@@ -15,6 +15,7 @@
  * --------------------------------------------------------------------------
  */
 import { isMac, isWin } from '@renderer/config/constant'
+import { useRoutePaneActive } from '@renderer/context/RoutePaneContext'
 import { useAppSelector } from '@renderer/store'
 import { orderBy } from 'lodash'
 import { useCallback } from 'react'
@@ -39,6 +40,7 @@ export const useShortcut = (
   options: UseShortcutOptions = defaultOptions
 ) => {
   const shortcuts = useAppSelector((state) => state.shortcuts.shortcuts)
+  const routePaneActive = useRoutePaneActive()
 
   const formatShortcut = useCallback((shortcut: string[]) => {
     return shortcut
@@ -56,6 +58,7 @@ export const useShortcut = (
   }, [])
 
   const shortcutConfig = shortcuts.find((s) => s.key === shortcutKey)
+  const enabled = options.enabled !== false && routePaneActive
 
   useHotkeys(
     shortcutConfig?.enabled ? formatShortcut(shortcutConfig.shortcut) : 'none',
@@ -63,14 +66,14 @@ export const useShortcut = (
       if (options.preventDefault) {
         e.preventDefault()
       }
-      if (options.enabled !== false) {
+      if (enabled) {
         callback(e)
       }
     },
     {
       enableOnFormTags: options.enableOnFormTags,
       description: options.description || shortcutConfig?.key,
-      enabled: !!shortcutConfig?.enabled
+      enabled: !!shortcutConfig?.enabled && enabled
     }
   )
 }

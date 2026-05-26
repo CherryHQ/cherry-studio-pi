@@ -1,5 +1,6 @@
 import { Navbar, NavbarCenter } from '@renderer/components/app/Navbar'
 import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
+import { useRoutePaneActive } from '@renderer/context/RoutePaneContext'
 import { useActiveAgent } from '@renderer/hooks/agents/useActiveAgent'
 import { useAgents } from '@renderer/hooks/agents/useAgents'
 import { useRuntime } from '@renderer/hooks/useRuntime'
@@ -21,6 +22,7 @@ import { AgentEmpty } from './components/status'
 
 const AgentPage = () => {
   const { isLeftNavbar } = useNavbarPosition()
+  const routePaneActive = useRoutePaneActive()
   const { showAssistants, toggleShowAssistants } = useShowAssistants()
   const { showTopics, toggleShowTopics } = useShowTopics()
   const { topicPosition } = useSettings()
@@ -55,12 +57,14 @@ const AgentPage = () => {
   }, [activeAgentId, agents, setActiveAgentId])
 
   useEffect(() => {
+    if (!routePaneActive) return
+
     const canMinimize = topicPosition === 'left' ? !showAssistants : !showAssistants && !showTopics
     void window.api.window.setMinimumSize(canMinimize ? SECOND_MIN_WINDOW_WIDTH : MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
     return () => {
       void window.api.window.resetMinimumSize()
     }
-  }, [showAssistants, showTopics, topicPosition])
+  }, [routePaneActive, showAssistants, showTopics, topicPosition])
 
   if (agents && agents.length === 0) {
     return (

@@ -1,4 +1,5 @@
 import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
+import { useRoutePaneActive } from '@renderer/context/RoutePaneContext'
 import { useAssistants } from '@renderer/hooks/useAssistant'
 import { useNavbarPosition, useSettings } from '@renderer/hooks/useSettings'
 import { useShortcut } from '@renderer/hooks/useShortcuts'
@@ -26,6 +27,7 @@ const HomePage: FC = () => {
   const { assistants } = useAssistants()
   const navigate = useNavigate()
   const { isLeftNavbar } = useNavbarPosition()
+  const routePaneActive = useRoutePaneActive()
 
   const location = useLocation()
   const state = location.state
@@ -109,13 +111,15 @@ const HomePage: FC = () => {
   }, [state])
 
   useEffect(() => {
+    if (!routePaneActive) return
+
     const canMinimize = topicPosition == 'left' ? !showAssistants : !showAssistants && !showTopics
     void window.api.window.setMinimumSize(canMinimize ? SECOND_MIN_WINDOW_WIDTH : MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
 
     return () => {
       void window.api.window.resetMinimumSize()
     }
-  }, [showAssistants, showTopics, topicPosition])
+  }, [routePaneActive, showAssistants, showTopics, topicPosition])
 
   return (
     <Container id="home-page">

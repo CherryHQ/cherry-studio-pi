@@ -19,6 +19,7 @@ import { addTab, removeTab, setActiveTab, setTabs } from '@renderer/store/tabs'
 import type { MinAppType } from '@renderer/types'
 import { ThemeMode } from '@renderer/types'
 import { classNames } from '@renderer/utils'
+import { markRouteSwitchStart } from '@renderer/utils/routePerformance'
 import { getTabBaseId, getTabIdFromPath } from '@renderer/utils/tabs'
 import { Tooltip } from 'antd'
 import type { LRUCache } from 'lru-cache'
@@ -157,7 +158,7 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children, withSidebar = f
   const getLocationPath = () => `${location.pathname}${location.search}`
 
   const navigateDeferred = useCallback(
-    (path: string) => {
+    (path: string, source = 'tabbar') => {
       if (path === getLocationPath()) {
         return
       }
@@ -167,6 +168,7 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children, withSidebar = f
       }
 
       pendingNavigationPath.current = path
+      markRouteSwitchStart(source, path)
       pendingNavigationFrame.current = requestAnimationFrame(() => {
         pendingNavigationFrame.current = requestAnimationFrame(() => {
           pendingNavigationFrame.current = null
@@ -267,12 +269,12 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children, withSidebar = f
 
   const handleAddTab = () => {
     hideMinappPopup()
-    navigateDeferred('/launchpad')
+    navigateDeferred('/launchpad', 'new-tab')
   }
 
   const handleSettingsClick = () => {
     hideMinappPopup()
-    navigateDeferred(lastSettingsPath)
+    navigateDeferred(lastSettingsPath, 'settings-button')
   }
 
   const handleTabClick = (tab: Tab) => {
@@ -280,7 +282,7 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children, withSidebar = f
     if (activeTabId !== tab.id) {
       dispatch(setActiveTab(tab.id))
     }
-    navigateDeferred(tab.path)
+    navigateDeferred(tab.path, 'tabbar')
   }
 
   const visibleTabs = useMemo(() => tabs.filter((tab) => !specialTabs.includes(getTabBaseId(tab.id))), [tabs])

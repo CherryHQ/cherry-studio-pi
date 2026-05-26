@@ -14,6 +14,7 @@ import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { setActiveTab, updateTab } from '@renderer/store/tabs'
 import { ThemeMode } from '@renderer/types'
 import { isEmoji } from '@renderer/utils'
+import { markRouteSwitchStart } from '@renderer/utils/routePerformance'
 import { createTaskTabPath, getTabIdFromPath, getTabInstanceId, withTabInstance } from '@renderer/utils/tabs'
 import { Avatar, Tooltip } from 'antd'
 import {
@@ -69,6 +70,7 @@ const useSwitchCurrentTab = () => {
 
     dispatch(updateTab({ id: activeTab.id, updates: { id: nextId, path: nextPath } }))
     dispatch(setActiveTab(nextId))
+    markRouteSwitchStart('sidebar', nextPath)
     navigate(nextPath)
   }
 }

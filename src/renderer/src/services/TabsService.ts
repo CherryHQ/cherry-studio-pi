@@ -2,6 +2,7 @@ import { loggerService } from '@logger'
 import store from '@renderer/store'
 import { removeTab, setActiveTab } from '@renderer/store/tabs'
 import type { MinAppType } from '@renderer/types'
+import { markRouteSwitchStart } from '@renderer/utils/routePerformance'
 import { clearWebviewState } from '@renderer/utils/webviewStateManager'
 import type { LRUCache } from 'lru-cache'
 
@@ -55,11 +56,13 @@ class TabsService {
 
       // 使用 NavigationService 导航到新的标签页
       if (NavigationService.navigate) {
+        markRouteSwitchStart('close-tab', lastTab.path)
         NavigationService.navigate(lastTab.path)
       } else {
         logger.warn('Navigation service not ready, will navigate on next render')
         setTimeout(() => {
           if (NavigationService.navigate) {
+            markRouteSwitchStart('close-tab', lastTab.path)
             NavigationService.navigate(lastTab.path)
           }
         }, 100)
@@ -133,6 +136,7 @@ class TabsService {
 
     // 导航到对应页面
     if (NavigationService.navigate) {
+      markRouteSwitchStart('tabs-service', tab.path)
       NavigationService.navigate(tab.path)
     }
 
