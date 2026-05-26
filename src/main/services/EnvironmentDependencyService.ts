@@ -4,6 +4,7 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 
 import { loggerService } from '@logger'
+import { getResourcePath } from '@main/utils'
 import { findExecutableInEnv, getBinaryName, getGitBashPathInfo, runInstallScript } from '@main/utils/process'
 import {
   disableManagedRuntime,
@@ -19,7 +20,8 @@ import { isWin } from '../constant'
 const execFileAsync = promisify(execFile)
 const logger = loggerService.withContext('EnvironmentDependencyService')
 const VERSION_TIMEOUT_MS = 3000
-const MANAGED_BINARY_NAMES = ['rtk', 'uv', 'uvx', 'bun', 'bunx', 'node', 'npm', 'npx']
+const MANAGED_CLI_TOOL_NAMES = ['perry-settings', 'perry-knowledge', 'perry-painting', 'perry-notes']
+const MANAGED_BINARY_NAMES = ['rtk', 'uv', 'uvx', 'bun', 'bunx', 'node', 'npm', 'npx', ...MANAGED_CLI_TOOL_NAMES]
 
 class EnvironmentDependencyService {
   async ensureIntegratedRuntime(): Promise<void> {
@@ -27,12 +29,14 @@ class EnvironmentDependencyService {
 
     await extractRtkBinaries()
     await this.installNodeShim()
+    await this.installCliTools()
   }
 
   async installManagedRuntime(): Promise<EnvironmentDependenciesStatus> {
     enableManagedRuntime()
     await extractRtkBinaries()
     await this.installNodeShim()
+    await this.installCliTools()
     return this.getStatus()
   }
 
@@ -45,6 +49,7 @@ class EnvironmentDependencyService {
         await Promise.all(paths.map((binaryPath) => fs.promises.rm(binaryPath, { force: true, recursive: true })))
       })
     )
+    await fs.promises.rm(path.join(getUserBinDir(), 'perry-cli'), { force: true, recursive: true })
 
     return this.getStatus()
   }
@@ -194,6 +199,14 @@ class EnvironmentDependencyService {
   }
 
   private async getManagedBinaryPaths(name: string): Promise<string[]> {
+    if (MANAGED_CLI_TOOL_NAMES.includes(name)) {
+      return [
+        path.join(getUserBinDir(), name),
+        path.join(getUserBinDir(), `${name}.cmd`),
+        path.join(getUserBinDir(), `${name}.js`)
+      ]
+    }
+
     const binaryPath = path.join(getUserBinDir(), await getBinaryName(name))
     if (isWin && name === 'node') {
       return [path.join(getUserBinDir(), 'node.cmd'), binaryPath]
@@ -247,6 +260,34 @@ class EnvironmentDependencyService {
     fs.writeFileSync(shimPath, script, 'utf8')
     fs.chmodSync(shimPath, 0o755)
     logger.debug('Installed Node.js shim', { shimPath })
+  }
+
+  private async installCliTools(): Promise<void> {
+    const binDir = getUserBinDir()
+    fs.mkdirSync(binDir, { recursive: true })
+
+    const sourceDir = path.join(getResourcePath(), 'cli')
+    const runtimeDir = path.join(binDir, 'perry-cli')
+    if (!fs.existsSync(sourceDir)) return
+    await fs.promises.rm(runtimeDir, { force: true, recursive: true })
+    await fs.promises.cp(sourceDir, runtimeDir, { recursive: true })
+
+    for (const name of MANAGED_CLI_TOOL_NAMES) {
+      const scriptPath = path.join(runtimeDir, `${name}.js`)
+      if (!fs.existsSync(scriptPath)) continue
+
+      if (isWin) {
+        const nodePath = (await this.getManagedBinaryPath('node')).replace(/\.exe$/i, '.cmd')
+        fs.writeFileSync(path.join(binDir, `${name}.cmd`), `@echo off\r\n"${nodePath}" "${scriptPath}" %*\r\n`, 'utf8')
+      } else {
+        const nodePath = await this.getManagedBinaryPath('node')
+        const wrapper = ['#!/bin/sh', `exec "${nodePath}" "${scriptPath}" "$@"`, ''].join('\n')
+        const wrapperPath = path.join(binDir, name)
+        fs.writeFileSync(wrapperPath, wrapper, 'utf8')
+        fs.chmodSync(wrapperPath, 0o755)
+      }
+    }
+    logger.debug('Installed Perry CLI tools', { tools: MANAGED_CLI_TOOL_NAMES })
   }
 }
 

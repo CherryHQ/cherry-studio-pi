@@ -8,6 +8,7 @@ import { authMiddleware } from './middleware/auth'
 import { errorHandler } from './middleware/error'
 import { setupOpenAPIDocumentation } from './middleware/openapi'
 import { agentsRoutes } from './routes/agents'
+import { appToolsRoutes } from './routes/app-tools'
 import { channelsRouter } from './routes/channels'
 import { chatRoutes } from './routes/chat'
 import { clawMcpRoutes } from './routes/claw-mcp'
@@ -139,7 +140,8 @@ app.get('/', (_req, res) => {
       agent_sessions: 'GET /v1/agents/:agentId/sessions',
       session_messages: 'GET /v1/agents/:agentId/sessions/:sessionId/messages',
       knowledge_bases: 'GET /v1/knowledge-bases',
-      knowledge_search: 'POST /v1/knowledge-bases/search'
+      knowledge_search: 'POST /v1/knowledge-bases/search',
+      app_tools: 'GET /v1/app/settings/sections'
     }
   })
 })
@@ -163,6 +165,7 @@ apiRouter.use('/channels', channelsRouter)
 apiRouter.use('/tasks', tasksRouter)
 apiRouter.use('/claw', clawMcpRoutes)
 apiRouter.use('/knowledge-bases', knowledgeRoutes)
+apiRouter.use('/app', appToolsRoutes)
 app.use('/v1', apiRouter)
 
 // Error handling (must be last)

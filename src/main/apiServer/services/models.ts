@@ -24,6 +24,8 @@ export class ModelsService {
 
       if (filter.providerType === 'anthropic') {
         providers = providers.filter((p) => p.type === 'anthropic' || !isEmpty(p.anthropicApiHost?.trim()))
+      } else if (filter.providerType) {
+        providers = providers.filter((p) => p.type === filter.providerType)
       }
 
       const models = await listAllAvailableModels(providers)

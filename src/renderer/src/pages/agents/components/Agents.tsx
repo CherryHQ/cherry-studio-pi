@@ -3,7 +3,6 @@ import DraggableVirtualList from '@renderer/components/DraggableList/virtual-lis
 import AgentModalPopup from '@renderer/components/Popups/agent/AgentModal'
 import { useActiveAgent } from '@renderer/hooks/agents/useActiveAgent'
 import { useAgents } from '@renderer/hooks/agents/useAgents'
-import { useApiServer } from '@renderer/hooks/useApiServer'
 import { useRuntime } from '@renderer/hooks/useRuntime'
 import type { AgentEntity } from '@renderer/types'
 import { memo, useCallback } from 'react'
@@ -18,7 +17,6 @@ interface AgentsProps {
 const Agents = ({ onSelectItem }: AgentsProps) => {
   const { t } = useTranslation()
   const { agents, deleteAgent, isLoading, error, reorderAgents } = useAgents()
-  const { apiServerRunning, startApiServer } = useApiServer()
   const { chat } = useRuntime()
   const { activeAgentId } = chat
   const { setActiveAgentId } = useActiveAgent()
@@ -32,13 +30,12 @@ const Agents = ({ onSelectItem }: AgentsProps) => {
   )
 
   const handleAddAgent = useCallback(() => {
-    void (!apiServerRunning && startApiServer())
     void AgentModalPopup.show({
       afterSubmit: (agent: AgentEntity) => {
         void setActiveAgentId(agent.id)
       }
     })
-  }, [apiServerRunning, startApiServer, setActiveAgentId])
+  }, [setActiveAgentId])
 
   if (isLoading) {
     return <div className="p-5 text-center text-(--color-text-secondary) text-[13px]">{t('common.loading')}</div>

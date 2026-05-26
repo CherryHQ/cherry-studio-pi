@@ -159,11 +159,13 @@ export const getEnableDeveloperMode = () => {
 export const useNavbarPosition = () => {
   const navbarPosition = useAppSelector((state) => state.settings.navbarPosition)
   const dispatch = useAppDispatch()
+  const isLeftNavbar = navbarPosition === 'left'
 
   return {
     navbarPosition,
-    isLeftNavbar: navbarPosition === 'left',
-    isTopNavbar: navbarPosition === 'top',
+    isLeftNavbar,
+    // Perry keeps the primary navigation on the left, while tabs are always handled by the top tab shell.
+    isTopNavbar: navbarPosition === 'top' || isLeftNavbar,
     setNavbarPosition: (position: 'left' | 'top') => dispatch(setNavbarPosition(position))
   }
 }

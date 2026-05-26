@@ -55,6 +55,21 @@ export interface BuiltinAgentConfig {
   description?: string
   instructions?: string
   configuration?: Record<string, unknown>
+  skills?: string[]
+}
+
+function syncBundledSkills(workspacePath: string, skills: unknown): void {
+  if (!Array.isArray(skills)) return
+
+  const resourceSkillsDir = path.join(getResourcePath(), 'skills')
+  const destSkillsDir = path.join(workspacePath, '.claude', 'skills')
+
+  for (const skillName of skills) {
+    if (typeof skillName !== 'string') continue
+    const sourceDir = path.join(resourceSkillsDir, skillName)
+    if (!fs.existsSync(sourceDir)) continue
+    copyDirSync(sourceDir, path.join(destSkillsDir, skillName))
+  }
 }
 
 /**
@@ -103,11 +118,13 @@ export async function provisionBuiltinAgent(
     const agentJsonPath = path.join(templateDir, 'agent.json')
     if (fs.existsSync(agentJsonPath)) {
       const agentConfig = JSON.parse(fs.readFileSync(agentJsonPath, 'utf-8'))
+      syncBundledSkills(workspacePath, agentConfig.skills)
       return {
         name: agentConfig.name,
         description: resolveLocalizedField(agentConfig.description),
         instructions: resolveLocalizedField(agentConfig.instructions),
-        configuration: agentConfig.configuration
+        configuration: agentConfig.configuration,
+        skills: Array.isArray(agentConfig.skills) ? agentConfig.skills : undefined
       } as BuiltinAgentConfig
     }
 

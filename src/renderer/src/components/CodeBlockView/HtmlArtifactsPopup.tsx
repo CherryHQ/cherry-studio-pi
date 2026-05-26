@@ -2,12 +2,15 @@ import type { CodeEditorHandles } from '@renderer/components/CodeEditor'
 import CodeEditor from '@renderer/components/CodeEditor'
 import { CopyIcon, FilePngIcon } from '@renderer/components/Icons'
 import { isMac } from '@renderer/config/constant'
+import { loadCustomMiniApp, ORIGIN_DEFAULT_MIN_APPS, updateAllMinApps } from '@renderer/config/minapps'
+import { useMinapps } from '@renderer/hooks/useMinapps'
 import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
+import type { MinAppType } from '@renderer/types'
 import { classNames } from '@renderer/utils'
 import { extractHtmlTitle, getFileNameFromHtmlTitle } from '@renderer/utils/formats'
 import { captureScrollableIframeAsBlob, captureScrollableIframeAsDataURL } from '@renderer/utils/image'
 import { Button, Dropdown, Modal, Splitter, Tooltip, Typography } from 'antd'
-import { Camera, Check, Code, Eye, Maximize2, Minimize2, SaveIcon, SquareSplitHorizontal, X } from 'lucide-react'
+import { Camera, Check, Code, Eye, Maximize2, Minimize2, Plus, SaveIcon, SquareSplitHorizontal, X } from 'lucide-react'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
@@ -104,6 +107,7 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({ open, title, ht
   const [splitSizes, setSplitSizes] = useState<string[]>(['50%', '50%'])
   const codeEditorRef = useRef<CodeEditorHandles>(null)
   const previewFrameRef = useRef<HTMLIFrameElement>(null)
+  const { minapps, pinned, updateMinapps, updatePinnedMinapps } = useMinapps()
 
   const panelSizes = viewMode === 'split' ? splitSizes : viewMode === 'code' ? ['100%', 0] : [0, '100%']
 
@@ -160,6 +164,40 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({ open, title, ht
     [html, t]
   )
 
+  const handleInstallToWorkbench = useCallback(async () => {
+    try {
+      const currentHtml = codeEditorRef.current?.getContent?.() || html
+      const htmlTitle = extractHtmlTitle(currentHtml) || title || 'HTML Artifact'
+      const installed = await window.api.appData.installHtmlArtifact({ title: htmlTitle, html: currentHtml })
+      const newApp: MinAppType = {
+        id: `artifact:${installed.id}`,
+        name: htmlTitle,
+        url: installed.url,
+        type: 'Custom',
+        addTime: new Date().toISOString(),
+        supportedRegions: ['CN', 'Global']
+      }
+      let customApps: MinAppType[] = []
+
+      try {
+        customApps = JSON.parse(await window.api.file.read('custom-minapps.json'))
+      } catch {
+        customApps = []
+      }
+
+      const nextCustomApps = [...customApps.filter((app) => app.id !== newApp.id), newApp]
+      await window.api.file.writeWithId('custom-minapps.json', JSON.stringify(nextCustomApps, null, 2))
+
+      const reloadedApps = [...ORIGIN_DEFAULT_MIN_APPS, ...(await loadCustomMiniApp())]
+      updateAllMinApps(reloadedApps)
+      updateMinapps([...minapps.filter((app) => app.id !== newApp.id), newApp])
+      updatePinnedMinapps([...pinned.filter((app) => app.id !== newApp.id), newApp])
+      window.toast.success('已安装到工作台')
+    } catch (error) {
+      window.toast.error(`安装到工作台失败：${(error as Error).message}`)
+    }
+  }, [html, minapps, pinned, title, updateMinapps, updatePinnedMinapps])
+
   const renderHeader = () => (
     <ModalHeader onDoubleClick={() => setIsFullscreen(!isFullscreen)} className={classNames({ drag: isFullscreen })}>
       <HeaderLeft $isFullscreen={isFullscreen}>
@@ -193,6 +231,11 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({ open, title, ht
       </HeaderCenter>
 
       <HeaderRight onDoubleClick={(e) => e.stopPropagation()}>
+        <Tooltip title="安装到工作台" mouseLeaveDelay={0}>
+          <Button type="text" icon={<Plus size={16} />} className="nodrag" onClick={handleInstallToWorkbench}>
+            安装到工作台
+          </Button>
+        </Tooltip>
         <Dropdown
           trigger={['click']}
           menu={{

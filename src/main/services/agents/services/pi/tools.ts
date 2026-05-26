@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 
 import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core'
 import { Type } from '@earendil-works/pi-ai'
+import { config as apiServerConfig } from '@main/apiServer/config'
 import mcpService from '@main/services/MCPService'
 import getShellEnv from '@main/utils/shell-env'
 import { HOME_CHERRY_DIR } from '@shared/config/constant'
@@ -89,6 +90,14 @@ const MANUAL_BINARY_DOWNLOAD_MESSAGE =
   'Refusing to manually download dependency binaries as a workaround for curl/SSL/install-script failures. Stop retrying and report the dependency/environment blocker briefly.'
 const DOCUMENTATION_FETCH_UNAVAILABLE_MESSAGE =
   '[Documentation fetch unavailable due to network restrictions. Do not retry with another downloader or narrate the fetch failure; continue only if package metadata or local knowledge is enough.]'
+const HOMEBREW_METADATA_UNAVAILABLE_MESSAGE =
+  '[Homebrew metadata unavailable in the agent runtime. Do not retry with brew variants; use package-manager metadata, existing PATH commands, or the user-requested installer only if it is already known.]'
+const HOMEBREW_COMMAND_PATTERN = /(^|[;&|]\s*)brew\s+(?:search|info|install|update|tap|fetch|--version)\b/i
+const SHELL_FAILURE_MARKER_PATTERN =
+  /(?:^|\n)(?:CURL_FAILED|NPM_FAILED|PNPM_FAILED|YARN_FAILED|BREW_FAILED|BREW_NOT_AVAILABLE|INSTALL_FAILED)\b/i
+const SHELL_ERROR_OUTPUT_PATTERN =
+  /(?:^|\n)(?:[^\n]+:\s+)?(?:command not found|Operation not permitted|Permission denied|No such file or directory|Error:|fatal:|npm ERR!|ERR_PNPM_|curl: \(\d+\))/i
+const SYSTEM_WRITE_DENIED_ROOTS = ['/etc', '/private/etc', '/var/db', '/private/var/db']
 
 const isRecoverableBashFailure = (command: string, description: string | undefined, output: string) => {
   if (POLICY_FAILURE_PATTERN.test(output)) return false
@@ -118,6 +127,14 @@ const isDocumentationFetchSslFailure = (command: string, description: string | u
   )
 }
 
+const isHomebrewMetadataFailure = (command: string, output: string) => {
+  return HOMEBREW_COMMAND_PATTERN.test(command) && SSL_CERTIFICATE_FAILURE_PATTERN.test(output)
+}
+
+const outputLooksLikeForcedShellFailure = (output: string) => {
+  return SHELL_FAILURE_MARKER_PATTERN.test(output) || SHELL_ERROR_OUTPUT_PATTERN.test(output)
+}
+
 const agentToolPrefixForCwd = (cwd: string) => {
   const key = Buffer.from(path.resolve(cwd)).toString('base64url').slice(0, 48)
   return path.join(process.env.TMPDIR || '/tmp', 'cherry-studio-agent-tools', key)
@@ -125,6 +142,7 @@ const agentToolPrefixForCwd = (cwd: string) => {
 
 const buildBashEnv = async (cwd: string, extraEnv: NodeJS.ProcessEnv = {}) => {
   const shellEnv = await getShellEnv().catch(() => process.env)
+  const apiConfig = await apiServerConfig.get().catch(() => null)
   const toolPrefix = agentToolPrefixForCwd(cwd)
   const toolBin = path.join(toolPrefix, 'bin')
   const managedBin = path.join(os.homedir(), HOME_CHERRY_DIR, 'bin')
@@ -141,6 +159,14 @@ const buildBashEnv = async (cwd: string, extraEnv: NodeJS.ProcessEnv = {}) => {
     npm_config_prefix: extraEnv.npm_config_prefix ?? toolPrefix,
     PNPM_HOME: extraEnv.PNPM_HOME ?? toolBin,
     YARN_PREFIX: extraEnv.YARN_PREFIX ?? toolPrefix,
+    PERRY_STUDIO_API_BASE:
+      extraEnv.PERRY_STUDIO_API_BASE ??
+      (apiConfig ? `http://${apiConfig.host}:${apiConfig.port}` : process.env.PERRY_STUDIO_API_BASE),
+    PERRY_STUDIO_API_KEY: extraEnv.PERRY_STUDIO_API_KEY ?? apiConfig?.apiKey ?? process.env.PERRY_STUDIO_API_KEY,
+    CHERRY_STUDIO_API_BASE:
+      extraEnv.CHERRY_STUDIO_API_BASE ??
+      (apiConfig ? `http://${apiConfig.host}:${apiConfig.port}` : process.env.CHERRY_STUDIO_API_BASE),
+    CHERRY_STUDIO_API_KEY: extraEnv.CHERRY_STUDIO_API_KEY ?? apiConfig?.apiKey ?? process.env.CHERRY_STUDIO_API_KEY,
     PATH: nextPath,
     ...(process.platform === 'win32' ? { Path: nextPath } : {})
   }
@@ -241,16 +267,24 @@ const assertCommandDoesNotReferenceOutsidePaths = (command: string, roots: strin
 const sandboxProfileForRoots = (roots: string[]) => {
   const deniedRoots = collectDeniedHomeSiblings(roots)
   const denyRules = deniedRoots.map((root) => `(subpath ${JSON.stringify(root)})`).join(' ')
-  if (!denyRules) return '(version 1)\n(allow default)'
+  const systemWriteDeniedRoots = SYSTEM_WRITE_DENIED_ROOTS.filter((item) => !isInside(item, roots))
+  const systemWriteDenyRules = systemWriteDeniedRoots.map((root) => `(subpath ${JSON.stringify(root)})`).join(' ')
+  if (!denyRules && !systemWriteDenyRules) return '(version 1)\n(allow default)'
 
-  return ['(version 1)', '(allow default)', `(deny file-read* ${denyRules})`, `(deny file-write* ${denyRules})`].join(
-    '\n'
-  )
+  return [
+    '(version 1)',
+    '(allow default)',
+    denyRules ? `(deny file-read* ${denyRules})` : '',
+    denyRules ? `(deny file-write* ${denyRules})` : '',
+    systemWriteDenyRules ? `(deny file-write* ${systemWriteDenyRules})` : ''
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 const collectDeniedHomeSiblings = (roots: string[]) => {
   const home = process.env.HOME
-  if (!home) return ['/etc', '/private/etc', '/var/db', '/private/var/db'].filter((item) => !isInside(item, roots))
+  if (!home) return []
 
   const allowedAncestors = new Set<string>()
   for (const root of roots) {
@@ -262,8 +296,9 @@ const collectDeniedHomeSiblings = (roots: string[]) => {
       current = parent
     }
   }
+  allowedAncestors.add(path.join(home, HOME_CHERRY_DIR))
 
-  const denied = ['/etc', '/private/etc', '/var/db', '/private/var/db']
+  const denied: string[] = []
   try {
     const entries = readdirSync(home, { withFileTypes: true })
     for (const entry of entries) {
@@ -462,6 +497,10 @@ export function createPiTools(cwd: string, accessiblePaths: string[]): AgentTool
         stderr: error.stderr ?? error.message,
         code: error.code ?? 1
       }))
+      let output = [result.stdout, result.stderr].filter(Boolean).join('\n')
+      if (!('code' in result) && outputLooksLikeForcedShellFailure(output)) {
+        result = { ...result, code: 1 }
+      }
       const isAgentScopedGlobalInstall = GLOBAL_PACKAGE_INSTALL_COMMAND_PATTERN.test(input.command)
       const details = {
         command: input.command,
@@ -469,17 +508,20 @@ export function createPiTools(cwd: string, accessiblePaths: string[]): AgentTool
         ...(isAgentScopedGlobalInstall ? { agentToolPrefix: agentToolPrefixForCwd(cwd) } : {})
       }
 
-      let output = [result.stdout, result.stderr].filter(Boolean).join('\n')
+      output = [result.stdout, result.stderr].filter(Boolean).join('\n')
 
-      if (
-        'code' in result &&
-        result.code !== 0 &&
-        isDocumentationFetchSslFailure(input.command, input.description, output)
-      ) {
+      if (isDocumentationFetchSslFailure(input.command, input.description, output)) {
         return textResult(DOCUMENTATION_FETCH_UNAVAILABLE_MESSAGE, {
           ...details,
           recoverable: true,
           reason: 'documentation_fetch_unavailable'
+        })
+      }
+      if (isHomebrewMetadataFailure(input.command, output)) {
+        return textResult(HOMEBREW_METADATA_UNAVAILABLE_MESSAGE, {
+          ...details,
+          recoverable: true,
+          reason: 'homebrew_metadata_unavailable'
         })
       }
 

@@ -1,4 +1,4 @@
-import { DEFAULT_SESSION_PAGE_SIZE } from '@renderer/api/agent'
+import { DEFAULT_SESSION_PAGE_SIZE } from '@renderer/api/agent-ipc'
 import type { AgentSessionEntity, ListAgentSessionsResponse, UpdateSessionForm } from '@renderer/types'
 import type { UpdateAgentBaseOptions, UpdateAgentSessionFunction } from '@renderer/types/agent'
 import { getErrorMessage } from '@renderer/utils/error'

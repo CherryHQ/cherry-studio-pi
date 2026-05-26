@@ -4,11 +4,11 @@ import { useNavbarPosition } from '@renderer/hooks/useSettings'
 
 const TopViewMinappContainer = () => {
   const { openedKeepAliveMinapps, openedOneOffMinapp } = useRuntime()
-  const { isLeftNavbar } = useNavbarPosition()
+  const { isLeftNavbar, isTopNavbar } = useNavbarPosition()
   const isCreate = openedKeepAliveMinapps.length > 0 || openedOneOffMinapp !== null
 
-  // Only show popup container in sidebar mode (left navbar), not in tab mode (top navbar)
-  return <>{isCreate && isLeftNavbar && <MinappPopupContainer />}</>
+  // Only show popup container for the legacy sidebar-only mode, not when top tabs are active.
+  return <>{isCreate && isLeftNavbar && !isTopNavbar && <MinappPopupContainer />}</>
 }
 
 export default TopViewMinappContainer

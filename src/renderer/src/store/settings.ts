@@ -140,6 +140,12 @@ export interface SettingsState {
   webdavMaxBackups: number
   webdavSkipBackupFile: boolean
   webdavDisableStream: boolean
+  dataSyncWebdavHost: string
+  dataSyncWebdavUser: string
+  dataSyncWebdavPass: string
+  dataSyncWebdavPath: string
+  dataSyncAutoSync: boolean
+  dataSyncSyncInterval: number
   translateModelPrompt: string
   autoTranslateWithSpace: boolean
   showTranslateConfirm: boolean
@@ -335,6 +341,12 @@ export const initialState: SettingsState = {
   webdavMaxBackups: 0,
   webdavSkipBackupFile: false,
   webdavDisableStream: false,
+  dataSyncWebdavHost: '',
+  dataSyncWebdavUser: '',
+  dataSyncWebdavPass: '',
+  dataSyncWebdavPath: '/perry-studio',
+  dataSyncAutoSync: false,
+  dataSyncSyncInterval: 0,
   translateModelPrompt: TRANSLATE_PROMPT,
   autoTranslateWithSpace: false,
   showTranslateConfirm: true,
@@ -590,6 +602,24 @@ const settingsSlice = createSlice({
     },
     setWebdavDisableStream: (state, action: PayloadAction<boolean>) => {
       state.webdavDisableStream = action.payload
+    },
+    setDataSyncWebdavHost: (state, action: PayloadAction<string>) => {
+      state.dataSyncWebdavHost = action.payload
+    },
+    setDataSyncWebdavUser: (state, action: PayloadAction<string>) => {
+      state.dataSyncWebdavUser = action.payload
+    },
+    setDataSyncWebdavPass: (state, action: PayloadAction<string>) => {
+      state.dataSyncWebdavPass = action.payload
+    },
+    setDataSyncWebdavPath: (state, action: PayloadAction<string>) => {
+      state.dataSyncWebdavPath = action.payload
+    },
+    setDataSyncAutoSync: (state, action: PayloadAction<boolean>) => {
+      state.dataSyncAutoSync = action.payload
+    },
+    setDataSyncSyncInterval: (state, action: PayloadAction<number>) => {
+      state.dataSyncSyncInterval = action.payload
     },
     setCodeExecution: (state, action: PayloadAction<{ enabled?: boolean; timeoutMinutes?: number }>) => {
       if (action.payload.enabled !== undefined) {
@@ -950,6 +980,12 @@ export const {
   setWebdavMaxBackups,
   setWebdavSkipBackupFile,
   setWebdavDisableStream,
+  setDataSyncWebdavHost,
+  setDataSyncWebdavUser,
+  setDataSyncWebdavPass,
+  setDataSyncWebdavPath,
+  setDataSyncAutoSync,
+  setDataSyncSyncInterval,
   setCodeExecution,
   setCodeEditor,
   setCodeViewer,

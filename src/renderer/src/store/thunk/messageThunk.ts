@@ -16,7 +16,6 @@
  */
 import { loggerService } from '@logger'
 import { AiSdkToChunkAdapter } from '@renderer/aiCore/chunk/AiSdkToChunkAdapter'
-import { AgentApiClient } from '@renderer/api/agent'
 import db from '@renderer/databases'
 import { getModel } from '@renderer/hooks/useModel'
 import { fetchMessagesSummary, transformMessagesAndFetch } from '@renderer/services/ApiService'
@@ -29,7 +28,7 @@ import { endSpan } from '@renderer/services/SpanManagerService'
 import { createStreamProcessor, type StreamProcessorCallbacks } from '@renderer/services/StreamProcessingService'
 import store from '@renderer/store'
 import { updateTopicUpdatedAt } from '@renderer/store/assistants'
-import { type ApiServerConfig, type Assistant, type FileMetadata, type Model, type Topic } from '@renderer/types'
+import { type Assistant, type FileMetadata, type Model, type Topic } from '@renderer/types'
 import type {
   AgentEffort,
   AgentSessionEntity,
@@ -144,30 +143,18 @@ const findExistingAgentSessionContext = (
   }
 }
 
-const buildAgentBaseURL = (apiServer: ApiServerConfig) => {
-  const hasProtocol = apiServer.host.startsWith('http://') || apiServer.host.startsWith('https://')
-  const baseHost = hasProtocol ? apiServer.host : `http://${apiServer.host}`
-  const portSegment = apiServer.port ? `:${apiServer.port}` : ''
-  return `${baseHost}${portSegment}`
-}
+const getAgentSessionPaths = (agentId: string) => ({
+  base: `/v1/agents/${agentId}/sessions`,
+  withId: (id: string) => `/v1/agents/${agentId}/sessions/${id}`
+})
 
-export const renameAgentSessionIfNeeded = async (
-  agentSession: AgentSessionContext,
-  topicId: string,
-  getState: () => RootState
-): Promise<void> => {
+export const renameAgentSessionIfNeeded = async (agentSession: AgentSessionContext, topicId: string): Promise<void> => {
   const lockId = `${agentSession.agentId}:${agentSession.sessionId}`
   if (agentSessionRenameLocks.has(lockId)) {
     return
   }
 
   try {
-    const state = getState()
-    const apiServer = state.settings.apiServer
-    if (!apiServer?.apiKey) {
-      return
-    }
-
     const { messages } = await dbFacade.fetchMessages(topicId, true)
     if (!messages.length) {
       return
@@ -179,19 +166,11 @@ export const renameAgentSessionIfNeeded = async (
       return
     }
 
-    const baseURL = buildAgentBaseURL(apiServer)
-    const client = new AgentApiClient({
-      baseURL,
-      headers: {
-        Authorization: `Bearer ${apiServer.apiKey}`
-      }
-    })
-
     agentSessionRenameLocks.add(lockId)
 
     let session: GetAgentSessionResponse
     try {
-      session = await client.getSession(agentSession.agentId, agentSession.sessionId)
+      session = await window.api.agent.getSession(agentSession.agentId, agentSession.sessionId)
     } catch (error) {
       logger.warn('Failed to fetch agent session for rename', error as Error)
       return
@@ -204,7 +183,7 @@ export const renameAgentSessionIfNeeded = async (
 
     let updatedSession: GetAgentSessionResponse
     try {
-      updatedSession = await client.updateSession(agentSession.agentId, {
+      updatedSession = await window.api.agent.updateSession(agentSession.agentId, {
         id: agentSession.sessionId,
         name: summaryText
       })
@@ -213,7 +192,7 @@ export const renameAgentSessionIfNeeded = async (
       return
     }
 
-    const paths = client.getSessionPaths(agentSession.agentId)
+    const paths = getAgentSessionPaths(agentSession.agentId)
 
     try {
       await mutate(paths.withId(agentSession.sessionId), updatedSession, {
@@ -245,21 +224,44 @@ export const renameAgentSessionIfNeeded = async (
   }
 }
 
-const createSSEReadableStream = (
-  source: ReadableStream<Uint8Array>,
+const createAgentMessageStream = async (
+  agentSession: AgentSessionContext,
+  content: string,
   signal: AbortSignal
-): ReadableStream<TextStreamPart<Record<string, any>>> => {
+): Promise<ReadableStream<TextStreamPart<Record<string, any>>>> => {
+  const requestId = uuid()
+  let cleanup: (() => void) | undefined
+  let closed = false
+  let abortHandler: (() => void) | undefined
+
   return new ReadableStream<TextStreamPart<Record<string, any>>>({
     start(controller) {
-      const reader = source.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
+      const close = () => {
+        if (closed) return
+        closed = true
+        cleanup?.()
+        if (abortHandler) signal.removeEventListener('abort', abortHandler)
+        controller.close()
+      }
 
-      const cancelReader = (reason?: any) => reader.cancel(reason).catch(() => {})
+      const fail = (error: unknown) => {
+        if (closed) return
+        closed = true
+        cleanup?.()
+        if (abortHandler) signal.removeEventListener('abort', abortHandler)
+        controller.error(error)
+      }
 
-      const abortHandler = () => {
-        void cancelReader(signal.reason ?? 'aborted')
-        controller.error(new DOMException('Aborted', 'AbortError'))
+      abortHandler = () => {
+        if (!closed) {
+          try {
+            controller.enqueue({ type: 'abort' } as TextStreamPart<Record<string, any>>)
+          } catch {
+            // Controller may already be closed.
+          }
+          close()
+        }
+        void window.api.agent.abortMessageStream(requestId)
       }
 
       if (signal.aborted) {
@@ -267,164 +269,56 @@ const createSSEReadableStream = (
         return
       }
 
-      signal.addEventListener('abort', abortHandler, { once: true })
-
-      const emitEvent = (eventString: string): boolean => {
-        const lines = eventString.split(/\r?\n/)
-        let dataPayload = ''
-        for (const line of lines) {
-          if (line.startsWith('data:')) {
-            dataPayload += line.slice(5).trimStart()
-          }
-        }
-
-        if (!dataPayload) {
-          return false
-        }
-
-        if (dataPayload === '[DONE]') {
-          signal.removeEventListener('abort', abortHandler)
-          void cancelReader()
-          controller.close()
-          return true
-        }
-
-        try {
-          const parsed = JSON.parse(dataPayload) as TextStreamPart<Record<string, any>>
-          controller.enqueue(parsed)
-        } catch (error) {
-          logger.warn('Failed to parse agent SSE chunk', { dataPayload })
-        }
-        return false
-      }
-
-      const pump = async () => {
-        try {
-          while (true) {
-            const { value, done } = await reader.read()
-            if (done) break
-            buffer += decoder.decode(value, { stream: true })
-
-            let separatorIndex = buffer.indexOf('\n\n')
-            while (separatorIndex !== -1) {
-              const rawEvent = buffer.slice(0, separatorIndex).trim()
-              buffer = buffer.slice(separatorIndex + 2)
-              if (rawEvent) {
-                const shouldStop = emitEvent(rawEvent)
-                if (shouldStop) {
-                  return
-                }
-              }
-              separatorIndex = buffer.indexOf('\n\n')
-            }
-          }
-
-          buffer += decoder.decode()
-          if (buffer.trim()) {
-            emitEvent(buffer.trim())
-          }
-          signal.removeEventListener('abort', abortHandler)
-          controller.close()
-        } catch (error) {
-          signal.removeEventListener('abort', abortHandler)
-          controller.error(error)
-        }
-      }
-
-      pump().catch((error) => {
-        signal.removeEventListener('abort', abortHandler)
-        controller.error(error)
-      })
-    },
-    cancel(reason) {
-      return source.cancel(reason).catch(() => {})
-    }
-  })
-}
-
-/**
- * Wraps a parsed stream with abort-signal lifecycle handling.
- * In the normal chat pipeline the AI SDK runtime converts abort signals into
- * `{ type: 'abort' }` stream parts. The agent pipeline bypasses the AI SDK
- * runtime, so this middleware fills that gap — keeping the SSE parser
- * (transport) and the chunk adapter (protocol) free of lifecycle concerns.
- */
-const withAbortStreamPart = (
-  source: ReadableStream<TextStreamPart<Record<string, any>>>,
-  signal: AbortSignal
-): ReadableStream<TextStreamPart<Record<string, any>>> => {
-  const reader = source.getReader()
-
-  return new ReadableStream<TextStreamPart<Record<string, any>>>({
-    async pull(controller) {
-      try {
-        const { value, done } = await reader.read()
-        if (done) {
-          controller.close()
+      cleanup = window.api.agent.onMessageStreamChunk((event) => {
+        if (event.requestId !== requestId || closed) return
+        if (event.type === 'chunk' && event.chunk) {
+          controller.enqueue(event.chunk as TextStreamPart<Record<string, any>>)
           return
         }
-        controller.enqueue(value)
-      } catch (error) {
-        // When the source errors due to abort, emit the abort stream part
-        // so downstream consumers (AiSdkToChunkAdapter) can fire onError.
-        if (signal.aborted) {
+        if (event.type === 'error') {
+          fail(new Error(event.error?.message || 'Agent message stream failed'))
+          return
+        }
+        if (event.type === 'aborted') {
           try {
             controller.enqueue({ type: 'abort' } as TextStreamPart<Record<string, any>>)
           } catch {
-            // Controller may already be closed
+            // Controller may already be closed.
           }
-          controller.close()
-        } else {
-          controller.error(error)
+          close()
+          return
         }
-      }
+        if (event.type === 'done') {
+          close()
+        }
+      })
+
+      signal.addEventListener('abort', abortHandler, { once: true })
+
+      window.api.agent
+        .startMessageStream({
+          requestId,
+          agentId: agentSession.agentId,
+          sessionId: agentSession.sessionId,
+          message: {
+            content,
+            ...(agentSession.effort ? { effort: agentSession.effort } : {}),
+            ...(agentSession.thinking ? { thinking: agentSession.thinking } : {})
+          }
+        })
+        .catch(fail)
     },
     cancel(reason) {
-      return reader.cancel(reason)
+      if (!closed) {
+        closed = true
+        cleanup?.()
+        if (abortHandler) signal.removeEventListener('abort', abortHandler)
+      }
+      return window.api.agent.abortMessageStream(requestId).catch(() => {
+        logger.warn('Failed to abort agent IPC stream', { requestId, reason })
+      })
     }
   })
-}
-
-const createAgentMessageStream = async (
-  apiServer: ApiServerConfig,
-  agentSession: AgentSessionContext,
-  content: string,
-  signal: AbortSignal
-): Promise<ReadableStream<TextStreamPart<Record<string, any>>>> => {
-  if (!apiServer.enabled) {
-    throw new Error('Agent API server is disabled')
-  }
-
-  const baseURL = buildAgentBaseURL(apiServer)
-  const url = `${baseURL}/v1/agents/${agentSession.agentId}/sessions/${agentSession.sessionId}/messages`
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiServer.apiKey}`,
-      'Content-Type': 'application/json',
-      Accept: 'text/event-stream',
-      'Cache-Control': 'no-cache'
-    },
-    body: JSON.stringify({
-      content,
-      ...(agentSession.effort ? { effort: agentSession.effort } : {}),
-      ...(agentSession.thinking ? { thinking: agentSession.thinking } : {})
-    }),
-    signal
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '')
-    throw new Error(errorText || `Failed to stream agent message: ${response.status}`)
-  }
-
-  if (!response.body) {
-    throw new Error('Agent message stream has no body')
-  }
-
-  const sseStream = createSSEReadableStream(response.body, signal)
-  return withAbortStreamPart(sseStream, signal)
 }
 // TODO: 后续可以将db操作移到Listener Middleware中
 // export const saveMessageAndBlocksToDB = async (message: Message, blocks: MessageBlock[], messageIndex: number = -1) => {
@@ -659,12 +553,7 @@ const fetchAndProcessAgentResponseImpl = async (
     const abortController = new AbortController()
     addAbortController(userMessageId, () => abortController.abort())
 
-    const stream = await createAgentMessageStream(
-      state.settings.apiServer,
-      agentSession,
-      userContent,
-      abortController.signal
-    )
+    const stream = await createAgentMessageStream(agentSession, userContent, abortController.signal)
 
     // Store the previous session ID to detect /clear command
     let latestAgentSessionId = agentSession.agentSessionId || ''
@@ -720,24 +609,12 @@ const fetchAndProcessAgentResponseImpl = async (
           await Promise.all(persistTasks)
         }
 
-        // Refresh session data to get updated slash_commands from backend
-        // This happens after the SDK init message updates the session in the database
-        const apiServer = stateAfterUpdate.settings.apiServer
-        if (apiServer?.apiKey) {
-          const baseURL = buildAgentBaseURL(apiServer)
-          const client = new AgentApiClient({
-            baseURL,
-            headers: {
-              Authorization: `Bearer ${apiServer.apiKey}`
-            }
-          })
-          const paths = client.getSessionPaths(agentSession.agentId)
-          await mutate(paths.withId(agentSession.sessionId))
-          logger.info('Refreshed session data after sessionId update', {
-            agentId: agentSession.agentId,
-            sessionId: agentSession.sessionId
-          })
-        }
+        const paths = getAgentSessionPaths(agentSession.agentId)
+        await mutate(paths.withId(agentSession.sessionId))
+        logger.info('Refreshed session data after sessionId update', {
+          agentId: agentSession.agentId,
+          sessionId: agentSession.sessionId
+        })
       } catch (error) {
         logger.error('Failed to persist agent session ID during stream', error as Error)
       }
@@ -763,7 +640,7 @@ const fetchAndProcessAgentResponseImpl = async (
       await persistAgentSessionId(latestAgentSessionId)
     }
 
-    await renameAgentSessionIfNeeded(agentSession, topicId, getState)
+    await renameAgentSessionIfNeeded(agentSession, topicId)
   } catch (error: any) {
     logger.error('Error in fetchAndProcessAgentResponseImpl:', error)
     try {
@@ -906,17 +783,9 @@ const fetchAndProcessAssistantResponseImpl = async (
     // Fetch agent allowed_tools for MCP auto-approval
     let allowedTools: string[] | undefined
     const activeAgentId = getState().runtime.chat.activeAgentId
-    const apiServer = getState().settings.apiServer
-    if (activeAgentId && apiServer?.apiKey) {
+    if (activeAgentId) {
       try {
-        const baseURL = buildAgentBaseURL(apiServer)
-        const agentClient = new AgentApiClient({
-          baseURL,
-          headers: {
-            Authorization: `Bearer ${apiServer.apiKey}`
-          }
-        })
-        const agentData = await agentClient.getAgent(activeAgentId)
+        const agentData = await window.api.agent.getAgent(activeAgentId)
         allowedTools = agentData?.allowed_tools
       } catch {
         // Agent fetch failed — proceed without allowedTools

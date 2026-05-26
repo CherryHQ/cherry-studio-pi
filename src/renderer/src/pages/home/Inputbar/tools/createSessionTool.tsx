@@ -1,7 +1,6 @@
 import { loggerService } from '@logger'
 import { ActionIconButton } from '@renderer/components/Buttons'
 import { useCreateDefaultSession } from '@renderer/hooks/agents/useCreateDefaultSession'
-import { useSettings } from '@renderer/hooks/useSettings'
 import { useShortcutDisplay } from '@renderer/hooks/useShortcuts'
 import { defineTool, registerTool, TopicType } from '@renderer/pages/home/Inputbar/types'
 import { Tooltip } from 'antd'
@@ -18,13 +17,12 @@ const createSessionTool = defineTool({
   render: function CreateSessionRender(context) {
     const { t, assistant, session } = context
     const newTopicShortcut = useShortcutDisplay('new_topic')
-    const { apiServer } = useSettings()
     const sessionAgentId = session?.agentId
 
     const agentId = sessionAgentId || assistant.id
     const { createDefaultSession, creatingSession } = useCreateDefaultSession(agentId)
 
-    const createSessionDisabled = creatingSession || !apiServer.enabled
+    const createSessionDisabled = creatingSession
 
     const handleCreateSession = useCallback(async () => {
       if (createSessionDisabled) {

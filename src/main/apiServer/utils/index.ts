@@ -10,6 +10,22 @@ const logger = loggerService.withContext('ApiServerUtils')
 // Cache configuration
 const PROVIDERS_CACHE_KEY = 'api-server:providers'
 const PROVIDERS_CACHE_TTL = 10 * 1000 // 10 seconds
+const AGENT_COMPATIBLE_PROVIDER_TYPES = new Set<ProviderType>([
+  'openai',
+  'openai-response',
+  'anthropic',
+  'gemini',
+  'azure-openai',
+  'vertexai',
+  'mistral',
+  'aws-bedrock',
+  'vertex-anthropic',
+  'new-api',
+  'gateway',
+  'ollama'
+])
+const API_KEY_OPTIONAL_PROVIDER_TYPES = new Set<ProviderType>(['vertexai', 'aws-bedrock'])
+const API_KEY_OPTIONAL_PROVIDER_IDS = new Set(['ollama', 'lmstudio'])
 
 export async function getAvailableProviders(): Promise<Provider[]> {
   try {
@@ -29,9 +45,10 @@ export async function getAvailableProviders(): Promise<Provider[]> {
       return []
     }
 
-    // Support OpenAI-compatible and Anthropic-compatible providers for API server
-    const supportedTypes: ProviderType[] = ['openai', 'anthropic', 'ollama', 'new-api']
-    const supportedProviders = providers.filter((p: Provider) => p.enabled && supportedTypes.includes(p.type))
+    // Pi agent runtime supports multiple native and OpenAI-compatible endpoints.
+    const supportedProviders = providers.filter(
+      (p: Provider) => p.enabled && AGENT_COMPATIBLE_PROVIDER_TYPES.has(p.type)
+    )
 
     // Format provider apiHost according to their type
     const results = await Promise.allSettled(supportedProviders.map((p: Provider) => formatProviderApiHost(p)))
@@ -175,7 +192,7 @@ export async function validateModelId(model: string): Promise<{
         valid: false,
         error: {
           type: 'provider_not_found',
-          message: `Provider '${providerId}' not found, not enabled, or not supported. Only OpenAI providers are currently supported.`,
+          message: `Provider '${providerId}' not found, not enabled, or not supported by the agent runtime.`,
           code: 'provider_not_found'
         }
       }
@@ -261,11 +278,13 @@ export function validateProvider(provider: Provider): boolean {
     }
 
     // Check required fields
-    if (!provider.id || !provider.type || !provider.apiKey || !provider.apiHost) {
+    const apiKeyRequired =
+      !API_KEY_OPTIONAL_PROVIDER_TYPES.has(provider.type) && !API_KEY_OPTIONAL_PROVIDER_IDS.has(provider.id)
+    if (!provider.id || !provider.type || (apiKeyRequired && !provider.apiKey) || !provider.apiHost) {
       logger.warn('Provider missing required fields', {
         id: !!provider.id,
         type: !!provider.type,
-        apiKey: !!provider.apiKey,
+        apiKey: apiKeyRequired ? !!provider.apiKey : true,
         apiHost: !!provider.apiHost
       })
       return false
@@ -277,8 +296,7 @@ export function validateProvider(provider: Provider): boolean {
       return false
     }
 
-    // Support OpenAI and Anthropic type providers
-    if (provider.type !== 'openai' && provider.type !== 'anthropic') {
+    if (!AGENT_COMPATIBLE_PROVIDER_TYPES.has(provider.type)) {
       logger.debug('Provider type not supported', {
         providerId: provider.id,
         providerType: provider.type

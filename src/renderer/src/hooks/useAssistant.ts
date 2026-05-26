@@ -32,6 +32,20 @@ import { useTranslation } from 'react-i18next'
 
 import { TopicManager } from './useTopic'
 
+const LOCAL_MODEL_PROVIDERS = new Set(['ollama', 'lmstudio', 'gpustack'])
+
+const pickFallbackModel = (providers: import('@renderer/types').Provider[]): Model | undefined => {
+  const provider = providers.find(
+    (provider) =>
+      provider.enabled &&
+      provider.id !== 'cherryai' &&
+      provider.models?.length &&
+      (provider.apiKey?.trim() || provider.isAuthed || LOCAL_MODEL_PROVIDERS.has(provider.id))
+  )
+  const model = provider?.models?.[0]
+  return model ? { ...model, provider: model.provider || provider.id } : undefined
+}
+
 export function useAssistants() {
   const { t } = useTranslation()
   const { assistants } = useAppSelector((state) => state.assistants)
@@ -75,13 +89,14 @@ export function useAssistants() {
 
 export function useAssistant(id: string) {
   const assistant = useAppSelector((state) => state.assistants.assistants.find((a) => a.id === id) as Assistant)
+  const fallbackModel = useAppSelector((state) => pickFallbackModel(state.llm.providers))
   const dispatch = useAppDispatch()
   const { defaultModel } = useDefaultModel()
 
-  const model = useMemo(() => assistant?.model ?? assistant?.defaultModel ?? defaultModel, [assistant, defaultModel])
-  if (!model) {
-    throw new Error(`Assistant model is not set for assistant with name: ${assistant?.name ?? 'unknown'}`)
-  }
+  const model = useMemo(
+    () => assistant?.model ?? assistant?.defaultModel ?? defaultModel ?? fallbackModel,
+    [assistant, defaultModel, fallbackModel]
+  )
 
   const normalizedTopics = useMemo(
     () => (Array.isArray(assistant?.topics) ? assistant.topics : []),
@@ -202,13 +217,14 @@ export function useDefaultAssistant() {
 }
 
 export function useDefaultModel() {
-  const { defaultModel, quickModel, translateModel } = useAppSelector((state) => state.llm)
+  const { defaultModel, quickModel, translateModel, providers } = useAppSelector((state) => state.llm)
+  const fallbackModel = useMemo(() => pickFallbackModel(providers), [providers])
   const dispatch = useAppDispatch()
 
   return {
-    defaultModel,
-    quickModel,
-    translateModel,
+    defaultModel: defaultModel ?? fallbackModel,
+    quickModel: quickModel ?? fallbackModel,
+    translateModel: translateModel ?? fallbackModel,
     setDefaultModel: (model: Model) => dispatch(setDefaultModel({ model })),
     setQuickModel: (model: Model) => dispatch(setQuickModel({ model })),
     setTranslateModel: (model: Model) => dispatch(setTranslateModel({ model }))

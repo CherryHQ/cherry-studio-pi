@@ -3,7 +3,19 @@ import App from '@renderer/components/MinApp/MinApp'
 import { useMinapps } from '@renderer/hooks/useMinapps'
 import { useRuntime } from '@renderer/hooks/useRuntime'
 import { useSettings } from '@renderer/hooks/useSettings'
-import { Code, FileSearch, Folder, Languages, LayoutGrid, NotepadText, Palette, Sparkle } from 'lucide-react'
+import { createTaskTabPath } from '@renderer/utils/tabs'
+import {
+  Bot,
+  Code,
+  FileSearch,
+  Folder,
+  Languages,
+  LayoutGrid,
+  MousePointerClick,
+  NotepadText,
+  Palette,
+  Sparkle
+} from 'lucide-react'
 import type { FC } from 'react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -23,6 +35,12 @@ const LaunchpadPage: FC = () => {
       text: t('title.apps'),
       path: '/apps',
       bgColor: 'linear-gradient(135deg, #8B5CF6, #A855F7)' // 小程序：紫色，代表多功能和灵活性
+    },
+    {
+      icon: <MousePointerClick size={32} className="icon" />,
+      text: t('agent.sidebar_title'),
+      path: '/agents',
+      bgColor: 'linear-gradient(135deg, #14B8A6, #06B6D4)'
     },
     {
       icon: <FileSearch size={32} className="icon" />,
@@ -67,6 +85,12 @@ const LaunchpadPage: FC = () => {
       bgColor: 'linear-gradient(135deg, #EF4444, #B91C1C)' // OpenClaw：红色渐变，代表龙虾的颜色
     },
     {
+      icon: <Bot size={32} className="icon" />,
+      text: 'Hermes',
+      path: '/hermes',
+      bgColor: 'linear-gradient(135deg, #14B8A6, #0F766E)'
+    },
+    {
       icon: <NotepadText size={32} className="icon" />,
       text: t('title.notes'),
       path: '/notes',
@@ -96,7 +120,7 @@ const LaunchpadPage: FC = () => {
           <SectionTitle>{t('launchpad.apps')}</SectionTitle>
           <Grid>
             {appMenuItems.map((item) => (
-              <AppIcon key={item.path} onClick={() => navigate(item.path)}>
+              <AppIcon key={item.path} onClick={() => navigate(createTaskTabPath(item.path))}>
                 <IconContainer>
                   <IconWrapper bgColor={item.bgColor}>{item.icon}</IconWrapper>
                 </IconContainer>

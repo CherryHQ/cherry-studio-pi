@@ -34,8 +34,7 @@ const AgentChat = () => {
   const { isLoading: isAgentsLoading, agents } = useAgents()
   const { createDefaultSession } = useCreateDefaultSession(activeAgentId)
 
-  // Don't show select/create alerts while data is still loading
-  // apiServerRunning is guaranteed by AgentPage guard
+  // Don't show select/create alerts while data is still loading.
   const isInitializing =
     isAgentsLoading || isAgentLoading || !isSessionInitialized || !agents || (!activeAgentId && agents.length > 0)
 

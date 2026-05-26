@@ -1,14 +1,12 @@
 import { useCallback } from 'react'
 import useSWR from 'swr'
 
-import { useApiServer } from '../useApiServer'
 import { useAgentClient } from './useAgentClient'
 
 export const useChannels = (type?: string) => {
   const client = useAgentClient()
-  const { apiServerRunning } = useApiServer()
 
-  const key = apiServerRunning ? `${client.channelPaths.base}?type=${type ?? ''}` : null
+  const key = `${client.channelPaths.base}?type=${type ?? ''}`
 
   const fetcher = useCallback(async () => {
     const result = await client.listChannels(type ? { type } : undefined)

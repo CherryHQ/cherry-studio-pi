@@ -20,32 +20,43 @@ import {
 } from '@renderer/config/models'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import type { ToolQuickPanelApi } from '@renderer/pages/home/Inputbar/types'
-import type { Model, ThinkingOption } from '@renderer/types'
+import type { Assistant, AssistantSettings, Model, ThinkingOption } from '@renderer/types'
 import { Tooltip } from 'antd'
 import type { FC, ReactElement } from 'react'
 import { useCallback, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
-interface Props {
+interface BaseProps {
   quickPanel: ToolQuickPanelApi
   model: Model
-  assistantId: string
-  // Controlled mode: external state management (for agent sessions)
   reasoningEffort?: ThinkingOption
   onReasoningEffortChange?: (option: ThinkingOption) => void
 }
 
-const ThinkingButton: FC<Props> = ({
+type Props =
+  | (BaseProps & { assistantId: string; assistant?: never; updateAssistantSettings?: never })
+  | (BaseProps & {
+      assistant: Assistant
+      assistantId?: never
+      updateAssistantSettings?: (settings: Partial<AssistantSettings>) => void
+    })
+
+interface ViewProps extends BaseProps {
+  assistant: Assistant
+  updateAssistantSettings?: (settings: Partial<AssistantSettings>) => void
+}
+
+const ThinkingButtonView: FC<ViewProps> = ({
   quickPanel,
   model,
-  assistantId,
+  assistant,
+  updateAssistantSettings,
   reasoningEffort: controlledEffort,
   onReasoningEffortChange
 }): ReactElement => {
   const { t } = useTranslation()
   const quickPanelHook = useQuickPanel()
   const isControlled = controlledEffort !== undefined
-  const { assistant, updateAssistantSettings } = useAssistant(assistantId)
 
   const currentReasoningEffort = useMemo(() => {
     if (isControlled) return controlledEffort
@@ -74,6 +85,10 @@ const ThinkingButton: FC<Props> = ({
 
       if (isControlled) {
         onReasoningEffortChange?.(option)
+        return
+      }
+
+      if (!updateAssistantSettings) {
         return
       }
 
@@ -229,6 +244,37 @@ const ThinkingButton: FC<Props> = ({
         {ThinkingIcon({ option: currentReasoningEffort, isFixedReasoning })}
       </ActionIconButton>
     </Tooltip>
+  )
+}
+
+const ThinkingButtonWithAssistantId: FC<BaseProps & { assistantId: string }> = (props) => {
+  const { assistant, updateAssistantSettings } = useAssistant(props.assistantId)
+
+  return <ThinkingButtonView {...props} assistant={assistant} updateAssistantSettings={updateAssistantSettings} />
+}
+
+const ThinkingButton: FC<Props> = (props): ReactElement => {
+  if (props.assistant) {
+    return (
+      <ThinkingButtonView
+        quickPanel={props.quickPanel}
+        model={props.model}
+        assistant={props.assistant}
+        updateAssistantSettings={props.updateAssistantSettings}
+        reasoningEffort={props.reasoningEffort}
+        onReasoningEffortChange={props.onReasoningEffortChange}
+      />
+    )
+  }
+
+  return (
+    <ThinkingButtonWithAssistantId
+      quickPanel={props.quickPanel}
+      model={props.model}
+      assistantId={props.assistantId}
+      reasoningEffort={props.reasoningEffort}
+      onReasoningEffortChange={props.onReasoningEffortChange}
+    />
   )
 }
 

@@ -1,19 +1,6 @@
-import { AgentApiClient } from '@renderer/api/agent'
+import { AgentIpcClient } from '@renderer/api/agent-ipc'
 import { useMemo } from 'react'
 
-import { useSettings } from '../useSettings'
-
 export const useAgentClient = () => {
-  const { apiServer } = useSettings()
-  const { host, port, apiKey } = apiServer
-  return useMemo(
-    () =>
-      new AgentApiClient({
-        baseURL: `http://${host}:${port}`,
-        headers: {
-          Authorization: `Bearer ${apiKey}`
-        }
-      }),
-    [host, port, apiKey]
-  )
+  return useMemo(() => new AgentIpcClient(), [])
 }

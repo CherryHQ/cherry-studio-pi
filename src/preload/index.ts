@@ -22,8 +22,13 @@ import type { ExternalAppInfo } from '@shared/externalApp/types'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { Notification } from '@types'
 import type {
+  AddAgentForm,
   AddMemoryOptions,
+  ApiModelsFilter,
   AssistantMessage,
+  CreateSessionForm,
+  CreateSessionMessageRequest,
+  CreateTaskRequest,
   FileListResponse,
   FileMetadata,
   FileUploadResponse,
@@ -31,6 +36,7 @@ import type {
   KnowledgeBaseParams,
   KnowledgeItem,
   KnowledgeSearchResult,
+  ListOptions,
   MCPServer,
   MemoryConfig,
   MemoryListOptions,
@@ -46,6 +52,9 @@ import type {
   StopApiServerStatusResult,
   SupportedOcrFile,
   ThemeMode,
+  UpdateAgentForm,
+  UpdateSessionForm,
+  UpdateTaskRequest,
   WebDavConfig
 } from '@types'
 import type { OpenDialogOptions } from 'electron'
@@ -77,6 +86,15 @@ interface OpenClawChannelInfo {
   name: string
   type: string
   status: 'connected' | 'disconnected' | 'error'
+}
+
+type AgentMessageStreamChunk = {
+  requestId: string
+  agentId: string
+  sessionId: string
+  type: 'chunk' | 'done' | 'aborted' | 'error'
+  chunk?: any
+  error?: { message: string; name?: string; stack?: string }
 }
 
 type DirectoryListOptions = {
@@ -217,6 +235,26 @@ const api = {
       ipcRenderer.invoke(IpcChannel.Backup_CreateLanTransferBackup, data, destinationPath),
     deleteLanTransferBackup: (filePath: string): Promise<boolean> =>
       ipcRenderer.invoke(IpcChannel.Backup_DeleteLanTransferBackup, filePath)
+  },
+  appData: {
+    get: (scope: string, key: string) => ipcRenderer.invoke(IpcChannel.AppData_Get, scope, key),
+    set: (scope: string, key: string, value: unknown) => ipcRenderer.invoke(IpcChannel.AppData_Set, scope, key, value),
+    delete: (scope: string, key: string) => ipcRenderer.invoke(IpcChannel.AppData_Delete, scope, key),
+    list: (scope?: string, includeDeleted?: boolean) =>
+      ipcRenderer.invoke(IpcChannel.AppData_List, scope, includeDeleted),
+    getCache: (namespace: string, key: string) => ipcRenderer.invoke(IpcChannel.AppCache_Get, namespace, key),
+    setCache: (namespace: string, key: string, value: unknown, ttlMs?: number) =>
+      ipcRenderer.invoke(IpcChannel.AppCache_Set, namespace, key, value, ttlMs),
+    deleteCache: (namespace: string, key: string) => ipcRenderer.invoke(IpcChannel.AppCache_Delete, namespace, key),
+    listWorkbenchShortcuts: () => ipcRenderer.invoke(IpcChannel.WorkbenchShortcut_List),
+    upsertWorkbenchShortcut: (shortcut: Record<string, unknown>) =>
+      ipcRenderer.invoke(IpcChannel.WorkbenchShortcut_Upsert, shortcut),
+    installHtmlArtifact: (input: { title?: string; html: string }) =>
+      ipcRenderer.invoke(IpcChannel.WorkbenchShortcut_InstallHtml, input)
+  },
+  dataSync: {
+    syncNow: (webdavConfig: WebDavConfig) => ipcRenderer.invoke(IpcChannel.DataSync_SyncNow, webdavConfig),
+    getStatus: () => ipcRenderer.invoke(IpcChannel.DataSync_GetStatus)
   },
   file: {
     select: (options?: OpenDialogOptions): Promise<FileMetadata[] | null> =>
@@ -560,6 +598,60 @@ const api = {
       message?: string
       updatedPermissions?: PermissionUpdate[]
     }) => ipcRenderer.invoke(IpcChannel.AgentToolPermission_Response, payload)
+  },
+  agent: {
+    listAgents: (options?: ListOptions) => ipcRenderer.invoke(IpcChannel.Agent_List, options),
+    createAgent: (form: AddAgentForm) => ipcRenderer.invoke(IpcChannel.Agent_Create, form),
+    getAgent: (id: string) => ipcRenderer.invoke(IpcChannel.Agent_Get, id),
+    updateAgent: (form: UpdateAgentForm, options?: { replace?: boolean }) =>
+      ipcRenderer.invoke(IpcChannel.Agent_Update, form.id, form, options),
+    deleteAgent: (id: string) => ipcRenderer.invoke(IpcChannel.Agent_Delete, id),
+    reorderAgents: (orderedIds: string[]) => ipcRenderer.invoke(IpcChannel.Agent_Reorder, orderedIds),
+    listSessions: (agentId: string, options?: ListOptions) =>
+      ipcRenderer.invoke(IpcChannel.AgentSession_List, agentId, options),
+    createSession: (agentId: string, form: CreateSessionForm) =>
+      ipcRenderer.invoke(IpcChannel.AgentSession_Create, agentId, form),
+    getSession: (agentId: string, sessionId: string) =>
+      ipcRenderer.invoke(IpcChannel.AgentSession_Get, agentId, sessionId),
+    updateSession: (agentId: string, form: UpdateSessionForm) =>
+      ipcRenderer.invoke(IpcChannel.AgentSession_Update, agentId, form.id, form),
+    deleteSession: (agentId: string, sessionId: string) =>
+      ipcRenderer.invoke(IpcChannel.AgentSession_Delete, agentId, sessionId),
+    reorderSessions: (agentId: string, orderedIds: string[]) =>
+      ipcRenderer.invoke(IpcChannel.AgentSession_Reorder, agentId, orderedIds),
+    deleteSessionMessage: (agentId: string, sessionId: string, messageId: number) =>
+      ipcRenderer.invoke(IpcChannel.AgentSessionMessage_Delete, sessionId, messageId, agentId),
+    listModels: (filter?: ApiModelsFilter) => ipcRenderer.invoke(IpcChannel.AgentModels_List, filter),
+    listTasks: (options?: ListOptions) => ipcRenderer.invoke(IpcChannel.AgentTasks_List, options),
+    createTask: (agentId: string, task: CreateTaskRequest) =>
+      ipcRenderer.invoke(IpcChannel.AgentTask_Create, agentId, task),
+    getTask: (taskId: string) => ipcRenderer.invoke(IpcChannel.AgentTask_Get, taskId),
+    updateTask: (taskId: string, updates: UpdateTaskRequest) =>
+      ipcRenderer.invoke(IpcChannel.AgentTask_Update, taskId, updates),
+    deleteTask: (taskId: string) => ipcRenderer.invoke(IpcChannel.AgentTask_Delete, taskId),
+    runTask: (taskId: string) => ipcRenderer.invoke(IpcChannel.AgentTask_Run, taskId),
+    getTaskLogs: (taskId: string, options?: ListOptions) =>
+      ipcRenderer.invoke(IpcChannel.AgentTaskLogs_List, taskId, options),
+    listChannels: (filters?: { agent_id?: string; type?: string }) =>
+      ipcRenderer.invoke(IpcChannel.AgentChannels_List, filters),
+    createChannel: (data: Record<string, unknown>) => ipcRenderer.invoke(IpcChannel.AgentChannel_Create, data),
+    updateChannel: (id: string, data: Record<string, unknown>) =>
+      ipcRenderer.invoke(IpcChannel.AgentChannel_Update, id, data),
+    deleteChannel: (id: string) => ipcRenderer.invoke(IpcChannel.AgentChannel_Delete, id),
+    startMessageStream: (payload: {
+      requestId: string
+      agentId: string
+      sessionId: string
+      message: CreateSessionMessageRequest
+    }) => ipcRenderer.invoke(IpcChannel.AgentMessageStream_Start, payload),
+    abortMessageStream: (requestId: string) => ipcRenderer.invoke(IpcChannel.AgentMessageStream_Abort, requestId),
+    onMessageStreamChunk: (callback: (chunk: AgentMessageStreamChunk) => void): (() => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, chunk: AgentMessageStreamChunk) => {
+        callback(chunk)
+      }
+      ipcRenderer.on(IpcChannel.AgentMessageStream_Chunk, listener)
+      return () => ipcRenderer.off(IpcChannel.AgentMessageStream_Chunk, listener)
+    }
   },
   agentSessionStream: {
     subscribe: (sessionId: string) => ipcRenderer.invoke(IpcChannel.AgentSessionStream_Subscribe, { sessionId }),

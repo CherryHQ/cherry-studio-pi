@@ -86,7 +86,7 @@ class TabsService {
     const tab = tabs.find((t) => t.id === tabId)
 
     if (tab && tab.path.startsWith('/apps/')) {
-      const appId = tab.path.replace('/apps/', '')
+      const appId = new URL(tab.path, 'app://perry').pathname.replace('/apps/', '')
 
       if (this.minAppsCache && this.minAppsCache.has(appId)) {
         logger.debug(`Cleaning up mini-app cache for app: ${appId}`)

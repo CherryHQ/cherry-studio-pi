@@ -12,9 +12,17 @@ const quickPhrasesTool = defineTool({
   },
 
   render: (context) => {
-    const { assistant, actions, quickPanel } = context
+    const { assistant, actions, quickPanel, scope } = context
 
-    return (
+    return scope === TopicType.Session ? (
+      <QuickPhrasesButton
+        quickPanel={quickPanel}
+        setInputValue={actions.onTextChange}
+        resizeTextArea={actions.resizeTextArea}
+        assistant={assistant}
+        allowAssistantPhrases={false}
+      />
+    ) : (
       <QuickPhrasesButton
         quickPanel={quickPanel}
         setInputValue={actions.onTextChange}

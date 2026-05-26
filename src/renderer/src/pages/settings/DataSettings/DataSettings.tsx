@@ -14,6 +14,7 @@ import styled from 'styled-components'
 
 import { SettingContainer } from '..'
 import BasicDataSettings from './BasicDataSettings'
+import DataSyncSettings from './DataSyncSettings'
 import ExportMenuOptions from './ExportMenuSettings'
 import JoplinSettings from './JoplinSettings'
 import LocalBackupSettings from './LocalBackupSettings'
@@ -37,6 +38,7 @@ const DataSettings: FC = () => {
     { key: 'divider_1', isDivider: true, text: t('settings.data.divider.cloud_storage') },
     { key: 'local_backup', title: t('settings.data.local.title'), icon: <FolderCog size={16} /> },
     { key: 'webdav', title: t('settings.data.webdav.title'), icon: <CloudSyncOutlined style={{ fontSize: 16 }} /> },
+    { key: 'data_sync', title: '数据同步', icon: <CloudSyncOutlined style={{ fontSize: 16 }} /> },
     { key: 'nutstore', title: t('settings.data.nutstore.title'), icon: <NutstoreIcon /> },
     { key: 's3', title: t('settings.data.s3.title.label'), icon: <CloudServerOutlined style={{ fontSize: 16 }} /> },
     { key: 'divider_2', isDivider: true, text: t('settings.data.divider.import_settings') },
@@ -102,6 +104,7 @@ const DataSettings: FC = () => {
       <SettingContainer theme={theme} style={{ display: 'flex', flex: 1, height: '100%' }}>
         {menu === 'data' && <BasicDataSettings />}
         {menu === 'webdav' && <WebDavSettings />}
+        {menu === 'data_sync' && <DataSyncSettings />}
         {menu === 'nutstore' && <NutstoreSettings />}
         {menu === 's3' && <S3Settings />}
         {menu === 'import_settings' && <ImportMenuOptions />}

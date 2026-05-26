@@ -10,8 +10,11 @@ import useNavBackgroundColor from '@renderer/hooks/useNavBackgroundColor'
 import { modelGenerating, useRuntime } from '@renderer/hooks/useRuntime'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { getSidebarIconLabel, getThemeModeLabel } from '@renderer/i18n/label'
+import { useAppDispatch, useAppSelector } from '@renderer/store'
+import { setActiveTab, updateTab } from '@renderer/store/tabs'
 import { ThemeMode } from '@renderer/types'
 import { isEmoji } from '@renderer/utils'
+import { createTaskTabPath, getTabIdFromPath, getTabInstanceId, withTabInstance } from '@renderer/utils/tabs'
 import { Avatar, Tooltip } from 'antd'
 import {
   Code,
@@ -38,6 +41,38 @@ import { OpenClawSidebarIcon } from '../Icons/SVGIcon'
 import UserPopup from '../Popups/UserPopup'
 import { SidebarOpenedMinappTabs, SidebarPinnedApps } from './PinnedMinapps'
 
+const useSwitchCurrentTab = () => {
+  const tabs = useAppSelector((state) => state.tabs.tabs)
+  const activeTabId = useAppSelector((state) => state.tabs.activeTabId)
+  const dispatch = useAppDispatch()
+  const navigate = useNavigate()
+
+  return async (path: string) => {
+    await modelGenerating()
+
+    const activeTab = tabs.find((tab) => tab.id === activeTabId)
+    if (!activeTab) {
+      navigate(path)
+      return
+    }
+
+    const activeInstanceId = getTabInstanceId(activeTab.id)
+    let nextPath = withTabInstance(path, activeInstanceId)
+    let nextId = getTabIdFromPath(nextPath)
+    const collidesWithOtherTab = () =>
+      tabs.some((tab) => tab.id !== activeTab.id && (tab.id === nextId || tab.path === nextPath))
+
+    if (collidesWithOtherTab()) {
+      nextPath = createTaskTabPath(path)
+      nextId = getTabIdFromPath(nextPath)
+    }
+
+    dispatch(updateTab({ id: activeTab.id, updates: { id: nextId, path: nextPath } }))
+    dispatch(setActiveTab(nextId))
+    navigate(nextPath)
+  }
+}
+
 const Sidebar: FC = () => {
   const { hideMinappPopup } = useMinappPopup()
   const { minappShow } = useRuntime()
@@ -45,7 +80,7 @@ const Sidebar: FC = () => {
   const { pinned } = useMinapps()
 
   const { pathname } = useLocation()
-  const navigate = useNavigate()
+  const switchCurrentTab = useSwitchCurrentTab()
 
   const { theme, settedTheme, toggleTheme } = useTheme()
   const avatar = useAvatar()
@@ -56,11 +91,6 @@ const Sidebar: FC = () => {
   const backgroundColor = useNavBackgroundColor()
 
   const showPinnedApps = pinned.length > 0 && sidebarIcons.visible.includes('minapp')
-
-  const to = async (path: string) => {
-    await modelGenerating()
-    navigate(path)
-  }
 
   const isFullscreen = useFullscreen()
 
@@ -106,7 +136,7 @@ const Sidebar: FC = () => {
           <StyledLink
             onClick={async () => {
               hideMinappPopup()
-              await to('/settings/provider')
+              await switchCurrentTab('/settings/provider')
             }}>
             <Icon theme={theme} className={pathname.startsWith('/settings') && !minappShow ? 'active' : ''}>
               <Settings size={20} className="icon" />
@@ -123,8 +153,8 @@ const MainMenus: FC = () => {
   const { pathname } = useLocation()
   const { sidebarIcons, defaultPaintingProvider } = useSettings()
   const { minappShow } = useRuntime()
-  const navigate = useNavigate()
   const { theme } = useTheme()
+  const switchCurrentTab = useSwitchCurrentTab()
 
   const isRoute = (path: string): string => (pathname === path && !minappShow ? 'active' : '')
   const isRoutes = (path: string): string => (pathname.startsWith(path) && path !== '/' && !minappShow ? 'active' : '')
@@ -166,8 +196,7 @@ const MainMenus: FC = () => {
         <StyledLink
           onClick={async () => {
             hideMinappPopup()
-            await modelGenerating()
-            navigate(path)
+            await switchCurrentTab(path)
           }}>
           <Icon theme={theme} className={isActive}>
             {iconMap[icon]}

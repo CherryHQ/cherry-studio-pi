@@ -33,6 +33,11 @@ export type BuiltinAgentInitResult =
   | { agentId: string; skippedReason?: undefined }
   | { agentId: null; skippedReason: 'deleted' | 'no_model' }
 
+const getFirstModelId = async (): Promise<string> => {
+  const modelsRes = await modelsService.getModels({ limit: 1 })
+  return modelsRes.data?.[0]?.id ?? ''
+}
+
 export class AgentService extends BaseService {
   static readonly DEFAULT_AGENT_ID = CHERRY_CLAW_AGENT_ID
 
@@ -185,7 +190,7 @@ export class AgentService extends BaseService {
   /**
    * Initialize a built-in agent from its bundled agent.json template.
    * Called once at app startup. Safe to call multiple times — skips if the agent already exists.
-   * Returns the agent ID if created or already present, or null if no compatible model is available yet.
+   * Returns the agent ID if created or already present, or null if no model is available yet.
    *
    * @param opts.id - Fixed agent ID
    * @param opts.builtinRole - Role key used by BuiltinAgentProvisioner (e.g. 'assistant')
@@ -219,6 +224,9 @@ export class AgentService extends BaseService {
         const agentConfig = workspace ? await provisionWorkspace(workspace, builtinRole) : undefined
         if (agentConfig && (agentConfig.description || agentConfig.instructions)) {
           const updateData: UpdateAgentRequest = {}
+          if (agentConfig.name && ['Cherry Assistant', 'Perry Assistant'].includes(existing.name ?? '')) {
+            updateData.name = agentConfig.name
+          }
           if (agentConfig.description) updateData.description = agentConfig.description
           if (agentConfig.instructions) updateData.instructions = agentConfig.instructions
           await this.updateAgent(id, updateData)
@@ -226,11 +234,9 @@ export class AgentService extends BaseService {
         return { agentId: id }
       }
 
-      const modelsRes = await modelsService.getModels({ providerType: 'anthropic', limit: 1 })
-      const firstModel = modelsRes.data?.[0]
-      if (!firstModel) {
-        logger.info(`No Anthropic-compatible models available yet — skipping ${builtinRole} creation`)
-        return { agentId: null, skippedReason: 'no_model' }
+      const modelId = await getFirstModelId()
+      if (!modelId) {
+        logger.info(`No models available yet — creating ${builtinRole} without a model`)
       }
 
       // Resolve workspace path first so provisioner can copy template files
@@ -253,12 +259,14 @@ export class AgentService extends BaseService {
         name: agentConfig?.name || builtinRole,
         description: agentConfig?.description || `Built-in ${builtinRole} agent`,
         instructions: agentConfig?.instructions || 'You are a helpful assistant.',
-        model: firstModel.id,
+        model: modelId,
         accessible_paths: resolvedPaths,
         configuration
       }
 
-      await this.validateAgentModels(req.type, { model: req.model })
+      if (req.model) {
+        await this.validateAgentModels(req.type, { model: req.model })
+      }
       const serialized = this.serializeJsonFields(req)
 
       const insertData: InsertAgentRow = {
@@ -303,7 +311,7 @@ export class AgentService extends BaseService {
   /**
    * Initialize the built-in CherryClaw agent with a fixed ID.
    * Called once at app startup. Safe to call multiple times — skips if the agent already exists.
-   * Returns the agent ID if created or already present, or null if no compatible model is available yet.
+   * Returns the agent ID if created or already present, or null if no model is available yet.
    */
   async initDefaultCherryClawAgent(): Promise<BuiltinAgentInitResult> {
     const id = AgentService.DEFAULT_AGENT_ID
@@ -320,11 +328,9 @@ export class AgentService extends BaseService {
         return { agentId: id }
       }
 
-      const modelsRes = await modelsService.getModels({ providerType: 'anthropic', limit: 1 })
-      const firstModel = modelsRes.data?.[0]
-      if (!firstModel) {
-        logger.info('No Anthropic-compatible models available yet — skipping default CherryClaw creation')
-        return { agentId: null, skippedReason: 'no_model' }
+      const modelId = await getFirstModelId()
+      if (!modelId) {
+        logger.info('No models available yet — creating default CherryClaw without a model')
       }
 
       const now = new Date().toISOString()
@@ -344,13 +350,15 @@ export class AgentService extends BaseService {
         type: 'claude-code',
         name: 'Cherry Claw',
         description: 'Default autonomous CherryClaw agent',
-        model: firstModel.id,
+        model: modelId,
         accessible_paths: [],
         configuration
       }
 
       const resolvedPaths = this.resolveAccessiblePaths(req.accessible_paths, id)
-      await this.validateAgentModels(req.type, { model: req.model })
+      if (req.model) {
+        await this.validateAgentModels(req.type, { model: req.model })
+      }
 
       const serialized = this.serializeJsonFields({ ...req, accessible_paths: resolvedPaths })
 

@@ -233,6 +233,11 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
       })
 
   const sendMessage = useCallback(async () => {
+    if (!assistant.model) {
+      window.toast.warning('请先选择一个可用模型')
+      return
+    }
+
     if (checkRateLimit(assistant)) {
       return
     }
@@ -332,9 +337,7 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
 
     addTopic(newTopic)
     setActiveTopic(newTopic)
-
-    setTimeoutTimer('addNewTopic', () => EventEmitter.emit(EVENT_NAMES.SHOW_TOPIC_SIDEBAR), 0)
-  }, [addTopic, assistant.defaultModel, assistant.id, setActiveTopic, setModel, setTimeoutTimer])
+  }, [addTopic, assistant.defaultModel, assistant.id, setActiveTopic, setModel])
 
   const handleRemoveModel = useCallback(
     (modelToRemove: Model) => {
@@ -376,7 +379,6 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
     'new_topic',
     () => {
       void addNewTopic()
-      void EventEmitter.emit(EVENT_NAMES.SHOW_TOPIC_SIDEBAR)
       focusTextarea()
     },
     { preventDefault: true, enableOnFormTags: true }
@@ -478,7 +480,8 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
   )
 
   // leftToolbar: 左侧工具栏
-  const leftToolbar = config.showTools ? <InputbarTools scope={scope} assistant={assistant} model={model} /> : null
+  const leftToolbar =
+    config.showTools && model ? <InputbarTools scope={scope} assistant={assistant} model={model} /> : null
 
   // rightToolbar: 右侧工具栏
   const rightToolbar = (

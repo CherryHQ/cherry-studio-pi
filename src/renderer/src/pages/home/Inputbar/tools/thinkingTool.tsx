@@ -9,15 +9,18 @@ const thinkingTool = defineTool({
   condition: ({ model }) => {
     return isReasoningModel(model)
   },
-  render: ({ assistant, model, quickPanel, session }) => (
-    <ThinkingButton
-      quickPanel={quickPanel}
-      model={model}
-      assistantId={assistant.id}
-      reasoningEffort={session?.reasoningEffort}
-      onReasoningEffortChange={session?.onReasoningEffortChange}
-    />
-  )
+  render: ({ assistant, model, quickPanel, scope, session }) =>
+    scope === TopicType.Session ? (
+      <ThinkingButton
+        quickPanel={quickPanel}
+        model={model}
+        assistant={assistant}
+        reasoningEffort={session?.reasoningEffort}
+        onReasoningEffortChange={session?.onReasoningEffortChange}
+      />
+    ) : (
+      <ThinkingButton quickPanel={quickPanel} model={model} assistantId={assistant.id} />
+    )
 })
 
 registerTool(thinkingTool)

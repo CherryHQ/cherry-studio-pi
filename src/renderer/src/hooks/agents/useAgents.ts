@@ -6,7 +6,6 @@ import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import useSWR from 'swr'
 
-import { useApiServer } from '../useApiServer'
 import { useRuntime } from '../useRuntime'
 import { useAgentClient } from './useAgentClient'
 
@@ -24,26 +23,15 @@ export const useAgents = () => {
   const { t } = useTranslation()
   const client = useAgentClient()
   const key = client.agentPaths.base
-  const { apiServerConfig, apiServerRunning } = useApiServer()
-
-  // Disable SWR fetching when server is not running by setting key to null
-  const swrKey = apiServerRunning ? key : null
 
   const fetcher = useCallback(async () => {
-    // API server will start on startup if enabled OR there are agents
-    if (!apiServerConfig.enabled && !apiServerRunning) {
-      throw new Error(t('apiServer.messages.notEnabled'))
-    }
-    if (!apiServerRunning) {
-      throw new Error(t('agent.server.error.not_running'))
-    }
     // The /agents listing endpoint defaults to the schema max so a single fetch returns the full
     // list. NOTE: useUpdateAgent depends on a flat array result.
     const result = await client.listAgents({ sortBy: 'sort_order', orderBy: 'asc' })
     return result.data
-  }, [apiServerConfig.enabled, apiServerRunning, client, t])
+  }, [client])
 
-  const { data, error, isLoading, mutate } = useSWR(swrKey, fetcher)
+  const { data, error, isLoading, mutate } = useSWR(key, fetcher)
   const { chat } = useRuntime()
   const { activeAgentId } = chat
   const dispatch = useAppDispatch()

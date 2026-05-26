@@ -177,7 +177,17 @@ export function getDefaultProvider() {
 }
 
 export function getDefaultModel() {
-  return store.getState().llm.defaultModel
+  const state = store.getState().llm
+  return (
+    state.defaultModel ??
+    getStoreProviders().find(
+      (provider) =>
+        provider.enabled &&
+        provider.id !== 'cherryai' &&
+        provider.models?.length &&
+        (provider.apiKey?.trim() || provider.isAuthed || ['ollama', 'lmstudio', 'gpustack'].includes(provider.id))
+    )?.models?.[0]
+  )
 }
 
 export function getQuickModel() {

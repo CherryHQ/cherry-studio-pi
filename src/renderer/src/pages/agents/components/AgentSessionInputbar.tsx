@@ -30,7 +30,7 @@ import { estimateUserPromptUsage } from '@renderer/services/TokenService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { newMessagesActions, selectMessagesForTopic } from '@renderer/store/newMessage'
 import { sendMessage as dispatchSendMessage } from '@renderer/store/thunk/messageThunk'
-import type { Assistant, Message, ThinkingOption } from '@renderer/types'
+import type { Assistant, Message, Model, ThinkingOption } from '@renderer/types'
 import type { FileMetadata } from '@renderer/types'
 import type { MessageBlock } from '@renderer/types/newMessage'
 import { MessageBlockStatus } from '@renderer/types/newMessage'
@@ -51,6 +51,23 @@ const DRAFT_CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours
 
 const getAgentDraftCacheKey = (agentId: string) => `agent-session-draft-${agentId}`
 
+const resolveAgentSessionModel = (modelId?: string): Model | undefined => {
+  if (!modelId) return undefined
+
+  const separatorIndex = modelId.indexOf(':')
+  const providerId = separatorIndex >= 0 ? modelId.slice(0, separatorIndex) : undefined
+  const actualModelId = separatorIndex >= 0 ? modelId.slice(separatorIndex + 1) : modelId
+
+  return (
+    getModel(actualModelId, providerId) ?? {
+      id: actualModelId,
+      provider: providerId ?? '',
+      name: actualModelId || modelId,
+      group: providerId ?? ''
+    }
+  )
+}
+
 type Props = {
   agentId: string
   sessionId: string
@@ -70,9 +87,7 @@ const AgentSessionInputbar = ({ agentId, sessionId }: Props) => {
   const assistantStub = useMemo<Assistant | null>(() => {
     if (!session) return null
 
-    // Extract model info
-    const [providerId, actualModelId] = session.model?.split(':') ?? [undefined, undefined]
-    const actualModel = actualModelId ? getModel(actualModelId, providerId) : undefined
+    const actualModel = resolveAgentSessionModel(session.model)
 
     return {
       id: session.agent_id ?? agentId,
@@ -172,7 +187,7 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({ assistant, agentId, session
     customHeight,
     setCustomHeight
   } = useTextareaResize({ maxHeight: 500, minHeight: 30 })
-  const { sendMessageShortcut, apiServer } = useSettings()
+  const { sendMessageShortcut } = useSettings()
 
   const { t } = useTranslation()
   const quickPanel = useQuickPanel()
@@ -334,7 +349,7 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({ assistant, agentId, session
     }
   }, [config.enableQuickPanel, toolsRegistry])
 
-  const sendDisabled = (inputEmpty && files.length === 0) || !apiServer.enabled
+  const sendDisabled = inputEmpty && files.length === 0
 
   const streamingAskIds = useMemo(() => {
     if (!topicMessages) {
@@ -377,81 +392,133 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({ assistant, agentId, session
     dispatch(newMessagesActions.setTopicLoading({ topicId: sessionTopicId, loading: false }))
   }, [dispatch, sessionTopicId, streamingAskIds])
 
-  const sendMessage = useCallback(async () => {
-    if (sendDisabled) {
-      return
-    }
+  const sendMessage = useCallback(
+    async (overrideText?: string) => {
+      const outboundText = overrideText ?? text
 
-    logger.info('Starting to send message')
-
-    try {
-      const userMessageId = uuid()
-
-      // For agent sessions, append file paths to the text content instead of uploading files
-      let messageText = text
-      if (files.length > 0) {
-        const filePaths = files.map((file) => file.path).join('\n')
-        messageText = text ? `${text}\n\nAttached files:\n${filePaths}` : `Attached files:\n${filePaths}`
+      if (!overrideText && sendDisabled) {
+        return
       }
 
-      const mainBlock = createMainTextBlock(userMessageId, messageText, {
-        status: MessageBlockStatus.SUCCESS
-      })
-      const userMessageBlocks: MessageBlock[] = [mainBlock]
+      if (!assistant.model) {
+        window.toast.warning('请先为当前 Agent 选择一个可用模型')
+        return
+      }
 
-      // Calculate token usage for the user message
-      const usage = await estimateUserPromptUsage({ content: text })
+      logger.info('Starting to send message')
 
-      const userMessage: Message = createMessage('user', sessionTopicId, agentId, {
-        id: userMessageId,
-        blocks: userMessageBlocks.map((block) => block?.id),
-        model: assistant.model,
-        modelId: assistant.model?.id,
-        usage
-      })
+      try {
+        const userMessageId = uuid()
 
-      const thinkingParams = assistant.model
-        ? getAnthropicReasoningParams(
-            { ...assistant, settings: { ...assistant.settings, reasoning_effort: reasoningEffort } },
-            assistant.model
-          )
-        : {}
+        // For agent sessions, append file paths to the text content instead of uploading files
+        let messageText = outboundText
+        if (!overrideText && files.length > 0) {
+          const filePaths = files.map((file) => file.path).join('\n')
+          messageText = outboundText
+            ? `${outboundText}\n\nAttached files:\n${filePaths}`
+            : `Attached files:\n${filePaths}`
+        }
 
-      void dispatch(
-        dispatchSendMessage(userMessage, userMessageBlocks, assistant, sessionTopicId, {
-          agentId,
-          sessionId,
-          ...thinkingParams
+        const mainBlock = createMainTextBlock(userMessageId, messageText, {
+          status: MessageBlockStatus.SUCCESS
         })
-      )
+        const userMessageBlocks: MessageBlock[] = [mainBlock]
 
-      // Emit event to trigger scroll to bottom in AgentSessionMessages
-      void EventEmitter.emit(EVENT_NAMES.SEND_MESSAGE, { topicId: sessionTopicId })
+        // Calculate token usage for the user message
+        const usage = await estimateUserPromptUsage({ content: outboundText })
 
-      // Clear text and files after successful send (draft is cleared automatically via onChange)
-      setText('')
-      setFiles([])
-      setTimeoutTimer('agentSession_sendMessage', () => setText(''), 500)
-      // Restore focus to textarea after sending to maintain IME state (fcitx5 issue)
-      focusTextarea()
-    } catch (error) {
-      logger.warn('Failed to send message:', error as Error)
+        const userMessage: Message = createMessage('user', sessionTopicId, agentId, {
+          id: userMessageId,
+          blocks: userMessageBlocks.map((block) => block?.id),
+          model: assistant.model,
+          modelId: assistant.model?.id,
+          usage
+        })
+
+        const thinkingParams = assistant.model
+          ? getAnthropicReasoningParams(
+              { ...assistant, settings: { ...assistant.settings, reasoning_effort: reasoningEffort } },
+              assistant.model
+            )
+          : {}
+
+        void dispatch(
+          dispatchSendMessage(userMessage, userMessageBlocks, assistant, sessionTopicId, {
+            agentId,
+            sessionId,
+            ...thinkingParams
+          })
+        )
+
+        // Emit event to trigger scroll to bottom in AgentSessionMessages
+        void EventEmitter.emit(EVENT_NAMES.SEND_MESSAGE, { topicId: sessionTopicId })
+
+        // Clear text and files after successful send (draft is cleared automatically via onChange)
+        if (!overrideText) {
+          setText('')
+          setFiles([])
+          setTimeoutTimer('agentSession_sendMessage', () => setText(''), 500)
+        }
+        // Restore focus to textarea after sending to maintain IME state (fcitx5 issue)
+        focusTextarea()
+      } catch (error) {
+        logger.warn('Failed to send message:', error as Error)
+      }
+    },
+    [
+      sendDisabled,
+      agentId,
+      dispatch,
+      assistant,
+      sessionId,
+      sessionTopicId,
+      setText,
+      setFiles,
+      setTimeoutTimer,
+      text,
+      files,
+      focusTextarea,
+      reasoningEffort
+    ]
+  )
+
+  useEffect(() => {
+    const runPrompt = (payload: any) => {
+      if (payload?.requestId && sessionStorage.getItem('handled-agent-run-prompt') === payload.requestId) {
+        return
+      }
+      if (payload?.agentId && payload.agentId !== agentId) {
+        return
+      }
+      if (payload?.sessionId && payload.sessionId !== sessionId) {
+        return
+      }
+      if (typeof payload?.text !== 'string' || !payload.text.trim()) {
+        return
+      }
+      if (payload?.requestId) {
+        sessionStorage.setItem('handled-agent-run-prompt', payload.requestId)
+      }
+      void sendMessage(payload.text)
     }
-  }, [
-    sendDisabled,
-    agentId,
-    dispatch,
-    assistant,
-    sessionId,
-    sessionTopicId,
-    setText,
-    setFiles,
-    setTimeoutTimer,
-    text,
-    files,
-    focusTextarea,
-    reasoningEffort
-  ])
+
+    const pendingPrompt = sessionStorage.getItem('pending-agent-run-prompt')
+    if (pendingPrompt) {
+      try {
+        const payload = JSON.parse(pendingPrompt)
+        sessionStorage.removeItem('pending-agent-run-prompt')
+        runPrompt(payload)
+      } catch {
+        sessionStorage.removeItem('pending-agent-run-prompt')
+      }
+    }
+
+    const unsubscribe = EventEmitter.on(EVENT_NAMES.AGENT_RUN_PROMPT, runPrompt)
+
+    return () => {
+      unsubscribe()
+    }
+  }, [agentId, sendMessage, sessionId])
 
   useEffect(() => {
     if (!document.querySelector('.topview-fullscreen-container')) {
@@ -483,8 +550,8 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({ assistant, agentId, session
   const leftToolbar = useMemo(
     () => (
       <ToolbarGroup>
-        {config.showTools && (
-          <InputbarTools scope={scope} assistant={assistant} model={assistant.model!} session={toolsSession} />
+        {config.showTools && assistant.model && (
+          <InputbarTools scope={scope} assistant={assistant} model={assistant.model} session={toolsSession} />
         )}
       </ToolbarGroup>
     ),

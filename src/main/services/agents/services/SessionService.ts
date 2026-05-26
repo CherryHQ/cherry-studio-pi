@@ -153,7 +153,7 @@ export class SessionService extends BaseService {
       description: serializedData.description || null,
       accessible_paths: serializedData.accessible_paths || null,
       instructions: serializedData.instructions || null,
-      model: serializedData.model || null,
+      model: serializedData.model ?? '',
       plan_model: serializedData.plan_model || null,
       small_model: serializedData.small_model || null,
       mcps: serializedData.mcps || null,

@@ -10,16 +10,14 @@ import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import useSWR, { mutate } from 'swr'
 
-import { useApiServer } from '../useApiServer'
 import { useAgentClient } from './useAgentClient'
 
 const TASKS_LIST_KEY = '/v1/tasks'
 
 export const useTasks = () => {
   const client = useAgentClient()
-  const { apiServerRunning } = useApiServer()
 
-  const key = apiServerRunning ? TASKS_LIST_KEY : null
+  const key = TASKS_LIST_KEY
 
   const fetcher = useCallback(async () => {
     return client.listTasks({ limit: 200 })
@@ -133,9 +131,8 @@ export const useDeleteTask = () => {
 
 export const useTaskLogs = (taskId: string | null) => {
   const client = useAgentClient()
-  const { apiServerRunning } = useApiServer()
 
-  const key = apiServerRunning && taskId ? client.taskPaths.logs(taskId) : null
+  const key = taskId ? client.taskPaths.logs(taskId) : null
 
   const fetcher = useCallback(async () => {
     if (!taskId) throw new Error('Task ID required')

@@ -3458,6 +3458,40 @@ const migrateConfig = {
       logger.error('migrate 208 error', error as Error)
       return state
     }
+  },
+  '209': (state: RootState) => {
+    try {
+      const currentVisible = state.settings.sidebarIcons?.visible || []
+      const currentDisabled = state.settings.sidebarIcons?.disabled || []
+      const visible = DEFAULT_SIDEBAR_ICONS
+      const disabled = Array.from(
+        new Set([...currentVisible, ...currentDisabled].filter((icon) => !visible.includes(icon)))
+      )
+
+      state.settings.sidebarIcons = { visible, disabled }
+
+      logger.info('migrate 209 success')
+      return state
+    } catch (error) {
+      logger.error('migrate 209 error', error as Error)
+      return state
+    }
+  },
+  '210': (state: RootState) => {
+    try {
+      state.settings.dataSyncWebdavHost ??= ''
+      state.settings.dataSyncWebdavUser ??= ''
+      state.settings.dataSyncWebdavPass ??= ''
+      state.settings.dataSyncWebdavPath ??= '/perry-studio'
+      state.settings.dataSyncAutoSync ??= false
+      state.settings.dataSyncSyncInterval ??= 0
+
+      logger.info('migrate 210 success')
+      return state
+    } catch (error) {
+      logger.error('migrate 210 error', error as Error)
+      return state
+    }
   }
 }
 

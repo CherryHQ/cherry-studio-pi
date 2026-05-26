@@ -66,7 +66,7 @@ interface Props {
 
 const AssistantSettingsTab = (props: Props) => {
   const { assistant } = useAssistant(props.assistant.id)
-  const { provider } = useProvider(assistant.model.provider)
+  const { provider } = useProvider(assistant.model?.provider ?? '')
 
   const { messageStyle, fontSize, language } = useSettings()
   const { theme } = useTheme()

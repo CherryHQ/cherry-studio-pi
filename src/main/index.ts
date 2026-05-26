@@ -15,7 +15,6 @@ import { isDev, isLinux, isWin } from './constant'
 import process from 'node:process'
 
 import { registerIpc } from './ipc'
-import { agentService } from './services/agents'
 import { schedulerService } from './services/agents/services/SchedulerService'
 import { bootstrapBuiltinAgents } from './services/agents/services/builtin/BuiltinAgentBootstrap'
 import { channelManager } from './services/agents/services/channels'
@@ -212,26 +211,13 @@ if (!app.requestSingleInstanceLock()) {
       // TODO: v2 lifecycle
       await bootstrapBuiltinAgents()
 
-      // Start API server if enabled or if agents exist
+      // Start the external API server only when the user explicitly enables it.
+      // The in-app Agent UI uses IPC now and does not need this HTTP server.
       try {
         const config = await apiServerService.getCurrentConfig()
         logger.info('API server config:', config)
 
-        // Check if there are any agents
-        let shouldStart = config.enabled
-        if (!shouldStart) {
-          try {
-            const { total } = await agentService.listAgents({ limit: 1 })
-            if (total > 0) {
-              shouldStart = true
-              logger.info(`Detected ${total} agent(s), auto-starting API server`)
-            }
-          } catch (error: any) {
-            logger.warn('Failed to check agent count:', error)
-          }
-        }
-
-        if (shouldStart) {
+        if (config.enabled) {
           await apiServerService.start()
         }
 

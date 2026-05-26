@@ -35,8 +35,24 @@ const NO_KEY_PLACEHOLDERS: Record<string, string> = {
   lmstudio: 'lmstudio'
 }
 
-const ANTHROPIC_ONLY_PROVIDER_TYPES = new Set(['anthropic', 'vertex-anthropic'])
-const ANTHROPIC_ENDPOINT_TYPES = new Set(['anthropic'])
+const PROVIDER_API_MAP = {
+  anthropic: 'anthropic-messages',
+  'vertex-anthropic': 'anthropic-messages',
+  gemini: 'google-generative-ai',
+  vertexai: 'google-vertex',
+  mistral: 'mistral-conversations',
+  'aws-bedrock': 'bedrock-converse-stream',
+  'openai-response': 'openai-responses',
+  'azure-openai': 'azure-openai-responses'
+} satisfies Partial<Record<Provider['type'], Api>>
+
+const ENDPOINT_API_MAP = {
+  anthropic: 'anthropic-messages',
+  gemini: 'google-generative-ai',
+  openai: 'openai-completions',
+  'openai-response': 'openai-responses'
+} satisfies Partial<Record<NonNullable<Model['endpoint_type']>, Api>>
+
 const MAX_HYDRATED_HISTORY_MESSAGES = 80
 
 class PiAgentStream extends EventEmitter implements AgentStream {
@@ -290,9 +306,9 @@ Use the least expensive tool first:
 - Use Read with offset/limit for large files.
 - Use Edit only after confirming the exact target text; if an edit is ambiguous, read more context and retry once.
 - Batch related shell checks into one Bash command when safe, but make diagnostic checks tolerate misses (for example append "|| true") and avoid speculative commands.
-- For dependency installs, inspect the package manager files first, then run the one matching install command. CLI packages may be installed with npm install -g; Perry Studio maps global npm installs to an agent-scoped tool prefix on PATH, so do not convert a CLI install into a project dependency. If an install script, binary download, or native package fetch fails because of SSL/certificate/network restrictions, stop. Do not manually download binaries with Node/curl/wget, do not switch to a local/global install workaround, and do not repeat variants. Briefly report the dependency/environment blocker only if it prevents the requested task.
+- For dependency installs, inspect the package manager files first, then run the one matching install command. CLI packages may be installed with npm install -g; Perry Studio maps global npm installs to an agent-scoped tool prefix on PATH, so do not convert a CLI install into a project dependency. Prefer npm metadata/install for npm-distributed CLIs; do not try Homebrew unless the user explicitly asked for Homebrew. If an install script, binary download, or native package fetch fails because of SSL/certificate/network restrictions, stop. Do not manually download binaries with Node/curl/wget, do not switch to a local/global install workaround, and do not repeat variants. Briefly report the dependency/environment blocker only if it prevents the requested task.
 - Path restrictions are final boundaries, not problems to bypass. If a path is outside accessible directories, do not retry from another directory, copy global files into the project, locally install a CLI as a workaround, or ask the user to expose /opt/homebrew/bin or /usr/local/bin. Use only the current workspace, injected MCP tools, or ask the user to add a task-relevant project path.
-- Never repair or mutate system/global SSL, certificate, curl, keychain, trust-store, npm, git, or Node TLS settings. Do not run commands such as security add-trusted-cert, update-ca-certificates, brew reinstall ca-certificates, npm config set strict-ssl false, git config --global http.sslVerify false, or NODE_TLS_REJECT_UNAUTHORIZED=0. If curl reports an SSL/certificate problem while fetching public documentation, do not narrate that failure or try another downloader; continue only if package metadata or local knowledge is enough.
+- Never repair or mutate system/global SSL, certificate, curl, keychain, trust-store, npm, git, or Node TLS settings. Do not run commands such as security add-trusted-cert, update-ca-certificates, brew reinstall ca-certificates, npm config set strict-ssl false, git config --global http.sslVerify false, or NODE_TLS_REJECT_UNAUTHORIZED=0. If curl reports an SSL/certificate problem while fetching public documentation, do not narrate that failure or try another downloader; continue only if package metadata or local knowledge is enough. Do not tell the user that Perry Studio, Node, or Homebrew is broadly sandbox-limited unless the exact requested action is still blocked after the single appropriate install path.
 - Keep tool outputs small: prefer commands like rg, git status --short, and targeted test commands over full-directory dumps.`
   }
 
@@ -417,12 +433,20 @@ Use the least expensive tool first:
   }
 
   private determineApi(provider: Provider, model?: Model): Api {
-    if (ANTHROPIC_ONLY_PROVIDER_TYPES.has(provider.type)) return 'anthropic-messages'
-    if (model?.endpoint_type && ANTHROPIC_ENDPOINT_TYPES.has(model.endpoint_type)) return 'anthropic-messages'
-    if (model?.supported_endpoint_types?.includes('anthropic')) return 'anthropic-messages'
+    const providerApi = PROVIDER_API_MAP[provider.type]
+    if (providerApi) return providerApi
+
+    if (model?.endpoint_type) {
+      const endpointApi = ENDPOINT_API_MAP[model.endpoint_type]
+      if (endpointApi) return endpointApi
+    }
+
+    const supportedEndpointApi = model?.supported_endpoint_types
+      ?.map((endpoint) => ENDPOINT_API_MAP[endpoint])
+      .find((api): api is Api => Boolean(api))
+    if (supportedEndpointApi) return supportedEndpointApi
+
     if (provider.anthropicApiHost && !model?.supported_endpoint_types?.length) return 'anthropic-messages'
-    if (provider.type === 'openai-response') return 'openai-responses'
-    if (provider.type === 'azure-openai') return 'azure-openai-responses'
     return 'openai-completions'
   }
 
@@ -431,13 +455,18 @@ Use the least expensive tool first:
       return withoutTrailingApiVersion(withoutTrailingSlash(provider.anthropicApiHost || provider.apiHost))
     }
 
-    if (api === 'azure-openai-responses') {
+    if (
+      api === 'azure-openai-responses' ||
+      api === 'google-generative-ai' ||
+      api === 'google-vertex' ||
+      api === 'mistral-conversations' ||
+      api === 'bedrock-converse-stream'
+    ) {
       return withoutTrailingSlash(provider.apiHost)
     }
 
     const raw = withoutTrailingSlash(provider.apiHost)
     if (provider.id === 'copilot' || provider.id === 'github') return formatApiHost(raw, false)
-    if (provider.type === 'gemini' && raw.includes('generativelanguage.googleapis.com')) return `${raw}/v1beta/openai`
     if (provider.type === 'gateway' && raw.endsWith('/v1/ai')) return raw.replace(/\/v1\/ai$/, '/v1')
     return hasAPIVersion(raw) ? raw : `${raw}/v1`
   }

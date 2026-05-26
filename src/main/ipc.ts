@@ -38,10 +38,12 @@ import type { ProxyConfig } from 'electron'
 import { BrowserWindow, dialog, ipcMain, session, shell, systemPreferences, webContents } from 'electron'
 import fontList from 'font-list'
 
+import { registerAgentIpcHandlers } from './services/agents/AgentIpcService'
 import { agentMessageRepository } from './services/agents/database'
 import { skillService } from './services/agents/skills/SkillService'
 import { analyticsService } from './services/AnalyticsService'
 import { apiServerService } from './services/ApiServerService'
+import { registerAppDataIpcHandlers } from './services/appData/AppDataIpcService'
 import appService from './services/AppService'
 import AppUpdater from './services/AppUpdater'
 import BackupManager from './services/BackupManager'
@@ -120,6 +122,7 @@ const dxtService = new DxtService()
 export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) {
   const appUpdater = new AppUpdater()
   const notificationService = new NotificationService()
+  registerAppDataIpcHandlers()
 
   // Register shutdown handlers
   powerMonitorService.registerShutdownHandler(() => {
@@ -989,6 +992,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   })
   // API Server
   apiServerService.registerIpcHandlers()
+  registerAgentIpcHandlers()
 
   // Anthropic OAuth
   ipcMain.handle(IpcChannel.Anthropic_StartOAuthFlow, () => anthropicService.startOAuthFlow())

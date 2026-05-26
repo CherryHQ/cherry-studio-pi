@@ -2,7 +2,6 @@ import { Navbar, NavbarCenter } from '@renderer/components/app/Navbar'
 import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
 import { useActiveAgent } from '@renderer/hooks/agents/useActiveAgent'
 import { useAgents } from '@renderer/hooks/agents/useAgents'
-import { useApiServer } from '@renderer/hooks/useApiServer'
 import { useRuntime } from '@renderer/hooks/useRuntime'
 import { useNavbarPosition, useSettings } from '@renderer/hooks/useSettings'
 import { useShortcut } from '@renderer/hooks/useShortcuts'
@@ -18,7 +17,7 @@ import { useTranslation } from 'react-i18next'
 import AgentChat from './AgentChat'
 import AgentNavbar from './AgentNavbar'
 import AgentSidePanel from './AgentSidePanel'
-import { AgentEmpty, AgentServerDisabled, AgentServerStopped } from './components/status'
+import { AgentEmpty } from './components/status'
 
 const AgentPage = () => {
   const { isLeftNavbar } = useNavbarPosition()
@@ -29,7 +28,6 @@ const AgentPage = () => {
   const { activeAgentId } = chat
   const { agents } = useAgents()
   const { setActiveAgentId } = useActiveAgent()
-  const { apiServerConfig, apiServerRunning, apiServerLoading } = useApiServer()
   const { t } = useTranslation()
 
   useShortcut('toggle_show_assistants', () => {
@@ -63,28 +61,6 @@ const AgentPage = () => {
       void window.api.window.resetMinimumSize()
     }
   }, [showAssistants, showTopics, topicPosition])
-
-  if (!apiServerConfig.enabled) {
-    return (
-      <Container>
-        <Navbar>
-          <NavbarCenter style={{ borderRight: 'none' }}>{t('common.agent_one')}</NavbarCenter>
-        </Navbar>
-        <AgentServerDisabled />
-      </Container>
-    )
-  }
-
-  if (!apiServerLoading && !apiServerRunning) {
-    return (
-      <Container>
-        <Navbar>
-          <NavbarCenter style={{ borderRight: 'none' }}>{t('common.agent_one')}</NavbarCenter>
-        </Navbar>
-        <AgentServerStopped />
-      </Container>
-    )
-  }
 
   if (agents && agents.length === 0) {
     return (

@@ -1,4 +1,4 @@
-import { DEFAULT_SESSION_PAGE_SIZE } from '@renderer/api/agent'
+import { DEFAULT_SESSION_PAGE_SIZE } from '@renderer/api/agent-ipc'
 import type {
   AgentSessionEntity,
   CreateAgentSessionResponse,
