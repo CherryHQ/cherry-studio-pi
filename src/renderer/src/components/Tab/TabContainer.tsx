@@ -298,34 +298,32 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children, withSidebar = f
     <Container>
       <TabsBar $isFullscreen={isFullscreen} $withSidebar={withSidebar} style={tabsBarStyle}>
         <HorizontalScrollContainer dependencies={[tabScrollKey]} gap="4px" className="tab-scroll-container">
-          <Sortable
-            items={visibleTabs}
-            itemKey="id"
-            layout="list"
-            horizontal
-            gap={'4px'}
-            onSortEnd={onSortEnd}
-            className="tabs-sortable"
-            renderItem={(tab) => {
-              return (
-                <Tab
-                  key={tab.id}
-                  $single={!hasMultipleVisibleTabs}
-                  $showTitle={hasMultipleVisibleTabs}
-                  active={tab.id === activeTabId}
-                  onClick={() => handleTabClick(tab)}
-                  onAuxClick={(e) => {
-                    if (e.button === 1 && hasMultipleVisibleTabs) {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      closeTab(tab.id)
-                    }
-                  }}>
-                  <TabHeader>
-                    {tab.id && <TabIcon>{getTabIcon(tab.id, minapps, minAppsCache)}</TabIcon>}
-                    {hasMultipleVisibleTabs && <TabTitle>{getTabTitle(tab.id)}</TabTitle>}
-                  </TabHeader>
-                  {hasMultipleVisibleTabs && (
+          {hasMultipleVisibleTabs && (
+            <Sortable
+              items={visibleTabs}
+              itemKey="id"
+              layout="list"
+              horizontal
+              gap={'4px'}
+              onSortEnd={onSortEnd}
+              className="tabs-sortable"
+              renderItem={(tab) => {
+                return (
+                  <Tab
+                    key={tab.id}
+                    active={tab.id === activeTabId}
+                    onClick={() => handleTabClick(tab)}
+                    onAuxClick={(e) => {
+                      if (e.button === 1) {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        closeTab(tab.id)
+                      }
+                    }}>
+                    <TabHeader>
+                      {tab.id && <TabIcon>{getTabIcon(tab.id, minapps, minAppsCache)}</TabIcon>}
+                      <TabTitle>{getTabTitle(tab.id)}</TabTitle>
+                    </TabHeader>
                     <CloseButton
                       className="close-button"
                       data-no-dnd
@@ -335,11 +333,11 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children, withSidebar = f
                       }}>
                       <X size={12} />
                     </CloseButton>
-                  )}
-                </Tab>
-              )
-            }}
-          />
+                  </Tab>
+                )
+              }}
+            />
+          )}
           <AddTabButton
             onClick={handleAddTab}
             className={classNames({ active: getTabBaseId(activeTabId) === 'launchpad' })}>
@@ -400,9 +398,9 @@ const TabsBar = styled.div<{ $isFullscreen: boolean; $withSidebar: boolean }>`
         ? 'calc(env(titlebar-area-x) + 74px)'
         : '15px'};
   padding-right: ${({ $isFullscreen }) => ($isFullscreen ? '12px' : '0')};
-  height: ${({ $withSidebar }) => ($withSidebar ? '36px' : 'var(--navbar-height)')};
+  height: var(--navbar-height);
   min-height: ${({ $isFullscreen, $withSidebar }) =>
-    $withSidebar ? '36px' : !$isFullscreen && isMac ? 'env(titlebar-area-height)' : ''};
+    !$isFullscreen && isMac && !$withSidebar ? 'env(titlebar-area-height)' : 'var(--navbar-height)'};
   position: relative;
   border-bottom: none;
   background: var(--tabs-bar-background, var(--navbar-background));
@@ -429,33 +427,32 @@ const TabsBar = styled.div<{ $isFullscreen: boolean; $withSidebar: boolean }>`
   }
 `
 
-const Tab = styled.div<{ active?: boolean; $showTitle: boolean; $single: boolean }>`
+const Tab = styled.div<{ active?: boolean }>`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: ${(props) => (props.$showTitle ? '0 8px 0 9px' : '0 8px')};
+  padding: 0 8px 0 9px;
   position: relative;
   align-self: flex-end;
   z-index: ${(props) => (props.active ? 2 : 1)};
-  margin-bottom: ${(props) => (props.$single ? '4px' : '-1px')};
-  background: ${(props) => (props.active && !props.$single ? 'var(--color-background)' : 'transparent')};
-  border: 0.5px solid ${(props) => (props.active && !props.$single ? 'var(--color-border)' : 'transparent')};
+  margin-bottom: -1px;
+  background: ${(props) => (props.active ? 'var(--color-background)' : 'transparent')};
+  border: 0.5px solid ${(props) => (props.active ? 'var(--color-border)' : 'transparent')};
   border-bottom: 0;
   transition:
     background 0.2s,
     border-color 0.2s,
     box-shadow 0.2s;
-  border-radius: ${(props) => (props.active && !props.$single ? '9px 9px 0 0' : '7px')};
+  border-radius: ${(props) => (props.active ? '9px 9px 0 0' : '7px')};
   user-select: none;
-  height: ${(props) => (props.$single ? '26px' : '30px')};
-  min-width: ${(props) => (props.$showTitle ? '108px' : '32px')};
+  height: 30px;
+  min-width: 108px;
   max-width: 168px;
-  box-shadow: ${(props) => (props.active && !props.$single ? '0 -1px 2px rgba(0, 0, 0, 0.04)' : 'none')};
+  box-shadow: ${(props) => (props.active ? '0 -1px 2px rgba(0, 0, 0, 0.04)' : 'none')};
   contain: layout paint;
 
   ${(props) =>
     props.active &&
-    !props.$single &&
     `
       &::before,
       &::after {
@@ -487,9 +484,7 @@ const Tab = styled.div<{ active?: boolean; $showTitle: boolean; $single: boolean
 
   &:hover {
     background: ${(props) =>
-      props.active && !props.$single
-        ? 'var(--color-background)'
-        : 'color-mix(in srgb, var(--color-list-item) 70%, transparent)'};
+      props.active ? 'var(--color-background)' : 'color-mix(in srgb, var(--color-list-item) 70%, transparent)'};
     .close-button {
       opacity: 1;
     }
