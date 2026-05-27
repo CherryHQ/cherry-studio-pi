@@ -268,5 +268,6 @@ jobs:
           draft: ${{ needs.prepare.outputs.draft }}
           prerelease: ${{ needs.prepare.outputs.prerelease }}
           generate_release_notes: true
+          overwrite_files: true
           fail_on_unmatched_files: true
           files: release-artifacts/*
