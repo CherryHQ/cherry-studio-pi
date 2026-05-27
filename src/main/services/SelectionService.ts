@@ -578,7 +578,7 @@ export class SelectionService {
       'com.github.Electron',
       'com.kangfenmao.CherryStudio',
       'com.yinsenho.PerryStudio',
-      'com.cherryhq.CherryStudioPi'
+      'com.cherryai.CherryStudioPi'
     ].includes(programName)
 
     if (!isSelf) {
