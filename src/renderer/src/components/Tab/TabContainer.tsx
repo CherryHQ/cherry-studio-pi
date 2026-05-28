@@ -454,7 +454,7 @@ const Tab = styled.div<{ active?: boolean }>`
     box-shadow 0.2s;
   border-radius: ${(props) => (props.active ? '9px 9px 0 0' : '7px')};
   user-select: none;
-  height: 30px;
+  height: 33px;
   min-width: 108px;
   max-width: 168px;
   box-shadow: ${(props) =>
@@ -538,9 +538,9 @@ const AddTabButton = styled.div`
   align-items: center;
   justify-content: center;
   width: 28px;
-  height: 28px;
+  height: 30px;
   align-self: flex-end;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
   cursor: pointer;
   color: var(--color-text-2);
   border-radius: 7px;
