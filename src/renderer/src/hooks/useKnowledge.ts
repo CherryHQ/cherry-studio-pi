@@ -60,9 +60,9 @@ export const useKnowledge = (baseId: string) => {
   const { setTimeoutTimer } = useTimer()
 
   // 重命名知识库
-  const renameKnowledgeBase = (name: string) => {
+  const renameKnowledgeBase = async (name: string) => {
     dispatch(renameBase({ baseId, name }))
-    void flushStorageV2KnowledgeMirror('rename-knowledge-base')
+    await flushStorageV2KnowledgeMirror('rename-knowledge-base')
   }
 
   // 更新知识库
@@ -79,9 +79,9 @@ export const useKnowledge = (baseId: string) => {
   }
 
   // 批量添加文件
-  const addFiles = (files: FileMetadata[]) => {
-    dispatch(addFilesThunk(baseId, files))
-    void flushStorageV2KnowledgeMirror('add-files')
+  const addFiles = async (files: FileMetadata[]) => {
+    await dispatch(addFilesThunk(baseId, files))
+    await flushStorageV2KnowledgeMirror('add-files')
     checkAllBases()
   }
 
@@ -94,30 +94,30 @@ export const useKnowledge = (baseId: string) => {
   }
 
   // 添加URL
-  const addUrl = (url: string) => {
-    dispatch(addItemThunk(baseId, 'url', url))
-    void flushStorageV2KnowledgeMirror('add-url')
+  const addUrl = async (url: string) => {
+    await dispatch(addItemThunk(baseId, 'url', url))
+    await flushStorageV2KnowledgeMirror('add-url')
     checkAllBases()
   }
 
   // 添加 Sitemap
-  const addSitemap = (url: string) => {
-    dispatch(addItemThunk(baseId, 'sitemap', url))
-    void flushStorageV2KnowledgeMirror('add-sitemap')
+  const addSitemap = async (url: string) => {
+    await dispatch(addItemThunk(baseId, 'sitemap', url))
+    await flushStorageV2KnowledgeMirror('add-sitemap')
     checkAllBases()
   }
 
   // Add directory support
-  const addDirectory = (path: string) => {
-    dispatch(addItemThunk(baseId, 'directory', path))
-    void flushStorageV2KnowledgeMirror('add-directory')
+  const addDirectory = async (path: string) => {
+    await dispatch(addItemThunk(baseId, 'directory', path))
+    await flushStorageV2KnowledgeMirror('add-directory')
     checkAllBases()
   }
 
   // add video support
-  const addVideo = (files: FileMetadata[]) => {
-    dispatch(addVedioThunk(baseId, 'video', files))
-    void flushStorageV2KnowledgeMirror('add-video')
+  const addVideo = async (files: FileMetadata[]) => {
+    await dispatch(addVedioThunk(baseId, 'video', files))
+    await flushStorageV2KnowledgeMirror('add-video')
     checkAllBases()
   }
 
@@ -145,9 +145,9 @@ export const useKnowledge = (baseId: string) => {
     return await getKnowledgeNoteWithStorageV2Fallback(noteId, 'knowledge-note-get-missing')
   }
 
-  const updateItem = (item: KnowledgeItem) => {
+  const updateItem = async (item: KnowledgeItem) => {
     dispatch(updateItemAction({ baseId, item }))
-    void flushStorageV2KnowledgeMirror('update-item')
+    await flushStorageV2KnowledgeMirror('update-item')
   }
 
   // 移除项目
@@ -201,7 +201,7 @@ export const useKnowledge = (baseId: string) => {
         uniqueIds: item.uniqueIds,
         base: getKnowledgeBaseParams(base)
       })
-      updateItem({
+      await updateItem({
         ...item,
         processingStatus: 'pending',
         processingProgress: 0,
@@ -210,7 +210,6 @@ export const useKnowledge = (baseId: string) => {
         retryCount: 0,
         updated_at: Date.now()
       })
-      void flushStorageV2KnowledgeMirror('refresh-item')
       checkAllBases()
     }
 
@@ -222,7 +221,7 @@ export const useKnowledge = (baseId: string) => {
 
     await window.api.knowledgeBase.remove(removalParams)
 
-    updateItem({
+    await updateItem({
       ...item,
       processingStatus: 'pending',
       processingProgress: 0,
@@ -231,7 +230,6 @@ export const useKnowledge = (baseId: string) => {
       retryCount: 0,
       updated_at: Date.now()
     })
-    void flushStorageV2KnowledgeMirror('refresh-item')
     setTimeout(() => KnowledgeQueue.checkAllBases(), 0)
   }
 
@@ -447,9 +445,9 @@ export const useKnowledgeBases = () => {
     await flushStorageV2KnowledgeMirror('delete-knowledge-base')
   }
 
-  const updateKnowledgeBases = (bases: KnowledgeBase[]) => {
+  const updateKnowledgeBases = async (bases: KnowledgeBase[]) => {
     dispatch(updateBases(bases))
-    void flushStorageV2KnowledgeMirror('update-knowledge-bases')
+    await flushStorageV2KnowledgeMirror('update-knowledge-bases')
   }
 
   return {
