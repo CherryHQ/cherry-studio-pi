@@ -550,6 +550,7 @@ export class StorageV2ProviderRepository {
     const timestamp = now()
     const config = stripProviderConfig(provider)
     const models = provider.models.map((model) => normalizeModelProvider(model, provider.id))
+    const modelIds = models.map((model) => `${provider.id}:${model.id}`)
 
     await withTransaction(client, async () => {
       await client.execute({
@@ -582,10 +583,25 @@ export class StorageV2ProviderRepository {
         ]
       })
 
-      await client.execute({
-        sql: 'DELETE FROM models WHERE provider_id = ?',
-        args: [provider.id]
-      })
+      if (modelIds.length > 0) {
+        await client.execute({
+          sql: `
+            UPDATE models
+            SET deleted_at = ?, updated_at = ?
+            WHERE provider_id = ? AND deleted_at IS NULL AND id NOT IN (${modelIds.map(() => '?').join(', ')})
+          `,
+          args: [timestamp, timestamp, provider.id, ...modelIds]
+        })
+      } else {
+        await client.execute({
+          sql: `
+            UPDATE models
+            SET deleted_at = ?, updated_at = ?
+            WHERE provider_id = ? AND deleted_at IS NULL
+          `,
+          args: [timestamp, timestamp, provider.id]
+        })
+      }
 
       for (const [modelIndex, model] of models.entries()) {
         await client.execute({

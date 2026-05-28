@@ -175,6 +175,29 @@ describe('StorageV2ProviderRepository', () => {
       )
     ).toBe(true)
   })
+
+  it('soft deletes missing provider models instead of hard deleting model rows', async () => {
+    const { client, execute } = createMockClient()
+    vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
+    vi.spyOn(storageV2Database, 'withTransaction').mockImplementation(async (_client, fn) => fn())
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(client)
+
+    await new StorageV2ProviderRepository().upsert({
+      id: 'provider-1',
+      type: 'openai',
+      name: 'OpenAI',
+      models: [{ id: 'gpt-4o', name: 'GPT-4o' }]
+    } as any)
+
+    const executedSql = execute.mock.calls.map(([input]) => (typeof input === 'string' ? input : input.sql))
+    expect(executedSql.some((sql) => sql.includes('DELETE FROM models'))).toBe(false)
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sql: expect.stringContaining('UPDATE models'),
+        args: [expect.any(String), expect.any(String), 'provider-1', 'provider-1:gpt-4o']
+      })
+    )
+  })
 })
 
 describe('StorageV2KnowledgeRepository', () => {
