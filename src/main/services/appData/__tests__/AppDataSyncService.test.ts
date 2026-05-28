@@ -267,6 +267,59 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('merges Storage v2 app records into sync when legacy app.db has partial data', async () => {
+    const legacyRecord = {
+      ...remoteRecord,
+      value: { mode: 'legacy' },
+      valueHash: 'legacy-theme-hash',
+      updatedAt: 1760000000001,
+      deviceId: 'legacy-device',
+      version: 1
+    }
+    const storageThemeRecord = {
+      ...remoteRecord,
+      value: { mode: 'storage-v2' },
+      valueHash: 'storage-theme-hash',
+      updatedAt: 1760000000002,
+      deviceId: 'storage-v2-device',
+      version: 2
+    }
+    const storageOnlyRecord = {
+      scope: 'agent-tools',
+      key: 'github',
+      value: { enabled: true },
+      valueHash: 'storage-github-hash',
+      updatedAt: 1760000000003,
+      deletedAt: null,
+      deviceId: 'storage-v2-device',
+      version: 1
+    }
+
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
+      if (filePath.endsWith('/manifest.json')) {
+        return JSON.stringify({ version: 1, updatedAt: 0, records: {} })
+      }
+      throw new Error(`Unexpected WebDAV read: ${filePath}`)
+    })
+    mocks.db.listRecords.mockResolvedValue([legacyRecord])
+    mocks.storageV2.listRecords.mockResolvedValueOnce([storageThemeRecord, storageOnlyRecord])
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.uploaded).toBe(2)
+    expect(mocks.storageV2.listRecords).toHaveBeenCalledWith(undefined, true)
+    expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
+      expect.stringContaining('/records/settings/theme.json'),
+      expect.stringContaining('storage-theme-hash'),
+      { overwrite: true }
+    )
+    expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
+      expect.stringContaining('/records/agent-tools/github.json'),
+      expect.stringContaining('storage-github-hash'),
+      { overwrite: true }
+    )
+  })
+
   it('reads sync status summary from Storage v2 when the legacy app database is missing it', async () => {
     const storageSummary = {
       uploaded: 1,
