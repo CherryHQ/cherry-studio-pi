@@ -4,6 +4,8 @@ import fs from 'fs'
 import path from 'path'
 
 import { getConfigDir } from '../utils/file'
+import { storageV2SecretVaultService } from './storageV2/SecretVaultService'
+import { storageV2SettingsRepository } from './storageV2/StorageV2Repositories'
 
 const logger = loggerService.withContext('CopilotService')
 
@@ -31,6 +33,18 @@ const CONFIG = {
     COPILOT_TOKEN: 'https://api.github.com/copilot_internal/v2/token'
   },
   TOKEN_FILE_NAME: '.copilot_token'
+}
+const STORAGE_V2_COPILOT_TOKEN_SETTING_KEY = 'copilot.accessToken'
+
+type CopilotTokenStorageV2Setting = {
+  accessTokenSecretRef?: string
+  clearedAt?: string
+  updatedAt?: string
+}
+
+type StorageV2CopilotTokenRead = {
+  cleared: boolean
+  token: string | null
 }
 
 // 接口定义移到顶部，便于查阅
@@ -78,11 +92,116 @@ class CopilotService {
   }
 
   private getTokenFilePath = (): string => {
-    const oldTokenFilePath = path.join(app.getPath('userData'), CONFIG.TOKEN_FILE_NAME)
+    const [oldTokenFilePath, configTokenFilePath] = this.getTokenFilePaths()
     if (fs.existsSync(oldTokenFilePath)) {
       return oldTokenFilePath
     }
-    return path.join(getConfigDir(), CONFIG.TOKEN_FILE_NAME)
+    return configTokenFilePath
+  }
+
+  private getTokenFilePaths = (): string[] => {
+    return [
+      path.join(app.getPath('userData'), CONFIG.TOKEN_FILE_NAME),
+      path.join(getConfigDir(), CONFIG.TOKEN_FILE_NAME)
+    ]
+  }
+
+  private getStorageV2AccessTokenSecretRef(value: unknown): string | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    const secretRef = (value as CopilotTokenStorageV2Setting).accessTokenSecretRef
+    return typeof secretRef === 'string' && secretRef ? secretRef : null
+  }
+
+  private isStorageV2TokenCleared(value: unknown): boolean {
+    return Boolean(
+      value && typeof value === 'object' && !Array.isArray(value) && (value as CopilotTokenStorageV2Setting).clearedAt
+    )
+  }
+
+  private saveAccessTokenToStorageV2 = async (token: string): Promise<void> => {
+    const secretRef = await storageV2SecretVaultService.setSecret('copilot', 'github', 'accessToken', token)
+    await storageV2SettingsRepository.set(
+      STORAGE_V2_COPILOT_TOKEN_SETTING_KEY,
+      {
+        accessTokenSecretRef: secretRef,
+        updatedAt: new Date().toISOString()
+      } satisfies CopilotTokenStorageV2Setting,
+      'copilot'
+    )
+  }
+
+  private readAccessTokenFromStorageV2 = async (): Promise<StorageV2CopilotTokenRead> => {
+    const setting = await storageV2SettingsRepository.get(STORAGE_V2_COPILOT_TOKEN_SETTING_KEY)
+    if (this.isStorageV2TokenCleared(setting)) {
+      return {
+        cleared: true,
+        token: null
+      }
+    }
+
+    const secretRef = this.getStorageV2AccessTokenSecretRef(setting)
+    if (!secretRef) {
+      return {
+        cleared: false,
+        token: null
+      }
+    }
+
+    return {
+      cleared: false,
+      token: await storageV2SecretVaultService.getSecret(secretRef)
+    }
+  }
+
+  private readAccessTokenFromLegacyFile = async (): Promise<string | null> => {
+    for (const tokenFilePath of this.getTokenFilePaths()) {
+      try {
+        const encryptedToken = await fs.promises.readFile(tokenFilePath)
+        return safeStorage.decryptString(Buffer.from(encryptedToken))
+      } catch (error) {
+        if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+          continue
+        }
+        throw error
+      }
+    }
+
+    return null
+  }
+
+  private readAccessToken = async (): Promise<string> => {
+    const storageToken = await this.readAccessTokenFromStorageV2().catch((error): StorageV2CopilotTokenRead => {
+      logger.warn('Failed to read Copilot access token from Storage v2', error as Error)
+      return {
+        cleared: false,
+        token: null
+      }
+    })
+    if (storageToken.cleared) {
+      throw new CopilotServiceError('未找到Copilot访问令牌，请重新授权')
+    }
+    if (storageToken.token) return storageToken.token
+
+    const legacyToken = await this.readAccessTokenFromLegacyFile()
+    if (legacyToken) {
+      await this.saveAccessTokenToStorageV2(legacyToken).catch((error) => {
+        logger.warn('Failed to mirror legacy Copilot access token to Storage v2', error as Error)
+      })
+      return legacyToken
+    }
+
+    throw new CopilotServiceError('未找到Copilot访问令牌，请重新授权')
+  }
+
+  private clearAccessTokenInStorageV2 = async (): Promise<void> => {
+    await storageV2SettingsRepository.set(
+      STORAGE_V2_COPILOT_TOKEN_SETTING_KEY,
+      {
+        clearedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      } satisfies CopilotTokenStorageV2Setting,
+      'copilot'
+    )
   }
 
   /**
@@ -219,6 +338,10 @@ class CopilotService {
   public saveCopilotToken = async (_: Electron.IpcMainInvokeEvent, token: string): Promise<void> => {
     try {
       const encryptedToken = safeStorage.encryptString(token)
+      await this.saveAccessTokenToStorageV2(token).catch((error) => {
+        logger.warn('Failed to save Copilot access token to Storage v2', error as Error)
+      })
+
       // 确保目录存在
       const dir = path.dirname(this.tokenFilePath)
       if (!fs.existsSync(dir)) {
@@ -242,8 +365,7 @@ class CopilotService {
     try {
       this.updateHeaders(headers)
 
-      const encryptedToken = await fs.promises.readFile(this.tokenFilePath)
-      const access_token = safeStorage.decryptString(Buffer.from(encryptedToken))
+      const access_token = await this.readAccessToken()
 
       const response = await net.fetch(CONFIG.API_URLS.COPILOT_TOKEN, {
         method: 'GET',
@@ -269,14 +391,21 @@ class CopilotService {
    */
   public logout = async (): Promise<void> => {
     try {
-      try {
-        await fs.promises.access(this.tokenFilePath)
-        await fs.promises.unlink(this.tokenFilePath)
-        logger.debug('Successfully logged out from Copilot')
-      } catch (error) {
-        // 文件不存在不是错误，只是记录一下
-        logger.debug('Token file not found, nothing to delete')
+      await this.clearAccessTokenInStorageV2().catch((error) => {
+        logger.warn('Failed to clear Copilot access token in Storage v2', error as Error)
+      })
+
+      for (const tokenFilePath of this.getTokenFilePaths()) {
+        try {
+          await fs.promises.access(tokenFilePath)
+          await fs.promises.unlink(tokenFilePath)
+        } catch (error) {
+          if (!(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')) {
+            throw error
+          }
+        }
       }
+      logger.debug('Successfully logged out from Copilot')
     } catch (error) {
       logger.error('Failed to logout:', error as Error)
       throw new CopilotServiceError('无法完成退出登录操作', error)
