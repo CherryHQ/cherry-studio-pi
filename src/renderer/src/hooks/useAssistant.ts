@@ -52,12 +52,13 @@ async function removeTopicsFromRuntime(topicIds: Iterable<string>, reason: strin
   }
 }
 
-const scheduleStorageV2TopicMirror = (topicId: string | undefined) => {
-  storageV2ConversationMirrorService.scheduleTopic(topicId, () => store.getState())
+const flushStorageV2TopicMirror = (topicId: string | undefined) => {
+  if (!topicId) return
+  void storageV2ConversationMirrorService.flushTopic(topicId, () => store.getState())
 }
 
-const scheduleStorageV2TopicMirrors = (topicIds: Iterable<string | undefined>) => {
-  storageV2ConversationMirrorService.scheduleTopics(topicIds, () => store.getState())
+const flushStorageV2TopicMirrors = (topicIds: Iterable<string | undefined>) => {
+  void storageV2ConversationMirrorService.flushTopics(topicIds, () => store.getState())
 }
 
 const flushAssistantMirror = (reason: string) => {
@@ -215,7 +216,7 @@ export function useAssistant(id: string) {
     model,
     addTopic: (topic: Topic) => {
       dispatch(addTopic({ assistantId: assistant.id, topic }))
-      scheduleStorageV2TopicMirror(topic.id)
+      flushStorageV2TopicMirror(topic.id)
     },
     removeTopic: async (topic: Topic) => {
       await removeTopicsFromRuntime([topic.id], 'topic removal')
@@ -238,16 +239,16 @@ export function useAssistant(id: string) {
           }
         })
         .then(() => {
-          scheduleStorageV2TopicMirror(topic.id)
+          flushStorageV2TopicMirror(topic.id)
         })
     },
     updateTopic: (topic: Topic) => {
       dispatch(updateTopic({ assistantId: assistant.id, topic }))
-      scheduleStorageV2TopicMirror(topic.id)
+      flushStorageV2TopicMirror(topic.id)
     },
     updateTopics: (topics: Topic[]) => {
       dispatch(updateTopics({ assistantId: assistant.id, topics }))
-      scheduleStorageV2TopicMirrors(topics.map((topic) => topic.id))
+      flushStorageV2TopicMirrors(topics.map((topic) => topic.id))
     },
     removeAllTopics: async () => {
       const replacementTopic = getDefaultTopic(assistant.id)
@@ -258,7 +259,7 @@ export function useAssistant(id: string) {
       await db.topics.put({ id: replacementTopic.id, messages: [] })
       dispatch(removeAllTopics({ assistantId: assistant.id, replacementTopic }))
       flushAssistantMirror('assistant-topics-reset')
-      scheduleStorageV2TopicMirror(replacementTopic.id)
+      flushStorageV2TopicMirror(replacementTopic.id)
     },
     setModel: useCallback(
       (model: Model) => {
