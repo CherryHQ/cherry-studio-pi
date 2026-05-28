@@ -1,4 +1,5 @@
 import { loggerService } from '@renderer/services/LoggerService'
+import { flushStorageV2ReduxMirror } from '@renderer/services/StorageV2ReduxMirrorFlush'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import {
   addDirectory,
@@ -15,6 +16,15 @@ import type { Model } from '@renderer/types'
 import { codeTools } from '@shared/config/constant'
 import { useCallback } from 'react'
 
+function flushCodeToolsMirror(reason: string): void
+function flushCodeToolsMirror(reason: string, options: { strict: true }): Promise<void>
+function flushCodeToolsMirror(reason: string, options?: { strict?: boolean }) {
+  const task = flushStorageV2ReduxMirror(reason, options)
+  if (options?.strict) return task
+  void task
+  return undefined
+}
+
 export const useCodeTools = () => {
   const dispatch = useAppDispatch()
   const codeToolsState = useAppSelector((state) => state.codeTools)
@@ -24,6 +34,7 @@ export const useCodeTools = () => {
   const setCliTool = useCallback(
     (tool: codeTools) => {
       dispatch(setSelectedCliTool(tool))
+      flushCodeToolsMirror('code-tools-selected-cli')
     },
     [dispatch]
   )
@@ -32,6 +43,7 @@ export const useCodeTools = () => {
   const setModel = useCallback(
     (model: Model | null) => {
       dispatch(setSelectedModel(model))
+      flushCodeToolsMirror('code-tools-selected-model')
     },
     [dispatch]
   )
@@ -40,6 +52,7 @@ export const useCodeTools = () => {
   const setTerminal = useCallback(
     (terminal: string) => {
       dispatch(setSelectedTerminal(terminal))
+      flushCodeToolsMirror('code-tools-selected-terminal')
     },
     [dispatch]
   )
@@ -48,6 +61,7 @@ export const useCodeTools = () => {
   const setEnvVars = useCallback(
     (envVars: string) => {
       dispatch(setEnvironmentVariables(envVars))
+      flushCodeToolsMirror('code-tools-env-vars')
     },
     [dispatch]
   )
@@ -56,14 +70,16 @@ export const useCodeTools = () => {
   const addDir = useCallback(
     (directory: string) => {
       dispatch(addDirectory(directory))
+      flushCodeToolsMirror('code-tools-add-directory')
     },
     [dispatch]
   )
 
   // 删除目录
   const removeDir = useCallback(
-    (directory: string) => {
+    async (directory: string) => {
       dispatch(removeDirectory(directory))
+      await flushCodeToolsMirror('code-tools-remove-directory', { strict: true })
     },
     [dispatch]
   )
@@ -72,18 +88,21 @@ export const useCodeTools = () => {
   const setCurrentDir = useCallback(
     (directory: string) => {
       dispatch(setCurrentDirectory(directory))
+      flushCodeToolsMirror('code-tools-current-directory')
     },
     [dispatch]
   )
 
   // 清空所有目录
-  const clearDirs = useCallback(() => {
+  const clearDirs = useCallback(async () => {
     dispatch(clearDirectories())
+    await flushCodeToolsMirror('code-tools-clear-directories', { strict: true })
   }, [dispatch])
 
   // 重置所有设置
-  const resetSettings = useCallback(() => {
+  const resetSettings = useCallback(async () => {
     dispatch(resetCodeTools())
+    await flushCodeToolsMirror('code-tools-reset', { strict: true })
   }, [dispatch])
 
   // 选择文件夹的辅助函数

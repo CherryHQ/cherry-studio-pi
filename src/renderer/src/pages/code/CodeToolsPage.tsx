@@ -170,9 +170,9 @@ const CodeToolsPage: FC = () => {
   }
 
   // 处理删除目录
-  const handleRemoveDirectory = (directory: string, e: React.MouseEvent) => {
+  const handleRemoveDirectory = async (directory: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    removeDir(directory)
+    await removeDir(directory)
   }
 
   // 检查 bun 是否安装
