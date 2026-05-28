@@ -54,7 +54,7 @@ class StorageV2AgentMirrorService {
 
   private async mirrorNow() {
     try {
-      await window.api.storageV2.importLegacyAgentDb({ dryRun: false })
+      await window.api.storageV2.importLegacyAgentDb({ dryRun: false, createSnapshot: false })
       logger.debug('Mirrored agent database to Storage v2')
     } catch (error) {
       this.pending = true

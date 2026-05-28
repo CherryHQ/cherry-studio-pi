@@ -1,9 +1,19 @@
 import { loggerService } from '@logger'
+import {
+  type ChannelUpdateInput,
+  createChannelWithStorageV2Recovery,
+  createTaskWithStorageV2Recovery,
+  deleteChannelWithStorageV2Recovery,
+  deleteTaskWithStorageV2Recovery,
+  getAgentWithStorageV2Recovery,
+  getChannelWithStorageV2Recovery,
+  listChannelsWithStorageV2Recovery,
+  listTasksWithStorageV2Recovery,
+  updateAgentWithStorageV2Recovery,
+  updateChannelWithStorageV2Recovery
+} from '@main/services/agents/AgentStorageV2ReadThrough'
 import { type ChannelConfig, ChannelConfigSchema } from '@main/services/agents/database/schema'
-import { agentService } from '@main/services/agents/services/AgentService'
 import { channelManager } from '@main/services/agents/services/channels/ChannelManager'
-import { channelService } from '@main/services/agents/services/ChannelService'
-import { taskService } from '@main/services/agents/services/TaskService'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { Tool } from '@modelcontextprotocol/sdk/types.js'
 import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } from '@modelcontextprotocol/sdk/types.js'
@@ -336,7 +346,7 @@ class ClawServer {
       channelIds = [this.sourceChannelId]
     }
 
-    const task = await taskService.createTask(this.agentId, {
+    const task = await createTaskWithStorageV2Recovery(this.agentId, {
       name,
       prompt: message,
       schedule_type: scheduleType,
@@ -352,7 +362,7 @@ class ClawServer {
   }
 
   private async listJobs() {
-    const { tasks } = await taskService.listTasks(this.agentId, { limit: 100 })
+    const { tasks } = await listTasksWithStorageV2Recovery(this.agentId, { limit: 100 })
 
     if (tasks.length === 0) {
       return { content: [{ type: 'text' as const, text: 'No scheduled jobs.' }] }
@@ -420,11 +430,11 @@ class ClawServer {
   // ── Config tool handlers ──────────────────────────────────────────
 
   private async configStatus() {
-    const agent = await agentService.getAgent(this.agentId)
+    const agent = await getAgentWithStorageV2Recovery(this.agentId)
     if (!agent) throw new McpError(ErrorCode.InternalError, `Agent not found: ${this.agentId}`)
 
     const config = agent.configuration
-    const channels = await channelService.listChannels({ agentId: this.agentId })
+    const channels = await listChannelsWithStorageV2Recovery({ agentId: this.agentId })
 
     const adapterStatuses = channelManager.getAdapterStatuses(this.agentId)
     const statusMap = new Map(adapterStatuses.map((s) => [s.channelId, s.connected]))
@@ -485,7 +495,7 @@ class ClawServer {
 
     const channelType = type as ChannelConfig['type']
     const config = ChannelConfigSchema.parse({ type: channelType, ...cfg })
-    const newChannel = await channelService.createChannel({
+    const newChannel = await createChannelWithStorageV2Recovery({
       type: channelType,
       name,
       agentId: this.agentId,
@@ -576,17 +586,17 @@ class ClawServer {
     const channelId = args.channel_id as string | undefined
     if (!channelId) throw new McpError(ErrorCode.InvalidParams, "'channel_id' is required for update_channel")
 
-    const existing = await channelService.getChannel(channelId)
+    const existing = await getChannelWithStorageV2Recovery(channelId)
     if (!existing) throw new McpError(ErrorCode.InvalidParams, `Channel "${channelId}" not found`)
 
-    const updates: Record<string, unknown> = {}
+    const updates: ChannelUpdateInput = {}
     if (args.name !== undefined) updates.name = args.name as string
     if (args.enabled !== undefined) updates.isActive = args.enabled as boolean
     if (args.config !== undefined) {
       updates.config = { ...existing.config, ...(args.config as Record<string, unknown>) }
     }
 
-    await channelService.updateChannel(channelId, updates)
+    await updateChannelWithStorageV2Recovery(channelId, updates)
     await channelManager.syncChannel(channelId)
 
     logger.info('Channel updated via config tool', { agentId: this.agentId, channelId })
@@ -599,10 +609,10 @@ class ClawServer {
     const channelId = args.channel_id as string | undefined
     if (!channelId) throw new McpError(ErrorCode.InvalidParams, "'channel_id' is required for remove_channel")
 
-    const channel = await channelService.getChannel(channelId)
+    const channel = await getChannelWithStorageV2Recovery(channelId)
     if (!channel) throw new McpError(ErrorCode.InvalidParams, `Channel "${channelId}" not found`)
 
-    await channelService.deleteChannel(channelId)
+    await deleteChannelWithStorageV2Recovery(channelId)
     await channelManager.disconnectChannel(channelId)
 
     logger.info('Channel removed via config tool', { agentId: this.agentId, channelId, type: channel.type })
@@ -615,7 +625,7 @@ class ClawServer {
     const channelId = args.channel_id as string | undefined
     if (!channelId) throw new McpError(ErrorCode.InvalidParams, "'channel_id' is required for reconnect_channel")
 
-    const channel = await channelService.getChannel(channelId)
+    const channel = await getChannelWithStorageV2Recovery(channelId)
     if (!channel) throw new McpError(ErrorCode.InvalidParams, `Channel "${channelId}" not found`)
 
     const needsQr =
@@ -676,7 +686,7 @@ class ClawServer {
     const name = args.name as string | undefined
     if (!name || !name.trim()) throw new McpError(ErrorCode.InvalidParams, "'name' is required for rename")
 
-    await agentService.updateAgent(this.agentId, { name: name.trim() })
+    await updateAgentWithStorageV2Recovery(this.agentId, { name: name.trim() })
 
     logger.info('Agent renamed via config tool', { agentId: this.agentId, name: name.trim() })
     return {
@@ -685,11 +695,11 @@ class ClawServer {
   }
 
   private async configCompleteBootstrap() {
-    const agent = await agentService.getAgent(this.agentId)
+    const agent = await getAgentWithStorageV2Recovery(this.agentId)
     if (!agent) throw new McpError(ErrorCode.InternalError, `Agent not found: ${this.agentId}`)
 
     const existingConfig = agent.configuration
-    await agentService.updateAgent(this.agentId, {
+    await updateAgentWithStorageV2Recovery(this.agentId, {
       configuration: { ...existingConfig, bootstrap_completed: true } as AgentConfiguration
     })
 
@@ -702,11 +712,11 @@ class ClawServer {
   }
 
   private async configResetBootstrap() {
-    const agent = await agentService.getAgent(this.agentId)
+    const agent = await getAgentWithStorageV2Recovery(this.agentId)
     if (!agent) throw new McpError(ErrorCode.InternalError, `Agent not found: ${this.agentId}`)
 
     const existingConfig = agent.configuration
-    await agentService.updateAgent(this.agentId, {
+    await updateAgentWithStorageV2Recovery(this.agentId, {
       configuration: { ...existingConfig, bootstrap_completed: false } as AgentConfiguration
     })
 
@@ -724,7 +734,7 @@ class ClawServer {
    */
   private async removeOrphanChannel(channelId: string): Promise<void> {
     try {
-      await channelService.deleteChannel(channelId)
+      await deleteChannelWithStorageV2Recovery(channelId)
       await channelManager.disconnectChannel(channelId)
     } catch (err) {
       logger.error('Failed to remove orphan channel', {
@@ -739,7 +749,7 @@ class ClawServer {
     const id = args.id
     if (!id) throw new McpError(ErrorCode.InvalidParams, "'id' is required for remove")
 
-    const deleted = await taskService.deleteTask(this.agentId, id)
+    const deleted = await deleteTaskWithStorageV2Recovery(this.agentId, id)
     if (!deleted) throw new McpError(ErrorCode.InvalidParams, `Job "${id}" not found`)
 
     logger.info('Cron job removed via tool', { agentId: this.agentId, taskId: id })

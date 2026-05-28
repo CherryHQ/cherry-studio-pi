@@ -113,11 +113,20 @@ Storage v2 引入稳定的数据根目录，而不是直接把 Electron `app.get
 
 启动时应按以下顺序定位数据：
 
-1. `CHERRY_STUDIO_STORAGE_V2_ROOT`，仅开发和诊断使用。
-2. `~/.cherrystudio/config/config.json` 中的 active data root。
-3. 当前 Electron userData 下是否存在 Storage v2 manifest。
-4. 旧 Cherry Studio Pi / Perry Studio / Cherry Studio 目录探测。
-5. 如果发现多个候选目录，进入数据目录选择和迁移 UI，不静默创建空库。
+1. `CHERRY_STUDIO_STORAGE_V2_ROOT`，仅开发和诊断使用，显式设置时优先。
+2. 任意候选目录中格式和版本匹配的 Storage v2 manifest。
+3. `~/.cherrystudio/config/config.json` 中仍然存在的 active data root。
+4. 当前 Electron userData 下已有旧库数据的 `Data` 目录。
+5. 旧 Cherry Studio Pi / Perry Studio / Cherry Studio 目录中已有旧库数据的 `Data` 目录。
+6. 当前 Electron userData 的 `Data` 目录。
+7. 如果发现多个候选目录，进入数据目录选择和迁移 UI，不静默创建空库。
+
+当前实现会在非 `CHERRY_STUDIO_STORAGE_V2_ROOT` 场景下，把选中的 Storage v2 data root 回写到
+`~/.cherrystudio/config/config.json` 的 `dataRoots` 中，并保留既有 `appDataPath` 配置。读取配置时只采纳
+`app` 为空或等于 `cherry-studio-pi` 的 active entry，且只有格式和版本匹配的 `manifest.json` 才会被视为有效
+Storage v2 根目录。这样产品名、仓库名或 Electron 默认 `userData` 路径变化后，下一次启动仍能优先找到同一个
+Storage v2 数据根。没有 manifest 的过渡期也会优先选择包含 `agents.db` / `app.db` / `Files` / `KnowledgeBase`
+等旧数据的目录，避免重命名后在新的空 userData 里静默创建空库，让用户误以为本地数据丢失。
 
 ## 权威数据库
 
@@ -362,6 +371,7 @@ files
   created_at
   updated_at
   deleted_at
+  version
 ```
 
 文件写入流程：
@@ -389,6 +399,7 @@ skills
   created_at
   updated_at
   deleted_at
+  version
 
 agent_skills
   agent_id
@@ -412,6 +423,7 @@ scheduled_tasks
   created_at
   updated_at
   deleted_at
+  version
 
 task_run_logs
   id
@@ -422,6 +434,7 @@ task_run_logs
   status
   result_json
   error
+  version
 
 channels
   id
@@ -436,6 +449,7 @@ channels
   created_at
   updated_at
   deleted_at
+  version
 ```
 
 Skill 文件仍然放在 `<dataRoot>/Skills/<folder>`，DB 存元数据和启用关系。agent workspace 下的 `.claude/skills` 仍可使用 symlink，但 symlink 是可重建的派生状态，不是权威数据。
@@ -453,6 +467,7 @@ knowledge_bases
   created_at
   updated_at
   deleted_at
+  version
 
 knowledge_items
   id
@@ -466,6 +481,7 @@ knowledge_items
   created_at
   updated_at
   deleted_at
+  version
 ```
 
 向量索引可以继续是知识库内部实现，但索引必须能从 `knowledge_items` 和 blob store 重建。权威元数据进入 `main.db`。
@@ -569,15 +585,18 @@ backup.zip
 当前落地恢复策略：
 
 - 设置页可选择 Storage v2 backup 目录并先做校验。
-- 校验会读取 `metadata.json`、检查 backup `main.db` 的 `quick_check` / `integrity_check`，并确认 DB 引用的 blob 文件在备份目录中存在且 sha256 checksum 匹配。
+- 校验会读取 `metadata.json`、检查 backup `main.db` 的 `quick_check` / `integrity_check`，确认 DB 引用的 blob 文件在备份目录中存在且 sha256 checksum 匹配，并校验 `secrets/vault.json` 的 vault 结构和 DB 中所有 secret ref 是否能找到对应密钥。
 - 恢复前会自动创建 `pre-restore` 备份。
 - 当前 `main.db` / `manifest.json` / `blobs` / `secrets` / `KnowledgeBase` / `Memory` / `Skills` / `Agents` 会先归档到 `legacy/pre-restore-*`，再从备份目录恢复。`Memory/memories.db` 备份使用 `VACUUM INTO`，避免直接复制正在写入的 SQLite DB。
 - 恢复前会尽量关闭知识库和记忆库的打开连接，降低恢复时旧句柄继续写入的风险。
-- 恢复成功后会自动开启 `storage_v2.runtime.auto_hydrate`，确保下一次启动会从 Storage v2 恢复 settings、providers、assistants、knowledge、memory、mcp、note、preprocess、websearch 和 topic 列表。
+- 恢复成功后会自动开启 `storage_v2.runtime.auto_hydrate`，确保下一次启动会从 Storage v2 恢复 settings、providers、assistants、所有持久化 Redux 配置 slice 和 topic 列表。
 - 恢复成功后会暂停 Renderer -> Storage v2 mirror，直到应用重启，避免旧运行时缓存把恢复后的数据库覆盖掉。
+- 恢复成功后会把 Storage v2 中的主进程 `config.*` 设置覆盖回 electron-store，保证重启后托盘、快捷键、选择助手、更新通道等主进程系统设置能跟随备份恢复。
 - 恢复成功后会把 Storage v2 中的 agent、session、agent 对话历史、skills、tasks、channels 投影回当前运行时仍在读取的 `Data/agents.db`，并把原 `agents.db` 归档到 `legacy/pre-restore-*`。
 - 恢复成功后会把 Storage v2 blob store 中的附件复制回 `Data/Files`，遇到同名但内容不同的旧文件会先归档再覆盖，确保旧对话中的图片和附件路径可用。
 - 恢复成功后会把 Storage v2 中的 app scoped records、cache、sync state、sync conflicts 和 workbench shortcuts 投影回当前运行时仍在读取的 `Data/app.db`，并尽量从 secrets vault 还原被引用的敏感字段。
+- auto hydrate 标记、主进程 config 回填和上面这些 legacy runtime 投影都发生在权威 Storage v2 数据已经恢复之后；如果某个后置步骤失败，恢复结果会返回 warning 而不是把已经完成的主库恢复误报成失败。应用重启后仍可通过 Storage v2 auto hydrate、手动 hydrate 和 read-through 继续恢复运行时缓存。
+- 恢复成功后会用恢复后的 manifest 重新激活当前 data root，让全局 data root config 跟随备份中的 workspace/profile 元数据更新。
 - 恢复后要求重启应用，让所有窗口和缓存重新连接到恢复后的数据库；普通聊天读取会在 Dexie 为空或开启启动恢复时从 Storage v2 read-through 回填消息、消息块和文件 metadata。
 
 ## 迁移策略
@@ -594,7 +613,8 @@ Storage v2 必须渐进迁移，不能一次性替换所有读写路径。
 
 - 新增 `<dataRoot>/manifest.json`。
 - 新增 `<dataRoot>/main.db`。
-- 新增 migrations、repositories、health check。
+- 新增 migrations、repositories、health check；启动时会执行幂等 schema column migration，并把 `storage_meta.schema_version`
+  写为当前 DB schema 版本，避免早期实验版 `main.db` 缺少新增列后在导入、备份或恢复时崩溃。
 - Renderer 通过 IPC 调用 StorageService。
 
 ### 阶段 2：迁移设置、providers、assistants
@@ -722,9 +742,13 @@ assistants.upsert(assistant)
 
 conversations.list(owner)
 conversations.get(id)
+conversations.sync(snapshot)
+conversations.upsert(metadata, pruneMissingMessages?)
 messages.list(conversationId, cursor)
 messages.append(conversationId, message)
-messages.updateBlocks(messageId, blocks)
+messages.upsert(conversationId, message)
+messages.updateBlocks(messageId, blocks, pruneMissing?)
+files.upsert(file)
 ```
 
 这些接口足够支撑阶段 1 到阶段 3。
@@ -752,36 +776,45 @@ messages.updateBlocks(messageId, blocks)
 
 当前代码已经完成 Storage v2 的安全并行骨架：
 
-- `StorageService`、data root discovery、`manifest.json`。
-- `main.db` 初始化、`PRAGMA quick_check`、`VACUUM INTO` snapshot。
-- Storage v2 backup 入口，可生成一致 DB 快照并复制 `blobs` / `secrets` / `KnowledgeBase` / `Memory` / `Skills` / `Agents` 到带 stats 与 integrity metadata 的备份目录。
+- `StorageService`、data root discovery、`manifest.json`；manifest 和全局 data root config 都使用临时文件原子 rename 写入，选中的 data root 会登记到 `~/.cherrystudio/config/config.json`，避免产品名或 userData 默认路径变化后丢失入口。
+- `main.db` 初始化、`PRAGMA quick_check`、`VACUUM INTO` snapshot；Storage v2 主库事务和 snapshot 通过进程内 exclusive queue 串行化，避免多个 mirror / 迁移入口并发时在同一 SQLite/libSQL 连接上互相抢 `BEGIN IMMEDIATE`。
+- Storage v2 backup 入口，可生成一致 DB 快照，并在等待 secret vault 写队列落盘后复制 `blobs` / `secrets` / `KnowledgeBase` / `Memory` / `Skills` / `Agents` 到带 stats 与 integrity metadata 的备份目录；Renderer 手动触发 snapshot / backup 前会按 Redux、普通对话、文件、agent 的顺序 flush mirror 队列，主进程 StorageService 也会在 snapshot / backup / restore 前等待 agent mirror flush，避免绕过 renderer 入口时漏掉最近的 agent 写入。
 - Storage v2 backup 会同时保存 `KnowledgeBase` 和 `Memory` 目录，其中 `Memory/memories.db` 通过 `VACUUM INTO` 生成一致快照。
+- 旧的本地 / WebDAV / S3 / 坚果云 / 局域网备份入口仍然保留，但在复制 `IndexedDB` / `Local Storage` / `Data` 或生成旧版 `data.json` 前会先执行 `handleSaveData()`，确保 Redux、普通聊天、文件、agent 和 durable localStorage 的 Storage v2 mirror 已落盘，降低刚改完就备份时漏掉最近数据的风险。复制 `Data` 时会使用当前选中的 active data root；如果存在 Storage v2 `main.db`，备份包内的 `main.db` 会替换为 `VACUUM INTO` 生成的一致快照，并移除复制过程中带上的 `main.db-wal` / `main.db-shm`。
 - Storage v2 restore 入口，可校验 backup 目录，恢复前创建 pre-restore 备份，并把旧文件归档到 `legacy/pre-restore-*` 后再恢复。
-- 只读迁移审计报告。
-- Storage v2 stats / integrity 统计与完整性检查接口，用于迁移后校验核心表数量、SQLite integrity、foreign key、孤儿记录、缺失 blob 文件和 blob checksum mismatch。
-- Storage v2 core snapshot 只读接口，可把 settings、providers、assistants、knowledge、memory、mcp、note、preprocess、websearch、assistant topics 合成为未来启动 hydrate 使用的安全快照；provider / LLM / MCP env / knowledge preprocess / document preprocess / websearch secrets 默认不解密。
-- sync ledger 基础写入：settings、providers、assistants、conversations、files、knowledge bases/items 写入时同步记录 `sync_changes`；显式删除会写入 `sync_tombstones`，避免删除的数据在恢复或未来同步时复活。
+- 旧版 `.bak` / JSON 备份恢复成功后，会显式关闭一次 `storage_v2.runtime.auto_hydrate`，避免用户之前开启过 Storage v2 启动恢复时，下一次启动用旧 Storage v2 快照覆盖刚恢复的 legacy localStorage / IndexedDB。
+- 只读迁移审计报告；会提示多个 Storage v2 manifest、缺失的已配置 data root，以及活动根之外仍存在旧版数据目录的风险。
+- Storage v2 stats / integrity 统计与完整性检查接口，用于迁移后校验核心表数量、SQLite integrity、foreign key、孤儿记录、缺失 blob 文件、blob checksum mismatch，以及 DB secret ref 是否能在 vault 中找到对应密钥。
+- Storage v2 backup 校验在扫描 secret ref 时会兼容早期备份缺少后续新增表/列的情况：缺失 schema source 会记录 warning 并继续扫描其余表，避免旧备份因非关键新表不存在而无法通过校验。
+- Storage v2 core snapshot 只读接口，可把 settings、providers、assistants、所有持久化 Redux 配置 slice、assistant topics 合成为未来启动 hydrate 使用的安全快照；provider / LLM / app settings / MCP env / Nutstore / OCR / code tools env / Copilot headers / knowledge preprocess / document preprocess / websearch secrets 默认不解密，并且会剔除历史异常数据里残留的同类明文字段，避免 `includeSecrets:false` 导出泄漏旧明文密钥。
+- sync ledger 基础写入：settings、providers、assistants、conversations、messages/message blocks、files、knowledge bases/items、agent/session/skill/task/channel、agent skill、task run log、app `kv_records` 写入时同步记录 `sync_changes`；除无行版本的关系表外，账本使用实体当前版本，显式删除会写入 `sync_tombstones`，避免删除的数据在恢复或未来同步时复活。
 - settings / providers / assistants repositories。
-- conversations / messages 只读查询接口，迁移后可以校验普通对话和 agent session 历史。
-- legacy Redux snapshot 导入入口，默认 `dryRun`；导入会把已删除的 providers / assistants 标记为 tombstone，并额外镜像 knowledge、memory、mcp、note、preprocess、websearch 等 Redux 配置。
+- conversations / messages 查询与普通对话直接写入接口，迁移后可以校验普通对话和 agent session 历史；普通聊天 mirror 已优先通过单会话原子 `conversation.sync` 写入 Storage v2，并保留 `conversation.upsert`、`message.upsert`、`message_blocks.upsert` 作为后续更细粒度主写路径，删除的消息和消息块会补 tombstone。
+- legacy Redux snapshot 导入入口，默认 `dryRun`；导入会把已删除的 providers / assistants 标记为 tombstone，并额外镜像所有持久化 Redux 配置 slice。
+- legacy Redux 导入支持局部 snapshot：只有传入 `llm.providers` 或 `assistants.assistants` 时才会 prune 对应实体；localStorage-only mirror、settings-only mirror 这类小域写入不会把缺失的数据域误判为空列表而删除 Storage v2 里的 provider / assistant。
 - provider API key、Vertex private key、AWS secret、CherryIn token 通过 Electron `safeStorage` 写入本地 secret vault；`dryRun` 时只报告不写入。
-- MCP server env、知识库预处理服务、文档预处理服务、网页搜索服务的敏感字段会写入 secret vault，`main.db` 只保存 secret ref；恢复 runtime cache 时再按需还原。
+- secret vault 写入使用进程内串行队列和临时文件原子 rename；只有 vault 文件不存在时才会初始化空 vault，已存在但无效或不可读时会拒绝继续写入，降低并发写入覆盖、崩溃截断和二次覆盖导致密钥丢失的风险。
+- 应用设置中的 S3 / API Server 凭据、MCP server env、Nutstore token、OCR API key、code tools 环境变量、Copilot 敏感 headers、知识库预处理服务、文档预处理服务、网页搜索服务的敏感字段会写入 secret vault，`main.db` 只保存 secret ref；恢复 runtime cache 时再按需还原。模型 provider 的新密钥如果因为安全存储不可用而无法写入 vault，会清理旧 credential ref，避免后续恢复出过期旧密钥。
+- 语言、当前 memory 用户、onboarding 完成状态、隐私协议确认状态等 durable localStorage 值，以及 MCP 市场/服务商登录 token（MCPRouter、ModelScope、蓝耘、TokenFlux、302.AI、百炼）虽然仍由现有页面读写 localStorage，但 Storage v2 mirror / 手动迁移会把它们纳入快照；MCP token、onboarding、隐私确认这类不一定伴随 Redux action 的写入会主动触发一次 localStorage mirror；其中 MCP provider token 会写入 secret vault，runtime cache 恢复时再写回 localStorage。被用户清除的 token 会通过显式 `clearedMcpProviderTokenKeys` 列表记录并在恢复时删除，避免把 safeStorage 不可用或 secret 缺失误判为“用户已清除 token”，也避免浏览器本地小配置和敏感 token 成为迁移和备份恢复的漏网数据。
 - knowledge bases/items 已进入结构化表，可在保留 Redux runtime 兼容快照的同时，用 `knowledge_bases` / `knowledge_items` 作为未来同步、重建索引和迁移校验的权威元数据。
-- legacy Dexie `topics` / `message_blocks` / `files` 导入入口，普通对话可写入统一 `conversations` / `messages` / `message_blocks`，文件可按 sha256 写入 blob store；完整导入会纳入 orphan Dexie topic，并可 prune 已删除的 topic / file。
-- legacy `Data/agents.db` 导入入口，覆盖 agents、sessions、session messages、skills、agent skills、tasks、task logs、channels。
+- legacy Dexie `topics` / `message_blocks` / `files` 导入入口，普通对话可写入统一 `conversations` / `messages` / `message_blocks`，缺失的消息和消息块使用软删除并记录变更；删除整段会话时也会为子消息和消息块写入 tombstone，文件可按 sha256 写入 blob store；完整导入会纳入 orphan Dexie topic，并可 prune 已删除的 topic / file。
+- legacy `Data/agents.db` 导入入口，覆盖 agents、sessions、session messages、skills、agent skills、tasks、task logs、channels；导入时只把旧库中实际存在的表视为权威来源，旧版 schema 缺少某张表时不会把 Storage v2 中对应数据批量标记删除；session messages 表缺失时也不会用空历史覆盖已有 agent conversation。
 - channel secret 字段导入时写入 secret vault；如果当前系统不可用，则跳过敏感明文并保留 warning。
-- legacy `Data/app.db` 导入入口，app scoped records、cache、sync state/conflicts、workbench shortcuts 可迁入 `kv_records` / sync tables，并会扫描常见 secret 字段写入 secret vault。
-- Renderer 侧提供完整 legacy migration runner，可一次性 dry-run 或按顺序迁移 Redux、Dexie、`agents.db`、`app.db`，实际导入前默认先创建 snapshot。
+- legacy `Data/app.db` 导入入口，app scoped records、cache、sync state/conflicts、workbench shortcuts 可迁入 `kv_records` / sync tables，并会扫描常见 secret 字段写入 secret vault；导入时只 prune 旧库中实际存在的表，旧版 app.db 缺少 cache、workbench shortcut 或 sync 表时不会删除 Storage v2 里的对应数据；新的 app-data set/delete、app-cache set/delete、workbench shortcut upsert/install 已先写 Storage v2 再写 legacy `app.db`，WebDAV app-data sync 下载记录、sync state 和 sync conflicts 也已先写 Storage v2 再写 legacy `app.db`，常见敏感字段仍会转成 secret ref；`appData.get`、`appCache.get`、workbench shortcut list、WebDAV sync status、WebDAV sync last-hash 和 app sync `device-id` 在 legacy runtime 读不到数据时会从 Storage v2 read-through 回退读取并还原 secret ref，避免旧库缺失 sync state 时把单边更新误判成冲突或生成新的设备身份；`app.db` 初始化本身也会优先复用 Storage v2 中的 `device-id`，没有旧值时才生成并镜像新的设备 ID。legacy app-data 和 Storage v2 app-data 读取都会区分“缺行”“合法 null”“删除墓碑”，避免从 Storage v2 读回旧值，或把合法 null 当成缺失后触发错误投影；`appData.get` 在单个 key 缺失时、`appData.list` 和 WebDAV app-data sync 在 legacy app records 为空时，会先尝试从选中的 legacy data root 把 `app.db` 种子导入 Storage v2，再把 Storage v2 投影回当前 `Data/app.db` 后继续读取/同步。
+- Renderer 侧提供完整 legacy migration runner，可一次性 dry-run 或按顺序迁移 Redux、Dexie、`agents.db`、`app.db`；实际导入前会先 flush 所有 mirror 队列，再默认创建一次顶层 snapshot，内部 `agents.db` / `app.db` 导入会复用这次保护点，不再额外生成重复 snapshot。
 - 设置页的数据设置中已加入“统一存储”控制面，可查看 data root、health、legacy audit、Storage v2 stats，并触发 dry-run、导入、snapshot、backup。
 - 设置页可手动触发 Storage v2 完整性检查。
 - dry-run / 导入的结果会写入 `migration_runs`，应用重启后仍可追溯最近迁移历史。
-- Renderer 已加入 Redux -> Storage v2 mirror middleware：`settings`、`llm`、`assistants`、`knowledge`、`memory`、`mcp`、`note`、`preprocess`、`websearch` 变更会低频写入 Storage v2，应用退出 flush 时也会同步落库。该 mirror 会去掉助手 topic runtime 数据，避免聊天历史重复塞进 settings。
-- Renderer 已加入普通对话 -> Storage v2 mirror：普通聊天消息、消息块、清空/删除等 IndexedDB 写入会按 topic 防抖镜像到 `conversations` / `messages` / `message_blocks`，并只同步当前对话引用到的文件元信息。
+- 主进程 `ConfigManager` 的 electron-store 设置会在启动时从 Storage v2 的 `config.*` 设置补空缺，再把现有 electron-store 快照镜像回 Storage v2；之后每次 `configManager.set()` 都会异步写入 Storage v2，覆盖托盘、快捷键、选择助手、更新通道、开发者模式等主进程系统设置。Storage v2 备份恢复时会以备份内 `config.*` 为准覆盖并 prune 当前 electron-store 中缺失的旧 key，避免本机残留配置污染恢复后的状态；如果早期备份完全没有 `config.*` 记录，则不会 prune 当前 electron-store，避免把缺失镜像能力误判为“备份要求清空配置”。
+- Renderer 已加入 Redux -> Storage v2 mirror middleware：所有持久化 Redux 配置 slice 的变更会低频写入 Storage v2，应用退出 flush 时也会同步落库。该 mirror 会去掉助手 topic runtime 数据，避免聊天历史重复塞进 settings；启动阶段会先暂停 mirror，`persist/REHYDRATE` 不直接写 Storage v2，待 Storage v2 自动恢复完成或确认跳过后再用最终 Redux 状态统一 mirror，避免旧 runtime cache 抢跑覆盖恢复数据。
+- Renderer 已加入普通对话 -> Storage v2 mirror：普通聊天消息、消息块、清空/删除等 IndexedDB 写入会按 topic 防抖镜像到 `conversations` / `messages` / `message_blocks`，失败时会保留待同步 topic，避免临时写入失败后直接丢掉 mirror 任务；mirror 只在 Dexie 明确存在该 topic cache 时写回，避免 Storage v2 read-through 尚未 seed Dexie 时把 Redux 里的空 topic 误当作清空会话，并只同步当前对话引用到的文件元信息。
 - Renderer 已加入普通对话 / 文件显式删除 tombstone：删除 topic 或文件时会写入 Storage v2 软删除，避免恢复后复活。
 - Renderer 已加入 Storage v2 -> 普通对话 read-through：启动恢复开启时优先从 Storage v2 读取普通聊天消息；Dexie cache 为空时也会从 Storage v2 回填消息、消息块和文件 metadata。
-- Renderer 已加入文件元信息 -> Storage v2 mirror：附件新增、更新、引用计数变化会同步到 blob/file tables。
-- Renderer / Main 已加入 Pi agent -> Storage v2 mirror：agent session 消息、agent/session/task/channel 等本地 IPC 写操作进入 `agents.db` 后会低频导入 Storage v2，应用退出 flush 时也会同步落库。
-- 设置页提供手动“从 Storage v2 恢复运行时缓存”入口，可把 Storage v2 核心快照恢复到 Redux runtime cache；同时提供默认关闭的启动恢复开关，开启后会在 Redux ready 通知前从 Storage v2 hydrate runtime cache。
+- Renderer 已加入文件元信息 -> Storage v2 mirror：附件新增、更新、引用计数变化会通过 `file.upsert` 同步到 blob/file tables；待同步文件在 flush 前已从 Dexie 消失时会补写 file tombstone，避免恢复后复活。
+- Renderer / Main 已加入 Pi agent -> Storage v2 mirror：agent session 消息、agent/session/task/channel 等本地 IPC、本地 HTTP API、定时任务、claw MCP 工具和外部 channel 写操作进入 `agents.db` 后会导入 Storage v2，消息流完成后会补一次 mirror 调度，运行时 mirror 会跳过迁移级保护快照以避免高频写入产生 snapshot 风暴；agent 创建/更新/排序、session 创建/更新/排序、task 创建/更新/运行日志、channel 创建/更新，以及 agent/session/message/task/channel 删除都会在成功写入 legacy 后立即 flush agent mirror，降低写入后崩溃导致 Storage v2 漏写或删除数据复活的风险；手动 legacy 导入和完整迁移仍默认保留 snapshot。Agent list/get/session/task/channel/message-history read 在 legacy runtime 为空或缺失时，会先尝试从选中的 legacy data root 把 `agents.db` 种子导入 Storage v2，再串行投影 Storage v2 回当前 `agents.db` 后重读；task/channel create 和 agent message persist 会先尝试恢复对应 runtime，再执行旧库写入；内置 agent 启动初始化前也会先尝试从 Storage v2 恢复，并且 legacy 里已有删除墓碑的 agent 不会被旧 Storage v2 数据复活；该 read-through / write-before-recovery 已覆盖 IPC、本地 HTTP API、调度器任务扫描/手动运行、Pi runtime 历史上下文加载、channel manager 启动/同步和 channel message session 解析，用于覆盖产品名或 userData 路径变化后的本地恢复场景。
+- 主进程启动后、内置 agent 初始化前，会先 flush 待处理的 agent mirror，并把选中 data root 下的 `agents.db` / `app.db` 主动 seed 到 Storage v2。启动 seed 默认不额外创建 snapshot，避免每次打开应用产生重复保护点；相同启动周期内并发调用会复用同一个 in-flight promise。这样即使用户刚经历产品名或 userData 路径变化，也能在首次进入 agent/app-data 读路径之前尽量完成旧库导入，减少首屏空状态和后续读穿透恢复的压力；内置 agent 初始化成功后也会立即 flush agent mirror，避免启动早期崩溃漏掉自动创建的内置 agent/session。
+- 旧备份/重置留下的 `.restore` 目录会在 `app.whenReady()` 后第一时间完成切换，早于 Storage v2 config hydrate/mirror、启动 seed、窗口创建和 renderer 加载，避免恢复/重置启动时旧运行态先写回新库。每次恢复解压前会先清空 restore temp 目录，避免上一次失败残留的 `metadata.json` / `Data` 影响本次格式判断和恢复内容。factory reset 会在 `Data.restore` 中预置全新的 Storage v2 manifest；切换完成后会立即把这个新路径重新注册为 active data root，避免旧产品名、旧用户名或旧配置里的 data root 继续优先命中，造成用户误以为重置失败或旧数据复活。
+- 设置页提供手动“从 Storage v2 恢复运行时缓存”入口，可把 Storage v2 核心快照恢复到 Redux runtime cache；同时提供默认关闭的启动恢复开关，开启后会在 Redux ready 通知前从 Storage v2 hydrate runtime cache。自动恢复只把真实 runtime 数据视为可恢复内容，不会因为 Storage v2 内部 `storage-v2` 设置元数据存在就把空库误判成可恢复快照。
 
-当前阶段仍不接管既有 Redux、IndexedDB、`agents.db` 或 `app.db` 的业务读写。
+当前阶段仍不完全接管既有 Redux、IndexedDB、`agents.db` 或 `app.db` 的业务读写；其中 Redux、普通对话、文件、Pi agent 和 app-data 写入已经开始双写 / mirror 到 Storage v2，读取路径仍按模块逐步切换。
 StorageService-first 写路径和 legacy 归档清理仍是后续步骤。

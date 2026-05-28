@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -75,6 +75,10 @@ function hashValue(value: unknown, deletedAt?: number | null) {
     .digest('hex')
 }
 
+const APP_RECORD_SOURCES = new Set(['legacy-app-record', 'app-record'])
+const APP_CACHE_SOURCES = new Set(['legacy-app-cache', 'app-cache'])
+const WORKBENCH_SHORTCUT_SOURCES = new Set(['legacy-workbench-shortcut', 'workbench-shortcut'])
+
 function getAppDbPath() {
   return path.join(app.getPath('userData'), 'Data', 'app.db')
 }
@@ -137,10 +141,11 @@ export class StorageV2AppDataLegacyProjectionService {
     const appDataDb = await getAppDataDatabase()
     const targetClient = await appDataDb.getRawClient()
     const storageClient = await storageV2Database.getClient()
+    const fallbackDeviceId = appDataDb.getDeviceId()
 
     await withTransaction(targetClient, async () => {
       await this.resetLegacyTables(targetClient)
-      await this.projectRows(storageClient, targetClient, report)
+      await this.projectRows(storageClient, targetClient, fallbackDeviceId, report)
     })
 
     await AppDataDatabase.close()
@@ -202,13 +207,17 @@ export class StorageV2AppDataLegacyProjectionService {
   private async projectRows(
     storageClient: Client,
     targetClient: Client,
+    fallbackDeviceId: string,
     report: StorageV2AppDataLegacyProjectionReport
   ) {
     const [recordsResult, syncStateResult, conflictsResult] = await Promise.all([
       storageClient.execute(`
         SELECT scope, key, value_json, source, updated_at, deleted_at, version
         FROM kv_records
-        WHERE source IN ('legacy-app-record', 'legacy-app-cache', 'legacy-workbench-shortcut')
+        WHERE source IN (
+          'legacy-app-record', 'legacy-app-cache', 'legacy-workbench-shortcut',
+          'app-record', 'app-cache', 'workbench-shortcut'
+        )
         ORDER BY updated_at ASC
       `),
       storageClient.execute(`
@@ -220,12 +229,12 @@ export class StorageV2AppDataLegacyProjectionService {
       storageClient.execute(`
         SELECT id, entity_id, local_snapshot_json, remote_snapshot_json, created_at, resolved_at
         FROM sync_conflicts
-        WHERE entity_type = 'legacy-app-record'
+        WHERE entity_type IN ('legacy-app-record', 'app-record')
         ORDER BY created_at ASC
       `)
     ])
 
-    const restoredDeviceId = this.getRestoredDeviceId(syncStateResult.rows) ?? randomUUID()
+    const restoredDeviceId = this.getRestoredDeviceId(syncStateResult.rows) ?? fallbackDeviceId
 
     for (const row of syncStateResult.rows) {
       const storageKey = text(row, 'key')
@@ -248,11 +257,11 @@ export class StorageV2AppDataLegacyProjectionService {
 
     for (const row of recordsResult.rows) {
       const source = text(row, 'source')
-      if (source === 'legacy-app-record') {
+      if (APP_RECORD_SOURCES.has(source ?? '')) {
         await this.projectAppRecord(row, targetClient, restoredDeviceId, report)
-      } else if (source === 'legacy-app-cache') {
+      } else if (APP_CACHE_SOURCES.has(source ?? '')) {
         await this.projectAppCache(row, targetClient, report)
-      } else if (source === 'legacy-workbench-shortcut') {
+      } else if (WORKBENCH_SHORTCUT_SOURCES.has(source ?? '')) {
         await this.projectWorkbenchShortcut(row, targetClient, restoredDeviceId, report)
       }
     }
@@ -312,6 +321,7 @@ export class StorageV2AppDataLegacyProjectionService {
     const scope = text(row, 'scope')
     const key = text(row, 'key')
     if (!scope?.startsWith('cache.') || !key) return
+    if (row.deleted_at) return
 
     const payload = parseJson<Record<string, unknown>>(text(row, 'value_json'), {})
     const value = await this.restoreSecrets(payload.value, report)
@@ -353,6 +363,15 @@ export class StorageV2AppDataLegacyProjectionService {
           id, name, url, source_path, kind, metadata, created_at, updated_at, deleted_at
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          name = excluded.name,
+          url = excluded.url,
+          source_path = excluded.source_path,
+          kind = excluded.kind,
+          metadata = excluded.metadata,
+          created_at = excluded.created_at,
+          updated_at = excluded.updated_at,
+          deleted_at = excluded.deleted_at
       `,
       args: [
         id,
@@ -371,6 +390,13 @@ export class StorageV2AppDataLegacyProjectionService {
       sql: `
         INSERT INTO app_records (scope, key, value, value_hash, updated_at, deleted_at, device_id, version)
         VALUES ('workbench.shortcuts', ?, ?, ?, ?, ?, ?, 1)
+        ON CONFLICT(scope, key) DO UPDATE SET
+          value = excluded.value,
+          value_hash = excluded.value_hash,
+          updated_at = excluded.updated_at,
+          deleted_at = excluded.deleted_at,
+          device_id = excluded.device_id,
+          version = app_records.version + 1
       `,
       args: [id, toJson(shortcut), hashValue(shortcut, deletedAt), updatedAt, deletedAt, deviceId]
     })

@@ -8,11 +8,16 @@ import { storageV2DataRootService } from './DataRootService'
 import { storageV2SecretVaultService } from './SecretVaultService'
 import { storageV2Database } from './StorageV2Database'
 import { type StorageV2ConversationImport, storageV2ConversationRepository } from './StorageV2Repositories'
+import { storageV2SyncLogService } from './SyncLogService'
 
 type LegacyAgentDbSnapshotOptions = {
   dryRun?: boolean
   dbPath?: string
+  createSnapshot?: boolean
 }
+
+type LegacyAgentDbRows = Record<(typeof LEGACY_TABLES)[number], Row[]>
+type LegacyAgentDbTableSet = Set<(typeof LEGACY_TABLES)[number]>
 
 export type StorageV2LegacyAgentDbImportReport = {
   dryRun: boolean
@@ -50,6 +55,15 @@ const LEGACY_TABLES = [
   'task_run_logs',
   'channels'
 ] as const
+
+const ENTITY_TYPE_BY_TABLE = {
+  agent_sessions: 'agent_session',
+  agents: 'agent',
+  channels: 'channel',
+  scheduled_tasks: 'scheduled_task',
+  skills: 'skill',
+  task_run_logs: 'task_run_log'
+} as const
 
 const CHANNEL_SECRET_KEYS = [
   'app_secret',
@@ -150,20 +164,56 @@ function extractAgentSessionText(content: unknown) {
 
 async function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
   const client = await storageV2Database.getClient()
-  await client.execute('BEGIN IMMEDIATE')
-  try {
-    const result = await fn()
-    await client.execute('COMMIT')
-    return result
-  } catch (error) {
-    await client.execute('ROLLBACK').catch(() => {})
-    throw error
+  return storageV2Database.withTransaction(client, fn)
+}
+
+async function getEntityVersion(
+  client: ReturnType<typeof createClient>,
+  table: keyof typeof ENTITY_TYPE_BY_TABLE,
+  idColumn: string,
+  entityId: string,
+  versioned = false
+) {
+  if (!versioned) return 1
+
+  const result = await client.execute({
+    sql: `SELECT version FROM ${table} WHERE ${idColumn} = ?`,
+    args: [entityId]
+  })
+  return Number(result.rows[0]?.version ?? 1)
+}
+
+async function recordEntityChange(
+  client: ReturnType<typeof createClient>,
+  input: {
+    table: keyof typeof ENTITY_TYPE_BY_TABLE
+    idColumn?: string
+    entityId: string
+    operation?: 'upsert' | 'delete'
+    payload?: unknown
+    versioned?: boolean
   }
+) {
+  await storageV2SyncLogService.recordChange({
+    client,
+    entityType: ENTITY_TYPE_BY_TABLE[input.table],
+    entityId: input.entityId,
+    operation: input.operation ?? 'upsert',
+    payload: input.payload ?? { id: input.entityId },
+    version: await getEntityVersion(
+      client,
+      input.table,
+      input.idColumn ?? 'id',
+      input.entityId,
+      input.versioned === true
+    )
+  })
 }
 
 export class StorageV2LegacyAgentDbImportService {
   async importSnapshot(options: LegacyAgentDbSnapshotOptions = {}): Promise<StorageV2LegacyAgentDbImportReport> {
     const dryRun = options.dryRun !== false
+    const shouldCreateSnapshot = !dryRun && options.createSnapshot !== false
     const sourceDbPath = firstExistingPath(candidateAgentDbPaths(options.dbPath))
     const warnings: string[] = []
 
@@ -191,10 +241,14 @@ export class StorageV2LegacyAgentDbImportService {
       }
 
       if (!dryRun) {
-        snapshotPath = (await storageV2Database.createSnapshot('before-legacy-agent-db-import')).path
-        importedSecretCount = await withTransaction(async () => this.writeRows(rows, warnings))
-        await this.importSessionMessages(rows, warnings)
-        await this.markMissingAgentSessionConversations(rows.sessions, warnings)
+        snapshotPath = shouldCreateSnapshot
+          ? (await storageV2Database.createSnapshot('before-legacy-agent-db-import')).path
+          : undefined
+        importedSecretCount = await withTransaction(async () => this.writeRows(rows, tables, warnings))
+        await this.importSessionMessages(rows, tables, warnings)
+        if (tables.has('sessions')) {
+          await this.markMissingAgentSessionConversations(rows.sessions, warnings)
+        }
       }
 
       return {
@@ -258,16 +312,22 @@ export class StorageV2LegacyAgentDbImportService {
     }
   }
 
-  private async getTables(client: ReturnType<typeof createClient>) {
+  private async getTables(client: ReturnType<typeof createClient>): Promise<LegacyAgentDbTableSet> {
     const result = await client.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
-    return new Set(result.rows.map((row) => String(row.name)))
+    return new Set(
+      result.rows
+        .map((row) => String(row.name))
+        .filter((table): table is (typeof LEGACY_TABLES)[number] =>
+          LEGACY_TABLES.includes(table as (typeof LEGACY_TABLES)[number])
+        )
+    )
   }
 
-  private async readLegacyRows(client: ReturnType<typeof createClient>, tables: Set<string>) {
-    const rows = Object.fromEntries(LEGACY_TABLES.map((table) => [table, [] as Row[]])) as Record<
-      (typeof LEGACY_TABLES)[number],
-      Row[]
-    >
+  private async readLegacyRows(
+    client: ReturnType<typeof createClient>,
+    tables: LegacyAgentDbTableSet
+  ): Promise<LegacyAgentDbRows> {
+    const rows = Object.fromEntries(LEGACY_TABLES.map((table) => [table, [] as Row[]])) as LegacyAgentDbRows
 
     for (const table of LEGACY_TABLES) {
       if (!tables.has(table)) continue
@@ -287,7 +347,7 @@ export class StorageV2LegacyAgentDbImportService {
     }, 0)
   }
 
-  private async writeRows(rows: Record<(typeof LEGACY_TABLES)[number], Row[]>, warnings: string[]) {
+  private async writeRows(rows: LegacyAgentDbRows, tables: LegacyAgentDbTableSet, warnings: string[]) {
     const client = await storageV2Database.getClient()
     let importedSecretCount = 0
     const agentIds = new Set(rows.agents.map((row) => text(row, 'id')).filter((id): id is string => Boolean(id)))
@@ -296,6 +356,7 @@ export class StorageV2LegacyAgentDbImportService {
     const taskIds = new Set(
       rows.scheduled_tasks.map((row) => text(row, 'id')).filter((id): id is string => Boolean(id))
     )
+    const taskRunLogIds = new Set<string>()
     const channelIds = new Set(rows.channels.map((row) => text(row, 'id')).filter((id): id is string => Boolean(id)))
     const agentSkillKeys = new Set(
       rows.agent_skills
@@ -380,6 +441,18 @@ export class StorageV2LegacyAgentDbImportService {
           text(row, 'deleted_at')
         ]
       })
+      await recordEntityChange(client, {
+        table: 'agents',
+        entityId: id,
+        operation: text(row, 'deleted_at') ? 'delete' : 'upsert',
+        payload: {
+          id,
+          type: requiredText(row, 'type', 'pi'),
+          name: requiredText(row, 'name', id),
+          deletedAt: text(row, 'deleted_at')
+        },
+        versioned: true
+      })
     }
 
     for (const [index, row] of rows.sessions.entries()) {
@@ -427,6 +500,16 @@ export class StorageV2LegacyAgentDbImportService {
           timestamp(row.updated_at, currentTime)
         ]
       })
+      await recordEntityChange(client, {
+        table: 'agent_sessions',
+        entityId: id,
+        payload: {
+          id,
+          agentId: requiredText(row, 'agent_id', 'legacy-missing-agent'),
+          name: requiredText(row, 'name', id)
+        },
+        versioned: true
+      })
     }
 
     for (const [index, row] of rows.skills.entries()) {
@@ -436,9 +519,9 @@ export class StorageV2LegacyAgentDbImportService {
         sql: `
           INSERT INTO skills (
             id, name, description, folder_name, source, source_url, namespace, author, tags_json,
-            content_hash, created_at, updated_at, deleted_at
+            content_hash, created_at, updated_at, deleted_at, version
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
           ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
             description = excluded.description,
@@ -450,7 +533,8 @@ export class StorageV2LegacyAgentDbImportService {
             tags_json = excluded.tags_json,
             content_hash = excluded.content_hash,
             updated_at = excluded.updated_at,
-            deleted_at = NULL
+            deleted_at = NULL,
+            version = skills.version + 1
         `,
         args: [
           id,
@@ -466,6 +550,16 @@ export class StorageV2LegacyAgentDbImportService {
           timestamp(row.created_at, currentTime),
           timestamp(row.updated_at, currentTime)
         ]
+      })
+      await recordEntityChange(client, {
+        table: 'skills',
+        entityId: id,
+        payload: {
+          id,
+          name: requiredText(row, 'name', id),
+          folderName: requiredText(row, 'folder_name', id)
+        },
+        versioned: true
       })
     }
 
@@ -490,6 +584,16 @@ export class StorageV2LegacyAgentDbImportService {
           timestamp(row.updated_at, currentTime)
         ]
       })
+      await storageV2SyncLogService.recordChange({
+        client,
+        entityType: 'agent_skill',
+        entityId: `${agentId}:${skillId}`,
+        payload: {
+          agentId,
+          skillId,
+          enabled: Boolean(intValue(row, 'is_enabled', 0))
+        }
+      })
     }
 
     for (const [index, row] of rows.scheduled_tasks.entries()) {
@@ -499,9 +603,9 @@ export class StorageV2LegacyAgentDbImportService {
         sql: `
           INSERT INTO scheduled_tasks (
             id, agent_id, name, prompt, schedule_type, schedule_value, timeout_minutes,
-            next_run, last_run, last_result, status, created_at, updated_at, deleted_at
+            next_run, last_run, last_result, status, created_at, updated_at, deleted_at, version
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
           ON CONFLICT(id) DO UPDATE SET
             agent_id = excluded.agent_id,
             name = excluded.name,
@@ -514,7 +618,8 @@ export class StorageV2LegacyAgentDbImportService {
             last_result = excluded.last_result,
             status = excluded.status,
             updated_at = excluded.updated_at,
-            deleted_at = NULL
+            deleted_at = NULL,
+            version = scheduled_tasks.version + 1
         `,
         args: [
           id,
@@ -532,19 +637,36 @@ export class StorageV2LegacyAgentDbImportService {
           timestamp(row.updated_at, currentTime)
         ]
       })
+      await recordEntityChange(client, {
+        table: 'scheduled_tasks',
+        entityId: id,
+        payload: {
+          id,
+          agentId: requiredText(row, 'agent_id', 'legacy-missing-agent'),
+          name: requiredText(row, 'name', id),
+          status: requiredText(row, 'status', 'active')
+        },
+        versioned: true
+      })
     }
 
     for (const row of rows.task_run_logs) {
+      const id = intValue(row, 'id', -1)
       const taskId = text(row, 'task_id')
       if (!taskId || !taskIds.has(taskId)) {
         warnings.push(`Skipped legacy task run log ${text(row, 'id') ?? 'unknown'}: missing scheduled task.`)
         continue
       }
+      if (id < 0) {
+        warnings.push(`Skipped legacy task run log ${text(row, 'id') ?? 'unknown'}: invalid id.`)
+        continue
+      }
+      taskRunLogIds.add(String(id))
 
       await client.execute({
         sql: `
-          INSERT INTO task_run_logs (id, task_id, session_id, run_at, duration_ms, status, result_json, error)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO task_run_logs (id, task_id, session_id, run_at, duration_ms, status, result_json, error, version)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
           ON CONFLICT(id) DO UPDATE SET
             task_id = excluded.task_id,
             session_id = excluded.session_id,
@@ -552,10 +674,11 @@ export class StorageV2LegacyAgentDbImportService {
             duration_ms = excluded.duration_ms,
             status = excluded.status,
             result_json = excluded.result_json,
-            error = excluded.error
+            error = excluded.error,
+            version = task_run_logs.version + 1
         `,
         args: [
-          intValue(row, 'id'),
+          id,
           taskId,
           text(row, 'session_id'),
           requiredText(row, 'run_at', now()),
@@ -564,6 +687,16 @@ export class StorageV2LegacyAgentDbImportService {
           normalizeJson(text(row, 'result')),
           text(row, 'error')
         ]
+      })
+      await recordEntityChange(client, {
+        table: 'task_run_logs',
+        entityId: String(id),
+        payload: {
+          id,
+          taskId,
+          status: requiredText(row, 'status', 'success')
+        },
+        versioned: true
       })
     }
 
@@ -578,9 +711,9 @@ export class StorageV2LegacyAgentDbImportService {
         sql: `
           INSERT INTO channels (
             id, type, name, agent_id, session_id, config_json, is_active,
-            active_chat_ids_json, permission_mode, created_at, updated_at, deleted_at
+            active_chat_ids_json, permission_mode, created_at, updated_at, deleted_at, version
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
           ON CONFLICT(id) DO UPDATE SET
             type = excluded.type,
             name = excluded.name,
@@ -591,7 +724,8 @@ export class StorageV2LegacyAgentDbImportService {
             active_chat_ids_json = excluded.active_chat_ids_json,
             permission_mode = excluded.permission_mode,
             updated_at = excluded.updated_at,
-            deleted_at = NULL
+            deleted_at = NULL,
+            version = channels.version + 1
         `,
         args: [
           id,
@@ -607,14 +741,41 @@ export class StorageV2LegacyAgentDbImportService {
           timestamp(row.updated_at, currentTime)
         ]
       })
+      await recordEntityChange(client, {
+        table: 'channels',
+        entityId: id,
+        payload: {
+          id,
+          type: requiredText(row, 'type', 'unknown'),
+          name: requiredText(row, 'name', id),
+          agentId: agentId && agentIds.has(agentId) ? agentId : null,
+          sessionId: sessionId && rows.sessions.some((session) => text(session, 'id') === sessionId) ? sessionId : null
+        },
+        versioned: true
+      })
     }
 
-    await this.markMissingEntityRowsDeleted(client, 'agents', 'id', agentIds, { versioned: true })
-    await this.markMissingEntityRowsDeleted(client, 'agent_sessions', 'id', sessionIds, { versioned: true })
-    await this.markMissingEntityRowsDeleted(client, 'skills', 'id', skillIds)
-    await this.markMissingEntityRowsDeleted(client, 'scheduled_tasks', 'id', taskIds)
-    await this.markMissingEntityRowsDeleted(client, 'channels', 'id', channelIds)
-    await this.deleteMissingAgentSkillRows(client, agentSkillKeys)
+    if (tables.has('agents')) {
+      await this.markMissingEntityRowsDeleted(client, 'agents', 'id', agentIds, { versioned: true })
+    }
+    if (tables.has('sessions')) {
+      await this.markMissingEntityRowsDeleted(client, 'agent_sessions', 'id', sessionIds, { versioned: true })
+    }
+    if (tables.has('skills')) {
+      await this.markMissingEntityRowsDeleted(client, 'skills', 'id', skillIds, { versioned: true })
+    }
+    if (tables.has('scheduled_tasks')) {
+      await this.markMissingEntityRowsDeleted(client, 'scheduled_tasks', 'id', taskIds, { versioned: true })
+    }
+    if (tables.has('channels')) {
+      await this.markMissingEntityRowsDeleted(client, 'channels', 'id', channelIds, { versioned: true })
+    }
+    if (tables.has('agent_skills')) {
+      await this.deleteMissingAgentSkillRows(client, agentSkillKeys)
+    }
+    if (tables.has('task_run_logs')) {
+      await this.deleteMissingTaskRunLogRows(client, taskRunLogIds)
+    }
 
     return importedSecretCount
   }
@@ -628,6 +789,25 @@ export class StorageV2LegacyAgentDbImportService {
   ) {
     const currentTime = now()
     const versionSql = options.versioned ? ', version = version + 1' : ''
+    const idsArray = Array.from(ids)
+    const missingRows =
+      ids.size === 0
+        ? await client.execute({
+            sql: `
+              SELECT ${idColumn} AS id${options.versioned ? ', version' : ''}
+              FROM ${table}
+              WHERE deleted_at IS NULL
+            `,
+            args: []
+          })
+        : await client.execute({
+            sql: `
+              SELECT ${idColumn} AS id${options.versioned ? ', version' : ''}
+              FROM ${table}
+              WHERE deleted_at IS NULL AND ${idColumn} NOT IN (${idsArray.map(() => '?').join(', ')})
+            `,
+            args: idsArray
+          })
 
     if (ids.size === 0) {
       await client.execute({
@@ -638,36 +818,114 @@ export class StorageV2LegacyAgentDbImportService {
         `,
         args: [currentTime, currentTime]
       })
-      return
+    } else {
+      await client.execute({
+        sql: `
+          UPDATE ${table}
+          SET deleted_at = ?, updated_at = ?${versionSql}
+          WHERE deleted_at IS NULL AND ${idColumn} NOT IN (${idsArray.map(() => '?').join(', ')})
+        `,
+        args: [currentTime, currentTime, ...idsArray]
+      })
     }
 
-    await client.execute({
-      sql: `
-        UPDATE ${table}
-        SET deleted_at = ?, updated_at = ?${versionSql}
-        WHERE deleted_at IS NULL AND ${idColumn} NOT IN (${Array.from(ids)
-          .map(() => '?')
-          .join(', ')})
-      `,
-      args: [currentTime, currentTime, ...Array.from(ids)]
-    })
+    for (const row of missingRows.rows) {
+      const entityId = text(row, 'id')
+      if (!entityId) continue
+      await storageV2SyncLogService.recordChange({
+        client,
+        entityType: ENTITY_TYPE_BY_TABLE[table],
+        entityId,
+        operation: 'delete',
+        payload: {
+          id: entityId,
+          deletedAt: currentTime
+        },
+        version: options.versioned ? Number(row.version ?? 0) + 1 : 1
+      })
+    }
   }
 
   private async deleteMissingAgentSkillRows(client: ReturnType<typeof createClient>, agentSkillKeys: Set<string>) {
+    const keysArray = Array.from(agentSkillKeys)
+    const missingRows =
+      agentSkillKeys.size === 0
+        ? await client.execute('SELECT agent_id, skill_id FROM agent_skills')
+        : await client.execute({
+            sql: `
+              SELECT agent_id, skill_id
+              FROM agent_skills
+              WHERE agent_id || char(31) || skill_id NOT IN (${keysArray.map(() => '?').join(', ')})
+            `,
+            args: keysArray
+          })
+
     if (agentSkillKeys.size === 0) {
       await client.execute('DELETE FROM agent_skills')
-      return
+    } else {
+      await client.execute({
+        sql: `
+          DELETE FROM agent_skills
+          WHERE agent_id || char(31) || skill_id NOT IN (${keysArray.map(() => '?').join(', ')})
+        `,
+        args: keysArray
+      })
     }
 
-    await client.execute({
-      sql: `
-        DELETE FROM agent_skills
-        WHERE agent_id || char(31) || skill_id NOT IN (${Array.from(agentSkillKeys)
-          .map(() => '?')
-          .join(', ')})
-      `,
-      args: Array.from(agentSkillKeys)
-    })
+    for (const row of missingRows.rows) {
+      const agentId = text(row, 'agent_id')
+      const skillId = text(row, 'skill_id')
+      if (!agentId || !skillId) continue
+
+      await storageV2SyncLogService.recordChange({
+        client,
+        entityType: 'agent_skill',
+        entityId: `${agentId}:${skillId}`,
+        operation: 'delete',
+        payload: { agentId, skillId }
+      })
+    }
+  }
+
+  private async deleteMissingTaskRunLogRows(client: ReturnType<typeof createClient>, taskRunLogIds: Set<string>) {
+    const idsArray = Array.from(taskRunLogIds)
+    const missingRows =
+      taskRunLogIds.size === 0
+        ? await client.execute('SELECT id, version FROM task_run_logs')
+        : await client.execute({
+            sql: `
+              SELECT id, version
+              FROM task_run_logs
+              WHERE CAST(id AS TEXT) NOT IN (${idsArray.map(() => '?').join(', ')})
+            `,
+            args: idsArray
+          })
+
+    if (taskRunLogIds.size === 0) {
+      await client.execute('DELETE FROM task_run_logs')
+    } else {
+      await client.execute({
+        sql: `
+          DELETE FROM task_run_logs
+          WHERE CAST(id AS TEXT) NOT IN (${idsArray.map(() => '?').join(', ')})
+        `,
+        args: idsArray
+      })
+    }
+
+    for (const row of missingRows.rows) {
+      const id = text(row, 'id')
+      if (!id) continue
+
+      await storageV2SyncLogService.recordChange({
+        client,
+        entityType: 'task_run_log',
+        entityId: id,
+        operation: 'delete',
+        payload: { id },
+        version: Number(row.version ?? 0) + 1
+      })
+    }
   }
 
   private async ensurePlaceholderAgent(agentId: string, warnings: string[]) {
@@ -687,6 +945,16 @@ export class StorageV2LegacyAgentDbImportService {
       `,
       args: [agentId, agentId, currentTime, currentTime]
     })
+    await recordEntityChange(client, {
+      table: 'agents',
+      entityId: agentId,
+      payload: {
+        id: agentId,
+        type: 'unknown',
+        placeholder: true
+      },
+      versioned: true
+    })
 
     warnings.push(`Created placeholder agent ${agentId} because legacy rows referenced a missing agent.`)
   }
@@ -699,13 +967,22 @@ export class StorageV2LegacyAgentDbImportService {
       sql: `
         INSERT INTO skills (
           id, name, description, folder_name, source, source_url, namespace, author, tags_json,
-          content_hash, created_at, updated_at, deleted_at
+          content_hash, created_at, updated_at, deleted_at, version
         )
         VALUES (?, ?, 'Recovered placeholder for legacy references', ?, 'local', NULL, NULL, NULL, '[]',
-          '', ?, ?, NULL)
+          '', ?, ?, NULL, 1)
         ON CONFLICT(id) DO NOTHING
       `,
       args: [skillId, skillId, `legacy-missing-${skillId}`, currentTime, currentTime]
+    })
+    await recordEntityChange(client, {
+      table: 'skills',
+      entityId: skillId,
+      payload: {
+        id: skillId,
+        placeholder: true
+      },
+      versioned: true
     })
 
     warnings.push(`Created placeholder skill ${skillId} because legacy rows referenced a missing skill.`)
@@ -745,7 +1022,11 @@ export class StorageV2LegacyAgentDbImportService {
     }
   }
 
-  private async importSessionMessages(rows: Record<(typeof LEGACY_TABLES)[number], Row[]>, warnings: string[]) {
+  private async importSessionMessages(rows: LegacyAgentDbRows, tables: LegacyAgentDbTableSet, warnings: string[]) {
+    if (!tables.has('session_messages')) {
+      return
+    }
+
     const sessionsById = new Map(rows.sessions.map((session) => [text(session, 'id'), session]))
     const messagesBySessionId = new Map<string, Row[]>()
 
@@ -780,38 +1061,38 @@ export class StorageV2LegacyAgentDbImportService {
   private async markMissingAgentSessionConversations(rows: Row[], warnings: string[]) {
     const sessionIds = new Set(rows.map((row) => text(row, 'id')).filter((id): id is string => Boolean(id)))
     const client = await storageV2Database.getClient()
-    const currentTime = now()
+    const sessionIdList = Array.from(sessionIds)
+    const staleConversations =
+      sessionIdList.length === 0
+        ? await client.execute(`
+            SELECT id
+            FROM conversations
+            WHERE kind = 'agent_session' AND deleted_at IS NULL
+          `)
+        : await client.execute({
+            sql: `
+              SELECT id
+              FROM conversations
+              WHERE kind = 'agent_session'
+                AND deleted_at IS NULL
+                AND (session_id IS NULL OR session_id NOT IN (${sessionIdList.map(() => '?').join(', ')}))
+            `,
+            args: sessionIdList
+          })
 
-    if (sessionIds.size === 0) {
-      const result = await client.execute({
-        sql: `
-          UPDATE conversations
-          SET deleted_at = ?, updated_at = ?, version = version + 1
-          WHERE kind = 'agent_session' AND deleted_at IS NULL
-        `,
-        args: [currentTime, currentTime]
-      })
-      if (result.rowsAffected > 0) {
-        warnings.push(`Marked ${result.rowsAffected} Storage v2 agent conversation(s) as deleted.`)
+    let deletedCount = 0
+    for (const row of staleConversations.rows) {
+      const conversationId = text(row, 'id')
+      if (!conversationId) continue
+
+      const result = await storageV2ConversationRepository.delete(conversationId)
+      if (result.deleted) {
+        deletedCount++
       }
-      return
     }
 
-    const result = await client.execute({
-      sql: `
-        UPDATE conversations
-        SET deleted_at = ?, updated_at = ?, version = version + 1
-        WHERE kind = 'agent_session'
-          AND deleted_at IS NULL
-          AND (session_id IS NULL OR session_id NOT IN (${Array.from(sessionIds)
-            .map(() => '?')
-            .join(', ')}))
-      `,
-      args: [currentTime, currentTime, ...Array.from(sessionIds)]
-    })
-
-    if (result.rowsAffected > 0) {
-      warnings.push(`Marked ${result.rowsAffected} stale Storage v2 agent conversation(s) as deleted.`)
+    if (deletedCount > 0) {
+      warnings.push(`Marked ${deletedCount} stale Storage v2 agent conversation(s) as deleted.`)
     }
   }
 

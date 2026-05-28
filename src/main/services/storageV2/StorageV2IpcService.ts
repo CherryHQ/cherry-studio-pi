@@ -52,9 +52,24 @@ export function registerStorageV2IpcHandlers() {
   ipcMain.handle(IpcChannel.StorageV2_MessagesList, (_event, conversationId: string, options?: unknown) =>
     storageV2Service.listMessages(conversationId, options as any)
   )
+  ipcMain.handle(IpcChannel.StorageV2_ConversationSync, (_event, conversation: unknown) =>
+    storageV2Service.syncConversation(conversation as any)
+  )
+  ipcMain.handle(IpcChannel.StorageV2_ConversationUpsert, (_event, conversation: unknown, options?: unknown) =>
+    storageV2Service.upsertConversation(conversation as any, options as any)
+  )
+  ipcMain.handle(IpcChannel.StorageV2_MessageUpsert, (_event, conversationId: string, message: unknown) =>
+    storageV2Service.upsertMessage(conversationId, message as any)
+  )
+  ipcMain.handle(
+    IpcChannel.StorageV2_MessageBlocksUpsert,
+    (_event, messageId: string, blocks: unknown, options?: unknown) =>
+      storageV2Service.upsertMessageBlocks(messageId, blocks as any, options as any)
+  )
   ipcMain.handle(IpcChannel.StorageV2_ConversationDelete, (_event, conversationId: string) =>
     storageV2Service.deleteConversation(conversationId)
   )
+  ipcMain.handle(IpcChannel.StorageV2_FileUpsert, (_event, file: unknown) => storageV2Service.upsertFile(file as any))
   ipcMain.handle(IpcChannel.StorageV2_FileDelete, (_event, fileId: string) => storageV2Service.deleteFile(fileId))
   ipcMain.handle(IpcChannel.StorageV2_ImportLegacyReduxSnapshot, (_event, snapshot: unknown, options?: unknown) =>
     storageV2Service.importLegacyReduxSnapshot(snapshot, options as any)

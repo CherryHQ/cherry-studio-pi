@@ -3,13 +3,18 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 
 import { loggerService } from '@logger'
+import { storageV2AgentDbMirrorService } from '@main/services/storageV2/AgentDbMirrorService'
 import type { GetAgentSessionResponse, PermissionMode } from '@types'
 
-import { agentService } from '../AgentService'
-import { channelService } from '../ChannelService'
+import {
+  createSessionWithStorageV2Recovery,
+  getAgentWithStorageV2Recovery,
+  getChannelWithStorageV2Recovery,
+  getSessionWithStorageV2Recovery,
+  updateChannelWithStorageV2Recovery
+} from '../../AgentStorageV2ReadThrough'
 import { sanitizeChannelOutput, wrapExternalContent } from '../security'
 import { sessionMessageService } from '../SessionMessageService'
-import { sessionService } from '../SessionService'
 import type {
   ChannelAdapter,
   ChannelCommandEvent,
@@ -328,11 +333,11 @@ export class ChannelMessageHandler {
     try {
       switch (command.command) {
         case 'new': {
-          const agent = await agentService.getAgent(agentId)
-          const channelRow = await channelService.getChannel(adapter.channelId)
+          const agent = await getAgentWithStorageV2Recovery(agentId)
+          const channelRow = await getChannelWithStorageV2Recovery(adapter.channelId)
           const permMode = channelRow?.permissionMode as PermissionMode | undefined
 
-          const newSession = await sessionService.createSession(agentId, {
+          const newSession = await createSessionWithStorageV2Recovery(agentId, {
             ...(agent?.configuration
               ? {
                   configuration: {
@@ -344,7 +349,8 @@ export class ChannelMessageHandler {
           })
           if (newSession) {
             // Update channel's session_id to point to the new session
-            await channelService.updateChannel(adapter.channelId, { sessionId: newSession.id })
+            await updateChannelWithStorageV2Recovery(adapter.channelId, { sessionId: newSession.id })
+            storageV2AgentDbMirrorService.schedule()
             const trackerKey = `${agentId}:${adapter.channelId}:${command.chatId}`
             this.sessionTracker.set(trackerKey, newSession.id)
             this.evictSessionTracker()
@@ -379,7 +385,7 @@ export class ChannelMessageHandler {
           break
         }
         case 'help': {
-          const agent = await agentService.getAgent(agentId)
+          const agent = await getAgentWithStorageV2Recovery(agentId)
           const name = agent?.name ?? 'CherryClaw'
           const description = agent?.description ?? ''
           const helpText = [
@@ -422,7 +428,7 @@ export class ChannelMessageHandler {
    * that were created before the setting was changed.
    */
   private async applyChannelPermissionMode(session: GetAgentSessionResponse, channelId: string): Promise<void> {
-    const channel = await channelService.getChannel(channelId)
+    const channel = await getChannelWithStorageV2Recovery(channelId)
     if (channel?.permissionMode && session.configuration) {
       session.configuration = {
         ...session.configuration,
@@ -500,16 +506,20 @@ export class ChannelMessageHandler {
     _chatId: string,
     trackerKey: string
   ): Promise<GetAgentSessionResponse | null> {
-    const channelRow = await channelService.getChannel(channelId)
+    const channelRow = await getChannelWithStorageV2Recovery(channelId)
 
     // Check tracker first
     const trackedId = this.sessionTracker.get(trackerKey)
     if (trackedId) {
-      const session = await sessionService.getSession(agentId, trackedId)
+      const session = await getSessionWithStorageV2Recovery(agentId, trackedId)
       if (session) {
         // Ensure channel's session_id stays in sync
         if (channelRow && channelRow.sessionId !== session.id) {
-          channelService.updateChannel(channelId, { sessionId: session.id }).catch(() => {})
+          updateChannelWithStorageV2Recovery(channelId, { sessionId: session.id })
+            .then(() => {
+              storageV2AgentDbMirrorService.schedule()
+            })
+            .catch(() => {})
         }
         return session
       }
@@ -519,7 +529,7 @@ export class ChannelMessageHandler {
 
     // Look up existing session via channel's session_id
     if (channelRow?.sessionId) {
-      const existingSession = await sessionService.getSession(agentId, channelRow.sessionId)
+      const existingSession = await getSessionWithStorageV2Recovery(agentId, channelRow.sessionId)
       if (existingSession) {
         this.sessionTracker.set(trackerKey, existingSession.id)
         this.evictSessionTracker()
@@ -534,10 +544,10 @@ export class ChannelMessageHandler {
       channelSessionId: channelRow?.sessionId ?? null,
       trackerKey
     })
-    const agent = await agentService.getAgent(agentId)
+    const agent = await getAgentWithStorageV2Recovery(agentId)
     const channelPermissionMode = channelRow?.permissionMode as PermissionMode | undefined
 
-    const newSession = await sessionService.createSession(agentId, {
+    const newSession = await createSessionWithStorageV2Recovery(agentId, {
       ...(agent?.configuration
         ? {
             configuration: {
@@ -549,7 +559,8 @@ export class ChannelMessageHandler {
     })
     if (newSession) {
       // Link channel to the new session
-      await channelService.updateChannel(channelId, { sessionId: newSession.id })
+      await updateChannelWithStorageV2Recovery(channelId, { sessionId: newSession.id })
+      storageV2AgentDbMirrorService.schedule()
       this.sessionTracker.set(trackerKey, newSession.id)
       this.evictSessionTracker()
       return newSession
@@ -651,6 +662,8 @@ export class ChannelMessageHandler {
         })
       }
       throw error
+    } finally {
+      storageV2AgentDbMirrorService.schedule()
     }
   }
 

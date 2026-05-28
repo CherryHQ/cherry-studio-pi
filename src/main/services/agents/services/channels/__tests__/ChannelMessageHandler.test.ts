@@ -46,6 +46,28 @@ vi.mock('../../ChannelService', () => ({
   }
 }))
 
+vi.mock('../../../AgentStorageV2ReadThrough', async () => {
+  const [{ agentService }, { channelService }, { sessionService }] = await Promise.all([
+    import('../../AgentService'),
+    import('../../ChannelService'),
+    import('../../SessionService')
+  ])
+
+  return {
+    createSessionWithStorageV2Recovery: vi.fn((agentId: string, form: any) =>
+      sessionService.createSession(agentId, form)
+    ),
+    getAgentWithStorageV2Recovery: vi.fn((agentId: string) => agentService.getAgent(agentId)),
+    getChannelWithStorageV2Recovery: vi.fn((channelId: string) => channelService.getChannel(channelId)),
+    getSessionWithStorageV2Recovery: vi.fn((agentId: string, sessionId: string) =>
+      sessionService.getSession(agentId, sessionId)
+    ),
+    updateChannelWithStorageV2Recovery: vi.fn((channelId: string, updates: any) =>
+      channelService.updateChannel(channelId, updates)
+    )
+  }
+})
+
 vi.mock('../SessionStreamBus', () => ({
   sessionStreamBus: {
     publish: vi.fn(),

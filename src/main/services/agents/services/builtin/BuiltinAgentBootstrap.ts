@@ -6,12 +6,17 @@
  * the main entry point (`src/main/index.ts`).
  */
 import { loggerService } from '@logger'
+import {
+  createSessionWithStorageV2Recovery,
+  getAgentWithStorageV2Recovery,
+  listSessionsWithStorageV2Recovery
+} from '@main/services/agents/AgentStorageV2ReadThrough'
+import { storageV2AgentDbMirrorService } from '@main/services/storageV2/AgentDbMirrorService'
 import { installBuiltinSkills } from '@main/utils/builtinSkills'
 
 import type { BuiltinAgentInitResult } from '../AgentService'
 import { agentService } from '../AgentService'
 import { schedulerService } from '../SchedulerService'
-import { sessionService } from '../SessionService'
 import { CHERRY_ASSISTANT_AGENT_ID, CHERRY_CLAW_AGENT_ID } from './BuiltinAgentIds'
 import { provisionBuiltinAgent } from './BuiltinAgentProvisioner'
 
@@ -72,10 +77,17 @@ function scheduleRetry(agentId: string, label: string, initFn: () => Promise<voi
 }
 
 async function ensureDefaultSession(agentId: string, label: string): Promise<void> {
-  const { total } = await sessionService.listSessions(agentId, { limit: 1 })
+  const { total } = await listSessionsWithStorageV2Recovery(agentId, { limit: 1 })
   if (total === 0) {
-    await sessionService.createSession(agentId, {})
+    await createSessionWithStorageV2Recovery(agentId, {})
     logger.info(`Default session created for ${label} agent`)
+  }
+}
+
+async function recoverBuiltinAgentIfNeeded(agentId: string, label: string): Promise<void> {
+  const agent = await getAgentWithStorageV2Recovery(agentId)
+  if (agent) {
+    logger.info(`Built-in ${label} agent available`, { agentId })
   }
 }
 
@@ -92,6 +104,8 @@ async function handleInitResult(
     if (onReady) {
       await onReady(result.agentId)
     }
+    storageV2AgentDbMirrorService.schedule()
+    await storageV2AgentDbMirrorService.flush()
     return
   }
 
@@ -107,6 +121,7 @@ async function handleInitResult(
 
 async function initCherryClaw(): Promise<void> {
   try {
+    await recoverBuiltinAgentIfNeeded(CHERRY_CLAW_AGENT_ID, 'CherryClaw')
     const result = await agentService.initDefaultCherryClawAgent()
     await handleInitResult(CHERRY_CLAW_AGENT_ID, 'CherryClaw', result, initCherryClaw, async (agentId) => {
       await schedulerService.ensureHeartbeatTask(agentId, 30)
@@ -122,6 +137,7 @@ export { CHERRY_ASSISTANT_AGENT_ID }
 
 async function initCherryAssistant(): Promise<void> {
   try {
+    await recoverBuiltinAgentIfNeeded(CHERRY_ASSISTANT_AGENT_ID, 'Cherry Assistant')
     const result = await agentService.initBuiltinAgent({
       id: CHERRY_ASSISTANT_AGENT_ID,
       builtinRole: 'assistant',

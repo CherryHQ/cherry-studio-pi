@@ -1,14 +1,27 @@
 import { loggerService } from '@logger'
+import { storageV2AgentDbMirrorService } from '@main/services/storageV2/AgentDbMirrorService'
 import type { CherryClawConfiguration, ScheduledTaskEntity } from '@types'
 
-import { agentService } from './AgentService'
+import {
+  createSessionWithStorageV2Recovery,
+  createTaskWithStorageV2Recovery,
+  getAgentWithStorageV2Recovery,
+  getDueTasksWithStorageV2Recovery,
+  getSessionWithStorageV2Recovery,
+  getTaskWithStorageV2Recovery,
+  hasActiveTasksWithStorageV2Recovery,
+  listTasksWithStorageV2Recovery,
+  logTaskRunWithStorageV2Recovery,
+  updateTaskAfterRunWithStorageV2Recovery,
+  updateTaskRunLogWithStorageV2Recovery,
+  updateTaskWithStorageV2Recovery
+} from '../AgentStorageV2ReadThrough'
 import type { ChannelAdapter } from './channels'
 import { channelManager } from './channels/ChannelManager'
 import { broadcastSessionChanged } from './channels/sessionStreamIpc'
 import { channelService } from './ChannelService'
 import { readHeartbeat } from './cherryclaw/heartbeat'
 import { sessionMessageService } from './SessionMessageService'
-import { sessionService } from './SessionService'
 import { taskService } from './TaskService'
 
 const logger = loggerService.withContext('SchedulerService')
@@ -63,7 +76,7 @@ class SchedulerService {
 
   /** Ensure the poll loop is running after agent config changes. */
   async syncScheduler(): Promise<void> {
-    const hasActive = await taskService.hasActiveTasks()
+    const hasActive = await hasActiveTasksWithStorageV2Recovery()
     if (hasActive) {
       this.startLoop()
     } else {
@@ -76,7 +89,7 @@ class SchedulerService {
   }
 
   async restoreSchedulers(): Promise<void> {
-    const hasActive = await taskService.hasActiveTasks()
+    const hasActive = await hasActiveTasksWithStorageV2Recovery()
     if (hasActive) {
       this.startLoop()
     } else {
@@ -89,18 +102,19 @@ class SchedulerService {
    * Creates one if missing, or updates the interval if it changed.
    */
   async ensureHeartbeatTask(agentId: string, intervalMinutes: number = 30): Promise<void> {
-    const { tasks } = await taskService.listTasks(agentId, { includeHeartbeat: true })
+    const { tasks } = await listTasksWithStorageV2Recovery(agentId, { includeHeartbeat: true })
     const existing = tasks.find((t) => t.name === 'heartbeat')
 
     if (existing) {
       const currentInterval = existing.schedule_value
       const newInterval = String(intervalMinutes)
       if (currentInterval !== newInterval) {
-        await taskService.updateTask(agentId, existing.id, { schedule_value: newInterval })
+        await updateTaskWithStorageV2Recovery(agentId, existing.id, { schedule_value: newInterval })
+        storageV2AgentDbMirrorService.schedule()
         logger.info('Updated heartbeat task interval', { agentId, interval: intervalMinutes })
       }
     } else {
-      await taskService.createTask(agentId, {
+      await createTaskWithStorageV2Recovery(agentId, {
         name: 'heartbeat',
         prompt: '__heartbeat__',
         schedule_type: 'interval',
@@ -108,12 +122,13 @@ class SchedulerService {
       })
       logger.info('Created heartbeat task', { agentId, interval: intervalMinutes })
       this.startLoop()
+      storageV2AgentDbMirrorService.schedule()
     }
   }
 
   /** Manually trigger a task run (from UI). Returns immediately; task runs in background. */
   async runTaskNow(agentId: string, taskId: string): Promise<void> {
-    const task = await taskService.getTask(agentId, taskId)
+    const task = await getTaskWithStorageV2Recovery(agentId, taskId)
     if (!task) throw new Error(`Task not found: ${taskId}`)
     if (this.activeTasks.has(task.id)) throw new Error('Task is already running')
 
@@ -143,7 +158,7 @@ class SchedulerService {
   }
 
   private async tick(): Promise<void> {
-    const dueTasks = await taskService.getDueTasks()
+    const dueTasks = await getDueTasksWithStorageV2Recovery()
     if (dueTasks.length > 0) {
       logger.info('Found due tasks', { count: dueTasks.length })
     }
@@ -191,7 +206,7 @@ class SchedulerService {
     let subscribedChannels: { id: string; sessionId?: string | null }[] = []
 
     // Create log entry immediately so UI shows the running task
-    const logId = await taskService.logTaskRun({
+    const logId = await logTaskRunWithStorageV2Recovery({
       task_id: task.id,
       session_id: null,
       run_at: new Date().toISOString(),
@@ -203,7 +218,7 @@ class SchedulerService {
 
     try {
       logger.info('Running scheduled task', { taskId: task.id, agentId: task.agent_id })
-      const agent = await agentService.getAgent(task.agent_id)
+      const agent = await getAgentWithStorageV2Recovery(task.agent_id)
       if (!agent) {
         throw new Error(`Agent not found: ${task.agent_id}`)
       }
@@ -218,7 +233,7 @@ class SchedulerService {
           logger.debug('Heartbeat task skipped (disabled or no workspace)', { taskId: task.id })
           // Still update next_run so it doesn't fire again immediately
           const nextRun = taskService.computeNextRun(task)
-          await taskService.updateTaskAfterRun(task.id, nextRun, 'Skipped (disabled)')
+          await updateTaskAfterRunWithStorageV2Recovery(task.id, nextRun, 'Skipped (disabled)')
           this.activeTasks.delete(task.id)
           return
         }
@@ -226,7 +241,7 @@ class SchedulerService {
         if (!heartbeatContent) {
           logger.debug('Heartbeat task skipped (no heartbeat.md)', { taskId: task.id })
           const nextRun = taskService.computeNextRun(task)
-          await taskService.updateTaskAfterRun(task.id, nextRun, 'Skipped (no file)')
+          await updateTaskAfterRunWithStorageV2Recovery(task.id, nextRun, 'Skipped (no file)')
           this.activeTasks.delete(task.id)
           return
         }
@@ -245,15 +260,15 @@ class SchedulerService {
 
       // Try to reuse the session from the last successful run for context continuity
       const lastSessionId = await taskService.getLastRunSessionId(task.id)
-      let session = lastSessionId ? await sessionService.getSession(task.agent_id, lastSessionId) : null
+      let session = lastSessionId ? await getSessionWithStorageV2Recovery(task.agent_id, lastSessionId) : null
 
       if (session) {
         sessionId = session.id
         logger.debug('Reusing session from last run', { taskId: task.id, sessionId })
       } else {
-        const newSession = await sessionService.createSession(task.agent_id, { name: task.name })
+        const newSession = await createSessionWithStorageV2Recovery(task.agent_id, { name: task.name })
         sessionId = newSession!.id
-        session = await sessionService.getSession(task.agent_id, sessionId)
+        session = await getSessionWithStorageV2Recovery(task.agent_id, sessionId)
         if (!session) {
           throw new Error(`Session not found: ${sessionId}`)
         }
@@ -307,18 +322,19 @@ class SchedulerService {
           taskId: task.id,
           errors: errCount
         })
-        await taskService.updateTask(task.agent_id, task.id, { status: 'paused' })
+        await updateTaskWithStorageV2Recovery(task.agent_id, task.id, { status: 'paused' })
         this.consecutiveErrors.delete(task.id)
       }
     } finally {
       if (timeoutTimer) clearTimeout(timeoutTimer)
       this.activeTasks.delete(task.id)
+      storageV2AgentDbMirrorService.schedule()
     }
 
     const durationMs = Date.now() - startTime
 
     // Update the log entry with final results
-    await taskService.updateTaskRunLog(logId, {
+    await updateTaskRunLogWithStorageV2Recovery(logId, {
       session_id: sessionId ?? null,
       duration_ms: durationMs,
       status: error ? 'error' : 'success',
@@ -329,7 +345,8 @@ class SchedulerService {
     // Compute next run and update task
     const nextRun = taskService.computeNextRun(task)
     const resultSummary = error ? `Error: ${error}` : result ? result.slice(0, 200) : 'Completed'
-    await taskService.updateTaskAfterRun(task.id, nextRun, resultSummary)
+    await updateTaskAfterRunWithStorageV2Recovery(task.id, nextRun, resultSummary)
+    storageV2AgentDbMirrorService.schedule()
 
     // Send error notification or final response to channels
     if (error) {

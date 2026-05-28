@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react'
 
+import { scheduleStorageV2LocalStorageMirror } from '../services/StorageV2LocalStorageSnapshot'
+
 const ONBOARDING_COMPLETED_KEY = 'onboarding-completed'
 
 export function useOnboardingState() {
@@ -9,6 +11,7 @@ export function useOnboardingState() {
 
   const completeOnboarding = useCallback(() => {
     localStorage.setItem(ONBOARDING_COMPLETED_KEY, 'true')
+    scheduleStorageV2LocalStorageMirror()
     setOnboardingCompleted(true)
   }, [])
 

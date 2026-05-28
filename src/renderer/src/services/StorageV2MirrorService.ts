@@ -1,6 +1,8 @@
 import { loggerService } from '@logger'
 import type { Middleware } from '@reduxjs/toolkit'
 
+import { getStorageV2LocalStorageSnapshot } from './StorageV2LocalStorageSnapshot'
+
 const logger = loggerService.withContext('StorageV2MirrorService')
 
 type ReduxAction = {
@@ -13,17 +15,28 @@ type ReduxAction = {
 type StateGetter = () => Record<string, any>
 
 const MIRRORED_ACTION_PREFIXES = [
+  'backup/',
+  'codeTools/',
+  'copilot/',
   'settings/',
   'llm/',
   'assistants/',
+  'inputTools/',
   'knowledge/',
   'memory/',
+  'minApps/',
   'mcp/',
   'note/',
+  'nutstore/',
+  'ocr/',
+  'openclaw/',
+  'paintings/',
   'preprocess/',
+  'selectionStore/',
+  'shortcuts/',
+  'translate/',
   'websearch/'
 ]
-const REHYDRATE_ACTION = 'persist/REHYDRATE'
 const DEFAULT_DEBOUNCE_MS = 1200
 
 function cloneJson<T>(value: T): T {
@@ -53,19 +66,31 @@ function getMirrorSnapshot(state: Record<string, any>) {
     llm: cloneJson(state.llm ?? {}),
     assistants: sanitizeAssistantsState(cloneJson(state.assistants ?? {})),
     redux: {
+      backup: cloneJson(state.backup ?? {}),
+      codeTools: cloneJson(state.codeTools ?? {}),
+      copilot: cloneJson(state.copilot ?? {}),
+      inputTools: cloneJson(state.inputTools ?? {}),
       knowledge: cloneJson(state.knowledge ?? {}),
       memory: cloneJson(state.memory ?? {}),
+      minApps: cloneJson(state.minapps ?? {}),
       mcp: cloneJson(state.mcp ?? {}),
       note: cloneJson(state.note ?? {}),
+      nutstore: cloneJson(state.nutstore ?? {}),
+      ocr: cloneJson(state.ocr ?? {}),
+      openclaw: cloneJson(state.openclaw ?? {}),
+      paintings: cloneJson(state.paintings ?? {}),
       preprocess: cloneJson(state.preprocess ?? {}),
+      selectionStore: cloneJson(state.selectionStore ?? {}),
+      shortcuts: cloneJson(state.shortcuts ?? {}),
+      translate: cloneJson(state.translate ?? {}),
       websearch: cloneJson(state.websearch ?? {})
-    }
+    },
+    localStorage: getStorageV2LocalStorageSnapshot()
   }
 }
 
 function shouldMirrorAction(action: ReduxAction) {
   if (!action.type || action.meta?.fromSync) return false
-  if (action.type === REHYDRATE_ACTION) return true
   return MIRRORED_ACTION_PREFIXES.some((prefix) => action.type!.startsWith(prefix))
 }
 
@@ -76,6 +101,7 @@ class StorageV2MirrorService {
   private inflight: Promise<void> | null = null
   private needsFollowUp = false
   private suspended = false
+  private paused = false
 
   createMiddleware(): Middleware {
     return (storeApi) => (next) => (action) => {
@@ -93,6 +119,7 @@ class StorageV2MirrorService {
   schedule(getState: StateGetter, debounceMs = DEFAULT_DEBOUNCE_MS) {
     if (this.suspended) return
     this.latestGetState = getState
+    if (this.paused) return
 
     if (this.timer) {
       clearTimeout(this.timer)
@@ -106,6 +133,7 @@ class StorageV2MirrorService {
 
   async flush() {
     if (this.suspended) return
+    if (this.paused) return
     if (!this.latestGetState) return
 
     if (this.timer) {
@@ -148,6 +176,7 @@ class StorageV2MirrorService {
 
   suspendUntilReload() {
     this.suspended = true
+    this.paused = false
     this.latestGetState = null
     this.needsFollowUp = false
 
@@ -155,6 +184,21 @@ class StorageV2MirrorService {
       clearTimeout(this.timer)
       this.timer = null
     }
+  }
+
+  pauseRuntimeMirroring() {
+    if (this.suspended) return
+    this.paused = true
+
+    if (this.timer) {
+      clearTimeout(this.timer)
+      this.timer = null
+    }
+  }
+
+  resumeRuntimeMirroring() {
+    if (this.suspended) return
+    this.paused = false
   }
 }
 

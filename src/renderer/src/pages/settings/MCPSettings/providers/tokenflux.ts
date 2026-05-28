@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { nanoid } from '@reduxjs/toolkit'
+import { scheduleStorageV2LocalStorageMirror } from '@renderer/services/StorageV2LocalStorageSnapshot'
 import type { MCPServer } from '@renderer/types'
 import i18next from 'i18next'
 
@@ -11,6 +12,7 @@ export const TOKENFLUX_HOST = 'https://tokenflux.ai'
 
 export const saveTokenFluxToken = (token: string): void => {
   localStorage.setItem(TOKEN_STORAGE_KEY, token)
+  scheduleStorageV2LocalStorageMirror()
 }
 
 export const getTokenFluxToken = (): string | null => {
@@ -19,6 +21,7 @@ export const getTokenFluxToken = (): string | null => {
 
 export const clearTokenFluxToken = (): void => {
   localStorage.removeItem(TOKEN_STORAGE_KEY)
+  scheduleStorageV2LocalStorageMirror()
 }
 
 export const hasTokenFluxToken = (): boolean => {

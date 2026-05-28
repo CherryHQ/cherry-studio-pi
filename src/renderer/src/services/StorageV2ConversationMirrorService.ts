@@ -107,6 +107,24 @@ function collectFilesFromBlocks(blocks: MessageBlock[]) {
   return filesById
 }
 
+function getTopicTitle(topic: Omit<Topic, 'messages'> & { messages: [] }) {
+  const title = (topic as Record<string, any>).title
+  return typeof topic.name === 'string' ? topic.name : typeof title === 'string' ? title : undefined
+}
+
+function getTopicSortOrder(topic: Omit<Topic, 'messages'> & { messages: [] }) {
+  const sortOrder = (topic as Record<string, any>).sortOrder
+  return typeof sortOrder === 'number' ? sortOrder : 0
+}
+
+function getMirrorMessageId(topicId: string, message: Message, index: number) {
+  return typeof message.id === 'string' && message.id ? message.id : `${topicId}:message:${index}`
+}
+
+function getMirrorBlockId(messageId: string, block: MessageBlock, index: number) {
+  return typeof block.id === 'string' && block.id ? block.id : `${messageId}:block:${index}`
+}
+
 class StorageV2ConversationMirrorService {
   private timer: ReturnType<typeof setTimeout> | null = null
   private latestGetState: StateGetter | null = null
@@ -287,13 +305,7 @@ class StorageV2ConversationMirrorService {
     if (conversations.length === 0) return
 
     try {
-      await window.api.storageV2.importLegacyDexieSnapshot(
-        {
-          conversations,
-          files: Array.from(filesById.values())
-        },
-        { dryRun: false }
-      )
+      await this.mirrorConversations(conversations, Array.from(filesById.values()))
 
       for (const [topicId, snapshotJson] of pendingSnapshots) {
         this.lastTopicSnapshotJson.set(topicId, snapshotJson)
@@ -301,7 +313,136 @@ class StorageV2ConversationMirrorService {
 
       logger.debug(`Mirrored ${conversations.length} conversation(s) to Storage v2`)
     } catch (error) {
+      for (const topicId of topicIds) {
+        this.pendingTopicIds.add(topicId)
+      }
+
       logger.warn('Failed to mirror conversations to Storage v2', error as Error)
+    }
+  }
+
+  private async mirrorConversations(conversations: ConversationSnapshot[], files: FileMetadata[]) {
+    const storageV2 = window.api.storageV2
+    const canSyncConversation = typeof storageV2.syncConversation === 'function'
+    const canUseDirectApi =
+      typeof storageV2.upsertConversation === 'function' &&
+      typeof storageV2.upsertMessage === 'function' &&
+      typeof storageV2.upsertMessageBlocks === 'function'
+
+    if (canSyncConversation) {
+      for (const conversation of conversations) {
+        await storageV2.syncConversation(this.toConversationImport(conversation))
+      }
+
+      await this.mirrorFiles(files)
+      return
+    }
+
+    if (!canUseDirectApi) {
+      await storageV2.importLegacyDexieSnapshot(
+        {
+          conversations,
+          files
+        },
+        { dryRun: false }
+      )
+      return
+    }
+
+    for (const conversation of conversations) {
+      await this.mirrorConversationDirect(conversation)
+    }
+
+    await this.mirrorFiles(files)
+  }
+
+  private async mirrorFiles(files: FileMetadata[]) {
+    if (files.length > 0) {
+      const storageV2 = window.api.storageV2
+
+      if (typeof storageV2.upsertFile === 'function') {
+        for (const file of files) {
+          await storageV2.upsertFile(file)
+        }
+      } else {
+        await storageV2.importLegacyDexieSnapshot(
+          {
+            conversations: [],
+            files
+          },
+          { dryRun: false }
+        )
+      }
+    }
+  }
+
+  private toConversationImport(conversation: ConversationSnapshot) {
+    const topic = conversation.topic
+
+    return {
+      id: topic.id,
+      kind: 'assistant_chat',
+      ownerType: 'assistant',
+      ownerId: conversation.assistantId,
+      title: getTopicTitle(topic),
+      pinned: Boolean((topic as Record<string, any>).pinned),
+      archived: false,
+      sortOrder: getTopicSortOrder(topic),
+      createdAt: topic.createdAt,
+      updatedAt: topic.updatedAt ?? topic.createdAt,
+      messages: conversation.messages,
+      blocks: conversation.blocks
+    }
+  }
+
+  private async mirrorConversationDirect(conversation: ConversationSnapshot) {
+    const topic = conversation.topic
+    const topicId = topic.id
+    const activeMessageIds = conversation.messages.map((message, index) => getMirrorMessageId(topicId, message, index))
+    const blocksByMessage = new Map<string, MessageBlock[]>()
+
+    for (const block of conversation.blocks) {
+      const blocks = blocksByMessage.get(block.messageId) ?? []
+      blocks.push(block)
+      blocksByMessage.set(block.messageId, blocks)
+    }
+
+    await window.api.storageV2.upsertConversation(
+      {
+        id: topicId,
+        kind: 'assistant_chat',
+        ownerType: 'assistant',
+        ownerId: conversation.assistantId,
+        title: getTopicTitle(topic),
+        pinned: Boolean((topic as Record<string, any>).pinned),
+        archived: false,
+        sortOrder: getTopicSortOrder(topic),
+        createdAt: topic.createdAt,
+        updatedAt: topic.updatedAt ?? topic.createdAt
+      },
+      {
+        pruneMissingMessages: true,
+        activeMessageIds
+      }
+    )
+
+    for (const [messageIndex, message] of conversation.messages.entries()) {
+      const messageId = activeMessageIds[messageIndex]
+      const messageBlocks = blocksByMessage.get(messageId) ?? []
+
+      await window.api.storageV2.upsertMessage(topicId, {
+        ...message,
+        id: messageId
+      })
+      await window.api.storageV2.upsertMessageBlocks(
+        messageId,
+        messageBlocks.map((block, blockIndex) => ({
+          ...block,
+          id: getMirrorBlockId(messageId, block, blockIndex),
+          messageId
+        })),
+        { pruneMissing: true }
+      )
     }
   }
 
@@ -361,6 +502,11 @@ class StorageV2ConversationMirrorService {
     state: Record<string, any>
   ): Promise<{ conversation: ConversationSnapshot; files: Map<string, FileMetadata> } | null> {
     const persistedTopic = await db.topics.get(topicId)
+    if (!persistedTopic) {
+      logger.debug(`Skipped Storage v2 mirror for topic ${topicId}: missing Dexie topic cache`)
+      return null
+    }
+
     const messages = persistedTopic?.messages ?? []
     const owner = findTopicOwner(state, topicId) ?? buildFallbackTopic(topicId, messages)
 

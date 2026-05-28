@@ -114,6 +114,17 @@ export type StorageV2ConversationImport = {
   blocks: Array<Record<string, any>>
 }
 
+export type StorageV2ConversationUpsert = Omit<StorageV2ConversationImport, 'messages' | 'blocks'>
+
+export type StorageV2ConversationUpsertOptions = {
+  pruneMissingMessages?: boolean
+  activeMessageIds?: string[]
+}
+
+export type StorageV2MessageBlocksUpsertOptions = {
+  pruneMissing?: boolean
+}
+
 export type StorageV2FileImport = Record<string, any> & {
   id?: string
   name?: string
@@ -220,15 +231,165 @@ function getImportMessageId(conversationId: string, message: Record<string, any>
   return typeof message.id === 'string' ? message.id : `${conversationId}:message:${index}`
 }
 
+function getMessageCreatedAt(message: Record<string, any>, fallback: string) {
+  return typeof message.createdAt === 'string'
+    ? message.createdAt
+    : typeof message.created_at === 'string'
+      ? message.created_at
+      : fallback
+}
+
+function getMessageUpdatedAt(message: Record<string, any>, fallback: string) {
+  return typeof message.updatedAt === 'string'
+    ? message.updatedAt
+    : typeof message.updated_at === 'string'
+      ? message.updated_at
+      : fallback
+}
+
+function getMessageModel(message: Record<string, any>) {
+  return message.model && typeof message.model === 'object' ? (message.model as Record<string, any>) : null
+}
+
+function getMessageRequestId(message: Record<string, any>) {
+  return typeof message.askId === 'string'
+    ? message.askId
+    : typeof message.requestId === 'string'
+      ? message.requestId
+      : null
+}
+
+function getMessageRole(message: Record<string, any>) {
+  return typeof message.role === 'string' ? message.role : 'user'
+}
+
+function getBlockCreatedAt(block: Record<string, any>, fallback: string) {
+  return typeof block.createdAt === 'string'
+    ? block.createdAt
+    : typeof block.created_at === 'string'
+      ? block.created_at
+      : fallback
+}
+
+function getBlockUpdatedAt(block: Record<string, any>, fallback: string) {
+  return typeof block.updatedAt === 'string'
+    ? block.updatedAt
+    : typeof block.updated_at === 'string'
+      ? block.updated_at
+      : fallback
+}
+
+function getBlockText(block: Record<string, any>) {
+  if (typeof block.content === 'string') return block.content
+  if (typeof block.text === 'string') return block.text
+  return null
+}
+
 async function withTransaction<T>(client: Client, fn: () => Promise<T>): Promise<T> {
-  await client.execute('BEGIN IMMEDIATE')
-  try {
-    const result = await fn()
-    await client.execute('COMMIT')
-    return result
-  } catch (error) {
-    await client.execute('ROLLBACK').catch(() => {})
-    throw error
+  return storageV2Database.withTransaction(client, fn)
+}
+
+async function getVersion(
+  client: Client,
+  table:
+    | 'settings'
+    | 'providers'
+    | 'assistants'
+    | 'conversations'
+    | 'messages'
+    | 'message_blocks'
+    | 'files'
+    | 'knowledge_bases'
+    | 'knowledge_items',
+  entityId: string
+): Promise<number> {
+  const idColumn = table === 'settings' ? 'key' : 'id'
+  const result = await client.execute({
+    sql: `SELECT version FROM ${table} WHERE ${idColumn} = ?`,
+    args: [entityId]
+  })
+  return Number(result.rows[0]?.version ?? 1)
+}
+
+async function softDeleteMissingMessageBlocks(
+  client: Client,
+  messageId: string,
+  activeBlockIds: Iterable<string>,
+  deletedAt: string
+) {
+  const activeIds = Array.from(new Set(activeBlockIds))
+  const args = [messageId, ...activeIds]
+  const result = await client.execute({
+    sql: `
+      SELECT id, version
+      FROM message_blocks
+      WHERE message_id = ? AND deleted_at IS NULL
+        ${activeIds.length > 0 ? `AND id NOT IN (${activeIds.map(() => '?').join(', ')})` : ''}
+    `,
+    args
+  })
+
+  for (const row of result.rows) {
+    const blockId = String(row.id)
+    const version = Number(row.version ?? 0) + 1
+    await client.execute({
+      sql: `
+        UPDATE message_blocks
+        SET deleted_at = ?, updated_at = ?, version = version + 1
+        WHERE id = ? AND deleted_at IS NULL
+      `,
+      args: [deletedAt, deletedAt, blockId]
+    })
+    await storageV2SyncLogService.recordChange({
+      client,
+      entityType: 'message_block',
+      entityId: blockId,
+      operation: 'delete',
+      payload: { id: blockId, messageId, deletedAt },
+      version
+    })
+  }
+}
+
+async function softDeleteMissingConversationMessages(
+  client: Client,
+  conversationId: string,
+  activeMessageIds: Iterable<string>,
+  deletedAt: string
+) {
+  const activeIds = Array.from(new Set(activeMessageIds))
+  const args = [conversationId, ...activeIds]
+  const result = await client.execute({
+    sql: `
+      SELECT id, version
+      FROM messages
+      WHERE conversation_id = ? AND deleted_at IS NULL
+        ${activeIds.length > 0 ? `AND id NOT IN (${activeIds.map(() => '?').join(', ')})` : ''}
+    `,
+    args
+  })
+
+  for (const row of result.rows) {
+    const messageId = String(row.id)
+    const version = Number(row.version ?? 0) + 1
+
+    await softDeleteMissingMessageBlocks(client, messageId, [], deletedAt)
+    await client.execute({
+      sql: `
+        UPDATE messages
+        SET deleted_at = ?, updated_at = ?, version = version + 1
+        WHERE id = ? AND deleted_at IS NULL
+      `,
+      args: [deletedAt, deletedAt, messageId]
+    })
+    await storageV2SyncLogService.recordChange({
+      client,
+      entityType: 'message',
+      entityId: messageId,
+      operation: 'delete',
+      payload: { id: messageId, conversationId, deletedAt },
+      version
+    })
   }
 }
 
@@ -260,26 +421,31 @@ export class StorageV2SettingsRepository {
     const client = await storageV2Database.getClient()
     const updatedAt = now()
     const valueJson = toJson(value)
+    let version = 1
 
-    await client.execute({
-      sql: `
-        INSERT INTO settings (key, value_json, scope, updated_at, version, deleted_at)
-        VALUES (?, ?, ?, ?, 1, NULL)
-        ON CONFLICT(key) DO UPDATE SET
-          value_json = excluded.value_json,
-          scope = excluded.scope,
-          updated_at = excluded.updated_at,
-          version = settings.version + 1,
-          deleted_at = NULL
-      `,
-      args: [key, valueJson, scope, updatedAt]
-    })
+    await withTransaction(client, async () => {
+      await client.execute({
+        sql: `
+          INSERT INTO settings (key, value_json, scope, updated_at, version, deleted_at)
+          VALUES (?, ?, ?, ?, 1, NULL)
+          ON CONFLICT(key) DO UPDATE SET
+            value_json = excluded.value_json,
+            scope = excluded.scope,
+            updated_at = excluded.updated_at,
+            version = settings.version + 1,
+            deleted_at = NULL
+        `,
+        args: [key, valueJson, scope, updatedAt]
+      })
 
-    await storageV2SyncLogService.recordChange({
-      client,
-      entityType: 'settings',
-      entityId: key,
-      payload: { key, value, scope }
+      version = await getVersion(client, 'settings', key)
+      await storageV2SyncLogService.recordChange({
+        client,
+        entityType: 'settings',
+        entityId: key,
+        payload: { key, value, scope },
+        version
+      })
     })
 
     return {
@@ -287,7 +453,7 @@ export class StorageV2SettingsRepository {
       value,
       scope,
       updatedAt,
-      version: 1,
+      version,
       deletedAt: null
     }
   }
@@ -392,6 +558,11 @@ export class StorageV2ProviderRepository {
           `,
           args: [provider.id, credentialRef, timestamp]
         })
+      } else {
+        await client.execute({
+          sql: "DELETE FROM provider_credentials WHERE provider_id = ? AND credential_kind = 'apiKey'",
+          args: [provider.id]
+        })
       }
 
       await storageV2SyncLogService.recordChange({
@@ -402,7 +573,8 @@ export class StorageV2ProviderRepository {
           provider: config,
           modelCount: models.length,
           hasCredentialRef: Boolean(credentialRef)
-        }
+        },
+        version: await getVersion(client, 'providers', provider.id)
       })
     })
 
@@ -479,13 +651,16 @@ export class StorageV2ProviderRepository {
   async delete(providerId: string): Promise<{ deleted: boolean }> {
     const client = await storageV2Database.getClient()
     const deletedAt = now()
-    const existingResult = await client.execute({
-      sql: 'SELECT version FROM providers WHERE id = ? AND deleted_at IS NULL',
-      args: [providerId]
-    })
-    const existingVersion = Number(existingResult.rows[0]?.version ?? 0)
+    let deleted = false
 
     await withTransaction(client, async () => {
+      const existingResult = await client.execute({
+        sql: 'SELECT version FROM providers WHERE id = ? AND deleted_at IS NULL',
+        args: [providerId]
+      })
+      const existingVersion = Number(existingResult.rows[0]?.version ?? 0)
+      deleted = existingVersion > 0
+
       await client.execute({
         sql: `
           UPDATE providers
@@ -517,7 +692,7 @@ export class StorageV2ProviderRepository {
     })
 
     return {
-      deleted: existingVersion > 0
+      deleted
     }
   }
 
@@ -559,52 +734,55 @@ export class StorageV2AssistantRepository {
         : []
     }
 
-    await client.execute({
-      sql: `
-        INSERT INTO assistants (
-          id, name, description, prompt, model_id, settings_json, tags_json, sort_order,
-          created_at, updated_at, deleted_at, version
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
-        ON CONFLICT(id) DO UPDATE SET
-          name = excluded.name,
-          description = excluded.description,
-          prompt = excluded.prompt,
-          model_id = excluded.model_id,
-          settings_json = excluded.settings_json,
-          tags_json = excluded.tags_json,
-          sort_order = excluded.sort_order,
-          updated_at = excluded.updated_at,
-          deleted_at = NULL,
-          version = assistants.version + 1
-      `,
-      args: [
-        assistant.id,
-        assistant.name,
-        assistant.description ?? null,
-        assistant.prompt ?? null,
-        assistant.model?.id ?? assistant.defaultModel?.id ?? null,
-        toJson({
-          settings: assistant.settings ?? null,
-          snapshot
-        }),
-        toJson(assistant.tags ?? null),
-        sortOrder,
-        timestamp,
-        timestamp
-      ]
-    })
+    await withTransaction(client, async () => {
+      await client.execute({
+        sql: `
+          INSERT INTO assistants (
+            id, name, description, prompt, model_id, settings_json, tags_json, sort_order,
+            created_at, updated_at, deleted_at, version
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
+          ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            description = excluded.description,
+            prompt = excluded.prompt,
+            model_id = excluded.model_id,
+            settings_json = excluded.settings_json,
+            tags_json = excluded.tags_json,
+            sort_order = excluded.sort_order,
+            updated_at = excluded.updated_at,
+            deleted_at = NULL,
+            version = assistants.version + 1
+        `,
+        args: [
+          assistant.id,
+          assistant.name,
+          assistant.description ?? null,
+          assistant.prompt ?? null,
+          assistant.model?.id ?? assistant.defaultModel?.id ?? null,
+          toJson({
+            settings: assistant.settings ?? null,
+            snapshot
+          }),
+          toJson(assistant.tags ?? null),
+          sortOrder,
+          timestamp,
+          timestamp
+        ]
+      })
 
-    await storageV2SyncLogService.recordChange({
-      client,
-      entityType: 'assistant',
-      entityId: assistant.id,
-      payload: {
-        id: assistant.id,
-        name: assistant.name,
-        modelId: assistant.model?.id ?? assistant.defaultModel?.id ?? null,
-        tags: assistant.tags ?? null
-      }
+      await storageV2SyncLogService.recordChange({
+        client,
+        entityType: 'assistant',
+        entityId: assistant.id,
+        payload: {
+          id: assistant.id,
+          name: assistant.name,
+          modelId: assistant.model?.id ?? assistant.defaultModel?.id ?? null,
+          tags: assistant.tags ?? null
+        },
+        version: await getVersion(client, 'assistants', assistant.id)
+      })
     })
   }
 
@@ -645,13 +823,16 @@ export class StorageV2AssistantRepository {
   async delete(assistantId: string): Promise<{ deleted: boolean }> {
     const client = await storageV2Database.getClient()
     const deletedAt = now()
-    const existingResult = await client.execute({
-      sql: 'SELECT version FROM assistants WHERE id = ? AND deleted_at IS NULL',
-      args: [assistantId]
-    })
-    const existingVersion = Number(existingResult.rows[0]?.version ?? 0)
+    let deleted = false
 
     await withTransaction(client, async () => {
+      const existingResult = await client.execute({
+        sql: 'SELECT version FROM assistants WHERE id = ? AND deleted_at IS NULL',
+        args: [assistantId]
+      })
+      const existingVersion = Number(existingResult.rows[0]?.version ?? 0)
+      deleted = existingVersion > 0
+
       await client.execute({
         sql: `
           UPDATE assistants
@@ -671,7 +852,7 @@ export class StorageV2AssistantRepository {
     })
 
     return {
-      deleted: existingVersion > 0
+      deleted
     }
   }
 
@@ -700,6 +881,207 @@ export class StorageV2AssistantRepository {
 }
 
 export class StorageV2ConversationRepository {
+  private async upsertConversationRow(
+    client: Client,
+    conversation: StorageV2ConversationUpsert,
+    summary: {
+      messageCount?: number
+      blockCount?: number
+    } = {},
+    timestamp = now()
+  ) {
+    const createdAt = conversation.createdAt ?? timestamp
+    const updatedAt = conversation.updatedAt ?? createdAt
+    const kind = conversation.kind ?? 'assistant_chat'
+    const ownerType = conversation.ownerType ?? 'assistant'
+    const sessionId = conversation.sessionId ?? null
+
+    await client.execute({
+      sql: `
+        INSERT INTO conversations (
+          id, kind, owner_type, owner_id, session_id, title, pinned, archived, sort_order,
+          created_at, updated_at, deleted_at, version
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
+        ON CONFLICT(id) DO UPDATE SET
+          kind = excluded.kind,
+          owner_type = excluded.owner_type,
+          owner_id = excluded.owner_id,
+          session_id = excluded.session_id,
+          title = excluded.title,
+          pinned = excluded.pinned,
+          archived = excluded.archived,
+          sort_order = excluded.sort_order,
+          updated_at = excluded.updated_at,
+          deleted_at = NULL,
+          version = conversations.version + 1
+      `,
+      args: [
+        conversation.id,
+        kind,
+        ownerType,
+        conversation.ownerId,
+        sessionId,
+        conversation.title ?? null,
+        conversation.pinned ? 1 : 0,
+        conversation.archived ? 1 : 0,
+        conversation.sortOrder ?? 0,
+        createdAt,
+        updatedAt
+      ]
+    })
+
+    await storageV2SyncLogService.recordChange({
+      client,
+      entityType: 'conversation',
+      entityId: conversation.id,
+      payload: {
+        kind,
+        ownerType,
+        ownerId: conversation.ownerId,
+        sessionId,
+        ...summary
+      },
+      version: await getVersion(client, 'conversations', conversation.id)
+    })
+
+    return {
+      createdAt,
+      updatedAt
+    }
+  }
+
+  private async upsertMessageRow(
+    client: Client,
+    conversationId: string,
+    message: Record<string, any>,
+    messageId: string,
+    fallbackCreatedAt: string,
+    blockCount = 0
+  ) {
+    const messageCreatedAt = getMessageCreatedAt(message, fallbackCreatedAt)
+    const messageUpdatedAt = getMessageUpdatedAt(message, messageCreatedAt)
+    const model = getMessageModel(message)
+    const role = getMessageRole(message)
+
+    await client.execute({
+      sql: `
+        INSERT INTO messages (
+          id, conversation_id, role, status, parent_id, request_id, model_id, provider_id,
+          token_usage_json, metadata_json, created_at, updated_at, deleted_at, version
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
+        ON CONFLICT(id) DO UPDATE SET
+          conversation_id = excluded.conversation_id,
+          role = excluded.role,
+          status = excluded.status,
+          parent_id = excluded.parent_id,
+          request_id = excluded.request_id,
+          model_id = excluded.model_id,
+          provider_id = excluded.provider_id,
+          token_usage_json = excluded.token_usage_json,
+          metadata_json = excluded.metadata_json,
+          updated_at = excluded.updated_at,
+          deleted_at = NULL,
+          version = messages.version + 1
+      `,
+      args: [
+        messageId,
+        conversationId,
+        role,
+        typeof message.status === 'string' ? message.status : null,
+        typeof message.parentId === 'string' ? message.parentId : null,
+        getMessageRequestId(message),
+        typeof message.modelId === 'string' ? message.modelId : typeof model?.id === 'string' ? model.id : null,
+        typeof model?.provider === 'string' ? model.provider : null,
+        toJson(message.usage ?? null),
+        toJson(message),
+        messageCreatedAt,
+        messageUpdatedAt
+      ]
+    })
+
+    await storageV2SyncLogService.recordChange({
+      client,
+      entityType: 'message',
+      entityId: messageId,
+      payload: {
+        conversationId,
+        role,
+        blockCount
+      },
+      version: await getVersion(client, 'messages', messageId)
+    })
+
+    return {
+      id: messageId,
+      createdAt: messageCreatedAt,
+      updatedAt: messageUpdatedAt
+    }
+  }
+
+  private async upsertMessageBlockRow(
+    client: Client,
+    messageId: string,
+    block: Record<string, any>,
+    blockId: string,
+    ordinal: number,
+    fallbackCreatedAt: string
+  ) {
+    const blockCreatedAt = getBlockCreatedAt(block, fallbackCreatedAt)
+    const blockUpdatedAt = getBlockUpdatedAt(block, blockCreatedAt)
+    const type = typeof block.type === 'string' ? block.type : 'unknown'
+
+    await client.execute({
+      sql: `
+        INSERT INTO message_blocks (
+          id, message_id, type, ordinal, text, payload_json, blob_id,
+          created_at, updated_at, deleted_at, version
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
+        ON CONFLICT(id) DO UPDATE SET
+          message_id = excluded.message_id,
+          type = excluded.type,
+          ordinal = excluded.ordinal,
+          text = excluded.text,
+          payload_json = excluded.payload_json,
+          blob_id = excluded.blob_id,
+          updated_at = excluded.updated_at,
+          deleted_at = NULL,
+          version = message_blocks.version + 1
+      `,
+      args: [
+        blockId,
+        messageId,
+        type,
+        ordinal,
+        getBlockText(block),
+        toJson(block),
+        typeof block.blobId === 'string' ? block.blobId : typeof block.blob_id === 'string' ? block.blob_id : null,
+        blockCreatedAt,
+        blockUpdatedAt
+      ]
+    })
+
+    await storageV2SyncLogService.recordChange({
+      client,
+      entityType: 'message_block',
+      entityId: blockId,
+      payload: {
+        messageId,
+        type,
+        ordinal
+      },
+      version: await getVersion(client, 'message_blocks', blockId)
+    })
+
+    return {
+      id: blockId,
+      createdAt: blockCreatedAt,
+      updatedAt: blockUpdatedAt
+    }
+  }
+
   async list(filter: { ownerType?: string; ownerId?: string } = {}): Promise<StoredConversation[]> {
     const client = await storageV2Database.getClient()
     const clauses = ['deleted_at IS NULL']
@@ -822,14 +1204,84 @@ export class StorageV2ConversationRepository {
     })
   }
 
+  async upsertConversation(
+    conversation: StorageV2ConversationUpsert,
+    options: StorageV2ConversationUpsertOptions = {}
+  ): Promise<{ id: string }> {
+    const client = await storageV2Database.getClient()
+    const timestamp = now()
+
+    await withTransaction(client, async () => {
+      await this.upsertConversationRow(client, conversation, undefined, timestamp)
+
+      if (options.pruneMissingMessages) {
+        await softDeleteMissingConversationMessages(client, conversation.id, options.activeMessageIds ?? [], timestamp)
+      }
+    })
+
+    return {
+      id: conversation.id
+    }
+  }
+
+  async upsertMessage(conversationId: string, message: Record<string, any>): Promise<{ id: string }> {
+    const messageId = typeof message.id === 'string' && message.id ? message.id : ''
+    if (!messageId) {
+      throw new Error('Storage v2 message upsert requires message.id')
+    }
+
+    const client = await storageV2Database.getClient()
+    const timestamp = now()
+
+    await withTransaction(client, async () => {
+      await this.upsertMessageRow(
+        client,
+        conversationId,
+        message,
+        messageId,
+        timestamp,
+        Array.isArray(message.blocks) ? message.blocks.length : 0
+      )
+    })
+
+    return {
+      id: messageId
+    }
+  }
+
+  async upsertMessageBlocks(
+    messageId: string,
+    blocks: Array<Record<string, any>>,
+    options: StorageV2MessageBlocksUpsertOptions = {}
+  ): Promise<{ messageId: string; blockCount: number }> {
+    const client = await storageV2Database.getClient()
+    const timestamp = now()
+    const blockIds = blocks.map((block, blockIndex) =>
+      typeof block.id === 'string' && block.id ? block.id : `${messageId}:block:${blockIndex}`
+    )
+
+    await withTransaction(client, async () => {
+      if (options.pruneMissing) {
+        await softDeleteMissingMessageBlocks(client, messageId, blockIds, timestamp)
+      }
+
+      for (const [blockIndex, block] of blocks.entries()) {
+        await this.upsertMessageBlockRow(client, messageId, block, blockIds[blockIndex], blockIndex, timestamp)
+      }
+    })
+
+    return {
+      messageId,
+      blockCount: blocks.length
+    }
+  }
+
   async importConversation(conversation: StorageV2ConversationImport): Promise<{
     messageCount: number
     blockCount: number
   }> {
     const client = await storageV2Database.getClient()
     const timestamp = now()
-    const createdAt = conversation.createdAt ?? timestamp
-    const updatedAt = conversation.updatedAt ?? createdAt
     const blocksByMessage = new Map<string, Array<Record<string, any>>>()
     const importedMessageIds = conversation.messages.map((message, index) =>
       getImportMessageId(conversation.id, message, index)
@@ -844,170 +1296,40 @@ export class StorageV2ConversationRepository {
     }
 
     await withTransaction(client, async () => {
-      await client.execute({
-        sql: `
-          INSERT INTO conversations (
-            id, kind, owner_type, owner_id, session_id, title, pinned, archived, sort_order,
-            created_at, updated_at, deleted_at, version
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
-          ON CONFLICT(id) DO UPDATE SET
-            kind = excluded.kind,
-            owner_type = excluded.owner_type,
-            owner_id = excluded.owner_id,
-            session_id = excluded.session_id,
-            title = excluded.title,
-            pinned = excluded.pinned,
-            archived = excluded.archived,
-            sort_order = excluded.sort_order,
-            updated_at = excluded.updated_at,
-            deleted_at = NULL,
-            version = conversations.version + 1
-        `,
-        args: [
-          conversation.id,
-          conversation.kind ?? 'assistant_chat',
-          conversation.ownerType ?? 'assistant',
-          conversation.ownerId,
-          conversation.sessionId ?? null,
-          conversation.title ?? null,
-          conversation.pinned ? 1 : 0,
-          conversation.archived ? 1 : 0,
-          conversation.sortOrder ?? 0,
-          createdAt,
-          updatedAt
-        ]
-      })
+      const { createdAt } = await this.upsertConversationRow(
+        client,
+        conversation,
+        {
+          messageCount: conversation.messages.length,
+          blockCount: conversation.blocks.length
+        },
+        timestamp
+      )
 
-      if (importedMessageIds.length > 0) {
-        await client.execute({
-          sql: `
-            DELETE FROM messages
-            WHERE conversation_id = ? AND id NOT IN (${importedMessageIds.map(() => '?').join(', ')})
-          `,
-          args: [conversation.id, ...importedMessageIds]
-        })
-      } else {
-        await client.execute({
-          sql: 'DELETE FROM messages WHERE conversation_id = ?',
-          args: [conversation.id]
-        })
-      }
+      await softDeleteMissingConversationMessages(client, conversation.id, importedMessageIds, timestamp)
 
       for (const [messageIndex, message] of conversation.messages.entries()) {
         const messageId = getImportMessageId(conversation.id, message, messageIndex)
         const messageBlocks = blocksByMessage.get(messageId) ?? []
-        const messageCreatedAt =
-          typeof message.createdAt === 'string'
-            ? message.createdAt
-            : typeof message.created_at === 'string'
-              ? message.created_at
-              : createdAt
-        const messageUpdatedAt =
-          typeof message.updatedAt === 'string'
-            ? message.updatedAt
-            : typeof message.updated_at === 'string'
-              ? message.updated_at
-              : messageCreatedAt
-        const model = message.model && typeof message.model === 'object' ? (message.model as Record<string, any>) : null
+        const importedBlockIds = messageBlocks.map((block, blockIndex) =>
+          typeof block.id === 'string' ? block.id : `${messageId}:block:${blockIndex}`
+        )
+        const messageResult = await this.upsertMessageRow(
+          client,
+          conversation.id,
+          message,
+          messageId,
+          createdAt,
+          messageBlocks.length
+        )
 
-        await client.execute({
-          sql: `
-            INSERT INTO messages (
-              id, conversation_id, role, status, parent_id, request_id, model_id, provider_id,
-              token_usage_json, metadata_json, created_at, updated_at, deleted_at, version
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
-            ON CONFLICT(id) DO UPDATE SET
-              conversation_id = excluded.conversation_id,
-              role = excluded.role,
-              status = excluded.status,
-              parent_id = excluded.parent_id,
-              request_id = excluded.request_id,
-              model_id = excluded.model_id,
-              provider_id = excluded.provider_id,
-              token_usage_json = excluded.token_usage_json,
-              metadata_json = excluded.metadata_json,
-              updated_at = excluded.updated_at,
-              deleted_at = NULL,
-              version = messages.version + 1
-          `,
-          args: [
-            messageId,
-            conversation.id,
-            typeof message.role === 'string' ? message.role : 'user',
-            typeof message.status === 'string' ? message.status : null,
-            typeof message.parentId === 'string' ? message.parentId : null,
-            typeof message.askId === 'string'
-              ? message.askId
-              : typeof message.requestId === 'string'
-                ? message.requestId
-                : null,
-            typeof message.modelId === 'string' ? message.modelId : typeof model?.id === 'string' ? model.id : null,
-            typeof model?.provider === 'string' ? model.provider : null,
-            toJson(message.usage ?? null),
-            toJson(message),
-            messageCreatedAt,
-            messageUpdatedAt
-          ]
-        })
-
-        await client.execute({
-          sql: 'DELETE FROM message_blocks WHERE message_id = ?',
-          args: [messageId]
-        })
+        await softDeleteMissingMessageBlocks(client, messageId, importedBlockIds, timestamp)
 
         for (const [blockIndex, block] of messageBlocks.entries()) {
-          const blockId = typeof block.id === 'string' ? block.id : `${messageId}:block:${blockIndex}`
-          const blockCreatedAt =
-            typeof block.createdAt === 'string'
-              ? block.createdAt
-              : typeof block.created_at === 'string'
-                ? block.created_at
-                : messageCreatedAt
-          const blockUpdatedAt =
-            typeof block.updatedAt === 'string'
-              ? block.updatedAt
-              : typeof block.updated_at === 'string'
-                ? block.updated_at
-                : blockCreatedAt
-          const text = typeof block.content === 'string' ? block.content : null
-
-          await client.execute({
-            sql: `
-              INSERT INTO message_blocks (
-                id, message_id, type, ordinal, text, payload_json, blob_id,
-                created_at, updated_at, deleted_at, version
-              )
-              VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL, 1)
-            `,
-            args: [
-              blockId,
-              messageId,
-              typeof block.type === 'string' ? block.type : 'unknown',
-              blockIndex,
-              text,
-              toJson(block),
-              blockCreatedAt,
-              blockUpdatedAt
-            ]
-          })
+          const blockId = importedBlockIds[blockIndex]
+          await this.upsertMessageBlockRow(client, messageId, block, blockId, blockIndex, messageResult.createdAt)
         }
       }
-
-      await storageV2SyncLogService.recordChange({
-        client,
-        entityType: 'conversation',
-        entityId: conversation.id,
-        payload: {
-          kind: conversation.kind ?? 'assistant_chat',
-          ownerType: conversation.ownerType ?? 'assistant',
-          ownerId: conversation.ownerId,
-          sessionId: conversation.sessionId ?? null,
-          messageCount: conversation.messages.length,
-          blockCount: conversation.blocks.length
-        }
-      })
     })
 
     return {
@@ -1019,22 +1341,43 @@ export class StorageV2ConversationRepository {
   async delete(conversationId: string): Promise<{ deleted: boolean }> {
     const client = await storageV2Database.getClient()
     const deletedAt = now()
-    const existingResult = await client.execute({
-      sql: 'SELECT version FROM conversations WHERE id = ? AND deleted_at IS NULL',
-      args: [conversationId]
-    })
-    const existingVersion = Number(existingResult.rows[0]?.version ?? 0)
+    let deleted = false
 
     await withTransaction(client, async () => {
+      const existingResult = await client.execute({
+        sql: 'SELECT version FROM conversations WHERE id = ? AND deleted_at IS NULL',
+        args: [conversationId]
+      })
+      const existingVersion = Number(existingResult.rows[0]?.version ?? 0)
+      deleted = existingVersion > 0
+
+      const messagesResult = await client.execute({
+        sql: `
+          SELECT id, version
+          FROM messages
+          WHERE conversation_id = ? AND deleted_at IS NULL
+        `,
+        args: [conversationId]
+      })
+      const blocksResult = await client.execute({
+        sql: `
+          SELECT b.id, b.message_id, b.version
+          FROM message_blocks b
+          INNER JOIN messages m ON m.id = b.message_id
+          WHERE m.conversation_id = ? AND b.deleted_at IS NULL
+        `,
+        args: [conversationId]
+      })
+
       await client.execute({
         sql: `
           UPDATE message_blocks
-          SET deleted_at = ?, version = version + 1
+          SET deleted_at = ?, updated_at = ?, version = version + 1
           WHERE message_id IN (
             SELECT id FROM messages WHERE conversation_id = ?
           ) AND deleted_at IS NULL
         `,
-        args: [deletedAt, conversationId]
+        args: [deletedAt, deletedAt, conversationId]
       })
       await client.execute({
         sql: `
@@ -1052,6 +1395,40 @@ export class StorageV2ConversationRepository {
         `,
         args: [deletedAt, deletedAt, conversationId]
       })
+
+      for (const row of blocksResult.rows) {
+        const blockId = String(row.id)
+        await storageV2SyncLogService.recordChange({
+          client,
+          entityType: 'message_block',
+          entityId: blockId,
+          operation: 'delete',
+          payload: {
+            id: blockId,
+            messageId: String(row.message_id),
+            conversationId,
+            deletedAt
+          },
+          version: Number(row.version ?? 0) + 1
+        })
+      }
+
+      for (const row of messagesResult.rows) {
+        const messageId = String(row.id)
+        await storageV2SyncLogService.recordChange({
+          client,
+          entityType: 'message',
+          entityId: messageId,
+          operation: 'delete',
+          payload: {
+            id: messageId,
+            conversationId,
+            deletedAt
+          },
+          version: Number(row.version ?? 0) + 1
+        })
+      }
+
       await storageV2SyncLogService.recordChange({
         client,
         entityType: 'conversation',
@@ -1063,7 +1440,7 @@ export class StorageV2ConversationRepository {
     })
 
     return {
-      deleted: existingVersion > 0
+      deleted
     }
   }
 
@@ -1119,9 +1496,9 @@ export class StorageV2KnowledgeRepository {
           sql: `
             INSERT INTO knowledge_bases (
               id, name, model_id, embedding_model_id, rerank_model_id, settings_json,
-              created_at, updated_at, deleted_at
+              created_at, updated_at, deleted_at, version
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
             ON CONFLICT(id) DO UPDATE SET
               name = excluded.name,
               model_id = excluded.model_id,
@@ -1129,7 +1506,8 @@ export class StorageV2KnowledgeRepository {
               rerank_model_id = excluded.rerank_model_id,
               settings_json = excluded.settings_json,
               updated_at = excluded.updated_at,
-              deleted_at = NULL
+              deleted_at = NULL,
+              version = knowledge_bases.version + 1
           `,
           args: [
             baseId,
@@ -1155,22 +1533,23 @@ export class StorageV2KnowledgeRepository {
 
           await client.execute({
             sql: `
-              INSERT INTO knowledge_items (
-                id, knowledge_base_id, source_type, source_uri, file_id, content_hash,
-                status, metadata_json, created_at, updated_at, deleted_at
-              )
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
-              ON CONFLICT(id) DO UPDATE SET
-                knowledge_base_id = excluded.knowledge_base_id,
-                source_type = excluded.source_type,
-                source_uri = excluded.source_uri,
-                file_id = excluded.file_id,
-                content_hash = excluded.content_hash,
-                status = excluded.status,
-                metadata_json = excluded.metadata_json,
-                updated_at = excluded.updated_at,
-                deleted_at = NULL
-            `,
+            INSERT INTO knowledge_items (
+              id, knowledge_base_id, source_type, source_uri, file_id, content_hash,
+              status, metadata_json, created_at, updated_at, deleted_at, version
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
+            ON CONFLICT(id) DO UPDATE SET
+              knowledge_base_id = excluded.knowledge_base_id,
+              source_type = excluded.source_type,
+              source_uri = excluded.source_uri,
+              file_id = excluded.file_id,
+              content_hash = excluded.content_hash,
+              status = excluded.status,
+              metadata_json = excluded.metadata_json,
+              updated_at = excluded.updated_at,
+              deleted_at = NULL,
+              version = knowledge_items.version + 1
+          `,
             args: [
               itemId,
               baseId,
@@ -1195,7 +1574,8 @@ export class StorageV2KnowledgeRepository {
               sourceType: typeof item.type === 'string' ? item.type : 'unknown',
               fileId: getKnowledgeItemFileId(item),
               status: typeof item.processingStatus === 'string' ? item.processingStatus : 'completed'
-            }
+            },
+            version: await getVersion(client, 'knowledge_items', itemId)
           })
         }
 
@@ -1207,14 +1587,15 @@ export class StorageV2KnowledgeRepository {
             id: baseId,
             name: base.name ?? baseId,
             itemCount: activeItemIds.size
-          }
+          },
+          version: await getVersion(client, 'knowledge_bases', baseId)
         })
       }
 
       for (const [baseId, activeItemIds] of activeItemIdsByBase.entries()) {
         const existingItems = await client.execute({
           sql: `
-            SELECT id
+            SELECT id, version
             FROM knowledge_items
             WHERE knowledge_base_id = ? AND deleted_at IS NULL
           `,
@@ -1228,7 +1609,7 @@ export class StorageV2KnowledgeRepository {
           await client.execute({
             sql: `
               UPDATE knowledge_items
-              SET deleted_at = ?, updated_at = ?
+              SET deleted_at = ?, updated_at = ?, version = version + 1
               WHERE id = ? AND deleted_at IS NULL
             `,
             args: [timestamp, timestamp, itemId]
@@ -1238,14 +1619,15 @@ export class StorageV2KnowledgeRepository {
             entityType: 'knowledge_item',
             entityId: itemId,
             operation: 'delete',
-            payload: { id: itemId, knowledgeBaseId: baseId, deletedAt: timestamp }
+            payload: { id: itemId, knowledgeBaseId: baseId, deletedAt: timestamp },
+            version: Number(row.version ?? 0) + 1
           })
           deletedItemCount++
         }
       }
 
       const existingBases = await client.execute(`
-        SELECT id
+        SELECT id, version
         FROM knowledge_bases
         WHERE deleted_at IS NULL
       `)
@@ -1255,7 +1637,7 @@ export class StorageV2KnowledgeRepository {
 
         const existingItems = await client.execute({
           sql: `
-            SELECT id
+            SELECT id, version
             FROM knowledge_items
             WHERE knowledge_base_id = ? AND deleted_at IS NULL
           `,
@@ -1265,7 +1647,7 @@ export class StorageV2KnowledgeRepository {
         await client.execute({
           sql: `
             UPDATE knowledge_bases
-            SET deleted_at = ?, updated_at = ?
+            SET deleted_at = ?, updated_at = ?, version = version + 1
             WHERE id = ? AND deleted_at IS NULL
           `,
           args: [timestamp, timestamp, baseId]
@@ -1273,7 +1655,7 @@ export class StorageV2KnowledgeRepository {
         await client.execute({
           sql: `
             UPDATE knowledge_items
-            SET deleted_at = ?, updated_at = ?
+            SET deleted_at = ?, updated_at = ?, version = version + 1
             WHERE knowledge_base_id = ? AND deleted_at IS NULL
           `,
           args: [timestamp, timestamp, baseId]
@@ -1285,7 +1667,8 @@ export class StorageV2KnowledgeRepository {
             entityType: 'knowledge_item',
             entityId: itemId,
             operation: 'delete',
-            payload: { id: itemId, knowledgeBaseId: baseId, deletedAt: timestamp }
+            payload: { id: itemId, knowledgeBaseId: baseId, deletedAt: timestamp },
+            version: Number(itemRow.version ?? 0) + 1
           })
           deletedItemCount++
         }
@@ -1294,7 +1677,8 @@ export class StorageV2KnowledgeRepository {
           entityType: 'knowledge_base',
           entityId: baseId,
           operation: 'delete',
-          payload: { id: baseId, deletedAt: timestamp }
+          payload: { id: baseId, deletedAt: timestamp },
+          version: Number(row.version ?? 0) + 1
         })
         deletedBaseCount++
       }
@@ -1335,6 +1719,7 @@ export class StorageV2FileRepository {
     const blobPath = path.join(blobDir, checksum)
     const storagePath = path.relative(rootInfo.dataRoot, blobPath)
     const timestamp = now()
+    const fileId = file.id ?? checksum
 
     fs.mkdirSync(blobDir, { recursive: true })
     if (!fs.existsSync(blobPath)) {
@@ -1374,9 +1759,9 @@ export class StorageV2FileRepository {
       await client.execute({
         sql: `
           INSERT INTO files (
-            id, blob_id, original_name, display_name, source, metadata_json, created_at, updated_at, deleted_at
+            id, blob_id, original_name, display_name, source, metadata_json, created_at, updated_at, deleted_at, version
           )
-          VALUES (?, ?, ?, ?, 'legacy-dexie', ?, ?, ?, NULL)
+          VALUES (?, ?, ?, ?, 'legacy-dexie', ?, ?, ?, NULL, 1)
           ON CONFLICT(id) DO UPDATE SET
             blob_id = excluded.blob_id,
             original_name = excluded.original_name,
@@ -1384,10 +1769,11 @@ export class StorageV2FileRepository {
             source = excluded.source,
             metadata_json = excluded.metadata_json,
             updated_at = excluded.updated_at,
-            deleted_at = NULL
+            deleted_at = NULL,
+            version = files.version + 1
         `,
         args: [
-          file.id ?? checksum,
+          fileId,
           checksum,
           file.origin_name ?? file.name ?? path.basename(sourcePath),
           file.name ?? file.origin_name ?? path.basename(sourcePath),
@@ -1411,13 +1797,14 @@ export class StorageV2FileRepository {
       await storageV2SyncLogService.recordChange({
         client,
         entityType: 'file',
-        entityId: file.id ?? checksum,
+        entityId: fileId,
         payload: {
           blobId: checksum,
           originalName: file.origin_name ?? file.name ?? path.basename(sourcePath),
           size: stats.size,
           source: 'legacy-dexie'
-        }
+        },
+        version: await getVersion(client, 'files', fileId)
       })
     })
 
@@ -1427,17 +1814,21 @@ export class StorageV2FileRepository {
   async delete(fileId: string): Promise<{ deleted: boolean }> {
     const client = await storageV2Database.getClient()
     const deletedAt = now()
-    const existingResult = await client.execute({
-      sql: 'SELECT blob_id FROM files WHERE id = ? AND deleted_at IS NULL',
-      args: [fileId]
-    })
-    const blobId = existingResult.rows[0]?.blob_id ? String(existingResult.rows[0].blob_id) : null
+    let deleted = false
 
     await withTransaction(client, async () => {
+      const existingResult = await client.execute({
+        sql: 'SELECT blob_id, version FROM files WHERE id = ? AND deleted_at IS NULL',
+        args: [fileId]
+      })
+      const blobId = existingResult.rows[0]?.blob_id ? String(existingResult.rows[0].blob_id) : null
+      const existingVersion = Number(existingResult.rows[0]?.version ?? 0)
+      deleted = Boolean(blobId)
+
       await client.execute({
         sql: `
           UPDATE files
-          SET deleted_at = ?, updated_at = ?
+          SET deleted_at = ?, updated_at = ?, version = version + 1
           WHERE id = ? AND deleted_at IS NULL
         `,
         args: [deletedAt, deletedAt, fileId]
@@ -1461,12 +1852,13 @@ export class StorageV2FileRepository {
         entityType: 'file',
         entityId: fileId,
         operation: 'delete',
-        payload: { id: fileId, blobId, deletedAt }
+        payload: { id: fileId, blobId, deletedAt },
+        version: existingVersion > 0 ? existingVersion + 1 : 1
       })
     })
 
     return {
-      deleted: Boolean(blobId)
+      deleted
     }
   }
 

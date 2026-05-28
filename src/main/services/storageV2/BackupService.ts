@@ -5,6 +5,7 @@ import path from 'node:path'
 import { createClient } from '@libsql/client'
 import { app } from 'electron'
 
+import { configManager } from '../ConfigManager'
 import KnowledgeService from '../KnowledgeService'
 import MemoryService from '../memory/MemoryService'
 import {
@@ -20,6 +21,8 @@ import {
   type StorageV2FileLegacyProjectionReport,
   storageV2FileLegacyProjectionService
 } from './FileLegacyProjectionService'
+import { scanStorageV2SecretReferences } from './SecretRefIntegrity'
+import { storageV2SecretVaultService } from './SecretVaultService'
 import { storageV2StatisticsService } from './StatisticsService'
 import { storageV2Database } from './StorageV2Database'
 import { storageV2SettingsRepository } from './StorageV2Repositories'
@@ -52,6 +55,9 @@ export type StorageV2BackupValidation = {
   integrityCheck: string | null
   missingBlobFileCount: number
   corruptBlobFileCount: number
+  secretVaultSecretCount: number
+  missingSecretRefCount: number
+  invalidSecretRefCount: number
   issues: StorageV2BackupValidationMessage[]
   warnings: StorageV2BackupValidationMessage[]
   metadata: Record<string, any> | null
@@ -70,6 +76,7 @@ export type StorageV2RestoreBackupResult = {
   appDataLegacyProjection: StorageV2AppDataLegacyProjectionReport
   validation: StorageV2BackupValidation
   requiresRestart: true
+  warnings: string[]
 }
 
 const RESTORABLE_DIRECTORIES = ['blobs', 'secrets', 'KnowledgeBase', 'Memory', 'Skills', 'Agents'] as const
@@ -99,11 +106,130 @@ function validationMessage(
   }
 }
 
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function createProjectionWarning(label: string, error: unknown) {
+  return `${label} legacy runtime projection failed after Storage v2 restore: ${errorMessage(error)}`
+}
+
+function failedAgentProjectionReport(warning: string): StorageV2AgentLegacyProjectionReport {
+  return {
+    agentDbPath: path.join(app.getPath('userData'), 'Data', 'agents.db'),
+    archivedFiles: [],
+    projectedAgentCount: 0,
+    projectedPlaceholderAgentCount: 0,
+    projectedSessionCount: 0,
+    projectedSessionMessageCount: 0,
+    projectedSkillCount: 0,
+    projectedPlaceholderSkillCount: 0,
+    projectedAgentSkillCount: 0,
+    projectedTaskCount: 0,
+    projectedTaskRunLogCount: 0,
+    projectedChannelCount: 0,
+    skippedSessionCount: 0,
+    skippedSessionMessageCount: 0,
+    skippedAgentSkillCount: 0,
+    skippedTaskCount: 0,
+    skippedTaskRunLogCount: 0,
+    skippedChannelCount: 0,
+    restoredChannelSecretCount: 0,
+    missingChannelSecretCount: 0,
+    warnings: [warning]
+  }
+}
+
+function failedFileProjectionReport(warning: string): StorageV2FileLegacyProjectionReport {
+  return {
+    filesDir: path.join(app.getPath('userData'), 'Data', 'Files'),
+    projectedFileCount: 0,
+    archivedFileCount: 0,
+    skippedFileCount: 0,
+    missingBlobCount: 0,
+    archivedFiles: [],
+    warnings: [warning]
+  }
+}
+
+function failedAppDataProjectionReport(warning: string): StorageV2AppDataLegacyProjectionReport {
+  return {
+    appDbPath: path.join(app.getPath('userData'), 'Data', 'app.db'),
+    archivedFiles: [],
+    projectedRecordCount: 0,
+    projectedCacheCount: 0,
+    projectedSyncStateCount: 0,
+    projectedSyncConflictCount: 0,
+    projectedWorkbenchShortcutCount: 0,
+    restoredSecretCount: 0,
+    missingSecretCount: 0,
+    warnings: [warning]
+  }
+}
+
 function readJsonFile(filePath: string): Record<string, any> | null {
   try {
     return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as Record<string, any>
   } catch {
     return null
+  }
+}
+
+function validateSecretVaultFile(vaultPath: string): {
+  exists: boolean
+  secretCount: number
+  secretIds: Set<string>
+  issue?: StorageV2BackupValidationMessage
+} {
+  if (!fs.existsSync(vaultPath)) {
+    return {
+      exists: false,
+      secretCount: 0,
+      secretIds: new Set()
+    }
+  }
+
+  const vault = readJsonFile(vaultPath)
+  if (!vault || vault.version !== 1 || !vault.secrets || typeof vault.secrets !== 'object') {
+    return {
+      exists: true,
+      secretCount: 0,
+      secretIds: new Set(),
+      issue: validationMessage('secret_vault_invalid', 'Backup secret vault is missing required fields.')
+    }
+  }
+
+  let secretCount = 0
+  const secretIds = new Set<string>()
+  for (const [secretId, record] of Object.entries(vault.secrets)) {
+    if (
+      !secretId ||
+      !record ||
+      typeof record !== 'object' ||
+      typeof (record as Record<string, unknown>).encrypted !== 'string' ||
+      (record as Record<string, unknown>).encoding !== 'electron-safe-storage'
+    ) {
+      return {
+        exists: true,
+        secretCount,
+        secretIds,
+        issue: validationMessage(
+          'secret_vault_invalid',
+          `Backup secret vault contains an invalid record: ${secretId}.`,
+          {
+            secretId
+          }
+        )
+      }
+    }
+    secretIds.add(secretId)
+    secretCount++
+  }
+
+  return {
+    exists: true,
+    secretCount,
+    secretIds
   }
 }
 
@@ -225,6 +351,7 @@ export class StorageV2BackupService {
     }
 
     await KnowledgeService.closeAll().catch(() => undefined)
+    await storageV2SecretVaultService.waitForIdle()
 
     const copiedDirectories: string[] = []
     for (const dirname of RESTORABLE_DIRECTORIES) {
@@ -313,6 +440,10 @@ export class StorageV2BackupService {
     let integrityCheck: string | null = null
     let missingBlobFileCount = 0
     let corruptBlobFileCount = 0
+    let secretVaultSecretCount = 0
+    let missingSecretRefCount = 0
+    let invalidSecretRefCount = 0
+    let secretReferenceScan: Awaited<ReturnType<typeof scanStorageV2SecretReferences>> | null = null
 
     if (!fs.existsSync(dbPath)) {
       issues.push(validationMessage('db_missing', 'Backup main.db is missing.'))
@@ -379,6 +510,8 @@ export class StorageV2BackupService {
             )
           )
         }
+
+        secretReferenceScan = await scanStorageV2SecretReferences(client)
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         issues.push(validationMessage('db_open_failed', `Backup database cannot be opened: ${message}`, { message }))
@@ -390,6 +523,56 @@ export class StorageV2BackupService {
     const copiedDirectories = Array.isArray(metadata?.copiedDirectories)
       ? metadata.copiedDirectories.filter((entry: unknown): entry is string => typeof entry === 'string')
       : RESTORABLE_DIRECTORIES.filter((dirname) => fs.existsSync(path.join(backupPath, dirname)))
+
+    const vaultValidation = validateSecretVaultFile(path.join(backupPath, 'secrets', 'vault.json'))
+    secretVaultSecretCount = vaultValidation.secretCount
+    if (vaultValidation.issue) {
+      issues.push(vaultValidation.issue)
+    } else if (!vaultValidation.exists && copiedDirectories.includes('secrets')) {
+      warnings.push(
+        validationMessage(
+          'secret_vault_missing',
+          'Backup metadata says secrets were copied, but secrets/vault.json is missing.'
+        )
+      )
+    }
+
+    if (secretReferenceScan) {
+      invalidSecretRefCount = secretReferenceScan.invalidRefs.size
+      missingSecretRefCount = Array.from(secretReferenceScan.refs).filter(
+        (secretId) => !vaultValidation.secretIds.has(secretId)
+      ).length
+
+      if (secretReferenceScan.skippedSources.length > 0) {
+        warnings.push(
+          validationMessage(
+            'secret_ref_scan_skipped_sources',
+            `Skipped ${secretReferenceScan.skippedSources.length} missing backup schema source(s) while scanning secret references.`,
+            { count: secretReferenceScan.skippedSources.length }
+          )
+        )
+      }
+
+      if (invalidSecretRefCount > 0) {
+        issues.push(
+          validationMessage(
+            'invalid_secret_refs',
+            `Backup contains ${invalidSecretRefCount} invalid secret reference(s).`,
+            { count: invalidSecretRefCount }
+          )
+        )
+      }
+
+      if (missingSecretRefCount > 0) {
+        issues.push(
+          validationMessage(
+            'missing_secret_refs',
+            `Backup is missing ${missingSecretRefCount} secret value(s) referenced by the database.`,
+            { count: missingSecretRefCount }
+          )
+        )
+      }
+    }
 
     return {
       ok: issues.length === 0,
@@ -404,6 +587,9 @@ export class StorageV2BackupService {
       integrityCheck,
       missingBlobFileCount,
       corruptBlobFileCount,
+      secretVaultSecretCount,
+      missingSecretRefCount,
+      invalidSecretRefCount,
       issues,
       warnings,
       metadata
@@ -424,6 +610,7 @@ export class StorageV2BackupService {
     const stagingDir = path.join(rootInfo.dataRoot, 'temp', restoreId)
     const restoredFiles: string[] = []
     const restoredDirectories: string[] = []
+    const warnings: string[] = []
 
     fs.rmSync(stagingDir, { recursive: true, force: true })
     fs.mkdirSync(stagingDir, { recursive: true })
@@ -442,6 +629,7 @@ export class StorageV2BackupService {
       }
 
       await Promise.allSettled([KnowledgeService.closeAll(), MemoryService.getInstance().close()])
+      await storageV2Database.waitForIdle()
       storageV2Database.close()
 
       for (const filename of RESTORABLE_DB_FILES) {
@@ -465,26 +653,52 @@ export class StorageV2BackupService {
         }
       }
 
+      storageV2DataRootService.activateDataRoot(rootInfo.dataRoot)
       await storageV2Database.initialize()
-      await storageV2SettingsRepository.set(
-        'storage_v2.runtime.auto_hydrate',
-        {
-          enabled: true,
-          reason: 'restore',
-          updatedAt: restoredAt
-        },
-        'storage-v2'
-      )
+      await storageV2SettingsRepository
+        .set(
+          'storage_v2.runtime.auto_hydrate',
+          {
+            enabled: true,
+            reason: 'restore',
+            updatedAt: restoredAt
+          },
+          'storage-v2'
+        )
+        .catch((error) => {
+          warnings.push(`Storage v2 auto hydrate flag update failed after restore: ${errorMessage(error)}`)
+        })
+      await configManager.hydrateFromStorageV2({ overwrite: true, pruneMissing: true }).catch((error) => {
+        warnings.push(`Main process config hydration failed after Storage v2 restore: ${errorMessage(error)}`)
+      })
 
-      const agentLegacyProjection = await storageV2AgentLegacyProjectionService.projectToLegacyRuntime({
-        archiveRoot
-      })
-      const fileLegacyProjection = await storageV2FileLegacyProjectionService.projectToLegacyRuntime({
-        archiveRoot
-      })
-      const appDataLegacyProjection = await storageV2AppDataLegacyProjectionService.projectToLegacyRuntime({
-        archiveRoot
-      })
+      const agentLegacyProjection = await storageV2AgentLegacyProjectionService
+        .projectToLegacyRuntime({
+          archiveRoot
+        })
+        .catch((error) => {
+          const warning = createProjectionWarning('Agent', error)
+          warnings.push(warning)
+          return failedAgentProjectionReport(warning)
+        })
+      const fileLegacyProjection = await storageV2FileLegacyProjectionService
+        .projectToLegacyRuntime({
+          archiveRoot
+        })
+        .catch((error) => {
+          const warning = createProjectionWarning('File', error)
+          warnings.push(warning)
+          return failedFileProjectionReport(warning)
+        })
+      const appDataLegacyProjection = await storageV2AppDataLegacyProjectionService
+        .projectToLegacyRuntime({
+          archiveRoot
+        })
+        .catch((error) => {
+          const warning = createProjectionWarning('App data', error)
+          warnings.push(warning)
+          return failedAppDataProjectionReport(warning)
+        })
 
       return {
         backupPath: validation.backupPath,
@@ -498,7 +712,8 @@ export class StorageV2BackupService {
         fileLegacyProjection,
         appDataLegacyProjection,
         validation,
-        requiresRestart: true
+        requiresRestart: true,
+        warnings
       }
     } finally {
       fs.rmSync(stagingDir, { recursive: true, force: true })

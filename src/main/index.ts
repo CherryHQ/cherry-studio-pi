@@ -44,6 +44,7 @@ import { initWebviewHotkeys } from './services/WebviewService'
 import { runAsyncFunction } from './utils'
 import { isOvmsSupported } from './services/OvmsManager'
 import { environmentDependencyService } from './services/EnvironmentDependencyService'
+import { storageV2StartupSeedService } from './services/storageV2/StartupSeedService'
 
 const logger = loggerService.withContext('MainEntry')
 
@@ -139,9 +140,26 @@ if (!app.requestSingleInstanceLock()) {
   // Some APIs can only be used after this event occurs.
 
   void app.whenReady().then(async () => {
+    // Complete pending backup restore/reset before any Storage v2 hydration or mirroring touches Data.
+    const { BackupManager } = await import('./services/BackupManager')
+    await BackupManager.handleStartupRestore()
+
     // Record current version for tracking
     // A preparation for v2 data refactoring
     versionService.recordCurrentVersion()
+
+    try {
+      const hydrationReport = await configManager.hydrateFromStorageV2({ overwrite: false })
+      const mirrorReport = await configManager.mirrorAllToStorageV2()
+      logger.info('Storage v2 config manager sync completed', {
+        restored: hydrationReport.restoredCount,
+        mirrored: mirrorReport.mirroredCount
+      })
+    } catch (error) {
+      logger.warn('Storage v2 config manager sync failed (non-fatal)', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
 
     initWebviewHotkeys()
     // Set app user model id for windows
@@ -152,10 +170,6 @@ if (!app.requestSingleInstanceLock()) {
     if (isLaunchToTray) {
       app.dock?.hide()
     }
-
-    // Check for backup restore marker and complete restoration (highest priority, before window creation)
-    const { BackupManager } = await import('./services/BackupManager')
-    await BackupManager.handleStartupRestore()
 
     // Renderer components subscribe during startup, so these handlers must exist before creating windows.
     registerSessionStreamIpc()
@@ -207,6 +221,24 @@ if (!app.requestSingleInstanceLock()) {
     initSelectionService()
 
     void runAsyncFunction(async () => {
+      try {
+        const seedReport = await storageV2StartupSeedService.seedFromLegacyRuntimeDatabases()
+        logger.info('Storage v2 startup seed completed', {
+          agentDb: seedReport.agent.sourceDbPath,
+          appDb: seedReport.appData.sourceDbPath,
+          agents: seedReport.agent.importedAgentCount,
+          agentSessions: seedReport.agent.importedSessionCount,
+          agentMessages: seedReport.agent.importedSessionMessageCount,
+          appRecords: seedReport.appData.importedRecordCount,
+          appCache: seedReport.appData.importedCacheCount,
+          warningCount: seedReport.agent.warnings.length + seedReport.appData.warnings.length
+        })
+      } catch (error) {
+        logger.warn('Storage v2 startup seed failed (non-fatal)', {
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
+
       // Initialize built-in skills and agents (sequential to avoid SQLITE_BUSY)
       // TODO: v2 lifecycle
       await bootstrapBuiltinAgents()

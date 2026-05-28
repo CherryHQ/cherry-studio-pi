@@ -6,6 +6,9 @@ const {
   mockInitBuiltinAgent,
   mockListSessions,
   mockCreateSession,
+  mockGetAgentWithStorageV2Recovery,
+  mockScheduleStorageV2Mirror,
+  mockFlushStorageV2Mirror,
   mockEnsureHeartbeatTask
 } = vi.hoisted(() => ({
   mockInstallBuiltinSkills: vi.fn(),
@@ -13,6 +16,9 @@ const {
   mockInitBuiltinAgent: vi.fn(),
   mockListSessions: vi.fn(),
   mockCreateSession: vi.fn(),
+  mockGetAgentWithStorageV2Recovery: vi.fn(),
+  mockScheduleStorageV2Mirror: vi.fn(),
+  mockFlushStorageV2Mirror: vi.fn(),
   mockEnsureHeartbeatTask: vi.fn()
 }))
 
@@ -34,6 +40,19 @@ vi.mock('../../SessionService', () => ({
   }
 }))
 
+vi.mock('@main/services/agents/AgentStorageV2ReadThrough', () => ({
+  createSessionWithStorageV2Recovery: mockCreateSession,
+  getAgentWithStorageV2Recovery: mockGetAgentWithStorageV2Recovery,
+  listSessionsWithStorageV2Recovery: mockListSessions
+}))
+
+vi.mock('@main/services/storageV2/AgentDbMirrorService', () => ({
+  storageV2AgentDbMirrorService: {
+    flush: mockFlushStorageV2Mirror,
+    schedule: mockScheduleStorageV2Mirror
+  }
+}))
+
 vi.mock('../../SchedulerService', () => ({
   schedulerService: {
     ensureHeartbeatTask: mockEnsureHeartbeatTask
@@ -50,8 +69,10 @@ describe('bootstrapBuiltinAgents', () => {
     vi.useFakeTimers()
     vi.resetModules()
     mockInstallBuiltinSkills.mockResolvedValue(undefined)
+    mockGetAgentWithStorageV2Recovery.mockResolvedValue(null)
     mockListSessions.mockResolvedValue({ total: 0 })
     mockCreateSession.mockResolvedValue({ id: 'session_1' })
+    mockFlushStorageV2Mirror.mockResolvedValue(undefined)
     mockEnsureHeartbeatTask.mockResolvedValue(undefined)
   })
 
@@ -77,6 +98,8 @@ describe('bootstrapBuiltinAgents', () => {
     expect(mockListSessions).toHaveBeenCalledWith('cherry-claw-default', { limit: 1 })
     expect(mockCreateSession).toHaveBeenCalledWith('cherry-claw-default', {})
     expect(mockEnsureHeartbeatTask).toHaveBeenCalledWith('cherry-claw-default', 30)
+    expect(mockScheduleStorageV2Mirror).toHaveBeenCalled()
+    expect(mockFlushStorageV2Mirror).toHaveBeenCalled()
   })
 
   it('does not retry built-in agents deleted by the user', async () => {

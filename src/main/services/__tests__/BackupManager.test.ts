@@ -38,13 +38,28 @@ vi.mock('path', async () => {
 })
 
 // Use vi.hoisted to define mocks that are available during hoisting
-const { mockLogger } = vi.hoisted(() => ({
-  mockLogger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn()
-  }
-}))
+const { mockLogger, mockStorageV2Database, mockStorageV2DataRootService, mockStreamZipAsync, mockStreamZipInstance } =
+  vi.hoisted(() => ({
+    mockLogger: {
+      debug: vi.fn(),
+      info: vi.fn(),
+      verbose: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    },
+    mockStorageV2Database: {
+      createSnapshot: vi.fn()
+    },
+    mockStorageV2DataRootService: {
+      activateDataRoot: vi.fn(),
+      createFreshDataRootManifest: vi.fn(),
+      resolveDataRoot: vi.fn()
+    },
+    mockStreamZipAsync: vi.fn(),
+    mockStreamZipInstance: {
+      extract: vi.fn()
+    }
+  }))
 
 vi.mock('@logger', () => ({
   loggerService: {
@@ -109,12 +124,22 @@ vi.mock('../../utils', () => ({
   getDataPath: vi.fn(() => '/mock/data')
 }))
 
+vi.mock('../storageV2/DataRootService', () => ({
+  storageV2DataRootService: mockStorageV2DataRootService
+}))
+
+vi.mock('../storageV2/StorageV2Database', () => ({
+  storageV2Database: mockStorageV2Database
+}))
+
 vi.mock('archiver', () => ({
   default: vi.fn()
 }))
 
 vi.mock('node-stream-zip', () => ({
-  default: vi.fn()
+  default: {
+    async: mockStreamZipAsync
+  }
 }))
 
 // Import after mocks
@@ -140,6 +165,12 @@ describe('BackupManager.copyDirWithProgress - Symlink Handling', () => {
     vi.mocked(fs.ensureDir).mockResolvedValue(undefined as never)
     vi.mocked(fs.copy).mockResolvedValue(undefined as never)
     vi.mocked(fs.realpath).mockImplementation(async (entryPath) => String(entryPath) as never)
+    mockStorageV2DataRootService.resolveDataRoot.mockReturnValue({ dataRoot: '/mock/userData/Data' })
+    mockStorageV2Database.createSnapshot.mockResolvedValue({
+      path: '/mock/userData/Data/snapshots/direct-backup.db',
+      reason: 'direct-backup',
+      createdAt: '2026-01-01T00:00:00.000Z'
+    })
   })
 
   it('should copy the real file when a valid symlink points to a file', async () => {
@@ -344,12 +375,113 @@ describe('BackupManager.copyDirWithProgress - Symlink Handling', () => {
   })
 })
 
+describe('BackupManager Storage v2 backup snapshot handling', () => {
+  let backupManager: BackupManager
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    backupManager = new BackupManager()
+    vi.mocked(fs.pathExists).mockResolvedValue(false as never)
+    vi.mocked(fs.copy).mockResolvedValue(undefined as never)
+    vi.mocked(fs.remove).mockResolvedValue(undefined as never)
+    mockStorageV2DataRootService.resolveDataRoot.mockReturnValue({ dataRoot: '/mock/userData/Data' })
+    mockStorageV2Database.createSnapshot.mockResolvedValue({
+      path: '/mock/userData/Data/snapshots/direct-backup.db',
+      reason: 'direct-backup',
+      createdAt: '2026-01-01T00:00:00.000Z'
+    })
+  })
+
+  it('replaces the copied Storage v2 database with a consistent snapshot', async () => {
+    vi.mocked(fs.pathExists).mockImplementation(
+      async (candidate) => String(candidate) === '/mock/userData/Data/main.db'
+    )
+
+    const snapshotPath = await (backupManager as any).createStorageV2SnapshotIfAvailable('/mock/userData/Data')
+    await (backupManager as any).replaceStorageV2DatabaseCopy('/tmp/cherry-studio/backup/temp/Data', snapshotPath)
+
+    expect(mockStorageV2Database.createSnapshot).toHaveBeenCalledWith('direct-backup')
+    expect(fs.copy).toHaveBeenCalledWith(
+      '/mock/userData/Data/snapshots/direct-backup.db',
+      '/tmp/cherry-studio/backup/temp/Data/main.db'
+    )
+    expect(fs.remove).toHaveBeenCalledWith('/tmp/cherry-studio/backup/temp/Data/main.db-wal')
+    expect(fs.remove).toHaveBeenCalledWith('/tmp/cherry-studio/backup/temp/Data/main.db-shm')
+  })
+
+  it('does not mix a snapshot from a different active data root into the copied root', async () => {
+    vi.mocked(fs.pathExists).mockImplementation(
+      async (candidate) => String(candidate) === '/mock/userData/Data/main.db'
+    )
+    mockStorageV2DataRootService.resolveDataRoot.mockReturnValue({ dataRoot: '/mock/other/Data' })
+
+    const snapshotPath = await (backupManager as any).createStorageV2SnapshotIfAvailable('/mock/userData/Data')
+
+    expect(snapshotPath).toBeNull()
+    expect(mockStorageV2Database.createSnapshot).not.toHaveBeenCalled()
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping Storage v2 snapshot'),
+      expect.objectContaining({
+        sourceDataPath: '/mock/userData/Data',
+        activeDataRoot: '/mock/other/Data'
+      })
+    )
+  })
+})
+
+describe('BackupManager.restore temp isolation', () => {
+  let backupManager: BackupManager
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    backupManager = new BackupManager()
+    vi.mocked(fs.ensureDir).mockResolvedValue(undefined as never)
+    vi.mocked(fs.remove).mockResolvedValue(undefined as never)
+    vi.mocked(fs.pathExists).mockResolvedValue(false as never)
+    vi.mocked(fs.readFile).mockResolvedValue('{"version":5}' as never)
+    mockStreamZipAsync.mockImplementation(() => mockStreamZipInstance)
+    mockStreamZipInstance.extract.mockResolvedValue(undefined)
+  })
+
+  it('cleans the restore temp directory before extracting a backup', async () => {
+    await expect(backupManager.restore({} as Electron.IpcMainInvokeEvent, '/backup.zip')).resolves.toBe('{"version":5}')
+
+    const tempDir = '/tmp/cherry-studio/backup/temp'
+    expect(fs.remove).toHaveBeenCalledWith(tempDir)
+    expect(fs.ensureDir).toHaveBeenCalledWith(tempDir)
+    expect(vi.mocked(fs.remove).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(fs.ensureDir).mock.invocationCallOrder[0]
+    )
+    expect(mockStreamZipInstance.extract).toHaveBeenCalledWith(null, tempDir)
+  })
+})
+
+describe('BackupManager.resetData', () => {
+  let backupManager: BackupManager
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    backupManager = new BackupManager()
+    vi.mocked(fs.ensureDir).mockResolvedValue(undefined as never)
+    vi.mocked(fs.remove).mockResolvedValue(undefined as never)
+  })
+
+  it('stages a fresh Storage v2 manifest so reset cannot reselect an old active root', async () => {
+    await backupManager.resetData()
+
+    expect(fs.remove).toHaveBeenCalledWith('/mock/data.restore')
+    expect(fs.ensureDir).toHaveBeenCalledWith('/mock/data.restore')
+    expect(mockStorageV2DataRootService.createFreshDataRootManifest).toHaveBeenCalledWith('/mock/data.restore')
+  })
+})
+
 describe('BackupManager.deleteLanTransferBackup - Security Tests', () => {
   let backupManager: BackupManager
 
   beforeEach(() => {
     vi.clearAllMocks()
     backupManager = new BackupManager()
+    mockStorageV2DataRootService.resolveDataRoot.mockReturnValue({ dataRoot: '/mock/userData/Data' })
   })
 
   describe('Normal Operations', () => {

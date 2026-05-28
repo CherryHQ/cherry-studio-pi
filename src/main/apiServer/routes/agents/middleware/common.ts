@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express'
 
-import { agentService } from '../../../../services/agents'
+import { getAgentWithStorageV2Recovery } from '../../../../services/agents/AgentStorageV2ReadThrough'
 import { loggerService } from '../../../../services/LoggerService'
 
 const logger = loggerService.withContext('ApiServerMiddleware')
@@ -14,9 +14,9 @@ export const handleValidationErrors = (_req: Request, _res: Response, next: any)
 export const checkAgentExists = async (req: Request, res: Response, next: any): Promise<void> => {
   try {
     const { agentId } = req.params
-    const exists = await agentService.agentExists(agentId)
+    const agent = await getAgentWithStorageV2Recovery(agentId)
 
-    if (!exists) {
+    if (!agent) {
       res.status(404).json({
         error: {
           message: 'Agent not found',

@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { nanoid } from '@reduxjs/toolkit'
+import { scheduleStorageV2LocalStorageMirror } from '@renderer/services/StorageV2LocalStorageSnapshot'
 import type { MCPServer } from '@renderer/types'
 import i18next from 'i18next'
 
@@ -11,6 +12,7 @@ export const AI302_HOST = 'https://api.302.ai/mcp'
 
 export const saveAI302Token = (token: string): void => {
   localStorage.setItem(TOKEN_STORAGE_KEY, token)
+  scheduleStorageV2LocalStorageMirror()
 }
 
 export const getAI302Token = (): string | null => {
@@ -19,6 +21,7 @@ export const getAI302Token = (): string | null => {
 
 export const clearAI302Token = (): void => {
   localStorage.removeItem(TOKEN_STORAGE_KEY)
+  scheduleStorageV2LocalStorageMirror()
 }
 
 export const hasAI302Token = (): boolean => {

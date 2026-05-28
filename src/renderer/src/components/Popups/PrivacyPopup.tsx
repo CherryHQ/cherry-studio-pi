@@ -1,5 +1,6 @@
 import { TopView } from '@renderer/components/TopView'
 import { useTheme } from '@renderer/context/ThemeProvider'
+import { scheduleStorageV2LocalStorageMirror } from '@renderer/services/StorageV2LocalStorageSnapshot'
 import { ThemeMode } from '@renderer/types'
 import { runAsyncFunction } from '@renderer/utils'
 import { Button, Modal } from 'antd'
@@ -44,6 +45,7 @@ const PopupContainer: React.FC<Props> = ({ title, showDeclineButton = true, reso
   const handleAccept = () => {
     setOpen(false)
     localStorage.setItem('privacy-popup-accepted', 'true')
+    scheduleStorageV2LocalStorageMirror()
     resolve({ accepted: true })
   }
 

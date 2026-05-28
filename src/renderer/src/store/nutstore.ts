@@ -49,6 +49,12 @@ const nutstoreSlice = createSlice({
   name: 'nutstore',
   initialState,
   reducers: {
+    hydrateNutstoreState: (_state, action: PayloadAction<Partial<NutstoreState>>) => {
+      return {
+        ...initialState,
+        ...action.payload
+      }
+    },
     setNutstoreToken: (state, action: PayloadAction<string>) => {
       state.nutstoreToken = action.payload
     },
@@ -74,6 +80,7 @@ const nutstoreSlice = createSlice({
 })
 
 export const {
+  hydrateNutstoreState,
   setNutstoreToken,
   setNutstorePath,
   setNutstoreAutoSync,

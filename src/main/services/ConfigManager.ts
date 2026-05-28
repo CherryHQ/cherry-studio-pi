@@ -14,6 +14,7 @@
  * - v2 Refactor PR   : https://github.com/CherryHQ/cherry-studio/pull/10162
  * --------------------------------------------------------------------------
  */
+import { loggerService } from '@logger'
 import type { UpgradeChannel } from '@shared/config/constant'
 import { defaultLanguage, ZOOM_SHORTCUTS } from '@shared/config/constant'
 import type { LanguageVarious, Shortcut } from '@types'
@@ -23,6 +24,11 @@ import Store from 'electron-store'
 import { v7 as uuid } from 'uuid'
 
 import { locales } from '../utils/locales'
+import { storageV2SettingsRepository } from './storageV2/StorageV2Repositories'
+
+const logger = loggerService.withContext('ConfigManager')
+const STORAGE_V2_CONFIG_SCOPE = 'config'
+const STORAGE_V2_CONFIG_PREFIX = 'config.'
 
 export enum ConfigKeys {
   Language = 'language',
@@ -283,13 +289,65 @@ export class ConfigManager {
     return clientId
   }
 
+  async hydrateFromStorageV2(
+    options: { overwrite?: boolean; pruneMissing?: boolean } = {}
+  ): Promise<{ restoredCount: number; prunedCount: number }> {
+    const records = await storageV2SettingsRepository.list(STORAGE_V2_CONFIG_SCOPE)
+    const restoredKeys = new Set<string>()
+    let restoredCount = 0
+    let prunedCount = 0
+
+    for (const record of records) {
+      if (!record.key.startsWith(STORAGE_V2_CONFIG_PREFIX)) continue
+
+      const key = record.key.slice(STORAGE_V2_CONFIG_PREFIX.length)
+      if (!key) continue
+      restoredKeys.add(key)
+      if (!options.overwrite && this.store.has(key)) continue
+
+      this.store.set(key, record.value)
+      restoredCount++
+    }
+
+    if (options.pruneMissing && restoredKeys.size > 0) {
+      for (const key of Object.keys(this.store.store)) {
+        if (restoredKeys.has(key)) continue
+
+        this.store.delete(key)
+        prunedCount++
+      }
+    }
+
+    return { restoredCount, prunedCount }
+  }
+
+  async mirrorAllToStorageV2(): Promise<{ mirroredCount: number }> {
+    const entries = Object.entries(this.store.store)
+
+    await Promise.all(entries.map(([key, value]) => this.setStorageV2Config(key, value)))
+
+    return {
+      mirroredCount: entries.length
+    }
+  }
+
   set(key: string, value: unknown, isNotify: boolean = false) {
     this.store.set(key, value)
+    void this.setStorageV2Config(key, value).catch((error) => {
+      logger.warn('Failed to mirror config setting to Storage v2', {
+        key,
+        error: error instanceof Error ? error.message : String(error)
+      })
+    })
     isNotify && this.notifySubscribers(key, value)
   }
 
   get<T>(key: string, defaultValue?: T) {
     return this.store.get(key, defaultValue) as T
+  }
+
+  private async setStorageV2Config(key: string, value: unknown) {
+    await storageV2SettingsRepository.set(`${STORAGE_V2_CONFIG_PREFIX}${key}`, value, STORAGE_V2_CONFIG_SCOPE)
   }
 }
 

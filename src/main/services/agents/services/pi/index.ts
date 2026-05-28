@@ -13,7 +13,6 @@ import type {
 import { streamSimple } from '@earendil-works/pi-ai'
 import { loggerService } from '@logger'
 import { validateModelId } from '@main/apiServer/utils'
-import { agentMessageRepository } from '@main/services/agents/database/sessionMessageRepository'
 import { getProxyEnvironment } from '@main/services/proxy/nodeProxy'
 import {
   buildCherryStudioPiAgentInstructions,
@@ -24,6 +23,7 @@ import {
 import { formatApiHost, hasAPIVersion, withoutTrailingApiVersion, withoutTrailingSlash } from '@shared/utils'
 import type { AgentPersistedMessage, MessageBlock, Model, Provider } from '@types'
 
+import { getAgentSessionHistoryWithStorageV2Recovery } from '../../AgentStorageV2ReadThrough'
 import type {
   AgentServiceInterface,
   AgentStream,
@@ -304,7 +304,7 @@ Use the least expensive tool first:
 
   private async loadHistory(sessionId: string): Promise<AgentMessage[]> {
     try {
-      const persisted = await agentMessageRepository.getSessionHistory(sessionId)
+      const persisted = await getAgentSessionHistoryWithStorageV2Recovery(sessionId)
       return persisted
         .slice(-MAX_HYDRATED_HISTORY_MESSAGES)
         .map((message) => this.toPiHistoryMessage(message))

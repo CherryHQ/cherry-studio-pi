@@ -14,6 +14,23 @@ const logger = loggerService.withContext('StorageV2DataRootService')
 
 const STORAGE_FORMAT = 'cherry-studio-pi-storage'
 const STORAGE_VERSION = 2
+const STORAGE_APP_ID = 'cherry-studio-pi'
+const STORAGE_PRODUCT_NAME = 'Cherry Studio Pi'
+
+type DataRootConfigEntry = {
+  app?: string
+  profileId?: string
+  path?: string
+  active?: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+type CherryConfig = {
+  appDataPath?: unknown
+  dataRoots?: DataRootConfigEntry[]
+  [key: string]: unknown
+}
 
 function readJson<T>(filePath: string): T | null {
   try {
@@ -35,7 +52,8 @@ function hasLegacyData(dataRoot: string): boolean {
 }
 
 function hasManifest(dataRoot: string): boolean {
-  return fs.existsSync(path.join(dataRoot, 'manifest.json'))
+  const manifest = readJson<StorageV2Manifest>(path.join(dataRoot, 'manifest.json'))
+  return manifest?.format === STORAGE_FORMAT && manifest.version === STORAGE_VERSION
 }
 
 function makeCandidate(
@@ -60,15 +78,16 @@ function getConfigPath() {
 }
 
 function getConfiguredDataRoots(): string[] {
-  const config = readJson<{
-    dataRoots?: Array<{ path?: string; active?: boolean }>
-  }>(getConfigPath())
+  const config = readJson<CherryConfig>(getConfigPath())
 
   if (!Array.isArray(config?.dataRoots)) {
     return []
   }
 
-  const activeRoots = config.dataRoots.filter((entry) => entry.active !== false).map((entry) => entry.path)
+  const activeRoots = config.dataRoots
+    .filter((entry) => entry.active !== false)
+    .filter((entry) => !entry.app || entry.app === STORAGE_APP_ID)
+    .map((entry) => entry.path)
   return activeRoots.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
 }
 
@@ -88,6 +107,13 @@ function readManifest(dataRoot: string): StorageV2Manifest | null {
     return null
   }
   return manifest
+}
+
+function writeJsonAtomic(filePath: string, value: unknown) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true })
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
+  fs.writeFileSync(tempPath, JSON.stringify(value, null, 2))
+  fs.renameSync(tempPath, filePath)
 }
 
 export class StorageV2DataRootService {
@@ -111,9 +137,11 @@ export class StorageV2DataRootService {
 
     const candidates = Array.from(candidatesByPath.values())
     const selected =
-      candidates.find((candidate) => candidate.hasManifest) ??
       candidates.find((candidate) => candidate.source === 'env') ??
+      candidates.find((candidate) => candidate.hasManifest) ??
       candidates.find((candidate) => candidate.source === 'config' && candidate.exists) ??
+      candidates.find((candidate) => candidate.source === 'current-user-data' && candidate.hasLegacyData) ??
+      candidates.find((candidate) => candidate.source === 'legacy-user-data' && candidate.hasLegacyData) ??
       candidates.find((candidate) => candidate.source === 'current-user-data')!
 
     return {
@@ -131,10 +159,32 @@ export class StorageV2DataRootService {
     const manifest = info.manifest
       ? this.touchManifest(info.dataRoot, info.manifest)
       : this.createManifest(info.dataRoot)
+    this.registerActiveDataRoot(info.dataRoot, manifest, info.source)
     return {
       ...info,
       manifest
     }
+  }
+
+  activateDataRoot(dataRoot: string): StorageV2Manifest | null {
+    const resolvedDataRoot = path.resolve(dataRoot)
+    if (!fs.existsSync(resolvedDataRoot)) {
+      return null
+    }
+
+    const manifest = readManifest(resolvedDataRoot)
+    if (!manifest) {
+      return null
+    }
+
+    const nextManifest = this.touchManifest(resolvedDataRoot, manifest)
+    this.registerActiveDataRoot(resolvedDataRoot, nextManifest, 'current-user-data')
+    return nextManifest
+  }
+
+  createFreshDataRootManifest(dataRoot: string): StorageV2Manifest {
+    fs.mkdirSync(dataRoot, { recursive: true })
+    return this.createManifest(path.resolve(dataRoot))
   }
 
   private createManifest(dataRoot: string): StorageV2Manifest {
@@ -148,12 +198,12 @@ export class StorageV2DataRootService {
       updatedAt: now,
       lastOpenedBy: {
         appId: 'com.cherryai.cherrystudio-pi',
-        productName: app.name || 'Cherry Studio Pi',
+        productName: app.name || STORAGE_PRODUCT_NAME,
         version: app.getVersion()
       }
     }
 
-    fs.writeFileSync(path.join(dataRoot, 'manifest.json'), JSON.stringify(manifest, null, 2))
+    writeJsonAtomic(path.join(dataRoot, 'manifest.json'), manifest)
     return manifest
   }
 
@@ -163,13 +213,13 @@ export class StorageV2DataRootService {
       updatedAt: new Date().toISOString(),
       lastOpenedBy: {
         appId: 'com.cherryai.cherrystudio-pi',
-        productName: app.name || 'Cherry Studio Pi',
+        productName: app.name || STORAGE_PRODUCT_NAME,
         version: app.getVersion()
       }
     }
 
     try {
-      fs.writeFileSync(path.join(dataRoot, 'manifest.json'), JSON.stringify(nextManifest, null, 2))
+      writeJsonAtomic(path.join(dataRoot, 'manifest.json'), nextManifest)
       return nextManifest
     } catch (error) {
       logger.warn('Failed to update Storage v2 manifest', {
@@ -177,6 +227,63 @@ export class StorageV2DataRootService {
         error: error instanceof Error ? error.message : String(error)
       })
       return manifest
+    }
+  }
+
+  private registerActiveDataRoot(dataRoot: string, manifest: StorageV2Manifest, source: StorageV2Candidate['source']) {
+    if (source === 'env') return
+
+    const configPath = getConfigPath()
+    const config = readJson<CherryConfig>(configPath) ?? {}
+    const dataRoots = Array.isArray(config.dataRoots) ? [...config.dataRoots] : []
+    const resolvedPath = path.resolve(dataRoot)
+    const now = new Date().toISOString()
+    const existingIndex = dataRoots.findIndex((entry) => {
+      if (typeof entry.path !== 'string') return false
+      return path.resolve(entry.path) === resolvedPath
+    })
+
+    const nextEntry: DataRootConfigEntry = {
+      ...(existingIndex >= 0 ? dataRoots[existingIndex] : {}),
+      app: STORAGE_APP_ID,
+      profileId: manifest.profileId,
+      path: resolvedPath,
+      active: true,
+      createdAt: existingIndex >= 0 ? dataRoots[existingIndex].createdAt : manifest.createdAt,
+      updatedAt: now
+    }
+
+    const nextRoots = dataRoots.map((entry, index) => {
+      if (index === existingIndex) {
+        return nextEntry
+      }
+
+      if (entry.app === STORAGE_APP_ID && (entry.profileId ?? 'default') === manifest.profileId) {
+        return {
+          ...entry,
+          active: false,
+          updatedAt: now
+        }
+      }
+
+      return entry
+    })
+
+    if (existingIndex < 0) {
+      nextRoots.push(nextEntry)
+    }
+
+    try {
+      writeJsonAtomic(configPath, {
+        ...config,
+        dataRoots: nextRoots
+      })
+    } catch (error) {
+      logger.warn('Failed to persist Storage v2 data root config', {
+        configPath,
+        dataRoot: resolvedPath,
+        error: error instanceof Error ? error.message : String(error)
+      })
     }
   }
 }

@@ -6,11 +6,22 @@ import type { Message, MessageBlock } from '@renderer/types/newMessage'
 import { storageV2AgentMirrorService } from './StorageV2AgentMirrorService'
 import { storageV2ConversationMirrorService } from './StorageV2ConversationMirrorService'
 import { storageV2FileMirrorService } from './StorageV2FileMirrorService'
+import { flushStorageV2LocalStorageMirror, getStorageV2LocalStorageSnapshot } from './StorageV2LocalStorageSnapshot'
 import { storageV2MirrorService } from './StorageV2MirrorService'
 
 export type StorageV2LegacyImportOptions = {
   dryRun?: boolean
   pruneMissing?: boolean
+}
+
+export type StorageV2LegacyAgentDbImportOptions = StorageV2LegacyImportOptions & {
+  dbPath?: string
+  createSnapshot?: boolean
+}
+
+export type StorageV2LegacyAppDbImportOptions = StorageV2LegacyImportOptions & {
+  dbPath?: string
+  createSnapshot?: boolean
 }
 
 type StorageV2LegacyDexieConversationSnapshot = {
@@ -65,6 +76,9 @@ export type StorageV2BackupValidation = {
   integrityCheck: string | null
   missingBlobFileCount: number
   corruptBlobFileCount: number
+  secretVaultSecretCount: number
+  missingSecretRefCount: number
+  invalidSecretRefCount: number
   issues: Array<{
     id: string
     message: string
@@ -132,6 +146,7 @@ export type StorageV2RestoreBackupResult = {
   }
   validation: StorageV2BackupValidation
   requiresRestart: true
+  warnings: string[]
 }
 
 export function getStorageV2DataRoot() {
@@ -175,7 +190,8 @@ export function recordStorageV2MigrationRun(input: {
   return window.api.storageV2.recordMigrationRun(input)
 }
 
-export function createStorageV2Snapshot(reason?: string) {
+export async function createStorageV2Snapshot(reason?: string) {
+  await flushStorageV2RuntimeMirrors()
   return window.api.storageV2.createSnapshot(reason)
 }
 
@@ -191,13 +207,26 @@ export function getLegacyReduxSnapshotForStorageV2() {
       presets: state.assistants.presets.map(stripAssistantRuntimeData)
     },
     redux: {
+      backup: state.backup,
+      codeTools: state.codeTools,
+      copilot: state.copilot,
+      inputTools: state.inputTools,
       knowledge: state.knowledge,
       memory: state.memory,
+      minApps: state.minapps,
       mcp: state.mcp,
       note: state.note,
+      nutstore: state.nutstore,
+      ocr: state.ocr,
+      openclaw: state.openclaw,
+      paintings: state.paintings,
       preprocess: state.preprocess,
+      selectionStore: state.selectionStore,
+      shortcuts: state.shortcuts,
+      translate: state.translate,
       websearch: state.websearch
-    }
+    },
+    localStorage: getStorageV2LocalStorageSnapshot()
   }
 }
 
@@ -322,7 +351,7 @@ export function dryRunLegacyAgentDbImportToStorageV2() {
   return window.api.storageV2.importLegacyAgentDb({ dryRun: true })
 }
 
-export function importLegacyAgentDbToStorageV2(options: StorageV2LegacyImportOptions & { dbPath?: string } = {}) {
+export function importLegacyAgentDbToStorageV2(options: StorageV2LegacyAgentDbImportOptions = {}) {
   return window.api.storageV2.importLegacyAgentDb({
     ...options,
     dryRun: options.dryRun ?? false
@@ -333,7 +362,7 @@ export function dryRunLegacyAppDbImportToStorageV2() {
   return window.api.storageV2.importLegacyAppDb({ dryRun: true })
 }
 
-export function importLegacyAppDbToStorageV2(options: StorageV2LegacyImportOptions & { dbPath?: string } = {}) {
+export function importLegacyAppDbToStorageV2(options: StorageV2LegacyAppDbImportOptions = {}) {
   return window.api.storageV2.importLegacyAppDb({
     ...options,
     dryRun: options.dryRun ?? false
@@ -348,15 +377,51 @@ export function listStorageV2Messages(conversationId: string, options?: { limit?
   return window.api.storageV2.listMessages(conversationId, options)
 }
 
+export function syncStorageV2Conversation(conversation: Record<string, unknown>) {
+  return window.api.storageV2.syncConversation(conversation)
+}
+
+export function upsertStorageV2Conversation(
+  conversation: Record<string, unknown>,
+  options?: { pruneMissingMessages?: boolean; activeMessageIds?: string[] }
+) {
+  return window.api.storageV2.upsertConversation(conversation, options)
+}
+
+export function upsertStorageV2Message(conversationId: string, message: Record<string, unknown>) {
+  return window.api.storageV2.upsertMessage(conversationId, message)
+}
+
+export function upsertStorageV2MessageBlocks(
+  messageId: string,
+  blocks: Array<Record<string, unknown>>,
+  options?: { pruneMissing?: boolean }
+) {
+  return window.api.storageV2.upsertMessageBlocks(messageId, blocks, options)
+}
+
 export function deleteStorageV2Conversation(conversationId: string): Promise<{ deleted: boolean }> {
   return window.api.storageV2.deleteConversation(conversationId)
+}
+
+export function upsertStorageV2File(file: FileMetadata): Promise<{ imported: boolean; skippedReason?: string }> {
+  return window.api.storageV2.upsertFile(file)
 }
 
 export function deleteStorageV2File(fileId: string): Promise<{ deleted: boolean }> {
   return window.api.storageV2.deleteFile(fileId)
 }
 
-export function createStorageV2Backup(reason?: string) {
+async function flushStorageV2RuntimeMirrors() {
+  await storageV2MirrorService.flush()
+  await flushStorageV2LocalStorageMirror()
+  await storageV2ConversationMirrorService.flush()
+  await storageV2FileMirrorService.flush()
+  await storageV2AgentMirrorService.flush()
+}
+
+export async function createStorageV2Backup(reason?: string) {
+  await flushStorageV2RuntimeMirrors()
   return window.api.storageV2.createBackup(reason)
 }
 
@@ -365,12 +430,7 @@ export function validateStorageV2Backup(backupPath: string): Promise<StorageV2Ba
 }
 
 export async function restoreStorageV2Backup(backupPath: string): Promise<StorageV2RestoreBackupResult> {
-  await Promise.all([
-    storageV2MirrorService.flush(),
-    storageV2ConversationMirrorService.flush(),
-    storageV2FileMirrorService.flush(),
-    storageV2AgentMirrorService.flush()
-  ])
+  await flushStorageV2RuntimeMirrors()
 
   const result = await window.api.storageV2.restoreBackup(backupPath)
 
@@ -391,6 +451,10 @@ export async function runLegacyMigrationToStorageV2(
   let snapshotPath: string | undefined
 
   try {
+    if (!dryRun) {
+      await flushStorageV2RuntimeMirrors()
+    }
+
     const snapshot = createSnapshot ? await window.api.storageV2.createSnapshot('before-full-legacy-import') : undefined
     snapshotPath = snapshot?.path
 
@@ -403,8 +467,8 @@ export async function runLegacyMigrationToStorageV2(
         dryRun,
         pruneMissing: !dryRun
       }),
-      agentDb: await window.api.storageV2.importLegacyAgentDb({ dryRun }),
-      appDb: await window.api.storageV2.importLegacyAppDb({ dryRun })
+      agentDb: await window.api.storageV2.importLegacyAgentDb({ dryRun, createSnapshot: false }),
+      appDb: await window.api.storageV2.importLegacyAppDb({ dryRun, createSnapshot: false })
     }
 
     const health = await window.api.storageV2.healthCheck()

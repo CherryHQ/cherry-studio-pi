@@ -4617,10 +4617,13 @@
             "db_open_failed": "备份数据库无法打开：{{message}}",
             "format_unsupported": "备份格式不受支持",
             "integrity_check_failed": "备份 integrity_check 失败：{{integrityCheck}}",
+            "invalid_secret_refs": "备份中有 {{count}} 个无效的密钥引用",
             "metadata_invalid": "备份 metadata.json 缺失或无效",
             "missing_blob_files": "备份缺少 {{count}} 个被数据库引用的 Blob 文件",
+            "missing_secret_refs": "备份缺少 {{count}} 个数据库引用的密钥",
             "path_not_directory": "选择的路径不是目录",
             "quick_check_failed": "备份 quick_check 失败：{{quickCheck}}",
+            "secret_vault_invalid": "备份 secrets/vault.json 结构无效",
             "version_unsupported": "备份版本不受支持"
           },
           "no_backup_selected": "请先选择一个可用的 Storage v2 备份",
@@ -4629,11 +4632,12 @@
           "restart_title": "Storage v2 备份已恢复",
           "select_title": "选择 Storage v2 备份目录",
           "selected": "备份：{{path}}",
-          "summary": "quick_check={{quickCheck}}，integrity_check={{integrityCheck}}，missing_blob={{missingBlobFileCount}}，corrupt_blob={{corruptBlobFileCount}}",
+          "summary": "quick_check={{quickCheck}}，integrity_check={{integrityCheck}}，missing_blob={{missingBlobFileCount}}，corrupt_blob={{corruptBlobFileCount}}，secrets={{secretVaultSecretCount}}，missing_secret={{missingSecretRefCount}}，invalid_secret_ref={{invalidSecretRefCount}}",
           "valid": "备份可用",
           "warning": "提示：{{message}}",
           "warnings": {
-            "manifest_missing": "备份 manifest.json 缺失或无效；恢复后可能会创建新的 manifest"
+            "manifest_missing": "备份 manifest.json 缺失或无效；恢复后可能会创建新的 manifest",
+            "secret_vault_missing": "备份标记已复制 secrets，但 secrets/vault.json 缺失"
           }
         },
         "banner": "Storage v2 是并行的本地数据层，用于迁移、备份和未来同步恢复。",
@@ -4692,12 +4696,15 @@
             "agent_skills_without_skill": "存在 {{count}} 条没有 Skill 的 Agent 绑定",
             "corrupt_blob_files": "存在 {{count}} 个 Blob 文件校验失败",
             "files_without_blob": "存在 {{count}} 个没有 Blob 的文件记录",
+            "invalid_secret_refs": "存在 {{count}} 个无效的密钥引用",
             "knowledge_items_without_base": "存在 {{count}} 条没有知识库的知识项",
             "message_blocks_without_message": "存在 {{count}} 个没有消息的消息块",
             "messages_without_conversation": "存在 {{count}} 条没有对话的消息",
             "missing_blob_files": "存在 {{count}} 个 Blob 文件在磁盘上缺失",
+            "missing_secret_refs": "存在 {{count}} 个找不到 vault 密钥的引用",
             "models_without_provider": "存在 {{count}} 个没有服务商的模型",
             "provider_credentials_without_provider": "存在 {{count}} 条没有服务商的密钥引用",
+            "secret_vault_invalid": "secrets/vault.json 结构无效",
             "task_logs_without_task": "存在 {{count}} 条没有任务的运行日志",
             "tasks_without_agent": "存在 {{count}} 个没有 Agent 的定时任务",
             "unknown": "{{label}}：{{count}}"

@@ -6,6 +6,12 @@ vi.mock('@logger', () => ({
   }
 }))
 
+vi.mock('@main/services/WindowService', () => ({
+  windowService: {
+    getMainWindow: vi.fn().mockReturnValue(null)
+  }
+}))
+
 vi.mock('../AgentService', () => ({
   agentService: {
     listAgents: vi.fn().mockResolvedValue({ agents: [], total: 0 }),

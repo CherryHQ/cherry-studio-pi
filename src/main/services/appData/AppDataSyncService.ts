@@ -2,10 +2,12 @@ import https from 'node:https'
 import path from 'node:path'
 
 import { loggerService } from '@logger'
+import { storageV2AppDataKvMirrorService } from '@main/services/storageV2/AppDataKvMirrorService'
+import { storageV2AppDataRuntimeRecoveryService } from '@main/services/storageV2/AppDataRuntimeRecoveryService'
 import type { WebDavConfig } from '@types'
 import { createClient, type WebDAVClient } from 'webdav'
 
-import { type AppDataRecord, getAppDataDatabase } from './AppDataDatabase'
+import { type AppDataDatabase, type AppDataRecord, getAppDataDatabase } from './AppDataDatabase'
 
 const logger = loggerService.withContext('AppDataSyncService')
 
@@ -154,19 +156,57 @@ export class AppDataSyncService {
     }
   }
 
+  private async applyRemoteRecord(db: AppDataDatabase, record: AppDataRecord) {
+    await storageV2AppDataKvMirrorService.upsertRecordSnapshot(record)
+    await db.applyRemoteRecord(record)
+  }
+
+  private async setSyncState(db: AppDataDatabase, id: string, value: unknown) {
+    await storageV2AppDataKvMirrorService.upsertSyncState(id, value)
+    await db.setSyncState(id, value)
+  }
+
+  private async getSyncState<T = unknown>(db: AppDataDatabase, id: string): Promise<T | null> {
+    const legacyValue = await db.getSyncState<T>(id)
+    return legacyValue ?? storageV2AppDataKvMirrorService.getSyncState<T>(id)
+  }
+
+  private async createConflict(
+    db: AppDataDatabase,
+    input: {
+      scope: string
+      key: string
+      localRecord?: AppDataRecord
+      remoteRecord: AppDataRecord
+      baseHash?: string | null
+    }
+  ) {
+    const id = `${input.scope}:${input.key}:${Date.now()}`
+    await storageV2AppDataKvMirrorService.upsertSyncConflict(id, input)
+    await db.createConflict({ ...input, id })
+    return id
+  }
+
   async syncNow(config: WebDavConfig): Promise<DataSyncSummary> {
     if (!config.webdavHost) {
       throw new Error('WebDAV host is required')
     }
 
-    const db = await getAppDataDatabase()
+    let db = await getAppDataDatabase()
     const { client, basePath } = this.createWebDavClient(config)
     const manifestPath = path.posix.join(basePath, 'manifest.json')
     const summary: DataSyncSummary = { ...EMPTY_SUMMARY, lastSyncAt: Date.now() }
 
     await this.ensureDirectory(client, basePath)
 
-    const localRecords = await db.listRecords(undefined, true)
+    let localRecords = await db.listRecords(undefined, true)
+    if (
+      localRecords.length === 0 &&
+      (await storageV2AppDataRuntimeRecoveryService.projectIfLegacyAppRecordListEmpty(undefined, 'app-data-sync-empty'))
+    ) {
+      db = await getAppDataDatabase()
+      localRecords = await db.listRecords(undefined, true)
+    }
     const localById = new Map(localRecords.map((record) => [recordId(record.scope, record.key), record]))
     const manifest = (await this.readJson<RemoteManifest>(client, manifestPath)) || makeManifest()
     const allIds = new Set([...localById.keys(), ...Object.keys(manifest.records)])
@@ -174,11 +214,11 @@ export class AppDataSyncService {
     for (const id of allIds) {
       const localRecord = localById.get(id)
       const remoteMeta = manifest.records[id]
-      const lastHash = await db.getSyncState<string>(`record:${id}:hash`)
+      const lastHash = await this.getSyncState<string>(db, `record:${id}:hash`)
 
       if (localRecord && !remoteMeta) {
         await this.pushRecord(client, basePath, localRecord, manifest)
-        await db.setSyncState(`record:${id}:hash`, localRecord.valueHash)
+        await this.setSyncState(db, `record:${id}:hash`, localRecord.valueHash)
         summary.uploaded += localRecord.deletedAt ? 0 : 1
         summary.deleted += localRecord.deletedAt ? 1 : 0
         continue
@@ -187,8 +227,8 @@ export class AppDataSyncService {
       if (!localRecord && remoteMeta) {
         const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
         if (remoteRecord) {
-          await db.applyRemoteRecord(remoteRecord)
-          await db.setSyncState(`record:${id}:hash`, remoteRecord.valueHash)
+          await this.applyRemoteRecord(db, remoteRecord)
+          await this.setSyncState(db, `record:${id}:hash`, remoteRecord.valueHash)
           summary.downloaded += remoteRecord.deletedAt ? 0 : 1
           summary.deleted += remoteRecord.deletedAt ? 1 : 0
         }
@@ -201,7 +241,7 @@ export class AppDataSyncService {
       }
 
       if (localRecord.valueHash === remoteMeta.valueHash) {
-        await db.setSyncState(`record:${id}:hash`, localRecord.valueHash)
+        await this.setSyncState(db, `record:${id}:hash`, localRecord.valueHash)
         summary.skipped += 1
         continue
       }
@@ -211,7 +251,7 @@ export class AppDataSyncService {
 
       if (localChanged && !remoteChanged) {
         await this.pushRecord(client, basePath, localRecord, manifest)
-        await db.setSyncState(`record:${id}:hash`, localRecord.valueHash)
+        await this.setSyncState(db, `record:${id}:hash`, localRecord.valueHash)
         summary.uploaded += localRecord.deletedAt ? 0 : 1
         summary.deleted += localRecord.deletedAt ? 1 : 0
         continue
@@ -224,14 +264,14 @@ export class AppDataSyncService {
       }
 
       if (!localChanged && remoteChanged) {
-        await db.applyRemoteRecord(remoteRecord)
-        await db.setSyncState(`record:${id}:hash`, remoteRecord.valueHash)
+        await this.applyRemoteRecord(db, remoteRecord)
+        await this.setSyncState(db, `record:${id}:hash`, remoteRecord.valueHash)
         summary.downloaded += remoteRecord.deletedAt ? 0 : 1
         summary.deleted += remoteRecord.deletedAt ? 1 : 0
         continue
       }
 
-      await db.createConflict({
+      await this.createConflict(db, {
         scope: localRecord.scope,
         key: localRecord.key,
         localRecord,
@@ -244,26 +284,33 @@ export class AppDataSyncService {
         await this.pushRecord(client, basePath, localRecord, manifest)
         summary.uploaded += localRecord.deletedAt ? 0 : 1
       } else {
-        await db.applyRemoteRecord(remoteRecord)
+        await this.applyRemoteRecord(db, remoteRecord)
         summary.downloaded += remoteRecord.deletedAt ? 0 : 1
       }
-      await db.setSyncState(`record:${id}:hash`, winner.valueHash)
+      await this.setSyncState(db, `record:${id}:hash`, winner.valueHash)
       summary.conflicts += 1
     }
 
     manifest.updatedAt = summary.lastSyncAt
     await this.writeJson(client, manifestPath, manifest)
-    await db.setSyncState('last-sync-summary', summary)
+    await this.setSyncState(db, 'last-sync-summary', summary)
 
     return summary
   }
 
   async getStatus() {
     const db = await getAppDataDatabase()
+    const storageDeviceId = await storageV2AppDataKvMirrorService.getSyncState<string>('device-id')
+    const lastSummary =
+      (await db.getSyncState<DataSyncSummary>('last-sync-summary')) ??
+      (await storageV2AppDataKvMirrorService.getSyncState<DataSyncSummary>('last-sync-summary')) ??
+      EMPTY_SUMMARY
+    const conflicts = await db.listConflicts(true)
+
     return {
-      deviceId: db.getDeviceId(),
-      lastSummary: (await db.getSyncState<DataSyncSummary>('last-sync-summary')) || EMPTY_SUMMARY,
-      conflicts: await db.listConflicts(true)
+      deviceId: storageDeviceId ?? db.getDeviceId(),
+      lastSummary,
+      conflicts: conflicts.length > 0 ? conflicts : await storageV2AppDataKvMirrorService.listSyncConflicts(true)
     }
   }
 }

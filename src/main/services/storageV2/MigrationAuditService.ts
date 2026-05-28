@@ -103,11 +103,34 @@ export class StorageV2MigrationAuditService {
     ])
 
     const warnings: string[] = []
-    if (
-      dataRootInfo.candidates.some((candidate) => candidate.source === 'legacy-user-data' && candidate.hasLegacyData)
-    ) {
+    const manifestCandidates = dataRootInfo.candidates.filter((candidate) => candidate.hasManifest)
+    const legacyDataCandidates = dataRootInfo.candidates.filter(
+      (candidate) =>
+        candidate.source === 'legacy-user-data' &&
+        candidate.hasLegacyData &&
+        path.resolve(candidate.path) !== path.resolve(dataRootInfo.dataRoot)
+    )
+    const missingConfiguredCandidates = dataRootInfo.candidates.filter(
+      (candidate) => candidate.source === 'config' && !candidate.exists
+    )
+
+    if (manifestCandidates.length > 1) {
       warnings.push(
-        'Legacy data roots were detected. A future migration UI should ask the user before switching roots.'
+        `Multiple Storage v2 data roots were detected. The active root is ${dataRootInfo.dataRoot}; review the candidate list before migrating or restoring data.`
+      )
+    }
+    if (legacyDataCandidates.length > 0) {
+      warnings.push(
+        `Legacy data roots were detected outside the active root (${legacyDataCandidates
+          .map((candidate) => candidate.path)
+          .join(', ')}). Review them before switching roots or creating a fresh profile.`
+      )
+    }
+    if (missingConfiguredCandidates.length > 0) {
+      warnings.push(
+        `Configured Storage v2 data root(s) are missing on disk: ${missingConfiguredCandidates
+          .map((candidate) => candidate.path)
+          .join(', ')}.`
       )
     }
     if (!items.find((item) => item.id === 'indexeddb')?.exists) {
