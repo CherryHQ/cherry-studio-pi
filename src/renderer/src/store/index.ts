@@ -161,7 +161,7 @@ export const persistor = persistStore(store, undefined, () => {
 
   const notifyReduxReady = () => {
     storageV2MirrorService.resumeRuntimeMirroring()
-    storageV2MirrorService.schedule(() => store.getState())
+    storageV2MirrorService.scheduleStartupMirror(() => store.getState())
     void window.electron?.ipcRenderer?.invoke(IpcChannel.ReduxStoreReady)
     logger.info('Redux store ready, notified main process')
   }

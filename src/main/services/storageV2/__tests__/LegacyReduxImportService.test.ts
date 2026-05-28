@@ -122,4 +122,55 @@ describe('StorageV2LegacyReduxImportService', () => {
     expect(mocks.providerRepository.deleteMissing).not.toHaveBeenCalled()
     expect(mocks.assistantRepository.deleteMissing).not.toHaveBeenCalled()
   })
+
+  it('honors pruneMissing false for full runtime snapshots', async () => {
+    await new StorageV2LegacyReduxImportService().importSnapshot(
+      {
+        llm: {
+          providers: [
+            {
+              id: 'openai',
+              name: 'OpenAI',
+              type: 'openai',
+              models: []
+            } as any
+          ]
+        },
+        assistants: {
+          assistants: [
+            {
+              id: 'assistant-1',
+              name: 'Assistant',
+              prompt: '',
+              topics: []
+            } as any
+          ]
+        },
+        redux: {
+          knowledge: {
+            bases: [
+              {
+                id: 'kb-1',
+                name: 'Knowledge',
+                items: []
+              }
+            ]
+          }
+        }
+      },
+      { dryRun: false, pruneMissing: false }
+    )
+
+    expect(mocks.providerRepository.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'openai' }),
+      0,
+      undefined
+    )
+    expect(mocks.assistantRepository.upsert).toHaveBeenCalledWith(expect.objectContaining({ id: 'assistant-1' }), 0)
+    expect(mocks.knowledgeRepository.importBases).toHaveBeenCalledWith([expect.objectContaining({ id: 'kb-1' })], {
+      pruneMissing: false
+    })
+    expect(mocks.providerRepository.deleteMissing).not.toHaveBeenCalled()
+    expect(mocks.assistantRepository.deleteMissing).not.toHaveBeenCalled()
+  })
 })

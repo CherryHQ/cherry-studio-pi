@@ -14,6 +14,10 @@ type ReduxAction = {
 
 type StateGetter = () => Record<string, any>
 
+type MirrorScheduleOptions = {
+  pruneMissing?: boolean
+}
+
 const MIRRORED_ACTION_PREFIXES = [
   'backup/',
   'codeTools/',
@@ -141,6 +145,7 @@ class StorageV2MirrorService {
   private needsFollowUp = false
   private suspended = false
   private paused = false
+  private pendingPruneMissing: boolean | null = null
 
   createMiddleware(): Middleware {
     return (storeApi) => (next) => (action) => {
@@ -149,7 +154,9 @@ class StorageV2MirrorService {
 
       if (!this.suspended && shouldMirrorAction(reduxAction)) {
         const mirrorImmediately = shouldMirrorActionImmediately(reduxAction)
-        this.schedule(() => storeApi.getState() as Record<string, any>, mirrorImmediately ? 0 : DEFAULT_DEBOUNCE_MS)
+        this.schedule(() => storeApi.getState() as Record<string, any>, mirrorImmediately ? 0 : DEFAULT_DEBOUNCE_MS, {
+          pruneMissing: true
+        })
         if (mirrorImmediately) {
           void this.flush()
         }
@@ -159,10 +166,13 @@ class StorageV2MirrorService {
     }
   }
 
-  schedule(getState: StateGetter, debounceMs = DEFAULT_DEBOUNCE_MS) {
+  schedule(getState: StateGetter, debounceMs = DEFAULT_DEBOUNCE_MS, options: MirrorScheduleOptions = {}) {
     if (this.suspended) return
     this.latestGetState = getState
     if (this.paused) return
+    const pruneMissing = options.pruneMissing !== false
+    this.pendingPruneMissing =
+      this.pendingPruneMissing === null ? pruneMissing : this.pendingPruneMissing || pruneMissing
 
     if (this.timer) {
       clearTimeout(this.timer)
@@ -172,6 +182,10 @@ class StorageV2MirrorService {
       this.timer = null
       void this.flush()
     }, debounceMs)
+  }
+
+  scheduleStartupMirror(getState: StateGetter) {
+    this.schedule(getState, DEFAULT_DEBOUNCE_MS, { pruneMissing: false })
   }
 
   async flush() {
@@ -207,9 +221,11 @@ class StorageV2MirrorService {
     const snapshot = getMirrorSnapshot(this.latestGetState())
     const snapshotJson = JSON.stringify(snapshot)
     if (snapshotJson === this.lastSnapshotJson) return
+    const pruneMissing = this.pendingPruneMissing !== false
 
     try {
-      await window.api.storageV2.importLegacyReduxSnapshot(snapshot, { dryRun: false })
+      await window.api.storageV2.importLegacyReduxSnapshot(snapshot, { dryRun: false, pruneMissing })
+      this.pendingPruneMissing = null
       this.lastSnapshotJson = snapshotJson
       logger.debug('Mirrored Redux settings to Storage v2')
     } catch (error) {
@@ -222,6 +238,7 @@ class StorageV2MirrorService {
     this.paused = false
     this.latestGetState = null
     this.needsFollowUp = false
+    this.pendingPruneMissing = null
 
     if (this.timer) {
       clearTimeout(this.timer)

@@ -79,10 +79,21 @@ describe('StorageV2MirrorService', () => {
     expect(importLegacyReduxSnapshot).not.toHaveBeenCalled()
 
     storageV2MirrorService.resumeRuntimeMirroring()
-    storageV2MirrorService.schedule(createState, 0)
-    await vi.advanceTimersByTimeAsync(1)
+    storageV2MirrorService.scheduleStartupMirror(createState)
+    await vi.advanceTimersByTimeAsync(1500)
 
     expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), { dryRun: false, pruneMissing: false })
+  })
+
+  it('keeps the initial startup mirror non-pruning', async () => {
+    const { storageV2MirrorService } = await import('../StorageV2MirrorService')
+
+    storageV2MirrorService.scheduleStartupMirror(createState)
+    await vi.advanceTimersByTimeAsync(1500)
+
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), { dryRun: false, pruneMissing: false })
   })
 
   it('flushes high-value settings actions without waiting for debounce', async () => {
@@ -97,6 +108,7 @@ describe('StorageV2MirrorService', () => {
     await vi.waitFor(() => {
       expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
     })
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), { dryRun: false, pruneMissing: true })
   })
 
   it('flushes persisted redux configuration slices without waiting for debounce', async () => {

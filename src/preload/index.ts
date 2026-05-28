@@ -305,14 +305,22 @@ const api = {
     projectFilesToLegacyRuntime: () => ipcRenderer.invoke(IpcChannel.StorageV2_FilesProjectLegacy),
     upsertFile: (file: unknown) => ipcRenderer.invoke(IpcChannel.StorageV2_FileUpsert, file),
     deleteFile: (fileId: string) => ipcRenderer.invoke(IpcChannel.StorageV2_FileDelete, fileId),
-    importLegacyReduxSnapshot: (snapshot: unknown, options?: { dryRun?: boolean }) =>
+    importLegacyReduxSnapshot: (snapshot: unknown, options?: { dryRun?: boolean; pruneMissing?: boolean }) =>
       ipcRenderer.invoke(IpcChannel.StorageV2_ImportLegacyReduxSnapshot, snapshot, options),
     importLegacyDexieSnapshot: (snapshot: unknown, options?: { dryRun?: boolean; pruneMissing?: boolean }) =>
       ipcRenderer.invoke(IpcChannel.StorageV2_ImportLegacyDexieSnapshot, snapshot, options),
-    importLegacyAgentDb: (options?: { dryRun?: boolean; dbPath?: string; createSnapshot?: boolean }) =>
-      ipcRenderer.invoke(IpcChannel.StorageV2_ImportLegacyAgentDb, options),
-    importLegacyAppDb: (options?: { dryRun?: boolean; dbPath?: string; createSnapshot?: boolean }) =>
-      ipcRenderer.invoke(IpcChannel.StorageV2_ImportLegacyAppDb, options)
+    importLegacyAgentDb: (options?: {
+      dryRun?: boolean
+      pruneMissing?: boolean
+      dbPath?: string
+      createSnapshot?: boolean
+    }) => ipcRenderer.invoke(IpcChannel.StorageV2_ImportLegacyAgentDb, options),
+    importLegacyAppDb: (options?: {
+      dryRun?: boolean
+      pruneMissing?: boolean
+      dbPath?: string
+      createSnapshot?: boolean
+    }) => ipcRenderer.invoke(IpcChannel.StorageV2_ImportLegacyAppDb, options)
   },
   file: {
     select: (options?: OpenDialogOptions): Promise<FileMetadata[] | null> =>

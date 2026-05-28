@@ -85,6 +85,7 @@ const DURABLE_LOCAL_STORAGE_KEYS = new Set([
 
 export type StorageV2LegacyImportOptions = {
   dryRun?: boolean
+  pruneMissing?: boolean
 }
 
 export type StorageV2LegacyImportReport = {
@@ -843,6 +844,7 @@ export class StorageV2LegacyReduxImportService {
     options: StorageV2LegacyImportOptions = {}
   ): Promise<StorageV2LegacyImportReport> {
     const dryRun = options.dryRun !== false
+    const pruneMissing = options.pruneMissing !== false
     const snapshot = normalizeSnapshot(input)
     const warnings: string[] = []
 
@@ -1085,7 +1087,7 @@ export class StorageV2LegacyReduxImportService {
       }
 
       if (Object.hasOwn(redux, 'knowledge')) {
-        const knowledgeImportReport = await storageV2KnowledgeRepository.importBases(knowledgeBases)
+        const knowledgeImportReport = await storageV2KnowledgeRepository.importBases(knowledgeBases, { pruneMissing })
         knowledgeBaseCount = knowledgeImportReport.baseCount
         knowledgeItemCount = knowledgeImportReport.itemCount
         importedKnowledgeBaseCount = knowledgeImportReport.baseCount
@@ -1094,10 +1096,10 @@ export class StorageV2LegacyReduxImportService {
         deletedKnowledgeItemCount = knowledgeImportReport.deletedItemCount
       }
 
-      if (hasProviderList) {
+      if (pruneMissing && hasProviderList) {
         deletedProviderCount = await storageV2ProviderRepository.deleteMissing(providers.map((provider) => provider.id))
       }
-      if (hasAssistantList) {
+      if (pruneMissing && hasAssistantList) {
         deletedAssistantCount = await storageV2AssistantRepository.deleteMissing(
           assistantList.map((assistant) => assistant.id)
         )

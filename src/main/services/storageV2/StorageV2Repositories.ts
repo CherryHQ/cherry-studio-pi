@@ -1628,7 +1628,10 @@ export class StorageV2KnowledgeRepository {
     })
   }
 
-  async importBases(bases: StorageV2KnowledgeBaseImport[]): Promise<{
+  async importBases(
+    bases: StorageV2KnowledgeBaseImport[],
+    options: { pruneMissing?: boolean } = {}
+  ): Promise<{
     baseCount: number
     itemCount: number
     deletedBaseCount: number
@@ -1636,6 +1639,7 @@ export class StorageV2KnowledgeRepository {
   }> {
     const client = await storageV2Database.getClient()
     const timestamp = now()
+    const pruneMissing = options.pruneMissing !== false
     const activeBaseIds = new Set<string>()
     const activeItemIdsByBase = new Map<string, Set<string>>()
     let itemCount = 0
@@ -1749,6 +1753,10 @@ export class StorageV2KnowledgeRepository {
           },
           version: await getVersion(client, 'knowledge_bases', baseId)
         })
+      }
+
+      if (!pruneMissing) {
+        return
       }
 
       for (const [baseId, activeItemIds] of activeItemIdsByBase.entries()) {
