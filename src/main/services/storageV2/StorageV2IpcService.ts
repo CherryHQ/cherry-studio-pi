@@ -52,8 +52,8 @@ export function registerStorageV2IpcHandlers() {
   ipcMain.handle(IpcChannel.StorageV2_MessagesList, (_event, conversationId: string, options?: unknown) =>
     storageV2Service.listMessages(conversationId, options as any)
   )
-  ipcMain.handle(IpcChannel.StorageV2_ConversationSync, (_event, conversation: unknown) =>
-    storageV2Service.syncConversation(conversation as any)
+  ipcMain.handle(IpcChannel.StorageV2_ConversationSync, (_event, conversation: unknown, options?: unknown) =>
+    storageV2Service.syncConversation(conversation as any, options as any)
   )
   ipcMain.handle(IpcChannel.StorageV2_ConversationUpsert, (_event, conversation: unknown, options?: unknown) =>
     storageV2Service.upsertConversation(conversation as any, options as any)

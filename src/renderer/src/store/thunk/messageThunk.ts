@@ -89,9 +89,9 @@ const scheduleStorageV2TopicMirror = (topicId: string) => {
   storageV2ConversationMirrorService.scheduleTopic(topicId, () => store.getState())
 }
 
-const flushStorageV2TopicMirror = async (topicId: string) => {
+const flushStorageV2TopicMirror = async (topicId: string, options: { destructive?: boolean } = {}) => {
   if (isAgentSessionTopicId(topicId)) return
-  await storageV2ConversationMirrorService.flushTopic(topicId, () => store.getState())
+  await storageV2ConversationMirrorService.flushTopic(topicId, () => store.getState(), options)
 }
 
 const finishTopicLoading = async (topicId: string) => {
@@ -1178,7 +1178,7 @@ export const resendMessageThunk =
         }
         const finalMessagesToSave = selectMessagesForTopic(getState(), topicId)
         await db.topics.update(topicId, { messages: finalMessagesToSave })
-        await flushStorageV2TopicMirror(topicId)
+        await flushStorageV2TopicMirror(topicId, { destructive: allBlockIdsToDelete.length > 0 })
       } catch (dbError) {
         logger.error('[resendMessageThunk] Error updating database:', dbError as Error)
       }
@@ -1317,7 +1317,7 @@ export const regenerateAssistantResponseThunk =
           await db.message_blocks.bulkDelete(blockIdsToDelete)
         }
       })
-      await flushStorageV2TopicMirror(topicId)
+      await flushStorageV2TopicMirror(topicId, { destructive: blockIdsToDelete.length > 0 })
 
       // 8. Add fetch/process call to the queue
       const queue = getTopicQueue(topicId)
@@ -1789,7 +1789,7 @@ export const removeBlocksThunk =
         })
       }
 
-      await flushStorageV2TopicMirror(topicId)
+      await flushStorageV2TopicMirror(topicId, { destructive: true })
       dispatch(updateTopicUpdatedAt({ topicId }))
     } catch (error) {
       logger.error(`[removeBlocksThunk] Failed to remove blocks from message ${messageId}:`, error as Error)

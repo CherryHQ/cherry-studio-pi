@@ -3,6 +3,8 @@ import db from '@renderer/databases'
 import type { Assistant, FileMetadata, Topic } from '@renderer/types'
 import type { Message, MessageBlock } from '@renderer/types/newMessage'
 
+import { fetchStorageV2TopicMessages } from './StorageV2ConversationHydrationService'
+
 const logger = loggerService.withContext('StorageV2ConversationMirrorService')
 
 const DEFAULT_DEBOUNCE_MS = 1500
@@ -21,6 +23,10 @@ type ConversationSnapshot = {
   topic: Omit<Topic, 'messages'> & { messages: [] }
   messages: Message[]
   blocks: MessageBlock[]
+}
+
+type MirrorScheduleOptions = {
+  destructive?: boolean
 }
 
 function cloneJson<T>(value: T): T {
@@ -134,6 +140,7 @@ class StorageV2ConversationMirrorService {
   private timer: ReturnType<typeof setTimeout> | null = null
   private latestGetState: StateGetter | null = null
   private pendingTopicIds = new Set<string>()
+  private pendingDestructiveTopicIds = new Set<string>()
   private pendingMessageIds = new Set<string>()
   private pendingBlockIds = new Set<string>()
   private lastTopicSnapshotJson = new Map<string, string>()
@@ -141,21 +148,37 @@ class StorageV2ConversationMirrorService {
   private needsFollowUp = false
   private suspended = false
 
-  scheduleTopic(topicId: string | undefined, getState: StateGetter, debounceMs = DEFAULT_DEBOUNCE_MS) {
+  scheduleTopic(
+    topicId: string | undefined,
+    getState: StateGetter,
+    debounceMs = DEFAULT_DEBOUNCE_MS,
+    options: MirrorScheduleOptions = {}
+  ) {
     if (this.suspended) return
     if (!topicId) return
     this.latestGetState = getState
     this.pendingTopicIds.add(topicId)
+    if (options.destructive) {
+      this.pendingDestructiveTopicIds.add(topicId)
+    }
     this.scheduleFlush(debounceMs)
   }
 
-  scheduleTopics(topicIds: Iterable<string | undefined>, getState: StateGetter, debounceMs = DEFAULT_DEBOUNCE_MS) {
+  scheduleTopics(
+    topicIds: Iterable<string | undefined>,
+    getState: StateGetter,
+    debounceMs = DEFAULT_DEBOUNCE_MS,
+    options: MirrorScheduleOptions = {}
+  ) {
     if (this.suspended) return
     let hasPending = false
 
     for (const topicId of topicIds) {
       if (!topicId) continue
       this.pendingTopicIds.add(topicId)
+      if (options.destructive) {
+        this.pendingDestructiveTopicIds.add(topicId)
+      }
       hasPending = true
     }
 
@@ -197,13 +220,17 @@ class StorageV2ConversationMirrorService {
     this.scheduleFlush(debounceMs)
   }
 
-  async flushTopic(topicId: string | undefined, getState: StateGetter) {
-    this.scheduleTopic(topicId, getState, 0)
+  async flushTopic(topicId: string | undefined, getState: StateGetter, options: MirrorScheduleOptions = {}) {
+    this.scheduleTopic(topicId, getState, 0, options)
     await this.flush()
   }
 
-  async flushTopics(topicIds: Iterable<string | undefined>, getState: StateGetter) {
-    this.scheduleTopics(topicIds, getState, 0)
+  async flushTopics(
+    topicIds: Iterable<string | undefined>,
+    getState: StateGetter,
+    options: MirrorScheduleOptions = {}
+  ) {
+    this.scheduleTopics(topicIds, getState, 0, options)
     await this.flush()
   }
 
@@ -271,10 +298,12 @@ class StorageV2ConversationMirrorService {
     const getState = this.latestGetState
     const state = getState()
     const topicIds = new Set(this.pendingTopicIds)
+    const destructiveTopicIds = new Set(this.pendingDestructiveTopicIds)
     const messageIds = new Set(this.pendingMessageIds)
     const blockIds = new Set(this.pendingBlockIds)
 
     this.pendingTopicIds.clear()
+    this.pendingDestructiveTopicIds.clear()
     this.pendingMessageIds.clear()
     this.pendingBlockIds.clear()
 
@@ -303,7 +332,9 @@ class StorageV2ConversationMirrorService {
     const pendingSnapshots = new Map<string, string>()
 
     for (const topicId of topicIds) {
-      const snapshot = await this.buildTopicSnapshot(topicId, state)
+      const snapshot = await this.buildMirrorSnapshot(topicId, state, {
+        destructive: destructiveTopicIds.has(topicId)
+      })
       if (!snapshot) continue
 
       const snapshotJson = JSON.stringify(snapshot.conversation)
@@ -465,6 +496,7 @@ class StorageV2ConversationMirrorService {
     this.suspended = true
     this.latestGetState = null
     this.pendingTopicIds.clear()
+    this.pendingDestructiveTopicIds.clear()
     this.pendingMessageIds.clear()
     this.pendingBlockIds.clear()
     this.needsFollowUp = false
@@ -553,6 +585,35 @@ class StorageV2ConversationMirrorService {
       },
       files
     }
+  }
+
+  private async buildMirrorSnapshot(
+    topicId: string,
+    state: Record<string, any>,
+    options: MirrorScheduleOptions
+  ): Promise<{ conversation: ConversationSnapshot; files: Map<string, FileMetadata> } | null> {
+    const snapshot = await this.buildTopicSnapshot(topicId, state)
+    if (!snapshot || options.destructive) {
+      return snapshot
+    }
+
+    await this.seedStorageV2TopicWithoutPruning(snapshot.conversation)
+    await fetchStorageV2TopicMessages(topicId).catch((error) => {
+      logger.warn('Failed to pre-hydrate Storage v2 topic before mirror prune', error as Error)
+      return null
+    })
+
+    return (await this.buildTopicSnapshot(topicId, state)) ?? snapshot
+  }
+
+  private async seedStorageV2TopicWithoutPruning(conversation: ConversationSnapshot) {
+    const storageV2 = window.api?.storageV2
+    if (typeof storageV2?.syncConversation !== 'function') return
+
+    await storageV2.syncConversation(this.toConversationImport(conversation), {
+      pruneMissingMessages: false,
+      pruneMissingBlocks: false
+    })
   }
 }
 

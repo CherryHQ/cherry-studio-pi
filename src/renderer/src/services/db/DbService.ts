@@ -107,16 +107,23 @@ class DbService implements MessageDataSource {
     )
   }
 
-  private async flushRegularTopicMirror(topicId: string | undefined): Promise<void> {
+  private async flushRegularTopicMirror(
+    topicId: string | undefined,
+    options: { destructive?: boolean } = {}
+  ): Promise<void> {
     if (!topicId || isAgentSessionTopicId(topicId)) return
 
-    await storageV2ConversationMirrorService.flushTopic(topicId, () => this.getState())
+    await storageV2ConversationMirrorService.flushTopic(topicId, () => this.getState(), options)
   }
 
-  private async flushRegularTopicMirrors(topicIds: Iterable<string | undefined>): Promise<void> {
+  private async flushRegularTopicMirrors(
+    topicIds: Iterable<string | undefined>,
+    options: { destructive?: boolean } = {}
+  ): Promise<void> {
     await storageV2ConversationMirrorService.flushTopics(
       Array.from(topicIds).filter((topicId) => topicId && !isAgentSessionTopicId(topicId)),
-      () => this.getState()
+      () => this.getState(),
+      options
     )
   }
 
@@ -175,13 +182,13 @@ class DbService implements MessageDataSource {
   async deleteMessage(topicId: string, messageId: string): Promise<void> {
     const source = this.getDataSource(topicId)
     await source.deleteMessage(topicId, messageId)
-    await this.flushRegularTopicMirror(topicId)
+    await this.flushRegularTopicMirror(topicId, { destructive: true })
   }
 
   async deleteMessages(topicId: string, messageIds: string[]): Promise<void> {
     const source = this.getDataSource(topicId)
     await source.deleteMessages(topicId, messageIds)
-    await this.flushRegularTopicMirror(topicId)
+    await this.flushRegularTopicMirror(topicId, { destructive: true })
   }
 
   // ============ Block Operations ============
@@ -228,7 +235,7 @@ class DbService implements MessageDataSource {
     // Default to Dexie since agent blocks can't be deleted individually
     const topicIds = await storageV2ConversationMirrorService.findTopicIdsForBlockIds(blockIds, () => this.getState())
     await this.dexieSource.deleteBlocks(blockIds)
-    await this.flushRegularTopicMirrors(topicIds)
+    await this.flushRegularTopicMirrors(topicIds, { destructive: true })
   }
 
   // ============ Batch Operations ============
@@ -236,7 +243,7 @@ class DbService implements MessageDataSource {
   async clearMessages(topicId: string): Promise<void> {
     const source = this.getDataSource(topicId)
     await source.clearMessages(topicId)
-    await this.flushRegularTopicMirror(topicId)
+    await this.flushRegularTopicMirror(topicId, { destructive: true })
   }
 
   async topicExists(topicId: string): Promise<boolean> {

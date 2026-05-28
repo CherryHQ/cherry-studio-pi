@@ -285,8 +285,8 @@ const api = {
       ipcRenderer.invoke(IpcChannel.StorageV2_ConversationsList, filter),
     listMessages: (conversationId: string, options?: { limit?: number; offset?: number }) =>
       ipcRenderer.invoke(IpcChannel.StorageV2_MessagesList, conversationId, options),
-    syncConversation: (conversation: Record<string, unknown>) =>
-      ipcRenderer.invoke(IpcChannel.StorageV2_ConversationSync, conversation),
+    syncConversation: (conversation: Record<string, unknown>, options?: Record<string, unknown>) =>
+      ipcRenderer.invoke(IpcChannel.StorageV2_ConversationSync, conversation, options),
     upsertConversation: (
       conversation: Record<string, unknown>,
       options?: { pruneMissingMessages?: boolean; activeMessageIds?: string[] }

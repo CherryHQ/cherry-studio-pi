@@ -390,8 +390,11 @@ export function listStorageV2Messages(conversationId: string, options?: { limit?
   return window.api.storageV2.listMessages(conversationId, options)
 }
 
-export function syncStorageV2Conversation(conversation: Record<string, unknown>) {
-  return window.api.storageV2.syncConversation(conversation)
+export function syncStorageV2Conversation(
+  conversation: Record<string, unknown>,
+  options?: { pruneMissingMessages?: boolean; pruneMissingBlocks?: boolean }
+) {
+  return window.api.storageV2.syncConversation(conversation, options)
 }
 
 export function upsertStorageV2Conversation(

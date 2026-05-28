@@ -16,6 +16,7 @@ import { storageV2Database } from './StorageV2Database'
 import {
   storageV2AssistantRepository,
   type StorageV2ConversationImport,
+  type StorageV2ConversationImportOptions,
   storageV2ConversationRepository,
   type StorageV2ConversationUpsert,
   type StorageV2ConversationUpsertOptions,
@@ -810,8 +811,8 @@ export class StorageV2Service {
     return storageV2ConversationRepository.listMessages(conversationId, options)
   }
 
-  async syncConversation(conversation: StorageV2ConversationImport) {
-    return storageV2ConversationRepository.importConversation(conversation)
+  async syncConversation(conversation: StorageV2ConversationImport, options?: StorageV2ConversationImportOptions) {
+    return storageV2ConversationRepository.importConversation(conversation, options)
   }
 
   async upsertConversation(conversation: StorageV2ConversationUpsert, options?: StorageV2ConversationUpsertOptions) {

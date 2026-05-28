@@ -294,6 +294,6 @@ export const TopicManager = {
       await safeDeleteFiles(filesToDelete)
     }
 
-    await storageV2ConversationMirrorService.flushTopic(id, () => store.getState())
+    await storageV2ConversationMirrorService.flushTopic(id, () => store.getState(), { destructive: true })
   }
 }
