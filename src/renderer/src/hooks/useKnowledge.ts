@@ -6,6 +6,7 @@ import { getKnowledgeBaseParams } from '@renderer/services/KnowledgeService'
 import { storageV2DexieTableMirrorService } from '@renderer/services/StorageV2DexieTableMirrorService'
 import { storageV2DexieTableRecoveryService } from '@renderer/services/StorageV2DexieTableRecoveryService'
 import { storageV2MirrorService } from '@renderer/services/StorageV2MirrorService'
+import { persistStorageV2ReduxSlice } from '@renderer/services/StorageV2ReduxSliceService'
 import type { RootState } from '@renderer/store'
 import { useAppDispatch } from '@renderer/store'
 import {
@@ -80,8 +81,14 @@ async function cleanupKnowledgeIndex(reason: string, cleanup: () => Promise<void
 
 export const useKnowledge = (baseId: string) => {
   const dispatch = useAppDispatch()
+  const knowledgeState = useSelector((state: RootState) => state.knowledge)
   const base = useSelector((state: RootState) => state.knowledge.bases.find((b) => b.id === baseId))
   const { setTimeoutTimer } = useTimer()
+
+  const getNextKnowledgeStateWithBaseItems = (items: KnowledgeItem[]) => ({
+    ...knowledgeState,
+    bases: knowledgeState.bases.map((candidate) => (candidate.id === baseId ? { ...candidate, items } : candidate))
+  })
 
   // 重命名知识库
   const renameKnowledgeBase = async (name: string) => {
@@ -187,11 +194,19 @@ export const useKnowledge = (baseId: string) => {
         uniqueIds: item.uniqueIds,
         base: getKnowledgeBaseParams(base)
       }
+      await persistStorageV2ReduxSlice(
+        'knowledge',
+        getNextKnowledgeStateWithBaseItems(base.items.filter((candidate) => candidate.id !== item.id))
+      )
       dispatch(removeItemAction({ baseId, item }))
       await flushStorageV2KnowledgeMirror('remove-item', { strict: true })
       await deleteKnowledgeNotesAfterMetadataFlush(noteIds)
       await cleanupKnowledgeIndex('remove-item', () => window.api.knowledgeBase.remove(removalParams))
     } else {
+      await persistStorageV2ReduxSlice(
+        'knowledge',
+        getNextKnowledgeStateWithBaseItems(base.items.filter((candidate) => candidate.id !== item.id))
+      )
       dispatch(removeItemAction({ baseId, item }))
       await flushStorageV2KnowledgeMirror('remove-item', { strict: true })
       await deleteKnowledgeNotesAfterMetadataFlush(noteIds)
@@ -234,6 +249,12 @@ export const useKnowledge = (baseId: string) => {
       updated_at: Date.now()
     }
 
+    await persistStorageV2ReduxSlice(
+      'knowledge',
+      getNextKnowledgeStateWithBaseItems(
+        base.items.map((candidate) => (candidate.id === refreshedItem.id ? refreshedItem : candidate))
+      )
+    )
     dispatch(updateItemAction({ baseId, item: refreshedItem }))
     await flushStorageV2KnowledgeMirror('refresh-item', { strict: true })
     await cleanupKnowledgeIndex('refresh-item', () => window.api.knowledgeBase.remove(removalParams))
