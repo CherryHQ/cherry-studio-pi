@@ -65,6 +65,8 @@ export type StorageV2LegacyDexieImportReport = {
   skippedFileCount: number
   deletedConversationCount: number
   deletedFileCount: number
+  deletedSettingCount: number
+  deletedDexieTableRowCount: number
   warnings: string[]
 }
 
@@ -150,6 +152,21 @@ function normalizeDexieTableRows(snapshot: LegacyDexieSnapshot, warnings: string
   return rows
 }
 
+async function pruneMissingSettings(scope: string, activeKeys: Iterable<string>) {
+  const activeKeySet = new Set(activeKeys)
+  const existingSettings = await storageV2SettingsRepository.list(scope)
+  let deletedCount = 0
+
+  for (const setting of existingSettings) {
+    if (activeKeySet.has(setting.key)) continue
+
+    await storageV2SettingsRepository.set(setting.key, null, scope)
+    deletedCount++
+  }
+
+  return deletedCount
+}
+
 export class StorageV2LegacyDexieImportService {
   async importSnapshot(
     input: LegacyDexieSnapshot | string,
@@ -181,6 +198,8 @@ export class StorageV2LegacyDexieImportService {
     let importedDexieTableRowCount = 0
     let deletedConversationCount = 0
     let deletedFileCount = 0
+    let deletedSettingCount = 0
+    let deletedDexieTableRowCount = 0
 
     if (!dryRun) {
       for (const setting of normalizedSettings) {
@@ -221,6 +240,19 @@ export class StorageV2LegacyDexieImportService {
             .map((file) => file.id)
             .filter((fileId): fileId is string => typeof fileId === 'string' && fileId.length > 0)
         )
+        deletedSettingCount = await pruneMissingSettings(
+          'dexie-settings',
+          normalizedSettings.map((setting) => `dexie.settings.${setting.id}`)
+        )
+
+        for (const tableName of DEXIE_AUXILIARY_TABLE_NAMES) {
+          deletedDexieTableRowCount += await pruneMissingSettings(
+            `dexie-table:${tableName}`,
+            dexieTableRows
+              .filter((entry) => entry.tableName === tableName)
+              .map((entry) => toStorageV2DexieTableKey(tableName, entry.row.id))
+          )
+        }
       }
     }
 
@@ -241,6 +273,8 @@ export class StorageV2LegacyDexieImportService {
       skippedFileCount: dryRun ? 0 : files.length - importedFileCount,
       deletedConversationCount,
       deletedFileCount,
+      deletedSettingCount,
+      deletedDexieTableRowCount,
       warnings
     }
   }

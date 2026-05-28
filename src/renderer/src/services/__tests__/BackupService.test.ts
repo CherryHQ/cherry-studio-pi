@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   db: {
-    tables: [],
+    tables: [] as Array<{ name: string }>,
     transaction: vi.fn(async (_mode: string, _tables: unknown[], fn: () => Promise<void>) => fn()),
     table: vi.fn()
   },
@@ -84,6 +84,8 @@ describe('BackupService legacy restore', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
+    mocks.db.tables = []
+    mocks.db.table.mockReset()
     localStorage.clear()
     originalApi = window.api
     originalToast = window.toast
@@ -170,5 +172,37 @@ describe('BackupService legacy restore', () => {
       'storage-v2'
     )
     expect(window.toast.success).toHaveBeenCalledWith('message.restore.success')
+  })
+
+  it('clears all current IndexedDB tables before restoring backup tables', async () => {
+    const topicsTable = {
+      clear: vi.fn().mockResolvedValue(undefined),
+      bulkAdd: vi.fn().mockResolvedValue(undefined)
+    }
+    const messageBlocksTable = {
+      clear: vi.fn().mockResolvedValue(undefined),
+      bulkAdd: vi.fn().mockResolvedValue(undefined)
+    }
+    mocks.db.tables = [{ name: 'topics' }, { name: 'message_blocks' }]
+    mocks.db.table.mockImplementation((tableName: string) => {
+      if (tableName === 'topics') return topicsTable
+      if (tableName === 'message_blocks') return messageBlocksTable
+      throw new Error(`Unexpected table ${tableName}`)
+    })
+
+    await handleData({
+      version: 2,
+      localStorage: {
+        'persist:cherry-studio': '{"settings":"{}"}'
+      },
+      indexedDB: {
+        topics: [{ id: 'topic-1', messages: [] }]
+      }
+    })
+
+    expect(topicsTable.clear).toHaveBeenCalledTimes(1)
+    expect(messageBlocksTable.clear).toHaveBeenCalledTimes(1)
+    expect(topicsTable.bulkAdd).toHaveBeenCalledWith([{ id: 'topic-1', messages: [] }])
+    expect(messageBlocksTable.bulkAdd).not.toHaveBeenCalled()
   })
 })

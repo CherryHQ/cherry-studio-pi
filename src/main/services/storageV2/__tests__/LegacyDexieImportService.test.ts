@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
     importFile: vi.fn()
   },
   settingsRepository: {
+    list: vi.fn(),
     set: vi.fn()
   }
 }))
@@ -29,6 +30,7 @@ describe('StorageV2LegacyDexieImportService', () => {
     mocks.conversationRepository.deleteMissingAssistantConversations.mockResolvedValue(0)
     mocks.fileRepository.importFile.mockResolvedValue({ imported: true })
     mocks.fileRepository.deleteMissingLegacyFiles.mockResolvedValue(0)
+    mocks.settingsRepository.list.mockResolvedValue([])
   })
 
   it('imports legacy Dexie settings into the Storage v2 settings scope', async () => {
@@ -90,5 +92,56 @@ describe('StorageV2LegacyDexieImportService', () => {
     expect(report.dexieTableRowCount).toBe(1)
     expect(report.importedDexieTableRowCount).toBe(1)
     expect(report.warnings).toEqual(['Skipped legacy Dexie translate_languages row at index 0: missing row id.'])
+  })
+
+  it('writes delete markers for Dexie settings and auxiliary rows missing from a prune import', async () => {
+    mocks.settingsRepository.list.mockImplementation(async (scope?: string) => {
+      if (scope === 'dexie-settings') {
+        return [
+          {
+            key: 'dexie.settings.image://avatar',
+            value: 'active-avatar'
+          },
+          {
+            key: 'dexie.settings.image://stale',
+            value: 'stale-avatar'
+          }
+        ]
+      }
+
+      if (scope === 'dexie-table:quick_phrases') {
+        return [
+          {
+            key: 'dexie.table.quick_phrases.phrase-1',
+            value: { id: 'phrase-1' }
+          },
+          {
+            key: 'dexie.table.quick_phrases.stale-phrase',
+            value: { id: 'stale-phrase' }
+          }
+        ]
+      }
+
+      return []
+    })
+
+    const report = await new StorageV2LegacyDexieImportService().importSnapshot(
+      {
+        settings: [{ id: 'image://avatar', value: 'active-avatar' }],
+        dexieTables: {
+          quick_phrases: [{ id: 'phrase-1', title: 'Greeting' }]
+        }
+      },
+      { dryRun: false, pruneMissing: true }
+    )
+
+    expect(mocks.settingsRepository.set).toHaveBeenCalledWith('dexie.settings.image://stale', null, 'dexie-settings')
+    expect(mocks.settingsRepository.set).toHaveBeenCalledWith(
+      'dexie.table.quick_phrases.stale-phrase',
+      null,
+      'dexie-table:quick_phrases'
+    )
+    expect(report.deletedSettingCount).toBe(1)
+    expect(report.deletedDexieTableRowCount).toBe(1)
   })
 })

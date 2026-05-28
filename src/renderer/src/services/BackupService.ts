@@ -992,9 +992,19 @@ async function backupDatabase() {
 }
 
 async function restoreDatabase(backup: Record<string, any>) {
+  const tableNames = new Set(db.tables.map((table) => table.name))
+
   await db.transaction('rw', db.tables, async () => {
-    for (const tableName in backup) {
+    for (const tableName of tableNames) {
       await db.table(tableName).clear()
+    }
+
+    for (const tableName in backup) {
+      if (!tableNames.has(tableName)) {
+        logger.warn(`Skipping unknown IndexedDB backup table: ${tableName}`)
+        continue
+      }
+
       await db.table(tableName).bulkAdd(backup[tableName])
     }
   })
