@@ -44,6 +44,25 @@ describe('StorageV2ReduxSliceService', () => {
     )
   })
 
+  it('imports a partial Redux snapshot for top-level persisted domains', async () => {
+    const importLegacyReduxSnapshot = vi.fn().mockResolvedValue({ dryRun: false })
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          importLegacyReduxSnapshot
+        }
+      }
+    })
+
+    const { persistStorageV2PartialReduxSnapshot } = await import('../StorageV2ReduxSliceService')
+    const snapshot = { assistants: { presets: [{ id: 'preset-1' }] } }
+
+    await persistStorageV2PartialReduxSnapshot(snapshot)
+
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(snapshot, { dryRun: false, pruneMissing: true })
+  })
+
   it('rejects when the Storage v2 Redux slice importer is unavailable', async () => {
     Object.defineProperty(window, 'api', {
       configurable: true,

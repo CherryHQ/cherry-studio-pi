@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { flushStorageV2ReduxMirror } from '@renderer/services/StorageV2ReduxMirrorFlush'
+import { persistStorageV2PartialReduxSnapshot } from '@renderer/services/StorageV2ReduxSliceService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import {
   addAssistantPreset,
@@ -48,6 +49,11 @@ export function useAssistantPresets() {
       flushPresetMirror('assistant-preset-add')
     },
     removeAssistantPreset: async (id: string) => {
+      await persistStorageV2PartialReduxSnapshot({
+        assistants: {
+          presets: presets.filter((preset) => preset.id !== id)
+        }
+      })
       dispatch(removeAssistantPreset({ id }))
       await flushPresetMirror('assistant-preset-remove', { strict: true })
     }
