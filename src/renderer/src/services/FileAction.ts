@@ -2,6 +2,7 @@ import { loggerService } from '@logger'
 import TextEditPopup from '@renderer/components/Popups/TextEditPopup'
 import db from '@renderer/databases'
 import FileManager from '@renderer/services/FileManager'
+import { storageV2ConversationMirrorService } from '@renderer/services/StorageV2ConversationMirrorService'
 import store from '@renderer/store'
 import type { FileMetadata } from '@renderer/types'
 import type { Message } from '@renderer/types/newMessage'
@@ -62,6 +63,7 @@ export async function handleDelete(fileId: string, t: (key: string) => string) {
   const relatedBlocks = await db.message_blocks.where('file.id').equals(fileId).toArray()
   const blockIdsToDelete = relatedBlocks.map((b) => b.id)
   const affectedMessageIds = [...new Set(relatedBlocks.map((b) => b.messageId))]
+  let affectedTopicIds: string[] = []
 
   try {
     await db.transaction('rw', db.topics, db.message_blocks, async () => {
@@ -85,7 +87,9 @@ export async function handleDelete(fileId: string, t: (key: string) => string) {
 
       await Promise.all(Object.entries(topicsToUpdate).map(([id, data]) => db.topics.update(id, data)))
       await db.message_blocks.bulkDelete(blockIdsToDelete)
+      affectedTopicIds = Object.keys(topicsToUpdate)
     })
+    await storageV2ConversationMirrorService.flushTopics(affectedTopicIds, () => store.getState())
     logger.info(`Deleted ${blockIdsToDelete.length} blocks for file ${fileId}`)
   } catch (err) {
     logger.error(`Error removing file blocks for ${fileId}:`, err as Error)

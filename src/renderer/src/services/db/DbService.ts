@@ -107,6 +107,19 @@ class DbService implements MessageDataSource {
     )
   }
 
+  private async flushRegularTopicMirror(topicId: string | undefined): Promise<void> {
+    if (!topicId || isAgentSessionTopicId(topicId)) return
+
+    await storageV2ConversationMirrorService.flushTopic(topicId, () => this.getState())
+  }
+
+  private async flushRegularTopicMirrors(topicIds: Iterable<string | undefined>): Promise<void> {
+    await storageV2ConversationMirrorService.flushTopics(
+      Array.from(topicIds).filter((topicId) => topicId && !isAgentSessionTopicId(topicId)),
+      () => this.getState()
+    )
+  }
+
   // ============ Read Operations ============
 
   async fetchMessages(
@@ -162,13 +175,13 @@ class DbService implements MessageDataSource {
   async deleteMessage(topicId: string, messageId: string): Promise<void> {
     const source = this.getDataSource(topicId)
     await source.deleteMessage(topicId, messageId)
-    this.scheduleRegularTopicMirror(topicId)
+    await this.flushRegularTopicMirror(topicId)
   }
 
   async deleteMessages(topicId: string, messageIds: string[]): Promise<void> {
     const source = this.getDataSource(topicId)
     await source.deleteMessages(topicId, messageIds)
-    this.scheduleRegularTopicMirror(topicId)
+    await this.flushRegularTopicMirror(topicId)
   }
 
   // ============ Block Operations ============
@@ -215,7 +228,7 @@ class DbService implements MessageDataSource {
     // Default to Dexie since agent blocks can't be deleted individually
     const topicIds = await storageV2ConversationMirrorService.findTopicIdsForBlockIds(blockIds, () => this.getState())
     await this.dexieSource.deleteBlocks(blockIds)
-    this.scheduleRegularTopicMirrors(topicIds)
+    await this.flushRegularTopicMirrors(topicIds)
   }
 
   // ============ Batch Operations ============
@@ -223,7 +236,7 @@ class DbService implements MessageDataSource {
   async clearMessages(topicId: string): Promise<void> {
     const source = this.getDataSource(topicId)
     await source.clearMessages(topicId)
-    this.scheduleRegularTopicMirror(topicId)
+    await this.flushRegularTopicMirror(topicId)
   }
 
   async topicExists(topicId: string): Promise<boolean> {

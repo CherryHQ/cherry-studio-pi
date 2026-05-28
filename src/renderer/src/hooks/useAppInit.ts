@@ -6,6 +6,7 @@ import db from '@renderer/databases'
 import i18n, { setDayjsLocale } from '@renderer/i18n'
 import KnowledgeQueue from '@renderer/queue/KnowledgeQueue'
 import MemoryService from '@renderer/services/MemoryService'
+import { storageV2DexieSettingsRecoveryService } from '@renderer/services/StorageV2DexieSettingsRecoveryService'
 import { handleSaveData, useAppDispatch, useAppSelector } from '@renderer/store'
 import { selectMemoryConfig } from '@renderer/store/memory'
 import { setAvatar, setFilesPath, setResourcesPath, setUpdateState } from '@renderer/store/runtime'
@@ -50,7 +51,9 @@ export function useAppInit() {
   const { isLeftNavbar } = useNavbarPosition()
   const { minappShow } = useRuntime()
   const { setDefaultModel, setQuickModel, setTranslateModel } = useDefaultModel()
-  const avatar = useLiveQuery(() => db.settings.get('image://avatar'))
+  const avatar = useLiveQuery(() =>
+    storageV2DexieSettingsRecoveryService.getSetting<string>('image://avatar', 'app-init-avatar-missing')
+  )
   const { theme } = useTheme()
   const memoryConfig = useAppSelector(selectMemoryConfig)
 

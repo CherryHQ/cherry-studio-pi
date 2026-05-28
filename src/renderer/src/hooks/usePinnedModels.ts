@@ -1,6 +1,7 @@
 import { loggerService } from '@logger'
 import db from '@renderer/databases'
 import { getModelUniqId } from '@renderer/services/ModelService'
+import { storageV2DexieSettingsRecoveryService } from '@renderer/services/StorageV2DexieSettingsRecoveryService'
 import { sortBy } from 'lodash'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -16,7 +17,10 @@ export const usePinnedModels = () => {
   useEffect(() => {
     const loadPinnedModels = async () => {
       setLoading(true)
-      const setting = await db.settings.get('pinned:models')
+      const setting = await storageV2DexieSettingsRecoveryService.getSetting<string[]>(
+        'pinned:models',
+        'pinned-models-empty'
+      )
       const savedPinnedModels = setting?.value || []
 
       // Filter out invalid pinned models

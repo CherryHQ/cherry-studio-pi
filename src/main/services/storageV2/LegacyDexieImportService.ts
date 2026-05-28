@@ -2,7 +2,8 @@ import {
   type StorageV2ConversationImport,
   storageV2ConversationRepository,
   type StorageV2FileImport,
-  storageV2FileRepository
+  storageV2FileRepository,
+  storageV2SettingsRepository
 } from './StorageV2Repositories'
 
 type LegacyDexieTopic = Record<string, any> & {
@@ -22,9 +23,24 @@ type LegacyDexieConversationInput = {
   blocks?: Array<Record<string, any>>
 }
 
+const DEXIE_AUXILIARY_TABLE_NAMES = [
+  'knowledge_notes',
+  'quick_phrases',
+  'translate_history',
+  'translate_languages'
+] as const
+
+type DexieAuxiliaryTableName = (typeof DEXIE_AUXILIARY_TABLE_NAMES)[number]
+
+type DexieAuxiliaryRow = Record<string, unknown> & {
+  id?: string
+}
+
 type LegacyDexieSnapshot = {
   conversations?: LegacyDexieConversationInput[]
   files?: StorageV2FileImport[]
+  settings?: Array<{ id?: string; value?: unknown }>
+  dexieTables?: Partial<Record<DexieAuxiliaryTableName, DexieAuxiliaryRow[]>>
 }
 
 export type StorageV2LegacyDexieImportOptions = {
@@ -38,10 +54,14 @@ export type StorageV2LegacyDexieImportReport = {
   messageCount: number
   blockCount: number
   fileCount: number
+  settingCount: number
+  dexieTableRowCount: number
   importedConversationCount: number
   importedMessageCount: number
   importedBlockCount: number
   importedFileCount: number
+  importedSettingCount: number
+  importedDexieTableRowCount: number
   skippedFileCount: number
   deletedConversationCount: number
   deletedFileCount: number
@@ -101,6 +121,35 @@ function normalizeConversation(
   }
 }
 
+function toStorageV2DexieTableKey(tableName: DexieAuxiliaryTableName, rowId: string) {
+  return `dexie.table.${tableName}.${rowId}`
+}
+
+function normalizeDexieTableRows(snapshot: LegacyDexieSnapshot, warnings: string[]) {
+  const rows: Array<{ tableName: DexieAuxiliaryTableName; row: Record<string, unknown> & { id: string } }> = []
+  const tables = snapshot.dexieTables ?? {}
+
+  for (const tableName of DEXIE_AUXILIARY_TABLE_NAMES) {
+    const tableRows = Array.isArray(tables[tableName]) ? tables[tableName] : []
+    for (const [index, row] of tableRows.entries()) {
+      if (typeof row?.id !== 'string' || row.id.length === 0) {
+        warnings.push(`Skipped legacy Dexie ${tableName} row at index ${index}: missing row id.`)
+        continue
+      }
+
+      rows.push({
+        tableName,
+        row: {
+          ...row,
+          id: row.id
+        }
+      })
+    }
+  }
+
+  return rows
+}
+
 export class StorageV2LegacyDexieImportService {
   async importSnapshot(
     input: LegacyDexieSnapshot | string,
@@ -111,6 +160,11 @@ export class StorageV2LegacyDexieImportService {
     const warnings: string[] = []
     const conversations = Array.isArray(snapshot.conversations) ? snapshot.conversations : []
     const files = Array.isArray(snapshot.files) ? snapshot.files : []
+    const settings = Array.isArray(snapshot.settings) ? snapshot.settings : []
+    const normalizedSettings = settings.filter(
+      (setting): setting is { id: string; value?: unknown } => typeof setting?.id === 'string' && setting.id.length > 0
+    )
+    const dexieTableRows = normalizeDexieTableRows(snapshot, warnings)
     const normalizedConversations = conversations
       .map((conversation, index) => normalizeConversation(conversation, index, warnings))
       .filter((conversation): conversation is StorageV2ConversationImport => Boolean(conversation))
@@ -123,10 +177,26 @@ export class StorageV2LegacyDexieImportService {
     let importedMessageCount = 0
     let importedBlockCount = 0
     let importedFileCount = 0
+    let importedSettingCount = 0
+    let importedDexieTableRowCount = 0
     let deletedConversationCount = 0
     let deletedFileCount = 0
 
     if (!dryRun) {
+      for (const setting of normalizedSettings) {
+        await storageV2SettingsRepository.set(`dexie.settings.${setting.id}`, setting.value ?? null, 'dexie-settings')
+        importedSettingCount++
+      }
+
+      for (const { tableName, row } of dexieTableRows) {
+        await storageV2SettingsRepository.set(
+          toStorageV2DexieTableKey(tableName, row.id),
+          row,
+          `dexie-table:${tableName}`
+        )
+        importedDexieTableRowCount++
+      }
+
       for (const conversation of normalizedConversations) {
         const result = await storageV2ConversationRepository.importConversation(conversation)
         importedMessageCount += result.messageCount
@@ -160,10 +230,14 @@ export class StorageV2LegacyDexieImportService {
       messageCount,
       blockCount,
       fileCount: files.length,
+      settingCount: normalizedSettings.length,
+      dexieTableRowCount: dexieTableRows.length,
       importedConversationCount: dryRun ? 0 : normalizedConversations.length,
       importedMessageCount,
       importedBlockCount,
       importedFileCount,
+      importedSettingCount,
+      importedDexieTableRowCount,
       skippedFileCount: dryRun ? 0 : files.length - importedFileCount,
       deletedConversationCount,
       deletedFileCount,

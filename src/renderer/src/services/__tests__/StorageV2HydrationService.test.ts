@@ -2,9 +2,51 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   getStorageV2CoreSnapshot: vi.fn(),
+  knowledgeNotesDelete: vi.fn(),
+  knowledgeNotesPut: vi.fn(),
+  quickPhrasesDelete: vi.fn(),
+  quickPhrasesPut: vi.fn(),
+  settingsDelete: vi.fn(),
+  settingsPut: vi.fn(),
+  translateHistoryDelete: vi.fn(),
+  translateHistoryPut: vi.fn(),
+  translateLanguagesDelete: vi.fn(),
+  translateLanguagesPut: vi.fn(),
+  transaction: vi.fn(async (...args: unknown[]) => {
+    const callback = args.at(-1)
+    if (typeof callback === 'function') {
+      await callback()
+    }
+  }),
   createHydrateAction:
     (type: string) =>
     (payload: unknown): { type: string; payload: unknown } => ({ type, payload })
+}))
+
+vi.mock('@renderer/databases', () => ({
+  default: {
+    knowledge_notes: {
+      delete: mocks.knowledgeNotesDelete,
+      put: mocks.knowledgeNotesPut
+    },
+    quick_phrases: {
+      delete: mocks.quickPhrasesDelete,
+      put: mocks.quickPhrasesPut
+    },
+    settings: {
+      delete: mocks.settingsDelete,
+      put: mocks.settingsPut
+    },
+    translate_history: {
+      delete: mocks.translateHistoryDelete,
+      put: mocks.translateHistoryPut
+    },
+    translate_languages: {
+      delete: mocks.translateLanguagesDelete,
+      put: mocks.translateLanguagesPut
+    },
+    transaction: mocks.transaction
+  }
 }))
 
 vi.mock('../StorageV2Service', () => ({
@@ -179,5 +221,96 @@ describe('StorageV2HydrationService', () => {
     })
     expect(target.dispatch).not.toHaveBeenCalled()
     expect(target.flush).not.toHaveBeenCalled()
+  })
+
+  it('hydrates Dexie settings from Storage v2 into the legacy runtime cache', async () => {
+    mocks.getStorageV2CoreSnapshot.mockResolvedValue({
+      generatedAt: '2026-01-01T00:00:00.000Z',
+      settings: {},
+      llm: { providers: [] },
+      assistants: { assistants: [] },
+      redux: {},
+      localStorage: {},
+      dexieSettings: {
+        'pinned:models': ['openai:gpt-4o'],
+        'image://avatar': null
+      },
+      metadata: {
+        includeSecrets: true,
+        settingCount: 2,
+        providerCount: 0,
+        assistantCount: 0,
+        topicCount: 0,
+        reduxSliceCount: 0,
+        missingSecretCount: 0
+      }
+    })
+    const target = { dispatch: vi.fn(), flush: vi.fn() }
+
+    await expect(maybeHydrateRuntimeCacheFromStorageV2(target)).resolves.toEqual({
+      hydrated: true,
+      snapshot: expect.objectContaining({
+        dexieSettings: expect.any(Object)
+      })
+    })
+
+    expect(mocks.transaction).toHaveBeenCalled()
+    expect(mocks.settingsPut).toHaveBeenCalledWith({
+      id: 'pinned:models',
+      value: ['openai:gpt-4o']
+    })
+    expect(mocks.settingsDelete).toHaveBeenCalledWith('image://avatar')
+  })
+
+  it('hydrates Dexie auxiliary tables from Storage v2 into the legacy runtime cache', async () => {
+    mocks.getStorageV2CoreSnapshot.mockResolvedValue({
+      generatedAt: '2026-01-01T00:00:00.000Z',
+      settings: {},
+      llm: { providers: [] },
+      assistants: { assistants: [] },
+      redux: {},
+      localStorage: {},
+      dexieTables: {
+        quick_phrases: {
+          'phrase-1': {
+            id: 'phrase-1',
+            title: 'Greeting',
+            content: 'Hello',
+            createdAt: 1760000000000,
+            updatedAt: 1760000000000
+          }
+        },
+        knowledge_notes: {
+          'note-1': null
+        }
+      },
+      metadata: {
+        includeSecrets: true,
+        settingCount: 2,
+        providerCount: 0,
+        assistantCount: 0,
+        topicCount: 0,
+        reduxSliceCount: 0,
+        dexieTableRowCount: 2,
+        missingSecretCount: 0
+      }
+    })
+    const target = { dispatch: vi.fn(), flush: vi.fn() }
+
+    await expect(maybeHydrateRuntimeCacheFromStorageV2(target)).resolves.toEqual({
+      hydrated: true,
+      snapshot: expect.objectContaining({
+        dexieTables: expect.any(Object)
+      })
+    })
+
+    expect(mocks.quickPhrasesPut).toHaveBeenCalledWith({
+      id: 'phrase-1',
+      title: 'Greeting',
+      content: 'Hello',
+      createdAt: 1760000000000,
+      updatedAt: 1760000000000
+    })
+    expect(mocks.knowledgeNotesDelete).toHaveBeenCalledWith('note-1')
   })
 })

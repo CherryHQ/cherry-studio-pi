@@ -17,6 +17,7 @@
 import { loggerService } from '@logger'
 import db from '@renderer/databases'
 import FileManager from '@renderer/services/FileManager'
+import { storageV2FileRecoveryService } from '@renderer/services/StorageV2FileRecoveryService'
 import store from '@renderer/store'
 import { updateTopicUpdatedAt } from '@renderer/store/assistants'
 import type { Message, MessageBlock } from '@renderer/types/newMessage'
@@ -396,6 +397,10 @@ export class DexieMessageDataSource implements MessageDataSource {
 
   async updateFileCount(fileId: string, delta: number, deleteIfZero: boolean = false): Promise<void> {
     try {
+      if (!(await db.files.get(fileId))) {
+        await storageV2FileRecoveryService.projectFileIfMissing(fileId, 'file-count-update-missing')
+      }
+
       await db.transaction('rw', db.files, async () => {
         const file = await db.files.get(fileId)
 

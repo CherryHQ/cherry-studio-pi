@@ -6,6 +6,8 @@ import type { FileMetadata } from '@renderer/types'
 import { getFileDirectory } from '@renderer/utils'
 import dayjs from 'dayjs'
 
+import { storageV2FileRecoveryService } from './StorageV2FileRecoveryService'
+
 const logger = loggerService.withContext('FileManager')
 
 class FileManager {
@@ -117,7 +119,14 @@ class FileManager {
   }
 
   static async getFile(id: string): Promise<FileMetadata | undefined> {
-    const file = await db.files.get(id)
+    let file = await db.files.get(id)
+
+    if (!file) {
+      const restored = await storageV2FileRecoveryService.projectFileIfMissing(id, 'file-manager-get-missing')
+      if (restored) {
+        file = await db.files.get(id)
+      }
+    }
 
     if (file) {
       const filesPath = store.getState().runtime.filesPath
@@ -173,6 +182,7 @@ class FileManager {
   }
 
   static async allFiles(): Promise<FileMetadata[]> {
+    await storageV2FileRecoveryService.projectFilesIfEmpty('file-manager-all-empty')
     return db.files.toArray()
   }
 

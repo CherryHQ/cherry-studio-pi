@@ -6,6 +6,7 @@ import { LanguagesEnum } from '@renderer/config/translate'
 import db from '@renderer/databases'
 import { useDefaultModel } from '@renderer/hooks/useAssistant'
 import useTranslate from '@renderer/hooks/useTranslate'
+import { storageV2DexieSettingsRecoveryService } from '@renderer/services/StorageV2DexieSettingsRecoveryService'
 import { translateText } from '@renderer/services/TranslateService'
 import type { TranslateLanguage } from '@renderer/types'
 import { runAsyncFunction } from '@renderer/utils'
@@ -23,17 +24,25 @@ interface Props {
   text: string
 }
 
-let _targetLanguage = (await db.settings.get({ id: 'translate:target:language' }))?.value || LanguagesEnum.zhCN
+let _targetLanguageCode =
+  (
+    await storageV2DexieSettingsRecoveryService.getSetting<string>(
+      'translate:target:language',
+      'mini-translate-target-language-missing'
+    )
+  )?.value || LanguagesEnum.zhCN.langCode
 
 const Translate: FC<Props> = ({ text }) => {
   const [result, setResult] = useState('')
-  const [targetLanguage, setTargetLanguage] = useState<TranslateLanguage>(_targetLanguage)
+  const { getLanguageByLangcode } = useTranslate()
+  const [targetLanguage, setTargetLanguage] = useState<TranslateLanguage>(() =>
+    getLanguageByLangcode(_targetLanguageCode)
+  )
   const { translateModel } = useDefaultModel()
   const { t } = useTranslation()
   const translatingRef = useRef(false)
-  const { getLanguageByLangcode } = useTranslate()
 
-  _targetLanguage = targetLanguage
+  _targetLanguageCode = targetLanguage.langCode
 
   const translate = useCallback(async () => {
     if (!text.trim() || !translateModel) return
@@ -55,7 +64,10 @@ const Translate: FC<Props> = ({ text }) => {
 
   useEffect(() => {
     void runAsyncFunction(async () => {
-      const targetLang = await db.settings.get({ id: 'translate:target:language' })
+      const targetLang = await storageV2DexieSettingsRecoveryService.getSetting<string>(
+        'translate:target:language',
+        'mini-translate-target-language-effect-missing'
+      )
       targetLang && setTargetLanguage(getLanguageByLangcode(targetLang.value))
     })
   }, [getLanguageByLangcode])

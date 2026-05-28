@@ -69,6 +69,9 @@ export function registerStorageV2IpcHandlers() {
   ipcMain.handle(IpcChannel.StorageV2_ConversationDelete, (_event, conversationId: string) =>
     storageV2Service.deleteConversation(conversationId)
   )
+  ipcMain.handle(IpcChannel.StorageV2_FilesList, () => storageV2Service.listFiles())
+  ipcMain.handle(IpcChannel.StorageV2_FileGet, (_event, fileId: string) => storageV2Service.getFile(fileId))
+  ipcMain.handle(IpcChannel.StorageV2_FilesProjectLegacy, () => storageV2Service.projectFilesToLegacyRuntime())
   ipcMain.handle(IpcChannel.StorageV2_FileUpsert, (_event, file: unknown) => storageV2Service.upsertFile(file as any))
   ipcMain.handle(IpcChannel.StorageV2_FileDelete, (_event, fileId: string) => storageV2Service.deleteFile(fileId))
   ipcMain.handle(IpcChannel.StorageV2_ImportLegacyReduxSnapshot, (_event, snapshot: unknown, options?: unknown) =>

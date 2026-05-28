@@ -3,6 +3,8 @@ import db from '@renderer/databases'
 import type { QuickPhrase } from '@renderer/types'
 import { v4 as uuidv4 } from 'uuid'
 
+import { storageV2DexieTableRecoveryService } from './StorageV2DexieTableRecoveryService'
+
 const logger = loggerService.withContext('QuickPhraseService')
 
 export class QuickPhraseService {
@@ -24,7 +26,16 @@ export class QuickPhraseService {
   static async getAll(): Promise<QuickPhrase[]> {
     // Ensure database is initialized before
     await QuickPhraseService.init()
-    const phrases = await db.quick_phrases.toArray()
+    let phrases = await db.quick_phrases.toArray()
+    if (phrases.length === 0) {
+      const restored = await storageV2DexieTableRecoveryService.projectTableIfEmpty(
+        'quick_phrases',
+        'quick-phrases-empty'
+      )
+      if (restored) {
+        phrases = await db.quick_phrases.toArray()
+      }
+    }
     return phrases.sort((a, b) => (b.order ?? 0) - (a.order ?? 0))
   }
 

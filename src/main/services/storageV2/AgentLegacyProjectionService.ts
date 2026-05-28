@@ -4,7 +4,7 @@ import path from 'node:path'
 import type { Client, Row } from '@libsql/client'
 import { loggerService } from '@logger'
 import { DatabaseManager } from '@main/services/agents/database/DatabaseManager'
-import { app } from 'electron'
+import { getDataPath } from '@main/utils'
 
 import { storageV2DataRootService } from './DataRootService'
 import { storageV2SecretVaultService } from './SecretVaultService'
@@ -184,10 +184,11 @@ function archiveFileIfExists(source: string, archiveRoot: string, userDataPath: 
 }
 
 function getLegacyAgentDbPaths() {
-  const userDataPath = app.getPath('userData')
+  const dataRoot = getDataPath()
+  const userDataPath = path.dirname(dataRoot)
   return {
     userDataPath,
-    currentPath: path.join(userDataPath, 'Data', 'agents.db'),
+    currentPath: path.join(dataRoot, 'agents.db'),
     oldPath: path.join(userDataPath, 'agents.db')
   }
 }

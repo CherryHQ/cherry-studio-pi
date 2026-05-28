@@ -2,10 +2,10 @@ import ModelTagsWithLabel from '@renderer/components/ModelTagsWithLabel'
 import type { QuickPanelListItem } from '@renderer/components/QuickPanel'
 import { QuickPanelReservedSymbol } from '@renderer/components/QuickPanel'
 import { getModelLogo, isEmbeddingModel, isRerankModel, isVisionModel } from '@renderer/config/models'
-import db from '@renderer/databases'
 import { useProviders } from '@renderer/hooks/useProvider'
 import type { ToolQuickPanelApi, ToolQuickPanelController } from '@renderer/pages/home/Inputbar/types'
 import { getModelUniqId } from '@renderer/services/ModelService'
+import { storageV2DexieSettingsRecoveryService } from '@renderer/services/StorageV2DexieSettingsRecoveryService'
 import type { FileMetadata, Model } from '@renderer/types'
 import { FILE_TYPE } from '@renderer/types'
 import { getFancyProviderName } from '@renderer/utils'
@@ -119,11 +119,14 @@ export const useMentionModelsPanel = (params: Params, role: 'button' | 'manager'
 
   const pinnedModels = useLiveQuery(
     async () => {
-      const setting = await db.settings.get('pinned:models')
-      return setting?.value || []
+      const setting = await storageV2DexieSettingsRecoveryService.getSetting<string[]>(
+        'pinned:models',
+        'mention-models-pinned-empty'
+      )
+      return setting?.value ?? []
     },
     [],
-    []
+    [] as string[]
   )
 
   const modelItems = useMemo(() => {

@@ -23,11 +23,14 @@ import { app } from 'electron'
 import fs from 'fs'
 import path from 'path'
 
+import { getDataPath } from '../../../utils'
 import { DataMigrationService } from './DataMigrationService'
 import { MigrationService } from './MigrationService'
 import * as schema from './schema'
 
-const dbPath = path.join(app.getPath('userData'), 'Data', 'agents.db')
+function getDbPath() {
+  return path.join(getDataPath(), 'agents.db')
+}
 
 function getOldDbPath() {
   return path.join(app.getPath('userData'), 'agents.db')
@@ -87,6 +90,7 @@ export class DatabaseManager {
     }
 
     const oldPath = getOldDbPath()
+    const dbPath = getDbPath()
     if (!fs.existsSync(oldPath) || fs.existsSync(dbPath)) {
       return
     }
@@ -118,6 +122,7 @@ export class DatabaseManager {
 
     try {
       DatabaseManager.migrateFromOldPath()
+      const dbPath = getDbPath()
 
       logger.info(`Initializing database at: ${dbPath}`)
 

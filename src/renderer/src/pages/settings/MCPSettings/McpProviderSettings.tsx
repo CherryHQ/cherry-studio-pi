@@ -3,6 +3,7 @@ import CollapsibleSearchBar from '@renderer/components/CollapsibleSearchBar'
 import Scrollbar from '@renderer/components/Scrollbar'
 import db from '@renderer/databases'
 import { useMCPServers } from '@renderer/hooks/useMCPServers'
+import { storageV2DexieSettingsRecoveryService } from '@renderer/services/StorageV2DexieSettingsRecoveryService'
 import type { MCPServer } from '@renderer/types'
 import { Button, Divider, Flex, Input, Space } from 'antd'
 import Link from 'antd/es/typography/Link'
@@ -38,7 +39,10 @@ const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => 
     const loadServersFromDb = async () => {
       try {
         const dbKey = `mcp:provider:${provider.key}:servers`
-        const setting = await db.settings.get(dbKey)
+        const setting = await storageV2DexieSettingsRecoveryService.getSetting<MCPServer[]>(
+          dbKey,
+          'mcp-provider-servers-empty'
+        )
         const savedServers = setting?.value || []
         setAvailableServers(savedServers)
       } catch (error) {

@@ -2,11 +2,11 @@ import { loggerService } from '@logger'
 import { isQwenMTModel } from '@renderer/config/models'
 import { LANG_DETECT_PROMPT } from '@renderer/config/prompts'
 import { builtinLanguages, LanguagesEnum, UNKNOWN } from '@renderer/config/translate'
-import db from '@renderer/databases'
 import i18n from '@renderer/i18n'
 import { fetchChatCompletion } from '@renderer/services/ApiService'
 import { getDefaultAssistant, getQuickModel } from '@renderer/services/AssistantService'
 import { hasModel } from '@renderer/services/ModelService'
+import { storageV2DexieSettingsRecoveryService } from '@renderer/services/StorageV2DexieSettingsRecoveryService'
 import { estimateTextTokens } from '@renderer/services/TokenService'
 import { getAllCustomLanguages } from '@renderer/services/TranslateService'
 import type { Assistant, TranslateLanguage, TranslateLanguageCode } from '@renderer/types'
@@ -29,7 +29,12 @@ export const detectLanguage = async (inputText: string): Promise<TranslateLangua
   const text = inputText.trim()
   if (!text) return LanguagesEnum.zhCN.langCode
 
-  let method = (await db.settings.get({ id: 'translate:detect:method' }))?.value
+  let method = (
+    await storageV2DexieSettingsRecoveryService.getSetting<string>(
+      'translate:detect:method',
+      'translate-detect-method-missing'
+    )
+  )?.value
   if (!method) method = 'auto'
   logger.info(`auto detection method: ${method}`)
 

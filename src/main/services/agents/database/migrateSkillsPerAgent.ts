@@ -12,9 +12,9 @@
 import * as path from 'node:path'
 
 import { loggerService } from '@logger'
+import { getDataPath } from '@main/utils'
 import { eq } from 'drizzle-orm'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
-import { app } from 'electron'
 
 import type * as schema from './schema'
 import { agentSkillsTable, agentsTable, skillsTable } from './schema'
@@ -132,12 +132,8 @@ function parseFirstAccessiblePath(serialized: string | null | undefined): string
 }
 
 /**
- * Resolve the global skills storage root without pulling in the main-process
- * `getDataPath` helper (which hits Electron's `app` module during migration
- * startup, at a point where the `app.ready` event may not have fired yet).
- *
- * Mirrors `getDataPath('Skills')` — `userData/Data/Skills`.
+ * Resolve the global skills storage root through the Storage v2-aware data root.
  */
 function getSkillsStorageRoot(): string {
-  return path.join(app.getPath('userData'), 'Data', 'Skills')
+  return getDataPath('Skills')
 }

@@ -15,6 +15,7 @@ import { useOcr } from '@renderer/hooks/useOcr'
 import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
 import { useTimer } from '@renderer/hooks/useTimer'
 import useTranslate from '@renderer/hooks/useTranslate'
+import { storageV2DexieSettingsRecoveryService } from '@renderer/services/StorageV2DexieSettingsRecoveryService'
 import { estimateTextTokens } from '@renderer/services/TokenService'
 import { saveTranslateHistory, translateText } from '@renderer/services/TranslateService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
@@ -371,14 +372,23 @@ const TranslatePage: FC = () => {
   // 控制设置加载
   useEffect(() => {
     void runAsyncFunction(async () => {
-      const targetLang = await db.settings.get({ id: 'translate:target:language' })
+      const targetLang = await storageV2DexieSettingsRecoveryService.getSetting<string>(
+        'translate:target:language',
+        'translate-target-language-missing'
+      )
       targetLang && setTargetLanguage(getLanguageByLangcode(targetLang.value))
 
-      const sourceLang = await db.settings.get({ id: 'translate:source:language' })
+      const sourceLang = await storageV2DexieSettingsRecoveryService.getSetting<string>(
+        'translate:source:language',
+        'translate-source-language-missing'
+      )
       sourceLang &&
         setSourceLanguage(sourceLang.value === 'auto' ? sourceLang.value : getLanguageByLangcode(sourceLang.value))
 
-      const bidirectionalPairSetting = await db.settings.get({ id: 'translate:bidirectional:pair' })
+      const bidirectionalPairSetting = await storageV2DexieSettingsRecoveryService.getSetting<string[]>(
+        'translate:bidirectional:pair',
+        'translate-bidirectional-pair-missing'
+      )
       if (bidirectionalPairSetting) {
         const langPair = bidirectionalPairSetting.value
         let source: undefined | TranslateLanguage
@@ -401,16 +411,28 @@ const TranslatePage: FC = () => {
         }
       }
 
-      const bidirectionalSetting = await db.settings.get({ id: 'translate:bidirectional:enabled' })
+      const bidirectionalSetting = await storageV2DexieSettingsRecoveryService.getSetting<boolean>(
+        'translate:bidirectional:enabled',
+        'translate-bidirectional-enabled-missing'
+      )
       setIsBidirectional(bidirectionalSetting ? bidirectionalSetting.value : false)
 
-      const scrollSyncSetting = await db.settings.get({ id: 'translate:scroll:sync' })
+      const scrollSyncSetting = await storageV2DexieSettingsRecoveryService.getSetting<boolean>(
+        'translate:scroll:sync',
+        'translate-scroll-sync-missing'
+      )
       setIsScrollSyncEnabled(scrollSyncSetting ? scrollSyncSetting.value : false)
 
-      const markdownSetting = await db.settings.get({ id: 'translate:markdown:enabled' })
+      const markdownSetting = await storageV2DexieSettingsRecoveryService.getSetting<boolean>(
+        'translate:markdown:enabled',
+        'translate-markdown-enabled-missing'
+      )
       setEnableMarkdown(markdownSetting ? markdownSetting.value : false)
 
-      const autoDetectionMethodSetting = await db.settings.get({ id: 'translate:detect:method' })
+      const autoDetectionMethodSetting = await storageV2DexieSettingsRecoveryService.getSetting<AutoDetectionMethod>(
+        'translate:detect:method',
+        'translate-detect-method-missing'
+      )
 
       if (autoDetectionMethodSetting) {
         setAutoDetectionMethod(autoDetectionMethodSetting.value)

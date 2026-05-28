@@ -3,6 +3,7 @@ import db from '@renderer/databases'
 import { getStoreSetting } from '@renderer/hooks/useSettings'
 import { getKnowledgeBaseParams } from '@renderer/services/KnowledgeService'
 import { NotificationService } from '@renderer/services/NotificationService'
+import { storageV2DexieTableRecoveryService } from '@renderer/services/StorageV2DexieTableRecoveryService'
 import store from '@renderer/store'
 import {
   clearCompletedProcessing,
@@ -183,6 +184,16 @@ class KnowledgeQueue {
       switch (item.type) {
         case 'note':
           note = await db.knowledge_notes.get(item.id)
+          if (!note) {
+            const restored = await storageV2DexieTableRecoveryService.projectRowIfMissing(
+              'knowledge_notes',
+              item.id,
+              'knowledge-queue-note-missing'
+            )
+            if (restored) {
+              note = await db.knowledge_notes.get(item.id)
+            }
+          }
           if (note) {
             content = note.content
             logger.info('{ ...sourceItem, content }', { ...sourceItem, content })

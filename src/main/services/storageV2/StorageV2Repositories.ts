@@ -98,6 +98,8 @@ type StoredMessage = {
   blocks: StoredMessageBlock[]
 }
 
+const LEGACY_FILE_TYPES = new Set(['image', 'video', 'audio', 'text', 'document', 'other'])
+
 export type StorageV2ConversationImport = {
   id: string
   kind?: string
@@ -225,6 +227,38 @@ function getKnowledgeItemSourceUri(item: Record<string, any>): string | null {
   }
 
   return null
+}
+
+function normalizeLegacyFileType(value: unknown): string | null {
+  return typeof value === 'string' && LEGACY_FILE_TYPES.has(value) ? value : null
+}
+
+function inferLegacyFileType(type: unknown, mime: unknown, ext: string): string {
+  const normalizedType = normalizeLegacyFileType(type)
+  if (normalizedType) return normalizedType
+
+  const normalizedMime = normalizeLegacyFileType(mime)
+  if (normalizedMime) return normalizedMime
+
+  if (typeof mime === 'string') {
+    const lowerMime = mime.toLowerCase()
+    if (lowerMime.startsWith('image/')) return 'image'
+    if (lowerMime.startsWith('video/')) return 'video'
+    if (lowerMime.startsWith('audio/')) return 'audio'
+    if (lowerMime.startsWith('text/')) return 'text'
+    if (lowerMime === 'application/json' || lowerMime.endsWith('+json')) return 'text'
+    if (lowerMime === 'application/pdf' || lowerMime.startsWith('application/')) return 'document'
+  }
+
+  const lowerExt = ext.toLowerCase()
+  if (['.txt', '.md', '.markdown', '.json', '.csv', '.ts', '.tsx', '.js', '.jsx', '.py'].includes(lowerExt)) {
+    return 'text'
+  }
+  if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp'].includes(lowerExt)) return 'image'
+  if (['.mp4', '.mov', '.avi', '.mkv', '.webm'].includes(lowerExt)) return 'video'
+  if (['.mp3', '.wav', '.m4a', '.flac', '.aac', '.ogg'].includes(lowerExt)) return 'audio'
+
+  return 'document'
 }
 
 function getImportMessageId(conversationId: string, message: Record<string, any>, index: number) {
@@ -1694,6 +1728,77 @@ export class StorageV2KnowledgeRepository {
 }
 
 export class StorageV2FileRepository {
+  private toLegacyFile(row: Record<string, any>): Record<string, any> {
+    const metadata = parseJson<Record<string, any>>(row.metadata_json, {})
+    const id = String(row.id)
+    const originalName = String(row.original_name ?? row.display_name ?? metadata.origin_name ?? metadata.name ?? id)
+    const extCandidate = metadata.ext ?? row.blob_ext ?? path.extname(originalName)
+    const ext =
+      typeof extCandidate === 'string' && extCandidate
+        ? extCandidate.startsWith('.')
+          ? extCandidate
+          : `.${extCandidate}`
+        : ''
+
+    return {
+      ...metadata,
+      id,
+      name: metadata.name ?? `${id}${ext}`,
+      origin_name: metadata.origin_name ?? originalName,
+      path: metadata.path ?? '',
+      size: typeof metadata.size === 'number' ? metadata.size : Number(row.blob_size ?? 0),
+      ext,
+      type: inferLegacyFileType(metadata.type, row.blob_mime, ext),
+      created_at: metadata.created_at ?? row.created_at,
+      count: typeof metadata.count === 'number' ? metadata.count : 1
+    }
+  }
+
+  async get(fileId: string): Promise<Record<string, any> | null> {
+    const client = await storageV2Database.getClient()
+    const result = await client.execute({
+      sql: `
+        SELECT
+          f.id,
+          f.original_name,
+          f.display_name,
+          f.metadata_json,
+          f.created_at,
+          b.ext AS blob_ext,
+          b.mime AS blob_mime,
+          b.size AS blob_size
+        FROM files f
+        INNER JOIN blobs b ON b.id = f.blob_id
+        WHERE f.id = ? AND f.deleted_at IS NULL
+      `,
+      args: [fileId]
+    })
+
+    const row = result.rows[0] as Record<string, any> | undefined
+    return row ? this.toLegacyFile(row) : null
+  }
+
+  async list(): Promise<Array<Record<string, any>>> {
+    const client = await storageV2Database.getClient()
+    const result = await client.execute(`
+      SELECT
+        f.id,
+        f.original_name,
+        f.display_name,
+        f.metadata_json,
+        f.created_at,
+        b.ext AS blob_ext,
+        b.mime AS blob_mime,
+        b.size AS blob_size
+      FROM files f
+      INNER JOIN blobs b ON b.id = f.blob_id
+      WHERE f.deleted_at IS NULL
+      ORDER BY f.created_at ASC, f.id ASC
+    `)
+
+    return result.rows.map((row) => this.toLegacyFile(row as Record<string, any>))
+  }
+
   async importFile(file: StorageV2FileImport): Promise<{
     imported: boolean
     skippedReason?: string

@@ -3,7 +3,12 @@ import { HStack } from '@renderer/components/Layout'
 import { DynamicVirtualList } from '@renderer/components/VirtualList'
 import db from '@renderer/databases'
 import useTranslate from '@renderer/hooks/useTranslate'
-import { clearHistory, deleteHistory, updateTranslateHistory } from '@renderer/services/TranslateService'
+import {
+  clearHistory,
+  deleteHistory,
+  recoverTranslateHistoryIfEmpty,
+  updateTranslateHistory
+} from '@renderer/services/TranslateService'
 import type { TranslateHistory, TranslateLanguage } from '@renderer/types'
 import { Button, Drawer, Empty, Flex, Input, Popconfirm } from 'antd'
 import dayjs from 'dayjs'
@@ -90,6 +95,12 @@ const TranslateHistoryList: FC<TranslateHistoryProps> = ({ isOpen, onHistoryItem
     },
     [t]
   )
+
+  useEffect(() => {
+    if (isOpen && _translateHistory?.length === 0) {
+      void recoverTranslateHistoryIfEmpty()
+    }
+  }, [_translateHistory?.length, isOpen])
 
   useEffect(() => {
     setDisplayedHistory(translateHistory.filter(finalFilter))

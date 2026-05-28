@@ -5,7 +5,7 @@ import path from 'node:path'
 import type { Client, Row } from '@libsql/client'
 import { loggerService } from '@logger'
 import { AppDataDatabase, getAppDataDatabase } from '@main/services/appData/AppDataDatabase'
-import { app } from 'electron'
+import { getDataPath } from '@main/utils'
 
 import { storageV2SecretVaultService } from './SecretVaultService'
 import { storageV2Database } from './StorageV2Database'
@@ -80,7 +80,7 @@ const APP_CACHE_SOURCES = new Set(['legacy-app-cache', 'app-cache'])
 const WORKBENCH_SHORTCUT_SOURCES = new Set(['legacy-workbench-shortcut', 'workbench-shortcut'])
 
 function getAppDbPath() {
-  return path.join(app.getPath('userData'), 'Data', 'app.db')
+  return path.join(getDataPath(), 'app.db')
 }
 
 function archiveFileIfExists(source: string, archiveRoot: string) {

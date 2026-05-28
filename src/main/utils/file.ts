@@ -13,6 +13,8 @@ import { app } from 'electron'
 import iconv from 'iconv-lite'
 import { v4 as uuidv4 } from 'uuid'
 
+import { getDataPath } from './index'
+
 const logger = loggerService.withContext('Utils:File')
 
 // 创建文件类型映射表，提高查找效率
@@ -166,11 +168,11 @@ export function getTempDir() {
 }
 
 export function getFilesDir() {
-  return path.join(app.getPath('userData'), 'Data', 'Files')
+  return getDataPath('Files')
 }
 
 export function getNotesDir() {
-  const notesDir = path.join(app.getPath('userData'), 'Data', 'Notes')
+  const notesDir = getDataPath('Notes')
   if (!fs.existsSync(notesDir)) {
     fs.mkdirSync(notesDir, { recursive: true })
     logger.info(`Notes directory created at: ${notesDir}`)

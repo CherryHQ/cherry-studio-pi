@@ -2,7 +2,30 @@ import fs from 'node:fs'
 import fsAsync from 'node:fs/promises'
 import path from 'node:path'
 
+import { HOME_CHERRY_DIR } from '@shared/config/constant'
 import { app } from 'electron'
+
+const STORAGE_FORMAT = 'cherry-studio-pi-storage'
+const STORAGE_VERSION = 2
+const STORAGE_APP_ID = 'cherry-studio-pi'
+const KNOWN_DATA_ROOT_NAMES = [
+  'Cherry Studio Pi',
+  'CherryStudioPi',
+  'Perry Studio',
+  'PerryStudio',
+  'Cherry Studio',
+  'CherryStudio'
+]
+
+type DataRootConfigEntry = {
+  app?: string
+  path?: string
+  active?: boolean
+}
+
+type CherryConfig = {
+  dataRoots?: DataRootConfigEntry[]
+}
 
 export function getResourcePath() {
   return path.join(app.getAppPath(), 'resources')
@@ -31,9 +54,77 @@ export function toAsarUnpackedPath(filePath: string): string {
   return path.join(unpackedAppPath, path.relative(appPath, filePath))
 }
 
-export function getDataPath(subPath?: string) {
-  const dataPath = path.join(app.getPath('userData'), 'Data')
+function readJson<T>(filePath: string): T | null {
+  try {
+    if (!fs.existsSync(filePath)) return null
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as T
+  } catch {
+    return null
+  }
+}
 
+function getDefaultDataRootPath() {
+  return path.join(app.getPath('userData'), 'Data')
+}
+
+function hasStorageV2Manifest(dataRoot: string) {
+  const manifest = readJson<{ format?: unknown; version?: unknown }>(path.join(dataRoot, 'manifest.json'))
+  return manifest?.format === STORAGE_FORMAT && manifest.version === STORAGE_VERSION
+}
+
+function hasLegacyRuntimeData(dataRoot: string) {
+  return ['main.db', 'agents.db', 'app.db', 'Files', 'KnowledgeBase', 'Memory', 'Skills', 'Agents'].some((entry) =>
+    fs.existsSync(path.join(dataRoot, entry))
+  )
+}
+
+function getGlobalConfigPath() {
+  return path.join(app.getPath('home'), HOME_CHERRY_DIR, 'config', 'config.json')
+}
+
+function getConfiguredDataRoots(): string[] {
+  const config = readJson<CherryConfig>(getGlobalConfigPath())
+  if (!Array.isArray(config?.dataRoots)) return []
+
+  return config.dataRoots
+    .filter((entry) => entry.active !== false)
+    .filter((entry) => !entry.app || entry.app === STORAGE_APP_ID)
+    .map((entry) => entry.path)
+    .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+}
+
+function getKnownLegacyDataRoots() {
+  const appDataRoot = app.getPath('appData')
+
+  return KNOWN_DATA_ROOT_NAMES.flatMap((name) => {
+    const userDataRoot = path.join(appDataRoot, name)
+    return [path.join(userDataRoot, 'Data'), path.join(`${userDataRoot}Dev`, 'Data')]
+  })
+}
+
+function resolveRuntimeDataRoot() {
+  const envRoot = process.env.CHERRY_STUDIO_STORAGE_V2_ROOT
+  if (envRoot) return path.resolve(envRoot)
+
+  const defaultDataRoot = getDefaultDataRootPath()
+  const configuredDataRoots = getConfiguredDataRoots().map((candidate) => path.resolve(candidate))
+  const configuredDataRootSet = new Set(configuredDataRoots)
+  const resolvedDefaultDataRoot = path.resolve(defaultDataRoot)
+  const candidates = [...configuredDataRoots, defaultDataRoot, ...getKnownLegacyDataRoots()].map((candidate) =>
+    path.resolve(candidate)
+  )
+  const uniqueCandidates = Array.from(new Set(candidates))
+
+  return (
+    uniqueCandidates.find((candidate) => hasStorageV2Manifest(candidate)) ??
+    uniqueCandidates.find((candidate) => configuredDataRootSet.has(candidate) && fs.existsSync(candidate)) ??
+    uniqueCandidates.find((candidate) => candidate === resolvedDefaultDataRoot && hasLegacyRuntimeData(candidate)) ??
+    uniqueCandidates.find((candidate) => candidate !== resolvedDefaultDataRoot && hasLegacyRuntimeData(candidate)) ??
+    defaultDataRoot
+  )
+}
+
+function ensureDataPath(dataPath: string, subPath?: string) {
   if (!fs.existsSync(dataPath)) {
     fs.mkdirSync(dataPath, { recursive: true })
   }
@@ -47,6 +138,14 @@ export function getDataPath(subPath?: string) {
   }
 
   return dataPath
+}
+
+export function getDefaultDataPath(subPath?: string) {
+  return ensureDataPath(getDefaultDataRootPath(), subPath)
+}
+
+export function getDataPath(subPath?: string) {
+  return ensureDataPath(resolveRuntimeDataRoot(), subPath)
 }
 
 export function getInstanceName(baseURL: string) {

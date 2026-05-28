@@ -35,6 +35,14 @@ import { TopicManager } from './useTopic'
 
 const LOCAL_MODEL_PROVIDERS = new Set(['ollama', 'lmstudio', 'gpustack'])
 
+const scheduleStorageV2TopicMirror = (topicId: string | undefined) => {
+  storageV2ConversationMirrorService.scheduleTopic(topicId, () => store.getState())
+}
+
+const scheduleStorageV2TopicMirrors = (topicIds: Iterable<string | undefined>) => {
+  storageV2ConversationMirrorService.scheduleTopics(topicIds, () => store.getState())
+}
+
 const pickFallbackModel = (providers: Provider[]): Model | undefined => {
   const provider = providers.find(
     (provider) =>
@@ -167,7 +175,10 @@ export function useAssistant(id: string) {
   return {
     assistant: assistantWithModel,
     model,
-    addTopic: (topic: Topic) => dispatch(addTopic({ assistantId: assistant.id, topic })),
+    addTopic: (topic: Topic) => {
+      dispatch(addTopic({ assistantId: assistant.id, topic }))
+      scheduleStorageV2TopicMirror(topic.id)
+    },
     removeTopic: (topic: Topic) => {
       void TopicManager.removeTopic(topic.id)
       dispatch(removeTopic({ assistantId: assistant.id, topic }))
@@ -188,11 +199,17 @@ export function useAssistant(id: string) {
           }
         })
         .then(() => {
-          storageV2ConversationMirrorService.scheduleTopic(topic.id, () => store.getState())
+          scheduleStorageV2TopicMirror(topic.id)
         })
     },
-    updateTopic: (topic: Topic) => dispatch(updateTopic({ assistantId: assistant.id, topic })),
-    updateTopics: (topics: Topic[]) => dispatch(updateTopics({ assistantId: assistant.id, topics })),
+    updateTopic: (topic: Topic) => {
+      dispatch(updateTopic({ assistantId: assistant.id, topic }))
+      scheduleStorageV2TopicMirror(topic.id)
+    },
+    updateTopics: (topics: Topic[]) => {
+      dispatch(updateTopics({ assistantId: assistant.id, topics }))
+      scheduleStorageV2TopicMirrors(topics.map((topic) => topic.id))
+    },
     removeAllTopics: () => dispatch(removeAllTopics({ assistantId: assistant.id })),
     setModel: useCallback(
       (model: Model) => assistant && dispatch(setModel({ assistantId: assistant?.id, model })),
