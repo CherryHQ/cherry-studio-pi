@@ -3,6 +3,8 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 
 import { loggerService } from '@logger'
+import { storageV2AgentDbMirrorService } from '@main/services/storageV2/AgentDbMirrorService'
+import { storageV2AgentRuntimeTombstoneService } from '@main/services/storageV2/AgentRuntimeTombstoneService'
 import { getDataPath } from '@main/utils'
 import { directoryExists } from '@main/utils/file'
 import { deleteDirectoryRecursive } from '@main/utils/fileOperations'
@@ -139,6 +141,8 @@ export class SkillService {
         skillId: options.skillId
       })
     }
+
+    await this.flushSkillRuntimeMutationToStorageV2()
 
     return { ...skill, isEnabled: options.isEnabled }
   }
@@ -308,11 +312,14 @@ export class SkillService {
       }
     }
 
+    await storageV2AgentRuntimeTombstoneService.tombstoneSkill(skillId)
+
     // Remove from global storage
     const skillPath = this.getSkillStoragePath(skill.folderName)
     await this.installer.uninstall(skillPath)
     // FK cascade on skill_id deletes agent_skills rows automatically.
     await this.repository.delete(skillId)
+    await this.flushSkillRuntimeMutationToStorageV2({ strict: true })
     logger.info('Skill uninstalled', { skillId, folderName: skill.folderName })
   }
 
@@ -593,6 +600,7 @@ export class SkillService {
       })
       const updated = (await this.repository.getById(existing.id))!
       logger.info('Skill updated', { id: existing.id, name: metadata.name, folderName, source })
+      await this.flushSkillRuntimeMutationToStorageV2()
       return updated
     }
 
@@ -625,6 +633,7 @@ export class SkillService {
     }
 
     logger.info('Skill installed', { id, name: metadata.name, folderName, source })
+    await this.flushSkillRuntimeMutationToStorageV2()
     return skill
   }
 
@@ -770,6 +779,16 @@ export class SkillService {
   /** Full path to a skill in global storage */
   private getSkillStoragePath(folderName: string): string {
     return path.join(getDataPath('Skills'), folderName)
+  }
+
+  private async flushSkillRuntimeMutationToStorageV2(options: { strict?: boolean } = {}): Promise<void> {
+    if (options.strict) {
+      await storageV2AgentDbMirrorService.flushStrict()
+      return
+    }
+
+    storageV2AgentDbMirrorService.schedule(0)
+    await storageV2AgentDbMirrorService.flush()
   }
 
   /** Symlink location for a given agent workspace: `{workspace}/.claude/skills/{folderName}` */

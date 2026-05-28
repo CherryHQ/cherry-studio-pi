@@ -2,11 +2,12 @@ import { storageV2Database } from './StorageV2Database'
 import { storageV2ConversationRepository } from './StorageV2Repositories'
 import { storageV2SyncLogService } from './SyncLogService'
 
-type AgentRuntimeEntityTable = 'agents' | 'agent_sessions' | 'scheduled_tasks' | 'channels'
+type AgentRuntimeEntityTable = 'agents' | 'agent_sessions' | 'skills' | 'scheduled_tasks' | 'channels'
 
 const ENTITY_TYPE_BY_TABLE: Record<AgentRuntimeEntityTable, string> = {
   agents: 'agent',
   agent_sessions: 'agent_session',
+  skills: 'skill',
   scheduled_tasks: 'scheduled_task',
   channels: 'channel'
 }
@@ -27,6 +28,10 @@ export class StorageV2AgentRuntimeTombstoneService {
   async tombstoneSession(sessionId: string) {
     await this.tombstoneEntity('agent_sessions', sessionId)
     await storageV2ConversationRepository.delete(`agent-session:${sessionId}`)
+  }
+
+  async tombstoneSkill(skillId: string) {
+    await this.tombstoneEntity('skills', skillId)
   }
 
   async tombstoneTask(taskId: string) {

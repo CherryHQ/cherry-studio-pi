@@ -72,6 +72,29 @@ describe('StorageV2AgentRuntimeTombstoneService', () => {
     expect(mocks.conversationDelete).toHaveBeenCalledWith('agent-session:session-1')
   })
 
+  it('tombstones skills and records delete changes', async () => {
+    mocks.client.execute
+      .mockResolvedValueOnce({ rows: [{ version: 5 }], columns: [], columnTypes: [] })
+      .mockResolvedValueOnce({ rows: [], columns: [], columnTypes: [] })
+
+    await new StorageV2AgentRuntimeTombstoneService().tombstoneSkill('skill-1')
+
+    expect(mocks.client.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sql: expect.stringContaining('FROM skills'),
+        args: ['skill-1']
+      })
+    )
+    expect(mocks.recordChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: 'skill',
+        entityId: 'skill-1',
+        operation: 'delete',
+        version: 6
+      })
+    )
+  })
+
   it('tombstones agent session messages and their blocks', async () => {
     mocks.client.execute
       .mockResolvedValueOnce({
