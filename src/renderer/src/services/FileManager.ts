@@ -35,7 +35,9 @@ class FileManager {
   }
 
   private static async deleteStorageV2File(id: string): Promise<void> {
-    if (typeof window.api?.storageV2?.deleteFile !== 'function') return
+    if (typeof window.api?.storageV2?.deleteFile !== 'function') {
+      throw new Error('Storage v2 file delete API unavailable')
+    }
 
     try {
       await window.api.storageV2.deleteFile(id)

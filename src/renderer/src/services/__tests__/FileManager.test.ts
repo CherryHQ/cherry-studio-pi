@@ -97,6 +97,31 @@ describe('FileManager', () => {
     expect(mocks.localFileDelete).not.toHaveBeenCalled()
   })
 
+  it('stops deleting file metadata when the Storage v2 tombstone API is unavailable', async () => {
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        file: {
+          delete: mocks.localFileDelete
+        },
+        storageV2: {}
+      }
+    })
+    mocks.filesGet.mockResolvedValue({
+      id: 'file-1',
+      ext: '.txt',
+      count: 1,
+      origin_name: 'note.txt'
+    })
+
+    const { default: FileManager } = await import('../FileManager')
+
+    await expect(FileManager.deleteFile('file-1', true)).rejects.toThrow('Storage v2 file delete API unavailable')
+
+    expect(mocks.filesDelete).not.toHaveBeenCalled()
+    expect(mocks.localFileDelete).not.toHaveBeenCalled()
+  })
+
   it('deletes legacy metadata and the local file after the Storage v2 tombstone succeeds', async () => {
     mocks.filesGet.mockResolvedValue({
       id: 'file-1',
