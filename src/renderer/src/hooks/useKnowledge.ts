@@ -153,30 +153,32 @@ export const useKnowledge = (baseId: string) => {
 
   // 移除项目
   const removeItem = async (item: KnowledgeItem) => {
-    dispatch(removeItemAction({ baseId, item }))
+    if (!base) {
+      return
+    }
+
     if (isKnowledgeNoteItem(item)) {
       await db.knowledge_notes.delete(item.id)
       storageV2DexieTableMirrorService.scheduleDelete('knowledge_notes', item.id)
       await storageV2DexieTableMirrorService.flush()
     }
-    await flushStorageV2KnowledgeMirror('remove-item')
 
-    if (!base || !item?.uniqueId || !item?.uniqueIds) {
-      return
+    if (item?.uniqueId && item?.uniqueIds) {
+      const removalParams = {
+        uniqueId: item.uniqueId,
+        uniqueIds: item.uniqueIds,
+        base: getKnowledgeBaseParams(base)
+      }
+
+      await window.api.knowledgeBase.remove(removalParams)
     }
-
-    const removalParams = {
-      uniqueId: item.uniqueId,
-      uniqueIds: item.uniqueIds,
-      base: getKnowledgeBaseParams(base)
-    }
-
-    await window.api.knowledgeBase.remove(removalParams)
 
     if (isKnowledgeFileItem(item) && typeof item.content === 'object' && !Array.isArray(item.content)) {
       const file = item.content
       // name: eg. text.pdf
-      await window.api.file.delete(file.name)
+      await window.api.file.delete(file.name).catch((error) => {
+        logger.warn(`Failed to delete knowledge item file ${file.name}`, error as Error)
+      })
     } else if (isKnowledgeVideoItem(item)) {
       // video item has srt and video files
       const files = item.content
@@ -184,6 +186,9 @@ export const useKnowledge = (baseId: string) => {
 
       await Promise.allSettled(deletePromises)
     }
+
+    dispatch(removeItemAction({ baseId, item }))
+    await flushStorageV2KnowledgeMirror('remove-item')
   }
   // 刷新项目
   const refreshItem = async (item: KnowledgeItem) => {
