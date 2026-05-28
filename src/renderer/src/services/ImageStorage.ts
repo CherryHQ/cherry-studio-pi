@@ -45,9 +45,9 @@ export default class ImageStorage {
   static async remove(key: string): Promise<void> {
     const id = IMAGE_PREFIX + key
     try {
-      await db.settings.delete(id)
       storageV2DexieSettingsMirrorService.scheduleDelete(id)
-      await storageV2DexieSettingsMirrorService.flush()
+      await storageV2DexieSettingsMirrorService.flushStrict()
+      await db.settings.delete(id)
     } catch (error) {
       logger.error('Error removing the image', error as Error)
       throw error

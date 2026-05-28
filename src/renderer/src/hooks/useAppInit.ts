@@ -88,9 +88,10 @@ export function useAppInit() {
     if (!avatar?.value) return
 
     if (isBuiltinAvatarValue(avatar.value)) {
-      void db.settings.delete('image://avatar').then(async () => {
+      void runAsyncFunction(async () => {
         storageV2DexieSettingsMirrorService.scheduleDelete('image://avatar')
-        await storageV2DexieSettingsMirrorService.flush()
+        await storageV2DexieSettingsMirrorService.flushStrict()
+        await db.settings.delete('image://avatar')
       })
       dispatch(setAvatar(UserAvatar))
       return
