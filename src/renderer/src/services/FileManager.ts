@@ -32,12 +32,13 @@ class FileManager {
   }
 
   private static async deleteStorageV2File(id: string): Promise<void> {
-    if (!window.api?.storageV2) return
+    if (typeof window.api?.storageV2?.deleteFile !== 'function') return
 
     try {
       await window.api.storageV2.deleteFile(id)
     } catch (error) {
       logger.warn('Failed to tombstone file in Storage v2:', error as Error)
+      throw error
     }
   }
 
@@ -159,6 +160,7 @@ class FileManager {
       }
     }
 
+    await this.deleteStorageV2File(id)
     await db.files.delete(id)
 
     try {
@@ -166,8 +168,6 @@ class FileManager {
     } catch (error) {
       logger.error('Failed to delete file:', error as Error)
     }
-
-    await this.deleteStorageV2File(id)
   }
 
   static async deleteFiles(files: FileMetadata[]): Promise<void> {
