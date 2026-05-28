@@ -71,8 +71,18 @@ class StorageV2AgentDbMirrorService {
     } catch (error) {
       this.pending = true
       this.lastError = error
+      this.scheduleRetry()
       logger.warn('Failed to mirror agents.db to Storage v2', error as Error)
     }
+  }
+
+  private scheduleRetry() {
+    if (this.timer) return
+
+    this.timer = setTimeout(() => {
+      this.timer = null
+      void this.flush()
+    }, DEFAULT_DEBOUNCE_MS)
   }
 }
 

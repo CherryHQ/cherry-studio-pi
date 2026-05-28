@@ -40,4 +40,28 @@ describe('StorageV2AgentDbMirrorService', () => {
       'agent-mirror-before-prune'
     )
   })
+
+  it('retries failed runtime mirrors on a timer', async () => {
+    vi.useFakeTimers()
+    const importSnapshot = vi
+      .spyOn(storageV2LegacyAgentDbImportService, 'importSnapshot')
+      .mockRejectedValueOnce(new Error('storage locked'))
+      .mockResolvedValueOnce({} as any)
+
+    try {
+      storageV2AgentDbMirrorService.schedule(0)
+      await storageV2AgentDbMirrorService.flush()
+
+      expect(importSnapshot).toHaveBeenCalledTimes(1)
+
+      await vi.advanceTimersByTimeAsync(3000)
+
+      expect(importSnapshot).toHaveBeenCalledTimes(2)
+      expect(storageV2AgentRuntimeRecoveryService.projectIfStorageHasAnyAgentRuntimeRows).toHaveBeenCalledWith(
+        'agent-mirror-before-prune'
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
