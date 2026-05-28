@@ -229,8 +229,18 @@ class StorageV2MirrorService {
       this.lastSnapshotJson = snapshotJson
       logger.debug('Mirrored Redux settings to Storage v2')
     } catch (error) {
+      this.scheduleRetry()
       logger.warn('Failed to mirror Redux settings to Storage v2', error as Error)
     }
+  }
+
+  private scheduleRetry() {
+    if (this.suspended || this.paused || this.timer) return
+
+    this.timer = setTimeout(() => {
+      this.timer = null
+      void this.flush()
+    }, DEFAULT_DEBOUNCE_MS)
   }
 
   suspendUntilReload() {
