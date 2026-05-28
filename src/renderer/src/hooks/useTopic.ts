@@ -289,11 +289,10 @@ export const TopicManager = {
       throw dbError
     }
 
-    // 删除文件
+    await storageV2ConversationMirrorService.flushTopic(id, () => store.getState(), { destructive: true })
+
     if (filesToDelete.length > 0) {
       await safeDeleteFiles(filesToDelete)
     }
-
-    await storageV2ConversationMirrorService.flushTopic(id, () => store.getState(), { destructive: true })
   }
 }
