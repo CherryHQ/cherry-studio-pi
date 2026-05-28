@@ -1,59 +1,107 @@
+import { storageV2AppDataKvMirrorService } from '@main/services/storageV2/AppDataKvMirrorService'
+import { storageV2AppDataRuntimeRecoveryService } from '@main/services/storageV2/AppDataRuntimeRecoveryService'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { WebDavConfig } from '@types'
 import { ipcMain } from 'electron'
 
-import { getAppDataDatabase } from './AppDataDatabase'
+import { createWorkbenchShortcutRecord, getAppDataDatabase } from './AppDataDatabase'
 import { appDataSyncService } from './AppDataSyncService'
 
 export function registerAppDataIpcHandlers() {
   ipcMain.handle(IpcChannel.AppData_Get, async (_, scope: string, key: string) => {
     const db = await getAppDataDatabase()
-    return db.getRecord(scope, key)
+    const entry = await db.getRecordEntry(scope, key)
+    if (entry.found) {
+      return entry.value
+    }
+
+    const storageEntry = await storageV2AppDataKvMirrorService.getRecordEntry(scope, key)
+    if (storageEntry.found) {
+      return storageEntry.value
+    }
+
+    if (await storageV2AppDataRuntimeRecoveryService.projectIfAppRecordMissing(scope, key, 'app-data-get-missing')) {
+      const recoveredEntry = await db.getRecordEntry(scope, key)
+      return recoveredEntry.found ? recoveredEntry.value : null
+    }
+
+    return null
   })
 
   ipcMain.handle(IpcChannel.AppData_Set, async (_, scope: string, key: string, value: unknown) => {
     const db = await getAppDataDatabase()
-    return db.setRecord(scope, key, value)
+    const updatedAt = Date.now()
+    await storageV2AppDataKvMirrorService.upsertRecord(scope, key, value, updatedAt)
+    const record = await db.setRecord(scope, key, value, updatedAt)
+    return record
   })
 
   ipcMain.handle(IpcChannel.AppData_Delete, async (_, scope: string, key: string) => {
     const db = await getAppDataDatabase()
-    await db.deleteRecord(scope, key)
+    const deletedAt = Date.now()
+    await storageV2AppDataKvMirrorService.deleteRecord(scope, key, deletedAt)
+    await db.deleteRecord(scope, key, deletedAt)
   })
 
   ipcMain.handle(IpcChannel.AppData_List, async (_, scope?: string, includeDeleted?: boolean) => {
-    const db = await getAppDataDatabase()
-    return db.listRecords(scope, includeDeleted)
+    let db = await getAppDataDatabase()
+    const records = await db.listRecords(scope, includeDeleted)
+    if (records.length > 0) {
+      return records
+    }
+
+    if (await storageV2AppDataRuntimeRecoveryService.projectIfLegacyAppRecordListEmpty(scope, 'app-data-list-empty')) {
+      db = await getAppDataDatabase()
+      return db.listRecords(scope, includeDeleted)
+    }
+
+    return records
   })
 
   ipcMain.handle(IpcChannel.AppCache_Get, async (_, namespace: string, key: string) => {
     const db = await getAppDataDatabase()
-    return db.getCache(namespace, key)
+    const entry = await db.getCacheEntry(namespace, key)
+    return entry.found ? entry.value : storageV2AppDataKvMirrorService.getCache(namespace, key)
   })
 
   ipcMain.handle(IpcChannel.AppCache_Set, async (_, namespace: string, key: string, value: unknown, ttlMs?: number) => {
     const db = await getAppDataDatabase()
-    await db.setCache(namespace, key, value, ttlMs)
+    const updatedAt = Date.now()
+    await storageV2AppDataKvMirrorService.upsertCache(namespace, key, value, ttlMs, updatedAt)
+    await db.setCache(namespace, key, value, ttlMs, updatedAt)
   })
 
   ipcMain.handle(IpcChannel.AppCache_Delete, async (_, namespace: string, key: string) => {
     const db = await getAppDataDatabase()
+    const deletedAt = Date.now()
+    await storageV2AppDataKvMirrorService.deleteCache(namespace, key, deletedAt)
     await db.deleteCache(namespace, key)
   })
 
   ipcMain.handle(IpcChannel.WorkbenchShortcut_List, async () => {
     const db = await getAppDataDatabase()
-    return db.listWorkbenchShortcuts()
+    const shortcuts = await db.listWorkbenchShortcuts()
+    if (shortcuts.length > 0) {
+      return shortcuts
+    }
+
+    return (await db.hasWorkbenchShortcutRows()) ? shortcuts : storageV2AppDataKvMirrorService.listWorkbenchShortcuts()
   })
 
   ipcMain.handle(IpcChannel.WorkbenchShortcut_Upsert, async (_, shortcut) => {
     const db = await getAppDataDatabase()
-    return db.upsertWorkbenchShortcut(shortcut)
+    const savedShortcut = createWorkbenchShortcutRecord(shortcut, Date.now())
+    await storageV2AppDataKvMirrorService.upsertWorkbenchShortcut(savedShortcut)
+    await db.upsertWorkbenchShortcut(savedShortcut)
+    return savedShortcut
   })
 
   ipcMain.handle(IpcChannel.WorkbenchShortcut_InstallHtml, async (_, input: { title?: string; html: string }) => {
     const db = await getAppDataDatabase()
-    return db.installHtmlArtifact(input)
+    const installed = await db.prepareHtmlArtifactShortcut(input, Date.now())
+    await storageV2AppDataKvMirrorService.upsertWorkbenchShortcut(installed)
+    await db.upsertWorkbenchShortcut(installed)
+    return installed
   })
 
   ipcMain.handle(IpcChannel.DataSync_SyncNow, async (_, config: WebDavConfig) => appDataSyncService.syncNow(config))

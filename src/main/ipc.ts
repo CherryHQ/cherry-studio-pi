@@ -39,7 +39,10 @@ import { BrowserWindow, dialog, ipcMain, session, shell, systemPreferences, webC
 import fontList from 'font-list'
 
 import { registerAgentIpcHandlers } from './services/agents/AgentIpcService'
-import { agentMessageRepository } from './services/agents/database'
+import {
+  getAgentSessionHistoryWithStorageV2Recovery,
+  persistAgentMessageExchangeWithStorageV2Recovery
+} from './services/agents/AgentStorageV2ReadThrough'
 import { skillService } from './services/agents/skills/SkillService'
 import { analyticsService } from './services/AnalyticsService'
 import { apiServerService } from './services/ApiServerService'
@@ -132,8 +135,8 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     appUpdater.setAutoUpdate(false)
   })
 
-  powerMonitorService.registerShutdownHandler(() => {
-    void storageV2AgentDbMirrorService.flush()
+  powerMonitorService.registerShutdownHandler(async () => {
+    await storageV2AgentDbMirrorService.flush()
     const mw = windowService.getMainWindow()
     if (mw && !mw.isDestroyed()) {
       mw.webContents.send(IpcChannel.App_SaveData)
@@ -259,7 +262,9 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
 
   ipcMain.handle(IpcChannel.AgentMessage_PersistExchange, async (_event, payload) => {
     try {
-      return await agentMessageRepository.persistExchange(payload)
+      const result = await persistAgentMessageExchangeWithStorageV2Recovery(payload)
+      storageV2AgentDbMirrorService.schedule()
+      return result
     } catch (error) {
       logger.error('Failed to persist agent session messages', error as Error)
       throw error
@@ -270,7 +275,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     IpcChannel.AgentMessage_GetHistory,
     async (_event, { sessionId }: { sessionId: string }): Promise<AgentPersistedMessage[]> => {
       try {
-        return await agentMessageRepository.getSessionHistory(sessionId)
+        return await getAgentSessionHistoryWithStorageV2Recovery(sessionId)
       } catch (error) {
         logger.error('Failed to get agent session history', error as Error)
         throw error

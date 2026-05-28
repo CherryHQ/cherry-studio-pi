@@ -1,7 +1,17 @@
 import { loggerService } from '@logger'
-import { AgentModelValidationError, agentService, sessionService } from '@main/services/agents'
+import { AgentModelValidationError } from '@main/services/agents'
+import {
+  createAgentWithStorageV2Recovery,
+  createSessionWithStorageV2Recovery,
+  deleteAgentWithStorageV2Recovery,
+  getAgentWithStorageV2Recovery,
+  listAgentsWithStorageV2Recovery,
+  reorderAgentsWithStorageV2Recovery,
+  updateAgentWithStorageV2Recovery
+} from '@main/services/agents/AgentStorageV2ReadThrough'
 import { channelManager } from '@main/services/agents/services/channels'
 import { schedulerService } from '@main/services/agents/services/SchedulerService'
+import { storageV2AgentDbMirrorService } from '@main/services/storageV2/AgentDbMirrorService'
 import type { CherryClawConfiguration, ListAgentsResponse } from '@types'
 import { type ReplaceAgentRequest, type UpdateAgentRequest } from '@types'
 import type { Request, Response } from 'express'
@@ -73,13 +83,13 @@ export const createAgent = async (req: Request, res: Response): Promise<Response
     logger.debug('Creating agent')
     logger.debug('Agent payload', { body: req.body })
 
-    const agent = await agentService.createAgent(req.body)
+    const agent = await createAgentWithStorageV2Recovery(req.body)
 
     try {
       logger.info('Agent created', { agentId: agent.id })
       logger.debug('Creating default session for agent', { agentId: agent.id })
 
-      await sessionService.createSession(agent.id, {})
+      await createSessionWithStorageV2Recovery(agent.id, {})
       logger.info('Default session created for agent', { agentId: agent.id })
 
       // Create heartbeat task if heartbeat is enabled
@@ -88,6 +98,7 @@ export const createAgent = async (req: Request, res: Response): Promise<Response
         await schedulerService.ensureHeartbeatTask(agent.id, createConfig.heartbeat_interval ?? 30)
       }
 
+      storageV2AgentDbMirrorService.schedule()
       return res.status(201).json(agent)
     } catch (sessionError: any) {
       logger.error('Failed to create default session for new agent, rolling back agent creation', {
@@ -96,7 +107,7 @@ export const createAgent = async (req: Request, res: Response): Promise<Response
       })
 
       try {
-        await agentService.deleteAgent(agent.id)
+        await deleteAgentWithStorageV2Recovery(agent.id)
       } catch (rollbackError: any) {
         logger.error('Failed to roll back agent after session creation failure', {
           agentId: agent.id,
@@ -216,7 +227,7 @@ export const listAgents = async (req: Request, res: Response): Promise<Response>
 
     logger.debug('Listing agents', { limit, offset, sortBy, orderBy })
 
-    const result = await agentService.listAgents({ limit, offset, sortBy, orderBy })
+    const result = await listAgentsWithStorageV2Recovery({ limit, offset, sortBy, orderBy })
 
     logger.info('Agents listed', {
       returned: result.agents.length,
@@ -281,7 +292,7 @@ export const getAgent = async (req: Request, res: Response): Promise<Response> =
     const { agentId } = req.params
     logger.debug('Getting agent', { agentId })
 
-    const agent = await agentService.getAgent(agentId)
+    const agent = await getAgentWithStorageV2Recovery(agentId)
 
     if (!agent) {
       logger.warn('Agent not found', { agentId })
@@ -363,7 +374,7 @@ export const updateAgent = async (req: Request, res: Response): Promise<Response
     const { validatedBody } = req as ValidationRequest
     const replacePayload = (validatedBody ?? {}) as ReplaceAgentRequest
 
-    const agent = await agentService.updateAgent(agentId, replacePayload, { replace: true })
+    const agent = await updateAgentWithStorageV2Recovery(agentId, replacePayload, { replace: true })
 
     if (!agent) {
       logger.warn('Agent not found for update', { agentId })
@@ -377,6 +388,7 @@ export const updateAgent = async (req: Request, res: Response): Promise<Response
     }
 
     syncSchedulerIfNeeded(agentId, agent)
+    storageV2AgentDbMirrorService.schedule()
 
     logger.info('Agent updated', { agentId })
     return res.json(agent)
@@ -511,7 +523,7 @@ export const patchAgent = async (req: Request, res: Response): Promise<Response>
     const { validatedBody } = req as ValidationRequest
     const updatePayload = (validatedBody ?? {}) as UpdateAgentRequest
 
-    const agent = await agentService.updateAgent(agentId, updatePayload)
+    const agent = await updateAgentWithStorageV2Recovery(agentId, updatePayload)
 
     if (!agent) {
       logger.warn('Agent not found for partial update', { agentId })
@@ -525,6 +537,7 @@ export const patchAgent = async (req: Request, res: Response): Promise<Response>
     }
 
     syncSchedulerIfNeeded(agentId, agent)
+    storageV2AgentDbMirrorService.schedule()
 
     logger.info('Agent patched', { agentId })
     return res.json(agent)
@@ -586,7 +599,7 @@ export const deleteAgent = async (req: Request, res: Response): Promise<Response
     const { agentId } = req.params
     logger.debug('Deleting agent', { agentId })
 
-    const deleted = await agentService.deleteAgent(agentId)
+    const deleted = await deleteAgentWithStorageV2Recovery(agentId)
 
     if (!deleted) {
       logger.warn('Agent not found for deletion', { agentId })
@@ -601,6 +614,7 @@ export const deleteAgent = async (req: Request, res: Response): Promise<Response
 
     // Disconnect all channel adapters for the deleted agent
     void channelManager.disconnectAgent(agentId)
+    storageV2AgentDbMirrorService.schedule()
 
     logger.info('Agent deleted', { agentId })
     return res.status(204).send()
@@ -672,7 +686,8 @@ export const reorderAgents = async (req: Request, res: Response): Promise<Respon
     }
 
     logger.debug('Reordering agents', { count: ordered_ids.length })
-    await agentService.reorderAgents(ordered_ids)
+    await reorderAgentsWithStorageV2Recovery(ordered_ids)
+    storageV2AgentDbMirrorService.schedule()
 
     logger.info('Agents reordered', { count: ordered_ids.length })
     return res.json({ success: true })

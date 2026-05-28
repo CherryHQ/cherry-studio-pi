@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url'
 
 import { type Client, createClient } from '@libsql/client'
 import { loggerService } from '@logger'
+import { storageV2AppDataKvMirrorService } from '@main/services/storageV2/AppDataKvMirrorService'
 import { app } from 'electron'
 
 const logger = loggerService.withContext('AppDataDatabase')
@@ -30,6 +31,24 @@ export type WorkbenchShortcut = {
   createdAt: number
   updatedAt: number
   deletedAt?: number | null
+}
+
+export type WorkbenchShortcutInput = Partial<WorkbenchShortcut> & Pick<WorkbenchShortcut, 'name' | 'url'>
+
+export type InstalledHtmlArtifactShortcut = WorkbenchShortcut & {
+  filePath: string
+}
+
+export type AppDataValueEntry<T = unknown> = {
+  found: boolean
+  value: T | null
+  deletedAt?: number | null
+}
+
+export type AppDataCacheEntry<T = unknown> = {
+  found: boolean
+  value: T | null
+  expiresAt?: number | null
 }
 
 type Row = Record<string, any>
@@ -83,6 +102,20 @@ function toShortcut(row: Row): WorkbenchShortcut {
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
     deletedAt: row.deleted_at ? Number(row.deleted_at) : null
+  }
+}
+
+export function createWorkbenchShortcutRecord(shortcut: WorkbenchShortcutInput, updatedAt = now()): WorkbenchShortcut {
+  return {
+    id: shortcut.id || randomUUID(),
+    name: shortcut.name,
+    url: shortcut.url,
+    sourcePath: shortcut.sourcePath ?? null,
+    kind: shortcut.kind || 'url',
+    metadata: shortcut.metadata ?? null,
+    createdAt: shortcut.createdAt || updatedAt,
+    updatedAt: shortcut.updatedAt || updatedAt,
+    deletedAt: null
   }
 }
 
@@ -213,7 +246,19 @@ export class AppDataDatabase {
       return existing
     }
 
+    const storageDeviceId = await storageV2AppDataKvMirrorService.getSyncState<string>('device-id').catch((error) => {
+      logger.warn('Failed to read app data device id from Storage v2', error as Error)
+      return null
+    })
+    if (storageDeviceId) {
+      await this.setSyncState('device-id', storageDeviceId)
+      return storageDeviceId
+    }
+
     const id = randomUUID()
+    await storageV2AppDataKvMirrorService.upsertSyncState('device-id', id).catch((error) => {
+      logger.warn('Failed to mirror generated app data device id to Storage v2', error as Error)
+    })
     await this.setSyncState('device-id', id)
     return id
   }
@@ -227,13 +272,28 @@ export class AppDataDatabase {
   }
 
   async getRecord<T = unknown>(scope: string, key: string): Promise<T | null> {
+    const entry = await this.getRecordEntry<T>(scope, key)
+    return entry.found && entry.deletedAt == null ? entry.value : null
+  }
+
+  async getRecordEntry<T = unknown>(scope: string, key: string): Promise<AppDataValueEntry<T>> {
     const client = await this.getClient()
     const result = await client.execute({
-      sql: 'SELECT * FROM app_records WHERE scope = ? AND key = ? AND deleted_at IS NULL',
+      sql: 'SELECT value, deleted_at FROM app_records WHERE scope = ? AND key = ?',
       args: [scope, key]
     })
     const row = result.rows[0] as Row | undefined
-    return row ? (parseJson(row.value, null) as T) : null
+
+    if (!row) {
+      return { found: false, value: null, deletedAt: null }
+    }
+
+    const deletedAt = row.deleted_at == null ? null : Number(row.deleted_at)
+    return {
+      found: true,
+      value: deletedAt == null ? (parseJson(row.value, null) as T) : null,
+      deletedAt
+    }
   }
 
   async listRecords(scope?: string, includeDeleted = false): Promise<AppDataRecord[]> {
@@ -303,9 +363,8 @@ export class AppDataDatabase {
     })
   }
 
-  async deleteRecord(scope: string, key: string) {
-    const timestamp = now()
-    const valueHash = hashValue(null, timestamp)
+  async deleteRecord(scope: string, key: string, deletedAt = now()) {
+    const valueHash = hashValue(null, deletedAt)
     const client = await this.getClient()
 
     await client.execute({
@@ -320,13 +379,12 @@ export class AppDataDatabase {
           device_id = excluded.device_id,
           version = app_records.version + 1
       `,
-      args: [scope, key, valueHash, timestamp, timestamp, this.getDeviceId()]
+      args: [scope, key, valueHash, deletedAt, deletedAt, this.getDeviceId()]
     })
   }
 
-  async setCache(namespace: string, key: string, value: unknown, ttlMs?: number) {
+  async setCache(namespace: string, key: string, value: unknown, ttlMs?: number, updatedAt = now()) {
     const client = await this.getClient()
-    const timestamp = now()
     await client.execute({
       sql: `
         INSERT INTO app_cache (namespace, key, value, expires_at, updated_at)
@@ -336,11 +394,16 @@ export class AppDataDatabase {
           expires_at = excluded.expires_at,
           updated_at = excluded.updated_at
       `,
-      args: [namespace, key, JSON.stringify(value ?? null), ttlMs ? timestamp + ttlMs : null, timestamp]
+      args: [namespace, key, JSON.stringify(value ?? null), ttlMs ? updatedAt + ttlMs : null, updatedAt]
     })
   }
 
   async getCache<T = unknown>(namespace: string, key: string): Promise<T | null> {
+    const entry = await this.getCacheEntry<T>(namespace, key)
+    return entry.found ? entry.value : null
+  }
+
+  async getCacheEntry<T = unknown>(namespace: string, key: string): Promise<AppDataCacheEntry<T>> {
     const client = await this.getClient()
     const timestamp = now()
     const result = await client.execute({
@@ -350,15 +413,21 @@ export class AppDataDatabase {
     const row = result.rows[0] as Row | undefined
 
     if (!row) {
-      return null
+      return { found: false, value: null, expiresAt: null }
     }
 
-    if (row.expires_at && Number(row.expires_at) <= timestamp) {
+    const expiresAt = row.expires_at == null ? null : Number(row.expires_at)
+
+    if (expiresAt != null && expiresAt <= timestamp) {
       await client.execute({ sql: 'DELETE FROM app_cache WHERE namespace = ? AND key = ?', args: [namespace, key] })
-      return null
+      return { found: false, value: null, expiresAt }
     }
 
-    return parseJson(row.value, null) as T
+    return {
+      found: true,
+      value: parseJson(row.value, null) as T,
+      expiresAt
+    }
   }
 
   async deleteCache(namespace: string, key: string) {
@@ -388,6 +457,7 @@ export class AppDataDatabase {
   }
 
   async createConflict(input: {
+    id?: string
     scope: string
     key: string
     localRecord?: AppDataRecord
@@ -395,7 +465,7 @@ export class AppDataDatabase {
     baseHash?: string | null
   }) {
     const client = await this.getClient()
-    const id = `${input.scope}:${input.key}:${now()}`
+    const id = input.id ?? `${input.scope}:${input.key}:${now()}`
 
     await client.execute({
       sql: `
@@ -428,20 +498,9 @@ export class AppDataDatabase {
     return result.rows
   }
 
-  async upsertWorkbenchShortcut(shortcut: Partial<WorkbenchShortcut> & Pick<WorkbenchShortcut, 'name' | 'url'>) {
+  async upsertWorkbenchShortcut(shortcut: WorkbenchShortcutInput) {
     const client = await this.getClient()
-    const timestamp = now()
-    const fullShortcut: WorkbenchShortcut = {
-      id: shortcut.id || randomUUID(),
-      name: shortcut.name,
-      url: shortcut.url,
-      sourcePath: shortcut.sourcePath ?? null,
-      kind: shortcut.kind || 'url',
-      metadata: shortcut.metadata ?? null,
-      createdAt: shortcut.createdAt || timestamp,
-      updatedAt: timestamp,
-      deletedAt: null
-    }
+    const fullShortcut = createWorkbenchShortcutRecord(shortcut)
 
     await client.execute({
       sql: `
@@ -483,7 +542,19 @@ export class AppDataDatabase {
     return result.rows.map((row) => toShortcut(row as Row))
   }
 
-  async installHtmlArtifact(input: { title?: string; html: string }) {
+  async hasWorkbenchShortcutRows() {
+    const client = await this.getClient()
+    const result = await client.execute({
+      sql: 'SELECT 1 FROM workbench_shortcuts LIMIT 1',
+      args: []
+    })
+    return result.rows.length > 0
+  }
+
+  async prepareHtmlArtifactShortcut(
+    input: { title?: string; html: string },
+    updatedAt = now()
+  ): Promise<InstalledHtmlArtifactShortcut> {
     const id = randomUUID()
     const safeName = `${(input.title || 'HTML Artifact').replace(/[\\/:*?"<>|]+/g, '-').slice(0, 80)}-${id.slice(0, 8)}.html`
     const dir = path.join(app.getPath('userData'), 'Data', 'Workbench')
@@ -492,16 +563,36 @@ export class AppDataDatabase {
     await fs.promises.mkdir(dir, { recursive: true })
     await fs.promises.writeFile(filePath, input.html, 'utf8')
 
-    const shortcut = await this.upsertWorkbenchShortcut({
-      id,
-      name: input.title || 'HTML Artifact',
-      url: pathToFileURL(filePath).toString(),
-      sourcePath: filePath,
-      kind: 'html',
-      metadata: { installedFrom: 'agent-html-artifact' }
+    return {
+      ...createWorkbenchShortcutRecord(
+        {
+          id,
+          name: input.title || 'HTML Artifact',
+          url: pathToFileURL(filePath).toString(),
+          sourcePath: filePath,
+          kind: 'html',
+          metadata: { installedFrom: 'agent-html-artifact' }
+        },
+        updatedAt
+      ),
+      filePath
+    }
+  }
+
+  async installHtmlArtifact(input: { title?: string; html: string }) {
+    const shortcut = await this.prepareHtmlArtifactShortcut(input)
+    await this.upsertWorkbenchShortcut({
+      id: shortcut.id,
+      name: shortcut.name,
+      url: shortcut.url,
+      sourcePath: shortcut.sourcePath,
+      kind: shortcut.kind,
+      metadata: shortcut.metadata,
+      createdAt: shortcut.createdAt,
+      updatedAt: shortcut.updatedAt
     })
 
-    return { ...shortcut, filePath }
+    return shortcut
   }
 }
 

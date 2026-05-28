@@ -1,5 +1,6 @@
 import type { Assistant, Provider } from '@types'
 
+import { storageV2AgentDbMirrorService } from './AgentDbMirrorService'
 import { storageV2BackupService } from './BackupService'
 import { storageV2DataRootService } from './DataRootService'
 import { storageV2LegacyAgentDbImportService } from './LegacyAgentDbImportService'
@@ -13,8 +14,12 @@ import { storageV2StatisticsService } from './StatisticsService'
 import { storageV2Database } from './StorageV2Database'
 import {
   storageV2AssistantRepository,
+  type StorageV2ConversationImport,
   storageV2ConversationRepository,
+  type StorageV2ConversationUpsert,
+  type StorageV2ConversationUpsertOptions,
   storageV2FileRepository,
+  type StorageV2MessageBlocksUpsertOptions,
   storageV2ProviderRepository,
   storageV2SettingsRepository
 } from './StorageV2Repositories'
@@ -45,6 +50,15 @@ const LLM_SETTINGS_SECRET_FIELDS = [
     secretRefKey: 'refreshTokenSecretRef'
   }
 ] as const
+
+const MCP_PROVIDER_TOKEN_KEYS = new Set([
+  'mcprouter_token',
+  'modelscope_token',
+  'tokenLanyunToken',
+  'tokenflux_token',
+  'ai302_token',
+  'bailian_token'
+])
 
 function cloneRecord(value: unknown): Record<string, any> {
   if (!value || typeof value !== 'object') return {}
@@ -84,6 +98,10 @@ function deleteNestedValue(root: Record<string, any>, path: readonly string[]) {
   delete current[path[path.length - 1]]
 }
 
+function isSensitiveHeaderName(headerName: string) {
+  return /(authorization|cookie|token|secret|api[-_]?key|x[-_].*key)/i.test(headerName)
+}
+
 async function restoreMcpStateSecrets(
   value: unknown,
   includeSecrets: boolean
@@ -100,7 +118,9 @@ async function restoreMcpStateSecrets(
 
     const envSecretRefs = isRecord(server.envSecretRefs) ? server.envSecretRefs : null
     if (envSecretRefs) {
-      if (!isRecord(server.env)) {
+      if (!includeSecrets) {
+        delete server.env
+      } else if (!isRecord(server.env)) {
         server.env = {}
       }
 
@@ -117,6 +137,10 @@ async function restoreMcpStateSecrets(
       }
     }
 
+    if (!includeSecrets) {
+      delete server.env
+    }
+
     delete server.envSecretRefs
     delete server.envSecretUnavailable
 
@@ -129,6 +153,64 @@ async function restoreMcpStateSecrets(
     value: restored,
     missingSecretCount
   }
+}
+
+async function restoreMcpProviderTokens(
+  value: unknown,
+  includeSecrets: boolean
+): Promise<{
+  value: Record<string, string>
+  missingSecretCount: number
+  knownTokenKeys: string[]
+}> {
+  const restored: Record<string, string> = {}
+  const tokens = cloneRecord(value)
+  const knownTokenKeys: string[] = []
+  let missingSecretCount = 0
+
+  for (const [tokenKey, tokenRecord] of Object.entries(tokens)) {
+    if (!MCP_PROVIDER_TOKEN_KEYS.has(tokenKey)) continue
+    knownTokenKeys.push(tokenKey)
+
+    if (typeof tokenRecord === 'string' && tokenRecord) {
+      if (includeSecrets) {
+        restored[tokenKey] = tokenRecord
+      }
+      continue
+    }
+
+    if (!isRecord(tokenRecord)) continue
+    const secretRef = tokenRecord.tokenSecretRef
+    if (typeof secretRef !== 'string' || !secretRef || !includeSecrets) continue
+
+    const token = await storageV2SecretVaultService.getSecret(secretRef)
+    if (token) {
+      restored[tokenKey] = token
+    } else {
+      missingSecretCount++
+    }
+  }
+
+  return {
+    value: restored,
+    missingSecretCount,
+    knownTokenKeys
+  }
+}
+
+function sanitizeClearedMcpProviderTokenKeys(value: unknown, knownTokenKeys: Set<string>): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return Array.from(
+    new Set(
+      value.filter(
+        (item): item is string =>
+          typeof item === 'string' && MCP_PROVIDER_TOKEN_KEYS.has(item) && !knownTokenKeys.has(item)
+      )
+    )
+  )
 }
 
 async function restoreSecretField(owner: Record<string, any>, field: string, includeSecrets: boolean): Promise<number> {
@@ -144,6 +226,10 @@ async function restoreSecretField(owner: Record<string, any>, field: string, inc
     } else {
       missingSecretCount++
     }
+  }
+
+  if (!includeSecrets && typeof owner[field] === 'string' && owner[field]) {
+    delete owner[field]
   }
 
   delete owner[secretRefKey]
@@ -204,12 +290,133 @@ async function restoreProviderListSecrets(
   }
 }
 
+async function restoreOcrStateSecrets(
+  value: unknown,
+  includeSecrets: boolean
+): Promise<{
+  value: unknown
+  missingSecretCount: number
+}> {
+  const restored = cloneRecord(value)
+  const providers = Array.isArray(restored.providers) ? restored.providers : []
+  let missingSecretCount = 0
+
+  for (const provider of providers) {
+    if (!isRecord(provider)) continue
+
+    const apiConfig = provider.config?.api
+    if (!isRecord(apiConfig)) continue
+
+    missingSecretCount += await restoreSecretField(apiConfig, 'apiKey', includeSecrets)
+  }
+
+  return {
+    value: restored,
+    missingSecretCount
+  }
+}
+
+async function restoreCodeToolsStateSecrets(
+  value: unknown,
+  includeSecrets: boolean
+): Promise<{
+  value: unknown
+  missingSecretCount: number
+}> {
+  const restored = cloneRecord(value)
+  const environmentVariableSecretRefs = isRecord(restored.environmentVariableSecretRefs)
+    ? restored.environmentVariableSecretRefs
+    : null
+  let missingSecretCount = 0
+
+  if (environmentVariableSecretRefs) {
+    if (!includeSecrets) {
+      delete restored.environmentVariables
+    } else if (!isRecord(restored.environmentVariables)) {
+      restored.environmentVariables = {}
+    }
+
+    for (const [toolId, secretRef] of Object.entries(environmentVariableSecretRefs)) {
+      if (typeof secretRef !== 'string' || !secretRef || !includeSecrets) continue
+
+      const secret = await storageV2SecretVaultService.getSecret(secretRef)
+      if (secret) {
+        restored.environmentVariables[toolId] = secret
+      } else {
+        missingSecretCount++
+      }
+    }
+  }
+
+  delete restored.environmentVariableSecretRefs
+  delete restored.environmentVariableSecretUnavailable
+
+  if (!includeSecrets) {
+    delete restored.environmentVariables
+  }
+
+  return {
+    value: restored,
+    missingSecretCount
+  }
+}
+
+async function restoreCopilotStateSecrets(
+  value: unknown,
+  includeSecrets: boolean
+): Promise<{
+  value: unknown
+  missingSecretCount: number
+}> {
+  const restored = cloneRecord(value)
+  const defaultHeaderSecretRefs = isRecord(restored.defaultHeaderSecretRefs) ? restored.defaultHeaderSecretRefs : null
+  let missingSecretCount = 0
+
+  if (!includeSecrets && isRecord(restored.defaultHeaders)) {
+    for (const headerName of Object.keys(restored.defaultHeaders)) {
+      if (isSensitiveHeaderName(headerName)) {
+        delete restored.defaultHeaders[headerName]
+      }
+    }
+  }
+
+  if (defaultHeaderSecretRefs) {
+    if (!includeSecrets && isRecord(restored.defaultHeaders)) {
+      for (const headerName of Object.keys(defaultHeaderSecretRefs)) {
+        delete restored.defaultHeaders[headerName]
+      }
+    } else if (!isRecord(restored.defaultHeaders)) {
+      restored.defaultHeaders = {}
+    }
+
+    for (const [headerName, secretRef] of Object.entries(defaultHeaderSecretRefs)) {
+      if (typeof secretRef !== 'string' || !secretRef || !includeSecrets) continue
+
+      const secret = await storageV2SecretVaultService.getSecret(secretRef)
+      if (secret) {
+        restored.defaultHeaders[headerName] = secret
+      } else {
+        missingSecretCount++
+      }
+    }
+  }
+
+  delete restored.defaultHeaderSecretRefs
+  delete restored.defaultHeaderSecretUnavailable
+
+  return {
+    value: restored,
+    missingSecretCount
+  }
+}
+
 function assignSettingRecord(
   target: {
     settings: Record<string, unknown>
     llm: Record<string, unknown>
     assistants: Record<string, unknown>
     redux: Record<string, unknown>
+    localStorage: Record<string, unknown>
   },
   key: string,
   value: unknown
@@ -231,10 +438,19 @@ function assignSettingRecord(
 
   if (key.startsWith('redux.')) {
     target.redux[key.slice('redux.'.length)] = value
+    return
+  }
+
+  if (key.startsWith('localStorage.')) {
+    target.localStorage[key.slice('localStorage.'.length)] = value
   }
 }
 
 export class StorageV2Service {
+  private async flushPendingRuntimeMirrors() {
+    await storageV2AgentDbMirrorService.flush()
+  }
+
   getDataRoot() {
     return storageV2DataRootService.resolveDataRoot()
   }
@@ -244,10 +460,12 @@ export class StorageV2Service {
   }
 
   async createSnapshot(reason: string = 'manual') {
+    await this.flushPendingRuntimeMirrors()
     return storageV2Database.createSnapshot(reason)
   }
 
   async createBackup(reason: string = 'manual') {
+    await this.flushPendingRuntimeMirrors()
     return storageV2BackupService.createBackup(reason)
   }
 
@@ -256,6 +474,7 @@ export class StorageV2Service {
   }
 
   async restoreBackup(backupPath: string) {
+    await this.flushPendingRuntimeMirrors()
     return storageV2BackupService.restoreBackup(backupPath)
   }
 
@@ -282,7 +501,8 @@ export class StorageV2Service {
       settings: {} as Record<string, unknown>,
       llm: {} as Record<string, unknown>,
       assistants: {} as Record<string, unknown>,
-      redux: {} as Record<string, unknown>
+      redux: {} as Record<string, unknown>,
+      localStorage: {} as Record<string, unknown>
     }
     const includeSecrets = options.includeSecrets === true
     const credentialRefsByProvider = includeSecrets
@@ -292,6 +512,14 @@ export class StorageV2Service {
 
     for (const record of settingsRecords) {
       assignSettingRecord(state, record.key, record.value)
+    }
+
+    if (isRecord(state.settings.s3)) {
+      missingSecretCount += await restoreSecretField(state.settings.s3, 'secretAccessKey', includeSecrets)
+    }
+
+    if (isRecord(state.settings.apiServer)) {
+      missingSecretCount += await restoreSecretField(state.settings.apiServer, 'apiKey', includeSecrets)
     }
 
     const llmSettings = cloneRecord(state.llm.settings)
@@ -311,6 +539,9 @@ export class StorageV2Service {
     }
 
     for (const field of LLM_SETTINGS_SECRET_FIELDS) {
+      if (!includeSecrets) {
+        deleteNestedValue(llmSettings, field.path)
+      }
       deleteNestedValue(llmSettings, [...field.path.slice(0, -1), field.secretRefKey])
       deleteNestedValue(llmSettings, [...field.path.slice(0, -1), `${field.path.at(-1)}SecretUnavailable`])
     }
@@ -348,6 +579,18 @@ export class StorageV2Service {
     )
     state.llm.providers = providerSnapshots
 
+    if (state.redux.codeTools) {
+      const restoredCodeToolsState = await restoreCodeToolsStateSecrets(state.redux.codeTools, includeSecrets)
+      state.redux.codeTools = restoredCodeToolsState.value
+      missingSecretCount += restoredCodeToolsState.missingSecretCount
+    }
+
+    if (state.redux.copilot) {
+      const restoredCopilotState = await restoreCopilotStateSecrets(state.redux.copilot, includeSecrets)
+      state.redux.copilot = restoredCopilotState.value
+      missingSecretCount += restoredCopilotState.missingSecretCount
+    }
+
     if (state.redux.mcp) {
       const restoredMcpState = await restoreMcpStateSecrets(state.redux.mcp, includeSecrets)
       state.redux.mcp = restoredMcpState.value
@@ -358,6 +601,18 @@ export class StorageV2Service {
       const restoredKnowledgeState = await restoreKnowledgeStateSecrets(state.redux.knowledge, includeSecrets)
       state.redux.knowledge = restoredKnowledgeState.value
       missingSecretCount += restoredKnowledgeState.missingSecretCount
+    }
+
+    if (state.redux.nutstore) {
+      const restoredNutstoreState = cloneRecord(state.redux.nutstore)
+      missingSecretCount += await restoreSecretField(restoredNutstoreState, 'nutstoreToken', includeSecrets)
+      state.redux.nutstore = restoredNutstoreState
+    }
+
+    if (state.redux.ocr) {
+      const restoredOcrState = await restoreOcrStateSecrets(state.redux.ocr, includeSecrets)
+      state.redux.ocr = restoredOcrState.value
+      missingSecretCount += restoredOcrState.missingSecretCount
     }
 
     if (state.redux.preprocess) {
@@ -378,6 +633,24 @@ export class StorageV2Service {
       )
       state.redux.websearch = restoredWebSearchState.value
       missingSecretCount += restoredWebSearchState.missingSecretCount
+    }
+
+    let knownMcpProviderTokenKeys = new Set<string>()
+    if (state.localStorage.mcpProviderTokens) {
+      const restoredMcpProviderTokens = await restoreMcpProviderTokens(
+        state.localStorage.mcpProviderTokens,
+        includeSecrets
+      )
+      state.localStorage.mcpProviderTokens = restoredMcpProviderTokens.value
+      knownMcpProviderTokenKeys = new Set(restoredMcpProviderTokens.knownTokenKeys)
+      missingSecretCount += restoredMcpProviderTokens.missingSecretCount
+    }
+
+    if (state.localStorage.clearedMcpProviderTokenKeys) {
+      state.localStorage.clearedMcpProviderTokenKeys = sanitizeClearedMcpProviderTokenKeys(
+        state.localStorage.clearedMcpProviderTokenKeys,
+        knownMcpProviderTokenKeys
+      )
     }
 
     const topicsByAssistantId = new Map<string, Array<Record<string, unknown>>>()
@@ -428,6 +701,7 @@ export class StorageV2Service {
       llm: state.llm,
       assistants: state.assistants,
       redux: state.redux,
+      localStorage: state.localStorage,
       metadata: {
         includeSecrets,
         settingCount: settingsRecords.length,
@@ -489,8 +763,32 @@ export class StorageV2Service {
     return storageV2ConversationRepository.listMessages(conversationId, options)
   }
 
+  async syncConversation(conversation: StorageV2ConversationImport) {
+    return storageV2ConversationRepository.importConversation(conversation)
+  }
+
+  async upsertConversation(conversation: StorageV2ConversationUpsert, options?: StorageV2ConversationUpsertOptions) {
+    return storageV2ConversationRepository.upsertConversation(conversation, options)
+  }
+
+  async upsertMessage(conversationId: string, message: Record<string, any>) {
+    return storageV2ConversationRepository.upsertMessage(conversationId, message)
+  }
+
+  async upsertMessageBlocks(
+    messageId: string,
+    blocks: Array<Record<string, any>>,
+    options?: StorageV2MessageBlocksUpsertOptions
+  ) {
+    return storageV2ConversationRepository.upsertMessageBlocks(messageId, blocks, options)
+  }
+
   async deleteConversation(conversationId: string) {
     return storageV2ConversationRepository.delete(conversationId)
+  }
+
+  async upsertFile(file: Record<string, any>) {
+    return storageV2FileRepository.importFile(file)
   }
 
   async deleteFile(fileId: string) {
@@ -505,11 +803,11 @@ export class StorageV2Service {
     return storageV2LegacyDexieImportService.importSnapshot(snapshot as any, options)
   }
 
-  async importLegacyAgentDb(options?: { dryRun?: boolean; dbPath?: string }) {
+  async importLegacyAgentDb(options?: { dryRun?: boolean; dbPath?: string; createSnapshot?: boolean }) {
     return storageV2LegacyAgentDbImportService.importSnapshot(options)
   }
 
-  async importLegacyAppDb(options?: { dryRun?: boolean; dbPath?: string }) {
+  async importLegacyAppDb(options?: { dryRun?: boolean; dbPath?: string; createSnapshot?: boolean }) {
     return storageV2LegacyAppDbImportService.importSnapshot(options)
   }
 }

@@ -245,13 +245,16 @@ const INTEGRITY_ISSUE_LABEL_KEYS: Record<string, string> = {
   agent_skills_without_skill: 'settings.data.storage_v2.integrity.issues.agent_skills_without_skill',
   corrupt_blob_files: 'settings.data.storage_v2.integrity.issues.corrupt_blob_files',
   files_without_blob: 'settings.data.storage_v2.integrity.issues.files_without_blob',
+  invalid_secret_refs: 'settings.data.storage_v2.integrity.issues.invalid_secret_refs',
   knowledge_items_without_base: 'settings.data.storage_v2.integrity.issues.knowledge_items_without_base',
   message_blocks_without_message: 'settings.data.storage_v2.integrity.issues.message_blocks_without_message',
   messages_without_conversation: 'settings.data.storage_v2.integrity.issues.messages_without_conversation',
   missing_blob_files: 'settings.data.storage_v2.integrity.issues.missing_blob_files',
+  missing_secret_refs: 'settings.data.storage_v2.integrity.issues.missing_secret_refs',
   models_without_provider: 'settings.data.storage_v2.integrity.issues.models_without_provider',
   provider_credentials_without_provider:
     'settings.data.storage_v2.integrity.issues.provider_credentials_without_provider',
+  secret_vault_invalid: 'settings.data.storage_v2.integrity.issues.secret_vault_invalid',
   task_logs_without_task: 'settings.data.storage_v2.integrity.issues.task_logs_without_task',
   tasks_without_agent: 'settings.data.storage_v2.integrity.issues.tasks_without_agent'
 }
@@ -261,14 +264,18 @@ const BACKUP_ISSUE_LABEL_KEYS: Record<string, string> = {
   corrupt_blob_files: 'settings.data.storage_v2.backup_restore.issues.corrupt_blob_files',
   format_unsupported: 'settings.data.storage_v2.backup_restore.issues.format_unsupported',
   integrity_check_failed: 'settings.data.storage_v2.backup_restore.issues.integrity_check_failed',
+  invalid_secret_refs: 'settings.data.storage_v2.backup_restore.issues.invalid_secret_refs',
   metadata_invalid: 'settings.data.storage_v2.backup_restore.issues.metadata_invalid',
   missing_blob_files: 'settings.data.storage_v2.backup_restore.issues.missing_blob_files',
+  missing_secret_refs: 'settings.data.storage_v2.backup_restore.issues.missing_secret_refs',
   path_not_directory: 'settings.data.storage_v2.backup_restore.issues.path_not_directory',
   quick_check_failed: 'settings.data.storage_v2.backup_restore.issues.quick_check_failed',
+  secret_vault_invalid: 'settings.data.storage_v2.backup_restore.issues.secret_vault_invalid',
   version_unsupported: 'settings.data.storage_v2.backup_restore.issues.version_unsupported'
 }
 const BACKUP_WARNING_LABEL_KEYS: Record<string, string> = {
-  manifest_missing: 'settings.data.storage_v2.backup_restore.warnings.manifest_missing'
+  manifest_missing: 'settings.data.storage_v2.backup_restore.warnings.manifest_missing',
+  secret_vault_missing: 'settings.data.storage_v2.backup_restore.warnings.secret_vault_missing'
 }
 
 function asRecord(value: unknown): Record<string, any> {
@@ -683,7 +690,10 @@ const StorageV2Settings: FC = () => {
                 quickCheck: backupValidation.quickCheck ?? '-',
                 integrityCheck: backupValidation.integrityCheck ?? '-',
                 missingBlobFileCount: backupValidation.missingBlobFileCount,
-                corruptBlobFileCount: backupValidation.corruptBlobFileCount
+                corruptBlobFileCount: backupValidation.corruptBlobFileCount,
+                secretVaultSecretCount: backupValidation.secretVaultSecretCount,
+                missingSecretRefCount: backupValidation.missingSecretRefCount,
+                invalidSecretRefCount: backupValidation.invalidSecretRefCount
               })}
             </Typography.Text>
             {backupValidation.issues.map((issue) => {
@@ -720,6 +730,11 @@ const StorageV2Settings: FC = () => {
                 path: lastRestoreResult.archivedPath
               })}
             </Typography.Text>
+            {lastRestoreResult.warnings.map((warning) => (
+              <Typography.Text key={warning} type="warning">
+                {t('settings.data.storage_v2.backup_restore.warning', { message: warning })}
+              </Typography.Text>
+            ))}
           </BackupSummary>
         )}
         {integrityReport && (

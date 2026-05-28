@@ -1,15 +1,29 @@
 import { loggerService } from '@logger'
 import { type AssistantsState, hydrateAssistantsState } from '@renderer/store/assistants'
+import { type BackupState, hydrateBackupState } from '@renderer/store/backup'
+import { type CodeToolsState, hydrateCodeToolsState } from '@renderer/store/codeTools'
+import { type CopilotState, hydrateCopilotState } from '@renderer/store/copilot'
+import { hydrateInputToolsState, type InputToolsState } from '@renderer/store/inputTools'
 import { hydrateKnowledgeState, type KnowledgeState } from '@renderer/store/knowledge'
 import { hydrateLlmState, type LlmState } from '@renderer/store/llm'
 import { hydrateMcpState } from '@renderer/store/mcp'
 import { hydrateMemoryState, type MemoryState } from '@renderer/store/memory'
+import { hydrateMinAppsState, type MinAppsState } from '@renderer/store/minapps'
 import { hydrateNoteState, type NoteState } from '@renderer/store/note'
+import { hydrateNutstoreState, type NutstoreState } from '@renderer/store/nutstore'
+import { hydrateOcrState, type OcrState } from '@renderer/store/ocr'
+import { hydrateOpenClawState, type OpenClawState } from '@renderer/store/openclaw'
+import { hydratePaintingsState } from '@renderer/store/paintings'
 import { hydratePreprocessState, type PreprocessState } from '@renderer/store/preprocess'
+import { hydrateSelectionState } from '@renderer/store/selectionStore'
 import { hydrateSettingsState, type SettingsState } from '@renderer/store/settings'
+import { hydrateShortcutsState, type ShortcutsState } from '@renderer/store/shortcuts'
+import { hydrateTranslateState, type TranslateState } from '@renderer/store/translate'
 import { hydrateWebSearchState, type WebSearchState } from '@renderer/store/websearch'
-import type { MCPConfig } from '@renderer/types'
+import type { MCPConfig, PaintingsState } from '@renderer/types'
+import type { SelectionState } from '@renderer/types/selectionTypes'
 
+import { applyStorageV2LocalStorageSnapshot, type StorageV2LocalStorageSnapshot } from './StorageV2LocalStorageSnapshot'
 import { getStorageV2CoreSnapshot } from './StorageV2Service'
 
 const logger = loggerService.withContext('StorageV2HydrationService')
@@ -19,13 +33,25 @@ type RuntimeHydrationTarget = {
   dispatch: (
     action:
       | ReturnType<typeof hydrateAssistantsState>
+      | ReturnType<typeof hydrateBackupState>
+      | ReturnType<typeof hydrateCodeToolsState>
+      | ReturnType<typeof hydrateCopilotState>
+      | ReturnType<typeof hydrateInputToolsState>
       | ReturnType<typeof hydrateKnowledgeState>
       | ReturnType<typeof hydrateLlmState>
       | ReturnType<typeof hydrateMemoryState>
+      | ReturnType<typeof hydrateMinAppsState>
       | ReturnType<typeof hydrateMcpState>
       | ReturnType<typeof hydrateNoteState>
+      | ReturnType<typeof hydrateNutstoreState>
+      | ReturnType<typeof hydrateOcrState>
+      | ReturnType<typeof hydrateOpenClawState>
+      | ReturnType<typeof hydratePaintingsState>
       | ReturnType<typeof hydratePreprocessState>
+      | ReturnType<typeof hydrateSelectionState>
       | ReturnType<typeof hydrateSettingsState>
+      | ReturnType<typeof hydrateShortcutsState>
+      | ReturnType<typeof hydrateTranslateState>
       | ReturnType<typeof hydrateWebSearchState>
   ) => unknown
   flush?: () => Promise<unknown>
@@ -37,13 +63,26 @@ type StorageV2CoreSnapshot = {
   llm?: Partial<LlmState>
   assistants?: Partial<AssistantsState>
   redux?: {
+    backup?: Partial<BackupState>
+    codeTools?: Partial<CodeToolsState>
+    copilot?: Partial<CopilotState>
+    inputTools?: Partial<InputToolsState>
     knowledge?: Partial<KnowledgeState>
     memory?: Partial<MemoryState>
+    minApps?: Partial<MinAppsState>
     mcp?: Partial<MCPConfig>
     note?: Partial<NoteState>
+    nutstore?: Partial<NutstoreState>
+    ocr?: Partial<OcrState>
+    openclaw?: Partial<OpenClawState>
+    paintings?: Partial<PaintingsState>
     preprocess?: Partial<PreprocessState>
+    selectionStore?: Partial<SelectionState>
+    shortcuts?: Partial<ShortcutsState>
+    translate?: Partial<TranslateState>
     websearch?: Partial<WebSearchState>
   }
+  localStorage?: Partial<StorageV2LocalStorageSnapshot>
   metadata?: {
     includeSecrets?: boolean
     settingCount?: number
@@ -73,13 +112,34 @@ function parseAutoHydrateSetting(value: unknown): boolean {
   return false
 }
 
+function hasMeaningfulSnapshotValue(value: unknown): boolean {
+  if (value == null) return false
+  if (Array.isArray(value)) return value.length > 0
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some(hasMeaningfulSnapshotValue)
+  }
+  return true
+}
+
+function hasMeaningfulLocalStorageSnapshot(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const snapshot = value as Partial<StorageV2LocalStorageSnapshot>
+
+  return hasMeaningfulSnapshotValue(snapshot.durableValues) || hasMeaningfulSnapshotValue(snapshot.mcpProviderTokens)
+}
+
 function hasCoreData(snapshot: StorageV2CoreSnapshot): boolean {
   const metadata = snapshot.metadata ?? {}
   return (
-    Number(metadata.settingCount ?? 0) > 0 ||
     Number(metadata.providerCount ?? 0) > 0 ||
     Number(metadata.assistantCount ?? 0) > 0 ||
-    Number(metadata.reduxSliceCount ?? 0) > 0
+    Number(metadata.topicCount ?? 0) > 0 ||
+    Number(metadata.reduxSliceCount ?? 0) > 0 ||
+    hasMeaningfulSnapshotValue(snapshot.settings) ||
+    hasMeaningfulSnapshotValue(snapshot.llm) ||
+    hasMeaningfulSnapshotValue(snapshot.assistants) ||
+    hasMeaningfulSnapshotValue(snapshot.redux) ||
+    hasMeaningfulLocalStorageSnapshot(snapshot.localStorage)
   )
 }
 
@@ -96,6 +156,9 @@ async function getRuntimeSnapshot() {
 async function applyRuntimeSnapshot(snapshot: StorageV2CoreSnapshot, target: RuntimeHydrationTarget) {
   if (snapshot.settings) {
     target.dispatch(hydrateSettingsState(snapshot.settings))
+    if (typeof snapshot.settings.language === 'string' && typeof localStorage !== 'undefined') {
+      localStorage.setItem('language', snapshot.settings.language)
+    }
   }
 
   if (snapshot.llm) {
@@ -106,12 +169,32 @@ async function applyRuntimeSnapshot(snapshot: StorageV2CoreSnapshot, target: Run
     target.dispatch(hydrateAssistantsState(snapshot.assistants))
   }
 
+  if (snapshot.redux?.backup) {
+    target.dispatch(hydrateBackupState(snapshot.redux.backup))
+  }
+
+  if (snapshot.redux?.codeTools) {
+    target.dispatch(hydrateCodeToolsState(snapshot.redux.codeTools))
+  }
+
+  if (snapshot.redux?.copilot) {
+    target.dispatch(hydrateCopilotState(snapshot.redux.copilot))
+  }
+
+  if (snapshot.redux?.inputTools) {
+    target.dispatch(hydrateInputToolsState(snapshot.redux.inputTools))
+  }
+
   if (snapshot.redux?.knowledge) {
     target.dispatch(hydrateKnowledgeState(snapshot.redux.knowledge))
   }
 
   if (snapshot.redux?.memory) {
     target.dispatch(hydrateMemoryState(snapshot.redux.memory))
+  }
+
+  if (snapshot.redux?.minApps) {
+    target.dispatch(hydrateMinAppsState(snapshot.redux.minApps))
   }
 
   if (snapshot.redux?.mcp) {
@@ -122,12 +205,44 @@ async function applyRuntimeSnapshot(snapshot: StorageV2CoreSnapshot, target: Run
     target.dispatch(hydrateNoteState(snapshot.redux.note))
   }
 
+  if (snapshot.redux?.nutstore) {
+    target.dispatch(hydrateNutstoreState(snapshot.redux.nutstore))
+  }
+
+  if (snapshot.redux?.ocr) {
+    target.dispatch(hydrateOcrState(snapshot.redux.ocr))
+  }
+
+  if (snapshot.redux?.openclaw) {
+    target.dispatch(hydrateOpenClawState(snapshot.redux.openclaw))
+  }
+
+  if (snapshot.redux?.paintings) {
+    target.dispatch(hydratePaintingsState(snapshot.redux.paintings))
+  }
+
   if (snapshot.redux?.preprocess) {
     target.dispatch(hydratePreprocessState(snapshot.redux.preprocess))
   }
 
+  if (snapshot.redux?.selectionStore) {
+    target.dispatch(hydrateSelectionState(snapshot.redux.selectionStore))
+  }
+
+  if (snapshot.redux?.shortcuts) {
+    target.dispatch(hydrateShortcutsState(snapshot.redux.shortcuts))
+  }
+
+  if (snapshot.redux?.translate) {
+    target.dispatch(hydrateTranslateState(snapshot.redux.translate))
+  }
+
   if (snapshot.redux?.websearch) {
     target.dispatch(hydrateWebSearchState(snapshot.redux.websearch))
+  }
+
+  if (snapshot.localStorage) {
+    applyStorageV2LocalStorageSnapshot(snapshot.localStorage)
   }
 
   await target.flush?.()

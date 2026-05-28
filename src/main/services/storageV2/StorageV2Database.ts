@@ -6,6 +6,7 @@ import { type Client, createClient } from '@libsql/client'
 import { loggerService } from '@logger'
 
 import { storageV2DataRootService } from './DataRootService'
+import { scanStorageV2SecretReferences } from './SecretRefIntegrity'
 import type {
   StorageV2HealthCheck,
   StorageV2IntegrityIssue,
@@ -14,9 +15,30 @@ import type {
 } from './types'
 
 const logger = loggerService.withContext('StorageV2Database')
+const DB_SCHEMA_VERSION = '2'
+
+type ColumnMigration = {
+  table: string
+  column: string
+  definition: string
+}
+
+const COLUMN_MIGRATIONS: ColumnMigration[] = [
+  { table: 'files', column: 'version', definition: 'INTEGER NOT NULL DEFAULT 1' },
+  { table: 'skills', column: 'version', definition: 'INTEGER NOT NULL DEFAULT 1' },
+  { table: 'scheduled_tasks', column: 'version', definition: 'INTEGER NOT NULL DEFAULT 1' },
+  { table: 'task_run_logs', column: 'version', definition: 'INTEGER NOT NULL DEFAULT 1' },
+  { table: 'channels', column: 'version', definition: 'INTEGER NOT NULL DEFAULT 1' },
+  { table: 'knowledge_bases', column: 'version', definition: 'INTEGER NOT NULL DEFAULT 1' },
+  { table: 'knowledge_items', column: 'version', definition: 'INTEGER NOT NULL DEFAULT 1' }
+]
 
 function quoteSqlString(value: string) {
   return `'${value.replace(/'/g, "''")}'`
+}
+
+function quoteIdentifier(value: string) {
+  return `"${value.replace(/"/g, '""')}"`
 }
 
 function timestampForFilename() {
@@ -127,10 +149,77 @@ async function sha256File(filePath: string): Promise<string> {
   return hash.digest('hex')
 }
 
+function readVaultSecretIds(vaultPath: string): {
+  secretIds: Set<string>
+  invalid: boolean
+} {
+  if (!fs.existsSync(vaultPath)) {
+    return {
+      secretIds: new Set(),
+      invalid: false
+    }
+  }
+
+  try {
+    const vault = JSON.parse(fs.readFileSync(vaultPath, 'utf-8')) as Record<string, any>
+    if (vault.version !== 1 || !vault.secrets || typeof vault.secrets !== 'object') {
+      return {
+        secretIds: new Set(),
+        invalid: true
+      }
+    }
+
+    const secretIds = new Set<string>()
+    for (const [secretId, record] of Object.entries(vault.secrets)) {
+      if (
+        !secretId ||
+        !record ||
+        typeof record !== 'object' ||
+        typeof (record as Record<string, unknown>).encrypted !== 'string' ||
+        (record as Record<string, unknown>).encoding !== 'electron-safe-storage'
+      ) {
+        return {
+          secretIds,
+          invalid: true
+        }
+      }
+      secretIds.add(secretId)
+    }
+
+    return {
+      secretIds,
+      invalid: false
+    }
+  } catch {
+    return {
+      secretIds: new Set(),
+      invalid: true
+    }
+  }
+}
+
+async function columnExists(client: Client, table: string, column: string): Promise<boolean> {
+  const result = await client.execute(`PRAGMA table_info(${quoteIdentifier(table)})`)
+  return result.rows.some((row) => row.name === column)
+}
+
+async function applyColumnMigrations(client: Client) {
+  for (const migration of COLUMN_MIGRATIONS) {
+    if (await columnExists(client, migration.table, migration.column)) continue
+
+    await client.execute(
+      `ALTER TABLE ${quoteIdentifier(migration.table)} ADD COLUMN ${quoteIdentifier(migration.column)} ${
+        migration.definition
+      }`
+    )
+  }
+}
+
 export class StorageV2Database {
   private client: Client | null = null
   private dbPath: string | null = null
   private initializing: Promise<void> | null = null
+  private exclusiveQueue: Promise<unknown> = Promise.resolve()
 
   async getClient(): Promise<Client> {
     if (!this.client) {
@@ -163,6 +252,30 @@ export class StorageV2Database {
     })
 
     await this.initializing
+  }
+
+  async withTransaction<T>(client: Client, fn: () => Promise<T>): Promise<T> {
+    return this.enqueueExclusive(async () => {
+      await client.execute('BEGIN IMMEDIATE')
+      try {
+        const result = await fn()
+        await client.execute('COMMIT')
+        return result
+      } catch (error) {
+        await client.execute('ROLLBACK').catch(() => {})
+        throw error
+      }
+    })
+  }
+
+  async waitForIdle(): Promise<void> {
+    await this.exclusiveQueue
+  }
+
+  private async enqueueExclusive<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.exclusiveQueue.then(operation, operation)
+    this.exclusiveQueue = result.catch(() => undefined)
+    return result
   }
 
   private async initializeInternal() {
@@ -393,6 +506,7 @@ export class StorageV2Database {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         deleted_at TEXT,
+        version INTEGER NOT NULL DEFAULT 1,
         FOREIGN KEY (blob_id) REFERENCES blobs(id)
       );
 
@@ -409,7 +523,8 @@ export class StorageV2Database {
         content_hash TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        deleted_at TEXT
+        deleted_at TEXT,
+        version INTEGER NOT NULL DEFAULT 1
       );
 
       CREATE TABLE IF NOT EXISTS agent_skills (
@@ -438,6 +553,7 @@ export class StorageV2Database {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         deleted_at TEXT,
+        version INTEGER NOT NULL DEFAULT 1,
         FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
       );
 
@@ -450,6 +566,7 @@ export class StorageV2Database {
         status TEXT NOT NULL,
         result_json TEXT,
         error TEXT,
+        version INTEGER NOT NULL DEFAULT 1,
         FOREIGN KEY (task_id) REFERENCES scheduled_tasks(id) ON DELETE CASCADE
       );
 
@@ -466,6 +583,7 @@ export class StorageV2Database {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         deleted_at TEXT,
+        version INTEGER NOT NULL DEFAULT 1,
         FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL,
         FOREIGN KEY (session_id) REFERENCES agent_sessions(id) ON DELETE SET NULL
       );
@@ -479,7 +597,8 @@ export class StorageV2Database {
         settings_json TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        deleted_at TEXT
+        deleted_at TEXT,
+        version INTEGER NOT NULL DEFAULT 1
       );
 
       CREATE TABLE IF NOT EXISTS knowledge_items (
@@ -494,6 +613,7 @@ export class StorageV2Database {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         deleted_at TEXT,
+        version INTEGER NOT NULL DEFAULT 1,
         FOREIGN KEY (knowledge_base_id) REFERENCES knowledge_bases(id) ON DELETE CASCADE,
         FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE SET NULL
       );
@@ -576,14 +696,16 @@ export class StorageV2Database {
       CREATE INDEX IF NOT EXISTS idx_migration_runs_created_at ON migration_runs(created_at);
     `)
 
+    await applyColumnMigrations(this.client)
+
     const now = new Date().toISOString()
     await this.client.execute({
       sql: `
         INSERT INTO storage_meta (key, value, updated_at)
-        VALUES ('schema_version', '1', ?)
+        VALUES ('schema_version', ?, ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
       `,
-      args: [now]
+      args: [DB_SCHEMA_VERSION, now]
     })
 
     logger.info('Storage v2 database initialized', { dbPath })
@@ -664,6 +786,36 @@ export class StorageV2Database {
       })
     }
 
+    const secretReferenceScan = await scanStorageV2SecretReferences(client)
+    const vault = readVaultSecretIds(path.join(rootInfo.dataRoot, 'secrets', 'vault.json'))
+    const missingSecretRefCount = Array.from(secretReferenceScan.refs).filter(
+      (secretId) => !vault.secretIds.has(secretId)
+    ).length
+
+    if (secretReferenceScan.invalidRefs.size > 0) {
+      issues.push({
+        id: 'invalid_secret_refs',
+        label: 'Invalid secret references',
+        count: secretReferenceScan.invalidRefs.size
+      })
+    }
+
+    if (missingSecretRefCount > 0) {
+      issues.push({
+        id: 'missing_secret_refs',
+        label: 'Secret references missing vault entries',
+        count: missingSecretRefCount
+      })
+    }
+
+    if (vault.invalid) {
+      issues.push({
+        id: 'secret_vault_invalid',
+        label: 'Secret vault file is invalid',
+        count: 1
+      })
+    }
+
     const quickCheck = getSinglePragmaValue(quickCheckResult)
     const integrityCheck = getSinglePragmaValue(integrityCheckResult)
     const foreignKeyIssueCount = foreignKeyCheckResult.rows.length
@@ -683,22 +835,24 @@ export class StorageV2Database {
   }
 
   async createSnapshot(reason: string): Promise<StorageV2Snapshot> {
-    const client = await this.getClient()
-    const rootInfo = storageV2DataRootService.ensureDataRoot()
-    const snapshotsDir = path.join(rootInfo.dataRoot, 'snapshots')
-    fs.mkdirSync(snapshotsDir, { recursive: true })
+    return this.enqueueExclusive(async () => {
+      const client = await this.getClient()
+      const rootInfo = storageV2DataRootService.ensureDataRoot()
+      const snapshotsDir = path.join(rootInfo.dataRoot, 'snapshots')
+      fs.mkdirSync(snapshotsDir, { recursive: true })
 
-    const createdAt = new Date().toISOString()
-    const safeReason = reason.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'manual'
-    const snapshotPath = path.join(snapshotsDir, `${timestampForFilename()}-${safeReason}.db`)
+      const createdAt = new Date().toISOString()
+      const safeReason = reason.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'manual'
+      const snapshotPath = path.join(snapshotsDir, `${timestampForFilename()}-${safeReason}.db`)
 
-    await client.execute(`VACUUM INTO ${quoteSqlString(snapshotPath)}`)
+      await client.execute(`VACUUM INTO ${quoteSqlString(snapshotPath)}`)
 
-    return {
-      path: snapshotPath,
-      reason,
-      createdAt
-    }
+      return {
+        path: snapshotPath,
+        reason,
+        createdAt
+      }
+    })
   }
 }
 

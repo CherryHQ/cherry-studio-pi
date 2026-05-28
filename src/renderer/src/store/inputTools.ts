@@ -55,7 +55,7 @@ export const DEFAULT_TOOL_ORDER_BY_SCOPE: Record<InputbarScope, ToolOrder> = {
   }
 }
 
-type InputToolsState = {
+export type InputToolsState = {
   toolOrder: ToolOrder
   sessionToolOrder: ToolOrder
   isCollapsed: boolean
@@ -71,6 +71,12 @@ const inputToolsSlice = createSlice({
   name: 'inputTools',
   initialState,
   reducers: {
+    hydrateInputToolsState: (_state, action: PayloadAction<Partial<InputToolsState>>) => {
+      return {
+        ...initialState,
+        ...action.payload
+      }
+    },
     setToolOrder: (state, action: PayloadAction<{ scope: InputbarScope; toolOrder: ToolOrder }>) => {
       if (action.payload.scope === TopicType.Session) {
         state.sessionToolOrder = action.payload.toolOrder
@@ -84,7 +90,7 @@ const inputToolsSlice = createSlice({
   }
 })
 
-export const { setToolOrder, setIsCollapsed } = inputToolsSlice.actions
+export const { hydrateInputToolsState, setToolOrder, setIsCollapsed } = inputToolsSlice.actions
 
 // Selector to get tool order for a specific scope
 export const selectToolOrderForScope = (state: { inputTools: InputToolsState }, scope: InputbarScope): ToolOrder => {

@@ -38,6 +38,12 @@ const ocrSlice = createSlice({
     }
   },
   reducers: {
+    hydrateOcrState: (_state, action: PayloadAction<Partial<OcrState>>) => {
+      return {
+        ...initialState,
+        ...action.payload
+      }
+    },
     setOcrProviders(state, action: PayloadAction<OcrProvider[]>) {
       state.providers = action.payload
     },
@@ -72,6 +78,7 @@ const ocrSlice = createSlice({
 })
 
 export const {
+  hydrateOcrState,
   setOcrProviders,
   addOcrProvider,
   removeOcrProvider,

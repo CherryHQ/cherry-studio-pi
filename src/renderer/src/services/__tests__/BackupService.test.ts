@@ -1,0 +1,141 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const mocks = vi.hoisted(() => ({
+  db: {
+    tables: [],
+    transaction: vi.fn(async (_mode: string, _tables: unknown[], fn: () => Promise<void>) => fn()),
+    table: vi.fn()
+  },
+  handleSaveData: vi.fn(),
+  i18nT: vi.fn((key: string) => key),
+  logger: {
+    error: vi.fn(),
+    verbose: vi.fn(),
+    warn: vi.fn()
+  }
+}))
+
+vi.mock('@logger', () => ({
+  loggerService: {
+    withContext: () => mocks.logger
+  }
+}))
+
+vi.mock('@renderer/databases', () => ({
+  default: mocks.db
+}))
+
+vi.mock('@renderer/databases/upgrades', () => ({
+  upgradeToV7: vi.fn(),
+  upgradeToV8: vi.fn()
+}))
+
+vi.mock('@renderer/i18n', () => ({
+  default: {
+    t: mocks.i18nT
+  }
+}))
+
+vi.mock('@renderer/store', () => ({
+  default: {
+    dispatch: vi.fn(),
+    getState: vi.fn(() => ({
+      backup: {},
+      messages: {
+        loadingByTopic: {}
+      },
+      settings: {
+        s3: {}
+      }
+    }))
+  },
+  handleSaveData: mocks.handleSaveData
+}))
+
+vi.mock('@renderer/store/backup', () => ({
+  setLocalBackupSyncState: vi.fn((payload) => payload),
+  setS3SyncState: vi.fn((payload) => payload),
+  setWebDAVSyncState: vi.fn((payload) => payload)
+}))
+
+vi.mock('@renderer/utils', () => ({
+  uuid: vi.fn(() => 'notification-id')
+}))
+
+vi.mock('../NotificationService', () => ({
+  NotificationService: {
+    getInstance: vi.fn(() => ({
+      send: vi.fn()
+    }))
+  }
+}))
+
+import { handleData } from '../BackupService'
+
+describe('BackupService legacy restore', () => {
+  let originalApi: unknown
+  let originalToast: unknown
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.clearAllMocks()
+    localStorage.clear()
+    originalApi = window.api
+    originalToast = window.toast
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        relaunchApp: vi.fn(),
+        storageV2: {
+          setSetting: vi.fn().mockResolvedValue(undefined)
+        }
+      }
+    })
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: {
+        error: vi.fn(),
+        success: vi.fn()
+      }
+    })
+  })
+
+  afterEach(() => {
+    localStorage.clear()
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: originalApi
+    })
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: originalToast
+    })
+  })
+
+  it('disables Storage v2 auto hydrate after restoring a legacy backup', async () => {
+    await handleData({
+      version: 2,
+      localStorage: {
+        'persist:cherry-studio': '{"settings":"{}"}'
+      },
+      indexedDB: {}
+    })
+
+    expect(localStorage.getItem('persist:cherry-studio')).toBe('{"settings":"{}"}')
+    expect(window.api.storageV2.setSetting).toHaveBeenCalledWith(
+      'storage_v2.runtime.auto_hydrate',
+      expect.objectContaining({
+        enabled: false,
+        reason: 'legacy-backup-restore',
+        updatedAt: expect.any(String)
+      }),
+      'storage-v2'
+    )
+    expect(window.toast.success).toHaveBeenCalledWith('message.restore.success')
+
+    vi.advanceTimersByTime(1000)
+    expect(window.api.relaunchApp).toHaveBeenCalledTimes(1)
+  })
+})

@@ -1,6 +1,6 @@
 import { loggerService } from '@logger'
 import i18n from '@renderer/i18n'
-import store from '@renderer/store'
+import store, { handleSaveData } from '@renderer/store'
 import { setNutstoreSyncState } from '@renderer/store/nutstore'
 import type { WebDavConfig } from '@renderer/types'
 import { NUTSTORE_HOST } from '@shared/config/nutstore'
@@ -147,6 +147,8 @@ export async function backupToNutstore({
   const maxBackups = store.getState().nutstore.nutstoreMaxBackups
 
   try {
+    await handleSaveData()
+
     // 先清理旧备份
     await cleanupOldBackups(config, maxBackups)
 

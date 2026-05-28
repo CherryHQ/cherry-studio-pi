@@ -33,12 +33,31 @@ type LegacyReduxSnapshot = {
     | string
   redux?:
     | {
+        backup?: unknown
+        codeTools?: unknown
+        copilot?: unknown
+        inputTools?: unknown
         knowledge?: unknown
         memory?: unknown
+        minApps?: unknown
         mcp?: unknown
         note?: unknown
+        nutstore?: unknown
+        ocr?: unknown
+        openclaw?: unknown
+        paintings?: unknown
         preprocess?: unknown
+        selectionStore?: unknown
+        shortcuts?: unknown
+        translate?: unknown
         websearch?: unknown
+      }
+    | string
+  localStorage?:
+    | {
+        clearedMcpProviderTokenKeys?: unknown
+        durableValues?: unknown
+        mcpProviderTokens?: unknown
       }
     | string
 }
@@ -47,6 +66,22 @@ type SecretField = {
   path: string[]
   kind: string
 }
+
+const MCP_PROVIDER_TOKEN_KEYS = new Set([
+  'mcprouter_token',
+  'modelscope_token',
+  'tokenLanyunToken',
+  'tokenflux_token',
+  'ai302_token',
+  'bailian_token'
+])
+
+const DURABLE_LOCAL_STORAGE_KEYS = new Set([
+  'language',
+  'memory_currentUserId',
+  'onboarding-completed',
+  'privacy-popup-accepted'
+])
 
 export type StorageV2LegacyImportOptions = {
   dryRun?: boolean
@@ -88,7 +123,8 @@ function normalizeSnapshot(input: LegacyReduxSnapshot | string): LegacyReduxSnap
     settings: parseMaybeJson<Record<string, unknown>>(snapshot.settings),
     llm: parseMaybeJson<Exclude<LegacyReduxSnapshot['llm'], string>>(snapshot.llm),
     assistants: parseMaybeJson<Exclude<LegacyReduxSnapshot['assistants'], string>>(snapshot.assistants),
-    redux: parseMaybeJson<Exclude<LegacyReduxSnapshot['redux'], string>>(snapshot.redux)
+    redux: parseMaybeJson<Exclude<LegacyReduxSnapshot['redux'], string>>(snapshot.redux),
+    localStorage: parseMaybeJson<Exclude<LegacyReduxSnapshot['localStorage'], string>>(snapshot.localStorage)
   }
 }
 
@@ -304,6 +340,81 @@ async function sanitizeMcpState(
   }
 }
 
+async function sanitizeMcpProviderTokens(
+  value: unknown,
+  options: {
+    dryRun: boolean
+    canImportSecrets: boolean
+    warnings: string[]
+  }
+): Promise<{
+  value: unknown
+  secretCandidateCount: number
+  importedSecretCount: number
+}> {
+  const sanitized = cloneJsonObject(value)
+  let secretCandidateCount = 0
+  let importedSecretCount = 0
+
+  for (const [tokenKey, token] of Object.entries(sanitized)) {
+    if (!MCP_PROVIDER_TOKEN_KEYS.has(tokenKey) || typeof token !== 'string' || !token) {
+      delete sanitized[tokenKey]
+      continue
+    }
+
+    secretCandidateCount++
+
+    if (!options.dryRun && options.canImportSecrets) {
+      sanitized[tokenKey] = {
+        tokenSecretRef: await storageV2SecretVaultService.setSecret('mcp-provider-token', tokenKey, 'token', token)
+      }
+      importedSecretCount++
+    } else if (!options.dryRun) {
+      sanitized[tokenKey] = {
+        tokenSecretUnavailable: true
+      }
+    }
+  }
+
+  if (secretCandidateCount > 0 && options.dryRun) {
+    options.warnings.push('MCP provider tokens were detected. Dry run did not write them to the secret vault.')
+  } else if (secretCandidateCount > 0 && !options.canImportSecrets) {
+    options.warnings.push('MCP provider tokens were detected but safeStorage encryption is unavailable on this system.')
+  }
+
+  return {
+    value: options.dryRun ? value : sanitized,
+    secretCandidateCount,
+    importedSecretCount
+  }
+}
+
+function sanitizeDurableLocalStorageValues(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+
+  const durableValues: Record<string, string> = {}
+
+  for (const [key, item] of Object.entries(value)) {
+    if (DURABLE_LOCAL_STORAGE_KEYS.has(key) && typeof item === 'string' && item) {
+      durableValues[key] = item
+    }
+  }
+
+  return durableValues
+}
+
+function sanitizeClearedMcpProviderTokenKeys(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return Array.from(
+    new Set(value.filter((item): item is string => typeof item === 'string' && MCP_PROVIDER_TOKEN_KEYS.has(item)))
+  )
+}
+
 type SecretSanitizerOptions = {
   dryRun: boolean
   canImportSecrets: boolean
@@ -489,6 +600,243 @@ async function sanitizeWebSearchState(value: unknown, options: SecretSanitizerOp
   }
 }
 
+async function sanitizeOcrState(value: unknown, options: SecretSanitizerOptions): Promise<SecretSanitizerResult> {
+  const sanitized = cloneJsonObject(value)
+  const providers = Array.isArray(sanitized.providers) ? sanitized.providers : []
+  let secretCandidateCount = 0
+  let importedSecretCount = 0
+
+  for (const [index, provider] of providers.entries()) {
+    if (!isRecord(provider)) continue
+
+    const apiConfig = provider.config?.api
+    if (!isRecord(apiConfig)) continue
+
+    const ownerId = typeof provider.id === 'string' && provider.id ? provider.id : `ocr-provider-${index}`
+    const result = await moveStringSecretField(apiConfig, {
+      ...options,
+      scope: 'ocr-provider',
+      ownerId,
+      field: 'apiKey',
+      kind: 'api.apiKey'
+    })
+
+    if (result.detected) secretCandidateCount++
+    if (result.imported) importedSecretCount++
+  }
+
+  pushSecretWarning(
+    options,
+    secretCandidateCount,
+    'OCR provider API keys were detected. Dry run did not write them to the secret vault.',
+    'OCR provider API keys were detected but safeStorage encryption is unavailable on this system.'
+  )
+
+  return {
+    value: options.dryRun ? value : sanitized,
+    secretCandidateCount,
+    importedSecretCount
+  }
+}
+
+async function sanitizeNutstoreState(value: unknown, options: SecretSanitizerOptions): Promise<SecretSanitizerResult> {
+  const sanitized = cloneJsonObject(value)
+  let secretCandidateCount = 0
+  let importedSecretCount = 0
+
+  const result = await moveStringSecretField(sanitized, {
+    ...options,
+    scope: 'nutstore',
+    ownerId: 'default',
+    field: 'nutstoreToken',
+    kind: 'token'
+  })
+
+  if (result.detected) secretCandidateCount++
+  if (result.imported) importedSecretCount++
+
+  pushSecretWarning(
+    options,
+    secretCandidateCount,
+    'Nutstore sync tokens were detected. Dry run did not write them to the secret vault.',
+    'Nutstore sync tokens were detected but safeStorage encryption is unavailable on this system.'
+  )
+
+  return {
+    value: options.dryRun ? value : sanitized,
+    secretCandidateCount,
+    importedSecretCount
+  }
+}
+
+async function sanitizeCodeToolsState(value: unknown, options: SecretSanitizerOptions): Promise<SecretSanitizerResult> {
+  const sanitized = cloneJsonObject(value)
+  const environmentVariables = isRecord(sanitized.environmentVariables) ? sanitized.environmentVariables : {}
+  const environmentVariableSecretRefs = isRecord(sanitized.environmentVariableSecretRefs)
+    ? { ...sanitized.environmentVariableSecretRefs }
+    : {}
+  const environmentVariableSecretUnavailable = isRecord(sanitized.environmentVariableSecretUnavailable)
+    ? { ...sanitized.environmentVariableSecretUnavailable }
+    : {}
+  let secretCandidateCount = 0
+  let importedSecretCount = 0
+
+  for (const [toolId, item] of Object.entries(environmentVariables)) {
+    if (typeof item !== 'string' || !item) continue
+
+    secretCandidateCount++
+
+    if (!options.dryRun && options.canImportSecrets) {
+      environmentVariableSecretRefs[toolId] = await storageV2SecretVaultService.setSecret(
+        'code-tools',
+        toolId,
+        'environmentVariables',
+        item
+      )
+      importedSecretCount++
+    } else if (!options.dryRun) {
+      environmentVariableSecretUnavailable[toolId] = true
+    }
+
+    if (!options.dryRun) {
+      environmentVariables[toolId] = ''
+    }
+  }
+
+  if (!options.dryRun) {
+    if (Object.keys(environmentVariableSecretRefs).length > 0) {
+      sanitized.environmentVariableSecretRefs = environmentVariableSecretRefs
+    }
+    if (Object.keys(environmentVariableSecretUnavailable).length > 0) {
+      sanitized.environmentVariableSecretUnavailable = environmentVariableSecretUnavailable
+    }
+  }
+
+  pushSecretWarning(
+    options,
+    secretCandidateCount,
+    'Code tool environment variables were detected. Dry run did not write them to the secret vault.',
+    'Code tool environment variables were detected but safeStorage encryption is unavailable on this system.'
+  )
+
+  return {
+    value: options.dryRun ? value : sanitized,
+    secretCandidateCount,
+    importedSecretCount
+  }
+}
+
+function isSensitiveHeaderName(headerName: string) {
+  return /(authorization|cookie|token|secret|api[-_]?key|x[-_].*key)/i.test(headerName)
+}
+
+async function sanitizeCopilotState(value: unknown, options: SecretSanitizerOptions): Promise<SecretSanitizerResult> {
+  const sanitized = cloneJsonObject(value)
+  const defaultHeaders = isRecord(sanitized.defaultHeaders) ? sanitized.defaultHeaders : {}
+  const defaultHeaderSecretRefs = isRecord(sanitized.defaultHeaderSecretRefs)
+    ? { ...sanitized.defaultHeaderSecretRefs }
+    : {}
+  const defaultHeaderSecretUnavailable = isRecord(sanitized.defaultHeaderSecretUnavailable)
+    ? { ...sanitized.defaultHeaderSecretUnavailable }
+    : {}
+  let secretCandidateCount = 0
+  let importedSecretCount = 0
+
+  for (const [headerName, headerValue] of Object.entries(defaultHeaders)) {
+    if (typeof headerValue !== 'string' || !headerValue || !isSensitiveHeaderName(headerName)) continue
+
+    secretCandidateCount++
+
+    if (!options.dryRun && options.canImportSecrets) {
+      defaultHeaderSecretRefs[headerName] = await storageV2SecretVaultService.setSecret(
+        'copilot',
+        'defaultHeaders',
+        headerName,
+        headerValue
+      )
+      importedSecretCount++
+    } else if (!options.dryRun) {
+      defaultHeaderSecretUnavailable[headerName] = true
+    }
+
+    if (!options.dryRun) {
+      delete defaultHeaders[headerName]
+    }
+  }
+
+  if (!options.dryRun) {
+    if (Object.keys(defaultHeaderSecretRefs).length > 0) {
+      sanitized.defaultHeaderSecretRefs = defaultHeaderSecretRefs
+    }
+    if (Object.keys(defaultHeaderSecretUnavailable).length > 0) {
+      sanitized.defaultHeaderSecretUnavailable = defaultHeaderSecretUnavailable
+    }
+  }
+
+  pushSecretWarning(
+    options,
+    secretCandidateCount,
+    'GitHub Copilot custom headers with sensitive names were detected. Dry run did not write them to the secret vault.',
+    'GitHub Copilot custom headers with sensitive names were detected but safeStorage encryption is unavailable on this system.'
+  )
+
+  return {
+    value: options.dryRun ? value : sanitized,
+    secretCandidateCount,
+    importedSecretCount
+  }
+}
+
+async function sanitizeSettingsEntry(
+  key: string,
+  value: unknown,
+  options: SecretSanitizerOptions
+): Promise<SecretSanitizerResult> {
+  if (key !== 's3' && key !== 'apiServer') {
+    return {
+      value,
+      secretCandidateCount: 0,
+      importedSecretCount: 0
+    }
+  }
+
+  const sanitized = cloneJsonObject(value)
+  let secretCandidateCount = 0
+  let importedSecretCount = 0
+  const result =
+    key === 's3'
+      ? await moveStringSecretField(sanitized, {
+          ...options,
+          scope: 'settings',
+          ownerId: 's3',
+          field: 'secretAccessKey',
+          kind: 'secretAccessKey'
+        })
+      : await moveStringSecretField(sanitized, {
+          ...options,
+          scope: 'settings',
+          ownerId: 'apiServer',
+          field: 'apiKey',
+          kind: 'apiKey'
+        })
+
+  if (result.detected) secretCandidateCount++
+  if (result.imported) importedSecretCount++
+
+  pushSecretWarning(
+    options,
+    secretCandidateCount,
+    'Sensitive app settings were detected. Dry run did not write them to the secret vault.',
+    'Sensitive app settings were detected but safeStorage encryption is unavailable on this system.'
+  )
+
+  return {
+    value: options.dryRun ? value : sanitized,
+    secretCandidateCount,
+    importedSecretCount
+  }
+}
+
 export class StorageV2LegacyReduxImportService {
   async importSnapshot(
     input: LegacyReduxSnapshot | string,
@@ -502,20 +850,30 @@ export class StorageV2LegacyReduxImportService {
     const llm = snapshot.llm && typeof snapshot.llm === 'object' ? snapshot.llm : {}
     const assistants = snapshot.assistants && typeof snapshot.assistants === 'object' ? snapshot.assistants : {}
     const redux = snapshot.redux && typeof snapshot.redux === 'object' ? snapshot.redux : {}
-    const providers = Array.isArray(llm.providers) ? llm.providers : []
-    const assistantList = Array.isArray(assistants.assistants) ? assistants.assistants : []
-
-    const settingsEntries: Array<[string, unknown, string]> = Object.entries(settings).map(([key, value]) => [
-      `settings.${key}`,
-      value,
-      'settings'
-    ])
-
+    const localStorage = snapshot.localStorage && typeof snapshot.localStorage === 'object' ? snapshot.localStorage : {}
+    const hasProviderList = Array.isArray(llm.providers)
+    const hasAssistantList = Array.isArray(assistants.assistants)
+    const providers = hasProviderList ? llm.providers! : []
+    const assistantList = hasAssistantList ? assistants.assistants! : []
     const canImportSecrets = storageV2SecretVaultService.isAvailable()
+    const settingsEntries: Array<[string, unknown, string]> = []
+    let settingsSecretCandidateCount = 0
+    let settingsImportedSecretCount = 0
     let llmSettingsSecretCandidateCount = 0
     let llmSettingsImportedSecretCount = 0
     let reduxSecretCandidateCount = 0
     let reduxImportedSecretCount = 0
+
+    for (const [key, value] of Object.entries(settings)) {
+      const sanitizedSettingsEntry = await sanitizeSettingsEntry(key, value, {
+        dryRun,
+        canImportSecrets,
+        warnings
+      })
+      settingsEntries.push([`settings.${key}`, sanitizedSettingsEntry.value, 'settings'])
+      settingsSecretCandidateCount += sanitizedSettingsEntry.secretCandidateCount
+      settingsImportedSecretCount += sanitizedSettingsEntry.importedSecretCount
+    }
 
     for (const key of ['defaultModel', 'topicNamingModel', 'quickModel', 'translateModel', 'quickAssistantId']) {
       if (Object.hasOwn(llm, key)) {
@@ -544,11 +902,48 @@ export class StorageV2LegacyReduxImportService {
       }
     }
 
-    for (const key of ['knowledge', 'memory', 'mcp', 'note', 'preprocess', 'websearch']) {
+    for (const key of [
+      'backup',
+      'codeTools',
+      'copilot',
+      'inputTools',
+      'knowledge',
+      'memory',
+      'minApps',
+      'mcp',
+      'note',
+      'nutstore',
+      'ocr',
+      'openclaw',
+      'paintings',
+      'preprocess',
+      'selectionStore',
+      'shortcuts',
+      'translate',
+      'websearch'
+    ]) {
       if (Object.hasOwn(redux, key)) {
         let value = (redux as Record<string, unknown>)[key]
 
-        if (key === 'knowledge') {
+        if (key === 'codeTools') {
+          const sanitizedCodeToolsState = await sanitizeCodeToolsState(value, {
+            dryRun,
+            canImportSecrets,
+            warnings
+          })
+          value = sanitizedCodeToolsState.value
+          reduxSecretCandidateCount += sanitizedCodeToolsState.secretCandidateCount
+          reduxImportedSecretCount += sanitizedCodeToolsState.importedSecretCount
+        } else if (key === 'copilot') {
+          const sanitizedCopilotState = await sanitizeCopilotState(value, {
+            dryRun,
+            canImportSecrets,
+            warnings
+          })
+          value = sanitizedCopilotState.value
+          reduxSecretCandidateCount += sanitizedCopilotState.secretCandidateCount
+          reduxImportedSecretCount += sanitizedCopilotState.importedSecretCount
+        } else if (key === 'knowledge') {
           const sanitizedKnowledgeState = await sanitizeKnowledgeState(value, {
             dryRun,
             canImportSecrets,
@@ -566,6 +961,24 @@ export class StorageV2LegacyReduxImportService {
           value = sanitizedMcpState.value
           reduxSecretCandidateCount += sanitizedMcpState.secretCandidateCount
           reduxImportedSecretCount += sanitizedMcpState.importedSecretCount
+        } else if (key === 'nutstore') {
+          const sanitizedNutstoreState = await sanitizeNutstoreState(value, {
+            dryRun,
+            canImportSecrets,
+            warnings
+          })
+          value = sanitizedNutstoreState.value
+          reduxSecretCandidateCount += sanitizedNutstoreState.secretCandidateCount
+          reduxImportedSecretCount += sanitizedNutstoreState.importedSecretCount
+        } else if (key === 'ocr') {
+          const sanitizedOcrState = await sanitizeOcrState(value, {
+            dryRun,
+            canImportSecrets,
+            warnings
+          })
+          value = sanitizedOcrState.value
+          reduxSecretCandidateCount += sanitizedOcrState.secretCandidateCount
+          reduxImportedSecretCount += sanitizedOcrState.importedSecretCount
         } else if (key === 'preprocess') {
           const sanitizedPreprocessState = await sanitizePreprocessState(value, {
             dryRun,
@@ -590,11 +1003,44 @@ export class StorageV2LegacyReduxImportService {
       }
     }
 
+    if (Object.hasOwn(localStorage, 'mcpProviderTokens')) {
+      const sanitizedMcpProviderTokens = await sanitizeMcpProviderTokens(
+        (localStorage as Record<string, unknown>).mcpProviderTokens,
+        {
+          dryRun,
+          canImportSecrets,
+          warnings
+        }
+      )
+      settingsEntries.push(['localStorage.mcpProviderTokens', sanitizedMcpProviderTokens.value, 'localStorage'])
+      reduxSecretCandidateCount += sanitizedMcpProviderTokens.secretCandidateCount
+      reduxImportedSecretCount += sanitizedMcpProviderTokens.importedSecretCount
+    }
+
+    if (Object.hasOwn(localStorage, 'durableValues')) {
+      settingsEntries.push([
+        'localStorage.durableValues',
+        sanitizeDurableLocalStorageValues((localStorage as Record<string, unknown>).durableValues),
+        'localStorage'
+      ])
+    }
+
+    if (Object.hasOwn(localStorage, 'clearedMcpProviderTokenKeys')) {
+      settingsEntries.push([
+        'localStorage.clearedMcpProviderTokenKeys',
+        sanitizeClearedMcpProviderTokenKeys((localStorage as Record<string, unknown>).clearedMcpProviderTokenKeys),
+        'localStorage'
+      ])
+    }
+
     const providerSecretCandidateCount = providers.filter((provider) => Boolean(provider.apiKey)).length
     const secretCandidateCount =
-      providerSecretCandidateCount + llmSettingsSecretCandidateCount + reduxSecretCandidateCount
+      providerSecretCandidateCount +
+      settingsSecretCandidateCount +
+      llmSettingsSecretCandidateCount +
+      reduxSecretCandidateCount
     const modelCount = providers.reduce((count, provider) => count + (provider.models?.length ?? 0), 0)
-    let importedSecretCount = llmSettingsImportedSecretCount + reduxImportedSecretCount
+    let importedSecretCount = settingsImportedSecretCount + llmSettingsImportedSecretCount + reduxImportedSecretCount
     let deletedProviderCount = 0
     let deletedAssistantCount = 0
     let knowledgeBaseCount = 0
@@ -648,10 +1094,14 @@ export class StorageV2LegacyReduxImportService {
         deletedKnowledgeItemCount = knowledgeImportReport.deletedItemCount
       }
 
-      deletedProviderCount = await storageV2ProviderRepository.deleteMissing(providers.map((provider) => provider.id))
-      deletedAssistantCount = await storageV2AssistantRepository.deleteMissing(
-        assistantList.map((assistant) => assistant.id)
-      )
+      if (hasProviderList) {
+        deletedProviderCount = await storageV2ProviderRepository.deleteMissing(providers.map((provider) => provider.id))
+      }
+      if (hasAssistantList) {
+        deletedAssistantCount = await storageV2AssistantRepository.deleteMissing(
+          assistantList.map((assistant) => assistant.id)
+        )
+      }
     }
 
     return {

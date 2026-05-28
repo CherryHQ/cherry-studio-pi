@@ -165,6 +165,14 @@ const shortcutsSlice = createSlice({
   name: 'shortcuts',
   initialState,
   reducers: {
+    hydrateShortcutsState: (_state, action: PayloadAction<Partial<ShortcutsState>>) => {
+      const nextState = {
+        ...initialState,
+        ...action.payload
+      }
+      void window.api.shortcuts.update(getSerializableShortcuts(nextState.shortcuts))
+      return nextState
+    },
     updateShortcut: (state, action: PayloadAction<Shortcut>) => {
       state.shortcuts = state.shortcuts.map((s) => (s.key === action.payload.key ? action.payload : s))
       void window.api.shortcuts.update(getSerializableShortcuts(state.shortcuts))
@@ -180,6 +188,6 @@ const shortcutsSlice = createSlice({
   }
 })
 
-export const { updateShortcut, toggleShortcut, resetShortcuts } = shortcutsSlice.actions
+export const { hydrateShortcutsState, updateShortcut, toggleShortcut, resetShortcuts } = shortcutsSlice.actions
 export default shortcutsSlice.reducer
 export { initialState }

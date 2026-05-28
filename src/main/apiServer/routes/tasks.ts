@@ -1,6 +1,14 @@
 import { loggerService } from '@logger'
+import {
+  createTaskWithStorageV2Recovery,
+  deleteTaskByIdWithStorageV2Recovery,
+  getTaskByIdWithStorageV2Recovery,
+  getTaskLogsWithStorageV2Recovery,
+  listAllTasksWithStorageV2Recovery,
+  updateTaskByIdWithStorageV2Recovery
+} from '@main/services/agents/AgentStorageV2ReadThrough'
 import { schedulerService } from '@main/services/agents/services/SchedulerService'
-import { taskService } from '@main/services/agents/services/TaskService'
+import { storageV2AgentDbMirrorService } from '@main/services/storageV2/AgentDbMirrorService'
 import type { ListTaskLogsResponse, ListTasksResponse } from '@types'
 import express, { type Request, type Response, type Router } from 'express'
 
@@ -15,7 +23,7 @@ tasksRouter.get('/', async (req: Request, res: Response) => {
     const offset = req.query.offset ? parseInt(req.query.offset as string) : 0
 
     logger.debug('Listing all tasks', { limit, offset })
-    const result = await taskService.listAllTasks({ limit, offset })
+    const result = await listAllTasksWithStorageV2Recovery({ limit, offset })
 
     return res.json({
       data: result.tasks,
@@ -50,8 +58,9 @@ tasksRouter.post('/', async (req: Request, res: Response) => {
     }
 
     logger.debug('Creating task', { agentId: agent_id })
-    const task = await taskService.createTask(agent_id, taskData)
+    const task = await createTaskWithStorageV2Recovery(agent_id, taskData)
     schedulerService.startLoop()
+    storageV2AgentDbMirrorService.schedule()
     logger.info('Task created', { agentId: agent_id, taskId: task.id })
     return res.status(201).json(task)
   } catch (error: any) {
@@ -71,7 +80,7 @@ tasksRouter.get('/:taskId', async (req: Request, res: Response) => {
   const { taskId } = req.params
   try {
     logger.debug('Getting task', { taskId })
-    const task = await taskService.getTaskById(taskId)
+    const task = await getTaskByIdWithStorageV2Recovery(taskId)
 
     if (!task) {
       return res.status(404).json({
@@ -93,7 +102,7 @@ tasksRouter.patch('/:taskId', async (req: Request, res: Response) => {
   const { taskId } = req.params
   try {
     logger.debug('Updating task', { taskId })
-    const task = await taskService.updateTaskById(taskId, req.body)
+    const task = await updateTaskByIdWithStorageV2Recovery(taskId, req.body)
 
     if (!task) {
       return res.status(404).json({
@@ -102,6 +111,7 @@ tasksRouter.patch('/:taskId', async (req: Request, res: Response) => {
     }
 
     void schedulerService.syncScheduler()
+    storageV2AgentDbMirrorService.schedule()
     logger.info('Task updated', { taskId })
     return res.json(task)
   } catch (error: any) {
@@ -121,7 +131,7 @@ tasksRouter.delete('/:taskId', async (req: Request, res: Response) => {
   const { taskId } = req.params
   try {
     logger.debug('Deleting task', { taskId })
-    const deleted = await taskService.deleteTaskById(taskId)
+    const deleted = await deleteTaskByIdWithStorageV2Recovery(taskId)
 
     if (!deleted) {
       return res.status(404).json({
@@ -130,6 +140,7 @@ tasksRouter.delete('/:taskId', async (req: Request, res: Response) => {
     }
 
     void schedulerService.syncScheduler()
+    storageV2AgentDbMirrorService.schedule()
     logger.info('Task deleted', { taskId })
     return res.status(204).send()
   } catch (error: any) {
@@ -144,7 +155,7 @@ tasksRouter.delete('/:taskId', async (req: Request, res: Response) => {
 tasksRouter.post('/:taskId/run', async (req: Request, res: Response) => {
   const { taskId } = req.params
   try {
-    const task = await taskService.getTaskById(taskId)
+    const task = await getTaskByIdWithStorageV2Recovery(taskId)
     if (!task) {
       return res.status(404).json({
         error: { message: 'Task not found', type: 'not_found', code: 'task_not_found' }
@@ -153,6 +164,7 @@ tasksRouter.post('/:taskId/run', async (req: Request, res: Response) => {
 
     logger.debug('Manually running task', { taskId, agentId: task.agent_id })
     await schedulerService.runTaskNow(task.agent_id, taskId)
+    storageV2AgentDbMirrorService.schedule()
     logger.info('Task triggered manually', { taskId })
     return res.json({ status: 'triggered' })
   } catch (error: any) {
@@ -172,7 +184,7 @@ tasksRouter.post('/:taskId/run', async (req: Request, res: Response) => {
 tasksRouter.get('/:taskId/logs', async (req: Request, res: Response) => {
   const { taskId } = req.params
   try {
-    const task = await taskService.getTaskById(taskId)
+    const task = await getTaskByIdWithStorageV2Recovery(taskId)
     if (!task) {
       return res.status(404).json({
         error: { message: 'Task not found', type: 'not_found', code: 'task_not_found' }
@@ -183,7 +195,7 @@ tasksRouter.get('/:taskId/logs', async (req: Request, res: Response) => {
     const offset = req.query.offset ? parseInt(req.query.offset as string) : 0
 
     logger.debug('Getting task logs', { taskId, limit, offset })
-    const result = await taskService.getTaskLogs(taskId, { limit, offset })
+    const result = await getTaskLogsWithStorageV2Recovery(taskId, { limit, offset })
 
     return res.json({
       data: result.logs,

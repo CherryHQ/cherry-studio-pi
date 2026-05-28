@@ -13,13 +13,17 @@ class FileManager {
     if (!file || !window.api?.storageV2) return
 
     try {
-      await window.api.storageV2.importLegacyDexieSnapshot(
-        {
-          conversations: [],
-          files: [file]
-        },
-        { dryRun: false }
-      )
+      if (typeof window.api.storageV2.upsertFile === 'function') {
+        await window.api.storageV2.upsertFile(file)
+      } else {
+        await window.api.storageV2.importLegacyDexieSnapshot(
+          {
+            conversations: [],
+            files: [file]
+          },
+          { dryRun: false }
+        )
+      }
     } catch (error) {
       logger.warn('Failed to mirror file to Storage v2:', error as Error)
     }

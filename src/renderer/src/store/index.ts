@@ -25,6 +25,7 @@ import { storageV2AgentMirrorService } from '../services/StorageV2AgentMirrorSer
 import { storageV2ConversationMirrorService } from '../services/StorageV2ConversationMirrorService'
 import { storageV2FileMirrorService } from '../services/StorageV2FileMirrorService'
 import { maybeHydrateRuntimeCacheFromStorageV2 } from '../services/StorageV2HydrationService'
+import { flushStorageV2LocalStorageMirror } from '../services/StorageV2LocalStorageSnapshot'
 import { storageV2MirrorService } from '../services/StorageV2MirrorService'
 import storeSyncService from '../services/StoreSyncService'
 import assistants from './assistants'
@@ -129,6 +130,8 @@ const store = configureStore({
 export type RootState = ReturnType<typeof rootReducer>
 export type AppDispatch = typeof store.dispatch
 
+storageV2MirrorService.pauseRuntimeMirroring()
+
 export const persistor = persistStore(store, undefined, () => {
   // Initialize notes path after rehydration if empty
   const state = store.getState()
@@ -146,6 +149,7 @@ export const persistor = persistStore(store, undefined, () => {
   }
 
   const notifyReduxReady = () => {
+    storageV2MirrorService.resumeRuntimeMirroring()
     storageV2MirrorService.schedule(() => store.getState())
     void window.electron?.ipcRenderer?.invoke(IpcChannel.ReduxStoreReady)
     logger.info('Redux store ready, notified main process')
@@ -175,6 +179,7 @@ export async function handleSaveData() {
   logger.info('Flushing redux persistor data')
   await persistor.flush()
   await storageV2MirrorService.flush()
+  await flushStorageV2LocalStorageMirror()
   await storageV2ConversationMirrorService.flush()
   await storageV2FileMirrorService.flush()
   await storageV2AgentMirrorService.flush()

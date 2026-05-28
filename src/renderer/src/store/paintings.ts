@@ -48,6 +48,12 @@ const paintingsSlice = createSlice({
   name: 'paintings',
   initialState,
   reducers: {
+    hydratePaintingsState: (_state, action: PayloadAction<Partial<PaintingsState>>) => {
+      return {
+        ...initialState,
+        ...action.payload
+      }
+    },
     addPainting: (
       state: PaintingsState,
       action: PayloadAction<{ namespace?: keyof PaintingsState; painting: PaintingAction }>
@@ -91,6 +97,7 @@ const paintingsSlice = createSlice({
   }
 })
 
-export const { updatePaintings, addPainting, removePainting, updatePainting } = paintingsSlice.actions
+export const { hydratePaintingsState, updatePaintings, addPainting, removePainting, updatePainting } =
+  paintingsSlice.actions
 
 export default paintingsSlice.reducer

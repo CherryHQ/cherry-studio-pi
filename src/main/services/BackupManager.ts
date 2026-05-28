@@ -31,6 +31,8 @@ import { getDataPath } from '../utils'
 import { isPathInside, resolveAndValidatePath } from '../utils/file'
 import S3Storage from './S3Storage'
 import selectionService from './SelectionService'
+import { storageV2DataRootService } from './storageV2/DataRootService'
+import { storageV2Database } from './storageV2/StorageV2Database'
 import WebDav from './WebDav'
 import { windowService } from './WindowService'
 
@@ -79,7 +81,7 @@ class BackupManager {
 
   /**
    * Handle backup restoration on app startup
-   * Called after window is created but before renderer is loaded
+   * Called before Storage v2 startup hydration/mirroring and before renderer is loaded.
    */
   static async handleStartupRestore(): Promise<void> {
     const userDataPath = app.getPath('userData')
@@ -123,6 +125,13 @@ class BackupManager {
         logger.info('[handleStartupRestore] Found Local Data.restore directories, completing restoration...')
         await fs.remove(dataDest).catch(() => {})
         await fs.rename(dataRestore, dataDest)
+        const manifest = storageV2DataRootService.activateDataRoot(dataDest)
+        if (manifest) {
+          logger.info('[handleStartupRestore] Activated restored Storage v2 data root', {
+            dataRoot: dataDest,
+            workspaceId: manifest.workspaceId
+          })
+        }
       }
 
       logger.info('[handleStartupRestore] Restoration completed successfully')
@@ -174,6 +183,7 @@ class BackupManager {
     const onProgress = this.onProgress(IpcChannel.BackupProgress, true)
 
     try {
+      await fs.remove(this.tempDir).catch(() => {})
       await fs.ensureDir(this.tempDir)
       onProgress({ stage: 'preparing', progress: 0, total: 100 })
 
@@ -210,10 +220,11 @@ class BackupManager {
 
       // Step 4: Copy Data directory (if not skipped)
       if (!skipBackupFile) {
-        const sourcePath = path.join(userDataPath, 'Data')
+        const sourcePath = this.getDataRootForBackup()
         const tempDataDir = path.join(this.tempDir, 'Data')
 
         if (await fs.pathExists(sourcePath)) {
+          const storageV2SnapshotPath = await this.createStorageV2SnapshotIfAvailable(sourcePath)
           const totalSize = await this.getDirSize(sourcePath, { dereferenceSymlinks: true })
 
           await this.copyDirWithProgress(
@@ -222,6 +233,7 @@ class BackupManager {
             this.createCopyProgressHandler(totalSize, 52, 80, 'copying_files', onProgress),
             { dereferenceSymlinks: true }
           )
+          await this.replaceStorageV2DatabaseCopy(tempDataDir, storageV2SnapshotPath)
         }
       } else {
         logger.debug('[backupDirect] Skip the backup of the file')
@@ -284,6 +296,7 @@ class BackupManager {
     const onProgress = this.onProgress(IpcChannel.BackupProgress, true)
 
     try {
+      await fs.remove(this.tempDir).catch(() => {})
       await fs.ensureDir(this.tempDir)
       onProgress({ stage: 'preparing', progress: 0, total: 100 })
 
@@ -305,8 +318,9 @@ class BackupManager {
 
       if (!skipBackupFile) {
         // Copy Data directory to temp directory
-        const sourcePath = path.join(app.getPath('userData'), 'Data')
+        const sourcePath = this.getDataRootForBackup()
         const tempDataDir = path.join(this.tempDir, 'Data')
+        const storageV2SnapshotPath = await this.createStorageV2SnapshotIfAvailable(sourcePath)
 
         // Get total size of source directory
         const totalSize = await this.getDirSize(sourcePath, { dereferenceSymlinks: true })
@@ -318,6 +332,7 @@ class BackupManager {
           this.createCopyProgressHandler(totalSize, 0, 50, 'copying_files', onProgress),
           { dereferenceSymlinks: true }
         )
+        await this.replaceStorageV2DatabaseCopy(tempDataDir, storageV2SnapshotPath)
 
         onProgress({ stage: 'preparing_compression', progress: 50, total: 100 })
       } else {
@@ -525,6 +540,7 @@ class BackupManager {
 
     try {
       // Create temp directory
+      await fs.remove(this.tempDir).catch(() => {})
       await fs.ensureDir(this.tempDir)
       onProgress({ stage: 'preparing', progress: 0, total: 100 })
 
@@ -851,6 +867,45 @@ class BackupManager {
     }
   }
 
+  private getDataRootForBackup() {
+    return storageV2DataRootService.resolveDataRoot().dataRoot
+  }
+
+  private async createStorageV2SnapshotIfAvailable(sourceDataPath: string): Promise<string | null> {
+    const mainDbPath = path.join(sourceDataPath, 'main.db')
+    if (!(await fs.pathExists(mainDbPath))) {
+      return null
+    }
+
+    const activeDataRoot = storageV2DataRootService.resolveDataRoot().dataRoot
+    if (path.resolve(activeDataRoot) !== path.resolve(sourceDataPath)) {
+      logger.warn('[backupDirect] Skipping Storage v2 snapshot because the copied data root is not active', {
+        sourceDataPath,
+        activeDataRoot
+      })
+      return null
+    }
+
+    const snapshot = await storageV2Database.createSnapshot('direct-backup')
+    logger.info('[backupDirect] Created Storage v2 database snapshot for backup', {
+      snapshotPath: snapshot.path
+    })
+    return snapshot.path
+  }
+
+  private async replaceStorageV2DatabaseCopy(tempDataDir: string, snapshotPath: string | null) {
+    if (!snapshotPath) {
+      return
+    }
+
+    const tempMainDbPath = path.join(tempDataDir, 'main.db')
+    await fs.copy(snapshotPath, tempMainDbPath)
+    await Promise.all([
+      fs.remove(`${tempMainDbPath}-wal`).catch(() => {}),
+      fs.remove(`${tempMainDbPath}-shm`).catch(() => {})
+    ])
+  }
+
   /**
    * Calculate total size of a directory recursively
    * @param dirPath - Directory path to calculate size
@@ -914,6 +969,7 @@ class BackupManager {
     const dataRestorePath = getDataPath() + '.restore'
     await fs.remove(dataRestorePath).catch(() => {})
     await fs.ensureDir(dataRestorePath)
+    storageV2DataRootService.createFreshDataRootManifest(dataRestorePath)
   }
 
   /**

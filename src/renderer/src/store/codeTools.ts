@@ -68,6 +68,12 @@ const codeToolsSlice = createSlice({
   name: 'codeTools',
   initialState,
   reducers: {
+    hydrateCodeToolsState: (_state, action: PayloadAction<Partial<CodeToolsState>>) => {
+      return {
+        ...initialState,
+        ...action.payload
+      }
+    },
     // 设置选择的 CLI 工具
     setSelectedCliTool: (state, action: PayloadAction<codeTools>) => {
       state.selectedCliTool = action.payload
@@ -158,6 +164,7 @@ const codeToolsSlice = createSlice({
 })
 
 export const {
+  hydrateCodeToolsState,
   setSelectedCliTool,
   setSelectedTerminal,
   setSelectedModel,

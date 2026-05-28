@@ -1,8 +1,14 @@
 import { loggerService } from '@logger'
+import { storageV2AgentDbMirrorService } from '@main/services/storageV2/AgentDbMirrorService'
 import { windowService } from '@main/services/WindowService'
 import type { ChannelLogEntry, ChannelStatusEvent } from '@shared/config/types'
 import { IpcChannel } from '@shared/IpcChannel'
 
+import {
+  getChannelWithStorageV2Recovery,
+  listChannelsWithStorageV2Recovery,
+  updateChannelWithStorageV2Recovery
+} from '../../AgentStorageV2ReadThrough'
 import type { ChannelConfig, ChannelRow } from '../../database/schema'
 import { channelService } from '../ChannelService'
 import type { ChannelAdapter } from './ChannelAdapter'
@@ -60,7 +66,7 @@ class ChannelManager {
 
   async start(): Promise<void> {
     try {
-      const channels = await channelService.listChannels()
+      const channels = await listChannelsWithStorageV2Recovery()
       const activeChannels = channels.filter((ch) => ch.isActive && ch.agentId)
 
       // Lazy-load only the adapter modules needed for active channels
@@ -186,7 +192,7 @@ class ChannelManager {
     await this.disconnectChannel(channelId)
 
     // Re-read from DB and reconnect if active
-    const channel = await channelService.getChannel(channelId)
+    const channel = await getChannelWithStorageV2Recovery(channelId)
     if (channel && channel.isActive && channel.agentId) {
       await ensureAdapterLoaded(channel.type)
       await this.connectChannelFromRow(channel)
@@ -227,13 +233,14 @@ class ChannelManager {
     channelId: string,
     creds: { appId: string; appSecret: string }
   ): Promise<void> {
-    const channel = await channelService.getChannel(channelId)
+    const channel = await getChannelWithStorageV2Recovery(channelId)
     if (!channel) return
 
     const config = channel.config as ChannelConfig & Record<string, unknown>
-    await channelService.updateChannel(channelId, {
+    await updateChannelWithStorageV2Recovery(channelId, {
       config: { ...config, app_id: creds.appId, app_secret: creds.appSecret } as ChannelConfig
     })
+    storageV2AgentDbMirrorService.schedule()
 
     logger.info('Saved QR registration credentials, reconnecting', { agentId, channelId })
     await this.syncChannel(channelId)
@@ -264,13 +271,18 @@ class ChannelManager {
         if (hasAllowedIds) return
         if (adapter.notifyChatIds.includes(chatId)) return
         adapter.notifyChatIds.push(chatId)
-        channelService.addActiveChatId(row.id, chatId).catch((err) => {
-          logger.warn('Failed to persist activeChatId', {
-            channelId: row.id,
-            chatId,
-            error: err instanceof Error ? err.message : String(err)
+        channelService
+          .addActiveChatId(row.id, chatId)
+          .then(() => {
+            storageV2AgentDbMirrorService.schedule()
           })
-        })
+          .catch((err) => {
+            logger.warn('Failed to persist activeChatId', {
+              channelId: row.id,
+              chatId,
+              error: err instanceof Error ? err.message : String(err)
+            })
+          })
       }
 
       adapter.on('message', (msg) => {

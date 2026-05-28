@@ -285,16 +285,30 @@ const api = {
       ipcRenderer.invoke(IpcChannel.StorageV2_ConversationsList, filter),
     listMessages: (conversationId: string, options?: { limit?: number; offset?: number }) =>
       ipcRenderer.invoke(IpcChannel.StorageV2_MessagesList, conversationId, options),
+    syncConversation: (conversation: Record<string, unknown>) =>
+      ipcRenderer.invoke(IpcChannel.StorageV2_ConversationSync, conversation),
+    upsertConversation: (
+      conversation: Record<string, unknown>,
+      options?: { pruneMissingMessages?: boolean; activeMessageIds?: string[] }
+    ) => ipcRenderer.invoke(IpcChannel.StorageV2_ConversationUpsert, conversation, options),
+    upsertMessage: (conversationId: string, message: Record<string, unknown>) =>
+      ipcRenderer.invoke(IpcChannel.StorageV2_MessageUpsert, conversationId, message),
+    upsertMessageBlocks: (
+      messageId: string,
+      blocks: Array<Record<string, unknown>>,
+      options?: { pruneMissing?: boolean }
+    ) => ipcRenderer.invoke(IpcChannel.StorageV2_MessageBlocksUpsert, messageId, blocks, options),
     deleteConversation: (conversationId: string) =>
       ipcRenderer.invoke(IpcChannel.StorageV2_ConversationDelete, conversationId),
+    upsertFile: (file: unknown) => ipcRenderer.invoke(IpcChannel.StorageV2_FileUpsert, file),
     deleteFile: (fileId: string) => ipcRenderer.invoke(IpcChannel.StorageV2_FileDelete, fileId),
     importLegacyReduxSnapshot: (snapshot: unknown, options?: { dryRun?: boolean }) =>
       ipcRenderer.invoke(IpcChannel.StorageV2_ImportLegacyReduxSnapshot, snapshot, options),
     importLegacyDexieSnapshot: (snapshot: unknown, options?: { dryRun?: boolean; pruneMissing?: boolean }) =>
       ipcRenderer.invoke(IpcChannel.StorageV2_ImportLegacyDexieSnapshot, snapshot, options),
-    importLegacyAgentDb: (options?: { dryRun?: boolean; dbPath?: string }) =>
+    importLegacyAgentDb: (options?: { dryRun?: boolean; dbPath?: string; createSnapshot?: boolean }) =>
       ipcRenderer.invoke(IpcChannel.StorageV2_ImportLegacyAgentDb, options),
-    importLegacyAppDb: (options?: { dryRun?: boolean; dbPath?: string }) =>
+    importLegacyAppDb: (options?: { dryRun?: boolean; dbPath?: string; createSnapshot?: boolean }) =>
       ipcRenderer.invoke(IpcChannel.StorageV2_ImportLegacyAppDb, options)
   },
   file: {

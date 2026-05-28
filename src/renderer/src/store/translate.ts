@@ -38,6 +38,12 @@ const translateSlice = createSlice({
   name: 'translate',
   initialState,
   reducers: {
+    hydrateTranslateState: (_state, action: PayloadAction<Partial<TranslateState>>) => {
+      return {
+        ...initialState,
+        ...action.payload
+      }
+    },
     setTranslateInput: (state, action: PayloadAction<string>) => {
       state.translateInput = action.payload
     },
@@ -51,6 +57,6 @@ const translateSlice = createSlice({
   }
 })
 
-export const { setTranslateInput, setTranslatedContent, updateSettings } = translateSlice.actions
+export const { hydrateTranslateState, setTranslateInput, setTranslatedContent, updateSettings } = translateSlice.actions
 
 export default translateSlice.reducer

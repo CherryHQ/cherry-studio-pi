@@ -1,5 +1,15 @@
 import { loggerService } from '@logger'
-import { AgentModelValidationError, sessionService } from '@main/services/agents'
+import { AgentModelValidationError } from '@main/services/agents'
+import {
+  createSessionWithStorageV2Recovery,
+  deleteSessionWithStorageV2Recovery,
+  getSessionWithStorageV2Recovery,
+  listAllSessionsWithStorageV2Recovery,
+  listSessionsWithStorageV2Recovery,
+  reorderSessionsWithStorageV2Recovery,
+  updateSessionWithStorageV2Recovery
+} from '@main/services/agents/AgentStorageV2ReadThrough'
+import { storageV2AgentDbMirrorService } from '@main/services/storageV2/AgentDbMirrorService'
 import type { ListAgentSessionsResponse, UpdateSessionResponse } from '@types'
 import { type ReplaceSessionRequest } from '@types'
 import type { Request, Response } from 'express'
@@ -24,9 +34,10 @@ export const createSession = async (req: Request, res: Response): Promise<Respon
     logger.debug('Creating new session', { agentId })
     logger.debug('Session payload', { sessionData })
 
-    const session = await sessionService.createSession(agentId, sessionData)
+    const session = await createSessionWithStorageV2Recovery(agentId, sessionData)
 
     logger.info('Session created', { agentId, sessionId: session?.id })
+    storageV2AgentDbMirrorService.schedule()
     return res.status(201).json(session)
   } catch (error: any) {
     if (error instanceof AgentModelValidationError) {
@@ -60,7 +71,7 @@ export const listSessions = async (req: Request, res: Response): Promise<Respons
 
     logger.debug('Listing agent sessions', { agentId, limit, offset, status })
 
-    const result = await sessionService.listSessions(agentId, { limit, offset })
+    const result = await listSessionsWithStorageV2Recovery(agentId, { limit, offset })
 
     logger.info('Agent sessions listed', {
       agentId,
@@ -92,7 +103,7 @@ export const getSession = async (req: Request, res: Response): Promise<Response>
     const { agentId, sessionId } = req.params
     logger.debug('Getting session', { agentId, sessionId })
 
-    const session = await sessionService.getSession(agentId, sessionId)
+    const session = await getSessionWithStorageV2Recovery(agentId, sessionId)
 
     if (!session) {
       logger.warn('Session not found', { agentId, sessionId })
@@ -135,7 +146,7 @@ export const updateSession = async (req: Request, res: Response): Promise<Respon
     logger.debug('Replace payload', { body: req.body })
 
     // First check if session exists and belongs to agent
-    const existingSession = await sessionService.getSession(agentId, sessionId)
+    const existingSession = await getSessionWithStorageV2Recovery(agentId, sessionId)
     if (!existingSession || existingSession.agent_id !== agentId) {
       logger.warn('Session not found for update', { agentId, sessionId })
       return res.status(404).json({
@@ -150,7 +161,7 @@ export const updateSession = async (req: Request, res: Response): Promise<Respon
     const { validatedBody } = req as ValidationRequest
     const replacePayload = (validatedBody ?? {}) as ReplaceSessionRequest
 
-    const session = await sessionService.updateSession(agentId, sessionId, replacePayload)
+    const session = await updateSessionWithStorageV2Recovery(agentId, sessionId, replacePayload)
 
     if (!session) {
       logger.warn('Session missing during update', { agentId, sessionId })
@@ -164,6 +175,7 @@ export const updateSession = async (req: Request, res: Response): Promise<Respon
     }
 
     logger.info('Session updated', { agentId, sessionId })
+    storageV2AgentDbMirrorService.schedule()
     return res.json(session satisfies UpdateSessionResponse)
   } catch (error: any) {
     if (error instanceof AgentModelValidationError) {
@@ -196,7 +208,7 @@ export const patchSession = async (req: Request, res: Response): Promise<Respons
     logger.debug('Patch payload', { body: req.body })
 
     // First check if session exists and belongs to agent
-    const existingSession = await sessionService.getSession(agentId, sessionId)
+    const existingSession = await getSessionWithStorageV2Recovery(agentId, sessionId)
     if (!existingSession || existingSession.agent_id !== agentId) {
       logger.warn('Session not found for patch', { agentId, sessionId })
       return res.status(404).json({
@@ -209,7 +221,7 @@ export const patchSession = async (req: Request, res: Response): Promise<Respons
     }
 
     const updateSession = { ...existingSession, ...req.body }
-    const session = await sessionService.updateSession(agentId, sessionId, updateSession)
+    const session = await updateSessionWithStorageV2Recovery(agentId, sessionId, updateSession)
 
     if (!session) {
       logger.warn('Session missing while patching', { agentId, sessionId })
@@ -223,6 +235,7 @@ export const patchSession = async (req: Request, res: Response): Promise<Respons
     }
 
     logger.info('Session patched', { agentId, sessionId })
+    storageV2AgentDbMirrorService.schedule()
     return res.json(session)
   } catch (error: any) {
     if (error instanceof AgentModelValidationError) {
@@ -254,7 +267,7 @@ export const deleteSession = async (req: Request, res: Response): Promise<Respon
     logger.debug('Deleting session', { agentId, sessionId })
 
     // First check if session exists and belongs to agent
-    const existingSession = await sessionService.getSession(agentId, sessionId)
+    const existingSession = await getSessionWithStorageV2Recovery(agentId, sessionId)
     if (!existingSession || existingSession.agent_id !== agentId) {
       logger.warn('Session not found for deletion', { agentId, sessionId })
       return res.status(404).json({
@@ -266,7 +279,7 @@ export const deleteSession = async (req: Request, res: Response): Promise<Respon
       })
     }
 
-    const deleted = await sessionService.deleteSession(agentId, sessionId)
+    const deleted = await deleteSessionWithStorageV2Recovery(agentId, sessionId)
 
     if (!deleted) {
       logger.warn('Session missing during delete', { agentId, sessionId })
@@ -280,17 +293,19 @@ export const deleteSession = async (req: Request, res: Response): Promise<Respon
     }
 
     logger.info('Session deleted', { agentId, sessionId })
+    storageV2AgentDbMirrorService.schedule()
 
-    const { total } = await sessionService.listSessions(agentId, { limit: 1 })
+    const { total } = await listSessionsWithStorageV2Recovery(agentId, { limit: 1 })
 
     if (total === 0) {
       logger.info('No remaining sessions, creating default', { agentId })
       try {
-        const fallbackSession = await sessionService.createSession(agentId, {})
+        const fallbackSession = await createSessionWithStorageV2Recovery(agentId, {})
         logger.info('Default session created after delete', {
           agentId,
           sessionId: fallbackSession?.id
         })
+        storageV2AgentDbMirrorService.schedule()
       } catch (recoveryError: any) {
         logger.error('Failed to recreate session after deleting last session', {
           agentId,
@@ -339,7 +354,8 @@ export const reorderSessions = async (req: Request, res: Response): Promise<Resp
     }
 
     logger.debug('Reordering sessions', { agentId, count: ordered_ids.length })
-    await sessionService.reorderSessions(agentId, ordered_ids)
+    await reorderSessionsWithStorageV2Recovery(agentId, ordered_ids)
+    storageV2AgentDbMirrorService.schedule()
 
     logger.info('Sessions reordered', { agentId, count: ordered_ids.length })
     return res.json({ success: true })
@@ -364,7 +380,7 @@ export const listAllSessions = async (req: Request, res: Response): Promise<Resp
 
     logger.debug('Listing all sessions', { limit, offset, status })
 
-    const result = await sessionService.listSessions(undefined, { limit, offset })
+    const result = await listAllSessionsWithStorageV2Recovery({ limit, offset })
 
     logger.info('Sessions listed', {
       returned: result.sessions.length,

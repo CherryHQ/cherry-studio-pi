@@ -4617,10 +4617,13 @@
             "db_open_failed": "Backup database cannot be opened: {{message}}",
             "format_unsupported": "Backup format is not supported",
             "integrity_check_failed": "Backup integrity_check failed: {{integrityCheck}}",
+            "invalid_secret_refs": "Backup contains {{count}} invalid secret reference(s)",
             "metadata_invalid": "Backup metadata.json is missing or invalid",
             "missing_blob_files": "Backup is missing {{count}} referenced blob file(s)",
+            "missing_secret_refs": "Backup is missing {{count}} secret value(s) referenced by the database",
             "path_not_directory": "Selected path is not a directory",
             "quick_check_failed": "Backup quick_check failed: {{quickCheck}}",
+            "secret_vault_invalid": "Backup secrets/vault.json is invalid",
             "version_unsupported": "Backup version is not supported"
           },
           "no_backup_selected": "Select a usable Storage v2 backup first",
@@ -4629,11 +4632,12 @@
           "restart_title": "Storage v2 backup restored",
           "select_title": "Select Storage v2 backup directory",
           "selected": "Backup: {{path}}",
-          "summary": "quick_check={{quickCheck}}, integrity_check={{integrityCheck}}, missing_blob={{missingBlobFileCount}}, corrupt_blob={{corruptBlobFileCount}}",
+          "summary": "quick_check={{quickCheck}}, integrity_check={{integrityCheck}}, missing_blob={{missingBlobFileCount}}, corrupt_blob={{corruptBlobFileCount}}, secrets={{secretVaultSecretCount}}, missing_secret={{missingSecretRefCount}}, invalid_secret_ref={{invalidSecretRefCount}}",
           "valid": "Backup is usable",
           "warning": "Warning: {{message}}",
           "warnings": {
-            "manifest_missing": "Backup manifest.json is missing or invalid; a new manifest may be created after restore"
+            "manifest_missing": "Backup manifest.json is missing or invalid; a new manifest may be created after restore",
+            "secret_vault_missing": "Backup metadata says secrets were copied, but secrets/vault.json is missing"
           }
         },
         "banner": "Storage v2 is a parallel local data layer for migration, backup, and future sync recovery.",
@@ -4692,12 +4696,15 @@
             "agent_skills_without_skill": "{{count}} agent skill binding(s) without a skill",
             "corrupt_blob_files": "{{count}} blob file(s) with checksum mismatch",
             "files_without_blob": "{{count}} file record(s) without a blob",
+            "invalid_secret_refs": "{{count}} invalid secret reference(s)",
             "knowledge_items_without_base": "{{count}} knowledge item(s) without a knowledge base",
             "message_blocks_without_message": "{{count}} message block(s) without a message",
             "messages_without_conversation": "{{count}} message(s) without a conversation",
             "missing_blob_files": "{{count}} blob file(s) missing on disk",
+            "missing_secret_refs": "{{count}} secret reference(s) without vault entries",
             "models_without_provider": "{{count}} model(s) without a provider",
             "provider_credentials_without_provider": "{{count}} credential reference(s) without a provider",
+            "secret_vault_invalid": "secrets/vault.json is invalid",
             "task_logs_without_task": "{{count}} task log(s) without a task",
             "tasks_without_agent": "{{count}} scheduled task(s) without an agent",
             "unknown": "{{label}}: {{count}}"

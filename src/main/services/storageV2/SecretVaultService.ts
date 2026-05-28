@@ -37,6 +37,8 @@ function decodeSecretRef(secretRef: string) {
 }
 
 export class StorageV2SecretVaultService {
+  private writeQueue: Promise<unknown> = Promise.resolve()
+
   isAvailable() {
     return safeStorage.isEncryptionAvailable()
   }
@@ -48,16 +50,18 @@ export class StorageV2SecretVaultService {
 
     const secretId = encodeSecretId(scope, ownerId, kind)
     const secretRef = `${SECRET_REF_PREFIX}${secretId}`
-    const vault = await this.readVault()
-    const encrypted = safeStorage.encryptString(value).toString('base64')
+    await this.enqueueVaultWrite(async () => {
+      const vault = await this.readVault()
+      const encrypted = safeStorage.encryptString(value).toString('base64')
 
-    vault.secrets[secretId.replace(/\//g, ':')] = {
-      encrypted,
-      encoding: 'electron-safe-storage',
-      updatedAt: new Date().toISOString()
-    }
+      vault.secrets[secretId.replace(/\//g, ':')] = {
+        encrypted,
+        encoding: 'electron-safe-storage',
+        updatedAt: new Date().toISOString()
+      }
 
-    await this.writeVault(vault)
+      await this.writeVault(vault)
+    })
     return secretRef
   }
 
@@ -66,12 +70,24 @@ export class StorageV2SecretVaultService {
       return null
     }
 
+    await this.waitForIdle()
+
     const secretId = decodeSecretRef(secretRef)
-    const vault = await this.readVault()
+    const vault = await this.readVault().catch(() => null)
+    if (!vault) return null
+
     const record = vault.secrets[secretId]
     if (!record) return null
 
-    return safeStorage.decryptString(Buffer.from(record.encrypted, 'base64'))
+    try {
+      return safeStorage.decryptString(Buffer.from(record.encrypted, 'base64'))
+    } catch {
+      return null
+    }
+  }
+
+  async waitForIdle(): Promise<void> {
+    await this.writeQueue
   }
 
   private getVaultPath() {
@@ -87,20 +103,33 @@ export class StorageV2SecretVaultService {
       if (parsed.version === VAULT_VERSION && parsed.secrets && typeof parsed.secrets === 'object') {
         return parsed
       }
-    } catch {
-      // Missing or unreadable vault starts empty. The caller writes it atomically.
+    } catch (error) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+        return {
+          version: VAULT_VERSION,
+          secrets: {}
+        }
+      }
+
+      throw new Error('Storage v2 secret vault is unreadable or invalid')
     }
 
-    return {
-      version: VAULT_VERSION,
-      secrets: {}
-    }
+    throw new Error('Storage v2 secret vault is invalid')
   }
 
   private async writeVault(vault: SecretVaultFile) {
     const vaultPath = this.getVaultPath()
+    const tempPath = `${vaultPath}.${process.pid}.${Date.now()}.tmp`
     await fs.mkdir(path.dirname(vaultPath), { recursive: true, mode: 0o700 })
-    await fs.writeFile(vaultPath, JSON.stringify(vault, null, 2), { mode: 0o600 })
+    await fs.writeFile(tempPath, JSON.stringify(vault, null, 2), { mode: 0o600 })
+    await fs.rename(tempPath, vaultPath)
+    await fs.chmod(vaultPath, 0o600).catch(() => undefined)
+  }
+
+  private async enqueueVaultWrite<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.writeQueue.then(operation, operation)
+    this.writeQueue = result.catch(() => undefined)
+    return result
   }
 }
 

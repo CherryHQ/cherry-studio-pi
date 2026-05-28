@@ -5,19 +5,25 @@ import {
   STREAM_TIMEOUT_REASON,
   type StreamAbortController
 } from '@main/apiServer/utils/createStreamAbortController'
-import { agentService, sessionMessageService, sessionService } from '@main/services/agents'
+import { sessionMessageService } from '@main/services/agents'
+import {
+  deleteAgentSessionMessageWithStorageV2Recovery,
+  getAgentWithStorageV2Recovery,
+  getSessionWithStorageV2Recovery
+} from '@main/services/agents/AgentStorageV2ReadThrough'
+import { storageV2AgentDbMirrorService } from '@main/services/storageV2/AgentDbMirrorService'
 import type { Request, Response } from 'express'
 
 const logger = loggerService.withContext('ApiServerMessagesHandlers')
 
 // Helper function to verify agent and session exist and belong together
 const verifyAgentAndSession = async (agentId: string, sessionId: string) => {
-  const agentExists = await agentService.agentExists(agentId)
-  if (!agentExists) {
+  const agent = await getAgentWithStorageV2Recovery(agentId)
+  if (!agent) {
     throw { status: 404, code: 'agent_not_found', message: 'Agent not found' }
   }
 
-  const session = await sessionService.getSession(agentId, sessionId)
+  const session = await getSessionWithStorageV2Recovery(agentId, sessionId)
   if (!session) {
     throw { status: 404, code: 'session_not_found', message: 'Session not found' }
   }
@@ -198,7 +204,7 @@ export const createMessage = async (req: Request, res: Response): Promise<void> 
       logger.error('Pump stream failure', { error })
     })
 
-    completion
+    void completion
       .then(() => {
         streamFinished = true
         finalizeResponse()
@@ -223,6 +229,9 @@ export const createMessage = async (req: Request, res: Response): Promise<void> 
         responseEnded = true
         cleanup()
         res.end()
+      })
+      .finally(() => {
+        storageV2AgentDbMirrorService.schedule()
       })
     // Clear timeout when response ends
     res.on('close', cleanup)
@@ -268,7 +277,7 @@ export const deleteMessage = async (req: Request, res: Response): Promise<Respon
 
     await verifyAgentAndSession(agentId, sessionId)
 
-    const deleted = await sessionMessageService.deleteSessionMessage(sessionId, messageId)
+    const deleted = await deleteAgentSessionMessageWithStorageV2Recovery(sessionId, messageId)
 
     if (!deleted) {
       logger.warn('Session message not found', { agentId, sessionId, messageId })
@@ -282,6 +291,7 @@ export const deleteMessage = async (req: Request, res: Response): Promise<Respon
     }
 
     logger.info('Session message deleted', { agentId, sessionId, messageId })
+    storageV2AgentDbMirrorService.schedule()
     return res.status(204).send()
   } catch (error: any) {
     if (error?.status === 404) {

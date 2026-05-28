@@ -7,10 +7,12 @@ import { app } from 'electron'
 import { storageV2DataRootService } from './DataRootService'
 import { storageV2SecretVaultService } from './SecretVaultService'
 import { storageV2Database } from './StorageV2Database'
+import { storageV2SyncLogService } from './SyncLogService'
 
 type LegacyAppDbImportOptions = {
   dryRun?: boolean
   dbPath?: string
+  createSnapshot?: boolean
 }
 
 export type StorageV2LegacyAppDbImportReport = {
@@ -34,6 +36,10 @@ export type StorageV2LegacyAppDbImportReport = {
 }
 
 const LEGACY_TABLES = ['app_records', 'app_cache', 'sync_state', 'sync_conflicts', 'workbench_shortcuts'] as const
+type LegacyAppDbTable = (typeof LEGACY_TABLES)[number]
+type LegacyAppDbRows = Record<LegacyAppDbTable, Row[]>
+type LegacyAppDbTableSet = Set<LegacyAppDbTable>
+
 const SECRET_KEY_PATTERN =
   /(api[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|bot[_-]?token|client[_-]?secret|app[_-]?secret|secret|password|private[_-]?key)/i
 
@@ -108,20 +114,46 @@ function candidateAppDbPaths(explicitPath?: string) {
 
 async function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
   const client = await storageV2Database.getClient()
-  await client.execute('BEGIN IMMEDIATE')
-  try {
-    const result = await fn()
-    await client.execute('COMMIT')
-    return result
-  } catch (error) {
-    await client.execute('ROLLBACK').catch(() => {})
-    throw error
+  return storageV2Database.withTransaction(client, fn)
+}
+
+async function getKvRecordVersion(client: ReturnType<typeof createClient>, scope: string, key: string) {
+  const result = await client.execute({
+    sql: 'SELECT version FROM kv_records WHERE scope = ? AND key = ?',
+    args: [scope, key]
+  })
+  return Number(result.rows[0]?.version ?? 1)
+}
+
+async function recordKvRecordChange(
+  client: ReturnType<typeof createClient>,
+  input: {
+    scope: string
+    key: string
+    source: string
+    operation?: 'upsert' | 'delete'
+    deletedAt?: string | null
   }
+) {
+  await storageV2SyncLogService.recordChange({
+    client,
+    entityType: 'kv_record',
+    entityId: `${input.scope}:${input.key}`,
+    operation: input.operation ?? 'upsert',
+    payload: {
+      scope: input.scope,
+      key: input.key,
+      source: input.source,
+      deletedAt: input.deletedAt ?? null
+    },
+    version: await getKvRecordVersion(client, input.scope, input.key)
+  })
 }
 
 export class StorageV2LegacyAppDbImportService {
   async importSnapshot(options: LegacyAppDbImportOptions = {}): Promise<StorageV2LegacyAppDbImportReport> {
     const dryRun = options.dryRun !== false
+    const shouldCreateSnapshot = !dryRun && options.createSnapshot !== false
     const sourceDbPath = firstExistingPath(candidateAppDbPaths(options.dbPath))
     const warnings: string[] = []
 
@@ -151,8 +183,10 @@ export class StorageV2LegacyAppDbImportService {
       }
 
       if (!dryRun) {
-        snapshotPath = (await storageV2Database.createSnapshot('before-legacy-app-db-import')).path
-        importedSecretCount = await withTransaction(async () => this.writeRows(rows))
+        snapshotPath = shouldCreateSnapshot
+          ? (await storageV2Database.createSnapshot('before-legacy-app-db-import')).path
+          : undefined
+        importedSecretCount = await withTransaction(async () => this.writeRows(rows, tables))
       }
 
       return {
@@ -204,16 +238,20 @@ export class StorageV2LegacyAppDbImportService {
     }
   }
 
-  private async getTables(client: ReturnType<typeof createClient>) {
+  private async getTables(client: ReturnType<typeof createClient>): Promise<LegacyAppDbTableSet> {
     const result = await client.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
-    return new Set(result.rows.map((row) => String(row.name)))
+    return new Set(
+      result.rows
+        .map((row) => String(row.name))
+        .filter((table): table is LegacyAppDbTable => LEGACY_TABLES.includes(table as LegacyAppDbTable))
+    )
   }
 
-  private async readRows(client: ReturnType<typeof createClient>, tables: Set<string>) {
-    const rows = Object.fromEntries(LEGACY_TABLES.map((table) => [table, [] as Row[]])) as Record<
-      (typeof LEGACY_TABLES)[number],
-      Row[]
-    >
+  private async readRows(
+    client: ReturnType<typeof createClient>,
+    tables: LegacyAppDbTableSet
+  ): Promise<LegacyAppDbRows> {
+    const rows = Object.fromEntries(LEGACY_TABLES.map((table) => [table, [] as Row[]])) as LegacyAppDbRows
 
     for (const table of LEGACY_TABLES) {
       if (!tables.has(table)) continue
@@ -224,7 +262,7 @@ export class StorageV2LegacyAppDbImportService {
     return rows
   }
 
-  private countSecretCandidates(rows: Record<(typeof LEGACY_TABLES)[number], Row[]>) {
+  private countSecretCandidates(rows: LegacyAppDbRows) {
     const appRecordCount = rows.app_records.reduce(
       (count, row) => count + this.countSecretsInValue(parseJson(text(row, 'value'))),
       0
@@ -312,7 +350,7 @@ export class StorageV2LegacyAppDbImportService {
     return { value: sanitized, importedSecretCount }
   }
 
-  private async writeRows(rows: Record<(typeof LEGACY_TABLES)[number], Row[]>) {
+  private async writeRows(rows: LegacyAppDbRows, tables: LegacyAppDbTableSet) {
     const client = await storageV2Database.getClient()
     let importedSecretCount = 0
     const appRecordKeys = new Set<string>()
@@ -349,6 +387,13 @@ export class StorageV2LegacyAppDbImportService {
           numberValue(row, 'version') ?? 1
         ]
       })
+      await recordKvRecordChange(client, {
+        scope,
+        key,
+        source: 'legacy-app-record',
+        operation: row.deleted_at ? 'delete' : 'upsert',
+        deletedAt: row.deleted_at ? timestamp(row.deleted_at) : null
+      })
     }
 
     for (const row of rows.app_cache) {
@@ -379,6 +424,11 @@ export class StorageV2LegacyAppDbImportService {
           }),
           timestamp(row.updated_at)
         ]
+      })
+      await recordKvRecordChange(client, {
+        scope: `cache.${namespace}`,
+        key,
+        source: 'legacy-app-cache'
       })
     }
 
@@ -419,6 +469,13 @@ export class StorageV2LegacyAppDbImportService {
           timestamp(row.updated_at),
           row.deleted_at ? timestamp(row.deleted_at) : null
         ]
+      })
+      await recordKvRecordChange(client, {
+        scope: 'workbench.shortcuts',
+        key: id,
+        source: 'legacy-workbench-shortcut',
+        operation: row.deleted_at ? 'delete' : 'upsert',
+        deletedAt: row.deleted_at ? timestamp(row.deleted_at) : null
       })
     }
 
@@ -484,11 +541,21 @@ export class StorageV2LegacyAppDbImportService {
       })
     }
 
-    await this.markMissingKvRowsDeleted(client, 'legacy-app-record', appRecordKeys)
-    await this.markMissingKvRowsDeleted(client, 'legacy-app-cache', appCacheKeys)
-    await this.markMissingKvRowsDeleted(client, 'legacy-workbench-shortcut', workbenchShortcutKeys)
-    await this.deleteMissingSyncStateRows(client, syncStateKeys)
-    await this.deleteMissingSyncConflictRows(client, syncConflictIds)
+    if (tables.has('app_records')) {
+      await this.markMissingKvRowsDeleted(client, 'legacy-app-record', appRecordKeys)
+    }
+    if (tables.has('app_cache')) {
+      await this.markMissingKvRowsDeleted(client, 'legacy-app-cache', appCacheKeys)
+    }
+    if (tables.has('workbench_shortcuts')) {
+      await this.markMissingKvRowsDeleted(client, 'legacy-workbench-shortcut', workbenchShortcutKeys)
+    }
+    if (tables.has('sync_state')) {
+      await this.deleteMissingSyncStateRows(client, syncStateKeys)
+    }
+    if (tables.has('sync_conflicts')) {
+      await this.deleteMissingSyncConflictRows(client, syncConflictIds)
+    }
 
     return importedSecretCount
   }
@@ -499,6 +566,27 @@ export class StorageV2LegacyAppDbImportService {
     keys: Set<string>
   ) {
     const currentTime = now()
+    const keysArray = Array.from(keys)
+    const missingRows =
+      keys.size === 0
+        ? await client.execute({
+            sql: `
+              SELECT scope, key, version
+              FROM kv_records
+              WHERE source = ? AND deleted_at IS NULL
+            `,
+            args: [source]
+          })
+        : await client.execute({
+            sql: `
+              SELECT scope, key, version
+              FROM kv_records
+              WHERE source = ?
+                AND deleted_at IS NULL
+                AND scope || char(31) || key NOT IN (${keysArray.map(() => '?').join(', ')})
+            `,
+            args: [source, ...keysArray]
+          })
 
     if (keys.size === 0) {
       await client.execute({
@@ -509,21 +597,37 @@ export class StorageV2LegacyAppDbImportService {
         `,
         args: [currentTime, currentTime, source]
       })
-      return
+    } else {
+      await client.execute({
+        sql: `
+          UPDATE kv_records
+          SET deleted_at = ?, updated_at = ?, version = version + 1
+          WHERE source = ?
+            AND deleted_at IS NULL
+            AND scope || char(31) || key NOT IN (${keysArray.map(() => '?').join(', ')})
+        `,
+        args: [currentTime, currentTime, source, ...keysArray]
+      })
     }
 
-    await client.execute({
-      sql: `
-        UPDATE kv_records
-        SET deleted_at = ?, updated_at = ?, version = version + 1
-        WHERE source = ?
-          AND deleted_at IS NULL
-          AND scope || char(31) || key NOT IN (${Array.from(keys)
-            .map(() => '?')
-            .join(', ')})
-      `,
-      args: [currentTime, currentTime, source, ...Array.from(keys)]
-    })
+    for (const row of missingRows.rows) {
+      const scope = text(row, 'scope')
+      const key = text(row, 'key')
+      if (!scope || !key) continue
+      await storageV2SyncLogService.recordChange({
+        client,
+        entityType: 'kv_record',
+        entityId: `${scope}:${key}`,
+        operation: 'delete',
+        payload: {
+          scope,
+          key,
+          source,
+          deletedAt: currentTime
+        },
+        version: Number(row.version ?? 0) + 1
+      })
+    }
   }
 
   private async deleteMissingSyncStateRows(client: ReturnType<typeof createClient>, keys: Set<string>) {

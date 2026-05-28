@@ -2,7 +2,7 @@ import { loggerService } from '@logger'
 import db from '@renderer/databases'
 import { upgradeToV7, upgradeToV8 } from '@renderer/databases/upgrades'
 import i18n from '@renderer/i18n'
-import store from '@renderer/store'
+import store, { handleSaveData } from '@renderer/store'
 import { setLocalBackupSyncState, setS3SyncState, setWebDAVSyncState } from '@renderer/store/backup'
 import type { S3Config, WebDavConfig } from '@renderer/types'
 import { uuid } from '@renderer/utils'
@@ -11,6 +11,23 @@ import dayjs from 'dayjs'
 import { NotificationService } from './NotificationService'
 
 const logger = loggerService.withContext('BackupService')
+const STORAGE_V2_AUTO_HYDRATE_SETTING_KEY = 'storage_v2.runtime.auto_hydrate'
+
+async function disableStorageV2AutoHydrateAfterLegacyRestore() {
+  try {
+    await window.api.storageV2.setSetting(
+      STORAGE_V2_AUTO_HYDRATE_SETTING_KEY,
+      {
+        enabled: false,
+        reason: 'legacy-backup-restore',
+        updatedAt: new Date().toISOString()
+      },
+      'storage-v2'
+    )
+  } catch (error) {
+    logger.warn('Failed to disable Storage v2 auto hydrate after legacy restore', error as Error)
+  }
+}
 
 // 重试删除S3文件的辅助函数
 async function deleteS3FileWithRetry(fileName: string, s3Config: S3Config, maxRetries = 3) {
@@ -67,6 +84,7 @@ export async function backup(skipBackupFile: boolean) {
   const selectFolder = await window.api.file.selectFolder()
   if (selectFolder) {
     // Use direct backup method - copy IndexedDB/LocalStorage directories directly
+    await handleSaveData()
     await window.api.backup.backup(filename, selectFolder, skipBackupFile)
     window.toast.success(i18n.t('message.backup.success'))
   }
@@ -222,6 +240,8 @@ export async function backupToWebdav({
 
   // 上传文件 - Use direct backup method (copy IndexedDB/LocalStorage directories)
   try {
+    await handleSaveData()
+
     const success = await window.api.backup.backupToWebdav({
       webdavHost,
       webdavUser,
@@ -403,6 +423,8 @@ export async function backupToS3({
 
   try {
     // Use direct backup method (copy IndexedDB/LocalStorage directories)
+    await handleSaveData()
+
     const success = await window.api.backup.backupToS3({
       ...s3Config,
       fileName: finalFileName
@@ -884,6 +906,8 @@ export function stopAutoSync(type?: BackupType) {
 }
 
 export async function getBackupData() {
+  await handleSaveData()
+
   return JSON.stringify({
     time: new Date().getTime(),
     version: 5,
@@ -907,6 +931,7 @@ export async function handleData(data: Record<string, any>) {
     }
 
     localStorage.setItem('persist:cherry-studio', data.localStorage['persist:cherry-studio'])
+    await disableStorageV2AutoHydrateAfterLegacyRestore()
     window.toast.success(i18n.t('message.restore.success'))
     setTimeout(() => window.api.relaunchApp(), 1000)
     return
@@ -935,6 +960,7 @@ export async function handleData(data: Record<string, any>) {
       })
     }
 
+    await disableStorageV2AutoHydrateAfterLegacyRestore()
     window.toast.success(i18n.t('message.restore.success'))
     setTimeout(() => window.api.relaunchApp(), 1000)
     return
@@ -1019,6 +1045,8 @@ export async function backupToLocal({
 
   try {
     // Use direct backup method (copy IndexedDB/LocalStorage directories)
+    await handleSaveData()
+
     const result = await window.api.backup.backupToLocalDir(finalFileName, {
       localBackupDir,
       skipBackupFile: localBackupSkipBackupFile

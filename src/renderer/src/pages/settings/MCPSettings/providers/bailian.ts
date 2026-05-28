@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { nanoid } from '@reduxjs/toolkit'
+import { scheduleStorageV2LocalStorageMirror } from '@renderer/services/StorageV2LocalStorageSnapshot'
 import type { MCPServer } from '@renderer/types'
 import i18next from 'i18next'
 
@@ -12,6 +13,7 @@ const TOKEN_STORAGE_KEY = 'bailian_token'
 // Token 工具函数
 export const saveBailianToken = (token: string): void => {
   localStorage.setItem(TOKEN_STORAGE_KEY, token)
+  scheduleStorageV2LocalStorageMirror()
 }
 
 export const getBailianToken = (): string | null => {
@@ -21,6 +23,7 @@ export const getBailianToken = (): string | null => {
 
 export const clearBailianToken = (): void => {
   localStorage.removeItem(TOKEN_STORAGE_KEY)
+  scheduleStorageV2LocalStorageMirror()
 }
 
 export const hasBailianToken = (): boolean => {

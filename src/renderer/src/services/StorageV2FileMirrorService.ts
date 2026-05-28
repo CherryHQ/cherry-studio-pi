@@ -77,17 +77,32 @@ class StorageV2FileMirrorService {
 
     try {
       const files = await db.files.where('id').anyOf(fileIds).toArray()
-      if (files.length === 0) return
+      const foundFileIds = new Set(files.map((file) => file.id).filter(Boolean))
+      const missingFileIds = fileIds.filter((fileId) => !foundFileIds.has(fileId))
 
-      await window.api.storageV2.importLegacyDexieSnapshot(
-        {
-          conversations: [],
-          files
-        },
-        { dryRun: false }
+      if (files.length > 0) {
+        if (typeof window.api.storageV2.upsertFile === 'function') {
+          for (const file of files) {
+            await window.api.storageV2.upsertFile(file)
+          }
+        } else {
+          await window.api.storageV2.importLegacyDexieSnapshot(
+            {
+              conversations: [],
+              files
+            },
+            { dryRun: false }
+          )
+        }
+      }
+
+      for (const fileId of missingFileIds) {
+        await window.api.storageV2.deleteFile(fileId)
+      }
+
+      logger.debug(
+        `Mirrored ${files.length} file(s) and ${missingFileIds.length} missing file tombstone(s) to Storage v2`
       )
-
-      logger.debug(`Mirrored ${files.length} file(s) to Storage v2`)
     } catch (error) {
       for (const fileId of fileIds) {
         this.pendingFileIds.add(fileId)
