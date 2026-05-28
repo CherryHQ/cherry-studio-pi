@@ -13,7 +13,12 @@ const logger = loggerService.withContext('FileManager')
 
 class FileManager {
   private static async mirrorFileToStorageV2(file: FileMetadata | undefined): Promise<void> {
-    if (!file || !window.api?.storageV2) return
+    if (!file) return
+
+    if (!window.api?.storageV2) {
+      storageV2FileMirrorService.scheduleFile(file.id, 0)
+      return
+    }
 
     try {
       if (typeof window.api.storageV2.upsertFile === 'function') {

@@ -191,4 +191,31 @@ describe('FileManager', () => {
     expect(mocks.mirrorScheduleFile).toHaveBeenCalledWith('file-2', 0)
     expect(mocks.mirrorFlush).toHaveBeenCalled()
   })
+
+  it('queues file metadata for retry when Storage v2 is unavailable during add', async () => {
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        file: {
+          delete: mocks.localFileDelete
+        }
+      }
+    })
+    const file = {
+      id: 'file-3',
+      ext: '.txt',
+      count: 1,
+      origin_name: 'offline.txt'
+    }
+    mocks.filesGet.mockResolvedValue(undefined)
+    mocks.filesAdd.mockResolvedValue('file-3')
+
+    const { default: FileManager } = await import('../FileManager')
+
+    await expect(FileManager.addFile(file as any)).resolves.toBe(file)
+
+    expect(mocks.filesAdd).toHaveBeenCalledWith(file)
+    expect(mocks.storageV2UpsertFile).not.toHaveBeenCalled()
+    expect(mocks.mirrorScheduleFile).toHaveBeenCalledWith('file-3', 0)
+  })
 })
