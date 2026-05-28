@@ -236,7 +236,12 @@ class StorageV2MirrorService {
   }
 
   private async mirrorNow() {
-    if (!this.latestGetState || !window.api?.storageV2) return
+    if (!this.latestGetState) return
+
+    if (!window.api?.storageV2) {
+      this.scheduleRetry()
+      return
+    }
 
     const snapshot = getMirrorSnapshot(this.latestGetState())
     const snapshotJson = JSON.stringify(snapshot)

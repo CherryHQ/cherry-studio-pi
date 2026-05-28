@@ -166,6 +166,37 @@ describe('StorageV2MirrorService', () => {
     )
   })
 
+  it('retries pending Redux mirror work when Storage v2 API becomes available later', async () => {
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {}
+    })
+    const { storageV2MirrorService } = await import('../StorageV2MirrorService')
+
+    storageV2MirrorService.scheduleStartupMirror(createState)
+    await storageV2MirrorService.flush()
+
+    expect(importLegacyReduxSnapshot).not.toHaveBeenCalled()
+
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          importLegacyReduxSnapshot
+        }
+      }
+    })
+
+    await vi.advanceTimersByTimeAsync(1199)
+    expect(importLegacyReduxSnapshot).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), {
+      dryRun: false,
+      pruneMissing: false
+    })
+  })
+
   it('flushes high-value settings actions without waiting for debounce', async () => {
     const { storageV2MirrorService } = await import('../StorageV2MirrorService')
     const middleware = storageV2MirrorService.createMiddleware()({
