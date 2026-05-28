@@ -412,13 +412,18 @@ export class StorageV2AgentLegacyProjectionService {
     ])
 
     const agentIds = new Set<string>()
+    const visibleAgentIds = new Set<string>()
     const agentTypeById = new Map<string, string>()
 
     for (const row of agents) {
       const id = requiredText(row, 'id', '')
       if (!id) continue
       agentIds.add(id)
-      agentTypeById.set(id, requiredText(row, 'type', 'pi'))
+      const deletedAt = text(row, 'deleted_at')
+      if (!deletedAt) {
+        visibleAgentIds.add(id)
+        agentTypeById.set(id, requiredText(row, 'type', 'pi'))
+      }
 
       await targetClient.execute({
         sql: `
@@ -434,7 +439,7 @@ export class StorageV2AgentLegacyProjectionService {
           requiredText(row, 'type', 'pi'),
           requiredText(row, 'name', id),
           text(row, 'description'),
-          text(row, 'deleted_at'),
+          deletedAt,
           normalizeJson(text(row, 'accessible_paths_json'), []),
           text(row, 'instructions'),
           requiredText(row, 'model_id', ''),
@@ -460,9 +465,10 @@ export class StorageV2AgentLegacyProjectionService {
     )
 
     for (const agentId of referencedAgentIds) {
-      if (agentIds.has(agentId)) continue
+      if (visibleAgentIds.has(agentId) || agentIds.has(agentId)) continue
       await this.insertPlaceholderAgent(targetClient, agentId)
       agentIds.add(agentId)
+      visibleAgentIds.add(agentId)
       agentTypeById.set(agentId, 'unknown')
       report.projectedPlaceholderAgentCount++
       report.warnings.push(`Created placeholder agent ${agentId} for orphaned Storage v2 references.`)
@@ -472,7 +478,7 @@ export class StorageV2AgentLegacyProjectionService {
     for (const row of sessions) {
       const id = requiredText(row, 'id', '')
       const agentId = requiredText(row, 'agent_id', '')
-      if (!id || !agentId || !agentIds.has(agentId)) {
+      if (!id || !agentId || !visibleAgentIds.has(agentId)) {
         report.skippedSessionCount++
         report.warnings.push(`Skipped agent session ${id || 'unknown'} because its agent is missing.`)
         continue
@@ -535,7 +541,7 @@ export class StorageV2AgentLegacyProjectionService {
     for (const row of agentSkills) {
       const agentId = text(row, 'agent_id')
       const skillId = text(row, 'skill_id')
-      if (!agentId || !skillId || !agentIds.has(agentId)) {
+      if (!agentId || !skillId || !visibleAgentIds.has(agentId)) {
         report.skippedAgentSkillCount++
         continue
       }
@@ -565,7 +571,7 @@ export class StorageV2AgentLegacyProjectionService {
     for (const row of tasks) {
       const id = requiredText(row, 'id', '')
       const agentId = requiredText(row, 'agent_id', '')
-      if (!id || !agentId || !agentIds.has(agentId)) {
+      if (!id || !agentId || !visibleAgentIds.has(agentId)) {
         report.skippedTaskCount++
         continue
       }
@@ -656,7 +662,7 @@ export class StorageV2AgentLegacyProjectionService {
           requiredText(row, 'id', `${type}-${Date.now()}`),
           type,
           requiredText(row, 'name', type),
-          agentId && agentIds.has(agentId) ? agentId : null,
+          agentId && visibleAgentIds.has(agentId) ? agentId : null,
           sessionId && sessionIds.has(sessionId) ? sessionId : null,
           restoredConfig,
           intValue(row, 'is_active', 1),
