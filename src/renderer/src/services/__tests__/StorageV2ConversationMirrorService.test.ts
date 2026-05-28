@@ -221,4 +221,57 @@ describe('StorageV2ConversationMirrorService', () => {
     expect(mocks.fetchStorageV2TopicMessages).not.toHaveBeenCalled()
     expect(syncConversation).toHaveBeenCalledTimes(2)
   })
+
+  it('retries destructive mirrors when the Dexie topic snapshot cannot be read', async () => {
+    vi.useFakeTimers()
+    const syncConversation = vi.fn().mockResolvedValue({ messageCount: 0, blockCount: 0 })
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          syncConversation
+        }
+      }
+    })
+
+    mocks.topicsGet.mockRejectedValueOnce(new Error('dexie busy')).mockResolvedValue({
+      id: 'topic-1',
+      messages: []
+    })
+
+    const state = {
+      assistants: {
+        assistants: [
+          {
+            id: 'assistant-1',
+            topics: [
+              {
+                id: 'topic-1',
+                assistantId: 'assistant-1',
+                name: 'Recovered',
+                createdAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                messages: []
+              }
+            ]
+          }
+        ]
+      }
+    }
+
+    try {
+      const { storageV2ConversationMirrorService } = await import('../StorageV2ConversationMirrorService')
+
+      await storageV2ConversationMirrorService.flushTopic('topic-1', () => state, { destructive: true })
+
+      expect(syncConversation).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(1500)
+
+      expect(syncConversation).toHaveBeenCalledTimes(1)
+      expect(mocks.fetchStorageV2TopicMessages).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

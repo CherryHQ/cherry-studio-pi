@@ -327,30 +327,30 @@ class StorageV2ConversationMirrorService {
 
     if (topicIds.size === 0) return
 
-    const conversations: ConversationSnapshot[] = []
-    const filesById = new Map<string, FileMetadata>()
-    const pendingSnapshots = new Map<string, string>()
-
-    for (const topicId of topicIds) {
-      const snapshot = await this.buildMirrorSnapshot(topicId, state, {
-        destructive: destructiveTopicIds.has(topicId)
-      })
-      if (!snapshot) continue
-
-      const snapshotJson = JSON.stringify(snapshot.conversation)
-      if (snapshotJson === this.lastTopicSnapshotJson.get(topicId)) continue
-
-      pendingSnapshots.set(topicId, snapshotJson)
-      conversations.push(snapshot.conversation)
-
-      for (const [fileId, file] of snapshot.files) {
-        filesById.set(fileId, file)
-      }
-    }
-
-    if (conversations.length === 0) return
-
     try {
+      const conversations: ConversationSnapshot[] = []
+      const filesById = new Map<string, FileMetadata>()
+      const pendingSnapshots = new Map<string, string>()
+
+      for (const topicId of topicIds) {
+        const snapshot = await this.buildMirrorSnapshot(topicId, state, {
+          destructive: destructiveTopicIds.has(topicId)
+        })
+        if (!snapshot) continue
+
+        const snapshotJson = JSON.stringify(snapshot.conversation)
+        if (snapshotJson === this.lastTopicSnapshotJson.get(topicId)) continue
+
+        pendingSnapshots.set(topicId, snapshotJson)
+        conversations.push(snapshot.conversation)
+
+        for (const [fileId, file] of snapshot.files) {
+          filesById.set(fileId, file)
+        }
+      }
+
+      if (conversations.length === 0) return
+
       await this.mirrorConversations(conversations, Array.from(filesById.values()))
 
       for (const [topicId, snapshotJson] of pendingSnapshots) {
