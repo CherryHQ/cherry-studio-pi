@@ -31,6 +31,16 @@ export class StorageV2AgentRuntimeRecoveryService {
     })
   }
 
+  async projectIfAgentListMissingRows(reason: string): Promise<boolean> {
+    return this.projectIfStorageHasRows(reason, async () => {
+      const [legacyAgentCount, storageAgentCount] = await Promise.all([
+        this.countLegacyVisibleAgents(),
+        this.countStorageVisibleAgents()
+      ])
+      return storageAgentCount > legacyAgentCount
+    })
+  }
+
   async projectIfAgentMissing(agentId: string, reason: string): Promise<boolean> {
     return this.projectIfStorageHasRows(reason, async () => {
       if ((await this.countLegacyDeletedAgent(agentId)) > 0) return false

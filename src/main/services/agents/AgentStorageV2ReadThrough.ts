@@ -48,9 +48,8 @@ async function flushAgentRuntimeMutationToStorageV2(options: { strict?: boolean 
 
 export async function listAgentsWithStorageV2Recovery(options: ListOptions) {
   const result = await agentService.listAgents(options)
-  if (result.total > 0) return result
 
-  if (await storageV2AgentRuntimeRecoveryService.projectIfLegacyAgentListEmpty('agent-list-empty')) {
+  if (await storageV2AgentRuntimeRecoveryService.projectIfAgentListMissingRows('agent-list-missing-rows')) {
     return agentService.listAgents(options)
   }
 

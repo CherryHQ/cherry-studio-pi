@@ -166,6 +166,36 @@ describe('StorageV2AgentRuntimeRecoveryService', () => {
     expect(projection).not.toHaveBeenCalled()
   })
 
+  it('projects agent lists when Storage v2 has visible agents missing from legacy', async () => {
+    const legacyClient = createCountClient(1)
+    const storageClient = createCountClient(2)
+    const projection = mockProjection()
+    vi.spyOn(DatabaseManager, 'getInstance').mockResolvedValue({
+      getClient: async () => legacyClient
+    } as any)
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(storageClient as any)
+
+    const recovered = await new StorageV2AgentRuntimeRecoveryService().projectIfAgentListMissingRows('test')
+
+    expect(recovered).toBe(true)
+    expect(projection).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not project agent lists when Storage v2 has no additional visible agents', async () => {
+    const legacyClient = createCountClient(2)
+    const storageClient = createCountClient(2)
+    const projection = mockProjection()
+    vi.spyOn(DatabaseManager, 'getInstance').mockResolvedValue({
+      getClient: async () => legacyClient
+    } as any)
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(storageClient as any)
+
+    const recovered = await new StorageV2AgentRuntimeRecoveryService().projectIfAgentListMissingRows('test')
+
+    expect(recovered).toBe(false)
+    expect(projection).not.toHaveBeenCalled()
+  })
+
   it('does not project an empty visible agent list when legacy has delete tombstones', async () => {
     const legacyClient = {
       execute: vi.fn(async (input: string | { sql: string }) => {

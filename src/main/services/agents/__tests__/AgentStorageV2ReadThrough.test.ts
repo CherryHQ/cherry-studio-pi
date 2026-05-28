@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   agentService: {
     createAgent: vi.fn(),
     getAgent: vi.fn(),
+    listAgents: vi.fn(),
     updateAgent: vi.fn(),
     reorderAgents: vi.fn(),
     deleteAgent: vi.fn()
@@ -38,6 +39,7 @@ const mocks = vi.hoisted(() => ({
     deleteChannel: vi.fn()
   },
   recovery: {
+    projectIfAgentListMissingRows: vi.fn(),
     projectIfAgentMissing: vi.fn(),
     projectIfSessionMissing: vi.fn(),
     projectIfSessionMissingById: vi.fn(),
@@ -109,6 +111,7 @@ import {
   deleteSessionWithStorageV2Recovery,
   deleteTaskByIdWithStorageV2Recovery,
   deleteTaskWithStorageV2Recovery,
+  listAgentsWithStorageV2Recovery,
   logTaskRunWithStorageV2Recovery,
   persistAgentMessageExchangeWithStorageV2Recovery,
   reorderAgentsWithStorageV2Recovery,
@@ -133,12 +136,28 @@ describe('AgentStorageV2ReadThrough mutation wrappers', () => {
     mocks.tombstone.tombstoneSessionMessage.mockResolvedValue(undefined)
     mocks.tombstone.tombstoneTask.mockResolvedValue(undefined)
     mocks.tombstone.tombstoneChannel.mockResolvedValue(undefined)
+    mocks.recovery.projectIfAgentListMissingRows.mockResolvedValue(false)
     mocks.recovery.projectIfAgentMissing.mockResolvedValue(false)
     mocks.recovery.projectIfSessionMissing.mockResolvedValue(false)
     mocks.recovery.projectIfSessionMissingById.mockResolvedValue(false)
     mocks.recovery.projectIfSessionMessagesEmpty.mockResolvedValue(false)
     mocks.recovery.projectIfTaskMissing.mockResolvedValue(false)
     mocks.recovery.projectIfChannelMissing.mockResolvedValue(false)
+  })
+
+  it('projects Storage v2 agents when the legacy agent list is partially populated', async () => {
+    mocks.agentService.listAgents
+      .mockResolvedValueOnce({ agents: [{ id: 'agent-legacy' }], total: 1 })
+      .mockResolvedValueOnce({ agents: [{ id: 'agent-storage' }, { id: 'agent-legacy' }], total: 2 })
+    mocks.recovery.projectIfAgentListMissingRows.mockResolvedValueOnce(true)
+
+    await expect(listAgentsWithStorageV2Recovery({})).resolves.toEqual({
+      agents: [{ id: 'agent-storage' }, { id: 'agent-legacy' }],
+      total: 2
+    })
+
+    expect(mocks.recovery.projectIfAgentListMissingRows).toHaveBeenCalledWith('agent-list-missing-rows')
+    expect(mocks.agentService.listAgents).toHaveBeenCalledTimes(2)
   })
 
   it('flushes the Storage v2 agent mirror after destructive writes', async () => {
