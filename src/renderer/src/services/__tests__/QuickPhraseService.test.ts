@@ -29,6 +29,7 @@ vi.mock('../StorageV2DexieTableMirrorService', () => ({
 
 vi.mock('../StorageV2DexieTableRecoveryService', () => ({
   storageV2DexieTableRecoveryService: {
+    projectMissingRows: vi.fn(),
     projectTableIfEmpty: vi.fn()
   }
 }))

@@ -134,4 +134,58 @@ describe('StorageV2DexieTableRecoveryService', () => {
       updated_at: 1760000000001
     })
   })
+
+  it('projects missing Storage v2 rows when the legacy table is partially populated', async () => {
+    const listSettings = vi.fn().mockResolvedValue([
+      {
+        key: 'dexie.table.quick_phrases.phrase-existing',
+        value: {
+          title: 'Existing',
+          content: 'Already in Dexie',
+          createdAt: 1760000000000,
+          updatedAt: 1760000000000
+        }
+      },
+      {
+        key: 'dexie.table.quick_phrases.phrase-missing',
+        value: {
+          title: 'Missing',
+          content: 'Only in Storage v2',
+          createdAt: 1760000000001,
+          updatedAt: 1760000000001
+        }
+      },
+      {
+        key: 'dexie.table.quick_phrases.phrase-deleted',
+        value: null
+      }
+    ])
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          listSettings
+        }
+      }
+    })
+    mocks.quickPhrasesGet.mockImplementation(async (id: string) =>
+      id === 'phrase-existing' ? { id, title: 'Existing' } : null
+    )
+
+    const { storageV2DexieTableRecoveryService } = await import('../StorageV2DexieTableRecoveryService')
+
+    await expect(
+      storageV2DexieTableRecoveryService.projectMissingRows('quick_phrases', 'quick-phrases-list')
+    ).resolves.toBe(true)
+
+    expect(listSettings).toHaveBeenCalledWith('dexie-table:quick_phrases')
+    expect(mocks.quickPhrasesPut).toHaveBeenCalledTimes(1)
+    expect(mocks.quickPhrasesPut).toHaveBeenCalledWith({
+      id: 'phrase-missing',
+      title: 'Missing',
+      content: 'Only in Storage v2',
+      createdAt: 1760000000001,
+      updatedAt: 1760000000001
+    })
+  })
 })

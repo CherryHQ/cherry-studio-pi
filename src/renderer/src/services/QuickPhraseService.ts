@@ -31,6 +31,7 @@ export class QuickPhraseService {
   static async getAll(): Promise<QuickPhrase[]> {
     // Ensure database is initialized before
     await QuickPhraseService.init()
+    await storageV2DexieTableRecoveryService.projectMissingRows('quick_phrases', 'quick-phrases-list')
     let phrases = await db.quick_phrases.toArray()
     if (phrases.length === 0) {
       const restored = await storageV2DexieTableRecoveryService.projectTableIfEmpty(

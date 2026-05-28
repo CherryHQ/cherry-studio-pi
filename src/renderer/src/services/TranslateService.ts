@@ -189,6 +189,10 @@ export const updateCustomLanguage = async (
  */
 export const getAllCustomLanguages = async () => {
   try {
+    await storageV2DexieTableRecoveryService.projectMissingRows(
+      'translate_languages',
+      'custom-translate-languages-list'
+    )
     let languages = await db.translate_languages.toArray()
     if (languages.length === 0) {
       const restored = await storageV2DexieTableRecoveryService.projectTableIfEmpty(
@@ -233,9 +237,11 @@ export const saveTranslateHistory = async (
   await storageV2DexieTableMirrorService.flush()
 }
 
-export const recoverTranslateHistoryIfEmpty = async () => {
-  return storageV2DexieTableRecoveryService.projectTableIfEmpty('translate_history', 'translate-history-empty')
+export const recoverTranslateHistory = async () => {
+  return storageV2DexieTableRecoveryService.projectMissingRows('translate_history', 'translate-history-list')
 }
+
+export const recoverTranslateHistoryIfEmpty = recoverTranslateHistory
 
 /**
  * 更新翻译历史记录

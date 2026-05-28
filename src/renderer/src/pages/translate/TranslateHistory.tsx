@@ -6,7 +6,7 @@ import useTranslate from '@renderer/hooks/useTranslate'
 import {
   clearHistory,
   deleteHistory,
-  recoverTranslateHistoryIfEmpty,
+  recoverTranslateHistory,
   updateTranslateHistory
 } from '@renderer/services/TranslateService'
 import type { TranslateHistory, TranslateLanguage } from '@renderer/types'
@@ -97,10 +97,10 @@ const TranslateHistoryList: FC<TranslateHistoryProps> = ({ isOpen, onHistoryItem
   )
 
   useEffect(() => {
-    if (isOpen && _translateHistory?.length === 0) {
-      void recoverTranslateHistoryIfEmpty()
+    if (isOpen) {
+      void recoverTranslateHistory()
     }
-  }, [_translateHistory?.length, isOpen])
+  }, [isOpen])
 
   useEffect(() => {
     setDisplayedHistory(translateHistory.filter(finalFilter))

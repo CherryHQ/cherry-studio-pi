@@ -78,6 +78,32 @@ class StorageV2DexieTableRecoveryService {
     }
   }
 
+  async projectMissingRows(tableName: StorageV2DexieTableName, reason: string): Promise<boolean> {
+    if (!STORAGE_V2_DEXIE_TABLE_NAMES.includes(tableName)) return false
+
+    try {
+      const table = getTable(tableName)
+      const rows = await getStorageRows(tableName)
+      if (rows.length === 0) return false
+
+      let projectedCount = 0
+
+      for (const row of rows) {
+        if (await table.get(row.id)) continue
+        await table.put(row)
+        projectedCount++
+      }
+
+      if (projectedCount === 0) return false
+
+      logger.info(`Projected ${projectedCount} missing Storage v2 ${tableName} row(s) into Dexie`, { reason })
+      return true
+    } catch (error) {
+      logger.warn(`Failed to project missing Storage v2 ${tableName} rows into Dexie`, error as Error)
+      return false
+    }
+  }
+
   async projectRowIfMissing(tableName: StorageV2DexieTableName, rowId: string, reason: string): Promise<boolean> {
     if (!STORAGE_V2_DEXIE_TABLE_NAMES.includes(tableName) || !rowId) return false
 
