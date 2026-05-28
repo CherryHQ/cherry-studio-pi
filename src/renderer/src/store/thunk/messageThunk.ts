@@ -1009,9 +1009,9 @@ export const deleteSingleMessageThunk =
     const blockIdsToDelete = messageToDelete.blocks || []
 
     try {
+      await deleteMessageFromDB(topicId, messageId)
       dispatch(newMessagesActions.removeMessage({ topicId, messageId }))
       cleanupMultipleBlocks(dispatch, blockIdsToDelete)
-      await deleteMessageFromDB(topicId, messageId)
     } catch (error) {
       logger.error(`[deleteSingleMessage] Failed to delete message ${messageId}:`, error as Error)
     }
@@ -1048,9 +1048,9 @@ export const deleteMessageGroupThunk =
     const messageIdsToDelete = messagesToDelete.map((m) => m.id)
 
     try {
+      await deleteMessagesFromDB(topicId, messageIdsToDelete)
       dispatch(newMessagesActions.removeMessagesByAskId({ topicId, askId }))
       cleanupMultipleBlocks(dispatch, blockIdsToDelete)
-      await deleteMessagesFromDB(topicId, messageIdsToDelete)
     } catch (error) {
       logger.error(`[deleteMessageGroup] Failed to delete messages with askId ${askId}:`, error as Error)
     }
@@ -1073,9 +1073,9 @@ export const clearTopicMessagesThunk =
 
       const blockIdsToDelete = Array.from(blockIdsToDeleteSet)
 
+      await clearMessagesFromDB(topicId)
       dispatch(newMessagesActions.clearTopicMessages(topicId))
       cleanupMultipleBlocks(dispatch, blockIdsToDelete)
-      await clearMessagesFromDB(topicId)
     } catch (error) {
       logger.error(`[clearTopicMessagesThunk] Failed to clear messages for topic ${topicId}:`, error as Error)
     }
