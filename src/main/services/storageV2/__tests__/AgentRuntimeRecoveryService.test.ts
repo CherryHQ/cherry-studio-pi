@@ -1,5 +1,5 @@
 import { DatabaseManager } from '@main/services/agents/database/DatabaseManager'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { storageV2AgentLegacyProjectionService } from '../AgentLegacyProjectionService'
 import { StorageV2AgentRuntimeRecoveryService } from '../AgentRuntimeRecoveryService'
@@ -13,21 +13,6 @@ function createCountClient(count: number) {
       columns: [],
       columnTypes: []
     }))
-  }
-}
-
-function createCountSequenceClient(counts: number[]) {
-  let index = 0
-  return {
-    execute: vi.fn(async () => {
-      const count = counts[Math.min(index, counts.length - 1)] ?? 0
-      index++
-      return {
-        rows: [{ count }],
-        columns: [],
-        columnTypes: []
-      }
-    })
   }
 }
 
@@ -58,6 +43,33 @@ function mockProjection() {
 }
 
 describe('StorageV2AgentRuntimeRecoveryService', () => {
+  beforeEach(() => {
+    vi.spyOn(storageV2LegacyAgentDbImportService, 'importSnapshot').mockResolvedValue({
+      dryRun: false,
+      sourceDbPath: '/tmp/agents.db',
+      agentCount: 0,
+      sessionCount: 0,
+      sessionMessageCount: 0,
+      skillCount: 0,
+      agentSkillCount: 0,
+      taskCount: 0,
+      taskRunLogCount: 0,
+      channelCount: 0,
+      importedAgentCount: 0,
+      importedSessionCount: 0,
+      importedSessionMessageCount: 0,
+      importedSkillCount: 0,
+      importedAgentSkillCount: 0,
+      importedTaskCount: 0,
+      importedTaskRunLogCount: 0,
+      importedChannelCount: 0,
+      secretCandidateCount: 0,
+      importedSecretCount: 0,
+      skippedSecretCount: 0,
+      warnings: []
+    })
+  })
+
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -79,9 +91,10 @@ describe('StorageV2AgentRuntimeRecoveryService', () => {
 
   it('seeds Storage v2 from the selected legacy agent database before projecting an empty runtime', async () => {
     const legacyClient = createCountClient(0)
-    const storageClient = createCountSequenceClient([0, 1])
+    const storageClient = createCountClient(1)
     const projection = mockProjection()
-    const importSnapshot = vi.spyOn(storageV2LegacyAgentDbImportService, 'importSnapshot').mockResolvedValue({
+    const importSnapshot = vi.mocked(storageV2LegacyAgentDbImportService.importSnapshot)
+    importSnapshot.mockResolvedValueOnce({
       dryRun: false,
       sourceDbPath: '/tmp/old/agents.db',
       agentCount: 1,
@@ -113,7 +126,7 @@ describe('StorageV2AgentRuntimeRecoveryService', () => {
     const recovered = await new StorageV2AgentRuntimeRecoveryService().projectIfLegacyAgentListEmpty('test')
 
     expect(recovered).toBe(true)
-    expect(importSnapshot).toHaveBeenCalledWith({ dryRun: false, createSnapshot: false })
+    expect(importSnapshot).toHaveBeenCalledWith({ dryRun: false, createSnapshot: false, pruneMissing: false })
     expect(projection).toHaveBeenCalledTimes(1)
   })
 
@@ -127,6 +140,11 @@ describe('StorageV2AgentRuntimeRecoveryService', () => {
     const recovered = await new StorageV2AgentRuntimeRecoveryService().projectIfLegacyAgentListEmpty('test')
 
     expect(recovered).toBe(false)
+    expect(storageV2LegacyAgentDbImportService.importSnapshot).toHaveBeenCalledWith({
+      dryRun: false,
+      createSnapshot: false,
+      pruneMissing: false
+    })
     expect(projection).not.toHaveBeenCalled()
   })
 

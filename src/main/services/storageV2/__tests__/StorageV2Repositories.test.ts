@@ -94,6 +94,33 @@ describe('StorageV2ConversationRepository', () => {
     )
   })
 
+  it('can import a conversation without pruning missing children', async () => {
+    const { client, execute } = createMockClient()
+    const recordChange = vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
+    vi.spyOn(storageV2Database, 'withTransaction').mockImplementation(async (_client, fn) => fn())
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(client)
+
+    await new StorageV2ConversationRepository().importConversation(
+      {
+        id: 'topic-1',
+        ownerId: 'assistant-1',
+        messages: [{ id: 'message-1', role: 'assistant', createdAt: '2026-01-01T00:00:00.000Z' }],
+        blocks: []
+      },
+      { pruneMissingBlocks: false, pruneMissingMessages: false }
+    )
+
+    const executedSql = execute.mock.calls.map(([input]) => (typeof input === 'string' ? input : input.sql))
+    expect(executedSql.some((sql) => sql.includes('UPDATE messages'))).toBe(false)
+    expect(executedSql.some((sql) => sql.includes('UPDATE message_blocks'))).toBe(false)
+    expect(recordChange).not.toHaveBeenCalledWith(
+      expect.objectContaining({ entityType: 'message', entityId: 'stale-message', operation: 'delete' })
+    )
+    expect(recordChange).not.toHaveBeenCalledWith(
+      expect.objectContaining({ entityType: 'message_block', entityId: 'stale-block', operation: 'delete' })
+    )
+  })
+
   it('only prunes missing message blocks when requested', async () => {
     const { client, execute } = createMockClient()
     const recordChange = vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)

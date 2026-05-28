@@ -104,12 +104,8 @@ export class StorageV2AgentRuntimeRecoveryService {
 
   private async projectNow(reason: string, hasRows: () => Promise<boolean>): Promise<boolean> {
     try {
-      let storageHasRows = await hasRows()
-      if (!storageHasRows) {
-        await this.seedStorageFromLegacyRuntime(reason)
-        storageHasRows = await hasRows()
-      }
-
+      await this.seedStorageFromLegacyRuntime(reason)
+      const storageHasRows = await hasRows()
       if (!storageHasRows) {
         return false
       }
@@ -136,7 +132,7 @@ export class StorageV2AgentRuntimeRecoveryService {
     }
 
     this.legacySeed = storageV2LegacyAgentDbImportService
-      .importSnapshot({ dryRun: false, createSnapshot: false })
+      .importSnapshot({ dryRun: false, createSnapshot: false, pruneMissing: false })
       .then((report) => {
         if (
           report.agentCount > 0 ||

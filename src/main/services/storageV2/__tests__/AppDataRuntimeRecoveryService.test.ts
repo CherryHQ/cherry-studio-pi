@@ -1,5 +1,5 @@
 import * as AppDataDatabaseModule from '@main/services/appData/AppDataDatabase'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { storageV2AppDataLegacyProjectionService } from '../AppDataLegacyProjectionService'
 import { StorageV2AppDataRuntimeRecoveryService } from '../AppDataRuntimeRecoveryService'
@@ -13,21 +13,6 @@ function createCountClient(count: number) {
       columns: [],
       columnTypes: []
     }))
-  }
-}
-
-function createCountSequenceClient(counts: number[]) {
-  let index = 0
-  return {
-    execute: vi.fn(async () => {
-      const count = counts[Math.min(index, counts.length - 1)] ?? 0
-      index++
-      return {
-        rows: [{ count }],
-        columns: [],
-        columnTypes: []
-      }
-    })
   }
 }
 
@@ -47,6 +32,27 @@ function mockProjection() {
 }
 
 describe('StorageV2AppDataRuntimeRecoveryService', () => {
+  beforeEach(() => {
+    vi.spyOn(storageV2LegacyAppDbImportService, 'importSnapshot').mockResolvedValue({
+      dryRun: false,
+      sourceDbPath: '/tmp/app.db',
+      recordCount: 0,
+      cacheCount: 0,
+      syncStateCount: 0,
+      syncConflictCount: 0,
+      workbenchShortcutCount: 0,
+      importedRecordCount: 0,
+      importedCacheCount: 0,
+      importedSyncStateCount: 0,
+      importedSyncConflictCount: 0,
+      importedWorkbenchShortcutCount: 0,
+      secretCandidateCount: 0,
+      importedSecretCount: 0,
+      skippedSecretCount: 0,
+      warnings: []
+    })
+  })
+
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -71,9 +77,10 @@ describe('StorageV2AppDataRuntimeRecoveryService', () => {
 
   it('seeds Storage v2 from the selected legacy app database before projecting an empty runtime', async () => {
     const legacyClient = createCountClient(0)
-    const storageClient = createCountSequenceClient([0, 1])
+    const storageClient = createCountClient(1)
     const projection = mockProjection()
-    const importSnapshot = vi.spyOn(storageV2LegacyAppDbImportService, 'importSnapshot').mockResolvedValue({
+    const importSnapshot = vi.mocked(storageV2LegacyAppDbImportService.importSnapshot)
+    importSnapshot.mockResolvedValueOnce({
       dryRun: false,
       sourceDbPath: '/tmp/old/app.db',
       recordCount: 1,
@@ -102,7 +109,7 @@ describe('StorageV2AppDataRuntimeRecoveryService', () => {
     )
 
     expect(recovered).toBe(true)
-    expect(importSnapshot).toHaveBeenCalledWith({ dryRun: false, createSnapshot: false })
+    expect(importSnapshot).toHaveBeenCalledWith({ dryRun: false, createSnapshot: false, pruneMissing: false })
     expect(projection).toHaveBeenCalledTimes(1)
   })
 
@@ -121,6 +128,11 @@ describe('StorageV2AppDataRuntimeRecoveryService', () => {
     )
 
     expect(recovered).toBe(false)
+    expect(storageV2LegacyAppDbImportService.importSnapshot).toHaveBeenCalledWith({
+      dryRun: false,
+      createSnapshot: false,
+      pruneMissing: false
+    })
     expect(storageClient.execute).not.toHaveBeenCalled()
     expect(projection).not.toHaveBeenCalled()
   })

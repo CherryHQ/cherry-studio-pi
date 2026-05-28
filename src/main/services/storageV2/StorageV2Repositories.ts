@@ -123,6 +123,11 @@ export type StorageV2ConversationUpsertOptions = {
   activeMessageIds?: string[]
 }
 
+export type StorageV2ConversationImportOptions = {
+  pruneMissingMessages?: boolean
+  pruneMissingBlocks?: boolean
+}
+
 export type StorageV2MessageBlocksUpsertOptions = {
   pruneMissing?: boolean
 }
@@ -1334,7 +1339,10 @@ export class StorageV2ConversationRepository {
     }
   }
 
-  async importConversation(conversation: StorageV2ConversationImport): Promise<{
+  async importConversation(
+    conversation: StorageV2ConversationImport,
+    options: StorageV2ConversationImportOptions = {}
+  ): Promise<{
     messageCount: number
     blockCount: number
   }> {
@@ -1364,7 +1372,9 @@ export class StorageV2ConversationRepository {
         timestamp
       )
 
-      await softDeleteMissingConversationMessages(client, conversation.id, importedMessageIds, timestamp)
+      if (options.pruneMissingMessages !== false) {
+        await softDeleteMissingConversationMessages(client, conversation.id, importedMessageIds, timestamp)
+      }
 
       for (const [messageIndex, message] of conversation.messages.entries()) {
         const messageId = getImportMessageId(conversation.id, message, messageIndex)
@@ -1381,7 +1391,9 @@ export class StorageV2ConversationRepository {
           messageBlocks.length
         )
 
-        await softDeleteMissingMessageBlocks(client, messageId, importedBlockIds, timestamp)
+        if (options.pruneMissingBlocks !== false) {
+          await softDeleteMissingMessageBlocks(client, messageId, importedBlockIds, timestamp)
+        }
 
         for (const [blockIndex, block] of messageBlocks.entries()) {
           const blockId = importedBlockIds[blockIndex]

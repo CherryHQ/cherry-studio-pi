@@ -232,7 +232,42 @@ describe('StorageV2LegacyAgentDbImportService', () => {
         id: 'agent-session:session-1',
         sessionId: 'session-1',
         messages: [expect.objectContaining({ id: 'agent-message:1' })]
-      })
+      }),
+      {
+        pruneMissingBlocks: true,
+        pruneMissingMessages: true
+      }
+    )
+  })
+
+  it('can import legacy agent data without pruning existing Storage v2 rows', async () => {
+    const { tmpDir, dbPath } = await createLegacyDbWithTables(['agents', 'sessions', 'session_messages'])
+    tmpDirs.push(tmpDir)
+
+    await new StorageV2LegacyAgentDbImportService().importSnapshot({
+      dryRun: false,
+      dbPath,
+      createSnapshot: false,
+      pruneMissing: false
+    })
+
+    const executedSql = mocks.storageClient.execute.mock.calls.map(([input]) =>
+      typeof input === 'string' ? input : input.sql
+    )
+
+    expect(executedSql.some((sql) => sql.includes('INSERT INTO agents'))).toBe(true)
+    expect(executedSql.some((sql) => sql.includes('SET deleted_at'))).toBe(false)
+    expect(executedSql.some((sql) => sql.includes('DELETE FROM agent_skills'))).toBe(false)
+    expect(executedSql.some((sql) => sql.includes('DELETE FROM task_run_logs'))).toBe(false)
+    expect(mocks.deleteConversation).not.toHaveBeenCalled()
+    expect(mocks.importConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'agent-session:session-1'
+      }),
+      {
+        pruneMissingBlocks: false,
+        pruneMissingMessages: false
+      }
     )
   })
 })

@@ -199,4 +199,26 @@ describe('StorageV2LegacyAppDbImportService', () => {
     expect(executed.some((call) => call.sql.includes('DELETE FROM sync_state'))).toBe(false)
     expect(executed.some((call) => call.sql.includes('DELETE FROM sync_conflicts'))).toBe(false)
   })
+
+  it('can import legacy app data without pruning existing Storage v2 rows', async () => {
+    const { tmpDir, dbPath } = await createLegacyDbWithTables(['app_records', 'sync_state', 'sync_conflicts'])
+    tmpDirs.push(tmpDir)
+
+    await new StorageV2LegacyAppDbImportService().importSnapshot({
+      dryRun: false,
+      dbPath,
+      createSnapshot: false,
+      pruneMissing: false
+    })
+
+    const executed = mocks.storageClient.execute.mock.calls.map((call) => {
+      const input = call[0] as string | { sql: string; args?: unknown[] }
+      return typeof input === 'string' ? input : input.sql
+    })
+
+    expect(executed.some((sql) => sql.includes('INSERT INTO kv_records'))).toBe(true)
+    expect(executed.some((sql) => sql.includes('UPDATE kv_records') && sql.includes('SET deleted_at'))).toBe(false)
+    expect(executed.some((sql) => sql.includes('DELETE FROM sync_state'))).toBe(false)
+    expect(executed.some((sql) => sql.includes('DELETE FROM sync_conflicts'))).toBe(false)
+  })
 })

@@ -13,6 +13,7 @@ type LegacyAppDbImportOptions = {
   dryRun?: boolean
   dbPath?: string
   createSnapshot?: boolean
+  pruneMissing?: boolean
 }
 
 export type StorageV2LegacyAppDbImportReport = {
@@ -154,6 +155,7 @@ export class StorageV2LegacyAppDbImportService {
   async importSnapshot(options: LegacyAppDbImportOptions = {}): Promise<StorageV2LegacyAppDbImportReport> {
     const dryRun = options.dryRun !== false
     const shouldCreateSnapshot = !dryRun && options.createSnapshot !== false
+    const shouldPruneMissing = options.pruneMissing !== false
     const sourceDbPath = firstExistingPath(candidateAppDbPaths(options.dbPath))
     const warnings: string[] = []
 
@@ -186,7 +188,9 @@ export class StorageV2LegacyAppDbImportService {
         snapshotPath = shouldCreateSnapshot
           ? (await storageV2Database.createSnapshot('before-legacy-app-db-import')).path
           : undefined
-        importedSecretCount = await withTransaction(async () => this.writeRows(rows, tables))
+        importedSecretCount = await withTransaction(async () =>
+          this.writeRows(rows, tables, { pruneMissing: shouldPruneMissing })
+        )
       }
 
       return {
@@ -350,7 +354,11 @@ export class StorageV2LegacyAppDbImportService {
     return { value: sanitized, importedSecretCount }
   }
 
-  private async writeRows(rows: LegacyAppDbRows, tables: LegacyAppDbTableSet) {
+  private async writeRows(
+    rows: LegacyAppDbRows,
+    tables: LegacyAppDbTableSet,
+    options: { pruneMissing?: boolean } = {}
+  ) {
     const client = await storageV2Database.getClient()
     let importedSecretCount = 0
     const appRecordKeys = new Set<string>()
@@ -541,20 +549,22 @@ export class StorageV2LegacyAppDbImportService {
       })
     }
 
-    if (tables.has('app_records')) {
-      await this.markMissingKvRowsDeleted(client, 'legacy-app-record', appRecordKeys)
-    }
-    if (tables.has('app_cache')) {
-      await this.markMissingKvRowsDeleted(client, 'legacy-app-cache', appCacheKeys)
-    }
-    if (tables.has('workbench_shortcuts')) {
-      await this.markMissingKvRowsDeleted(client, 'legacy-workbench-shortcut', workbenchShortcutKeys)
-    }
-    if (tables.has('sync_state')) {
-      await this.deleteMissingSyncStateRows(client, syncStateKeys)
-    }
-    if (tables.has('sync_conflicts')) {
-      await this.deleteMissingSyncConflictRows(client, syncConflictIds)
+    if (options.pruneMissing !== false) {
+      if (tables.has('app_records')) {
+        await this.markMissingKvRowsDeleted(client, 'legacy-app-record', appRecordKeys)
+      }
+      if (tables.has('app_cache')) {
+        await this.markMissingKvRowsDeleted(client, 'legacy-app-cache', appCacheKeys)
+      }
+      if (tables.has('workbench_shortcuts')) {
+        await this.markMissingKvRowsDeleted(client, 'legacy-workbench-shortcut', workbenchShortcutKeys)
+      }
+      if (tables.has('sync_state')) {
+        await this.deleteMissingSyncStateRows(client, syncStateKeys)
+      }
+      if (tables.has('sync_conflicts')) {
+        await this.deleteMissingSyncConflictRows(client, syncConflictIds)
+      }
     }
 
     return importedSecretCount

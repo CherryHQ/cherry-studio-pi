@@ -60,12 +60,8 @@ export class StorageV2AppDataRuntimeRecoveryService {
 
   private async projectNow(reason: string, hasRows: () => Promise<boolean>): Promise<boolean> {
     try {
-      let storageHasRows = await hasRows()
-      if (!storageHasRows) {
-        await this.seedStorageFromLegacyRuntime(reason)
-        storageHasRows = await hasRows()
-      }
-
+      await this.seedStorageFromLegacyRuntime(reason)
+      const storageHasRows = await hasRows()
       if (!storageHasRows) {
         return false
       }
@@ -92,7 +88,7 @@ export class StorageV2AppDataRuntimeRecoveryService {
     }
 
     this.legacySeed = storageV2LegacyAppDbImportService
-      .importSnapshot({ dryRun: false, createSnapshot: false })
+      .importSnapshot({ dryRun: false, createSnapshot: false, pruneMissing: false })
       .then((report) => {
         if (report.recordCount > 0 || report.cacheCount > 0 || report.workbenchShortcutCount > 0) {
           logger.info('Seeded Storage v2 app data from legacy runtime before recovery', {

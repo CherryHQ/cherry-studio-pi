@@ -14,6 +14,7 @@ type LegacyAgentDbSnapshotOptions = {
   dryRun?: boolean
   dbPath?: string
   createSnapshot?: boolean
+  pruneMissing?: boolean
 }
 
 type LegacyAgentDbRows = Record<(typeof LEGACY_TABLES)[number], Row[]>
@@ -214,6 +215,7 @@ export class StorageV2LegacyAgentDbImportService {
   async importSnapshot(options: LegacyAgentDbSnapshotOptions = {}): Promise<StorageV2LegacyAgentDbImportReport> {
     const dryRun = options.dryRun !== false
     const shouldCreateSnapshot = !dryRun && options.createSnapshot !== false
+    const shouldPruneMissing = options.pruneMissing !== false
     const sourceDbPath = firstExistingPath(candidateAgentDbPaths(options.dbPath))
     const warnings: string[] = []
 
@@ -244,9 +246,11 @@ export class StorageV2LegacyAgentDbImportService {
         snapshotPath = shouldCreateSnapshot
           ? (await storageV2Database.createSnapshot('before-legacy-agent-db-import')).path
           : undefined
-        importedSecretCount = await withTransaction(async () => this.writeRows(rows, tables, warnings))
-        await this.importSessionMessages(rows, tables, warnings)
-        if (tables.has('sessions')) {
+        importedSecretCount = await withTransaction(async () =>
+          this.writeRows(rows, tables, warnings, { pruneMissing: shouldPruneMissing })
+        )
+        await this.importSessionMessages(rows, tables, warnings, { pruneMissing: shouldPruneMissing })
+        if (shouldPruneMissing && tables.has('sessions')) {
           await this.markMissingAgentSessionConversations(rows.sessions, warnings)
         }
       }
@@ -347,7 +351,12 @@ export class StorageV2LegacyAgentDbImportService {
     }, 0)
   }
 
-  private async writeRows(rows: LegacyAgentDbRows, tables: LegacyAgentDbTableSet, warnings: string[]) {
+  private async writeRows(
+    rows: LegacyAgentDbRows,
+    tables: LegacyAgentDbTableSet,
+    warnings: string[],
+    options: { pruneMissing?: boolean } = {}
+  ) {
     const client = await storageV2Database.getClient()
     let importedSecretCount = 0
     const agentIds = new Set(rows.agents.map((row) => text(row, 'id')).filter((id): id is string => Boolean(id)))
@@ -755,26 +764,28 @@ export class StorageV2LegacyAgentDbImportService {
       })
     }
 
-    if (tables.has('agents')) {
-      await this.markMissingEntityRowsDeleted(client, 'agents', 'id', agentIds, { versioned: true })
-    }
-    if (tables.has('sessions')) {
-      await this.markMissingEntityRowsDeleted(client, 'agent_sessions', 'id', sessionIds, { versioned: true })
-    }
-    if (tables.has('skills')) {
-      await this.markMissingEntityRowsDeleted(client, 'skills', 'id', skillIds, { versioned: true })
-    }
-    if (tables.has('scheduled_tasks')) {
-      await this.markMissingEntityRowsDeleted(client, 'scheduled_tasks', 'id', taskIds, { versioned: true })
-    }
-    if (tables.has('channels')) {
-      await this.markMissingEntityRowsDeleted(client, 'channels', 'id', channelIds, { versioned: true })
-    }
-    if (tables.has('agent_skills')) {
-      await this.deleteMissingAgentSkillRows(client, agentSkillKeys)
-    }
-    if (tables.has('task_run_logs')) {
-      await this.deleteMissingTaskRunLogRows(client, taskRunLogIds)
+    if (options.pruneMissing !== false) {
+      if (tables.has('agents')) {
+        await this.markMissingEntityRowsDeleted(client, 'agents', 'id', agentIds, { versioned: true })
+      }
+      if (tables.has('sessions')) {
+        await this.markMissingEntityRowsDeleted(client, 'agent_sessions', 'id', sessionIds, { versioned: true })
+      }
+      if (tables.has('skills')) {
+        await this.markMissingEntityRowsDeleted(client, 'skills', 'id', skillIds, { versioned: true })
+      }
+      if (tables.has('scheduled_tasks')) {
+        await this.markMissingEntityRowsDeleted(client, 'scheduled_tasks', 'id', taskIds, { versioned: true })
+      }
+      if (tables.has('channels')) {
+        await this.markMissingEntityRowsDeleted(client, 'channels', 'id', channelIds, { versioned: true })
+      }
+      if (tables.has('agent_skills')) {
+        await this.deleteMissingAgentSkillRows(client, agentSkillKeys)
+      }
+      if (tables.has('task_run_logs')) {
+        await this.deleteMissingTaskRunLogRows(client, taskRunLogIds)
+      }
     }
 
     return importedSecretCount
@@ -1022,7 +1033,12 @@ export class StorageV2LegacyAgentDbImportService {
     }
   }
 
-  private async importSessionMessages(rows: LegacyAgentDbRows, tables: LegacyAgentDbTableSet, warnings: string[]) {
+  private async importSessionMessages(
+    rows: LegacyAgentDbRows,
+    tables: LegacyAgentDbTableSet,
+    warnings: string[],
+    options: { pruneMissing?: boolean } = {}
+  ) {
     if (!tables.has('session_messages')) {
       return
     }
@@ -1047,14 +1063,20 @@ export class StorageV2LegacyAgentDbImportService {
       if (!sessionId) continue
       importedSessionIds.add(sessionId)
       const conversation = this.toConversationImport(sessionId, row, messagesBySessionId.get(sessionId) ?? [])
-      await storageV2ConversationRepository.importConversation(conversation)
+      await storageV2ConversationRepository.importConversation(conversation, {
+        pruneMissingMessages: options.pruneMissing !== false,
+        pruneMissingBlocks: options.pruneMissing !== false
+      })
     }
 
     for (const [sessionId, messages] of messagesBySessionId.entries()) {
       if (importedSessionIds.has(sessionId)) continue
       const session = sessionsById.get(sessionId)
       const conversation = this.toConversationImport(sessionId, session, messages)
-      await storageV2ConversationRepository.importConversation(conversation)
+      await storageV2ConversationRepository.importConversation(conversation, {
+        pruneMissingMessages: options.pruneMissing !== false,
+        pruneMissingBlocks: options.pruneMissing !== false
+      })
     }
   }
 
