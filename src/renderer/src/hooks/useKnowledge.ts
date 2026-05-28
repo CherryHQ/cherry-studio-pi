@@ -1,6 +1,8 @@
 import { db } from '@renderer/databases'
 import KnowledgeQueue from '@renderer/queue/KnowledgeQueue'
 import { getKnowledgeBaseParams } from '@renderer/services/KnowledgeService'
+import { storageV2DexieTableMirrorService } from '@renderer/services/StorageV2DexieTableMirrorService'
+import { storageV2DexieTableRecoveryService } from '@renderer/services/StorageV2DexieTableRecoveryService'
 import type { RootState } from '@renderer/store'
 import { useAppDispatch } from '@renderer/store'
 import {
@@ -28,6 +30,17 @@ import { useDispatch, useSelector } from 'react-redux'
 import { useAssistants } from './useAssistant'
 import { useAssistantPresets } from './useAssistantPresets'
 import { useTimer } from './useTimer'
+
+async function getKnowledgeNoteWithStorageV2Fallback(noteId: string, reason: string) {
+  let note = await db.knowledge_notes.get(noteId)
+  if (!note) {
+    const restored = await storageV2DexieTableRecoveryService.projectRowIfMissing('knowledge_notes', noteId, reason)
+    if (restored) {
+      note = await db.knowledge_notes.get(noteId)
+    }
+  }
+  return note
+}
 
 export const useKnowledge = (baseId: string) => {
   const dispatch = useAppDispatch()
@@ -90,7 +103,7 @@ export const useKnowledge = (baseId: string) => {
 
   // 更新笔记内容
   const updateNoteContent = async (noteId: string, content: string) => {
-    const note = await db.knowledge_notes.get(noteId)
+    const note = await getKnowledgeNoteWithStorageV2Fallback(noteId, 'knowledge-note-update-missing')
     if (note) {
       const updatedNote = {
         ...note,
@@ -106,7 +119,7 @@ export const useKnowledge = (baseId: string) => {
 
   // 获取笔记内容
   const getNoteContent = async (noteId: string) => {
-    return await db.knowledge_notes.get(noteId)
+    return await getKnowledgeNoteWithStorageV2Fallback(noteId, 'knowledge-note-get-missing')
   }
 
   const updateItem = (item: KnowledgeItem) => {
@@ -116,6 +129,11 @@ export const useKnowledge = (baseId: string) => {
   // 移除项目
   const removeItem = async (item: KnowledgeItem) => {
     dispatch(removeItemAction({ baseId, item }))
+    if (isKnowledgeNoteItem(item)) {
+      await db.knowledge_notes.delete(item.id)
+      storageV2DexieTableMirrorService.scheduleDelete('knowledge_notes', item.id)
+    }
+
     if (!base || !item?.uniqueId || !item?.uniqueIds) {
       return
     }
@@ -256,7 +274,7 @@ export const useKnowledge = (baseId: string) => {
           break
         case 'note':
           try {
-            const note = await db.knowledge_notes.get(item.id)
+            const note = await getKnowledgeNoteWithStorageV2Fallback(item.id, 'knowledge-note-migrate-missing')
             const content = note?.content || ''
             await dispatch(addNoteThunk(newBase.id, content))
           } catch (error) {
@@ -300,7 +318,7 @@ export const useKnowledge = (baseId: string) => {
     void runAsyncFunction(async () => {
       const newNoteItems = await Promise.all(
         notes.map(async (item) => {
-          const note = await db.knowledge_notes.get(item.id)
+          const note = await getKnowledgeNoteWithStorageV2Fallback(item.id, 'knowledge-note-list-missing')
           return { ...item, content: note?.content ?? '' } satisfies KnowledgeNoteItem
         })
       )
@@ -356,6 +374,16 @@ export const useKnowledgeBases = () => {
     const base = bases.find((b) => b.id === baseId)
     if (!base) return
     dispatch(deleteBase({ baseId }))
+
+    const noteIds = base.items.filter(isKnowledgeNoteItem).map((item) => item.id)
+    if (noteIds.length > 0) {
+      void db.knowledge_notes
+        .bulkDelete(noteIds)
+        .then(() => {
+          storageV2DexieTableMirrorService.scheduleDeletes('knowledge_notes', noteIds)
+        })
+        .catch(() => undefined)
+    }
 
     // remove assistant knowledge_base
     const _assistants = assistants.map((assistant) => {

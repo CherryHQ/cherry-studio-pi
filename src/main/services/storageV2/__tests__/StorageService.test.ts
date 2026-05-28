@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => ({
   dataRootService: {
     resolveDataRoot: vi.fn()
   },
+  fileProjectionService: {
+    projectToLegacyRuntime: vi.fn()
+  },
   legacyAgentDbImportService: {
     importSnapshot: vi.fn()
   },
@@ -68,7 +71,9 @@ const mocks = vi.hoisted(() => ({
   },
   fileRepository: {
     delete: vi.fn(),
-    importFile: vi.fn()
+    get: vi.fn(),
+    importFile: vi.fn(),
+    list: vi.fn()
   }
 }))
 
@@ -82,6 +87,10 @@ vi.mock('../BackupService', () => ({
 
 vi.mock('../DataRootService', () => ({
   storageV2DataRootService: mocks.dataRootService
+}))
+
+vi.mock('../FileLegacyProjectionService', () => ({
+  storageV2FileLegacyProjectionService: mocks.fileProjectionService
 }))
 
 vi.mock('../LegacyAgentDbImportService', () => ({
@@ -138,6 +147,85 @@ describe('StorageV2Service', () => {
     mocks.providerRepository.listCredentialRefs.mockResolvedValue(new Map())
     mocks.assistantRepository.list.mockResolvedValue([])
     mocks.conversationRepository.list.mockResolvedValue([])
+    mocks.fileRepository.get.mockResolvedValue(null)
+    mocks.fileRepository.list.mockResolvedValue([])
+  })
+
+  it('projects legacy Dexie auxiliary table rows into core snapshots', async () => {
+    mocks.settingsRepository.list.mockResolvedValue([
+      {
+        key: 'dexie.table.quick_phrases.phrase-1',
+        value: {
+          id: 'phrase-1',
+          title: 'Greeting',
+          content: 'Hello',
+          createdAt: 1760000000000,
+          updatedAt: 1760000000000
+        },
+        scope: 'dexie-table:quick_phrases',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        version: 1,
+        deletedAt: null
+      },
+      {
+        key: 'dexie.table.knowledge_notes.note-1',
+        value: null,
+        scope: 'dexie-table:knowledge_notes',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        version: 1,
+        deletedAt: null
+      }
+    ])
+
+    const snapshot = await new StorageV2Service().getCoreSnapshot()
+
+    expect(snapshot.dexieTables.quick_phrases).toEqual({
+      'phrase-1': {
+        id: 'phrase-1',
+        title: 'Greeting',
+        content: 'Hello',
+        createdAt: 1760000000000,
+        updatedAt: 1760000000000
+      }
+    })
+    expect(snapshot.dexieTables.knowledge_notes).toEqual({
+      'note-1': null
+    })
+    expect(snapshot.metadata.dexieTableRowCount).toBe(2)
+  })
+
+  it('delegates Storage v2 file read-through and projection helpers', async () => {
+    const file = {
+      id: 'file-1',
+      name: 'file-1.txt',
+      origin_name: 'notes.txt',
+      path: '',
+      size: 128,
+      ext: '.txt',
+      type: 'text',
+      created_at: '2026-01-01T00:00:00.000Z',
+      count: 1
+    }
+    const projectionReport = {
+      filesDir: '/tmp/Files',
+      projectedFileCount: 1,
+      archivedFileCount: 0,
+      skippedFileCount: 0,
+      missingBlobCount: 0,
+      archivedFiles: [],
+      warnings: []
+    }
+    mocks.fileRepository.get.mockResolvedValue(file)
+    mocks.fileRepository.list.mockResolvedValue([file])
+    mocks.fileProjectionService.projectToLegacyRuntime.mockResolvedValue(projectionReport)
+
+    const service = new StorageV2Service()
+
+    await expect(service.getFile('file-1')).resolves.toEqual(file)
+    await expect(service.listFiles()).resolves.toEqual([file])
+    await expect(service.projectFilesToLegacyRuntime()).resolves.toEqual(projectionReport)
+    expect(mocks.fileRepository.get).toHaveBeenCalledWith('file-1')
+    expect(mocks.fileProjectionService.projectToLegacyRuntime).toHaveBeenCalled()
   })
 
   it('restores localStorage MCP provider tokens from secret refs in core snapshots', async () => {

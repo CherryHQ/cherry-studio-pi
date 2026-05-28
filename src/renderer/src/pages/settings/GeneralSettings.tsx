@@ -7,8 +7,9 @@ import { useTheme } from '@renderer/context/ThemeProvider'
 import { useEnableDeveloperMode, useSettings } from '@renderer/hooks/useSettings'
 import { useTimer } from '@renderer/hooks/useTimer'
 import i18n from '@renderer/i18n'
+import { storageV2ConversationMirrorService } from '@renderer/services/StorageV2ConversationMirrorService'
 import type { RootState } from '@renderer/store'
-import { useAppDispatch } from '@renderer/store'
+import store, { useAppDispatch } from '@renderer/store'
 import { updateAssistant, updateDefaultAssistant } from '@renderer/store/assistants'
 import {
   setEnableDataCollection,
@@ -122,6 +123,10 @@ const GeneralSettings: FC = () => {
       )
       dispatch(updateDefaultAssistant({ assistant: { ...defaultAssistant, name: newName, topics: updatedTopics } }))
       dispatch(updateAssistant({ id: defaultAssistant.id, name: newName, topics: updatedTopics }))
+      storageV2ConversationMirrorService.scheduleTopics(
+        updatedTopics.map((topic) => topic.id),
+        () => store.getState()
+      )
     }
   }
 

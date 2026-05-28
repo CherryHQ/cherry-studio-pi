@@ -12,10 +12,12 @@ type StateGetter = () => Record<string, any>
 type TopicOwner = {
   assistantId: string
   topic: Topic
+  sortOrder: number
 }
 
 type ConversationSnapshot = {
   assistantId: string
+  sortOrder: number
   topic: Omit<Topic, 'messages'> & { messages: [] }
   messages: Message[]
   blocks: MessageBlock[]
@@ -51,11 +53,13 @@ function getUniqueAssistants(state: Record<string, any>): Assistant[] {
 
 function findTopicOwner(state: Record<string, any>, topicId: string): TopicOwner | null {
   for (const assistant of getUniqueAssistants(state)) {
-    const topic = assistant.topics?.find((candidate) => candidate.id === topicId)
+    const topicIndex = assistant.topics?.findIndex((candidate) => candidate.id === topicId) ?? -1
+    const topic = topicIndex >= 0 ? assistant.topics?.[topicIndex] : undefined
     if (topic) {
       return {
         assistantId: assistant.id,
-        topic
+        topic,
+        sortOrder: topicIndex
       }
     }
   }
@@ -75,6 +79,7 @@ function buildFallbackTopic(topicId: string, messages: Message[]): TopicOwner | 
 
   return {
     assistantId,
+    sortOrder: 0,
     topic: {
       id: topicId,
       assistantId,
@@ -112,9 +117,9 @@ function getTopicTitle(topic: Omit<Topic, 'messages'> & { messages: [] }) {
   return typeof topic.name === 'string' ? topic.name : typeof title === 'string' ? title : undefined
 }
 
-function getTopicSortOrder(topic: Omit<Topic, 'messages'> & { messages: [] }) {
+function getTopicSortOrder(topic: Omit<Topic, 'messages'> & { messages: [] }, fallbackSortOrder = 0) {
   const sortOrder = (topic as Record<string, any>).sortOrder
-  return typeof sortOrder === 'number' ? sortOrder : 0
+  return typeof sortOrder === 'number' ? sortOrder : fallbackSortOrder
 }
 
 function getMirrorMessageId(topicId: string, message: Message, index: number) {
@@ -190,6 +195,16 @@ class StorageV2ConversationMirrorService {
 
     this.latestGetState = getState
     this.scheduleFlush(debounceMs)
+  }
+
+  async flushTopic(topicId: string | undefined, getState: StateGetter) {
+    this.scheduleTopic(topicId, getState, 0)
+    await this.flush()
+  }
+
+  async flushTopics(topicIds: Iterable<string | undefined>, getState: StateGetter) {
+    this.scheduleTopics(topicIds, getState, 0)
+    await this.flush()
   }
 
   async findTopicIdsForBlockIds(blockIds: Iterable<string | undefined>, getState: StateGetter): Promise<Set<string>> {
@@ -387,7 +402,7 @@ class StorageV2ConversationMirrorService {
       title: getTopicTitle(topic),
       pinned: Boolean((topic as Record<string, any>).pinned),
       archived: false,
-      sortOrder: getTopicSortOrder(topic),
+      sortOrder: getTopicSortOrder(topic, conversation.sortOrder),
       createdAt: topic.createdAt,
       updatedAt: topic.updatedAt ?? topic.createdAt,
       messages: conversation.messages,
@@ -416,7 +431,7 @@ class StorageV2ConversationMirrorService {
         title: getTopicTitle(topic),
         pinned: Boolean((topic as Record<string, any>).pinned),
         archived: false,
-        sortOrder: getTopicSortOrder(topic),
+        sortOrder: getTopicSortOrder(topic, conversation.sortOrder),
         createdAt: topic.createdAt,
         updatedAt: topic.updatedAt ?? topic.createdAt
       },
@@ -531,6 +546,7 @@ class StorageV2ConversationMirrorService {
     return {
       conversation: {
         assistantId: owner.assistantId,
+        sortOrder: owner.sortOrder,
         topic: stripTopicMessages(owner.topic),
         messages,
         blocks

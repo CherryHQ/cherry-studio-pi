@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import db from '@renderer/databases'
 import { type AssistantsState, hydrateAssistantsState } from '@renderer/store/assistants'
 import { type BackupState, hydrateBackupState } from '@renderer/store/backup'
 import { type CodeToolsState, hydrateCodeToolsState } from '@renderer/store/codeTools'
@@ -28,6 +29,14 @@ import { getStorageV2CoreSnapshot } from './StorageV2Service'
 
 const logger = loggerService.withContext('StorageV2HydrationService')
 const AUTO_HYDRATE_SETTING_KEY = 'storage_v2.runtime.auto_hydrate'
+const STORAGE_V2_DEXIE_TABLE_NAMES = [
+  'knowledge_notes',
+  'quick_phrases',
+  'translate_history',
+  'translate_languages'
+] as const
+
+type StorageV2DexieTableName = (typeof STORAGE_V2_DEXIE_TABLE_NAMES)[number]
 
 type RuntimeHydrationTarget = {
   dispatch: (
@@ -83,6 +92,8 @@ type StorageV2CoreSnapshot = {
     websearch?: Partial<WebSearchState>
   }
   localStorage?: Partial<StorageV2LocalStorageSnapshot>
+  dexieSettings?: Record<string, unknown>
+  dexieTables?: Partial<Record<StorageV2DexieTableName, Record<string, unknown>>>
   metadata?: {
     includeSecrets?: boolean
     settingCount?: number
@@ -90,6 +101,7 @@ type StorageV2CoreSnapshot = {
     assistantCount?: number
     topicCount?: number
     reduxSliceCount?: number
+    dexieTableRowCount?: number
     missingSecretCount?: number
   }
 }
@@ -121,6 +133,19 @@ function hasMeaningfulSnapshotValue(value: unknown): boolean {
   return true
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function hasSnapshotEntries(value: unknown): boolean {
+  return isRecord(value) && Object.keys(value).length > 0
+}
+
+function hasDexieTableEntries(value: unknown): boolean {
+  if (!isRecord(value)) return false
+  return Object.values(value).some(hasSnapshotEntries)
+}
+
 function hasMeaningfulLocalStorageSnapshot(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const snapshot = value as Partial<StorageV2LocalStorageSnapshot>
@@ -139,8 +164,19 @@ function hasCoreData(snapshot: StorageV2CoreSnapshot): boolean {
     hasMeaningfulSnapshotValue(snapshot.llm) ||
     hasMeaningfulSnapshotValue(snapshot.assistants) ||
     hasMeaningfulSnapshotValue(snapshot.redux) ||
-    hasMeaningfulLocalStorageSnapshot(snapshot.localStorage)
+    hasMeaningfulLocalStorageSnapshot(snapshot.localStorage) ||
+    hasSnapshotEntries(snapshot.dexieSettings) ||
+    hasDexieTableEntries(snapshot.dexieTables)
   )
+}
+
+function getDexieTable(tableName: StorageV2DexieTableName) {
+  return (
+    db as unknown as Record<
+      StorageV2DexieTableName,
+      { put: (row: unknown) => Promise<unknown>; delete: (id: string) => Promise<unknown> }
+    >
+  )[tableName]
 }
 
 async function getRuntimeSnapshot() {
@@ -243,6 +279,45 @@ async function applyRuntimeSnapshot(snapshot: StorageV2CoreSnapshot, target: Run
 
   if (snapshot.localStorage) {
     applyStorageV2LocalStorageSnapshot(snapshot.localStorage)
+  }
+
+  if (snapshot.dexieSettings) {
+    await db.transaction('rw', db.settings, async () => {
+      for (const [id, value] of Object.entries(snapshot.dexieSettings ?? {})) {
+        if (value === null) {
+          await db.settings.delete(id)
+        } else {
+          await db.settings.put({ id, value })
+        }
+      }
+    })
+  }
+
+  if (snapshot.dexieTables) {
+    await db.transaction(
+      'rw',
+      db.knowledge_notes,
+      db.quick_phrases,
+      db.translate_history,
+      db.translate_languages,
+      async () => {
+        for (const tableName of STORAGE_V2_DEXIE_TABLE_NAMES) {
+          const table = getDexieTable(tableName)
+          const rowsById = snapshot.dexieTables?.[tableName] ?? {}
+
+          for (const [id, value] of Object.entries(rowsById)) {
+            if (value === null) {
+              await table.delete(id)
+            } else if (isRecord(value)) {
+              await table.put({
+                ...value,
+                id
+              })
+            }
+          }
+        }
+      }
+    )
   }
 
   await target.flush?.()

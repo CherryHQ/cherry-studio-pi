@@ -25,6 +25,7 @@ import FileManager from '@renderer/services/FileManager'
 import { BlockManager } from '@renderer/services/messageStreaming/BlockManager'
 import { createCallbacks } from '@renderer/services/messageStreaming/callbacks'
 import { endSpan } from '@renderer/services/SpanManagerService'
+import { storageV2ConversationMirrorService } from '@renderer/services/StorageV2ConversationMirrorService'
 import { createStreamProcessor, type StreamProcessorCallbacks } from '@renderer/services/StreamProcessingService'
 import store from '@renderer/store'
 import { updateTopicUpdatedAt } from '@renderer/store/assistants'
@@ -82,6 +83,16 @@ import { newMessagesActions, selectMessagesForTopic } from '../newMessage'
 // } from './messageThunk.v2'
 
 const logger = loggerService.withContext('MessageThunk')
+
+const scheduleStorageV2TopicMirror = (topicId: string) => {
+  if (isAgentSessionTopicId(topicId)) return
+  storageV2ConversationMirrorService.scheduleTopic(topicId, () => store.getState())
+}
+
+const flushStorageV2TopicMirror = async (topicId: string) => {
+  if (isAgentSessionTopicId(topicId)) return
+  await storageV2ConversationMirrorService.flushTopic(topicId, () => store.getState())
+}
 
 const finishTopicLoading = async (topicId: string) => {
   await waitForTopicQueue(topicId)
@@ -692,6 +703,7 @@ const dispatchMultiModelResponses = async (
     const currentEntities = getState().messages.entities
     const messagesToSaveInDB = currentTopicMessageIds.map((id) => currentEntities[id]).filter((m): m is Message => !!m)
     await db.topics.update(topicId, { messages: messagesToSaveInDB })
+    scheduleStorageV2TopicMirror(topicId)
   } else {
     logger.error(`[dispatchMultiModelResponses] Topic ${topicId} not found in DB during multi-model save.`)
     throw new Error(`Topic ${topicId} not found in DB.`)
@@ -1166,6 +1178,7 @@ export const resendMessageThunk =
         }
         const finalMessagesToSave = selectMessagesForTopic(getState(), topicId)
         await db.topics.update(topicId, { messages: finalMessagesToSave })
+        await flushStorageV2TopicMirror(topicId)
       } catch (dbError) {
         logger.error('[resendMessageThunk] Error updating database:', dbError as Error)
       }
@@ -1304,6 +1317,7 @@ export const regenerateAssistantResponseThunk =
           await db.message_blocks.bulkDelete(blockIdsToDelete)
         }
       })
+      await flushStorageV2TopicMirror(topicId)
 
       // 8. Add fetch/process call to the queue
       const queue = getTopicQueue(topicId)
@@ -1393,6 +1407,7 @@ export const initiateTranslationThunk =
         await db.message_blocks.put(newBlock) // Save the initial block
         await db.topics.update(topicId, { messages: finalMessagesToSave }) // Save updated message list
       })
+      scheduleStorageV2TopicMirror(topicId)
       return newBlock.id // Return the ID
     } catch (error) {
       logger.error(`[initiateTranslationThunk] Failed for message ${messageId}:`, error as Error)
@@ -1662,6 +1677,7 @@ export const cloneMessagesToNewTopicThunk =
       if (clonedBlocks.length > 0) {
         dispatch(upsertManyBlocks(clonedBlocks))
       }
+      scheduleStorageV2TopicMirror(newTopic.id)
 
       return true // Indicate success
     } catch (error) {
@@ -1773,6 +1789,7 @@ export const removeBlocksThunk =
         })
       }
 
+      await flushStorageV2TopicMirror(topicId)
       dispatch(updateTopicUpdatedAt({ topicId }))
     } catch (error) {
       logger.error(`[removeBlocksThunk] Failed to remove blocks from message ${messageId}:`, error as Error)

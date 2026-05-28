@@ -5,6 +5,8 @@ import type { Message, MessageBlock } from '@renderer/types/newMessage'
 
 import { storageV2AgentMirrorService } from './StorageV2AgentMirrorService'
 import { storageV2ConversationMirrorService } from './StorageV2ConversationMirrorService'
+import { storageV2DexieSettingsMirrorService } from './StorageV2DexieSettingsMirrorService'
+import { STORAGE_V2_DEXIE_TABLE_NAMES, storageV2DexieTableMirrorService } from './StorageV2DexieTableMirrorService'
 import { storageV2FileMirrorService } from './StorageV2FileMirrorService'
 import { flushStorageV2LocalStorageMirror, getStorageV2LocalStorageSnapshot } from './StorageV2LocalStorageSnapshot'
 import { storageV2MirrorService } from './StorageV2MirrorService'
@@ -262,6 +264,8 @@ function stripAssistantRuntimeData<T extends { topics?: unknown }>(assistant: T)
 export async function getLegacyDexieSnapshotForStorageV2(): Promise<{
   conversations: StorageV2LegacyDexieConversationSnapshot[]
   files: FileMetadata[]
+  settings: Array<{ id: string; value: unknown }>
+  dexieTables: Record<(typeof STORAGE_V2_DEXIE_TABLE_NAMES)[number], Array<{ id: string } & object>>
 }> {
   const conversations: StorageV2LegacyDexieConversationSnapshot[] = []
   const includedTopicIds = new Set<string>()
@@ -320,7 +324,14 @@ export async function getLegacyDexieSnapshotForStorageV2(): Promise<{
 
   return {
     conversations,
-    files: await db.files.toArray()
+    files: await db.files.toArray(),
+    settings: await db.settings.toArray(),
+    dexieTables: {
+      knowledge_notes: await db.knowledge_notes.toArray(),
+      quick_phrases: await db.quick_phrases.toArray(),
+      translate_history: await db.translate_history.toArray(),
+      translate_languages: await db.translate_languages.toArray()
+    }
   }
 }
 
@@ -404,6 +415,18 @@ export function deleteStorageV2Conversation(conversationId: string): Promise<{ d
   return window.api.storageV2.deleteConversation(conversationId)
 }
 
+export function listStorageV2Files(): Promise<FileMetadata[]> {
+  return window.api.storageV2.listFiles()
+}
+
+export function getStorageV2File(fileId: string): Promise<FileMetadata | null> {
+  return window.api.storageV2.getFile(fileId)
+}
+
+export function projectStorageV2FilesToLegacyRuntime(): Promise<unknown> {
+  return window.api.storageV2.projectFilesToLegacyRuntime()
+}
+
 export function upsertStorageV2File(file: FileMetadata): Promise<{ imported: boolean; skippedReason?: string }> {
   return window.api.storageV2.upsertFile(file)
 }
@@ -417,6 +440,8 @@ async function flushStorageV2RuntimeMirrors() {
   await flushStorageV2LocalStorageMirror()
   await storageV2ConversationMirrorService.flush()
   await storageV2FileMirrorService.flush()
+  await storageV2DexieSettingsMirrorService.flush()
+  await storageV2DexieTableMirrorService.flush()
   await storageV2AgentMirrorService.flush()
 }
 
@@ -437,6 +462,8 @@ export async function restoreStorageV2Backup(backupPath: string): Promise<Storag
   storageV2MirrorService.suspendUntilReload()
   storageV2ConversationMirrorService.suspendUntilReload()
   storageV2FileMirrorService.suspendUntilReload()
+  storageV2DexieSettingsMirrorService.suspendUntilReload()
+  storageV2DexieTableMirrorService.suspendUntilReload()
   storageV2AgentMirrorService.suspendUntilReload()
 
   return result

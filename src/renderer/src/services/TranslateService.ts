@@ -19,6 +19,8 @@ import { t } from 'i18next'
 
 import { fetchChatCompletion } from './ApiService'
 import { getDefaultTranslateAssistant } from './AssistantService'
+import { storageV2DexieTableMirrorService } from './StorageV2DexieTableMirrorService'
+import { storageV2DexieTableRecoveryService } from './StorageV2DexieTableRecoveryService'
 
 const logger = loggerService.withContext('TranslateService')
 
@@ -179,7 +181,16 @@ export const updateCustomLanguage = async (
  */
 export const getAllCustomLanguages = async () => {
   try {
-    const languages = await db.translate_languages.toArray()
+    let languages = await db.translate_languages.toArray()
+    if (languages.length === 0) {
+      const restored = await storageV2DexieTableRecoveryService.projectTableIfEmpty(
+        'translate_languages',
+        'custom-translate-languages-empty'
+      )
+      if (restored) {
+        languages = await db.translate_languages.toArray()
+      }
+    }
     return languages
   } catch (e) {
     logger.error('Failed to get all custom languages.', e as Error)
@@ -212,6 +223,10 @@ export const saveTranslateHistory = async (
   await db.translate_history.add(history)
 }
 
+export const recoverTranslateHistoryIfEmpty = async () => {
+  return storageV2DexieTableRecoveryService.projectTableIfEmpty('translate_history', 'translate-history-empty')
+}
+
 /**
  * 更新翻译历史记录
  * @param id - 历史记录ID
@@ -238,7 +253,8 @@ export const updateTranslateHistory = async (id: string, update: Omit<Partial<Tr
  */
 export const deleteHistory = async (id: string) => {
   try {
-    void db.translate_history.delete(id)
+    await db.translate_history.delete(id)
+    storageV2DexieTableMirrorService.scheduleDelete('translate_history', id)
   } catch (e) {
     logger.error('Failed to delete translate history', e as Error)
     throw e
@@ -250,5 +266,10 @@ export const deleteHistory = async (id: string) => {
  * @returns Promise<void>
  */
 export const clearHistory = async () => {
-  void db.translate_history.clear()
+  const histories = await db.translate_history.toArray()
+  await db.translate_history.clear()
+  storageV2DexieTableMirrorService.scheduleDeletes(
+    'translate_history',
+    histories.map((history) => history.id)
+  )
 }

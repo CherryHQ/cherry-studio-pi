@@ -252,7 +252,7 @@ describe('StorageV2BackupService.restoreBackup', () => {
       'Agent legacy runtime projection failed after Storage v2 restore: agents.db locked'
     ])
     expect(result.agentLegacyProjection.warnings).toEqual(result.warnings)
-    expect(result.agentLegacyProjection.agentDbPath).toBe('/mock/userData/Data/agents.db')
+    expect(result.agentLegacyProjection.agentDbPath).toBe(path.join(result.dataRoot, 'agents.db'))
   })
 
   it('returns restore warnings instead of failing when the auto hydrate flag cannot be written', async () => {

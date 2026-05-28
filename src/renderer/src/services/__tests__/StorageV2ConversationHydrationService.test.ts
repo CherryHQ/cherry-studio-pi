@@ -173,13 +173,31 @@ describe('StorageV2ConversationHydrationService', () => {
     })
   })
 
-  it('does not seed Dexie when Storage v2 has no topic messages', async () => {
+  it('treats an existing empty Storage v2 topic as authoritative and seeds an empty Dexie cache', async () => {
+    mocks.listStorageV2Conversations.mockResolvedValue([{ id: 'empty-topic', ownerId: 'assistant-1' }])
     mocks.listStorageV2Messages.mockResolvedValueOnce([])
 
-    await expect(fetchStorageV2TopicMessages('empty-topic')).resolves.toBeNull()
+    await expect(fetchStorageV2TopicMessages('empty-topic')).resolves.toEqual({
+      messages: [],
+      blocks: []
+    })
+
+    expect(mocks.transaction).toHaveBeenCalled()
+    expect(mocks.messageBlocksBulkDelete).toHaveBeenCalledWith(['old-block', 'block-text'])
+    expect(mocks.messageBlocksBulkPut).not.toHaveBeenCalled()
+    expect(mocks.topicsPut).toHaveBeenCalledWith({
+      id: 'empty-topic',
+      messages: []
+    })
+  })
+
+  it('falls back to legacy reads when Storage v2 has neither messages nor a topic row', async () => {
+    mocks.listStorageV2Messages.mockResolvedValueOnce([])
+    mocks.listStorageV2Conversations.mockResolvedValue([])
+
+    await expect(fetchStorageV2TopicMessages('missing-topic')).resolves.toBeNull()
 
     expect(mocks.transaction).not.toHaveBeenCalled()
-    expect(mocks.listStorageV2Conversations).not.toHaveBeenCalled()
   })
 
   it('falls back to legacy reads when Storage v2 auto hydrate status cannot be read', async () => {

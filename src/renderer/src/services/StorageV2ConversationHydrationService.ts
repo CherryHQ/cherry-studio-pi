@@ -167,9 +167,9 @@ function toMessage(topicId: string, assistantId: string, message: StorageV2Store
   } as Message
 }
 
-async function getConversationOwnerId(topicId: string) {
+async function getStorageV2Conversation(topicId: string) {
   const conversations = (await listStorageV2Conversations({ ownerType: 'assistant' })) as StorageV2StoredConversation[]
-  return conversations.find((conversation) => conversation.id === topicId)?.ownerId ?? ''
+  return conversations.find((conversation) => conversation.id === topicId) ?? null
 }
 
 async function seedDexieTopic(topicId: string, messages: Message[], blocks: MessageBlock[]) {
@@ -224,10 +224,7 @@ export async function shouldPreferStorageV2ConversationReads(): Promise<boolean>
 
 export async function storageV2TopicExists(topicId: string): Promise<boolean> {
   try {
-    const conversations = (await listStorageV2Conversations({
-      ownerType: 'assistant'
-    })) as StorageV2StoredConversation[]
-    return conversations.some((conversation) => conversation.id === topicId)
+    return Boolean(await getStorageV2Conversation(topicId))
   } catch (error) {
     logger.warn('Failed to check Storage v2 topic existence', error as Error)
     return false
@@ -245,9 +242,21 @@ export async function fetchStorageV2TopicMessages(
 } | null> {
   try {
     const storedMessages = await listAllStorageV2Messages(topicId)
-    if (storedMessages.length === 0) return null
+    const conversation = await getStorageV2Conversation(topicId)
+    if (!conversation) return null
 
-    const assistantId = await getConversationOwnerId(topicId)
+    if (storedMessages.length === 0) {
+      if (options.seedDexie !== false) {
+        await seedDexieTopic(topicId, [], [])
+      }
+
+      return {
+        messages: [],
+        blocks: []
+      }
+    }
+
+    const assistantId = conversation.ownerId ?? ''
     const blocks = await normalizeBlocksForRuntime(
       storedMessages.flatMap((message) => message.blocks.map(toMessageBlock))
     )

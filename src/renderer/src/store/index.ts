@@ -23,6 +23,8 @@ import storage from 'redux-persist/lib/storage'
 
 import { storageV2AgentMirrorService } from '../services/StorageV2AgentMirrorService'
 import { storageV2ConversationMirrorService } from '../services/StorageV2ConversationMirrorService'
+import { storageV2DexieSettingsMirrorService } from '../services/StorageV2DexieSettingsMirrorService'
+import { storageV2DexieTableMirrorService } from '../services/StorageV2DexieTableMirrorService'
 import { storageV2FileMirrorService } from '../services/StorageV2FileMirrorService'
 import { maybeHydrateRuntimeCacheFromStorageV2 } from '../services/StorageV2HydrationService'
 import { flushStorageV2LocalStorageMirror } from '../services/StorageV2LocalStorageSnapshot'
@@ -131,6 +133,8 @@ export type RootState = ReturnType<typeof rootReducer>
 export type AppDispatch = typeof store.dispatch
 
 storageV2MirrorService.pauseRuntimeMirroring()
+storageV2DexieSettingsMirrorService.install()
+storageV2DexieTableMirrorService.install()
 
 export const persistor = persistStore(store, undefined, () => {
   // Initialize notes path after rehydration if empty
@@ -182,6 +186,8 @@ export async function handleSaveData() {
   await flushStorageV2LocalStorageMirror()
   await storageV2ConversationMirrorService.flush()
   await storageV2FileMirrorService.flush()
+  await storageV2DexieSettingsMirrorService.flush()
+  await storageV2DexieTableMirrorService.flush()
   await storageV2AgentMirrorService.flush()
   logger.info('Flushed redux persistor data')
 }

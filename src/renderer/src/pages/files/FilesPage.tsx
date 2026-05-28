@@ -3,10 +3,10 @@ import { loggerService } from '@logger'
 import { Navbar, NavbarCenter } from '@renderer/components/app/Navbar'
 import { DeleteIcon, EditIcon } from '@renderer/components/Icons'
 import ListItem from '@renderer/components/ListItem'
-import db from '@renderer/databases'
 import { getFileFieldLabel } from '@renderer/i18n/label'
 import { handleDelete, handleRename, sortFiles, tempFilesSort } from '@renderer/services/FileAction'
 import FileManager from '@renderer/services/FileManager'
+import { storageV2FileRecoveryService } from '@renderer/services/StorageV2FileRecoveryService'
 import store from '@renderer/store'
 import type { FileMetadata, FileType } from '@renderer/types'
 import { FILE_TYPE } from '@renderer/types'
@@ -46,10 +46,7 @@ const FilesPage: FC = () => {
   }, [fileType])
 
   const files = useLiveQuery<FileMetadata[]>(async () => {
-    if (fileType === 'all') {
-      return db.files.orderBy('count').toArray().then(tempFilesSort)
-    }
-    return db.files.where('type').equals(fileType).sortBy('count').then(tempFilesSort)
+    return storageV2FileRecoveryService.listFilesWithFallback(fileType, 'files-page-empty').then(tempFilesSort)
   }, [fileType])
 
   const sortedFiles = files ? sortFiles(files, sortField, sortOrder) : []

@@ -7,7 +7,7 @@ import { loggerService } from '@logger'
 import { HOME_CHERRY_DIR } from '@shared/config/constant'
 import { app } from 'electron'
 
-import { getDataPath } from '../../utils'
+import { getDefaultDataPath } from '../../utils'
 import type { StorageV2Candidate, StorageV2DataRootInfo, StorageV2Manifest } from './types'
 
 const logger = loggerService.withContext('StorageV2DataRootService')
@@ -129,7 +129,7 @@ export class StorageV2DataRootService {
       makeCandidate(configuredRoot, 'config', candidatesByPath)
     }
 
-    makeCandidate(getDataPath(), 'current-user-data', candidatesByPath)
+    makeCandidate(getDefaultDataPath(), 'current-user-data', candidatesByPath)
 
     for (const legacyRoot of getLegacyDataRoots()) {
       makeCandidate(legacyRoot, 'legacy-user-data', candidatesByPath)

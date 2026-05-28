@@ -4,7 +4,7 @@ import { app } from 'electron'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  getDataPath: vi.fn(),
+  getDefaultDataPath: vi.fn(),
   fs: {
     existsSync: vi.fn(),
     readFileSync: vi.fn(),
@@ -20,7 +20,7 @@ vi.mock('node:fs', () => ({
 }))
 
 vi.mock('../../../utils', () => ({
-  getDataPath: mocks.getDataPath
+  getDefaultDataPath: mocks.getDefaultDataPath
 }))
 
 const manifest = {
@@ -42,7 +42,7 @@ describe('StorageV2DataRootService', () => {
     vi.resetModules()
     vi.clearAllMocks()
     delete process.env.CHERRY_STUDIO_STORAGE_V2_ROOT
-    mocks.getDataPath.mockReturnValue('/mock/appData/Cherry Studio Pi/Data')
+    mocks.getDefaultDataPath.mockReturnValue('/mock/appData/Cherry Studio Pi/Data')
     vi.mocked(app.getPath).mockImplementation((key: string) => {
       if (key === 'appData') return '/mock/appData'
       if (key === 'userData') return '/mock/appData/Cherry Studio Pi'

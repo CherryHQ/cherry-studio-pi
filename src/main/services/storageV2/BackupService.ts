@@ -114,9 +114,17 @@ function createProjectionWarning(label: string, error: unknown) {
   return `${label} legacy runtime projection failed after Storage v2 restore: ${errorMessage(error)}`
 }
 
+function getRuntimeDataPath(subPath?: string) {
+  const dataRoot =
+    typeof storageV2DataRootService.resolveDataRoot === 'function'
+      ? storageV2DataRootService.resolveDataRoot().dataRoot
+      : storageV2DataRootService.ensureDataRoot().dataRoot
+  return subPath ? path.join(dataRoot, subPath) : dataRoot
+}
+
 function failedAgentProjectionReport(warning: string): StorageV2AgentLegacyProjectionReport {
   return {
-    agentDbPath: path.join(app.getPath('userData'), 'Data', 'agents.db'),
+    agentDbPath: getRuntimeDataPath('agents.db'),
     archivedFiles: [],
     projectedAgentCount: 0,
     projectedPlaceholderAgentCount: 0,
@@ -142,7 +150,7 @@ function failedAgentProjectionReport(warning: string): StorageV2AgentLegacyProje
 
 function failedFileProjectionReport(warning: string): StorageV2FileLegacyProjectionReport {
   return {
-    filesDir: path.join(app.getPath('userData'), 'Data', 'Files'),
+    filesDir: getRuntimeDataPath('Files'),
     projectedFileCount: 0,
     archivedFileCount: 0,
     skippedFileCount: 0,
@@ -154,7 +162,7 @@ function failedFileProjectionReport(warning: string): StorageV2FileLegacyProject
 
 function failedAppDataProjectionReport(warning: string): StorageV2AppDataLegacyProjectionReport {
   return {
-    appDbPath: path.join(app.getPath('userData'), 'Data', 'app.db'),
+    appDbPath: getRuntimeDataPath('app.db'),
     archivedFiles: [],
     projectedRecordCount: 0,
     projectedCacheCount: 0,

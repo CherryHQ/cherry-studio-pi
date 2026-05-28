@@ -4,6 +4,7 @@ import i18n from '@renderer/i18n'
 import { fetchMessagesSummary } from '@renderer/services/ApiService'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import { safeDeleteFiles } from '@renderer/services/MessagesService'
+import { storageV2ConversationMirrorService } from '@renderer/services/StorageV2ConversationMirrorService'
 import store from '@renderer/store'
 import { updateTopic } from '@renderer/store/assistants'
 import { setNewlyRenamedTopics, setRenamingTopics } from '@renderer/store/runtime'
@@ -140,6 +141,7 @@ export const autoRenameTopic = async (assistant: Assistant, topicId: string) => 
         _setActiveTopic(data)
       }
       store.dispatch(updateTopic({ assistantId: assistant.id, topic: data }))
+      storageV2ConversationMirrorService.scheduleTopic(topicId, () => store.getState())
     }
 
     const getFirstMessageName = () => {
@@ -266,5 +268,7 @@ export const TopicManager = {
     if (filesToDelete.length > 0) {
       await safeDeleteFiles(filesToDelete)
     }
+
+    await storageV2ConversationMirrorService.flushTopic(id, () => store.getState())
   }
 }

@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url'
 import { type Client, createClient } from '@libsql/client'
 import { loggerService } from '@logger'
 import { storageV2AppDataKvMirrorService } from '@main/services/storageV2/AppDataKvMirrorService'
-import { app } from 'electron'
+import { getDataPath } from '@main/utils'
 
 const logger = loggerService.withContext('AppDataDatabase')
 
@@ -151,7 +151,7 @@ export class AppDataDatabase {
   }
 
   private get dbPath() {
-    return path.join(app.getPath('userData'), 'Data', DB_NAME)
+    return path.join(getDataPath(), DB_NAME)
   }
 
   private async initialize() {
@@ -557,7 +557,7 @@ export class AppDataDatabase {
   ): Promise<InstalledHtmlArtifactShortcut> {
     const id = randomUUID()
     const safeName = `${(input.title || 'HTML Artifact').replace(/[\\/:*?"<>|]+/g, '-').slice(0, 80)}-${id.slice(0, 8)}.html`
-    const dir = path.join(app.getPath('userData'), 'Data', 'Workbench')
+    const dir = getDataPath('Workbench')
     const filePath = path.join(dir, safeName)
 
     await fs.promises.mkdir(dir, { recursive: true })

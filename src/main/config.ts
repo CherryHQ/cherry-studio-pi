@@ -1,15 +1,11 @@
 import { isDev, isWin } from '@main/constant'
 import { app } from 'electron'
 
-import { getDataPath } from './utils'
-
 if (process.env.CHERRY_STUDIO_USER_DATA_DIR) {
   app.setPath('userData', process.env.CHERRY_STUDIO_USER_DATA_DIR)
 } else if (isDev) {
   app.setPath('userData', app.getPath('userData') + 'Dev')
 }
-
-export const DATA_PATH = getDataPath()
 
 export const titleBarOverlayDark = {
   height: 42,

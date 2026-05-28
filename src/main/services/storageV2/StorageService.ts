@@ -3,6 +3,7 @@ import type { Assistant, Provider } from '@types'
 import { storageV2AgentDbMirrorService } from './AgentDbMirrorService'
 import { storageV2BackupService } from './BackupService'
 import { storageV2DataRootService } from './DataRootService'
+import { storageV2FileLegacyProjectionService } from './FileLegacyProjectionService'
 import { storageV2LegacyAgentDbImportService } from './LegacyAgentDbImportService'
 import { storageV2LegacyAppDbImportService } from './LegacyAppDbImportService'
 import { type StorageV2LegacyDexieImportOptions, storageV2LegacyDexieImportService } from './LegacyDexieImportService'
@@ -410,6 +411,13 @@ async function restoreCopilotStateSecrets(
   }
 }
 
+const DEXIE_AUXILIARY_TABLE_NAMES = [
+  'knowledge_notes',
+  'quick_phrases',
+  'translate_history',
+  'translate_languages'
+] as const
+
 function assignSettingRecord(
   target: {
     settings: Record<string, unknown>
@@ -417,6 +425,8 @@ function assignSettingRecord(
     assistants: Record<string, unknown>
     redux: Record<string, unknown>
     localStorage: Record<string, unknown>
+    dexieSettings: Record<string, unknown>
+    dexieTables: Record<string, Record<string, unknown>>
   },
   key: string,
   value: unknown
@@ -443,6 +453,22 @@ function assignSettingRecord(
 
   if (key.startsWith('localStorage.')) {
     target.localStorage[key.slice('localStorage.'.length)] = value
+    return
+  }
+
+  if (key.startsWith('dexie.settings.')) {
+    target.dexieSettings[key.slice('dexie.settings.'.length)] = value
+    return
+  }
+
+  for (const tableName of DEXIE_AUXILIARY_TABLE_NAMES) {
+    const prefix = `dexie.table.${tableName}.`
+    if (key.startsWith(prefix)) {
+      const rowId = key.slice(prefix.length)
+      target.dexieTables[tableName] = target.dexieTables[tableName] ?? {}
+      target.dexieTables[tableName][rowId] = value
+      return
+    }
   }
 }
 
@@ -502,7 +528,9 @@ export class StorageV2Service {
       llm: {} as Record<string, unknown>,
       assistants: {} as Record<string, unknown>,
       redux: {} as Record<string, unknown>,
-      localStorage: {} as Record<string, unknown>
+      localStorage: {} as Record<string, unknown>,
+      dexieSettings: {} as Record<string, unknown>,
+      dexieTables: {} as Record<string, Record<string, unknown>>
     }
     const includeSecrets = options.includeSecrets === true
     const credentialRefsByProvider = includeSecrets
@@ -702,6 +730,8 @@ export class StorageV2Service {
       assistants: state.assistants,
       redux: state.redux,
       localStorage: state.localStorage,
+      dexieSettings: state.dexieSettings,
+      dexieTables: state.dexieTables,
       metadata: {
         includeSecrets,
         settingCount: settingsRecords.length,
@@ -709,6 +739,10 @@ export class StorageV2Service {
         assistantCount: assistants.length,
         topicCount: conversations.length,
         reduxSliceCount: Object.keys(state.redux).length,
+        dexieTableRowCount: Object.values(state.dexieTables).reduce(
+          (count, rowsById) => count + Object.keys(rowsById).length,
+          0
+        ),
         missingSecretCount
       }
     }
@@ -785,6 +819,18 @@ export class StorageV2Service {
 
   async deleteConversation(conversationId: string) {
     return storageV2ConversationRepository.delete(conversationId)
+  }
+
+  async listFiles() {
+    return storageV2FileRepository.list()
+  }
+
+  async getFile(fileId: string) {
+    return storageV2FileRepository.get(fileId)
+  }
+
+  async projectFilesToLegacyRuntime() {
+    return storageV2FileLegacyProjectionService.projectToLegacyRuntime()
   }
 
   async upsertFile(file: Record<string, any>) {

@@ -10,6 +10,7 @@ import useTranslate from '@renderer/hooks/useTranslate'
 import MessageContent from '@renderer/pages/home/Messages/MessageContent'
 import { getDefaultTopic, getDefaultTranslateAssistant } from '@renderer/services/AssistantService'
 import { pauseTrace } from '@renderer/services/SpanManagerService'
+import { storageV2DexieSettingsRecoveryService } from '@renderer/services/StorageV2DexieSettingsRecoveryService'
 import type { Assistant, Topic, TranslateLanguage, TranslateLanguageCode } from '@renderer/types'
 import { AssistantMessageStatus } from '@renderer/types/newMessage'
 import type { ActionItem } from '@renderer/types/selectionTypes'
@@ -73,7 +74,10 @@ const ActionTranslate: FC<Props> = ({ action, scrollToBottom }) => {
       return
     }
 
-    const biDirectionLangPair = await db.settings.get({ id: 'translate:bidirectional:pair' })
+    const biDirectionLangPair = await storageV2DexieSettingsRecoveryService.getSetting<string[]>(
+      'translate:bidirectional:pair',
+      'selection-translate-bidirectional-pair-missing'
+    )
 
     if (biDirectionLangPair && biDirectionLangPair.value[0]) {
       const targetLang = getLanguageByLangcode(biDirectionLangPair.value[0])

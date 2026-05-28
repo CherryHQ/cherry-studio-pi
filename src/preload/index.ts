@@ -300,6 +300,9 @@ const api = {
     ) => ipcRenderer.invoke(IpcChannel.StorageV2_MessageBlocksUpsert, messageId, blocks, options),
     deleteConversation: (conversationId: string) =>
       ipcRenderer.invoke(IpcChannel.StorageV2_ConversationDelete, conversationId),
+    listFiles: () => ipcRenderer.invoke(IpcChannel.StorageV2_FilesList),
+    getFile: (fileId: string) => ipcRenderer.invoke(IpcChannel.StorageV2_FileGet, fileId),
+    projectFilesToLegacyRuntime: () => ipcRenderer.invoke(IpcChannel.StorageV2_FilesProjectLegacy),
     upsertFile: (file: unknown) => ipcRenderer.invoke(IpcChannel.StorageV2_FileUpsert, file),
     deleteFile: (fileId: string) => ipcRenderer.invoke(IpcChannel.StorageV2_FileDelete, fileId),
     importLegacyReduxSnapshot: (snapshot: unknown, options?: { dryRun?: boolean }) =>
