@@ -647,24 +647,7 @@ export class MemoryService {
     }
 
     try {
-      // Get count of memories to be deleted
-      const countResult = await this.db.execute({
-        sql: MemoryQueries.users.countMemoriesForUser,
-        args: [userId]
-      })
-      const totalCount = (countResult.rows[0] as any).total as number
-
-      // Delete history entries for this user's memories
-      await this.db.execute({
-        sql: MemoryQueries.users.deleteHistoryForUser,
-        args: [userId]
-      })
-
-      // Hard delete all memories for this user
-      await this.db.execute({
-        sql: MemoryQueries.users.deleteAllMemoriesForUser,
-        args: [userId]
-      })
+      const totalCount = await this.softDeleteMemoriesForUser(userId)
 
       logger.debug(`Reset all memories for user ${userId} (${totalCount} memories deleted)`)
     } catch (error) {
@@ -674,7 +657,7 @@ export class MemoryService {
   }
 
   /**
-   * Delete a user and all their memories (hard delete)
+   * Delete a user and all their memories (soft delete)
    */
   public async deleteUser(userId: string): Promise<void> {
     await this.init()
@@ -689,24 +672,7 @@ export class MemoryService {
     }
 
     try {
-      // Get count of memories to be deleted
-      const countResult = await this.db.execute({
-        sql: `SELECT COUNT(*) as total FROM memories WHERE user_id = ?`,
-        args: [userId]
-      })
-      const totalCount = (countResult.rows[0] as any).total as number
-
-      // Delete history entries for this user's memories
-      await this.db.execute({
-        sql: `DELETE FROM memory_history WHERE memory_id IN (SELECT id FROM memories WHERE user_id = ?)`,
-        args: [userId]
-      })
-
-      // Delete all memories for this user (hard delete)
-      await this.db.execute({
-        sql: `DELETE FROM memories WHERE user_id = ?`,
-        args: [userId]
-      })
+      const totalCount = await this.softDeleteMemoriesForUser(userId)
 
       logger.debug(`Deleted user ${userId} and ${totalCount} memories`)
     } catch (error) {
@@ -887,6 +853,37 @@ export class MemoryService {
   }
 
   // ========== HELPER METHODS ==========
+
+  private async softDeleteMemoriesForUser(userId: string): Promise<number> {
+    if (!this.db) throw new Error('Database not initialized')
+
+    await this.db.execute('BEGIN IMMEDIATE')
+
+    try {
+      const activeMemories = await this.db.execute({
+        sql: MemoryQueries.users.listActiveMemoriesForUser,
+        args: [userId]
+      })
+      const now = new Date().toISOString()
+
+      await this.db.execute({
+        sql: MemoryQueries.users.softDeleteAllMemoriesForUser,
+        args: [now, userId]
+      })
+
+      for (const row of activeMemories.rows) {
+        const id = String((row as any).id)
+        const memory = String((row as any).memory)
+        await this.addHistory(id, memory, null, 'DELETE')
+      }
+
+      await this.db.execute('COMMIT')
+      return activeMemories.rows.length
+    } catch (error) {
+      await this.db.execute('ROLLBACK').catch(() => {})
+      throw error
+    }
+  }
 
   /**
    * Add entry to memory history

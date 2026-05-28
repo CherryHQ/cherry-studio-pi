@@ -136,4 +136,72 @@ describe('MemoryService migration', () => {
       intMode: 'number'
     })
   })
+
+  it('soft deletes all memories for a user and keeps delete history', async () => {
+    mocks.client.execute.mockImplementation(async (input: string | { sql: string; args?: unknown[] }) => {
+      const sql = typeof input === 'string' ? input : input.sql
+      if (sql.includes('SELECT id, memory FROM memories WHERE user_id')) {
+        return {
+          rows: [
+            { id: 'memory-1', memory: 'First memory' },
+            { id: 'memory-2', memory: 'Second memory' }
+          ],
+          columns: [],
+          columnTypes: []
+        }
+      }
+      return { rows: [], columns: [], columnTypes: [] }
+    })
+
+    await MemoryService.reload().deleteAllMemoriesForUser('user-1')
+
+    const calls = mocks.client.execute.mock.calls.map(([input]) => (typeof input === 'string' ? input : input.sql))
+    expect(calls).toContain('BEGIN IMMEDIATE')
+    expect(calls).toContain('COMMIT')
+    expect(calls.some((sql) => sql.includes('DELETE FROM memories'))).toBe(false)
+    expect(calls.some((sql) => sql.includes('DELETE FROM memory_history'))).toBe(false)
+    expect(mocks.client.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sql: expect.stringContaining('UPDATE memories SET is_deleted = 1'),
+        args: [expect.any(String), 'user-1']
+      })
+    )
+    expect(mocks.client.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sql: expect.stringContaining('INSERT INTO memory_history'),
+        args: ['memory-1', 'First memory', null, 'DELETE', expect.any(String), expect.any(String)]
+      })
+    )
+    expect(mocks.client.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sql: expect.stringContaining('INSERT INTO memory_history'),
+        args: ['memory-2', 'Second memory', null, 'DELETE', expect.any(String), expect.any(String)]
+      })
+    )
+  })
+
+  it('soft deletes non-default user memories instead of hard deleting rows', async () => {
+    mocks.client.execute.mockImplementation(async (input: string | { sql: string; args?: unknown[] }) => {
+      const sql = typeof input === 'string' ? input : input.sql
+      if (sql.includes('SELECT id, memory FROM memories WHERE user_id')) {
+        return {
+          rows: [{ id: 'memory-1', memory: 'User memory' }],
+          columns: [],
+          columnTypes: []
+        }
+      }
+      return { rows: [], columns: [], columnTypes: [] }
+    })
+
+    await MemoryService.reload().deleteUser('user-2')
+
+    const calls = mocks.client.execute.mock.calls.map(([input]) => (typeof input === 'string' ? input : input.sql))
+    expect(calls.some((sql) => sql.includes('DELETE FROM memories'))).toBe(false)
+    expect(mocks.client.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sql: expect.stringContaining('UPDATE memories SET is_deleted = 1'),
+        args: [expect.any(String), 'user-2']
+      })
+    )
+  })
 })

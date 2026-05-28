@@ -155,10 +155,9 @@ export const MemoryQueries = {
       ORDER BY last_memory_date DESC
     `,
 
-    countMemoriesForUser: 'SELECT COUNT(*) as total FROM memories WHERE user_id = ?',
+    listActiveMemoriesForUser: 'SELECT id, memory FROM memories WHERE user_id = ? AND is_deleted = 0',
 
-    deleteAllMemoriesForUser: 'DELETE FROM memories WHERE user_id = ?',
-
-    deleteHistoryForUser: 'DELETE FROM memory_history WHERE memory_id IN (SELECT id FROM memories WHERE user_id = ?)'
+    softDeleteAllMemoriesForUser:
+      'UPDATE memories SET is_deleted = 1, updated_at = ? WHERE user_id = ? AND is_deleted = 0'
   }
 } as const
