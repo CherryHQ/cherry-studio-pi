@@ -117,6 +117,34 @@ describe('FileManager', () => {
     expect(mocks.localFileDelete).toHaveBeenCalledWith('file-1.txt')
   })
 
+  it('rejects batch deletion when any Storage v2 file tombstone fails', async () => {
+    mocks.filesGet.mockImplementation(async (id: string) => ({
+      id,
+      ext: '.txt',
+      count: 1,
+      origin_name: `${id}.txt`
+    }))
+    mocks.storageV2DeleteFile.mockImplementation(async (id: string) => {
+      if (id === 'file-2') {
+        throw new Error('storage unavailable')
+      }
+      return { deleted: true }
+    })
+    mocks.filesDelete.mockResolvedValue(undefined)
+    mocks.localFileDelete.mockResolvedValue(undefined)
+
+    const { default: FileManager } = await import('../FileManager')
+
+    await expect(FileManager.deleteFiles([{ id: 'file-1' }, { id: 'file-2' }] as any)).rejects.toThrow(
+      'Failed to delete 1 file(s)'
+    )
+
+    expect(mocks.storageV2DeleteFile).toHaveBeenCalledWith('file-1')
+    expect(mocks.storageV2DeleteFile).toHaveBeenCalledWith('file-2')
+    expect(mocks.filesDelete).toHaveBeenCalledWith('file-1')
+    expect(mocks.filesDelete).not.toHaveBeenCalledWith('file-2')
+  })
+
   it('queues file metadata for retry when the direct Storage v2 mirror fails', async () => {
     const file = {
       id: 'file-2',

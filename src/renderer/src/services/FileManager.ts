@@ -181,6 +181,7 @@ class FileManager {
     const failed = results.filter((r) => r.status === 'rejected')
     if (failed.length > 0) {
       logger.warn(`File deletions completed with ${failed.length} files failed to delete:`, failed)
+      throw new Error(`Failed to delete ${failed.length} file(s)`)
     }
   }
 

@@ -175,16 +175,10 @@ export const useKnowledge = (baseId: string) => {
 
     if (isKnowledgeFileItem(item) && typeof item.content === 'object' && !Array.isArray(item.content)) {
       const file = item.content
-      // name: eg. text.pdf
-      await window.api.file.delete(file.name).catch((error) => {
-        logger.warn(`Failed to delete knowledge item file ${file.name}`, error as Error)
-      })
+      await FileManager.deleteFile(file.id)
     } else if (isKnowledgeVideoItem(item)) {
-      // video item has srt and video files
       const files = item.content
-      const deletePromises = files.map((file) => window.api.file.delete(file.name))
-
-      await Promise.allSettled(deletePromises)
+      await FileManager.deleteFiles(files)
     }
 
     dispatch(removeItemAction({ baseId, item }))
@@ -200,23 +194,6 @@ export const useKnowledge = (baseId: string) => {
 
     if (!base || !item?.uniqueId || !item?.uniqueIds) {
       return
-    }
-    if (base && item.uniqueId && item.uniqueIds) {
-      await window.api.knowledgeBase.remove({
-        uniqueId: item.uniqueId,
-        uniqueIds: item.uniqueIds,
-        base: getKnowledgeBaseParams(base)
-      })
-      await updateItem({
-        ...item,
-        processingStatus: 'pending',
-        processingProgress: 0,
-        processingError: '',
-        uniqueId: undefined,
-        retryCount: 0,
-        updated_at: Date.now()
-      })
-      checkAllBases()
     }
 
     const removalParams = {
@@ -236,7 +213,7 @@ export const useKnowledge = (baseId: string) => {
       retryCount: 0,
       updated_at: Date.now()
     })
-    setTimeout(() => KnowledgeQueue.checkAllBases(), 0)
+    checkAllBases()
   }
 
   // 更新处理状态
