@@ -1,6 +1,9 @@
 import { loggerService } from '@logger'
 import { nanoid } from '@reduxjs/toolkit'
-import { scheduleStorageV2LocalStorageMirror } from '@renderer/services/StorageV2LocalStorageSnapshot'
+import {
+  flushStorageV2LocalStorageMirrorStrict,
+  scheduleStorageV2LocalStorageMirror
+} from '@renderer/services/StorageV2LocalStorageSnapshot'
 import type { MCPServer } from '@renderer/types'
 import i18next from 'i18next'
 
@@ -19,9 +22,10 @@ export const getAI302Token = (): string | null => {
   return localStorage.getItem(TOKEN_STORAGE_KEY)
 }
 
-export const clearAI302Token = (): void => {
+export const clearAI302Token = async (): Promise<void> => {
   localStorage.removeItem(TOKEN_STORAGE_KEY)
   scheduleStorageV2LocalStorageMirror()
+  await flushStorageV2LocalStorageMirrorStrict()
 }
 
 export const hasAI302Token = (): boolean => {
@@ -52,7 +56,7 @@ export const syncAi302Servers = async (token: string, existingServers: MCPServer
 
     // Handle authentication errors
     if (response.status === 401 || response.status === 403) {
-      clearAI302Token()
+      await clearAI302Token()
       return {
         success: false,
         message: t('settings.mcp.sync.unauthorized', 'Sync Unauthorized'),

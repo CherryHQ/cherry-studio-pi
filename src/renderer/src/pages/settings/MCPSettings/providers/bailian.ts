@@ -1,6 +1,9 @@
 import { loggerService } from '@logger'
 import { nanoid } from '@reduxjs/toolkit'
-import { scheduleStorageV2LocalStorageMirror } from '@renderer/services/StorageV2LocalStorageSnapshot'
+import {
+  flushStorageV2LocalStorageMirrorStrict,
+  scheduleStorageV2LocalStorageMirror
+} from '@renderer/services/StorageV2LocalStorageSnapshot'
 import type { MCPServer } from '@renderer/types'
 import i18next from 'i18next'
 
@@ -21,9 +24,10 @@ export const getBailianToken = (): string | null => {
   return token
 }
 
-export const clearBailianToken = (): void => {
+export const clearBailianToken = async (): Promise<void> => {
   localStorage.removeItem(TOKEN_STORAGE_KEY)
   scheduleStorageV2LocalStorageMirror()
+  await flushStorageV2LocalStorageMirrorStrict()
 }
 
 export const hasBailianToken = (): boolean => {
@@ -176,7 +180,7 @@ export const syncBailianServers = async (token: string, existingServers: MCPServ
     let errorDetails: string | undefined = undefined
 
     if (error instanceof Error && error.message === 'unauthorized') {
-      clearBailianToken()
+      await clearBailianToken()
       message = t('settings.mcp.sync.unauthorized', 'Sync Unauthorized')
       logger.error('Unauthorized access during sync')
       return {

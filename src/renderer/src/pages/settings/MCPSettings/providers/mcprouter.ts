@@ -1,6 +1,9 @@
 import { loggerService } from '@logger'
 import { nanoid } from '@reduxjs/toolkit'
-import { scheduleStorageV2LocalStorageMirror } from '@renderer/services/StorageV2LocalStorageSnapshot'
+import {
+  flushStorageV2LocalStorageMirrorStrict,
+  scheduleStorageV2LocalStorageMirror
+} from '@renderer/services/StorageV2LocalStorageSnapshot'
 import type { MCPServer } from '@renderer/types'
 import i18next from 'i18next'
 
@@ -19,9 +22,10 @@ export const getMCPRouterToken = (): string | null => {
   return localStorage.getItem(TOKEN_STORAGE_KEY)
 }
 
-export const clearMCPRouterToken = (): void => {
+export const clearMCPRouterToken = async (): Promise<void> => {
   localStorage.removeItem(TOKEN_STORAGE_KEY)
   scheduleStorageV2LocalStorageMirror()
+  await flushStorageV2LocalStorageMirrorStrict()
 }
 
 export const hasMCPRouterToken = (): boolean => {
@@ -71,7 +75,7 @@ export const syncMCPRouterServers = async (
 
     // Handle authentication errors
     if (response.status === 401 || response.status === 403) {
-      clearMCPRouterToken()
+      await clearMCPRouterToken()
       return {
         success: false,
         message: t('settings.mcp.sync.unauthorized', 'Sync Unauthorized'),
