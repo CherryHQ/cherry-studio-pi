@@ -34,6 +34,7 @@ import selectionService from './SelectionService'
 import { storageV2DataRootService } from './storageV2/DataRootService'
 import { storageV2SecretVaultService } from './storageV2/SecretVaultService'
 import { storageV2Database } from './storageV2/StorageV2Database'
+import { storageV2SettingsRepository } from './storageV2/StorageV2Repositories'
 import WebDav from './WebDav'
 import { windowService } from './WindowService'
 
@@ -635,6 +636,7 @@ class BackupManager {
       const dataSource = path.join(this.tempDir, 'Data')
       const dataExists = await fs.pathExists(dataSource)
       const dataFiles = dataExists ? await fs.readdir(dataSource) : []
+      let stagedDataRestore = false
 
       if (dataExists && dataFiles.length > 0) {
         logger.debug('[restoreDirect] Staging Data directory...')
@@ -649,8 +651,13 @@ class BackupManager {
           this.createCopyProgressHandler(totalSize, 65, 95, 'restoring_data', onProgress),
           { dereferenceSymlinks: false }
         )
+        stagedDataRestore = true
       } else {
         logger.debug('[restoreDirect] No Data directory to restore')
+      }
+
+      if (!stagedDataRestore) {
+        await this.disableStorageV2AutoHydrateAfterRuntimeOnlyRestore()
       }
 
       // Clean up
@@ -671,6 +678,22 @@ class BackupManager {
         fs.remove(dataDest).catch(() => {})
       ])
       throw error
+    }
+  }
+
+  private async disableStorageV2AutoHydrateAfterRuntimeOnlyRestore(): Promise<void> {
+    try {
+      await storageV2SettingsRepository.set(
+        'storage_v2.runtime.auto_hydrate',
+        {
+          enabled: false,
+          reason: 'direct-backup-runtime-only-restore',
+          updatedAt: new Date().toISOString()
+        },
+        'storage-v2'
+      )
+    } catch (error) {
+      logger.warn('Failed to disable Storage v2 auto hydrate after runtime-only direct restore', error as Error)
     }
   }
 

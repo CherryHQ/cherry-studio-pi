@@ -788,6 +788,7 @@ files.upsert(file)
 - 旧版 `userData/memories.db` 迁入稳定 `Data/Memory/memories.db` 时，如果目标库已存在，会把旧库及 `-wal` / `-shm` sidecar 归档到 `Data/Memory/legacy/pre-storage-v2-memory-*`，不会覆盖当前活跃 memory 数据；跨磁盘移动失败时会回退到 copy + unlink。MemoryService 初始化前也会主动执行一次该安全迁移，避免只依赖历史 Redux migration 导致旧记忆库留在旧 userData。
 - 旧的本地 / WebDAV / S3 / 坚果云 / 局域网备份入口仍然保留，但在复制 `IndexedDB` / `Local Storage` / `Data` 或生成旧版 `data.json` 前会先执行 `handleSaveData()`，确保 Redux、普通聊天、文件、Dexie settings、Dexie 辅助表、agent 和 durable localStorage 的 Storage v2 mirror 已落盘，降低刚改完就备份时漏掉最近数据的风险。复制 `Data` 时会使用当前选中的 active data root；如果存在 Storage v2 `main.db`，备份包内的 `main.db` 会替换为 `VACUUM INTO` 生成的一致快照，并移除复制过程中带上的 `main.db-wal` / `main.db-shm`。
 - 旧的 direct / legacy 备份恢复在 staging `Data.restore` 时也会使用当前选中的 active data root，而不是固定写到 Electron `userData/Data.restore`；启动恢复和重置流程因此能在自定义 data root、产品改名或旧 Perry/Cherry 数据根被重新选中时命中同一套恢复目录。
+- 旧的 direct 备份如果是 `skipBackupFile` 生成的运行时缓存备份、没有可恢复的 `Data` payload，恢复 staging 完成后会显式关闭一次 `storage_v2.runtime.auto_hydrate`，避免下一次启动用当前旧 Storage v2 快照覆盖刚恢复的 `IndexedDB` / `Local Storage`。
 - Storage v2 restore 入口，可校验 backup 目录，恢复前创建 pre-restore 备份，并把旧文件归档到 `legacy/pre-restore-*` 后再恢复。
 - 旧版 `.bak` / JSON 备份恢复成功后，会显式关闭一次 `storage_v2.runtime.auto_hydrate`，避免用户之前开启过 Storage v2 启动恢复时，下一次启动用旧 Storage v2 快照覆盖刚恢复的 legacy localStorage / IndexedDB。
 - 只读迁移审计报告；会以当前 active data root 作为 `Data` 目录审计目标，并提示多个 Storage v2 manifest、缺失的已配置 data root，以及活动根之外仍存在旧版数据目录的风险。

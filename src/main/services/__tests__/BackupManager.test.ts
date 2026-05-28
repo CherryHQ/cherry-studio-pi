@@ -42,6 +42,7 @@ const {
   mockLogger,
   mockStorageV2Database,
   mockStorageV2DataRootService,
+  mockStorageV2SettingsRepository,
   mockStorageV2SecretVaultService,
   mockStreamZipAsync,
   mockStreamZipInstance
@@ -60,6 +61,9 @@ const {
     activateDataRoot: vi.fn(),
     createFreshDataRootManifest: vi.fn(),
     resolveDataRoot: vi.fn()
+  },
+  mockStorageV2SettingsRepository: {
+    set: vi.fn()
   },
   mockStorageV2SecretVaultService: {
     waitForIdle: vi.fn()
@@ -158,6 +162,10 @@ vi.mock('../storageV2/DataRootService', () => ({
 
 vi.mock('../storageV2/StorageV2Database', () => ({
   storageV2Database: mockStorageV2Database
+}))
+
+vi.mock('../storageV2/StorageV2Repositories', () => ({
+  storageV2SettingsRepository: mockStorageV2SettingsRepository
 }))
 
 vi.mock('../storageV2/SecretVaultService', () => ({
@@ -509,6 +517,7 @@ describe('BackupManager.restore temp isolation', () => {
     })
     expect(fs.remove).toHaveBeenCalledWith(tempDir)
     expect(getDirSizeSpy).toHaveBeenCalledWith(`${tempDir}/Data`, { dereferenceSymlinks: false })
+    expect(mockStorageV2SettingsRepository.set).not.toHaveBeenCalled()
   })
 
   it('stages legacy backup Data restores beside the active Data root', async () => {
@@ -527,6 +536,30 @@ describe('BackupManager.restore temp isolation', () => {
     })
     expect(fs.remove).toHaveBeenCalledWith(tempDir)
     expect(getDirSizeSpy).toHaveBeenCalledWith(`${tempDir}/Data`, { dereferenceSymlinks: false })
+  })
+
+  it('disables Storage v2 auto hydrate when a direct backup restores only runtime cache', async () => {
+    const tempDir = '/tmp/cherry-studio/backup/temp'
+    vi.mocked(fs.pathExists).mockImplementation(async (candidate) => {
+      const path = String(candidate)
+      return path === `${tempDir}/metadata.json` || path === `${tempDir}/Data`
+    })
+    vi.mocked(fs.readJson).mockResolvedValue({ appName: 'Cherry Studio Pi', platform: process.platform } as never)
+    vi.mocked(fs.readdir).mockResolvedValue([] as never)
+    mockStorageV2SettingsRepository.set.mockResolvedValue(undefined)
+
+    await (backupManager as any).restoreDirect()
+
+    expect(mockStorageV2SettingsRepository.set).toHaveBeenCalledWith(
+      'storage_v2.runtime.auto_hydrate',
+      expect.objectContaining({
+        enabled: false,
+        reason: 'direct-backup-runtime-only-restore',
+        updatedAt: expect.any(String)
+      }),
+      'storage-v2'
+    )
+    expect(fs.remove).toHaveBeenCalledWith(tempDir)
   })
 })
 
