@@ -89,7 +89,9 @@ export async function handleDelete(fileId: string, t: (key: string) => string) {
       await db.message_blocks.bulkDelete(blockIdsToDelete)
       affectedTopicIds = Object.keys(topicsToUpdate)
     })
-    await storageV2ConversationMirrorService.flushTopics(affectedTopicIds, () => store.getState())
+    await storageV2ConversationMirrorService.flushTopics(affectedTopicIds, () => store.getState(), {
+      destructive: true
+    })
     logger.info(`Deleted ${blockIdsToDelete.length} blocks for file ${fileId}`)
   } catch (err) {
     logger.error(`Error removing file blocks for ${fileId}:`, err as Error)
