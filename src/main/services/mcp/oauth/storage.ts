@@ -251,13 +251,7 @@ export class JsonFileStorage implements IOAuthStorage {
   }
 
   async clear(): Promise<void> {
-    let storageV2Error: unknown = null
-    try {
-      await this.clearStorageV2()
-    } catch (error) {
-      storageV2Error = error
-      logger.error('Error clearing OAuth storage from Storage v2:', error as Error)
-    }
+    await this.clearStorageV2()
 
     try {
       await fs.unlink(this.filePath)
@@ -270,12 +264,5 @@ export class JsonFileStorage implements IOAuthStorage {
     }
 
     this.cache = null
-    if (storageV2Error) {
-      throw new Error(
-        `Failed to clear OAuth storage from Storage v2: ${
-          storageV2Error instanceof Error ? storageV2Error.message : String(storageV2Error)
-        }`
-      )
-    }
   }
 }

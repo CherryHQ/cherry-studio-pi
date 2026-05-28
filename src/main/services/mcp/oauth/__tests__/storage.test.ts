@@ -193,4 +193,20 @@ describe('JsonFileStorage Storage v2 OAuth persistence', () => {
       'mcp-oauth'
     )
   })
+
+  it('keeps the legacy JSON file when the Storage v2 clear marker cannot be written', async () => {
+    const filePath = path.join(tempDir, tokenFileName)
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        lastUpdated: 1,
+        tokens: { access_token: 'legacy-token' }
+      })
+    )
+    mocks.settingsRepository.set.mockRejectedValueOnce(new Error('storage locked'))
+
+    await expect(JsonFileStorage.clearByServerUrlHash(serverUrlHash, tempDir)).rejects.toThrow('storage locked')
+
+    await expect(fs.access(filePath)).resolves.toBeUndefined()
+  })
 })
