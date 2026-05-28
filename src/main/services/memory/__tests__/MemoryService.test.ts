@@ -180,6 +180,68 @@ describe('MemoryService migration', () => {
     )
   })
 
+  it('rolls back a single memory delete when delete history cannot be recorded', async () => {
+    mocks.client.execute.mockImplementation(async (input: string | { sql: string; args?: unknown[] }) => {
+      const sql = typeof input === 'string' ? input : input.sql
+      if (sql.includes('SELECT memory FROM memories WHERE id')) {
+        return {
+          rows: [{ memory: 'Important memory' }],
+          columns: [],
+          columnTypes: []
+        }
+      }
+      if (sql.includes('INSERT INTO memory_history')) {
+        throw new Error('history locked')
+      }
+      return { rows: [], columns: [], columnTypes: [] }
+    })
+
+    await expect(MemoryService.reload().delete('memory-1')).rejects.toThrow('history locked')
+
+    const calls = mocks.client.execute.mock.calls.map(([input]) => (typeof input === 'string' ? input : input.sql))
+    expect(calls).toContain('BEGIN IMMEDIATE')
+    expect(calls).toContain('ROLLBACK')
+    expect(calls).not.toContain('COMMIT')
+    expect(mocks.client.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sql: expect.stringContaining('UPDATE memories SET is_deleted = 1'),
+        args: [expect.any(String), 'memory-1']
+      })
+    )
+  })
+
+  it('rolls back a memory update when update history cannot be recorded', async () => {
+    mocks.client.execute.mockImplementation(async (input: string | { sql: string; args?: unknown[] }) => {
+      const sql = typeof input === 'string' ? input : input.sql
+      if (sql.includes('SELECT memory, metadata FROM memories WHERE id')) {
+        return {
+          rows: [{ memory: 'Old memory', metadata: '{"source":"old"}' }],
+          columns: [],
+          columnTypes: []
+        }
+      }
+      if (sql.includes('INSERT INTO memory_history')) {
+        throw new Error('history locked')
+      }
+      return { rows: [], columns: [], columnTypes: [] }
+    })
+
+    await expect(MemoryService.reload().update('memory-1', 'New memory', { source: 'new' })).rejects.toThrow(
+      'history locked'
+    )
+
+    const calls = mocks.client.execute.mock.calls.map(([input]) => (typeof input === 'string' ? input : input.sql))
+    expect(calls).toContain('BEGIN IMMEDIATE')
+    expect(calls).toContain('ROLLBACK')
+    expect(calls).not.toContain('COMMIT')
+    expect(mocks.client.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sql: expect.stringContaining('UPDATE memories'),
+        args: ['New memory', expect.any(String), null, '{"source":"new"}', expect.any(String), 'memory-1']
+      })
+    )
+  })
+
   it('soft deletes non-default user memories instead of hard deleting rows', async () => {
     mocks.client.execute.mockImplementation(async (input: string | { sql: string; args?: unknown[] }) => {
       const sql = typeof input === 'string' ? input : input.sql

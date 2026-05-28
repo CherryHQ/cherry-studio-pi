@@ -249,20 +249,20 @@ export class MemoryService {
 
             const now = new Date().toISOString()
 
-            // Restore the deleted record
-            await this.db.execute({
-              sql: MemoryQueries.memory.restoreDeleted,
-              args: [
-                trimmedMemory,
-                embedding ? this.embeddingToVector(embedding) : null,
-                metadata ? JSON.stringify(metadata) : null,
-                now,
-                existingRecord.id
-              ]
-            })
+            await this.withImmediateTransaction(async () => {
+              await this.db!.execute({
+                sql: MemoryQueries.memory.restoreDeleted,
+                args: [
+                  trimmedMemory,
+                  embedding ? this.embeddingToVector(embedding) : null,
+                  metadata ? JSON.stringify(metadata) : null,
+                  now,
+                  existingRecord.id
+                ]
+              })
 
-            // Add to history
-            await this.addHistory(existingRecord.id, null, trimmedMemory, 'ADD')
+              await this.addHistory(existingRecord.id, null, trimmedMemory, 'ADD')
+            })
 
             addedMemories.push({
               id: existingRecord.id,
@@ -313,24 +313,25 @@ export class MemoryService {
         const id = crypto.randomUUID()
         const now = new Date().toISOString()
 
-        await this.db.execute({
-          sql: MemoryQueries.memory.insert,
-          args: [
-            id,
-            trimmedMemory,
-            hash,
-            embedding ? this.embeddingToVector(embedding) : null,
-            metadata ? JSON.stringify(metadata) : null,
-            userId || null,
-            agentId || null,
-            runId || null,
-            now,
-            now
-          ]
-        })
+        await this.withImmediateTransaction(async () => {
+          await this.db!.execute({
+            sql: MemoryQueries.memory.insert,
+            args: [
+              id,
+              trimmedMemory,
+              hash,
+              embedding ? this.embeddingToVector(embedding) : null,
+              metadata ? JSON.stringify(metadata) : null,
+              userId || null,
+              agentId || null,
+              runId || null,
+              now,
+              now
+            ]
+          })
 
-        // Add to history
-        await this.addHistory(id, null, trimmedMemory, 'ADD')
+          await this.addHistory(id, null, trimmedMemory, 'ADD')
+        })
 
         addedMemories.push({
           id,
@@ -526,14 +527,14 @@ export class MemoryService {
 
       const currentMemory = (current.rows[0] as any).memory as string
 
-      // Soft delete
-      await this.db.execute({
-        sql: MemoryQueries.memory.softDelete,
-        args: [new Date().toISOString(), id]
-      })
+      await this.withImmediateTransaction(async () => {
+        await this.db!.execute({
+          sql: MemoryQueries.memory.softDelete,
+          args: [new Date().toISOString(), id]
+        })
 
-      // Add to history
-      await this.addHistory(id, currentMemory, null, 'DELETE')
+        await this.addHistory(id, currentMemory, null, 'DELETE')
+      })
 
       logger.debug(`Memory deleted: ${id}`)
     } catch (error) {
@@ -583,21 +584,21 @@ export class MemoryService {
       // Merge metadata
       const mergedMetadata = { ...previousMetadata, ...metadata }
 
-      // Update memory
-      await this.db.execute({
-        sql: MemoryQueries.memory.update,
-        args: [
-          memory.trim(),
-          hash,
-          embedding ? this.embeddingToVector(embedding) : null,
-          JSON.stringify(mergedMetadata),
-          new Date().toISOString(),
-          id
-        ]
-      })
+      await this.withImmediateTransaction(async () => {
+        await this.db!.execute({
+          sql: MemoryQueries.memory.update,
+          args: [
+            memory.trim(),
+            hash,
+            embedding ? this.embeddingToVector(embedding) : null,
+            JSON.stringify(mergedMetadata),
+            new Date().toISOString(),
+            id
+          ]
+        })
 
-      // Add to history
-      await this.addHistory(id, previousMemory, memory, 'UPDATE')
+        await this.addHistory(id, previousMemory, memory, 'UPDATE')
+      })
 
       logger.debug(`Memory updated: ${id}`)
     } catch (error) {
@@ -857,16 +858,14 @@ export class MemoryService {
   private async softDeleteMemoriesForUser(userId: string): Promise<number> {
     if (!this.db) throw new Error('Database not initialized')
 
-    await this.db.execute('BEGIN IMMEDIATE')
-
-    try {
-      const activeMemories = await this.db.execute({
+    return this.withImmediateTransaction(async () => {
+      const activeMemories = await this.db!.execute({
         sql: MemoryQueries.users.listActiveMemoriesForUser,
         args: [userId]
       })
       const now = new Date().toISOString()
 
-      await this.db.execute({
+      await this.db!.execute({
         sql: MemoryQueries.users.softDeleteAllMemoriesForUser,
         args: [now, userId]
       })
@@ -877,8 +876,19 @@ export class MemoryService {
         await this.addHistory(id, memory, null, 'DELETE')
       }
 
-      await this.db.execute('COMMIT')
       return activeMemories.rows.length
+    })
+  }
+
+  private async withImmediateTransaction<T>(operation: () => Promise<T>): Promise<T> {
+    if (!this.db) throw new Error('Database not initialized')
+
+    await this.db.execute('BEGIN IMMEDIATE')
+
+    try {
+      const result = await operation()
+      await this.db.execute('COMMIT')
+      return result
     } catch (error) {
       await this.db.execute('ROLLBACK').catch(() => {})
       throw error

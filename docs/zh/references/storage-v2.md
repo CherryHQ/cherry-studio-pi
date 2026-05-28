@@ -787,7 +787,7 @@ files.upsert(file)
 - Storage v2 backup 会同时保存 `KnowledgeBase` 和 `Memory` 目录，其中 `Memory/memories.db` 通过 `VACUUM INTO` 生成一致快照。
 - 旧版 `userData/agents.db` 迁入稳定 `Data/agents.db` 时，如果目标库已存在，会把旧库及 `-wal` / `-shm` sidecar 归档到 `Data/legacy/pre-storage-v2-agents-*`，不会覆盖当前活跃 agent runtime 数据；跨磁盘移动失败时会回退到 copy + unlink。
 - 旧版 `userData/memories.db` 迁入稳定 `Data/Memory/memories.db` 时，如果目标库已存在，会把旧库及 `-wal` / `-shm` sidecar 归档到 `Data/Memory/legacy/pre-storage-v2-memory-*`，不会覆盖当前活跃 memory 数据；跨磁盘移动失败时会回退到 copy + unlink。MemoryService 初始化前也会主动执行一次该安全迁移，避免只依赖历史 Redux migration 导致旧记忆库留在旧 userData。
-- MemoryService 的单条删除、按用户清空记忆和删除非默认用户都会保留 memory 软删除行并写入 DELETE history；批量删除在事务内完成，避免未来同步或恢复时因为硬删缺少 tombstone 而复活旧记忆或丢失删除证据。
+- MemoryService 的新增、恢复、更新、单条删除、按用户清空记忆和删除非默认用户都会把 memory 行变更与 history 写入放进同一个事务；删除会保留 memory 软删除行并写入 DELETE history，避免未来同步或恢复时因为半成功写入、硬删缺少 tombstone 而复活旧记忆或丢失删除证据。
 - 旧的本地 / WebDAV / S3 / 坚果云 / 局域网备份入口仍然保留，但在复制 `IndexedDB` / `Local Storage` / `Data` 或生成旧版 `data.json` 前会先执行 `handleSaveData()`，确保 Redux、普通聊天、文件、Dexie settings、Dexie 辅助表、agent 和 durable localStorage 的 Storage v2 mirror 已落盘，降低刚改完就备份时漏掉最近数据的风险。复制 `Data` 时会使用当前选中的 active data root；如果存在 Storage v2 `main.db`，备份包内的 `main.db` 会替换为 `VACUUM INTO` 生成的一致快照，并移除复制过程中带上的 `main.db-wal` / `main.db-shm`。
 - 旧的 direct / legacy 备份恢复在 staging `Data.restore` 时也会使用当前选中的 active data root，而不是固定写到 Electron `userData/Data.restore`；启动恢复和重置流程因此能在自定义 data root、产品改名或旧 Perry/Cherry 数据根被重新选中时命中同一套恢复目录。
 - 旧的 direct 备份如果是 `skipBackupFile` 生成的运行时缓存备份、没有可恢复的 `Data` payload，恢复 staging 完成后会显式关闭一次 `storage_v2.runtime.auto_hydrate`，避免下一次启动用当前旧 Storage v2 快照覆盖刚恢复的 `IndexedDB` / `Local Storage`。
