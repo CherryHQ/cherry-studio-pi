@@ -215,7 +215,9 @@ describe('StorageV2ConversationMirrorService', () => {
 
     const { storageV2ConversationMirrorService } = await import('../StorageV2ConversationMirrorService')
 
-    await storageV2ConversationMirrorService.flushTopic('topic-1', () => state, { destructive: true })
+    await expect(
+      storageV2ConversationMirrorService.flushTopic('topic-1', () => state, { destructive: true })
+    ).rejects.toThrow('storage busy')
     await storageV2ConversationMirrorService.flush()
 
     expect(mocks.fetchStorageV2TopicMessages).not.toHaveBeenCalled()
@@ -327,7 +329,9 @@ describe('StorageV2ConversationMirrorService', () => {
     try {
       const { storageV2ConversationMirrorService } = await import('../StorageV2ConversationMirrorService')
 
-      await storageV2ConversationMirrorService.flushTopic('topic-1', () => state, { destructive: true })
+      await expect(
+        storageV2ConversationMirrorService.flushTopic('topic-1', () => state, { destructive: true })
+      ).rejects.toThrow('dexie busy')
 
       expect(syncConversation).not.toHaveBeenCalled()
 

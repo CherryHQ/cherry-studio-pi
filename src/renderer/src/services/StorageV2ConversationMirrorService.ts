@@ -224,6 +224,10 @@ class StorageV2ConversationMirrorService {
   async flushTopic(topicId: string | undefined, getState: StateGetter, options: MirrorScheduleOptions = {}) {
     this.scheduleTopic(topicId, getState, 0, options)
     await this.flush()
+    if (options.destructive) {
+      this.throwPendingDestructiveError([topicId])
+      await this.flushStrict()
+    }
   }
 
   async flushTopics(
@@ -231,8 +235,13 @@ class StorageV2ConversationMirrorService {
     getState: StateGetter,
     options: MirrorScheduleOptions = {}
   ) {
-    this.scheduleTopics(topicIds, getState, 0, options)
+    const topicIdList = Array.from(topicIds)
+    this.scheduleTopics(topicIdList, getState, 0, options)
     await this.flush()
+    if (options.destructive) {
+      this.throwPendingDestructiveError(topicIdList)
+      await this.flushStrict()
+    }
   }
 
   async findTopicIdsForBlockIds(blockIds: Iterable<string | undefined>, getState: StateGetter): Promise<Set<string>> {
@@ -307,6 +316,15 @@ class StorageV2ConversationMirrorService {
 
   private hasPendingWork() {
     return this.pendingTopicIds.size > 0 || this.pendingMessageIds.size > 0 || this.pendingBlockIds.size > 0
+  }
+
+  private throwPendingDestructiveError(topicIds: Iterable<string | undefined>) {
+    if (!this.lastError) return
+
+    for (const topicId of topicIds) {
+      if (!topicId || !this.pendingDestructiveTopicIds.has(topicId)) continue
+      throw this.lastError instanceof Error ? this.lastError : new Error('Failed to mirror conversations to Storage v2')
+    }
   }
 
   private async mirrorPendingNow() {
