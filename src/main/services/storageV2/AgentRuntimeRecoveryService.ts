@@ -20,7 +20,7 @@ function countFromRow(row: Record<string, unknown> | undefined): number {
 
 export class StorageV2AgentRuntimeRecoveryService {
   private projection: Promise<boolean> | null = null
-  private legacySeed: Promise<void> | null = null
+  private legacySeed: Promise<boolean> | null = null
 
   async projectIfLegacyAgentListEmpty(reason: string): Promise<boolean> {
     return this.projectIfStorageHasRows(reason, async () => {
@@ -109,7 +109,9 @@ export class StorageV2AgentRuntimeRecoveryService {
 
   private async projectNow(reason: string, hasRows: () => Promise<boolean>): Promise<boolean> {
     try {
-      await this.seedStorageFromLegacyRuntime(reason)
+      const legacySeeded = await this.seedStorageFromLegacyRuntime(reason)
+      if (!legacySeeded) return false
+
       const storageHasRows = await hasRows()
       if (!storageHasRows) {
         return false
@@ -130,10 +132,9 @@ export class StorageV2AgentRuntimeRecoveryService {
     }
   }
 
-  private async seedStorageFromLegacyRuntime(reason: string): Promise<void> {
+  private async seedStorageFromLegacyRuntime(reason: string): Promise<boolean> {
     if (this.legacySeed) {
-      await this.legacySeed
-      return
+      return this.legacySeed
     }
 
     this.legacySeed = storageV2LegacyAgentDbImportService
@@ -154,15 +155,17 @@ export class StorageV2AgentRuntimeRecoveryService {
             messageCount: report.sessionMessageCount
           })
         }
+        return true
       })
       .catch((error) => {
         logger.warn('Failed to seed Storage v2 agent data from legacy runtime', error as Error)
+        return false
       })
       .finally(() => {
         this.legacySeed = null
       })
 
-    await this.legacySeed
+    return this.legacySeed
   }
 
   private async countLegacyVisibleAgents() {

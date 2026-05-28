@@ -130,6 +130,24 @@ describe('StorageV2AgentRuntimeRecoveryService', () => {
     expect(projection).toHaveBeenCalledTimes(1)
   })
 
+  it('does not project stale Storage v2 data when the legacy seed fails', async () => {
+    const legacyClient = createCountClient(0)
+    const storageClient = createCountClient(1)
+    const projection = mockProjection()
+    const importSnapshot = vi.mocked(storageV2LegacyAgentDbImportService.importSnapshot)
+    importSnapshot.mockRejectedValueOnce(new Error('agents.db locked'))
+    vi.spyOn(DatabaseManager, 'getInstance').mockResolvedValue({
+      getClient: async () => legacyClient
+    } as any)
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(storageClient as any)
+
+    const recovered = await new StorageV2AgentRuntimeRecoveryService().projectIfLegacyAgentListEmpty('test')
+
+    expect(recovered).toBe(false)
+    expect(storageClient.execute).not.toHaveBeenCalled()
+    expect(projection).not.toHaveBeenCalled()
+  })
+
   it('does not project when the legacy runtime already has visible agents', async () => {
     const legacyClient = createCountClient(1)
     const projection = mockProjection()
