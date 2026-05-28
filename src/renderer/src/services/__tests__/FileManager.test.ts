@@ -35,7 +35,8 @@ vi.mock('@renderer/store', () => ({
 
 vi.mock('@renderer/services/StorageV2FileRecoveryService', () => ({
   storageV2FileRecoveryService: {
-    projectFileIfMissing: vi.fn()
+    projectFileIfMissing: vi.fn(),
+    projectMissingFiles: vi.fn()
   }
 }))
 

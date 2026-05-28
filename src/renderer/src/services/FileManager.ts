@@ -185,7 +185,7 @@ class FileManager {
   }
 
   static async allFiles(): Promise<FileMetadata[]> {
-    await storageV2FileRecoveryService.projectFilesIfEmpty('file-manager-all-empty')
+    await storageV2FileRecoveryService.projectMissingFiles('file-manager-all')
     return db.files.toArray()
   }
 

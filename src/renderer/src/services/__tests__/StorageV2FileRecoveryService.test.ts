@@ -110,6 +110,52 @@ describe('StorageV2FileRecoveryService', () => {
     expect(mocks.filesPut).toHaveBeenCalledWith(file)
   })
 
+  it('projects missing Storage v2 files when the legacy file table is partially populated', async () => {
+    const existingFile = {
+      id: 'file-existing',
+      name: 'file-existing.txt',
+      origin_name: 'existing.txt',
+      path: '',
+      size: 128,
+      ext: '.txt',
+      type: 'text',
+      created_at: '2026-01-01T00:00:00.000Z',
+      count: 1
+    }
+    const missingFile = {
+      id: 'file-missing',
+      name: 'file-missing.txt',
+      origin_name: 'missing.txt',
+      path: '',
+      size: 256,
+      ext: '.txt',
+      type: 'text',
+      created_at: '2026-01-02T00:00:00.000Z',
+      count: 1
+    }
+    const listFiles = vi.fn().mockResolvedValue([existingFile, missingFile])
+    const projectFilesToLegacyRuntime = vi.fn().mockResolvedValue({ projectedFileCount: 2 })
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          getFile: vi.fn(),
+          listFiles,
+          projectFilesToLegacyRuntime
+        }
+      }
+    })
+    mocks.filesGet.mockImplementation(async (id: string) => (id === existingFile.id ? existingFile : undefined))
+
+    const { storageV2FileRecoveryService } = await import('../StorageV2FileRecoveryService')
+
+    await expect(storageV2FileRecoveryService.projectMissingFiles('files-page-list')).resolves.toBe(true)
+
+    expect(listFiles).toHaveBeenCalled()
+    expect(projectFilesToLegacyRuntime).toHaveBeenCalled()
+    expect(mocks.filesBulkPut).toHaveBeenCalledWith([missingFile])
+  })
+
   it('reuses an in-flight full file projection', async () => {
     const file = {
       id: 'file-1',

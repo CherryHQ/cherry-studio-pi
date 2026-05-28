@@ -27,6 +27,36 @@ class StorageV2FileRecoveryService {
     return this.projectAllPromise
   }
 
+  async projectMissingFiles(reason: string): Promise<boolean> {
+    if (!hasStorageV2FileRecoveryApi()) return false
+
+    if (this.projectAllPromise) {
+      await this.projectAllPromise
+    }
+
+    try {
+      const files = (await window.api.storageV2.listFiles()) as FileMetadata[]
+      if (files.length === 0) return false
+
+      const missingFiles: FileMetadata[] = []
+      for (const file of files) {
+        if (!file.id || (await db.files.get(file.id))) continue
+        missingFiles.push(file)
+      }
+
+      if (missingFiles.length === 0) return false
+
+      await window.api.storageV2.projectFilesToLegacyRuntime()
+      await db.files.bulkPut(missingFiles)
+
+      logger.info(`Projected ${missingFiles.length} missing Storage v2 file metadata row(s) into Dexie`, { reason })
+      return true
+    } catch (error) {
+      logger.warn('Failed to project missing Storage v2 files into Dexie', error as Error)
+      return false
+    }
+  }
+
   private async projectFilesIfEmptyNow(reason: string): Promise<boolean> {
     if ((await db.files.count()) > 0) return false
     if (!hasStorageV2FileRecoveryApi()) return false
@@ -72,7 +102,7 @@ class StorageV2FileRecoveryService {
   }
 
   async listFilesWithFallback(fileType: FileType | 'all', reason: string): Promise<FileMetadata[]> {
-    await this.projectFilesIfEmpty(reason)
+    await this.projectMissingFiles(reason)
 
     if (fileType === 'all') {
       return db.files.orderBy('count').toArray()
