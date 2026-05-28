@@ -636,7 +636,7 @@ export class MemoryService {
   }
 
   /**
-   * Delete all memories for a user without deleting the user (hard delete)
+   * Delete all memories for a user without deleting the user (soft delete)
    */
   public async deleteAllMemoriesForUser(userId: string): Promise<void> {
     await this.init()

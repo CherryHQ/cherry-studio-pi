@@ -179,7 +179,7 @@ class MemoryService {
   }
 
   /**
-   * Deletes a user and all their memories (hard delete)
+   * Deletes a user and all their memories (soft delete)
    * @param userId - The user ID to delete
    * @returns Promise that resolves when deletion is complete
    */

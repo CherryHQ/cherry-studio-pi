@@ -1,4 +1,5 @@
 import FileManager from '@renderer/services/FileManager'
+import { storageV2MirrorService } from '@renderer/services/StorageV2MirrorService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { addPainting, removePainting, updatePainting, updatePaintings } from '@renderer/store/paintings'
 import type { PaintingAction, PaintingsState } from '@renderer/types'
@@ -38,8 +39,9 @@ export function usePaintings() {
       return painting
     },
     removePainting: async (namespace: keyof PaintingsState, painting: PaintingAction) => {
-      void FileManager.deleteFiles(painting.files)
+      await FileManager.deleteFiles(painting.files)
       dispatch(removePainting({ namespace, painting }))
+      await storageV2MirrorService.flush()
     },
     updatePainting: (namespace: keyof PaintingsState, painting: PaintingAction) => {
       dispatch(updatePainting({ namespace, painting }))
