@@ -142,6 +142,9 @@ describe('OpenClawService Storage v2 config snapshot', () => {
       'config',
       expect.stringContaining('sk-one')
     )
+    expect(mocks.secretVault.setSecret.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(fs.writeFileSync).mock.invocationCallOrder[0]
+    )
     expect(mocks.settingsRepository.set).toHaveBeenCalledWith(
       'openclaw.config',
       {
@@ -183,5 +186,19 @@ describe('OpenClawService Storage v2 config snapshot', () => {
     expect(writtenConfig.gateway.auth.token).toBe('restored-token')
     expect(writtenConfig.models.providers.existing.apiKey).toBe('existing-key')
     expect(writtenConfig.models.providers['cherry-openai'].apiKey).toBe('sk-one')
+  })
+
+  it('does not update the OpenClaw runtime projection when Storage v2 snapshot fails', async () => {
+    mocks.secretVault.setSecret.mockRejectedValueOnce(new Error('vault locked'))
+    const service = await loadOpenClawService()
+
+    await expect(
+      service.syncProviderConfig({} as Electron.IpcMainInvokeEvent, provider, primaryModel)
+    ).resolves.toEqual({
+      success: false,
+      message: 'vault locked'
+    })
+
+    expect(fs.writeFileSync).not.toHaveBeenCalled()
   })
 })

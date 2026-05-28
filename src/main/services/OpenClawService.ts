@@ -902,7 +902,6 @@ class OpenClawService {
       // Auto-generate auth token if not already set, and store it for API calls
       const token = this.gatewayAuthToken || existingGatewayToken || this.generateAuthToken()
       config.gateway.auth = { token }
-      this.gatewayAuthToken = token
 
       // Update config
       config.models.providers[providerKey] = openclawProvider
@@ -914,11 +913,11 @@ class OpenClawService {
         primary: `${providerKey}/${primaryModel.id}`
       }
 
-      // Write config file
+      await this.saveConfigToStorageV2(config)
+
+      // Write external runtime projection only after the Storage v2 snapshot is durable.
       fs.writeFileSync(OPENCLAW_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
-      await this.saveConfigToStorageV2(config).catch((error) => {
-        logger.warn('Failed to save OpenClaw config to Storage v2:', error as Error)
-      })
+      this.gatewayAuthToken = token
 
       logger.info(`Synced provider ${provider.id} to OpenClaw config`)
       return { success: true }
