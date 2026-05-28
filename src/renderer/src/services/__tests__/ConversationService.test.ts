@@ -46,7 +46,10 @@ vi.mock('@renderer/services/AssistantService', () => {
 
   return {
     DEFAULT_ASSISTANT_SETTINGS: defaultAssistantSettings,
-    getAssistantSettings: () => ({ contextCount: 10 }),
+    getAssistantSettings: (assistant: any) => ({
+      contextCount: assistant?.settings?.contextCount ?? 10,
+      maxTokens: assistant?.settings?.maxTokens
+    }),
     getDefaultModel: () => ({ id: 'default-model' }),
     getDefaultAssistant: () => createDefaultAssistant(),
     getDefaultTopic: () => createDefaultTopic(),
@@ -59,6 +62,12 @@ vi.mock('@renderer/services/AssistantService', () => {
     getDefaultTranslateAssistant: () => createDefaultAssistant()
   }
 })
+
+vi.mock('@renderer/aiCore/prepareParams', () => ({
+  convertMessagesToSdkMessages: vi.fn(async (messages: any[]) =>
+    messages.map((message) => ({ role: message.role, content: message.id }))
+  )
+}))
 
 vi.mock('@renderer/store', () => ({
   default: {
@@ -162,5 +171,83 @@ describe('ConversationService.filterMessagesPipeline', () => {
     expect(filtered.find((m) => m.id === 'user-2')).toBeUndefined()
     expect(filtered[0].role).toBe('user')
     expect(filtered[filtered.length - 1].role).toBe('user')
+  })
+})
+
+describe('ConversationService.prepareMessagesForModel', () => {
+  beforeEach(() => {
+    mockStore = createMockStore()
+    vi.clearAllMocks()
+  })
+
+  function addTextMessage(role: 'user' | 'assistant', id: string, content: string, totalTokens: number) {
+    const block = createMainTextBlock(id, content, { status: MessageBlockStatus.SUCCESS })
+    const message = createMessage(role, 'topic-1', 'assistant-1', {
+      id,
+      blocks: [block.id],
+      usage: {
+        prompt_tokens: role === 'user' ? totalTokens : 0,
+        completion_tokens: role === 'assistant' ? totalTokens : 0,
+        total_tokens: totalTokens
+      }
+    })
+
+    mockStore.dispatch(messageBlocksSlice.actions.upsertOneBlock(block))
+    return message
+  }
+
+  it('trims old chat messages by the selected model context window and keeps the latest user message', async () => {
+    const user1 = addTextMessage('user', 'user-1', 'First question', 30)
+    const assistant1 = addTextMessage('assistant', 'assistant-1', 'First answer', 30)
+    const user2 = addTextMessage('user', 'user-2', 'Final question', 100)
+    const assistant = {
+      id: 'assistant-1',
+      name: 'Assistant',
+      prompt: '',
+      topics: [],
+      type: 'assistant',
+      regularPhrases: [],
+      settings: { contextCount: 10 },
+      model: {
+        id: 'tiny-model',
+        name: 'tiny-model',
+        provider: 'test',
+        group: 'test',
+        context_window: 110,
+        max_output_tokens: 20
+      }
+    } as any
+
+    const result = await ConversationService.prepareMessagesForModel([user1, assistant1, user2], assistant)
+
+    expect(result.uiMessages.map((m) => m.id)).toEqual(['user-2'])
+    expect(result.modelMessages).toEqual([{ role: 'user', content: 'user-2' }])
+  })
+
+  it('does not trim by token budget when the model window is sufficient', async () => {
+    const user1 = addTextMessage('user', 'user-1', 'First question', 30)
+    const assistant1 = addTextMessage('assistant', 'assistant-1', 'First answer', 30)
+    const user2 = addTextMessage('user', 'user-2', 'Final question', 30)
+    const assistant = {
+      id: 'assistant-1',
+      name: 'Assistant',
+      prompt: '',
+      topics: [],
+      type: 'assistant',
+      regularPhrases: [],
+      settings: { contextCount: 10 },
+      model: {
+        id: 'large-model',
+        name: 'large-model',
+        provider: 'test',
+        group: 'test',
+        context_window: 10_000,
+        max_output_tokens: 200
+      }
+    } as any
+
+    const result = await ConversationService.prepareMessagesForModel([user1, assistant1, user2], assistant)
+
+    expect(result.uiMessages.map((m) => m.id)).toEqual(['user-1', 'assistant-1', 'user-2'])
   })
 })

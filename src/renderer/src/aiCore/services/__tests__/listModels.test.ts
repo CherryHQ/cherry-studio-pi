@@ -464,6 +464,31 @@ describe('listModels', () => {
       expect(models[0].id).toBe('gemini-2.5-flash')
       expect(models).toMatchSnapshot()
     })
+
+    it('should preserve input and output token limits from Gemini responses', async () => {
+      mockGetFromApi.mockResolvedValue({
+        value: {
+          models: [
+            {
+              name: 'models/gemini-context-aware',
+              displayName: 'Gemini Context Aware',
+              inputTokenLimit: 1_000_000,
+              outputTokenLimit: 65_536
+            }
+          ]
+        }
+      })
+
+      const models = await listModels(
+        makeProvider({ id: 'gemini', type: 'gemini', apiHost: 'https://generativelanguage.googleapis.com/v1beta' })
+      )
+
+      expect(models[0]).toMatchObject({
+        id: 'gemini-context-aware',
+        max_input_tokens: 1_000_000,
+        max_output_tokens: 65_536
+      })
+    })
   })
 
   describe('Vertex AI', () => {
@@ -653,6 +678,32 @@ describe('listModels', () => {
       expect(models.find((m) => m.id === 'openai/gpt-5.4-nano')?.group).toBe('openai')
       expect(models.find((m) => m.id === 'x-ai/grok-4.20-multi-agent-beta')?.group).toBe('x-ai')
       expect(models).toMatchSnapshot()
+    })
+
+    it('should preserve context and completion token limits from OpenRouter metadata', async () => {
+      mockGetFromApi
+        .mockResolvedValueOnce({
+          value: {
+            data: [
+              {
+                id: 'openai/gpt-4o',
+                object: 'model',
+                owned_by: 'openai',
+                context_length: 128_000,
+                top_provider: { max_completion_tokens: 16_384 }
+              }
+            ]
+          }
+        })
+        .mockResolvedValueOnce({ value: { data: [] } })
+
+      const models = await listModels(makeProvider({ id: 'openrouter' }))
+
+      expect(models[0]).toMatchObject({
+        id: 'openai/gpt-4o',
+        context_window: 128_000,
+        max_output_tokens: 16_384
+      })
     })
 
     it('should deduplicate across endpoints', async () => {

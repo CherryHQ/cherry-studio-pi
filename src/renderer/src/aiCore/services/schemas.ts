@@ -7,6 +7,30 @@
  */
 import * as z from 'zod'
 
+const TokenLimitSchema = z
+  .union([z.number(), z.string()])
+  .nullable()
+  .optional()
+  .transform((v) => {
+    if (v === null || v === undefined) return undefined
+    const value = typeof v === 'string' ? Number(v.trim()) : v
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined
+  })
+
+const TokenLimitsObjectSchema = z
+  .looseObject({
+    max_input_tokens: TokenLimitSchema,
+    max_output_tokens: TokenLimitSchema
+  })
+  .optional()
+
+const TopProviderSchema = z
+  .looseObject({
+    context_length: TokenLimitSchema,
+    max_completion_tokens: TokenLimitSchema
+  })
+  .optional()
+
 // === OpenAI-compatible (also used by OpenRouter, PPIO, etc.) ===
 
 export const OpenAIModelsResponseSchema = z.object({
@@ -15,7 +39,14 @@ export const OpenAIModelsResponseSchema = z.object({
       id: z.string(),
       object: z.string().optional().default('model'),
       created: z.number().optional(),
-      owned_by: z.string().optional()
+      owned_by: z.string().optional(),
+      context_length: TokenLimitSchema,
+      max_context_length: TokenLimitSchema,
+      max_input_tokens: TokenLimitSchema,
+      max_output_tokens: TokenLimitSchema,
+      max_completion_tokens: TokenLimitSchema,
+      top_provider: TopProviderSchema,
+      limits: TokenLimitsObjectSchema
     })
   ),
   object: z.string().optional()
@@ -95,7 +126,8 @@ export const GitHubModelsResponseSchema = z.array(
     publisher: z.string().optional(),
     name: z.string().optional(),
     description: z.string().optional(),
-    version: z.string().optional()
+    version: z.string().optional(),
+    limits: TokenLimitsObjectSchema
   })
 )
 
@@ -126,6 +158,13 @@ export const NewApiModelsResponseSchema = z.object({
       object: z.string().optional().default('model'),
       created: z.number().optional(),
       owned_by: z.string().optional(),
+      context_length: TokenLimitSchema,
+      max_context_length: TokenLimitSchema,
+      max_input_tokens: TokenLimitSchema,
+      max_output_tokens: TokenLimitSchema,
+      max_completion_tokens: TokenLimitSchema,
+      top_provider: TopProviderSchema,
+      limits: TokenLimitsObjectSchema,
       supported_endpoint_types: z
         .array(z.string())
         .nullable()

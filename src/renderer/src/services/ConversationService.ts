@@ -6,6 +6,7 @@ import type { ModelMessage } from 'ai'
 import { findLast, isEmpty, takeRight } from 'lodash'
 
 import { getAssistantSettings, getDefaultModel } from './AssistantService'
+import { applyChatContextBudget } from './ChatContextService'
 import {
   filterAfterContextClearMessages,
   filterEmptyMessages,
@@ -54,7 +55,10 @@ export class ConversationService {
     logger.debug('uiMessagesFromPipeline', uiMessagesFromPipeline)
 
     // Fallback: ensure at least the last user message is present to avoid empty payloads
-    let uiMessages = uiMessagesFromPipeline
+    const budgetedMessages = await applyChatContextBudget(uiMessagesFromPipeline, assistant)
+    logger.debug('chatContextBudget', budgetedMessages.stats)
+
+    let uiMessages = budgetedMessages.messages
     if ((!uiMessages || uiMessages.length === 0) && lastUserMessage) {
       uiMessages = [lastUserMessage]
     }

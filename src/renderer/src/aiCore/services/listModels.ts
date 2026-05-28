@@ -11,6 +11,7 @@ import {
 } from '@ai-sdk/provider-utils'
 import { loggerService } from '@logger'
 import { COPILOT_DEFAULT_HEADERS } from '@renderer/aiCore/provider/constants'
+import { extractModelTokenLimitFields } from '@renderer/services/ModelTokenLimitService'
 import store from '@renderer/store'
 import type { EndpointType, Model, Provider } from '@renderer/types'
 import { SystemProviderIds } from '@renderer/types'
@@ -188,7 +189,11 @@ const geminiFetcher: ModelFetcher = {
     })
     return dedup(response.models, (m) => m.name).map((m) => {
       const id = m.name.startsWith('models/') ? m.name.slice(7) : m.name
-      return toModel(id, provider, { name: m.displayName || id, description: m.description })
+      return toModel(id, provider, {
+        name: m.displayName || id,
+        description: m.description,
+        ...extractModelTokenLimitFields(m)
+      })
     })
   }
 }
@@ -289,10 +294,13 @@ const githubFetcher: ModelFetcher = {
       toModel(m.id, provider, {
         name: m.name || m.id,
         description: pickPreferredString([m.summary, m.description]),
-        owned_by: m.publisher
+        owned_by: m.publisher,
+        ...extractModelTokenLimitFields(m)
       })
     )
-    const v1Models = v1Response.data.map((m) => toModel(m.id, provider, { owned_by: m.owned_by }))
+    const v1Models = v1Response.data.map((m) =>
+      toModel(m.id, provider, { owned_by: m.owned_by, ...extractModelTokenLimitFields(m) })
+    )
     return dedup([...catalogModels, ...v1Models], (m) => m.id)
   }
 }
@@ -326,7 +334,9 @@ const copilotFetcher: ModelFetcher = {
       )
     })
 
-    return dedup(filtered, (m) => m.id).map((m) => toModel(m.id, provider, { owned_by: m.owned_by }))
+    return dedup(filtered, (m) => m.id).map((m) =>
+      toModel(m.id, provider, { owned_by: m.owned_by, ...extractModelTokenLimitFields(m) })
+    )
   }
 }
 
@@ -361,7 +371,8 @@ const togetherFetcher: ModelFetcher = {
       toModel(m.id, provider, {
         name: m.display_name || m.id,
         description: m.description,
-        owned_by: m.organization
+        owned_by: m.organization,
+        ...extractModelTokenLimitFields(m)
       })
     )
   }
@@ -380,6 +391,7 @@ const newApiFetcher: ModelFetcher = {
     return dedup(response.data, (m) => m.id).map((m) =>
       toModel(m.id, provider, {
         owned_by: m.owned_by,
+        ...extractModelTokenLimitFields(m),
         supported_endpoint_types: m.supported_endpoint_types as EndpointType[] | undefined
       })
     )
@@ -404,7 +416,9 @@ const openRouterFetcher: ModelFetcher = {
       }).catch(() => ({ data: [] }))
     ])
     const all = [...modelsResponse.data, ...embedModelsResponse.data]
-    return dedup(all, (m) => m.id).map((m) => toModel(m.id, provider, { owned_by: m.owned_by }))
+    return dedup(all, (m) => m.id).map((m) =>
+      toModel(m.id, provider, { owned_by: m.owned_by, ...extractModelTokenLimitFields(m) })
+    )
   }
 }
 
@@ -433,7 +447,9 @@ const ppioFetcher: ModelFetcher = {
       }).catch(() => ({ data: [] }))
     ])
     const all = [...chat.data, ...embed.data, ...reranker.data]
-    return dedup(all, (m) => m.id).map((m) => toModel(m.id, provider, { owned_by: m.owned_by }))
+    return dedup(all, (m) => m.id).map((m) =>
+      toModel(m.id, provider, { owned_by: m.owned_by, ...extractModelTokenLimitFields(m) })
+    )
   }
 }
 
@@ -449,7 +465,8 @@ const aiHubMixFetcher: ModelFetcher = {
     return dedup(response.data, (m) => m.model_id).map((m) =>
       toModel(m.model_id, provider, {
         name: m.model_name || m.model_id,
-        description: m.desc
+        description: m.desc,
+        ...extractModelTokenLimitFields(m)
       })
     )
   }
@@ -488,7 +505,9 @@ const openAICompatibleFetcher: ModelFetcher = {
       responseSchema: OpenAIModelsResponseSchema,
       abortSignal: signal
     })
-    return dedup(response.data, (m) => m.id).map((m) => toModel(m.id, provider, { owned_by: m.owned_by }))
+    return dedup(response.data, (m) => m.id).map((m) =>
+      toModel(m.id, provider, { owned_by: m.owned_by, ...extractModelTokenLimitFields(m) })
+    )
   }
 }
 
