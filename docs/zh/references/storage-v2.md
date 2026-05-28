@@ -382,7 +382,7 @@ files
 1. 写入 `<dataRoot>/temp`。
 2. 计算 sha256。
 3. 原子移动到 `blobs/sha256/<prefix>/<hash>`。
-4. 在同一事务中写入 `blobs` 和 `files` 引用。
+4. 在同一事务中写入 `blobs` 和 `files` 引用；如果同一个 file id 改指向新 blob，会同时重算旧 blob 和新 blob 的 `ref_count`。
 5. 失败时清理 temp；启动时也要清理孤儿 temp 文件。
 
 ### Skills、任务和外部通道

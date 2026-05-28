@@ -1999,6 +1999,12 @@ export class StorageV2FileRepository {
     }
 
     await withTransaction(client, async () => {
+      const previousFileResult = await client.execute({
+        sql: 'SELECT blob_id FROM files WHERE id = ?',
+        args: [fileId]
+      })
+      const previousBlobId = previousFileResult.rows[0]?.blob_id ? String(previousFileResult.rows[0].blob_id) : null
+
       await client.execute({
         sql: `
           INSERT INTO blobs (id, algorithm, size, mime, ext, storage_path, checksum, created_at, ref_count)
@@ -2048,16 +2054,19 @@ export class StorageV2FileRepository {
         ]
       })
 
-      await client.execute({
-        sql: `
-          UPDATE blobs
-          SET ref_count = (
-            SELECT COUNT(*) FROM files WHERE blob_id = ? AND deleted_at IS NULL
-          )
-          WHERE id = ?
-        `,
-        args: [checksum, checksum]
-      })
+      const blobIdsToRefresh = Array.from(new Set([checksum, previousBlobId].filter((id): id is string => Boolean(id))))
+      for (const blobId of blobIdsToRefresh) {
+        await client.execute({
+          sql: `
+            UPDATE blobs
+            SET ref_count = (
+              SELECT COUNT(*) FROM files WHERE blob_id = ? AND deleted_at IS NULL
+            )
+            WHERE id = ?
+          `,
+          args: [blobId, blobId]
+        })
+      }
 
       await storageV2SyncLogService.recordChange({
         client,
