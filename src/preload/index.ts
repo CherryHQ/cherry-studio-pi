@@ -1,8 +1,8 @@
-import type { PermissionUpdate } from '@anthropic-ai/claude-agent-sdk'
 import type { TokenUsageData } from '@cherrystudio/analytics-client'
 import { electronAPI } from '@electron-toolkit/preload'
 import type { SpanEntity, TokenUsage } from '@mcp-trace/trace-core'
 import type { SpanContext } from '@opentelemetry/api'
+import type { AgentPermissionUpdate } from '@shared/agents/types'
 import type { GitBashPathInfo, TerminalConfig, UpgradeChannel } from '@shared/config/constant'
 import type { LogLevel, LogSourceWithContext } from '@shared/config/logger'
 import type {
@@ -637,7 +637,7 @@ const api = {
       behavior: 'allow' | 'deny'
       updatedInput?: Record<string, unknown>
       message?: string
-      updatedPermissions?: PermissionUpdate[]
+      updatedPermissions?: AgentPermissionUpdate[]
     }) => ipcRenderer.invoke(IpcChannel.AgentToolPermission_Response, payload)
   },
   agent: {

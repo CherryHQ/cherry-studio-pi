@@ -41,7 +41,7 @@ const MAX_FOLDER_NAME_LENGTH = 80
  * Skills are stored in `{dataPath}/Skills/{folderName}/` (inert global library).
  * When enabled **for a specific agent**, a symlink is created at
  * `{agentWorkspace}/.claude/skills/{folderName}/` pointing to the library,
- * making the skill discoverable by Claude Code running against that workspace.
+ * making the skill discoverable by the agent runtime running against that workspace.
  *
  * Skill library metadata lives in the `skills` table. Per-agent enablement
  * state lives in the `agent_skills` join table. The legacy `skills.is_enabled`

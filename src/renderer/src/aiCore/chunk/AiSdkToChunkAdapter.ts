@@ -12,7 +12,7 @@ import { ProviderSpecificError } from '@renderer/types/provider-specific-error'
 import { formatErrorMessage, isAbortError } from '@renderer/utils/error'
 import type { IdleTimeoutHandle } from '@renderer/utils/IdleTimeoutController'
 import { convertLinks, flushLinkConverterBuffer } from '@renderer/utils/linkConverter'
-import type { ClaudeCodeRawValue } from '@shared/agents/claudecode/types'
+import type { AgentRawValue } from '@shared/agents/types'
 import { AISDKError, type TextStreamPart, type ToolSet } from 'ai'
 
 import { ToolCallChunkHandler } from './handleToolCallChunk'
@@ -176,7 +176,7 @@ export class AiSdkToChunkAdapter {
     logger.silly(`AI SDK chunk type: ${chunk.type}`, chunk)
     switch (chunk.type) {
       case 'raw': {
-        const agentRawMessage = chunk.rawValue as ClaudeCodeRawValue
+        const agentRawMessage = chunk.rawValue as AgentRawValue
         if (agentRawMessage.type === 'init' && agentRawMessage.session_id) {
           this.onSessionUpdate?.(agentRawMessage.session_id)
         } else if (agentRawMessage.type === 'compact' && agentRawMessage.session_id) {

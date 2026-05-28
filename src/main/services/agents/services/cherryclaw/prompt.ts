@@ -131,15 +131,14 @@ ${sections}`
  * Two entry points:
  *
  * 1. {@link buildSystemPrompt} — full custom prompt for Soul Mode agents that
- *    REPLACES the SDK preset entirely. Includes the basic identity, the full
+ *    replaces the default runtime identity. Includes the basic identity, the full
  *    tool guidance (claw + skills + memory + web), bootstrap instructions when
  *    needed, and the workspace memory files (SOUL.md / USER.md / FACT.md).
  *
  * 2. {@link buildToolGuidance} — lightweight tool-strategy suffix for
- *    non-Soul agents. Does not touch workspace files; intended to be APPENDED
- *    to the SDK's `claude_code` preset so the model gets cross-tool strategy
- *    guidance (skills + memory + web) on top of the standard Claude Code
- *    instructions. Returns a synchronous string — no I/O.
+ *    non-Soul agents. Does not touch workspace files; intended to be appended
+ *    to the runtime prompt so the model gets cross-tool strategy guidance
+ *    (skills + memory + web). Returns a synchronous string — no I/O.
  *
  * Memory files layout (Soul Mode only):
  *   {workspace}/soul.md          — personality, tone, communication style
@@ -179,9 +178,8 @@ export class PromptBuilder {
 
   /**
    * Build the cross-tool strategy guidance string for a non-Soul agent. The
-   * returned text is meant to be APPENDED to the Claude Code SDK preset so
-   * the model gets explicit "when to use which tool" guidance on top of the
-   * SDK's built-in instructions. The skills + memory + web sections are
+   * returned text gives the model explicit "when to use which tool" guidance.
+   * The skills + memory + web sections are
    * always included (those MCP servers are injected for every agent); the
    * claw section is excluded by default (non-Soul agents do not get cron /
    * notify / config).

@@ -3,8 +3,7 @@
 
 import type { EventEmitter } from 'node:events'
 
-import type { Options } from '@anthropic-ai/claude-agent-sdk'
-import type { GetAgentSessionResponse } from '@types'
+import type { CreateSessionMessageRequest, GetAgentSessionResponse } from '@types'
 import type { TextStreamPart } from 'ai'
 
 // Generic agent stream event that works with any agent type
@@ -24,8 +23,8 @@ export interface AgentStream extends EventEmitter {
 }
 
 export interface AgentThinkingOptions {
-  effort?: Options['effort']
-  thinking?: Options['thinking']
+  effort?: CreateSessionMessageRequest['effort']
+  thinking?: CreateSessionMessageRequest['thinking']
 }
 
 // Base agent service interface

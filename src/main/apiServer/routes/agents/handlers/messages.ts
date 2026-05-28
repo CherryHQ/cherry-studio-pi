@@ -93,7 +93,7 @@ export const createMessage = async (req: Request, res: Response): Promise<void> 
      *
      * We monitor multiple HTTP events to reliably detect when a client disconnects
      * from the streaming response. This is crucial for:
-     * - Aborting long-running Claude Code processes
+     * - Aborting long-running agent runtime streams
      * - Cleaning up resources and preventing memory leaks
      * - Avoiding orphaned processes
      *
@@ -103,7 +103,7 @@ export const createMessage = async (req: Request, res: Response): Promise<void> 
      * 3. req.on('close') - Request object closure (less common with SSE)
      *
      * When any disconnect event fires, we:
-     * - Abort the Claude Code SDK process via abortController
+     * - Abort the agent runtime stream via abortController
      * - Clean up event listeners to prevent memory leaks
      * - Mark the response as ended to prevent further writes
      */

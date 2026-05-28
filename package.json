@@ -84,7 +84,6 @@
     "ci": "pnpm ci:basic-check && pnpm ci:test-check"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.2.112",
     "@earendil-works/pi-agent-core": "0.75.5",
     "@earendil-works/pi-ai": "0.75.5",
     "@expo/sudo-prompt": "^9.3.2",
@@ -93,6 +92,7 @@
     "@napi-rs/canvas": "0.1.80",
     "@napi-rs/system-ocr": "1.0.2",
     "@paymoapp/electron-shutdown-handler": "1.1.2",
+    "@vscode/ripgrep": "^1.18.0",
     "cron-parser": "^5.0.8",
     "express": "5.1.0",
     "fast-glob": "3.3.3",

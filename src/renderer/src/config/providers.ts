@@ -339,7 +339,7 @@ export const SYSTEM_PROVIDERS_CONFIG: Record<SystemProviderId, SystemProvider> =
     type: 'openai',
     apiKey: '',
     apiHost: 'https://openrouter.ai/api/v1/',
-    // Anthropic-compatible endpoint for Agent mode (Claude Code SDK)
+    // Anthropic-compatible endpoint for Agent mode.
     // https://openrouter.ai/docs/guides/guides/coding-agents/claude-code-integration
     anthropicApiHost: 'https://openrouter.ai/api',
     models: SYSTEM_MODELS.openrouter,

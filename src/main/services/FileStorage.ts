@@ -1,5 +1,4 @@
 import { loggerService } from '@logger'
-import { toAsarUnpackedPath } from '@main/utils'
 import {
   checkName,
   getFilesDir,
@@ -11,6 +10,7 @@ import {
   scanDir
 } from '@main/utils/file'
 import { t } from '@main/utils/locales'
+import { getRipgrepBinaryPath, runRipgrep } from '@main/utils/ripgrep'
 import { documentExts, imageExts, KB, MB } from '@shared/config/constant'
 import { parseDataUrl } from '@shared/utils'
 import type { FileMetadata, FileType, NotesTreeNode } from '@types'
@@ -33,69 +33,20 @@ import WordExtractor from 'word-extractor'
 
 const logger = loggerService.withContext('FileStorage')
 
-// Get ripgrep binary path
-const getRipgrepBinaryPath = (): string | null => {
-  try {
-    const arch = process.arch === 'arm64' ? 'arm64' : 'x64'
-    const platform = process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux'
-    let ripgrepBinaryPath = path.join(
-      __dirname,
-      '../../node_modules/@anthropic-ai/claude-agent-sdk/vendor/ripgrep',
-      `${arch}-${platform}`,
-      process.platform === 'win32' ? 'rg.exe' : 'rg'
-    )
-
-    ripgrepBinaryPath = toAsarUnpackedPath(ripgrepBinaryPath)
-
-    if (fs.existsSync(ripgrepBinaryPath)) {
-      return ripgrepBinaryPath
-    }
-    return null
-  } catch (error) {
-    logger.error('Failed to locate ripgrep binary:', error as Error)
-    return null
-  }
-}
-
 /**
  * Execute ripgrep with captured output
  */
-function executeRipgrep(args: string[]): Promise<{ exitCode: number; output: string }> {
-  return new Promise((resolve, reject) => {
-    const ripgrepBinaryPath = getRipgrepBinaryPath()
+async function executeRipgrep(args: string[]): Promise<{ exitCode: number; output: string }> {
+  const result = await runRipgrep(['--no-config', '--ignore-case', ...args])
 
-    if (!ripgrepBinaryPath) {
-      reject(new Error('Ripgrep binary not available'))
-      return
-    }
+  if (!result.ok) {
+    throw new Error(result.output || 'Ripgrep binary not available')
+  }
 
-    const { spawn } = require('child_process')
-    const child = spawn(ripgrepBinaryPath, ['--no-config', '--ignore-case', ...args], {
-      stdio: ['pipe', 'pipe', 'pipe']
-    })
-
-    let output = ''
-    let errorOutput = ''
-
-    child.stdout.on('data', (data: Buffer) => {
-      output += data.toString()
-    })
-
-    child.stderr.on('data', (data: Buffer) => {
-      errorOutput += data.toString()
-    })
-
-    child.on('close', (code: number) => {
-      resolve({
-        exitCode: code || 0,
-        output: output || errorOutput
-      })
-    })
-
-    child.on('error', (error: Error) => {
-      reject(error)
-    })
-  })
+  return {
+    exitCode: result.exitCode ?? 0,
+    output: result.output || result.stderr || result.stdout
+  }
 }
 
 interface FileWatcherConfig {

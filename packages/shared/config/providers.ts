@@ -1,5 +1,5 @@
 /**
- * @fileoverview Shared provider configuration for Claude Code and Anthropic API compatibility
+ * @fileoverview Shared provider configuration for Anthropic API compatibility
  *
  * This module defines which models from specific providers support the Anthropic API endpoint.
  * Used by both the Code Tools page and the Anthropic SDK client.
@@ -9,7 +9,7 @@ import { SystemProviderIds } from '@types'
 
 /**
  * Silicon provider models that support Anthropic API endpoint.
- * These models can be used with Claude Code via the Anthropic-compatible API.
+ * These models can be used by coding agents via the Anthropic-compatible API.
  *
  * @see https://docs.siliconflow.cn/cn/api-reference/chat-completions/messages
  */

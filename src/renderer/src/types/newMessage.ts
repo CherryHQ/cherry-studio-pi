@@ -215,7 +215,7 @@ export type Message = {
   // 跟踪Id
   traceId?: string
 
-  // Agent session identifier used to resume Claude Code runs
+  // Agent session identifier used to resume runtime sessions
   agentSessionId?: string
 
   // raw data

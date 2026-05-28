@@ -306,7 +306,7 @@ export class SessionMessageService extends BaseService {
               }
 
               default:
-                logger.warn('Unknown event type from Claude Code service:', {
+                logger.warn('Unknown event type from agent runtime service:', {
                   type: event.type
                 })
                 break

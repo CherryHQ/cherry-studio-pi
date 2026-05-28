@@ -18,7 +18,7 @@ import { and, asc, count, desc, eq, isNull, type SQL, sql } from 'drizzle-orm'
 import { BaseService } from '../BaseService'
 import { agentsTable, type InsertSessionRow, type SessionRow, sessionsTable } from '../database/schema'
 import type { AgentModelField } from '../errors'
-import { builtinSlashCommands } from './claudecode/commands'
+import { builtinSlashCommands } from './pi/builtin'
 
 const logger = loggerService.withContext('SessionService')
 

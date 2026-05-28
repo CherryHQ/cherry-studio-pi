@@ -2,29 +2,18 @@
  * @fileoverview Shared Anthropic AI client utilities for Cherry Studio
  *
  * This module provides functions for creating Anthropic SDK clients with different
- * authentication methods (OAuth, API key) and building Claude Code system messages.
+ * authentication methods (OAuth, API key).
  * It supports both standard Anthropic API and Anthropic Vertex AI endpoints.
  *
  * This shared module can be used by both main and renderer processes.
  */
 
 import Anthropic from '@anthropic-ai/sdk'
-import type { TextBlockParam } from '@anthropic-ai/sdk/resources'
 import { loggerService } from '@logger'
 import { withoutTrailingApiVersion } from '@shared/utils/api'
 import type { Provider } from '@types'
-import type { ModelMessage } from 'ai'
 
 const logger = loggerService.withContext('anthropic-sdk')
-
-const defaultClaudeCodeSystemPrompt = `You are Claude Code, Anthropic's official CLI for Claude.`
-
-const defaultClaudeCodeSystem: Array<TextBlockParam> = [
-  {
-    type: 'text',
-    text: defaultClaudeCodeSystemPrompt
-  }
-]
 
 /**
  * Creates and configures an Anthropic SDK client based on the provider configuration.
@@ -33,7 +22,7 @@ const defaultClaudeCodeSystem: Array<TextBlockParam> = [
  * 1. OAuth: Uses OAuth tokens passed as parameter
  * 2. API Key: Uses traditional API key authentication
  *
- * For OAuth authentication, it includes Claude Code specific headers and beta features.
+ * For OAuth authentication, it includes Anthropic OAuth headers and beta features.
  * For API key authentication, it uses the provider's configuration with custom headers.
  *
  * @param provider - The provider configuration containing authentication details
@@ -121,52 +110,4 @@ export function getSdkClient(
       ...provider.extra_headers
     }
   })
-}
-
-/**
- * Builds and prepends the Claude Code system message to user-provided system messages.
- *
- * This function ensures that all interactions with Claude include the official Claude Code
- * system prompt, which identifies the assistant as "Claude Code, Anthropic's official CLI for Claude."
- *
- * The function handles three cases:
- * 1. No system message provided: Returns only the default Claude Code system message
- * 2. String system message: Converts to array format and prepends Claude Code message
- * 3. Array system message: Checks if Claude Code message exists and prepends if missing
- *
- * @param system - Optional user-provided system message (string or TextBlockParam array)
- * @returns Combined system message with Claude Code prompt prepended
- *
- * ```
- */
-export function buildClaudeCodeSystemMessage(system?: string | Array<TextBlockParam>): Array<TextBlockParam> {
-  if (!system) {
-    return defaultClaudeCodeSystem
-  }
-
-  if (typeof system === 'string') {
-    if (system.trim() === defaultClaudeCodeSystemPrompt || system.trim() === '') {
-      return defaultClaudeCodeSystem
-    } else {
-      return [...defaultClaudeCodeSystem, { type: 'text', text: system }]
-    }
-  }
-  if (Array.isArray(system)) {
-    const firstSystem = system[0]
-    if (firstSystem.type === 'text' && firstSystem.text.trim() === defaultClaudeCodeSystemPrompt) {
-      return system
-    } else {
-      return [...defaultClaudeCodeSystem, ...system]
-    }
-  }
-
-  return defaultClaudeCodeSystem
-}
-
-export function buildClaudeCodeSystemModelMessage(system?: string | Array<TextBlockParam>): Array<ModelMessage> {
-  const textBlocks = buildClaudeCodeSystemMessage(system)
-  return textBlocks.map((block) => ({
-    role: 'system',
-    content: block.text
-  }))
 }

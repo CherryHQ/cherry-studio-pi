@@ -213,7 +213,7 @@ export interface FindExecutableOptions {
 
 /**
  * Find executable in common paths or PATH environment variable
- * Based on Claude Code's implementation with security checks
+ * Find executable with security checks
  * @param name - Name of the executable to find (without extension)
  * @param options - Optional configuration for extensions and common paths
  * @returns Full path to the executable or null if not found

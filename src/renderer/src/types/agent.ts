@@ -71,7 +71,6 @@ export const AgentConfigurationSchema = z
     avatar: z.string().optional(), // agent type as mark of default avatar; single emoji; URL or path to avatar image.
     slash_commands: z.array(z.string()).optional(), // Array of slash commands to trigger the agent, this is from agent init response
 
-    // https://docs.claude.com/en/docs/claude-code/sdk/sdk-permissions#mode-specific-behaviors
     permission_mode: PermissionModeSchema.optional().default('bypassPermissions'), // Permission mode, default to full tool access
     max_turns: z.number().optional().default(100), // Maximum number of interaction turns, default to 100
     env_vars: z.record(z.string(), z.string()).optional().default({}), // Custom environment variables for the agent runtime

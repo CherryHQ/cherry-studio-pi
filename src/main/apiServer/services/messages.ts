@@ -2,7 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import type { MessageCreateParams, MessageStreamEvent } from '@anthropic-ai/sdk/resources'
 import { loggerService } from '@logger'
 import anthropicService from '@main/services/AnthropicService'
-import { buildClaudeCodeSystemMessage, getSdkClient } from '@shared/anthropic'
+import { getSdkClient } from '@shared/anthropic'
 import type { Provider } from '@types'
 import type { Response } from 'express'
 
@@ -124,7 +124,7 @@ export class MessagesService {
     return extraHeaders
   }
 
-  createAnthropicRequest(request: MessageCreateParams, provider: Provider, modelId?: string): MessageCreateParams {
+  createAnthropicRequest(request: MessageCreateParams, _provider: Provider, modelId?: string): MessageCreateParams {
     const anthropicRequest: MessageCreateParams = {
       ...request,
       stream: !!request.stream
@@ -133,11 +133,6 @@ export class MessagesService {
     // Override model if provided
     if (modelId) {
       anthropicRequest.model = modelId
-    }
-
-    // Add Claude Code system message for OAuth providers
-    if (provider.type === 'anthropic' && provider.authType === 'oauth') {
-      anthropicRequest.system = buildClaudeCodeSystemMessage(request.system)
     }
 
     return anthropicRequest

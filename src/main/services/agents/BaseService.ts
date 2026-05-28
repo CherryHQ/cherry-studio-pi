@@ -12,8 +12,7 @@ import path from 'path'
 import { DatabaseManager } from './database/DatabaseManager'
 import type { AgentModelField } from './errors'
 import { AgentModelValidationError } from './errors'
-import { builtinSlashCommands } from './services/claudecode/commands'
-import { builtinTools } from './services/claudecode/tools'
+import { builtinSlashCommands, builtinTools } from './services/pi/builtin'
 
 const logger = loggerService.withContext('BaseService')
 const MCP_TOOL_ID_PREFIX = 'mcp__'
