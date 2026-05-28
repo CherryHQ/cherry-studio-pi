@@ -4,6 +4,7 @@ import db from '@renderer/databases'
 const logger = loggerService.withContext('StorageV2DexieSettingsMirrorService')
 
 const DEFAULT_DEBOUNCE_MS = 0
+const RETRY_DEBOUNCE_MS = 5000
 const STORAGE_V2_DEXIE_SETTINGS_PREFIX = 'dexie.settings.'
 
 type DexieTransactionLike = {
@@ -161,7 +162,7 @@ class StorageV2DexieSettingsMirrorService {
       for (const settingId of deletedIds) {
         this.pendingDeletedIds.add(settingId)
       }
-      this.scheduleFlush(DEFAULT_DEBOUNCE_MS)
+      this.scheduleFlush(RETRY_DEBOUNCE_MS)
       logger.warn('Failed to mirror Dexie settings to Storage v2', error as Error)
     }
   }
