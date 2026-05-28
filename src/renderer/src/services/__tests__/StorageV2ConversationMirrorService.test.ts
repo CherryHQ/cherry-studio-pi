@@ -173,4 +173,52 @@ describe('StorageV2ConversationMirrorService', () => {
       })
     )
   })
+
+  it('preserves destructive flush semantics when a mirror retry is queued', async () => {
+    const syncConversation = vi.fn().mockRejectedValueOnce(new Error('storage busy')).mockResolvedValue({
+      messageCount: 0,
+      blockCount: 0
+    })
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          syncConversation
+        }
+      }
+    })
+
+    mocks.topicsGet.mockResolvedValue({
+      id: 'topic-1',
+      messages: []
+    })
+
+    const state = {
+      assistants: {
+        assistants: [
+          {
+            id: 'assistant-1',
+            topics: [
+              {
+                id: 'topic-1',
+                assistantId: 'assistant-1',
+                name: 'Cleared',
+                createdAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                messages: []
+              }
+            ]
+          }
+        ]
+      }
+    }
+
+    const { storageV2ConversationMirrorService } = await import('../StorageV2ConversationMirrorService')
+
+    await storageV2ConversationMirrorService.flushTopic('topic-1', () => state, { destructive: true })
+    await storageV2ConversationMirrorService.flush()
+
+    expect(mocks.fetchStorageV2TopicMessages).not.toHaveBeenCalled()
+    expect(syncConversation).toHaveBeenCalledTimes(2)
+  })
 })

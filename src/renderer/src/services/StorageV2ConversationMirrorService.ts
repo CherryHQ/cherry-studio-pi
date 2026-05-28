@@ -361,6 +361,9 @@ class StorageV2ConversationMirrorService {
     } catch (error) {
       for (const topicId of topicIds) {
         this.pendingTopicIds.add(topicId)
+        if (destructiveTopicIds.has(topicId)) {
+          this.pendingDestructiveTopicIds.add(topicId)
+        }
       }
 
       logger.warn('Failed to mirror conversations to Storage v2', error as Error)
