@@ -5,6 +5,7 @@ import TesseractLogo from '@renderer/assets/images/providers/Tesseract.js.png'
 import { BUILTIN_OCR_PROVIDERS_MAP, DEFAULT_OCR_PROVIDER } from '@renderer/config/ocr'
 import { getBuiltinOcrProviderLabel } from '@renderer/i18n/label'
 import { flushStorageV2ReduxMirror } from '@renderer/services/StorageV2ReduxMirrorFlush'
+import { persistStorageV2ReduxSlice } from '@renderer/services/StorageV2ReduxSliceService'
 import { useAppSelector } from '@renderer/store'
 import { addOcrProvider, removeOcrProvider, setImageOcrProviderId, updateOcrProviderConfig } from '@renderer/store/ocr'
 import type { ImageOcrProvider, OcrProvider, OcrProviderConfig } from '@renderer/types'
@@ -17,11 +18,17 @@ import { useDispatch } from 'react-redux'
 
 const logger = loggerService.withContext('useOcrProvider')
 
-const flushOcrMirror = (reason: string) => {
-  void flushStorageV2ReduxMirror(reason)
+function flushOcrMirror(reason: string): void
+function flushOcrMirror(reason: string, options: { strict: true }): Promise<void>
+function flushOcrMirror(reason: string, options?: { strict?: boolean }) {
+  const task = flushStorageV2ReduxMirror(reason, options)
+  if (options?.strict) return task
+  void task
+  return undefined
 }
 
 export const useOcrProviders = () => {
+  const ocrState = useAppSelector((state) => state.ocr)
   const providers = useAppSelector((state) => state.ocr.providers)
   const imageProviders = providers.filter(isImageOcrProvider)
   const imageProviderId = useAppSelector((state) => state.ocr.imageProviderId)
@@ -53,7 +60,7 @@ export const useOcrProviders = () => {
    * @param id - 要移除的OCR提供者ID
    * @throws {Error} 当尝试移除一个内置提供商时抛出错误
    */
-  const removeProvider = (id: string) => {
+  const removeProvider = async (id: string) => {
     if (isBuiltinOcrProviderId(id)) {
       const msg = `Cannot remove builtin provider ${id}`
       logger.error(msg)
@@ -61,8 +68,12 @@ export const useOcrProviders = () => {
       throw new Error(msg)
     }
 
+    await persistStorageV2ReduxSlice('ocr', {
+      ...ocrState,
+      providers: providers.filter((provider) => provider.id !== id)
+    })
     dispatch(removeOcrProvider(id))
-    flushOcrMirror('ocr-remove-provider')
+    await flushOcrMirror('ocr-remove-provider', { strict: true })
   }
 
   const setImageProviderId = useCallback(
