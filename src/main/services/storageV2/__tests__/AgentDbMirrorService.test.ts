@@ -17,4 +17,16 @@ describe('StorageV2AgentDbMirrorService', () => {
 
     expect(importSnapshot).toHaveBeenCalledWith({ dryRun: false, createSnapshot: false })
   })
+
+  it('throws from strict flush when the runtime mirror cannot be written', async () => {
+    const error = new Error('storage locked')
+    const importSnapshot = vi
+      .spyOn(storageV2LegacyAgentDbImportService, 'importSnapshot')
+      .mockRejectedValueOnce(error)
+      .mockResolvedValueOnce({} as any)
+
+    await expect(storageV2AgentDbMirrorService.flushStrict()).rejects.toThrow('storage locked')
+
+    expect(importSnapshot).toHaveBeenCalledWith({ dryRun: false, createSnapshot: false })
+  })
 })

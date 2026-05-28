@@ -35,7 +35,12 @@ async function recoverAgentRuntimeForWrite(agentId: string | undefined, reason: 
   await storageV2AgentRuntimeRecoveryService.projectIfAgentMissing(agentId, reason)
 }
 
-async function flushAgentRuntimeMutationToStorageV2() {
+async function flushAgentRuntimeMutationToStorageV2(options: { strict?: boolean } = {}) {
+  if (options.strict) {
+    await storageV2AgentDbMirrorService.flushStrict()
+    return
+  }
+
   storageV2AgentDbMirrorService.schedule(0)
   await storageV2AgentDbMirrorService.flush()
 }
@@ -94,7 +99,7 @@ export async function deleteAgentWithStorageV2Recovery(id: string): Promise<bool
     deleted = await agentService.deleteAgent(id)
   }
   if (deleted) {
-    await flushAgentRuntimeMutationToStorageV2()
+    await flushAgentRuntimeMutationToStorageV2({ strict: true })
   }
   return deleted
 }
@@ -196,7 +201,7 @@ export async function deleteSessionWithStorageV2Recovery(agentId: string, sessio
     deleted = await sessionService.deleteSession(agentId, sessionId)
   }
   if (deleted) {
-    await flushAgentRuntimeMutationToStorageV2()
+    await flushAgentRuntimeMutationToStorageV2({ strict: true })
   }
   return deleted
 }
@@ -264,7 +269,7 @@ export async function deleteAgentSessionMessageWithStorageV2Recovery(
     deleted = await sessionMessageService.deleteSessionMessage(sessionId, messageId)
   }
   if (deleted) {
-    await flushAgentRuntimeMutationToStorageV2()
+    await flushAgentRuntimeMutationToStorageV2({ strict: true })
   }
   return deleted
 }
@@ -373,7 +378,7 @@ export async function deleteTaskWithStorageV2Recovery(agentId: string, taskId: s
     deleted = await taskService.deleteTask(agentId, taskId)
   }
   if (deleted) {
-    await flushAgentRuntimeMutationToStorageV2()
+    await flushAgentRuntimeMutationToStorageV2({ strict: true })
   }
   return deleted
 }
@@ -387,7 +392,7 @@ export async function deleteTaskByIdWithStorageV2Recovery(taskId: string): Promi
     deleted = await taskService.deleteTaskById(taskId)
   }
   if (deleted) {
-    await flushAgentRuntimeMutationToStorageV2()
+    await flushAgentRuntimeMutationToStorageV2({ strict: true })
   }
   return deleted
 }
@@ -503,7 +508,7 @@ export async function deleteChannelWithStorageV2Recovery(channelId: string): Pro
     deleted = await channelService.deleteChannel(channelId)
   }
   if (deleted) {
-    await flushAgentRuntimeMutationToStorageV2()
+    await flushAgentRuntimeMutationToStorageV2({ strict: true })
   }
   return deleted
 }

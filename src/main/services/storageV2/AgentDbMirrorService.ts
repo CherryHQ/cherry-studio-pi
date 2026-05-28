@@ -11,6 +11,7 @@ class StorageV2AgentDbMirrorService {
   private pending = false
   private inflight: Promise<void> | null = null
   private needsFollowUp = false
+  private lastError: unknown = null
 
   schedule(debounceMs = DEFAULT_DEBOUNCE_MS) {
     this.pending = true
@@ -51,12 +52,23 @@ class StorageV2AgentDbMirrorService {
     await this.inflight
   }
 
+  async flushStrict() {
+    this.schedule(0)
+    await this.flush()
+
+    if (this.pending) {
+      throw this.lastError instanceof Error ? this.lastError : new Error('Failed to mirror agents.db to Storage v2')
+    }
+  }
+
   private async mirrorNow() {
     try {
       await storageV2LegacyAgentDbImportService.importSnapshot({ dryRun: false, createSnapshot: false })
+      this.lastError = null
       logger.debug('Mirrored agents.db to Storage v2')
     } catch (error) {
       this.pending = true
+      this.lastError = error
       logger.warn('Failed to mirror agents.db to Storage v2', error as Error)
     }
   }

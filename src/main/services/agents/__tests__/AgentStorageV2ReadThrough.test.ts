@@ -41,7 +41,8 @@ const mocks = vi.hoisted(() => ({
   },
   mirror: {
     schedule: vi.fn(),
-    flush: vi.fn()
+    flush: vi.fn(),
+    flushStrict: vi.fn()
   }
 }))
 
@@ -109,6 +110,7 @@ describe('AgentStorageV2ReadThrough mutation wrappers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.mirror.flush.mockResolvedValue(undefined)
+    mocks.mirror.flushStrict.mockResolvedValue(undefined)
     mocks.recovery.projectIfAgentMissing.mockResolvedValue(false)
     mocks.recovery.projectIfSessionMissing.mockResolvedValue(false)
     mocks.recovery.projectIfSessionMissingById.mockResolvedValue(false)
@@ -132,9 +134,9 @@ describe('AgentStorageV2ReadThrough mutation wrappers', () => {
     await expect(deleteTaskByIdWithStorageV2Recovery('task-1')).resolves.toBe(true)
     await expect(deleteChannelWithStorageV2Recovery('channel-1')).resolves.toBe(true)
 
-    expect(mocks.mirror.schedule).toHaveBeenCalledTimes(6)
-    expect(mocks.mirror.schedule).toHaveBeenCalledWith(0)
-    expect(mocks.mirror.flush).toHaveBeenCalledTimes(6)
+    expect(mocks.mirror.schedule).not.toHaveBeenCalled()
+    expect(mocks.mirror.flush).not.toHaveBeenCalled()
+    expect(mocks.mirror.flushStrict).toHaveBeenCalledTimes(6)
   })
 
   it('flushes the Storage v2 agent mirror after low-frequency successful writes', async () => {
@@ -199,8 +201,9 @@ describe('AgentStorageV2ReadThrough mutation wrappers', () => {
       'agent-session-delete-missing'
     )
     expect(mocks.sessionService.deleteSession).toHaveBeenCalledTimes(2)
-    expect(mocks.mirror.schedule).toHaveBeenCalledWith(0)
-    expect(mocks.mirror.flush).toHaveBeenCalledTimes(1)
+    expect(mocks.mirror.schedule).not.toHaveBeenCalled()
+    expect(mocks.mirror.flush).not.toHaveBeenCalled()
+    expect(mocks.mirror.flushStrict).toHaveBeenCalledTimes(1)
   })
 
   it('does not flush when the delete target is absent from both runtimes', async () => {
@@ -211,6 +214,18 @@ describe('AgentStorageV2ReadThrough mutation wrappers', () => {
 
     expect(mocks.mirror.schedule).not.toHaveBeenCalled()
     expect(mocks.mirror.flush).not.toHaveBeenCalled()
+    expect(mocks.mirror.flushStrict).not.toHaveBeenCalled()
+  })
+
+  it('surfaces strict Storage v2 mirror failures after destructive deletes', async () => {
+    const error = new Error('storage unavailable')
+    mocks.sessionService.deleteSession.mockResolvedValue(true)
+    mocks.mirror.flushStrict.mockRejectedValueOnce(error)
+
+    await expect(deleteSessionWithStorageV2Recovery('agent-1', 'session-1')).rejects.toThrow('storage unavailable')
+
+    expect(mocks.sessionService.deleteSession).toHaveBeenCalledTimes(1)
+    expect(mocks.mirror.flushStrict).toHaveBeenCalledTimes(1)
   })
 
   it('flushes the Storage v2 agent mirror after persisting a message exchange', async () => {
