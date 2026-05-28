@@ -228,6 +228,7 @@ describe('StorageV2ProviderRepository', () => {
 
     const executedSql = execute.mock.calls.map(([input]) => (typeof input === 'string' ? input : input.sql))
     expect(executedSql.some((sql) => sql.includes('DELETE FROM models'))).toBe(false)
+    expect(executedSql.some((sql) => sql.includes('INSERT INTO models') && sql.includes('ON CONFLICT(id)'))).toBe(true)
     expect(execute).toHaveBeenCalledWith(
       expect.objectContaining({
         sql: expect.stringContaining('UPDATE models'),

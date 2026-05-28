@@ -611,6 +611,16 @@ export class StorageV2ProviderRepository {
               created_at, updated_at, deleted_at
             )
             VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, NULL)
+            ON CONFLICT(id) DO UPDATE SET
+              provider_id = excluded.provider_id,
+              name = excluded.name,
+              group_name = excluded.group_name,
+              capabilities_json = excluded.capabilities_json,
+              config_json = excluded.config_json,
+              enabled = excluded.enabled,
+              sort_order = excluded.sort_order,
+              updated_at = excluded.updated_at,
+              deleted_at = NULL
           `,
           args: [
             `${provider.id}:${model.id}`,
