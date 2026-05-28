@@ -938,6 +938,7 @@ export async function getBackupData() {
 /************************************* Backup Utils ************************************** */
 export async function handleData(data: Record<string, any>) {
   if (data.version === 1) {
+    suspendStorageV2RuntimeMirrorsUntilReload()
     await clearDatabase()
 
     for (const { key, value } of data.indexedDB) {
@@ -958,6 +959,7 @@ export async function handleData(data: Record<string, any>) {
   }
 
   if (data.version >= 2) {
+    suspendStorageV2RuntimeMirrorsUntilReload()
     localStorage.setItem('persist:cherry-studio', data.localStorage['persist:cherry-studio'])
 
     // remove notes_tree from indexedDB

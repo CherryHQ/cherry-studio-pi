@@ -161,6 +161,10 @@ describe('BackupService legacy restore', () => {
       preferMessageAssistantId: true,
       pruneMissing: true
     })
+    expect(mocks.suspendStorageV2RuntimeMirrorsUntilReload).toHaveBeenCalledTimes(1)
+    expect(mocks.suspendStorageV2RuntimeMirrorsUntilReload.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.importLegacyDexieToStorageV2.mock.invocationCallOrder[0]
+    )
     expect(window.toast.success).toHaveBeenCalledWith('message.restore.success')
 
     vi.advanceTimersByTime(1000)
