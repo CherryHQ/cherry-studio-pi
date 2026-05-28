@@ -105,6 +105,10 @@ describe('StorageV2LegacyDexieImportService', () => {
           {
             key: 'dexie.settings.image://stale',
             value: 'stale-avatar'
+          },
+          {
+            key: 'dexie.settings.image://already-deleted',
+            value: null
           }
         ]
       }
@@ -118,6 +122,10 @@ describe('StorageV2LegacyDexieImportService', () => {
           {
             key: 'dexie.table.quick_phrases.stale-phrase',
             value: { id: 'stale-phrase' }
+          },
+          {
+            key: 'dexie.table.quick_phrases.already-deleted',
+            value: null
           }
         ]
       }
@@ -136,8 +144,18 @@ describe('StorageV2LegacyDexieImportService', () => {
     )
 
     expect(mocks.settingsRepository.set).toHaveBeenCalledWith('dexie.settings.image://stale', null, 'dexie-settings')
+    expect(mocks.settingsRepository.set).not.toHaveBeenCalledWith(
+      'dexie.settings.image://already-deleted',
+      null,
+      'dexie-settings'
+    )
     expect(mocks.settingsRepository.set).toHaveBeenCalledWith(
       'dexie.table.quick_phrases.stale-phrase',
+      null,
+      'dexie-table:quick_phrases'
+    )
+    expect(mocks.settingsRepository.set).not.toHaveBeenCalledWith(
+      'dexie.table.quick_phrases.already-deleted',
       null,
       'dexie-table:quick_phrases'
     )

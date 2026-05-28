@@ -159,6 +159,7 @@ async function pruneMissingSettings(scope: string, activeKeys: Iterable<string>)
 
   for (const setting of existingSettings) {
     if (activeKeySet.has(setting.key)) continue
+    if (setting.value === null) continue
 
     await storageV2SettingsRepository.set(setting.key, null, scope)
     deletedCount++
