@@ -21,6 +21,12 @@ function getConfigDir() {
   return path.join(os.homedir(), HOME_CHERRY_DIR, 'config')
 }
 
+function writeJsonAtomic(filePath: string, value: unknown) {
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
+  fs.writeFileSync(tempPath, JSON.stringify(value, null, 2))
+  fs.renameSync(tempPath, filePath)
+}
+
 export function initAppDataDir() {
   const appDataPath = getAppDataPathFromConfig()
   if (appDataPath) {
@@ -101,7 +107,7 @@ export function updateAppDataConfig(appDataPath: string) {
   }
 
   if (!fs.existsSync(configPath)) {
-    fs.writeFileSync(configPath, JSON.stringify({ appDataPath: [{ executablePath, dataPath: appDataPath }] }, null, 2))
+    writeJsonAtomic(configPath, { appDataPath: [{ executablePath, dataPath: appDataPath }] })
     return
   }
 
@@ -120,5 +126,5 @@ export function updateAppDataConfig(appDataPath: string) {
     config.appDataPath.push({ executablePath, dataPath: appDataPath })
   }
 
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2))
+  writeJsonAtomic(configPath, config)
 }
