@@ -304,9 +304,13 @@ class StorageV2MirrorService {
     }
   }
 
-  resumeRuntimeMirroring() {
+  resumeRuntimeMirroring(options: { scheduleLatest?: boolean; pruneMissing?: boolean } = {}) {
     if (this.suspended) return
     this.paused = false
+
+    if (options.scheduleLatest && this.latestGetState) {
+      this.schedule(this.latestGetState, 0, { pruneMissing: options.pruneMissing })
+    }
   }
 }
 

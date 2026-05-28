@@ -445,7 +445,7 @@ export const useKnowledgeBases = () => {
       updateAssistants(_assistants)
       setAssistantPresets(_presets)
     } finally {
-      storageV2MirrorService.resumeRuntimeMirroring()
+      storageV2MirrorService.resumeRuntimeMirroring({ scheduleLatest: true })
     }
 
     await flushStorageV2KnowledgeMirror('delete-knowledge-base', { strict: true })

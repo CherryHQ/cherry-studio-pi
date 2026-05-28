@@ -86,6 +86,26 @@ describe('StorageV2MirrorService', () => {
     expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), { dryRun: false, pruneMissing: false })
   })
 
+  it('can queue the latest paused runtime state when mirroring resumes', async () => {
+    const { storageV2MirrorService } = await import('../StorageV2MirrorService')
+    const middleware = storageV2MirrorService.createMiddleware()({
+      dispatch: vi.fn(),
+      getState: createState
+    } as any)(vi.fn((action) => action))
+
+    storageV2MirrorService.pauseRuntimeMirroring()
+    middleware({ type: 'knowledge/deleteBase' })
+    await vi.advanceTimersByTimeAsync(1500)
+
+    expect(importLegacyReduxSnapshot).not.toHaveBeenCalled()
+
+    storageV2MirrorService.resumeRuntimeMirroring({ scheduleLatest: true })
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), { dryRun: false, pruneMissing: true })
+  })
+
   it('keeps the initial startup mirror non-pruning', async () => {
     const { storageV2MirrorService } = await import('../StorageV2MirrorService')
 
