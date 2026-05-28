@@ -26,6 +26,7 @@ export class StorageV2AgentRuntimeRecoveryService {
     return this.projectIfStorageHasRows(reason, async () => {
       const legacyAgentCount = await this.countLegacyVisibleAgents()
       if (legacyAgentCount > 0) return false
+      if ((await this.countLegacyDeletedAgents()) > 0) return false
       return (await this.countStorageVisibleAgents()) > 0
     })
   }
@@ -178,6 +179,13 @@ export class StorageV2AgentRuntimeRecoveryService {
       sql: 'SELECT COUNT(*) AS count FROM agents WHERE id = ? AND deleted_at IS NOT NULL',
       args: [agentId]
     })
+    return countFromRow(result.rows[0] as Record<string, unknown> | undefined)
+  }
+
+  private async countLegacyDeletedAgents() {
+    const databaseManager = await DatabaseManager.getInstance()
+    const client = await databaseManager.getClient()
+    const result = await client.execute('SELECT COUNT(*) AS count FROM agents WHERE deleted_at IS NOT NULL')
     return countFromRow(result.rows[0] as Record<string, unknown> | undefined)
   }
 
