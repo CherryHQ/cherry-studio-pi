@@ -829,6 +829,25 @@ describe('StorageV2BackupService.restoreBackup', () => {
       issues: []
     })
     mocks.statisticsService.getStats.mockResolvedValue({ generatedAt: '2026-01-01T00:00:00.000Z', counts: {} })
+    mocks.agentProjection.projectToLegacyRuntime.mockResolvedValue({
+      projectedAgentCount: 1,
+      projectedSessionCount: 1,
+      projectedSessionMessageCount: 1,
+      projectedChannelCount: 1,
+      warnings: []
+    })
+    mocks.fileProjection.projectToLegacyRuntime.mockResolvedValue({
+      projectedFileCount: 1,
+      missingBlobCount: 0,
+      warnings: []
+    })
+    mocks.appDataProjection.projectToLegacyRuntime.mockResolvedValue({
+      projectedRecordCount: 1,
+      projectedSyncStateCount: 1,
+      projectedSyncConflictCount: 1,
+      projectedWorkbenchShortcutCount: 1,
+      warnings: []
+    })
 
     const service = new StorageV2BackupService()
     const backup = await service.createBackup('complete-fixture')
@@ -870,6 +889,31 @@ describe('StorageV2BackupService.restoreBackup', () => {
     expect(fs.readFileSync(path.join(targetRoot, 'Notes', 'note.md'), 'utf-8')).toBe('# Note')
     expect(fs.readFileSync(path.join(targetRoot, 'Workspace', 'README.md'), 'utf-8')).toBe('# Workspace')
     expect(mocks.dataRootService.activateDataRoot).toHaveBeenCalledWith(targetRoot)
+    expect(mocks.agentProjection.projectToLegacyRuntime).toHaveBeenCalledWith({ archiveRoot: result.archivedPath })
+    expect(mocks.fileProjection.projectToLegacyRuntime).toHaveBeenCalledWith({ archiveRoot: result.archivedPath })
+    expect(mocks.appDataProjection.projectToLegacyRuntime).toHaveBeenCalledWith({ archiveRoot: result.archivedPath })
+    expect(result.agentLegacyProjection).toEqual(
+      expect.objectContaining({
+        projectedAgentCount: 1,
+        projectedSessionCount: 1,
+        projectedSessionMessageCount: 1,
+        projectedChannelCount: 1
+      })
+    )
+    expect(result.fileLegacyProjection).toEqual(
+      expect.objectContaining({
+        projectedFileCount: 1,
+        missingBlobCount: 0
+      })
+    )
+    expect(result.appDataLegacyProjection).toEqual(
+      expect.objectContaining({
+        projectedRecordCount: 1,
+        projectedSyncStateCount: 1,
+        projectedSyncConflictCount: 1,
+        projectedWorkbenchShortcutCount: 1
+      })
+    )
     expect(result.requiresRestart).toBe(true)
     expect(result.warnings).toEqual([])
   })
