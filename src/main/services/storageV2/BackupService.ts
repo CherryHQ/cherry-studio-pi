@@ -1,9 +1,9 @@
-import { createHash } from 'node:crypto'
+import { createDecipheriv, createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
 import { createClient } from '@libsql/client'
-import { app, safeStorage } from 'electron'
+import { app } from 'electron'
 
 import { configManager } from '../ConfigManager'
 import KnowledgeService from '../KnowledgeService'
@@ -242,6 +242,29 @@ function readJsonFile(filePath: string): Record<string, any> | null {
   }
 }
 
+function readSecretVaultMasterKey(vaultPath: string): Buffer | null {
+  try {
+    const key = Buffer.from(fs.readFileSync(path.join(path.dirname(vaultPath), 'master.key'), 'utf-8').trim(), 'base64')
+    return key.length === 32 ? key : null
+  } catch {
+    return null
+  }
+}
+
+function canDecryptLocalVaultRecord(record: Record<string, string>, key: Buffer): boolean {
+  if (!record.iv || !record.authTag) return false
+
+  try {
+    const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(record.iv, 'base64'))
+    decipher.setAuthTag(Buffer.from(record.authTag, 'base64'))
+    decipher.update(Buffer.from(record.encrypted, 'base64'))
+    decipher.final()
+    return true
+  } catch {
+    return false
+  }
+}
+
 function validateSecretVaultFile(vaultPath: string): {
   exists: boolean
   secretCount: number
@@ -255,7 +278,7 @@ function validateSecretVaultFile(vaultPath: string): {
       exists: false,
       secretCount: 0,
       secretIds: new Set(),
-      decryptabilityChecked: safeStorage.isEncryptionAvailable(),
+      decryptabilityChecked: true,
       undecryptableSecretIds: new Set()
     }
   }
@@ -266,7 +289,7 @@ function validateSecretVaultFile(vaultPath: string): {
       exists: true,
       secretCount: 0,
       secretIds: new Set(),
-      decryptabilityChecked: safeStorage.isEncryptionAvailable(),
+      decryptabilityChecked: true,
       undecryptableSecretIds: new Set(),
       issue: validationMessage('secret_vault_invalid', 'Backup secret vault is missing required fields.')
     }
@@ -274,15 +297,17 @@ function validateSecretVaultFile(vaultPath: string): {
 
   let secretCount = 0
   const secretIds = new Set<string>()
-  const decryptabilityChecked = safeStorage.isEncryptionAvailable()
+  const masterKey = readSecretVaultMasterKey(vaultPath)
+  const decryptabilityChecked = Boolean(masterKey)
   const undecryptableSecretIds = new Set<string>()
   for (const [secretId, record] of Object.entries(vault.secrets)) {
+    const vaultRecord = record as Record<string, string>
     if (
       !secretId ||
       !record ||
       typeof record !== 'object' ||
-      typeof (record as Record<string, unknown>).encrypted !== 'string' ||
-      (record as Record<string, unknown>).encoding !== 'electron-safe-storage'
+      typeof vaultRecord.encrypted !== 'string' ||
+      (vaultRecord.encoding !== 'cherry-local-aes-256-gcm' && vaultRecord.encoding !== 'electron-safe-storage')
     ) {
       return {
         exists: true,
@@ -300,10 +325,10 @@ function validateSecretVaultFile(vaultPath: string): {
       }
     }
     secretIds.add(secretId)
-    if (decryptabilityChecked) {
-      try {
-        safeStorage.decryptString(Buffer.from((record as Record<string, string>).encrypted, 'base64'))
-      } catch {
+    if (vaultRecord.encoding === 'electron-safe-storage') {
+      undecryptableSecretIds.add(secretId)
+    } else if (decryptabilityChecked && masterKey) {
+      if (!canDecryptLocalVaultRecord(vaultRecord, masterKey)) {
         undecryptableSecretIds.add(secretId)
       }
     }

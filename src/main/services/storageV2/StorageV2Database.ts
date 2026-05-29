@@ -267,7 +267,8 @@ function readVaultSecretIds(vaultPath: string): {
         !record ||
         typeof record !== 'object' ||
         typeof (record as Record<string, unknown>).encrypted !== 'string' ||
-        (record as Record<string, unknown>).encoding !== 'electron-safe-storage'
+        ((record as Record<string, unknown>).encoding !== 'cherry-local-aes-256-gcm' &&
+          (record as Record<string, unknown>).encoding !== 'electron-safe-storage')
       ) {
         return {
           secretIds,

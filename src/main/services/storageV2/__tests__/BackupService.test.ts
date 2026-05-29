@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createCipheriv, createHash, randomBytes } from 'node:crypto'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
@@ -53,10 +53,6 @@ const mocks = vi.hoisted(() => ({
   memoryService: {
     close: vi.fn()
   },
-  safeStorage: {
-    decryptString: vi.fn(),
-    isEncryptionAvailable: vi.fn()
-  },
   secretVault: {
     waitForIdle: vi.fn()
   },
@@ -73,8 +69,7 @@ vi.mock('electron', () => ({
     getPath: vi.fn((key: string) => (key === 'userData' ? '/mock/userData' : '/mock/unknown')),
     getVersion: vi.fn(() => '1.0.0'),
     name: 'Cherry Studio Pi'
-  },
-  safeStorage: mocks.safeStorage
+  }
 }))
 
 vi.mock('../../ConfigManager', () => ({
@@ -184,6 +179,41 @@ async function createBackupValidationDb(dbPath: string, secretRef?: string) {
   } finally {
     client.close()
   }
+}
+
+function writeLocalSecretVault(
+  secretsDir: string,
+  secretId: string,
+  options: {
+    corruptAuthTag?: boolean
+    writeMasterKey?: boolean
+  } = {}
+) {
+  const key = randomBytes(32)
+  const iv = randomBytes(12)
+  const cipher = createCipheriv('aes-256-gcm', key, iv)
+  const encrypted = Buffer.concat([cipher.update('secret', 'utf-8'), cipher.final()])
+  const authTag = options.corruptAuthTag ? randomBytes(16) : cipher.getAuthTag()
+
+  fs.mkdirSync(secretsDir, { recursive: true })
+  if (options.writeMasterKey !== false) {
+    fs.writeFileSync(path.join(secretsDir, 'master.key'), `${key.toString('base64')}\n`)
+  }
+  fs.writeFileSync(
+    path.join(secretsDir, 'vault.json'),
+    JSON.stringify({
+      version: 1,
+      secrets: {
+        [secretId]: {
+          encrypted: encrypted.toString('base64'),
+          iv: iv.toString('base64'),
+          authTag: authTag.toString('base64'),
+          encoding: 'cherry-local-aes-256-gcm',
+          updatedAt: '2026-01-01T00:00:00.000Z'
+        }
+      }
+    })
+  )
 }
 
 async function createCompleteBackupValidationDb(
@@ -364,8 +394,6 @@ describe('StorageV2BackupService.validateBackup', () => {
         }
       })
     )
-    mocks.safeStorage.isEncryptionAvailable.mockReturnValue(true)
-    mocks.safeStorage.decryptString.mockImplementation(() => 'secret')
   })
 
   afterEach(() => {
@@ -376,22 +404,7 @@ describe('StorageV2BackupService.validateBackup', () => {
   it('warns when backup secrets cannot be decrypted on this device', async () => {
     const secretRef = 'storage-v2://secret/provider/provider-1/apiKey'
     await createBackupValidationDb(path.join(backupPath, 'main.db'), secretRef)
-    fs.writeFileSync(
-      path.join(backupPath, 'secrets', 'vault.json'),
-      JSON.stringify({
-        version: 1,
-        secrets: {
-          'provider:provider-1:apiKey': {
-            encrypted: Buffer.from('encrypted-on-another-device').toString('base64'),
-            encoding: 'electron-safe-storage',
-            updatedAt: '2026-01-01T00:00:00.000Z'
-          }
-        }
-      })
-    )
-    mocks.safeStorage.decryptString.mockImplementation(() => {
-      throw new Error('not this device')
-    })
+    writeLocalSecretVault(path.join(backupPath, 'secrets'), 'provider:provider-1:apiKey', { corruptAuthTag: true })
 
     const validation = await new StorageV2BackupService().validateBackup(backupPath)
 
@@ -405,29 +418,15 @@ describe('StorageV2BackupService.validateBackup', () => {
     )
   })
 
-  it('warns without decrypting backup secrets when safeStorage is unavailable', async () => {
+  it('warns without decrypting backup secrets when the local master key is missing', async () => {
     const secretRef = 'storage-v2://secret/provider/provider-1/apiKey'
     await createBackupValidationDb(path.join(backupPath, 'main.db'), secretRef)
-    fs.writeFileSync(
-      path.join(backupPath, 'secrets', 'vault.json'),
-      JSON.stringify({
-        version: 1,
-        secrets: {
-          'provider:provider-1:apiKey': {
-            encrypted: Buffer.from('encrypted-on-this-device').toString('base64'),
-            encoding: 'electron-safe-storage',
-            updatedAt: '2026-01-01T00:00:00.000Z'
-          }
-        }
-      })
-    )
-    mocks.safeStorage.isEncryptionAvailable.mockReturnValue(false)
+    writeLocalSecretVault(path.join(backupPath, 'secrets'), 'provider:provider-1:apiKey', { writeMasterKey: false })
 
     const validation = await new StorageV2BackupService().validateBackup(backupPath)
 
     expect(validation.ok).toBe(true)
     expect(validation.undecryptableSecretVaultEntryCount).toBe(0)
-    expect(mocks.safeStorage.decryptString).not.toHaveBeenCalled()
     expect(validation.warnings).toContainEqual(
       expect.objectContaining({
         id: 'secret_vault_decrypt_unavailable'
@@ -470,19 +469,7 @@ describe('StorageV2BackupService.validateBackup', () => {
         copiedDirectories
       })
     )
-    fs.writeFileSync(
-      path.join(backupPath, 'secrets', 'vault.json'),
-      JSON.stringify({
-        version: 1,
-        secrets: {
-          'provider:provider-1:apiKey': {
-            encrypted: Buffer.from('encrypted-provider-key').toString('base64'),
-            encoding: 'electron-safe-storage',
-            updatedAt: '2026-01-01T00:00:00.000Z'
-          }
-        }
-      })
-    )
+    writeLocalSecretVault(path.join(backupPath, 'secrets'), 'provider:provider-1:apiKey')
     await createCompleteBackupValidationDb(path.join(backupPath, 'main.db'), {
       blobStoragePath,
       blobChecksum,
@@ -546,19 +533,7 @@ describe('StorageV2BackupService.validateBackup', () => {
         copiedDirectories: ['blobs', 'secrets']
       })
     )
-    fs.writeFileSync(
-      path.join(backupPath, 'secrets', 'vault.json'),
-      JSON.stringify({
-        version: 1,
-        secrets: {
-          'provider:provider-1:apiKey': {
-            encrypted: Buffer.from('encrypted-provider-key').toString('base64'),
-            encoding: 'electron-safe-storage',
-            updatedAt: '2026-01-01T00:00:00.000Z'
-          }
-        }
-      })
-    )
+    writeLocalSecretVault(path.join(backupPath, 'secrets'), 'provider:provider-1:apiKey')
     await createCompleteBackupValidationDb(path.join(backupPath, 'main.db'), {
       blobStoragePath,
       blobChecksum,
@@ -852,19 +827,7 @@ describe('StorageV2BackupService.restoreBackup', () => {
       })
     )
     fs.writeFileSync(path.join(sourceRoot, blobStoragePath), blobContent)
-    fs.writeFileSync(
-      path.join(sourceRoot, 'secrets', 'vault.json'),
-      JSON.stringify({
-        version: 1,
-        secrets: {
-          'provider:provider-1:apiKey': {
-            encrypted: Buffer.from('encrypted-provider-key').toString('base64'),
-            encoding: 'electron-safe-storage',
-            updatedAt: '2026-01-01T00:00:00.000Z'
-          }
-        }
-      })
-    )
+    writeLocalSecretVault(path.join(sourceRoot, 'secrets'), 'provider:provider-1:apiKey')
     fs.writeFileSync(path.join(sourceRoot, 'Channels', 'weixin_bot_channel-1.json'), '{"token":"secret"}')
     fs.writeFileSync(path.join(sourceRoot, 'Workbench', 'artifact.html'), '<h1>Artifact</h1>')
     fs.writeFileSync(path.join(sourceRoot, 'Notes', 'note.md'), '# Note')

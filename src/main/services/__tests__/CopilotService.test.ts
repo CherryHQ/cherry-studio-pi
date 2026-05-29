@@ -17,10 +17,6 @@ const mocks = vi.hoisted(() => ({
   net: {
     fetch: vi.fn()
   },
-  safeStorage: {
-    decryptString: vi.fn(),
-    encryptString: vi.fn()
-  },
   secretVault: {
     getSecret: vi.fn(),
     setSecret: vi.fn()
@@ -38,8 +34,7 @@ vi.mock('fs', () => ({
 
 vi.mock('electron', () => ({
   app: mocks.app,
-  net: mocks.net,
-  safeStorage: mocks.safeStorage
+  net: mocks.net
 }))
 
 vi.mock('../../utils/file', () => ({
@@ -79,8 +74,6 @@ describe('CopilotService Storage v2 token persistence', () => {
     mocks.fs.promises.readFile.mockRejectedValue(Object.assign(new Error('not found'), { code: 'ENOENT' }))
     mocks.fs.promises.unlink.mockResolvedValue(undefined)
     mocks.fs.promises.writeFile.mockResolvedValue(undefined)
-    mocks.safeStorage.encryptString.mockImplementation((value: string) => Buffer.from(`encrypted:${value}`))
-    mocks.safeStorage.decryptString.mockImplementation((value: Buffer) => value.toString().replace(/^encrypted:/, ''))
     mocks.secretVault.getSecret.mockResolvedValue(null)
     mocks.secretVault.setSecret.mockResolvedValue('storage-v2://secret/copilot/github/accessToken')
     mocks.settingsRepository.get.mockResolvedValue(null)
@@ -91,12 +84,17 @@ describe('CopilotService Storage v2 token persistence', () => {
     })
   })
 
-  it('saves Copilot access tokens to Storage v2 secret vault and the legacy token file', async () => {
+  it('saves Copilot access tokens to Storage v2 secret vault and removes legacy token files', async () => {
     const service = await loadCopilotService()
 
-    await service.saveCopilotToken({} as Electron.IpcMainInvokeEvent, 'github-access-token')
+    await service.saveCopilotToken({} as Electron.IpcMainInvokeEvent, 'gho_github-access-token')
 
-    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith('copilot', 'github', 'accessToken', 'github-access-token')
+    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith(
+      'copilot',
+      'github',
+      'accessToken',
+      'gho_github-access-token'
+    )
     expect(mocks.settingsRepository.set).toHaveBeenCalledWith(
       'copilot.accessToken',
       {
@@ -105,37 +103,28 @@ describe('CopilotService Storage v2 token persistence', () => {
       },
       'copilot'
     )
-    expect(mocks.fs.promises.writeFile).toHaveBeenCalledWith(
-      '/mock/config/.copilot_token',
-      Buffer.from('encrypted:github-access-token')
-    )
+    expect(mocks.fs.promises.writeFile).not.toHaveBeenCalled()
+    expect(mocks.fs.promises.unlink).toHaveBeenCalledWith('/mock/userData/.copilot_token')
+    expect(mocks.fs.promises.unlink).toHaveBeenCalledWith('/mock/config/.copilot_token')
   })
 
-  it('keeps legacy token fallback readable if Storage v2 save fails after a previous clear', async () => {
-    mocks.secretVault.setSecret.mockRejectedValue(new Error('safeStorage unavailable'))
+  it('does not write a legacy token fallback if Storage v2 save fails', async () => {
+    mocks.secretVault.setSecret.mockRejectedValue(new Error('local vault unavailable'))
     const service = await loadCopilotService()
 
-    await service.saveCopilotToken({} as Electron.IpcMainInvokeEvent, 'github-access-token')
+    await expect(
+      service.saveCopilotToken({} as Electron.IpcMainInvokeEvent, 'gho_github-access-token')
+    ).rejects.toThrow('无法保存访问令牌')
 
-    expect(mocks.fs.promises.writeFile).toHaveBeenCalledWith(
-      '/mock/config/.copilot_token',
-      Buffer.from('encrypted:github-access-token')
-    )
-    expect(mocks.settingsRepository.set).toHaveBeenCalledWith(
-      'copilot.accessToken',
-      {
-        legacyFallbackAt: expect.any(String),
-        updatedAt: expect.any(String)
-      },
-      'copilot'
-    )
+    expect(mocks.fs.promises.writeFile).not.toHaveBeenCalled()
+    expect(mocks.settingsRepository.set).not.toHaveBeenCalled()
   })
 
   it('reads Copilot access tokens from Storage v2 before the legacy token file', async () => {
     mocks.settingsRepository.get.mockResolvedValue({
       accessTokenSecretRef: 'storage-v2://secret/copilot/github/accessToken'
     })
-    mocks.secretVault.getSecret.mockResolvedValue('github-access-token')
+    mocks.secretVault.getSecret.mockResolvedValue('gho_github-access-token')
     const service = await loadCopilotService()
 
     const token = await service.getToken({} as Electron.IpcMainInvokeEvent, { 'user-agent': 'test' })
@@ -146,7 +135,7 @@ describe('CopilotService Storage v2 token persistence', () => {
       'https://api.github.com/copilot_internal/v2/token',
       expect.objectContaining({
         headers: expect.objectContaining({
-          authorization: 'token github-access-token'
+          authorization: 'token gho_github-access-token'
         })
       })
     )
@@ -155,7 +144,7 @@ describe('CopilotService Storage v2 token persistence', () => {
   it('falls back to the legacy token file and mirrors the token into Storage v2', async () => {
     mocks.fs.promises.readFile.mockImplementation(async (candidate) => {
       if (String(candidate) === '/mock/config/.copilot_token') {
-        return Buffer.from('encrypted:legacy-access-token')
+        return 'gho_legacy-access-token'
       }
       throw Object.assign(new Error('not found'), { code: 'ENOENT' })
     })
@@ -163,12 +152,17 @@ describe('CopilotService Storage v2 token persistence', () => {
 
     await service.getToken({} as Electron.IpcMainInvokeEvent)
 
-    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith('copilot', 'github', 'accessToken', 'legacy-access-token')
+    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith(
+      'copilot',
+      'github',
+      'accessToken',
+      'gho_legacy-access-token'
+    )
     expect(mocks.net.fetch).toHaveBeenCalledWith(
       'https://api.github.com/copilot_internal/v2/token',
       expect.objectContaining({
         headers: expect.objectContaining({
-          authorization: 'token legacy-access-token'
+          authorization: 'token gho_legacy-access-token'
         })
       })
     )

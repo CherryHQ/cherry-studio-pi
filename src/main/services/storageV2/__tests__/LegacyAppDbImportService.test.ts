@@ -20,11 +20,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock('electron', () => ({
   app: {
     getPath: vi.fn(() => '/tmp/storage-v2-legacy-app-import-user-data')
-  },
-  safeStorage: {
-    isEncryptionAvailable: vi.fn(() => false),
-    encryptString: vi.fn((value: string) => Buffer.from(value)),
-    decryptString: vi.fn((value: Buffer) => value.toString('utf-8'))
   }
 }))
 

@@ -111,7 +111,7 @@ export const STORAGE_V2_LEGACY_RUNTIME_POLICIES: readonly StorageV2LegacyRuntime
     label: 'Copilot legacy token files',
     role: 'sensitive-legacy-projection',
     retention: 'archive-after-storage-v2-backed',
-    notes: 'Legacy safeStorage token files are compatibility fallbacks and can be archived after Storage v2 is backed.'
+    notes: 'Legacy token files are compatibility fallbacks and can be archived after Storage v2 is backed.'
   },
   {
     id: 'legacy-user-data-agents-db',

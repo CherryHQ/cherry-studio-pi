@@ -253,9 +253,7 @@ async function sanitizeLlmSettings(
       'Sensitive LLM settings were detected. Dry run did not write them to the Storage v2 secret vault.'
     )
   } else if (secretCandidateCount > 0 && !options.canImportSecrets) {
-    options.warnings.push(
-      'Sensitive LLM settings were detected but safeStorage encryption is unavailable on this system.'
-    )
+    options.warnings.push('Sensitive LLM settings were detected but local secret vault is unavailable.')
   }
 
   return {
@@ -329,9 +327,7 @@ async function sanitizeMcpState(
       'MCP server environment values were detected. Dry run did not write them to the secret vault.'
     )
   } else if (secretCandidateCount > 0 && !options.canImportSecrets) {
-    options.warnings.push(
-      'MCP server environment values were detected but safeStorage encryption is unavailable on this system.'
-    )
+    options.warnings.push('MCP server environment values were detected but local secret vault is unavailable.')
   }
 
   return {
@@ -380,7 +376,7 @@ async function sanitizeMcpProviderTokens(
   if (secretCandidateCount > 0 && options.dryRun) {
     options.warnings.push('MCP provider tokens were detected. Dry run did not write them to the secret vault.')
   } else if (secretCandidateCount > 0 && !options.canImportSecrets) {
-    options.warnings.push('MCP provider tokens were detected but safeStorage encryption is unavailable on this system.')
+    options.warnings.push('MCP provider tokens were detected but local secret vault is unavailable.')
   }
 
   return {
@@ -514,7 +510,7 @@ async function sanitizeKnowledgeState(value: unknown, options: SecretSanitizerOp
     options,
     secretCandidateCount,
     'Knowledge base preprocess provider API keys were detected. Dry run did not write them to the secret vault.',
-    'Knowledge base preprocess provider API keys were detected but safeStorage encryption is unavailable on this system.'
+    'Knowledge base preprocess provider API keys were detected but local secret vault is unavailable.'
   )
 
   return {
@@ -553,7 +549,7 @@ async function sanitizePreprocessState(
     options,
     secretCandidateCount,
     'Document preprocess provider API keys were detected. Dry run did not write them to the secret vault.',
-    'Document preprocess provider API keys were detected but safeStorage encryption is unavailable on this system.'
+    'Document preprocess provider API keys were detected but local secret vault is unavailable.'
   )
 
   return {
@@ -591,7 +587,7 @@ async function sanitizeWebSearchState(value: unknown, options: SecretSanitizerOp
     options,
     secretCandidateCount,
     'Web search provider credentials were detected. Dry run did not write them to the secret vault.',
-    'Web search provider credentials were detected but safeStorage encryption is unavailable on this system.'
+    'Web search provider credentials were detected but local secret vault is unavailable.'
   )
 
   return {
@@ -630,7 +626,7 @@ async function sanitizeOcrState(value: unknown, options: SecretSanitizerOptions)
     options,
     secretCandidateCount,
     'OCR provider API keys were detected. Dry run did not write them to the secret vault.',
-    'OCR provider API keys were detected but safeStorage encryption is unavailable on this system.'
+    'OCR provider API keys were detected but local secret vault is unavailable.'
   )
 
   return {
@@ -660,7 +656,7 @@ async function sanitizeNutstoreState(value: unknown, options: SecretSanitizerOpt
     options,
     secretCandidateCount,
     'Nutstore sync tokens were detected. Dry run did not write them to the secret vault.',
-    'Nutstore sync tokens were detected but safeStorage encryption is unavailable on this system.'
+    'Nutstore sync tokens were detected but local secret vault is unavailable.'
   )
 
   return {
@@ -717,7 +713,7 @@ async function sanitizeCodeToolsState(value: unknown, options: SecretSanitizerOp
     options,
     secretCandidateCount,
     'Code tool environment variables were detected. Dry run did not write them to the secret vault.',
-    'Code tool environment variables were detected but safeStorage encryption is unavailable on this system.'
+    'Code tool environment variables were detected but local secret vault is unavailable.'
   )
 
   return {
@@ -778,7 +774,7 @@ async function sanitizeCopilotState(value: unknown, options: SecretSanitizerOpti
     options,
     secretCandidateCount,
     'GitHub Copilot custom headers with sensitive names were detected. Dry run did not write them to the secret vault.',
-    'GitHub Copilot custom headers with sensitive names were detected but safeStorage encryption is unavailable on this system.'
+    'GitHub Copilot custom headers with sensitive names were detected but local secret vault is unavailable.'
   )
 
   return {
@@ -828,7 +824,7 @@ async function sanitizeSettingsEntry(
     options,
     secretCandidateCount,
     'Sensitive app settings were detected. Dry run did not write them to the secret vault.',
-    'Sensitive app settings were detected but safeStorage encryption is unavailable on this system.'
+    'Sensitive app settings were detected but local secret vault is unavailable.'
   )
 
   return {
@@ -1065,7 +1061,7 @@ export class StorageV2LegacyReduxImportService {
     if (providerSecretCandidateCount > 0 && dryRun) {
       warnings.push('Provider API keys were detected. Dry run did not write them to the Storage v2 secret vault.')
     } else if (providerSecretCandidateCount > 0 && !canImportSecrets) {
-      warnings.push('Provider API keys were detected but safeStorage encryption is unavailable on this system.')
+      warnings.push('Provider API keys were detected but local secret vault is unavailable.')
     }
 
     if (!dryRun) {

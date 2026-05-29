@@ -1,7 +1,6 @@
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-
-import { safeStorage } from 'electron'
 
 import { storageV2DataRootService } from './DataRootService'
 
@@ -11,7 +10,9 @@ type SecretVaultFile = {
     string,
     {
       encrypted: string
-      encoding: 'electron-safe-storage'
+      encoding: 'cherry-local-aes-256-gcm' | 'electron-safe-storage'
+      iv?: string
+      authTag?: string
       updatedAt: string
     }
   >
@@ -26,6 +27,9 @@ export type StorageV2SecretVaultPruneResult = {
 
 const VAULT_VERSION = 1
 const SECRET_REF_PREFIX = 'storage-v2://secret/'
+const LOCAL_VAULT_ENCODING = 'cherry-local-aes-256-gcm'
+const MASTER_KEY_BYTE_LENGTH = 32
+const GCM_IV_BYTE_LENGTH = 12
 
 function encodeSecretId(scope: string, ownerId: string, kind: string) {
   return [scope, ownerId, kind].map((part) => encodeURIComponent(part)).join('/')
@@ -45,25 +49,23 @@ function decodeSecretRef(secretRef: string) {
 
 export class StorageV2SecretVaultService {
   private writeQueue: Promise<unknown> = Promise.resolve()
+  private masterKey: Buffer | null = null
+  private masterKeyPath: string | null = null
 
   isAvailable() {
-    return safeStorage.isEncryptionAvailable()
+    return true
   }
 
   async setSecret(scope: string, ownerId: string, kind: string, value: string): Promise<string> {
-    if (!this.isAvailable()) {
-      throw new Error('Electron safeStorage encryption is not available')
-    }
-
     const secretId = encodeSecretId(scope, ownerId, kind)
     const secretRef = `${SECRET_REF_PREFIX}${secretId}`
     await this.enqueueVaultWrite(async () => {
       const vault = await this.readVault()
-      const encrypted = safeStorage.encryptString(value).toString('base64')
+      const encrypted = await this.encryptLocal(value)
 
       vault.secrets[secretId.replace(/\//g, ':')] = {
-        encrypted,
-        encoding: 'electron-safe-storage',
+        ...encrypted,
+        encoding: LOCAL_VAULT_ENCODING,
         updatedAt: new Date().toISOString()
       }
 
@@ -73,10 +75,6 @@ export class StorageV2SecretVaultService {
   }
 
   async getSecret(secretRef: string): Promise<string | null> {
-    if (!this.isAvailable()) {
-      return null
-    }
-
     await this.waitForIdle()
 
     const secretId = decodeSecretRef(secretRef)
@@ -87,7 +85,11 @@ export class StorageV2SecretVaultService {
     if (!record) return null
 
     try {
-      return safeStorage.decryptString(Buffer.from(record.encrypted, 'base64'))
+      if (record.encoding !== LOCAL_VAULT_ENCODING) {
+        return null
+      }
+
+      return await this.decryptLocal(record)
     } catch {
       return null
     }
@@ -132,6 +134,63 @@ export class StorageV2SecretVaultService {
   private getVaultPath() {
     const rootInfo = storageV2DataRootService.ensureDataRoot()
     return path.join(rootInfo.dataRoot, 'secrets', 'vault.json')
+  }
+
+  private getMasterKeyPath() {
+    const rootInfo = storageV2DataRootService.ensureDataRoot()
+    return path.join(rootInfo.dataRoot, 'secrets', 'master.key')
+  }
+
+  private async getMasterKey(): Promise<Buffer> {
+    const keyPath = this.getMasterKeyPath()
+    if (this.masterKey && this.masterKeyPath === keyPath) return this.masterKey
+
+    const key = await fs
+      .readFile(keyPath, 'utf-8')
+      .then((raw) => Buffer.from(raw.trim(), 'base64'))
+      .catch(async (error) => {
+        if (!(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')) {
+          throw error
+        }
+
+        const generated = randomBytes(MASTER_KEY_BYTE_LENGTH)
+        const tempPath = `${keyPath}.${process.pid}.${Date.now()}.tmp`
+        await fs.mkdir(path.dirname(keyPath), { recursive: true, mode: 0o700 })
+        await fs.writeFile(tempPath, `${generated.toString('base64')}\n`, { mode: 0o600 })
+        await fs.rename(tempPath, keyPath)
+        await fs.chmod(keyPath, 0o600).catch(() => undefined)
+        return generated
+      })
+
+    if (key.length !== MASTER_KEY_BYTE_LENGTH) {
+      throw new Error('Storage v2 secret vault master key is invalid')
+    }
+
+    this.masterKey = key
+    this.masterKeyPath = keyPath
+    return key
+  }
+
+  private async encryptLocal(value: string): Promise<{ encrypted: string; iv: string; authTag: string }> {
+    const key = await this.getMasterKey()
+    const iv = randomBytes(GCM_IV_BYTE_LENGTH)
+    const cipher = createCipheriv('aes-256-gcm', key, iv)
+    const encrypted = Buffer.concat([cipher.update(value, 'utf-8'), cipher.final()])
+
+    return {
+      encrypted: encrypted.toString('base64'),
+      iv: iv.toString('base64'),
+      authTag: cipher.getAuthTag().toString('base64')
+    }
+  }
+
+  private async decryptLocal(record: SecretVaultFile['secrets'][string]): Promise<string | null> {
+    if (!record.iv || !record.authTag) return null
+
+    const key = await this.getMasterKey()
+    const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(record.iv, 'base64'))
+    decipher.setAuthTag(Buffer.from(record.authTag, 'base64'))
+    return Buffer.concat([decipher.update(Buffer.from(record.encrypted, 'base64')), decipher.final()]).toString('utf-8')
   }
 
   private async readVault(): Promise<SecretVaultFile> {

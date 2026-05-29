@@ -6,41 +6,31 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   dataRootService: {
     ensureDataRoot: vi.fn()
-  },
-  safeStorage: {
-    decryptString: vi.fn(),
-    encryptString: vi.fn(),
-    isEncryptionAvailable: vi.fn()
   }
-}))
-
-vi.mock('electron', () => ({
-  safeStorage: mocks.safeStorage
 }))
 
 vi.mock('../DataRootService', () => ({
   storageV2DataRootService: mocks.dataRootService
 }))
 
-import { storageV2SecretVaultService } from '../SecretVaultService'
+import { StorageV2SecretVaultService } from '../SecretVaultService'
 
 describe('StorageV2SecretVaultService', () => {
   let tmpDir: string
   let dataRoot: string
+  let secretVaultService: StorageV2SecretVaultService
 
   beforeEach(async () => {
     vi.clearAllMocks()
     tmpDir = await fs.mkdtemp('/tmp/storage-v2-vault-')
     dataRoot = path.join(tmpDir, 'Data')
+    secretVaultService = new StorageV2SecretVaultService()
     mocks.dataRootService.ensureDataRoot.mockReturnValue({
       dataRoot,
       manifest: null,
       source: 'env',
       candidates: []
     })
-    mocks.safeStorage.isEncryptionAvailable.mockReturnValue(true)
-    mocks.safeStorage.encryptString.mockImplementation((value: string) => Buffer.from(`sealed:${value}`))
-    mocks.safeStorage.decryptString.mockImplementation((value: Buffer) => value.toString().replace(/^sealed:/, ''))
   })
 
   afterEach(async () => {
@@ -50,51 +40,53 @@ describe('StorageV2SecretVaultService', () => {
   })
 
   it('uses encoded vault ids so encoded refs can be read back', async () => {
-    const secretRef = await storageV2SecretVaultService.setSecret('provider', 'provider 1/alpha', 'api key', 'token')
+    const secretRef = await secretVaultService.setSecret('provider', 'provider 1/alpha', 'api key', 'token')
 
     expect(secretRef).toBe('storage-v2://secret/provider/provider%201%2Falpha/api%20key')
-    await expect(storageV2SecretVaultService.getSecret(secretRef)).resolves.toBe('token')
+    await expect(secretVaultService.getSecret(secretRef)).resolves.toBe('token')
 
     const vault = JSON.parse(await fs.readFile(path.join(dataRoot, 'secrets', 'vault.json'), 'utf-8'))
     expect(Object.keys(vault.secrets)).toEqual(['provider:provider%201%2Falpha:api%20key'])
-  })
-
-  it('does not create a vault entry when safeStorage encryption is unavailable', async () => {
-    mocks.safeStorage.isEncryptionAvailable.mockReturnValue(false)
-
-    await expect(storageV2SecretVaultService.setSecret('provider', 'provider-1', 'apiKey', 'token')).rejects.toThrow(
-      'Electron safeStorage encryption is not available'
-    )
-
-    expect(mocks.safeStorage.encryptString).not.toHaveBeenCalled()
-    await expect(fs.access(path.join(dataRoot, 'secrets', 'vault.json'))).rejects.toThrow()
-  })
-
-  it('returns null without reading the vault when safeStorage encryption is unavailable', async () => {
-    mocks.safeStorage.isEncryptionAvailable.mockReturnValue(false)
-
-    await expect(storageV2SecretVaultService.getSecret('storage-v2://secret/provider/provider-1/apiKey')).resolves.toBe(
-      null
-    )
-
-    expect(mocks.dataRootService.ensureDataRoot).not.toHaveBeenCalled()
-    expect(mocks.safeStorage.decryptString).not.toHaveBeenCalled()
+    expect(vault.secrets['provider:provider%201%2Falpha:api%20key']).toMatchObject({
+      encoding: 'cherry-local-aes-256-gcm'
+    })
+    await expect(fs.access(path.join(dataRoot, 'secrets', 'master.key'))).resolves.toBeUndefined()
   })
 
   it('treats undecryptable secret values as unavailable instead of throwing', async () => {
-    const secretRef = await storageV2SecretVaultService.setSecret('provider', 'provider-1', 'apiKey', 'token')
-    mocks.safeStorage.decryptString.mockImplementation(() => {
-      throw new Error('different keychain')
-    })
+    const secretRef = await secretVaultService.setSecret('provider', 'provider-1', 'apiKey', 'token')
+    const vaultPath = path.join(dataRoot, 'secrets', 'vault.json')
+    const vault = JSON.parse(await fs.readFile(vaultPath, 'utf-8'))
+    vault.secrets['provider:provider-1:apiKey'].authTag = Buffer.alloc(16, 1).toString('base64')
+    await fs.writeFile(vaultPath, JSON.stringify(vault))
 
-    await expect(storageV2SecretVaultService.getSecret(secretRef)).resolves.toBeNull()
+    await expect(secretVaultService.getSecret(secretRef)).resolves.toBeNull()
+  })
+
+  it('treats legacy electron safeStorage records as unavailable instead of prompting the OS keychain', async () => {
+    await fs.mkdir(path.join(dataRoot, 'secrets'), { recursive: true })
+    await fs.writeFile(
+      path.join(dataRoot, 'secrets', 'vault.json'),
+      JSON.stringify({
+        version: 1,
+        secrets: {
+          'provider:provider-1:apiKey': {
+            encrypted: Buffer.from('legacy-token').toString('base64'),
+            encoding: 'electron-safe-storage',
+            updatedAt: '2026-01-01T00:00:00.000Z'
+          }
+        }
+      })
+    )
+
+    await expect(secretVaultService.getSecret('storage-v2://secret/provider/provider-1/apiKey')).resolves.toBeNull()
   })
 
   it('prunes vault secrets that are no longer referenced by Storage v2 records', async () => {
-    await storageV2SecretVaultService.setSecret('provider', 'keep', 'apiKey', 'keep-token')
-    const dropRef = await storageV2SecretVaultService.setSecret('provider', 'drop', 'apiKey', 'drop-token')
+    await secretVaultService.setSecret('provider', 'keep', 'apiKey', 'keep-token')
+    const dropRef = await secretVaultService.setSecret('provider', 'drop', 'apiKey', 'drop-token')
 
-    const result = await storageV2SecretVaultService.pruneUnreferencedSecretIds(['provider:keep:apiKey'])
+    const result = await secretVaultService.pruneUnreferencedSecretIds(['provider:keep:apiKey'])
 
     expect(result).toEqual({
       beforeCount: 2,
@@ -102,7 +94,7 @@ describe('StorageV2SecretVaultService', () => {
       prunedCount: 1,
       prunedSecretIds: ['provider:drop:apiKey']
     })
-    await expect(storageV2SecretVaultService.getSecret(dropRef)).resolves.toBeNull()
+    await expect(secretVaultService.getSecret(dropRef)).resolves.toBeNull()
 
     const vault = JSON.parse(await fs.readFile(path.join(dataRoot, 'secrets', 'vault.json'), 'utf-8'))
     expect(Object.keys(vault.secrets)).toEqual(['provider:keep:apiKey'])

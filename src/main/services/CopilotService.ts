@@ -1,5 +1,5 @@
 import { loggerService } from '@logger'
-import { app, net, safeStorage } from 'electron'
+import { app, net } from 'electron'
 import fs from 'fs'
 import path from 'path'
 
@@ -39,7 +39,6 @@ const STORAGE_V2_COPILOT_TOKEN_SETTING_KEY = 'copilot.accessToken'
 type CopilotTokenStorageV2Setting = {
   accessTokenSecretRef?: string
   clearedAt?: string
-  legacyFallbackAt?: string
   updatedAt?: string
 }
 
@@ -80,24 +79,14 @@ class CopilotServiceError extends Error {
 }
 
 class CopilotService {
-  private readonly tokenFilePath: string
   private headers: Record<string, string>
 
   constructor() {
-    this.tokenFilePath = this.getTokenFilePath()
     this.headers = {
       ...CONFIG.DEFAULT_HEADERS,
       accept: 'application/json',
       'user-agent': 'Visual Studio Code (desktop)'
     }
-  }
-
-  private getTokenFilePath = (): string => {
-    const [oldTokenFilePath, configTokenFilePath] = this.getTokenFilePaths()
-    if (fs.existsSync(oldTokenFilePath)) {
-      return oldTokenFilePath
-    }
-    return configTokenFilePath
   }
 
   private getTokenFilePaths = (): string[] => {
@@ -131,18 +120,6 @@ class CopilotService {
     )
   }
 
-  private markAccessTokenLegacyFallbackInStorageV2 = async (): Promise<void> => {
-    const timestamp = new Date().toISOString()
-    await storageV2SettingsRepository.set(
-      STORAGE_V2_COPILOT_TOKEN_SETTING_KEY,
-      {
-        legacyFallbackAt: timestamp,
-        updatedAt: timestamp
-      } satisfies CopilotTokenStorageV2Setting,
-      'copilot'
-    )
-  }
-
   private readAccessTokenFromStorageV2 = async (): Promise<StorageV2CopilotTokenRead> => {
     const setting = await storageV2SettingsRepository.get(STORAGE_V2_COPILOT_TOKEN_SETTING_KEY)
     if (this.isStorageV2TokenCleared(setting)) {
@@ -169,8 +146,10 @@ class CopilotService {
   private readAccessTokenFromLegacyFile = async (): Promise<string | null> => {
     for (const tokenFilePath of this.getTokenFilePaths()) {
       try {
-        const encryptedToken = await fs.promises.readFile(tokenFilePath)
-        return safeStorage.decryptString(Buffer.from(encryptedToken))
+        const token = (await fs.promises.readFile(tokenFilePath, 'utf-8')).trim()
+        if (/^(gh[opsur]_|github_pat_)/.test(token)) {
+          return token
+        }
       } catch (error) {
         if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
           continue
@@ -350,24 +329,15 @@ class CopilotService {
    */
   public saveCopilotToken = async (_: Electron.IpcMainInvokeEvent, token: string): Promise<void> => {
     try {
-      const encryptedToken = safeStorage.encryptString(token)
-      let shouldMarkLegacyFallback = false
-      await this.saveAccessTokenToStorageV2(token).catch((error) => {
-        shouldMarkLegacyFallback = true
-        logger.warn('Failed to save Copilot access token to Storage v2', error as Error)
-      })
-
-      // 确保目录存在
-      const dir = path.dirname(this.tokenFilePath)
-      if (!fs.existsSync(dir)) {
-        await fs.promises.mkdir(dir, { recursive: true })
-      }
-
-      await fs.promises.writeFile(this.tokenFilePath, encryptedToken)
-      if (shouldMarkLegacyFallback) {
-        await this.markAccessTokenLegacyFallbackInStorageV2().catch((error) => {
-          logger.warn('Failed to clear Copilot Storage v2 cleared marker after legacy token write', error as Error)
-        })
+      await this.saveAccessTokenToStorageV2(token)
+      for (const tokenFilePath of this.getTokenFilePaths()) {
+        try {
+          await fs.promises.unlink(tokenFilePath)
+        } catch (error) {
+          if (!(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')) {
+            logger.warn('Failed to remove legacy Copilot token file', error as Error)
+          }
+        }
       }
     } catch (error) {
       logger.error('Failed to save token:', error as Error)

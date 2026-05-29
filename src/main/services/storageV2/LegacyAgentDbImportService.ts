@@ -242,7 +242,7 @@ export class StorageV2LegacyAgentDbImportService {
       if (secretCandidateCount > 0 && dryRun) {
         warnings.push('Channel credentials were detected. Dry run did not write them to the Storage v2 secret vault.')
       } else if (secretCandidateCount > 0 && !storageV2SecretVaultService.isAvailable()) {
-        warnings.push('Channel credentials were detected but safeStorage encryption is unavailable on this system.')
+        warnings.push('Channel credentials were detected but local secret vault is unavailable.')
       }
 
       if (!dryRun) {
@@ -1118,7 +1118,7 @@ export class StorageV2LegacyAgentDbImportService {
       } else {
         delete nextConfig[key]
         nextConfig[`${key}_secret_unmigrated`] = true
-        warnings.push(`Skipped secret field ${key} for channel ${channelId}: safeStorage is unavailable.`)
+        warnings.push(`Skipped secret field ${key} for channel ${channelId}: local secret vault is unavailable.`)
       }
     }
 

@@ -64,7 +64,7 @@ Main Process
         |
         +--> main.db          structured authoritative data
         +--> blobs/           content-addressed file store
-        +--> secrets vault    OS keychain or encrypted local vault
+        +--> secrets vault    local AES-GCM vault
         +--> manifest.json    profile and data-root identity
 ```
 
@@ -514,12 +514,10 @@ knowledge_items
 默认策略：
 
 ```text
-macOS      Keychain
-Windows    Credential Manager / DPAPI
-Linux      Secret Service，缺失时使用本地加密 vault 并提示用户
+All platforms    本地 `secrets/master.key` + AES-256-GCM vault
 ```
 
-`main.db` 只保存 `secret_ref`。备份默认不包含 secrets 明文。恢复到新设备后，用户可以重新输入密钥；未来账号体系可以提供端到端加密的 secret sync。
+`main.db` 只保存 `secret_ref`。备份默认不包含 secrets 明文，但包含本地 vault 所需的加密材料以保证跨平台备份恢复可用；未来账号体系可以提供端到端加密的 secret sync。
 
 ## 同步模型
 
@@ -661,7 +659,7 @@ Storage v2 必须渐进迁移，不能一次性替换所有读写路径。
 ### 阶段 6：迁移 secrets
 
 - 识别 Local Storage 和 app DB 中的敏感字段。
-- 写入 OS keychain 或 encrypted vault。
+- 写入本地 AES-GCM encrypted vault。
 - DB 中替换为 `secret_ref`。
 - 迁移完成后清理 legacy 明文，清理前必须有快照。
 
@@ -770,7 +768,7 @@ files.upsert(file)
 
 ## 开放问题
 
-1. Linux 无 Secret Service 时，是否强制用户设置本地 vault 密码，还是允许低安全模式。
+1. 是否引入用户设置的恢复密码，让 `secrets/master.key` 可选择用口令包裹，而不是仅作为本地文件随备份迁移。
 2. 账号体系上线后，profile 与 account 是一对一还是一对多。
 3. WebDAV 同步是否继续支持，还是只作为备份通道，真正同步走账号服务。
 4. 普通助手和 Pi agent 的 prompt/version 是否需要完整时间旅行 UI。
@@ -806,7 +804,7 @@ files.upsert(file)
 - 旧版 `.bak` / JSON 备份恢复开始写 legacy IndexedDB 前，会先暂停 renderer runtime mirror 到重启，避免清表和批量写入期间把半成品旧运行态抢跑镜像到 Storage v2；恢复成功后，会先清空当前所有 legacy IndexedDB 表，再写入备份中存在的表，避免备份缺失的旧表残留当前数据；随后会把刚恢复的 legacy IndexedDB（普通会话、message blocks、files、Dexie settings 和辅助表）全量导入 Storage v2，恢复导入会忽略重启前旧 Redux 中存在但恢复后的 Dexie 中不存在的 topic，并优先使用消息中的 assistantId，避免旧运行态 topic 污染恢复结果；同时 prune 缺失的普通会话、文件，并给缺失的 Dexie settings / 辅助表行写删除标记，再显式关闭一次 `storage_v2.runtime.auto_hydrate`，避免用户之前开启过 Storage v2 启动恢复时，下一次启动用旧 Storage v2 快照覆盖刚恢复的 legacy localStorage / IndexedDB；如果这次导入失败，legacy 恢复仍完成并保留关闭 auto hydrate 的保护，避免旧 Storage v2 快照抢跑覆盖恢复结果。
 - 只读迁移审计报告；会以当前 active data root 作为 `Data` 目录审计目标，并提示多个 Storage v2 manifest、缺失的已配置 data root，以及活动根之外仍存在旧版数据目录的风险。
 - Storage v2 stats / integrity 统计与完整性检查接口，用于迁移后校验核心表数量、SQLite integrity、foreign key、孤儿记录、缺失 blob 文件、blob checksum mismatch，以及 DB secret ref 是否能在 vault 中找到对应密钥。
-- Storage v2 backup 校验在扫描 secret ref 时会兼容早期备份缺少后续新增表/列的情况：缺失 schema source 会记录 warning 并继续扫描其余表；校验会报告缺失/无效 secret ref，也会把备份中已经不被 DB 引用的 vault secret、当前设备无法解密的 safeStorage secret 作为 warning，避免旧备份因非关键新表不存在而无法通过校验，同时降低过期 token 被长期带进备份、跨设备恢复后用户误以为密钥仍可用的风险。
+- Storage v2 backup 校验在扫描 secret ref 时会兼容早期备份缺少后续新增表/列的情况：缺失 schema source 会记录 warning 并继续扫描其余表；校验会报告缺失/无效 secret ref，也会把备份中已经不被 DB 引用的 vault secret、当前备份缺失 master key 或无法解密的旧 vault secret 作为 warning，避免旧备份因非关键新表不存在而无法通过校验，同时降低过期 token 被长期带进备份、跨设备恢复后用户误以为密钥仍可用的风险。
 - Storage v2 core snapshot 只读接口，可把 settings、providers、assistants、所有持久化 Redux 配置 slice、assistant topics、legacy Dexie settings 和 Dexie 辅助表合成为未来启动 hydrate 使用的安全快照；provider / LLM / app settings / MCP env / Nutstore / OCR / code tools env / Copilot headers / knowledge preprocess / document preprocess / websearch secrets 默认不解密，并且会剔除历史异常数据里残留的同类明文字段，避免 `includeSecrets:false` 导出泄漏旧明文密钥。
 - sync ledger 基础写入：settings、providers、assistants、conversations、messages/message blocks、files、knowledge bases/items、agent/session/skill/task/channel、agent skill、task run log、app `kv_records` 写入时同步记录 `sync_changes`；除无行版本的关系表外，账本使用实体当前版本，显式删除会写入 `sync_tombstones`，避免删除的数据在恢复或未来同步时复活。
 - settings / providers / assistants repositories。
@@ -819,10 +817,10 @@ files.upsert(file)
 - conversations / messages 查询与普通对话直接写入接口，迁移后可以校验普通对话和 agent session 历史；普通聊天 mirror 已优先通过单会话原子 `conversation.sync` 写入 Storage v2，并保留 `conversation.upsert`、`message.upsert`、`message_blocks.upsert` 作为后续更细粒度主写路径，删除的消息和消息块会补 tombstone。
 - legacy Redux snapshot 导入入口，默认 `dryRun`；导入会把已删除的 providers / assistants 标记为 tombstone，并额外镜像所有持久化 Redux 配置 slice。
 - legacy Redux 导入支持局部 snapshot：只有传入 `llm.providers` 或 `assistants.assistants` 时才会 prune 对应实体；localStorage-only mirror、settings-only mirror 这类小域写入不会把缺失的数据域误判为空列表而删除 Storage v2 里的 provider / assistant。
-- provider API key、Vertex private key、AWS secret、CherryIn token 通过 Electron `safeStorage` 写入本地 secret vault；`dryRun` 时只报告不写入。
-- secret vault 写入使用进程内串行队列和临时文件原子 rename；secret ref 到 vault id 的转换保留 URL 编码片段，避免 owner/kind 包含空格或斜杠时无法找回密钥；只有 vault 文件不存在时才会初始化空 vault，已存在但无效或不可读时会拒绝继续写入，降低并发写入覆盖、崩溃截断和二次覆盖导致密钥丢失的风险。vault 支持按 Storage v2 当前引用集合清理未引用 secret，避免 logout、删除 provider/channel 或旧迁移残留的敏感值长期留在本地备份里。
-- 应用设置中的 S3 / API Server 凭据、MCP server env / OAuth、Anthropic OAuth、Nutstore token、OCR API key、code tools 环境变量、Copilot 敏感 headers、Copilot GitHub access token、知识库预处理服务、文档预处理服务、网页搜索服务的敏感字段会写入 secret vault，`main.db` 只保存 secret ref；恢复 runtime cache 时再按需还原。模型 provider 的新密钥如果因为安全存储不可用而无法写入 vault，会清理旧 credential ref，避免后续恢复出过期旧密钥。Copilot access token 读取时优先走 Storage v2 secret vault，旧 `.copilot_token` 文件只作为兼容 fallback；fallback 成功后会自愈镜像到 Storage v2，logout 会先写入清除标记再删除旧文件，清除标记写入失败会保留 legacy token 文件并中止 logout，避免旧 token 复活。MCP OAuth client 信息、access/refresh token、code verifier 会作为整份 OAuth 状态写入 secret vault，旧 `mcp/oauth/*_oauth.json` 只作为兼容 fallback；删除 MCP server 或 OAuth clear 会先写清除标记再删除旧 JSON，清除标记失败时保留 legacy 文件，避免旧 OAuth 凭据恢复。Anthropic OAuth access/refresh token 同样优先读取 Storage v2 secret vault，旧 `oauth/anthropic.json` 只作为兼容 fallback；clear credentials 会先写清除标记再删除旧 JSON，清除标记失败时保留 legacy 文件。OpenClaw 的 `~/.openclaw/openclaw.json` 仍作为外部进程运行时投影文件保留，但同步 provider 时会先把包含 gateway token/provider apiKey 的整份配置镜像到 Storage v2 secret vault，成功后再写外部投影文件，避免界面显示同步成功但备份/迁移缺少 OpenClaw 敏感配置；如果本地投影文件缺失或不可解析，会优先用 Storage v2 快照恢复再继续同步。WeChat channel 登录态和按用户缓存的 context token 都按 tokenPath hash 写入 Storage v2 secret vault，旧 `Channels/weixin_bot_*.json` / `Channels/weixin_bot_*.context-tokens.json` 只作为兼容 fallback；会话过期或重新登录清除凭据与 context token 时会先写清除标记再删除旧文件，清除标记失败时保留 legacy 文件，避免旧登录态或旧上下文 token 复活。
-- 语言、当前 memory 用户、onboarding 完成状态、隐私协议确认状态等 durable localStorage 值，以及 MCP 市场/服务商登录 token（MCPRouter、ModelScope、蓝耘、TokenFlux、302.AI、百炼）虽然仍由现有页面读写 localStorage，但 Storage v2 mirror / 手动迁移会把它们纳入快照；语言、当前 memory 用户、MCP token、onboarding、隐私确认这类不一定伴随 Redux action 的写入会主动触发一次 localStorage mirror，并默认立即 flush，失败或 Storage v2 IPC 暂不可用时会保留当前快照并延迟重试；其中 MCP provider token 会写入 secret vault，runtime cache 恢复时再写回 localStorage。MCP provider 的 Fetch / Sync 操作会在继续拉取和写入 server 配置前 strict flush token mirror，避免同步成功但 token 只停留在 Local Storage。被用户清除的 token 会通过显式 `clearedMcpProviderTokenKeys` 列表记录并在恢复时删除，避免把 safeStorage 不可用或 secret 缺失误判为“用户已清除 token”，也避免浏览器本地小配置和敏感 token 成为迁移和备份恢复的漏网数据。
+- provider API key、Vertex private key、AWS secret、CherryIn token 通过本地 AES-256-GCM secret vault 写入；`dryRun` 时只报告不写入。
+- secret vault 写入使用进程内串行队列和临时文件原子 rename；secret ref 到 vault id 的转换保留 URL 编码片段，避免 owner/kind 包含空格或斜杠时无法找回密钥；只有 vault 文件不存在时才会初始化空 vault，已存在但无效或不可读时会拒绝继续写入，降低并发写入覆盖、崩溃截断和二次覆盖导致密钥丢失的风险。vault 使用本地 `secrets/master.key` 加密，不依赖 macOS Keychain、Windows DPAPI 或 Linux Secret Service，并支持按 Storage v2 当前引用集合清理未引用 secret，避免 logout、删除 provider/channel 或旧迁移残留的敏感值长期留在本地备份里。
+- 应用设置中的 S3 / API Server 凭据、MCP server env / OAuth、Anthropic OAuth、Nutstore token、OCR API key、code tools 环境变量、Copilot 敏感 headers、Copilot GitHub access token、知识库预处理服务、文档预处理服务、网页搜索服务的敏感字段会写入 secret vault，`main.db` 只保存 secret ref；恢复 runtime cache 时再按需还原。模型 provider 的新密钥如果因为本地 vault 不可写而无法保存，会清理旧 credential ref，避免后续恢复出过期旧密钥。Copilot access token 读取时优先走 Storage v2 secret vault，旧 `.copilot_token` 文件只兼容明文 GitHub token 并在自愈镜像到 Storage v2 后删除，logout 会先写入清除标记再删除旧文件，清除标记写入失败会保留 legacy token 文件并中止 logout，避免旧 token 复活。MCP OAuth client 信息、access/refresh token、code verifier 会作为整份 OAuth 状态写入 secret vault，旧 `mcp/oauth/*_oauth.json` 只作为兼容 fallback；删除 MCP server 或 OAuth clear 会先写清除标记再删除旧 JSON，清除标记失败时保留 legacy 文件，避免旧 OAuth 凭据恢复。Anthropic OAuth access/refresh token 同样优先读取 Storage v2 secret vault，旧 `oauth/anthropic.json` 只作为兼容 fallback；clear credentials 会先写清除标记再删除旧 JSON，清除标记失败时保留 legacy 文件。OpenClaw 的 `~/.openclaw/openclaw.json` 仍作为外部进程运行时投影文件保留，但同步 provider 时会先把包含 gateway token/provider apiKey 的整份配置镜像到 Storage v2 secret vault，成功后再写外部投影文件，避免界面显示同步成功但备份/迁移缺少 OpenClaw 敏感配置；如果本地投影文件缺失或不可解析，会优先用 Storage v2 快照恢复再继续同步。WeChat channel 登录态和按用户缓存的 context token 都按 tokenPath hash 写入 Storage v2 secret vault，旧 `Channels/weixin_bot_*.json` / `Channels/weixin_bot_*.context-tokens.json` 只作为兼容 fallback；会话过期或重新登录清除凭据与 context token 时会先写清除标记再删除旧文件，清除标记失败时保留 legacy 文件，避免旧登录态或旧上下文 token 复活。
+- 语言、当前 memory 用户、onboarding 完成状态、隐私协议确认状态等 durable localStorage 值，以及 MCP 市场/服务商登录 token（MCPRouter、ModelScope、蓝耘、TokenFlux、302.AI、百炼）虽然仍由现有页面读写 localStorage，但 Storage v2 mirror / 手动迁移会把它们纳入快照；语言、当前 memory 用户、MCP token、onboarding、隐私确认这类不一定伴随 Redux action 的写入会主动触发一次 localStorage mirror，并默认立即 flush，失败或 Storage v2 IPC 暂不可用时会保留当前快照并延迟重试；其中 MCP provider token 会写入 secret vault，runtime cache 恢复时再写回 localStorage。MCP provider 的 Fetch / Sync 操作会在继续拉取和写入 server 配置前 strict flush token mirror，避免同步成功但 token 只停留在 Local Storage。被用户清除的 token 会通过显式 `clearedMcpProviderTokenKeys` 列表记录并在恢复时删除，避免把本地 vault 缺失或 secret 缺失误判为“用户已清除 token”，也避免浏览器本地小配置和敏感 token 成为迁移和备份恢复的漏网数据。
 - knowledge bases/items 已进入结构化表，可在保留 Redux runtime 兼容快照的同时，用 `knowledge_bases` / `knowledge_items` 作为未来同步、重建索引和迁移校验的权威元数据；如果 core snapshot 中缺少 `redux.knowledge`，或只有空的 `knowledge.bases` 但结构化知识库表中仍有数据，启动恢复会从结构化表重建 `knowledge.bases`，避免 Redux 兼容快照缺失或空快照抢占时知识库列表直接变空。
 - 知识库创建、删除、改名、设置编辑、排序、条目新增/删除、笔记内容更新和迁移新增条目后会主动 flush Redux -> Storage v2 mirror；知识库文件 / URL / sitemap / 目录 / 视频添加、条目刷新、条目更新和知识库列表更新这类低频资产操作会等待 flush 完成后再继续触发后续队列；删除知识库时会把暂停 mirror 期间批量更新的知识库、assistant 引用和 preset 引用重新排队后再 strict flush；删除条目或刷新条目会先通过 partial Redux import 写入下一版 `redux.knowledge`，成功后才更新 Redux runtime cache；删除知识库、删除条目或刷新条目会先要求 Redux mirror strict flush 成功，再清理知识库索引、笔记内容和相关文件，避免知识库这类用户资产只停留在低频防抖写入队列里、临时写入失败后未来恢复中复活，或恢复出指向已删除索引 / 已 tombstone 文件的条目。
 - 主进程 API server 的知识库 list/get/search 已在 Redux runtime cache 不可用或为空时回退读取 Storage v2 结构化知识库表；搜索链路会在 Redux provider 不可用或缺失时回退读取 Storage v2 provider 与 secret vault 中的 API key，知识库运行时索引仍沿用现有 KnowledgeService。

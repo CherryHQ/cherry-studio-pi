@@ -179,9 +179,7 @@ export class StorageV2LegacyAppDbImportService {
       if (secretCandidateCount > 0 && dryRun) {
         warnings.push('Sensitive app data fields were detected. Dry run did not write them to the secret vault.')
       } else if (secretCandidateCount > 0 && !storageV2SecretVaultService.isAvailable()) {
-        warnings.push(
-          'Sensitive app data fields were detected but safeStorage encryption is unavailable on this system.'
-        )
+        warnings.push('Sensitive app data fields were detected but local secret vault is unavailable.')
       }
 
       if (!dryRun) {
