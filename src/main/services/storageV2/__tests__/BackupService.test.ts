@@ -273,8 +273,10 @@ describe('StorageV2BackupService.createBackup', () => {
     dataRoot = path.join(tmpDir, 'Data')
     snapshotPath = path.join(tmpDir, 'snapshot.db')
     fs.mkdirSync(path.join(dataRoot, 'secrets'), { recursive: true })
+    fs.mkdirSync(path.join(dataRoot, 'Workbench'), { recursive: true })
     fs.writeFileSync(snapshotPath, 'snapshot-db')
     fs.writeFileSync(path.join(dataRoot, 'secrets', 'vault.json'), JSON.stringify({ version: 1, secrets: {} }))
+    fs.writeFileSync(path.join(dataRoot, 'Workbench', 'artifact.html'), '<h1>Artifact</h1>')
 
     mocks.dataRootService.ensureDataRoot.mockReturnValue({
       dataRoot,
@@ -329,6 +331,8 @@ describe('StorageV2BackupService.createBackup', () => {
       prunedCount: 1,
       prunedSecretIds: ['provider:stale:apiKey']
     })
+    expect(metadata.copiedDirectories).toContain('Workbench')
+    expect(fs.readFileSync(path.join(result.path, 'Workbench', 'artifact.html'), 'utf-8')).toBe('<h1>Artifact</h1>')
   })
 })
 

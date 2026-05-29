@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 
 import type { Client } from '@libsql/client'
 import type { AppDataRecord, WorkbenchShortcut } from '@main/services/appData/AppDataDatabase'
+import { resolveRuntimeWorkbenchShortcut } from '@main/services/appData/WorkbenchShortcutPath'
 
 import { storageV2SecretVaultService } from './SecretVaultService'
 import { storageV2Database } from './StorageV2Database'
@@ -222,17 +223,20 @@ export class StorageV2AppDataKvMirrorService {
         const id = typeof shortcut.id === 'string' && shortcut.id ? shortcut.id : key
         if (!id) continue
 
-        shortcuts.push({
-          id,
-          name: typeof shortcut.name === 'string' ? shortcut.name : id,
-          url: typeof shortcut.url === 'string' ? shortcut.url : '',
-          sourcePath: typeof shortcut.sourcePath === 'string' ? shortcut.sourcePath : null,
-          kind: shortcut.kind === 'html' || shortcut.kind === 'file' || shortcut.kind === 'url' ? shortcut.kind : 'url',
-          metadata: isRecord(shortcut.metadata) ? shortcut.metadata : null,
-          createdAt: typeof shortcut.createdAt === 'number' ? shortcut.createdAt : updatedAt,
-          updatedAt,
-          deletedAt
-        })
+        shortcuts.push(
+          resolveRuntimeWorkbenchShortcut({
+            id,
+            name: typeof shortcut.name === 'string' ? shortcut.name : id,
+            url: typeof shortcut.url === 'string' ? shortcut.url : '',
+            sourcePath: typeof shortcut.sourcePath === 'string' ? shortcut.sourcePath : null,
+            kind:
+              shortcut.kind === 'html' || shortcut.kind === 'file' || shortcut.kind === 'url' ? shortcut.kind : 'url',
+            metadata: isRecord(shortcut.metadata) ? shortcut.metadata : null,
+            createdAt: typeof shortcut.createdAt === 'number' ? shortcut.createdAt : updatedAt,
+            updatedAt,
+            deletedAt
+          })
+        )
       }
     }
 

@@ -82,7 +82,7 @@ export type StorageV2RestoreBackupResult = {
   warnings: string[]
 }
 
-const RESTORABLE_DIRECTORIES = ['blobs', 'secrets', 'KnowledgeBase', 'Memory', 'Skills', 'Agents'] as const
+const RESTORABLE_DIRECTORIES = ['blobs', 'secrets', 'KnowledgeBase', 'Memory', 'Skills', 'Agents', 'Workbench'] as const
 const RESTORABLE_DB_FILES = ['main.db', 'main.db-wal', 'main.db-shm'] as const
 
 function quoteSqlString(value: string) {

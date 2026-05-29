@@ -5,6 +5,7 @@ import path from 'node:path'
 import type { Client, Row } from '@libsql/client'
 import { loggerService } from '@logger'
 import { AppDataDatabase, getAppDataDatabase } from '@main/services/appData/AppDataDatabase'
+import { resolveRuntimeWorkbenchShortcut } from '@main/services/appData/WorkbenchShortcutPath'
 import { getDataPath } from '@main/utils'
 
 import { getAvailablePathSync, movePathSync } from './SafeFileMove'
@@ -356,6 +357,18 @@ export class StorageV2AppDataLegacyProjectionService {
     const id = typeof shortcut.id === 'string' && shortcut.id ? shortcut.id : key
     const updatedAt = numberValue(shortcut.updatedAt) ?? epochMs(row.updated_at)
     const deletedAt = numberValue(shortcut.deletedAt)
+    const runtimeShortcut = resolveRuntimeWorkbenchShortcut({
+      ...shortcut,
+      id,
+      name: typeof shortcut.name === 'string' ? shortcut.name : id,
+      url: typeof shortcut.url === 'string' ? shortcut.url : '',
+      sourcePath: typeof shortcut.sourcePath === 'string' ? shortcut.sourcePath : null,
+      kind: shortcut.kind === 'html' || shortcut.kind === 'file' || shortcut.kind === 'url' ? shortcut.kind : 'url',
+      metadata: isRecord(shortcut.metadata) ? shortcut.metadata : null,
+      createdAt: numberValue(shortcut.createdAt) ?? updatedAt,
+      updatedAt,
+      deletedAt
+    })
 
     await targetClient.execute({
       sql: `
@@ -375,12 +388,12 @@ export class StorageV2AppDataLegacyProjectionService {
       `,
       args: [
         id,
-        typeof shortcut.name === 'string' ? shortcut.name : id,
-        typeof shortcut.url === 'string' ? shortcut.url : '',
-        typeof shortcut.sourcePath === 'string' ? shortcut.sourcePath : null,
-        typeof shortcut.kind === 'string' ? shortcut.kind : 'url',
-        toJson(shortcut.metadata ?? null),
-        numberValue(shortcut.createdAt) ?? updatedAt,
+        runtimeShortcut.name,
+        runtimeShortcut.url,
+        runtimeShortcut.sourcePath,
+        runtimeShortcut.kind,
+        toJson(runtimeShortcut.metadata ?? null),
+        runtimeShortcut.createdAt,
         updatedAt,
         deletedAt
       ]
@@ -398,7 +411,7 @@ export class StorageV2AppDataLegacyProjectionService {
           device_id = excluded.device_id,
           version = app_records.version + 1
       `,
-      args: [id, toJson(shortcut), hashValue(shortcut, deletedAt), updatedAt, deletedAt, deviceId]
+      args: [id, toJson(runtimeShortcut), hashValue(runtimeShortcut, deletedAt), updatedAt, deletedAt, deviceId]
     })
     report.projectedWorkbenchShortcutCount++
   }
