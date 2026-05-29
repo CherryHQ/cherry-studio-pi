@@ -15,6 +15,8 @@ import {
   getConfigDir,
   getFilesDir,
   getFileType,
+  getLegacyMcpDir,
+  getMcpDir,
   getTempDir,
   isPathInside,
   untildify
@@ -241,6 +243,20 @@ describe('file', () => {
     it('should return correct config directory path', () => {
       const configDir = getConfigDir()
       expect(configDir).toBe('/mock/home/.cherrystudio/config')
+    })
+  })
+
+  describe('getMcpDir', () => {
+    it('should return the Storage v2 MCP directory path', () => {
+      const mcpDir = getMcpDir()
+      expect(mcpDir).toBe('/mock/userData/Data/MCP')
+    })
+  })
+
+  describe('getLegacyMcpDir', () => {
+    it('should return the old home MCP directory path', () => {
+      const legacyMcpDir = getLegacyMcpDir()
+      expect(legacyMcpDir).toBe('/mock/home/.cherrystudio/mcp')
     })
   })
 

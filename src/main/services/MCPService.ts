@@ -394,6 +394,7 @@ class McpService {
             }
           } else if (server.command) {
             let cmd = server.command
+            let dxtRuntimePath = server.dxtPath
 
             // Get login shell environment first - needed for command detection and server execution
             // Note: getLoginShellEnvironment() is memoized, so subsequent calls are fast
@@ -401,8 +402,9 @@ class McpService {
 
             // For DXT servers, use resolved configuration with platform overrides and variable substitution
             if (server.dxtPath) {
-              const resolvedConfig = this.dxtService.getResolvedMcpConfig(server.dxtPath)
+              const resolvedConfig = this.dxtService.getResolvedMcpConfig(server.dxtPath, undefined, server.name)
               if (resolvedConfig) {
+                dxtRuntimePath = resolvedConfig.cwd
                 cmd = resolvedConfig.command
                 args = resolvedConfig.args
                 // Merge resolved environment variables with existing ones
@@ -529,10 +531,10 @@ class McpService {
             }
 
             // For DXT servers, set the working directory to the extracted path
-            if (server.dxtPath) {
-              transportOptions.cwd = server.dxtPath
+            if (dxtRuntimePath) {
+              transportOptions.cwd = dxtRuntimePath
               getServerLogger(server).debug(`Setting working directory for DXT server`, {
-                cwd: server.dxtPath
+                cwd: dxtRuntimePath
               })
             }
 

@@ -446,7 +446,8 @@ describe('StorageV2BackupService.validateBackup', () => {
       'Channels',
       'Workbench',
       'Notes',
-      'Workspace'
+      'Workspace',
+      'MCP'
     ]
     const secretRef = 'storage-v2://secret/provider/provider-1/apiKey'
     const blobStoragePath = 'blobs/file-1.txt'
@@ -457,6 +458,8 @@ describe('StorageV2BackupService.validateBackup', () => {
       fs.mkdirSync(path.join(backupPath, dirname), { recursive: true })
     }
     fs.writeFileSync(path.join(backupPath, blobStoragePath), blobContent)
+    fs.mkdirSync(path.join(backupPath, 'MCP', 'server-demo'), { recursive: true })
+    fs.writeFileSync(path.join(backupPath, 'MCP', 'server-demo', 'manifest.json'), '{"name":"demo"}')
     fs.writeFileSync(
       path.join(backupPath, 'metadata.json'),
       JSON.stringify({
@@ -629,12 +632,14 @@ describe('StorageV2BackupService.createBackup', () => {
     fs.mkdirSync(path.join(dataRoot, 'Channels'), { recursive: true })
     fs.mkdirSync(path.join(dataRoot, 'Notes'), { recursive: true })
     fs.mkdirSync(path.join(dataRoot, 'Workspace'), { recursive: true })
+    fs.mkdirSync(path.join(dataRoot, 'MCP', 'server-demo'), { recursive: true })
     fs.writeFileSync(snapshotPath, 'snapshot-db')
     fs.writeFileSync(path.join(dataRoot, 'secrets', 'vault.json'), JSON.stringify({ version: 1, secrets: {} }))
     fs.writeFileSync(path.join(dataRoot, 'Workbench', 'artifact.html'), '<h1>Artifact</h1>')
     fs.writeFileSync(path.join(dataRoot, 'Channels', 'weixin_bot_channel-1.json'), '{"token":"secret"}')
     fs.writeFileSync(path.join(dataRoot, 'Notes', 'note.md'), '# Note')
     fs.writeFileSync(path.join(dataRoot, 'Workspace', 'README.md'), '# Workspace')
+    fs.writeFileSync(path.join(dataRoot, 'MCP', 'server-demo', 'manifest.json'), '{"name":"demo"}')
 
     mocks.dataRootService.ensureDataRoot.mockReturnValue({
       dataRoot,
@@ -693,12 +698,16 @@ describe('StorageV2BackupService.createBackup', () => {
     expect(metadata.copiedDirectories).toContain('Channels')
     expect(metadata.copiedDirectories).toContain('Notes')
     expect(metadata.copiedDirectories).toContain('Workspace')
+    expect(metadata.copiedDirectories).toContain('MCP')
     expect(fs.readFileSync(path.join(result.path, 'Workbench', 'artifact.html'), 'utf-8')).toBe('<h1>Artifact</h1>')
     expect(fs.readFileSync(path.join(result.path, 'Channels', 'weixin_bot_channel-1.json'), 'utf-8')).toBe(
       '{"token":"secret"}'
     )
     expect(fs.readFileSync(path.join(result.path, 'Notes', 'note.md'), 'utf-8')).toBe('# Note')
     expect(fs.readFileSync(path.join(result.path, 'Workspace', 'README.md'), 'utf-8')).toBe('# Workspace')
+    expect(fs.readFileSync(path.join(result.path, 'MCP', 'server-demo', 'manifest.json'), 'utf-8')).toBe(
+      '{"name":"demo"}'
+    )
   })
 })
 
@@ -720,9 +729,11 @@ describe('StorageV2BackupService.restoreBackup', () => {
     fs.mkdirSync(path.join(backupPath, 'Channels'), { recursive: true })
     fs.mkdirSync(path.join(backupPath, 'Notes'), { recursive: true })
     fs.mkdirSync(path.join(backupPath, 'Workspace'), { recursive: true })
+    fs.mkdirSync(path.join(backupPath, 'MCP', 'server-demo'), { recursive: true })
     fs.writeFileSync(path.join(backupPath, 'Channels', 'weixin_bot_channel-1.json'), '{"token":"secret"}')
     fs.writeFileSync(path.join(backupPath, 'Notes', 'note.md'), '# Restored note')
     fs.writeFileSync(path.join(backupPath, 'Workspace', 'README.md'), '# Restored workspace')
+    fs.writeFileSync(path.join(backupPath, 'MCP', 'server-demo', 'manifest.json'), '{"name":"restored"}')
     fs.writeFileSync(
       path.join(backupPath, 'manifest.json'),
       JSON.stringify({
@@ -797,11 +808,15 @@ describe('StorageV2BackupService.restoreBackup', () => {
     expect(result.restoredDirectories).toContain('Channels')
     expect(result.restoredDirectories).toContain('Notes')
     expect(result.restoredDirectories).toContain('Workspace')
+    expect(result.restoredDirectories).toContain('MCP')
     expect(fs.readFileSync(path.join(dataRoot, 'Channels', 'weixin_bot_channel-1.json'), 'utf-8')).toBe(
       '{"token":"secret"}'
     )
     expect(fs.readFileSync(path.join(dataRoot, 'Notes', 'note.md'), 'utf-8')).toBe('# Restored note')
     expect(fs.readFileSync(path.join(dataRoot, 'Workspace', 'README.md'), 'utf-8')).toBe('# Restored workspace')
+    expect(fs.readFileSync(path.join(dataRoot, 'MCP', 'server-demo', 'manifest.json'), 'utf-8')).toBe(
+      '{"name":"restored"}'
+    )
     expect(result.requiresRestart).toBe(true)
     expect(result.warnings).toEqual([])
   })
@@ -810,7 +825,7 @@ describe('StorageV2BackupService.restoreBackup', () => {
     const sourceRoot = path.join(tmpDir, 'SourceData')
     const targetRoot = path.join(tmpDir, 'FreshData')
     const snapshotDbPath = path.join(tmpDir, 'source-snapshot.db')
-    const copiedDirectories = ['blobs', 'secrets', 'Channels', 'Workbench', 'Notes', 'Workspace']
+    const copiedDirectories = ['blobs', 'secrets', 'Channels', 'Workbench', 'Notes', 'Workspace', 'MCP']
     const blobStoragePath = 'blobs/file-1.txt'
     const blobContent = 'blob-content'
     const blobChecksum = createHash('sha256').update(blobContent).digest('hex')
@@ -854,6 +869,8 @@ describe('StorageV2BackupService.restoreBackup', () => {
     fs.writeFileSync(path.join(sourceRoot, 'Workbench', 'artifact.html'), '<h1>Artifact</h1>')
     fs.writeFileSync(path.join(sourceRoot, 'Notes', 'note.md'), '# Note')
     fs.writeFileSync(path.join(sourceRoot, 'Workspace', 'README.md'), '# Workspace')
+    fs.mkdirSync(path.join(sourceRoot, 'MCP', 'server-demo'), { recursive: true })
+    fs.writeFileSync(path.join(sourceRoot, 'MCP', 'server-demo', 'manifest.json'), '{"name":"demo"}')
     await createCompleteBackupValidationDb(snapshotDbPath, {
       blobStoragePath,
       blobChecksum,
@@ -951,6 +968,9 @@ describe('StorageV2BackupService.restoreBackup', () => {
     expect(fs.readFileSync(path.join(targetRoot, 'Workbench', 'artifact.html'), 'utf-8')).toBe('<h1>Artifact</h1>')
     expect(fs.readFileSync(path.join(targetRoot, 'Notes', 'note.md'), 'utf-8')).toBe('# Note')
     expect(fs.readFileSync(path.join(targetRoot, 'Workspace', 'README.md'), 'utf-8')).toBe('# Workspace')
+    expect(fs.readFileSync(path.join(targetRoot, 'MCP', 'server-demo', 'manifest.json'), 'utf-8')).toBe(
+      '{"name":"demo"}'
+    )
     expect(mocks.dataRootService.activateDataRoot).toHaveBeenCalledWith(targetRoot)
     expect(mocks.agentProjection.projectToLegacyRuntime).toHaveBeenCalledWith({ archiveRoot: result.archivedPath })
     expect(mocks.fileProjection.projectToLegacyRuntime).toHaveBeenCalledWith({ archiveRoot: result.archivedPath })

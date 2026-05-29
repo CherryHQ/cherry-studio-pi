@@ -1,7 +1,25 @@
-import path from 'path'
-import { describe, expect, it } from 'vitest'
+import fs from 'node:fs'
 
-import { ensurePathWithin, validateArgs, validateCommand } from '../DxtService'
+import path from 'path'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('fs', async () => {
+  const actual = await vi.importActual<typeof import('fs')>('fs')
+  return { ...actual, default: actual }
+})
+
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs')
+  return { ...actual, default: actual }
+})
+
+import {
+  ensurePathWithin,
+  migrateLegacyMcpDirectory,
+  resolveDxtPackagePath,
+  validateArgs,
+  validateCommand
+} from '../DxtService'
 
 describe('ensurePathWithin', () => {
   // Use path.join to construct cross-platform compatible paths
@@ -217,5 +235,86 @@ describe('validateArgs', () => {
       // @ts-expect-error - testing runtime behavior
       expect(() => validateArgs(['valid', null])).toThrow('must be a string')
     })
+  })
+})
+
+describe('migrateLegacyMcpDirectory', () => {
+  let tmpDir: string | null = null
+  const tmpRoot = process.env.TMPDIR || '/tmp'
+
+  afterEach(() => {
+    if (tmpDir) {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+      tmpDir = null
+    }
+  })
+
+  it('copies legacy DXT server packages into the Storage v2 MCP directory', () => {
+    tmpDir = fs.mkdtempSync(path.join(tmpRoot, 'dxt-mcp-migrate-'))
+    const legacyDir = path.join(tmpDir, 'home-mcp')
+    const targetDir = path.join(tmpDir, 'Data', 'MCP')
+
+    fs.mkdirSync(path.join(legacyDir, 'server-demo'), { recursive: true })
+    fs.writeFileSync(path.join(legacyDir, 'server-demo', 'manifest.json'), '{"name":"demo"}')
+
+    const migrated = migrateLegacyMcpDirectory(legacyDir, targetDir)
+
+    expect(migrated).toEqual(['server-demo'])
+    expect(fs.readFileSync(path.join(targetDir, 'server-demo', 'manifest.json'), 'utf-8')).toBe('{"name":"demo"}')
+  })
+
+  it('keeps existing Storage v2 MCP entries authoritative during legacy migration', () => {
+    tmpDir = fs.mkdtempSync(path.join(tmpRoot, 'dxt-mcp-migrate-'))
+    const legacyDir = path.join(tmpDir, 'home-mcp')
+    const targetDir = path.join(tmpDir, 'Data', 'MCP')
+
+    fs.mkdirSync(path.join(legacyDir, 'server-demo'), { recursive: true })
+    fs.mkdirSync(path.join(targetDir, 'server-demo'), { recursive: true })
+    fs.writeFileSync(path.join(legacyDir, 'server-demo', 'manifest.json'), '{"name":"legacy"}')
+    fs.writeFileSync(path.join(targetDir, 'server-demo', 'manifest.json'), '{"name":"storage-v2"}')
+
+    const migrated = migrateLegacyMcpDirectory(legacyDir, targetDir)
+
+    expect(migrated).toEqual([])
+    expect(fs.readFileSync(path.join(targetDir, 'server-demo', 'manifest.json'), 'utf-8')).toBe('{"name":"storage-v2"}')
+  })
+})
+
+describe('resolveDxtPackagePath', () => {
+  let tmpDir: string | null = null
+  const tmpRoot = process.env.TMPDIR || '/tmp'
+
+  afterEach(() => {
+    if (tmpDir) {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+      tmpDir = null
+    }
+  })
+
+  it('redirects legacy DXT paths to the restored Storage v2 package directory', () => {
+    tmpDir = fs.mkdtempSync(path.join(tmpRoot, 'dxt-path-resolve-'))
+    const legacyDir = path.join(tmpDir, 'home-mcp')
+    const targetDir = path.join(tmpDir, 'Data', 'MCP')
+    const restoredPath = path.join(targetDir, 'server-demo')
+
+    fs.mkdirSync(restoredPath, { recursive: true })
+
+    expect(resolveDxtPackagePath(path.join(legacyDir, 'server-demo'), targetDir, legacyDir)).toBe(restoredPath)
+  })
+
+  it('falls back to the server name when the stored DXT path uses an old directory name', () => {
+    tmpDir = fs.mkdtempSync(path.join(tmpRoot, 'dxt-path-resolve-'))
+    const legacyDir = path.join(tmpDir, 'home-mcp')
+    const targetDir = path.join(tmpDir, 'Data', 'MCP')
+    const restoredPath = path.join(targetDir, 'server-demo')
+
+    fs.mkdirSync(restoredPath, { recursive: true })
+
+    expect(resolveDxtPackagePath(path.join(legacyDir, 'old-demo'), targetDir, legacyDir, 'demo')).toBe(restoredPath)
+  })
+
+  it('keeps the stored path when no restored package exists', () => {
+    const storedPath = '/missing/home-mcp/server-demo'
+    expect(resolveDxtPackagePath(storedPath, '/missing/Data/MCP', '/missing/home-mcp')).toBe(storedPath)
   })
 })

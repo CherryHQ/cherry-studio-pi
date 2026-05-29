@@ -1,5 +1,5 @@
 import { loggerService } from '@logger'
-import { getMcpDir, getTempDir } from '@main/utils/file'
+import { getLegacyMcpDir, getMcpDir, getTempDir } from '@main/utils/file'
 import * as fs from 'fs'
 import StreamZip from 'node-stream-zip'
 import * as os from 'os'
@@ -246,10 +246,86 @@ export function applyPlatformOverrides(mcpConfig: any, extractDir: string, userC
   return resolvedConfig
 }
 
+function copyDirectorySync(source: string, destination: string): void {
+  fs.mkdirSync(destination, { recursive: true })
+
+  const entries = fs.readdirSync(source, { withFileTypes: true })
+  for (const entry of entries) {
+    const sourcePath = path.join(source, entry.name)
+    const destinationPath = path.join(destination, entry.name)
+
+    if (entry.isDirectory()) {
+      copyDirectorySync(sourcePath, destinationPath)
+      continue
+    }
+
+    fs.copyFileSync(sourcePath, destinationPath)
+  }
+}
+
+export function migrateLegacyMcpDirectory(legacyDir: string, targetDir: string): string[] {
+  const resolvedLegacyDir = path.resolve(legacyDir)
+  const resolvedTargetDir = path.resolve(targetDir)
+  if (resolvedLegacyDir === resolvedTargetDir || !fs.existsSync(resolvedLegacyDir)) {
+    return []
+  }
+
+  fs.mkdirSync(resolvedTargetDir, { recursive: true })
+
+  const copiedEntries: string[] = []
+  const entries = fs.readdirSync(resolvedLegacyDir, { withFileTypes: true })
+  for (const entry of entries) {
+    const source = path.join(resolvedLegacyDir, entry.name)
+    const destination = ensurePathWithin(resolvedTargetDir, path.join(resolvedTargetDir, entry.name))
+
+    if (fs.existsSync(destination)) {
+      continue
+    }
+
+    if (entry.isDirectory()) {
+      copyDirectorySync(source, destination)
+    } else {
+      fs.copyFileSync(source, destination)
+    }
+    copiedEntries.push(entry.name)
+  }
+
+  return copiedEntries
+}
+
+function isSameOrInside(childPath: string, parentPath: string) {
+  const resolvedChild = path.resolve(childPath)
+  const resolvedParent = path.resolve(parentPath)
+  if (resolvedChild === resolvedParent) return true
+
+  const relativePath = path.relative(resolvedParent, resolvedChild)
+  return Boolean(relativePath && !relativePath.startsWith('..') && !path.isAbsolute(relativePath))
+}
+
+export function resolveDxtPackagePath(
+  dxtPath: string,
+  targetDir: string,
+  legacyDir: string,
+  serverName?: string
+): string {
+  const candidates = [dxtPath]
+  const packageDirName = path.basename(dxtPath)
+
+  if (isSameOrInside(dxtPath, legacyDir) || packageDirName.startsWith('server-')) {
+    candidates.push(path.join(targetDir, packageDirName))
+  }
+  if (serverName) {
+    candidates.push(path.join(targetDir, `server-${serverName}`))
+  }
+
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? dxtPath
+}
+
 export interface ResolvedMcpConfig {
   command: string
   args: string[]
   env?: Record<string, string>
+  cwd: string
 }
 
 class DxtService {
@@ -269,6 +345,13 @@ class DxtService {
       // Create MCP directory
       if (!fs.existsSync(this.mcpDir)) {
         fs.mkdirSync(this.mcpDir, { recursive: true })
+      }
+      const migratedEntries = migrateLegacyMcpDirectory(getLegacyMcpDir(), this.mcpDir)
+      if (migratedEntries.length > 0) {
+        logger.info('Migrated legacy DXT MCP servers into Storage v2 data root', {
+          count: migratedEntries.length,
+          target: this.mcpDir
+        })
       }
     } catch (error) {
       logger.error('Failed to create directories:', error as Error)
@@ -412,10 +495,15 @@ class DxtService {
   /**
    * Get resolved MCP configuration for a DXT server with platform overrides and variable substitution
    */
-  public getResolvedMcpConfig(dxtPath: string, userConfig?: Record<string, any>): ResolvedMcpConfig | null {
+  public getResolvedMcpConfig(
+    dxtPath: string,
+    userConfig?: Record<string, any>,
+    serverName?: string
+  ): ResolvedMcpConfig | null {
     try {
+      const resolvedDxtPath = this.resolveDxtPath(dxtPath, serverName)
       // Read the manifest from the DXT server directory
-      const manifestPath = path.join(dxtPath, 'manifest.json')
+      const manifestPath = path.join(resolvedDxtPath, 'manifest.json')
       if (!fs.existsSync(manifestPath)) {
         logger.error(`Manifest not found: ${manifestPath}`)
         return null
@@ -430,7 +518,7 @@ class DxtService {
       }
 
       // Apply platform overrides and variable substitution
-      const resolvedConfig = applyPlatformOverrides(manifest.server.mcp_config, dxtPath, userConfig)
+      const resolvedConfig = applyPlatformOverrides(manifest.server.mcp_config, resolvedDxtPath, userConfig)
 
       logger.debug('Resolved MCP config:', {
         command: resolvedConfig.command,
@@ -438,11 +526,18 @@ class DxtService {
         env: resolvedConfig.env ? Object.keys(resolvedConfig.env) : undefined
       })
 
-      return resolvedConfig
+      return {
+        ...resolvedConfig,
+        cwd: resolvedDxtPath
+      }
     } catch (error) {
       logger.error('Failed to resolve MCP config:', error as Error)
       return null
     }
+  }
+
+  public resolveDxtPath(dxtPath: string, serverName?: string): string {
+    return resolveDxtPackagePath(dxtPath, this.mcpDir, getLegacyMcpDir(), serverName)
   }
 
   public cleanupDxtServer(serverName: string): boolean {

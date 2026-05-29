@@ -39,6 +39,7 @@ const KNOWN_DATA_ROOT_ENTRIES = new Set([
   'Workbench',
   'Notes',
   'Workspace',
+  'MCP',
   'backups',
   'snapshots',
   'legacy',
@@ -291,6 +292,12 @@ export class StorageV2MigrationAuditService {
         risk: 'high',
         notes: 'Default filesystem MCP workspace is copied by Storage v2 backups.'
       }),
+      auditPath('mcp-dxt-servers', 'DXT MCP server packages', path.join(dataPath, 'MCP'), {
+        category: 'user-asset',
+        coverage: 'covered',
+        risk: 'medium',
+        notes: 'Uploaded DXT MCP server packages live under the Storage v2 data root and are copied by backups.'
+      }),
       auditPath('agents-workspaces', 'Agent workspaces', path.join(dataPath, 'Agents'), {
         category: 'user-asset',
         coverage: 'covered',
@@ -359,6 +366,13 @@ export class StorageV2MigrationAuditService {
         coverage: 'covered',
         risk: 'medium',
         notes: 'MCP OAuth token projection under the home config directory.'
+      }),
+      auditPath('legacy-mcp-dxt-servers', 'Legacy DXT MCP server packages', path.join(homeCherryPath, 'mcp'), {
+        category: 'external-projection',
+        coverage: 'covered',
+        risk: 'low',
+        notes:
+          'Old DXT MCP extraction directory. Missing server packages are copied into Data/MCP before the DXT runtime writes new packages.'
       }),
       auditPath('copilot-token-legacy', 'Config Copilot token', path.join(homeCherryPath, 'config', '.copilot_token'), {
         category: 'external-projection',

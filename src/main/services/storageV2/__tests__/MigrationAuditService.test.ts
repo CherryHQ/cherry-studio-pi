@@ -59,6 +59,7 @@ describe('StorageV2MigrationAuditService', () => {
     expect(itemPath('knowledge-base')).toBe('/mock/stable-data-root/KnowledgeBase')
     expect(itemPath('notes')).toBe('/mock/stable-data-root/Notes')
     expect(itemPath('workspace')).toBe('/mock/stable-data-root/Workspace')
+    expect(itemPath('mcp-dxt-servers')).toBe('/mock/stable-data-root/MCP')
     expect(itemPath('channels')).toBe('/mock/stable-data-root/Channels')
     expect(itemPath('workbench')).toBe('/mock/stable-data-root/Workbench')
     expect(itemPath('agents-db')).toBe('/mock/stable-data-root/agents.db')
@@ -67,6 +68,7 @@ describe('StorageV2MigrationAuditService', () => {
     expect(itemPath('home-config')).toBe('/mock/home/.cherrystudio/config/config.json')
     expect(itemPath('mcp-memory-json')).toBe('/mock/home/.cherrystudio/config/memory.json')
     expect(itemPath('mcp-oauth-legacy')).toBe('/mock/home/.cherrystudio/config/mcp/oauth')
+    expect(itemPath('legacy-mcp-dxt-servers')).toBe('/mock/home/.cherrystudio/mcp')
     expect(itemPath('code-tools-bin')).toBe('/mock/home/.cherrystudio/bin')
     expect(itemPath('code-tools-install')).toBe('/mock/home/.cherrystudio/install')
     expect(itemPath('openclaw-config')).toBe('/mock/home/.openclaw/openclaw.json')
@@ -87,6 +89,70 @@ describe('StorageV2MigrationAuditService', () => {
     expect(itemPath('storage-v2-snapshots')).toBe('/mock/stable-data-root/snapshots')
     expect(itemPath('storage-v2-legacy-archives')).toBe('/mock/stable-data-root/legacy')
     expect(itemPath('storage-v2-temp')).toBe('/mock/stable-data-root/temp')
+  })
+
+  it('classifies durable assets, rebuildable caches, and external projections explicitly', async () => {
+    const { StorageV2MigrationAuditService } = await import('../MigrationAuditService')
+    const audit = await new StorageV2MigrationAuditService().runAudit()
+    const byId = new Map(audit.items.map((item) => [item.id, item]))
+
+    for (const item of audit.items) {
+      expect(item.category, item.id).toBeTruthy()
+      expect(item.coverage, item.id).toBeTruthy()
+    }
+
+    for (const id of [
+      'files',
+      'knowledge-base',
+      'memory',
+      'skills',
+      'channels',
+      'workbench',
+      'notes',
+      'workspace',
+      'mcp-dxt-servers',
+      'agents-workspaces',
+      'agents-db',
+      'app-db'
+    ]) {
+      expect(byId.get(id)).toMatchObject({
+        category: 'user-asset',
+        coverage: 'covered'
+      })
+    }
+
+    for (const id of [
+      'code-tools-bin',
+      'code-tools-install',
+      'trace-cache',
+      'logs',
+      'user-data-cache',
+      'version-log',
+      'tesseract-cache',
+      'storage-v2-snapshots',
+      'storage-v2-legacy-archives',
+      'storage-v2-temp'
+    ]) {
+      expect(byId.get(id)).toMatchObject({
+        category: 'runtime-cache',
+        coverage: 'cache'
+      })
+    }
+
+    for (const id of [
+      'anthropic-oauth-legacy',
+      'mcp-memory-json',
+      'mcp-oauth-legacy',
+      'legacy-mcp-dxt-servers',
+      'copilot-token-legacy',
+      'openclaw-config',
+      'obsidian-config'
+    ]) {
+      expect(byId.get(id)).toMatchObject({
+        category: 'external-projection',
+        coverage: 'covered'
+      })
+    }
   })
 
   it('surfaces unclassified top-level Data entries as action-required audit items', async () => {

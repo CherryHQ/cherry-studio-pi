@@ -105,7 +105,8 @@ function hasLegacyRuntimeData(dataRoot: string) {
     'Channels',
     'Workbench',
     'Notes',
-    'Workspace'
+    'Workspace',
+    'MCP'
   ].some((entry) => hasDataEntry(path.join(dataRoot, entry)))
 }
 
