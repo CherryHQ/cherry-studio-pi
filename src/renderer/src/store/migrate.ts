@@ -32,6 +32,7 @@ import db from '@renderer/databases'
 import { getModel } from '@renderer/hooks/useModel'
 import i18n from '@renderer/i18n'
 import { DEFAULT_ASSISTANT_SETTINGS } from '@renderer/services/AssistantService'
+import { storageV2ConversationMirrorService } from '@renderer/services/StorageV2ConversationMirrorService'
 import { scheduleStorageV2LocalStorageMirror } from '@renderer/services/StorageV2LocalStorageSnapshot'
 import { defaultPreprocessProviders } from '@renderer/store/preprocess'
 import type {
@@ -660,7 +661,8 @@ const migrateConfig = {
                 ...message,
                 assistantId: assistant.id
               }))
-              void db.topics.put({ ..._topic, messages }, topic.id)
+              await db.topics.put({ ..._topic, messages }, topic.id)
+              await storageV2ConversationMirrorService.flushTopic(topic.id, () => state)
             }
           })
         })
