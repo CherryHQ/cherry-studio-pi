@@ -271,6 +271,7 @@ const INTEGRITY_ISSUE_LABEL_KEYS: Record<string, string> = {
   tasks_without_agent: 'settings.data.storage_v2.integrity.issues.tasks_without_agent'
 }
 const BACKUP_ISSUE_LABEL_KEYS: Record<string, string> = {
+  copied_directory_missing: 'settings.data.storage_v2.backup_restore.issues.copied_directory_missing',
   db_missing: 'settings.data.storage_v2.backup_restore.issues.db_missing',
   db_open_failed: 'settings.data.storage_v2.backup_restore.issues.db_open_failed',
   corrupt_blob_files: 'settings.data.storage_v2.backup_restore.issues.corrupt_blob_files',
@@ -288,10 +289,13 @@ const BACKUP_ISSUE_LABEL_KEYS: Record<string, string> = {
 const BACKUP_WARNING_LABEL_KEYS: Record<string, string> = {
   manifest_missing: 'settings.data.storage_v2.backup_restore.warnings.manifest_missing',
   orphan_secret_vault_entries: 'settings.data.storage_v2.backup_restore.warnings.orphan_secret_vault_entries',
+  restorable_directory_untracked: 'settings.data.storage_v2.backup_restore.warnings.restorable_directory_untracked',
+  schema_tables_missing: 'settings.data.storage_v2.backup_restore.warnings.schema_tables_missing',
   secret_vault_decrypt_unavailable: 'settings.data.storage_v2.backup_restore.warnings.secret_vault_decrypt_unavailable',
   secret_vault_missing: 'settings.data.storage_v2.backup_restore.warnings.secret_vault_missing',
   undecryptable_secret_vault_entries:
-    'settings.data.storage_v2.backup_restore.warnings.undecryptable_secret_vault_entries'
+    'settings.data.storage_v2.backup_restore.warnings.undecryptable_secret_vault_entries',
+  unknown_copied_directories: 'settings.data.storage_v2.backup_restore.warnings.unknown_copied_directories'
 }
 
 function asRecord(value: unknown): Record<string, any> {

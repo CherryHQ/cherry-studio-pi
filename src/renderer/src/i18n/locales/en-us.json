@@ -4612,6 +4612,7 @@
           "invalid": "Backup is not usable",
           "issue": "Issue: {{message}}",
           "issues": {
+            "copied_directory_missing": "Backup metadata says {{directory}} was copied, but the directory is missing",
             "corrupt_blob_files": "Backup has {{count}} blob file(s) with checksum mismatch",
             "db_missing": "Backup main.db is missing",
             "db_open_failed": "Backup database cannot be opened: {{message}}",
@@ -4638,9 +4639,12 @@
           "warnings": {
             "manifest_missing": "Backup manifest.json is missing or invalid; a new manifest may be created after restore",
             "orphan_secret_vault_entries": "Backup contains {{count}} secret value(s) that are no longer referenced by the database. New backups prune them automatically",
+            "restorable_directory_untracked": "Backup contains restorable directories not listed in metadata: {{directories}}; restore still recognizes them",
+            "schema_tables_missing": "Backup database is missing {{count}} current Storage v2 table(s): {{tables}}; the tables can be recreated after restore, but their records are not present in this backup",
             "secret_vault_decrypt_unavailable": "System encryption is unavailable, so this backup's secret values cannot be verified on this device",
             "secret_vault_missing": "Backup metadata says secrets were copied, but secrets/vault.json is missing",
-            "undecryptable_secret_vault_entries": "Backup contains {{count}} secret value(s) that cannot be decrypted on this device; you may need to re-enter them after cross-device restore"
+            "undecryptable_secret_vault_entries": "Backup contains {{count}} secret value(s) that cannot be decrypted on this device; you may need to re-enter them after cross-device restore",
+            "unknown_copied_directories": "Backup metadata contains unknown directory entries: {{directories}}"
           }
         },
         "banner": "Storage v2 is a parallel local data layer for migration, backup, and future sync recovery.",

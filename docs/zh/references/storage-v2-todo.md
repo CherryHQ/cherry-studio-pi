@@ -21,6 +21,7 @@
 - [x] 自定义小程序 `custom-minapps.json` 进入 Storage v2 settings read-through / mirror。
 - [x] Workbench HTML artifact 文件纳入 Storage v2 backup / restore，并修复恢复后的 `file://` 路径。
 - [x] migration audit 已纳入 Channels、Workbench、旧 `agents.db` / `memories.db`、MCP / OpenClaw / OVMS / OAuth、trace/log/OCR cache 等路径分类；legacy-only 且需要处理的路径会生成 warning。
+- [x] `Channels` 目录纳入 Storage v2 backup / restore；backup validation 会检查 copiedDirectories 缺失、未知目录和当前 schema 表缺失。
 - [ ] 继续扫描 `userData`、`Data/*`、`~/.cherrystudio`、外部 JSON/DB 写入路径。
 - [ ] 判定每个路径属于用户资产、可重建缓存、临时文件或外部工具投影。
 - [ ] 用户资产必须进入 Storage v2 或 backup/restore。
@@ -83,7 +84,7 @@
 - [x] 已有 migration audit、stats、integrity、secret ref validation 基础能力。
 - [x] 扩展 migration audit，列出仍在 legacy-only 的数据路径。
 - [x] 扩展 integrity report：补齐 message block blob、头像 blob、孤儿 blob、blob ref_count、孤儿 secret vault entry 检查；已有 message/block/file/blob file/secret ref 检查继续保留。
-- [ ] 增加 backup validation 对新增目录和表的兼容检查。
+- [x] 增加 backup validation 对新增目录和表的兼容检查。
 - [ ] 增加“当前 profile 是否可安全迁移/备份”的 health summary。
 - [ ] 设置页显示 data root、最近备份、mirror pending、失败重试队列。
 

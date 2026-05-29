@@ -82,8 +82,50 @@ export type StorageV2RestoreBackupResult = {
   warnings: string[]
 }
 
-const RESTORABLE_DIRECTORIES = ['blobs', 'secrets', 'KnowledgeBase', 'Memory', 'Skills', 'Agents', 'Workbench'] as const
+const RESTORABLE_DIRECTORIES = [
+  'blobs',
+  'secrets',
+  'KnowledgeBase',
+  'Memory',
+  'Skills',
+  'Agents',
+  'Channels',
+  'Workbench'
+] as const
 const RESTORABLE_DB_FILES = ['main.db', 'main.db-wal', 'main.db-shm'] as const
+const RESTORABLE_DIRECTORY_SET = new Set<string>(RESTORABLE_DIRECTORIES)
+const REQUIRED_BACKUP_TABLES = [
+  'storage_meta',
+  'profiles',
+  'devices',
+  'settings',
+  'providers',
+  'models',
+  'provider_credentials',
+  'assistants',
+  'assistant_versions',
+  'agents',
+  'agent_versions',
+  'agent_sessions',
+  'conversations',
+  'messages',
+  'message_blocks',
+  'blobs',
+  'files',
+  'skills',
+  'agent_skills',
+  'scheduled_tasks',
+  'task_run_logs',
+  'channels',
+  'knowledge_bases',
+  'knowledge_items',
+  'kv_records',
+  'sync_changes',
+  'sync_tombstones',
+  'sync_state',
+  'sync_conflicts',
+  'migration_runs'
+] as const
 
 function quoteSqlString(value: string) {
   return `'${value.replace(/'/g, "''")}'`
@@ -509,6 +551,24 @@ export class StorageV2BackupService {
           )
         }
 
+        const tableResult = await client.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        const tableNames = new Set(tableResult.rows.map((row) => String(row.name)).filter(Boolean))
+        const missingTables = REQUIRED_BACKUP_TABLES.filter((table) => !tableNames.has(table))
+        if (missingTables.length > 0) {
+          warnings.push(
+            validationMessage(
+              'schema_tables_missing',
+              `Backup database is missing ${missingTables.length} current Storage v2 table(s): ${missingTables.join(
+                ', '
+              )}. Missing tables can be recreated after restore, but their records are not present in this backup.`,
+              {
+                count: missingTables.length,
+                tables: missingTables.join(', ')
+              }
+            )
+          )
+        }
+
         const blobsResult = await client.execute(`
           SELECT storage_path, checksum
           FROM blobs
@@ -560,6 +620,46 @@ export class StorageV2BackupService {
     const copiedDirectories = Array.isArray(metadata?.copiedDirectories)
       ? metadata.copiedDirectories.filter((entry: unknown): entry is string => typeof entry === 'string')
       : RESTORABLE_DIRECTORIES.filter((dirname) => fs.existsSync(path.join(backupPath, dirname)))
+    const copiedDirectorySet = new Set(copiedDirectories)
+    const unknownCopiedDirectories = copiedDirectories.filter((dirname) => !RESTORABLE_DIRECTORY_SET.has(dirname))
+
+    if (unknownCopiedDirectories.length > 0) {
+      warnings.push(
+        validationMessage(
+          'unknown_copied_directories',
+          `Backup metadata contains unknown copied directory entries: ${unknownCopiedDirectories.join(', ')}.`,
+          { count: unknownCopiedDirectories.length, directories: unknownCopiedDirectories.join(', ') }
+        )
+      )
+    }
+
+    const untrackedRestorableDirectories = RESTORABLE_DIRECTORIES.filter(
+      (dirname) => !copiedDirectorySet.has(dirname) && fs.existsSync(path.join(backupPath, dirname))
+    )
+    if (untrackedRestorableDirectories.length > 0) {
+      warnings.push(
+        validationMessage(
+          'restorable_directory_untracked',
+          `Backup contains restorable directories not listed in metadata: ${untrackedRestorableDirectories.join(
+            ', '
+          )}. Restore still considers these directories.`,
+          { count: untrackedRestorableDirectories.length, directories: untrackedRestorableDirectories.join(', ') }
+        )
+      )
+    }
+
+    for (const dirname of copiedDirectories) {
+      if (dirname === 'secrets' || !RESTORABLE_DIRECTORY_SET.has(dirname)) continue
+      if (fs.existsSync(path.join(backupPath, dirname))) continue
+
+      issues.push(
+        validationMessage(
+          'copied_directory_missing',
+          `Backup metadata says ${dirname} was copied, but the directory is missing.`,
+          { directory: dirname }
+        )
+      )
+    }
 
     const vaultValidation = validateSecretVaultFile(path.join(backupPath, 'secrets', 'vault.json'))
     secretVaultSecretCount = vaultValidation.secretCount
