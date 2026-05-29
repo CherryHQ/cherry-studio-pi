@@ -171,6 +171,10 @@ describe('StorageV2Service', () => {
     mocks.assistantRepository.upsert.mockResolvedValue(undefined)
     mocks.assistantRepository.delete.mockResolvedValue({ deleted: true })
     mocks.conversationRepository.list.mockResolvedValue([])
+    mocks.conversationRepository.upsertConversation.mockResolvedValue(undefined)
+    mocks.conversationRepository.upsertMessage.mockResolvedValue(undefined)
+    mocks.conversationRepository.upsertMessageBlocks.mockResolvedValue(undefined)
+    mocks.conversationRepository.delete.mockResolvedValue({ deleted: true })
     mocks.fileRepository.get.mockResolvedValue(null)
     mocks.fileRepository.list.mockResolvedValue([])
     mocks.knowledgeRepository.listBases.mockResolvedValue([])
@@ -428,6 +432,40 @@ describe('StorageV2Service', () => {
     await expect(new StorageV2Service().deleteAssistant('assistant-1')).resolves.toEqual({ deleted: true })
 
     expect(mocks.assistantRepository.delete).toHaveBeenCalledWith('assistant-1')
+  })
+
+  it('delegates conversation upserts to the structured Storage v2 repository', async () => {
+    const conversation = {
+      id: 'topic-1',
+      kind: 'assistant_chat',
+      ownerType: 'assistant',
+      ownerId: 'assistant-1',
+      title: 'Topic'
+    }
+    const message = { id: 'message-1', role: 'user' }
+    const blocks = [{ id: 'block-1', messageId: 'message-1', type: 'main_text' }]
+
+    const service = new StorageV2Service()
+
+    await expect(service.upsertConversation(conversation, { pruneMissingMessages: false })).resolves.toBeUndefined()
+    await expect(service.upsertMessage('topic-1', message)).resolves.toBeUndefined()
+    await expect(service.upsertMessageBlocks('message-1', blocks, { pruneMissing: true })).resolves.toBeUndefined()
+
+    expect(mocks.conversationRepository.upsertConversation).toHaveBeenCalledWith(conversation, {
+      pruneMissingMessages: false
+    })
+    expect(mocks.conversationRepository.upsertMessage).toHaveBeenCalledWith('topic-1', message)
+    expect(mocks.conversationRepository.upsertMessageBlocks).toHaveBeenCalledWith('message-1', blocks, {
+      pruneMissing: true
+    })
+  })
+
+  it('deletes conversations through the Storage v2 tombstone repository path', async () => {
+    mocks.conversationRepository.delete.mockResolvedValue({ deleted: true })
+
+    await expect(new StorageV2Service().deleteConversation('topic-1')).resolves.toEqual({ deleted: true })
+
+    expect(mocks.conversationRepository.delete).toHaveBeenCalledWith('topic-1')
   })
 
   it('summarizes whether the current profile is ready for backup and migration', async () => {

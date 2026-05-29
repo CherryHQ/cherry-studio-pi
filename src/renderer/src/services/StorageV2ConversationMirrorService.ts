@@ -35,6 +35,11 @@ type MirrorScheduleOptions = {
   destructive?: boolean
 }
 
+type MessageUpsertOptions = {
+  pruneMissingBlocks?: boolean
+  topic?: TopicSnapshotMetadata
+}
+
 function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
@@ -366,6 +371,73 @@ class StorageV2ConversationMirrorService {
     this.lastError = null
 
     logger.debug(`Persisted conversation snapshot ${topicId} to Storage v2`)
+  }
+
+  async upsertTopicMessageFirst(
+    topicId: string | undefined,
+    getState: StateGetter,
+    message: Message,
+    blocks?: MessageBlock[],
+    options: MessageUpsertOptions = {}
+  ) {
+    if (this.suspended) return
+    if (!topicId) return
+
+    await this.flush()
+
+    const storageV2 = window.api?.storageV2
+    if (
+      typeof storageV2?.upsertConversation !== 'function' ||
+      typeof storageV2.upsertMessage !== 'function' ||
+      typeof storageV2.upsertMessageBlocks !== 'function'
+    ) {
+      throw new Error('Storage v2 direct conversation write API unavailable')
+    }
+
+    const state = getState()
+    const owner = findTopicOwner(state, topicId) ?? buildTopicOwnerFromMetadata(topicId, options.topic, [message])
+
+    if (!owner) {
+      throw new Error(`Cannot persist Storage v2 message for ${topicId}: missing assistant owner`)
+    }
+
+    const topic = stripTopicMessages(owner.topic)
+    const messageId = getMirrorMessageId(topicId, message, 0)
+    const normalizedBlocks =
+      blocks?.map((block, blockIndex) => ({
+        ...block,
+        id: getMirrorBlockId(messageId, block, blockIndex),
+        messageId
+      })) ?? null
+
+    await storageV2.upsertConversation(
+      {
+        id: topicId,
+        kind: 'assistant_chat',
+        ownerType: 'assistant',
+        ownerId: owner.assistantId,
+        title: getTopicTitle(topic),
+        pinned: Boolean((topic as Record<string, any>).pinned),
+        archived: false,
+        sortOrder: getTopicSortOrder(topic, owner.sortOrder),
+        createdAt: topic.createdAt,
+        updatedAt: topic.updatedAt ?? topic.createdAt
+      },
+      {
+        pruneMissingMessages: false
+      }
+    )
+    await storageV2.upsertMessage(topicId, {
+      ...message,
+      id: messageId
+    })
+
+    if (normalizedBlocks) {
+      await storageV2.upsertMessageBlocks(messageId, normalizedBlocks, {
+        pruneMissing: Boolean(options.pruneMissingBlocks)
+      })
+      await this.mirrorFiles(Array.from(collectFilesFromBlocks(normalizedBlocks).values()))
+    }
   }
 
   async findTopicIdsForBlockIds(blockIds: Iterable<string | undefined>, getState: StateGetter): Promise<Set<string>> {

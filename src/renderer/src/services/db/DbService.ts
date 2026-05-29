@@ -140,6 +140,20 @@ class DbService implements MessageDataSource {
     )
   }
 
+  private async upsertRegularTopicMessageBeforeMutation(
+    topicId: string,
+    message: Message,
+    blocks?: MessageBlock[],
+    options: { pruneMissingBlocks?: boolean; topic?: { id: string; messages: Message[] } } = {}
+  ): Promise<void> {
+    if (isAgentSessionTopicId(topicId)) return
+
+    await storageV2ConversationMirrorService.upsertTopicMessageFirst(topicId, () => this.getState(), message, blocks, {
+      pruneMissingBlocks: options.pruneMissingBlocks,
+      topic: options.topic
+    })
+  }
+
   private async cleanupFilesAfterConversationMirror(files: void | FileMetadata[]): Promise<void> {
     if (!files || files.length === 0) return
     await FileManager.deleteFiles(files)
@@ -177,12 +191,30 @@ class DbService implements MessageDataSource {
   // ============ Write Operations ============
   async appendMessage(topicId: string, message: Message, blocks: MessageBlock[], insertIndex?: number): Promise<void> {
     const source = this.getDataSource(topicId)
+    await this.upsertRegularTopicMessageBeforeMutation(topicId, message, blocks, { pruneMissingBlocks: true })
     await source.appendMessage(topicId, message, blocks, insertIndex)
     this.scheduleRegularTopicMirror(topicId)
   }
 
   async updateMessage(topicId: string, messageId: string, updates: Partial<Message>): Promise<void> {
     const source = this.getDataSource(topicId)
+
+    if (!isAgentSessionTopicId(topicId)) {
+      const topic = await this.dexieSource.getRawTopic(topicId)
+      const existingMessage = topic?.messages?.find((message) => message.id === messageId)
+
+      if (existingMessage) {
+        await this.upsertRegularTopicMessageBeforeMutation(
+          topicId,
+          { ...existingMessage, ...updates, id: messageId },
+          undefined,
+          {
+            topic
+          }
+        )
+      }
+    }
+
     await source.updateMessage(topicId, messageId, updates)
     this.scheduleRegularTopicMirror(topicId)
   }
@@ -193,6 +225,24 @@ class DbService implements MessageDataSource {
     blocksToUpdate: MessageBlock[]
   ): Promise<void> {
     const source = this.getDataSource(topicId)
+
+    if (!isAgentSessionTopicId(topicId)) {
+      const topic = await this.dexieSource.getRawTopic(topicId)
+      const existingMessage = topic?.messages?.find((message) => message.id === messageUpdates.id)
+
+      if (existingMessage) {
+        await this.upsertRegularTopicMessageBeforeMutation(
+          topicId,
+          { ...existingMessage, ...messageUpdates },
+          blocksToUpdate,
+          {
+            pruneMissingBlocks: false,
+            topic
+          }
+        )
+      }
+    }
+
     await source.updateMessageAndBlocks(topicId, messageUpdates, blocksToUpdate)
     this.scheduleRegularTopicMirror(topicId)
   }

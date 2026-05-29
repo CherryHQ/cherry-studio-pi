@@ -3,25 +3,33 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   agentGetStreamingCacheInfo: vi.fn(),
   deleteFiles: vi.fn(),
+  dexieAppendMessage: vi.fn(),
   dexieDeleteBlocks: vi.fn(),
   dexieDeleteMessage: vi.fn(),
   dexieDeleteMessages: vi.fn(),
   dexieClearMessages: vi.fn(),
   dexieGetRawTopic: vi.fn(),
+  dexieUpdateMessage: vi.fn(),
+  dexieUpdateMessageAndBlocks: vi.fn(),
   findTopicIdsForBlockIds: vi.fn(),
   flushTopic: vi.fn(),
   flushTopics: vi.fn(),
   flushTopicMessagesSnapshot: vi.fn(),
-  getState: vi.fn()
+  getState: vi.fn(),
+  scheduleTopic: vi.fn(),
+  upsertTopicMessageFirst: vi.fn()
 }))
 
 vi.mock('../DexieMessageDataSource', () => ({
   DexieMessageDataSource: vi.fn(() => ({
+    appendMessage: mocks.dexieAppendMessage,
     deleteBlocks: mocks.dexieDeleteBlocks,
     deleteMessage: mocks.dexieDeleteMessage,
     deleteMessages: mocks.dexieDeleteMessages,
     clearMessages: mocks.dexieClearMessages,
-    getRawTopic: mocks.dexieGetRawTopic
+    getRawTopic: mocks.dexieGetRawTopic,
+    updateMessage: mocks.dexieUpdateMessage,
+    updateMessageAndBlocks: mocks.dexieUpdateMessageAndBlocks
   }))
 }))
 
@@ -42,7 +50,9 @@ vi.mock('@renderer/services/StorageV2ConversationMirrorService', () => ({
     findTopicIdsForBlockIds: mocks.findTopicIdsForBlockIds,
     flushTopic: mocks.flushTopic,
     flushTopicMessagesSnapshot: mocks.flushTopicMessagesSnapshot,
-    flushTopics: mocks.flushTopics
+    flushTopics: mocks.flushTopics,
+    scheduleTopic: mocks.scheduleTopic,
+    upsertTopicMessageFirst: mocks.upsertTopicMessageFirst
   }
 }))
 
@@ -74,6 +84,65 @@ describe('DbService destructive file cleanup ordering', () => {
     mocks.flushTopic.mockResolvedValue(undefined)
     mocks.flushTopicMessagesSnapshot.mockResolvedValue(undefined)
     mocks.flushTopics.mockResolvedValue(undefined)
+    mocks.upsertTopicMessageFirst.mockResolvedValue(undefined)
+    mocks.dexieAppendMessage.mockResolvedValue(undefined)
+    mocks.dexieUpdateMessage.mockResolvedValue(undefined)
+    mocks.dexieUpdateMessageAndBlocks.mockResolvedValue(undefined)
+  })
+
+  it('upserts Storage v2 messages before appending legacy Dexie rows', async () => {
+    const message = { id: 'message-1', assistantId: 'assistant-1', topicId: 'topic-1', blocks: ['block-1'] }
+    const blocks = [{ id: 'block-1', messageId: 'message-1', type: 'main_text' }]
+
+    const { dbService } = await import('../DbService')
+
+    await dbService.appendMessage('topic-1', message as any, blocks as any, 0)
+
+    expect(mocks.upsertTopicMessageFirst).toHaveBeenCalledWith(
+      'topic-1',
+      expect.any(Function),
+      message,
+      blocks,
+      expect.objectContaining({ pruneMissingBlocks: true })
+    )
+    expect(mocks.dexieAppendMessage).toHaveBeenCalledWith('topic-1', message, blocks, 0)
+    expect(mocks.upsertTopicMessageFirst.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.dexieAppendMessage.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('keeps legacy rows untouched when the pre-append Storage v2 message write fails', async () => {
+    mocks.upsertTopicMessageFirst.mockRejectedValue(new Error('storage busy'))
+
+    const { dbService } = await import('../DbService')
+
+    await expect(dbService.appendMessage('topic-1', { id: 'message-1' } as any, [], 0)).rejects.toThrow('storage busy')
+
+    expect(mocks.dexieAppendMessage).not.toHaveBeenCalled()
+  })
+
+  it('upserts merged Storage v2 messages before updating legacy Dexie message rows', async () => {
+    const topic = {
+      id: 'topic-1',
+      messages: [{ id: 'message-1', assistantId: 'assistant-1', topicId: 'topic-1', status: 'pending' }]
+    }
+    mocks.dexieGetRawTopic.mockResolvedValue(topic)
+
+    const { dbService } = await import('../DbService')
+
+    await dbService.updateMessage('topic-1', 'message-1', { status: 'success' } as any)
+
+    expect(mocks.upsertTopicMessageFirst).toHaveBeenCalledWith(
+      'topic-1',
+      expect.any(Function),
+      { id: 'message-1', assistantId: 'assistant-1', topicId: 'topic-1', status: 'success' },
+      undefined,
+      expect.objectContaining({ topic })
+    )
+    expect(mocks.dexieUpdateMessage).toHaveBeenCalledWith('topic-1', 'message-1', { status: 'success' })
+    expect(mocks.upsertTopicMessageFirst.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.dexieUpdateMessage.mock.invocationCallOrder[0]
+    )
   })
 
   it('persists the final message snapshot before deleting legacy message rows', async () => {
