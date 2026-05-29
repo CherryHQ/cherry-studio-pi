@@ -139,7 +139,7 @@ describe('AppDataSyncService', () => {
     expect(summary.downloaded).toBe(1)
     expect(events).toEqual(['storage-v2', 'legacy'])
     expect(mocks.storageV2.upsertRecordSnapshot).toHaveBeenCalledWith(remoteRecord)
-    expect(mocks.db.applyRemoteRecord).toHaveBeenCalledWith(remoteRecord)
+    expect(mocks.db.applyRemoteRecord).toHaveBeenCalledWith(remoteRecord, { storageV2Mirrored: true })
   })
 
   it('does not write downloaded remote records to legacy app.db when Storage v2 rejects them', async () => {
@@ -162,7 +162,9 @@ describe('AppDataSyncService', () => {
 
     expect(events.slice(0, 2)).toEqual(['storage-v2-sync-state', 'legacy-sync-state'])
     expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith('record:settings:theme:hash', 'remote-hash')
-    expect(mocks.db.setSyncState).toHaveBeenCalledWith('record:settings:theme:hash', 'remote-hash')
+    expect(mocks.db.setSyncState).toHaveBeenCalledWith('record:settings:theme:hash', 'remote-hash', {
+      storageV2Mirrored: true
+    })
   })
 
   it('writes sync conflicts to Storage v2 before legacy app.db conflicts', async () => {
@@ -212,7 +214,8 @@ describe('AppDataSyncService', () => {
         localRecord,
         remoteRecord,
         baseHash: 'base-hash'
-      })
+      }),
+      { storageV2Mirrored: true }
     )
   })
 
