@@ -40,6 +40,8 @@ import fontList from 'font-list'
 
 import { registerAgentIpcHandlers } from './services/agents/AgentIpcService'
 import {
+  clearAgentSessionMessagesWithStorageV2Recovery,
+  deleteAgentSessionMessagesByPayloadIdsWithStorageV2Recovery,
   getAgentSessionHistoryWithStorageV2Recovery,
   persistAgentMessageExchangeWithStorageV2Recovery
 } from './services/agents/AgentStorageV2ReadThrough'
@@ -281,6 +283,30 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
       }
     }
   )
+  ipcMain.handle(
+    IpcChannel.AgentMessage_DeleteMessages,
+    async (_event, { sessionId, messageIds }: { sessionId: string; messageIds: string[] }) => {
+      try {
+        const deletedMessageIds = await deleteAgentSessionMessagesByPayloadIdsWithStorageV2Recovery(
+          sessionId,
+          messageIds
+        )
+        return { deletedMessageIds }
+      } catch (error) {
+        logger.error('Failed to delete agent session messages', error as Error)
+        throw error
+      }
+    }
+  )
+  ipcMain.handle(IpcChannel.AgentMessage_ClearSession, async (_event, { sessionId }: { sessionId: string }) => {
+    try {
+      const deletedCount = await clearAgentSessionMessagesWithStorageV2Recovery(sessionId)
+      return { deletedCount }
+    } catch (error) {
+      logger.error('Failed to clear agent session messages', error as Error)
+      throw error
+    }
+  })
 
   //only for mac
   if (isMac) {

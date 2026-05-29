@@ -307,14 +307,17 @@ export class AgentMessageDataSource implements MessageDataSource {
       // Merge updates with existing message
       const updatedMessage = { ...existingMessage.message, ...updates }
       const agentSessionId = updatedMessage.agentSessionId ?? existingMessage.message.agentSessionId ?? ''
+      const blocksToPersist = Array.isArray(updates.blocks)
+        ? (existingMessage.blocks || []).filter((block) => updates.blocks?.includes(block.id))
+        : existingMessage.blocks || []
 
       // Save updated message back to backend
       await window.electron.ipcRenderer.invoke(IpcChannel.AgentMessage_PersistExchange, {
         sessionId,
         agentSessionId,
         ...(updatedMessage.role === 'user'
-          ? { user: { payload: { message: updatedMessage, blocks: existingMessage.blocks || [] } } }
-          : { assistant: { payload: { message: updatedMessage, blocks: existingMessage.blocks || [] } } })
+          ? { user: { payload: { message: updatedMessage, blocks: blocksToPersist } } }
+          : { assistant: { payload: { message: updatedMessage, blocks: blocksToPersist } } })
       })
       storageV2AgentMirrorService.schedule()
 
@@ -469,24 +472,43 @@ export class AgentMessageDataSource implements MessageDataSource {
     }
   }
 
-  // oxlint-disable-next-line no-unused-vars
-  async deleteMessage(topicId: string, _messageId: string): Promise<void> {
-    // Agent session messages cannot be deleted individually
-    logger.warn(`deleteMessage called for agent session ${topicId}, operation not supported`)
-
-    // In a full implementation, you might want to:
-    // 1. Implement soft delete in backend
-    // 2. Or just hide from UI without actual deletion
+  async deleteMessage(topicId: string, messageId: string): Promise<void> {
+    await this.deleteMessages(topicId, [messageId])
   }
 
-  // oxlint-disable-next-line no-unused-vars
-  async deleteMessages(topicId: string, _messageIds: string[]): Promise<void> {
-    // Agent session messages cannot be deleted in batch
-    logger.warn(`deleteMessages called for agent session ${topicId}, operation not supported`)
+  async deleteMessages(topicId: string, messageIds: string[]): Promise<void> {
+    const sessionId = extractSessionId(topicId)
+    if (!sessionId) {
+      throw new Error(`Invalid agent session topicId: ${topicId}`)
+    }
 
-    // In a full implementation, you might want to:
-    // 1. Implement batch soft delete in backend
-    // 2. Update local state accordingly
+    if (messageIds.length === 0) {
+      return
+    }
+
+    if (!window.electron?.ipcRenderer) {
+      throw new Error('IPC renderer not available for agent message deletion')
+    }
+
+    const result = await window.electron.ipcRenderer.invoke(IpcChannel.AgentMessage_DeleteMessages, {
+      sessionId,
+      messageIds
+    })
+    const deletedMessageIds = Array.isArray(result?.deletedMessageIds) ? result.deletedMessageIds : []
+    const deletedMessageIdSet = new Set(deletedMessageIds)
+    const missingMessageIds = messageIds.filter((messageId) => !deletedMessageIdSet.has(messageId))
+
+    if (missingMessageIds.length > 0) {
+      throw new Error(`Failed to persist deletion for agent message(s): ${missingMessageIds.join(', ')}`)
+    }
+
+    storageV2AgentMirrorService.schedule()
+
+    for (const messageId of messageIds) {
+      this.cleanupMessage(messageId)
+    }
+
+    logger.info(`Deleted ${messageIds.length} message(s) for agent session ${sessionId}`)
   }
 
   // oxlint-disable-next-line no-unused-vars
@@ -637,19 +659,18 @@ export class AgentMessageDataSource implements MessageDataSource {
     const sessionId = extractSessionId(topicId)
 
     if (!window.electron?.ipcRenderer) {
-      logger.warn('IPC renderer not available for clear messages')
-      return
+      throw new Error('IPC renderer not available for agent session clear')
     }
 
-    // In a full implementation, you would call a backend endpoint to clear session
-    // For now, we'll just log the attempt
-    logger.info(`Clear messages requested for agent session ${sessionId}`)
+    if (!sessionId) {
+      throw new Error(`Invalid agent session topicId: ${topicId}`)
+    }
 
-    // You might want to implement:
-    // await window.electron.ipcRenderer.invoke(
-    //   IpcChannel.AgentMessage_ClearSession,
-    //   { sessionId }
-    // )
+    await window.electron.ipcRenderer.invoke(IpcChannel.AgentMessage_ClearSession, {
+      sessionId
+    })
+    storageV2AgentMirrorService.schedule()
+    logger.info(`Cleared messages for agent session ${sessionId}`)
   }
 
   async topicExists(topicId: string): Promise<boolean> {

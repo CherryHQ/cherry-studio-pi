@@ -96,15 +96,20 @@ vi.mock('../services/ChannelService', () => ({
 vi.mock('../database/sessionMessageRepository', () => ({
   agentMessageRepository: {
     persistExchange: vi.fn(),
-    getSessionHistory: vi.fn()
+    getSessionHistory: vi.fn(),
+    findRowsByPayloadMessageIds: vi.fn(),
+    listRowsForSession: vi.fn(),
+    deleteRowsByIds: vi.fn()
   }
 }))
 
 import {
+  clearAgentSessionMessagesWithStorageV2Recovery,
   createAgentWithStorageV2Recovery,
   createChannelWithStorageV2Recovery,
   createSessionWithStorageV2Recovery,
   createTaskWithStorageV2Recovery,
+  deleteAgentSessionMessagesByPayloadIdsWithStorageV2Recovery,
   deleteAgentSessionMessageWithStorageV2Recovery,
   deleteAgentWithStorageV2Recovery,
   deleteChannelWithStorageV2Recovery,
@@ -143,6 +148,9 @@ describe('AgentStorageV2ReadThrough mutation wrappers', () => {
     mocks.recovery.projectIfSessionMessagesEmpty.mockResolvedValue(false)
     mocks.recovery.projectIfTaskMissing.mockResolvedValue(false)
     mocks.recovery.projectIfChannelMissing.mockResolvedValue(false)
+    vi.mocked(agentMessageRepository.findRowsByPayloadMessageIds).mockResolvedValue([])
+    vi.mocked(agentMessageRepository.listRowsForSession).mockResolvedValue([])
+    vi.mocked(agentMessageRepository.deleteRowsByIds).mockResolvedValue([])
   })
 
   it('projects Storage v2 agents when the legacy agent list is partially populated', async () => {
@@ -189,6 +197,43 @@ describe('AgentStorageV2ReadThrough mutation wrappers', () => {
     expect(mocks.tombstone.tombstoneSessionMessage).toHaveBeenCalledWith(1)
     expect(mocks.tombstone.tombstoneTask).toHaveBeenCalledTimes(2)
     expect(mocks.tombstone.tombstoneChannel).toHaveBeenCalledWith('channel-1')
+  })
+
+  it('tombstones Storage v2 rows before deleting agent messages by payload id', async () => {
+    const rows = [
+      { id: 11, content: JSON.stringify({ message: { id: 'message-1' } }) },
+      { id: 12, content: JSON.stringify({ message: { id: 'message-2' } }) }
+    ]
+    vi.mocked(agentMessageRepository.findRowsByPayloadMessageIds).mockResolvedValue(rows as any)
+    vi.mocked(agentMessageRepository.deleteRowsByIds).mockResolvedValue([11, 12])
+
+    await expect(
+      deleteAgentSessionMessagesByPayloadIdsWithStorageV2Recovery('session-1', ['message-1', 'message-2'])
+    ).resolves.toEqual(['message-1', 'message-2'])
+
+    expect(mocks.tombstone.tombstoneSessionMessage).toHaveBeenCalledWith(11)
+    expect(mocks.tombstone.tombstoneSessionMessage).toHaveBeenCalledWith(12)
+    expect(agentMessageRepository.deleteRowsByIds).toHaveBeenCalledWith('session-1', [11, 12])
+    expect(mocks.tombstone.tombstoneSessionMessage.mock.invocationCallOrder[1]).toBeLessThan(
+      vi.mocked(agentMessageRepository.deleteRowsByIds).mock.invocationCallOrder[0]
+    )
+    expect(mocks.mirror.flushStrict).toHaveBeenCalledTimes(1)
+  })
+
+  it('tombstones Storage v2 rows before clearing an agent session history', async () => {
+    const rows = [
+      { id: 21, content: JSON.stringify({ message: { id: 'message-1' } }) },
+      { id: 22, content: JSON.stringify({ message: { id: 'message-2' } }) }
+    ]
+    vi.mocked(agentMessageRepository.listRowsForSession).mockResolvedValue(rows as any)
+    vi.mocked(agentMessageRepository.deleteRowsByIds).mockResolvedValue([21, 22])
+
+    await expect(clearAgentSessionMessagesWithStorageV2Recovery('session-1')).resolves.toBe(2)
+
+    expect(mocks.tombstone.tombstoneSessionMessage).toHaveBeenCalledWith(21)
+    expect(mocks.tombstone.tombstoneSessionMessage).toHaveBeenCalledWith(22)
+    expect(agentMessageRepository.deleteRowsByIds).toHaveBeenCalledWith('session-1', [21, 22])
+    expect(mocks.mirror.flushStrict).toHaveBeenCalledTimes(1)
   })
 
   it('flushes the Storage v2 agent mirror after low-frequency successful writes', async () => {

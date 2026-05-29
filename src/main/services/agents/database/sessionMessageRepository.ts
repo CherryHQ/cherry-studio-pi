@@ -7,7 +7,7 @@ import type {
   AgentPersistedMessage,
   AgentSessionMessageEntity
 } from '@types'
-import { and, asc, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 
 import { BaseService } from '../BaseService'
 import type { InsertSessionMessageRow, SessionMessageRow } from './schema'
@@ -91,6 +91,22 @@ class AgentMessageRepository extends BaseService {
         and(
           eq(sessionMessagesTable.session_id, sessionId),
           eq(sessionMessagesTable.role, role),
+          sql`json_extract(${sessionMessagesTable.content}, '$.message.id') = ${messageId}`
+        )
+      )
+      .limit(1)
+
+    return rows[0] ?? null
+  }
+
+  private async findMessageRowByPayloadId(sessionId: string, messageId: string): Promise<SessionMessageRow | null> {
+    const database = await this.getDatabase()
+    const rows = await database
+      .select()
+      .from(sessionMessagesTable)
+      .where(
+        and(
+          eq(sessionMessagesTable.session_id, sessionId),
           sql`json_extract(${sessionMessagesTable.content}, '$.message.id') = ${messageId}`
         )
       )
@@ -217,6 +233,53 @@ class AgentMessageRepository extends BaseService {
       logger.error('Failed to load session history', error as Error)
       throw error
     }
+  }
+
+  async findRowsByPayloadMessageIds(sessionId: string, messageIds: string[]): Promise<SessionMessageRow[]> {
+    const uniqueMessageIds = Array.from(new Set(messageIds.filter(Boolean)))
+    if (uniqueMessageIds.length === 0) return []
+
+    const rows: SessionMessageRow[] = []
+    const seenRowIds = new Set<number>()
+
+    for (const messageId of uniqueMessageIds) {
+      const row = await this.findMessageRowByPayloadId(sessionId, messageId)
+      if (!row || seenRowIds.has(row.id)) continue
+
+      rows.push(row)
+      seenRowIds.add(row.id)
+    }
+
+    return rows
+  }
+
+  async listRowsForSession(sessionId: string): Promise<SessionMessageRow[]> {
+    const database = await this.getDatabase()
+    return database
+      .select()
+      .from(sessionMessagesTable)
+      .where(eq(sessionMessagesTable.session_id, sessionId))
+      .orderBy(asc(sessionMessagesTable.created_at))
+  }
+
+  async deleteRowsByIds(sessionId: string, rowIds: number[]): Promise<number[]> {
+    const uniqueRowIds = Array.from(new Set(rowIds.filter((id) => Number.isSafeInteger(id))))
+    if (uniqueRowIds.length === 0) return []
+
+    const database = await this.getDatabase()
+    const rows = await database
+      .select({ id: sessionMessagesTable.id })
+      .from(sessionMessagesTable)
+      .where(and(eq(sessionMessagesTable.session_id, sessionId), inArray(sessionMessagesTable.id, uniqueRowIds)))
+
+    const existingRowIds = rows.map((row) => row.id)
+    if (existingRowIds.length === 0) return []
+
+    await database
+      .delete(sessionMessagesTable)
+      .where(and(eq(sessionMessagesTable.session_id, sessionId), inArray(sessionMessagesTable.id, existingRowIds)))
+
+    return existingRowIds
   }
 }
 

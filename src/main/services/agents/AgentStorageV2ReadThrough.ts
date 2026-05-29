@@ -289,6 +289,97 @@ export async function deleteAgentSessionMessageWithStorageV2Recovery(
   return deleted
 }
 
+function getPayloadMessageId(row: { content: unknown }): string | undefined {
+  const content =
+    typeof row.content === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(row.content)
+          } catch {
+            return undefined
+          }
+        })()
+      : row.content
+
+  const messageId = (content as { message?: { id?: unknown } } | undefined)?.message?.id
+  return typeof messageId === 'string' ? messageId : undefined
+}
+
+async function tombstoneAgentSessionMessageRows(rows: Array<{ id: number }>) {
+  for (const row of rows) {
+    await storageV2AgentRuntimeTombstoneService.tombstoneSessionMessage(row.id)
+  }
+}
+
+function hasMissingPayloadMessages(rows: Array<{ content: unknown }>, messageIds: string[]) {
+  const foundMessageIds = new Set(rows.map(getPayloadMessageId).filter((id): id is string => Boolean(id)))
+  return messageIds.some((messageId) => !foundMessageIds.has(messageId))
+}
+
+export async function deleteAgentSessionMessagesByPayloadIdsWithStorageV2Recovery(
+  sessionId: string,
+  messageIds: string[]
+): Promise<string[]> {
+  const uniqueMessageIds = Array.from(new Set(messageIds.filter(Boolean)))
+  if (uniqueMessageIds.length === 0) return []
+
+  let rows = await agentMessageRepository.findRowsByPayloadMessageIds(sessionId, uniqueMessageIds)
+  if (
+    hasMissingPayloadMessages(rows, uniqueMessageIds) &&
+    (await storageV2AgentRuntimeRecoveryService.projectIfSessionMessagesEmpty(
+      sessionId,
+      'agent-message-delete-payload-missing'
+    ))
+  ) {
+    rows = await agentMessageRepository.findRowsByPayloadMessageIds(sessionId, uniqueMessageIds)
+  }
+
+  if (rows.length === 0) return []
+
+  await tombstoneAgentSessionMessageRows(rows)
+  const deletedRowIds = await agentMessageRepository.deleteRowsByIds(
+    sessionId,
+    rows.map((row) => row.id)
+  )
+
+  if (deletedRowIds.length > 0) {
+    await flushAgentRuntimeMutationToStorageV2({ strict: true })
+  }
+
+  const deletedRowIdSet = new Set(deletedRowIds)
+  return rows
+    .filter((row) => deletedRowIdSet.has(row.id))
+    .map(getPayloadMessageId)
+    .filter((messageId): messageId is string => Boolean(messageId))
+}
+
+export async function clearAgentSessionMessagesWithStorageV2Recovery(sessionId: string): Promise<number> {
+  let rows = await agentMessageRepository.listRowsForSession(sessionId)
+  if (
+    rows.length === 0 &&
+    (await storageV2AgentRuntimeRecoveryService.projectIfSessionMessagesEmpty(
+      sessionId,
+      'agent-message-clear-session-empty'
+    ))
+  ) {
+    rows = await agentMessageRepository.listRowsForSession(sessionId)
+  }
+
+  if (rows.length === 0) return 0
+
+  await tombstoneAgentSessionMessageRows(rows)
+  const deletedRowIds = await agentMessageRepository.deleteRowsByIds(
+    sessionId,
+    rows.map((row) => row.id)
+  )
+
+  if (deletedRowIds.length > 0) {
+    await flushAgentRuntimeMutationToStorageV2({ strict: true })
+  }
+
+  return deletedRowIds.length
+}
+
 export async function listTasksWithStorageV2Recovery(
   agentId: string,
   options: ListOptions & { includeHeartbeat?: boolean } = {}
