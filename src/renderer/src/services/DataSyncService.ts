@@ -1,7 +1,8 @@
 import { loggerService } from '@logger'
-import store from '@renderer/store'
+import store, { persistor } from '@renderer/store'
 import type { WebDavConfig } from '@renderer/types'
 
+import { hydrateRuntimeCacheFromStorageV2 } from './StorageV2HydrationService'
 import { flushStorageV2RuntimeMirrors } from './StorageV2Service'
 
 const logger = loggerService.withContext('DataSyncService')
@@ -12,6 +13,13 @@ export type DataSyncSummary = {
   deleted: number
   conflicts: number
   skipped: number
+  storageUploaded?: number
+  storageDownloaded?: number
+  storageDeleted?: number
+  storageConflicts?: number
+  storageSkipped?: number
+  blobUploaded?: number
+  blobDownloaded?: number
   snapshotUploaded?: boolean
   snapshotFileName?: string | null
   snapshotBytes?: number
@@ -46,7 +54,16 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
   syncing = true
   try {
     await flushStorageV2RuntimeMirrors()
-    return await window.api.dataSync.syncNow(config)
+    const summary = await window.api.dataSync.syncNow(config)
+    if ((summary.storageDownloaded ?? 0) > 0 || (summary.blobDownloaded ?? 0) > 0) {
+      await hydrateRuntimeCacheFromStorageV2({
+        dispatch: store.dispatch,
+        flush: () => persistor.flush()
+      }).catch((error) => {
+        logger.warn('Failed to hydrate runtime cache after data sync', error as Error)
+      })
+    }
+    return summary
   } finally {
     syncing = false
   }

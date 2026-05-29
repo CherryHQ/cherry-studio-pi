@@ -4068,7 +4068,7 @@
       "data_sync": {
         "auto_sync": "自動同步",
         "current_device": "目前裝置",
-        "help": "資料同步會先刷新本機儲存鏡像，再上傳完整資料快照與輕量變更記錄；恢復遠端資料會取代目前裝置資料並重新啟動應用程式。",
+        "help": "資料同步會透過 WebDAV 合併 Storage v2 記錄，涵蓋設定、模型、助手、agent、對話、知識庫、檔案與應用資料；完整安全快照僅用於災難恢復。",
         "interval": {
           "day_one": "每天",
           "hour_one": "每 1 小時",
@@ -4079,15 +4079,20 @@
         },
         "last_result": "最近結果",
         "method": "同步方式",
-        "method_value": "完整資料快照 + WebDAV",
+        "method_value": "Storage v2 記錄級同步 + WebDAV",
         "password": "密碼",
         "password_placeholder": "WebDAV 密碼或應用程式密碼",
         "remote_path": "同步目錄",
-        "restore_confirm_content": "將使用 WebDAV 上最近的完整快照取代本機資料，應用程式會自動重新啟動。請確認目前裝置資料已先備份。",
-        "restore_confirm_title": "恢復遠端資料？",
-        "restore_latest": "恢復遠端資料",
+        "restore_confirm_content": "此操作僅用於災難恢復，會使用 WebDAV 上最近的安全快照取代本機資料並重新啟動應用程式。正常多端同步不需要點這個。",
+        "restore_confirm_title": "恢復安全快照？",
+        "restore_latest": "恢復安全快照",
         "snapshot": {
-          "uploaded": "快照 {{file}}（{{size}}）"
+          "uploaded": "安全快照 {{file}}（{{size}}）"
+        },
+        "storage": {
+          "blobs": "檔案上傳 {{uploaded}} / 下載 {{downloaded}}",
+          "conflicts": "記錄衝突 {{count}}",
+          "records": "記錄上傳 {{uploaded}} / 下載 {{downloaded}}"
         },
         "summary": {
           "conflicts": "衝突 {{count}}",

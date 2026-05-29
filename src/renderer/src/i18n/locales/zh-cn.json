@@ -4068,7 +4068,7 @@
       "data_sync": {
         "auto_sync": "自动同步",
         "current_device": "当前设备",
-        "help": "数据同步会先刷新本地存储镜像，再上传完整数据快照和轻量变更记录；恢复远端数据会替换当前设备数据并重启应用。",
+        "help": "数据同步会通过 WebDAV 合并 Storage v2 记录，覆盖设置、模型、助手、agent、会话、知识库、文件和应用数据；完整安全快照只用于灾难恢复。",
         "interval": {
           "day_one": "每天",
           "hour_one": "每 1 小时",
@@ -4079,15 +4079,20 @@
         },
         "last_result": "最近结果",
         "method": "同步方式",
-        "method_value": "完整数据快照 + WebDAV",
+        "method_value": "Storage v2 记录级同步 + WebDAV",
         "password": "密码",
         "password_placeholder": "WebDAV 密码或应用密码",
         "remote_path": "同步目录",
-        "restore_confirm_content": "将用 WebDAV 上最近的完整快照替换本机数据，应用会自动重启。请确认当前设备数据已经备份。",
-        "restore_confirm_title": "恢复远端数据？",
-        "restore_latest": "恢复远端数据",
+        "restore_confirm_content": "这个操作只用于灾难恢复，会用 WebDAV 上最近的安全快照替换本机数据并重启应用。正常多端同步不需要点这个。",
+        "restore_confirm_title": "恢复安全快照？",
+        "restore_latest": "恢复安全快照",
         "snapshot": {
-          "uploaded": "快照 {{file}}（{{size}}）"
+          "uploaded": "安全快照 {{file}}（{{size}}）"
+        },
+        "storage": {
+          "blobs": "文件上传 {{uploaded}} / 下载 {{downloaded}}",
+          "conflicts": "记录冲突 {{count}}",
+          "records": "记录上传 {{uploaded}} / 下载 {{downloaded}}"
         },
         "summary": {
           "conflicts": "冲突 {{count}}",

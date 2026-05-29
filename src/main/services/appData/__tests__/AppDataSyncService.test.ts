@@ -25,6 +25,9 @@ const mocks = vi.hoisted(() => ({
   recovery: {
     projectIfLegacyAppRecordListEmpty: vi.fn()
   },
+  storageRecordSync: {
+    sync: vi.fn()
+  },
   backupManager: {
     backup: vi.fn(),
     restore: vi.fn()
@@ -64,6 +67,10 @@ vi.mock('@main/services/storageV2/AppDataKvMirrorService', () => ({
 
 vi.mock('@main/services/storageV2/AppDataRuntimeRecoveryService', () => ({
   storageV2AppDataRuntimeRecoveryService: mocks.recovery
+}))
+
+vi.mock('@main/services/storageV2/WebDavRecordSyncService', () => ({
+  storageV2WebDavRecordSyncService: mocks.storageRecordSync
 }))
 
 import { AppDataSyncService } from '../AppDataSyncService'
@@ -120,6 +127,18 @@ describe('AppDataSyncService', () => {
     mocks.storageV2.listSyncConflicts.mockResolvedValue([])
     mocks.storageV2.listRecords.mockResolvedValue([])
     mocks.recovery.projectIfLegacyAppRecordListEmpty.mockResolvedValue(false)
+    mocks.storageRecordSync.sync.mockResolvedValue({
+      manifest: { version: 1, records: {}, blobs: {} },
+      summary: {
+        storageUploaded: 0,
+        storageDownloaded: 0,
+        storageDeleted: 0,
+        storageConflicts: 0,
+        storageSkipped: 0,
+        blobUploaded: 0,
+        blobDownloaded: 0
+      }
+    })
     mocks.backupManager.backup.mockImplementation(async (_event, fileName: string) => {
       const filePath = path.join('/tmp', fileName)
       await fsp.writeFile(filePath, 'backup')
@@ -299,6 +318,7 @@ describe('AppDataSyncService', () => {
 
     expect(summary.uploaded).toBe(0)
     expect(summary.snapshotUploaded).toBe(true)
+    expect(mocks.storageRecordSync.sync).toHaveBeenCalledWith(mocks.webdav, '/remote-root/sync/v1', null)
     expect(summary.snapshotFileName).toBe('cherry-studio-pi.data-sync.local-device.zip')
     expect(summary.snapshotBytes).toBe(6)
     expect(mocks.backupManager.backup).toHaveBeenCalledWith(

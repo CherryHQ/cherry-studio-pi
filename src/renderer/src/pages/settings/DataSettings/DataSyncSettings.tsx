@@ -27,6 +27,13 @@ type SyncSummary = {
   deleted: number
   conflicts: number
   skipped: number
+  storageUploaded?: number
+  storageDownloaded?: number
+  storageDeleted?: number
+  storageConflicts?: number
+  storageSkipped?: number
+  blobUploaded?: number
+  blobDownloaded?: number
   snapshotUploaded?: boolean
   snapshotFileName?: string | null
   snapshotBytes?: number
@@ -284,6 +291,21 @@ const DataSyncSettings: FC = () => {
               </Typography.Text>
               <Typography.Text type={summary.conflicts ? 'warning' : 'secondary'}>
                 {t('settings.data.data_sync.summary.conflicts', { count: summary.conflicts })}
+              </Typography.Text>
+              <Typography.Text type="secondary">
+                {t('settings.data.data_sync.storage.records', {
+                  uploaded: summary.storageUploaded ?? 0,
+                  downloaded: summary.storageDownloaded ?? 0
+                })}
+              </Typography.Text>
+              <Typography.Text type="secondary">
+                {t('settings.data.data_sync.storage.blobs', {
+                  uploaded: summary.blobUploaded ?? 0,
+                  downloaded: summary.blobDownloaded ?? 0
+                })}
+              </Typography.Text>
+              <Typography.Text type={summary.storageConflicts ? 'warning' : 'secondary'}>
+                {t('settings.data.data_sync.storage.conflicts', { count: summary.storageConflicts ?? 0 })}
               </Typography.Text>
               {summary.snapshotUploaded && (
                 <Typography.Text type="secondary">

@@ -7,6 +7,11 @@ import { loggerService } from '@logger'
 import BackupManager from '@main/services/BackupManager'
 import { storageV2AppDataKvMirrorService } from '@main/services/storageV2/AppDataKvMirrorService'
 import { storageV2AppDataRuntimeRecoveryService } from '@main/services/storageV2/AppDataRuntimeRecoveryService'
+import {
+  type StorageV2WebDavRecordSyncManifest,
+  storageV2WebDavRecordSyncService,
+  type StorageV2WebDavRecordSyncSummary
+} from '@main/services/storageV2/WebDavRecordSyncService'
 import type { WebDavConfig } from '@types'
 import { createClient, type WebDAVClient } from 'webdav'
 
@@ -30,6 +35,7 @@ type RemoteManifest = {
   version: 1
   updatedAt: number
   records: Record<string, RemoteRecordMeta>
+  storageV2?: StorageV2WebDavRecordSyncManifest | null
   latestSnapshot?: RemoteSnapshotMeta | null
   snapshots?: Record<string, RemoteSnapshotMeta>
 }
@@ -51,6 +57,13 @@ export type DataSyncSummary = {
   deleted: number
   conflicts: number
   skipped: number
+  storageUploaded: number
+  storageDownloaded: number
+  storageDeleted: number
+  storageConflicts: number
+  storageSkipped: number
+  blobUploaded: number
+  blobDownloaded: number
   snapshotUploaded: boolean
   snapshotFileName: string | null
   snapshotBytes: number
@@ -63,6 +76,13 @@ const EMPTY_SUMMARY: DataSyncSummary = {
   deleted: 0,
   conflicts: 0,
   skipped: 0,
+  storageUploaded: 0,
+  storageDownloaded: 0,
+  storageDeleted: 0,
+  storageConflicts: 0,
+  storageSkipped: 0,
+  blobUploaded: 0,
+  blobDownloaded: 0,
   snapshotUploaded: false,
   snapshotFileName: null,
   snapshotBytes: 0,
@@ -87,7 +107,7 @@ function normalizeBasePath(webdavPath?: string) {
 }
 
 function makeManifest(): RemoteManifest {
-  return { version: 1, updatedAt: Date.now(), records: {}, latestSnapshot: null, snapshots: {} }
+  return { version: 1, updatedAt: Date.now(), records: {}, storageV2: null, latestSnapshot: null, snapshots: {} }
 }
 
 function bufferToString(value: string | Buffer | ArrayBuffer | unknown) {
@@ -199,9 +219,20 @@ export class AppDataSyncService {
   private normalizeManifest(manifest: RemoteManifest | null): RemoteManifest {
     const nextManifest = manifest ?? makeManifest()
     nextManifest.records = nextManifest.records ?? {}
+    nextManifest.storageV2 = nextManifest.storageV2 ?? null
     nextManifest.snapshots = nextManifest.snapshots ?? {}
     nextManifest.latestSnapshot = nextManifest.latestSnapshot ?? null
     return nextManifest
+  }
+
+  private addStorageV2Summary(summary: DataSyncSummary, storageSummary: StorageV2WebDavRecordSyncSummary) {
+    summary.storageUploaded += storageSummary.storageUploaded
+    summary.storageDownloaded += storageSummary.storageDownloaded
+    summary.storageDeleted += storageSummary.storageDeleted
+    summary.storageConflicts += storageSummary.storageConflicts
+    summary.storageSkipped += storageSummary.storageSkipped
+    summary.blobUploaded += storageSummary.blobUploaded
+    summary.blobDownloaded += storageSummary.blobDownloaded
   }
 
   private async pullRemoteRecord(client: WebDAVClient, basePath: string, meta: RemoteRecordMeta) {
@@ -452,6 +483,10 @@ export class AppDataSyncService {
       await this.setSyncState(db, `record:${id}:hash`, winner.valueHash)
       summary.conflicts += 1
     }
+
+    const storageSync = await storageV2WebDavRecordSyncService.sync(client, basePath, manifest.storageV2)
+    manifest.storageV2 = storageSync.manifest
+    this.addStorageV2Summary(summary, storageSync.summary)
 
     await this.pushFullSnapshot(client, basePath, db, manifest, summary)
 

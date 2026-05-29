@@ -4068,7 +4068,7 @@
       "data_sync": {
         "auto_sync": "[to be translated]:Auto sync",
         "current_device": "[to be translated]:Current device",
-        "help": "Data sync refreshes local storage mirrors, then uploads a full data snapshot and lightweight change records. Restoring remote data replaces this device's data and restarts the app.",
+        "help": "Data sync merges Storage v2 records through WebDAV for settings, models, assistants, agents, conversations, knowledge, files, and app data. A full safety snapshot is uploaded only for disaster recovery.",
         "interval": {
           "day_one": "[to be translated]:Every day",
           "hour_one": "[to be translated]:Every 1 hour",
@@ -4079,15 +4079,20 @@
         },
         "last_result": "[to be translated]:Last result",
         "method": "[to be translated]:Sync method",
-        "method_value": "Full data snapshot + WebDAV",
+        "method_value": "Record-level Storage v2 sync + WebDAV",
         "password": "[to be translated]:Password",
         "password_placeholder": "[to be translated]:WebDAV password or app password",
         "remote_path": "[to be translated]:Sync directory",
-        "restore_confirm_content": "This will replace this device's data with the latest full snapshot on WebDAV and restart the app. Make sure this device is backed up first.",
-        "restore_confirm_title": "Restore remote data?",
-        "restore_latest": "Restore remote data",
+        "restore_confirm_content": "This is only for disaster recovery. It will replace this device's data with the latest safety snapshot on WebDAV and restart the app. Normal multi-device sync does not need this.",
+        "restore_confirm_title": "Restore safety snapshot?",
+        "restore_latest": "Restore safety snapshot",
         "snapshot": {
-          "uploaded": "Snapshot {{file}} ({{size}})"
+          "uploaded": "Safety snapshot {{file}} ({{size}})"
+        },
+        "storage": {
+          "blobs": "Files up {{uploaded}} / down {{downloaded}}",
+          "conflicts": "Record conflicts {{count}}",
+          "records": "Records up {{uploaded}} / down {{downloaded}}"
         },
         "summary": {
           "conflicts": "[to be translated]:Conflicts {{count}}",
