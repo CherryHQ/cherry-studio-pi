@@ -144,14 +144,16 @@ artifactBuildCompleted: scripts/artifact-build-completed.js
 releaseInfo:
   releaseNotes: |
     <!--LANG:en-->
-    Cherry Studio Pi 1.9.8 - Model Support & Bug Fixes
+    Cherry Studio Pi 1.9.9 - Storage Reliability & Bug Fixes
 
     ✨ New Features
+    - [Storage] Completed the Storage v2 reliability layer with stable data roots, authoritative writes, read-through recovery, backup/restore validation, and secret-backed local configuration
     - [Models] Added support for grok-build-0.1 capabilities (reasoning, tool use, vision)
     - [Providers] StepFun now supports Claude Code / Anthropic-compatible mode with auto-filled endpoint
     - [Agents] DeepSeek V4 Flash and MiMo V2.5+ now properly support 1M context window in Claude Code
 
     🐛 Bug Fixes
+    - [Packaging] Fixed packaged app startup failures caused by missing platform ripgrep binaries
     - [Profile] Reworked the default user avatar with a flat circular-safe design
     - [Web Search] Fixed ExaMCP web search not returning result content correctly
     - [Code Viewer] Fixed code syntax highlighting issues where tokens could disappear in light theme
@@ -164,14 +166,16 @@ releaseInfo:
     - [Providers] Fixed AIHubMix reasoning effort configuration not working properly
 
     <!--LANG:zh-CN-->
-    Cherry Studio Pi 1.9.8 - 模型支持与错误修复
+    Cherry Studio Pi 1.9.9 - 存储可靠性与错误修复
 
     ✨ 新功能
+    - [存储] 完成 Storage v2 可靠性层，覆盖稳定数据根、权威写入、读穿透恢复、备份/恢复校验和敏感配置本地加密存储
     - [模型] 支持 grok-build-0.1 模型能力（推理、工具调用、视觉）
     - [提供商] StepFun 现在支持 Claude Code / Anthropic 兼容模式，并自动填充端点
     - [智能体] DeepSeek V4 Flash 和 MiMo V2.5+ 现在在 Claude Code 中正确支持 1M 上下文窗口
 
     🐛 问题修复
+    - [打包] 修复安装包因缺少平台 ripgrep 二进制导致的启动失败
     - [个人资料] 重新设计默认用户头像，采用扁平且适配圆形裁切的样式
     - [网络搜索] 修复 ExaMCP 网络搜索无法正确返回结果内容的问题
     - [代码查看器] 修复浅色主题下代码语法高亮标记可能消失的问题
