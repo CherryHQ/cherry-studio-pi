@@ -57,7 +57,7 @@
 - [ ] Agent list/session/history/task/channel 增加更多路径变化场景验证。
 - [ ] App data list/get/cache/workbench 增加更多冲突和 tombstone 场景验证。
 - [ ] 文件列表、单文件、blob 投影验证旧路径缺失时的体验。
-- [ ] localStorage/Redux 缺失时不得用空状态覆盖 Storage v2。
+- [x] localStorage/Redux 缺失时不得用空状态覆盖 Storage v2：启动镜像保持 non-pruning，并增加空 runtime snapshot 回归测试。
 
 ## 4. 备份/恢复完整验证
 

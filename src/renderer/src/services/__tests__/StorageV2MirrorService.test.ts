@@ -24,6 +24,11 @@ const createState = () => ({
   websearch: {}
 })
 
+const createEmptyRuntimeState = () => ({
+  ...createState(),
+  settings: {}
+})
+
 describe('StorageV2MirrorService', () => {
   let importLegacyReduxSnapshot: ReturnType<typeof vi.fn>
 
@@ -114,6 +119,24 @@ describe('StorageV2MirrorService', () => {
 
     expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
     expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), { dryRun: false, pruneMissing: false })
+  })
+
+  it('does not prune Storage v2 with an empty startup runtime snapshot', async () => {
+    const { storageV2MirrorService } = await import('../StorageV2MirrorService')
+
+    storageV2MirrorService.scheduleStartupMirror(createEmptyRuntimeState)
+    await vi.advanceTimersByTimeAsync(1500)
+
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        settings: {},
+        redux: expect.objectContaining({
+          note: {}
+        })
+      }),
+      { dryRun: false, pruneMissing: false }
+    )
   })
 
   it('upgrades an identical startup snapshot to pruning after runtime changes resume', async () => {
