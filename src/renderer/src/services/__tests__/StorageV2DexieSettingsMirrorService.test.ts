@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   settingsAnyOf: vi.fn(),
   settingsHook: vi.fn(),
+  settingsPut: vi.fn(),
   settingsWhere: vi.fn()
 }))
 
@@ -10,6 +11,7 @@ vi.mock('@renderer/databases', () => ({
   default: {
     settings: {
       hook: mocks.settingsHook,
+      put: mocks.settingsPut,
       where: mocks.settingsWhere
     }
   }
@@ -35,6 +37,7 @@ describe('StorageV2DexieSettingsMirrorService', () => {
     mocks.settingsWhere.mockReturnValue({
       anyOf: mocks.settingsAnyOf
     })
+    mocks.settingsPut.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -66,6 +69,33 @@ describe('StorageV2DexieSettingsMirrorService', () => {
 
     expect(setSetting).toHaveBeenCalledWith('dexie.settings.language', 'zh-CN', 'dexie-settings')
     expect(setSetting).toHaveBeenCalledWith('dexie.settings.image://avatar', null, 'dexie-settings')
+  })
+
+  it('writes a Dexie setting and immediately flushes the Storage v2 mirror', async () => {
+    const setSetting = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          setSetting
+        }
+      }
+    })
+    mocks.settingsAnyOf.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          id: 'translate:target:language',
+          value: 'ja-JP'
+        }
+      ])
+    })
+
+    const { storageV2DexieSettingsMirrorService } = await import('../StorageV2DexieSettingsMirrorService')
+
+    await storageV2DexieSettingsMirrorService.putSettingAndFlush({ id: 'translate:target:language', value: 'ja-JP' })
+
+    expect(mocks.settingsPut).toHaveBeenCalledWith({ id: 'translate:target:language', value: 'ja-JP' })
+    expect(setSetting).toHaveBeenCalledWith('dexie.settings.translate:target:language', 'ja-JP', 'dexie-settings')
   })
 
   it('delays retry after a transient Storage v2 settings mirror failure', async () => {

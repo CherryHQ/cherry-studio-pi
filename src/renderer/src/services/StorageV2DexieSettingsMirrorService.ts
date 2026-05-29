@@ -7,6 +7,11 @@ const DEFAULT_DEBOUNCE_MS = 0
 const RETRY_DEBOUNCE_MS = 5000
 const STORAGE_V2_DEXIE_SETTINGS_PREFIX = 'dexie.settings.'
 
+type DexieSettingRecord<T = unknown> = {
+  id: string
+  value: T
+}
+
 type DexieTransactionLike = {
   on?: (eventName: 'complete', callback: () => void) => void
 }
@@ -62,6 +67,18 @@ class StorageV2DexieSettingsMirrorService {
     this.pendingSettingIds.delete(settingId)
     this.pendingDeletedIds.add(settingId)
     this.scheduleFlush(debounceMs)
+  }
+
+  async putSettingAndFlush<T>(setting: DexieSettingRecord<T>, options: { strict?: boolean } = {}) {
+    await db.settings.put(setting)
+    this.scheduleSetting(setting.id, 0)
+
+    if (options.strict) {
+      await this.flushStrict()
+      return
+    }
+
+    await this.flush()
   }
 
   async flush() {

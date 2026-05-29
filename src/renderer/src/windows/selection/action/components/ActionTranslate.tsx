@@ -3,13 +3,13 @@ import { loggerService } from '@logger'
 import CopyButton from '@renderer/components/CopyButton'
 import LanguageSelect from '@renderer/components/LanguageSelect'
 import { LanguagesEnum, UNKNOWN } from '@renderer/config/translate'
-import db from '@renderer/databases'
 import { useTopicMessages } from '@renderer/hooks/useMessageOperations'
 import { useSettings } from '@renderer/hooks/useSettings'
 import useTranslate from '@renderer/hooks/useTranslate'
 import MessageContent from '@renderer/pages/home/Messages/MessageContent'
 import { getDefaultTopic, getDefaultTranslateAssistant } from '@renderer/services/AssistantService'
 import { pauseTrace } from '@renderer/services/SpanManagerService'
+import { storageV2DexieSettingsMirrorService } from '@renderer/services/StorageV2DexieSettingsMirrorService'
 import { storageV2DexieSettingsRecoveryService } from '@renderer/services/StorageV2DexieSettingsRecoveryService'
 import type { Assistant, Topic, TranslateLanguage, TranslateLanguageCode } from '@renderer/types'
 import { AssistantMessageStatus } from '@renderer/types/newMessage'
@@ -31,6 +31,12 @@ interface Props {
 }
 
 const logger = loggerService.withContext('ActionTranslate')
+
+function saveTranslateSetting(id: string, value: unknown) {
+  void storageV2DexieSettingsMirrorService.putSettingAndFlush({ id, value }).catch((error) => {
+    logger.error(`Failed to save translate setting ${id}.`, error as Error)
+  })
+}
 
 const ActionTranslate: FC<Props> = ({ action, scrollToBottom }) => {
   const { t } = useTranslation()
@@ -236,10 +242,7 @@ const ActionTranslate: FC<Props> = ({ action, scrollToBottom }) => {
       targetLangRef.current = newTargetLanguage
       setAlterLanguage(newAlterLanguage)
 
-      void db.settings.put({
-        id: 'translate:bidirectional:pair',
-        value: [newTargetLanguage.langCode, newAlterLanguage.langCode]
-      })
+      saveTranslateSetting('translate:bidirectional:pair', [newTargetLanguage.langCode, newAlterLanguage.langCode])
     },
     [initialized]
   )
@@ -257,7 +260,7 @@ const ActionTranslate: FC<Props> = ({ action, scrollToBottom }) => {
         // New language is different from both, update target
         setTargetLanguage(newLang)
         targetLangRef.current = newLang
-        void db.settings.put({ id: 'translate:bidirectional:pair', value: [newLang.langCode, alterLanguage.langCode] })
+        saveTranslateSetting('translate:bidirectional:pair', [newLang.langCode, alterLanguage.langCode])
       }
     },
     [initialized, getLanguageByLangcode, targetLanguage.langCode, alterLanguage.langCode]

@@ -13,22 +13,15 @@ export default class ImageStorage {
   static async set(key: string, value: File | string) {
     const id = IMAGE_PREFIX + key
     try {
-      let didStore = false
       if (typeof value === 'string') {
         // string（emoji）
-        await db.settings.put({ id, value })
-        didStore = true
+        await storageV2DexieSettingsMirrorService.putSettingAndFlush({ id, value })
       } else {
         // file image
         const base64Image = await convertToBase64(value)
         if (typeof base64Image === 'string') {
-          await db.settings.put({ id, value: base64Image })
-          didStore = true
+          await storageV2DexieSettingsMirrorService.putSettingAndFlush({ id, value: base64Image })
         }
-      }
-      if (didStore) {
-        storageV2DexieSettingsMirrorService.scheduleSetting(id, 0)
-        await storageV2DexieSettingsMirrorService.flush()
       }
     } catch (error) {
       logger.error('Error storing the image', error as Error)

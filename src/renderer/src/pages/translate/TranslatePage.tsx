@@ -7,7 +7,6 @@ import ModelSelectButton from '@renderer/components/ModelSelectButton'
 import { isEmbeddingModel, isRerankModel, isTextToImageModel } from '@renderer/config/models'
 import { LanguagesEnum, UNKNOWN } from '@renderer/config/translate'
 import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
-import db from '@renderer/databases'
 import { useDefaultModel } from '@renderer/hooks/useAssistant'
 import { useDrag } from '@renderer/hooks/useDrag'
 import { useFiles } from '@renderer/hooks/useFiles'
@@ -15,6 +14,7 @@ import { useOcr } from '@renderer/hooks/useOcr'
 import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
 import { useTimer } from '@renderer/hooks/useTimer'
 import useTranslate from '@renderer/hooks/useTranslate'
+import { storageV2DexieSettingsMirrorService } from '@renderer/services/StorageV2DexieSettingsMirrorService'
 import { storageV2DexieSettingsRecoveryService } from '@renderer/services/StorageV2DexieSettingsRecoveryService'
 import { estimateTextTokens } from '@renderer/services/TokenService'
 import { saveTranslateHistory, translateText } from '@renderer/services/TranslateService'
@@ -55,6 +55,12 @@ import TranslateHistoryList from './TranslateHistory'
 import TranslateSettings from './TranslateSettings'
 
 const logger = loggerService.withContext('TranslatePage')
+
+function saveTranslateSetting(id: string, value: unknown) {
+  void storageV2DexieSettingsMirrorService.putSettingAndFlush({ id, value }).catch((error) => {
+    logger.error(`Failed to save translate setting ${id}.`, error as Error)
+  })
+}
 
 // cache variables
 let _sourceLanguage: TranslateLanguage | 'auto' = 'auto'
@@ -110,7 +116,7 @@ const TranslatePage: FC = () => {
   // 控制翻译模型切换
   const handleModelChange = (model: Model) => {
     setTranslateModel(model)
-    void db.settings.put({ id: 'translate:model', value: model.id })
+    saveTranslateSetting('translate:model', model.id)
   }
 
   // 控制翻译状态
@@ -297,7 +303,7 @@ const TranslatePage: FC = () => {
   // 控制双向翻译切换
   const toggleBidirectional = (value: boolean) => {
     setIsBidirectional(value)
-    void db.settings.put({ id: 'translate:bidirectional:enabled', value })
+    saveTranslateSetting('translate:bidirectional:enabled', value)
   }
 
   // 控制历史记录点击
@@ -342,8 +348,8 @@ const TranslatePage: FC = () => {
     const target = targetLanguage
     setSourceLanguage(target)
     setTargetLanguage(source)
-    void db.settings.put({ id: 'translate:source:language', value: target.langCode })
-    void db.settings.put({ id: 'translate:target:language', value: source.langCode })
+    saveTranslateSetting('translate:source:language', target.langCode)
+    saveTranslateSetting('translate:target:language', source.langCode)
   }, [couldExchangeAuto, detectedLanguage, sourceLanguage, t, targetLanguage])
 
   useEffect(() => {
@@ -404,10 +410,7 @@ const TranslatePage: FC = () => {
         } else {
           const defaultPair: [TranslateLanguage, TranslateLanguage] = [LanguagesEnum.enUS, LanguagesEnum.zhCN]
           setBidirectionalPair(defaultPair)
-          void db.settings.put({
-            id: 'translate:bidirectional:pair',
-            value: [defaultPair[0].langCode, defaultPair[1].langCode]
-          })
+          saveTranslateSetting('translate:bidirectional:pair', [defaultPair[0].langCode, defaultPair[1].langCode])
         }
       }
 
@@ -438,7 +441,7 @@ const TranslatePage: FC = () => {
         setAutoDetectionMethod(autoDetectionMethodSetting.value)
       } else {
         setAutoDetectionMethod('franc')
-        void db.settings.put({ id: 'translate:detect:method', value: 'franc' })
+        saveTranslateSetting('translate:detect:method', 'franc')
       }
     })
   }, [getLanguageByLangcode])
@@ -446,7 +449,7 @@ const TranslatePage: FC = () => {
   // 控制设置同步
   const updateAutoDetectionMethod = async (method: AutoDetectionMethod) => {
     try {
-      await db.settings.put({ id: 'translate:detect:method', value: method })
+      await storageV2DexieSettingsMirrorService.putSettingAndFlush({ id: 'translate:detect:method', value: method })
       setAutoDetectionMethod(method)
     } catch (e) {
       logger.error('Failed to update auto detection method setting.', e as Error)
@@ -490,7 +493,7 @@ const TranslatePage: FC = () => {
         value={targetLanguage.langCode}
         onChange={(value) => {
           setTargetLanguage(getLanguageByLangcode(value))
-          void db.settings.put({ id: 'translate:target:language', value })
+          saveTranslateSetting('translate:target:language', value)
         }}
       />
     )
@@ -757,7 +760,7 @@ const TranslatePage: FC = () => {
               onChange={(value) => {
                 if (value !== 'auto') setSourceLanguage(getLanguageByLangcode(value))
                 else setSourceLanguage('auto')
-                void db.settings.put({ id: 'translate:source:language', value })
+                saveTranslateSetting('translate:source:language', value)
               }}
               extraOptionsBefore={[
                 {

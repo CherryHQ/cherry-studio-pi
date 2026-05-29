@@ -1,7 +1,8 @@
+import { loggerService } from '@logger'
 import LanguageSelect from '@renderer/components/LanguageSelect'
 import { HStack } from '@renderer/components/Layout'
-import db from '@renderer/databases'
 import useTranslate from '@renderer/hooks/useTranslate'
+import { storageV2DexieSettingsMirrorService } from '@renderer/services/StorageV2DexieSettingsMirrorService'
 import type { AutoDetectionMethod, Model, TranslateLanguage } from '@renderer/types'
 import { Button, Flex, Modal, Radio, Space, Switch, Tooltip } from 'antd'
 import { HelpCircle } from 'lucide-react'
@@ -10,6 +11,14 @@ import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import TranslateSettingsPopup from '../settings/TranslateSettingsPopup/TranslateSettingsPopup'
+
+const logger = loggerService.withContext('TranslateSettings')
+
+function saveTranslateSetting(id: string, value: unknown) {
+  void storageV2DexieSettingsMirrorService.putSettingAndFlush({ id, value }).catch((error) => {
+    logger.error(`Failed to save translate setting ${id}.`, error as Error)
+  })
+}
 
 // TODO: Just don't send so many props. Migrate them to redux.
 const TranslateSettings: FC<{
@@ -71,7 +80,7 @@ const TranslateSettings: FC<{
               checked={enableMarkdown}
               onChange={(checked) => {
                 setEnableMarkdown(checked)
-                void db.settings.put({ id: 'translate:markdown:enabled', value: checked })
+                saveTranslateSetting('translate:markdown:enabled', checked)
               }}
             />
           </Flex>
@@ -91,7 +100,7 @@ const TranslateSettings: FC<{
               checked={isScrollSyncEnabled}
               onChange={(checked) => {
                 setIsScrollSyncEnabled(checked)
-                void db.settings.put({ id: 'translate:scroll:sync', value: checked })
+                saveTranslateSetting('translate:scroll:sync', checked)
               }}
             />
           </Flex>
@@ -162,10 +171,7 @@ const TranslateSettings: FC<{
                     }
                     setLocalPair(newPair)
                     setBidirectionalPair(newPair)
-                    void db.settings.put({
-                      id: 'translate:bidirectional:pair',
-                      value: [newPair[0].langCode, newPair[1].langCode]
-                    })
+                    saveTranslateSetting('translate:bidirectional:pair', [newPair[0].langCode, newPair[1].langCode])
                   }}
                 />
                 <span>⇆</span>
@@ -180,10 +186,7 @@ const TranslateSettings: FC<{
                     }
                     setLocalPair(newPair)
                     setBidirectionalPair(newPair)
-                    void db.settings.put({
-                      id: 'translate:bidirectional:pair',
-                      value: [newPair[0].langCode, newPair[1].langCode]
-                    })
+                    saveTranslateSetting('translate:bidirectional:pair', [newPair[0].langCode, newPair[1].langCode])
                   }}
                 />
               </Flex>

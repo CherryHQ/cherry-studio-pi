@@ -3,9 +3,9 @@ import { loggerService } from '@logger'
 import LanguageSelect from '@renderer/components/LanguageSelect'
 import Scrollbar from '@renderer/components/Scrollbar'
 import { LanguagesEnum } from '@renderer/config/translate'
-import db from '@renderer/databases'
 import { useDefaultModel } from '@renderer/hooks/useAssistant'
 import useTranslate from '@renderer/hooks/useTranslate'
+import { storageV2DexieSettingsMirrorService } from '@renderer/services/StorageV2DexieSettingsMirrorService'
 import { storageV2DexieSettingsRecoveryService } from '@renderer/services/StorageV2DexieSettingsRecoveryService'
 import { translateText } from '@renderer/services/TranslateService'
 import type { TranslateLanguage } from '@renderer/types'
@@ -99,7 +99,7 @@ const Translate: FC<Props> = ({ text }) => {
           style={{ maxWidth: 200, minWidth: 130, flex: 1 }}
           optionFilterProp="label"
           onChange={async (value) => {
-            await db.settings.put({ id: 'translate:target:language', value })
+            await storageV2DexieSettingsMirrorService.putSettingAndFlush({ id: 'translate:target:language', value })
             setTargetLanguage(getLanguageByLangcode(value))
           }}
         />
