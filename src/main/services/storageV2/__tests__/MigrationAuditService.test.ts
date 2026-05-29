@@ -146,6 +146,8 @@ describe('StorageV2MigrationAuditService', () => {
       'legacy-mcp-dxt-servers',
       'copilot-token-legacy',
       'openclaw-config',
+      'openclaw-legacy-config',
+      'ovms-config',
       'obsidian-config'
     ]) {
       expect(byId.get(id)).toMatchObject({

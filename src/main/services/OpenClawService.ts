@@ -732,6 +732,7 @@ class OpenClawService {
    */
   private loadAuthTokenFromConfig(): void {
     try {
+      this.migrateLegacyConfigProjection()
       if (fs.existsSync(OPENCLAW_CONFIG_PATH)) {
         const content = fs.readFileSync(OPENCLAW_CONFIG_PATH, 'utf-8')
         const config = JSON.parse(content) as OpenClawConfig
@@ -751,6 +752,17 @@ class OpenClawService {
    */
   private generateAuthToken(): string {
     return crypto.randomBytes(24).toString('base64url')
+  }
+
+  private migrateLegacyConfigProjection(): void {
+    if (!fs.existsSync(OPENCLAW_LEGACY_CONFIG_PATH)) return
+
+    if (fs.existsSync(OPENCLAW_CONFIG_PATH)) {
+      fs.renameSync(OPENCLAW_CONFIG_PATH, OPENCLAW_CONFIG_BAK_PATH)
+      logger.info('Migrated openclaw.json -> openclaw.json.bak')
+    }
+    fs.renameSync(OPENCLAW_LEGACY_CONFIG_PATH, OPENCLAW_CONFIG_PATH)
+    logger.info('Migrated openclaw.cherry.json -> openclaw.json')
   }
 
   private parseConfig(content: string): OpenClawConfig | null {
@@ -800,15 +812,7 @@ class OpenClawService {
         fs.mkdirSync(OPENCLAW_CONFIG_DIR, { recursive: true })
       }
 
-      // Migrate legacy openclaw.cherry.json → openclaw.json
-      if (fs.existsSync(OPENCLAW_LEGACY_CONFIG_PATH)) {
-        if (fs.existsSync(OPENCLAW_CONFIG_PATH)) {
-          fs.renameSync(OPENCLAW_CONFIG_PATH, OPENCLAW_CONFIG_BAK_PATH)
-          logger.info('Migrated openclaw.json → openclaw.json.bak')
-        }
-        fs.renameSync(OPENCLAW_LEGACY_CONFIG_PATH, OPENCLAW_CONFIG_PATH)
-        logger.info('Migrated openclaw.cherry.json → openclaw.json')
-      }
+      this.migrateLegacyConfigProjection()
 
       // Read existing config
       let config: OpenClawConfig = {}

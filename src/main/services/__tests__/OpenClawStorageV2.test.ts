@@ -188,6 +188,47 @@ describe('OpenClawService Storage v2 config snapshot', () => {
     expect(writtenConfig.models.providers['cherry-openai'].apiKey).toBe('sk-one')
   })
 
+  it('migrates the legacy OpenClaw runtime projection before mirroring to Storage v2', async () => {
+    const legacyConfig = {
+      models: {
+        mode: 'merge',
+        providers: {
+          legacy: {
+            api: 'openai-completions',
+            apiKey: 'legacy-key',
+            baseUrl: 'https://legacy.example/v1',
+            models: []
+          }
+        }
+      }
+    }
+    mocks.fs.existsSync.mockImplementation((targetPath) =>
+      ['/mock/home/.openclaw/openclaw.json', '/mock/home/.openclaw/openclaw.cherry.json'].includes(String(targetPath))
+    )
+    mocks.fs.readFileSync.mockReturnValue(JSON.stringify(legacyConfig))
+    const service = await loadOpenClawService()
+
+    await expect(
+      service.syncProviderConfig({} as Electron.IpcMainInvokeEvent, provider, primaryModel)
+    ).resolves.toEqual({ success: true })
+
+    expect(fs.renameSync).toHaveBeenCalledWith(
+      '/mock/home/.openclaw/openclaw.json',
+      '/mock/home/.openclaw/openclaw.json.bak'
+    )
+    expect(fs.renameSync).toHaveBeenCalledWith(
+      '/mock/home/.openclaw/openclaw.cherry.json',
+      '/mock/home/.openclaw/openclaw.json'
+    )
+    expect(getWrittenConfig().models.providers.legacy.apiKey).toBe('legacy-key')
+    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith(
+      'openclaw',
+      'default',
+      'config',
+      expect.stringContaining('legacy-key')
+    )
+  })
+
   it('does not update the OpenClaw runtime projection when Storage v2 snapshot fails', async () => {
     mocks.secretVault.setSecret.mockRejectedValueOnce(new Error('vault locked'))
     const service = await loadOpenClawService()

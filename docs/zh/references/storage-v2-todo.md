@@ -2,7 +2,7 @@
 
 更新时间：2026-05-29
 
-固定进度口径：整体 88%。这表示 Storage v2 并行保护层、主要数据 mirror/read-through、StorageService-first 主写保护、端到端备份/恢复验证、大部分漏网路径归类和同步/账号体系前置策略已经完成，剩余工作集中在 OVMS / legacy 外部投影收尾、legacy runtime 清理、最终测试矩阵和收尾实机验证。
+固定进度口径：整体 90%。这表示 Storage v2 并行保护层、主要数据 mirror/read-through、StorageService-first 主写保护、端到端备份/恢复验证、漏网路径归类/补洞和同步/账号体系前置策略已经完成，剩余工作集中在 legacy runtime 清理、最终测试矩阵和收尾实机验证。
 
 跟踪规则：
 
@@ -13,7 +13,7 @@
 
 ## 1. 漏网数据扫描和补洞
 
-状态：进行中
+状态：完成
 
 - [x] MCP memory `memory.json` 进入 Storage v2 secret-backed mirror。
 - [x] WeChat channel 登录态进入 Storage v2 secret vault。
@@ -28,12 +28,12 @@
 - [x] CodeTools / OpenCode 的 `~/.cherrystudio/bin` 与 `~/.cherrystudio/install` 归类为可重建 CLI cache；CodeTools 选择、模型、环境变量、目录列表继续由 Storage v2 `redux.codeTools` 保存。
 - [x] Obsidian vault registry 纳入 migration audit，分类为外部投影；默认 vault 选择由 Storage v2 `settings.defaultObsidianVault` 镜像，外部 vault 内容不进入 App 备份承诺。
 - [x] DXT MCP 上传服务包从旧 `~/.cherrystudio/mcp` 迁入 `Data/MCP`，纳入 data root 识别、migration audit 和 Storage v2 backup / restore；旧目录按外部投影兼容读取，缺失包会补拷贝，不覆盖已存在的 Storage v2 版本，恢复后旧 `dxtPath` 会自动重定向到 `Data/MCP/server-*`。
-- [x] 继续扫描 `userData`、`Data/*`、`~/.cherrystudio`、外部 JSON/DB 写入路径；新增 DXT MCP 漏项已补齐，OVMS / old OpenClaw legacy 继续作为 action-required 审计项保留。
+- [x] 继续扫描 `userData`、`Data/*`、`~/.cherrystudio`、外部 JSON/DB 写入路径；DXT MCP、OVMS model config 和 old OpenClaw legacy config 漏项已补齐。
 - [x] 判定每个路径属于用户资产、可重建缓存、临时文件或外部工具投影；MigrationAuditService 增加显式分类回归测试。
 - [x] 用户资产必须进入 Storage v2 或 backup/restore；当前已知 Data root 用户资产目录包含 Files、KnowledgeBase、Memory、Skills、Agents、Channels、Workbench、Notes、Workspace、MCP。
 - [x] 可重建缓存明确标记为 cache，不参与恢复承诺。
-- [ ] 外部工具投影必须有 Storage v2 权威副本，本地文件可重建。
-- [x] 重点复查 OVMS、CodeTools/OpenCode、Obsidian、DXT MCP、trace/dev logs、OCR/tesseract、notes/external path；目前均已进入 audit 分类，OVMS / old OpenClaw legacy 仍保留后续 authority / cleanup 决策。
+- [x] 外部工具投影必须有 Storage v2 权威副本，本地文件可重建；OpenClaw config 由 Storage v2 secret vault 兜底，OVMS `models/config.json` 由 Storage v2 `ovms.model_config` setting 兜底，DXT MCP 包进入 `Data/MCP`。
+- [x] 重点复查 OVMS、CodeTools/OpenCode、Obsidian、DXT MCP、trace/dev logs、OCR/tesseract、notes/external path；目前均已进入 audit 分类，legacy-only 用户资产留到收尾清理策略处理。
 
 ## 2. StorageService-first 写路径
 

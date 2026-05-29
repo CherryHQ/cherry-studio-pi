@@ -411,12 +411,11 @@ export class StorageV2MigrationAuditService {
         'Legacy OpenClaw config',
         path.join(homePath, '.openclaw', 'openclaw.cherry.json'),
         {
-          actionRequired: true,
           category: 'external-projection',
-          coverage: 'legacy-only',
-          risk: 'medium',
+          coverage: 'covered',
+          risk: 'low',
           notes:
-            'Old OpenClaw config path. The runtime migrates it to openclaw.json, but an existing file should be reviewed.'
+            'Old OpenClaw config path. The runtime migrates it to openclaw.json and then mirrors the config into Storage v2 secrets.'
         }
       ),
       auditPath(
@@ -424,11 +423,11 @@ export class StorageV2MigrationAuditService {
         'OVMS model config',
         path.join(homeCherryPath, 'ovms', 'ovms', 'models', 'config.json'),
         {
-          actionRequired: true,
           category: 'external-projection',
-          coverage: 'legacy-only',
+          coverage: 'covered',
           risk: 'medium',
-          notes: 'OVMS model config is still maintained as an external JSON projection and needs an authority decision.'
+          notes:
+            'OVMS model config is mirrored into Storage v2 settings; the external JSON remains a rebuildable runtime projection while model weights stay external/re-downloadable.'
         }
       ),
       auditPath('trace-cache', 'Trace cache', path.join(homeCherryPath, 'trace'), {
