@@ -74,6 +74,11 @@ export type StorageV2AuditItem = {
   sizeBytes: number
   fileCount?: number
   directoryCount?: number
+  category?: 'bootstrap' | 'external-projection' | 'runtime-cache' | 'user-asset'
+  coverage?: 'cache' | 'covered' | 'legacy-only' | 'storage-v2-authoritative'
+  risk?: 'high' | 'low' | 'medium'
+  notes?: string
+  actionRequired?: boolean
 }
 
 export type StorageV2MigrationAudit = {
