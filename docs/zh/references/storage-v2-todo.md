@@ -2,7 +2,7 @@
 
 更新时间：2026-05-29
 
-固定进度口径：整体 75%。这表示 Storage v2 并行保护层、主要数据 mirror/read-through、backup/restore 骨架已经完成，剩余工作集中在 StorageService-first 主写路径、端到端恢复验证、同步冲突策略和最后一批 legacy-only 漏洞。
+固定进度口径：整体 82%。这表示 Storage v2 并行保护层、主要数据 mirror/read-through、StorageService-first 主写保护和端到端备份/恢复验证已经基本完成，剩余工作集中在最后一批 legacy-only 路径扫描、同步/账号体系策略、legacy runtime 清理和收尾实机验证。
 
 跟踪规则：
 
@@ -69,7 +69,7 @@
 
 ## 4. 备份/恢复完整验证
 
-状态：未完成
+状态：完成
 
 - [x] 构造完整 fixture：provider、助手、普通会话、附件、知识库、agent、agent 历史、channel、app data、workbench、MCP、OAuth、localStorage；BackupService 已有完整 Storage v2 backup validation fixture 覆盖当前 schema 表、blob checksum、secret ref、restorable directories 和核心实体占位数据，后续恢复读回继续扩展同一夹具。
 - [x] 生成 Storage v2 backup 后恢复到全新 data root；BackupService 测试已从完整 fixture source data root 真实 createBackup，再 restoreBackup 到空 FreshData，验证 main.db、manifest、blob、secret vault、Channels、Workbench、Notes、Workspace 均恢复并重新 activate data root。
@@ -77,7 +77,7 @@
 - [x] 验证 `Perry Studio -> Cherry Studio Pi`、username 变化、appId/productName 变化；DataRootService 已覆盖 Perry/Cherry 旧 root 兼容、旧 username configured root 缺失时不遮蔽当前 root，Backup validation 已覆盖 legacy Perry Studio manifest 仍可被 Cherry Studio Pi 接受。
 - [x] 验证自定义 App Data 路径迁移；AppDataMigrationService 已覆盖复制时排除 stale `Data`/restore staging、外部 active Data root 优先、自定义新 appData 路径不能位于 active Storage v2 data root 内，迁移前会等待 secret vault idle 并使用 Storage v2 snapshot 替换 main.db。
 - [x] 验证旧 `.bak` / legacy JSON 备份恢复不会被 Storage v2 旧快照覆盖；renderer legacy restore 已在导入 restored IndexedDB 前关闭 Storage v2 auto hydrate、暂停 runtime mirror 并用 pruneMissing mirror 新 legacy 数据，main startup restore 已覆盖先完成 `Data.restore` 替换并 activate restored data root，再允许后续启动 hydration。
-- [ ] 验证 secret vault 不可解密、缺失 secret ref、旧备份缺表时的 warning 行为。
+- [x] 验证 secret vault 不可解密、缺失 secret ref、旧备份缺表时的 warning 行为；Backup validation 已覆盖 undecryptable secret、safeStorage 不可用、missing secret refs、orphan secret vault entries、旧备份缺当前 schema 表、copied directory 缺失和未知目录 warning/issue。
 
 ## 5. 同步/账号体系前置设计
 
