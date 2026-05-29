@@ -73,7 +73,9 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
   const { t } = useTranslation()
   const { notesPath } = useNotesSettings()
   const { assistants } = useAssistants()
-  const { assistant, addTopic, removeTopic, moveTopic, updateTopic, updateTopics } = useAssistant(_assistant.id)
+  const { assistant, addTopic, removeTopic, removeTopics, moveTopic, updateTopic, updateTopics } = useAssistant(
+    _assistant.id
+  )
   const { showTopicTime, pinTopicsToTop, setTopicPosition, topicPosition } = useSettings()
 
   const renamingTopics = useSelector((state: RootState) => state.runtime.chat.renamingTopics)
@@ -223,7 +225,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
       await modelGenerating()
       const index = findIndex(assistant.topics, (t) => t.id === topic.id)
       setActiveTopic(assistant.topics[index + 1 === assistant.topics.length ? 0 : index + 1])
-      moveTopic(topic, toAssistant)
+      await moveTopic(topic, toAssistant)
     },
     [assistant.topics, moveTopic, setActiveTopic]
   )
@@ -711,7 +713,7 @@ export const Topics: React.FC<Props> = ({ assistant: _assistant, activeTopic, se
         assistants={assistants}
         activeTopic={activeTopic}
         setActiveTopic={setActiveTopic}
-        updateTopics={updateTopics}
+        removeTopics={removeTopics}
         moveTopic={moveTopic}
         manageState={manageState}
         filteredTopics={filteredTopics}

@@ -1,6 +1,5 @@
 import AssistantAvatar from '@renderer/components/Avatar/AssistantAvatar'
 import { modelGenerating } from '@renderer/hooks/useRuntime'
-import { TopicManager } from '@renderer/hooks/useTopic'
 import type { Assistant, Topic } from '@renderer/types'
 import { cn } from '@renderer/utils'
 import { Dropdown, Tooltip } from 'antd'
@@ -69,8 +68,8 @@ interface TopicManagePanelProps {
   assistants: Assistant[]
   activeTopic: Topic
   setActiveTopic: (topic: Topic) => void
-  updateTopics: (topics: Topic[]) => void
-  moveTopic: (topic: Topic, toAssistant: Assistant) => void
+  removeTopics: (topics: Topic[]) => Promise<Set<string>>
+  moveTopic: (topic: Topic, toAssistant: Assistant) => Promise<void>
   manageState: TopicManageModeState
   filteredTopics: Topic[]
 }
@@ -83,7 +82,7 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
   assistants,
   activeTopic,
   setActiveTopic,
-  updateTopics,
+  removeTopics,
   moveTopic,
   manageState,
   filteredTopics
@@ -143,17 +142,9 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
     await modelGenerating()
 
     const idsArray = Array.from(selectedIds)
-
-    // Delete DB records and files
-    const results = await Promise.allSettled(idsArray.map((id) => TopicManager.removeTopic(id).then(() => id)))
-
-    // Filter successful ids
-    const successfulIds = new Set(
-      results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map((r) => r.value)
-    )
-
+    const selectedTopics = assistant.topics.filter((topic) => selectedIds.has(topic.id))
+    const successfulIds = await removeTopics(selectedTopics)
     const actualRemainingTopics = assistant.topics.filter((topic) => !successfulIds.has(topic.id))
-    updateTopics(actualRemainingTopics)
 
     // Switch to first remaining topic if current topic was deleted
     if (successfulIds.has(activeTopic.id) && actualRemainingTopics.length > 0) {
@@ -173,7 +164,7 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
       window.toast.error(t('chat.topics.manage.delete.error'))
     }
     exitManageMode()
-  }, [selectedIds, assistant.topics, activeTopic.id, setActiveTopic, t, exitManageMode, updateTopics])
+  }, [selectedIds, assistant.topics, activeTopic.id, setActiveTopic, t, exitManageMode, removeTopics])
 
   // Handle move selected topics to another assistant
   const handleMoveSelected = useCallback(
@@ -195,7 +186,7 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
       for (const id of selectedIds) {
         const topic = assistant.topics.find((t) => t.id === id)
         if (topic) {
-          moveTopic(topic, targetAssistant)
+          await moveTopic(topic, targetAssistant)
         }
       }
 

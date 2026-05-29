@@ -31,6 +31,7 @@ import {
 import { setDefaultModel, setQuickModel, setTranslateModel } from '@renderer/store/llm'
 import type { Assistant, AssistantSettings, Model, Provider, ThinkingOption, Topic } from '@renderer/types'
 import { uuid } from '@renderer/utils'
+import { uniqBy } from 'lodash'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -86,23 +87,58 @@ const pickFallbackModel = (providers: Provider[]): Model | undefined => {
 
 const omitTopicMessages = (topic: Topic): Topic => ({ ...topic, messages: [] })
 
-function updateAssistantTopicsInState(
+const getAssistantTopicsFromState = (
   assistantsState: RootState['assistants'],
   assistantId: string,
-  topics: Topic[]
+  fallbackTopics: Topic[] = []
+) => {
+  const assistant = assistantsState.assistants.find((assistant) => assistant.id === assistantId)
+  return Array.isArray(assistant?.topics) ? assistant.topics : fallbackTopics
+}
+
+function updateAssistantTopicsBatchInState(
+  assistantsState: RootState['assistants'],
+  updates: Array<{ assistantId: string; topics: Topic[] }>
 ): RootState['assistants'] {
+  const topicsByAssistantId = new Map(updates.map(({ assistantId, topics }) => [assistantId, topics]))
+
   return {
     ...assistantsState,
     assistants: assistantsState.assistants.map((assistant) =>
-      assistant.id === assistantId ? { ...assistant, topics: topics.map(omitTopicMessages) } : assistant
+      topicsByAssistantId.has(assistant.id)
+        ? { ...assistant, topics: topicsByAssistantId.get(assistant.id)?.map(omitTopicMessages) ?? [] }
+        : assistant
     )
   }
 }
 
-async function persistAssistantTopicsBeforeRuntimeUpdate(assistantId: string, topics: Topic[]) {
+async function persistAssistantTopicsBeforeRuntimeUpdate(updates: Array<{ assistantId: string; topics: Topic[] }>) {
   await persistStorageV2PartialReduxSnapshot({
-    assistants: updateAssistantTopicsInState(store.getState().assistants, assistantId, topics)
+    assistants: updateAssistantTopicsBatchInState(store.getState().assistants, updates)
   })
+}
+
+async function removeTopicsFromRuntimeSettled(topics: Topic[], reason: string) {
+  const uniqueTopics = uniqBy(
+    topics.filter((topic) => topic.id),
+    'id'
+  )
+  if (uniqueTopics.length === 0) return new Set<string>()
+
+  const results = await Promise.allSettled(
+    uniqueTopics.map((topic) => TopicManager.removeTopic(topic.id).then(() => topic.id))
+  )
+  const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+
+  if (failures.length > 0) {
+    logger.error(`Failed to remove ${failures.length} topic(s) from runtime before ${reason}`, failures[0].reason)
+  }
+
+  return new Set(
+    results
+      .filter((result): result is PromiseFulfilledResult<string> => result.status === 'fulfilled')
+      .map((result) => result.value)
+  )
 }
 
 export function useAssistants() {
@@ -249,18 +285,35 @@ export function useAssistant(id: string) {
     },
     removeTopic: async (topic: Topic) => {
       await removeTopicsFromRuntime([topic.id], 'topic removal')
-      await persistAssistantTopicsBeforeRuntimeUpdate(
-        assistant.id,
-        normalizedTopics.filter(({ id }) => id !== topic.id)
-      )
+      const currentTopics = getAssistantTopicsFromState(store.getState().assistants, assistant.id, normalizedTopics)
+      await persistAssistantTopicsBeforeRuntimeUpdate([
+        {
+          assistantId: assistant.id,
+          topics: currentTopics.filter(({ id }) => id !== topic.id)
+        }
+      ])
       dispatch(removeTopic({ assistantId: assistant.id, topic }))
       await flushAssistantMirror('assistant-topic-remove', { strict: true })
     },
-    moveTopic: (topic: Topic, toAssistant: Assistant) => {
-      dispatch(addTopic({ assistantId: toAssistant.id, topic: { ...topic, assistantId: toAssistant.id } }))
-      dispatch(removeTopic({ assistantId: assistant.id, topic }))
-      // update topic messages in database
-      void db.topics
+    removeTopics: async (topics: Topic[]) => {
+      const successfulIds = await removeTopicsFromRuntimeSettled(topics, 'batch topic removal')
+      if (successfulIds.size === 0 && topics.length > 0) {
+        throw new Error('Failed to remove selected topics from runtime')
+      }
+
+      const currentTopics = getAssistantTopicsFromState(store.getState().assistants, assistant.id, normalizedTopics)
+      const nextTopics = currentTopics.filter((topic) => !successfulIds.has(topic.id))
+
+      await persistAssistantTopicsBeforeRuntimeUpdate([{ assistantId: assistant.id, topics: nextTopics }])
+      dispatch(updateTopics({ assistantId: assistant.id, topics: nextTopics }))
+      await flushAssistantMirror('assistant-topics-remove-batch', { strict: true })
+
+      return successfulIds
+    },
+    moveTopic: async (topic: Topic, toAssistant: Assistant) => {
+      const movedTopic = { ...topic, assistantId: toAssistant.id }
+
+      await db.topics
         .where('id')
         .equals(topic.id)
         .modify((dbTopic) => {
@@ -271,9 +324,24 @@ export function useAssistant(id: string) {
             }))
           }
         })
-        .then(() => {
-          flushStorageV2TopicMirror(topic.id)
-        })
+
+      const assistantsState = store.getState().assistants
+      const sourceTopics = getAssistantTopicsFromState(assistantsState, assistant.id, normalizedTopics).filter(
+        ({ id }) => id !== topic.id
+      )
+      const targetTopics = uniqBy(
+        [movedTopic, ...getAssistantTopicsFromState(assistantsState, toAssistant.id, toAssistant.topics)],
+        'id'
+      )
+
+      await persistAssistantTopicsBeforeRuntimeUpdate([
+        { assistantId: assistant.id, topics: sourceTopics },
+        { assistantId: toAssistant.id, topics: targetTopics }
+      ])
+      dispatch(updateTopics({ assistantId: toAssistant.id, topics: targetTopics }))
+      dispatch(updateTopics({ assistantId: assistant.id, topics: sourceTopics }))
+      await flushAssistantMirror('assistant-topic-move', { strict: true })
+      flushStorageV2TopicMirror(topic.id)
     },
     updateTopic: (topic: Topic) => {
       dispatch(updateTopic({ assistantId: assistant.id, topic }))
@@ -290,7 +358,7 @@ export function useAssistant(id: string) {
         'topic reset'
       )
       await db.topics.put({ id: replacementTopic.id, messages: [] })
-      await persistAssistantTopicsBeforeRuntimeUpdate(assistant.id, [replacementTopic])
+      await persistAssistantTopicsBeforeRuntimeUpdate([{ assistantId: assistant.id, topics: [replacementTopic] }])
       dispatch(removeAllTopics({ assistantId: assistant.id, replacementTopic }))
       await flushAssistantMirror('assistant-topics-reset', { strict: true })
       flushStorageV2TopicMirror(replacementTopic.id)
