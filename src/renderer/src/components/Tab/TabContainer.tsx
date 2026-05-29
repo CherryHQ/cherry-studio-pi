@@ -19,7 +19,7 @@ import type { MinAppType } from '@renderer/types'
 import { ThemeMode } from '@renderer/types'
 import { classNames } from '@renderer/utils'
 import { markRouteSwitchStart } from '@renderer/utils/routePerformance'
-import { getTabBaseId, getTabIdFromPath } from '@renderer/utils/tabs'
+import { canCloseVisibleTab, getTabBaseId, getTabIdFromPath } from '@renderer/utils/tabs'
 import { Tooltip } from 'antd'
 import type { LRUCache } from 'lru-cache'
 import {
@@ -297,7 +297,7 @@ const TabsContainer: React.FC<TabsContainerProps> = ({ children, withSidebar = f
             onSortEnd={onSortEnd}
             className="tabs-sortable"
             renderItem={(tab) => {
-              const isClosable = !['home', 'agents'].includes(getTabBaseId(tab.id))
+              const isClosable = canCloseVisibleTab(visibleTabs.length)
 
               return (
                 <Tab

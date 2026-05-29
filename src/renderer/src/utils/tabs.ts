@@ -47,3 +47,5 @@ export const withTabInstance = (path: string, instanceId?: string) => {
 
   return `${url.pathname}${url.search}${url.hash}`
 }
+
+export const canCloseVisibleTab = (visibleTabCount: number) => visibleTabCount > 1

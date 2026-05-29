@@ -52,6 +52,10 @@ const tabsSlice = createSlice({
       state.activeTabId = action.payload.id
     },
     removeTab: (state, action: PayloadAction<string>) => {
+      if (state.tabs.length <= 1) {
+        return
+      }
+
       const index = state.tabs.findIndex((tab) => tab.id === action.payload)
       if (index !== -1) {
         state.tabs.splice(index, 1)
