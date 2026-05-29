@@ -1,5 +1,4 @@
 import type { UpdateAgentBaseForm } from '@renderer/types'
-import { AgentConfigurationSchema } from '@renderer/types'
 import { parseKeyValueString, serializeKeyValueString } from '@renderer/utils/env'
 import { Input, InputNumber, Tooltip } from 'antd'
 import { Info } from 'lucide-react'
@@ -10,6 +9,7 @@ import {
   type AgentConfigurationState,
   type AgentOrSessionSettingsProps,
   defaultConfiguration,
+  parseAgentSettingsConfiguration,
   SettingsContainer,
   SettingsItem,
   SettingsTitle
@@ -30,7 +30,7 @@ export const AdvancedSettings: React.FC<AgentOrSessionSettingsProps> = ({ agentB
       setEnvVarsText('')
       return
     }
-    const parsed: AgentConfigurationState = AgentConfigurationSchema.parse(agentBase.configuration ?? {})
+    const parsed = parseAgentSettingsConfiguration(agentBase.configuration)
     setConfiguration(parsed)
     setMaxTurnsInput(parsed.max_turns)
     setEnvVarsText(serializeKeyValueString(parsed.env_vars ?? {}))

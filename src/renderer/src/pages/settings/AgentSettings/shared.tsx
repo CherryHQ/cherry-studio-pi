@@ -12,8 +12,12 @@ import type {
   UpdateAgentFunction,
   UpdateAgentSessionFunction
 } from '@renderer/types'
-import { AgentConfigurationSchema, isAgentType } from '@renderer/types'
+import { isAgentType } from '@renderer/types'
 import { cn } from '@renderer/utils'
+import {
+  DEFAULT_AGENT_CONFIGURATION,
+  parseAgentConfiguration as parseSharedAgentConfiguration
+} from '@renderer/utils/agentConfiguration'
 import type { ModalProps } from 'antd'
 import { Menu, Modal } from 'antd'
 import type { ReactNode } from 'react'
@@ -24,7 +28,9 @@ import { SettingDivider } from '..'
 
 // Shared types and constants for agent settings
 export type AgentConfigurationState = AgentConfiguration & Record<string, unknown>
-export const defaultConfiguration: AgentConfigurationState = AgentConfigurationSchema.parse({})
+export const defaultConfiguration: AgentConfigurationState = DEFAULT_AGENT_CONFIGURATION
+export const parseAgentSettingsConfiguration = (value: unknown): AgentConfigurationState =>
+  parseSharedAgentConfiguration(value)
 
 /**
  * Unified props type for settings components that work with both Agent and Session
@@ -92,10 +98,10 @@ export type AgentLabelProps = {
 export const SOUL_MODE_EMOJI = '🦞'
 
 export const isSoulModeEnabled = (configuration: AgentConfiguration | undefined | null): boolean =>
-  configuration?.soul_enabled === true
+  parseAgentSettingsConfiguration(configuration).soul_enabled === true
 
 export const getAgentAvatar = (configuration: AgentConfiguration | undefined | null): string => {
-  const avatar = configuration?.avatar?.trim()
+  const avatar = parseAgentSettingsConfiguration(configuration).avatar?.trim()
   if (!avatar || isAgentType(avatar)) return '⭐️'
   return avatar
 }

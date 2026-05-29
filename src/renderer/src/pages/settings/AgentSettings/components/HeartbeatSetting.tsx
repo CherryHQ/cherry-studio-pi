@@ -9,7 +9,7 @@ import { Info } from 'lucide-react'
 import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { SettingsItem, SettingsTitle } from '../shared'
+import { parseAgentSettingsConfiguration, SettingsItem, SettingsTitle } from '../shared'
 
 interface HeartbeatSettingProps {
   base: AgentBaseWithId | undefined | null
@@ -19,7 +19,7 @@ interface HeartbeatSettingProps {
 export const HeartbeatSetting = ({ base: agentBase, update }: HeartbeatSettingProps) => {
   const { t } = useTranslation()
 
-  const config = useMemo(() => (agentBase?.configuration ?? {}) as AgentConfiguration, [agentBase?.configuration])
+  const config = useMemo(() => parseAgentSettingsConfiguration(agentBase?.configuration), [agentBase?.configuration])
   const enabled = config.heartbeat_enabled ?? true
   const interval = config.heartbeat_interval ?? 30
 

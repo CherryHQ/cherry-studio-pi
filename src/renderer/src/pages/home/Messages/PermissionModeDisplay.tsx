@@ -1,5 +1,6 @@
 import { permissionModeCards } from '@renderer/config/agent'
 import SessionSettingsPopup from '@renderer/pages/settings/AgentSettings/SessionSettingsPopup'
+import { parseAgentSettingsConfiguration } from '@renderer/pages/settings/AgentSettings/shared'
 import type { GetAgentSessionResponse, PermissionMode } from '@renderer/types'
 import { FileEdit, Lightbulb, Shield, ShieldOff } from 'lucide-react'
 import type { FC } from 'react'
@@ -39,7 +40,8 @@ const getPermissionModeConfig = (mode: PermissionMode) => {
 const PermissionModeDisplay: FC<Props> = ({ session, agentId }) => {
   const { t } = useTranslation()
 
-  const permissionMode = session?.configuration?.permission_mode ?? 'default'
+  const configuration = useMemo(() => parseAgentSettingsConfiguration(session?.configuration), [session?.configuration])
+  const permissionMode = configuration.permission_mode ?? 'default'
 
   const modeCard = useMemo(() => {
     return permissionModeCards.find((card) => card.mode === permissionMode)

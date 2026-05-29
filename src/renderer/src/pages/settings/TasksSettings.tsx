@@ -8,6 +8,7 @@ import { useTaskLogs } from '@renderer/hooks/agents/useTasks'
 import { useAppDispatch } from '@renderer/store'
 import { setActiveAgentId, setActiveSessionIdAction } from '@renderer/store/runtime'
 import type { CreateTaskRequest, ScheduledTaskEntity, TaskRunLogEntity, UpdateTaskRequest } from '@renderer/types'
+import { parseAgentConfiguration } from '@renderer/utils/agentConfiguration'
 import { Alert, Button, DatePicker, Empty, Input, Modal, Popconfirm, Select, Spin, Table, Tag, Tooltip } from 'antd'
 import dayjs from 'dayjs'
 import { CalendarClock, Clock, ExternalLink, History, Maximize2, Pause, Play, Search, Trash2 } from 'lucide-react'
@@ -794,7 +795,8 @@ const TasksSettings: FC = () => {
       setAgents(
         agentsRes.data
           .filter((a) => {
-            return a.configuration?.soul_enabled === true || a.configuration?.permission_mode === 'bypassPermissions'
+            const configuration = parseAgentConfiguration(a.configuration)
+            return configuration.soul_enabled === true || configuration.permission_mode === 'bypassPermissions'
           })
           .map((a) => ({ id: a.id, name: a.name ?? a.id }))
       )

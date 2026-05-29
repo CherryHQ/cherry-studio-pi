@@ -16,6 +16,7 @@ import {
   computeModeDefaults,
   defaultConfiguration,
   isSoulModeEnabled,
+  parseAgentSettingsConfiguration,
   SettingsContainer,
   SettingsItem,
   SettingsTitle
@@ -66,10 +67,11 @@ export const ToolsSettings: FC<AgentOrSessionSettingsProps> = ({ agentBase, upda
   const [isUpdatingTools, setIsUpdatingTools] = useState(false)
   const [isUpdatingMcp, setIsUpdatingMcp] = useState(false)
 
-  const selectedMode = useMemo(
-    () => agentBase?.configuration?.permission_mode ?? defaultConfiguration.permission_mode,
-    [agentBase?.configuration?.permission_mode]
+  const configuration = useMemo(
+    () => parseAgentSettingsConfiguration(agentBase?.configuration),
+    [agentBase?.configuration]
   )
+  const selectedMode = configuration.permission_mode ?? defaultConfiguration.permission_mode
   const selectedModeCard = useMemo(() => permissionModeCards.find((card) => card.mode === selectedMode), [selectedMode])
   const availableTools = useMemo(() => agentBase?.tools ?? [], [agentBase?.tools])
   const autoToolIds = useMemo(() => computeModeDefaults(selectedMode, availableTools), [availableTools, selectedMode])

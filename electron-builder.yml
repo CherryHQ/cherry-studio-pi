@@ -144,7 +144,7 @@ artifactBuildCompleted: scripts/artifact-build-completed.js
 releaseInfo:
   releaseNotes: |
     <!--LANG:en-->
-    Cherry Studio Pi 1.9.9 - Storage Reliability & Bug Fixes
+    Cherry Studio Pi 1.9.10 - Agent Stability & Release Hardening
 
     ✨ New Features
     - [Storage] Completed the Storage v2 reliability layer with stable data roots, authoritative writes, read-through recovery, backup/restore validation, and secret-backed local configuration
@@ -153,6 +153,8 @@ releaseInfo:
     - [Agents] DeepSeek V4 Flash and MiMo V2.5+ now properly support 1M context window in Claude Code
 
     🐛 Bug Fixes
+    - [Agents] Hardened agent configuration parsing to prevent malformed local data from causing settings pages or agent creation/editing flows to white-screen
+    - [Agents] Normalized avatar, Soul Mode, heartbeat, permission mode, and advanced configuration reads through a shared safe parser
     - [Packaging] Fixed packaged app startup failures caused by missing platform ripgrep binaries
     - [Profile] Reworked the default user avatar with a flat circular-safe design
     - [Web Search] Fixed ExaMCP web search not returning result content correctly
@@ -166,7 +168,7 @@ releaseInfo:
     - [Providers] Fixed AIHubMix reasoning effort configuration not working properly
 
     <!--LANG:zh-CN-->
-    Cherry Studio Pi 1.9.9 - 存储可靠性与错误修复
+    Cherry Studio Pi 1.9.10 - 智能体稳定性与发布加固
 
     ✨ 新功能
     - [存储] 完成 Storage v2 可靠性层，覆盖稳定数据根、权威写入、读穿透恢复、备份/恢复校验和敏感配置本地加密存储
@@ -175,6 +177,8 @@ releaseInfo:
     - [智能体] DeepSeek V4 Flash 和 MiMo V2.5+ 现在在 Claude Code 中正确支持 1M 上下文窗口
 
     🐛 问题修复
+    - [智能体] 加固智能体配置解析，避免本地异常配置导致设置页或创建/编辑流程白屏
+    - [智能体] 将头像、Soul Mode、心跳、权限模式和高级配置读取统一收敛到安全解析入口
     - [打包] 修复安装包因缺少平台 ripgrep 二进制导致的启动失败
     - [个人资料] 重新设计默认用户头像，采用扁平且适配圆形裁切的样式
     - [网络搜索] 修复 ExaMCP 网络搜索无法正确返回结果内容的问题

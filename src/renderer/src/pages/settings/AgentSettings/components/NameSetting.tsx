@@ -1,11 +1,11 @@
 import { EmojiAvatarWithPicker } from '@renderer/components/Avatar/EmojiAvatarWithPicker'
 import type { AgentBaseWithId, UpdateAgentBaseForm, UpdateAgentFunctionUnion } from '@renderer/types'
-import { AgentConfigurationSchema, isAgentEntity, isAgentType } from '@renderer/types'
+import { isAgentEntity, isAgentType } from '@renderer/types'
 import { Input } from 'antd'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { SettingsItem, SettingsTitle } from '../shared'
+import { parseAgentSettingsConfiguration, SettingsItem, SettingsTitle } from '../shared'
 
 export interface NameSettingsProps {
   base: AgentBaseWithId | undefined | null
@@ -23,13 +23,15 @@ export const NameSetting = ({ base, update }: NameSettingsProps) => {
 
   // Avatar logic
   const isAgent = isAgentEntity(base)
-  const isDefault = isAgent ? isAgentType(base.configuration?.avatar) : false
-  const [emoji, setEmoji] = useState(isAgent && !isDefault ? (base.configuration?.avatar ?? '⭐️') : '⭐️')
+  const baseConfiguration = isAgent ? parseAgentSettingsConfiguration(base.configuration) : undefined
+  const baseAvatar = baseConfiguration?.avatar
+  const isDefault = isAgent && typeof baseAvatar === 'string' ? isAgentType(baseAvatar) : false
+  const [emoji, setEmoji] = useState(isAgent && !isDefault ? (baseAvatar ?? '⭐️') : '⭐️')
 
   const updateAvatar = useCallback(
     (avatar: string) => {
       if (!isAgent || !base) return
-      const parsedConfiguration = AgentConfigurationSchema.parse(base.configuration ?? {})
+      const parsedConfiguration = parseAgentSettingsConfiguration(base.configuration)
       const payload = {
         id: base.id,
         configuration: {
@@ -53,7 +55,7 @@ export const NameSetting = ({ base, update }: NameSettingsProps) => {
             emoji={emoji}
             onPick={(emoji: string) => {
               setEmoji(emoji)
-              if (isAgent && emoji === base?.configuration?.avatar) return
+              if (isAgent && emoji === baseAvatar) return
               updateAvatar(emoji)
             }}
           />

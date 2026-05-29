@@ -4,7 +4,7 @@ import { useActiveSession } from '@renderer/hooks/agents/useActiveSession'
 import { useAgent } from '@renderer/hooks/agents/useAgent'
 import { useUpdateAgent } from '@renderer/hooks/agents/useUpdateAgent'
 import { useUpdateSession } from '@renderer/hooks/agents/useUpdateSession'
-import { computeModeDefaults, defaultConfiguration } from '@renderer/pages/settings/AgentSettings/shared'
+import { computeModeDefaults, parseAgentSettingsConfiguration } from '@renderer/pages/settings/AgentSettings/shared'
 import type { PermissionMode } from '@renderer/types'
 import { Tooltip } from 'antd'
 import { uniq } from 'lodash'
@@ -44,14 +44,22 @@ const permissionModeTool = defineTool({
     const { updateAgent } = useUpdateAgent()
     const { updateSession } = useUpdateSession(agentId ?? null)
 
-    const currentMode = session?.configuration?.permission_mode ?? 'default'
+    const sessionConfiguration = useMemo(
+      () => parseAgentSettingsConfiguration(session?.configuration),
+      [session?.configuration]
+    )
+    const agentConfiguration = useMemo(
+      () => parseAgentSettingsConfiguration(agent?.configuration),
+      [agent?.configuration]
+    )
+    const currentMode = sessionConfiguration.permission_mode ?? 'default'
     const availableTools = useMemo(() => session?.tools ?? [], [session?.tools])
 
     const handleSelectMode = useCallback(
       (nextMode: PermissionMode) => {
         if (!session || nextMode === currentMode) return
 
-        const configuration = session.configuration ?? defaultConfiguration
+        const configuration = parseAgentSettingsConfiguration(session.configuration)
         const currentAutoToolIds = computeModeDefaults(currentMode, availableTools)
         const nextAutoToolIds = computeModeDefaults(nextMode, availableTools)
 
@@ -63,12 +71,12 @@ const permissionModeTool = defineTool({
 
         // Disable soul mode on the agent when switching away from bypassPermissions
         // Check agent-level soul_enabled since session may not have it
-        if (nextMode !== 'bypassPermissions' && agentId && agent?.configuration?.soul_enabled === true) {
+        if (nextMode !== 'bypassPermissions' && agentId && agentConfiguration.soul_enabled === true) {
           updatedConfiguration.soul_enabled = false
           void updateAgent(
             {
               id: agentId,
-              configuration: { ...agent.configuration, soul_enabled: false, permission_mode: nextMode }
+              configuration: { ...agentConfiguration, soul_enabled: false, permission_mode: nextMode }
             },
             { showSuccessToast: false }
           )
@@ -83,7 +91,7 @@ const permissionModeTool = defineTool({
           { showSuccessToast: false }
         )
       },
-      [currentMode, session, availableTools, updateSession, agentId, agent, updateAgent]
+      [currentMode, session, availableTools, updateSession, agentId, agentConfiguration, updateAgent]
     )
 
     const handleClick = useCallback(() => {

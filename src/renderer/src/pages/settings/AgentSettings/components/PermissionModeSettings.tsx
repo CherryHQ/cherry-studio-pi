@@ -12,6 +12,7 @@ import {
   type AgentOrSessionSettingsProps,
   computeModeDefaults,
   defaultConfiguration,
+  parseAgentSettingsConfiguration,
   SettingsContainer,
   SettingsItem,
   SettingsTitle
@@ -21,11 +22,11 @@ export const PermissionModeSettings: FC<AgentOrSessionSettingsProps> = ({ agentB
   const { t } = useTranslation()
   const [isUpdatingMode, setIsUpdatingMode] = useState(false)
 
-  const configuration = useMemo(() => agentBase?.configuration ?? defaultConfiguration, [agentBase?.configuration])
-  const selectedMode = useMemo(
-    () => agentBase?.configuration?.permission_mode ?? defaultConfiguration.permission_mode,
-    [agentBase?.configuration?.permission_mode]
+  const configuration = useMemo(
+    () => parseAgentSettingsConfiguration(agentBase?.configuration),
+    [agentBase?.configuration]
   )
+  const selectedMode = configuration.permission_mode ?? defaultConfiguration.permission_mode
   const availableTools = useMemo(() => agentBase?.tools ?? [], [agentBase?.tools])
   const autoToolIds = useMemo(() => computeModeDefaults(selectedMode, availableTools), [availableTools, selectedMode])
   const approvedToolIds = useMemo(() => {

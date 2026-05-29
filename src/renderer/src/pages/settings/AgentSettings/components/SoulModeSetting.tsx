@@ -1,15 +1,10 @@
-import type {
-  AgentBaseWithId,
-  AgentConfiguration,
-  UpdateAgentBaseForm,
-  UpdateAgentFunctionUnion
-} from '@renderer/types'
+import type { AgentBaseWithId, UpdateAgentBaseForm, UpdateAgentFunctionUnion } from '@renderer/types'
 import { Switch, Tooltip } from 'antd'
 import { Info } from 'lucide-react'
 import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { isSoulModeEnabled, SettingsItem, SettingsTitle } from '../shared'
+import { isSoulModeEnabled, parseAgentSettingsConfiguration, SettingsItem, SettingsTitle } from '../shared'
 
 interface SoulModeSettingProps {
   base: AgentBaseWithId | undefined | null
@@ -19,7 +14,7 @@ interface SoulModeSettingProps {
 export const SoulModeSetting = ({ base: agentBase, update }: SoulModeSettingProps) => {
   const { t } = useTranslation()
 
-  const config = useMemo(() => agentBase?.configuration ?? ({} as AgentConfiguration), [agentBase?.configuration])
+  const config = useMemo(() => parseAgentSettingsConfiguration(agentBase?.configuration), [agentBase?.configuration])
   const soulEnabled = isSoulModeEnabled(agentBase?.configuration)
 
   const handleToggle = useCallback(
