@@ -31,6 +31,13 @@ import { PDFDocument } from 'pdf-lib'
 import { v4 as uuidv4 } from 'uuid'
 import WordExtractor from 'word-extractor'
 
+import {
+  CUSTOM_MIN_APPS_FILE_NAME,
+  hydrateCustomMiniAppsFileFromStorageV2,
+  mirrorCustomMiniAppsContentToStorageV2,
+  writeLegacyCustomMiniAppsFile
+} from './minapps/CustomMiniAppsStorageV2'
+
 const logger = loggerService.withContext('FileStorage')
 
 /**
@@ -124,10 +131,6 @@ class FileStorage {
       }
       if (!fs.existsSync(this.notesDir)) {
         fs.mkdirSync(this.notesDir, { recursive: true })
-      }
-      const customMinAppsPath = path.join(this.storageDir, 'custom-minapps.json')
-      if (!fs.existsSync(customMinAppsPath)) {
-        fs.writeFileSync(customMinAppsPath, '[]', 'utf8')
       }
     } catch (error) {
       logger.error('Failed to initialize storage directories:', error as Error)
@@ -528,7 +531,43 @@ class FileStorage {
     detectEncoding: boolean = false
   ): Promise<string> => {
     const filePath = path.join(this.storageDir, id)
+    if (id === CUSTOM_MIN_APPS_FILE_NAME) {
+      return this.readCustomMiniAppsFile(filePath)
+    }
     return this.readFileCore(filePath, detectEncoding)
+  }
+
+  private async readCustomMiniAppsFile(filePath: string): Promise<string> {
+    if (!fs.existsSync(filePath)) {
+      const restored = await hydrateCustomMiniAppsFileFromStorageV2(filePath).catch((error) => {
+        logger.warn('Failed to hydrate custom mini apps from Storage v2', {
+          error: error instanceof Error ? error.message : String(error)
+        })
+        return null
+      })
+      if (restored !== null) return restored
+
+      const emptyContent = '[]'
+      await writeLegacyCustomMiniAppsFile(filePath, emptyContent).catch((error) => {
+        logger.warn('Failed to initialize custom mini apps legacy file', {
+          error: error instanceof Error ? error.message : String(error)
+        })
+      })
+      await mirrorCustomMiniAppsContentToStorageV2(emptyContent).catch((error) => {
+        logger.warn('Failed to initialize custom mini apps in Storage v2', {
+          error: error instanceof Error ? error.message : String(error)
+        })
+      })
+      return emptyContent
+    }
+
+    const content = await this.readFileCore(filePath)
+    await mirrorCustomMiniAppsContentToStorageV2(content).catch((error) => {
+      logger.warn('Failed to mirror legacy custom mini apps to Storage v2', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+    })
+    return content
   }
 
   /**
@@ -1562,6 +1601,13 @@ class FileStorage {
       }
 
       await fs.promises.writeFile(filePath, content, 'utf8')
+      if (id === CUSTOM_MIN_APPS_FILE_NAME) {
+        await mirrorCustomMiniAppsContentToStorageV2(content).catch((error) => {
+          logger.warn('Failed to mirror custom mini apps write to Storage v2', {
+            error: error instanceof Error ? error.message : String(error)
+          })
+        })
+      }
       logger.debug(`File written successfully: ${filePath}`)
     } catch (error) {
       logger.error('Failed to write file:', error as Error)
