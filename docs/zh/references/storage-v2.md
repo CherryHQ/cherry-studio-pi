@@ -35,6 +35,17 @@ Cherry Studio Pi 当前的数据分散在多个存储中：
 - Storage v2 不把 Redux、IndexedDB、electron-store 立刻删除；它们会先降级为 cache 或 legacy source。
 - Storage v2 不在没有用户授权的情况下跨设备同步敏感密钥。
 
+## Legacy Runtime 清理策略
+
+Storage v2 切换后，旧存储不再统一视为“待删除垃圾”。它们分成三类处理：
+
+- Runtime cache：Redux / Local Storage、Dexie / IndexedDB、`Data/agents.db`、`Data/app.db` 等仍被当前运行时读取，保留为可重建缓存，恢复后由 Storage v2 投影回去。
+- Runtime projection：OpenClaw `openclaw.json`、OVMS `models/config.json`、MCP `memory.json` 等外部工具仍需要本地文件，Storage v2 保存权威副本，本地文件只负责让外部进程运行。
+- Legacy source：旧 `userData/agents.db`、旧 `userData/memories.db` 这类历史来源继续留在 audit 里，直到有用户可控的归档/删除入口。
+
+敏感 legacy projection 不能直接删除。`LegacyRuntimeCleanupService` 只会在 Storage v2 已经存在 secret ref 或显式 cleared marker 时，把可清理的旧敏感文件归档到
+`Data/legacy/sensitive-projections-*`；真正归档前必须先创建 `before-sensitive-legacy-cleanup` Storage v2 snapshot。当前可自动归档的范围只包括 Anthropic OAuth 旧 JSON 和 Copilot 旧 token 文件；OpenClaw、WeChat、MCP memory 等运行时仍需要的投影继续保留。
+
 ## 总体架构
 
 ```text

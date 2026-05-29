@@ -24,6 +24,13 @@ export function registerStorageV2IpcHandlers() {
     storageV2Service.restoreBackup(backupPath)
   )
   ipcMain.handle(IpcChannel.StorageV2_GetMigrationAudit, () => storageV2Service.getMigrationAudit())
+  ipcMain.handle(IpcChannel.StorageV2_GetLegacyRuntimePolicies, () => storageV2Service.getLegacyRuntimePolicies())
+  ipcMain.handle(IpcChannel.StorageV2_GetSensitiveLegacyProjectionCleanupPlan, () =>
+    storageV2Service.getSensitiveLegacyProjectionCleanupPlan()
+  )
+  ipcMain.handle(IpcChannel.StorageV2_CleanupSensitiveLegacyProjections, (_event, options?: unknown) =>
+    storageV2Service.cleanupSensitiveLegacyProjections(options as any)
+  )
   ipcMain.handle(IpcChannel.StorageV2_GetStats, () => storageV2Service.getStats())
   ipcMain.handle(IpcChannel.StorageV2_GetIntegrityReport, () => storageV2Service.getIntegrityReport())
   ipcMain.handle(IpcChannel.StorageV2_GetCoreSnapshot, (_event, options?: unknown) =>

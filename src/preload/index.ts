@@ -267,6 +267,11 @@ const api = {
     validateBackup: (backupPath: string) => ipcRenderer.invoke(IpcChannel.StorageV2_ValidateBackup, backupPath),
     restoreBackup: (backupPath: string) => ipcRenderer.invoke(IpcChannel.StorageV2_RestoreBackup, backupPath),
     getMigrationAudit: () => ipcRenderer.invoke(IpcChannel.StorageV2_GetMigrationAudit),
+    getLegacyRuntimePolicies: () => ipcRenderer.invoke(IpcChannel.StorageV2_GetLegacyRuntimePolicies),
+    getSensitiveLegacyProjectionCleanupPlan: () =>
+      ipcRenderer.invoke(IpcChannel.StorageV2_GetSensitiveLegacyProjectionCleanupPlan),
+    cleanupSensitiveLegacyProjections: (options?: { dryRun?: boolean }) =>
+      ipcRenderer.invoke(IpcChannel.StorageV2_CleanupSensitiveLegacyProjections, options),
     getStats: () => ipcRenderer.invoke(IpcChannel.StorageV2_GetStats),
     getIntegrityReport: () => ipcRenderer.invoke(IpcChannel.StorageV2_GetIntegrityReport),
     getCoreSnapshot: (options?: { includeSecrets?: boolean }) =>

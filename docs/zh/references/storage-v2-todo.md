@@ -2,7 +2,7 @@
 
 更新时间：2026-05-29
 
-固定进度口径：整体 90%。这表示 Storage v2 并行保护层、主要数据 mirror/read-through、StorageService-first 主写保护、端到端备份/恢复验证、漏网路径归类/补洞和同步/账号体系前置策略已经完成，剩余工作集中在 legacy runtime 清理、最终测试矩阵和收尾实机验证。
+固定进度口径：整体 92%。这表示 Storage v2 并行保护层、主要数据 mirror/read-through、StorageService-first 主写保护、端到端备份/恢复验证、漏网路径归类/补洞、同步/账号体系前置策略和 legacy runtime 清理策略已经完成，剩余工作集中在最终测试矩阵和收尾实机验证。
 
 跟踪规则：
 
@@ -127,10 +127,10 @@
 
 ## 8. 收尾和清理
 
-状态：未完成
+状态：进行中
 
-- [ ] 明确哪些 legacy 文件/库保留为 runtime cache。
-- [ ] 对可清理的 legacy 明文敏感数据做安全归档或清除，清理前必须有快照。
-- [ ] 更新 Storage v2 文档，避免文档和代码进度不一致。
+- [x] 明确哪些 legacy 文件/库保留为 runtime cache；`LegacyRuntimeCleanupService` 已固化 Redux/IndexedDB、`Data/agents.db`、`Data/app.db`、OpenClaw、OVMS、MCP memory、旧 userData DB 等 retention policy。
+- [x] 对可清理的 legacy 明文敏感数据做安全归档或清除，清理前必须有快照；Anthropic OAuth 旧 JSON 和 Copilot 旧 token 文件只有在 Storage v2 secret ref / cleared marker 存在时才会进入归档计划，非 dry-run 归档前会先创建 `before-sensitive-legacy-cleanup` snapshot。
+- [x] 更新 Storage v2 文档，避免文档和代码进度不一致；`storage-v2.md` 已补 legacy runtime 清理策略。
 - [ ] 做一次从安装包启动的真实恢复验证。
 - [ ] 最终 review 后再决定 push/release。

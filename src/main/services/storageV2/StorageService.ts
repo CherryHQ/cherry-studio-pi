@@ -9,6 +9,7 @@ import { storageV2LegacyAgentDbImportService } from './LegacyAgentDbImportServic
 import { storageV2LegacyAppDbImportService } from './LegacyAppDbImportService'
 import { type StorageV2LegacyDexieImportOptions, storageV2LegacyDexieImportService } from './LegacyDexieImportService'
 import { type StorageV2LegacyImportOptions, storageV2LegacyReduxImportService } from './LegacyReduxImportService'
+import { listStorageV2LegacyRuntimePolicies, storageV2LegacyRuntimeCleanupService } from './LegacyRuntimeCleanupService'
 import { storageV2MigrationAuditService } from './MigrationAuditService'
 import { type StorageV2MigrationRunInput, storageV2MigrationRunService } from './MigrationRunService'
 import { storageV2SecretVaultService } from './SecretVaultService'
@@ -520,6 +521,19 @@ export class StorageV2Service {
 
   async getMigrationAudit() {
     return storageV2MigrationAuditService.runAudit()
+  }
+
+  getLegacyRuntimePolicies() {
+    return listStorageV2LegacyRuntimePolicies()
+  }
+
+  async getSensitiveLegacyProjectionCleanupPlan() {
+    return storageV2LegacyRuntimeCleanupService.getSensitiveLegacyProjectionPlan()
+  }
+
+  async cleanupSensitiveLegacyProjections(options?: { dryRun?: boolean }) {
+    await this.flushPendingRuntimeMirrors()
+    return storageV2LegacyRuntimeCleanupService.cleanupSensitiveLegacyProjections(options)
   }
 
   async getStats() {
