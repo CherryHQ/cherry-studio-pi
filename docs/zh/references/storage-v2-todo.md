@@ -76,7 +76,7 @@
 - [x] 验证恢复后所有列表、详情、搜索、导出、agent 历史都能读到；restore 流程已断言 agent/file/app data legacy projection 在恢复后执行并返回 agent/session/history/channel/file/workbench/sync 计数，普通会话列表/消息/搜索/导出、agent history、file/app data read-through 已由 TopicManager、ConversationHydration、AgentRuntimeRecovery、FileRecovery、AppDataRuntimeRecovery 测试覆盖。
 - [x] 验证 `Perry Studio -> Cherry Studio Pi`、username 变化、appId/productName 变化；DataRootService 已覆盖 Perry/Cherry 旧 root 兼容、旧 username configured root 缺失时不遮蔽当前 root，Backup validation 已覆盖 legacy Perry Studio manifest 仍可被 Cherry Studio Pi 接受。
 - [x] 验证自定义 App Data 路径迁移；AppDataMigrationService 已覆盖复制时排除 stale `Data`/restore staging、外部 active Data root 优先、自定义新 appData 路径不能位于 active Storage v2 data root 内，迁移前会等待 secret vault idle 并使用 Storage v2 snapshot 替换 main.db。
-- [ ] 验证旧 `.bak` / legacy JSON 备份恢复不会被 Storage v2 旧快照覆盖。
+- [x] 验证旧 `.bak` / legacy JSON 备份恢复不会被 Storage v2 旧快照覆盖；renderer legacy restore 已在导入 restored IndexedDB 前关闭 Storage v2 auto hydrate、暂停 runtime mirror 并用 pruneMissing mirror 新 legacy 数据，main startup restore 已覆盖先完成 `Data.restore` 替换并 activate restored data root，再允许后续启动 hydration。
 - [ ] 验证 secret vault 不可解密、缺失 secret ref、旧备份缺表时的 warning 行为。
 
 ## 5. 同步/账号体系前置设计

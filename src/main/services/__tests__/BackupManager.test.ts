@@ -105,6 +105,7 @@ vi.mock('fs-extra', () => ({
     realpath: vi.fn(),
     readFile: vi.fn(),
     readJson: vi.fn(),
+    rename: vi.fn(),
     writeFile: vi.fn(),
     writeJson: vi.fn(),
     createWriteStream: vi.fn(),
@@ -123,6 +124,7 @@ vi.mock('fs-extra', () => ({
   realpath: vi.fn(),
   readFile: vi.fn(),
   readJson: vi.fn(),
+  rename: vi.fn(),
   writeFile: vi.fn(),
   writeJson: vi.fn(),
   createWriteStream: vi.fn(),
@@ -482,6 +484,7 @@ describe('BackupManager.restore temp isolation', () => {
     backupManager = new BackupManager()
     vi.mocked(fs.ensureDir).mockResolvedValue(undefined as never)
     vi.mocked(fs.remove).mockResolvedValue(undefined as never)
+    vi.mocked(fs.rename).mockResolvedValue(undefined as never)
     vi.mocked(fs.pathExists).mockResolvedValue(false as never)
     vi.mocked(fs.readFile).mockResolvedValue('{"version":5}' as never)
     mockStreamZipAsync.mockImplementation(() => mockStreamZipInstance)
@@ -498,6 +501,20 @@ describe('BackupManager.restore temp isolation', () => {
       vi.mocked(fs.ensureDir).mock.invocationCallOrder[0]
     )
     expect(mockStreamZipInstance.extract).toHaveBeenCalledWith(null, tempDir)
+  })
+
+  it('completes staged Data restores and activates the restored Storage v2 root before startup continues', async () => {
+    vi.mocked(fs.pathExists).mockImplementation(async (candidate) => String(candidate) === '/mock/data.restore')
+    mockStorageV2DataRootService.activateDataRoot.mockReturnValue({ workspaceId: 'restored-workspace' })
+
+    await BackupManager.handleStartupRestore()
+
+    expect(fs.remove).toHaveBeenCalledWith('/mock/data')
+    expect(fs.rename).toHaveBeenCalledWith('/mock/data.restore', '/mock/data')
+    expect(mockStorageV2DataRootService.activateDataRoot).toHaveBeenCalledWith('/mock/data')
+    expect(vi.mocked(fs.rename).mock.invocationCallOrder[0]).toBeLessThan(
+      mockStorageV2DataRootService.activateDataRoot.mock.invocationCallOrder[0]
+    )
   })
 
   it('stages direct backup Data restores beside the active Data root', async () => {
