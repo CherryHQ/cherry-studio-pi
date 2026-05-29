@@ -6,6 +6,7 @@ import { HOME_CHERRY_DIR } from '@shared/config/constant'
 import { app } from 'electron'
 
 import { storageV2DataRootService } from './DataRootService'
+import { storageV2SettingsRepository } from './StorageV2Repositories'
 import type { StorageV2AuditItem, StorageV2MigrationAudit } from './types'
 
 type PathStats = {
@@ -51,6 +52,19 @@ function safeAuditIdSegment(value: string) {
       .replace(/^-|-$/g, '')
       .toLowerCase() || 'entry'
   )
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function isSameOrInside(childPath: string, parentPath: string) {
+  const resolvedChild = path.resolve(childPath)
+  const resolvedParent = path.resolve(parentPath)
+  if (resolvedChild === resolvedParent) return true
+
+  const relativePath = path.relative(resolvedParent, resolvedChild)
+  return Boolean(relativePath && !relativePath.startsWith('..') && !path.isAbsolute(relativePath))
 }
 
 async function collectStats(targetPath: string): Promise<PathStats> {
@@ -149,6 +163,35 @@ async function auditUnclassifiedDataRootEntries(dataRoot: string): Promise<Stora
   } catch {
     return []
   }
+}
+
+async function getStoredReduxNoteState(): Promise<Record<string, unknown> | null> {
+  try {
+    const value = await storageV2SettingsRepository.get('redux.note')
+    return isRecord(value) ? value : null
+  } catch {
+    return null
+  }
+}
+
+async function auditExternalNotesPath(dataRoot: string): Promise<StorageV2AuditItem | null> {
+  const noteState = await getStoredReduxNoteState()
+  const notesPath = typeof noteState?.notesPath === 'string' ? noteState.notesPath.trim() : ''
+  if (!notesPath) return null
+
+  const resolvedNotesPath = path.resolve(notesPath)
+  if (isSameOrInside(resolvedNotesPath, dataRoot)) {
+    return null
+  }
+
+  return auditPath('external-notes-path', 'Configured external notes path', resolvedNotesPath, {
+    actionRequired: true,
+    category: 'user-asset',
+    coverage: 'legacy-only',
+    risk: 'high',
+    notes:
+      'The selected notes folder is outside the Storage v2 data root. The path setting is mirrored, but note contents are not copied by Storage v2 backups.'
+  })
 }
 
 export class StorageV2MigrationAuditService {
@@ -406,7 +449,12 @@ export class StorageV2MigrationAuditService {
         risk: 'medium'
       })
     ])
-    const items = [...knownItems, ...(await auditUnclassifiedDataRootEntries(dataPath))]
+    const externalNotesItem = await auditExternalNotesPath(dataPath)
+    const items = [
+      ...knownItems,
+      ...(externalNotesItem ? [externalNotesItem] : []),
+      ...(await auditUnclassifiedDataRootEntries(dataPath))
+    ]
 
     const warnings: string[] = []
     const manifestCandidates = dataRootInfo.candidates.filter((candidate) => candidate.hasManifest)
@@ -453,6 +501,12 @@ export class StorageV2MigrationAuditService {
         `Legacy-only data paths were detected: ${legacyOnlyItems
           .map((item) => `${item.label} (${item.path})`)
           .join(', ')}. Classify, migrate, or archive them before finalizing the Storage v2 cutover.`
+      )
+    }
+    const missingExternalNotesItem = items.find((item) => item.id === 'external-notes-path' && !item.exists)
+    if (missingExternalNotesItem) {
+      warnings.push(
+        `Configured external notes path is missing: ${missingExternalNotesItem.path}. Restore will fall back to the default notes directory unless this path is made available.`
       )
     }
 

@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
   fs: {
     stat: vi.fn(),
     readdir: vi.fn()
+  },
+  settingsRepository: {
+    get: vi.fn()
   }
 }))
 
@@ -20,6 +23,10 @@ vi.mock('node:fs/promises', () => ({
 
 vi.mock('../DataRootService', () => ({
   storageV2DataRootService: mocks.dataRootService
+}))
+
+vi.mock('../StorageV2Repositories', () => ({
+  storageV2SettingsRepository: mocks.settingsRepository
 }))
 
 describe('StorageV2MigrationAuditService', () => {
@@ -35,6 +42,7 @@ describe('StorageV2MigrationAuditService', () => {
       candidates: []
     })
     vi.mocked(fs.stat).mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }))
+    mocks.settingsRepository.get.mockResolvedValue(null)
   })
 
   it('audits legacy runtime directories under the active Storage v2 data root', async () => {
@@ -111,6 +119,59 @@ describe('StorageV2MigrationAuditService', () => {
       risk: 'medium'
     })
     expect(audit.warnings.some((warning) => warning.includes('Unclassified Data entry'))).toBe(true)
+  })
+
+  it('warns when a configured notes directory lives outside the Storage v2 data root', async () => {
+    mocks.settingsRepository.get.mockResolvedValue({
+      notesPath: '/mock/external-notes'
+    })
+    vi.mocked(fs.stat).mockImplementation(async (targetPath) => {
+      if (String(targetPath) === '/mock/external-notes') {
+        return {
+          isDirectory: () => true,
+          isFile: () => false,
+          size: 0
+        } as any
+      }
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+    })
+    vi.mocked(fs.readdir).mockImplementation(async (targetPath) => {
+      if (String(targetPath) === '/mock/external-notes') {
+        return [
+          {
+            name: 'note.md',
+            isDirectory: () => false,
+            isFile: () => true
+          }
+        ] as any
+      }
+      return [] as any
+    })
+
+    const { StorageV2MigrationAuditService } = await import('../MigrationAuditService')
+    const audit = await new StorageV2MigrationAuditService().runAudit()
+    const item = audit.items.find((entry) => entry.id === 'external-notes-path')
+
+    expect(item).toMatchObject({
+      actionRequired: true,
+      category: 'user-asset',
+      coverage: 'legacy-only',
+      exists: true,
+      path: '/mock/external-notes',
+      risk: 'high'
+    })
+    expect(audit.warnings.some((warning) => warning.includes('/mock/external-notes'))).toBe(true)
+  })
+
+  it('does not warn for the default notes directory under the Storage v2 data root', async () => {
+    mocks.settingsRepository.get.mockResolvedValue({
+      notesPath: '/mock/stable-data-root/Notes'
+    })
+
+    const { StorageV2MigrationAuditService } = await import('../MigrationAuditService')
+    const audit = await new StorageV2MigrationAuditService().runAudit()
+
+    expect(audit.items.some((entry) => entry.id === 'external-notes-path')).toBe(false)
   })
 
   it('warns when legacy-only action-required paths still exist', async () => {

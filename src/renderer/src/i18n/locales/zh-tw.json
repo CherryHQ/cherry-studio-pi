@@ -4597,6 +4597,7 @@
           "channels": "Channel 執行階段檔案",
           "copilot_token_legacy": "設定目錄 Copilot 權杖",
           "data": "目前 Data 目錄",
+          "external_notes_path": "外部筆記目錄",
           "files": "上傳檔案",
           "home_config": "Home config.json",
           "indexeddb": "Chromium IndexedDB",

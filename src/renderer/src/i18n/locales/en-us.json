@@ -4597,6 +4597,7 @@
           "channels": "Channel runtime files",
           "copilot_token_legacy": "Config Copilot token",
           "data": "Current Data directory",
+          "external_notes_path": "External notes directory",
           "files": "Uploaded files",
           "home_config": "Home config.json",
           "indexeddb": "Chromium IndexedDB",

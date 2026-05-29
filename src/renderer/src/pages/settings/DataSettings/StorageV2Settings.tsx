@@ -146,6 +146,7 @@ const AUDIT_ITEM_LABEL_KEYS: Record<string, string> = {
   channels: 'settings.data.storage_v2.audit_items.channels',
   'copilot-token-legacy': 'settings.data.storage_v2.audit_items.copilot_token_legacy',
   data: 'settings.data.storage_v2.audit_items.data',
+  'external-notes-path': 'settings.data.storage_v2.audit_items.external_notes_path',
   files: 'settings.data.storage_v2.audit_items.files',
   'home-config': 'settings.data.storage_v2.audit_items.home_config',
   indexeddb: 'settings.data.storage_v2.audit_items.indexeddb',
