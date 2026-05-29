@@ -3,6 +3,7 @@ import path from 'node:path'
 
 import { loggerService } from '@logger'
 import { isMac } from '@main/constant'
+import { appCapabilityService } from '@main/services/appCapabilities'
 import { reduxService } from '@main/services/ReduxService'
 import { windowService } from '@main/services/WindowService'
 import { getName, getNotesDir, isPathInside, scanDir } from '@main/utils/file'
@@ -113,6 +114,50 @@ function flattenNotes(nodes: any[], result: any[] = []) {
 
 appToolsRouter.get('/settings/sections', (_req, res) => {
   res.json({ sections: SETTINGS_SECTIONS })
+})
+
+appToolsRouter.get('/capabilities', (req, res, next) => {
+  try {
+    res.json({
+      capabilities: appCapabilityService.list({
+        domain: req.query.domain ? String(req.query.domain) : undefined,
+        risk: req.query.risk ? (String(req.query.risk) as any) : undefined,
+        includeHidden: req.query.includeHidden === 'true',
+        includeSchemas: req.query.includeSchemas === 'true'
+      })
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+appToolsRouter.get('/capabilities/search', (req, res, next) => {
+  try {
+    res.json({
+      capabilities: appCapabilityService.search({
+        query: String(req.query.q || req.query.query || ''),
+        domain: req.query.domain ? String(req.query.domain) : undefined,
+        risk: req.query.risk ? (String(req.query.risk) as any) : undefined,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+        includeHidden: req.query.includeHidden === 'true',
+        includeSchemas: req.query.includeSchemas === 'true'
+      })
+    })
+  } catch (error) {
+    next(error)
+  }
+})
+
+appToolsRouter.post('/capabilities/:id/call', async (req, res, next) => {
+  try {
+    const result = await appCapabilityService.call(req.params.id, req.body?.input ?? req.body ?? {}, {
+      source: 'api',
+      dryRun: req.body?.dryRun === true
+    })
+    res.status(result.ok ? 200 : 400).json(result)
+  } catch (error) {
+    next(error)
+  }
 })
 
 appToolsRouter.get('/settings', async (_req, res, next) => {

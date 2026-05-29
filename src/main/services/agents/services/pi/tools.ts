@@ -8,6 +8,7 @@ import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core'
 import { Type } from '@earendil-works/pi-ai'
 import { config as apiServerConfig } from '@main/apiServer/config'
 import { promptForToolApproval } from '@main/services/agents/services/ToolPermissionService'
+import { appCapabilityService } from '@main/services/appCapabilities'
 import mcpService from '@main/services/MCPService'
 import getShellEnv from '@main/utils/shell-env'
 import { HOME_CHERRY_DIR } from '@shared/config/constant'
@@ -367,6 +368,36 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
     folders.forEach((folder) => approvedRoots.add(path.resolve(folder)))
   }
 
+  const ensureAppCapabilityAccess = async (toolCallId: string, input: ToolParams, signal?: AbortSignal) => {
+    const capability = appCapabilityService.list({ includeHidden: true }).find((item) => item.id === input.id)
+    if (!capability || capability.risk === 'read') return
+
+    const result = await promptForToolApproval(
+      'AppCallCapability',
+      {
+        id: input.id,
+        input: input.input ?? {},
+        dryRun: input.dryRun === true,
+        capability: {
+          title: capability.title,
+          domain: capability.domain,
+          risk: capability.risk,
+          permissions: capability.permissions,
+          sideEffects: capability.sideEffects
+        }
+      },
+      {
+        toolCallId: toPermissionToolCallId(toolCallId),
+        description: `Allow app capability ${input.id} (${capability.risk})`,
+        signal
+      }
+    )
+
+    if (result.behavior !== 'allow') {
+      throw new Error(result.message ?? `User denied app capability ${input.id}`)
+    }
+  }
+
   const getBrowserController = async () => {
     if (!browserController) {
       const modulePath = '@main/mcpServers/browser/controller'
@@ -600,6 +631,88 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
     }
   }
 
+  const appSearchCapabilitiesTool: AgentTool<any> = {
+    name: 'AppSearchCapabilities',
+    label: 'App Search Capabilities',
+    description:
+      'Search Cherry Studio Pi internal app capabilities by user intent. Use this before AppCallCapability when you need to operate settings, backups, knowledge bases, notes, paintings, agents, storage, or navigation.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Capability search query or user intent' },
+        domain: {
+          type: 'string',
+          description:
+            'Optional capability domain such as settings, storage, knowledge, notes, paintings, agents, or app'
+        },
+        risk: {
+          type: 'string',
+          enum: ['read', 'write', 'destructive', 'external'],
+          description: 'Optional risk filter'
+        },
+        limit: { type: 'number', description: 'Maximum capabilities to return' },
+        includeSchemas: { type: 'boolean', description: 'Include input schemas for returned capabilities' }
+      }
+    } as any,
+    async execute(_toolCallId, params) {
+      return safeExecute('AppSearchCapabilities', async () => {
+        const input = params as ToolParams
+        const capabilities = appCapabilityService.search({
+          query: input.query,
+          domain: input.domain,
+          risk: input.risk,
+          limit: input.limit,
+          includeSchemas: input.includeSchemas === true
+        })
+        const text = truncateOutput(JSON.stringify({ capabilities }, null, 2), MAX_SUCCESS_OUTPUT_CHARS)
+        return textResult(text.text, {
+          count: capabilities.length,
+          truncated: text.truncated
+        })
+      })
+    }
+  }
+
+  const appCallCapabilityTool: AgentTool<any> = {
+    name: 'AppCallCapability',
+    label: 'App Call Capability',
+    description:
+      'Call a Cherry Studio Pi internal app capability directly without HTTP/MCP. Use for app settings, backups, knowledge bases, notes, paintings, agents, storage, and navigation after selecting a capability id.',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Capability id, for example storage.backup.create or settings.value.set' },
+        input: { type: 'object', additionalProperties: true, description: 'Structured capability input' },
+        dryRun: { type: 'boolean', description: 'Preview destructive operations when the capability supports it' }
+      },
+      required: ['id']
+    } as any,
+    async execute(toolCallId, params, signal) {
+      return safeExecute('AppCallCapability', async () => {
+        const input = params as ToolParams
+        await ensureAppCapabilityAccess(toolCallId, input, signal)
+        const result = await appCapabilityService.call(input.id, input.input ?? {}, {
+          source: 'agent',
+          sessionId: options.sessionId,
+          toolCallId: options.sessionId ? `${options.sessionId}:${toolCallId}` : toolCallId,
+          signal,
+          dryRun: input.dryRun === true
+        })
+        const text = truncateOutput(
+          JSON.stringify(result, null, 2),
+          result.ok ? MAX_SUCCESS_OUTPUT_CHARS : MAX_ERROR_OUTPUT_CHARS
+        )
+        return result.ok
+          ? textResult(text.text, { capabilityId: input.id, truncated: text.truncated, structuredContent: result })
+          : errorTextResult(text.text, {
+              capabilityId: input.id,
+              truncated: text.truncated,
+              structuredContent: result
+            })
+      })
+    }
+  }
+
   const browserOpenTool: AgentTool<any> = {
     name: 'BrowserOpen',
     label: 'Browser Open',
@@ -773,6 +886,8 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
     globTool,
     grepTool,
     httpRequestTool,
+    appSearchCapabilitiesTool,
+    appCallCapabilityTool,
     browserOpenTool,
     browserExecuteTool,
     browserResetTool

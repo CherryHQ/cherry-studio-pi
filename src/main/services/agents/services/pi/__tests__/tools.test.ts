@@ -25,11 +25,20 @@ vi.mock('@main/services/MCPService', () => ({
   }
 }))
 
+vi.mock('@main/services/appCapabilities', () => ({
+  appCapabilityService: {
+    list: vi.fn(),
+    search: vi.fn(),
+    call: vi.fn()
+  }
+}))
+
 vi.mock('@main/services/agents/services/ToolPermissionService', () => ({
   promptForToolApproval: vi.fn(async () => ({ behavior: 'allow' }))
 }))
 
 import { promptForToolApproval } from '@main/services/agents/services/ToolPermissionService'
+import { appCapabilityService } from '@main/services/appCapabilities'
 import mcpService from '@main/services/MCPService'
 
 import { createPiMcpTools, createPiTools } from '../tools'
@@ -50,6 +59,10 @@ describe('Pi tools', () => {
     await fs.mkdir(tmpDir, { recursive: true })
     vi.mocked(promptForToolApproval).mockReset()
     vi.mocked(promptForToolApproval).mockResolvedValue({ behavior: 'allow' })
+    vi.mocked(appCapabilityService.list).mockReset()
+    vi.mocked(appCapabilityService.list).mockReturnValue([])
+    vi.mocked(appCapabilityService.search).mockReset()
+    vi.mocked(appCapabilityService.call).mockReset()
   })
 
   afterEach(async () => {
@@ -369,10 +382,96 @@ exit 1
     expect(resultText(result).trim()).toBe('hi')
   })
 
-  it('includes HTTP and browser tools by default', () => {
+  it('includes HTTP, app capability, and browser tools by default', () => {
     const tools = createPiTools(tmpDir, [tmpDir]).map((tool) => tool.name)
 
-    expect(tools).toEqual(expect.arrayContaining(['HTTPRequest', 'BrowserOpen', 'BrowserExecute', 'BrowserReset']))
+    expect(tools).toEqual(
+      expect.arrayContaining([
+        'HTTPRequest',
+        'AppSearchCapabilities',
+        'AppCallCapability',
+        'BrowserOpen',
+        'BrowserExecute',
+        'BrowserReset'
+      ])
+    )
+  })
+
+  it('searches app capabilities through the direct app bridge', async () => {
+    vi.mocked(appCapabilityService.search).mockReturnValueOnce([
+      {
+        id: 'storage.backup.create',
+        domain: 'storage',
+        kind: 'command',
+        title: 'Create local backup',
+        description: 'Create a backup',
+        risk: 'write'
+      } as any
+    ])
+
+    const search = getTool('AppSearchCapabilities', tmpDir, [tmpDir])
+    const result = await search.execute('app-search', {
+      query: 'local backup',
+      limit: 3
+    })
+
+    expect(appCapabilityService.search).toHaveBeenCalledWith({
+      query: 'local backup',
+      domain: undefined,
+      risk: undefined,
+      limit: 3,
+      includeSchemas: false
+    })
+    expect(resultText(result)).toContain('storage.backup.create')
+  })
+
+  it('calls app capabilities through the direct app bridge', async () => {
+    vi.mocked(appCapabilityService.list).mockReturnValueOnce([
+      {
+        id: 'storage.backup.create',
+        domain: 'storage',
+        kind: 'command',
+        title: 'Create local backup',
+        description: 'Create a backup',
+        risk: 'write',
+        permissions: ['storage.backup.write'],
+        sideEffects: ['filesystem.write']
+      } as any
+    ])
+    vi.mocked(appCapabilityService.call).mockResolvedValueOnce({
+      ok: true,
+      summary: 'Backup created',
+      data: { path: '/tmp/backup' }
+    })
+
+    const call = createPiTools(tmpDir, [tmpDir], { sessionId: 'session-1' }).find(
+      (tool) => tool.name === 'AppCallCapability'
+    )!
+    const result = await call.execute('app-call', {
+      id: 'storage.backup.create',
+      input: { reason: 'test' }
+    })
+
+    expect(promptForToolApproval).toHaveBeenCalledWith(
+      'AppCallCapability',
+      expect.objectContaining({
+        id: 'storage.backup.create',
+        input: { reason: 'test' },
+        capability: expect.objectContaining({ risk: 'write' })
+      }),
+      expect.objectContaining({ toolCallId: 'session-1:app-call' })
+    )
+    expect(appCapabilityService.call).toHaveBeenCalledWith(
+      'storage.backup.create',
+      { reason: 'test' },
+      expect.objectContaining({
+        source: 'agent',
+        sessionId: 'session-1',
+        toolCallId: 'session-1:app-call',
+        dryRun: false
+      })
+    )
+    expect(resultText(result)).toContain('Backup created')
   })
 
   it('truncates noisy Bash failures', async () => {

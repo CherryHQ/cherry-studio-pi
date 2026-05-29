@@ -39,6 +39,20 @@ export const builtinTools: Tool[] = [
     type: 'builtin'
   },
   {
+    id: 'AppSearchCapabilities',
+    name: 'AppSearchCapabilities',
+    description: 'Searches Cherry Studio Pi internal app capabilities',
+    requirePermissions: false,
+    type: 'builtin'
+  },
+  {
+    id: 'AppCallCapability',
+    name: 'AppCallCapability',
+    description: 'Calls a Cherry Studio Pi internal app capability directly',
+    requirePermissions: true,
+    type: 'builtin'
+  },
+  {
     id: 'BrowserOpen',
     name: 'BrowserOpen',
     description: 'Opens a URL in the browser automation session',

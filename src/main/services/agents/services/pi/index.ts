@@ -285,12 +285,13 @@ class PiAgentService implements AgentServiceInterface {
 
     return `## Tool Use
 
-Available built-in tools are Bash, Read, Write, Edit, Glob, Grep, HTTPRequest, BrowserOpen, BrowserExecute, and BrowserReset.
+Available built-in tools are Bash, Read, Write, Edit, Glob, Grep, HTTPRequest, AppSearchCapabilities, AppCallCapability, BrowserOpen, BrowserExecute, and BrowserReset.
 
 ${mcpSummary}
 
 Use the least expensive tool first:
 - Use Glob/Grep to locate files or symbols before broad Read calls.
+- Use AppSearchCapabilities and AppCallCapability for Cherry Studio Pi app operations such as settings, backups, knowledge bases, notes, paintings, agents, storage, and navigation. These call internal app services directly and are preferred over HTTPRequest for in-app work.
 - Use HTTPRequest for direct HTTP APIs, downloads, and raw web requests. Use BrowserOpen and BrowserExecute for rendered pages, JavaScript-heavy sites, login flows, or page interaction.
 - For skill discovery, start with Glob pattern ".claude/skills/*/SKILL.md" from the workspace root. Do not probe guessed skill paths with failing Bash commands.
 - Use Read with offset/limit for large files.
