@@ -164,6 +164,18 @@ type WeChatCredentialsStorageV2ReadResult = {
   credentials?: Credentials
 }
 
+type WeChatContextTokensStorageV2Setting = {
+  clearedAt?: string
+  contextTokensSecretRef?: string
+  legacyFallbackAt?: string
+  updatedAt?: string
+}
+
+type WeChatContextTokensStorageV2ReadResult = {
+  cleared: boolean
+  tokens?: Record<string, string>
+}
+
 interface SendTypingReq {
   ilink_user_id: string
   typing_ticket: string
@@ -180,6 +192,7 @@ const QR_POLL_INTERVAL_MS = 2_000
 const MAX_CONTEXT_TOKENS = 1000
 const STORAGE_V2_WECHAT_CREDENTIALS_SCOPE = 'wechat'
 const STORAGE_V2_WECHAT_CREDENTIALS_SETTING_PREFIX = 'wechat.credentials.'
+const STORAGE_V2_WECHAT_CONTEXT_TOKENS_SETTING_PREFIX = 'wechat.contextTokens.'
 
 // --------------- AES-128-ECB helpers ---------------
 
@@ -549,9 +562,19 @@ function getCredentialStorageSettingKey(tokenPath: string): string {
   return `${STORAGE_V2_WECHAT_CREDENTIALS_SETTING_PREFIX}${getCredentialStorageOwnerId(tokenPath)}`
 }
 
+function getContextTokensStorageSettingKey(tokenPath: string): string {
+  return `${STORAGE_V2_WECHAT_CONTEXT_TOKENS_SETTING_PREFIX}${getCredentialStorageOwnerId(tokenPath)}`
+}
+
 function getCredentialsSecretRef(value: unknown): string | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const secretRef = (value as WeChatCredentialsStorageV2Setting).credentialsSecretRef
+  return typeof secretRef === 'string' && secretRef ? secretRef : null
+}
+
+function getContextTokensSecretRef(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const secretRef = (value as WeChatContextTokensStorageV2Setting).contextTokensSecretRef
   return typeof secretRef === 'string' && secretRef ? secretRef : null
 }
 
@@ -562,6 +585,27 @@ function isCredentialsCleared(value: unknown): boolean {
       !Array.isArray(value) &&
       (value as WeChatCredentialsStorageV2Setting).clearedAt
   )
+}
+
+function isContextTokensCleared(value: unknown): boolean {
+  return Boolean(
+    value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      (value as WeChatContextTokensStorageV2Setting).clearedAt
+  )
+}
+
+function normalizeContextTokens(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+
+  const tokens: Record<string, string> = {}
+  for (const [userId, token] of Object.entries(value)) {
+    if (typeof token === 'string' && token) {
+      tokens[userId] = token
+    }
+  }
+  return tokens
 }
 
 async function loadCredentialsFromStorageV2(tokenPath: string): Promise<WeChatCredentialsStorageV2ReadResult> {
@@ -694,6 +738,76 @@ async function clearCredentials(tokenPath: string): Promise<void> {
   await rm(tokenPath, { force: true })
 }
 
+async function loadContextTokensFromStorageV2(tokenPath: string): Promise<WeChatContextTokensStorageV2ReadResult> {
+  const setting = await storageV2SettingsRepository.get(getContextTokensStorageSettingKey(tokenPath))
+  if (isContextTokensCleared(setting)) {
+    return {
+      cleared: true
+    }
+  }
+
+  const secretRef = getContextTokensSecretRef(setting)
+  if (!secretRef) {
+    return {
+      cleared: false
+    }
+  }
+
+  const secret = await storageV2SecretVaultService.getSecret(secretRef)
+  if (!secret) {
+    return {
+      cleared: false
+    }
+  }
+
+  return {
+    cleared: false,
+    tokens: normalizeContextTokens(JSON.parse(secret))
+  }
+}
+
+async function saveContextTokensToStorageV2(tokens: Record<string, string>, tokenPath: string): Promise<void> {
+  const ownerId = getCredentialStorageOwnerId(tokenPath)
+  const secretRef = await storageV2SecretVaultService.setSecret(
+    STORAGE_V2_WECHAT_CREDENTIALS_SCOPE,
+    ownerId,
+    'contextTokens',
+    JSON.stringify(tokens)
+  )
+  await storageV2SettingsRepository.set(
+    getContextTokensStorageSettingKey(tokenPath),
+    {
+      contextTokensSecretRef: secretRef,
+      updatedAt: new Date().toISOString()
+    } satisfies WeChatContextTokensStorageV2Setting,
+    STORAGE_V2_WECHAT_CREDENTIALS_SCOPE
+  )
+}
+
+async function markContextTokensLegacyFallback(tokenPath: string): Promise<void> {
+  const timestamp = new Date().toISOString()
+  await storageV2SettingsRepository.set(
+    getContextTokensStorageSettingKey(tokenPath),
+    {
+      legacyFallbackAt: timestamp,
+      updatedAt: timestamp
+    } satisfies WeChatContextTokensStorageV2Setting,
+    STORAGE_V2_WECHAT_CREDENTIALS_SCOPE
+  )
+}
+
+async function clearContextTokensInStorageV2(tokenPath: string): Promise<void> {
+  const timestamp = new Date().toISOString()
+  await storageV2SettingsRepository.set(
+    getContextTokensStorageSettingKey(tokenPath),
+    {
+      clearedAt: timestamp,
+      updatedAt: timestamp
+    } satisfies WeChatContextTokensStorageV2Setting,
+    STORAGE_V2_WECHAT_CREDENTIALS_SCOPE
+  )
+}
+
 interface LoginOptions {
   baseUrl: string
   tokenPath: string
@@ -793,6 +907,7 @@ export class WeixinBot {
   private readonly onQrUrlCallback?: (url: string) => void
   private readonly handlers: MessageHandler[] = []
   private readonly contextTokens = new Map<string, string>()
+  private readonly contextTokensReady: Promise<void>
   private credentials?: Credentials
   private cursor = ''
   private stopped = false
@@ -807,7 +922,7 @@ export class WeixinBot {
     this.contextTokenPath = options.tokenPath ? options.tokenPath.replace(/\.json$/, '.context-tokens.json') : undefined
     this.onErrorCallback = options.onError
     this.onQrUrlCallback = options.onQrUrl
-    this.restoreContextTokens()
+    this.contextTokensReady = this.restoreContextTokens()
   }
 
   async hasCredentials(): Promise<boolean> {
@@ -849,13 +964,15 @@ export class WeixinBot {
   }
 
   async reply(message: IncomingMessage, text: string): Promise<void> {
+    await this.contextTokensReady
     this.contextTokens.set(message.userId, message._contextToken)
-    this.persistContextTokens()
+    await this.persistContextTokensSafely()
     await this.sendText(message.userId, text, message._contextToken)
     this.stopTyping(message.userId).catch(() => {})
   }
 
   async sendTyping(userId: string): Promise<void> {
+    await this.contextTokensReady
     const contextToken = this.contextTokens.get(userId)
     if (!contextToken) return
 
@@ -867,6 +984,7 @@ export class WeixinBot {
   }
 
   async stopTyping(userId: string): Promise<void> {
+    await this.contextTokensReady
     const contextToken = this.contextTokens.get(userId)
     if (!contextToken) return
 
@@ -878,6 +996,7 @@ export class WeixinBot {
   }
 
   async send(userId: string, text: string): Promise<void> {
+    await this.contextTokensReady
     const contextToken = this.contextTokens.get(userId)
     if (!contextToken) {
       logger.warn('No cached context token, sending without context', { userId })
@@ -923,6 +1042,7 @@ export class WeixinBot {
    * Send an image to a user by uploading to WeChat CDN.
    */
   async sendImage(userId: string, imageData: Buffer): Promise<void> {
+    await this.contextTokensReady
     const contextToken = this.contextTokens.get(userId)
     if (!contextToken) {
       logger.warn('No cached context token for sendImage, sending without context', { userId })
@@ -980,6 +1100,7 @@ export class WeixinBot {
   }
 
   private async runLoop(): Promise<void> {
+    await this.contextTokensReady
     await this.ensureCredentials()
     logger.info('Long-poll loop started')
     let retryDelayMs = 1_000
@@ -1001,7 +1122,7 @@ export class WeixinBot {
         retryDelayMs = 1_000
 
         for (const raw of updates.msgs ?? []) {
-          this.rememberContext(raw)
+          await this.rememberContext(raw)
           const incoming = this.toIncomingMessage(raw)
           if (incoming) {
             await this.dispatchMessage(incoming)
@@ -1017,6 +1138,7 @@ export class WeixinBot {
           this.credentials = undefined
           this.cursor = ''
           this.contextTokens.clear()
+          this.clearPersistedContextTokens()
 
           try {
             await clearCredentials(this.tokenPath!)
@@ -1071,7 +1193,7 @@ export class WeixinBot {
     }
   }
 
-  private rememberContext(message: WeixinMessage): void {
+  private async rememberContext(message: WeixinMessage): Promise<void> {
     const userId = message.message_type === MessageType.USER ? message.from_user_id : message.to_user_id
     if (userId && message.context_token) {
       // Evict oldest entry when map exceeds max size
@@ -1080,7 +1202,7 @@ export class WeixinBot {
         if (oldest !== undefined) this.contextTokens.delete(oldest)
       }
       this.contextTokens.set(userId, message.context_token)
-      this.persistContextTokens()
+      await this.persistContextTokensSafely()
     }
   }
 
@@ -1106,36 +1228,71 @@ export class WeixinBot {
     }
   }
 
-  private persistContextTokens(): void {
-    if (!this.contextTokenPath) return
-    try {
-      const tokens: Record<string, string> = {}
-      for (const [k, v] of this.contextTokens) {
-        tokens[k] = v
-      }
-      writeFile(this.contextTokenPath, JSON.stringify(tokens), { mode: 0o600 }).catch((err) => {
-        logger.warn('Failed to persist context tokens', { error: err instanceof Error ? err.message : String(err) })
-      })
-    } catch (err) {
+  private async persistContextTokensSafely(): Promise<void> {
+    await this.persistContextTokensNow().catch((err) => {
       logger.warn('Failed to persist context tokens', { error: err instanceof Error ? err.message : String(err) })
-    }
+    })
   }
 
-  private restoreContextTokens(): void {
-    if (!this.contextTokenPath) return
+  private async persistContextTokensNow(): Promise<void> {
+    if (!this.contextTokenPath || !this.tokenPath) return
+
+    const tokens = this.serializeContextTokens()
+    try {
+      await saveContextTokensToStorageV2(tokens, this.tokenPath)
+    } catch (error) {
+      logger.warn('Failed to save WeChat context tokens to Storage v2', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      await markContextTokensLegacyFallback(this.tokenPath).catch((fallbackError) => {
+        logger.warn('Failed to mark WeChat context tokens legacy fallback', {
+          error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+        })
+      })
+    }
+
+    await this.writeLegacyContextTokens(tokens)
+  }
+
+  private async restoreContextTokens(): Promise<void> {
+    if (!this.contextTokenPath || !this.tokenPath) return
+
+    const storageV2Result = await loadContextTokensFromStorageV2(this.tokenPath).catch(
+      (error): WeChatContextTokensStorageV2ReadResult => {
+        logger.warn('Failed to load WeChat context tokens from Storage v2', {
+          error: error instanceof Error ? error.message : String(error)
+        })
+        return {
+          cleared: false
+        }
+      }
+    )
+    if (storageV2Result.cleared) return
+    if (storageV2Result.tokens) {
+      const count = this.replaceContextTokens(storageV2Result.tokens)
+      await this.writeLegacyContextTokens(this.serializeContextTokens()).catch((error) => {
+        logger.warn('Failed to project WeChat context tokens to legacy file', {
+          error: error instanceof Error ? error.message : String(error)
+        })
+      })
+      if (count > 0) {
+        logger.info('Restored context tokens from Storage v2', { count })
+      }
+      return
+    }
+
     try {
       if (!fs.existsSync(this.contextTokenPath)) return
       const raw = fs.readFileSync(this.contextTokenPath, 'utf8')
-      const tokens = JSON.parse(raw) as Record<string, string>
-      let count = 0
-      for (const [userId, token] of Object.entries(tokens)) {
-        if (typeof token === 'string' && token) {
-          this.contextTokens.set(userId, token)
-          count++
-        }
-      }
+      const tokens = normalizeContextTokens(JSON.parse(raw))
+      const count = this.replaceContextTokens(tokens)
       if (count > 0) {
         logger.info('Restored context tokens from disk', { count })
+        await saveContextTokensToStorageV2(this.serializeContextTokens(), this.tokenPath).catch((error) => {
+          logger.warn('Failed to mirror legacy WeChat context tokens to Storage v2', {
+            error: error instanceof Error ? error.message : String(error)
+          })
+        })
       }
     } catch (err) {
       logger.warn('Failed to restore context tokens', { error: err instanceof Error ? err.message : String(err) })
@@ -1143,8 +1300,50 @@ export class WeixinBot {
   }
 
   private clearPersistedContextTokens(): void {
+    if (!this.contextTokenPath || !this.tokenPath) return
+    const contextTokenPath = this.contextTokenPath
+    const tokenPath = this.tokenPath
+    void (async () => {
+      try {
+        await clearContextTokensInStorageV2(tokenPath)
+      } catch (error) {
+        logger.warn('Failed to clear WeChat context tokens from Storage v2', {
+          error: error instanceof Error ? error.message : String(error)
+        })
+        return
+      }
+      await rm(contextTokenPath, { force: true }).catch((error) => {
+        logger.warn('Failed to remove legacy WeChat context tokens file', {
+          error: error instanceof Error ? error.message : String(error)
+        })
+      })
+    })()
+  }
+
+  private serializeContextTokens(): Record<string, string> {
+    const tokens: Record<string, string> = {}
+    for (const [userId, token] of this.contextTokens) {
+      tokens[userId] = token
+    }
+    return tokens
+  }
+
+  private replaceContextTokens(tokens: Record<string, string>): number {
+    this.contextTokens.clear()
+    let count = 0
+    for (const [userId, token] of Object.entries(tokens)) {
+      if (typeof token === 'string' && token) {
+        this.contextTokens.set(userId, token)
+        count++
+      }
+    }
+    return count
+  }
+
+  private async writeLegacyContextTokens(tokens: Record<string, string>): Promise<void> {
     if (!this.contextTokenPath) return
-    rm(this.contextTokenPath, { force: true }).catch(() => {})
+    await mkdir(path.dirname(this.contextTokenPath), { recursive: true, mode: 0o700 })
+    await writeFile(this.contextTokenPath, JSON.stringify(tokens), { mode: 0o600 })
   }
 
   private reportError(error: unknown): void {

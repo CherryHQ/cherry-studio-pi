@@ -58,6 +58,9 @@ vi.mock('../../../../../storageV2/StorageV2Repositories', () => ({
 import { WeixinBot } from '../wechat/WeChatProtocol'
 
 const tokenPath = '/mock/channels/weixin_bot_ch-1.json'
+const contextTokenPath = '/mock/channels/weixin_bot_ch-1.context-tokens.json'
+const credentialsSecretRef = 'storage-v2://secret/wechat/hash/credentials'
+const contextTokensSecretRef = 'storage-v2://secret/wechat/hash/contextTokens'
 const credentials = {
   accountId: 'account-id',
   baseUrl: 'https://ilinkai.weixin.qq.com',
@@ -73,6 +76,37 @@ function jsonResponse(body: unknown) {
   }
 }
 
+function mockStorageV2CredentialsAndContext(contextTokens?: Record<string, string> | { clearedAt: string }) {
+  mocks.settingsRepository.get.mockImplementation(async (key: string) => {
+    if (key.startsWith('wechat.credentials.')) {
+      return {
+        credentialsSecretRef
+      }
+    }
+    if (key.startsWith('wechat.contextTokens.')) {
+      if (!contextTokens) return null
+      if ('clearedAt' in contextTokens) return contextTokens
+      return {
+        contextTokensSecretRef
+      }
+    }
+    return null
+  })
+  mocks.secretVault.getSecret.mockImplementation(async (secretRef: string) => {
+    if (secretRef === credentialsSecretRef) return JSON.stringify(credentials)
+    if (secretRef === contextTokensSecretRef && contextTokens && !('clearedAt' in contextTokens)) {
+      return JSON.stringify(contextTokens)
+    }
+    return null
+  })
+}
+
+function getLastSendMessageBody() {
+  const call = mocks.net.fetch.mock.calls.find(([url]) => String(url).includes('/ilink/bot/sendmessage'))
+  expect(call).toBeDefined()
+  return JSON.parse(String(call?.[1]?.body))
+}
+
 describe('WeixinBot Storage v2 credentials persistence', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -84,7 +118,7 @@ describe('WeixinBot Storage v2 credentials persistence', () => {
     mocks.fsPromises.writeFile.mockResolvedValue(undefined)
     mocks.net.fetch.mockResolvedValue(jsonResponse({}))
     mocks.secretVault.getSecret.mockResolvedValue(null)
-    mocks.secretVault.setSecret.mockResolvedValue('storage-v2://secret/wechat/hash/credentials')
+    mocks.secretVault.setSecret.mockResolvedValue(credentialsSecretRef)
     mocks.settingsRepository.get.mockResolvedValue(null)
     mocks.settingsRepository.set.mockResolvedValue({ key: 'wechat.credentials.hash' })
   })
@@ -177,5 +211,69 @@ describe('WeixinBot Storage v2 credentials persistence', () => {
       },
       'wechat'
     )
+  })
+
+  it('restores context tokens from Storage v2 before the legacy context token file', async () => {
+    mockStorageV2CredentialsAndContext({
+      userA: 'ctx-storage'
+    })
+    mocks.fs.existsSync.mockReturnValue(true)
+    mocks.fs.readFileSync.mockReturnValue(JSON.stringify({ userA: 'ctx-legacy' }))
+    const bot = new WeixinBot({ tokenPath })
+
+    await bot.send('userA', 'hello')
+
+    expect(mocks.fs.readFileSync).not.toHaveBeenCalled()
+    expect(getLastSendMessageBody().msg.context_token).toBe('ctx-storage')
+  })
+
+  it('mirrors legacy context tokens to Storage v2', async () => {
+    mockStorageV2CredentialsAndContext()
+    mocks.fs.existsSync.mockReturnValue(true)
+    mocks.fs.readFileSync.mockReturnValue(JSON.stringify({ userA: 'ctx-legacy' }))
+    const bot = new WeixinBot({ tokenPath })
+
+    await bot.send('userA', 'hello')
+
+    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith(
+      'wechat',
+      expect.any(String),
+      'contextTokens',
+      expect.stringContaining('ctx-legacy')
+    )
+    expect(getLastSendMessageBody().msg.context_token).toBe('ctx-legacy')
+  })
+
+  it('does not resurrect a legacy context token file after Storage v2 is cleared', async () => {
+    mockStorageV2CredentialsAndContext({
+      clearedAt: '2026-05-28T00:00:00.000Z'
+    })
+    mocks.fs.existsSync.mockReturnValue(true)
+    mocks.fs.readFileSync.mockReturnValue(JSON.stringify({ userA: 'ctx-legacy' }))
+    const bot = new WeixinBot({ tokenPath })
+
+    await bot.send('userA', 'hello')
+
+    expect(mocks.fs.readFileSync).not.toHaveBeenCalled()
+    expect(getLastSendMessageBody().msg.context_token).toBe('')
+  })
+
+  it('persists remembered context tokens to Storage v2 and the legacy context token file', async () => {
+    mockStorageV2CredentialsAndContext()
+    mocks.secretVault.setSecret.mockResolvedValue(contextTokensSecretRef)
+    const bot = new WeixinBot({ tokenPath })
+
+    await bot.reply({ userId: 'userA', _contextToken: 'ctx-new' } as Parameters<WeixinBot['reply']>[0], 'hello')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith(
+      'wechat',
+      expect.any(String),
+      'contextTokens',
+      expect.stringContaining('ctx-new')
+    )
+    expect(mocks.fsPromises.writeFile).toHaveBeenCalledWith(contextTokenPath, expect.stringContaining('ctx-new'), {
+      mode: 0o600
+    })
   })
 })
