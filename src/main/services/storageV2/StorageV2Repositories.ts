@@ -137,6 +137,7 @@ export type StorageV2FileImport = Record<string, any> & {
   name?: string
   origin_name?: string
   path?: string
+  storageV2SourcePath?: string
   size?: number
   ext?: string
   type?: string
@@ -1963,7 +1964,12 @@ export class StorageV2FileRepository {
     imported: boolean
     skippedReason?: string
   }> {
-    const sourcePath = typeof file.path === 'string' ? file.path : ''
+    const sourcePath =
+      typeof file.storageV2SourcePath === 'string'
+        ? file.storageV2SourcePath
+        : typeof file.path === 'string'
+          ? file.path
+          : ''
     if (!sourcePath) {
       return { imported: false, skippedReason: 'missing path' }
     }
@@ -1985,6 +1991,8 @@ export class StorageV2FileRepository {
     const storagePath = path.relative(rootInfo.dataRoot, blobPath)
     const timestamp = now()
     const fileId = file.id ?? checksum
+    const metadata = { ...file }
+    delete metadata.storageV2SourcePath
 
     fs.mkdirSync(blobDir, { recursive: true })
     if (!fs.existsSync(blobPath)) {
@@ -2048,7 +2056,7 @@ export class StorageV2FileRepository {
           checksum,
           file.origin_name ?? file.name ?? path.basename(sourcePath),
           file.name ?? file.origin_name ?? path.basename(sourcePath),
-          toJson(file),
+          toJson(metadata),
           file.created_at ?? timestamp,
           timestamp
         ]

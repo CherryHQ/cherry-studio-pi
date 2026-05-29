@@ -43,8 +43,8 @@
 - [ ] 普通会话从 Dexie-first 切到 Storage v2 conversation/message/block 权威写入。
 - [x] 普通会话 append/update message 的 DbService 入口已先写 Storage v2 conversation/message/block，再落 Dexie legacy cache；delete/clear 既有 tombstone/snapshot-first 保护继续保留。
 - [x] 普通会话 block-only 更新入口已先写 Storage v2 message_blocks，再落 Dexie legacy cache；覆盖 updateBlocks、bulkAddBlocks 和可解析的 updateSingleBlock 路径。
-- [ ] 文件上传/删除从 Dexie/filesystem-first 切到 blob/file record 权威写入。
-- [x] 文件 metadata add/update/count decrement 已先 upsert Storage v2 file record，再更新 Dexie legacy cache；delete 继续先写 Storage v2 tombstone。物理文件 blob/上传复制权威化仍待后续处理。
+- [x] 文件上传/删除从 Dexie/filesystem-first 切到 blob/file record 权威写入。
+- [x] 文件 metadata add/update/count decrement 已先 upsert Storage v2 file record，再更新 Dexie legacy cache；上传物理文件已改为临时处理后先导入 Storage v2 blob/file record，再投影到 legacy `Files` 目录；delete 继续先写 Storage v2 tombstone，再删除 Dexie/legacy 文件。
 - [x] Agent/session/task/channel/session history 从 `agents.db` first 切到 Storage v2 first。
 - [x] Channel 配置 create/update 已先写 Storage v2 `channels` 和 secret vault，再写 `agents.db` runtime cache；delete 路径保留 Storage v2 tombstone-first，服务层也防止绕过 wrapper 直接删 legacy。
 - [x] Scheduled task create/update/run-state 已先写 Storage v2 `scheduled_tasks`，再写 `agents.db` runtime cache；`channel_task_subscriptions` 已纳入 Storage v2 schema、legacy import/projection、backup validation 和 stats，避免任务 channel 订阅关系恢复丢失。Task run log create/update 已先写 Storage v2，并用 Storage v2 生成 ID 对齐 legacy cache。
@@ -112,6 +112,7 @@
 - [x] 普通会话 Storage v2-first 写路径测试：DbService 覆盖 append/update message 先 upsert Storage v2，main StorageService 覆盖 conversation/message/block API。
 - [x] 普通会话 block-only Storage v2-first 写路径测试：DbService 覆盖 updateBlocks 先 upsert Storage v2 message_blocks，失败时阻断 Dexie 写入。
 - [x] 文件 metadata Storage v2-first 写路径测试：FileManager 覆盖 add 前 upsert 和 upsert 失败阻断 legacy 写入，main StorageService 覆盖 file upsert/delete API。
+- [x] 文件 physical blob Storage v2-first 写路径测试：FileStorage 覆盖上传时先导入 Storage v2 blob/file record、失败时阻断 legacy 文件落盘；StorageV2FileRepository 覆盖 staging source path 不污染持久 metadata。
 - [x] Agent runtime channel Storage v2-first 写路径测试：ChannelService 覆盖 create/update 先写 Storage v2、失败阻断 legacy，以及服务层 delete tombstone-first；AgentRuntimeWriteService 覆盖 channel secret vault 写入和 safeStorage 不可用时不落明文。
 - [x] Agent runtime scheduled task Storage v2-first 写路径测试：TaskService 覆盖 create/update/run-state/task run log 先写 Storage v2、失败阻断 legacy、服务层 delete tombstone-first；AgentRuntimeWriteService 覆盖 task upsert、task run log create/update 与 channel subscription 同步。
 - [x] Agent runtime agent Storage v2-first 写路径测试：AgentService 覆盖 create/reorder 先写 Storage v2、失败阻断 legacy、继承同步 session 先写 Storage v2；AgentRuntimeWriteService 覆盖 agent upsert/reorder 和 sync log。

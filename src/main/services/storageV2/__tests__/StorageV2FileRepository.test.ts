@@ -134,4 +134,43 @@ describe('StorageV2FileRepository', () => {
       fs.rmSync(tempDir, { recursive: true, force: true })
     }
   })
+
+  it('imports blob bytes from a staging path without persisting the staging path in metadata', async () => {
+    const tempDir = fs.mkdtempSync(path.join(process.env.TMPDIR ?? '/tmp', 'storage-v2-file-stage-'))
+    const stagingPath = path.join(tempDir, 'staged.txt')
+    const legacyPath = path.join(tempDir, 'Files', 'file-1.txt')
+    fs.mkdirSync(path.dirname(legacyPath), { recursive: true })
+    fs.writeFileSync(stagingPath, 'staged blob content')
+
+    mocks.dataRoot.ensureDataRoot.mockReturnValue({ dataRoot: tempDir })
+    mocks.client.execute.mockResolvedValue({ rows: [], columns: [], columnTypes: [] })
+
+    try {
+      const { StorageV2FileRepository } = await import('../StorageV2Repositories')
+
+      await expect(
+        new StorageV2FileRepository().importFile({
+          id: 'file-1',
+          path: legacyPath,
+          storageV2SourcePath: stagingPath,
+          name: 'file-1.txt',
+          origin_name: 'source.txt',
+          ext: '.txt',
+          type: 'text'
+        })
+      ).resolves.toEqual({ imported: true })
+
+      const fileUpsertCall = mocks.client.execute.mock.calls.find(
+        ([input]) => typeof input !== 'string' && input.sql.includes('INSERT INTO files')
+      )
+      const metadataJson = typeof fileUpsertCall?.[0] === 'string' ? undefined : fileUpsertCall?.[0].args?.[4]
+      const metadata = JSON.parse(String(metadataJson))
+
+      expect(metadata.path).toBe(legacyPath)
+      expect(metadata.storageV2SourcePath).toBeUndefined()
+      expect(fs.existsSync(stagingPath)).toBe(true)
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
 })

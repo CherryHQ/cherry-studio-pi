@@ -37,6 +37,7 @@ import {
   mirrorCustomMiniAppsContentToStorageV2,
   writeLegacyCustomMiniAppsFile
 } from './minapps/CustomMiniAppsStorageV2'
+import { storageV2FileRepository } from './storageV2/StorageV2Repositories'
 
 const logger = loggerService.withContext('FileStorage')
 
@@ -257,11 +258,23 @@ class FileStorage {
     }
   }
 
+  private async importStorageV2FileBlob(file: FileMetadata, sourcePath: string = file.path): Promise<void> {
+    const result = await storageV2FileRepository.importFile({
+      ...file,
+      storageV2SourcePath: sourcePath
+    })
+
+    if (!result.imported) {
+      throw new Error(result.skippedReason ?? `Failed to import file ${file.id} into Storage v2`)
+    }
+  }
+
   public uploadFile = async (_: Electron.IpcMainInvokeEvent, file: FileMetadata): Promise<FileMetadata> => {
     const filePath = file.path
     const duplicateFile = await this.findDuplicateFile(filePath)
 
     if (duplicateFile) {
+      await this.importStorageV2FileBlob(duplicateFile)
       return duplicateFile
     }
 
@@ -269,34 +282,45 @@ class FileStorage {
     const origin_name = path.basename(file.path)
     const ext = path.extname(origin_name).toLowerCase()
     const destPath = path.join(this.storageDir, uuid + ext)
+    const stagingDir = path.join(this.tempDir, 'file-uploads')
+    const stagingPath = path.join(stagingDir, uuid + ext)
 
     logger.info(`[FileStorage] Uploading file: ${filePath}`)
 
-    // 根据文件类型选择处理方式
-    if (imageExts.includes(ext)) {
-      await this.compressImage(filePath, destPath)
-    } else {
-      await fs.promises.copyFile(filePath, destPath)
+    await fs.promises.mkdir(stagingDir, { recursive: true })
+
+    try {
+      // 根据文件类型选择处理方式
+      if (imageExts.includes(ext)) {
+        await this.compressImage(filePath, stagingPath)
+      } else {
+        await fs.promises.copyFile(filePath, stagingPath)
+      }
+
+      const stats = await fs.promises.stat(stagingPath)
+      const fileType = await this.getFileType(stagingPath)
+
+      const fileMetadata: FileMetadata = {
+        id: uuid,
+        origin_name,
+        name: uuid + ext,
+        path: destPath,
+        created_at: stats.birthtime.toISOString(),
+        size: stats.size,
+        ext: ext,
+        type: fileType,
+        count: 1
+      }
+
+      await this.importStorageV2FileBlob(fileMetadata, stagingPath)
+      await fs.promises.copyFile(stagingPath, destPath)
+
+      logger.debug(`File uploaded: ${fileMetadata}`)
+
+      return fileMetadata
+    } finally {
+      await fs.promises.rm(stagingPath, { force: true })
     }
-
-    const stats = await fs.promises.stat(destPath)
-    const fileType = await this.getFileType(destPath)
-
-    const fileMetadata: FileMetadata = {
-      id: uuid,
-      origin_name,
-      name: uuid + ext,
-      path: destPath,
-      created_at: stats.birthtime.toISOString(),
-      size: stats.size,
-      ext: ext,
-      type: fileType,
-      count: 1
-    }
-
-    logger.debug(`File uploaded: ${fileMetadata}`)
-
-    return fileMetadata
   }
 
   public getFile = async (_: Electron.IpcMainInvokeEvent, filePath: string): Promise<FileMetadata | null> => {
