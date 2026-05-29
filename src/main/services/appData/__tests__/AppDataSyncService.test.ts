@@ -338,6 +338,62 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('keeps record sync successful when the safety snapshot upload is temporarily unavailable', async () => {
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
+      if (filePath.endsWith('/manifest.json')) {
+        return JSON.stringify({ version: 1, updatedAt: 0, records: {} })
+      }
+      throw new Error(`Unexpected WebDAV read: ${filePath}`)
+    })
+    mocks.webdav.putFileContents.mockImplementation(async (filePath: string) => {
+      if (String(filePath).includes('/backups/')) {
+        throw new Error('Invalid response: 503 Service Unavailable')
+      }
+      return undefined
+    })
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.snapshotUploaded).toBe(false)
+    expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith('last-sync-summary', summary)
+  })
+
+  it('skips full data snapshots when this device already uploaded a fresh one', async () => {
+    const uploadedAt = 1760000000000
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(uploadedAt + 60_000)
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
+      if (filePath.endsWith('/manifest.json')) {
+        return JSON.stringify({
+          version: 1,
+          updatedAt: uploadedAt,
+          records: {},
+          snapshots: {
+            'local-device': {
+              id: 'local-device',
+              fileName: 'cherry-studio-pi.data-sync.local-device.zip',
+              path: 'backups/cherry-studio-pi.data-sync.local-device.zip',
+              byteSize: 6,
+              createdAt: new Date(uploadedAt).toISOString(),
+              uploadedAt,
+              deviceId: 'local-device',
+              format: 'cherry-studio-direct-backup-zip'
+            }
+          }
+        })
+      }
+      throw new Error(`Unexpected WebDAV read: ${filePath}`)
+    })
+
+    try {
+      const summary = await new AppDataSyncService().syncNow(config)
+
+      expect(summary.snapshotUploaded).toBe(false)
+      expect(mocks.backupManager.backup).not.toHaveBeenCalled()
+    } finally {
+      nowSpy.mockRestore()
+    }
+  })
+
   it('merges Storage v2 app records into sync when legacy app.db has partial data', async () => {
     const legacyRecord = {
       ...remoteRecord,

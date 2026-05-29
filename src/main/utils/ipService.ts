@@ -8,23 +8,28 @@ const logger = loggerService.withContext('IpService')
  * @returns 返回国家代码，默认为'CN'
  */
 export async function getIpCountry(): Promise<string> {
-  try {
-    // 添加超时控制
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000)
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 5000)
 
+  try {
     const ipinfo = await net.fetch(`https://api.ipinfo.io/lite/me?token=5aa4105b40adbc`, {
       signal: controller.signal
     })
 
-    clearTimeout(timeoutId)
     const data = await ipinfo.json()
     const country = data.country_code || 'CN'
     logger.info(`Detected user IP address country: ${country}`)
     return country
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      logger.warn('IP country lookup timed out; defaulting to CN')
+      return 'CN'
+    }
+
     logger.error('Failed to get IP address information:', error as Error)
     return 'CN'
+  } finally {
+    clearTimeout(timeoutId)
   }
 }
 

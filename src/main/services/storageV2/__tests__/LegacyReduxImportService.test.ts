@@ -173,4 +173,51 @@ describe('StorageV2LegacyReduxImportService', () => {
     expect(mocks.providerRepository.deleteMissing).not.toHaveBeenCalled()
     expect(mocks.assistantRepository.deleteMissing).not.toHaveBeenCalled()
   })
+
+  it('deduplicates repeated providers and models in runtime snapshots', async () => {
+    const report = await new StorageV2LegacyReduxImportService().importSnapshot(
+      {
+        llm: {
+          providers: [
+            {
+              id: 'openai',
+              name: 'OpenAI A',
+              type: 'openai',
+              models: [
+                { id: 'gpt-4o', name: 'Old GPT-4o' },
+                { id: 'gpt-4o-mini', name: 'GPT-4o mini' }
+              ]
+            } as any,
+            {
+              id: 'openai',
+              name: 'OpenAI B',
+              type: 'openai',
+              models: [
+                { id: 'gpt-4o', name: 'GPT-4o' },
+                { id: '', name: 'Invalid' }
+              ]
+            } as any
+          ]
+        }
+      },
+      { dryRun: false }
+    )
+
+    expect(report.providerCount).toBe(1)
+    expect(report.modelCount).toBe(2)
+    expect(mocks.providerRepository.upsert).toHaveBeenCalledTimes(1)
+    expect(mocks.providerRepository.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'openai',
+        name: 'OpenAI B',
+        models: [
+          expect.objectContaining({ id: 'gpt-4o', name: 'GPT-4o' }),
+          expect.objectContaining({ id: 'gpt-4o-mini', name: 'GPT-4o mini' })
+        ]
+      }),
+      0,
+      undefined
+    )
+    expect(mocks.providerRepository.deleteMissing).toHaveBeenCalledWith(['openai'])
+  })
 })

@@ -719,6 +719,13 @@
       "enable_server_description": "Der API-Server muss aktiviert sein, damit Agents funktionieren. Sie können ihn direkt aktivieren oder in den Einstellungen konfigurieren.",
       "server_not_running": "API-Server ist aktiviert, läuft aber nicht. Bitte überprüfen Sie die Serverkonfiguration.",
       "server_not_running_description": "Der API-Server muss laufen, damit die Agents funktionieren. Sie können ihn direkt starten oder die Einstellungen überprüfen."
+    },
+    "welcome": {
+      "suggestions": {
+        "explore": "[to be translated]:Inspect this project's structure and tell me where to start",
+        "plan": "[to be translated]:Help me break the current goal into an executable plan",
+        "review": "[to be translated]:Review the latest changes, point out risks and next steps"
+      }
     }
   },
   "apiServer": {
@@ -4605,16 +4612,47 @@
         "audit_items": {
           "agents_db": "[to be translated]:Pi agent database",
           "agents_workspaces": "[to be translated]:Agent workspaces",
+          "anthropic_oauth_legacy": "[to be translated]:Anthropic OAuth token file",
           "app_db": "[to be translated]:App database",
+          "channels": "[to be translated]:Channel runtime files",
+          "code_tools_bin": "[to be translated]:CodeTools managed CLI binaries",
+          "code_tools_install": "[to be translated]:CodeTools managed CLI install tree",
+          "copilot_token_legacy": "[to be translated]:Config Copilot token",
           "data": "[to be translated]:Current Data directory",
+          "external_notes_path": "[to be translated]:External notes directory",
           "files": "[to be translated]:Uploaded files",
+          "home_config": "[to be translated]:Home config.json",
           "indexeddb": "[to be translated]:Chromium IndexedDB",
           "knowledge_base": "[to be translated]:Knowledge bases",
+          "legacy_mcp_dxt_servers": "[to be translated]:Legacy DXT MCP server packages",
+          "legacy_user_data_agents_db": "[to be translated]:Legacy userData agents.db",
+          "legacy_user_data_copilot_token": "[to be translated]:Legacy userData Copilot token",
+          "legacy_user_data_memory_db": "[to be translated]:Legacy userData memories.db",
           "local_storage": "[to be translated]:Chromium Local Storage",
+          "logs": "[to be translated]:Runtime logs",
+          "mcp_dxt_servers": "[to be translated]:DXT MCP server packages",
+          "mcp_memory_json": "[to be translated]:MCP memory.json",
+          "mcp_oauth_legacy": "[to be translated]:MCP OAuth token directory",
+          "memory": "[to be translated]:Memory database",
+          "notes": "[to be translated]:Default notes directory",
+          "obsidian_config": "[to be translated]:Obsidian vault registry",
+          "openclaw_config": "[to be translated]:OpenClaw config",
+          "openclaw_legacy_config": "[to be translated]:Legacy OpenClaw config",
+          "ovms_config": "[to be translated]:OVMS model config",
           "redux_local_storage_leveldb": "[to be translated]:Chromium Local Storage LevelDB",
           "skills": "[to be translated]:Global skills",
+          "storage_v2_backups": "[to be translated]:Storage v2 backup history",
+          "storage_v2_legacy_archives": "[to be translated]:Storage v2 legacy archives",
           "storage_v2_main_db": "[to be translated]:Storage v2 main database",
-          "storage_v2_manifest": "[to be translated]:Storage v2 manifest"
+          "storage_v2_manifest": "[to be translated]:Storage v2 manifest",
+          "storage_v2_snapshots": "[to be translated]:Storage v2 snapshots",
+          "storage_v2_temp": "[to be translated]:Storage v2 temp directory",
+          "tesseract_cache": "[to be translated]:Tesseract cache",
+          "trace_cache": "[to be translated]:Trace cache",
+          "user_data_cache": "[to be translated]:Chromium runtime cache",
+          "version_log": "[to be translated]:Version history log",
+          "workbench": "[to be translated]:Workbench artifacts",
+          "workspace": "[to be translated]:Default agent workspace"
         },
         "auto_hydrate": {
           "help": "[to be translated]:When enabled, app startup restores the runtime cache from Storage v2 settings, model providers, and assistant configuration first. Keep this off until migration checks look good.",

@@ -236,6 +236,35 @@ describe('StorageV2ProviderRepository', () => {
       })
     )
   })
+
+  it('deduplicates provider models before writing Storage v2 rows', async () => {
+    const { client, execute } = createMockClient()
+    vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
+    vi.spyOn(storageV2Database, 'withTransaction').mockImplementation(async (_client, fn) => fn())
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(client)
+
+    await new StorageV2ProviderRepository().upsert({
+      id: 'provider-1',
+      type: 'openai',
+      name: 'OpenAI',
+      models: [
+        { id: 'gpt-4o', name: 'Old GPT-4o' },
+        { id: 'gpt-4o', name: 'GPT-4o' }
+      ]
+    } as any)
+
+    const modelInsertCalls = execute.mock.calls.filter(([input]) => {
+      const sql = typeof input === 'string' ? input : input.sql
+      return sql.includes('INSERT INTO models')
+    })
+
+    expect(modelInsertCalls).toHaveLength(1)
+    expect(modelInsertCalls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        args: expect.arrayContaining(['provider-1:gpt-4o', 'GPT-4o'])
+      })
+    )
+  })
 })
 
 describe('StorageV2KnowledgeRepository', () => {

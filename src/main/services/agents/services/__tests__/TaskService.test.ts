@@ -273,6 +273,54 @@ describe('TaskService Storage v2 first writes', () => {
     )
   })
 
+  it('does not let a runtime id field override the Storage v2 task run log id', async () => {
+    const returning = vi.fn().mockResolvedValue([{ id: 42 }])
+    const values = vi.fn(() => ({ returning }))
+    const insert = vi.fn(() => ({ values }))
+    const service = new TaskService()
+    vi.spyOn(service as never, 'getDatabase').mockResolvedValue({ insert } as never)
+
+    await expect(
+      service.logTaskRun({
+        id: null,
+        task_id: 'task-1',
+        session_id: null,
+        run_at: '2026-05-29T00:00:00.000Z',
+        duration_ms: 0,
+        status: 'running',
+        result: null,
+        error: null
+      } as any)
+    ).resolves.toBe(42)
+
+    expect(values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 42,
+        task_id: 'task-1'
+      })
+    )
+  })
+
+  it('keeps task execution alive when the legacy task log cache insert fails', async () => {
+    const returning = vi.fn().mockRejectedValue(new Error('legacy unavailable'))
+    const values = vi.fn(() => ({ returning }))
+    const insert = vi.fn(() => ({ values }))
+    const service = new TaskService()
+    vi.spyOn(service as never, 'getDatabase').mockResolvedValue({ insert } as never)
+
+    await expect(
+      service.logTaskRun({
+        task_id: 'task-1',
+        session_id: null,
+        run_at: '2026-05-29T00:00:00.000Z',
+        duration_ms: 0,
+        status: 'running',
+        result: null,
+        error: null
+      })
+    ).resolves.toBe(42)
+  })
+
   it('does not insert a legacy task run log when the Storage v2 first write fails', async () => {
     const insert = vi.fn()
     const service = new TaskService()

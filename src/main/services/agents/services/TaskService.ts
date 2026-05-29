@@ -372,11 +372,17 @@ export class TaskService extends BaseService {
   async logTaskRun(log: Omit<InsertTaskRunLogRow, 'id'>): Promise<number> {
     const database = await this.getDatabase()
     const storageLogId = await storageV2AgentRuntimeWriteService.createTaskRunLog(log)
-    const result = await database
-      .insert(taskRunLogsTable)
-      .values({ id: storageLogId, ...log })
-      .returning({ id: taskRunLogsTable.id })
-    return result[0]?.id ?? storageLogId
+
+    try {
+      const result = await database
+        .insert(taskRunLogsTable)
+        .values({ ...log, id: storageLogId })
+        .returning({ id: taskRunLogsTable.id })
+      return result[0]?.id ?? storageLogId
+    } catch (error) {
+      logger.warn('Failed to mirror task run log to legacy cache; Storage v2 row is authoritative', error as Error)
+      return storageLogId
+    }
   }
 
   async updateTaskRunLog(

@@ -5,6 +5,7 @@ import path from 'node:path'
 
 import type { Client, InValue } from '@libsql/client'
 import { loggerService } from '@logger'
+import { runWebDavOperation, WebDavOperationError } from '@main/services/WebDavRetry'
 import type { WebDAVClient } from 'webdav'
 
 import { storageV2DataRootService } from './DataRootService'
@@ -382,16 +383,38 @@ export class StorageV2WebDavRecordSyncService {
   }
 
   private async ensureDirectory(client: WebDAVClient, dirPath: string) {
-    if (await client.exists(dirPath)) return
-    await client.createDirectory(dirPath, { recursive: true })
+    if (await runWebDavOperation(`checking remote directory ${dirPath}`, () => client.exists(dirPath), { logger })) {
+      return
+    }
+    await runWebDavOperation(
+      `creating remote directory ${dirPath}`,
+      () => client.createDirectory(dirPath, { recursive: true }),
+      {
+        logger
+      }
+    )
   }
 
   private async readJson<T>(client: WebDAVClient, filePath: string): Promise<T | null> {
     try {
-      if (!(await client.exists(filePath))) return null
-      const contents = await client.getFileContents(filePath, { format: 'binary' })
+      if (
+        !(await runWebDavOperation(`checking Storage v2 sync record ${filePath}`, () => client.exists(filePath), {
+          logger
+        }))
+      ) {
+        return null
+      }
+      const contents = await runWebDavOperation(
+        `reading Storage v2 sync record ${filePath}`,
+        () => client.getFileContents(filePath, { format: 'binary' }),
+        { logger }
+      )
       return JSON.parse(bufferToString(contents)) as T
     } catch (error) {
+      if (error instanceof WebDavOperationError && error.transient) {
+        throw error
+      }
+
       logger.warn(`Failed to read Storage v2 sync record ${filePath}`, error as Error)
       return null
     }
@@ -399,7 +422,11 @@ export class StorageV2WebDavRecordSyncService {
 
   private async writeJson(client: WebDAVClient, filePath: string, data: unknown) {
     await this.ensureDirectory(client, path.posix.dirname(filePath))
-    await client.putFileContents(filePath, JSON.stringify(data, null, 2), { overwrite: true })
+    await runWebDavOperation(
+      `writing Storage v2 sync record ${filePath}`,
+      () => client.putFileContents(filePath, JSON.stringify(data, null, 2), { overwrite: true }),
+      { logger }
+    )
   }
 
   private async getTableColumns(client: Client, tableName: string) {
@@ -579,10 +606,16 @@ export class StorageV2WebDavRecordSyncService {
 
     const relativePath = blobPath(blobId)
     await this.ensureDirectory(client, path.posix.dirname(path.posix.join(basePath, relativePath)))
-    await client.putFileContents(path.posix.join(basePath, relativePath), fs.createReadStream(localPath), {
-      overwrite: true,
-      contentLength: stat.size
-    })
+    const remotePath = path.posix.join(basePath, relativePath)
+    await runWebDavOperation(
+      `uploading Storage v2 blob ${remotePath}`,
+      () =>
+        client.putFileContents(remotePath, fs.createReadStream(localPath), {
+          overwrite: true,
+          contentLength: stat.size
+        }),
+      { logger }
+    )
 
     manifest.blobs[blobId] = {
       id: blobId,
@@ -617,9 +650,12 @@ export class StorageV2WebDavRecordSyncService {
       }
     }
 
-    const contents = await client.getFileContents(path.posix.join(basePath, safeRemoteRelativePath(blob.path)), {
-      format: 'binary'
-    })
+    const remotePath = path.posix.join(basePath, safeRemoteRelativePath(blob.path))
+    const contents = await runWebDavOperation(
+      `downloading Storage v2 blob ${remotePath}`,
+      () => client.getFileContents(remotePath, { format: 'binary' }),
+      { logger }
+    )
     await fsp.mkdir(path.dirname(localPath), { recursive: true })
     await fsp.writeFile(localPath, bufferFromRemoteContents(contents))
     summary.blobDownloaded += 1

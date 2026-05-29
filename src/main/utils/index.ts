@@ -29,7 +29,14 @@ type CherryConfig = {
 }
 
 export function getResourcePath() {
-  return path.join(app.getAppPath(), 'resources')
+  const resourcePath = path.join(app.getAppPath(), 'resources')
+  const unpackedResourcePath = toAsarUnpackedPath(resourcePath)
+
+  if (unpackedResourcePath !== resourcePath && fs.existsSync(unpackedResourcePath)) {
+    return unpackedResourcePath
+  }
+
+  return resourcePath
 }
 
 export function toAsarUnpackedPath(filePath: string): string {

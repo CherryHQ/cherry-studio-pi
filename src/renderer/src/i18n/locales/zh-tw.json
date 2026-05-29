@@ -719,6 +719,13 @@
       "enable_server_description": "智能體功能需要啟用 API 伺服器。你可以直接啟用，或前往設定頁面進行配置。",
       "server_not_running": "API 伺服器已啟用但未執行。請檢查伺服器設定。",
       "server_not_running_description": "智能體功能需要 API 伺服器運行。你可以直接啟動伺服器，或前往設定頁面檢查配置。"
+    },
+    "welcome": {
+      "suggestions": {
+        "explore": "先查看這個專案的結構，並告訴我可以從哪裡開始",
+        "plan": "幫我把目前目標拆成可執行的計畫",
+        "review": "檢查最近的改動，指出風險和下一步"
+      }
     }
   },
   "apiServer": {

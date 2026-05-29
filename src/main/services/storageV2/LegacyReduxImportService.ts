@@ -129,6 +129,42 @@ function normalizeSnapshot(input: LegacyReduxSnapshot | string): LegacyReduxSnap
   }
 }
 
+function mergeProviderModels(left: Provider['models'] = [], right: Provider['models'] = []): Provider['models'] {
+  const modelsById = new Map<string, Provider['models'][number]>()
+
+  for (const model of [...left, ...right]) {
+    if (!model?.id) continue
+    modelsById.set(model.id, model)
+  }
+
+  return Array.from(modelsById.values())
+}
+
+function normalizeProviders(providers: Provider[]): Provider[] {
+  const providersById = new Map<string, Provider>()
+
+  for (const provider of providers) {
+    if (!provider?.id) continue
+
+    const existing = providersById.get(provider.id)
+    if (!existing) {
+      providersById.set(provider.id, {
+        ...provider,
+        models: mergeProviderModels([], provider.models)
+      })
+      continue
+    }
+
+    providersById.set(provider.id, {
+      ...existing,
+      ...provider,
+      models: mergeProviderModels(existing.models, provider.models)
+    })
+  }
+
+  return Array.from(providersById.values())
+}
+
 const LLM_SETTINGS_SECRET_FIELDS: SecretField[] = [
   {
     path: ['vertexai', 'serviceAccount', 'privateKey'],
@@ -851,7 +887,7 @@ export class StorageV2LegacyReduxImportService {
     const localStorage = snapshot.localStorage && typeof snapshot.localStorage === 'object' ? snapshot.localStorage : {}
     const hasProviderList = Array.isArray(llm.providers)
     const hasAssistantList = Array.isArray(assistants.assistants)
-    const providers = hasProviderList ? llm.providers! : []
+    const providers = hasProviderList ? normalizeProviders(llm.providers!) : []
     const assistantList = hasAssistantList ? assistants.assistants! : []
     const canImportSecrets = storageV2SecretVaultService.isAvailable()
     const settingsEntries: Array<[string, unknown, string]> = []

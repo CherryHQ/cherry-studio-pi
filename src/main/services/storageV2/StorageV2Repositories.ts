@@ -226,6 +226,19 @@ function normalizeModelProvider(model: Model, providerId: string): Model {
   }
 }
 
+function normalizeProviderModels(provider: Provider): Model[] {
+  const modelsByStorageId = new Map<string, Model>()
+
+  for (const model of provider.models ?? []) {
+    if (!model?.id) continue
+
+    const normalized = normalizeModelProvider(model, provider.id)
+    modelsByStorageId.set(`${provider.id}:${normalized.id}`, normalized)
+  }
+
+  return Array.from(modelsByStorageId.values())
+}
+
 function cloneJsonValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
@@ -550,7 +563,7 @@ export class StorageV2ProviderRepository {
     const client = await storageV2Database.getClient()
     const timestamp = now()
     const config = stripProviderConfig(provider)
-    const models = provider.models.map((model) => normalizeModelProvider(model, provider.id))
+    const models = normalizeProviderModels(provider)
     const modelIds = models.map((model) => `${provider.id}:${model.id}`)
 
     await withTransaction(client, async () => {

@@ -719,6 +719,13 @@
       "enable_server_description": "智能体功能需要启用 API 服务器。你可以直接启用，或前往设置页面进行配置。",
       "server_not_running": "API 服务器已启用但未运行，请检查服务器配置。",
       "server_not_running_description": "智能体功能需要 API 服务器运行。你可以直接启动服务器，或前往设置页面检查配置。"
+    },
+    "welcome": {
+      "suggestions": {
+        "explore": "先看一下这个项目的结构，并告诉我可以从哪里开始",
+        "plan": "帮我把当前目标拆成一个可执行计划",
+        "review": "检查最近的改动，指出风险和下一步"
+      }
     }
   },
   "apiServer": {

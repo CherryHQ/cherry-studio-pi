@@ -12,6 +12,7 @@ import {
   storageV2WebDavRecordSyncService,
   type StorageV2WebDavRecordSyncSummary
 } from '@main/services/storageV2/WebDavRecordSyncService'
+import { runWebDavOperation, WebDavOperationError } from '@main/services/WebDavRetry'
 import type { WebDavConfig } from '@types'
 import { createClient, type WebDAVClient } from 'webdav'
 
@@ -88,6 +89,8 @@ const EMPTY_SUMMARY: DataSyncSummary = {
   snapshotBytes: 0,
   lastSyncAt: 0
 }
+
+const SNAPSHOT_UPLOAD_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 function recordId(scope: string, key: string) {
   return `${scope}:${key}`
@@ -190,22 +193,36 @@ export class AppDataSyncService {
   }
 
   private async ensureDirectory(client: WebDAVClient, dirPath: string) {
-    if (await client.exists(dirPath)) {
+    if (await runWebDavOperation(`checking remote directory ${dirPath}`, () => client.exists(dirPath), { logger })) {
       return
     }
 
-    await client.createDirectory(dirPath, { recursive: true })
+    await runWebDavOperation(
+      `creating remote directory ${dirPath}`,
+      () => client.createDirectory(dirPath, { recursive: true }),
+      {
+        logger
+      }
+    )
   }
 
   private async readJson<T>(client: WebDAVClient, filePath: string): Promise<T | null> {
     try {
-      if (!(await client.exists(filePath))) {
+      if (!(await runWebDavOperation(`checking remote json ${filePath}`, () => client.exists(filePath), { logger }))) {
         return null
       }
 
-      const contents = await client.getFileContents(filePath, { format: 'binary' })
+      const contents = await runWebDavOperation(
+        `reading remote json ${filePath}`,
+        () => client.getFileContents(filePath, { format: 'binary' }),
+        { logger }
+      )
       return JSON.parse(bufferToString(contents)) as T
     } catch (error) {
+      if (error instanceof WebDavOperationError && error.transient) {
+        throw error
+      }
+
       logger.warn(`Failed to read remote json ${filePath}`, error as Error)
       return null
     }
@@ -213,7 +230,11 @@ export class AppDataSyncService {
 
   private async writeJson(client: WebDAVClient, filePath: string, data: unknown) {
     await this.ensureDirectory(client, path.posix.dirname(filePath))
-    await client.putFileContents(filePath, JSON.stringify(data, null, 2), { overwrite: true })
+    await runWebDavOperation(
+      `writing remote json ${filePath}`,
+      () => client.putFileContents(filePath, JSON.stringify(data, null, 2), { overwrite: true }),
+      { logger }
+    )
   }
 
   private normalizeManifest(manifest: RemoteManifest | null): RemoteManifest {
@@ -307,10 +328,15 @@ export class AppDataSyncService {
     try {
       const stat = await fsp.stat(localBackupPath)
       await this.ensureDirectory(client, path.posix.dirname(remotePath))
-      await client.putFileContents(remotePath, fs.createReadStream(localBackupPath), {
-        overwrite: true,
-        contentLength: stat.size
-      })
+      await runWebDavOperation(
+        `uploading data sync snapshot ${remotePath}`,
+        () =>
+          client.putFileContents(remotePath, fs.createReadStream(localBackupPath), {
+            overwrite: true,
+            contentLength: stat.size
+          }),
+        { logger }
+      )
 
       const snapshot: RemoteSnapshotMeta = {
         id: safeFileSegment(deviceId),
@@ -337,6 +363,11 @@ export class AppDataSyncService {
     }
   }
 
+  private shouldUploadFullSnapshot(db: AppDataDatabase, manifest: RemoteManifest, now: number) {
+    const existingSnapshot = manifest.snapshots?.[safeFileSegment(db.getDeviceId())]
+    return !existingSnapshot?.uploadedAt || now - existingSnapshot.uploadedAt >= SNAPSHOT_UPLOAD_INTERVAL_MS
+  }
+
   async restoreLatestSnapshot(config: WebDavConfig) {
     if (!config.webdavHost) {
       throw new Error('WebDAV host is required')
@@ -358,7 +389,11 @@ export class AppDataSyncService {
     }
 
     const remotePath = path.posix.join(basePath, normalizeRemoteSnapshotPath(snapshot.path))
-    const backupContents = await client.getFileContents(remotePath, { format: 'binary' })
+    const backupContents = await runWebDavOperation(
+      `downloading data sync snapshot ${remotePath}`,
+      () => client.getFileContents(remotePath, { format: 'binary' }),
+      { logger }
+    )
     const localBackupPath = path.join(
       process.env.TMPDIR || '/tmp',
       'cherry-studio-pi-data-sync',
@@ -488,10 +523,19 @@ export class AppDataSyncService {
     manifest.storageV2 = storageSync.manifest
     this.addStorageV2Summary(summary, storageSync.summary)
 
-    await this.pushFullSnapshot(client, basePath, db, manifest, summary)
-
     manifest.updatedAt = summary.lastSyncAt
     await this.writeJson(client, manifestPath, manifest)
+
+    if (this.shouldUploadFullSnapshot(db, manifest, summary.lastSyncAt)) {
+      try {
+        await this.pushFullSnapshot(client, basePath, db, manifest, summary)
+        manifest.updatedAt = summary.lastSyncAt
+        await this.writeJson(client, manifestPath, manifest)
+      } catch (error) {
+        logger.warn('Data sync safety snapshot upload failed; record sync completed', error as Error)
+      }
+    }
+
     await this.setSyncState(db, 'last-sync-summary', summary)
 
     return summary

@@ -9,7 +9,8 @@ const mocks = vi.hoisted(() => ({
     statSync: vi.fn()
   },
   getPath: vi.fn(),
-  getAppPath: vi.fn()
+  getAppPath: vi.fn(),
+  isPackaged: false
 }))
 
 vi.mock('node:fs', () => ({
@@ -20,7 +21,10 @@ vi.mock('node:fs', () => ({
 vi.mock('electron', () => ({
   app: {
     getAppPath: mocks.getAppPath,
-    getPath: mocks.getPath
+    getPath: mocks.getPath,
+    get isPackaged() {
+      return mocks.isPackaged
+    }
   }
 }))
 
@@ -36,6 +40,7 @@ describe('getDataPath', () => {
       return '/mock/unknown'
     })
     mocks.getAppPath.mockReturnValue('/mock/app')
+    mocks.isPackaged = false
     mocks.fs.existsSync.mockReturnValue(false)
     mocks.fs.mkdirSync.mockReturnValue(undefined as never)
     mocks.fs.readFileSync.mockReturnValue('{}')
@@ -45,6 +50,16 @@ describe('getDataPath', () => {
       isFile: () => true,
       size: 1
     } as never)
+  })
+
+  it('uses unpacked resources when packaged app resources are outside app.asar', async () => {
+    mocks.isPackaged = true
+    mocks.getAppPath.mockReturnValue('/Applications/Cherry Studio Pi.app/Contents/Resources/app.asar')
+    mocks.fs.existsSync.mockImplementation((candidate) => String(candidate).endsWith('/app.asar.unpacked/resources'))
+
+    const { getResourcePath } = await import('../index')
+
+    expect(getResourcePath()).toBe('/Applications/Cherry Studio Pi.app/Contents/Resources/app.asar.unpacked/resources')
   })
 
   it('uses the active configured data root for runtime paths', async () => {

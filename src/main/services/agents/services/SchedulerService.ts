@@ -202,21 +202,22 @@ class SchedulerService {
 
     let result: string | null = null
     let error: string | null = null
+    let logId: number | null = null
     let sessionId: string | undefined
     let subscribedChannels: { id: string; sessionId?: string | null }[] = []
 
-    // Create log entry immediately so UI shows the running task
-    const logId = await logTaskRunWithStorageV2Recovery({
-      task_id: task.id,
-      session_id: null,
-      run_at: new Date().toISOString(),
-      duration_ms: 0,
-      status: 'running',
-      result: null,
-      error: null
-    })
-
     try {
+      // Create log entry immediately so UI shows the running task.
+      logId = await logTaskRunWithStorageV2Recovery({
+        task_id: task.id,
+        session_id: null,
+        run_at: new Date().toISOString(),
+        duration_ms: 0,
+        status: 'running',
+        result: null,
+        error: null
+      })
+
       logger.info('Running scheduled task', { taskId: task.id, agentId: task.agent_id })
       const agent = await getAgentWithStorageV2Recovery(task.agent_id)
       if (!agent) {
@@ -334,13 +335,15 @@ class SchedulerService {
     const durationMs = Date.now() - startTime
 
     // Update the log entry with final results
-    await updateTaskRunLogWithStorageV2Recovery(logId, {
-      session_id: sessionId ?? null,
-      duration_ms: durationMs,
-      status: error ? 'error' : 'success',
-      result,
-      error
-    })
+    if (logId !== null) {
+      await updateTaskRunLogWithStorageV2Recovery(logId, {
+        session_id: sessionId ?? null,
+        duration_ms: durationMs,
+        status: error ? 'error' : 'success',
+        result,
+        error
+      })
+    }
 
     // Compute next run and update task
     const nextRun = taskService.computeNextRun(task)
