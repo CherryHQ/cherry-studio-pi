@@ -475,6 +475,12 @@ export const cleanupMultipleBlocks = (dispatch: AppDispatch, blockIds: string[])
   }
 }
 
+const cancelMultipleBlockUpdates = (blockIds: string[]) => {
+  blockIds.forEach((id) => {
+    cancelThrottledBlockUpdate(id)
+  })
+}
+
 // 新增: 通用的、非节流的函数，用于保存消息和块的更新到数据库
 const saveUpdatesToDB = async (
   messageId: string,
@@ -1769,7 +1775,23 @@ export const removeBlocksThunk =
 
       const updatedBlockIds = (message.blocks || []).filter((id) => !blockIdsToRemoveSet.has(id))
 
-      // 1. Update Redux state
+      cancelMultipleBlockUpdates(blockIdsToRemove)
+
+      if (isAgentSessionTopicId(topicId)) {
+        await dbService.updateMessage(topicId, messageId, {
+          blocks: updatedBlockIds
+        })
+      } else {
+        const finalMessagesToSave = (selectMessagesForTopic(state, topicId) ?? []).map((candidate) =>
+          candidate.id === messageId ? { ...candidate, blocks: updatedBlockIds } : candidate
+        )
+        await db.transaction('rw', db.topics, db.message_blocks, async () => {
+          await db.topics.update(topicId, { messages: finalMessagesToSave })
+          await db.message_blocks.bulkDelete(blockIdsToRemove)
+        })
+      }
+
+      await flushStorageV2TopicMirror(topicId, { destructive: true })
       dispatch(
         newMessagesActions.updateMessage({
           topicId,
@@ -1777,26 +1799,7 @@ export const removeBlocksThunk =
           updates: { blocks: updatedBlockIds }
         })
       )
-      cleanupMultipleBlocks(dispatch, blockIdsToRemove)
-
-      // 2. Update database - different handling for agent vs Dexie topics
-      if (isAgentSessionTopicId(topicId)) {
-        // For agent topics: dbService.updateMessage routes to AgentMessageDataSource
-        await dbService.updateMessage(topicId, messageId, {
-          blocks: updatedBlockIds
-        })
-      } else {
-        // For Dexie topics: use transaction for atomicity
-        const finalMessagesToSave = selectMessagesForTopic(getState(), topicId)
-        await db.transaction('rw', db.topics, db.message_blocks, async () => {
-          await db.topics.update(topicId, { messages: finalMessagesToSave })
-          if (blockIdsToRemove.length > 0) {
-            await db.message_blocks.bulkDelete(blockIdsToRemove)
-          }
-        })
-      }
-
-      await flushStorageV2TopicMirror(topicId, { destructive: true })
+      dispatch(removeManyBlocks(blockIdsToRemove))
       await cleanupFilesAfterStorageV2Mirror(filesToDelete)
       dispatch(updateTopicUpdatedAt({ topicId }))
     } catch (error) {
