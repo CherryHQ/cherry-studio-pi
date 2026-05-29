@@ -170,7 +170,7 @@ describe('FileManager', () => {
     expect(mocks.filesDelete).not.toHaveBeenCalledWith('file-2')
   })
 
-  it('queues file metadata for retry when the direct Storage v2 mirror fails', async () => {
+  it('upserts file metadata before adding legacy metadata', async () => {
     const file = {
       id: 'file-2',
       ext: '.txt',
@@ -179,20 +179,38 @@ describe('FileManager', () => {
     }
     mocks.filesGet.mockResolvedValue(undefined)
     mocks.filesAdd.mockResolvedValue('file-2')
-    mocks.storageV2UpsertFile.mockRejectedValue(new Error('temporary storage failure'))
-    mocks.mirrorFlush.mockResolvedValue(undefined)
+    mocks.storageV2UpsertFile.mockResolvedValue({ id: 'file-2' })
 
     const { default: FileManager } = await import('../FileManager')
 
     await expect(FileManager.addFile(file as any)).resolves.toBe(file)
 
-    expect(mocks.filesAdd).toHaveBeenCalledWith(file)
     expect(mocks.storageV2UpsertFile).toHaveBeenCalledWith(file)
-    expect(mocks.mirrorScheduleFile).toHaveBeenCalledWith('file-2', 0)
-    expect(mocks.mirrorFlush).toHaveBeenCalled()
+    expect(mocks.filesAdd).toHaveBeenCalledWith(file)
+    expect(mocks.storageV2UpsertFile.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.filesAdd.mock.invocationCallOrder[0]
+    )
   })
 
-  it('queues file metadata for retry when Storage v2 is unavailable during add', async () => {
+  it('stops adding legacy metadata when the Storage v2 file upsert fails', async () => {
+    const file = {
+      id: 'file-2',
+      ext: '.txt',
+      count: 1,
+      origin_name: 'draft.txt'
+    }
+    mocks.filesGet.mockResolvedValue(undefined)
+    mocks.storageV2UpsertFile.mockRejectedValue(new Error('temporary storage failure'))
+
+    const { default: FileManager } = await import('../FileManager')
+
+    await expect(FileManager.addFile(file as any)).rejects.toThrow('temporary storage failure')
+
+    expect(mocks.storageV2UpsertFile).toHaveBeenCalledWith(file)
+    expect(mocks.filesAdd).not.toHaveBeenCalled()
+  })
+
+  it('stops adding legacy metadata when Storage v2 is unavailable during add', async () => {
     Object.defineProperty(window, 'api', {
       configurable: true,
       value: {
@@ -212,10 +230,9 @@ describe('FileManager', () => {
 
     const { default: FileManager } = await import('../FileManager')
 
-    await expect(FileManager.addFile(file as any)).resolves.toBe(file)
+    await expect(FileManager.addFile(file as any)).rejects.toThrow('Storage v2 file upsert API unavailable')
 
-    expect(mocks.filesAdd).toHaveBeenCalledWith(file)
+    expect(mocks.filesAdd).not.toHaveBeenCalled()
     expect(mocks.storageV2UpsertFile).not.toHaveBeenCalled()
-    expect(mocks.mirrorScheduleFile).toHaveBeenCalledWith('file-3', 0)
   })
 })

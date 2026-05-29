@@ -6,36 +6,23 @@ import type { FileMetadata } from '@renderer/types'
 import { getFileDirectory } from '@renderer/utils'
 import dayjs from 'dayjs'
 
-import { storageV2FileMirrorService } from './StorageV2FileMirrorService'
 import { storageV2FileRecoveryService } from './StorageV2FileRecoveryService'
 
 const logger = loggerService.withContext('FileManager')
 
 class FileManager {
-  private static async mirrorFileToStorageV2(file: FileMetadata | undefined): Promise<void> {
+  private static async upsertStorageV2File(file: FileMetadata | undefined): Promise<void> {
     if (!file) return
 
-    if (!window.api?.storageV2) {
-      storageV2FileMirrorService.scheduleFile(file.id, 0)
-      return
+    if (typeof window.api?.storageV2?.upsertFile !== 'function') {
+      throw new Error('Storage v2 file upsert API unavailable')
     }
 
     try {
-      if (typeof window.api.storageV2.upsertFile === 'function') {
-        await window.api.storageV2.upsertFile(file)
-      } else {
-        await window.api.storageV2.importLegacyDexieSnapshot(
-          {
-            conversations: [],
-            files: [file]
-          },
-          { dryRun: false }
-        )
-      }
+      await window.api.storageV2.upsertFile(file)
     } catch (error) {
-      logger.warn('Failed to mirror file to Storage v2:', error as Error)
-      storageV2FileMirrorService.scheduleFile(file.id, 0)
-      await storageV2FileMirrorService.flush()
+      logger.warn('Failed to upsert file in Storage v2:', error as Error)
+      throw error
     }
   }
 
@@ -61,13 +48,13 @@ class FileManager {
 
     if (fileRecord) {
       const updatedFile = { ...fileRecord, count: fileRecord.count + 1 }
+      await this.upsertStorageV2File(updatedFile)
       await db.files.update(fileRecord.id, updatedFile)
-      await this.mirrorFileToStorageV2(updatedFile)
       return fileRecord
     }
 
+    await this.upsertStorageV2File(file)
     await db.files.add(file)
-    await this.mirrorFileToStorageV2(file)
 
     return file
   }
@@ -94,13 +81,13 @@ class FileManager {
 
     if (fileRecord) {
       const updatedFile = { ...fileRecord, count: fileRecord.count + 1 }
+      await this.upsertStorageV2File(updatedFile)
       await db.files.update(fileRecord.id, updatedFile)
-      await this.mirrorFileToStorageV2(updatedFile)
       return fileRecord
     }
 
+    await this.upsertStorageV2File(base64File)
     await db.files.add(base64File)
-    await this.mirrorFileToStorageV2(base64File)
 
     return base64File
   }
@@ -114,13 +101,13 @@ class FileManager {
 
     if (fileRecord) {
       const updatedFile = { ...fileRecord, count: fileRecord.count + 1 }
+      await this.upsertStorageV2File(updatedFile)
       await db.files.update(fileRecord.id, updatedFile)
-      await this.mirrorFileToStorageV2(updatedFile)
       return fileRecord
     }
 
+    await this.upsertStorageV2File(uploadFile)
     await db.files.add(uploadFile)
-    await this.mirrorFileToStorageV2(uploadFile)
 
     return uploadFile
   }
@@ -164,8 +151,8 @@ class FileManager {
     if (!force) {
       if (file.count > 1) {
         const updatedFile = { ...file, count: file.count - 1 }
+        await this.upsertStorageV2File(updatedFile)
         await db.files.update(id, updatedFile)
-        await this.mirrorFileToStorageV2(updatedFile)
         return
       }
     }
@@ -217,8 +204,8 @@ class FileManager {
       file.origin_name = file.origin_name + file.ext
     }
 
+    await this.upsertStorageV2File(file)
     await db.files.update(file.id, file)
-    await this.mirrorFileToStorageV2(file)
   }
 
   static formatFileName(file: FileMetadata) {

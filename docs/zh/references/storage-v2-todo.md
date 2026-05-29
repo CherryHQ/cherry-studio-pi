@@ -43,6 +43,7 @@
 - [ ] 普通会话从 Dexie-first 切到 Storage v2 conversation/message/block 权威写入。
 - [x] 普通会话 append/update message 的 DbService 入口已先写 Storage v2 conversation/message/block，再落 Dexie legacy cache；delete/clear 既有 tombstone/snapshot-first 保护继续保留。
 - [ ] 文件上传/删除从 Dexie/filesystem-first 切到 blob/file record 权威写入。
+- [x] 文件 metadata add/update/count decrement 已先 upsert Storage v2 file record，再更新 Dexie legacy cache；delete 继续先写 Storage v2 tombstone。物理文件 blob/上传复制权威化仍待后续处理。
 - [ ] Agent/session/task/channel 从 `agents.db` first 切到 Storage v2 first。
 - [ ] App data/workbench/sync state 从 `app.db` first 切到 Storage v2 first。
 - [ ] destructive 操作统一先写 tombstone，再更新 legacy/UI。
@@ -103,6 +104,7 @@
 - [x] Provider/模型 Storage v2-first 写路径测试：renderer 写入队列覆盖连续模型变更，main StorageService 覆盖 secret vault upsert、显式 credential ref 和 provider tombstone。
 - [x] Assistant Storage v2-first 写路径测试：renderer 写入队列覆盖连续助手变更，main StorageService 覆盖 assistant upsert 和 tombstone。
 - [x] 普通会话 Storage v2-first 写路径测试：DbService 覆盖 append/update message 先 upsert Storage v2，main StorageService 覆盖 conversation/message/block API。
+- [x] 文件 metadata Storage v2-first 写路径测试：FileManager 覆盖 add 前 upsert 和 upsert 失败阻断 legacy 写入，main StorageService 覆盖 file upsert/delete API。
 - [ ] 补恢复到空 legacy runtime 的 read-through 测试。
 - [ ] 补路径变化后不丢数据的集成测试。
 - [ ] 补 secret vault 不可用、safeStorage 不可用的降级测试。

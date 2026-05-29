@@ -176,6 +176,8 @@ describe('StorageV2Service', () => {
     mocks.conversationRepository.upsertMessageBlocks.mockResolvedValue(undefined)
     mocks.conversationRepository.delete.mockResolvedValue({ deleted: true })
     mocks.fileRepository.get.mockResolvedValue(null)
+    mocks.fileRepository.importFile.mockResolvedValue({ id: 'file-1' })
+    mocks.fileRepository.delete.mockResolvedValue({ deleted: true })
     mocks.fileRepository.list.mockResolvedValue([])
     mocks.knowledgeRepository.listBases.mockResolvedValue([])
     mocks.dataRootService.resolveDataRoot.mockReturnValue({ dataRoot: '/mock/Data', candidates: [] })
@@ -466,6 +468,23 @@ describe('StorageV2Service', () => {
     await expect(new StorageV2Service().deleteConversation('topic-1')).resolves.toEqual({ deleted: true })
 
     expect(mocks.conversationRepository.delete).toHaveBeenCalledWith('topic-1')
+  })
+
+  it('delegates file upsert and delete to the structured Storage v2 repository', async () => {
+    const file = {
+      id: 'file-1',
+      name: 'file-1.txt',
+      ext: '.txt',
+      count: 1
+    }
+
+    const service = new StorageV2Service()
+
+    await expect(service.upsertFile(file)).resolves.toEqual({ id: 'file-1' })
+    await expect(service.deleteFile('file-1')).resolves.toEqual({ deleted: true })
+
+    expect(mocks.fileRepository.importFile).toHaveBeenCalledWith(file)
+    expect(mocks.fileRepository.delete).toHaveBeenCalledWith('file-1')
   })
 
   it('summarizes whether the current profile is ready for backup and migration', async () => {
