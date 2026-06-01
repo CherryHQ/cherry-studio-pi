@@ -373,6 +373,10 @@ async function sha256File(filePath: string): Promise<string> {
   return hash.digest('hex')
 }
 
+function isIgnorableCreateDirectoryError(error: unknown) {
+  return error instanceof WebDavOperationError && (error.status === 405 || error.status === 409)
+}
+
 export class StorageV2WebDavRecordSyncService {
   private columnsByTable = new Map<string, string[]>()
 
@@ -383,16 +387,56 @@ export class StorageV2WebDavRecordSyncService {
   }
 
   private async ensureDirectory(client: WebDAVClient, dirPath: string) {
-    if (await runWebDavOperation(`checking remote directory ${dirPath}`, () => client.exists(dirPath), { logger })) {
+    if (dirPath === '/') return
+
+    try {
+      if (await runWebDavOperation(`checking remote directory ${dirPath}`, () => client.exists(dirPath), { logger })) {
+        return
+      }
+    } catch (error) {
+      if (!(error instanceof WebDavOperationError) || error.status !== 403) {
+        throw error
+      }
+      logger.warn(`Cannot check remote directory ${dirPath}; trying to create it directly`, error)
+    }
+
+    try {
+      await runWebDavOperation(
+        `creating remote directory ${dirPath}`,
+        () => client.createDirectory(dirPath, { recursive: true }),
+        {
+          logger
+        }
+      )
+    } catch (error) {
+      if (isIgnorableCreateDirectoryError(error)) {
+        logger.warn(`Remote directory ${dirPath} already exists or was created concurrently`, error as Error)
+        return
+      }
+      throw error
+    }
+  }
+
+  private async assertWriteAccess(client: WebDAVClient, basePath: string) {
+    const probePath = path.posix.join(basePath, `.cherry-studio-pi-storage-write-test-${Date.now()}.tmp`)
+    await runWebDavOperation(
+      `writing Storage v2 sync probe ${probePath}`,
+      () => client.putFileContents(probePath, 'ok', { overwrite: true }),
+      { logger }
+    )
+
+    const maybeDeleteFile = (client as WebDAVClient & { deleteFile?: (filePath: string) => Promise<void> }).deleteFile
+    if (typeof maybeDeleteFile !== 'function') {
       return
     }
+
     await runWebDavOperation(
-      `creating remote directory ${dirPath}`,
-      () => client.createDirectory(dirPath, { recursive: true }),
-      {
-        logger
-      }
-    )
+      `deleting Storage v2 sync probe ${probePath}`,
+      () => maybeDeleteFile.call(client, probePath),
+      { logger }
+    ).catch((error) => {
+      logger.warn(`Failed to delete Storage v2 sync probe ${probePath}`, error as Error)
+    })
   }
 
   private async readJson<T>(client: WebDAVClient, filePath: string): Promise<T | null> {
@@ -678,6 +722,8 @@ export class StorageV2WebDavRecordSyncService {
     const dbClient = await storageV2Database.getClient()
     const manifest = normalizeManifest(manifestInput ?? makeManifest())
     const summary = { ...EMPTY_SUMMARY }
+    await this.ensureDirectory(client, basePath)
+    await this.assertWriteAccess(client, basePath)
     const localRecords = await this.listLocalRecords(dbClient)
     const localById = new Map(localRecords.map((record) => [record.id, record]))
     const ids = this.sortRecordIds(new Set([...localById.keys(), ...Object.keys(manifest.records)]))

@@ -200,6 +200,25 @@ describe('AppDataSyncService', () => {
     expect(mocks.webdav.exists).not.toHaveBeenCalledWith('/remote-root/sync/v1/sync/v1')
   })
 
+  it('tries to create the sync directory when WebDAV denies directory existence checks', async () => {
+    mocks.webdav.exists.mockImplementation(async (filePath: string) => {
+      if (filePath === '/remote-root/sync/v1') {
+        throw new Error('Invalid response: 403 Forbidden')
+      }
+
+      return true
+    })
+
+    await new AppDataSyncService().syncNow(config)
+
+    expect(mocks.webdav.createDirectory).toHaveBeenCalledWith('/remote-root/sync/v1', { recursive: true })
+    expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/remote-root\/sync\/v1\/\.cherry-studio-pi-write-test-/),
+      'ok',
+      { overwrite: true }
+    )
+  })
+
   it('applies downloaded remote app records to Storage v2 before legacy app.db', async () => {
     const events: string[] = []
     mocks.storageV2.upsertRecordSnapshot.mockImplementation(async () => {

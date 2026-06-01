@@ -57,6 +57,15 @@ function getOriginalError(error: unknown) {
   return error instanceof WebDavOperationError ? error.originalError : error
 }
 
+function getOperationTarget(error: unknown) {
+  if (!(error instanceof WebDavOperationError)) {
+    return null
+  }
+
+  const match = error.operation.match(/\s(\/[^ ]*)$/)
+  return match?.[1] ?? null
+}
+
 function describeWebDavError(error: unknown) {
   const status = getWebDavErrorStatus(error)
   const statusText = getWebDavErrorStatusText(error)
@@ -102,6 +111,8 @@ export function describeWebDavUserFacingError(error: unknown, action = '访问 W
   const status = getWebDavErrorStatus(source)
   const message = errorMessage(source)
   const prefix = `${action}失败`
+  const target = getOperationTarget(error)
+  const targetText = target ? `（路径：${target}）` : ''
 
   if (status) {
     if (status === 401) {
@@ -109,7 +120,7 @@ export function describeWebDavUserFacingError(error: unknown, action = '访问 W
     }
 
     if (status === 403) {
-      return `${prefix}：当前账号没有访问这个 WebDAV 目录的权限。请检查目录权限，或换一个有读写权限的目录。`
+      return `${prefix}：当前账号没有访问这个 WebDAV 目录的权限${targetText}。请在“数据设置 > 多端数据同步”里重新选择一个已存在且可写的目录；如果 WebDAV 地址本身已经指向账号目录，同步目录只需要选择该目录下的子目录。`
     }
 
     if (status === 404) {
