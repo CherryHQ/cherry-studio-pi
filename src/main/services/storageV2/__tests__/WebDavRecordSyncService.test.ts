@@ -35,6 +35,7 @@ vi.mock('../DataRootService', () => ({
   }
 }))
 
+import { storageV2Database } from '../StorageV2Database'
 import { StorageV2WebDavRecordSyncService } from '../WebDavRecordSyncService'
 
 const settingsTable = {
@@ -62,6 +63,100 @@ function hashJson(value: unknown) {
   return createHash('sha256')
     .update(JSON.stringify(canonicalize(value)))
     .digest('hex')
+}
+
+type SettingsRow = {
+  key: string
+  value_json: string
+  scope: string
+  updated_at: string
+  deleted_at: string | null
+  version: number
+}
+
+function makeSettingsDb(rows: SettingsRow[]) {
+  const state = {
+    rows: [...rows],
+    syncState: new Map<string, string>()
+  }
+
+  return {
+    state,
+    client: {
+      execute: vi.fn(async (input: string | { sql: string; args?: unknown[] }) => {
+        const sql = typeof input === 'string' ? input : input.sql
+        const args = typeof input === 'string' ? [] : (input.args ?? [])
+
+        if (sql.includes('SELECT * FROM settings')) {
+          return { rows: state.rows.map((row) => ({ ...row })) }
+        }
+
+        if (sql.includes('SELECT value_json FROM sync_state')) {
+          const value = state.syncState.get(String(args[0]))
+          return { rows: value ? [{ value_json: JSON.stringify(value) }] : [] }
+        }
+
+        if (sql.includes('INSERT INTO sync_state')) {
+          state.syncState.set(String(args[0]), JSON.parse(String(args[1])))
+          return { rows: [] }
+        }
+
+        if (sql.includes('PRAGMA table_info(settings)')) {
+          return {
+            rows: [
+              { name: 'key' },
+              { name: 'value_json' },
+              { name: 'scope' },
+              { name: 'updated_at' },
+              { name: 'deleted_at' },
+              { name: 'version' }
+            ]
+          }
+        }
+
+        if (sql.includes('INSERT INTO settings')) {
+          const nextRow: SettingsRow = {
+            key: String(args[0]),
+            value_json: String(args[1]),
+            scope: String(args[2]),
+            updated_at: String(args[3]),
+            deleted_at: args[4] == null ? null : String(args[4]),
+            version: Number(args[5])
+          }
+          const index = state.rows.findIndex((row) => row.key === nextRow.key)
+          if (index === -1) {
+            state.rows.push(nextRow)
+          } else {
+            state.rows[index] = nextRow
+          }
+          return { rows: [] }
+        }
+
+        return { rows: [] }
+      })
+    }
+  }
+}
+
+function makeSharedWebDavStore() {
+  const files = new Map<string, unknown>()
+  return {
+    files,
+    client: {
+      exists: vi.fn(async () => true),
+      createDirectory: vi.fn(async () => undefined),
+      getFileContents: vi.fn(async (filePath: string) => {
+        if (!files.has(filePath)) {
+          throw new Error(`Missing remote file: ${filePath}`)
+        }
+        return files.get(filePath)
+      }),
+      putFileContents: vi.fn(async (filePath: string, contents: unknown) => {
+        files.set(filePath, contents)
+        return true
+      })
+    }
+  }
 }
 
 describe('StorageV2WebDavRecordSyncService', () => {
@@ -290,6 +385,56 @@ describe('StorageV2WebDavRecordSyncService', () => {
       mocks.webdav.putFileContents.mock.calls.some(
         ([filePath, contents]) =>
           String(filePath).includes('/storage-v2/records/settings/') && String(contents).includes('local-default')
+      )
+    ).toBe(false)
+  })
+
+  it('simulates two devices syncing through the same WebDAV store', async () => {
+    const remote = makeSharedWebDavStore()
+    const deviceA = makeSettingsDb([
+      {
+        key: 'theme',
+        value_json: '{"mode":"device-a-user-value"}',
+        scope: 'app',
+        updated_at: '2026-05-29T12:00:00.000Z',
+        deleted_at: null,
+        version: 1
+      }
+    ])
+    const deviceB = makeSettingsDb([
+      {
+        key: 'theme',
+        value_json: '{"mode":"device-b-default"}',
+        scope: 'app',
+        updated_at: '2026-05-29T12:20:00.000Z',
+        deleted_at: null,
+        version: 3
+      }
+    ])
+    const getClient = vi.mocked(storageV2Database.getClient)
+    const service = new StorageV2WebDavRecordSyncService([settingsTable])
+
+    getClient.mockResolvedValueOnce(deviceA.client as any)
+    const firstSync = await service.sync(remote.client as any, '/remote-root/sync/v1', null)
+    const remoteHashAfterDeviceA = firstSync.manifest.records['settings:theme']?.valueHash
+
+    getClient.mockResolvedValueOnce(deviceB.client as any)
+    const secondSync = await service.sync(remote.client as any, '/remote-root/sync/v1', firstSync.manifest)
+
+    expect(firstSync.summary.storageUploaded).toBe(1)
+    expect(secondSync.summary.storageDownloaded).toBe(1)
+    expect(secondSync.summary.storageUploaded).toBe(0)
+    expect(secondSync.summary.storageConflicts).toBe(0)
+    expect(deviceB.state.rows[0]).toMatchObject({
+      value_json: '{"mode":"device-a-user-value"}',
+      updated_at: '2026-05-29T12:00:00.000Z',
+      version: 1
+    })
+    expect(secondSync.manifest.records['settings:theme']?.valueHash).toBe(remoteHashAfterDeviceA)
+    expect(
+      Array.from(remote.files.entries()).some(
+        ([filePath, contents]) =>
+          filePath.includes('/storage-v2/records/settings/') && String(contents).includes('device-b-default')
       )
     ).toBe(false)
   })
