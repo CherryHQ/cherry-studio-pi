@@ -7,11 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   storageClient: {
-    execute: vi.fn(async (_input: string | { sql: string; args?: unknown[] }) => ({
-      rows: [],
-      columns: [],
-      columnTypes: []
-    }))
+    execute: vi.fn(async (input: string | { sql: string; args?: unknown[] }) => {
+      void input
+      return {
+        rows: [],
+        columns: [],
+        columnTypes: []
+      }
+    })
   },
   withTransaction: vi.fn(async (_client: unknown, fn: () => Promise<unknown>) => fn()),
   recordChange: vi.fn()

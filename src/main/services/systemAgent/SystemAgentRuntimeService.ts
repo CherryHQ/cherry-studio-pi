@@ -1,5 +1,13 @@
 import { loggerService } from '@logger'
 import {
+  formatSystemAgentApprovalRequiredError,
+  formatSystemAgentAutoRunFailure,
+  formatSystemAgentAutoRunSuccess,
+  formatSystemAgentBlockedSummary,
+  formatSystemAgentGuidance,
+  formatSystemAgentNoCapabilityGuidance
+} from '@main/i18n/systemAgentMessages'
+import {
   type AppCapabilityDescriptor,
   type AppCapabilityListOptions,
   type AppCapabilityResult,
@@ -62,13 +70,6 @@ export type SystemAgentHandledEvent = {
   summary: string
 }
 
-const RISK_LABELS: Record<AppCapabilityRisk, string> = {
-  read: '只读',
-  write: '会修改应用数据或设置',
-  destructive: '高风险，会覆盖或删除数据',
-  external: '会调用外部服务或网络能力'
-}
-
 function needsApproval(risk: AppCapabilityRisk) {
   return risk !== 'read'
 }
@@ -84,13 +85,10 @@ function makeEventQuery(input: SystemAgentEventInput) {
 
 function makeGuidance(recommended: AppCapabilityDescriptor | null) {
   if (!recommended) {
-    return '没有找到合适的内部能力。可以让 agent 继续收集上下文，或把功能注册为新的 app capability。'
+    return formatSystemAgentNoCapabilityGuidance()
   }
 
-  const approval = needsApproval(recommended.risk)
-    ? `这个能力是“${RISK_LABELS[recommended.risk]}”，执行前需要用户确认。`
-    : '这个能力是只读的，可以优先用于诊断、查询和规划。'
-  return `建议优先使用 ${recommended.id}。${approval}`
+  return formatSystemAgentGuidance(recommended.id, recommended.risk, needsApproval(recommended.risk))
 }
 
 export class SystemAgentRuntimeService {
@@ -154,11 +152,15 @@ export class SystemAgentRuntimeService {
     const successfulAutoRun = autoRuns.find((item) => item.result.ok)
     const failedAutoRun = autoRuns.find((item) => !item.result.ok)
     const summary = successfulAutoRun
-      ? `系统 Agent 已自动运行 ${successfulAutoRun.capability.id}：${successfulAutoRun.result.summary}`
+      ? formatSystemAgentAutoRunSuccess(successfulAutoRun.capability.id, successfulAutoRun.result.summary)
       : failedAutoRun
-        ? `系统 Agent 已尝试 ${failedAutoRun.capability.id}，但诊断失败：${failedAutoRun.result.error || failedAutoRun.result.summary}`
+        ? formatSystemAgentAutoRunFailure(
+            failedAutoRun.capability.id,
+            failedAutoRun.result.error,
+            failedAutoRun.result.summary
+          )
         : blocked[0]
-          ? `系统 Agent 找到可处理能力 ${blocked[0].id}，但这是“${RISK_LABELS[blocked[0].risk]}”操作，需要用户确认。`
+          ? formatSystemAgentBlockedSummary(blocked[0].id, blocked[0].risk)
           : plan.guidance
 
     logger.info('Handled system agent event', {
@@ -200,7 +202,7 @@ export class SystemAgentRuntimeService {
         ok: false,
         isError: true,
         summary: `${id} requires approval`,
-        error: `${id} 是“${RISK_LABELS[capability.risk]}”能力，需要用户确认后才能执行。`
+        error: formatSystemAgentApprovalRequiredError(id, capability.risk)
       }
     }
 

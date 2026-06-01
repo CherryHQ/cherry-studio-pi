@@ -145,7 +145,10 @@ describe('StorageV2AgentLegacyProjectionService', () => {
 
       return { rows: [] }
     })
-    const targetExecute = vi.fn(async (_input: ExecuteInput) => ({ rows: [] }))
+    const targetExecute = vi.fn(async (input: ExecuteInput) => {
+      void input
+      return { rows: [] }
+    })
     const report = createReport()
 
     await (storageV2AgentLegacyProjectionService as any).projectRows(
@@ -244,7 +247,10 @@ describe('StorageV2AgentLegacyProjectionService', () => {
 
       return { rows: [] }
     })
-    const targetExecute = vi.fn(async (_input: ExecuteInput) => ({ rows: [] }))
+    const targetExecute = vi.fn(async (input: ExecuteInput) => {
+      void input
+      return { rows: [] }
+    })
     const report = createReport()
 
     await (storageV2AgentLegacyProjectionService as any).projectRows(

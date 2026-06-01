@@ -76,6 +76,12 @@ function flushAssistantMirror(reason: string, options?: { strict?: boolean }) {
   return undefined
 }
 
+function runAssistantUpdate(task: () => Promise<void>, reason: string) {
+  void task().catch((error) => {
+    logger.error(`Failed to persist assistant update after ${reason}`, error as Error)
+  })
+}
+
 const pickFallbackModel = (providers: Provider[]): Model | undefined => {
   const provider = providers.find(
     (provider) =>
@@ -173,10 +179,12 @@ export function useAssistants() {
 
   return {
     assistants,
-    updateAssistants: async (assistants: Assistant[]) => {
-      await upsertStorageV2AssistantList(assistants)
-      dispatch(updateAssistants(assistants))
-      flushAssistantMirror('assistants-update-list')
+    updateAssistants: (assistants: Assistant[]) => {
+      runAssistantUpdate(async () => {
+        await upsertStorageV2AssistantList(assistants)
+        dispatch(updateAssistants(assistants))
+        flushAssistantMirror('assistants-update-list')
+      }, 'assistants-update-list')
     },
     addAssistant: async (assistant: Assistant) => {
       await upsertStorageV2AssistantList([assistant, ...reduxStore.getState().assistants.assistants])
@@ -260,14 +268,16 @@ export function useAssistant(id: string) {
   }, [assistant?.settings])
 
   const updateAssistantSettings = useCallback(
-    async (settings: Partial<AssistantSettings>) => {
+    (settings: Partial<AssistantSettings>) => {
       if (!assistant?.id) return
 
-      await mutateStorageV2AssistantFirst(assistant.id, store.getState().assistants.assistants, (assistant) =>
-        applyAssistantSettingsPatch(assistant, settings)
-      )
-      dispatch(_updateAssistantSettings({ assistantId: assistant.id, settings }))
-      flushAssistantMirror('assistant-settings-update')
+      runAssistantUpdate(async () => {
+        await mutateStorageV2AssistantFirst(assistant.id, store.getState().assistants.assistants, (assistant) =>
+          applyAssistantSettingsPatch(assistant, settings)
+        )
+        dispatch(_updateAssistantSettings({ assistantId: assistant.id, settings }))
+        flushAssistantMirror('assistant-settings-update')
+      }, 'assistant-settings-update')
     },
     [assistant?.id, dispatch]
   )
@@ -387,23 +397,27 @@ export function useAssistant(id: string) {
       await flushAssistantMirror('assistant-topic-move', { strict: true })
       void flushStorageV2TopicMirror(topic.id)
     },
-    updateTopic: async (topic: Topic) => {
-      await mutateStorageV2AssistantFirst(assistant.id, store.getState().assistants.assistants, (assistant) => ({
-        ...assistant,
-        topics: getAssistantTopicsFromState(store.getState().assistants, assistant.id, normalizedTopics).map(
-          (currentTopic) => (currentTopic.id === topic.id ? { ...topic, messages: [] } : currentTopic)
-        )
-      }))
-      dispatch(updateTopic({ assistantId: assistant.id, topic }))
-      void flushStorageV2TopicMirror(topic.id)
+    updateTopic: (topic: Topic) => {
+      runAssistantUpdate(async () => {
+        await mutateStorageV2AssistantFirst(assistant.id, store.getState().assistants.assistants, (assistant) => ({
+          ...assistant,
+          topics: getAssistantTopicsFromState(store.getState().assistants, assistant.id, normalizedTopics).map(
+            (currentTopic) => (currentTopic.id === topic.id ? { ...topic, messages: [] } : currentTopic)
+          )
+        }))
+        dispatch(updateTopic({ assistantId: assistant.id, topic }))
+        void flushStorageV2TopicMirror(topic.id)
+      }, 'assistant-topic-update')
     },
-    updateTopics: async (topics: Topic[]) => {
-      await mutateStorageV2AssistantFirst(assistant.id, store.getState().assistants.assistants, (assistant) => ({
-        ...assistant,
-        topics: topics.map(omitTopicMessages)
-      }))
-      dispatch(updateTopics({ assistantId: assistant.id, topics }))
-      flushStorageV2TopicMirrors(topics.map((topic) => topic.id))
+    updateTopics: (topics: Topic[]) => {
+      runAssistantUpdate(async () => {
+        await mutateStorageV2AssistantFirst(assistant.id, store.getState().assistants.assistants, (assistant) => ({
+          ...assistant,
+          topics: topics.map(omitTopicMessages)
+        }))
+        dispatch(updateTopics({ assistantId: assistant.id, topics }))
+        flushStorageV2TopicMirrors(topics.map((topic) => topic.id))
+      }, 'assistant-topics-update')
     },
     removeAllTopics: async () => {
       const replacementTopic = getDefaultTopic(assistant.id)
@@ -418,26 +432,30 @@ export function useAssistant(id: string) {
       await flushStorageV2TopicMirror(replacementTopic.id)
     },
     setModel: useCallback(
-      async (model: Model) => {
+      (model: Model) => {
         if (!assistant) return
 
-        await mutateStorageV2AssistantFirst(assistant.id, store.getState().assistants.assistants, (assistant) => ({
-          ...assistant,
-          model
-        }))
-        dispatch(setModel({ assistantId: assistant.id, model }))
-        flushAssistantMirror('assistant-set-model')
+        runAssistantUpdate(async () => {
+          await mutateStorageV2AssistantFirst(assistant.id, store.getState().assistants.assistants, (assistant) => ({
+            ...assistant,
+            model
+          }))
+          dispatch(setModel({ assistantId: assistant.id, model }))
+          flushAssistantMirror('assistant-set-model')
+        }, 'assistant-set-model')
       },
       [assistant, dispatch]
     ),
     updateAssistant: useCallback(
-      async (update: Partial<Omit<Assistant, 'id'>>) => {
-        await mutateStorageV2AssistantFirst(id, store.getState().assistants.assistants, (assistant) => ({
-          ...assistant,
-          ...update
-        }))
-        dispatch(updateAssistant({ id, ...update }))
-        flushAssistantMirror('assistant-update')
+      (update: Partial<Omit<Assistant, 'id'>>) => {
+        runAssistantUpdate(async () => {
+          await mutateStorageV2AssistantFirst(id, store.getState().assistants.assistants, (assistant) => ({
+            ...assistant,
+            ...update
+          }))
+          dispatch(updateAssistant({ id, ...update }))
+          flushAssistantMirror('assistant-update')
+        }, 'assistant-update')
       },
       [dispatch, id]
     ),

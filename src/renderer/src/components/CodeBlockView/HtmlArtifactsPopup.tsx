@@ -192,11 +192,11 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({ open, title, ht
       updateAllMinApps(reloadedApps)
       updateMinapps([...minapps.filter((app) => app.id !== newApp.id), newApp])
       updatePinnedMinapps([...pinned.filter((app) => app.id !== newApp.id), newApp])
-      window.toast.success('已安装到工作台')
+      window.toast.success(t('html_artifacts.install_workbench.success'))
     } catch (error) {
-      window.toast.error(`安装到工作台失败：${(error as Error).message}`)
+      window.toast.error(t('html_artifacts.install_workbench.failed', { message: (error as Error).message }))
     }
-  }, [html, minapps, pinned, title, updateMinapps, updatePinnedMinapps])
+  }, [html, minapps, pinned, t, title, updateMinapps, updatePinnedMinapps])
 
   const renderHeader = () => (
     <ModalHeader onDoubleClick={() => setIsFullscreen(!isFullscreen)} className={classNames({ drag: isFullscreen })}>
@@ -231,9 +231,9 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({ open, title, ht
       </HeaderCenter>
 
       <HeaderRight onDoubleClick={(e) => e.stopPropagation()}>
-        <Tooltip title="安装到工作台" mouseLeaveDelay={0}>
+        <Tooltip title={t('html_artifacts.install_workbench.title')} mouseLeaveDelay={0}>
           <Button type="text" icon={<Plus size={16} />} className="nodrag" onClick={handleInstallToWorkbench}>
-            安装到工作台
+            {t('html_artifacts.install_workbench.title')}
           </Button>
         </Tooltip>
         <Dropdown

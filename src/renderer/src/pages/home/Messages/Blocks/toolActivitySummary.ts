@@ -1,26 +1,17 @@
+import {
+  formatToolActivityFileTask,
+  formatToolActivityValueTask,
+  formatToolActivityZhTask,
+  isToolActivityZh,
+  selectToolActivityText,
+  TOOL_ACTIVITY_ACTION_RULES,
+  TOOL_ACTIVITY_KNOWN_SUBJECTS,
+  TOOL_ACTIVITY_SEARCH_REPLACEMENTS,
+  TOOL_ACTIVITY_TEXT,
+  TOOL_ACTIVITY_ZH_SUBJECTS,
+  type ToolActivityLocalizedText
+} from '@renderer/i18n/toolActivitySummary'
 import type { ToolMessageBlock } from '@renderer/types/newMessage'
-
-const KNOWN_SUBJECTS: Array<{ pattern: RegExp; zh: string; en: string }> = [
-  { pattern: /(?:@?feishu|lark)[-\s_]*cli/i, zh: '飞书 CLI', en: 'Feishu CLI' },
-  { pattern: /@feishu/i, zh: '飞书', en: 'Feishu' },
-  { pattern: /\b(?:feishu|lark)\b/i, zh: '飞书', en: 'Feishu' }
-]
-
-const ZH_SUBJECTS: Array<{ pattern: RegExp; label: string }> = [
-  { pattern: /^(?:project|package)\s+dependenc(?:y|ies)$/i, label: '项目依赖' },
-  { pattern: /^target\s+skill\s+location$/i, label: '技能位置' },
-  { pattern: /^other\s+package\s+managers?$/i, label: '包管理器' },
-  { pattern: /^package\s+managers?$/i, label: '包管理器' },
-  { pattern: /^repositories$/i, label: '代码仓库' },
-  { pattern: /^repository$/i, label: '代码仓库' },
-  { pattern: /^tool$/i, label: '工具' },
-  { pattern: /^tools$/i, label: '工具' },
-  { pattern: /^workspace$/i, label: '工作区' },
-  { pattern: /^environment$/i, label: '运行环境' }
-]
-
-const isZh = (language?: string) => language?.toLowerCase().startsWith('zh')
-const local = (language: string | undefined, zh: string, en: string) => (isZh(language) ? zh : en)
 
 const text = (value: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined
@@ -52,27 +43,21 @@ const stripPackageDecoration = (value: string) => {
 
 const formatSubject = (raw: string, language?: string) => {
   const cleaned = stripPackageDecoration(normalizeWhitespace(raw))
-  const known = KNOWN_SUBJECTS.find((item) => item.pattern.test(cleaned))
-  if (known) return local(language, known.zh, known.en)
-  if (isZh(language)) {
-    const subject = ZH_SUBJECTS.find((item) => item.pattern.test(cleaned))
+  const known = TOOL_ACTIVITY_KNOWN_SUBJECTS.find((item) => item.pattern.test(cleaned))
+  if (known) return selectToolActivityText(language, known)
+  if (isToolActivityZh(language)) {
+    const subject = TOOL_ACTIVITY_ZH_SUBJECTS.find((item) => item.pattern.test(cleaned))
     if (subject) return subject.label
   }
   return cleaned
 }
 
-const normalizeZhSearchSubject = (raw: string, language?: string) =>
-  formatSubject(raw, language)
-    .replace(/\brelated\b/gi, '相关')
-    .replace(/\bglobal\b/gi, '')
-    .replace(/\bnpm\b/gi, 'npm')
-    .replace(/\bpackages?\b/gi, '包')
-    .replace(/\s+/g, '')
-    .trim()
-
-const formatZhTask = (verb: string, subject: string, suffix = '') => {
-  const spacer = suffix && /[A-Za-z0-9]$/.test(subject) ? ' ' : ''
-  return `${verb}${subject}${spacer}${suffix}`
+const normalizeZhSearchSubject = (raw: string, language?: string) => {
+  const subject = TOOL_ACTIVITY_SEARCH_REPLACEMENTS.reduce(
+    (value, replacement) => value.replace(replacement.pattern, replacement.replacement),
+    formatSubject(raw, language)
+  )
+  return subject.replace(/\s+/g, '').trim()
 }
 
 const formatAction = (
@@ -84,7 +69,10 @@ const formatAction = (
   enSuffix = ''
 ) => {
   const subject = formatSubject(raw, language)
-  return local(language, formatZhTask(zhVerb, subject, zhSuffix), `${enVerb} ${subject}${enSuffix}`)
+  return selectToolActivityText(language, {
+    zh: formatToolActivityZhTask(zhVerb, subject, zhSuffix),
+    en: `${enVerb} ${subject}${enSuffix}`
+  })
 }
 
 const basename = (filePath: string) => {
@@ -92,21 +80,11 @@ const basename = (filePath: string) => {
   return normalized.split('/').filter(Boolean).pop() || normalized
 }
 
-const ACTION_RULES: Array<[RegExp, string, string]> = [
-  [/^fetch\s+(.+)$/i, '获取', 'Fetch'],
-  [/^read\s+(.+)$/i, '读取', 'Read'],
-  [/^list\s+(.+)$/i, '查看', 'List'],
-  [/^check\s+(.+)$/i, '检查', 'Check'],
-  [/^(?:inspect|probe|verify|test|look\s+for|locate)\s+(.+)$/i, '检查', 'Check'],
-  [/^register\s+(.+?)(?:\s+(?:globally|locally|after)\b.*)?$/i, '注册', 'Register'],
-  [/^run\s+(.+)$/i, '运行', 'Run']
-]
-
 const summarizeEnglishDescription = (description: string, language?: string): string | undefined => {
   const value = normalizeWhitespace(description)
 
   if (/^install (?:project |package )?dependenc(?:y|ies)\b/i.test(value)) {
-    return local(language, '安装项目依赖', 'Install project dependencies')
+    return selectToolActivityText(language, TOOL_ACTIVITY_TEXT.projectDependencies)
   }
 
   const installMatch = value.match(
@@ -114,32 +92,51 @@ const summarizeEnglishDescription = (description: string, language?: string): st
   )
   if (installMatch?.[1]) {
     const subject = formatSubject(installMatch[1], language)
-    return local(language, `安装${subject}`, `Install ${subject}`)
+    return selectToolActivityText(language, {
+      zh: formatToolActivityZhTask(TOOL_ACTIVITY_TEXT.install.zh, subject),
+      en: `${TOOL_ACTIVITY_TEXT.install.en} ${subject}`
+    })
   }
 
   const fetchGuideMatch = value.match(/^fetch\s+(.+?)\s+(?:installation\s+)?guide(?:\s+with\s+.+)?$/i)
   if (fetchGuideMatch?.[1]) {
     const subject = formatSubject(fetchGuideMatch[1], language)
     const isInstallationGuide = /\binstallation\s+guide\b/i.test(value)
-    if (isZh(language)) return formatZhTask('获取', subject, isInstallationGuide ? '安装指南' : '指南')
-    return `Fetch ${subject}${isInstallationGuide ? ' installation' : ''} guide`
+    if (isToolActivityZh(language)) {
+      return formatToolActivityZhTask(
+        TOOL_ACTIVITY_TEXT.fetch.zh,
+        subject,
+        isInstallationGuide ? TOOL_ACTIVITY_TEXT.installationGuide.zh : TOOL_ACTIVITY_TEXT.guide.zh
+      )
+    }
+    return `${TOOL_ACTIVITY_TEXT.fetch.en} ${subject}${isInstallationGuide ? TOOL_ACTIVITY_TEXT.installationGuide.en : ''} guide`
   }
 
   const npmSearchMatch =
     value.match(/^search\s+npm\s+for\s+(.+?)\s+packages?$/i) ??
     value.match(/^search\s+for\s+(.+?)(?:\s+related)?\s+(?:global\s+)?npm\s+packages?$/i)
   if (npmSearchMatch?.[1])
-    return formatAction(npmSearchMatch[1], language, '查找', 'Find', '相关 npm 包', ' npm packages')
+    return formatAction(
+      npmSearchMatch[1],
+      language,
+      TOOL_ACTIVITY_TEXT.find.zh,
+      TOOL_ACTIVITY_TEXT.find.en,
+      TOOL_ACTIVITY_TEXT.relatedNpmPackages.zh,
+      TOOL_ACTIVITY_TEXT.relatedNpmPackages.en
+    )
 
   const searchMatch = value.match(/^search(?:\s+for)?\s+(.+)$/i)
   if (searchMatch?.[1]) {
-    const subject = isZh(language)
+    const subject = isToolActivityZh(language)
       ? normalizeZhSearchSubject(searchMatch[1], language)
       : formatSubject(searchMatch[1], language)
-    return local(language, `搜索${subject}`, `Search ${subject}`)
+    return selectToolActivityText(language, {
+      zh: formatToolActivityZhTask(TOOL_ACTIVITY_TEXT.search.zh, subject),
+      en: `${TOOL_ACTIVITY_TEXT.search.en} ${subject}`
+    })
   }
 
-  for (const [pattern, zhVerb, enVerb] of ACTION_RULES) {
+  for (const [pattern, zhVerb, enVerb] of TOOL_ACTIVITY_ACTION_RULES) {
     const match = value.match(pattern)
     if (match?.[1]) return formatAction(match[1], language, zhVerb, enVerb)
   }
@@ -148,11 +145,13 @@ const summarizeEnglishDescription = (description: string, language?: string): st
 }
 
 const summarizeChineseDescription = (description: string): string => {
-  return normalizeWhitespace(description)
-    .replace(/^让我(?:先)?/, '')
-    .replace(/^正在/, '')
-    .replace(/。.*$/, '')
-    .trim()
+  let summarized = normalizeWhitespace(description)
+  const prefix = TOOL_ACTIVITY_TEXT.chineseDescriptionPrefixes.find((prefix) => summarized.startsWith(prefix))
+  if (prefix) {
+    summarized = summarized.slice(prefix.length)
+  }
+
+  return summarized.replace(/。.*$/, '').trim()
 }
 
 const summarizeCommand = (command: string, language?: string): string | undefined => {
@@ -163,31 +162,43 @@ const summarizeCommand = (command: string, language?: string): string | undefine
   )
   if (globalInstallMatch?.[1]) {
     const subject = formatSubject(globalInstallMatch[1], language)
-    return local(language, `安装${subject}`, `Install ${subject}`)
+    return selectToolActivityText(language, {
+      zh: formatToolActivityZhTask(TOOL_ACTIVITY_TEXT.install.zh, subject),
+      en: `${TOOL_ACTIVITY_TEXT.install.en} ${subject}`
+    })
   }
 
   const localInstallMatch = value.match(/\b(?:npm|pnpm)\s+(?:install|i|add)\s+([^\s;&|]+)/i)
   if (localInstallMatch?.[1]) {
     const subject = formatSubject(localInstallMatch[1], language)
-    return local(language, `安装${subject}`, `Install ${subject}`)
+    return selectToolActivityText(language, {
+      zh: formatToolActivityZhTask(TOOL_ACTIVITY_TEXT.install.zh, subject),
+      en: `${TOOL_ACTIVITY_TEXT.install.en} ${subject}`
+    })
   }
 
   if (/\b(?:npm|pnpm|yarn)\s+(?:install|i)\b/i.test(value)) {
-    return local(language, '安装项目依赖', 'Install project dependencies')
+    return selectToolActivityText(language, TOOL_ACTIVITY_TEXT.projectDependencies)
   }
 
   const npmSearchMatch = value.match(/\b(?:npm|pnpm)\s+search\s+([^\s;&|]+)/i)
   if (npmSearchMatch?.[1]) {
     const subject = formatSubject(npmSearchMatch[1], language)
-    return local(language, formatZhTask('查找', subject, '相关 npm 包'), `Search ${subject} npm packages`)
+    return selectToolActivityText(language, {
+      zh: formatToolActivityZhTask(TOOL_ACTIVITY_TEXT.find.zh, subject, TOOL_ACTIVITY_TEXT.relatedNpmPackages.zh),
+      en: `${TOOL_ACTIVITY_TEXT.search.en} ${subject} ${TOOL_ACTIVITY_TEXT.npmPackages.en}`
+    })
   }
 
   if (/\b(?:npm|pnpm)\s+search\b/i.test(value)) {
-    return local(language, '查找 npm 包', 'Search npm packages')
+    return selectToolActivityText(language, {
+      zh: formatToolActivityZhTask(TOOL_ACTIVITY_TEXT.find.zh, TOOL_ACTIVITY_TEXT.npmPackages.zh),
+      en: `${TOOL_ACTIVITY_TEXT.search.en} ${TOOL_ACTIVITY_TEXT.npmPackages.en}`
+    })
   }
 
   if (/\b(?:curl|wget)\b/i.test(value)) {
-    return local(language, '获取在线资料', 'Fetch online resource')
+    return selectToolActivityText(language, TOOL_ACTIVITY_TEXT.onlineResource)
   }
 
   return undefined
@@ -196,23 +207,19 @@ const summarizeCommand = (command: string, language?: string): string | undefine
 const fileTask = (
   language: string | undefined,
   filePath: string | undefined,
-  zhVerb: string,
-  enVerb: string,
-  zhFallback: string,
-  enFallback: string
+  verb: ToolActivityLocalizedText,
+  fallbackSubject: ToolActivityLocalizedText
 ) => {
   const name = filePath ? basename(filePath) : undefined
-  return local(language, name ? `${zhVerb}${name}` : zhFallback, name ? `${enVerb} ${name}` : enFallback)
+  return formatToolActivityFileTask(language, name, verb, fallbackSubject)
 }
 
 const valueTask = (
   language: string | undefined,
   value: string | undefined,
-  zhVerb: string,
-  enVerb: string,
-  zhFallback: string,
-  enFallback: string
-) => local(language, value ? `${zhVerb}${value}` : zhFallback, value ? `${enVerb} ${value}` : enFallback)
+  verb: ToolActivityLocalizedText,
+  fallbackSubject: ToolActivityLocalizedText
+) => formatToolActivityValueTask(language, value, verb, fallbackSubject)
 
 export const getToolActivitySummary = (block: ToolMessageBlock, language?: string): string => {
   const args = argsOf(block)
@@ -240,22 +247,22 @@ export const getToolActivitySummary = (block: ToolMessageBlock, language?: strin
 
   switch (toolName) {
     case 'Read':
-      return fileTask(language, filePath, '读取', 'Read', '读取文件', 'Read file')
+      return fileTask(language, filePath, TOOL_ACTIVITY_TEXT.read, TOOL_ACTIVITY_TEXT.file)
     case 'Write':
-      return fileTask(language, filePath, '写入', 'Write', '写入文件', 'Write file')
+      return fileTask(language, filePath, TOOL_ACTIVITY_TEXT.write, TOOL_ACTIVITY_TEXT.file)
     case 'Edit':
     case 'MultiEdit':
-      return fileTask(language, filePath, '更新', 'Update', '更新文件', 'Update file')
+      return fileTask(language, filePath, TOOL_ACTIVITY_TEXT.update, TOOL_ACTIVITY_TEXT.file)
     case 'Glob':
-      return valueTask(language, pattern, '查找', 'Find', '查找文件', 'Find files')
+      return valueTask(language, pattern, TOOL_ACTIVITY_TEXT.find, TOOL_ACTIVITY_TEXT.files)
     case 'Grep':
-      return valueTask(language, pattern, '搜索', 'Search', '搜索内容', 'Search content')
+      return valueTask(language, pattern, TOOL_ACTIVITY_TEXT.search, TOOL_ACTIVITY_TEXT.content)
     case 'WebSearch':
-      return valueTask(language, query, '搜索', 'Search', '搜索网络', 'Search web')
+      return valueTask(language, query, TOOL_ACTIVITY_TEXT.search, TOOL_ACTIVITY_TEXT.web)
     case 'WebFetch':
-      return local(language, '获取在线资料', 'Fetch online resource')
+      return selectToolActivityText(language, TOOL_ACTIVITY_TEXT.onlineResource)
     default:
-      if (toolName.startsWith('mcp__')) return local(language, '调用 MCP 工具', 'Call MCP tool')
-      return local(language, '处理任务', 'Process task')
+      if (toolName.startsWith('mcp__')) return selectToolActivityText(language, TOOL_ACTIVITY_TEXT.mcpTool)
+      return selectToolActivityText(language, TOOL_ACTIVITY_TEXT.processTask)
   }
 }

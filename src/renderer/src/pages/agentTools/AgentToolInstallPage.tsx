@@ -6,6 +6,7 @@ import { Button, Input, Select, Space, Typography } from 'antd'
 import { Bot, ExternalLink, Send, Settings } from 'lucide-react'
 import type { FC } from 'react'
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import styled from 'styled-components'
 
@@ -67,6 +68,7 @@ const getDefaultConfig = (tool: ToolId): ToolConfig => ({
 const AgentToolInstallPage: FC<Props> = ({ tool }) => {
   const profile = profiles[tool]
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { chat } = useRuntime()
   const [config, setConfig] = useState<ToolConfig>(() => getDefaultConfig(tool))
   const [saving, setSaving] = useState(false)
@@ -74,45 +76,33 @@ const AgentToolInstallPage: FC<Props> = ({ tool }) => {
   useEffect(() => {
     const load = async () => {
       const saved = await window.api.appData.get('agent-tools', tool)
-      setConfig({ ...getDefaultConfig(tool), ...(saved || {}) })
+      setConfig({ ...getDefaultConfig(tool), ...saved })
     }
 
     void load()
   }, [tool])
 
   const installPrompt = useMemo(
-    () => `请帮我全局安装并初始化 ${profile.title}。
-
-项目地址：${profile.repo}
-
-官方推荐安装命令：
-- macOS / Linux / WSL：${profile.posixInstall}
-- Windows PowerShell：${profile.windowsInstall}
-- 如果当前系统更适合 npm/源码兜底：${profile.fallbackInstall}
-
-安装完成后请做这些事：
-1. 验证安装：${profile.verify}
-2. 如需启动本地 WebUI 或 dashboard，请启动并确认访问地址。
-3. 将下面的配置写入 ${profile.title} 的实际配置文件或通过它的 CLI 配置命令写入；如果路径不确定，请先用官方命令或源码结构定位，不要猜路径。
-4. 配置完成后返回 WebUI 地址、关键命令输出和下一步使用方式。
-
-Access token:
-${config.accessToken || '(未填写)'}
-
-模型服务类型:
-${config.modelProvider}
-
-多模型配置：
-${config.modelsJson}
-`,
-    [config.accessToken, config.modelProvider, config.modelsJson, profile]
+    () =>
+      t('agentTools.install.prompt', {
+        accessToken: config.accessToken || t('agentTools.install.not_filled'),
+        fallbackInstall: profile.fallbackInstall,
+        modelProvider: config.modelProvider,
+        modelsJson: config.modelsJson,
+        posixInstall: profile.posixInstall,
+        repo: profile.repo,
+        title: profile.title,
+        verify: profile.verify,
+        windowsInstall: profile.windowsInstall
+      }),
+    [config.accessToken, config.modelProvider, config.modelsJson, profile, t]
   )
 
   const saveConfig = async () => {
     setSaving(true)
     try {
       await window.api.appData.set('agent-tools', tool, config)
-      window.toast.success('配置已保存')
+      window.toast.success(t('agentTools.install.saved'))
     } finally {
       setSaving(false)
     }
@@ -121,7 +111,7 @@ ${config.modelsJson}
   const sendToAgent = async () => {
     await saveConfig()
     navigate('/agents')
-    window.toast.info('已把安装任务发送给 Agent')
+    window.toast.info(t('agentTools.install.sent_to_agent'))
 
     const payload = {
       requestId: `${tool}-${Date.now()}`,
@@ -151,36 +141,36 @@ ${config.modelsJson}
         </Hero>
 
         <Section>
-          <SectionTitle>初始化</SectionTitle>
+          <SectionTitle>{t('agentTools.install.initialize')}</SectionTitle>
           <CommandBlock>{profile.posixInstall}</CommandBlock>
           <HStack gap="8px">
             <Button type="primary" icon={<Send size={15} />} onClick={sendToAgent}>
-              交给 Agent 安装
+              {t('agentTools.install.send_to_agent')}
             </Button>
             <Button icon={<ExternalLink size={15} />} onClick={() => window.api.openWebsite(config.webuiUrl)}>
-              打开 WebUI
+              {t('agentTools.install.open_webui')}
             </Button>
             <Button loading={saving} icon={<Settings size={15} />} onClick={saveConfig}>
-              保存配置
+              {t('agentTools.install.save_config')}
             </Button>
           </HStack>
         </Section>
 
         <Section>
-          <SectionTitle>运行配置</SectionTitle>
+          <SectionTitle>{t('agentTools.install.runtime_config')}</SectionTitle>
           <FormGrid>
             <Label>Access token</Label>
             <Input.Password
               value={config.accessToken}
               onChange={(event) => setConfig((prev) => ({ ...prev, accessToken: event.target.value }))}
-              placeholder="可选，用于写入工具配置"
+              placeholder={t('agentTools.install.access_token_placeholder')}
             />
-            <Label>WebUI 地址</Label>
+            <Label>{t('agentTools.install.webui_url')}</Label>
             <Input
               value={config.webuiUrl}
               onChange={(event) => setConfig((prev) => ({ ...prev, webuiUrl: event.target.value }))}
             />
-            <Label>模型服务</Label>
+            <Label>{t('agentTools.install.model_service')}</Label>
             <Select
               value={config.modelProvider}
               onChange={(modelProvider) => setConfig((prev) => ({ ...prev, modelProvider }))}
@@ -189,12 +179,12 @@ ${config.modelsJson}
                 { label: 'OpenRouter', value: 'openrouter' },
                 { label: 'Anthropic', value: 'anthropic' },
                 { label: 'Ollama', value: 'ollama' },
-                { label: '自定义', value: 'custom' }
+                { label: t('agentTools.install.custom'), value: 'custom' }
               ]}
             />
           </FormGrid>
           <Space direction="vertical" style={{ width: '100%' }}>
-            <Typography.Text type="secondary">多模型配置 JSON</Typography.Text>
+            <Typography.Text type="secondary">{t('agentTools.install.models_json')}</Typography.Text>
             <Input.TextArea
               value={config.modelsJson}
               onChange={(event) => setConfig((prev) => ({ ...prev, modelsJson: event.target.value }))}

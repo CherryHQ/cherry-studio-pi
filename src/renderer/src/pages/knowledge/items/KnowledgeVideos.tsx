@@ -79,7 +79,7 @@ const KnowledgeVideos: FC<KnowledgeContentProps> = ({ selectedBase }) => {
     }
 
     if (result && result.videoFile && result.srtFile) {
-      addVideo([result.videoFile, result.srtFile])
+      await addVideo([result.videoFile, result.srtFile])
     }
   }
 

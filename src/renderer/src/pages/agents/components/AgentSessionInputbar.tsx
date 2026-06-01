@@ -385,7 +385,7 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({ assistant, agentId, session
       }
 
       if (!assistant.model) {
-        window.toast.warning('请先为当前 Agent 选择一个可用模型')
+        window.toast.warning(t('message.error.enter.model'))
         return
       }
 
@@ -462,7 +462,8 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({ assistant, agentId, session
       text,
       files,
       focusTextarea,
-      reasoningEffort
+      reasoningEffort,
+      t
     ]
   )
 

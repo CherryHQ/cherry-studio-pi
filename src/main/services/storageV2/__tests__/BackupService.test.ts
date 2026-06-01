@@ -7,17 +7,17 @@ import { createClient } from '@libsql/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('node:fs', async () => {
-  const actual = await vi.importActual<typeof import('node:fs')>('node:fs')
+  const actual = await vi.importActual<typeof fs>('node:fs')
   return { ...actual, default: actual }
 })
 
 vi.mock('node:os', async () => {
-  const actual = await vi.importActual<typeof import('node:os')>('node:os')
+  const actual = await vi.importActual<typeof os>('node:os')
   return { ...actual, default: actual }
 })
 
 vi.mock('node:path', async () => {
-  const actual = await vi.importActual<typeof import('node:path')>('node:path')
+  const actual = await vi.importActual<typeof path>('node:path')
   return { ...actual, default: actual }
 })
 

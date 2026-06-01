@@ -124,7 +124,7 @@ const KnowledgeFiles: FC<KnowledgeContentProps> = ({ selectedBase, progressMap, 
     logger.debug('processFiles', files)
     if (files.length > 0) {
       const uploadedFiles = await FileManager.uploadFiles(files)
-      addFiles(uploadedFiles)
+      await addFiles(uploadedFiles)
     }
   }
 

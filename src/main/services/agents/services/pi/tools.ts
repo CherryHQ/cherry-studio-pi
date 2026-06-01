@@ -95,7 +95,7 @@ const FILESYSTEM_BASH_COMMAND_PATTERN =
   /^\s*(?:cat|less|more|head|tail|sed|awk|grep|rg|find|ls|stat|wc|test|\[|mkdir|touch|rm|rmdir|cp|mv|ln|chmod|chown|du|tree)\b/
 const SHELL_PATH_PATTERN = /(?:^|[\s"'`=([{:;,])((?:~|\/)[^\s"'`()[\]{};|&<>$\\]+|\.\.\/[^\s"'`()[\]{};|&<>$\\]*)/g
 
-const isRecoverableBashFailure = (command: string, description: string | undefined, _output: string) => {
+const isRecoverableBashFailure = (command: string, description: string | undefined) => {
   if (description && RECOVERABLE_BASH_DESCRIPTION_PATTERN.test(description)) return true
   return READ_ONLY_BASH_COMMAND_PATTERN.test(command)
 }
@@ -569,7 +569,7 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
 
       if ('code' in result && result.code !== 0) {
         const truncated = truncateOutput(output || '(no output)', MAX_ERROR_OUTPUT_CHARS)
-        if (isRecoverableBashFailure(input.command, input.description, truncated.text)) {
+        if (isRecoverableBashFailure(input.command, input.description)) {
           return textResult(
             `${truncated.text}\n\n[Diagnostic command exited with code ${result.code}. Treat this as a miss, not a task failure. Use Glob/Grep/Read or try the next likely path.]`,
             { ...details, recoverable: true, truncated: truncated.truncated }

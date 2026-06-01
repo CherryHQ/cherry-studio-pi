@@ -324,6 +324,7 @@ appToolsRouter.patch('/paintings/default-provider', async (req, res, next) => {
 })
 
 appToolsRouter.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  void _next
   logger.warn('App tools route failed', { error: error instanceof Error ? error.message : String(error) })
   res.status(500).json({ error: error instanceof Error ? error.message : String(error) })
 })

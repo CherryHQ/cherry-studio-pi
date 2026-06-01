@@ -19,7 +19,7 @@ type DataSyncSettingsState = {
 }
 
 async function getDataSyncSettings(): Promise<DataSyncSettingsState> {
-  return ((await reduxService.select('state.settings')) ?? {}) as DataSyncSettingsState
+  return (await reduxService.select('state.settings')) ?? {}
 }
 
 async function getStoredWebDavConfig(): Promise<WebDavConfig> {

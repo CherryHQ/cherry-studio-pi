@@ -44,14 +44,17 @@ async function api(path, { method = 'GET', body, opts = {} } = {}) {
   if (!apiKey) throw new Error('Missing API key. Set PERRY_STUDIO_API_KEY or pass --api-key.')
 
   const base = await discoverBase(opts)
-  const response = await fetch(`${base}/v1${path}`, {
+  const request = {
     method,
     headers: {
       'content-type': 'application/json',
       'x-api-key': apiKey
-    },
-    body: body === undefined ? undefined : JSON.stringify(body)
-  })
+    }
+  }
+  if (body !== undefined && method !== 'GET' && method !== 'HEAD') {
+    request.body = JSON.stringify(body)
+  }
+  const response = await fetch(`${base}/v1${path}`, request)
 
   const text = await response.text()
   const data = text ? JSON.parse(text) : null

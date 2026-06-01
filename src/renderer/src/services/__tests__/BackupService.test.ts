@@ -236,7 +236,7 @@ describe('BackupService legacy restore', () => {
     ;(mocks.db as any).topics = { clear: tableClear }
     ;(mocks.db as any).settings = { clear: tableClear }
 
-    reset()
+    await reset()
 
     const confirmCalls = vi.mocked(window.modal.confirm).mock.calls
     expect(confirmCalls).toHaveLength(1)
@@ -264,7 +264,7 @@ describe('BackupService legacy restore', () => {
     mocks.db.tables = [{ name: 'topics' }]
     ;(mocks.db as any).topics = { clear: tableClear }
 
-    reset()
+    await reset()
 
     const confirmCalls = vi.mocked(window.modal.confirm).mock.calls
     await confirmCalls[0][0].onOk?.()

@@ -21,7 +21,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>()
+  const actual = await importOriginal<typeof fs>()
   return {
     ...actual,
     default: actual
@@ -29,7 +29,7 @@ vi.mock('node:fs', async (importOriginal) => {
 })
 
 vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:os')>()
+  const actual = await importOriginal<typeof os>()
   return {
     ...actual,
     default: actual

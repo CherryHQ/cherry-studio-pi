@@ -1,3 +1,24 @@
+import {
+  formatWebDavConflictMessage,
+  formatWebDavFailurePrefix,
+  formatWebDavHostRequiredMessage,
+  formatWebDavInsufficientStorageMessage,
+  formatWebDavInvalidUrlMessage,
+  formatWebDavLockedMessage,
+  formatWebDavNetworkMessage,
+  formatWebDavNotFoundMessage,
+  formatWebDavRateLimitedMessage,
+  formatWebDavReadForbiddenMessage,
+  formatWebDavTargetText,
+  formatWebDavUnauthorizedMessage,
+  formatWebDavUnavailableMessage,
+  formatWebDavUnhandledStatusMessage,
+  formatWebDavUnknownMessage,
+  formatWebDavWriteForbiddenMessage,
+  WEB_DAV_DEFAULT_ACTION,
+  WEB_DAV_NETWORK_ERROR_PATTERNS
+} from '@main/i18n/webDavMessages'
+
 type WebDavRetryLogger = {
   warn: (message: string, ...data: any[]) => void
 }
@@ -9,13 +30,6 @@ type WebDavRetryOptions = {
 }
 
 const RETRIABLE_WEB_DAV_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504])
-const NETWORK_ERROR_PATTERNS = [
-  { pattern: /\bENOTFOUND\b|\bEAI_AGAIN\b/i, message: '无法解析 WebDAV 地址，请检查域名或当前网络 DNS。' },
-  { pattern: /\bECONNREFUSED\b/i, message: 'WebDAV 服务拒绝连接，请确认地址和端口正确，服务正在运行。' },
-  { pattern: /\bETIMEDOUT\b|\bESOCKETTIMEDOUT\b|timeout/i, message: '连接 WebDAV 超时，请稍后重试或检查网络。' },
-  { pattern: /\bECONNRESET\b|\bsocket hang up\b/i, message: '连接被 WebDAV 服务中断，请稍后重试。' },
-  { pattern: /\bCERT_|certificate|self[- ]signed/i, message: 'WebDAV HTTPS 证书异常，请检查服务端证书配置。' }
-]
 
 function asObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
@@ -114,69 +128,69 @@ export function normalizeWebDavHost(webdavHost?: string) {
   return /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
 }
 
-export function describeWebDavUserFacingError(error: unknown, action = '访问 WebDAV') {
+export function describeWebDavUserFacingError(error: unknown, action = WEB_DAV_DEFAULT_ACTION) {
   const source = getOriginalError(error)
   const status = getWebDavErrorStatus(source)
   const message = errorMessage(source)
-  const prefix = `${action}失败`
+  const prefix = formatWebDavFailurePrefix(action)
   const operation = getOperation(error)
   const target = getOperationTarget(error)
-  const targetText = target ? `（路径：${target}）` : ''
+  const targetText = target ? formatWebDavTargetText(target) : ''
 
   if (status) {
     if (status === 401) {
-      return `${prefix}：账号或密码验证失败。请检查 WebDAV 用户名、密码或应用专用密码是否正确。`
+      return formatWebDavUnauthorizedMessage(prefix)
     }
 
     if (status === 403) {
       if (isWriteOperation(operation)) {
-        return `${prefix}：WebDAV 服务拒绝写入${targetText}。这个端点可能是只读的，或当前账号没有写入权限；数据同步需要支持 MKCOL、PUT、DELETE。请更换可写的 WebDAV 地址/账号，或在服务端重新生成带写入权限的授权。`
+        return formatWebDavWriteForbiddenMessage(prefix, targetText)
       }
 
-      return `${prefix}：当前账号没有访问这个 WebDAV 目录的权限${targetText}。请在“数据设置 > 多端数据同步”里重新选择一个已存在且可写的目录；如果 WebDAV 地址本身已经指向账号目录，同步目录只需要选择该目录下的子目录。`
+      return formatWebDavReadForbiddenMessage(prefix, targetText)
     }
 
     if (status === 404) {
-      return `${prefix}：找不到远程目录或文件。软件会在同步时自动创建同步目录；如果仍失败，请先在目录选择器里选择一个已存在的上级目录。`
+      return formatWebDavNotFoundMessage(prefix)
     }
 
     if (status === 409) {
-      return `${prefix}：远程目录结构冲突。请重新选择一个已存在且可写的目录，软件会自动创建需要的子目录。`
+      return formatWebDavConflictMessage(prefix)
     }
 
     if (status === 423) {
-      return `${prefix}：远程目录或文件被 WebDAV 服务锁定。请稍后重试，或在服务端解除锁定。`
+      return formatWebDavLockedMessage(prefix)
     }
 
     if (status === 429) {
-      return `${prefix}：WebDAV 服务限流。软件已经自动重试但仍失败，请稍后再同步。`
+      return formatWebDavRateLimitedMessage(prefix)
     }
 
     if (status === 507) {
-      return `${prefix}：WebDAV 空间不足。请清理远程空间或更换同步目录。`
+      return formatWebDavInsufficientStorageMessage(prefix)
     }
 
     if ([408, 500, 502, 503, 504].includes(status)) {
-      return `${prefix}：WebDAV 服务暂时不可用或网关超时。软件已经自动重试但仍失败，请稍后再试，或检查 WebDAV 服务商状态。`
+      return formatWebDavUnavailableMessage(prefix)
     }
 
-    return `${prefix}：WebDAV 返回了无法处理的状态（${status}）。请检查 WebDAV 地址、账号权限和同步目录。`
+    return formatWebDavUnhandledStatusMessage(prefix, status)
   }
 
-  const networkMatch = NETWORK_ERROR_PATTERNS.find((item) => item.pattern.test(message))
+  const networkMatch = WEB_DAV_NETWORK_ERROR_PATTERNS.find((item) => item.pattern.test(message))
   if (networkMatch) {
-    return `${prefix}：${networkMatch.message}`
+    return formatWebDavNetworkMessage(prefix, networkMatch.message)
   }
 
   if (/WebDAV host is required/i.test(message)) {
-    return `${prefix}：请先填写 WebDAV 地址。`
+    return formatWebDavHostRequiredMessage(prefix)
   }
 
   if (/Invalid URL|Only absolute URLs|URL/i.test(message)) {
-    return `${prefix}：WebDAV 地址格式不正确。请填写完整地址，例如 https://example.com/dav。`
+    return formatWebDavInvalidUrlMessage(prefix)
   }
 
-  return `${prefix}：发生未知错误，请检查 WebDAV 地址、账号权限和同步目录后重试。`
+  return formatWebDavUnknownMessage(prefix)
 }
 
 export async function runWebDavOperation<T>(

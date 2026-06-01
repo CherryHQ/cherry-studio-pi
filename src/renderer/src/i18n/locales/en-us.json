@@ -731,6 +731,24 @@
       }
     }
   },
+  "agentTools": {
+    "install": {
+      "access_token_placeholder": "Optional, used when writing the tool config",
+      "custom": "Custom",
+      "initialize": "Initialize",
+      "model_service": "Model service",
+      "models_json": "Multi-model config JSON",
+      "not_filled": "Not filled",
+      "open_webui": "Open WebUI",
+      "prompt": "Please install and initialize {{title}} globally.\n\nRepository: {{repo}}\n\nOfficial recommended install commands:\n- macOS / Linux / WSL: {{posixInstall}}\n- Windows PowerShell: {{windowsInstall}}\n- If npm/source fallback is more suitable for this system: {{fallbackInstall}}\n\nAfter installation, please do the following:\n1. Verify installation: {{verify}}\n2. If a local WebUI or dashboard is needed, start it and confirm the access URL.\n3. Write the config below into the actual {{title}} config file or through its CLI config command. If the path is unclear, locate it with official commands or source structure first; do not guess.\n4. After configuration, return the WebUI URL, key command output, and next usage steps.\n\nAccess token:\n{{accessToken}}\n\nModel service type:\n{{modelProvider}}\n\nMulti-model config:\n{{modelsJson}}\n",
+      "runtime_config": "Runtime config",
+      "save_config": "Save config",
+      "saved": "Config saved",
+      "send_to_agent": "Ask Agent to install",
+      "sent_to_agent": "Installation task sent to Agent",
+      "webui_url": "WebUI URL"
+    }
+  },
   "apiServer": {
     "actions": {
       "copy": "Copy",
@@ -1993,6 +2011,11 @@
     "code": "Code",
     "empty_preview": "No content to display",
     "generating": "Generating",
+    "install_workbench": {
+      "failed": "Failed to install to workbench: {{message}}",
+      "success": "Installed to workbench",
+      "title": "Install to Workbench"
+    },
     "preview": "Preview",
     "split": "Split"
   },

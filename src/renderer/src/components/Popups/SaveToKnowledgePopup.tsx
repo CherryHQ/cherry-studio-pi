@@ -297,7 +297,7 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
         }
 
         if (result.files.length > 0 && selectedTypes.includes(CONTENT_TYPES.FILE)) {
-          addFiles(result.files)
+          await addFiles(result.files)
           savedCount += result.files.length
         }
       }

@@ -529,7 +529,7 @@ export class AppDataSyncService {
       }
 
       manifest.snapshots = {
-        ...(manifest.snapshots ?? {}),
+        ...manifest.snapshots,
         [snapshot.id]: snapshot
       }
       manifest.latestSnapshot = snapshot

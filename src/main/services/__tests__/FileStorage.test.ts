@@ -1,5 +1,6 @@
 import path from 'node:path'
 
+import type * as NodeFs from 'fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -14,10 +15,10 @@ const mocks = vi.hoisted(() => ({
   }
 }))
 
-let fs: typeof import('fs')
+let fs: typeof NodeFs
 
 vi.mock('fs', async () => {
-  const actual = await vi.importActual<typeof import('fs')>('fs')
+  const actual = await vi.importActual<typeof NodeFs>('fs')
 
   return {
     default: actual,
@@ -63,7 +64,7 @@ describe('FileStorage Storage v2 upload flow', () => {
   beforeEach(async () => {
     vi.resetModules()
     vi.clearAllMocks()
-    fs = await vi.importActual<typeof import('fs')>('fs')
+    fs = await vi.importActual<typeof NodeFs>('fs')
     const root = fs.mkdtempSync(path.join(process.env.TMPDIR ?? '/tmp', 'file-storage-v2-'))
     mocks.dirs.root = root
     mocks.dirs.files = path.join(root, 'Files')

@@ -731,6 +731,24 @@
       }
     }
   },
+  "agentTools": {
+    "install": {
+      "access_token_placeholder": "可選，用於寫入工具設定",
+      "custom": "自訂",
+      "initialize": "初始化",
+      "model_service": "模型服務",
+      "models_json": "多模型設定 JSON",
+      "not_filled": "未填寫",
+      "open_webui": "開啟 WebUI",
+      "prompt": "請幫我全域安裝並初始化 {{title}}。\n\n專案地址：{{repo}}\n\n官方推薦安裝命令：\n- macOS / Linux / WSL：{{posixInstall}}\n- Windows PowerShell：{{windowsInstall}}\n- 如果目前系統更適合 npm/原始碼備援：{{fallbackInstall}}\n\n安裝完成後請做這些事：\n1. 驗證安裝：{{verify}}\n2. 如需啟動本機 WebUI 或 dashboard，請啟動並確認存取地址。\n3. 將下面的設定寫入 {{title}} 的實際設定檔或透過它的 CLI 設定命令寫入；如果路徑不確定，請先用官方命令或原始碼結構定位，不要猜路徑。\n4. 設定完成後返回 WebUI 地址、關鍵命令輸出和下一步使用方式。\n\nAccess token:\n{{accessToken}}\n\n模型服務類型:\n{{modelProvider}}\n\n多模型設定：\n{{modelsJson}}\n",
+      "runtime_config": "執行設定",
+      "save_config": "儲存設定",
+      "saved": "設定已儲存",
+      "send_to_agent": "交給 Agent 安裝",
+      "sent_to_agent": "已把安裝任務傳送給 Agent",
+      "webui_url": "WebUI 地址"
+    }
+  },
   "apiServer": {
     "actions": {
       "copy": "複製",
@@ -1993,6 +2011,11 @@
     "code": "程式碼",
     "empty_preview": "沒有內容可顯示",
     "generating": "產生中",
+    "install_workbench": {
+      "failed": "安裝到工作台失敗：{{message}}",
+      "success": "已安裝到工作台",
+      "title": "安裝到工作台"
+    },
     "preview": "預覽",
     "split": "分割畫面"
   },

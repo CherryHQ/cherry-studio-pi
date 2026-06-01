@@ -234,7 +234,7 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
 
   const sendMessage = useCallback(async () => {
     if (!assistant.model) {
-      window.toast.warning('请先选择一个可用模型')
+      window.toast.warning(t('message.error.enter.model'))
       return
     }
 
@@ -289,7 +289,8 @@ const InputbarInner: FC<InputbarInnerProps> = ({ assistant: initialAssistant, se
     setFiles,
     setTimeoutTimer,
     resizeTextArea,
-    focusTextarea
+    focusTextarea,
+    t
   ])
 
   const tokenCountProps = useMemo(() => {

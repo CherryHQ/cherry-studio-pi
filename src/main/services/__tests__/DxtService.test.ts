@@ -4,12 +4,12 @@ import path from 'path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('fs', async () => {
-  const actual = await vi.importActual<typeof import('fs')>('fs')
+  const actual = await vi.importActual<typeof fs>('fs')
   return { ...actual, default: actual }
 })
 
 vi.mock('node:fs', async () => {
-  const actual = await vi.importActual<typeof import('node:fs')>('node:fs')
+  const actual = await vi.importActual<typeof fs>('node:fs')
   return { ...actual, default: actual }
 })
 

@@ -114,7 +114,7 @@ export const useKnowledge = (baseId: string) => {
 
   // 批量添加文件
   const addFiles = async (files: FileMetadata[]) => {
-    await dispatch(addFilesThunk(baseId, files))
+    dispatch(addFilesThunk(baseId, files))
     await flushStorageV2KnowledgeMirror('add-files')
     checkAllBases()
   }
@@ -129,28 +129,28 @@ export const useKnowledge = (baseId: string) => {
 
   // 添加URL
   const addUrl = async (url: string) => {
-    await dispatch(addItemThunk(baseId, 'url', url))
+    dispatch(addItemThunk(baseId, 'url', url))
     await flushStorageV2KnowledgeMirror('add-url')
     checkAllBases()
   }
 
   // 添加 Sitemap
   const addSitemap = async (url: string) => {
-    await dispatch(addItemThunk(baseId, 'sitemap', url))
+    dispatch(addItemThunk(baseId, 'sitemap', url))
     await flushStorageV2KnowledgeMirror('add-sitemap')
     checkAllBases()
   }
 
   // Add directory support
   const addDirectory = async (path: string) => {
-    await dispatch(addItemThunk(baseId, 'directory', path))
+    dispatch(addItemThunk(baseId, 'directory', path))
     await flushStorageV2KnowledgeMirror('add-directory')
     checkAllBases()
   }
 
   // add video support
   const addVideo = async (files: FileMetadata[]) => {
-    await dispatch(addVedioThunk(baseId, 'video', files))
+    dispatch(addVedioThunk(baseId, 'video', files))
     await flushStorageV2KnowledgeMirror('add-video')
     checkAllBases()
   }
@@ -485,7 +485,7 @@ export const useKnowledgeBases = () => {
     storageV2MirrorService.pauseRuntimeMirroring()
     try {
       dispatch(deleteBase({ baseId }))
-      await updateAssistants(_assistants)
+      updateAssistants(_assistants)
       setAssistantPresets(_presets)
     } finally {
       storageV2MirrorService.resumeRuntimeMirroring({ scheduleLatest: true })

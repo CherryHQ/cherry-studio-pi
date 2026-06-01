@@ -6,7 +6,8 @@ import type { Message, MessageBlock } from '@renderer/types/newMessage'
 import { storageV2AgentMirrorService } from './StorageV2AgentMirrorService'
 import { storageV2ConversationMirrorService } from './StorageV2ConversationMirrorService'
 import { storageV2DexieSettingsMirrorService } from './StorageV2DexieSettingsMirrorService'
-import { STORAGE_V2_DEXIE_TABLE_NAMES, storageV2DexieTableMirrorService } from './StorageV2DexieTableMirrorService'
+import type { STORAGE_V2_DEXIE_TABLE_NAMES } from './StorageV2DexieTableMirrorService'
+import { storageV2DexieTableMirrorService } from './StorageV2DexieTableMirrorService'
 import { storageV2FileMirrorService } from './StorageV2FileMirrorService'
 import {
   flushStorageV2LocalStorageMirrorStrict,
@@ -345,7 +346,7 @@ export async function getLegacyDexieSnapshotForStorageV2(
       const blocks = messageIds.length ? await db.message_blocks.where('messageId').anyOf(messageIds).toArray() : []
       const topicSnapshot = {
         ...topic,
-        ...(persistedTopic ?? {}),
+        ...persistedTopic,
         id: topic.id,
         assistantId,
         messages: []

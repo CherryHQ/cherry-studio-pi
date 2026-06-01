@@ -126,7 +126,8 @@ export class AppCapabilityRegistry {
   }
 
   private toDescriptor(capability: AppCapabilityDefinition, includeSchema: boolean): AppCapabilityDescriptor {
-    const { execute: _execute, inputSchema, outputSchema, ...descriptor } = capability
+    const { execute, inputSchema, outputSchema, ...descriptor } = capability
+    void execute
     return {
       ...descriptor,
       ...(includeSchema ? { inputSchema, outputSchema } : {})

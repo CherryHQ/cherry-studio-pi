@@ -75,7 +75,7 @@ const KnowledgeUrls: FC<KnowledgeContentProps> = ({ selectedBase }) => {
         try {
           new URL(url.trim())
           if (!urlItems.find((item) => item.content === url.trim())) {
-            addUrl(url.trim())
+            await addUrl(url.trim())
           } else {
             window.toast.warning({
               title: t('knowledge.url_added'),
@@ -107,7 +107,7 @@ const KnowledgeUrls: FC<KnowledgeContentProps> = ({ selectedBase }) => {
     })
 
     if (editedRemark !== undefined && editedRemark !== null) {
-      updateItem({
+      await updateItem({
         ...item,
         remark: editedRemark,
         updated_at: Date.now()

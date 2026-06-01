@@ -1,3 +1,4 @@
+import { loggerService } from '@logger'
 import { createSelector } from '@reduxjs/toolkit'
 import { isNotSupportTextDeltaModel } from '@renderer/config/models'
 import { CHERRYAI_PROVIDER } from '@renderer/config/providers'
@@ -47,6 +48,12 @@ function flushProviderMirror(reason: string, options?: { strict?: boolean }) {
   return undefined
 }
 
+function runProviderUpdate(task: () => Promise<void>, reason: string) {
+  void task().catch((error) => {
+    loggerService.withContext('useProvider').error(`Failed to persist provider update after ${reason}`, error as Error)
+  })
+}
+
 const selectProviders = (state: RootState) => state.llm.providers
 
 const selectEnabledProviders = createSelector(selectProviders, (providers) =>
@@ -77,28 +84,34 @@ export function useProviders() {
 
   return {
     providers: providers || [],
-    addProvider: async (provider: Provider) => {
-      await upsertStorageV2ProviderList([provider, ...reduxStore.getState().llm.providers])
-      dispatch(addProvider(provider))
-      flushProviderMirror('llm-add-provider')
+    addProvider: (provider: Provider) => {
+      runProviderUpdate(async () => {
+        await upsertStorageV2ProviderList([provider, ...reduxStore.getState().llm.providers])
+        dispatch(addProvider(provider))
+        flushProviderMirror('llm-add-provider')
+      }, 'add-provider')
     },
     removeProvider: async (provider: Provider) => {
       await deleteStorageV2Provider(provider.id)
       dispatch(removeProvider(provider))
       await flushProviderMirror('llm-remove-provider', { strict: true })
     },
-    updateProvider: async (updates: Partial<Provider> & { id: string }) => {
-      await mutateStorageV2ProviderFirst(updates.id, reduxStore.getState().llm.providers, (provider) => ({
-        ...provider,
-        ...updates
-      }))
-      dispatch(updateProvider(updates))
-      flushProviderMirror('llm-update-provider')
+    updateProvider: (updates: Partial<Provider> & { id: string }) => {
+      runProviderUpdate(async () => {
+        await mutateStorageV2ProviderFirst(updates.id, reduxStore.getState().llm.providers, (provider) => ({
+          ...provider,
+          ...updates
+        }))
+        dispatch(updateProvider(updates))
+        flushProviderMirror('llm-update-provider')
+      }, 'update-provider')
     },
-    updateProviders: async (providers: Provider[]) => {
-      await upsertStorageV2ProviderList(providers)
-      dispatch(updateProviders(providers))
-      flushProviderMirror('llm-update-providers')
+    updateProviders: (providers: Provider[]) => {
+      runProviderUpdate(async () => {
+        await upsertStorageV2ProviderList(providers)
+        dispatch(updateProviders(providers))
+        flushProviderMirror('llm-update-providers')
+      }, 'update-providers')
     }
   }
 }
@@ -122,7 +135,7 @@ export function useProvider(id: string) {
   const reduxStore = useAppStore()
 
   const handleAddModel = useCallback(
-    async (model: Model) => {
+    (model: Model) => {
       let processedModel = { ...model, supported_text_delta: !isNotSupportTextDeltaModel(model) }
 
       if (isNewApiProvider(provider)) {
@@ -135,13 +148,15 @@ export function useProvider(id: string) {
         }
       }
 
-      await mutateStorageV2ProviderFirst(id, reduxStore.getState().llm.providers, (provider) => ({
-        ...provider,
-        models: uniqBy(provider.models.concat(processedModel), 'id'),
-        enabled: true
-      }))
-      dispatch(addModel({ providerId: id, model: processedModel }))
-      flushProviderMirror('llm-add-model')
+      runProviderUpdate(async () => {
+        await mutateStorageV2ProviderFirst(id, reduxStore.getState().llm.providers, (provider) => ({
+          ...provider,
+          models: uniqBy(provider.models.concat(processedModel), 'id'),
+          enabled: true
+        }))
+        dispatch(addModel({ providerId: id, model: processedModel }))
+        flushProviderMirror('llm-add-model')
+      }, 'add-model')
     },
     [dispatch, id, provider, reduxStore]
   )
@@ -184,24 +199,28 @@ export function useProvider(id: string) {
   return {
     provider,
     models: provider?.models ?? [],
-    updateProvider: async (updates: Partial<Provider>) => {
-      await mutateStorageV2ProviderFirst(id, reduxStore.getState().llm.providers, (provider) => ({
-        ...provider,
-        ...updates
-      }))
-      dispatch(updateProvider({ id, ...updates }))
-      flushProviderMirror('llm-update-provider')
+    updateProvider: (updates: Partial<Provider>) => {
+      runProviderUpdate(async () => {
+        await mutateStorageV2ProviderFirst(id, reduxStore.getState().llm.providers, (provider) => ({
+          ...provider,
+          ...updates
+        }))
+        dispatch(updateProvider({ id, ...updates }))
+        flushProviderMirror('llm-update-provider')
+      }, 'update-provider')
     },
     addModel: handleAddModel,
     removeModel: handleRemoveModel,
     removeModels: handleRemoveModels,
-    updateModel: async (model: Model) => {
-      await mutateStorageV2ProviderFirst(id, reduxStore.getState().llm.providers, (provider) => ({
-        ...provider,
-        models: provider.models.map((providerModel) => (providerModel.id === model.id ? model : providerModel))
-      }))
-      dispatch(updateModel({ providerId: id, model }))
-      flushProviderMirror('llm-update-model')
+    updateModel: (model: Model) => {
+      runProviderUpdate(async () => {
+        await mutateStorageV2ProviderFirst(id, reduxStore.getState().llm.providers, (provider) => ({
+          ...provider,
+          models: provider.models.map((providerModel) => (providerModel.id === model.id ? model : providerModel))
+        }))
+        dispatch(updateModel({ providerId: id, model }))
+        flushProviderMirror('llm-update-model')
+      }, 'update-model')
     }
   }
 }

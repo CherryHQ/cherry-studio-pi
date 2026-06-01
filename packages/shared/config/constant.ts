@@ -203,10 +203,10 @@ export enum FeedUrl {
   GITHUB_LATEST = 'https://github.com/CherryHQ/cherry-studio-pi/releases/latest/download'
 }
 
-export enum UpdateConfigUrl {
-  GITHUB = 'https://raw.githubusercontent.com/CherryHQ/cherry-studio-pi/main/app-upgrade-config.json',
-  GITCODE = 'https://raw.githubusercontent.com/CherryHQ/cherry-studio-pi/main/app-upgrade-config.json'
-}
+export const UpdateConfigUrl = {
+  GITHUB: 'https://raw.githubusercontent.com/CherryHQ/cherry-studio-pi/main/app-upgrade-config.json',
+  GITCODE: 'https://raw.githubusercontent.com/CherryHQ/cherry-studio-pi/main/app-upgrade-config.json'
+} as const
 
 export enum UpgradeChannel {
   LATEST = 'latest', // 最新稳定版本
