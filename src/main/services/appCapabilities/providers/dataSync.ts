@@ -192,7 +192,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       domain: 'dataSync',
       kind: 'query',
       title: 'Diagnose WebDAV data sync',
-      description: 'Run a read-only WebDAV sync diagnosis by checking config, status, and remote directory access.',
+      description: 'Diagnose WebDAV data sync by checking config, status, remote directory access, and write access.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -203,25 +203,29 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
           webdavPath: { type: 'string' }
         }
       },
-      risk: 'read',
-      permissions: ['network.webdav.read'],
-      sideEffects: ['network.webdav.read'],
-      tags: ['dataSync', 'sync', 'webdav', 'diagnose', 'troubleshoot'],
-      execute: async (input: any) => {
+      risk: 'write',
+      permissions: ['network.webdav.read', 'network.webdav.write'],
+      sideEffects: ['network.webdav.read', 'network.webdav.write'],
+      supportsDryRun: true,
+      tags: ['dataSync', 'sync', 'webdav', 'diagnose', 'troubleshoot', 'write-access'],
+      execute: async (input: any, context) => {
         const config = await resolveWebDavConfig(input)
         if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
 
-        const [status, directories] = await runWebDavCapability('诊断 WebDAV 同步', () =>
-          Promise.all([
+        const [status, directories, writeAccess] = await runWebDavCapability('诊断 WebDAV 同步', async () => {
+          const [nextStatus, nextDirectories] = await Promise.all([
             appDataSyncService.getStatus(),
             appDataSyncService.listRemoteDirectories(config, input?.remotePath || config.webdavPath || '/')
           ])
-        )
+          const nextWriteAccess = context.dryRun ? null : await appDataSyncService.checkWriteAccess(config)
+          return [nextStatus, nextDirectories, nextWriteAccess] as const
+        })
         return okResult(
           'WebDAV data sync diagnosis completed',
           sanitizeForAgent({
             config,
             effectiveSyncPath: normalizeRemotePath(config.webdavPath),
+            writeAccess,
             status,
             directories
           })

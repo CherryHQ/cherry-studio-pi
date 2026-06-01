@@ -319,6 +319,7 @@ export enum IpcChannel {
   DataSync_RestoreLatestSnapshot = 'data-sync:restore-latest-snapshot',
   DataSync_GetStatus = 'data-sync:get-status',
   DataSync_ListRemoteDirectories = 'data-sync:list-remote-directories',
+  DataSync_CheckWriteAccess = 'data-sync:check-write-access',
   SystemAgent_ListCapabilities = 'system-agent:list-capabilities',
   SystemAgent_PlanIntent = 'system-agent:plan-intent',
   SystemAgent_PlanEvent = 'system-agent:plan-event',

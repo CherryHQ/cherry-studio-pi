@@ -4083,7 +4083,9 @@
           "checked_at": "检查时间：{{time}}",
           "device": "本机设备：{{deviceId}}",
           "remote_path": "已读取远端目录：{{path}}，可选子目录 {{count}} 个",
-          "title": "WebDAV 同步诊断"
+          "title": "WebDAV 同步诊断",
+          "write_path": "已验证实际写入路径：{{path}}",
+          "write_success": "WebDAV 同步目录可写，可以用于多端数据同步。"
         },
         "effective_path": "实际写入路径",
         "effective_path_help": "应用会在同步目录下使用 sync/v1 保存记录级同步数据，安全快照保存在 sync/v1/backups。",

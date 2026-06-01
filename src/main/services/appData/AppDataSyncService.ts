@@ -64,6 +64,11 @@ export type DataSyncRemoteDirectoryList = {
   directories: DataSyncRemoteDirectory[]
 }
 
+export type DataSyncWriteAccessResult = {
+  ok: true
+  basePath: string
+}
+
 export type DataSyncSummary = {
   status?: 'success' | 'failed'
   error?: string | null
@@ -382,6 +387,18 @@ export class AppDataSyncService {
         .filter((entry) => entry.path !== currentPath)
         .sort((left, right) => left.name.localeCompare(right.name))
     }
+  }
+
+  async checkWriteAccess(config: WebDavConfig): Promise<DataSyncWriteAccessResult> {
+    if (!normalizeWebDavHost(config.webdavHost)) {
+      throw new Error('WebDAV host is required')
+    }
+
+    const { client, basePath } = this.createWebDavClient(config)
+    await this.ensureDirectory(client, basePath)
+    await this.assertWriteAccess(client, basePath)
+
+    return { ok: true, basePath }
   }
 
   private normalizeManifest(manifest: RemoteManifest | null): RemoteManifest {

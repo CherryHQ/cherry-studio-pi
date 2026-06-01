@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   appDataSyncService: {
     getStatus: vi.fn(),
     listRemoteDirectories: vi.fn(),
+    checkWriteAccess: vi.fn(),
     syncNow: vi.fn(),
     restoreLatestSnapshot: vi.fn()
   }
@@ -90,6 +91,34 @@ describe('data sync app capabilities', () => {
       },
       '/'
     )
+  })
+
+  it('diagnoses WebDAV write access outside dry runs', async () => {
+    mocks.appDataSyncService.getStatus.mockResolvedValueOnce({ deviceId: 'device-1', conflicts: [] })
+    mocks.appDataSyncService.listRemoteDirectories.mockResolvedValueOnce({ path: '/sync-root', directories: [] })
+    mocks.appDataSyncService.checkWriteAccess.mockResolvedValueOnce({ ok: true, basePath: '/sync-root/sync/v1' })
+
+    const result = await capability('dataSync.webdav.diagnose').execute({}, { source: 'agent' })
+
+    expect(result.ok).toBe(true)
+    expect(mocks.appDataSyncService.checkWriteAccess).toHaveBeenCalledWith({
+      webdavHost: 'https://dav.example.com',
+      webdavUser: 'user',
+      webdavPass: 'secret',
+      webdavPath: '/sync-root'
+    })
+    expect(result.data).toMatchObject({
+      writeAccess: { ok: true, basePath: '/sync-root/sync/v1' }
+    })
+  })
+
+  it('keeps WebDAV diagnosis dry runs read-only', async () => {
+    mocks.appDataSyncService.getStatus.mockResolvedValueOnce({ deviceId: 'device-1', conflicts: [] })
+    mocks.appDataSyncService.listRemoteDirectories.mockResolvedValueOnce({ path: '/sync-root', directories: [] })
+
+    await capability('dataSync.webdav.diagnose').execute({}, { source: 'agent', dryRun: true })
+
+    expect(mocks.appDataSyncService.checkWriteAccess).not.toHaveBeenCalled()
   })
 
   it('supports data sync dry runs without writing remote data', async () => {

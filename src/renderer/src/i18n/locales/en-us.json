@@ -4083,7 +4083,9 @@
           "checked_at": "Checked at: {{time}}",
           "device": "This device: {{deviceId}}",
           "remote_path": "Remote directory read: {{path}}, {{count}} selectable subdirectories",
-          "title": "WebDAV Sync Diagnosis"
+          "title": "WebDAV Sync Diagnosis",
+          "write_path": "Verified actual write path: {{path}}",
+          "write_success": "The WebDAV sync directory is writable and can be used for multi-device sync."
         },
         "effective_path": "Actual write path",
         "effective_path_help": "The app stores record-level sync data under sync/v1 inside the selected directory. Safety snapshots are stored in sync/v1/backups.",

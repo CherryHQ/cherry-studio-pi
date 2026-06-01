@@ -188,4 +188,11 @@ export function registerAppDataIpcHandlers() {
       throwDataSyncUserError(error, '读取远程目录')
     }
   })
+  ipcMain.handle(IpcChannel.DataSync_CheckWriteAccess, async (_, config: WebDavConfig) => {
+    try {
+      return await appDataSyncService.checkWriteAccess(config)
+    } catch (error) {
+      throwDataSyncUserError(error, '检查同步写入权限')
+    }
+  })
 }

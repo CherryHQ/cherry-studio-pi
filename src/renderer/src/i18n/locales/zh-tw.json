@@ -4083,7 +4083,9 @@
           "checked_at": "檢查時間：{{time}}",
           "device": "本機裝置：{{deviceId}}",
           "remote_path": "已讀取遠端目錄：{{path}}，可選子目錄 {{count}} 個",
-          "title": "WebDAV 同步診斷"
+          "title": "WebDAV 同步診斷",
+          "write_path": "已驗證實際寫入路徑：{{path}}",
+          "write_success": "WebDAV 同步目錄可寫，可以用於多端資料同步。"
         },
         "effective_path": "實際寫入路徑",
         "effective_path_help": "應用會在同步目錄下使用 sync/v1 保存記錄級同步資料，安全快照保存在 sync/v1/backups。",

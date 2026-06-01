@@ -37,6 +37,7 @@ const mocks = vi.hoisted(() => ({
     createDirectory: vi.fn(),
     getFileContents: vi.fn(),
     putFileContents: vi.fn(),
+    deleteFile: vi.fn(),
     getDirectoryContents: vi.fn()
   }
 }))
@@ -149,6 +150,7 @@ describe('AppDataSyncService', () => {
     mocks.webdav.exists.mockResolvedValue(true)
     mocks.webdav.createDirectory.mockResolvedValue(undefined)
     mocks.webdav.putFileContents.mockResolvedValue(undefined)
+    mocks.webdav.deleteFile.mockResolvedValue(undefined)
     mocks.webdav.getDirectoryContents.mockResolvedValue([
       {
         type: 'directory',
@@ -191,6 +193,28 @@ describe('AppDataSyncService', () => {
         }
       ]
     })
+  })
+
+  it('checks WebDAV write access against the actual sync path', async () => {
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1760000000123)
+
+    try {
+      const result = await new AppDataSyncService().checkWriteAccess(config)
+
+      expect(result).toEqual({ ok: true, basePath: '/remote-root/sync/v1' })
+      expect(mocks.webdav.exists).toHaveBeenCalledWith('/remote-root/sync/v1')
+      expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
+        '/remote-root/sync/v1/.cherry-studio-pi-write-test-1760000000123.tmp',
+        'ok',
+        { overwrite: true }
+      )
+      expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(
+        '/remote-root/sync/v1/.cherry-studio-pi-write-test-1760000000123.tmp'
+      )
+      expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
+    } finally {
+      nowSpy.mockRestore()
+    }
   })
 
   it('does not append the sync suffix twice when users paste the internal sync path', async () => {

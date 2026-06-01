@@ -66,18 +66,7 @@ type DiagnosisState = {
   summary: string
   checkedAt: number
   remotePath?: string
-  directoryCount?: number
   deviceId?: string
-}
-
-type DiagnosisCapabilityResult = {
-  ok?: boolean
-  summary?: string
-  error?: string
-  data?: {
-    status?: SyncStatus
-    directories?: RemoteDirectoryList
-  }
 }
 
 const DEFAULT_REMOTE_PATH = '/cherry-studio-pi'
@@ -327,37 +316,22 @@ const DataSyncSettings: FC = () => {
 
     setDiagnosing(true)
     try {
-      const result = (await window.api.systemAgent.callCapability(
-        'dataSync.webdav.diagnose',
-        {
-          ...config,
-          remotePath: config.webdavPath
-        },
-        { dryRun: true }
-      )) as DiagnosisCapabilityResult
+      const [writeCheck, nextStatus] = await Promise.all([
+        window.api.dataSync.checkWriteAccess(config),
+        window.api.dataSync.getStatus()
+      ])
 
       const nextDiagnosis: DiagnosisState = {
-        ok: result.ok === true,
-        summary:
-          result.ok === true
-            ? result.summary || t('settings.data.data_sync.toast.diagnose_success')
-            : result.error || result.summary || t('settings.data.data_sync.toast.diagnose_failed', { message: '' }),
+        ok: true,
+        summary: t('settings.data.data_sync.diagnosis.write_success'),
         checkedAt: Date.now(),
-        remotePath: result.data?.directories?.path,
-        directoryCount: result.data?.directories?.directories?.length,
-        deviceId: result.data?.status?.deviceId
+        remotePath: writeCheck.basePath,
+        deviceId: nextStatus.deviceId
       }
 
       setDiagnosis(nextDiagnosis)
-      if (result.data?.status) {
-        setStatus(result.data.status)
-      }
-
-      if (result.ok) {
-        window.toast.success(t('settings.data.data_sync.toast.diagnose_success'))
-      } else {
-        window.toast.error(t('settings.data.data_sync.toast.diagnose_failed', { message: nextDiagnosis.summary }))
-      }
+      setStatus(nextStatus)
+      window.toast.success(t('settings.data.data_sync.toast.diagnose_success'))
     } catch (error) {
       const message = getErrorMessage(error)
       setDiagnosis({
@@ -625,10 +599,7 @@ const DataSyncSettings: FC = () => {
                   </Typography.Text>
                   {diagnosis.remotePath && (
                     <Typography.Text type="secondary">
-                      {t('settings.data.data_sync.diagnosis.remote_path', {
-                        path: diagnosis.remotePath,
-                        count: diagnosis.directoryCount ?? 0
-                      })}
+                      {t('settings.data.data_sync.diagnosis.write_path', { path: diagnosis.remotePath })}
                     </Typography.Text>
                   )}
                   {diagnosis.deviceId && (
