@@ -285,6 +285,29 @@ describe('AppDataSyncService', () => {
     })
   })
 
+  it('prefers remote app records when a device has no prior sync baseline', async () => {
+    const localRecord = {
+      ...remoteRecord,
+      value: { mode: 'local-default' },
+      valueHash: 'local-default-hash',
+      updatedAt: remoteRecord.updatedAt + 60_000,
+      deviceId: 'new-device'
+    }
+    mocks.db.listRecords.mockResolvedValue([localRecord])
+    mocks.db.getSyncState.mockResolvedValue(null)
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.downloaded).toBe(1)
+    expect(summary.conflicts).toBe(0)
+    expect(mocks.storageV2.upsertRecordSnapshot).toHaveBeenCalledWith(remoteRecord)
+    expect(mocks.db.applyRemoteRecord).toHaveBeenCalledWith(remoteRecord, { storageV2Mirrored: true })
+    expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith('record:settings:theme:hash', 'remote-hash')
+    expect(mocks.webdav.putFileContents.mock.calls.some((call) => String(call[1]).includes('local-default-hash'))).toBe(
+      false
+    )
+  })
+
   it('writes sync conflicts to Storage v2 before legacy app.db conflicts', async () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1760000000999)
     const localRecord = {

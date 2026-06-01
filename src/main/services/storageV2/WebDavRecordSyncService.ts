@@ -768,6 +768,19 @@ export class StorageV2WebDavRecordSyncService {
       const localChanged = localRecord.valueHash !== lastHash
       const remoteChanged = remoteMeta.valueHash !== lastHash
 
+      if (!lastHash) {
+        const remoteRecord = await this.pullRecord(client, basePath, remoteMeta)
+        if (remoteRecord && (await this.applyRemoteRecord(dbClient, remoteRecord))) {
+          await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
+          await this.setRecordSyncState(dbClient, id, remoteRecord.valueHash)
+          summary.storageDownloaded += remoteRecord.deletedAt ? 0 : 1
+          summary.storageDeleted += remoteRecord.deletedAt ? 1 : 0
+        } else {
+          summary.storageSkipped += 1
+        }
+        continue
+      }
+
       if (localChanged && !remoteChanged) {
         await this.pushRecord(client, basePath, manifest, localRecord)
         await this.pushBlobFile(client, basePath, manifest, localRecord, summary)

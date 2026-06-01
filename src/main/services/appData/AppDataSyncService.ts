@@ -642,6 +642,19 @@ export class AppDataSyncService {
       const localChanged = localRecord.valueHash !== lastHash
       const remoteChanged = remoteMeta.valueHash !== lastHash
 
+      if (!lastHash) {
+        const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
+        if (remoteRecord) {
+          await this.applyRemoteRecord(db, remoteRecord)
+          await this.setSyncState(db, `record:${id}:hash`, remoteRecord.valueHash)
+          summary.downloaded += remoteRecord.deletedAt ? 0 : 1
+          summary.deleted += remoteRecord.deletedAt ? 1 : 0
+        } else {
+          summary.skipped += 1
+        }
+        continue
+      }
+
       if (localChanged && !remoteChanged) {
         await this.pushRecord(client, basePath, localRecord, manifest)
         await this.setSyncState(db, `record:${id}:hash`, localRecord.valueHash)
