@@ -4089,7 +4089,18 @@
         "method_value": "Record-level Storage v2 sync + WebDAV",
         "password": "[to be translated]:Password",
         "password_placeholder": "[to be translated]:WebDAV password or app password",
+        "remote_browser": {
+          "current_path": "[to be translated]:Current directory: {{path}}",
+          "empty": "[to be translated]:No selectable subdirectories in this directory",
+          "error_title": "[to be translated]:Failed to read directory",
+          "refresh": "[to be translated]:Refresh",
+          "select": "[to be translated]:Select",
+          "select_current": "[to be translated]:Select current directory",
+          "title": "[to be translated]:Select WebDAV sync directory",
+          "use_default": "[to be translated]:Use recommended directory"
+        },
         "remote_path": "[to be translated]:Sync directory",
+        "remote_path_browse": "[to be translated]:Browse",
         "restore_confirm_content": "This is only for disaster recovery. It will replace this device's data with the latest safety snapshot on WebDAV and restart the app. Normal multi-device sync does not need this.",
         "restore_confirm_title": "Restore safety snapshot?",
         "restore_latest": "Restore safety snapshot",
@@ -4111,6 +4122,7 @@
         "sync_now": "[to be translated]:Sync now",
         "title": "[to be translated]:Data Sync",
         "toast": {
+          "remote_path_selected": "[to be translated]:Sync directory selected: {{path}}",
           "restore_failed": "Restore failed: {{message}}",
           "restore_success": "Restore started. The app will restart.",
           "sync_failed": "[to be translated]:Sync failed: {{message}}",

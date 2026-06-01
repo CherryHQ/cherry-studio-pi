@@ -257,7 +257,9 @@ const api = {
     syncNow: (webdavConfig: WebDavConfig) => ipcRenderer.invoke(IpcChannel.DataSync_SyncNow, webdavConfig),
     restoreLatestSnapshot: (webdavConfig: WebDavConfig) =>
       ipcRenderer.invoke(IpcChannel.DataSync_RestoreLatestSnapshot, webdavConfig),
-    getStatus: () => ipcRenderer.invoke(IpcChannel.DataSync_GetStatus)
+    getStatus: () => ipcRenderer.invoke(IpcChannel.DataSync_GetStatus),
+    listRemoteDirectories: (webdavConfig: WebDavConfig, remotePath?: string) =>
+      ipcRenderer.invoke(IpcChannel.DataSync_ListRemoteDirectories, webdavConfig, remotePath)
   },
   storageV2: {
     getDataRoot: () => ipcRenderer.invoke(IpcChannel.StorageV2_GetDataRoot),

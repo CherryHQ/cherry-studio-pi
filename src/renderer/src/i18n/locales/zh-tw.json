@@ -4089,7 +4089,18 @@
         "method_value": "Storage v2 記錄級同步 + WebDAV",
         "password": "密碼",
         "password_placeholder": "WebDAV 密碼或應用程式密碼",
+        "remote_browser": {
+          "current_path": "目前目錄：{{path}}",
+          "empty": "這個目錄下沒有可選的子目錄",
+          "error_title": "讀取目錄失敗",
+          "refresh": "重新整理",
+          "select": "選擇",
+          "select_current": "選擇目前目錄",
+          "title": "選擇 WebDAV 同步目錄",
+          "use_default": "使用建議目錄"
+        },
         "remote_path": "同步目錄",
+        "remote_path_browse": "瀏覽",
         "restore_confirm_content": "此操作僅用於災難恢復，會使用 WebDAV 上最近的安全快照取代本機資料並重新啟動應用程式。正常多端同步不需要點這個。",
         "restore_confirm_title": "恢復安全快照？",
         "restore_latest": "恢復安全快照",
@@ -4111,6 +4122,7 @@
         "sync_now": "立即同步",
         "title": "資料同步",
         "toast": {
+          "remote_path_selected": "已選擇同步目錄：{{path}}",
           "restore_failed": "恢復失敗：{{message}}",
           "restore_success": "已開始恢復，應用程式將重新啟動",
           "sync_failed": "同步失敗：{{message}}",

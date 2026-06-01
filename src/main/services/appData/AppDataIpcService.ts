@@ -1,6 +1,7 @@
 import { loggerService } from '@logger'
 import { storageV2AppDataKvMirrorService } from '@main/services/storageV2/AppDataKvMirrorService'
 import { storageV2AppDataRuntimeRecoveryService } from '@main/services/storageV2/AppDataRuntimeRecoveryService'
+import { describeWebDavUserFacingError } from '@main/services/WebDavRetry'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { WebDavConfig } from '@types'
 import { ipcMain } from 'electron'
@@ -15,6 +16,12 @@ import {
 import { appDataSyncService } from './AppDataSyncService'
 
 const logger = loggerService.withContext('AppDataIpcService')
+
+function throwDataSyncUserError(error: unknown, action: string): never {
+  const message = describeWebDavUserFacingError(error, action)
+  logger.warn(message, error as Error)
+  throw new Error(message)
+}
 
 export function registerAppDataIpcHandlers() {
   ipcMain.handle(IpcChannel.AppData_Get, async (_, scope: string, key: string) => {
@@ -146,9 +153,26 @@ export function registerAppDataIpcHandlers() {
     return installed
   })
 
-  ipcMain.handle(IpcChannel.DataSync_SyncNow, async (_, config: WebDavConfig) => appDataSyncService.syncNow(config))
-  ipcMain.handle(IpcChannel.DataSync_RestoreLatestSnapshot, async (_, config: WebDavConfig) =>
-    appDataSyncService.restoreLatestSnapshot(config)
-  )
+  ipcMain.handle(IpcChannel.DataSync_SyncNow, async (_, config: WebDavConfig) => {
+    try {
+      return await appDataSyncService.syncNow(config)
+    } catch (error) {
+      throwDataSyncUserError(error, '同步数据')
+    }
+  })
+  ipcMain.handle(IpcChannel.DataSync_RestoreLatestSnapshot, async (_, config: WebDavConfig) => {
+    try {
+      return await appDataSyncService.restoreLatestSnapshot(config)
+    } catch (error) {
+      throwDataSyncUserError(error, '恢复安全快照')
+    }
+  })
   ipcMain.handle(IpcChannel.DataSync_GetStatus, async () => appDataSyncService.getStatus())
+  ipcMain.handle(IpcChannel.DataSync_ListRemoteDirectories, async (_, config: WebDavConfig, remotePath?: string) => {
+    try {
+      return await appDataSyncService.listRemoteDirectories(config, remotePath)
+    } catch (error) {
+      throwDataSyncUserError(error, '读取远程目录')
+    }
+  })
 }

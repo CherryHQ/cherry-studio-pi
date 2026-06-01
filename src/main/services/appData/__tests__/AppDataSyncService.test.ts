@@ -36,7 +36,8 @@ const mocks = vi.hoisted(() => ({
     exists: vi.fn(),
     createDirectory: vi.fn(),
     getFileContents: vi.fn(),
-    putFileContents: vi.fn()
+    putFileContents: vi.fn(),
+    getDirectoryContents: vi.fn()
   }
 }))
 
@@ -148,6 +149,20 @@ describe('AppDataSyncService', () => {
     mocks.webdav.exists.mockResolvedValue(true)
     mocks.webdav.createDirectory.mockResolvedValue(undefined)
     mocks.webdav.putFileContents.mockResolvedValue(undefined)
+    mocks.webdav.getDirectoryContents.mockResolvedValue([
+      {
+        type: 'directory',
+        basename: 'Cherry',
+        filename: '/remote-root/Cherry',
+        lastmod: '2026-05-29T00:00:00.000Z'
+      },
+      {
+        type: 'file',
+        basename: 'manifest.json',
+        filename: '/remote-root/manifest.json',
+        lastmod: '2026-05-29T00:00:00.000Z'
+      }
+    ])
     mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
       if (filePath.endsWith('/manifest.json')) {
         return JSON.stringify(remoteManifest)
@@ -159,6 +174,30 @@ describe('AppDataSyncService', () => {
 
       throw new Error(`Unexpected WebDAV read: ${filePath}`)
     })
+  })
+
+  it('lists remote WebDAV directories for the setup browser', async () => {
+    const result = await new AppDataSyncService().listRemoteDirectories(config, '/remote-root')
+
+    expect(mocks.webdav.getDirectoryContents).toHaveBeenCalledWith('/remote-root')
+    expect(result).toEqual({
+      path: '/remote-root',
+      parentPath: '/',
+      directories: [
+        {
+          name: 'Cherry',
+          path: '/remote-root/Cherry',
+          modifiedAt: '2026-05-29T00:00:00.000Z'
+        }
+      ]
+    })
+  })
+
+  it('does not append the sync suffix twice when users paste the internal sync path', async () => {
+    await new AppDataSyncService().syncNow({ ...config, webdavPath: '/remote-root/sync/v1' })
+
+    expect(mocks.webdav.exists).toHaveBeenCalledWith('/remote-root/sync/v1')
+    expect(mocks.webdav.exists).not.toHaveBeenCalledWith('/remote-root/sync/v1/sync/v1')
   })
 
   it('applies downloaded remote app records to Storage v2 before legacy app.db', async () => {

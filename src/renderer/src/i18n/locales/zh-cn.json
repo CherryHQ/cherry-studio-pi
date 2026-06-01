@@ -4089,7 +4089,18 @@
         "method_value": "Storage v2 记录级同步 + WebDAV",
         "password": "密码",
         "password_placeholder": "WebDAV 密码或应用密码",
+        "remote_browser": {
+          "current_path": "当前目录：{{path}}",
+          "empty": "这个目录下没有可选的子目录",
+          "error_title": "读取目录失败",
+          "refresh": "刷新",
+          "select": "选择",
+          "select_current": "选择当前目录",
+          "title": "选择 WebDAV 同步目录",
+          "use_default": "使用推荐目录"
+        },
         "remote_path": "同步目录",
+        "remote_path_browse": "浏览",
         "restore_confirm_content": "这个操作只用于灾难恢复，会用 WebDAV 上最近的安全快照替换本机数据并重启应用。正常多端同步不需要点这个。",
         "restore_confirm_title": "恢复安全快照？",
         "restore_latest": "恢复安全快照",
@@ -4111,6 +4122,7 @@
         "sync_now": "立即同步",
         "title": "数据同步",
         "toast": {
+          "remote_path_selected": "已选择同步目录：{{path}}",
           "restore_failed": "恢复失败：{{message}}",
           "restore_success": "已开始恢复，应用将重启",
           "sync_failed": "同步失败：{{message}}",

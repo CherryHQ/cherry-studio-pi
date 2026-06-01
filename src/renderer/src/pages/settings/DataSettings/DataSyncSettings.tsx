@@ -1,4 +1,4 @@
-import { SyncOutlined } from '@ant-design/icons'
+import { FolderOpenOutlined, HomeOutlined, ReloadOutlined, SyncOutlined } from '@ant-design/icons'
 import { HStack } from '@renderer/components/Layout'
 import Selector from '@renderer/components/Selector'
 import { useTheme } from '@renderer/context/ThemeProvider'
@@ -13,7 +13,7 @@ import {
   setDataSyncWebdavPath,
   setDataSyncWebdavUser
 } from '@renderer/store/settings'
-import { Button, Input, Modal, Typography } from 'antd'
+import { Alert, Breadcrumb, Button, Empty, Input, List, Modal, Space, Spin, Typography } from 'antd'
 import dayjs from 'dayjs'
 import type { FC } from 'react'
 import { useEffect, useState } from 'react'
@@ -46,6 +46,21 @@ type SyncStatus = {
   conflicts: unknown[]
 }
 
+type RemoteDirectory = {
+  name: string
+  path: string
+  modifiedAt: string | null
+}
+
+type RemoteDirectoryList = {
+  path: string
+  parentPath: string | null
+  directories: RemoteDirectory[]
+}
+
+const DEFAULT_REMOTE_PATH = '/cherry-studio-pi'
+const DATA_SYNC_SUFFIX = '/sync/v1'
+
 function formatBytes(value: number) {
   if (!Number.isFinite(value) || value <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
@@ -58,6 +73,69 @@ function formatBytes(value: number) {
   }
 
   return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
+}
+
+function normalizeWebdavHostInput(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  return /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+}
+
+function normalizeRemotePathInput(value?: string) {
+  const trimmed = value?.trim() || DEFAULT_REMOTE_PATH
+  let normalized = trimmed.replace(/\\/g, '/').replace(/\/+/g, '/')
+  if (!normalized.startsWith('/')) {
+    normalized = `/${normalized}`
+  }
+  if (normalized.length > 1) {
+    normalized = normalized.replace(/\/$/g, '')
+  }
+  if (normalized === DATA_SYNC_SUFFIX || normalized.endsWith(DATA_SYNC_SUFFIX)) {
+    normalized = normalized.slice(0, -DATA_SYNC_SUFFIX.length) || '/'
+  }
+  return normalized
+}
+
+function normalizeDirectoryBrowserPath(value?: string) {
+  const trimmed = value?.trim() || '/'
+  let normalized = trimmed.replace(/\\/g, '/').replace(/\/+/g, '/')
+  if (!normalized.startsWith('/')) {
+    normalized = `/${normalized}`
+  }
+  if (normalized.length > 1) {
+    normalized = normalized.replace(/\/$/g, '')
+  }
+  return normalized
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+
+  return String(error)
+}
+
+function makeBreadcrumbItems(currentPath: string, onOpen: (path: string) => void) {
+  const normalized = normalizeDirectoryBrowserPath(currentPath || '/')
+  const parts = normalized.split('/').filter(Boolean)
+  const items = [
+    {
+      title: <HomeOutlined onClick={() => onOpen('/')} style={{ cursor: 'pointer' }} />
+    }
+  ]
+
+  let cursor = ''
+  parts.forEach((part, index) => {
+    cursor = `${cursor}/${part}`
+    const itemPath = cursor
+    const isLast = index === parts.length - 1
+    items.push({
+      title: isLast ? <span>{part}</span> : <Typography.Link onClick={() => onOpen(itemPath)}>{part}</Typography.Link>
+    })
+  })
+
+  return items
 }
 
 const DataSyncSettings: FC = () => {
@@ -74,6 +152,29 @@ const DataSyncSettings: FC = () => {
   const [syncing, setSyncing] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [status, setStatus] = useState<SyncStatus | null>(null)
+  const [directoryBrowserOpen, setDirectoryBrowserOpen] = useState(false)
+  const [directoryLoading, setDirectoryLoading] = useState(false)
+  const [directoryError, setDirectoryError] = useState<string | null>(null)
+  const [remoteDirectoryList, setRemoteDirectoryList] = useState<RemoteDirectoryList | null>(null)
+
+  const saveWebDavConfig = (nextPath = webdavPath) => {
+    const normalizedHost = normalizeWebdavHostInput(webdavHost)
+    const normalizedPath = normalizeRemotePathInput(nextPath)
+
+    setWebdavHost(normalizedHost)
+    setWebdavPath(normalizedPath)
+    dispatch(setDataSyncWebdavHost(normalizedHost))
+    dispatch(setDataSyncWebdavUser(webdavUser || ''))
+    dispatch(setDataSyncWebdavPass(webdavPass || ''))
+    dispatch(setDataSyncWebdavPath(normalizedPath))
+
+    return {
+      webdavHost: normalizedHost,
+      webdavUser,
+      webdavPass,
+      webdavPath: normalizedPath
+    }
+  }
 
   const refreshStatus = async () => {
     const nextStatus = await window.api.dataSync.getStatus()
@@ -90,14 +191,11 @@ const DataSyncSettings: FC = () => {
       return
     }
 
-    dispatch(setDataSyncWebdavHost(webdavHost || ''))
-    dispatch(setDataSyncWebdavUser(webdavUser || ''))
-    dispatch(setDataSyncWebdavPass(webdavPass || ''))
-    dispatch(setDataSyncWebdavPath(webdavPath || '/cherry-studio-pi'))
+    const config = saveWebDavConfig()
 
     setSyncing(true)
     try {
-      const summary = await syncAppDataNow({ webdavHost, webdavUser, webdavPass, webdavPath })
+      const summary = await syncAppDataNow(config)
       if (summary) {
         setStatus((prev) => ({
           deviceId: prev?.deviceId || '',
@@ -108,7 +206,7 @@ const DataSyncSettings: FC = () => {
       await refreshStatus()
       window.toast.success(t('settings.data.data_sync.toast.sync_success'))
     } catch (error) {
-      window.toast.error(t('settings.data.data_sync.toast.sync_failed', { message: (error as Error).message }))
+      window.toast.error(t('settings.data.data_sync.toast.sync_failed', { message: getErrorMessage(error) }))
     } finally {
       setSyncing(false)
     }
@@ -120,10 +218,7 @@ const DataSyncSettings: FC = () => {
       return
     }
 
-    dispatch(setDataSyncWebdavHost(webdavHost || ''))
-    dispatch(setDataSyncWebdavUser(webdavUser || ''))
-    dispatch(setDataSyncWebdavPass(webdavPass || ''))
-    dispatch(setDataSyncWebdavPath(webdavPath || '/cherry-studio-pi'))
+    const config = saveWebDavConfig()
 
     Modal.confirm({
       title: t('settings.data.data_sync.restore_confirm_title'),
@@ -133,10 +228,10 @@ const DataSyncSettings: FC = () => {
       onOk: async () => {
         setRestoring(true)
         try {
-          await window.api.dataSync.restoreLatestSnapshot({ webdavHost, webdavUser, webdavPass, webdavPath })
+          await window.api.dataSync.restoreLatestSnapshot(config)
           window.toast.success(t('settings.data.data_sync.toast.restore_success'))
         } catch (error) {
-          window.toast.error(t('settings.data.data_sync.toast.restore_failed', { message: (error as Error).message }))
+          window.toast.error(t('settings.data.data_sync.toast.restore_failed', { message: getErrorMessage(error) }))
         } finally {
           setRestoring(false)
         }
@@ -145,12 +240,58 @@ const DataSyncSettings: FC = () => {
   }
 
   const summary = status?.lastSummary
+
+  const loadRemoteDirectories = async (path: string) => {
+    const normalizedHost = normalizeWebdavHostInput(webdavHost)
+    if (!normalizedHost) {
+      window.toast.warning(t('settings.data.data_sync.toast.webdav_required'))
+      return
+    }
+
+    setDirectoryLoading(true)
+    setDirectoryError(null)
+    try {
+      const result = await window.api.dataSync.listRemoteDirectories(
+        {
+          webdavHost: normalizedHost,
+          webdavUser,
+          webdavPass,
+          webdavPath: normalizeRemotePathInput(webdavPath)
+        },
+        path
+      )
+      setRemoteDirectoryList(result)
+    } catch (error) {
+      setDirectoryError(getErrorMessage(error))
+    } finally {
+      setDirectoryLoading(false)
+    }
+  }
+
+  const openDirectoryBrowser = () => {
+    if (!webdavHost) {
+      window.toast.warning(t('settings.data.data_sync.toast.webdav_required'))
+      return
+    }
+
+    const normalizedConfig = saveWebDavConfig()
+    setDirectoryBrowserOpen(true)
+    void loadRemoteDirectories(
+      normalizedConfig.webdavPath === DEFAULT_REMOTE_PATH ? '/' : normalizedConfig.webdavPath || '/'
+    )
+  }
+
+  const selectRemotePath = (path: string) => {
+    saveWebDavConfig(path)
+    setDirectoryBrowserOpen(false)
+    window.toast.success(
+      t('settings.data.data_sync.toast.remote_path_selected', { path: normalizeRemotePathInput(path) })
+    )
+  }
+
   const onSyncIntervalChange = (value: number) => {
     setSyncInterval(value)
-    dispatch(setDataSyncWebdavHost(webdavHost || ''))
-    dispatch(setDataSyncWebdavUser(webdavUser || ''))
-    dispatch(setDataSyncWebdavPass(webdavPass || ''))
-    dispatch(setDataSyncWebdavPath(webdavPath || '/cherry-studio-pi'))
+    saveWebDavConfig()
     dispatch(setDataSyncSyncInterval(value))
     dispatch(setDataSyncAutoSync(value > 0))
 
@@ -177,8 +318,10 @@ const DataSyncSettings: FC = () => {
           value={webdavHost}
           onChange={(event) => setWebdavHost(event.target.value)}
           onBlur={() => {
-            dispatch(setDataSyncWebdavHost(webdavHost || ''))
-            if (!webdavHost) {
+            const normalizedHost = normalizeWebdavHostInput(webdavHost)
+            setWebdavHost(normalizedHost)
+            dispatch(setDataSyncWebdavHost(normalizedHost))
+            if (!normalizedHost) {
               setSyncInterval(0)
               dispatch(setDataSyncSyncInterval(0))
               dispatch(setDataSyncAutoSync(false))
@@ -214,13 +357,17 @@ const DataSyncSettings: FC = () => {
       <SettingDivider />
       <SettingRow>
         <SettingRowTitle>{t('settings.data.data_sync.remote_path')}</SettingRowTitle>
-        <Input
-          placeholder="/cherry-studio-pi"
-          value={webdavPath}
-          onChange={(event) => setWebdavPath(event.target.value)}
-          onBlur={() => dispatch(setDataSyncWebdavPath(webdavPath || '/cherry-studio-pi'))}
-          style={{ width: 280 }}
-        />
+        <HStack gap="8px">
+          <Input
+            readOnly
+            placeholder={DEFAULT_REMOTE_PATH}
+            value={normalizeRemotePathInput(webdavPath)}
+            style={{ width: 280 }}
+          />
+          <Button icon={<FolderOpenOutlined />} disabled={!webdavHost} onClick={openDirectoryBrowser}>
+            {t('settings.data.data_sync.remote_path_browse')}
+          </Button>
+        </HStack>
       </SettingRow>
       <SettingDivider />
       <SettingRow>
@@ -326,6 +473,79 @@ const DataSyncSettings: FC = () => {
           {status?.conflicts?.length || 0}
         </Typography.Text>
       </SettingRow>
+      <Modal
+        centered
+        open={directoryBrowserOpen}
+        title={t('settings.data.data_sync.remote_browser.title')}
+        width={640}
+        onCancel={() => setDirectoryBrowserOpen(false)}
+        footer={
+          <Space>
+            <Button onClick={() => selectRemotePath(DEFAULT_REMOTE_PATH)}>
+              {t('settings.data.data_sync.remote_browser.use_default')}
+            </Button>
+            <Button
+              type="primary"
+              disabled={!remoteDirectoryList?.path}
+              onClick={() => selectRemotePath(remoteDirectoryList?.path || DEFAULT_REMOTE_PATH)}>
+              {t('settings.data.data_sync.remote_browser.select_current')}
+            </Button>
+          </Space>
+        }>
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <HStack gap="8px" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <Breadcrumb
+              items={makeBreadcrumbItems(remoteDirectoryList?.path || '/', (path) => void loadRemoteDirectories(path))}
+            />
+            <Button
+              icon={<ReloadOutlined spin={directoryLoading} />}
+              onClick={() => void loadRemoteDirectories(remoteDirectoryList?.path || '/')}>
+              {t('settings.data.data_sync.remote_browser.refresh')}
+            </Button>
+          </HStack>
+          <Typography.Text type="secondary">
+            {t('settings.data.data_sync.remote_browser.current_path', {
+              path: remoteDirectoryList?.path || normalizeRemotePathInput(webdavPath)
+            })}
+          </Typography.Text>
+          {directoryError && (
+            <Alert
+              showIcon
+              type="warning"
+              message={t('settings.data.data_sync.remote_browser.error_title')}
+              description={directoryError}
+            />
+          )}
+          <Spin spinning={directoryLoading}>
+            {remoteDirectoryList?.directories?.length ? (
+              <List
+                size="small"
+                dataSource={remoteDirectoryList.directories}
+                renderItem={(directory) => (
+                  <List.Item
+                    actions={[
+                      <Button key="select" type="link" onClick={() => selectRemotePath(directory.path)}>
+                        {t('settings.data.data_sync.remote_browser.select')}
+                      </Button>
+                    ]}>
+                    <List.Item.Meta
+                      avatar={<FolderOpenOutlined />}
+                      title={
+                        <Typography.Link onClick={() => void loadRemoteDirectories(directory.path)}>
+                          {directory.name}
+                        </Typography.Link>
+                      }
+                      description={directory.path}
+                    />
+                  </List.Item>
+                )}
+              />
+            ) : (
+              <Empty description={t('settings.data.data_sync.remote_browser.empty')} />
+            )}
+          </Spin>
+        </Space>
+      </Modal>
     </SettingGroup>
   )
 }

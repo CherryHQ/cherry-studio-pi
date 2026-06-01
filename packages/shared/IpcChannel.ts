@@ -318,6 +318,7 @@ export enum IpcChannel {
   DataSync_SyncNow = 'data-sync:sync-now',
   DataSync_RestoreLatestSnapshot = 'data-sync:restore-latest-snapshot',
   DataSync_GetStatus = 'data-sync:get-status',
+  DataSync_ListRemoteDirectories = 'data-sync:list-remote-directories',
 
   // Storage v2 scaffold
   StorageV2_GetDataRoot = 'storage-v2:get-data-root',

@@ -12,9 +12,9 @@ import {
   storageV2WebDavRecordSyncService,
   type StorageV2WebDavRecordSyncSummary
 } from '@main/services/storageV2/WebDavRecordSyncService'
-import { runWebDavOperation, WebDavOperationError } from '@main/services/WebDavRetry'
+import { normalizeWebDavHost, runWebDavOperation, WebDavOperationError } from '@main/services/WebDavRetry'
 import type { WebDavConfig } from '@types'
-import { createClient, type WebDAVClient } from 'webdav'
+import { createClient, type FileStat, type WebDAVClient } from 'webdav'
 
 import { type AppDataDatabase, type AppDataRecord, getAppDataDatabase } from './AppDataDatabase'
 import { mergeAppDataRecords } from './AppDataRecordMerge'
@@ -50,6 +50,18 @@ type RemoteSnapshotMeta = {
   uploadedAt: number
   deviceId: string
   format: 'cherry-studio-direct-backup-zip'
+}
+
+export type DataSyncRemoteDirectory = {
+  name: string
+  path: string
+  modifiedAt: string | null
+}
+
+export type DataSyncRemoteDirectoryList = {
+  path: string
+  parentPath: string | null
+  directories: DataSyncRemoteDirectory[]
 }
 
 export type DataSyncSummary = {
@@ -91,6 +103,8 @@ const EMPTY_SUMMARY: DataSyncSummary = {
 }
 
 const SNAPSHOT_UPLOAD_INTERVAL_MS = 24 * 60 * 60 * 1000
+const DATA_SYNC_REMOTE_ROOT = '/cherry-studio-pi'
+const DATA_SYNC_SUFFIX = '/sync/v1'
 
 function recordId(scope: string, key: string) {
   return `${scope}:${key}`
@@ -104,9 +118,33 @@ function recordPath(record: Pick<AppDataRecord, 'scope' | 'key'>) {
   return `records/${encodePart(record.scope)}/${encodePart(record.key)}.json`
 }
 
+function normalizeWebDavDirectoryPath(webdavPath?: string) {
+  const trimmed = webdavPath?.trim() || DATA_SYNC_REMOTE_ROOT
+  const withSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
+  const normalized = path.posix.normalize(withSlash.replace(/\\/g, '/').replace(/\/+/g, '/'))
+  const withoutTrailingSlash = normalized.length > 1 ? normalized.replace(/\/+$/g, '') : normalized
+  return withoutTrailingSlash === '.' ? '/' : withoutTrailingSlash
+}
+
 function normalizeBasePath(webdavPath?: string) {
-  const basePath = webdavPath?.trim() || '/cherry-studio-pi'
-  return path.posix.join(basePath.startsWith('/') ? basePath : `/${basePath}`, 'sync', 'v1')
+  const basePath = normalizeWebDavDirectoryPath(webdavPath)
+  return basePath === DATA_SYNC_SUFFIX || basePath.endsWith(DATA_SYNC_SUFFIX)
+    ? basePath
+    : path.posix.join(basePath, 'sync', 'v1')
+}
+
+function parentDirectoryPath(directoryPath: string) {
+  if (directoryPath === '/') return null
+  return path.posix.dirname(directoryPath) || '/'
+}
+
+function normalizeDirectoryContents(contents: unknown): FileStat[] {
+  if (Array.isArray(contents)) {
+    return contents as FileStat[]
+  }
+
+  const detailedData = (contents as { data?: unknown } | null)?.data
+  return Array.isArray(detailedData) ? (detailedData as FileStat[]) : []
 }
 
 function makeManifest(): RemoteManifest {
@@ -178,7 +216,8 @@ export class AppDataSyncService {
   }
 
   private createWebDavClient(config: WebDavConfig) {
-    const client = createClient(config.webdavHost, {
+    const webdavHost = normalizeWebDavHost(config.webdavHost)
+    const client = createClient(webdavHost, {
       username: config.webdavUser,
       password: config.webdavPass,
       maxBodyLength: Infinity,
@@ -190,6 +229,16 @@ export class AppDataSyncService {
       client,
       basePath: normalizeBasePath(config.webdavPath)
     }
+  }
+
+  private createRawWebDavClient(config: WebDavConfig) {
+    return createClient(normalizeWebDavHost(config.webdavHost), {
+      username: config.webdavUser,
+      password: config.webdavPass,
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
+      httpsAgent: new https.Agent({ rejectUnauthorized: false })
+    })
   }
 
   private async ensureDirectory(client: WebDAVClient, dirPath: string) {
@@ -235,6 +284,55 @@ export class AppDataSyncService {
       () => client.putFileContents(filePath, JSON.stringify(data, null, 2), { overwrite: true }),
       { logger }
     )
+  }
+
+  async listRemoteDirectories(config: WebDavConfig, remotePath = '/'): Promise<DataSyncRemoteDirectoryList> {
+    if (!normalizeWebDavHost(config.webdavHost)) {
+      throw new Error('WebDAV host is required')
+    }
+
+    const client = this.createRawWebDavClient(config)
+    let currentPath = normalizeWebDavDirectoryPath(remotePath || '/')
+    let contents: FileStat[]
+
+    const readDirectory = async (targetPath: string) =>
+      normalizeDirectoryContents(
+        await runWebDavOperation(
+          `listing remote directory ${targetPath}`,
+          () => client.getDirectoryContents(targetPath),
+          { logger }
+        )
+      )
+
+    try {
+      contents = await readDirectory(currentPath)
+    } catch (error) {
+      const fallbackPath = parentDirectoryPath(currentPath)
+      if (error instanceof WebDavOperationError && error.status === 404 && fallbackPath) {
+        logger.warn(`Remote directory ${currentPath} does not exist; falling back to ${fallbackPath}`, error)
+        currentPath = fallbackPath
+        contents = await readDirectory(currentPath)
+      } else {
+        throw error
+      }
+    }
+
+    return {
+      path: currentPath,
+      parentPath: parentDirectoryPath(currentPath),
+      directories: contents
+        .filter((entry) => entry.type === 'directory')
+        .map((entry) => {
+          const entryPath = normalizeWebDavDirectoryPath(entry.filename || path.posix.join(currentPath, entry.basename))
+          return {
+            name: entry.basename || path.posix.basename(entryPath) || entryPath,
+            path: entryPath,
+            modifiedAt: entry.lastmod || null
+          }
+        })
+        .filter((entry) => entry.path !== currentPath)
+        .sort((left, right) => left.name.localeCompare(right.name))
+    }
   }
 
   private normalizeManifest(manifest: RemoteManifest | null): RemoteManifest {
@@ -369,7 +467,7 @@ export class AppDataSyncService {
   }
 
   async restoreLatestSnapshot(config: WebDavConfig) {
-    if (!config.webdavHost) {
+    if (!normalizeWebDavHost(config.webdavHost)) {
       throw new Error('WebDAV host is required')
     }
 
@@ -406,7 +504,7 @@ export class AppDataSyncService {
   }
 
   async syncNow(config: WebDavConfig): Promise<DataSyncSummary> {
-    if (!config.webdavHost) {
+    if (!normalizeWebDavHost(config.webdavHost)) {
       throw new Error('WebDAV host is required')
     }
 
