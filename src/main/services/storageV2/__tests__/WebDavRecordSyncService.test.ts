@@ -47,6 +47,21 @@ const settingsTable = {
   versionColumn: 'version'
 } as const
 
+const agentSkillTable = {
+  entityType: 'agent_skill',
+  table: 'agent_skills',
+  idColumns: ['agent_id', 'skill_id'],
+  updatedAtColumn: 'updated_at'
+} as const
+
+const tombstoneTable = {
+  entityType: 'sync_tombstone',
+  table: 'sync_tombstones',
+  idColumns: ['entity_type', 'entity_id'],
+  updatedAtColumn: 'deleted_at',
+  versionColumn: 'version'
+} as const
+
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize)
   if (!value || typeof value !== 'object') return value
@@ -71,6 +86,22 @@ type SettingsRow = {
   scope: string
   updated_at: string
   deleted_at: string | null
+  version: number
+}
+
+type AgentSkillRow = {
+  agent_id: string
+  skill_id: string
+  enabled: number
+  created_at: string
+  updated_at: string
+}
+
+type TombstoneRow = {
+  entity_type: string
+  entity_id: string
+  deleted_at: string
+  device_id: string
   version: number
 }
 
@@ -129,6 +160,119 @@ function makeSettingsDb(rows: SettingsRow[]) {
           } else {
             state.rows[index] = nextRow
           }
+          return { rows: [] }
+        }
+
+        return { rows: [] }
+      })
+    }
+  }
+}
+
+function makeAgentSkillDb(input: { agentSkills?: AgentSkillRow[]; tombstones?: TombstoneRow[] }) {
+  const state = {
+    agentSkills: [...(input.agentSkills ?? [])],
+    tombstones: [...(input.tombstones ?? [])],
+    syncState: new Map<string, string>()
+  }
+
+  return {
+    state,
+    client: {
+      execute: vi.fn(async (input: string | { sql: string; args?: unknown[] }) => {
+        const sql = typeof input === 'string' ? input : input.sql
+        const args = typeof input === 'string' ? [] : (input.args ?? [])
+
+        if (sql.includes('SELECT * FROM agent_skills')) {
+          return { rows: state.agentSkills.map((row) => ({ ...row })) }
+        }
+
+        if (sql.includes('SELECT * FROM sync_tombstones')) {
+          return { rows: state.tombstones.map((row) => ({ ...row })) }
+        }
+
+        if (sql.includes('SELECT deleted_at') && sql.includes('FROM sync_tombstones')) {
+          const row = state.tombstones.find(
+            (item) => item.entity_type === String(args[0]) && item.entity_id === String(args[1])
+          )
+          return { rows: row ? [{ deleted_at: row.deleted_at }] : [] }
+        }
+
+        if (sql.includes('SELECT value_json FROM sync_state')) {
+          const value = state.syncState.get(String(args[0]))
+          return { rows: value ? [{ value_json: JSON.stringify(value) }] : [] }
+        }
+
+        if (sql.includes('INSERT INTO sync_state')) {
+          state.syncState.set(String(args[0]), JSON.parse(String(args[1])))
+          return { rows: [] }
+        }
+
+        if (sql.includes('PRAGMA table_info(agent_skills)')) {
+          return {
+            rows: [
+              { name: 'agent_id' },
+              { name: 'skill_id' },
+              { name: 'enabled' },
+              { name: 'created_at' },
+              { name: 'updated_at' }
+            ]
+          }
+        }
+
+        if (sql.includes('PRAGMA table_info(sync_tombstones)')) {
+          return {
+            rows: [
+              { name: 'entity_type' },
+              { name: 'entity_id' },
+              { name: 'deleted_at' },
+              { name: 'device_id' },
+              { name: 'version' }
+            ]
+          }
+        }
+
+        if (sql.includes('INSERT INTO agent_skills')) {
+          const nextRow: AgentSkillRow = {
+            agent_id: String(args[0]),
+            skill_id: String(args[1]),
+            enabled: Number(args[2]),
+            created_at: String(args[3]),
+            updated_at: String(args[4])
+          }
+          const index = state.agentSkills.findIndex(
+            (row) => row.agent_id === nextRow.agent_id && row.skill_id === nextRow.skill_id
+          )
+          if (index === -1) {
+            state.agentSkills.push(nextRow)
+          } else {
+            state.agentSkills[index] = nextRow
+          }
+          return { rows: [] }
+        }
+
+        if (sql.includes('INSERT INTO sync_tombstones')) {
+          const nextRow: TombstoneRow = {
+            entity_type: String(args[0]),
+            entity_id: String(args[1]),
+            deleted_at: String(args[2]),
+            device_id: String(args[3]),
+            version: Number(args[4])
+          }
+          const index = state.tombstones.findIndex(
+            (row) => row.entity_type === nextRow.entity_type && row.entity_id === nextRow.entity_id
+          )
+          if (index === -1) {
+            state.tombstones.push(nextRow)
+          } else {
+            state.tombstones[index] = nextRow
+          }
+          return { rows: [] }
+        }
+
+        if (sql.includes('DELETE FROM agent_skills')) {
+          const [agentId, skillId] = args.map(String)
+          state.agentSkills = state.agentSkills.filter((row) => !(row.agent_id === agentId && row.skill_id === skillId))
           return { rows: [] }
         }
 
@@ -437,5 +581,151 @@ describe('StorageV2WebDavRecordSyncService', () => {
           filePath.includes('/storage-v2/records/settings/') && String(contents).includes('device-b-default')
       )
     ).toBe(false)
+  })
+
+  it('uses local tombstones to avoid resurrecting stale association rows', async () => {
+    const remote = makeSharedWebDavStore()
+    const remoteRow: AgentSkillRow = {
+      agent_id: 'agent-1',
+      skill_id: 'skill-1',
+      enabled: 1,
+      created_at: '2026-05-29T12:00:00.000Z',
+      updated_at: '2026-05-29T12:00:00.000Z'
+    }
+    const remoteHash = hashJson(remoteRow)
+    const remoteRecord = {
+      id: 'agent_skill:agent-1:skill-1',
+      table: agentSkillTable,
+      idValues: ['agent-1', 'skill-1'],
+      row: remoteRow,
+      valueHash: remoteHash,
+      updatedAt: Date.parse(remoteRow.updated_at),
+      deletedAt: null,
+      version: 1
+    }
+    remote.files.set('/remote-root/sync/v1/storage-v2/records/agent_skill/stale.json', JSON.stringify(remoteRecord))
+
+    const db = makeAgentSkillDb({
+      tombstones: [
+        {
+          entity_type: 'agent_skill',
+          entity_id: 'agent-1:skill-1',
+          deleted_at: '2026-05-29T12:10:00.000Z',
+          device_id: 'device-b',
+          version: 2
+        }
+      ]
+    })
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    const result = await new StorageV2WebDavRecordSyncService([agentSkillTable, tombstoneTable]).sync(
+      remote.client as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {
+          'agent_skill:agent-1:skill-1': {
+            entityType: 'agent_skill',
+            table: 'agent_skills',
+            idValues: ['agent-1', 'skill-1'],
+            valueHash: remoteHash,
+            updatedAt: remoteRecord.updatedAt,
+            deletedAt: null,
+            version: 1,
+            path: 'storage-v2/records/agent_skill/stale.json'
+          }
+        }
+      }
+    )
+
+    expect(result.summary.storageDownloaded).toBe(0)
+    expect(db.state.agentSkills).toEqual([])
+    expect(result.manifest.records['agent_skill:agent-1:skill-1']).toBeUndefined()
+    expect(Object.keys(result.manifest.records).some((id) => id.startsWith('sync_tombstone:agent_skill:'))).toBe(true)
+  })
+
+  it('applies remote tombstones to physically deleted association rows', async () => {
+    const remote = makeSharedWebDavStore()
+    const associationRow: AgentSkillRow = {
+      agent_id: 'agent-1',
+      skill_id: 'skill-1',
+      enabled: 1,
+      created_at: '2026-05-29T12:00:00.000Z',
+      updated_at: '2026-05-29T12:00:00.000Z'
+    }
+    const tombstoneRow: TombstoneRow = {
+      entity_type: 'agent_skill',
+      entity_id: 'agent-1:skill-1',
+      deleted_at: '2026-05-29T12:10:00.000Z',
+      device_id: 'device-b',
+      version: 2
+    }
+    const associationHash = hashJson(associationRow)
+    const tombstoneHash = hashJson(tombstoneRow)
+    remote.files.set(
+      '/remote-root/sync/v1/storage-v2/records/agent_skill/stale.json',
+      JSON.stringify({
+        id: 'agent_skill:agent-1:skill-1',
+        table: agentSkillTable,
+        idValues: ['agent-1', 'skill-1'],
+        row: associationRow,
+        valueHash: associationHash,
+        updatedAt: Date.parse(associationRow.updated_at),
+        deletedAt: null,
+        version: 1
+      })
+    )
+    remote.files.set(
+      '/remote-root/sync/v1/storage-v2/records/sync_tombstone/delete.json',
+      JSON.stringify({
+        id: 'sync_tombstone:agent_skill:agent-1%3Askill-1',
+        table: tombstoneTable,
+        idValues: ['agent_skill', 'agent-1:skill-1'],
+        row: tombstoneRow,
+        valueHash: tombstoneHash,
+        updatedAt: Date.parse(tombstoneRow.deleted_at),
+        deletedAt: null,
+        version: 2
+      })
+    )
+
+    const db = makeAgentSkillDb({ agentSkills: [associationRow] })
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    const result = await new StorageV2WebDavRecordSyncService([agentSkillTable, tombstoneTable]).sync(
+      remote.client as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {
+          'agent_skill:agent-1:skill-1': {
+            entityType: 'agent_skill',
+            table: 'agent_skills',
+            idValues: ['agent-1', 'skill-1'],
+            valueHash: associationHash,
+            updatedAt: Date.parse(associationRow.updated_at),
+            deletedAt: null,
+            version: 1,
+            path: 'storage-v2/records/agent_skill/stale.json'
+          },
+          'sync_tombstone:agent_skill:agent-1%3Askill-1': {
+            entityType: 'sync_tombstone',
+            table: 'sync_tombstones',
+            idValues: ['agent_skill', 'agent-1:skill-1'],
+            valueHash: tombstoneHash,
+            updatedAt: Date.parse(tombstoneRow.deleted_at),
+            deletedAt: null,
+            version: 2,
+            path: 'storage-v2/records/sync_tombstone/delete.json'
+          }
+        }
+      }
+    )
+
+    expect(db.state.agentSkills).toEqual([])
+    expect(db.state.tombstones).toEqual([tombstoneRow])
+    expect(result.manifest.records['agent_skill:agent-1:skill-1']).toBeUndefined()
   })
 })

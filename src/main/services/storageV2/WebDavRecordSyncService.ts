@@ -81,6 +81,18 @@ const EMPTY_SUMMARY: StorageV2WebDavRecordSyncSummary = {
   blobDownloaded: 0
 }
 
+const TOMBSTONE_ENTITY_TYPE = 'sync_tombstone'
+const TOMBSTONE_PHYSICAL_DELETE_TARGETS = {
+  agent_skill: {
+    table: 'agent_skills',
+    idColumns: ['agent_id', 'skill_id']
+  },
+  channel_task_subscription: {
+    table: 'channel_task_subscriptions',
+    idColumns: ['channel_id', 'task_id']
+  }
+} as const
+
 const STORAGE_V2_SYNC_TABLES: readonly StorageV2SyncTable[] = [
   { entityType: 'profile', table: 'profiles', idColumns: ['id'], updatedAtColumn: 'updated_at' },
   {
@@ -238,6 +250,13 @@ const STORAGE_V2_SYNC_TABLES: readonly StorageV2SyncTable[] = [
     updatedAtColumn: 'updated_at',
     deletedAtColumn: 'deleted_at',
     versionColumn: 'version'
+  },
+  {
+    entityType: TOMBSTONE_ENTITY_TYPE,
+    table: 'sync_tombstones',
+    idColumns: ['entity_type', 'entity_id'],
+    updatedAtColumn: 'deleted_at',
+    versionColumn: 'version'
   }
 ] as const
 
@@ -336,6 +355,34 @@ function rowToPlain(row: Record<string, unknown>) {
     result[key] = toSqlValue(value)
     return result
   }, {})
+}
+
+function tombstoneTargetFromRecord(entityType: string, idValues: readonly string[]) {
+  if (!Object.hasOwn(TOMBSTONE_PHYSICAL_DELETE_TARGETS, entityType)) return null
+
+  const target = TOMBSTONE_PHYSICAL_DELETE_TARGETS[entityType as keyof typeof TOMBSTONE_PHYSICAL_DELETE_TARGETS]
+  if (idValues.length !== target.idColumns.length || idValues.some((value) => !value)) return null
+
+  return {
+    entityType,
+    entityId: idValues.join(':'),
+    idValues
+  }
+}
+
+function tombstoneTargetFromRow(row: Record<string, unknown>) {
+  const entityType = typeof row.entity_type === 'string' ? row.entity_type : null
+  const entityId = typeof row.entity_id === 'string' ? row.entity_id : null
+  if (!entityType || !entityId || !Object.hasOwn(TOMBSTONE_PHYSICAL_DELETE_TARGETS, entityType)) return null
+
+  const target = TOMBSTONE_PHYSICAL_DELETE_TARGETS[entityType as keyof typeof TOMBSTONE_PHYSICAL_DELETE_TARGETS]
+  const idValues = entityId.split(':')
+  if (idValues.length !== target.idColumns.length || idValues.some((value) => !value)) return null
+
+  return {
+    entityType,
+    idValues
+  }
 }
 
 function bufferToString(value: string | Buffer | ArrayBuffer | unknown) {
@@ -617,7 +664,62 @@ export class StorageV2WebDavRecordSyncService {
       args: insertColumns.map((column) => remote.row[column] ?? null)
     })
 
+    await this.applyTombstoneTarget(client, remote.row)
     return true
+  }
+
+  private async applyTombstoneTarget(client: Client, row: Record<string, unknown>) {
+    const target = tombstoneTargetFromRow(row)
+    if (!target) return false
+
+    const targetTable =
+      TOMBSTONE_PHYSICAL_DELETE_TARGETS[target.entityType as keyof typeof TOMBSTONE_PHYSICAL_DELETE_TARGETS]
+    await client.execute({
+      sql: `
+        DELETE FROM ${targetTable.table}
+        WHERE ${targetTable.idColumns.map((column) => `${column} = ?`).join(' AND ')}
+      `,
+      args: target.idValues
+    })
+
+    return true
+  }
+
+  private pruneManifestRecordCoveredByTombstone(
+    manifest: StorageV2WebDavRecordSyncManifest,
+    row: Record<string, unknown>
+  ) {
+    const target = tombstoneTargetFromRow(row)
+    if (!target) return
+
+    delete manifest.records[recordId(target.entityType, target.idValues)]
+  }
+
+  private async applyLocalTombstoneRecord(
+    client: Client,
+    manifest: StorageV2WebDavRecordSyncManifest,
+    record: LocalRecord
+  ) {
+    if (record.table.entityType !== TOMBSTONE_ENTITY_TYPE) return
+
+    await this.applyTombstoneTarget(client, record.row)
+    this.pruneManifestRecordCoveredByTombstone(manifest, record.row)
+  }
+
+  private async isCoveredByLocalTombstone(client: Client, meta: RemoteRecordMeta) {
+    const target = tombstoneTargetFromRecord(meta.entityType, meta.idValues)
+    if (!target) return false
+
+    const result = await client.execute({
+      sql: `
+        SELECT deleted_at
+        FROM sync_tombstones
+        WHERE entity_type = ? AND entity_id = ?
+      `,
+      args: [target.entityType, target.entityId]
+    })
+    const tombstoneDeletedAt = parseTime(result.rows[0]?.deleted_at)
+    return tombstoneDeletedAt > 0 && tombstoneDeletedAt >= meta.updatedAt
   }
 
   private blobLocalPath(storagePath: string) {
@@ -736,6 +838,7 @@ export class StorageV2WebDavRecordSyncService {
       if (localRecord && !remoteMeta) {
         await this.pushRecord(client, basePath, manifest, localRecord)
         await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
+        await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord)
         await this.setRecordSyncState(dbClient, id, localRecord.valueHash)
         summary.storageUploaded += localRecord.deletedAt ? 0 : 1
         summary.storageDeleted += localRecord.deletedAt ? 1 : 0
@@ -743,9 +846,16 @@ export class StorageV2WebDavRecordSyncService {
       }
 
       if (!localRecord && remoteMeta) {
+        if (await this.isCoveredByLocalTombstone(dbClient, remoteMeta)) {
+          delete manifest.records[id]
+          summary.storageSkipped += 1
+          continue
+        }
+
         const remoteRecord = await this.pullRecord(client, basePath, remoteMeta)
         if (remoteRecord && (await this.applyRemoteRecord(dbClient, remoteRecord))) {
           await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
+          this.pruneManifestRecordCoveredByTombstone(manifest, remoteRecord.row)
           await this.setRecordSyncState(dbClient, id, remoteRecord.valueHash)
           summary.storageDownloaded += remoteRecord.deletedAt ? 0 : 1
           summary.storageDeleted += remoteRecord.deletedAt ? 1 : 0
@@ -760,6 +870,7 @@ export class StorageV2WebDavRecordSyncService {
 
       if (localRecord.valueHash === remoteMeta.valueHash) {
         await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
+        await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord)
         await this.setRecordSyncState(dbClient, id, localRecord.valueHash)
         summary.storageSkipped += 1
         continue
@@ -772,6 +883,7 @@ export class StorageV2WebDavRecordSyncService {
         const remoteRecord = await this.pullRecord(client, basePath, remoteMeta)
         if (remoteRecord && (await this.applyRemoteRecord(dbClient, remoteRecord))) {
           await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
+          this.pruneManifestRecordCoveredByTombstone(manifest, remoteRecord.row)
           await this.setRecordSyncState(dbClient, id, remoteRecord.valueHash)
           summary.storageDownloaded += remoteRecord.deletedAt ? 0 : 1
           summary.storageDeleted += remoteRecord.deletedAt ? 1 : 0
@@ -784,6 +896,7 @@ export class StorageV2WebDavRecordSyncService {
       if (localChanged && !remoteChanged) {
         await this.pushRecord(client, basePath, manifest, localRecord)
         await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
+        await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord)
         await this.setRecordSyncState(dbClient, id, localRecord.valueHash)
         summary.storageUploaded += localRecord.deletedAt ? 0 : 1
         summary.storageDeleted += localRecord.deletedAt ? 1 : 0
@@ -799,6 +912,7 @@ export class StorageV2WebDavRecordSyncService {
       if (!localChanged && remoteChanged) {
         if (await this.applyRemoteRecord(dbClient, remoteRecord)) {
           await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
+          this.pruneManifestRecordCoveredByTombstone(manifest, remoteRecord.row)
           await this.setRecordSyncState(dbClient, id, remoteRecord.valueHash)
           summary.storageDownloaded += remoteRecord.deletedAt ? 0 : 1
           summary.storageDeleted += remoteRecord.deletedAt ? 1 : 0
@@ -812,10 +926,12 @@ export class StorageV2WebDavRecordSyncService {
       if (localWins) {
         await this.pushRecord(client, basePath, manifest, localRecord)
         await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
+        await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord)
         await this.setRecordSyncState(dbClient, id, localRecord.valueHash)
         summary.storageUploaded += localRecord.deletedAt ? 0 : 1
       } else if (await this.applyRemoteRecord(dbClient, remoteRecord)) {
         await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
+        this.pruneManifestRecordCoveredByTombstone(manifest, remoteRecord.row)
         await this.setRecordSyncState(dbClient, id, remoteRecord.valueHash)
         summary.storageDownloaded += remoteRecord.deletedAt ? 0 : 1
       }
