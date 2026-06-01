@@ -4102,15 +4102,20 @@
         "method_value": "Storage v2 记录级同步 + WebDAV",
         "password": "密码",
         "password_placeholder": "WebDAV 密码或应用密码",
+        "refresh_status": "刷新",
         "remote_browser": {
           "current_path": "当前目录：{{path}}",
           "empty": "这个目录下没有可选的子目录",
           "error_title": "读取目录失败",
+          "path_hint": "目录列表只显示远端已经存在的目录。当前同步目录 {{path}} 如果尚未创建，可能不会出现在列表里；可以直接使用当前同步目录，同步时会自动创建 sync/v1（前提是 WebDAV 支持写入）。",
+          "path_hint_title": "找不到当前同步目录？",
           "refresh": "刷新",
           "select": "选择",
           "select_current": "选择当前目录",
           "title": "选择 WebDAV 同步目录",
-          "use_default": "使用推荐目录"
+          "use_current_path": "使用当前同步目录",
+          "use_default": "使用推荐目录",
+          "use_root": "使用根目录"
         },
         "remote_path": "同步目录",
         "remote_path_browse": "浏览",
@@ -4130,6 +4135,9 @@
           "conflicts": "冲突 {{count}}",
           "deleted": "删除 {{count}}",
           "downloaded": "下载 {{count}}",
+          "error": "错误：{{message}}",
+          "status_failed": "失败",
+          "status_success": "成功",
           "uploaded": "上传 {{count}}"
         },
         "sync": "同步",

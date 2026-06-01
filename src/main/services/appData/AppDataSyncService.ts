@@ -65,6 +65,8 @@ export type DataSyncRemoteDirectoryList = {
 }
 
 export type DataSyncSummary = {
+  status?: 'success' | 'failed'
+  error?: string | null
   uploaded: number
   downloaded: number
   deleted: number
@@ -84,6 +86,8 @@ export type DataSyncSummary = {
 }
 
 const EMPTY_SUMMARY: DataSyncSummary = {
+  status: undefined,
+  error: null,
   uploaded: 0,
   downloaded: 0,
   deleted: 0,
@@ -197,6 +201,10 @@ function normalizeRemoteSnapshotPath(value: string) {
     throw new Error('Remote data snapshot path is invalid')
   }
   return normalized
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function isIgnorableCreateDirectoryError(error: unknown) {
@@ -676,8 +684,22 @@ export class AppDataSyncService {
       }
     }
 
+    summary.status = 'success'
+    summary.error = null
     await this.setSyncState(db, 'last-sync-summary', summary)
 
+    return summary
+  }
+
+  async recordSyncFailure(error: unknown) {
+    const db = await getAppDataDatabase()
+    const summary: DataSyncSummary = {
+      ...EMPTY_SUMMARY,
+      status: 'failed',
+      error: errorMessage(error),
+      lastSyncAt: Date.now()
+    }
+    await this.setSyncState(db, 'last-sync-summary', summary)
     return summary
   }
 

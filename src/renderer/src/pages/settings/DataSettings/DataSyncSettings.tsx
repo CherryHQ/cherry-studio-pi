@@ -23,6 +23,8 @@ import { useTranslation } from 'react-i18next'
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
 
 type SyncSummary = {
+  status?: 'success' | 'failed'
+  error?: string | null
   uploaded: number
   downloaded: number
   deleted: number
@@ -121,6 +123,12 @@ function getEffectiveSyncPath(value?: string) {
   return basePath === '/' ? DATA_SYNC_SUFFIX : `${basePath}${DATA_SYNC_SUFFIX}`
 }
 
+function getDirectoryBrowserStartPath(value?: string) {
+  const remotePath = normalizeRemotePathInput(value)
+  if (remotePath === '/' || remotePath === DEFAULT_REMOTE_PATH) return '/'
+  return remotePath
+}
+
 function normalizeDirectoryBrowserPath(value?: string) {
   const trimmed = value?.trim() || '/'
   let normalized = trimmed.replace(/\\/g, '/').replace(/\/+/g, '/')
@@ -179,6 +187,7 @@ const DataSyncSettings: FC = () => {
   const [diagnosing, setDiagnosing] = useState(false)
   const [diagnosis, setDiagnosis] = useState<DiagnosisState | null>(null)
   const [status, setStatus] = useState<SyncStatus | null>(null)
+  const [statusRefreshing, setStatusRefreshing] = useState(false)
   const [directoryBrowserOpen, setDirectoryBrowserOpen] = useState(false)
   const [directoryLoading, setDirectoryLoading] = useState(false)
   const [directoryError, setDirectoryError] = useState<string | null>(null)
@@ -203,13 +212,30 @@ const DataSyncSettings: FC = () => {
     }
   }
 
-  const refreshStatus = async () => {
-    const nextStatus = await window.api.dataSync.getStatus()
-    setStatus(nextStatus)
+  const refreshStatus = async (showLoading = false) => {
+    if (showLoading) {
+      setStatusRefreshing(true)
+    }
+    try {
+      const nextStatus = await window.api.dataSync.getStatus()
+      setStatus(nextStatus)
+    } finally {
+      if (showLoading) {
+        setStatusRefreshing(false)
+      }
+    }
   }
 
   useEffect(() => {
-    void refreshStatus()
+    void refreshStatus().catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void refreshStatus().catch(() => undefined)
+    }, 10_000)
+
+    return () => window.clearInterval(timer)
   }, [])
 
   const syncNow = async () => {
@@ -233,6 +259,7 @@ const DataSyncSettings: FC = () => {
       await refreshStatus()
       window.toast.success(t('settings.data.data_sync.toast.sync_success'))
     } catch (error) {
+      await refreshStatus().catch(() => undefined)
       window.toast.error(t('settings.data.data_sync.toast.sync_failed', { message: getErrorMessage(error) }))
       void reportErrorToSystemAgent(
         error,
@@ -407,9 +434,7 @@ const DataSyncSettings: FC = () => {
 
     const normalizedConfig = saveWebDavConfig()
     setDirectoryBrowserOpen(true)
-    void loadRemoteDirectories(
-      normalizedConfig.webdavPath === DEFAULT_REMOTE_PATH ? '/' : normalizedConfig.webdavPath || '/'
-    )
+    void loadRemoteDirectories(getDirectoryBrowserStartPath(normalizedConfig.webdavPath))
   }
 
   const selectRemotePath = (path: string) => {
@@ -541,9 +566,18 @@ const DataSyncSettings: FC = () => {
       <SettingDivider />
       <SettingRow>
         <SettingRowTitle>{t('settings.data.data_sync.current_device')}</SettingRowTitle>
-        <Typography.Text type="secondary" copyable>
-          {status?.deviceId || t('settings.data.data_sync.uninitialized')}
-        </Typography.Text>
+        <HStack gap="8px">
+          <Typography.Text type="secondary" copyable>
+            {status?.deviceId || t('settings.data.data_sync.uninitialized')}
+          </Typography.Text>
+          <Button
+            size="small"
+            icon={<ReloadOutlined spin={statusRefreshing} />}
+            loading={statusRefreshing}
+            onClick={() => void refreshStatus(true)}>
+            {t('settings.data.data_sync.refresh_status')}
+          </Button>
+        </HStack>
       </SettingRow>
       <SettingDivider />
       <SettingRow>
@@ -618,6 +652,20 @@ const DataSyncSettings: FC = () => {
               <Typography.Text type="secondary">
                 {dayjs(summary.lastSyncAt).format('YYYY-MM-DD HH:mm:ss')}
               </Typography.Text>
+              {summary.status && (
+                <Typography.Text type={summary.status === 'failed' ? 'danger' : 'success'}>
+                  {t(
+                    summary.status === 'failed'
+                      ? 'settings.data.data_sync.summary.status_failed'
+                      : 'settings.data.data_sync.summary.status_success'
+                  )}
+                </Typography.Text>
+              )}
+              {summary.error && (
+                <Typography.Text type="danger">
+                  {t('settings.data.data_sync.summary.error', { message: summary.error })}
+                </Typography.Text>
+              )}
               <Typography.Text type="secondary">
                 {t('settings.data.data_sync.summary.uploaded', { count: summary.uploaded })}
               </Typography.Text>
@@ -672,8 +720,11 @@ const DataSyncSettings: FC = () => {
         onCancel={() => setDirectoryBrowserOpen(false)}
         footer={
           <Space>
-            <Button onClick={() => selectRemotePath(DEFAULT_REMOTE_PATH)}>
-              {t('settings.data.data_sync.remote_browser.use_default')}
+            <Button onClick={() => selectRemotePath('/')}>
+              {t('settings.data.data_sync.remote_browser.use_root')}
+            </Button>
+            <Button onClick={() => selectRemotePath(normalizeRemotePathInput(webdavPath))}>
+              {t('settings.data.data_sync.remote_browser.use_current_path')}
             </Button>
             <Button
               type="primary"
@@ -699,6 +750,23 @@ const DataSyncSettings: FC = () => {
               path: remoteDirectoryList?.path || normalizeRemotePathInput(webdavPath)
             })}
           </Typography.Text>
+          <Alert
+            showIcon
+            type="info"
+            message={t('settings.data.data_sync.remote_browser.path_hint_title')}
+            description={
+              <Space direction="vertical" size={8}>
+                <Typography.Text type="secondary">
+                  {t('settings.data.data_sync.remote_browser.path_hint', {
+                    path: normalizeRemotePathInput(webdavPath)
+                  })}
+                </Typography.Text>
+                <Button size="small" onClick={() => selectRemotePath(normalizeRemotePathInput(webdavPath))}>
+                  {t('settings.data.data_sync.remote_browser.use_current_path')}
+                </Button>
+              </Space>
+            }
+          />
           {directoryError && (
             <Alert
               showIcon

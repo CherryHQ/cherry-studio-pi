@@ -9,6 +9,8 @@ import { reportErrorToSystemAgent } from './SystemAgentService'
 const logger = loggerService.withContext('DataSyncService')
 
 export type DataSyncSummary = {
+  status?: 'success' | 'failed'
+  error?: string | null
   uploaded: number
   downloaded: number
   deleted: number

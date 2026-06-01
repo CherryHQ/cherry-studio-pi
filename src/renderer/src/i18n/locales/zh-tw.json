@@ -4102,15 +4102,20 @@
         "method_value": "Storage v2 記錄級同步 + WebDAV",
         "password": "密碼",
         "password_placeholder": "WebDAV 密碼或應用程式密碼",
+        "refresh_status": "重新整理",
         "remote_browser": {
           "current_path": "目前目錄：{{path}}",
           "empty": "這個目錄下沒有可選的子目錄",
           "error_title": "讀取目錄失敗",
+          "path_hint": "目錄列表只顯示遠端已經存在的目錄。目前同步目錄 {{path}} 如果尚未建立，可能不會出現在列表裡；可以直接使用目前同步目錄，同步時會自動建立 sync/v1（前提是 WebDAV 支援寫入）。",
+          "path_hint_title": "找不到目前同步目錄？",
           "refresh": "重新整理",
           "select": "選擇",
           "select_current": "選擇目前目錄",
           "title": "選擇 WebDAV 同步目錄",
-          "use_default": "使用建議目錄"
+          "use_current_path": "使用目前同步目錄",
+          "use_default": "使用建議目錄",
+          "use_root": "使用根目錄"
         },
         "remote_path": "同步目錄",
         "remote_path_browse": "瀏覽",
@@ -4130,6 +4135,9 @@
           "conflicts": "衝突 {{count}}",
           "deleted": "刪除 {{count}}",
           "downloaded": "下載 {{count}}",
+          "error": "錯誤：{{message}}",
+          "status_failed": "失敗",
+          "status_success": "成功",
           "uploaded": "上傳 {{count}}"
         },
         "sync": "同步",

@@ -17,10 +17,21 @@ import { appDataSyncService } from './AppDataSyncService'
 
 const logger = loggerService.withContext('AppDataIpcService')
 
-function throwDataSyncUserError(error: unknown, action: string): never {
+function getDataSyncUserErrorMessage(error: unknown, action: string) {
   const message = describeWebDavUserFacingError(error, action)
   logger.warn(message, error as Error)
+  return message
+}
+
+function throwDataSyncUserError(error: unknown, action: string): never {
+  const message = getDataSyncUserErrorMessage(error, action)
   throw new Error(message)
+}
+
+async function rememberDataSyncFailure(message: string) {
+  await appDataSyncService.recordSyncFailure(new Error(message)).catch((recordError) => {
+    logger.warn('Failed to record data sync failure summary', recordError as Error)
+  })
 }
 
 export function registerAppDataIpcHandlers() {
@@ -157,7 +168,9 @@ export function registerAppDataIpcHandlers() {
     try {
       return await appDataSyncService.syncNow(config)
     } catch (error) {
-      throwDataSyncUserError(error, '同步数据')
+      const message = getDataSyncUserErrorMessage(error, '同步数据')
+      await rememberDataSyncFailure(message)
+      throw new Error(message)
     }
   })
   ipcMain.handle(IpcChannel.DataSync_RestoreLatestSnapshot, async (_, config: WebDavConfig) => {

@@ -4102,15 +4102,20 @@
         "method_value": "Record-level Storage v2 sync + WebDAV",
         "password": "[to be translated]:Password",
         "password_placeholder": "[to be translated]:WebDAV password or app password",
+        "refresh_status": "[to be translated]:Refresh",
         "remote_browser": {
           "current_path": "[to be translated]:Current directory: {{path}}",
           "empty": "[to be translated]:No selectable subdirectories in this directory",
           "error_title": "[to be translated]:Failed to read directory",
+          "path_hint": "[to be translated]:The browser only shows directories that already exist remotely. If the current sync directory {{path}} has not been created yet, it may not appear here. You can still use the current sync directory; sync will create sync/v1 automatically when WebDAV allows writes.",
+          "path_hint_title": "[to be translated]:Can't find the current sync directory?",
           "refresh": "[to be translated]:Refresh",
           "select": "[to be translated]:Select",
           "select_current": "[to be translated]:Select current directory",
           "title": "[to be translated]:Select WebDAV sync directory",
-          "use_default": "[to be translated]:Use recommended directory"
+          "use_current_path": "[to be translated]:Use current sync directory",
+          "use_default": "[to be translated]:Use recommended directory",
+          "use_root": "[to be translated]:Use root directory"
         },
         "remote_path": "[to be translated]:Sync directory",
         "remote_path_browse": "[to be translated]:Browse",
@@ -4130,6 +4135,9 @@
           "conflicts": "[to be translated]:Conflicts {{count}}",
           "deleted": "[to be translated]:Deleted {{count}}",
           "downloaded": "[to be translated]:Downloaded {{count}}",
+          "error": "[to be translated]:Error: {{message}}",
+          "status_failed": "[to be translated]:Failed",
+          "status_success": "[to be translated]:Success",
           "uploaded": "[to be translated]:Uploaded {{count}}"
         },
         "sync": "[to be translated]:Sync",

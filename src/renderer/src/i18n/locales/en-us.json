@@ -4102,15 +4102,20 @@
         "method_value": "Record-level Storage v2 sync + WebDAV",
         "password": "Password",
         "password_placeholder": "WebDAV password or app password",
+        "refresh_status": "Refresh",
         "remote_browser": {
           "current_path": "Current directory: {{path}}",
           "empty": "No selectable subdirectories in this directory",
           "error_title": "Failed to read directory",
+          "path_hint": "The browser only shows directories that already exist remotely. If the current sync directory {{path}} has not been created yet, it may not appear here. You can still use the current sync directory; sync will create sync/v1 automatically when WebDAV allows writes.",
+          "path_hint_title": "Can't find the current sync directory?",
           "refresh": "Refresh",
           "select": "Select",
           "select_current": "Select current directory",
           "title": "Select WebDAV sync directory",
-          "use_default": "Use recommended directory"
+          "use_current_path": "Use current sync directory",
+          "use_default": "Use recommended directory",
+          "use_root": "Use root directory"
         },
         "remote_path": "Sync directory",
         "remote_path_browse": "Browse",
@@ -4130,6 +4135,9 @@
           "conflicts": "Conflicts {{count}}",
           "deleted": "Deleted {{count}}",
           "downloaded": "Downloaded {{count}}",
+          "error": "Error: {{message}}",
+          "status_failed": "Failed",
+          "status_success": "Success",
           "uploaded": "Uploaded {{count}}"
         },
         "sync": "Sync",
