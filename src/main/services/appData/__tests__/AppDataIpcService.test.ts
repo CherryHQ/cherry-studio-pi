@@ -78,6 +78,17 @@ vi.mock('@main/services/storageV2/AppDataRuntimeRecoveryService', () => ({
   storageV2AppDataRuntimeRecoveryService: mocks.recovery
 }))
 
+vi.mock('../AppDataSyncService', () => ({
+  appDataSyncService: {
+    syncNow: vi.fn(),
+    restoreLatestSnapshot: vi.fn(),
+    getStatus: vi.fn(),
+    listRemoteDirectories: vi.fn(),
+    checkWriteAccess: vi.fn(),
+    recordSyncFailure: vi.fn()
+  }
+}))
+
 import { registerAppDataIpcHandlers } from '../AppDataIpcService'
 
 function getHandler(channel: IpcChannel) {

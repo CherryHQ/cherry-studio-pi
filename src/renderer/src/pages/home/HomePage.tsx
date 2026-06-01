@@ -5,6 +5,7 @@ import { useNavbarPosition, useSettings } from '@renderer/hooks/useSettings'
 import { useShortcut } from '@renderer/hooks/useShortcuts'
 import { useShowAssistants, useShowTopics } from '@renderer/hooks/useStore'
 import { useActiveTopic } from '@renderer/hooks/useTopic'
+import { getDefaultTopic } from '@renderer/services/AssistantService'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import NavigationService from '@renderer/services/NavigationService'
 import { newMessagesActions } from '@renderer/store/newMessage'
@@ -83,8 +84,8 @@ const HomePage: FC = () => {
       startTransition(() => {
         _setActiveAssistant(newAssistant)
         // 同步更新 active topic，避免不必要的重新渲染
-        const newTopic = newAssistant.topics[0]
-        _setActiveTopic((prev) => (newTopic?.id === prev.id ? prev : newTopic))
+        const newTopic = newAssistant.topics?.[0] ?? getDefaultTopic(newAssistant.id)
+        _setActiveTopic((prev) => (newTopic?.id === prev?.id ? prev : newTopic))
       })
     },
     [_setActiveTopic, activeAssistant?.id]
@@ -93,7 +94,7 @@ const HomePage: FC = () => {
   const setActiveTopic = useCallback(
     (newTopic: Topic) => {
       startTransition(() => {
-        _setActiveTopic((prev) => (newTopic?.id === prev.id ? prev : newTopic))
+        _setActiveTopic((prev) => (newTopic?.id === prev?.id ? prev : newTopic))
         dispatch(newMessagesActions.setTopicFulfilled({ topicId: newTopic.id, fulfilled: false }))
       })
     },
@@ -153,14 +154,16 @@ const HomePage: FC = () => {
             </ErrorBoundary>
           )}
         </AnimatePresence>
-        <ErrorBoundary>
-          <Chat
-            assistant={activeAssistant}
-            activeTopic={activeTopic}
-            setActiveTopic={setActiveTopic}
-            setActiveAssistant={setActiveAssistant}
-          />
-        </ErrorBoundary>
+        {activeAssistant && activeTopic && (
+          <ErrorBoundary>
+            <Chat
+              assistant={activeAssistant}
+              activeTopic={activeTopic}
+              setActiveTopic={setActiveTopic}
+              setActiveAssistant={setActiveAssistant}
+            />
+          </ErrorBoundary>
+        )}
       </ContentContainer>
     </Container>
   )

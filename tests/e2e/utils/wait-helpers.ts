@@ -9,23 +9,44 @@ export async function waitForAppReady(page: Page, timeout: number = 60000): Prom
   // First, wait for React root to be attached
   await page.waitForSelector('#root', { state: 'attached', timeout })
 
-  // Wait for main app content to render
-  // The app may show either:
-  // 1. Sidebar layout (navbarPosition === 'left')
-  // 2. TabsContainer layout (default)
-  // 3. Home page content
-  await page.waitForSelector(
-    [
-      '#home-page', // Home page container
-      '[class*="Sidebar"]', // Sidebar component
-      '[class*="TabsContainer"]', // Tabs container
-      '[class*="home-navbar"]', // Home navbar
-      '[class*="Container"]' // Generic container from styled-components
-    ].join(', '),
-    {
-      state: 'visible',
-      timeout
-    }
+  const skipOnboardingButton = page.getByRole('button', { name: /跳过引导|skip/i }).first()
+  try {
+    await skipOnboardingButton.waitFor({ state: 'visible', timeout: 3000 })
+    await skipOnboardingButton.click()
+  } catch {
+    // The onboarding screen only appears for fresh profiles.
+  }
+
+  // Wait for main app content to render. Avoid a broad comma selector here:
+  // Playwright may lock onto the first hidden styled-component match.
+  await page.waitForFunction(
+    () => {
+      const selectors = [
+        '#home-page',
+        'textarea',
+        '[contenteditable="true"]',
+        '[class*="Sidebar"]',
+        '[class*="home-navbar"]',
+        'a[href*="/settings/"]'
+      ]
+
+      const isVisible = (element: Element) => {
+        const style = window.getComputedStyle(element)
+        const rect = element.getBoundingClientRect()
+        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+      }
+
+      const hasVisibleShell = selectors.some((selector) =>
+        Array.from(document.querySelectorAll(selector)).some(isVisible)
+      )
+      const bodyText = document.body?.innerText ?? ''
+
+      return (
+        hasVisibleShell || bodyText.includes('对话') || bodyText.includes('选择模型') || bodyText.includes('默认助手')
+      )
+    },
+    undefined,
+    { timeout }
   )
 
   // Additional wait for React to fully hydrate

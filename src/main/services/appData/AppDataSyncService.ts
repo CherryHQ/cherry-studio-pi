@@ -309,7 +309,11 @@ export class AppDataSyncService {
     })
   }
 
-  private async readJson<T>(client: WebDAVClient, filePath: string): Promise<T | null> {
+  private async readJson<T>(
+    client: WebDAVClient,
+    filePath: string,
+    options: { throwOnInvalidJson?: boolean } = {}
+  ): Promise<T | null> {
     try {
       if (!(await runWebDavOperation(`checking remote json ${filePath}`, () => client.exists(filePath), { logger }))) {
         return null
@@ -320,9 +324,20 @@ export class AppDataSyncService {
         () => client.getFileContents(filePath, { format: 'binary' }),
         { logger }
       )
-      return JSON.parse(bufferToString(contents)) as T
+      try {
+        return JSON.parse(bufferToString(contents)) as T
+      } catch (error) {
+        if (options.throwOnInvalidJson) {
+          throw new Error(`Remote sync metadata is corrupted: ${filePath}`, { cause: error })
+        }
+        throw error
+      }
     } catch (error) {
       if (error instanceof WebDavOperationError && error.transient) {
+        throw error
+      }
+
+      if (options.throwOnInvalidJson) {
         throw error
       }
 
@@ -540,7 +555,9 @@ export class AppDataSyncService {
     const db = await getAppDataDatabase()
     const { client, basePath } = this.createWebDavClient(config)
     const manifestPath = path.posix.join(basePath, 'manifest.json')
-    const manifest = this.normalizeManifest(await this.readJson<RemoteManifest>(client, manifestPath))
+    const manifest = this.normalizeManifest(
+      await this.readJson<RemoteManifest>(client, manifestPath, { throwOnInvalidJson: true })
+    )
     const localDeviceId = db.getDeviceId()
     const snapshots = Object.values(manifest.snapshots ?? {})
       .filter((snapshot): snapshot is RemoteSnapshotMeta => Boolean(snapshot?.path && snapshot.fileName))
@@ -601,7 +618,9 @@ export class AppDataSyncService {
       }
     }
     const localById = new Map(localRecords.map((record) => [recordId(record.scope, record.key), record]))
-    const manifest = this.normalizeManifest(await this.readJson<RemoteManifest>(client, manifestPath))
+    const manifest = this.normalizeManifest(
+      await this.readJson<RemoteManifest>(client, manifestPath, { throwOnInvalidJson: true })
+    )
     const allIds = new Set([...localById.keys(), ...Object.keys(manifest.records)])
 
     for (const id of allIds) {

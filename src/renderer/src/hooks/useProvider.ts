@@ -34,7 +34,7 @@ import { useDefaultModel } from './useAssistant'
 function normalizeProvider<T extends Provider>(provider: T): T {
   return {
     ...provider,
-    apiHost: withoutTrailingSlash(provider.apiHost)
+    apiHost: withoutTrailingSlash(provider.apiHost ?? '')
   }
 }
 

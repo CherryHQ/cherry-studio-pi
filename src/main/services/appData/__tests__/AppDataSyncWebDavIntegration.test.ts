@@ -24,12 +24,17 @@ vi.unmock('node:stream/promises')
 type WebDavTestServer = {
   url: string
   root: string
+  setDenyWrites: (value: boolean) => void
   close: () => Promise<void>
 }
 
 type TestInstance = {
   userData: string
   dataRoot: string
+}
+
+type WebDavServerState = {
+  denyWrites: boolean
 }
 
 function xmlEscape(value: string) {
@@ -113,9 +118,16 @@ ${entries
   res.end(body)
 }
 
-async function handleWebDavRequest(root: string, req: IncomingMessage, res: ServerResponse) {
+async function handleWebDavRequest(root: string, state: WebDavServerState, req: IncomingMessage, res: ServerResponse) {
   try {
     const targetPath = resolveWebDavPath(root, req.url)
+    const isWriteMethod = req.method === 'MKCOL' || req.method === 'PUT' || req.method === 'DELETE'
+
+    if (state.denyWrites && isWriteMethod) {
+      res.writeHead(403)
+      res.end()
+      return
+    }
 
     if (req.method === 'OPTIONS') {
       res.writeHead(200, { allow: 'OPTIONS, GET, HEAD, PROPFIND, MKCOL, PUT, DELETE' })
@@ -179,10 +191,13 @@ async function handleWebDavRequest(root: string, req: IncomingMessage, res: Serv
   }
 }
 
-async function startWebDavServer(root: string): Promise<WebDavTestServer> {
+async function startWebDavServer(
+  root: string,
+  state: WebDavServerState = { denyWrites: false }
+): Promise<WebDavTestServer> {
   await fsp.mkdir(root, { recursive: true })
   const server = createServer((req, res) => {
-    void handleWebDavRequest(root, req, res)
+    void handleWebDavRequest(root, state, req, res)
   })
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   const address = server.address()
@@ -193,6 +208,9 @@ async function startWebDavServer(root: string): Promise<WebDavTestServer> {
   return {
     url: `http://127.0.0.1:${address.port}`,
     root,
+    setDenyWrites: (value: boolean) => {
+      state.denyWrites = value
+    },
     close: () =>
       new Promise<void>((resolve, reject) => {
         server.close((error?: Error) => (error ? reject(error) : resolve()))
@@ -255,6 +273,25 @@ async function seedInstanceData(input: {
   })
 }
 
+async function deleteInstanceData(deletedAt: number, storageDeletedAt: string) {
+  const appDb = await getAppDataDatabase()
+  await appDb.deleteRecord('settings', 'sync.integration.theme', deletedAt)
+
+  const storageClient = await storageV2Database.getClient()
+  await storageClient.execute({
+    sql: `
+      INSERT INTO settings (key, value_json, scope, updated_at, version, deleted_at)
+      VALUES (?, NULL, 'app', ?, 1, ?)
+      ON CONFLICT(key) DO UPDATE SET
+        value_json = NULL,
+        updated_at = excluded.updated_at,
+        version = settings.version + 1,
+        deleted_at = excluded.deleted_at
+    `,
+    args: ['settings.sync.integration.storage', storageDeletedAt, storageDeletedAt]
+  })
+}
+
 async function readInstanceState() {
   const appDb = await getAppDataDatabase()
   const appRecord = await appDb.getRecord('settings', 'sync.integration.theme')
@@ -268,6 +305,57 @@ async function readInstanceState() {
     appRecord,
     storageSetting: JSON.parse(String(storageResult.rows[0]?.value_json ?? 'null'))
   }
+}
+
+async function readInstanceEntries() {
+  const appDb = await getAppDataDatabase()
+  const appRecord = await appDb.getRecordEntry('settings', 'sync.integration.theme')
+  const storageClient = await storageV2Database.getClient()
+  const storageResult = await storageClient.execute({
+    sql: 'SELECT value_json, deleted_at FROM settings WHERE key = ?',
+    args: ['settings.sync.integration.storage']
+  })
+  const storageRow = storageResult.rows[0]
+
+  return {
+    appRecord,
+    storageSetting: {
+      value: storageRow?.value_json == null ? null : JSON.parse(String(storageRow.value_json)),
+      deletedAt: storageRow?.deleted_at == null ? null : String(storageRow.deleted_at)
+    }
+  }
+}
+
+function makeConfig(server: WebDavTestServer, webdavPath = '/cherry-studio-pi-integration') {
+  return {
+    webdavHost: server.url,
+    webdavUser: 'user',
+    webdavPass: 'pass',
+    webdavPath
+  }
+}
+
+function makeBackupManager(tempRoot: string) {
+  return {
+    backup: vi.fn(async (_event: unknown, fileName: string) => {
+      const backupPath = path.join(tempRoot, fileName)
+      await fsp.writeFile(backupPath, `backup:${fileName}`)
+      return backupPath
+    }),
+    restore: vi.fn()
+  }
+}
+
+function remoteSyncRoot(server: WebDavTestServer, webdavPath: string) {
+  const normalized = path.posix
+    .normalize(`/${webdavPath}`.replace(/\\/g, '/').replace(/\/+/g, '/'))
+    .replace(/\/+$/g, '')
+  const basePath = normalized.endsWith('/sync/v1') ? normalized : path.posix.join(normalized, 'sync', 'v1')
+  return path.join(server.root, ...basePath.split('/').filter(Boolean).map(decodeURIComponent))
+}
+
+async function readRemoteManifest(server: WebDavTestServer, webdavPath: string) {
+  return JSON.parse(await fsp.readFile(path.join(remoteSyncRoot(server, webdavPath), 'manifest.json'), 'utf8'))
 }
 
 async function readAllRemoteText(root: string) {
@@ -310,20 +398,8 @@ describe('AppDataSyncService local WebDAV integration', () => {
     const homePath = path.join(tempRoot, 'home')
     const instanceA = makeInstance(tempRoot, 'device-a')
     const instanceB = makeInstance(tempRoot, 'device-b')
-    const config = {
-      webdavHost: server!.url,
-      webdavUser: 'user',
-      webdavPass: 'pass',
-      webdavPath: '/cherry-studio-pi-integration'
-    }
-    const backupManager = {
-      backup: vi.fn(async (_event: unknown, fileName: string) => {
-        const backupPath = path.join(tempRoot, fileName)
-        await fsp.writeFile(backupPath, `backup:${fileName}`)
-        return backupPath
-      }),
-      restore: vi.fn()
-    }
+    const config = makeConfig(server!)
+    const backupManager = makeBackupManager(tempRoot)
 
     await switchInstance(instanceA, homePath)
     await seedInstanceData({
@@ -358,5 +434,258 @@ describe('AppDataSyncService local WebDAV integration', () => {
     expect(remoteText).toContain('device-a-storage-value')
     expect(remoteText).not.toContain('device-b-default')
     expect(remoteText).not.toContain('device-b-storage-default')
+  })
+
+  it('propagates later updates and tombstones between two devices', async () => {
+    const homePath = path.join(tempRoot, 'home')
+    const instanceA = makeInstance(tempRoot, 'device-a')
+    const instanceB = makeInstance(tempRoot, 'device-b')
+    const config = makeConfig(server!)
+    const backupManager = makeBackupManager(tempRoot)
+
+    await switchInstance(instanceA, homePath)
+    await seedInstanceData({
+      appRecordValue: { mode: 'initial-a' },
+      appRecordUpdatedAt: Date.parse('2026-05-29T12:00:00.000Z'),
+      storageSettingValue: { owner: 'initial-a' },
+      storageSettingUpdatedAt: '2026-05-29T12:00:00.000Z'
+    })
+    await new AppDataSyncService(backupManager as never).syncNow(config)
+
+    await switchInstance(instanceB, homePath)
+    const firstPull = await new AppDataSyncService(backupManager as never).syncNow(config)
+    expect(firstPull.downloaded + firstPull.storageDownloaded).toBeGreaterThan(0)
+
+    await seedInstanceData({
+      appRecordValue: { mode: 'updated-by-b' },
+      appRecordUpdatedAt: Date.parse('2026-05-29T12:30:00.000Z'),
+      storageSettingValue: { owner: 'updated-by-b' },
+      storageSettingUpdatedAt: '2026-05-29T12:30:00.000Z'
+    })
+    const bPush = await new AppDataSyncService(backupManager as never).syncNow(config)
+    expect(bPush.uploaded + bPush.storageUploaded).toBeGreaterThan(0)
+
+    await switchInstance(instanceA, homePath)
+    const aPull = await new AppDataSyncService(backupManager as never).syncNow(config)
+    expect(aPull.downloaded + aPull.storageDownloaded).toBeGreaterThan(0)
+    await expect(readInstanceState()).resolves.toEqual({
+      appRecord: { mode: 'updated-by-b' },
+      storageSetting: { owner: 'updated-by-b' }
+    })
+
+    await switchInstance(instanceB, homePath)
+    await deleteInstanceData(Date.parse('2026-05-29T12:40:00.000Z'), '2026-05-29T12:40:00.000Z')
+    const bDeletePush = await new AppDataSyncService(backupManager as never).syncNow(config)
+    expect(bDeletePush.deleted).toBeGreaterThan(0)
+    expect(bDeletePush.storageDeleted).toBeGreaterThan(0)
+
+    await switchInstance(instanceA, homePath)
+    const aDeletePull = await new AppDataSyncService(backupManager as never).syncNow(config)
+    const deletedState = await readInstanceEntries()
+    expect(aDeletePull.deleted + aDeletePull.storageDeleted).toBeGreaterThan(0)
+    expect(deletedState.appRecord).toMatchObject({ found: true, value: null })
+    expect(deletedState.appRecord.deletedAt).toBe(Date.parse('2026-05-29T12:40:00.000Z'))
+    expect(deletedState.storageSetting).toEqual({
+      value: null,
+      deletedAt: '2026-05-29T12:40:00.000Z'
+    })
+  })
+
+  it('creates conflicts instead of silently overwriting when both devices edit after a shared baseline', async () => {
+    const homePath = path.join(tempRoot, 'home')
+    const instanceA = makeInstance(tempRoot, 'device-a')
+    const instanceB = makeInstance(tempRoot, 'device-b')
+    const config = makeConfig(server!)
+    const backupManager = makeBackupManager(tempRoot)
+
+    await switchInstance(instanceA, homePath)
+    await seedInstanceData({
+      appRecordValue: { mode: 'baseline' },
+      appRecordUpdatedAt: Date.parse('2026-05-29T12:00:00.000Z'),
+      storageSettingValue: { owner: 'baseline' },
+      storageSettingUpdatedAt: '2026-05-29T12:00:00.000Z'
+    })
+    await new AppDataSyncService(backupManager as never).syncNow(config)
+
+    await switchInstance(instanceB, homePath)
+    await new AppDataSyncService(backupManager as never).syncNow(config)
+
+    await switchInstance(instanceA, homePath)
+    await seedInstanceData({
+      appRecordValue: { mode: 'edited-by-a' },
+      appRecordUpdatedAt: Date.parse('2026-05-29T12:10:00.000Z'),
+      storageSettingValue: { owner: 'edited-by-a' },
+      storageSettingUpdatedAt: '2026-05-29T12:10:00.000Z'
+    })
+    await new AppDataSyncService(backupManager as never).syncNow(config)
+
+    await switchInstance(instanceB, homePath)
+    await seedInstanceData({
+      appRecordValue: { mode: 'edited-by-b' },
+      appRecordUpdatedAt: Date.parse('2026-05-29T12:20:00.000Z'),
+      storageSettingValue: { owner: 'edited-by-b' },
+      storageSettingUpdatedAt: '2026-05-29T12:20:00.000Z'
+    })
+    const conflictSummary = await new AppDataSyncService(backupManager as never).syncNow(config)
+    const remoteText = await readAllRemoteText(server!.root)
+
+    expect(conflictSummary.conflicts).toBeGreaterThan(0)
+    expect(conflictSummary.storageConflicts).toBeGreaterThan(0)
+    expect(remoteText).toContain('edited-by-b')
+  })
+
+  it('does not reupload records on an idempotent no-change sync', async () => {
+    const homePath = path.join(tempRoot, 'home')
+    const instanceA = makeInstance(tempRoot, 'device-a')
+    const config = makeConfig(server!)
+    const backupManager = makeBackupManager(tempRoot)
+
+    await switchInstance(instanceA, homePath)
+    await seedInstanceData({
+      appRecordValue: { mode: 'stable' },
+      appRecordUpdatedAt: Date.parse('2026-05-29T12:00:00.000Z'),
+      storageSettingValue: { owner: 'stable' },
+      storageSettingUpdatedAt: '2026-05-29T12:00:00.000Z'
+    })
+    await new AppDataSyncService(backupManager as never).syncNow(config)
+    const secondSummary = await new AppDataSyncService(backupManager as never).syncNow(config)
+
+    expect(secondSummary.uploaded).toBe(0)
+    expect(secondSummary.downloaded).toBe(0)
+    expect(secondSummary.deleted).toBe(0)
+    expect(secondSummary.conflicts).toBe(0)
+    expect(secondSummary.storageUploaded).toBe(0)
+    expect(secondSummary.storageDownloaded).toBe(0)
+    expect(secondSummary.storageDeleted).toBe(0)
+    expect(secondSummary.storageConflicts).toBe(0)
+    expect(secondSummary.snapshotUploaded).toBe(false)
+  })
+
+  it('handles unicode and spaced WebDAV directory paths', async () => {
+    const homePath = path.join(tempRoot, 'home')
+    const instanceA = makeInstance(tempRoot, 'device-a')
+    const instanceB = makeInstance(tempRoot, 'device-b')
+    const webdavPath = '/同步 目录/Cherry Studio Pi'
+    const config = makeConfig(server!, webdavPath)
+    const backupManager = makeBackupManager(tempRoot)
+
+    await switchInstance(instanceA, homePath)
+    await seedInstanceData({
+      appRecordValue: { mode: 'unicode-path' },
+      appRecordUpdatedAt: Date.parse('2026-05-29T12:00:00.000Z'),
+      storageSettingValue: { owner: 'unicode-path' },
+      storageSettingUpdatedAt: '2026-05-29T12:00:00.000Z'
+    })
+    await new AppDataSyncService(backupManager as never).syncNow(config)
+
+    await switchInstance(instanceB, homePath)
+    await new AppDataSyncService(backupManager as never).syncNow(config)
+
+    expect(await pathExists(path.join(remoteSyncRoot(server!, webdavPath), 'manifest.json'))).toBe(true)
+    await expect(readInstanceState()).resolves.toEqual({
+      appRecord: { mode: 'unicode-path' },
+      storageSetting: { owner: 'unicode-path' }
+    })
+  })
+
+  it('fails safely when WebDAV write access is lost', async () => {
+    const homePath = path.join(tempRoot, 'home')
+    const instanceA = makeInstance(tempRoot, 'device-a')
+    const config = makeConfig(server!)
+    const backupManager = makeBackupManager(tempRoot)
+
+    await switchInstance(instanceA, homePath)
+    await seedInstanceData({
+      appRecordValue: { mode: 'before-readonly' },
+      appRecordUpdatedAt: Date.parse('2026-05-29T12:00:00.000Z'),
+      storageSettingValue: { owner: 'before-readonly' },
+      storageSettingUpdatedAt: '2026-05-29T12:00:00.000Z'
+    })
+    await new AppDataSyncService(backupManager as never).syncNow(config)
+    const remoteBefore = await readAllRemoteText(server!.root)
+
+    await seedInstanceData({
+      appRecordValue: { mode: 'should-not-upload' },
+      appRecordUpdatedAt: Date.parse('2026-05-29T12:10:00.000Z'),
+      storageSettingValue: { owner: 'should-not-upload' },
+      storageSettingUpdatedAt: '2026-05-29T12:10:00.000Z'
+    })
+    server!.setDenyWrites(true)
+
+    await expect(new AppDataSyncService(backupManager as never).syncNow(config)).rejects.toThrow()
+    const remoteAfter = await readAllRemoteText(server!.root)
+    expect(remoteAfter).toBe(remoteBefore)
+  })
+
+  it('does not overwrite remote data when manifest metadata is corrupted', async () => {
+    const homePath = path.join(tempRoot, 'home')
+    const instanceA = makeInstance(tempRoot, 'device-a')
+    const instanceB = makeInstance(tempRoot, 'device-b')
+    const webdavPath = '/cherry-studio-pi-integration'
+    const config = makeConfig(server!, webdavPath)
+    const backupManager = makeBackupManager(tempRoot)
+
+    await switchInstance(instanceA, homePath)
+    await seedInstanceData({
+      appRecordValue: { mode: 'safe-remote' },
+      appRecordUpdatedAt: Date.parse('2026-05-29T12:00:00.000Z'),
+      storageSettingValue: { owner: 'safe-remote' },
+      storageSettingUpdatedAt: '2026-05-29T12:00:00.000Z'
+    })
+    await new AppDataSyncService(backupManager as never).syncNow(config)
+    const manifestPath = path.join(remoteSyncRoot(server!, webdavPath), 'manifest.json')
+    await fsp.writeFile(manifestPath, '{ broken manifest', 'utf8')
+
+    await switchInstance(instanceB, homePath)
+    await seedInstanceData({
+      appRecordValue: { mode: 'should-not-replace-corrupt-remote' },
+      appRecordUpdatedAt: Date.parse('2026-05-29T12:20:00.000Z'),
+      storageSettingValue: { owner: 'should-not-replace-corrupt-remote' },
+      storageSettingUpdatedAt: '2026-05-29T12:20:00.000Z'
+    })
+
+    await expect(new AppDataSyncService(backupManager as never).syncNow(config)).rejects.toThrow(
+      'Remote sync metadata is corrupted'
+    )
+    const remoteAfter = await readAllRemoteText(server!.root)
+    await expect(fsp.readFile(manifestPath, 'utf8')).resolves.toBe('{ broken manifest')
+    expect(remoteAfter).toContain('safe-remote')
+    expect(remoteAfter).not.toContain('should-not-replace-corrupt-remote')
+  })
+
+  it('skips a remote record whose manifest entry points to a missing file', async () => {
+    const homePath = path.join(tempRoot, 'home')
+    const instanceA = makeInstance(tempRoot, 'device-a')
+    const instanceB = makeInstance(tempRoot, 'device-b')
+    const webdavPath = '/cherry-studio-pi-integration'
+    const config = makeConfig(server!, webdavPath)
+    const backupManager = makeBackupManager(tempRoot)
+
+    await switchInstance(instanceA, homePath)
+    await seedInstanceData({
+      appRecordValue: { mode: 'remote-file-present' },
+      appRecordUpdatedAt: Date.parse('2026-05-29T12:00:00.000Z'),
+      storageSettingValue: { owner: 'remote-file-present' },
+      storageSettingUpdatedAt: '2026-05-29T12:00:00.000Z'
+    })
+    await new AppDataSyncService(backupManager as never).syncNow(config)
+
+    const manifest = await readRemoteManifest(server!, webdavPath)
+    const appMeta = manifest.records['settings:sync.integration.theme']
+    await fsp.rm(path.join(remoteSyncRoot(server!, webdavPath), appMeta.path), { force: true })
+
+    await switchInstance(instanceB, homePath)
+    await seedInstanceData({
+      appRecordValue: { mode: 'local-fallback' },
+      appRecordUpdatedAt: Date.parse('2026-05-29T12:20:00.000Z'),
+      storageSettingValue: { owner: 'local-fallback' },
+      storageSettingUpdatedAt: '2026-05-29T12:20:00.000Z'
+    })
+    const summary = await new AppDataSyncService(backupManager as never).syncNow(config)
+
+    expect(summary.conflicts).toBe(0)
+    await expect(readInstanceState()).resolves.toMatchObject({
+      appRecord: { mode: 'local-fallback' }
+    })
   })
 })

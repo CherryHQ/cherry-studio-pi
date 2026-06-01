@@ -241,10 +241,13 @@ export function useAssistant(id: string) {
     [assistant, defaultModel, fallbackModel]
   )
 
-  const normalizedTopics = useMemo(
-    () => (Array.isArray(assistant?.topics) ? assistant.topics : []),
-    [assistant?.topics]
-  )
+  const normalizedTopics = useMemo(() => {
+    if (Array.isArray(assistant?.topics) && assistant.topics.length > 0) {
+      return assistant.topics
+    }
+
+    return assistant?.id ? [getDefaultTopic(assistant.id)] : []
+  }, [assistant?.id, assistant?.topics])
   const assistantWithModel = useMemo(
     () => ({ ...assistant, model, topics: normalizedTopics }),
     [assistant, model, normalizedTopics]
