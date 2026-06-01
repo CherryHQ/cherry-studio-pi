@@ -1,5 +1,6 @@
 import type { AppCapabilityRegistry } from '../registry'
 import { createAgentCapabilities } from './agents'
+import { createDataSyncCapabilities } from './dataSync'
 import { createKnowledgeCapabilities } from './knowledge'
 import { createMcpCapabilities } from './mcp'
 import { createNavigationCapabilities } from './navigation'
@@ -12,6 +13,7 @@ export function registerAppCapabilities(registry: AppCapabilityRegistry): void {
   registry.registerMany([
     ...createNavigationCapabilities(),
     ...createSettingsCapabilities(),
+    ...createDataSyncCapabilities(),
     ...createStorageCapabilities(),
     ...createKnowledgeCapabilities(),
     ...createMcpCapabilities(),

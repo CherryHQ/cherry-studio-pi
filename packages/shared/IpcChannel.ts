@@ -319,6 +319,10 @@ export enum IpcChannel {
   DataSync_RestoreLatestSnapshot = 'data-sync:restore-latest-snapshot',
   DataSync_GetStatus = 'data-sync:get-status',
   DataSync_ListRemoteDirectories = 'data-sync:list-remote-directories',
+  SystemAgent_ListCapabilities = 'system-agent:list-capabilities',
+  SystemAgent_PlanIntent = 'system-agent:plan-intent',
+  SystemAgent_PlanEvent = 'system-agent:plan-event',
+  SystemAgent_CallCapability = 'system-agent:call-capability',
 
   // Storage v2 scaffold
   StorageV2_GetDataRoot = 'storage-v2:get-data-root',

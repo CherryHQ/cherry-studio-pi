@@ -5,6 +5,7 @@ export type {
   AppCapabilityDefinition,
   AppCapabilityDescriptor,
   AppCapabilityJsonSchema,
+  AppCapabilityListOptions,
   AppCapabilityResult,
   AppCapabilityRisk,
   AppCapabilitySearchOptions

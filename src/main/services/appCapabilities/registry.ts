@@ -16,6 +16,8 @@ const tokenize = (value: string) =>
 const QUERY_EXPANSIONS: Array<[RegExp, string[]]> = [
   [/备份|备份一下|保存数据/, ['backup', 'storage', 'create', 'data']],
   [/恢复|还原/, ['restore', 'backup', 'storage']],
+  [/同步|云同步|多端|webdav/i, ['dataSync', 'sync', 'webdav']],
+  [/目录|路径/, ['directory', 'path']],
   [/设置|配置|偏好/, ['settings', 'preferences', 'configuration']],
   [/语言/, ['language', 'settings']],
   [/主题|外观/, ['theme', 'display', 'settings']],

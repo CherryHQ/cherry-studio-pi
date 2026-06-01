@@ -635,7 +635,7 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
     name: 'AppSearchCapabilities',
     label: 'App Search Capabilities',
     description:
-      'Search Cherry Studio Pi internal app capabilities by user intent. Use this before AppCallCapability when you need to operate settings, backups, knowledge bases, notes, paintings, agents, storage, or navigation.',
+      'Search Cherry Studio Pi internal app capabilities by user intent. Use this before AppCallCapability when you need to operate settings, data sync, backups, knowledge bases, notes, paintings, agents, storage, or navigation.',
     parameters: {
       type: 'object',
       properties: {
@@ -643,7 +643,7 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
         domain: {
           type: 'string',
           description:
-            'Optional capability domain such as settings, storage, knowledge, notes, paintings, agents, or app'
+            'Optional capability domain such as settings, dataSync, storage, knowledge, notes, paintings, agents, or app'
         },
         risk: {
           type: 'string',
@@ -677,7 +677,7 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
     name: 'AppCallCapability',
     label: 'App Call Capability',
     description:
-      'Call a Cherry Studio Pi internal app capability directly without HTTP/MCP. Use for app settings, backups, knowledge bases, notes, paintings, agents, storage, and navigation after selecting a capability id.',
+      'Call a Cherry Studio Pi internal app capability directly without HTTP/MCP. Use for app settings, data sync, backups, knowledge bases, notes, paintings, agents, storage, and navigation after selecting a capability id.',
     parameters: {
       type: 'object',
       properties: {

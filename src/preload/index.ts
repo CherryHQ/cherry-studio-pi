@@ -261,6 +261,14 @@ const api = {
     listRemoteDirectories: (webdavConfig: WebDavConfig, remotePath?: string) =>
       ipcRenderer.invoke(IpcChannel.DataSync_ListRemoteDirectories, webdavConfig, remotePath)
   },
+  systemAgent: {
+    listCapabilities: (options?: Record<string, unknown>) =>
+      ipcRenderer.invoke(IpcChannel.SystemAgent_ListCapabilities, options),
+    planIntent: (input: Record<string, unknown>) => ipcRenderer.invoke(IpcChannel.SystemAgent_PlanIntent, input),
+    planEvent: (input: Record<string, unknown>) => ipcRenderer.invoke(IpcChannel.SystemAgent_PlanEvent, input),
+    callCapability: (id: string, input?: unknown, options?: Record<string, unknown>) =>
+      ipcRenderer.invoke(IpcChannel.SystemAgent_CallCapability, id, input, options)
+  },
   storageV2: {
     getDataRoot: () => ipcRenderer.invoke(IpcChannel.StorageV2_GetDataRoot),
     healthCheck: () => ipcRenderer.invoke(IpcChannel.StorageV2_HealthCheck),

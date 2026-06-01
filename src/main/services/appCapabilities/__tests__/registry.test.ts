@@ -83,8 +83,20 @@ describe('AppCapabilityRegistry', () => {
         tags: ['image', 'drawing']
       })
     )
+    registry.register(
+      capability({
+        id: 'dataSync.sync.now',
+        domain: 'dataSync',
+        kind: 'command',
+        title: 'Sync data now',
+        description: 'Run WebDAV data sync',
+        risk: 'write',
+        tags: ['webdav', 'sync', 'data']
+      })
+    )
 
     expect(registry.search({ query: '创建一个本地备份' }).map((item) => item.id)[0]).toBe('storage.backup.create')
     expect(registry.search({ query: '帮我画图' }).map((item) => item.id)[0]).toBe('paintings.image.generate')
+    expect(registry.search({ query: '同步 webdav 数据' }).map((item) => item.id)[0]).toBe('dataSync.sync.now')
   })
 })

@@ -101,6 +101,7 @@ import { storageV2AgentDbMirrorService } from './services/storageV2/AgentDbMirro
 import { storageV2DataRootService } from './services/storageV2/DataRootService'
 import { registerStorageV2IpcHandlers } from './services/storageV2/StorageV2IpcService'
 import storeSyncService from './services/StoreSyncService'
+import { registerSystemAgentIpcHandlers } from './services/systemAgent'
 import { themeService } from './services/ThemeService'
 import VertexAIService from './services/VertexAIService'
 import { setOpenLinkExternal } from './services/WebviewService'
@@ -134,6 +135,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   const notificationService = new NotificationService()
   registerAppDataIpcHandlers()
   registerStorageV2IpcHandlers()
+  registerSystemAgentIpcHandlers()
 
   // Register shutdown handlers
   powerMonitorService.registerShutdownHandler(() => {
