@@ -66,6 +66,14 @@ function getOperationTarget(error: unknown) {
   return match?.[1] ?? null
 }
 
+function getOperation(error: unknown) {
+  return error instanceof WebDavOperationError ? error.operation : ''
+}
+
+function isWriteOperation(operation: string) {
+  return /\b(creating|writing|uploading|deleting|restoring)\b/i.test(operation)
+}
+
 function describeWebDavError(error: unknown) {
   const status = getWebDavErrorStatus(error)
   const statusText = getWebDavErrorStatusText(error)
@@ -111,6 +119,7 @@ export function describeWebDavUserFacingError(error: unknown, action = '访问 W
   const status = getWebDavErrorStatus(source)
   const message = errorMessage(source)
   const prefix = `${action}失败`
+  const operation = getOperation(error)
   const target = getOperationTarget(error)
   const targetText = target ? `（路径：${target}）` : ''
 
@@ -120,6 +129,10 @@ export function describeWebDavUserFacingError(error: unknown, action = '访问 W
     }
 
     if (status === 403) {
+      if (isWriteOperation(operation)) {
+        return `${prefix}：WebDAV 服务拒绝写入${targetText}。这个端点可能是只读的，或当前账号没有写入权限；数据同步需要支持 MKCOL、PUT、DELETE。请更换可写的 WebDAV 地址/账号，或在服务端重新生成带写入权限的授权。`
+      }
+
       return `${prefix}：当前账号没有访问这个 WebDAV 目录的权限${targetText}。请在“数据设置 > 多端数据同步”里重新选择一个已存在且可写的目录；如果 WebDAV 地址本身已经指向账号目录，同步目录只需要选择该目录下的子目录。`
     }
 
