@@ -6,7 +6,7 @@ import { HStack } from '@renderer/components/Layout'
 import ListItem from '@renderer/components/ListItem'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import ImportMenuOptions from '@renderer/pages/settings/DataSettings/ImportMenuSettings'
-import { FileText, FolderCog, FolderInput, FolderOpen } from 'lucide-react'
+import { Archive, Database, FileText, FolderInput, FolderOpen, RefreshCw } from 'lucide-react'
 import type { FC } from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -33,25 +33,29 @@ const DataSettings: FC = () => {
   const [menu, setMenu] = useState<string>('data')
 
   const menuItems = [
-    { key: 'divider_0', isDivider: true, text: t('settings.data.divider.basic') },
-    { key: 'data', title: t('settings.data.data.title'), icon: <FolderCog size={16} /> },
-    { key: 'divider_1', isDivider: true, text: t('settings.data.divider.cloud_storage') },
-    { key: 'local_backup', title: t('settings.data.local.title'), icon: <FolderCog size={16} /> },
-    { key: 'webdav', title: t('settings.data.webdav.title'), icon: <CloudSyncOutlined style={{ fontSize: 16 }} /> },
+    { key: 'divider_0', isDivider: true, text: t('settings.data.divider.storage') },
+    { key: 'data', title: t('settings.data.data.title'), icon: <Database size={16} /> },
+    { key: 'divider_1', isDivider: true, text: t('settings.data.divider.backup') },
+    { key: 'local_backup', title: t('settings.data.local.title'), icon: <Archive size={16} /> },
     {
-      key: 'data_sync',
-      title: t('settings.data.data_sync.title'),
+      key: 'webdav',
+      title: t('settings.data.webdav.menu_title'),
       icon: <CloudSyncOutlined style={{ fontSize: 16 }} />
     },
-    { key: 'nutstore', title: t('settings.data.nutstore.title'), icon: <NutstoreIcon /> },
-    { key: 's3', title: t('settings.data.s3.title.label'), icon: <CloudServerOutlined style={{ fontSize: 16 }} /> },
-    { key: 'divider_2', isDivider: true, text: t('settings.data.divider.import_settings') },
+    { key: 'nutstore', title: t('settings.data.nutstore.menu_title'), icon: <NutstoreIcon /> },
+    { key: 's3', title: t('settings.data.s3.menu_title'), icon: <CloudServerOutlined style={{ fontSize: 16 }} /> },
+    { key: 'divider_2', isDivider: true, text: t('settings.data.divider.sync') },
+    {
+      key: 'data_sync',
+      title: t('settings.data.data_sync.menu_title'),
+      icon: <RefreshCw size={16} />
+    },
+    { key: 'divider_3', isDivider: true, text: t('settings.data.divider.import_export') },
     {
       key: 'import_settings',
       title: t('settings.data.import_settings.title'),
       icon: <FolderOpen size={16} />
     },
-    { key: 'divider_3', isDivider: true, text: t('settings.data.divider.export_settings') },
     {
       key: 'export_menu',
       title: t('settings.data.export_menu.title'),
@@ -63,7 +67,7 @@ const DataSettings: FC = () => {
       icon: <FileText size={16} />
     },
 
-    { key: 'divider_4', isDivider: true, text: t('settings.data.divider.third_party') },
+    { key: 'divider_4', isDivider: true, text: t('settings.data.divider.integrations') },
     { key: 'notion', title: t('settings.data.notion.title'), icon: <i className="iconfont icon-notion" /> },
     {
       key: 'yuque',

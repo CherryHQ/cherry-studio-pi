@@ -4078,6 +4078,15 @@
       "data_sync": {
         "auto_sync": "Auto sync",
         "current_device": "Current device",
+        "diagnose": "Diagnose connection",
+        "diagnosis": {
+          "checked_at": "Checked at: {{time}}",
+          "device": "This device: {{deviceId}}",
+          "remote_path": "Remote directory read: {{path}}, {{count}} selectable subdirectories",
+          "title": "WebDAV Sync Diagnosis"
+        },
+        "effective_path": "Actual write path",
+        "effective_path_help": "The app stores record-level sync data under sync/v1 inside the selected directory. Safety snapshots are stored in sync/v1/backups.",
         "help": "Data sync merges Storage v2 records through WebDAV for settings, models, assistants, agents, conversations, knowledge, files, and app data. A full safety snapshot is uploaded only for disaster recovery.",
         "interval": {
           "day_one": "Every day",
@@ -4088,6 +4097,7 @@
           "off": "Off"
         },
         "last_result": "Last result",
+        "menu_title": "Multi-device Sync",
         "method": "Sync method",
         "method_value": "Record-level Storage v2 sync + WebDAV",
         "password": "Password",
@@ -4104,6 +4114,7 @@
         },
         "remote_path": "Sync directory",
         "remote_path_browse": "Browse",
+        "remote_path_help": "Choose a root directory for Cherry Studio Pi sync. You do not need to type sync/v1 manually.",
         "restore_confirm_content": "This is only for disaster recovery. It will replace this device's data with the latest safety snapshot on WebDAV and restart the app. Normal multi-device sync does not need this.",
         "restore_confirm_title": "Restore safety snapshot?",
         "restore_latest": "Restore safety snapshot",
@@ -4125,6 +4136,8 @@
         "sync_now": "Sync now",
         "title": "Data Sync",
         "toast": {
+          "diagnose_failed": "Diagnosis failed: {{message}}",
+          "diagnose_success": "WebDAV sync diagnosis passed",
           "remote_path_selected": "Sync directory selected: {{path}}",
           "restore_failed": "Restore failed: {{message}}",
           "restore_success": "Restore started. The app will restart.",
@@ -4139,10 +4152,15 @@
         "webdav_host": "WebDAV URL"
       },
       "divider": {
+        "backup": "Backup and Restore",
         "basic": "Basic Data Settings",
         "cloud_storage": "Cloud Backup Settings",
         "export_settings": "Export Settings",
+        "import_export": "Import and Export",
         "import_settings": "Import Settings",
+        "integrations": "External Connections",
+        "storage": "Local Data",
+        "sync": "Multi-device Sync",
         "third_party": "Third-party Connections"
       },
       "export_menu": {
@@ -4419,6 +4437,7 @@
           "content": "After logout, you will not be able to backup to Nutstore or restore from Nutstore.",
           "title": "Are you sure you want to logout from Nutstore?"
         },
+        "menu_title": "Nutstore Backup",
         "new_folder": {
           "button": {
             "cancel": "Cancel",
@@ -4530,6 +4549,7 @@
           "label": "Maximum Backups",
           "unlimited": "Unlimited"
         },
+        "menu_title": "S3 Remote Backup",
         "region": {
           "label": "Region",
           "placeholder": "Region, e.g: us-east-1"
@@ -4944,6 +4964,7 @@
         "hour_interval_other": "{{count}} hours",
         "lastSync": "Last Backup",
         "maxBackups": "Maximum Backups",
+        "menu_title": "WebDAV Remote Backup",
         "minute_interval_one": "{{count}} minute",
         "minute_interval_other": "{{count}} minutes",
         "noSync": "Waiting for next backup",

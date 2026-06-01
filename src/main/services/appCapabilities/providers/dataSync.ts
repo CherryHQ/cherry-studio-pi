@@ -1,11 +1,13 @@
 import { appDataSyncService } from '@main/services/appData/AppDataSyncService'
 import { reduxService } from '@main/services/ReduxService'
+import { describeWebDavUserFacingError } from '@main/services/WebDavRetry'
 import type { WebDavConfig } from '@types'
 
 import type { AppCapabilityDefinition } from '../types'
 import { okResult, sanitizeForAgent } from '../utils'
 
 const DEFAULT_DATA_SYNC_PATH = '/cherry-studio-pi'
+const DATA_SYNC_SUFFIX = '/sync/v1'
 
 type DataSyncSettingsState = {
   dataSyncWebdavHost?: string
@@ -42,6 +44,24 @@ async function resolveWebDavConfig(input: any): Promise<WebDavConfig> {
 
 function hasWebDavHost(config: WebDavConfig) {
   return Boolean(config.webdavHost?.trim())
+}
+
+function normalizeRemotePath(value?: string) {
+  const trimmed = value?.trim() || DEFAULT_DATA_SYNC_PATH
+  let normalized = trimmed.replace(/\\/g, '/').replace(/\/+/g, '/')
+  if (!normalized.startsWith('/')) normalized = `/${normalized}`
+  if (normalized.length > 1) normalized = normalized.replace(/\/+$/g, '')
+  return normalized === DATA_SYNC_SUFFIX || normalized.endsWith(DATA_SYNC_SUFFIX)
+    ? normalized
+    : `${normalized === '/' ? '' : normalized}${DATA_SYNC_SUFFIX}`
+}
+
+async function runWebDavCapability<T>(action: string, fn: () => Promise<T>) {
+  try {
+    return await fn()
+  } catch (error) {
+    throw new Error(describeWebDavUserFacingError(error, action))
+  }
 }
 
 async function persistWebDavConfig(config: WebDavConfig, options: { autoSync?: boolean; syncInterval?: number } = {}) {
@@ -159,7 +179,11 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
         if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
         return okResult(
           'WebDAV directories listed',
-          sanitizeForAgent(await appDataSyncService.listRemoteDirectories(config, input?.remotePath || '/'))
+          sanitizeForAgent(
+            await runWebDavCapability('读取远程目录', () =>
+              appDataSyncService.listRemoteDirectories(config, input?.remotePath || '/')
+            )
+          )
         )
       }
     },
@@ -187,14 +211,17 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
         const config = await resolveWebDavConfig(input)
         if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
 
-        const [status, directories] = await Promise.all([
-          appDataSyncService.getStatus(),
-          appDataSyncService.listRemoteDirectories(config, input?.remotePath || config.webdavPath || '/')
-        ])
+        const [status, directories] = await runWebDavCapability('诊断 WebDAV 同步', () =>
+          Promise.all([
+            appDataSyncService.getStatus(),
+            appDataSyncService.listRemoteDirectories(config, input?.remotePath || config.webdavPath || '/')
+          ])
+        )
         return okResult(
           'WebDAV data sync diagnosis completed',
           sanitizeForAgent({
             config,
+            effectiveSyncPath: normalizeRemotePath(config.webdavPath),
             status,
             directories
           })
@@ -232,7 +259,10 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
         if (input?.saveConfig === true) {
           await persistWebDavConfig(config)
         }
-        return okResult('Data sync completed', sanitizeForAgent(await appDataSyncService.syncNow(config)))
+        return okResult(
+          'Data sync completed',
+          sanitizeForAgent(await runWebDavCapability('同步数据', () => appDataSyncService.syncNow(config)))
+        )
       }
     },
     {
@@ -262,7 +292,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
           return okResult('Data sync snapshot restore dry run completed', sanitizeForAgent({ config }))
         }
 
-        await appDataSyncService.restoreLatestSnapshot(config)
+        await runWebDavCapability('恢复安全快照', () => appDataSyncService.restoreLatestSnapshot(config))
         return okResult('Data sync snapshot restore started')
       }
     }

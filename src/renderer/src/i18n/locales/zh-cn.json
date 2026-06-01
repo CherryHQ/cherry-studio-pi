@@ -4078,6 +4078,15 @@
       "data_sync": {
         "auto_sync": "自动同步",
         "current_device": "当前设备",
+        "diagnose": "诊断连接",
+        "diagnosis": {
+          "checked_at": "检查时间：{{time}}",
+          "device": "本机设备：{{deviceId}}",
+          "remote_path": "已读取远端目录：{{path}}，可选子目录 {{count}} 个",
+          "title": "WebDAV 同步诊断"
+        },
+        "effective_path": "实际写入路径",
+        "effective_path_help": "应用会在同步目录下使用 sync/v1 保存记录级同步数据，安全快照保存在 sync/v1/backups。",
         "help": "数据同步会通过 WebDAV 合并 Storage v2 记录，覆盖设置、模型、助手、agent、会话、知识库、文件和应用数据；完整安全快照只用于灾难恢复。",
         "interval": {
           "day_one": "每天",
@@ -4088,6 +4097,7 @@
           "off": "关闭"
         },
         "last_result": "最近结果",
+        "menu_title": "多端数据同步",
         "method": "同步方式",
         "method_value": "Storage v2 记录级同步 + WebDAV",
         "password": "密码",
@@ -4104,6 +4114,7 @@
         },
         "remote_path": "同步目录",
         "remote_path_browse": "浏览",
+        "remote_path_help": "请选择一个用于 Cherry Studio Pi 同步的根目录，不需要手动填写 sync/v1。",
         "restore_confirm_content": "这个操作只用于灾难恢复，会用 WebDAV 上最近的安全快照替换本机数据并重启应用。正常多端同步不需要点这个。",
         "restore_confirm_title": "恢复安全快照？",
         "restore_latest": "恢复安全快照",
@@ -4125,6 +4136,8 @@
         "sync_now": "立即同步",
         "title": "数据同步",
         "toast": {
+          "diagnose_failed": "诊断失败：{{message}}",
+          "diagnose_success": "WebDAV 同步诊断通过",
           "remote_path_selected": "已选择同步目录：{{path}}",
           "restore_failed": "恢复失败：{{message}}",
           "restore_success": "已开始恢复，应用将重启",
@@ -4139,10 +4152,15 @@
         "webdav_host": "WebDAV 地址"
       },
       "divider": {
+        "backup": "备份与恢复",
         "basic": "基础数据设置",
         "cloud_storage": "云备份设置",
         "export_settings": "导出设置",
+        "import_export": "导入与导出",
         "import_settings": "导入设置",
+        "integrations": "外部连接",
+        "storage": "本机数据",
+        "sync": "多端同步",
         "third_party": "第三方连接"
       },
       "export_menu": {
@@ -4419,6 +4437,7 @@
           "content": "退出后将无法备份至坚果云和从坚果云恢复",
           "title": "确定要退出坚果云登录？"
         },
+        "menu_title": "坚果云备份",
         "new_folder": {
           "button": {
             "cancel": "取消",
@@ -4530,6 +4549,7 @@
           "label": "最大备份数",
           "unlimited": "不限"
         },
+        "menu_title": "S3 远端备份",
         "region": {
           "label": "区域",
           "placeholder": "Region, 例如: us-east-1"
@@ -4944,6 +4964,7 @@
         "hour_interval_other": "{{count}} 小时",
         "lastSync": "上次备份时间",
         "maxBackups": "最大备份数",
+        "menu_title": "WebDAV 远端备份",
         "minute_interval_one": "{{count}} 分钟",
         "minute_interval_other": "{{count}} 分钟",
         "noSync": "等待下次备份",

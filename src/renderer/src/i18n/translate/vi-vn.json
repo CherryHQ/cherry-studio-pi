@@ -4078,6 +4078,15 @@
       "data_sync": {
         "auto_sync": "[to be translated]:Auto sync",
         "current_device": "[to be translated]:Current device",
+        "diagnose": "[to be translated]:Diagnose connection",
+        "diagnosis": {
+          "checked_at": "[to be translated]:Checked at: {{time}}",
+          "device": "[to be translated]:This device: {{deviceId}}",
+          "remote_path": "[to be translated]:Remote directory read: {{path}}, {{count}} selectable subdirectories",
+          "title": "[to be translated]:WebDAV Sync Diagnosis"
+        },
+        "effective_path": "[to be translated]:Actual write path",
+        "effective_path_help": "[to be translated]:The app stores record-level sync data under sync/v1 inside the selected directory. Safety snapshots are stored in sync/v1/backups.",
         "help": "Data sync merges Storage v2 records through WebDAV for settings, models, assistants, agents, conversations, knowledge, files, and app data. A full safety snapshot is uploaded only for disaster recovery.",
         "interval": {
           "day_one": "[to be translated]:Every day",
@@ -4088,6 +4097,7 @@
           "off": "[to be translated]:Off"
         },
         "last_result": "[to be translated]:Last result",
+        "menu_title": "[to be translated]:Multi-device Sync",
         "method": "[to be translated]:Sync method",
         "method_value": "Record-level Storage v2 sync + WebDAV",
         "password": "[to be translated]:Password",
@@ -4104,6 +4114,7 @@
         },
         "remote_path": "[to be translated]:Sync directory",
         "remote_path_browse": "[to be translated]:Browse",
+        "remote_path_help": "[to be translated]:Choose a root directory for Cherry Studio Pi sync. You do not need to type sync/v1 manually.",
         "restore_confirm_content": "This is only for disaster recovery. It will replace this device's data with the latest safety snapshot on WebDAV and restart the app. Normal multi-device sync does not need this.",
         "restore_confirm_title": "Restore safety snapshot?",
         "restore_latest": "Restore safety snapshot",
@@ -4125,6 +4136,8 @@
         "sync_now": "[to be translated]:Sync now",
         "title": "[to be translated]:Data Sync",
         "toast": {
+          "diagnose_failed": "[to be translated]:Diagnosis failed: {{message}}",
+          "diagnose_success": "[to be translated]:WebDAV sync diagnosis passed",
           "remote_path_selected": "[to be translated]:Sync directory selected: {{path}}",
           "restore_failed": "Restore failed: {{message}}",
           "restore_success": "Restore started. The app will restart.",
@@ -4139,10 +4152,15 @@
         "webdav_host": "[to be translated]:WebDAV URL"
       },
       "divider": {
+        "backup": "[to be translated]:Backup and Restore",
         "basic": "Cài đặt Dữ liệu Cơ bản",
         "cloud_storage": "Cài đặt Sao lưu Đám mây",
         "export_settings": "Xuất Cài đặt",
+        "import_export": "[to be translated]:Import and Export",
         "import_settings": "Nhập Cài đặt",
+        "integrations": "[to be translated]:External Connections",
+        "storage": "[to be translated]:Local Data",
+        "sync": "[to be translated]:Multi-device Sync",
         "third_party": "Kết nối của bên thứ ba"
       },
       "export_menu": {
@@ -4419,6 +4437,7 @@
           "content": "Sau khi đăng xuất, bạn sẽ không thể sao lưu lên Nutstore hoặc khôi phục từ Nutstore.",
           "title": "Bạn có chắc chắn muốn đăng xuất khỏi Nutstore không?"
         },
+        "menu_title": "[to be translated]:Nutstore Backup",
         "new_folder": {
           "button": {
             "cancel": "Hủy",
@@ -4530,6 +4549,7 @@
           "label": "Số bản sao lưu tối đa",
           "unlimited": "Không giới hạn"
         },
+        "menu_title": "[to be translated]:S3 Remote Backup",
         "region": {
           "label": "Vùng",
           "placeholder": "Ví dụ: us-east-1"
@@ -4944,6 +4964,7 @@
         "hour_interval_other": "{{count}} giờ",
         "lastSync": "Bản sao lưu cuối cùng",
         "maxBackups": "Backups Máximos",
+        "menu_title": "[to be translated]:WebDAV Remote Backup",
         "minute_interval_one": "{{count}} phút",
         "minute_interval_other": "{{count}} phút",
         "noSync": "Chờ bản sao lưu tiếp theo",

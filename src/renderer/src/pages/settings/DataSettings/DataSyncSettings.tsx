@@ -1,4 +1,4 @@
-import { FolderOpenOutlined, HomeOutlined, ReloadOutlined, SyncOutlined } from '@ant-design/icons'
+import { BugOutlined, FolderOpenOutlined, HomeOutlined, ReloadOutlined, SyncOutlined } from '@ant-design/icons'
 import { HStack } from '@renderer/components/Layout'
 import Selector from '@renderer/components/Selector'
 import { useTheme } from '@renderer/context/ThemeProvider'
@@ -59,6 +59,25 @@ type RemoteDirectoryList = {
   directories: RemoteDirectory[]
 }
 
+type DiagnosisState = {
+  ok: boolean
+  summary: string
+  checkedAt: number
+  remotePath?: string
+  directoryCount?: number
+  deviceId?: string
+}
+
+type DiagnosisCapabilityResult = {
+  ok?: boolean
+  summary?: string
+  error?: string
+  data?: {
+    status?: SyncStatus
+    directories?: RemoteDirectoryList
+  }
+}
+
 const DEFAULT_REMOTE_PATH = '/cherry-studio-pi'
 const DATA_SYNC_SUFFIX = '/sync/v1'
 
@@ -95,6 +114,11 @@ function normalizeRemotePathInput(value?: string) {
     normalized = normalized.slice(0, -DATA_SYNC_SUFFIX.length) || '/'
   }
   return normalized
+}
+
+function getEffectiveSyncPath(value?: string) {
+  const basePath = normalizeRemotePathInput(value)
+  return basePath === '/' ? DATA_SYNC_SUFFIX : `${basePath}${DATA_SYNC_SUFFIX}`
 }
 
 function normalizeDirectoryBrowserPath(value?: string) {
@@ -152,6 +176,8 @@ const DataSyncSettings: FC = () => {
   const [syncInterval, setSyncInterval] = useState(dataSyncSyncInterval)
   const [syncing, setSyncing] = useState(false)
   const [restoring, setRestoring] = useState(false)
+  const [diagnosing, setDiagnosing] = useState(false)
+  const [diagnosis, setDiagnosis] = useState<DiagnosisState | null>(null)
   const [status, setStatus] = useState<SyncStatus | null>(null)
   const [directoryBrowserOpen, setDirectoryBrowserOpen] = useState(false)
   const [directoryLoading, setDirectoryLoading] = useState(false)
@@ -264,7 +290,74 @@ const DataSyncSettings: FC = () => {
     })
   }
 
+  const diagnoseNow = async () => {
+    if (!webdavHost) {
+      window.toast.warning(t('settings.data.data_sync.toast.webdav_required'))
+      return
+    }
+
+    const config = saveWebDavConfig()
+
+    setDiagnosing(true)
+    try {
+      const result = (await window.api.systemAgent.callCapability(
+        'dataSync.webdav.diagnose',
+        {
+          ...config,
+          remotePath: config.webdavPath
+        },
+        { dryRun: true }
+      )) as DiagnosisCapabilityResult
+
+      const nextDiagnosis: DiagnosisState = {
+        ok: result.ok === true,
+        summary:
+          result.ok === true
+            ? result.summary || t('settings.data.data_sync.toast.diagnose_success')
+            : result.error || result.summary || t('settings.data.data_sync.toast.diagnose_failed', { message: '' }),
+        checkedAt: Date.now(),
+        remotePath: result.data?.directories?.path,
+        directoryCount: result.data?.directories?.directories?.length,
+        deviceId: result.data?.status?.deviceId
+      }
+
+      setDiagnosis(nextDiagnosis)
+      if (result.data?.status) {
+        setStatus(result.data.status)
+      }
+
+      if (result.ok) {
+        window.toast.success(t('settings.data.data_sync.toast.diagnose_success'))
+      } else {
+        window.toast.error(t('settings.data.data_sync.toast.diagnose_failed', { message: nextDiagnosis.summary }))
+      }
+    } catch (error) {
+      const message = getErrorMessage(error)
+      setDiagnosis({
+        ok: false,
+        summary: message,
+        checkedAt: Date.now()
+      })
+      window.toast.error(t('settings.data.data_sync.toast.diagnose_failed', { message }))
+      void reportErrorToSystemAgent(
+        error,
+        {
+          source: 'settings.data_sync.diagnose',
+          domain: 'dataSync',
+          details: {
+            webdavHost,
+            webdavPath: normalizeRemotePathInput(webdavPath)
+          }
+        },
+        { showToast: true }
+      )
+    } finally {
+      setDiagnosing(false)
+    }
+  }
+
   const summary = status?.lastSummary
+  const effectiveSyncPath = getEffectiveSyncPath(webdavPath)
 
   const loadRemoteDirectories = async (path: string) => {
     const normalizedHost = normalizeWebdavHostInput(webdavHost)
@@ -407,6 +500,19 @@ const DataSyncSettings: FC = () => {
           </Button>
         </HStack>
       </SettingRow>
+      <SettingRow>
+        <SettingHelpText>{t('settings.data.data_sync.remote_path_help')}</SettingHelpText>
+      </SettingRow>
+      <SettingDivider />
+      <SettingRow>
+        <SettingRowTitle>{t('settings.data.data_sync.effective_path')}</SettingRowTitle>
+        <Typography.Text type="secondary" copyable style={{ maxWidth: 360, wordBreak: 'break-all' }}>
+          {effectiveSyncPath}
+        </Typography.Text>
+      </SettingRow>
+      <SettingRow>
+        <SettingHelpText>{t('settings.data.data_sync.effective_path_help')}</SettingHelpText>
+      </SettingRow>
       <SettingDivider />
       <SettingRow>
         <SettingRowTitle>{t('settings.data.data_sync.auto_sync')}</SettingRowTitle>
@@ -442,20 +548,67 @@ const DataSyncSettings: FC = () => {
       <SettingDivider />
       <SettingRow>
         <SettingRowTitle>{t('settings.data.data_sync.sync_now')}</SettingRowTitle>
-        <HStack gap="8px">
+        <HStack gap="8px" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <Button
             type="primary"
             icon={<SyncOutlined spin={syncing} />}
             loading={syncing}
-            disabled={!webdavHost || restoring}
+            disabled={!webdavHost || restoring || diagnosing}
             onClick={syncNow}>
             {t('settings.data.data_sync.sync')}
           </Button>
-          <Button loading={restoring} disabled={!webdavHost || syncing} onClick={restoreLatestSnapshot}>
+          <Button
+            icon={<BugOutlined />}
+            loading={diagnosing}
+            disabled={!webdavHost || syncing || restoring}
+            onClick={diagnoseNow}>
+            {t('settings.data.data_sync.diagnose')}
+          </Button>
+          <Button
+            icon={<ReloadOutlined />}
+            loading={restoring}
+            disabled={!webdavHost || syncing || diagnosing}
+            onClick={restoreLatestSnapshot}>
             {t('settings.data.data_sync.restore_latest')}
           </Button>
         </HStack>
       </SettingRow>
+      {diagnosis && (
+        <>
+          <SettingDivider />
+          <SettingRow>
+            <Alert
+              showIcon
+              type={diagnosis.ok ? 'success' : 'warning'}
+              message={t('settings.data.data_sync.diagnosis.title')}
+              description={
+                <Space direction="vertical" size={2}>
+                  <Typography.Text>{diagnosis.summary}</Typography.Text>
+                  <Typography.Text type="secondary">
+                    {t('settings.data.data_sync.diagnosis.checked_at', {
+                      time: dayjs(diagnosis.checkedAt).format('YYYY-MM-DD HH:mm:ss')
+                    })}
+                  </Typography.Text>
+                  {diagnosis.remotePath && (
+                    <Typography.Text type="secondary">
+                      {t('settings.data.data_sync.diagnosis.remote_path', {
+                        path: diagnosis.remotePath,
+                        count: diagnosis.directoryCount ?? 0
+                      })}
+                    </Typography.Text>
+                  )}
+                  {diagnosis.deviceId && (
+                    <Typography.Text type="secondary">
+                      {t('settings.data.data_sync.diagnosis.device', { deviceId: diagnosis.deviceId })}
+                    </Typography.Text>
+                  )}
+                </Space>
+              }
+              style={{ flex: 1 }}
+            />
+          </SettingRow>
+        </>
+      )}
       {summary && summary.lastSyncAt > 0 && (
         <>
           <SettingDivider />
