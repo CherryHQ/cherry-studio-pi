@@ -22,11 +22,14 @@ export type SystemAgentCapabilityCallOptions = {
 }
 
 export type SystemAgentEventInput = {
+  type?: 'error' | 'event'
   source: string
   message?: string
   code?: string | number
   domain?: string
   details?: unknown
+  capabilityInput?: unknown
+  autoRunReadOnly?: boolean
   limit?: number
 }
 
@@ -45,6 +48,20 @@ export type SystemAgentEventPlan = {
   guidance: string
 }
 
+export type SystemAgentAutoRun = {
+  capability: AppCapabilityDescriptor
+  result: AppCapabilityResult
+}
+
+export type SystemAgentHandledEvent = {
+  source: string
+  plan: SystemAgentEventPlan
+  autoRuns: SystemAgentAutoRun[]
+  blocked: AppCapabilityDescriptor[]
+  handled: boolean
+  summary: string
+}
+
 const RISK_LABELS: Record<AppCapabilityRisk, string> = {
   read: '只读',
   write: '会修改应用数据或设置',
@@ -61,7 +78,8 @@ function makeIntentQuery(input: SystemAgentPlanIntentInput) {
 }
 
 function makeEventQuery(input: SystemAgentEventInput) {
-  return [input.domain, input.source, input.code, input.message].filter(Boolean).join(' ')
+  const eventTerms = input.type === 'error' ? 'error failed diagnose troubleshoot repair' : 'event handle'
+  return [eventTerms, input.domain, input.source, input.code, input.message].filter(Boolean).join(' ')
 }
 
 function makeGuidance(recommended: AppCapabilityDescriptor | null) {
@@ -114,6 +132,49 @@ export class SystemAgentRuntimeService {
       recommended,
       capabilities,
       guidance: makeGuidance(recommended)
+    }
+  }
+
+  async handleEvent(input: SystemAgentEventInput): Promise<SystemAgentHandledEvent> {
+    const plan = this.planEvent(input)
+    const autoRuns: SystemAgentAutoRun[] = []
+
+    if (input.autoRunReadOnly !== false) {
+      const readOnlyCapability = plan.capabilities.find((capability) => capability.risk === 'read')
+      if (readOnlyCapability) {
+        const result = await appCapabilityService.call(readOnlyCapability.id, input.capabilityInput ?? {}, {
+          source: 'system',
+          dryRun: true
+        })
+        autoRuns.push({ capability: readOnlyCapability, result })
+      }
+    }
+
+    const blocked = plan.capabilities.filter((capability) => needsApproval(capability.risk)).slice(0, 3)
+    const successfulAutoRun = autoRuns.find((item) => item.result.ok)
+    const failedAutoRun = autoRuns.find((item) => !item.result.ok)
+    const summary = successfulAutoRun
+      ? `系统 Agent 已自动运行 ${successfulAutoRun.capability.id}：${successfulAutoRun.result.summary}`
+      : failedAutoRun
+        ? `系统 Agent 已尝试 ${failedAutoRun.capability.id}，但诊断失败：${failedAutoRun.result.error || failedAutoRun.result.summary}`
+        : blocked[0]
+          ? `系统 Agent 找到可处理能力 ${blocked[0].id}，但这是“${RISK_LABELS[blocked[0].risk]}”操作，需要用户确认。`
+          : plan.guidance
+
+    logger.info('Handled system agent event', {
+      source: input.source,
+      type: input.type ?? 'event',
+      autoRuns: autoRuns.map((item) => ({ id: item.capability.id, ok: item.result.ok })),
+      blocked: blocked.map((item) => item.id)
+    })
+
+    return {
+      source: input.source,
+      plan,
+      autoRuns,
+      blocked,
+      handled: Boolean(successfulAutoRun),
+      summary
     }
   }
 

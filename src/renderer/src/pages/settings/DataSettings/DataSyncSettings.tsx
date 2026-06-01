@@ -4,6 +4,7 @@ import Selector from '@renderer/components/Selector'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { startDataSyncAutoSync, stopDataSyncAutoSync, syncAppDataNow } from '@renderer/services/DataSyncService'
+import { reportErrorToSystemAgent } from '@renderer/services/SystemAgentService'
 import { useAppDispatch } from '@renderer/store'
 import {
   setDataSyncAutoSync,
@@ -207,6 +208,18 @@ const DataSyncSettings: FC = () => {
       window.toast.success(t('settings.data.data_sync.toast.sync_success'))
     } catch (error) {
       window.toast.error(t('settings.data.data_sync.toast.sync_failed', { message: getErrorMessage(error) }))
+      void reportErrorToSystemAgent(
+        error,
+        {
+          source: 'settings.data_sync.sync_now',
+          domain: 'dataSync',
+          details: {
+            webdavHost,
+            webdavPath: normalizeRemotePathInput(webdavPath)
+          }
+        },
+        { showToast: true }
+      )
     } finally {
       setSyncing(false)
     }
@@ -232,6 +245,18 @@ const DataSyncSettings: FC = () => {
           window.toast.success(t('settings.data.data_sync.toast.restore_success'))
         } catch (error) {
           window.toast.error(t('settings.data.data_sync.toast.restore_failed', { message: getErrorMessage(error) }))
+          void reportErrorToSystemAgent(
+            error,
+            {
+              source: 'settings.data_sync.restore_latest_snapshot',
+              domain: 'dataSync',
+              details: {
+                webdavHost,
+                webdavPath: normalizeRemotePathInput(webdavPath)
+              }
+            },
+            { showToast: true }
+          )
         } finally {
           setRestoring(false)
         }
@@ -263,6 +288,19 @@ const DataSyncSettings: FC = () => {
       setRemoteDirectoryList(result)
     } catch (error) {
       setDirectoryError(getErrorMessage(error))
+      void reportErrorToSystemAgent(
+        error,
+        {
+          source: 'settings.data_sync.remote_directory_browser',
+          domain: 'dataSync',
+          details: {
+            remotePath: path,
+            webdavHost,
+            webdavPath: normalizeRemotePathInput(webdavPath)
+          }
+        },
+        { showToast: true }
+      )
     } finally {
       setDirectoryLoading(false)
     }

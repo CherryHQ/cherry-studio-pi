@@ -266,6 +266,7 @@ const api = {
       ipcRenderer.invoke(IpcChannel.SystemAgent_ListCapabilities, options),
     planIntent: (input: Record<string, unknown>) => ipcRenderer.invoke(IpcChannel.SystemAgent_PlanIntent, input),
     planEvent: (input: Record<string, unknown>) => ipcRenderer.invoke(IpcChannel.SystemAgent_PlanEvent, input),
+    handleEvent: (input: Record<string, unknown>) => ipcRenderer.invoke(IpcChannel.SystemAgent_HandleEvent, input),
     callCapability: (id: string, input?: unknown, options?: Record<string, unknown>) =>
       ipcRenderer.invoke(IpcChannel.SystemAgent_CallCapability, id, input, options)
   },

@@ -611,6 +611,9 @@
       }
     },
     "sidebar_title": "Agents",
+    "system_agent": {
+      "auto_triggered": "[to be translated]:System Agent checked automatically"
+    },
     "todo": {
       "panel": {
         "title": "{{completed}}/{{total}} tâches terminées"

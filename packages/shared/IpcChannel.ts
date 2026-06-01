@@ -322,6 +322,7 @@ export enum IpcChannel {
   SystemAgent_ListCapabilities = 'system-agent:list-capabilities',
   SystemAgent_PlanIntent = 'system-agent:plan-intent',
   SystemAgent_PlanEvent = 'system-agent:plan-event',
+  SystemAgent_HandleEvent = 'system-agent:handle-event',
   SystemAgent_CallCapability = 'system-agent:call-capability',
 
   // Storage v2 scaffold

@@ -5,6 +5,7 @@ import { startAutoSync } from './services/BackupService'
 import { startDataSyncAutoSync } from './services/DataSyncService'
 import { startNutstoreAutoSync } from './services/NutstoreService'
 import storeSyncService from './services/StoreSyncService'
+import { initSystemAgentErrorTriggers } from './services/SystemAgentService'
 import { webTraceService } from './services/WebTraceService'
 import store from './store'
 
@@ -39,7 +40,12 @@ function initWebTrace() {
   webTraceService.init()
 }
 
+function initSystemAgent() {
+  initSystemAgentErrorTriggers()
+}
+
 initKeyv()
+initSystemAgent()
 initAutoSync()
 initStoreSync()
 initWebTrace()

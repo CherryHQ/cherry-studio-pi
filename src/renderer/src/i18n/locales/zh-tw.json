@@ -611,6 +611,9 @@
       }
     },
     "sidebar_title": "Agents",
+    "system_agent": {
+      "auto_triggered": "系統 Agent 已自動檢查"
+    },
     "todo": {
       "panel": {
         "title": "已完成 {{completed}}/{{total}} 個任務"

@@ -611,6 +611,9 @@
       }
     },
     "sidebar_title": "智能体",
+    "system_agent": {
+      "auto_triggered": "系统 Agent 已自动检查"
+    },
     "todo": {
       "panel": {
         "title": "已完成 {{completed}}/{{total}} 个任务"

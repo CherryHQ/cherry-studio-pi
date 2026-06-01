@@ -23,6 +23,9 @@ export function registerSystemAgentIpcHandlers() {
   ipcMain.handle(IpcChannel.SystemAgent_PlanEvent, (_, input: SystemAgentEventInput) =>
     systemAgentRuntimeService.planEvent(input)
   )
+  ipcMain.handle(IpcChannel.SystemAgent_HandleEvent, (_, input: SystemAgentEventInput) =>
+    systemAgentRuntimeService.handleEvent(input)
+  )
   ipcMain.handle(
     IpcChannel.SystemAgent_CallCapability,
     (_, id: string, input: unknown = {}, options: SystemAgentCapabilityCallOptions = {}) =>

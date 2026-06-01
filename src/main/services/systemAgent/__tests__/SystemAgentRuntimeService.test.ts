@@ -54,6 +54,43 @@ describe('SystemAgentRuntimeService', () => {
     expect(plan.guidance).toContain('需要用户确认')
   })
 
+  it('auto-runs the best read-only capability for error events', async () => {
+    const readCapability = {
+      id: 'dataSync.webdav.diagnose',
+      domain: 'dataSync',
+      kind: 'query',
+      title: 'Diagnose WebDAV data sync',
+      description: 'Diagnose sync errors',
+      risk: 'read'
+    }
+    mocks.appCapabilityService.search.mockReturnValueOnce([writeCapability, readCapability])
+    mocks.appCapabilityService.call.mockResolvedValueOnce({ ok: true, summary: 'diagnosed' })
+
+    const result = await new SystemAgentRuntimeService().handleEvent({
+      type: 'error',
+      source: 'settings.data_sync.sync_now',
+      domain: 'dataSync',
+      message: '503 Service Unavailable'
+    })
+
+    expect(mocks.appCapabilityService.search).toHaveBeenCalledWith({
+      query: 'error failed diagnose troubleshoot repair dataSync settings.data_sync.sync_now 503 Service Unavailable',
+      domain: 'dataSync',
+      includeSchemas: true,
+      limit: 6
+    })
+    expect(mocks.appCapabilityService.call).toHaveBeenCalledWith(
+      'dataSync.webdav.diagnose',
+      {},
+      {
+        source: 'system',
+        dryRun: true
+      }
+    )
+    expect(result.handled).toBe(true)
+    expect(result.summary).toContain('dataSync.webdav.diagnose')
+  })
+
   it('blocks write capabilities until the caller confirms approval', async () => {
     mocks.appCapabilityService.list.mockReturnValueOnce([writeCapability])
 

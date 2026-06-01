@@ -4,6 +4,7 @@ import type { WebDavConfig } from '@renderer/types'
 
 import { hydrateRuntimeCacheFromStorageV2 } from './StorageV2HydrationService'
 import { flushStorageV2RuntimeMirrors } from './StorageV2Service'
+import { reportErrorToSystemAgent } from './SystemAgentService'
 
 const logger = loggerService.withContext('DataSyncService')
 
@@ -115,6 +116,10 @@ async function performAutoSync() {
     await syncAppDataNow()
   } catch (error) {
     logger.warn('Auto data sync failed', error as Error)
+    void reportErrorToSystemAgent(error, {
+      source: 'data-sync.auto',
+      domain: 'dataSync'
+    })
   } finally {
     if (autoSyncStarted) {
       scheduleNextSync(store.getState().settings.dataSyncSyncInterval * 60 * 1000)
