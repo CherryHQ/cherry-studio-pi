@@ -9,6 +9,7 @@ import { app } from 'electron'
 import { SkillRepository } from '../services/agents/skills/SkillRepository'
 import { skillService } from '../services/agents/skills/SkillService'
 import { getDataPath, toAsarUnpackedPath } from '.'
+import { getBuiltinSkillId } from './builtinSkillId'
 
 const logger = loggerService.withContext('builtinSkills')
 
@@ -106,6 +107,7 @@ async function syncBuiltinSkillToDb(folderName: string, destPath: string, filesU
     } else {
       const now = Date.now()
       const inserted = await repo.insert({
+        id: getBuiltinSkillId(folderName),
         name: metadata.name,
         description: metadata.description ?? null,
         folder_name: folderName,

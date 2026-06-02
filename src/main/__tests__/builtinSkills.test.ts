@@ -134,6 +134,7 @@ describe('installBuiltinSkills', () => {
     expect(mockRepo.getByFolderName).toHaveBeenCalledWith('my-skill')
     expect(mockRepo.insert).toHaveBeenCalledWith(
       expect.objectContaining({
+        id: 'builtin-my-skill',
         folder_name: 'my-skill',
         source: 'builtin',
         // Legacy column — deliberately false in the new per-agent model.
@@ -251,6 +252,7 @@ describe('installBuiltinSkills', () => {
     // But DB row should be created
     expect(mockRepo.insert).toHaveBeenCalledWith(
       expect.objectContaining({
+        id: 'builtin-my-skill',
         folder_name: 'my-skill',
         source: 'builtin'
       })

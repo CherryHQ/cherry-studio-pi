@@ -426,6 +426,7 @@ function isIgnorableCreateDirectoryError(error: unknown) {
 
 export class StorageV2WebDavRecordSyncService {
   private columnsByTable = new Map<string, string[]>()
+  private skillIdRemaps = new Map<string, string>()
 
   constructor(private readonly tables: readonly StorageV2SyncTable[] = STORAGE_V2_SYNC_TABLES) {}
 
@@ -640,12 +641,82 @@ export class StorageV2WebDavRecordSyncService {
     }
   }
 
+  private async getLocalSkillIdByFolderName(client: Client, folderName: string) {
+    const result = await client.execute({
+      sql: 'SELECT id FROM skills WHERE folder_name = ? LIMIT 1',
+      args: [folderName]
+    })
+    const id = result.rows[0]?.id
+    return typeof id === 'string' && id ? id : null
+  }
+
+  private rewriteAgentSkillRow(row: Record<string, InValue>) {
+    const skillId = typeof row.skill_id === 'string' ? row.skill_id : ''
+    const mappedSkillId = this.skillIdRemaps.get(skillId)
+    if (!mappedSkillId) return row
+
+    return {
+      ...row,
+      skill_id: mappedSkillId
+    }
+  }
+
+  private rewriteAgentSkillEntityId(entityId: string) {
+    const parts = entityId.split(':')
+    if (parts.length !== 2) return entityId
+
+    const mappedSkillId = this.skillIdRemaps.get(parts[1])
+    return mappedSkillId ? `${parts[0]}:${mappedSkillId}` : entityId
+  }
+
+  private async rewriteRemoteRowForLocalAliases(
+    client: Client,
+    table: StorageV2SyncTable,
+    row: Record<string, InValue>
+  ) {
+    if (table.entityType === 'skill') {
+      const remoteSkillId = typeof row.id === 'string' ? row.id : ''
+      const folderName = typeof row.folder_name === 'string' ? row.folder_name : ''
+      if (!remoteSkillId || !folderName) return row
+
+      const localSkillId = await this.getLocalSkillIdByFolderName(client, folderName)
+      if (!localSkillId || localSkillId === remoteSkillId) return row
+
+      this.skillIdRemaps.set(remoteSkillId, localSkillId)
+      return {
+        ...row,
+        id: localSkillId
+      }
+    }
+
+    if (table.entityType === 'agent_skill') {
+      return this.rewriteAgentSkillRow(row)
+    }
+
+    if (table.entityType === TOMBSTONE_ENTITY_TYPE) {
+      const entityType = typeof row.entity_type === 'string' ? row.entity_type : ''
+      const entityId = typeof row.entity_id === 'string' ? row.entity_id : ''
+      if (entityType !== 'agent_skill' || !entityId) return row
+
+      const mappedEntityId = this.rewriteAgentSkillEntityId(entityId)
+      return mappedEntityId === entityId
+        ? row
+        : {
+            ...row,
+            entity_id: mappedEntityId
+          }
+    }
+
+    return row
+  }
+
   private async applyRemoteRecord(client: Client, remote: LocalRecord) {
     const table = this.tableByEntity(remote.table.entityType)
     if (!table) return false
 
+    const row = await this.rewriteRemoteRowForLocalAliases(client, table, remote.row)
     const columns = await this.getTableColumns(client, table.table)
-    const insertColumns = columns.filter((column) => Object.hasOwn(remote.row, column))
+    const insertColumns = columns.filter((column) => Object.hasOwn(row, column))
     if (insertColumns.length === 0) return false
 
     const updateColumns = insertColumns.filter((column) => !table.idColumns.includes(column))
@@ -661,10 +732,10 @@ export class StorageV2WebDavRecordSyncService {
         VALUES (${insertColumns.map(() => '?').join(', ')})
         ON CONFLICT(${conflictTarget}) ${updateSql}
       `,
-      args: insertColumns.map((column) => remote.row[column] ?? null)
+      args: insertColumns.map((column) => row[column] ?? null)
     })
 
-    await this.applyTombstoneTarget(client, remote.row)
+    await this.applyTombstoneTarget(client, row)
     return true
   }
 
@@ -821,6 +892,7 @@ export class StorageV2WebDavRecordSyncService {
     basePath: string,
     manifestInput?: StorageV2WebDavRecordSyncManifest | null
   ): Promise<{ manifest: StorageV2WebDavRecordSyncManifest; summary: StorageV2WebDavRecordSyncSummary }> {
+    this.skillIdRemaps.clear()
     const dbClient = await storageV2Database.getClient()
     const manifest = normalizeManifest(manifestInput ?? makeManifest())
     const summary = { ...EMPTY_SUMMARY }

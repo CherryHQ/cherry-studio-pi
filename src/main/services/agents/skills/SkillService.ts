@@ -6,6 +6,7 @@ import { loggerService } from '@logger'
 import { storageV2AgentDbMirrorService } from '@main/services/storageV2/AgentDbMirrorService'
 import { storageV2AgentRuntimeTombstoneService } from '@main/services/storageV2/AgentRuntimeTombstoneService'
 import { getDataPath } from '@main/utils'
+import { getBuiltinSkillId } from '@main/utils/builtinSkillId'
 import { directoryExists } from '@main/utils/file'
 import { deleteDirectoryRecursive } from '@main/utils/fileOperations'
 import { findAllSkillDirectories, findSkillMdPath, parseSkillMetadata } from '@main/utils/markdownParser'
@@ -605,7 +606,7 @@ export class SkillService {
     }
 
     const isBuiltin = source === 'builtin'
-    const id = randomUUID()
+    const id = isBuiltin ? getBuiltinSkillId(folderName) : randomUUID()
     const now = Date.now()
 
     const skill = await this.repository.insert({
