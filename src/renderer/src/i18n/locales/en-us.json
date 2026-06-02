@@ -4161,6 +4161,7 @@
           "deleted": "Deleted {{count}}",
           "downloaded": "Downloaded {{count}}",
           "error": "Error: {{message}}",
+          "remote_path": "Remote path {{path}}",
           "status_failed": "Failed",
           "status_success": "Success",
           "uploaded": "Uploaded {{count}}"

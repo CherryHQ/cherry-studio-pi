@@ -87,6 +87,7 @@ export type DataSyncSummary = {
   snapshotUploaded: boolean
   snapshotFileName: string | null
   snapshotBytes: number
+  remotePath: string | null
   lastSyncAt: number
 }
 
@@ -108,6 +109,7 @@ const EMPTY_SUMMARY: DataSyncSummary = {
   snapshotUploaded: false,
   snapshotFileName: null,
   snapshotBytes: 0,
+  remotePath: null,
   lastSyncAt: 0
 }
 
@@ -594,7 +596,7 @@ export class AppDataSyncService {
     let db = await getAppDataDatabase()
     const { client, basePath } = this.createWebDavClient(config)
     const manifestPath = path.posix.join(basePath, 'manifest.json')
-    const summary: DataSyncSummary = { ...EMPTY_SUMMARY, lastSyncAt: Date.now() }
+    const summary: DataSyncSummary = { ...EMPTY_SUMMARY, remotePath: basePath, lastSyncAt: Date.now() }
 
     await this.ensureDirectory(client, basePath)
     await this.assertWriteAccess(client, basePath)

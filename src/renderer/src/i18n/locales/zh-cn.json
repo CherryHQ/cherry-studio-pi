@@ -4161,6 +4161,7 @@
           "deleted": "删除 {{count}}",
           "downloaded": "下载 {{count}}",
           "error": "错误：{{message}}",
+          "remote_path": "远端目录 {{path}}",
           "status_failed": "失败",
           "status_success": "成功",
           "uploaded": "上传 {{count}}"

@@ -3,7 +3,7 @@ import store, { persistor } from '@renderer/store'
 import type { WebDavConfig } from '@renderer/types'
 
 import { hydrateRuntimeCacheFromStorageV2 } from './StorageV2HydrationService'
-import { flushStorageV2RuntimeMirrors } from './StorageV2Service'
+import { prepareStorageV2ForDataSync } from './StorageV2Service'
 import { reportErrorToSystemAgent } from './SystemAgentService'
 
 const logger = loggerService.withContext('DataSyncService')
@@ -26,12 +26,45 @@ export type DataSyncSummary = {
   snapshotUploaded?: boolean
   snapshotFileName?: string | null
   snapshotBytes?: number
+  remotePath?: string | null
   lastSyncAt: number
 }
 
 let syncTimeout: NodeJS.Timeout | null = null
 let autoSyncStarted = false
 let syncing = false
+
+function hasDownloadedRemoteData(summary?: Partial<DataSyncSummary> | null) {
+  if (!summary) return false
+
+  return (
+    (summary.downloaded ?? 0) > 0 ||
+    (summary.storageDownloaded ?? 0) > 0 ||
+    (summary.blobDownloaded ?? 0) > 0 ||
+    (summary.deleted ?? 0) > 0 ||
+    (summary.storageDeleted ?? 0) > 0
+  )
+}
+
+async function hydrateRuntimeCacheAfterDataSync(context: string) {
+  await hydrateRuntimeCacheFromStorageV2({
+    dispatch: store.dispatch,
+    flush: () => persistor.flush()
+  }).catch((error) => {
+    logger.warn(`Failed to hydrate runtime cache ${context}`, error as Error)
+  })
+}
+
+async function hydratePreviouslyDownloadedRemoteData() {
+  const status = await window.api.dataSync.getStatus().catch((error) => {
+    logger.warn('Failed to inspect previous data sync status before sync', error as Error)
+    return null
+  })
+
+  if (!hasDownloadedRemoteData(status?.lastSummary)) return
+
+  await hydrateRuntimeCacheAfterDataSync('before data sync')
+}
 
 function getWebDavConfig(): WebDavConfig {
   const settings = store.getState().settings
@@ -56,16 +89,10 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
 
   syncing = true
   try {
-    await flushStorageV2RuntimeMirrors()
+    await hydratePreviouslyDownloadedRemoteData()
+    await prepareStorageV2ForDataSync()
     const summary = await window.api.dataSync.syncNow(config)
-    if ((summary.storageDownloaded ?? 0) > 0 || (summary.blobDownloaded ?? 0) > 0) {
-      await hydrateRuntimeCacheFromStorageV2({
-        dispatch: store.dispatch,
-        flush: () => persistor.flush()
-      }).catch((error) => {
-        logger.warn('Failed to hydrate runtime cache after data sync', error as Error)
-      })
-    }
+    await hydrateRuntimeCacheAfterDataSync('after data sync')
     return summary
   } finally {
     syncing = false

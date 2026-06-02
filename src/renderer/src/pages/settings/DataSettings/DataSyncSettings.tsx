@@ -40,6 +40,7 @@ type SyncSummary = {
   snapshotUploaded?: boolean
   snapshotFileName?: string | null
   snapshotBytes?: number
+  remotePath?: string | null
   lastSyncAt: number
 }
 
@@ -635,6 +636,11 @@ const DataSyncSettings: FC = () => {
               {summary.error && (
                 <Typography.Text type="danger">
                   {t('settings.data.data_sync.summary.error', { message: summary.error })}
+                </Typography.Text>
+              )}
+              {summary.remotePath && (
+                <Typography.Text type="secondary" copyable>
+                  {t('settings.data.data_sync.summary.remote_path', { path: summary.remotePath })}
                 </Typography.Text>
               )}
               <Typography.Text type="secondary">
