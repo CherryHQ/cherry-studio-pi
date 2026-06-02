@@ -28,6 +28,10 @@ function throwDataSyncUserError(error: unknown, action: string): never {
   throw new Error(message)
 }
 
+function isDataSyncAlreadyRunningMessage(message: string) {
+  return /Data sync is already running|已有数据同步正在进行|同步正在进行/i.test(message)
+}
+
 async function rememberDataSyncFailure(message: string) {
   await appDataSyncService.recordSyncFailure(new Error(message)).catch((recordError) => {
     logger.warn('Failed to record data sync failure summary', recordError as Error)
@@ -169,7 +173,9 @@ export function registerAppDataIpcHandlers() {
       return await appDataSyncService.syncNow(config)
     } catch (error) {
       const message = getDataSyncUserErrorMessage(error, '同步数据')
-      await rememberDataSyncFailure(message)
+      if (!isDataSyncAlreadyRunningMessage(message)) {
+        await rememberDataSyncFailure(message)
+      }
       throw new Error(message)
     }
   })

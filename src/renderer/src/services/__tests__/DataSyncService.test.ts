@@ -42,7 +42,7 @@ vi.mock('../SystemAgentService', () => ({
   reportErrorToSystemAgent: mocks.reportErrorToSystemAgent
 }))
 
-import { syncAppDataNow } from '../DataSyncService'
+import { getDataSyncRuntimeState, subscribeDataSyncRuntimeState, syncAppDataNow } from '../DataSyncService'
 
 const successSummary = {
   status: 'success' as const,
@@ -64,6 +64,17 @@ const successSummary = {
   snapshotBytes: 0,
   remotePath: '/cherry-studio-pi/sync/v1',
   lastSyncAt: 1780058147577
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
 }
 
 describe('DataSyncService', () => {
@@ -180,5 +191,39 @@ describe('DataSyncService', () => {
     expect(mocks.prepareStorageV2ForDataSync).not.toHaveBeenCalled()
     expect(mocks.syncNow).not.toHaveBeenCalled()
     expect(mocks.hydrateRuntimeCacheFromStorageV2).not.toHaveBeenCalled()
+  })
+
+  it('notifies subscribers while a manual sync is running', async () => {
+    const pendingSync = deferred<typeof successSummary>()
+    const states: boolean[] = []
+    mocks.syncNow.mockReturnValueOnce(pendingSync.promise)
+    const unsubscribe = subscribeDataSyncRuntimeState((state) => {
+      states.push(state.syncing)
+    })
+
+    const sync = syncAppDataNow()
+    await vi.waitFor(() => expect(getDataSyncRuntimeState().syncing).toBe(true))
+
+    pendingSync.resolve(successSummary)
+    await expect(sync).resolves.toEqual(successSummary)
+
+    expect(getDataSyncRuntimeState().syncing).toBe(false)
+    expect(states).toContain(true)
+    expect(states.at(-1)).toBe(false)
+    unsubscribe()
+  })
+
+  it('returns null for duplicate manual sync attempts while the first sync is in flight', async () => {
+    const pendingSync = deferred<typeof successSummary>()
+    mocks.syncNow.mockReturnValueOnce(pendingSync.promise)
+
+    const firstSync = syncAppDataNow()
+    await vi.waitFor(() => expect(getDataSyncRuntimeState().syncing).toBe(true))
+
+    await expect(syncAppDataNow()).resolves.toBeNull()
+    expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+
+    pendingSync.resolve(successSummary)
+    await expect(firstSync).resolves.toEqual(successSummary)
   })
 })

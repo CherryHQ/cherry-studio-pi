@@ -33,6 +33,38 @@ export type DataSyncSummary = {
 let syncTimeout: NodeJS.Timeout | null = null
 let autoSyncStarted = false
 let syncing = false
+let syncStartedAt: number | null = null
+const syncStateListeners = new Set<(state: DataSyncRuntimeState) => void>()
+
+export type DataSyncRuntimeState = {
+  syncing: boolean
+  syncStartedAt: number | null
+}
+
+export function getDataSyncRuntimeState(): DataSyncRuntimeState {
+  return {
+    syncing,
+    syncStartedAt
+  }
+}
+
+export function subscribeDataSyncRuntimeState(listener: (state: DataSyncRuntimeState) => void) {
+  syncStateListeners.add(listener)
+  listener(getDataSyncRuntimeState())
+
+  return () => {
+    syncStateListeners.delete(listener)
+  }
+}
+
+function setDataSyncRunning(nextSyncing: boolean) {
+  syncing = nextSyncing
+  syncStartedAt = nextSyncing ? Date.now() : null
+  const nextState = getDataSyncRuntimeState()
+  for (const listener of syncStateListeners) {
+    listener(nextState)
+  }
+}
 
 function hasDownloadedRemoteData(summary?: Partial<DataSyncSummary> | null) {
   if (!summary) return false
@@ -87,7 +119,7 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
     throw new Error('WebDAV host is required')
   }
 
-  syncing = true
+  setDataSyncRunning(true)
   try {
     await hydratePreviouslyDownloadedRemoteData()
     await prepareStorageV2ForDataSync()
@@ -95,7 +127,7 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
     await hydrateRuntimeCacheAfterDataSync('after data sync')
     return summary
   } finally {
-    syncing = false
+    setDataSyncRunning(false)
   }
 }
 

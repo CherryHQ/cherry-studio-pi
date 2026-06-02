@@ -4176,6 +4176,7 @@
           "restore_failed": "Restore failed: {{message}}",
           "restore_success": "Restore started. The app will restart.",
           "sync_failed": "[to be translated]:Sync failed: {{message}}",
+          "sync_running": "[to be translated]:Data sync is already running. Please wait for it to finish.",
           "sync_success": "[to be translated]:Data sync completed",
           "webdav_required": "[to be translated]:Configure the WebDAV URL first"
         },

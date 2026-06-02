@@ -4176,6 +4176,7 @@
           "restore_failed": "恢復失敗：{{message}}",
           "restore_success": "已開始恢復，應用程式將重新啟動",
           "sync_failed": "同步失敗：{{message}}",
+          "sync_running": "[to be translated]:Data sync is already running. Please wait for it to finish.",
           "sync_success": "資料同步完成",
           "webdav_required": "請先設定 WebDAV 位址"
         },

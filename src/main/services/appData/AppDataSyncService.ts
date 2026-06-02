@@ -25,6 +25,8 @@ import { type AppDataDatabase, type AppDataRecord, getAppDataDatabase } from './
 import { mergeAppDataRecords } from './AppDataRecordMerge'
 
 const logger = loggerService.withContext('AppDataSyncService')
+const DATA_SYNC_ALREADY_RUNNING_ERROR = 'Data sync is already running'
+const LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS = 10 * 60 * 1000
 
 type RemoteRecordMeta = {
   scope: string
@@ -290,6 +292,8 @@ function getStorageV2ManifestEntityTypes(manifest?: StorageV2WebDavRecordSyncMan
 export class AppDataSyncService {
   private static instance: AppDataSyncService | null = null
   private readonly backupManager: BackupManager
+  private syncInFlight: Promise<DataSyncSummary> | null = null
+  private syncStartedAt: number | null = null
 
   constructor(backupManager = new BackupManager()) {
     this.backupManager = backupManager
@@ -658,7 +662,7 @@ export class AppDataSyncService {
             overwrite: true,
             contentLength: stat.size
           }),
-        { logger }
+        { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
       )
 
       const snapshot: RemoteSnapshotMeta = {
@@ -717,7 +721,7 @@ export class AppDataSyncService {
     const backupContents = await runWebDavOperation(
       `downloading data sync snapshot ${remotePath}`,
       () => client.getFileContents(remotePath, { format: 'binary' }),
-      { logger }
+      { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
     )
     const localBackupPath = path.join(
       process.env.TMPDIR || '/tmp',
@@ -731,6 +735,29 @@ export class AppDataSyncService {
   }
 
   async syncNow(config: WebDavConfig): Promise<DataSyncSummary> {
+    if (!normalizeWebDavHost(config.webdavHost)) {
+      throw new Error('WebDAV host is required')
+    }
+
+    if (this.syncInFlight) {
+      throw new Error(DATA_SYNC_ALREADY_RUNNING_ERROR)
+    }
+
+    this.syncStartedAt = Date.now()
+    const sync = this.performSyncNow(config)
+    this.syncInFlight = sync
+
+    try {
+      return await sync
+    } finally {
+      if (this.syncInFlight === sync) {
+        this.syncInFlight = null
+        this.syncStartedAt = null
+      }
+    }
+  }
+
+  private async performSyncNow(config: WebDavConfig): Promise<DataSyncSummary> {
     if (!normalizeWebDavHost(config.webdavHost)) {
       throw new Error('WebDAV host is required')
     }
@@ -912,7 +939,9 @@ export class AppDataSyncService {
     return {
       deviceId: storageDeviceId ?? db.getDeviceId(),
       lastSummary,
-      conflicts: conflicts.length > 0 ? conflicts : await storageV2AppDataKvMirrorService.listSyncConflicts(true)
+      conflicts: conflicts.length > 0 ? conflicts : await storageV2AppDataKvMirrorService.listSyncConflicts(true),
+      syncing: Boolean(this.syncInFlight),
+      syncStartedAt: this.syncStartedAt
     }
   }
 }

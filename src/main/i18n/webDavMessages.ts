@@ -49,5 +49,8 @@ export const formatWebDavHostRequiredMessage = (prefix: string) => `${prefix}：
 export const formatWebDavInvalidUrlMessage = (prefix: string) =>
   `${prefix}：WebDAV 地址格式不正确。请填写完整地址，例如 https://example.com/dav。`
 
+export const formatWebDavAlreadyRunningMessage = (prefix: string) =>
+  `${prefix}：已有数据同步正在进行，请等待本次同步完成。`
+
 export const formatWebDavUnknownMessage = (prefix: string) =>
   `${prefix}：发生未知错误，请检查 WebDAV 地址、账号权限和同步目录后重试。`

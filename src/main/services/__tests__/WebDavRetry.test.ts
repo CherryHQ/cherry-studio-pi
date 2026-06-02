@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { describeWebDavUserFacingError, normalizeWebDavHost, WebDavOperationError } from '../WebDavRetry'
+import {
+  describeWebDavUserFacingError,
+  normalizeWebDavHost,
+  runWebDavOperation,
+  WebDavOperationError
+} from '../WebDavRetry'
 
 describe('WebDavRetry', () => {
   it('normalizes WebDAV hosts without a protocol', () => {
@@ -29,5 +34,20 @@ describe('WebDavRetry', () => {
     expect(message).toContain('WebDAV 服务拒绝写入')
     expect(message).toContain('/remote-root/sync/v1/.cherry-studio-pi-write-test.tmp')
     expect(message).toContain('数据同步需要支持 MKCOL、PUT、DELETE')
+  })
+
+  it('times out stalled WebDAV operations instead of waiting forever', async () => {
+    await expect(
+      runWebDavOperation('reading remote json /sync/v1/manifest.json', () => new Promise(() => undefined), {
+        maxAttempts: 1,
+        timeoutMs: 1
+      })
+    ).rejects.toThrow('timed out')
+  })
+
+  it('describes concurrent data sync attempts clearly', () => {
+    const message = describeWebDavUserFacingError(new Error('Data sync is already running'), '同步数据')
+
+    expect(message).toContain('已有数据同步正在进行')
   })
 })

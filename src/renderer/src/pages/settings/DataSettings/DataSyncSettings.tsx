@@ -3,7 +3,13 @@ import { HStack } from '@renderer/components/Layout'
 import Selector from '@renderer/components/Selector'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useSettings } from '@renderer/hooks/useSettings'
-import { startDataSyncAutoSync, stopDataSyncAutoSync, syncAppDataNow } from '@renderer/services/DataSyncService'
+import {
+  getDataSyncRuntimeState,
+  startDataSyncAutoSync,
+  stopDataSyncAutoSync,
+  subscribeDataSyncRuntimeState,
+  syncAppDataNow
+} from '@renderer/services/DataSyncService'
 import { reportErrorToSystemAgent } from '@renderer/services/SystemAgentService'
 import { useAppDispatch } from '@renderer/store'
 import {
@@ -48,6 +54,8 @@ type SyncStatus = {
   deviceId: string
   lastSummary: SyncSummary
   conflicts: unknown[]
+  syncing?: boolean
+  syncStartedAt?: number | null
 }
 
 type RemoteDirectory = {
@@ -139,6 +147,10 @@ function getErrorMessage(error: unknown) {
   return String(error)
 }
 
+function isDataSyncAlreadyRunningError(error: unknown) {
+  return /Data sync is already running|已有数据同步正在进行|同步正在进行/i.test(getErrorMessage(error))
+}
+
 function makeBreadcrumbItems(currentPath: string, onOpen: (path: string) => void) {
   const normalized = normalizeDirectoryBrowserPath(currentPath || '/')
   const parts = normalized.split('/').filter(Boolean)
@@ -172,7 +184,7 @@ const DataSyncSettings: FC = () => {
   const [webdavPass, setWebdavPass] = useState(dataSyncWebdavPass)
   const [webdavPath, setWebdavPath] = useState(dataSyncWebdavPath)
   const [syncInterval, setSyncInterval] = useState(dataSyncSyncInterval)
-  const [syncing, setSyncing] = useState(false)
+  const [syncing, setSyncing] = useState(() => getDataSyncRuntimeState().syncing)
   const [restoring, setRestoring] = useState(false)
   const [diagnosing, setDiagnosing] = useState(false)
   const [diagnosis, setDiagnosis] = useState<DiagnosisState | null>(null)
@@ -209,6 +221,7 @@ const DataSyncSettings: FC = () => {
     try {
       const nextStatus = await window.api.dataSync.getStatus()
       setStatus(nextStatus)
+      setSyncing(Boolean(nextStatus.syncing) || getDataSyncRuntimeState().syncing)
     } finally {
       if (showLoading) {
         setStatusRefreshing(false)
@@ -219,6 +232,8 @@ const DataSyncSettings: FC = () => {
   useEffect(() => {
     void refreshStatus().catch(() => undefined)
   }, [])
+
+  useEffect(() => subscribeDataSyncRuntimeState((state) => setSyncing(state.syncing)), [])
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -234,11 +249,25 @@ const DataSyncSettings: FC = () => {
       return
     }
 
+    if (syncing || getDataSyncRuntimeState().syncing) {
+      setSyncing(true)
+      window.toast.info(t('settings.data.data_sync.toast.sync_running'))
+      return
+    }
+
     const config = saveWebDavConfig()
 
+    let keepSyncing = false
     setSyncing(true)
     try {
       const summary = await syncAppDataNow(config)
+      if (!summary) {
+        await refreshStatus()
+        keepSyncing = true
+        window.toast.info(t('settings.data.data_sync.toast.sync_running'))
+        return
+      }
+
       if (summary) {
         setStatus((prev) => ({
           deviceId: prev?.deviceId || '',
@@ -250,6 +279,13 @@ const DataSyncSettings: FC = () => {
       window.toast.success(t('settings.data.data_sync.toast.sync_success'))
     } catch (error) {
       await refreshStatus().catch(() => undefined)
+      if (isDataSyncAlreadyRunningError(error)) {
+        keepSyncing = true
+        setSyncing(true)
+        window.toast.info(t('settings.data.data_sync.toast.sync_running'))
+        return
+      }
+
       window.toast.error(t('settings.data.data_sync.toast.sync_failed', { message: getErrorMessage(error) }))
       void reportErrorToSystemAgent(
         error,
@@ -264,7 +300,7 @@ const DataSyncSettings: FC = () => {
         { showToast: true }
       )
     } finally {
-      setSyncing(false)
+      setSyncing(keepSyncing || getDataSyncRuntimeState().syncing)
     }
   }
 

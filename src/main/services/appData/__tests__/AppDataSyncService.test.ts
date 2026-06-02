@@ -142,6 +142,17 @@ const remoteManifest = {
   }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}
+
 describe('AppDataSyncService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -738,7 +749,9 @@ describe('AppDataSyncService', () => {
     await expect(new AppDataSyncService().getStatus()).resolves.toEqual({
       deviceId: 'local-device',
       lastSummary: storageSummary,
-      conflicts: []
+      conflicts: [],
+      syncing: false,
+      syncStartedAt: null
     })
     expect(mocks.storageV2.getSyncState).toHaveBeenCalledWith('last-sync-summary')
   })
@@ -751,7 +764,9 @@ describe('AppDataSyncService', () => {
     await expect(new AppDataSyncService().getStatus()).resolves.toEqual({
       deviceId: 'storage-device',
       lastSummary: expect.any(Object),
-      conflicts: []
+      conflicts: [],
+      syncing: false,
+      syncStartedAt: null
     })
     expect(mocks.storageV2.getSyncState).toHaveBeenCalledWith('device-id')
   })
@@ -775,8 +790,34 @@ describe('AppDataSyncService', () => {
     await expect(new AppDataSyncService().getStatus()).resolves.toEqual({
       deviceId: 'local-device',
       lastSummary: expect.any(Object),
-      conflicts: [storageConflict]
+      conflicts: [storageConflict],
+      syncing: false,
+      syncStartedAt: null
     })
     expect(mocks.storageV2.listSyncConflicts).toHaveBeenCalledWith(true)
+  })
+
+  it('reports in-flight sync status and rejects concurrent sync attempts', async () => {
+    const pendingDirectoryCheck = deferred<boolean>()
+    mocks.webdav.exists.mockReturnValueOnce(pendingDirectoryCheck.promise)
+    const service = new AppDataSyncService()
+    const firstSync = service.syncNow(config)
+
+    await expect(service.syncNow(config)).rejects.toThrow('Data sync is already running')
+    await expect(service.getStatus()).resolves.toEqual(
+      expect.objectContaining({
+        syncing: true,
+        syncStartedAt: expect.any(Number)
+      })
+    )
+
+    pendingDirectoryCheck.resolve(true)
+    await expect(firstSync).resolves.toEqual(expect.objectContaining({ status: 'success' }))
+    await expect(service.getStatus()).resolves.toEqual(
+      expect.objectContaining({
+        syncing: false,
+        syncStartedAt: null
+      })
+    )
   })
 })

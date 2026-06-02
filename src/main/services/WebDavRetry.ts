@@ -1,4 +1,5 @@
 import {
+  formatWebDavAlreadyRunningMessage,
   formatWebDavConflictMessage,
   formatWebDavFailurePrefix,
   formatWebDavHostRequiredMessage,
@@ -27,9 +28,11 @@ type WebDavRetryOptions = {
   logger?: WebDavRetryLogger
   maxAttempts?: number
   initialDelayMs?: number
+  timeoutMs?: number
 }
 
 const RETRIABLE_WEB_DAV_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504])
+const DEFAULT_WEB_DAV_OPERATION_TIMEOUT_MS = 90_000
 
 function asObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
@@ -106,6 +109,33 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function isTimeoutError(error: unknown) {
+  return /\bETIMEDOUT\b|\bESOCKETTIMEDOUT\b|timed out|timeout/i.test(errorMessage(error))
+}
+
+function withTimeout<T>(promise: Promise<T>, operation: string, timeoutMs: number): Promise<T> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return promise
+  }
+
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      const error = new Error(`WebDAV operation timed out after ${timeoutMs}ms while ${operation}`) as Error & {
+        code: string
+      }
+      error.code = 'ETIMEDOUT'
+      reject(error)
+    }, timeoutMs)
+  })
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+    }
+  })
+}
+
 export class WebDavOperationError extends Error {
   readonly status: number | null
   readonly transient: boolean
@@ -118,7 +148,7 @@ export class WebDavOperationError extends Error {
     super(`WebDAV request failed while ${operation}: ${describeWebDavError(originalError)}`)
     this.name = 'WebDavOperationError'
     this.status = status
-    this.transient = status !== null && RETRIABLE_WEB_DAV_STATUSES.has(status)
+    this.transient = (status !== null && RETRIABLE_WEB_DAV_STATUSES.has(status)) || isTimeoutError(originalError)
   }
 }
 
@@ -186,6 +216,10 @@ export function describeWebDavUserFacingError(error: unknown, action = WEB_DAV_D
     return formatWebDavHostRequiredMessage(prefix)
   }
 
+  if (/Data sync is already running|已有数据同步正在进行|同步正在进行/i.test(message)) {
+    return formatWebDavAlreadyRunningMessage(prefix)
+  }
+
   if (/Invalid URL|Only absolute URLs|URL/i.test(message)) {
     return formatWebDavInvalidUrlMessage(prefix)
   }
@@ -200,10 +234,11 @@ export async function runWebDavOperation<T>(
 ): Promise<T> {
   const maxAttempts = Math.max(1, options.maxAttempts ?? 3)
   const initialDelayMs = Math.max(0, options.initialDelayMs ?? 500)
+  const timeoutMs = Math.max(0, options.timeoutMs ?? DEFAULT_WEB_DAV_OPERATION_TIMEOUT_MS)
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      return await fn()
+      return await withTimeout(fn(), operation, timeoutMs)
     } catch (error) {
       const wrapped = new WebDavOperationError(operation, error)
       if (!wrapped.transient || attempt >= maxAttempts) {

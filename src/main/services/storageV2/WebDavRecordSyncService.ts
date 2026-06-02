@@ -12,6 +12,7 @@ import { storageV2DataRootService } from './DataRootService'
 import { storageV2Database } from './StorageV2Database'
 
 const logger = loggerService.withContext('StorageV2WebDavRecordSyncService')
+const LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS = 10 * 60 * 1000
 
 type StorageV2SyncTable = {
   entityType: string
@@ -831,7 +832,7 @@ export class StorageV2WebDavRecordSyncService {
           overwrite: true,
           contentLength: stat.size
         }),
-      { logger }
+      { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
     )
 
     manifest.blobs[blobId] = {
@@ -871,7 +872,7 @@ export class StorageV2WebDavRecordSyncService {
     const contents = await runWebDavOperation(
       `downloading Storage v2 blob ${remotePath}`,
       () => client.getFileContents(remotePath, { format: 'binary' }),
-      { logger }
+      { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
     )
     await fsp.mkdir(path.dirname(localPath), { recursive: true })
     await fsp.writeFile(localPath, bufferFromRemoteContents(contents))

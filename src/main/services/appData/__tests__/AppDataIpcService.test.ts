@@ -90,6 +90,7 @@ vi.mock('../AppDataSyncService', () => ({
 }))
 
 import { registerAppDataIpcHandlers } from '../AppDataIpcService'
+import { appDataSyncService } from '../AppDataSyncService'
 
 function getHandler(channel: IpcChannel) {
   const handler = mocks.handlers.get(channel)
@@ -595,5 +596,20 @@ describe('AppDataIpcService', () => {
       expect.objectContaining({ id: 'html-shortcut', filePath: '/tmp/artifact.html' }),
       { storageV2Mirrored: true }
     )
+  })
+
+  it('does not record a failed sync summary when another sync is already running', async () => {
+    vi.mocked(appDataSyncService.syncNow).mockRejectedValueOnce(new Error('Data sync is already running'))
+
+    await expect(
+      getHandler(IpcChannel.DataSync_SyncNow)(null, {
+        webdavHost: 'https://dav.example.test',
+        webdavUser: 'user',
+        webdavPass: 'pass',
+        webdavPath: '/sync'
+      })
+    ).rejects.toThrow('已有数据同步正在进行')
+
+    expect(appDataSyncService.recordSyncFailure).not.toHaveBeenCalled()
   })
 })
