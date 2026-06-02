@@ -6,6 +6,9 @@ import DataSyncSettings from '../DataSyncSettings'
 const mocks = vi.hoisted(() => ({
   dispatch: vi.fn(),
   getStatus: vi.fn(),
+  checkWriteAccess: vi.fn(),
+  listRemoteDirectories: vi.fn(),
+  restoreLatestSnapshot: vi.fn(),
   startDataSyncAutoSync: vi.fn(),
   stopDataSyncAutoSync: vi.fn(),
   syncAppDataNow: vi.fn(),
@@ -135,15 +138,18 @@ describe('DataSyncSettings', () => {
     mocks.runtimeState.syncing = false
     mocks.runtimeState.syncStartedAt = null
     mocks.getStatus.mockResolvedValue(idleStatus())
+    mocks.checkWriteAccess.mockResolvedValue({ ok: true, basePath: '/cherry-studio-pi/sync/v1' })
+    mocks.listRemoteDirectories.mockResolvedValue({ path: '/', parentPath: null, directories: [] })
+    mocks.restoreLatestSnapshot.mockResolvedValue(undefined)
     mocks.syncAppDataNow.mockResolvedValue(null)
     Object.defineProperty(window, 'api', {
       configurable: true,
       value: {
         dataSync: {
-          checkWriteAccess: vi.fn(),
+          checkWriteAccess: mocks.checkWriteAccess,
           getStatus: mocks.getStatus,
-          listRemoteDirectories: vi.fn(),
-          restoreLatestSnapshot: vi.fn(),
+          listRemoteDirectories: mocks.listRemoteDirectories,
+          restoreLatestSnapshot: mocks.restoreLatestSnapshot,
           syncNow: vi.fn()
         }
       }
@@ -151,6 +157,26 @@ describe('DataSyncSettings', () => {
     Object.defineProperty(window, 'toast', {
       configurable: true,
       value: mocks.toast
+    })
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn()
+      }))
+    })
+    const getComputedStyleWithoutPseudo = window.getComputedStyle.bind(window)
+    Object.defineProperty(window, 'getComputedStyle', {
+      configurable: true,
+      writable: true,
+      value: (element: Element) => getComputedStyleWithoutPseudo(element)
     })
   })
 
@@ -180,8 +206,22 @@ describe('DataSyncSettings', () => {
 
     await waitFor(() => expect(mocks.syncAppDataNow).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(mocks.toast.info).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_running'))
+    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
     expect(mocks.toast.success).not.toHaveBeenCalled()
     expect(mocks.toast.error).not.toHaveBeenCalled()
+  })
+
+  it('keeps the sync button busy for a null sync summary only while refreshed status is still syncing', async () => {
+    mocks.getStatus.mockResolvedValueOnce(idleStatus()).mockResolvedValueOnce(runningStatus())
+
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(syncButton())
+
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(syncButton()).toHaveClass('ant-btn-loading'))
+    expect(mocks.toast.success).not.toHaveBeenCalled()
   })
 
   it('shows an in-flight message without reporting an error when the main process is already syncing', async () => {
@@ -193,6 +233,7 @@ describe('DataSyncSettings', () => {
     fireEvent.click(syncButton())
 
     await waitFor(() => expect(mocks.toast.info).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_running'))
+    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
     expect(mocks.toast.success).not.toHaveBeenCalled()
     expect(mocks.toast.error).not.toHaveBeenCalled()
     expect(mocks.reportErrorToSystemAgent).not.toHaveBeenCalled()
@@ -234,5 +275,51 @@ describe('DataSyncSettings', () => {
     await waitFor(() => expect(mocks.toast.success).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_success'))
     expect(mocks.toast.info).not.toHaveBeenCalledWith('settings.data.data_sync.toast.sync_running')
     expect(mocks.toast.error).not.toHaveBeenCalled()
+  })
+
+  it('opens the remote directory browser from root so the default sync folder does not have to exist', async () => {
+    mocks.listRemoteDirectories.mockResolvedValueOnce({
+      path: '/',
+      parentPath: null,
+      directories: [{ name: 'dav', path: '/dav', modifiedAt: null }]
+    })
+
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(screen.getByText('settings.data.data_sync.remote_path_browse'))
+
+    await waitFor(() =>
+      expect(mocks.listRemoteDirectories).toHaveBeenCalledWith(
+        expect.objectContaining({
+          webdavHost: 'https://dav.example.test',
+          webdavPath: '/cherry-studio-pi'
+        }),
+        '/'
+      )
+    )
+    expect(await screen.findByText('/dav')).toBeTruthy()
+  })
+
+  it('shows directory browser failures without leaving the directory loader stuck', async () => {
+    mocks.listRemoteDirectories.mockRejectedValueOnce(
+      new Error('同步数据失败：当前账号没有访问这个 WebDAV 目录的权限。')
+    )
+
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(screen.getByText('settings.data.data_sync.remote_path_browse'))
+
+    expect(await screen.findByText('settings.data.data_sync.remote_browser.error_title')).toBeTruthy()
+    expect(screen.getByText('同步数据失败：当前账号没有访问这个 WebDAV 目录的权限。')).toBeTruthy()
+    expect(mocks.reportErrorToSystemAgent).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        domain: 'dataSync',
+        source: 'settings.data_sync.remote_directory_browser'
+      }),
+      { showToast: true }
+    )
   })
 })

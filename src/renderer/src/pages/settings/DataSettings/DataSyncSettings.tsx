@@ -222,11 +222,16 @@ const DataSyncSettings: FC = () => {
       const nextStatus = await window.api.dataSync.getStatus()
       setStatus(nextStatus)
       setSyncing(Boolean(nextStatus.syncing) || getDataSyncRuntimeState().syncing)
+      return nextStatus
     } finally {
       if (showLoading) {
         setStatusRefreshing(false)
       }
     }
+  }
+
+  const isSyncStillRunning = (nextStatus?: SyncStatus | null) => {
+    return Boolean(nextStatus?.syncing) || getDataSyncRuntimeState().syncing
   }
 
   useEffect(() => {
@@ -262,8 +267,8 @@ const DataSyncSettings: FC = () => {
     try {
       const summary = await syncAppDataNow(config)
       if (!summary) {
-        await refreshStatus()
-        keepSyncing = true
+        const nextStatus = await refreshStatus().catch(() => null)
+        keepSyncing = isSyncStillRunning(nextStatus)
         window.toast.info(t('settings.data.data_sync.toast.sync_running'))
         return
       }
@@ -278,10 +283,10 @@ const DataSyncSettings: FC = () => {
       await refreshStatus()
       window.toast.success(t('settings.data.data_sync.toast.sync_success'))
     } catch (error) {
-      await refreshStatus().catch(() => undefined)
+      const nextStatus = await refreshStatus().catch(() => null)
       if (isDataSyncAlreadyRunningError(error)) {
-        keepSyncing = true
-        setSyncing(true)
+        keepSyncing = isSyncStillRunning(nextStatus)
+        setSyncing(keepSyncing)
         window.toast.info(t('settings.data.data_sync.toast.sync_running'))
         return
       }
