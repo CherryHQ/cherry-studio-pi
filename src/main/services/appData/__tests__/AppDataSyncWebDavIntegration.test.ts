@@ -5,7 +5,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
 
-import type { InValue } from '@libsql/client'
+import { createClient, type InValue } from '@libsql/client'
 import { app } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -237,6 +237,8 @@ async function switchInstance(instance: TestInstance, homePath: string) {
   await AppDataDatabase.close()
   storageV2Database.close()
   process.env.CHERRY_STUDIO_STORAGE_V2_ROOT = instance.dataRoot
+  ;(app as unknown as { getAppPath?: ReturnType<typeof vi.fn> }).getAppPath ??= vi.fn()
+  vi.mocked(app.getAppPath).mockReturnValue(process.cwd())
   vi.mocked(app.getPath).mockImplementation((key: string) => {
     switch (key) {
       case 'userData':
@@ -872,6 +874,58 @@ async function readComprehensiveStorageV2State(instance: TestInstance, fixture: 
   }
 }
 
+async function readComprehensiveLegacyRuntimeState(instance: TestInstance) {
+  const client = createClient({
+    url: `file:${path.join(instance.dataRoot, 'agents.db')}`,
+    intMode: 'number'
+  })
+  const count = async (table: string) => {
+    const result = await client.execute(`SELECT COUNT(*) AS count FROM ${table}`)
+    return Number(result.rows[0]?.count ?? 0)
+  }
+  const selectOne = async <T extends Record<string, unknown>>(sql: string, args: InValue[] = []) => {
+    const result = await client.execute({ sql, args })
+    return (result.rows[0] ?? null) as unknown as T | null
+  }
+
+  try {
+    const filePath = path.join(instance.dataRoot, 'Files', 'file-sync-full-doc.txt')
+    const fileContents = await fsp.readFile(filePath)
+
+    return {
+      counts: {
+        agents: await count('agents'),
+        sessions: await count('sessions'),
+        skills: await count('skills'),
+        agent_skills: await count('agent_skills'),
+        scheduled_tasks: await count('scheduled_tasks'),
+        task_run_logs: await count('task_run_logs'),
+        channels: await count('channels'),
+        channel_task_subscriptions: await count('channel_task_subscriptions'),
+        session_messages: await count('session_messages')
+      },
+      agent: await selectOne<{ name: string; configuration: string; allowed_tools: string }>(
+        'SELECT name, configuration, allowed_tools FROM agents WHERE id = ?',
+        ['agent-sync-full']
+      ),
+      session: await selectOne<{ name: string; configuration: string }>(
+        'SELECT name, configuration FROM sessions WHERE id = ?',
+        ['agent-session-sync-full']
+      ),
+      sessionMessages: (
+        await client.execute('SELECT role, content FROM session_messages ORDER BY created_at, id')
+      ).rows.map((row) => ({
+        role: String(row.role),
+        content: String(row.content)
+      })),
+      fileHash: hashBuffer(fileContents),
+      filePayload: fileContents.toString('utf8')
+    }
+  } finally {
+    client.close()
+  }
+}
+
 function makeConfig(server: WebDavTestServer, webdavPath = '/cherry-studio-pi-integration') {
   return {
     webdavHost: server.url,
@@ -1070,6 +1124,7 @@ describe('AppDataSyncService local WebDAV integration', () => {
     await switchInstance(instanceB, homePath)
     const secondSummary = await new AppDataSyncService(backupManager as never).syncNow(config)
     const deviceBState = await readComprehensiveStorageV2State(instanceB, fixture)
+    const deviceBLegacyRuntimeState = await readComprehensiveLegacyRuntimeState(instanceB)
 
     expect(secondSummary.storageDownloaded).toBe(expectedRecordCount)
     expect(secondSummary.blobDownloaded).toBe(1)
@@ -1157,6 +1212,37 @@ describe('AppDataSyncService local WebDAV integration', () => {
     })
     expect(deviceBState.blobHash).toBe(fixture.blobChecksum)
     expect(deviceBState.blobPayload).toBe(fixture.blobPayload)
+    expect(deviceBLegacyRuntimeState.counts).toEqual({
+      agents: 1,
+      sessions: 1,
+      skills: 1,
+      agent_skills: 1,
+      scheduled_tasks: 1,
+      task_run_logs: 1,
+      channels: 0,
+      channel_task_subscriptions: 0,
+      session_messages: 2
+    })
+    expect(deviceBLegacyRuntimeState.agent).toMatchObject({ name: '同步测试 Agent' })
+    expect(JSON.parse(deviceBLegacyRuntimeState.agent!.configuration)).toMatchObject({
+      permissionMode: 'soul',
+      maxToolCalls: 12
+    })
+    expect(JSON.parse(deviceBLegacyRuntimeState.agent!.allowed_tools)).toContain('settings.write')
+    expect(deviceBLegacyRuntimeState.session).toMatchObject({ name: '同步测试任务会话' })
+    expect(JSON.parse(deviceBLegacyRuntimeState.session!.configuration)).toMatchObject({
+      modelId: 'model-sync-full-chat',
+      permissionMode: 'soul'
+    })
+    expect(deviceBLegacyRuntimeState.sessionMessages.map((message) => message.role)).toEqual(['user', 'assistant'])
+    expect(deviceBLegacyRuntimeState.sessionMessages.map((message) => message.content).join('\n')).toContain(
+      '请验证同步 fixture 是否完整。'
+    )
+    expect(deviceBLegacyRuntimeState.sessionMessages.map((message) => message.content).join('\n')).toContain(
+      '已检查模型、助手、Agent、知识库和设置。'
+    )
+    expect(deviceBLegacyRuntimeState.fileHash).toBe(fixture.blobChecksum)
+    expect(deviceBLegacyRuntimeState.filePayload).toBe(fixture.blobPayload)
   })
 
   it('propagates later updates and tombstones between two devices', async () => {

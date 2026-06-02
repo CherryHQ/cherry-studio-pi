@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import * as fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import https from 'node:https'
@@ -5,8 +6,12 @@ import path from 'node:path'
 
 import { loggerService } from '@logger'
 import BackupManager from '@main/services/BackupManager'
+import { storageV2AgentLegacyProjectionService } from '@main/services/storageV2/AgentLegacyProjectionService'
 import { storageV2AppDataKvMirrorService } from '@main/services/storageV2/AppDataKvMirrorService'
+import { storageV2AppDataLegacyProjectionService } from '@main/services/storageV2/AppDataLegacyProjectionService'
 import { storageV2AppDataRuntimeRecoveryService } from '@main/services/storageV2/AppDataRuntimeRecoveryService'
+import { storageV2DataRootService } from '@main/services/storageV2/DataRootService'
+import { storageV2FileLegacyProjectionService } from '@main/services/storageV2/FileLegacyProjectionService'
 import {
   type StorageV2WebDavRecordSyncManifest,
   storageV2WebDavRecordSyncService,
@@ -116,6 +121,26 @@ const EMPTY_SUMMARY: DataSyncSummary = {
 const SNAPSHOT_UPLOAD_INTERVAL_MS = 24 * 60 * 60 * 1000
 const DATA_SYNC_REMOTE_ROOT = '/cherry-studio-pi'
 const DATA_SYNC_SUFFIX = '/sync/v1'
+const STORAGE_V2_RUNTIME_PROJECTION_HASH_KEY = 'storage-v2-runtime-projection-hash'
+
+const AGENT_RUNTIME_ENTITY_TYPES = new Set([
+  'agent',
+  'agent_version',
+  'agent_skill',
+  'agent_session',
+  'channel',
+  'channel_task_subscription',
+  'conversation',
+  'message',
+  'message_block',
+  'scheduled_task',
+  'skill',
+  'sync_tombstone',
+  'task_run_log'
+])
+
+const FILE_RUNTIME_ENTITY_TYPES = new Set(['blob', 'file'])
+const APP_DATA_RUNTIME_ENTITY_TYPES = new Set(['kv_record'])
 
 function recordId(scope: string, key: string) {
   return `${scope}:${key}`
@@ -216,6 +241,50 @@ function errorMessage(error: unknown) {
 
 function isIgnorableCreateDirectoryError(error: unknown) {
   return error instanceof WebDavOperationError && (error.status === 405 || error.status === 409)
+}
+
+function storageV2ManifestRecordEntries(manifest?: StorageV2WebDavRecordSyncManifest | null) {
+  return Object.entries(manifest?.records ?? {}).sort(([left], [right]) => left.localeCompare(right))
+}
+
+function storageV2ManifestBlobEntries(manifest?: StorageV2WebDavRecordSyncManifest | null) {
+  return Object.entries(manifest?.blobs ?? {}).sort(([left], [right]) => left.localeCompare(right))
+}
+
+function hasStorageV2RemoteData(manifest?: StorageV2WebDavRecordSyncManifest | null) {
+  return storageV2ManifestRecordEntries(manifest).length > 0 || storageV2ManifestBlobEntries(manifest).length > 0
+}
+
+function storageV2ManifestFingerprint(manifest?: StorageV2WebDavRecordSyncManifest | null) {
+  if (!hasStorageV2RemoteData(manifest)) return null
+
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        records: storageV2ManifestRecordEntries(manifest).map(([id, meta]) => [
+          id,
+          meta.entityType,
+          meta.valueHash,
+          meta.updatedAt,
+          meta.deletedAt ?? null,
+          meta.version,
+          meta.path
+        ]),
+        blobs: storageV2ManifestBlobEntries(manifest).map(([id, meta]) => [
+          id,
+          meta.checksum,
+          meta.byteSize,
+          meta.storagePath,
+          meta.path,
+          meta.updatedAt
+        ])
+      })
+    )
+    .digest('hex')
+}
+
+function getStorageV2ManifestEntityTypes(manifest?: StorageV2WebDavRecordSyncManifest | null) {
+  return new Set(storageV2ManifestRecordEntries(manifest).map(([, meta]) => meta.entityType))
 }
 
 export class AppDataSyncService {
@@ -472,6 +541,79 @@ export class AppDataSyncService {
     return legacyValue ?? storageV2AppDataKvMirrorService.getSyncState<T>(id)
   }
 
+  private async projectStorageV2RuntimeAfterSync(
+    db: AppDataDatabase,
+    manifest: StorageV2WebDavRecordSyncManifest | null | undefined,
+    summary: DataSyncSummary,
+    options: {
+      remoteHadStorageDataBeforeSync: boolean
+    }
+  ): Promise<AppDataDatabase> {
+    const fingerprint = storageV2ManifestFingerprint(manifest)
+    if (!fingerprint) return db
+
+    const shouldProject =
+      options.remoteHadStorageDataBeforeSync ||
+      summary.storageDownloaded > 0 ||
+      summary.storageDeleted > 0 ||
+      summary.storageConflicts > 0 ||
+      summary.blobDownloaded > 0
+    if (!shouldProject) return db
+
+    const lastProjectedFingerprint = await this.getSyncState<string>(db, STORAGE_V2_RUNTIME_PROJECTION_HASH_KEY)
+    if (lastProjectedFingerprint === fingerprint) return db
+
+    const entityTypes = getStorageV2ManifestEntityTypes(manifest)
+    const storageRecordsChanged =
+      summary.storageDownloaded > 0 ||
+      summary.storageDeleted > 0 ||
+      summary.storageConflicts > 0 ||
+      summary.blobDownloaded > 0
+    const canProjectAppDataStrongly = storageRecordsChanged && summary.skipped === 0
+    const archiveRoot = path.join(
+      storageV2DataRootService.ensureDataRoot().dataRoot,
+      'legacy',
+      `data-sync-runtime-projection-${Date.now()}`
+    )
+    let projected = false
+
+    if ([...entityTypes].some((entityType) => AGENT_RUNTIME_ENTITY_TYPES.has(entityType))) {
+      await storageV2AgentLegacyProjectionService.projectToLegacyRuntime({ archiveRoot })
+      projected = true
+    }
+
+    if ([...entityTypes].some((entityType) => FILE_RUNTIME_ENTITY_TYPES.has(entityType))) {
+      await storageV2FileLegacyProjectionService.projectToLegacyRuntime({ archiveRoot })
+      projected = true
+    }
+
+    if ([...entityTypes].some((entityType) => APP_DATA_RUNTIME_ENTITY_TYPES.has(entityType))) {
+      if (canProjectAppDataStrongly) {
+        await storageV2AppDataLegacyProjectionService.projectToLegacyRuntime({ archiveRoot })
+        db = await getAppDataDatabase()
+        projected = true
+      } else if (
+        await storageV2AppDataRuntimeRecoveryService.projectIfLegacyAppRecordListEmpty(
+          undefined,
+          'data-sync-runtime-projection'
+        )
+      ) {
+        db = await getAppDataDatabase()
+        projected = true
+      }
+    }
+
+    if (!projected) return db
+
+    await this.setSyncState(db, STORAGE_V2_RUNTIME_PROJECTION_HASH_KEY, fingerprint)
+    logger.info('Projected synced Storage v2 records to runtime caches', {
+      entityTypes: [...entityTypes],
+      fingerprint,
+      remotePath: summary.remotePath
+    })
+    return db
+  }
+
   private async createConflict(
     db: AppDataDatabase,
     input: {
@@ -623,6 +765,7 @@ export class AppDataSyncService {
     const manifest = this.normalizeManifest(
       await this.readJson<RemoteManifest>(client, manifestPath, { throwOnInvalidJson: true })
     )
+    const remoteHadStorageDataBeforeSync = hasStorageV2RemoteData(manifest.storageV2)
     const allIds = new Set([...localById.keys(), ...Object.keys(manifest.records)])
 
     for (const id of allIds) {
@@ -721,6 +864,9 @@ export class AppDataSyncService {
     const storageSync = await storageV2WebDavRecordSyncService.sync(client, basePath, manifest.storageV2)
     manifest.storageV2 = storageSync.manifest
     this.addStorageV2Summary(summary, storageSync.summary)
+    db = await this.projectStorageV2RuntimeAfterSync(db, manifest.storageV2, summary, {
+      remoteHadStorageDataBeforeSync
+    })
 
     manifest.updatedAt = summary.lastSyncAt
     await this.writeJson(client, manifestPath, manifest)

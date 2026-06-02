@@ -25,6 +25,14 @@ const mocks = vi.hoisted(() => ({
   recovery: {
     projectIfLegacyAppRecordListEmpty: vi.fn()
   },
+  runtimeProjection: {
+    projectAgents: vi.fn(),
+    projectFiles: vi.fn(),
+    projectAppData: vi.fn()
+  },
+  dataRoot: {
+    ensureDataRoot: vi.fn()
+  },
   storageRecordSync: {
     sync: vi.fn()
   },
@@ -69,6 +77,28 @@ vi.mock('@main/services/storageV2/AppDataKvMirrorService', () => ({
 
 vi.mock('@main/services/storageV2/AppDataRuntimeRecoveryService', () => ({
   storageV2AppDataRuntimeRecoveryService: mocks.recovery
+}))
+
+vi.mock('@main/services/storageV2/AgentLegacyProjectionService', () => ({
+  storageV2AgentLegacyProjectionService: {
+    projectToLegacyRuntime: mocks.runtimeProjection.projectAgents
+  }
+}))
+
+vi.mock('@main/services/storageV2/FileLegacyProjectionService', () => ({
+  storageV2FileLegacyProjectionService: {
+    projectToLegacyRuntime: mocks.runtimeProjection.projectFiles
+  }
+}))
+
+vi.mock('@main/services/storageV2/AppDataLegacyProjectionService', () => ({
+  storageV2AppDataLegacyProjectionService: {
+    projectToLegacyRuntime: mocks.runtimeProjection.projectAppData
+  }
+}))
+
+vi.mock('@main/services/storageV2/DataRootService', () => ({
+  storageV2DataRootService: mocks.dataRoot
 }))
 
 vi.mock('@main/services/storageV2/WebDavRecordSyncService', () => ({
@@ -129,6 +159,10 @@ describe('AppDataSyncService', () => {
     mocks.storageV2.listSyncConflicts.mockResolvedValue([])
     mocks.storageV2.listRecords.mockResolvedValue([])
     mocks.recovery.projectIfLegacyAppRecordListEmpty.mockResolvedValue(false)
+    mocks.runtimeProjection.projectAgents.mockResolvedValue({ projectedAgentCount: 0 })
+    mocks.runtimeProjection.projectFiles.mockResolvedValue({ projectedFileCount: 0 })
+    mocks.runtimeProjection.projectAppData.mockResolvedValue({ projectedRecordCount: 0 })
+    mocks.dataRoot.ensureDataRoot.mockReturnValue({ dataRoot: '/tmp/cherry-studio-pi-data-root' })
     mocks.storageRecordSync.sync.mockResolvedValue({
       manifest: { version: 1, records: {}, blobs: {} },
       summary: {
@@ -408,6 +442,141 @@ describe('AppDataSyncService', () => {
       expect.stringContaining('/records/settings/theme.json'),
       expect.stringContaining('"local-hash"'),
       { overwrite: true }
+    )
+  })
+
+  it('does not project runtime caches for a first-time Storage v2 upload to an empty remote', async () => {
+    const uploadedStorageManifest = {
+      version: 1,
+      records: {
+        'agent:agent-1': {
+          entityType: 'agent',
+          table: 'agents',
+          idValues: ['agent-1'],
+          valueHash: 'agent-hash',
+          updatedAt: 1760000000000,
+          deletedAt: null,
+          version: 1,
+          path: 'storage-v2/records/agent/agent-1.json'
+        }
+      },
+      blobs: {}
+    }
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
+      if (filePath.endsWith('/manifest.json')) {
+        return JSON.stringify({ version: 1, updatedAt: 0, records: {} })
+      }
+      throw new Error(`Unexpected WebDAV read: ${filePath}`)
+    })
+    mocks.storageRecordSync.sync.mockResolvedValueOnce({
+      manifest: uploadedStorageManifest,
+      summary: {
+        storageUploaded: 1,
+        storageDownloaded: 0,
+        storageDeleted: 0,
+        storageConflicts: 0,
+        storageSkipped: 0,
+        blobUploaded: 0,
+        blobDownloaded: 0
+      }
+    })
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.storageUploaded).toBe(1)
+    expect(mocks.runtimeProjection.projectAgents).not.toHaveBeenCalled()
+    expect(mocks.runtimeProjection.projectFiles).not.toHaveBeenCalled()
+    expect(mocks.runtimeProjection.projectAppData).not.toHaveBeenCalled()
+  })
+
+  it('projects previously synced Storage v2 remote records even when the current record sync only skips them', async () => {
+    const existingStorageManifest = {
+      version: 1,
+      records: {
+        'agent:agent-1': {
+          entityType: 'agent',
+          table: 'agents',
+          idValues: ['agent-1'],
+          valueHash: 'agent-hash',
+          updatedAt: 1760000000000,
+          deletedAt: null,
+          version: 1,
+          path: 'storage-v2/records/agent/agent-1.json'
+        },
+        'file:file-1': {
+          entityType: 'file',
+          table: 'files',
+          idValues: ['file-1'],
+          valueHash: 'file-hash',
+          updatedAt: 1760000000001,
+          deletedAt: null,
+          version: 1,
+          path: 'storage-v2/records/file/file-1.json'
+        },
+        'kv_record:settings:theme': {
+          entityType: 'kv_record',
+          table: 'kv_records',
+          idValues: ['settings', 'theme'],
+          valueHash: 'kv-hash',
+          updatedAt: 1760000000002,
+          deletedAt: null,
+          version: 1,
+          path: 'storage-v2/records/kv_record/theme.json'
+        }
+      },
+      blobs: {
+        'blob-1': {
+          id: 'blob-1',
+          checksum: 'blob-checksum',
+          byteSize: 128,
+          storagePath: 'blobs/blob-1.bin',
+          path: 'storage-v2/blobs/blob-1',
+          updatedAt: 1760000000001
+        }
+      }
+    }
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
+      if (filePath.endsWith('/manifest.json')) {
+        return JSON.stringify({
+          version: 1,
+          updatedAt: 1760000000000,
+          records: {},
+          storageV2: existingStorageManifest
+        })
+      }
+      throw new Error(`Unexpected WebDAV read: ${filePath}`)
+    })
+    mocks.storageRecordSync.sync.mockResolvedValueOnce({
+      manifest: existingStorageManifest,
+      summary: {
+        storageUploaded: 0,
+        storageDownloaded: 0,
+        storageDeleted: 0,
+        storageConflicts: 0,
+        storageSkipped: 3,
+        blobUploaded: 0,
+        blobDownloaded: 0
+      }
+    })
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.storageDownloaded).toBe(0)
+    expect(summary.storageSkipped).toBe(3)
+    expect(mocks.runtimeProjection.projectAgents).toHaveBeenCalledWith({
+      archiveRoot: expect.stringContaining('/tmp/cherry-studio-pi-data-root/legacy/data-sync-runtime-projection-')
+    })
+    expect(mocks.runtimeProjection.projectFiles).toHaveBeenCalledWith({
+      archiveRoot: expect.stringContaining('/tmp/cherry-studio-pi-data-root/legacy/data-sync-runtime-projection-')
+    })
+    expect(mocks.runtimeProjection.projectAppData).not.toHaveBeenCalled()
+    expect(mocks.recovery.projectIfLegacyAppRecordListEmpty).toHaveBeenCalledWith(
+      undefined,
+      'data-sync-runtime-projection'
+    )
+    expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith(
+      'storage-v2-runtime-projection-hash',
+      expect.any(String)
     )
   })
 
