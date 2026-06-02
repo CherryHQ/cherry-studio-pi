@@ -18,6 +18,7 @@ import type {
 
 const logger = loggerService.withContext('StorageV2Database')
 const DB_SCHEMA_VERSION = '2'
+const CORRUPT_DATABASE_ARCHIVE_DIR = 'corrupt'
 
 type ColumnMigration = {
   table: string
@@ -45,6 +46,45 @@ function quoteIdentifier(value: string) {
 
 function timestampForFilename() {
   return new Date().toISOString().replace(/[:.]/g, '-')
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function getErrorCode(error: unknown): string | undefined {
+  const candidate = error as { code?: unknown; cause?: { code?: unknown } } | null | undefined
+  if (typeof candidate?.code === 'string') return candidate.code
+  if (typeof candidate?.cause?.code === 'string') return candidate.cause.code
+  return undefined
+}
+
+function isSqliteDatabaseCorruption(error: unknown) {
+  const code = getErrorCode(error)
+  const message = getErrorMessage(error).toLowerCase()
+
+  return (
+    code === 'SQLITE_CORRUPT' ||
+    code === 'SQLITE_NOTADB' ||
+    message.includes('quick_check failed') ||
+    message.includes('database disk image') ||
+    message.includes('database disk image is malformed') ||
+    message.includes('file is not a database')
+  )
+}
+
+function archiveCorruptDatabaseFiles(dbPath: string) {
+  const existingPaths = [dbPath, `${dbPath}-wal`, `${dbPath}-shm`].filter((candidate) => fs.existsSync(candidate))
+  if (existingPaths.length === 0) return null
+
+  const archiveDir = path.join(path.dirname(dbPath), CORRUPT_DATABASE_ARCHIVE_DIR, `${timestampForFilename()}-main-db`)
+  fs.mkdirSync(archiveDir, { recursive: true })
+
+  for (const sourcePath of existingPaths) {
+    fs.renameSync(sourcePath, path.join(archiveDir, path.basename(sourcePath)))
+  }
+
+  return archiveDir
 }
 
 const INTEGRITY_ISSUE_CHECKS: Array<{ id: string; label: string; sql: string }> = [
@@ -375,13 +415,17 @@ export class StorageV2Database {
     const dbPath = path.join(rootInfo.dataRoot, 'main.db')
     fs.mkdirSync(path.dirname(dbPath), { recursive: true })
 
-    this.client = createClient({
-      url: `file:${dbPath}`,
-      intMode: 'number'
-    })
-    this.dbPath = dbPath
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        this.client = createClient({
+          url: `file:${dbPath}`,
+          intMode: 'number'
+        })
+        this.dbPath = dbPath
 
-    await this.client.executeMultiple(`
+        await this.assertQuickCheckOk(dbPath)
+
+        await this.client.executeMultiple(`
       PRAGMA journal_mode = WAL;
       PRAGMA foreign_keys = ON;
       PRAGMA busy_timeout = 5000;
@@ -799,19 +843,48 @@ export class StorageV2Database {
       CREATE INDEX IF NOT EXISTS idx_migration_runs_created_at ON migration_runs(created_at);
     `)
 
-    await applyColumnMigrations(this.client)
+        await applyColumnMigrations(this.client)
+        await this.assertQuickCheckOk(dbPath)
 
-    const now = new Date().toISOString()
-    await this.client.execute({
-      sql: `
+        const now = new Date().toISOString()
+        await this.client.execute({
+          sql: `
         INSERT INTO storage_meta (key, value, updated_at)
         VALUES ('schema_version', ?, ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
       `,
-      args: [DB_SCHEMA_VERSION, now]
-    })
+          args: [DB_SCHEMA_VERSION, now]
+        })
 
-    logger.info('Storage v2 database initialized', { dbPath })
+        logger.info('Storage v2 database initialized', { dbPath })
+        return
+      } catch (error) {
+        const shouldRecover = attempt === 0 && isSqliteDatabaseCorruption(error)
+        this.close()
+
+        if (!shouldRecover) {
+          throw error
+        }
+
+        const archivePath = archiveCorruptDatabaseFiles(dbPath)
+        logger.warn('Storage v2 database was corrupt; archived and recreating', {
+          dbPath,
+          archivePath,
+          error: getErrorMessage(error),
+          code: getErrorCode(error)
+        })
+      }
+    }
+
+    throw new Error(`Storage v2 database initialization failed for ${dbPath}`)
+  }
+
+  private async assertQuickCheckOk(dbPath: string) {
+    const result = await this.client!.execute('PRAGMA quick_check')
+    const quickCheck = getSinglePragmaValue(result)
+    if (quickCheck.toLowerCase() !== 'ok') {
+      throw new Error(`Storage v2 database quick_check failed for ${dbPath}: ${quickCheck}`)
+    }
   }
 
   async healthCheck(): Promise<StorageV2HealthCheck> {
