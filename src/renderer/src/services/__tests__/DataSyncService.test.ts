@@ -226,4 +226,19 @@ describe('DataSyncService', () => {
     pendingSync.resolve(successSummary)
     await expect(firstSync).resolves.toEqual(successSummary)
   })
+
+  it('clears runtime sync state and notifies subscribers when a manual sync fails', async () => {
+    const states: boolean[] = []
+    const unsubscribe = subscribeDataSyncRuntimeState((state) => {
+      states.push(state.syncing)
+    })
+    mocks.syncNow.mockRejectedValueOnce(new Error('Invalid response: 503 Service Unavailable'))
+
+    await expect(syncAppDataNow()).rejects.toThrow('503 Service Unavailable')
+
+    expect(getDataSyncRuntimeState().syncing).toBe(false)
+    expect(states).toContain(true)
+    expect(states.at(-1)).toBe(false)
+    unsubscribe()
+  })
 })

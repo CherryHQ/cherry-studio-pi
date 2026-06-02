@@ -75,31 +75,54 @@ function syncButton() {
   return button!
 }
 
-function runningStatus() {
+function successSummary() {
+  return {
+    status: 'success',
+    error: null,
+    uploaded: 1,
+    downloaded: 2,
+    deleted: 0,
+    conflicts: 0,
+    skipped: 3,
+    storageUploaded: 4,
+    storageDownloaded: 5,
+    storageDeleted: 0,
+    storageConflicts: 0,
+    storageSkipped: 6,
+    blobUploaded: 7,
+    blobDownloaded: 8,
+    snapshotUploaded: false,
+    snapshotFileName: null,
+    snapshotBytes: 0,
+    remotePath: '/cherry-studio-pi/sync/v1',
+    lastSyncAt: 1780058147577
+  }
+}
+
+function idleStatus() {
   return {
     deviceId: 'device-1',
     lastSummary: {
-      status: 'success',
-      error: null,
+      ...successSummary(),
       uploaded: 0,
       downloaded: 0,
-      deleted: 0,
-      conflicts: 0,
       skipped: 0,
       storageUploaded: 0,
       storageDownloaded: 0,
-      storageDeleted: 0,
-      storageConflicts: 0,
       storageSkipped: 0,
       blobUploaded: 0,
       blobDownloaded: 0,
-      snapshotUploaded: false,
-      snapshotFileName: null,
-      snapshotBytes: 0,
-      remotePath: '/cherry-studio-pi/sync/v1',
       lastSyncAt: 0
     },
     conflicts: [],
+    syncing: false,
+    syncStartedAt: null
+  }
+}
+
+function runningStatus() {
+  return {
+    ...idleStatus(),
     syncing: true,
     syncStartedAt: 1780058147577
   }
@@ -111,7 +134,7 @@ describe('DataSyncSettings', () => {
     mocks.runtimeListeners.clear()
     mocks.runtimeState.syncing = false
     mocks.runtimeState.syncStartedAt = null
-    mocks.getStatus.mockResolvedValue(runningStatus())
+    mocks.getStatus.mockResolvedValue(idleStatus())
     mocks.syncAppDataNow.mockResolvedValue(null)
     Object.defineProperty(window, 'api', {
       configurable: true,
@@ -132,6 +155,8 @@ describe('DataSyncSettings', () => {
   })
 
   it('keeps the sync button busy after remount and does not report success for duplicate clicks', async () => {
+    mocks.getStatus.mockResolvedValue(runningStatus())
+
     const firstRender = render(<DataSyncSettings />)
     await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
     firstRender.unmount()
@@ -145,5 +170,69 @@ describe('DataSyncSettings', () => {
     expect(mocks.syncAppDataNow).not.toHaveBeenCalled()
     expect(mocks.toast.success).not.toHaveBeenCalled()
     expect(mocks.toast.info).not.toHaveBeenCalledWith('settings.data.data_sync.toast.sync_success')
+  })
+
+  it('treats a null sync summary as an in-flight duplicate instead of success', async () => {
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(syncButton())
+
+    await waitFor(() => expect(mocks.syncAppDataNow).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mocks.toast.info).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_running'))
+    expect(mocks.toast.success).not.toHaveBeenCalled()
+    expect(mocks.toast.error).not.toHaveBeenCalled()
+  })
+
+  it('shows an in-flight message without reporting an error when the main process is already syncing', async () => {
+    mocks.syncAppDataNow.mockRejectedValueOnce(new Error('同步数据失败：已有数据同步正在进行，请等待本次同步完成。'))
+
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(syncButton())
+
+    await waitFor(() => expect(mocks.toast.info).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_running'))
+    expect(mocks.toast.success).not.toHaveBeenCalled()
+    expect(mocks.toast.error).not.toHaveBeenCalled()
+    expect(mocks.reportErrorToSystemAgent).not.toHaveBeenCalled()
+  })
+
+  it('clears the sync button loading state and reports actionable feedback after real failures', async () => {
+    mocks.syncAppDataNow.mockRejectedValueOnce(new Error('同步数据失败：连接 WebDAV 超时，请稍后重试或检查网络。'))
+
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(syncButton())
+
+    await waitFor(() =>
+      expect(mocks.toast.error).toHaveBeenCalledWith(
+        expect.stringContaining('settings.data.data_sync.toast.sync_failed')
+      )
+    )
+    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+    expect(mocks.toast.success).not.toHaveBeenCalled()
+    expect(mocks.reportErrorToSystemAgent).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        domain: 'dataSync',
+        source: 'settings.data_sync.sync_now'
+      }),
+      { showToast: true }
+    )
+  })
+
+  it('reports success only after syncAppDataNow returns a completed summary', async () => {
+    mocks.syncAppDataNow.mockResolvedValueOnce(successSummary())
+
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(syncButton())
+
+    await waitFor(() => expect(mocks.toast.success).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_success'))
+    expect(mocks.toast.info).not.toHaveBeenCalledWith('settings.data.data_sync.toast.sync_running')
+    expect(mocks.toast.error).not.toHaveBeenCalled()
   })
 })
