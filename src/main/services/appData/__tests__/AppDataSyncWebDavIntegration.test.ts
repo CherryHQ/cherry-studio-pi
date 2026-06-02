@@ -1,9 +1,11 @@
+import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
 
+import type { InValue } from '@libsql/client'
 import { app } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -31,6 +33,12 @@ type WebDavTestServer = {
 type TestInstance = {
   userData: string
   dataRoot: string
+}
+
+type ComprehensiveStorageFixture = {
+  blobChecksum: string
+  blobPayload: string
+  blobStoragePath: string
 }
 
 type WebDavServerState = {
@@ -273,6 +281,428 @@ async function seedInstanceData(input: {
   })
 }
 
+async function seedComprehensiveStorageV2Data(instance: TestInstance): Promise<ComprehensiveStorageFixture> {
+  const client = await storageV2Database.getClient()
+  const createdAt = '2026-05-29T13:00:00.000Z'
+  const updatedAt = '2026-05-29T13:10:00.000Z'
+  const blobStoragePath = 'Blobs/comprehensive-sync-fixture.txt'
+  const blobPayload = [
+    'Cherry Studio Pi comprehensive sync fixture',
+    'provider/model/assistant/agent/knowledge/conversation/settings'
+  ].join('\n')
+  const blobBytes = Buffer.from(blobPayload, 'utf8')
+  const blobChecksum = createHash('sha256').update(blobBytes).digest('hex')
+  const blobPath = path.join(instance.dataRoot, blobStoragePath)
+
+  await fsp.mkdir(path.dirname(blobPath), { recursive: true })
+  await fsp.writeFile(blobPath, blobBytes)
+
+  const execute = (sql: string, args: InValue[] = []) => client.execute({ sql, args })
+  const json = (value: unknown) => JSON.stringify(value)
+
+  await execute(
+    `
+      INSERT INTO profiles (id, name, avatar_blob_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+    `,
+    ['profile-sync-full', '同步测试用户', 'blob-sync-full-doc', createdAt, updatedAt]
+  )
+  await execute(
+    `
+      INSERT INTO providers (
+        id, type, name, api_host, enabled, sort_order, config_json,
+        created_at, updated_at, deleted_at, version
+      )
+      VALUES (?, ?, ?, ?, 1, 7, ?, ?, ?, NULL, 3)
+    `,
+    [
+      'provider-sync-full-openai',
+      'openai-compatible',
+      '同步测试模型服务',
+      'https://sync.example.test/v1',
+      json({ apiKeySecretRef: 'storage-v2://secret/provider-sync-full-openai/apiKey', timeoutMs: 30000 }),
+      createdAt,
+      updatedAt
+    ]
+  )
+  await execute(
+    `
+      INSERT INTO models (
+        id, provider_id, name, group_name, capabilities_json, config_json,
+        enabled, sort_order, created_at, updated_at, deleted_at
+      )
+      VALUES
+        (?, ?, ?, ?, ?, ?, 1, 1, ?, ?, NULL),
+        (?, ?, ?, ?, ?, ?, 1, 2, ?, ?, NULL)
+    `,
+    [
+      'model-sync-full-chat',
+      'provider-sync-full-openai',
+      'sync-gpt-4.1',
+      'chat',
+      json(['chat', 'vision', 'tool_use']),
+      json({ contextWindow: 128000, temperature: 0.2 }),
+      createdAt,
+      updatedAt,
+      'model-sync-full-embedding',
+      'provider-sync-full-openai',
+      'sync-embedding-large',
+      'embedding',
+      json(['embedding']),
+      json({ dimensions: 3072 }),
+      createdAt,
+      updatedAt
+    ]
+  )
+  await execute(
+    `
+      INSERT INTO blobs (id, algorithm, size, mime, ext, storage_path, checksum, created_at, ref_count)
+      VALUES (?, 'sha256', ?, 'text/plain', '.txt', ?, ?, ?, 4)
+    `,
+    ['blob-sync-full-doc', blobBytes.byteLength, blobStoragePath, blobChecksum, createdAt]
+  )
+  await execute(
+    `
+      INSERT INTO assistants (
+        id, name, description, prompt, model_id, settings_json, avatar_blob_id,
+        tags_json, sort_order, created_at, updated_at, deleted_at, version
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 4, ?, ?, NULL, 5)
+    `,
+    [
+      'assistant-sync-full',
+      '同步测试助手',
+      '覆盖助手提示词、模型和偏好的同步 fixture',
+      '你是一个用于验证多端同步的助手。',
+      'model-sync-full-chat',
+      json({ temperature: 0.35, maxTokens: 2048, preferredLanguage: 'zh-CN' }),
+      'blob-sync-full-doc',
+      json(['sync', 'assistant']),
+      createdAt,
+      updatedAt
+    ]
+  )
+  await execute(
+    `
+      INSERT INTO assistant_versions (id, assistant_id, snapshot_json, created_at, created_by_device_id)
+      VALUES (?, ?, ?, ?, ?)
+    `,
+    [
+      'assistant-version-sync-full',
+      'assistant-sync-full',
+      json({ name: '同步测试助手', prompt: '你是一个用于验证多端同步的助手。' }),
+      updatedAt,
+      'device-a'
+    ]
+  )
+  await execute(
+    `
+      INSERT INTO agents (
+        id, type, name, description, instructions, model_id, plan_model_id, small_model_id,
+        accessible_paths_json, mcps_json, allowed_tools_json, configuration_json, avatar_blob_id,
+        sort_order, created_at, updated_at, deleted_at, version
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 3, ?, ?, NULL, 6)
+    `,
+    [
+      'agent-sync-full',
+      'pi',
+      '同步测试 Agent',
+      '覆盖 agent 配置、权限、工具和 skill 关联',
+      '读取用户意图，必要时调用设置、知识库和绘图工具。',
+      'model-sync-full-chat',
+      'model-sync-full-chat',
+      'model-sync-full-chat',
+      json(['/tmp/cherry-studio-pi-sync-fixture']),
+      json([{ id: 'mcp-sync-settings', name: 'Settings MCP' }]),
+      json(['settings.read', 'settings.write', 'knowledge.search', 'image.generate']),
+      json({ permissionMode: 'soul', autoApprove: false, maxToolCalls: 12 }),
+      'blob-sync-full-doc',
+      createdAt,
+      updatedAt
+    ]
+  )
+  await execute(
+    `
+      INSERT INTO agent_versions (id, agent_id, snapshot_json, created_at, created_by_device_id)
+      VALUES (?, ?, ?, ?, ?)
+    `,
+    [
+      'agent-version-sync-full',
+      'agent-sync-full',
+      json({ name: '同步测试 Agent', permissionMode: 'soul' }),
+      updatedAt,
+      'device-a'
+    ]
+  )
+  await execute(
+    `
+      INSERT INTO skills (
+        id, name, description, folder_name, source, source_url, namespace, author, tags_json,
+        content_hash, created_at, updated_at, deleted_at, version
+      )
+      VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, NULL, 2)
+    `,
+    [
+      'skill-sync-full',
+      '同步测试 Skill',
+      '用于验证 agent skill 关联同步',
+      'sync-fixture-skill',
+      'local',
+      '@sync/fixture',
+      'Cherry Studio Pi',
+      json(['sync', 'skill']),
+      createHash('sha256').update('sync-fixture-skill').digest('hex'),
+      createdAt,
+      updatedAt
+    ]
+  )
+  await execute(
+    `
+      INSERT INTO agent_skills (agent_id, skill_id, enabled, created_at, updated_at)
+      VALUES (?, ?, 1, ?, ?)
+    `,
+    ['agent-sync-full', 'skill-sync-full', createdAt, updatedAt]
+  )
+  await execute(
+    `
+      INSERT INTO agent_sessions (
+        id, agent_id, name, inherited_config_json, current_config_json,
+        sort_order, created_at, updated_at, deleted_at, version
+      )
+      VALUES (?, ?, ?, ?, ?, 1, ?, ?, NULL, 4)
+    `,
+    [
+      'agent-session-sync-full',
+      'agent-sync-full',
+      '同步测试任务会话',
+      json({ modelId: 'model-sync-full-chat', permissionMode: 'soul' }),
+      json({ workingDirectory: '/tmp/cherry-studio-pi-sync-fixture', status: 'ready' }),
+      createdAt,
+      updatedAt
+    ]
+  )
+  await execute(
+    `
+      INSERT INTO scheduled_tasks (
+        id, agent_id, name, prompt, schedule_type, schedule_value, timeout_minutes,
+        next_run, last_run, last_result, status, created_at, updated_at, deleted_at, version
+      )
+      VALUES (?, ?, ?, ?, ?, ?, 5, ?, ?, ?, 'active', ?, ?, NULL, 2)
+    `,
+    [
+      'task-sync-full',
+      'agent-sync-full',
+      '同步测试定时任务',
+      '每天检查同步 fixture 是否存在。',
+      'cron',
+      '0 9 * * *',
+      '2026-05-30T01:00:00.000Z',
+      '2026-05-29T01:00:00.000Z',
+      json({ ok: true, checked: 'comprehensive-fixture' }),
+      createdAt,
+      updatedAt
+    ]
+  )
+  await execute(
+    `
+      INSERT INTO task_run_logs (id, task_id, session_id, run_at, duration_ms, status, result_json, error, version)
+      VALUES (101, ?, ?, ?, 1234, 'success', ?, NULL, 1)
+    `,
+    ['task-sync-full', 'agent-session-sync-full', updatedAt, json({ output: 'fixture synced' })]
+  )
+  await execute(
+    `
+      INSERT INTO channels (
+        id, type, name, agent_id, session_id, config_json, is_active, active_chat_ids_json,
+        permission_mode, created_at, updated_at, deleted_at, version
+      )
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, NULL, 2)
+    `,
+    [
+      'channel-sync-full',
+      'webhook',
+      '同步测试频道',
+      'agent-sync-full',
+      'agent-session-sync-full',
+      json({ endpointSecretRef: 'storage-v2://secret/channel-sync-full/webhook' }),
+      json(['chat-sync-full']),
+      'soul',
+      createdAt,
+      updatedAt
+    ]
+  )
+  await execute(
+    `
+      INSERT INTO channel_task_subscriptions (channel_id, task_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?)
+    `,
+    ['channel-sync-full', 'task-sync-full', createdAt, updatedAt]
+  )
+  await execute(
+    `
+      INSERT INTO conversations (
+        id, kind, owner_type, owner_id, session_id, title, pinned, archived,
+        sort_order, created_at, updated_at, deleted_at, version
+      )
+      VALUES (?, ?, ?, ?, ?, ?, 1, 0, 2, ?, ?, NULL, 3)
+    `,
+    [
+      'conversation-sync-full',
+      'agent_session',
+      'agent',
+      'agent-sync-full',
+      'agent-session-sync-full',
+      '同步测试对话',
+      createdAt,
+      updatedAt
+    ]
+  )
+  await execute(
+    `
+      INSERT INTO messages (
+        id, conversation_id, role, status, parent_id, request_id, model_id, provider_id,
+        token_usage_json, metadata_json, created_at, updated_at, deleted_at, version
+      )
+      VALUES
+        (?, ?, 'user', 'complete', NULL, ?, NULL, NULL, ?, ?, ?, ?, NULL, 1),
+        (?, ?, 'assistant', 'complete', ?, ?, ?, ?, ?, ?, ?, ?, NULL, 2)
+    `,
+    [
+      'message-sync-user',
+      'conversation-sync-full',
+      'request-sync-full-1',
+      json({ input: 12, output: 0 }),
+      json({ source: 'manual', fixture: true }),
+      createdAt,
+      createdAt,
+      'message-sync-assistant',
+      'conversation-sync-full',
+      'message-sync-user',
+      'request-sync-full-1',
+      'model-sync-full-chat',
+      'provider-sync-full-openai',
+      json({ input: 12, output: 48 }),
+      json({ finishReason: 'stop', fixture: true }),
+      updatedAt,
+      updatedAt
+    ]
+  )
+  await execute(
+    `
+      INSERT INTO message_blocks (
+        id, message_id, type, ordinal, text, payload_json, blob_id,
+        created_at, updated_at, deleted_at, version
+      )
+      VALUES
+        (?, ?, 'text', 0, ?, NULL, NULL, ?, ?, NULL, 1),
+        (?, ?, 'text', 0, ?, ?, NULL, ?, ?, NULL, 1),
+        (?, ?, 'file', 1, NULL, ?, ?, ?, ?, NULL, 1)
+    `,
+    [
+      'message-block-sync-user-text',
+      'message-sync-user',
+      '请验证同步 fixture 是否完整。',
+      createdAt,
+      createdAt,
+      'message-block-sync-assistant-text',
+      'message-sync-assistant',
+      '已检查模型、助手、Agent、知识库和设置。',
+      json({ citations: ['knowledge-item-sync-full'] }),
+      updatedAt,
+      updatedAt,
+      'message-block-sync-assistant-file',
+      'message-sync-assistant',
+      json({ fileId: 'file-sync-full-doc', displayName: 'comprehensive-sync-fixture.txt' }),
+      'blob-sync-full-doc',
+      updatedAt,
+      updatedAt
+    ]
+  )
+  await execute(
+    `
+      INSERT INTO files (
+        id, blob_id, original_name, display_name, source, metadata_json,
+        created_at, updated_at, deleted_at, version
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 2)
+    `,
+    [
+      'file-sync-full-doc',
+      'blob-sync-full-doc',
+      'comprehensive-sync-fixture.txt',
+      '综合同步测试文档.txt',
+      'knowledge',
+      json({ bytes: blobBytes.byteLength, checksum: blobChecksum }),
+      createdAt,
+      updatedAt
+    ]
+  )
+  await execute(
+    `
+      INSERT INTO knowledge_bases (
+        id, name, model_id, embedding_model_id, rerank_model_id, settings_json,
+        created_at, updated_at, deleted_at, version
+      )
+      VALUES (?, ?, ?, ?, NULL, ?, ?, ?, NULL, 2)
+    `,
+    [
+      'knowledge-base-sync-full',
+      '同步测试知识库',
+      'model-sync-full-chat',
+      'model-sync-full-embedding',
+      json({ chunkSize: 512, retrievalTopK: 6, language: 'zh-CN' }),
+      createdAt,
+      updatedAt
+    ]
+  )
+  await execute(
+    `
+      INSERT INTO knowledge_items (
+        id, knowledge_base_id, source_type, source_uri, file_id, content_hash, status, metadata_json,
+        created_at, updated_at, deleted_at, version
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 2)
+    `,
+    [
+      'knowledge-item-sync-full',
+      'knowledge-base-sync-full',
+      'file',
+      'file://comprehensive-sync-fixture.txt',
+      'file-sync-full-doc',
+      blobChecksum,
+      'indexed',
+      json({ title: '综合同步测试文档', tokens: 128 }),
+      createdAt,
+      updatedAt
+    ]
+  )
+  await execute(
+    `
+      INSERT INTO kv_records (scope, key, value_json, source, updated_at, deleted_at, version)
+      VALUES (?, ?, ?, ?, ?, NULL, 2)
+    `,
+    ['ui', 'sync.fixture.workspace', json({ layout: 'compact', sidebar: 'agents' }), 'integration-test', updatedAt]
+  )
+  await execute(
+    `
+      INSERT INTO settings (key, value_json, scope, updated_at, updated_by_device_id, version, deleted_at)
+      VALUES (?, ?, 'app', ?, 'device-a', 9, NULL)
+    `,
+    [
+      'settings.sync.fixture.preference',
+      json({ locale: 'zh-CN', theme: 'dark', dataSync: { mode: 'webdav', realtime: true } }),
+      updatedAt
+    ]
+  )
+
+  return {
+    blobChecksum,
+    blobPayload,
+    blobStoragePath
+  }
+}
+
 async function deleteInstanceData(deletedAt: number, storageDeletedAt: string) {
   const appDb = await getAppDataDatabase()
   await appDb.deleteRecord('settings', 'sync.integration.theme', deletedAt)
@@ -326,6 +756,122 @@ async function readInstanceEntries() {
   }
 }
 
+function hashBuffer(value: Buffer) {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+async function readComprehensiveStorageV2State(instance: TestInstance, fixture: ComprehensiveStorageFixture) {
+  const client = await storageV2Database.getClient()
+  const selectOne = async <T extends Record<string, unknown>>(sql: string, args: InValue[] = []) => {
+    const result = await client.execute({ sql, args })
+    return (result.rows[0] ?? null) as unknown as T | null
+  }
+  const count = async (table: string) => {
+    const result = await client.execute(`SELECT COUNT(*) AS count FROM ${table}`)
+    return Number(result.rows[0]?.count ?? 0)
+  }
+  const blobPath = path.join(instance.dataRoot, fixture.blobStoragePath)
+  const blobContents = await fsp.readFile(blobPath)
+
+  return {
+    counts: {
+      profiles: await count('profiles'),
+      providers: await count('providers'),
+      models: await count('models'),
+      blobs: await count('blobs'),
+      assistants: await count('assistants'),
+      assistant_versions: await count('assistant_versions'),
+      agents: await count('agents'),
+      agent_versions: await count('agent_versions'),
+      skills: await count('skills'),
+      agent_skills: await count('agent_skills'),
+      agent_sessions: await count('agent_sessions'),
+      scheduled_tasks: await count('scheduled_tasks'),
+      task_run_logs: await count('task_run_logs'),
+      channels: await count('channels'),
+      channel_task_subscriptions: await count('channel_task_subscriptions'),
+      conversations: await count('conversations'),
+      messages: await count('messages'),
+      message_blocks: await count('message_blocks'),
+      files: await count('files'),
+      knowledge_bases: await count('knowledge_bases'),
+      knowledge_items: await count('knowledge_items'),
+      kv_records: await count('kv_records'),
+      settings: await count('settings')
+    },
+    provider: await selectOne<{ name: string; config_json: string }>(
+      'SELECT name, config_json FROM providers WHERE id = ?',
+      ['provider-sync-full-openai']
+    ),
+    models: (await client.execute('SELECT id, capabilities_json FROM models ORDER BY sort_order')).rows.map((row) => ({
+      id: String(row.id),
+      capabilities: JSON.parse(String(row.capabilities_json))
+    })),
+    assistant: await selectOne<{ name: string; prompt: string; settings_json: string }>(
+      'SELECT name, prompt, settings_json FROM assistants WHERE id = ?',
+      ['assistant-sync-full']
+    ),
+    agent: await selectOne<{ name: string; configuration_json: string; allowed_tools_json: string }>(
+      'SELECT name, configuration_json, allowed_tools_json FROM agents WHERE id = ?',
+      ['agent-sync-full']
+    ),
+    agentSkill: await selectOne<{ enabled: number }>(
+      'SELECT enabled FROM agent_skills WHERE agent_id = ? AND skill_id = ?',
+      ['agent-sync-full', 'skill-sync-full']
+    ),
+    knowledgeBase: await selectOne<{ name: string; settings_json: string }>(
+      'SELECT name, settings_json FROM knowledge_bases WHERE id = ?',
+      ['knowledge-base-sync-full']
+    ),
+    knowledgeItem: await selectOne<{ status: string; file_id: string }>(
+      'SELECT status, file_id FROM knowledge_items WHERE id = ?',
+      ['knowledge-item-sync-full']
+    ),
+    conversation: await selectOne<{ title: string }>('SELECT title FROM conversations WHERE id = ?', [
+      'conversation-sync-full'
+    ]),
+    messages: (await client.execute('SELECT id, role, metadata_json FROM messages ORDER BY created_at, id')).rows.map(
+      (row) => ({
+        id: String(row.id),
+        role: String(row.role),
+        metadata: JSON.parse(String(row.metadata_json))
+      })
+    ),
+    messageBlocks: (await client.execute('SELECT id, type, text, blob_id FROM message_blocks ORDER BY id')).rows.map(
+      (row) => ({
+        id: String(row.id),
+        type: String(row.type),
+        text: row.text == null ? null : String(row.text),
+        blobId: row.blob_id == null ? null : String(row.blob_id)
+      })
+    ),
+    file: await selectOne<{ display_name: string; metadata_json: string }>(
+      'SELECT display_name, metadata_json FROM files WHERE id = ?',
+      ['file-sync-full-doc']
+    ),
+    scheduledTask: await selectOne<{ name: string; status: string }>(
+      'SELECT name, status FROM scheduled_tasks WHERE id = ?',
+      ['task-sync-full']
+    ),
+    channel: await selectOne<{ name: string; permission_mode: string }>(
+      'SELECT name, permission_mode FROM channels WHERE id = ?',
+      ['channel-sync-full']
+    ),
+    taskRunLog: await selectOne<{ status: string; result_json: string }>(
+      'SELECT status, result_json FROM task_run_logs WHERE id = 101'
+    ),
+    setting: await selectOne<{ value_json: string }>('SELECT value_json FROM settings WHERE key = ?', [
+      'settings.sync.fixture.preference'
+    ]),
+    kvRecord: await selectOne<{ value_json: string }>('SELECT value_json FROM kv_records WHERE scope = ? AND key = ?', [
+      'ui',
+      'sync.fixture.workspace'
+    ]),
+    blobHash: hashBuffer(blobContents),
+    blobPayload: blobContents.toString('utf8')
+  }
+}
+
 function makeConfig(server: WebDavTestServer, webdavPath = '/cherry-studio-pi-integration') {
   return {
     webdavHost: server.url,
@@ -357,6 +903,66 @@ function remoteSyncRoot(server: WebDavTestServer, webdavPath: string) {
 async function readRemoteManifest(server: WebDavTestServer, webdavPath: string) {
   return JSON.parse(await fsp.readFile(path.join(remoteSyncRoot(server, webdavPath), 'manifest.json'), 'utf8'))
 }
+
+function countRemoteStorageV2Records(manifest: { storageV2?: { records?: Record<string, { entityType: string }> } }) {
+  const counts: Record<string, number> = {}
+  for (const record of Object.values(manifest.storageV2?.records ?? {})) {
+    counts[record.entityType] = (counts[record.entityType] ?? 0) + 1
+  }
+  return counts
+}
+
+const COMPREHENSIVE_STORAGE_TABLE_COUNTS = {
+  profiles: 1,
+  providers: 1,
+  models: 2,
+  blobs: 1,
+  assistants: 1,
+  assistant_versions: 1,
+  agents: 1,
+  agent_versions: 1,
+  skills: 1,
+  agent_skills: 1,
+  agent_sessions: 1,
+  scheduled_tasks: 1,
+  task_run_logs: 1,
+  channels: 1,
+  channel_task_subscriptions: 1,
+  conversations: 1,
+  messages: 2,
+  message_blocks: 3,
+  files: 1,
+  knowledge_bases: 1,
+  knowledge_items: 1,
+  kv_records: 1,
+  settings: 1
+} as const
+
+const COMPREHENSIVE_REMOTE_ENTITY_COUNTS = {
+  profile: 1,
+  provider: 1,
+  model: 2,
+  blob: 1,
+  assistant: 1,
+  assistant_version: 1,
+  agent: 1,
+  agent_version: 1,
+  skill: 1,
+  agent_skill: 1,
+  agent_session: 1,
+  scheduled_task: 1,
+  task_run_log: 1,
+  channel: 1,
+  channel_task_subscription: 1,
+  conversation: 1,
+  message: 2,
+  message_block: 3,
+  file: 1,
+  knowledge_base: 1,
+  knowledge_item: 1,
+  kv_record: 1,
+  settings: 1
+} as const
 
 async function readAllRemoteText(root: string) {
   const values: string[] = []
@@ -434,6 +1040,123 @@ describe('AppDataSyncService local WebDAV integration', () => {
     expect(remoteText).toContain('device-a-storage-value')
     expect(remoteText).not.toContain('device-b-default')
     expect(remoteText).not.toContain('device-b-storage-default')
+  })
+
+  it('syncs comprehensive Storage v2 data across models, assistants, agents, knowledge, files, chats and settings', async () => {
+    const homePath = path.join(tempRoot, 'home')
+    const instanceA = makeInstance(tempRoot, 'device-a')
+    const instanceB = makeInstance(tempRoot, 'device-b')
+    const webdavPath = '/cherry-studio-pi-comprehensive'
+    const config = makeConfig(server!, webdavPath)
+    const backupManager = makeBackupManager(tempRoot)
+    const expectedRecordCount = Object.values(COMPREHENSIVE_REMOTE_ENTITY_COUNTS).reduce((sum, count) => sum + count, 0)
+
+    await switchInstance(instanceA, homePath)
+    const fixture = await seedComprehensiveStorageV2Data(instanceA)
+    const firstSummary = await new AppDataSyncService(backupManager as never).syncNow(config)
+    const remoteManifest = await readRemoteManifest(server!, webdavPath)
+    const remoteText = await readAllRemoteText(remoteSyncRoot(server!, webdavPath))
+
+    expect(firstSummary.storageUploaded).toBe(expectedRecordCount)
+    expect(firstSummary.blobUploaded).toBe(1)
+    expect(countRemoteStorageV2Records(remoteManifest)).toEqual(COMPREHENSIVE_REMOTE_ENTITY_COUNTS)
+    expect(Object.keys(remoteManifest.storageV2?.records ?? {})).toHaveLength(expectedRecordCount)
+    expect(remoteText).toContain('同步测试模型服务')
+    expect(remoteText).toContain('同步测试助手')
+    expect(remoteText).toContain('同步测试 Agent')
+    expect(remoteText).toContain('同步测试知识库')
+    expect(remoteText).toContain('settings.sync.fixture.preference')
+
+    await switchInstance(instanceB, homePath)
+    const secondSummary = await new AppDataSyncService(backupManager as never).syncNow(config)
+    const deviceBState = await readComprehensiveStorageV2State(instanceB, fixture)
+
+    expect(secondSummary.storageDownloaded).toBe(expectedRecordCount)
+    expect(secondSummary.blobDownloaded).toBe(1)
+    expect(secondSummary.storageConflicts).toBe(0)
+    expect(deviceBState.counts).toEqual(COMPREHENSIVE_STORAGE_TABLE_COUNTS)
+    expect(deviceBState.provider).toMatchObject({
+      name: '同步测试模型服务'
+    })
+    expect(JSON.parse(deviceBState.provider!.config_json)).toEqual({
+      apiKeySecretRef: 'storage-v2://secret/provider-sync-full-openai/apiKey',
+      timeoutMs: 30000
+    })
+    expect(deviceBState.models).toEqual([
+      { id: 'model-sync-full-chat', capabilities: ['chat', 'vision', 'tool_use'] },
+      { id: 'model-sync-full-embedding', capabilities: ['embedding'] }
+    ])
+    expect(deviceBState.assistant).toMatchObject({
+      name: '同步测试助手',
+      prompt: '你是一个用于验证多端同步的助手。'
+    })
+    expect(JSON.parse(deviceBState.assistant!.settings_json)).toMatchObject({
+      preferredLanguage: 'zh-CN'
+    })
+    expect(deviceBState.agent).toMatchObject({ name: '同步测试 Agent' })
+    expect(JSON.parse(deviceBState.agent!.configuration_json)).toMatchObject({
+      permissionMode: 'soul',
+      maxToolCalls: 12
+    })
+    expect(JSON.parse(deviceBState.agent!.allowed_tools_json)).toContain('knowledge.search')
+    expect(deviceBState.agentSkill).toEqual({ enabled: 1 })
+    expect(deviceBState.knowledgeBase).toMatchObject({ name: '同步测试知识库' })
+    expect(JSON.parse(deviceBState.knowledgeBase!.settings_json)).toMatchObject({ retrievalTopK: 6 })
+    expect(deviceBState.knowledgeItem).toEqual({
+      status: 'indexed',
+      file_id: 'file-sync-full-doc'
+    })
+    expect(deviceBState.conversation).toEqual({ title: '同步测试对话' })
+    expect(deviceBState.messages).toEqual([
+      { id: 'message-sync-user', role: 'user', metadata: { source: 'manual', fixture: true } },
+      { id: 'message-sync-assistant', role: 'assistant', metadata: { finishReason: 'stop', fixture: true } }
+    ])
+    expect(deviceBState.messageBlocks).toEqual([
+      {
+        id: 'message-block-sync-assistant-file',
+        type: 'file',
+        text: null,
+        blobId: 'blob-sync-full-doc'
+      },
+      {
+        id: 'message-block-sync-assistant-text',
+        type: 'text',
+        text: '已检查模型、助手、Agent、知识库和设置。',
+        blobId: null
+      },
+      {
+        id: 'message-block-sync-user-text',
+        type: 'text',
+        text: '请验证同步 fixture 是否完整。',
+        blobId: null
+      }
+    ])
+    expect(deviceBState.file).toMatchObject({
+      display_name: '综合同步测试文档.txt'
+    })
+    expect(JSON.parse(deviceBState.file!.metadata_json)).toMatchObject({
+      checksum: fixture.blobChecksum
+    })
+    expect(deviceBState.scheduledTask).toEqual({
+      name: '同步测试定时任务',
+      status: 'active'
+    })
+    expect(deviceBState.channel).toEqual({
+      name: '同步测试频道',
+      permission_mode: 'soul'
+    })
+    expect(deviceBState.taskRunLog).toMatchObject({ status: 'success' })
+    expect(JSON.parse(deviceBState.taskRunLog!.result_json)).toEqual({ output: 'fixture synced' })
+    expect(JSON.parse(deviceBState.setting!.value_json)).toMatchObject({
+      locale: 'zh-CN',
+      dataSync: { mode: 'webdav', realtime: true }
+    })
+    expect(JSON.parse(deviceBState.kvRecord!.value_json)).toEqual({
+      layout: 'compact',
+      sidebar: 'agents'
+    })
+    expect(deviceBState.blobHash).toBe(fixture.blobChecksum)
+    expect(deviceBState.blobPayload).toBe(fixture.blobPayload)
   })
 
   it('propagates later updates and tombstones between two devices', async () => {
