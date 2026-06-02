@@ -75,6 +75,8 @@ export class StorageV2AgentRuntimeRecoveryService {
     input: {
       agentId?: string
       includeHeartbeat?: boolean
+      activeOnly?: boolean
+      dueBefore?: string
     },
     reason: string
   ): Promise<boolean> {
@@ -100,7 +102,13 @@ export class StorageV2AgentRuntimeRecoveryService {
   }
 
   async projectIfStorageHasAnyAgentRuntimeRows(reason: string): Promise<boolean> {
-    return this.projectIfStorageHasRows(reason, async () => (await this.countStorageAnyAgentRuntimeRows()) > 0)
+    return this.projectIfStorageHasRows(reason, async () => {
+      const [legacyCount, storageCount] = await Promise.all([
+        this.countLegacyAnyAgentRuntimeRows(),
+        this.countStorageAnyAgentRuntimeRows()
+      ])
+      return storageCount > legacyCount
+    })
   }
 
   private async projectIfStorageHasRows(reason: string, hasRows: () => Promise<boolean>): Promise<boolean> {
@@ -256,7 +264,13 @@ export class StorageV2AgentRuntimeRecoveryService {
     return countFromRow(result.rows[0] as Record<string, unknown> | undefined)
   }
 
-  private async countStorageTask(input: { agentId?: string; taskId?: string; includeHeartbeat?: boolean }) {
+  private async countStorageTask(input: {
+    agentId?: string
+    taskId?: string
+    includeHeartbeat?: boolean
+    activeOnly?: boolean
+    dueBefore?: string
+  }) {
     const client = await storageV2Database.getClient()
     const clauses = ['deleted_at IS NULL']
     const args: string[] = []
@@ -269,6 +283,16 @@ export class StorageV2AgentRuntimeRecoveryService {
     if (input.taskId) {
       clauses.push('id = ?')
       args.push(input.taskId)
+    }
+
+    if (input.activeOnly) {
+      clauses.push("status = 'active'")
+    }
+
+    if (input.dueBefore) {
+      clauses.push('next_run IS NOT NULL')
+      clauses.push('next_run <= ?')
+      args.push(input.dueBefore)
     }
 
     if (!input.includeHeartbeat) {
@@ -315,6 +339,24 @@ export class StorageV2AgentRuntimeRecoveryService {
       sql: `SELECT COUNT(*) AS count FROM channels WHERE ${clauses.join(' AND ')}`,
       args
     })
+    return countFromRow(result.rows[0] as Record<string, unknown> | undefined)
+  }
+
+  private async countLegacyAnyAgentRuntimeRows() {
+    const databaseManager = await DatabaseManager.getInstance()
+    const client = await databaseManager.getClient()
+    const result = await client.execute(`
+      SELECT
+        (SELECT COUNT(*) FROM agents WHERE deleted_at IS NULL) +
+        (SELECT COUNT(*) FROM sessions) +
+        (SELECT COUNT(*) FROM skills) +
+        (SELECT COUNT(*) FROM agent_skills) +
+        (SELECT COUNT(*) FROM scheduled_tasks) +
+        (SELECT COUNT(*) FROM task_run_logs) +
+        (SELECT COUNT(*) FROM channels) +
+        (SELECT COUNT(*) FROM channel_task_subscriptions) +
+        (SELECT COUNT(*) FROM session_messages) AS count
+    `)
     return countFromRow(result.rows[0] as Record<string, unknown> | undefined)
   }
 

@@ -31,6 +31,37 @@ const STORAGE_V2_CONFIG_SCOPE = 'config'
 const STORAGE_V2_CONFIG_PREFIX = 'config.'
 const STORAGE_V2_CONFIG_RETRY_MS = 5000
 
+type StorageV2ConfigEntry = [string, unknown]
+
+type StorageV2ConfigMirrorFailure = {
+  key: string
+  value: unknown
+  error: unknown
+}
+
+class StorageV2ConfigMirrorError extends Error {
+  readonly failures: StorageV2ConfigMirrorFailure[]
+
+  constructor(failures: StorageV2ConfigMirrorFailure[]) {
+    const firstFailure = failures[0]
+    super(
+      `Failed to mirror ${failures.length} config setting(s) to Storage v2${
+        firstFailure ? `; first failed key: ${firstFailure.key}; ${getErrorMessage(firstFailure.error)}` : ''
+      }`
+    )
+    this.name = 'StorageV2ConfigMirrorError'
+    this.failures = failures
+  }
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function getErrorStack(error: unknown) {
+  return error instanceof Error ? error.stack : undefined
+}
+
 export enum ConfigKeys {
   Language = 'language',
   Theme = 'theme',
@@ -329,26 +360,28 @@ export class ConfigManager {
 
   async mirrorAllToStorageV2(): Promise<{ mirroredCount: number }> {
     const entries = Object.entries(this.store.store)
+    const report = await this.mirrorEntriesToStorageV2(entries)
 
-    try {
-      await Promise.all(entries.map(([key, value]) => this.setStorageV2Config(key, value)))
-      for (const [key] of entries) {
-        this.pendingStorageV2Config.delete(key)
-      }
-      this.lastStorageV2ConfigError = null
-    } catch (error) {
-      for (const [key, value] of entries) {
-        if (!this.pendingStorageV2Config.has(key)) {
-          this.pendingStorageV2Config.set(key, value)
+    for (const key of report.mirroredKeys) {
+      this.pendingStorageV2Config.delete(key)
+    }
+
+    if (report.failures.length > 0) {
+      for (const failure of report.failures) {
+        if (!this.pendingStorageV2Config.has(failure.key)) {
+          this.pendingStorageV2Config.set(failure.key, failure.value)
         }
       }
+      const error = new StorageV2ConfigMirrorError(report.failures)
       this.lastStorageV2ConfigError = error
       this.scheduleStorageV2ConfigRetry()
       throw error
     }
 
+    this.lastStorageV2ConfigError = null
+
     return {
-      mirroredCount: entries.length
+      mirroredCount: report.mirroredKeys.length
     }
   }
 
@@ -401,22 +434,47 @@ export class ConfigManager {
   }
 
   private async mirrorPendingStorageV2Config(entries: Array<[string, unknown]>) {
-    try {
-      await Promise.all(entries.map(([key, value]) => this.setStorageV2Config(key, value)))
+    const report = await this.mirrorEntriesToStorageV2(entries)
+
+    if (report.failures.length === 0) {
       this.lastStorageV2ConfigError = null
-    } catch (error) {
-      for (const [key, value] of entries) {
-        if (!this.pendingStorageV2Config.has(key)) {
-          this.pendingStorageV2Config.set(key, value)
-        }
-      }
-      this.lastStorageV2ConfigError = error
-      this.scheduleStorageV2ConfigRetry()
-      logger.warn('Failed to mirror config settings to Storage v2', {
-        count: entries.length,
-        error: error instanceof Error ? error.message : String(error)
-      })
+      return
     }
+
+    for (const failure of report.failures) {
+      if (!this.pendingStorageV2Config.has(failure.key)) {
+        this.pendingStorageV2Config.set(failure.key, failure.value)
+      }
+    }
+
+    const error = new StorageV2ConfigMirrorError(report.failures)
+    this.lastStorageV2ConfigError = error
+    this.scheduleStorageV2ConfigRetry()
+    logger.warn('Failed to mirror config settings to Storage v2', {
+      count: entries.length,
+      failedCount: report.failures.length,
+      failedKeys: report.failures.map((failure) => failure.key),
+      error: getErrorMessage(error),
+      stack: getErrorStack(report.failures[0]?.error)
+    })
+  }
+
+  private async mirrorEntriesToStorageV2(entries: StorageV2ConfigEntry[]) {
+    const mirroredKeys: string[] = []
+    const failures: StorageV2ConfigMirrorFailure[] = []
+
+    await Promise.all(
+      entries.map(async ([key, value]) => {
+        try {
+          await this.setStorageV2Config(key, value)
+          mirroredKeys.push(key)
+        } catch (error) {
+          failures.push({ key, value, error })
+        }
+      })
+    )
+
+    return { mirroredKeys, failures }
   }
 
   private scheduleStorageV2ConfigRetry() {

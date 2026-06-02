@@ -160,4 +160,29 @@ describe('ConfigManager Storage v2 mirror', () => {
     expect(mocks.settingsRepository.set).toHaveBeenCalledWith('config.tray', true, 'config')
     expect(mocks.settingsRepository.set).toHaveBeenCalledWith('config.testChannel', 'latest', 'config')
   })
+
+  it('keeps successfully mirrored snapshot entries out of retry when one config key fails', async () => {
+    vi.useFakeTimers()
+    mocks.storeData.tray = true
+    mocks.storeData.testChannel = 'latest'
+    mocks.settingsRepository.set.mockImplementation(async (key: string) => {
+      if (key === 'config.testChannel') {
+        throw new Error('bad path')
+      }
+    })
+    const manager = new ConfigManager()
+
+    await expect(manager.mirrorAllToStorageV2()).rejects.toThrow('testChannel')
+
+    expect(mocks.settingsRepository.set).toHaveBeenCalledWith('config.tray', true, 'config')
+    expect(mocks.settingsRepository.set).toHaveBeenCalledWith('config.testChannel', 'latest', 'config')
+
+    mocks.settingsRepository.set.mockClear()
+    mocks.settingsRepository.set.mockResolvedValue(undefined)
+
+    await vi.advanceTimersByTimeAsync(5000)
+
+    expect(mocks.settingsRepository.set).toHaveBeenCalledTimes(1)
+    expect(mocks.settingsRepository.set).toHaveBeenCalledWith('config.testChannel', 'latest', 'config')
+  })
 })

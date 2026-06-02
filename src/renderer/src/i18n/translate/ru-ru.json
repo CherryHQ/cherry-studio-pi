@@ -731,6 +731,24 @@
       }
     }
   },
+  "agentTools": {
+    "install": {
+      "access_token_placeholder": "[to be translated]:Optional, used when writing the tool config",
+      "custom": "[to be translated]:Custom",
+      "initialize": "[to be translated]:Initialize",
+      "model_service": "[to be translated]:Model service",
+      "models_json": "[to be translated]:Multi-model config JSON",
+      "not_filled": "[to be translated]:Not filled",
+      "open_webui": "[to be translated]:Open WebUI",
+      "prompt": "[to be translated]:Please install and initialize {{title}} globally.\n\nRepository: {{repo}}\n\nOfficial recommended install commands:\n- macOS / Linux / WSL: {{posixInstall}}\n- Windows PowerShell: {{windowsInstall}}\n- If npm/source fallback is more suitable for this system: {{fallbackInstall}}\n\nAfter installation, please do the following:\n1. Verify installation: {{verify}}\n2. If a local WebUI or dashboard is needed, start it and confirm the access URL.\n3. Write the config below into the actual {{title}} config file or through its CLI config command. If the path is unclear, locate it with official commands or source structure first; do not guess.\n4. After configuration, return the WebUI URL, key command output, and next usage steps.\n\nAccess token:\n{{accessToken}}\n\nModel service type:\n{{modelProvider}}\n\nMulti-model config:\n{{modelsJson}}\n",
+      "runtime_config": "[to be translated]:Runtime config",
+      "save_config": "[to be translated]:Save config",
+      "saved": "[to be translated]:Config saved",
+      "send_to_agent": "[to be translated]:Ask Agent to install",
+      "sent_to_agent": "[to be translated]:Installation task sent to Agent",
+      "webui_url": "[to be translated]:WebUI URL"
+    }
+  },
   "apiServer": {
     "actions": {
       "copy": "Копировать",
@@ -1993,6 +2011,11 @@
     "code": "Код",
     "empty_preview": "Нет содержания для отображения",
     "generating": "Генерация",
+    "install_workbench": {
+      "failed": "[to be translated]:Failed to install to workbench: {{message}}",
+      "success": "[to be translated]:Installed to workbench",
+      "title": "[to be translated]:Install to Workbench"
+    },
     "preview": "Предпросмотр",
     "split": "Разделить"
   },
@@ -4138,6 +4161,7 @@
           "deleted": "[to be translated]:Deleted {{count}}",
           "downloaded": "[to be translated]:Downloaded {{count}}",
           "error": "[to be translated]:Error: {{message}}",
+          "remote_path": "[to be translated]:Remote path {{path}}",
           "status_failed": "[to be translated]:Failed",
           "status_success": "[to be translated]:Success",
           "uploaded": "[to be translated]:Uploaded {{count}}"

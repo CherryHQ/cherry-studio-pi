@@ -174,11 +174,18 @@ export const renameAgentSessionIfNeeded = async (agentSession: AgentSessionConte
 
     agentSessionRenameLocks.add(lockId)
 
-    let session: GetAgentSessionResponse
+    let session: GetAgentSessionResponse | null | undefined
     try {
       session = await window.api.agent.getSession(agentSession.agentId, agentSession.sessionId)
     } catch (error) {
       logger.warn('Failed to fetch agent session for rename', error as Error)
+      return
+    }
+    if (!session) {
+      logger.warn('Skipped agent session rename because the session was not found', {
+        agentId: agentSession.agentId,
+        sessionId: agentSession.sessionId
+      })
       return
     }
 
@@ -187,7 +194,7 @@ export const renameAgentSessionIfNeeded = async (agentSession: AgentSessionConte
       return
     }
 
-    let updatedSession: GetAgentSessionResponse
+    let updatedSession: GetAgentSessionResponse | null | undefined
     try {
       updatedSession = await window.api.agent.updateSession(agentSession.agentId, {
         id: agentSession.sessionId,
@@ -195,6 +202,13 @@ export const renameAgentSessionIfNeeded = async (agentSession: AgentSessionConte
       })
     } catch (error) {
       logger.warn('Failed to update agent session name', error as Error)
+      return
+    }
+    if (!updatedSession) {
+      logger.warn('Skipped agent session cache update because the rename result was empty', {
+        agentId: agentSession.agentId,
+        sessionId: agentSession.sessionId
+      })
       return
     }
 

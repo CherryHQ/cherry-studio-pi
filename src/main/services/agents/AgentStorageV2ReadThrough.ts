@@ -541,7 +541,7 @@ export async function getDueTasksWithStorageV2Recovery() {
 
   if (
     await storageV2AgentRuntimeRecoveryService.projectIfTaskListEmpty(
-      { includeHeartbeat: true },
+      { includeHeartbeat: true, activeOnly: true, dueBefore: new Date().toISOString() },
       'agent-due-task-list-empty'
     )
   ) {
@@ -557,7 +557,7 @@ export async function hasActiveTasksWithStorageV2Recovery(): Promise<boolean> {
 
   if (
     await storageV2AgentRuntimeRecoveryService.projectIfTaskListEmpty(
-      { includeHeartbeat: true },
+      { includeHeartbeat: true, activeOnly: true },
       'agent-active-task-list-empty'
     )
   ) {

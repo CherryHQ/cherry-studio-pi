@@ -250,11 +250,15 @@ describe('AgentStorageV2ReadThrough mutation wrappers', () => {
     expect(mocks.recovery.projectIfTaskListEmpty).toHaveBeenCalledWith({}, 'agent-task-list-all-empty')
     expect(mocks.recovery.projectIfTaskLogsEmpty).toHaveBeenCalledWith('task-1', 'agent-task-logs-empty')
     expect(mocks.recovery.projectIfTaskListEmpty).toHaveBeenCalledWith(
-      { includeHeartbeat: true },
+      expect.objectContaining({
+        includeHeartbeat: true,
+        activeOnly: true,
+        dueBefore: expect.any(String)
+      }),
       'agent-due-task-list-empty'
     )
     expect(mocks.recovery.projectIfTaskListEmpty).toHaveBeenCalledWith(
-      { includeHeartbeat: true },
+      { includeHeartbeat: true, activeOnly: true },
       'agent-active-task-list-empty'
     )
     expect(mocks.recovery.projectIfChannelListEmpty).toHaveBeenCalledWith(

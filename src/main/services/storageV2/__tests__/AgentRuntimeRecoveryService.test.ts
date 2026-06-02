@@ -338,9 +338,13 @@ describe('StorageV2AgentRuntimeRecoveryService', () => {
     expect(projection).toHaveBeenCalledTimes(1)
   })
 
-  it('projects any Storage v2 agent runtime rows before an authoritative mirror', async () => {
+  it('projects Storage v2 agent runtime rows before an authoritative mirror when runtime cache is behind', async () => {
+    const legacyClient = createCountClient(0)
     const storageClient = createCountClient(1)
     const projection = mockProjection()
+    vi.spyOn(DatabaseManager, 'getInstance').mockResolvedValue({
+      getClient: async () => legacyClient
+    } as any)
     vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(storageClient as any)
 
     const recovered = await new StorageV2AgentRuntimeRecoveryService().projectIfStorageHasAnyAgentRuntimeRows('test')
@@ -356,6 +360,21 @@ describe('StorageV2AgentRuntimeRecoveryService', () => {
     expect(projection).toHaveBeenCalledTimes(1)
   })
 
+  it('does not project before an authoritative mirror when runtime cache is already current', async () => {
+    const legacyClient = createCountClient(2)
+    const storageClient = createCountClient(2)
+    const projection = mockProjection()
+    vi.spyOn(DatabaseManager, 'getInstance').mockResolvedValue({
+      getClient: async () => legacyClient
+    } as any)
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(storageClient as any)
+
+    const recovered = await new StorageV2AgentRuntimeRecoveryService().projectIfStorageHasAnyAgentRuntimeRows('test')
+
+    expect(recovered).toBe(false)
+    expect(projection).not.toHaveBeenCalled()
+  })
+
   it('projects a specific missing task when Storage v2 has it', async () => {
     const storageClient = createCountClient(1)
     const projection = mockProjection()
@@ -368,6 +387,35 @@ describe('StorageV2AgentRuntimeRecoveryService', () => {
       expect.objectContaining({
         sql: expect.stringContaining('scheduled_tasks'),
         args: ['task-1']
+      })
+    )
+    expect(projection).toHaveBeenCalledTimes(1)
+  })
+
+  it('projects only active due tasks for due-task list recovery', async () => {
+    const storageClient = createCountClient(1)
+    const projection = mockProjection()
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(storageClient as any)
+
+    const recovered = await new StorageV2AgentRuntimeRecoveryService().projectIfTaskListEmpty(
+      {
+        includeHeartbeat: true,
+        activeOnly: true,
+        dueBefore: '2026-06-02T10:00:00.000Z'
+      },
+      'test'
+    )
+
+    expect(recovered).toBe(true)
+    expect(storageClient.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sql: expect.stringContaining("status = 'active'"),
+        args: ['2026-06-02T10:00:00.000Z']
+      })
+    )
+    expect(storageClient.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sql: expect.stringContaining('next_run <= ?')
       })
     )
     expect(projection).toHaveBeenCalledTimes(1)
