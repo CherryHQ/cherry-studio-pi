@@ -25,6 +25,8 @@ export type DataSyncSummary = {
   storageSkipped?: number
   blobUploaded?: number
   blobDownloaded?: number
+  secretUploaded?: number
+  secretDownloaded?: number
   snapshotUploaded?: boolean
   snapshotFileName?: string | null
   snapshotBytes?: number
@@ -80,18 +82,24 @@ function hasDownloadedRemoteData(summary?: Partial<DataSyncSummary> | null) {
     (summary.downloaded ?? 0) > 0 ||
     (summary.storageDownloaded ?? 0) > 0 ||
     (summary.blobDownloaded ?? 0) > 0 ||
+    (summary.secretDownloaded ?? 0) > 0 ||
     (summary.deleted ?? 0) > 0 ||
     (summary.storageDeleted ?? 0) > 0
   )
 }
 
-async function hydrateRuntimeCacheAfterDataSync(context: string) {
-  await hydrateRuntimeCacheFromStorageV2({
-    dispatch: store.dispatch,
-    flush: () => persistor.flush()
-  }).catch((error) => {
+async function hydrateRuntimeCacheAfterDataSync(context: string, options: { strict?: boolean } = {}) {
+  try {
+    await hydrateRuntimeCacheFromStorageV2({
+      dispatch: store.dispatch,
+      flush: () => persistor.flush()
+    })
+  } catch (error) {
     logger.warn(`Failed to hydrate runtime cache ${context}`, error as Error)
-  })
+    if (options.strict) {
+      throw new Error(`远端数据已下载，但恢复到当前界面失败：${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
 }
 
 async function hydratePreviouslyDownloadedRemoteData() {
@@ -102,7 +110,7 @@ async function hydratePreviouslyDownloadedRemoteData() {
 
   if (!hasDownloadedRemoteData(status?.lastSummary)) return
 
-  await hydrateRuntimeCacheAfterDataSync('before data sync')
+  await hydrateRuntimeCacheAfterDataSync('before data sync', { strict: true })
 }
 
 async function isMainProcessRunning() {
@@ -145,7 +153,7 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
     await hydratePreviouslyDownloadedRemoteData()
     await prepareStorageV2ForDataSync()
     const summary = await window.api.dataSync.syncNow(config)
-    await hydrateRuntimeCacheAfterDataSync('after data sync')
+    await hydrateRuntimeCacheAfterDataSync('after data sync', { strict: hasDownloadedRemoteData(summary) })
     return summary
   } finally {
     setDataSyncRunning(false)

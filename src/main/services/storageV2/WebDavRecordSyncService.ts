@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 import * as fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
@@ -10,6 +10,7 @@ import { runWebDavOperation, WebDavOperationError } from '@main/services/WebDavR
 import type { WebDAVClient } from 'webdav'
 
 import { storageV2DataRootService } from './DataRootService'
+import { type StorageV2PlaintextSecretVaultEntry, storageV2SecretVaultService } from './SecretVaultService'
 import { storageV2Database } from './StorageV2Database'
 
 const logger = loggerService.withContext('StorageV2WebDavRecordSyncService')
@@ -66,6 +67,28 @@ type RemoteRecordBundleMeta = {
   updatedAt: number
 }
 
+type RemoteSecretVaultMeta = {
+  version: 1
+  path: string
+  valueHash: string
+  secretCount: number
+  updatedAt: number
+  encryption: 'cherry-webdav-secret-sync-aes-256-gcm'
+}
+
+type RemoteEncryptedSecretEntry = {
+  encrypted: string
+  iv: string
+  authTag: string
+  updatedAt: string
+}
+
+type RemoteSecretVaultBundle = {
+  version: 1
+  updatedAt: number
+  secrets: Record<string, RemoteEncryptedSecretEntry>
+}
+
 type StorageV2WebDavRecordSyncBundle = {
   version: 1
   updatedAt: number
@@ -78,6 +101,7 @@ export type StorageV2WebDavRecordSyncManifest = {
   records: Record<string, RemoteRecordMeta>
   blobs: Record<string, RemoteBlobMeta>
   bundle?: RemoteRecordBundleMeta | null
+  secrets?: RemoteSecretVaultMeta | null
 }
 
 export type StorageV2WebDavRecordSyncSummary = {
@@ -89,6 +113,8 @@ export type StorageV2WebDavRecordSyncSummary = {
   storageSkipped: number
   blobUploaded: number
   blobDownloaded: number
+  secretUploaded: number
+  secretDownloaded: number
 }
 
 export type StorageV2WebDavRecordSyncStateCommit = {
@@ -102,6 +128,10 @@ export type StorageV2WebDavRecordSyncResult = {
   syncStates: StorageV2WebDavRecordSyncStateCommit[]
 }
 
+type StorageV2WebDavRecordSyncOptions = {
+  secretKeyMaterial?: string
+}
+
 const EMPTY_SUMMARY: StorageV2WebDavRecordSyncSummary = {
   storageUploaded: 0,
   storageDownloaded: 0,
@@ -110,12 +140,18 @@ const EMPTY_SUMMARY: StorageV2WebDavRecordSyncSummary = {
   storageResolvedConflicts: 0,
   storageSkipped: 0,
   blobUploaded: 0,
-  blobDownloaded: 0
+  blobDownloaded: 0,
+  secretUploaded: 0,
+  secretDownloaded: 0
 }
 
 const TOMBSTONE_ENTITY_TYPE = 'sync_tombstone'
 const STORAGE_V2_LEGACY_RECORD_BUNDLE_PATH = 'storage-v2/bundle/current.json'
 const STORAGE_V2_BUNDLE_DIR = 'storage-v2/bundle'
+const STORAGE_V2_SECRET_VAULT_DIR = 'storage-v2/secrets'
+const SECRET_SYNC_KEY_CONTEXT = 'cherry-studio-pi:webdav-secret-sync:v1'
+const SECRET_SYNC_ENCRYPTION = 'cherry-webdav-secret-sync-aes-256-gcm' as const
+const GCM_IV_BYTE_LENGTH = 12
 const TOMBSTONE_PHYSICAL_DELETE_TARGETS = {
   agent_skill: {
     table: 'agent_skills',
@@ -303,7 +339,8 @@ function normalizeManifest(manifest?: StorageV2WebDavRecordSyncManifest | null):
     version: 1,
     records: manifest?.records ?? {},
     blobs: manifest?.blobs ?? {},
-    bundle: manifest?.bundle ?? null
+    bundle: manifest?.bundle ?? null,
+    secrets: manifest?.secrets ?? null
   }
 }
 
@@ -373,6 +410,10 @@ function blobPath(blobId: string, checksum?: string) {
   return checksum
     ? `storage-v2/blobs/${encodePart(blobId)}-${encodePart(checksum)}`
     : `storage-v2/blobs/${encodePart(blobId)}`
+}
+
+function secretBundlePath(valueHash: string) {
+  return `${STORAGE_V2_SECRET_VAULT_DIR}/${encodePart(valueHash)}.json`
 }
 
 function recordMetaFromLocalRecord(record: LocalRecord, relativePath = recordPath(record)): RemoteRecordMeta {
@@ -478,6 +519,61 @@ function bufferFromRemoteContents(value: string | Buffer | ArrayBuffer | unknown
 
 function sha256Buffer(value: Buffer) {
   return createHash('sha256').update(value).digest('hex')
+}
+
+function sha256String(value: string) {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+function deriveSecretSyncKey(secretKeyMaterial: string | undefined) {
+  return createHash('sha256')
+    .update(SECRET_SYNC_KEY_CONTEXT)
+    .update('\0')
+    .update(secretKeyMaterial ?? '')
+    .digest()
+}
+
+function secretEntryTimestamp(entry: StorageV2PlaintextSecretVaultEntry | undefined) {
+  if (!entry?.updatedAt) return 0
+  const parsed = Date.parse(entry.updatedAt)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function secretEntryHash(entry: StorageV2PlaintextSecretVaultEntry | undefined) {
+  return entry ? sha256String(entry.value) : null
+}
+
+function secretVaultValueHash(secrets: Record<string, StorageV2PlaintextSecretVaultEntry>) {
+  return hashJson(
+    Object.entries(secrets)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([secretId, entry]) => [secretId, secretEntryHash(entry), entry.updatedAt])
+  )
+}
+
+function secretVaultUpdatedAt(secrets: Record<string, StorageV2PlaintextSecretVaultEntry>) {
+  return Math.max(0, ...Object.values(secrets).map(secretEntryTimestamp))
+}
+
+function encryptRemoteSecret(secretId: string, entry: StorageV2PlaintextSecretVaultEntry, key: Buffer) {
+  const iv = randomBytes(GCM_IV_BYTE_LENGTH)
+  const cipher = createCipheriv('aes-256-gcm', key, iv)
+  cipher.setAAD(Buffer.from(secretId, 'utf8'))
+  const encrypted = Buffer.concat([cipher.update(entry.value, 'utf8'), cipher.final()])
+
+  return {
+    encrypted: encrypted.toString('base64'),
+    iv: iv.toString('base64'),
+    authTag: cipher.getAuthTag().toString('base64'),
+    updatedAt: entry.updatedAt
+  }
+}
+
+function decryptRemoteSecret(secretId: string, entry: RemoteEncryptedSecretEntry, key: Buffer) {
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(entry.iv, 'base64'))
+  decipher.setAAD(Buffer.from(secretId, 'utf8'))
+  decipher.setAuthTag(Buffer.from(entry.authTag, 'base64'))
+  return Buffer.concat([decipher.update(Buffer.from(entry.encrypted, 'base64')), decipher.final()]).toString('utf8')
 }
 
 function normalizeLocalStoragePath(input: string) {
@@ -654,14 +750,17 @@ export class StorageV2WebDavRecordSyncService {
         ? ((contents as { data: unknown[] }).data as Array<{ filename?: string; basename?: string; type?: string }>)
         : []
     const files: string[] = []
+    const normalizedDirPath = path.posix.normalize(dirPath).replace(/\/+$/g, '')
 
     for (const entry of entries as Array<{ filename?: string; basename?: string; type?: string }>) {
       const filename = entry.filename || path.posix.join(dirPath, entry.basename || '')
       if (!filename || filename === dirPath) continue
+      const normalizedFilename = path.posix.normalize(filename)
+      if (normalizedFilename !== normalizedDirPath && !normalizedFilename.startsWith(`${normalizedDirPath}/`)) continue
       if (entry.type === 'directory') {
-        files.push(...(await this.listRemoteFilesRecursive(client, filename)))
+        files.push(...(await this.listRemoteFilesRecursive(client, normalizedFilename)))
       } else {
-        files.push(filename)
+        files.push(normalizedFilename)
       }
     }
 
@@ -698,6 +797,7 @@ export class StorageV2WebDavRecordSyncService {
     }
 
     addReferencedPath(manifest.bundle?.path)
+    addReferencedPath(manifest.secrets?.path)
     for (const meta of Object.values(manifest.records ?? {})) {
       addReferencedPath(meta.path)
     }
@@ -705,7 +805,7 @@ export class StorageV2WebDavRecordSyncService {
       addReferencedPath(blob.path)
     }
 
-    const roots = ['storage-v2/records', STORAGE_V2_BUNDLE_DIR, 'storage-v2/blobs']
+    const roots = ['storage-v2/records', STORAGE_V2_BUNDLE_DIR, 'storage-v2/blobs', STORAGE_V2_SECRET_VAULT_DIR]
     for (const root of roots) {
       const files = await this.listRemoteFilesRecursive(client, path.posix.join(basePath, root))
       for (const filePath of files) {
@@ -892,6 +992,161 @@ export class StorageV2WebDavRecordSyncService {
     }
 
     return blobIds
+  }
+
+  private async readRemoteSecretVaultBundle(
+    client: WebDAVClient,
+    basePath: string,
+    manifest: StorageV2WebDavRecordSyncManifest,
+    secretKeyMaterial: string | undefined
+  ): Promise<Record<string, StorageV2PlaintextSecretVaultEntry> | null> {
+    if (!manifest.secrets?.path) return null
+    if (manifest.secrets.encryption !== SECRET_SYNC_ENCRYPTION) {
+      throw new Error('远端敏感配置使用了当前版本不支持的加密格式。为避免模型配置残缺，本次同步已停止。')
+    }
+
+    const bundle = await this.readJson<RemoteSecretVaultBundle>(
+      client,
+      path.posix.join(basePath, safeRemoteRelativePath(manifest.secrets.path))
+    )
+    if (!bundle?.secrets || typeof bundle.secrets !== 'object') {
+      throw new Error('远端敏感配置数据包缺失或格式损坏。为避免模型配置残缺，本次同步已停止。')
+    }
+
+    const key = deriveSecretSyncKey(secretKeyMaterial)
+    const secrets: Record<string, StorageV2PlaintextSecretVaultEntry> = {}
+    try {
+      for (const [secretId, entry] of Object.entries(bundle.secrets)) {
+        if (!entry?.encrypted || !entry.iv || !entry.authTag || !entry.updatedAt) continue
+        secrets[secretId] = {
+          value: decryptRemoteSecret(secretId, entry, key),
+          updatedAt: entry.updatedAt
+        }
+      }
+    } catch (error) {
+      throw new Error(
+        '远端敏感配置无法解密。请确认两台设备使用同一套 WebDAV 同步账号和密码；为避免写入不完整模型配置，本次同步已停止。',
+        { cause: error }
+      )
+    }
+
+    const valueHash = secretVaultValueHash(secrets)
+    if (manifest.secrets.valueHash && manifest.secrets.valueHash !== valueHash) {
+      throw new Error('远端敏感配置校验失败。为避免导入损坏的模型密钥，本次同步已停止。')
+    }
+
+    return secrets
+  }
+
+  private async writeRemoteSecretVaultBundle(
+    client: WebDAVClient,
+    basePath: string,
+    manifest: StorageV2WebDavRecordSyncManifest,
+    secrets: Record<string, StorageV2PlaintextSecretVaultEntry>,
+    secretKeyMaterial: string | undefined
+  ) {
+    const valueHash = secretVaultValueHash(secrets)
+    const relativePath = secretBundlePath(valueHash)
+    const key = deriveSecretSyncKey(secretKeyMaterial)
+    const bundle: RemoteSecretVaultBundle = {
+      version: 1,
+      updatedAt: secretVaultUpdatedAt(secrets),
+      secrets: Object.fromEntries(
+        Object.entries(secrets)
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([secretId, entry]) => [secretId, encryptRemoteSecret(secretId, entry, key)])
+      )
+    }
+
+    await this.writeJson(client, path.posix.join(basePath, relativePath), bundle, { overwrite: false })
+    manifest.secrets = {
+      version: 1,
+      path: relativePath,
+      valueHash,
+      secretCount: Object.keys(secrets).length,
+      updatedAt: bundle.updatedAt,
+      encryption: SECRET_SYNC_ENCRYPTION
+    }
+  }
+
+  private async syncSecretVault(
+    client: WebDAVClient,
+    basePath: string,
+    manifest: StorageV2WebDavRecordSyncManifest,
+    summary: StorageV2WebDavRecordSyncSummary,
+    options: StorageV2WebDavRecordSyncOptions
+  ) {
+    const [localSecrets, remoteSecrets] = await Promise.all([
+      storageV2SecretVaultService.exportPlaintextSecrets(),
+      this.readRemoteSecretVaultBundle(client, basePath, manifest, options.secretKeyMaterial)
+    ])
+
+    const localIds = Object.keys(localSecrets)
+    const remoteIds = Object.keys(remoteSecrets ?? {})
+    if (localIds.length === 0 && remoteIds.length === 0) {
+      manifest.secrets = null
+      return
+    }
+
+    if (!remoteSecrets) {
+      await this.writeRemoteSecretVaultBundle(client, basePath, manifest, localSecrets, options.secretKeyMaterial)
+      summary.secretUploaded += localIds.length
+      return
+    }
+
+    const merged: Record<string, StorageV2PlaintextSecretVaultEntry> = { ...remoteSecrets }
+    const remoteImports: Record<string, StorageV2PlaintextSecretVaultEntry> = {}
+    const allSecretIds = new Set([...localIds, ...remoteIds])
+    let remoteNeedsUpdate = false
+
+    for (const secretId of allSecretIds) {
+      const local = localSecrets[secretId]
+      const remote = remoteSecrets[secretId]
+
+      if (local && !remote) {
+        merged[secretId] = local
+        summary.secretUploaded += 1
+        remoteNeedsUpdate = true
+        continue
+      }
+
+      if (!local && remote) {
+        remoteImports[secretId] = remote
+        summary.secretDownloaded += 1
+        continue
+      }
+
+      if (!local || !remote) continue
+
+      const localUpdatedAt = secretEntryTimestamp(local)
+      const remoteUpdatedAt = secretEntryTimestamp(remote)
+      const localHash = secretEntryHash(local)
+      const remoteHash = secretEntryHash(remote)
+
+      if (localHash === remoteHash) {
+        merged[secretId] = localUpdatedAt >= remoteUpdatedAt ? local : remote
+        continue
+      }
+
+      if (localUpdatedAt >= remoteUpdatedAt) {
+        merged[secretId] = local
+        summary.secretUploaded += 1
+        remoteNeedsUpdate = true
+      } else {
+        merged[secretId] = remote
+        remoteImports[secretId] = remote
+        summary.secretDownloaded += 1
+      }
+    }
+
+    if (Object.keys(remoteImports).length > 0) {
+      await storageV2SecretVaultService.importPlaintextSecrets(remoteImports)
+    }
+
+    const mergedHash = secretVaultValueHash(merged)
+    if (remoteNeedsUpdate || mergedHash !== manifest.secrets?.valueHash) {
+      await this.writeRemoteSecretVaultBundle(client, basePath, manifest, merged, options.secretKeyMaterial)
+    }
   }
 
   private async getRecordSyncState(client: Client, id: string): Promise<string | null> {
@@ -1379,7 +1634,8 @@ export class StorageV2WebDavRecordSyncService {
   async sync(
     client: WebDAVClient,
     basePath: string,
-    manifestInput?: StorageV2WebDavRecordSyncManifest | null
+    manifestInput?: StorageV2WebDavRecordSyncManifest | null,
+    options: StorageV2WebDavRecordSyncOptions = {}
   ): Promise<StorageV2WebDavRecordSyncResult> {
     this.skillIdRemaps.clear()
     const dbClient = await storageV2Database.getClient()
@@ -1578,6 +1834,7 @@ export class StorageV2WebDavRecordSyncService {
 
     this.pruneManifestBlobsWithoutRecords(manifest, bundledRecords)
     await this.writeRecordBundle(client, basePath, manifest, bundledRecords)
+    await this.syncSecretVault(client, basePath, manifest, summary, options)
     return {
       manifest,
       summary,

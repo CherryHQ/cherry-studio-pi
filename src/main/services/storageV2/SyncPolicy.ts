@@ -77,7 +77,7 @@ const STORAGE_V2_SYNC_POLICIES = [
     clearSemantics: 'explicit-cleared-marker',
     conflictUi: 'diff',
     notes:
-      'Settings keep scope-specific JSON values; credential values must be represented by secret refs or unavailable markers.'
+      'Settings keep scope-specific JSON values; credential values must be represented by secret refs or unavailable markers. WebDAV data sync carries referenced secret values through the encrypted secret vault bundle, not inside setting rows.'
   },
   {
     entityType: 'provider',
@@ -91,7 +91,8 @@ const STORAGE_V2_SYNC_POLICIES = [
     secretMode: 'secret-ref-only',
     clearSemantics: 'deleted-at-tombstone',
     conflictUi: 'diff',
-    notes: 'Provider metadata can sync, but API keys remain local-only secrets referenced by provider_credentials.'
+    notes:
+      'Provider rows sync metadata and secret refs only. WebDAV data sync carries provider API keys through the encrypted secret vault bundle so multi-device model configuration can recover without storing plaintext in provider rows.'
   },
   {
     entityType: 'assistant',

@@ -207,6 +207,46 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
+function mockDirectoryContentsFromRemoteFiles() {
+  mocks.webdav.getDirectoryContents.mockImplementation(async (dirPath: string) => {
+    const normalized = path.posix.normalize(dirPath).replace(/\/+$/g, '')
+    const prefix = `${normalized}/`
+    const discoveredDirectories = new Set<string>()
+    const entries: Array<{ type: 'directory' | 'file'; basename: string; filename: string; lastmod: string }> = []
+
+    for (const key of mocks.remoteFiles.keys()) {
+      const filePath = path.posix.normalize(String(key))
+      if (!filePath.startsWith(prefix)) continue
+
+      const relativePath = filePath.slice(prefix.length)
+      const parts = relativePath.split('/')
+      if (!parts[0]) continue
+
+      if (parts.length === 1) {
+        entries.push({
+          type: 'file',
+          basename: parts[0],
+          filename: filePath,
+          lastmod: '2026-06-01T00:00:00.000Z'
+        })
+        continue
+      }
+
+      const childDir = `${normalized}/${parts[0]}`
+      if (discoveredDirectories.has(childDir)) continue
+      discoveredDirectories.add(childDir)
+      entries.push({
+        type: 'directory',
+        basename: parts[0],
+        filename: childDir,
+        lastmod: '2026-06-01T00:00:00.000Z'
+      })
+    }
+
+    return entries
+  })
+}
+
 describe('AppDataSyncService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -240,7 +280,9 @@ describe('AppDataSyncService', () => {
         storageResolvedConflicts: 0,
         storageSkipped: 0,
         blobUploaded: 0,
-        blobDownloaded: 0
+        blobDownloaded: 0,
+        secretUploaded: 0,
+        secretDownloaded: 0
       }
     })
     mocks.storageRecordSync.commitRecordSyncStates.mockResolvedValue(undefined)
@@ -433,6 +475,7 @@ describe('AppDataSyncService', () => {
 
       return {
         manifest: { version: 1, records: {}, blobs: {} },
+        syncStates: [],
         summary: {
           storageUploaded: 0,
           storageDownloaded: 0,
@@ -441,7 +484,9 @@ describe('AppDataSyncService', () => {
           storageResolvedConflicts: 0,
           storageSkipped: 0,
           blobUploaded: 0,
-          blobDownloaded: 0
+          blobDownloaded: 0,
+          secretUploaded: 0,
+          secretDownloaded: 0
         }
       }
     })
@@ -761,7 +806,9 @@ describe('AppDataSyncService', () => {
         storageResolvedConflicts: 0,
         storageSkipped: 0,
         blobUploaded: 0,
-        blobDownloaded: 0
+        blobDownloaded: 0,
+        secretUploaded: 0,
+        secretDownloaded: 0
       }
     })
 
@@ -845,7 +892,9 @@ describe('AppDataSyncService', () => {
         storageResolvedConflicts: 0,
         storageSkipped: 3,
         blobUploaded: 0,
-        blobDownloaded: 0
+        blobDownloaded: 0,
+        secretUploaded: 0,
+        secretDownloaded: 0
       }
     })
 
@@ -886,7 +935,9 @@ describe('AppDataSyncService', () => {
 
     expect(summary.uploaded).toBe(0)
     expect(summary.snapshotUploaded).toBe(true)
-    expect(mocks.storageRecordSync.sync).toHaveBeenCalledWith(mocks.webdav, '/remote-root/sync/v1', null)
+    expect(mocks.storageRecordSync.sync).toHaveBeenCalledWith(mocks.webdav, '/remote-root/sync/v1', null, {
+      secretKeyMaterial: 'https://dav.example.com\nuser\npass'
+    })
     expect(summary.snapshotFileName).toMatch(/^cherry-studio-pi\.data-sync\.local-device\.\d+\.zip$/)
     expect(summary.snapshotBytes).toBe(6)
     expect(mocks.backupManager.backup).toHaveBeenCalledWith(undefined, summary.snapshotFileName, undefined, false)
@@ -899,6 +950,22 @@ describe('AppDataSyncService', () => {
       expect.stringContaining('"latestSnapshot"'),
       { overwrite: true }
     )
+  })
+
+  it('prunes stale app-data record and backup artifacts after publishing the manifest', async () => {
+    mockDirectoryContentsFromRemoteFiles()
+    mocks.remoteFiles.set('/remote-root/sync/v1/records/settings/theme.json', JSON.stringify(remoteRecord))
+    mocks.remoteFiles.set('/remote-root/sync/v1/records/settings/stale-hash.json', JSON.stringify({ stale: true }))
+    mocks.remoteFiles.set('/remote-root/sync/v1/backups/old-device-snapshot.zip', Buffer.from('old-backup'))
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.status).toBe('success')
+    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/records/settings/stale-hash.json')
+    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/backups/old-device-snapshot.zip')
+    expect(mocks.webdav.deleteFile).not.toHaveBeenCalledWith('/remote-root/sync/v1/records/settings/theme.json')
+    expect(mocks.remoteFiles.has('/remote-root/sync/v1/records/settings/stale-hash.json')).toBe(false)
+    expect(mocks.remoteFiles.has('/remote-root/sync/v1/backups/old-device-snapshot.zip')).toBe(false)
   })
 
   it('fails safely when the required safety snapshot upload is temporarily unavailable', async () => {

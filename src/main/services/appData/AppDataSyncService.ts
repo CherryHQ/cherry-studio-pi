@@ -121,6 +121,8 @@ export type DataSyncSummary = {
   storageSkipped: number
   blobUploaded: number
   blobDownloaded: number
+  secretUploaded: number
+  secretDownloaded: number
   snapshotUploaded: boolean
   snapshotFileName: string | null
   snapshotBytes: number
@@ -150,6 +152,8 @@ const EMPTY_SUMMARY: DataSyncSummary = {
   storageSkipped: 0,
   blobUploaded: 0,
   blobDownloaded: 0,
+  secretUploaded: 0,
+  secretDownloaded: 0,
   snapshotUploaded: false,
   snapshotFileName: null,
   snapshotBytes: 0,
@@ -332,7 +336,11 @@ function storageV2ManifestBlobEntries(manifest?: StorageV2WebDavRecordSyncManife
 }
 
 function hasStorageV2RemoteData(manifest?: StorageV2WebDavRecordSyncManifest | null) {
-  return storageV2ManifestRecordEntries(manifest).length > 0 || storageV2ManifestBlobEntries(manifest).length > 0
+  return (
+    storageV2ManifestRecordEntries(manifest).length > 0 ||
+    storageV2ManifestBlobEntries(manifest).length > 0 ||
+    Boolean(manifest?.secrets?.valueHash)
+  )
 }
 
 function storageV2ManifestFingerprint(manifest?: StorageV2WebDavRecordSyncManifest | null) {
@@ -357,7 +365,16 @@ function storageV2ManifestFingerprint(manifest?: StorageV2WebDavRecordSyncManife
           meta.storagePath,
           meta.path,
           meta.updatedAt
-        ])
+        ]),
+        secrets: manifest?.secrets
+          ? [
+              manifest.secrets.valueHash,
+              manifest.secrets.secretCount,
+              manifest.secrets.updatedAt,
+              manifest.secrets.path,
+              manifest.secrets.encryption
+            ]
+          : null
       })
     )
     .digest('hex')
@@ -518,6 +535,72 @@ export class AppDataSyncService {
       if (error instanceof WebDavOperationError && error.status === 404) return
       throw error
     })
+  }
+
+  private async listRemoteFilesRecursive(client: WebDAVClient, dirPath: string): Promise<string[]> {
+    try {
+      const exists = await runWebDavOperation(
+        `checking remote artifact directory ${dirPath}`,
+        () => client.exists(dirPath),
+        {
+          logger
+        }
+      )
+      if (!exists) return []
+    } catch (error) {
+      if (error instanceof WebDavOperationError && error.status === 404) return []
+      throw error
+    }
+
+    const contents = await runWebDavOperation(
+      `listing remote artifact directory ${dirPath}`,
+      () => client.getDirectoryContents(dirPath),
+      { logger }
+    )
+    const entries = normalizeDirectoryContents(contents)
+    const files: string[] = []
+    const normalizedDirPath = path.posix.normalize(dirPath).replace(/\/+$/g, '')
+
+    for (const entry of entries) {
+      const filename = entry.filename || path.posix.join(dirPath, entry.basename || '')
+      if (!filename || filename === dirPath) continue
+      const normalizedFilename = path.posix.normalize(filename)
+      if (normalizedFilename !== normalizedDirPath && !normalizedFilename.startsWith(`${normalizedDirPath}/`)) continue
+
+      if (entry.type === 'directory') {
+        files.push(...(await this.listRemoteFilesRecursive(client, normalizedFilename)))
+      } else {
+        files.push(normalizedFilename)
+      }
+    }
+
+    return files
+  }
+
+  private async pruneRemoteAppDataArtifacts(client: WebDAVClient, basePath: string, manifest: RemoteManifest) {
+    const referenced = new Set<string>()
+    const addReferencedPath = (relativePath: string | null | undefined) => {
+      if (!relativePath) return
+      referenced.add(
+        path.posix.join(basePath, normalizeRemoteRelativePath(relativePath, 'Remote app data artifact path'))
+      )
+    }
+
+    for (const meta of Object.values(manifest.records ?? {})) {
+      addReferencedPath(meta.path)
+    }
+    for (const snapshot of Object.values(manifest.snapshots ?? {})) {
+      addReferencedPath(snapshot.path)
+    }
+    addReferencedPath(manifest.latestSnapshot?.path)
+
+    for (const root of ['records', 'backups']) {
+      const files = await this.listRemoteFilesRecursive(client, path.posix.join(basePath, root))
+      for (const filePath of files) {
+        if (referenced.has(filePath)) continue
+        await this.removeRemoteFile(client, filePath)
+      }
+    }
   }
 
   private normalizeRemoteLock(lock: RemoteSyncLock | null): RemoteSyncLock | null {
@@ -890,6 +973,8 @@ export class AppDataSyncService {
     summary.storageSkipped += storageSummary.storageSkipped
     summary.blobUploaded += storageSummary.blobUploaded
     summary.blobDownloaded += storageSummary.blobDownloaded
+    summary.secretUploaded += storageSummary.secretUploaded
+    summary.secretDownloaded += storageSummary.secretDownloaded
   }
 
   private async pullRemoteRecord(client: WebDAVClient, basePath: string, meta: RemoteRecordMeta) {
@@ -1384,7 +1469,9 @@ export class AppDataSyncService {
         stageSyncState(`record:${id}:hash`, winner.valueHash)
       }
 
-      const storageSync = await storageV2WebDavRecordSyncService.sync(client, basePath, manifest.storageV2)
+      const storageSync = await storageV2WebDavRecordSyncService.sync(client, basePath, manifest.storageV2, {
+        secretKeyMaterial: `${normalizeWebDavHost(config.webdavHost)}\n${config.webdavUser ?? ''}\n${config.webdavPass ?? ''}`
+      })
       manifest.storageV2 = storageSync.manifest
       storageSyncStates = storageSync.syncStates ?? []
       this.addStorageV2Summary(summary, storageSync.summary)
@@ -1414,6 +1501,9 @@ export class AppDataSyncService {
       await this.assertRemoteLockStillOwned(client, remoteLock)
       await this.assertRemoteManifestUnchanged(client, manifestPath, manifestBaseline)
       await this.writeJson(client, manifestPath, manifest)
+      await this.pruneRemoteAppDataArtifacts(client, basePath, manifest).catch((error) => {
+        logger.warn('Failed to prune stale app data WebDAV artifacts after sync', error as Error)
+      })
       await storageV2WebDavRecordSyncService.commitRecordSyncStates(storageSyncStates)
       await storageV2WebDavRecordSyncService
         .pruneRemoteArtifacts(client, basePath, manifest.storageV2)

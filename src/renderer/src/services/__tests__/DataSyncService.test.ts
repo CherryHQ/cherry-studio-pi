@@ -61,6 +61,8 @@ const successSummary = {
   storageSkipped: 16,
   blobUploaded: 0,
   blobDownloaded: 0,
+  secretUploaded: 0,
+  secretDownloaded: 0,
   snapshotUploaded: false,
   snapshotFileName: null,
   snapshotBytes: 0,
@@ -103,6 +105,7 @@ describe('DataSyncService', () => {
         downloaded: 0,
         storageDownloaded: 0,
         blobDownloaded: 0,
+        secretDownloaded: 0,
         deleted: 0,
         storageDeleted: 0,
         lastSyncAt: 0
@@ -148,6 +151,7 @@ describe('DataSyncService', () => {
         downloaded: 0,
         storageDownloaded: 0,
         blobDownloaded: 0,
+        secretDownloaded: 0,
         deleted: 0,
         storageDeleted: 0,
         lastSyncAt: 1780058000000
@@ -161,6 +165,7 @@ describe('DataSyncService', () => {
         downloaded: 0,
         storageDownloaded: 12,
         blobDownloaded: 0,
+        secretDownloaded: 0,
         deleted: 0,
         storageDeleted: 0,
         lastSyncAt: 1780058000000
@@ -188,6 +193,58 @@ describe('DataSyncService', () => {
       webdavPath: '/cherry-studio-pi'
     })
     expect(mocks.hydrateRuntimeCacheFromStorageV2).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails the manual sync when downloaded remote data cannot be restored to runtime state', async () => {
+    mocks.syncNow.mockResolvedValueOnce({
+      ...successSummary,
+      storageDownloaded: 2,
+      secretDownloaded: 1
+    })
+    mocks.hydrateRuntimeCacheFromStorageV2.mockRejectedValueOnce(new Error('hydrate failed'))
+
+    await expect(syncAppDataNow()).rejects.toThrow('远端数据已下载，但恢复到当前界面失败')
+
+    expect(mocks.prepareStorageV2ForDataSync).toHaveBeenCalledTimes(1)
+    expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+    expect(getDataSyncRuntimeState().syncing).toBe(false)
+  })
+
+  it('blocks the next sync when previously downloaded remote data still cannot hydrate', async () => {
+    mocks.getStatus.mockResolvedValueOnce({
+      syncing: false,
+      lastSummary: {
+        status: 'success',
+        downloaded: 0,
+        storageDownloaded: 1,
+        blobDownloaded: 0,
+        secretDownloaded: 0,
+        deleted: 0,
+        storageDeleted: 0,
+        lastSyncAt: 1780058000000
+      },
+      conflicts: [],
+      syncStartedAt: null
+    })
+    mocks.getStatus.mockResolvedValueOnce({
+      lastSummary: {
+        status: 'success',
+        downloaded: 0,
+        storageDownloaded: 1,
+        blobDownloaded: 0,
+        secretDownloaded: 0,
+        deleted: 0,
+        storageDeleted: 0,
+        lastSyncAt: 1780058000000
+      }
+    })
+    mocks.hydrateRuntimeCacheFromStorageV2.mockRejectedValueOnce(new Error('hydrate failed'))
+
+    await expect(syncAppDataNow()).rejects.toThrow('远端数据已下载，但恢复到当前界面失败')
+
+    expect(mocks.prepareStorageV2ForDataSync).not.toHaveBeenCalled()
+    expect(mocks.syncNow).not.toHaveBeenCalled()
+    expect(getDataSyncRuntimeState().syncing).toBe(false)
   })
 
   it('does not prepare Storage v2 when WebDAV is not configured', async () => {

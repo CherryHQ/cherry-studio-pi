@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   restoreLatestSnapshot: vi.fn(),
   startDataSyncAutoSync: vi.fn(),
   stopDataSyncAutoSync: vi.fn(),
+  subscribeDataSyncRuntimeState: vi.fn(),
   syncAppDataNow: vi.fn(),
   reportErrorToSystemAgent: vi.fn(),
   toast: {
@@ -55,6 +56,7 @@ vi.mock('@renderer/services/SystemAgentService', () => ({
 vi.mock('@renderer/services/DataSyncService', () => ({
   startDataSyncAutoSync: mocks.startDataSyncAutoSync,
   stopDataSyncAutoSync: mocks.stopDataSyncAutoSync,
+  subscribeDataSyncRuntimeState: mocks.subscribeDataSyncRuntimeState,
   syncAppDataNow: mocks.syncAppDataNow
 }))
 
@@ -103,6 +105,8 @@ function idleStatus() {
       storageSkipped: 0,
       blobUploaded: 0,
       blobDownloaded: 0,
+      secretUploaded: 0,
+      secretDownloaded: 0,
       lastSyncAt: 0
     },
     conflicts: [],
@@ -126,6 +130,10 @@ describe('DataSyncSettings', () => {
     mocks.checkWriteAccess.mockResolvedValue({ ok: true, basePath: '/cherry-studio-pi/sync/v1' })
     mocks.listRemoteDirectories.mockResolvedValue({ path: '/', parentPath: null, directories: [] })
     mocks.restoreLatestSnapshot.mockResolvedValue(undefined)
+    mocks.subscribeDataSyncRuntimeState.mockImplementation((listener: (state: { syncing: boolean }) => void) => {
+      listener({ syncing: false })
+      return vi.fn()
+    })
     mocks.syncAppDataNow.mockResolvedValue(null)
     Object.defineProperty(window, 'api', {
       configurable: true,

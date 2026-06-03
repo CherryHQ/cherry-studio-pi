@@ -99,4 +99,38 @@ describe('StorageV2SecretVaultService', () => {
     const vault = JSON.parse(await fs.readFile(path.join(dataRoot, 'secrets', 'vault.json'), 'utf-8'))
     expect(Object.keys(vault.secrets)).toEqual(['provider:keep:apiKey'])
   })
+
+  it('exports decryptable secrets and imports newer remote secrets without replacing newer local values', async () => {
+    const keepRef = await secretVaultService.setSecret('provider', 'keep', 'apiKey', 'local-token')
+    const localVaultPath = path.join(dataRoot, 'secrets', 'vault.json')
+    const localVault = JSON.parse(await fs.readFile(localVaultPath, 'utf-8'))
+    localVault.secrets['provider:keep:apiKey'].updatedAt = '2026-01-02T00:00:00.000Z'
+    await fs.writeFile(localVaultPath, JSON.stringify(localVault))
+
+    await secretVaultService.importPlaintextSecrets({
+      'provider:keep:apiKey': {
+        value: 'older-remote-token',
+        updatedAt: '2026-01-01T00:00:00.000Z'
+      },
+      'provider:new:apiKey': {
+        value: 'new-remote-token',
+        updatedAt: '2026-01-03T00:00:00.000Z'
+      }
+    })
+
+    await expect(secretVaultService.getSecret(keepRef)).resolves.toBe('local-token')
+    await expect(secretVaultService.getSecret('storage-v2://secret/provider/new/apiKey')).resolves.toBe(
+      'new-remote-token'
+    )
+
+    const exported = await secretVaultService.exportPlaintextSecrets()
+    expect(exported['provider:keep:apiKey']).toMatchObject({
+      value: 'local-token',
+      updatedAt: '2026-01-02T00:00:00.000Z'
+    })
+    expect(exported['provider:new:apiKey']).toMatchObject({
+      value: 'new-remote-token',
+      updatedAt: '2026-01-03T00:00:00.000Z'
+    })
+  })
 })

@@ -18,6 +18,16 @@ type SecretVaultFile = {
   >
 }
 
+export type StorageV2PlaintextSecretVaultEntry = {
+  value: string
+  updatedAt: string
+}
+
+export type StorageV2SecretVaultImportResult = {
+  importedCount: number
+  skippedCount: number
+}
+
 export type StorageV2SecretVaultPruneResult = {
   beforeCount: number
   afterCount: number
@@ -45,6 +55,12 @@ function decodeSecretRef(secretRef: string) {
     decodeURIComponent(part)
   }
   return parts.join(':')
+}
+
+function parseUpdatedAt(value: unknown) {
+  if (typeof value !== 'string' || !value) return 0
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
 export class StorageV2SecretVaultService {
@@ -97,6 +113,81 @@ export class StorageV2SecretVaultService {
 
   async waitForIdle(): Promise<void> {
     await this.writeQueue
+  }
+
+  async exportPlaintextSecrets(): Promise<Record<string, StorageV2PlaintextSecretVaultEntry>> {
+    await this.waitForIdle()
+
+    const vault = await this.readVault().catch(() => null)
+    if (!vault) return {}
+
+    const secrets: Record<string, StorageV2PlaintextSecretVaultEntry> = {}
+    for (const [secretId, record] of Object.entries(vault.secrets)) {
+      if (record.encoding !== LOCAL_VAULT_ENCODING) continue
+
+      const value = await this.decryptLocal(record).catch(() => null)
+      if (value == null) continue
+
+      secrets[secretId] = {
+        value,
+        updatedAt: record.updatedAt
+      }
+    }
+
+    return secrets
+  }
+
+  async importPlaintextSecrets(
+    secrets: Record<string, StorageV2PlaintextSecretVaultEntry>
+  ): Promise<StorageV2SecretVaultImportResult> {
+    const entries = Object.entries(secrets).filter(
+      ([secretId, entry]) =>
+        Boolean(secretId) &&
+        entry &&
+        typeof entry.value === 'string' &&
+        typeof entry.updatedAt === 'string' &&
+        entry.updatedAt
+    )
+    if (entries.length === 0) {
+      return {
+        importedCount: 0,
+        skippedCount: 0
+      }
+    }
+
+    return this.enqueueVaultWrite(async () => {
+      const vault = await this.readVault()
+      let importedCount = 0
+      let skippedCount = 0
+
+      for (const [secretId, entry] of entries) {
+        const existing = vault.secrets[secretId]
+        const existingUpdatedAt = parseUpdatedAt(existing?.updatedAt)
+        const nextUpdatedAt = parseUpdatedAt(entry.updatedAt)
+
+        if (existing && existingUpdatedAt > nextUpdatedAt) {
+          skippedCount += 1
+          continue
+        }
+
+        const encrypted = await this.encryptLocal(entry.value)
+        vault.secrets[secretId] = {
+          ...encrypted,
+          encoding: LOCAL_VAULT_ENCODING,
+          updatedAt: entry.updatedAt
+        }
+        importedCount += 1
+      }
+
+      if (importedCount > 0) {
+        await this.writeVault(vault)
+      }
+
+      return {
+        importedCount,
+        skippedCount
+      }
+    })
   }
 
   async pruneUnreferencedSecretIds(referencedSecretIds: Iterable<string>): Promise<StorageV2SecretVaultPruneResult> {

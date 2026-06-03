@@ -3,7 +3,12 @@ import { HStack } from '@renderer/components/Layout'
 import Selector from '@renderer/components/Selector'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useSettings } from '@renderer/hooks/useSettings'
-import { startDataSyncAutoSync, stopDataSyncAutoSync, syncAppDataNow } from '@renderer/services/DataSyncService'
+import {
+  startDataSyncAutoSync,
+  stopDataSyncAutoSync,
+  subscribeDataSyncRuntimeState,
+  syncAppDataNow
+} from '@renderer/services/DataSyncService'
 import { reportErrorToSystemAgent } from '@renderer/services/SystemAgentService'
 import { useAppDispatch } from '@renderer/store'
 import {
@@ -39,6 +44,8 @@ type SyncSummary = {
   storageSkipped?: number
   blobUploaded?: number
   blobDownloaded?: number
+  secretUploaded?: number
+  secretDownloaded?: number
   snapshotUploaded?: boolean
   snapshotFileName?: string | null
   snapshotBytes?: number
@@ -224,6 +231,7 @@ const DataSyncSettings: FC = () => {
   const [webdavPath, setWebdavPath] = useState(dataSyncWebdavPath)
   const [syncInterval, setSyncInterval] = useState(dataSyncSyncInterval)
   const [syncing, setSyncing] = useState(false)
+  const [runtimeSyncing, setRuntimeSyncing] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [diagnosing, setDiagnosing] = useState(false)
   const [diagnosis, setDiagnosis] = useState<DiagnosisState | null>(null)
@@ -273,9 +281,13 @@ const DataSyncSettings: FC = () => {
     return Boolean(nextStatus?.syncing)
   }
 
+  const syncInProgress = syncing || runtimeSyncing || Boolean(status?.syncing)
+
   useEffect(() => {
     void refreshStatus().catch(() => undefined)
   }, [])
+
+  useEffect(() => subscribeDataSyncRuntimeState((state) => setRuntimeSyncing(state.syncing)), [])
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -291,7 +303,7 @@ const DataSyncSettings: FC = () => {
       return
     }
 
-    if (syncing) {
+    if (syncInProgress) {
       setSyncing(true)
       window.toast.info(t('settings.data.data_sync.toast.sync_running'))
       return
@@ -643,23 +655,23 @@ const DataSyncSettings: FC = () => {
         <HStack gap="8px" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <Button
             type="primary"
-            icon={<SyncOutlined spin={syncing} />}
-            loading={syncing}
-            disabled={!webdavHost || restoring || diagnosing}
+            icon={<SyncOutlined spin={syncInProgress} />}
+            loading={syncInProgress}
+            disabled={!webdavHost || syncInProgress || restoring || diagnosing}
             onClick={syncNow}>
             {t('settings.data.data_sync.sync')}
           </Button>
           <Button
             icon={<BugOutlined />}
             loading={diagnosing}
-            disabled={!webdavHost || syncing || restoring}
+            disabled={!webdavHost || syncInProgress || restoring}
             onClick={diagnoseNow}>
             {t('settings.data.data_sync.diagnose')}
           </Button>
           <Button
             icon={<ReloadOutlined />}
             loading={restoring}
-            disabled={!webdavHost || syncing || diagnosing}
+            disabled={!webdavHost || syncInProgress || diagnosing}
             onClick={restoreLatestSnapshot}>
             {t('settings.data.data_sync.restore_latest')}
           </Button>
