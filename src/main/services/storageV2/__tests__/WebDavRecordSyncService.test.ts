@@ -644,6 +644,131 @@ describe('StorageV2WebDavRecordSyncService', () => {
     )
   })
 
+  it('downloads remote records when record hash metadata is stale', async () => {
+    const remote = makeSharedWebDavStore()
+    const remoteRow = {
+      key: 'theme',
+      value_json: '{"mode":"light"}',
+      scope: 'app',
+      updated_at: '2026-05-29T12:10:00.000Z',
+      deleted_at: null,
+      version: 2
+    }
+    const remoteHash = hashJson(remoteRow)
+    const remoteRecord = {
+      id: 'settings:theme',
+      table: settingsTable,
+      idValues: ['theme'],
+      row: remoteRow,
+      valueHash: remoteHash,
+      updatedAt: Date.parse(remoteRow.updated_at),
+      deletedAt: null,
+      version: 2
+    }
+    remote.files.set('/remote-root/sync/v1/storage-v2/records/settings/legacy-theme.json', JSON.stringify(remoteRecord))
+
+    const result = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
+      remote.client as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {
+          'settings:theme': {
+            entityType: 'settings',
+            table: 'settings',
+            idValues: ['theme'],
+            valueHash: `${remoteHash}-stale`,
+            updatedAt: remoteRecord.updatedAt,
+            deletedAt: null,
+            version: 2,
+            path: 'storage-v2/records/settings/legacy-theme.json'
+          }
+        }
+      }
+    )
+
+    expect(result.summary.storageDownloaded).toBe(1)
+    expect(result.manifest.records['settings:theme']).toMatchObject({
+      entityType: 'settings',
+      table: 'settings',
+      idValues: ['theme'],
+      valueHash: remoteHash,
+      path: 'storage-v2/bundle/current.json'
+    })
+  })
+
+  it('does not create conflicts when rows are content-equivalent but hash metadata drifts', async () => {
+    const remote = makeSharedWebDavStore()
+    const localRow = {
+      key: 'theme',
+      value_json: '{"mode":"light"}',
+      scope: 'app',
+      updated_at: '2026-05-29T12:10:00.000Z',
+      deleted_at: null,
+      version: 2
+    }
+    const remoteRow = {
+      key: 'theme',
+      value_json: '{"mode":"light"}',
+      scope: 'app',
+      updated_at: '2026-05-29T12:10:00.000Z',
+      deleted_at: null,
+      version: 2
+    }
+    const remoteHash = hashJson(remoteRow)
+    const remoteRecord = {
+      id: 'settings:theme',
+      table: settingsTable,
+      idValues: ['theme'],
+      row: remoteRow,
+      valueHash: remoteHash,
+      updatedAt: Date.parse(remoteRow.updated_at),
+      deletedAt: null,
+      version: 2
+    }
+    remote.files.set('/remote-root/sync/v1/storage-v2/records/settings/legacy-theme.json', JSON.stringify(remoteRecord))
+
+    const db = makeSettingsDb([localRow])
+    db.state.syncState.set('webdav-storage-record:settings:theme:hash', 'historical-baseline')
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    const result = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
+      remote.client as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {
+          'settings:theme': {
+            entityType: 'settings',
+            table: 'settings',
+            idValues: ['theme'],
+            valueHash: `${remoteHash}-stale`,
+            updatedAt: remoteRecord.updatedAt,
+            deletedAt: null,
+            version: 2,
+            path: 'storage-v2/records/settings/legacy-theme.json'
+          }
+        }
+      }
+    )
+
+    expect(result.summary.storageConflicts).toBe(0)
+    expect(result.summary.storageResolvedConflicts).toBe(0)
+    expect(result.summary.storageSkipped).toBe(1)
+    expect(result.summary.storageUploaded).toBe(0)
+    expect(result.summary.storageDownloaded).toBe(0)
+    expect(result.manifest.records['settings:theme']).toMatchObject({
+      entityType: 'settings',
+      table: 'settings',
+      idValues: ['theme'],
+      valueHash: remoteHash,
+      path: 'storage-v2/bundle/current.json'
+    })
+    expect(db.state.syncState.get('webdav-storage-record:settings:theme:hash')).toBe(remoteHash)
+  })
+
   it('prefers remote Storage v2 rows when a device has no prior sync baseline', async () => {
     const localRow = {
       key: 'theme',

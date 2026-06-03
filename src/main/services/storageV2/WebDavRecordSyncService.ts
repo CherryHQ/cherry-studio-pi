@@ -826,9 +826,10 @@ export class StorageV2WebDavRecordSyncService {
     if (valueHash !== meta.valueHash) {
       logger.warn('Remote Storage v2 record hash mismatch', {
         entityType: meta.entityType,
+        expected: meta.valueHash,
+        actual: valueHash,
         idValues: meta.idValues
       })
-      return null
     }
 
     return {
@@ -841,6 +842,14 @@ export class StorageV2WebDavRecordSyncService {
       deletedAt: meta.deletedAt ?? null,
       version: meta.version
     }
+  }
+
+  private areRecordRowsEquivalent(left: LocalRecord, right: LocalRecord) {
+    return (
+      left.table.entityType === right.table.entityType &&
+      left.deletedAt === right.deletedAt &&
+      hashJson(left.row) === hashJson(right.row)
+    )
   }
 
   private async getLocalSkillIdByFolderName(client: Client, folderName: string) {
@@ -1172,11 +1181,40 @@ export class StorageV2WebDavRecordSyncService {
       }
 
       const localChanged = localRecord.valueHash !== lastHash
-      const remoteChanged = remoteMeta.valueHash !== lastHash
+      const remoteRecord = await this.pullRecord(client, basePath, remoteMeta, bundledRecord)
+      if (!remoteRecord) {
+        summary.storageSkipped += 1
+        continue
+      }
+
+      if (this.areRecordRowsEquivalent(localRecord, remoteRecord)) {
+        const localWins =
+          localRecord.updatedAt > remoteRecord.updatedAt ||
+          (localRecord.updatedAt === remoteRecord.updatedAt && localRecord.version >= remoteRecord.version)
+        const remoteWins = !localWins
+        const winner = localWins ? localRecord : remoteRecord
+
+        if (remoteWins && !(await this.applyRemoteRecord(dbClient, remoteRecord))) {
+          summary.storageSkipped += 1
+          continue
+        }
+
+        bundledRecords.set(id, winner)
+        manifest.records[id] = recordMetaFromLocalRecord(winner, recordBundlePath())
+        await this.setRecordSyncState(dbClient, id, winner.valueHash)
+        this.pruneManifestRecordCoveredByTombstone(manifest, winner.row, bundledRecords)
+        if (!localWins && remoteWins) {
+          await this.ensureRemoteBlobFile(client, basePath, manifest, winner, summary)
+        }
+        await this.applyLocalTombstoneRecord(dbClient, manifest, winner, bundledRecords)
+        summary.storageSkipped += 1
+        continue
+      }
+
+      const remoteChanged = remoteRecord.valueHash !== lastHash
 
       if (!lastHash) {
-        const remoteRecord = await this.pullRecord(client, basePath, remoteMeta, bundledRecord)
-        if (remoteRecord && (await this.applyRemoteRecord(dbClient, remoteRecord))) {
+        if (await this.applyRemoteRecord(dbClient, remoteRecord)) {
           bundledRecords.set(id, remoteRecord)
           manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
           await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
@@ -1197,12 +1235,6 @@ export class StorageV2WebDavRecordSyncService {
         await this.setRecordSyncState(dbClient, id, localRecord.valueHash)
         summary.storageUploaded += localRecord.deletedAt ? 0 : 1
         summary.storageDeleted += localRecord.deletedAt ? 1 : 0
-        continue
-      }
-
-      const remoteRecord = await this.pullRecord(client, basePath, remoteMeta, bundledRecord)
-      if (!remoteRecord) {
-        summary.storageSkipped += 1
         continue
       }
 
