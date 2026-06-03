@@ -236,7 +236,7 @@ function makeProviderCredentialDb(input: { credentials?: ProviderCredentialRow[]
         const sql = typeof input === 'string' ? input : input.sql
         const args = typeof input === 'string' ? [] : (input.args ?? [])
 
-        if (sql.includes('SELECT * FROM provider_credentials')) {
+        if (/SELECT\b/i.test(sql) && sql.includes('FROM provider_credentials')) {
           return { rows: state.credentials.map((row) => ({ ...row })) }
         }
 
@@ -693,6 +693,7 @@ function makeSharedWebDavStore() {
 }
 
 const HASHED_BUNDLE_PATH = /^storage-v2\/bundle\/[a-f0-9]{64}\.json$/
+const HASHED_SECRET_PATH = /^storage-v2\/secrets\/[a-f0-9]{64}\.json$/
 
 function hasRemoteFile(remote: ReturnType<typeof makeSharedWebDavStore>, pattern: RegExp) {
   return Array.from(remote.files.keys()).some((filePath) => pattern.test(filePath))
@@ -700,7 +701,17 @@ function hasRemoteFile(remote: ReturnType<typeof makeSharedWebDavStore>, pattern
 
 describe('StorageV2WebDavRecordSyncService', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    mocks.dbClient.execute.mockReset()
+    mocks.webdav.exists.mockReset()
+    mocks.webdav.createDirectory.mockReset()
+    mocks.webdav.getFileContents.mockReset()
+    mocks.webdav.putFileContents.mockReset()
+    mocks.webdav.getDirectoryContents.mockReset()
+    mocks.webdav.deleteFile.mockReset()
+    mocks.secretVault.exportPlaintextSecrets.mockReset()
+    mocks.secretVault.importPlaintextSecrets.mockReset()
+    vi.mocked(storageV2Database.getClient).mockReset()
+    vi.mocked(storageV2Database.getClient).mockImplementation(async () => mocks.dbClient as any)
     mocks.remoteFiles.clear()
     mocks.webdav.exists.mockImplementation(async (filePath: string) => {
       if (mocks.remoteFiles.has(filePath)) return true
@@ -1746,14 +1757,30 @@ describe('StorageV2WebDavRecordSyncService', () => {
   })
 
   it('syncs Storage v2 secret vault entries through encrypted WebDAV bundles', async () => {
+    const credentialRow: ProviderCredentialRow = {
+      provider_id: 'provider-1',
+      credential_kind: 'apiKey',
+      secret_ref: 'storage-v2://secret/provider/provider-1/apiKey',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      updated_by_device_id: 'device-a'
+    }
+    const deviceA = makeProviderCredentialDb({ credentials: [credentialRow] })
+    const deviceB = makeProviderCredentialDb({})
+    const service = new StorageV2WebDavRecordSyncService([providerCredentialTable])
+
     mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({
       'provider:provider-1:apiKey': {
         value: 'sk-local-provider',
         updatedAt: '2026-06-01T08:00:00.000Z'
+      },
+      'provider:stale:apiKey': {
+        value: 'sk-stale-provider',
+        updatedAt: '2026-06-01T08:00:00.000Z'
       }
     })
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(deviceA.client as any)
 
-    const firstResult = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
+    const firstResult = await service.sync(
       mocks.webdav as any,
       '/remote-root/sync/v1',
       { version: 1, blobs: {}, records: {} },
@@ -1769,15 +1796,15 @@ describe('StorageV2WebDavRecordSyncService', () => {
     const remoteSecretPath = `/remote-root/sync/v1/${firstResult.manifest.secrets?.path}`
     const remoteSecretBundle = JSON.parse(String(mocks.remoteFiles.get(remoteSecretPath)))
     expect(JSON.stringify(remoteSecretBundle)).not.toContain('sk-local-provider')
+    expect(JSON.stringify(remoteSecretBundle)).not.toContain('sk-stale-provider')
+    expect(Object.keys(remoteSecretBundle.secrets)).toEqual(['provider:provider-1:apiKey'])
 
     mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({})
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(deviceB.client as any)
 
-    const secondResult = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
-      mocks.webdav as any,
-      '/remote-root/sync/v1',
-      firstResult.manifest,
-      { secretKeyMaterial: 'dav-user:dav-password' }
-    )
+    const secondResult = await service.sync(mocks.webdav as any, '/remote-root/sync/v1', firstResult.manifest, {
+      secretKeyMaterial: 'dav-user:dav-password'
+    })
 
     expect(secondResult.summary.secretDownloaded).toBe(1)
     expect(mocks.secretVault.importPlaintextSecrets).toHaveBeenCalledWith({
@@ -1788,7 +1815,65 @@ describe('StorageV2WebDavRecordSyncService', () => {
     })
   })
 
+  it('drops remote secret vault metadata when no current Storage v2 records reference secrets', async () => {
+    const credentialRow: ProviderCredentialRow = {
+      provider_id: 'provider-1',
+      credential_kind: 'apiKey',
+      secret_ref: 'storage-v2://secret/provider/provider-1/apiKey',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      updated_by_device_id: 'device-a'
+    }
+    const deviceA = makeProviderCredentialDb({ credentials: [credentialRow] })
+    const deviceB = makeProviderCredentialDb({
+      tombstones: [
+        {
+          entity_type: 'provider_credential',
+          entity_id: 'provider-1:apiKey',
+          deleted_at: '2026-06-01T08:10:00.000Z',
+          device_id: 'device-b',
+          version: 2
+        }
+      ]
+    })
+    const service = new StorageV2WebDavRecordSyncService([providerCredentialTable, tombstoneTable])
+
+    mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({
+      'provider:provider-1:apiKey': {
+        value: 'sk-local-provider',
+        updatedAt: '2026-06-01T08:00:00.000Z'
+      }
+    })
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(deviceA.client as any)
+    const firstResult = await service.sync(
+      mocks.webdav as any,
+      '/remote-root/sync/v1',
+      { version: 1, blobs: {}, records: {} },
+      { secretKeyMaterial: 'dav-user:dav-password' }
+    )
+
+    mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({})
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(deviceB.client as any)
+    const secondResult = await service.sync(mocks.webdav as any, '/remote-root/sync/v1', firstResult.manifest, {
+      secretKeyMaterial: 'dav-user:wrong-password'
+    })
+
+    expect(secondResult.manifest.records['provider_credential:provider-1:apiKey']).toBeUndefined()
+    expect(secondResult.manifest.secrets).toBeNull()
+    expect(secondResult.summary.secretDownloaded).toBe(0)
+    expect(mocks.secretVault.importPlaintextSecrets).not.toHaveBeenCalled()
+  })
+
   it('republishes a secret vault manifest when the semantic secret bundle path already exists', async () => {
+    const credentialRow: ProviderCredentialRow = {
+      provider_id: 'provider-1',
+      credential_kind: 'apiKey',
+      secret_ref: 'storage-v2://secret/provider/provider-1/apiKey',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      updated_by_device_id: 'device-a'
+    }
+    const deviceA = makeProviderCredentialDb({ credentials: [credentialRow] })
+    const deviceB = makeProviderCredentialDb({ credentials: [credentialRow] })
+    const service = new StorageV2WebDavRecordSyncService([providerCredentialTable])
     const localSecrets = {
       'provider:provider-1:apiKey': {
         value: 'sk-local-provider',
@@ -1797,17 +1882,21 @@ describe('StorageV2WebDavRecordSyncService', () => {
     }
 
     mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce(localSecrets)
-    const firstResult = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(deviceA.client as any)
+    const firstResult = await service.sync(
       mocks.webdav as any,
       '/remote-root/sync/v1',
       { version: 1, blobs: {}, records: {} },
       { secretKeyMaterial: 'dav-user:dav-password' }
     )
-    const remoteSecretPath = `/remote-root/sync/v1/${firstResult.manifest.secrets?.path}`
+    const firstSecretPath = firstResult.manifest.secrets?.path
+    expect(firstSecretPath).toEqual(expect.stringMatching(HASHED_SECRET_PATH))
+    const remoteSecretPath = `/remote-root/sync/v1/${firstSecretPath}`
     const firstCiphertext = String(mocks.remoteFiles.get(remoteSecretPath))
 
     mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce(localSecrets)
-    const secondResult = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(deviceB.client as any)
+    const secondResult = await service.sync(
       mocks.webdav as any,
       '/remote-root/sync/v1',
       { version: 1, blobs: {}, records: {}, bundle: null, secrets: null },
@@ -1815,20 +1904,32 @@ describe('StorageV2WebDavRecordSyncService', () => {
     )
 
     expect(secondResult.summary.secretUploaded).toBe(1)
-    expect(secondResult.manifest.secrets?.path).toBe(firstResult.manifest.secrets?.path)
+    expect(secondResult.manifest.secrets?.path).toBe(firstSecretPath)
     expect(mocks.remoteFiles.get(remoteSecretPath)).toBeTruthy()
     expect(String(mocks.remoteFiles.get(remoteSecretPath))).not.toBe(firstCiphertext)
   })
 
   it('fails safely when the remote secret vault cannot be decrypted with the current WebDAV credentials', async () => {
+    const credentialRow: ProviderCredentialRow = {
+      provider_id: 'provider-1',
+      credential_kind: 'apiKey',
+      secret_ref: 'storage-v2://secret/provider/provider-1/apiKey',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      updated_by_device_id: 'device-a'
+    }
+    const deviceA = makeProviderCredentialDb({ credentials: [credentialRow] })
+    const deviceB = makeProviderCredentialDb({})
+    const service = new StorageV2WebDavRecordSyncService([providerCredentialTable])
+
     mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({
       'provider:provider-1:apiKey': {
         value: 'sk-local-provider',
         updatedAt: '2026-06-01T08:00:00.000Z'
       }
     })
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(deviceA.client as any)
 
-    const firstResult = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
+    const firstResult = await service.sync(
       mocks.webdav as any,
       '/remote-root/sync/v1',
       { version: 1, blobs: {}, records: {} },
@@ -1836,14 +1937,12 @@ describe('StorageV2WebDavRecordSyncService', () => {
     )
 
     mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({})
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(deviceB.client as any)
 
     await expect(
-      new StorageV2WebDavRecordSyncService([settingsTable]).sync(
-        mocks.webdav as any,
-        '/remote-root/sync/v1',
-        firstResult.manifest,
-        { secretKeyMaterial: 'dav-user:wrong-password' }
-      )
+      service.sync(mocks.webdav as any, '/remote-root/sync/v1', firstResult.manifest, {
+        secretKeyMaterial: 'dav-user:wrong-password'
+      })
     ).rejects.toThrow('远端敏感配置无法解密')
     expect(mocks.secretVault.importPlaintextSecrets).not.toHaveBeenCalled()
   })

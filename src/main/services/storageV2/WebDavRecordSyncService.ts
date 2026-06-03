@@ -10,6 +10,7 @@ import { runWebDavOperation, WebDavOperationError } from '@main/services/WebDavR
 import type { WebDAVClient } from 'webdav'
 
 import { storageV2DataRootService } from './DataRootService'
+import { scanStorageV2SecretReferences } from './SecretRefIntegrity'
 import { type StorageV2PlaintextSecretVaultEntry, storageV2SecretVaultService } from './SecretVaultService'
 import { storageV2Database } from './StorageV2Database'
 
@@ -565,6 +566,13 @@ function secretVaultUpdatedAt(secrets: Record<string, StorageV2PlaintextSecretVa
   return Math.max(0, ...Object.values(secrets).map(secretEntryTimestamp))
 }
 
+function filterSecretsByReferencedIds(
+  secrets: Record<string, StorageV2PlaintextSecretVaultEntry>,
+  referencedSecretIds: ReadonlySet<string>
+) {
+  return Object.fromEntries(Object.entries(secrets).filter(([secretId]) => referencedSecretIds.has(secretId)))
+}
+
 function encryptRemoteSecret(secretId: string, entry: StorageV2PlaintextSecretVaultEntry, key: Buffer) {
   const iv = randomBytes(GCM_IV_BYTE_LENGTH)
   const cipher = createCipheriv('aes-256-gcm', key, iv)
@@ -1084,12 +1092,20 @@ export class StorageV2WebDavRecordSyncService {
     basePath: string,
     manifest: StorageV2WebDavRecordSyncManifest,
     summary: StorageV2WebDavRecordSyncSummary,
-    options: StorageV2WebDavRecordSyncOptions
+    options: StorageV2WebDavRecordSyncOptions,
+    referencedSecretIds: ReadonlySet<string>
   ) {
-    const [localSecrets, remoteSecrets] = await Promise.all([
+    if (referencedSecretIds.size === 0) {
+      manifest.secrets = null
+      return
+    }
+
+    const [localSecretsAll, remoteSecretsAll] = await Promise.all([
       storageV2SecretVaultService.exportPlaintextSecrets(),
       this.readRemoteSecretVaultBundle(client, basePath, manifest, options.secretKeyMaterial)
     ])
+    const localSecrets = filterSecretsByReferencedIds(localSecretsAll, referencedSecretIds)
+    const remoteSecrets = remoteSecretsAll ? filterSecretsByReferencedIds(remoteSecretsAll, referencedSecretIds) : null
 
     const localIds = Object.keys(localSecrets)
     const remoteIds = Object.keys(remoteSecrets ?? {})
@@ -1844,7 +1860,8 @@ export class StorageV2WebDavRecordSyncService {
 
     this.pruneManifestBlobsWithoutRecords(manifest, bundledRecords)
     await this.writeRecordBundle(client, basePath, manifest, bundledRecords)
-    await this.syncSecretVault(client, basePath, manifest, summary, options)
+    const referencedSecretIds = (await scanStorageV2SecretReferences(dbClient)).refs
+    await this.syncSecretVault(client, basePath, manifest, summary, options, referencedSecretIds)
     return {
       manifest,
       summary,
