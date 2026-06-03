@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import path from 'node:path'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -10,7 +11,9 @@ const mocks = vi.hoisted(() => ({
     exists: vi.fn(),
     createDirectory: vi.fn(),
     getFileContents: vi.fn(),
-    putFileContents: vi.fn()
+    putFileContents: vi.fn(),
+    getDirectoryContents: vi.fn(),
+    deleteFile: vi.fn()
   }
 }))
 
@@ -481,7 +484,13 @@ function makeSharedWebDavStore() {
   return {
     files,
     client: {
-      exists: vi.fn(async () => true),
+      exists: vi.fn(async (filePath: string) => {
+        const normalized = path.posix.normalize(filePath).replace(/\/+$/g, '')
+        return Array.from(files.keys()).some((key) => {
+          const value = path.posix.normalize(String(key))
+          return value === normalized || value.startsWith(`${normalized}/`)
+        })
+      }),
       createDirectory: vi.fn(async () => undefined),
       getFileContents: vi.fn(async (filePath: string) => {
         if (!files.has(filePath)) {
@@ -492,6 +501,50 @@ function makeSharedWebDavStore() {
       putFileContents: vi.fn(async (filePath: string, contents: unknown) => {
         files.set(filePath, contents)
         return true
+      }),
+      deleteFile: vi.fn(async (filePath: string) => {
+        files.delete(filePath)
+        return true
+      }),
+      getDirectoryContents: vi.fn(async (filePath: string) => {
+        const normalized = path.posix.normalize(filePath).replace(/\/+$/g, '')
+        const prefix = `${normalized}/`
+        const discoveredDirectories = new Set<string>()
+        const entries = new Set<{
+          filename: string
+          basename: string
+          type: 'directory' | 'file'
+        }>()
+
+        for (const key of files.keys()) {
+          const file = path.posix.normalize(String(key))
+          if (file === normalized) continue
+          if (!file.startsWith(prefix)) continue
+
+          const relative = file.slice(prefix.length)
+          const parts = relative.split('/')
+          if (!parts[0]) continue
+
+          if (parts.length === 1) {
+            entries.add({
+              filename: file,
+              basename: parts[0],
+              type: 'file'
+            })
+            continue
+          }
+
+          const dirPath = `${normalized}/${parts[0]}`
+          if (discoveredDirectories.has(dirPath)) continue
+          discoveredDirectories.add(dirPath)
+          entries.add({
+            filename: dirPath,
+            basename: parts[0],
+            type: 'directory'
+          })
+        }
+
+        return Array.from(entries)
       })
     }
   }
@@ -504,6 +557,8 @@ describe('StorageV2WebDavRecordSyncService', () => {
     mocks.webdav.createDirectory.mockResolvedValue(undefined)
     mocks.webdav.putFileContents.mockResolvedValue(undefined)
     mocks.webdav.getFileContents.mockResolvedValue('')
+    mocks.webdav.deleteFile.mockResolvedValue(undefined)
+    mocks.webdav.getDirectoryContents.mockResolvedValue([])
     mocks.dbClient.execute.mockImplementation(async (input: string | { sql: string }) => {
       const sql = typeof input === 'string' ? input : input.sql
 
@@ -767,6 +822,108 @@ describe('StorageV2WebDavRecordSyncService', () => {
       path: 'storage-v2/bundle/current.json'
     })
     expect(db.state.syncState.get('webdav-storage-record:settings:theme:hash')).toBe(remoteHash)
+  })
+
+  it('rewrites a missing remote record referenced by equal hash into bundle-backed manifest', async () => {
+    const remote = makeSharedWebDavStore()
+    const localRow = {
+      key: 'theme',
+      value_json: '{"mode":"light"}',
+      scope: 'app',
+      updated_at: '2026-05-29T12:10:00.000Z',
+      deleted_at: null,
+      version: 2
+    }
+    const localHash = hashJson(localRow)
+    const db = makeSettingsDb([localRow])
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    const result = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
+      remote.client as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {
+          'settings:theme': {
+            entityType: 'settings',
+            table: 'settings',
+            idValues: ['theme'],
+            valueHash: localHash,
+            updatedAt: Date.parse(localRow.updated_at),
+            deletedAt: null,
+            version: 2,
+            path: 'storage-v2/records/settings/missing-theme.json'
+          }
+        }
+      }
+    )
+
+    expect(result.summary.storageUploaded).toBe(1)
+    expect(result.manifest.records['settings:theme']).toMatchObject({
+      entityType: 'settings',
+      table: 'settings',
+      idValues: ['theme'],
+      valueHash: localHash,
+      path: 'storage-v2/bundle/current.json'
+    })
+    expect(remote.files.has('/remote-root/sync/v1/storage-v2/bundle/current.json')).toBe(true)
+  })
+
+  it('cleans up stale storage-v2 record files during sync', async () => {
+    const remote = makeSharedWebDavStore()
+    const localRow = {
+      key: 'theme',
+      value_json: '{"mode":"cleanup"}',
+      scope: 'app',
+      updated_at: '2026-05-29T12:10:00.000Z',
+      deleted_at: null,
+      version: 3
+    }
+    const localHash = hashJson(localRow)
+    const staleRecord = {
+      id: 'settings:theme',
+      table: settingsTable,
+      idValues: ['theme'],
+      row: localRow,
+      valueHash: localHash,
+      updatedAt: Date.parse(localRow.updated_at),
+      deletedAt: null,
+      version: 1
+    }
+    remote.files.set('/remote-root/sync/v1/storage-v2/records/settings/theme-old.json', JSON.stringify(staleRecord))
+    remote.files.set('/remote-root/sync/v1/storage-v2/blobs/orphaned.bin', 'orphaned blob')
+    remote.files.set('/remote-root/sync/v1/storage-v2/bundle/old.json', 'orphaned bundle')
+
+    const db = makeSettingsDb([localRow])
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    const result = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
+      remote.client as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {
+          'settings:theme': {
+            entityType: 'settings',
+            table: 'settings',
+            idValues: ['theme'],
+            valueHash: localHash,
+            updatedAt: Date.parse(localRow.updated_at),
+            deletedAt: null,
+            version: 1,
+            path: 'storage-v2/records/settings/theme-old.json'
+          }
+        }
+      }
+    )
+
+    expect(result.summary.storageUploaded).toBe(0)
+    expect(remote.files.has('/remote-root/sync/v1/storage-v2/records/settings/theme-old.json')).toBe(false)
+    expect(remote.files.has('/remote-root/sync/v1/storage-v2/blobs/orphaned.bin')).toBe(false)
+    expect(remote.files.has('/remote-root/sync/v1/storage-v2/bundle/old.json')).toBe(false)
+    expect(remote.files.has('/remote-root/sync/v1/storage-v2/bundle/current.json')).toBe(true)
   })
 
   it('prefers remote Storage v2 rows when a device has no prior sync baseline', async () => {

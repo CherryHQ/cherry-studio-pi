@@ -6,7 +6,7 @@ import path from 'node:path'
 import type { Client, InValue } from '@libsql/client'
 import { loggerService } from '@logger'
 import { runWebDavOperation, WebDavOperationError } from '@main/services/WebDavRetry'
-import type { WebDAVClient } from 'webdav'
+import type { FileStat, WebDAVClient } from 'webdav'
 
 import { storageV2DataRootService } from './DataRootService'
 import { storageV2Database } from './StorageV2Database'
@@ -103,6 +103,9 @@ const EMPTY_SUMMARY: StorageV2WebDavRecordSyncSummary = {
 
 const TOMBSTONE_ENTITY_TYPE = 'sync_tombstone'
 const STORAGE_V2_RECORD_BUNDLE_PATH = 'storage-v2/bundle/current.json'
+const STORAGE_V2_RECORD_DIR = 'storage-v2/records'
+const STORAGE_V2_BLOB_DIR = 'storage-v2/blobs'
+const STORAGE_V2_BUNDLE_DIR = 'storage-v2/bundle'
 const TOMBSTONE_PHYSICAL_DELETE_TARGETS = {
   agent_skill: {
     table: 'agent_skills',
@@ -377,6 +380,28 @@ function parseTime(value: unknown) {
   return 0
 }
 
+function normalizePathForManifestEntry(value: string | undefined | null) {
+  if (!value) {
+    return ''
+  }
+
+  return safeRemoteRelativePath(value)
+}
+
+function normalizeRelativeFromBase(basePath: string, targetPath: string) {
+  const normalized = path.posix.normalize(targetPath)
+  if (!normalized.startsWith(basePath)) {
+    return ''
+  }
+
+  const relative = path.posix.relative(basePath, normalized)
+  if (relative === '' || relative.startsWith('../')) {
+    return ''
+  }
+
+  return relative
+}
+
 function tableWeight(tables: readonly StorageV2SyncTable[], entityType: string) {
   const index = tables.findIndex((table) => table.entityType === entityType)
   return index === -1 ? Number.MAX_SAFE_INTEGER : index
@@ -555,6 +580,179 @@ export class StorageV2WebDavRecordSyncService {
 
       logger.warn(`Failed to read Storage v2 sync record ${filePath}`, error as Error)
       return null
+    }
+  }
+
+  private normalizeDirectoryContents(contents: unknown): FileStat[] {
+    if (Array.isArray(contents)) {
+      return contents as FileStat[]
+    }
+
+    const detailedData = (contents as { data?: unknown } | null)?.data
+    return Array.isArray(detailedData) ? (detailedData as FileStat[]) : []
+  }
+
+  private isDirectoryEntry(entry: FileStat) {
+    return typeof entry.type === 'string' && ['d', 'directory', 'dir'].includes(entry.type.toLowerCase())
+  }
+
+  private async listRemoteFilesRecursively(
+    client: WebDAVClient,
+    basePath: string,
+    relativeRoot: string
+  ): Promise<string[]> {
+    const absoluteRoot = path.posix.join(basePath, relativeRoot)
+    const results: string[] = []
+
+    try {
+      if (
+        !(await runWebDavOperation(
+          `checking Storage v2 sync directory ${absoluteRoot}`,
+          () => client.exists(absoluteRoot),
+          {
+            logger
+          }
+        ))
+      ) {
+        return results
+      }
+    } catch (error) {
+      if (error instanceof WebDavOperationError && error.status === 404) {
+        return results
+      }
+      logger.warn(`Cannot inspect Storage v2 sync directory ${absoluteRoot}`, error as Error)
+      return results
+    }
+
+    const stack: Array<{ absolutePath: string; relativePath: string }> = [
+      {
+        absolutePath: absoluteRoot,
+        relativePath: relativeRoot
+      }
+    ]
+
+    while (stack.length > 0) {
+      const node = stack.pop()
+      if (!node) {
+        continue
+      }
+
+      const contents = this.normalizeDirectoryContents(
+        await runWebDavOperation(
+          `listing Storage v2 sync directory ${node.absolutePath}`,
+          () => client.getDirectoryContents(node.absolutePath),
+          { logger }
+        )
+      )
+
+      for (const entry of contents) {
+        const childName = entry.basename || path.posix.basename(entry.filename || '')
+        if (!childName) {
+          continue
+        }
+
+        const childRelative = path.posix.join(node.relativePath, childName)
+        const childAbsolute = path.posix.join(node.absolutePath, childName)
+
+        if (this.isDirectoryEntry(entry)) {
+          stack.push({ absolutePath: childAbsolute, relativePath: childRelative })
+          continue
+        }
+
+        const remoteRelative = normalizeRelativeFromBase(basePath, childAbsolute)
+        if (remoteRelative) {
+          results.push(remoteRelative)
+        }
+      }
+    }
+
+    return results
+  }
+
+  private async removeRemoteFile(client: WebDAVClient, filePath: string) {
+    const deleteFile = (client as WebDAVClient & { deleteFile?: (filePath: string) => Promise<void> }).deleteFile
+    if (typeof deleteFile !== 'function') {
+      return
+    }
+
+    await runWebDavOperation(
+      `deleting stale Storage v2 remote file ${filePath}`,
+      () => deleteFile.call(client, filePath),
+      {
+        logger
+      }
+    ).catch((error) => {
+      if (error instanceof WebDavOperationError && error.status === 404) {
+        return
+      }
+      logger.warn(`Failed to delete stale Storage v2 remote file ${filePath}`, error as Error)
+    })
+  }
+
+  private async cleanupRemoteArtifacts(
+    client: WebDAVClient,
+    basePath: string,
+    manifest: StorageV2WebDavRecordSyncManifest
+  ) {
+    const keep = new Set<string>()
+
+    if (manifest.bundle?.path) {
+      try {
+        keep.add(normalizePathForManifestEntry(manifest.bundle.path))
+      } catch {
+        // ignore invalid bundle manifest path
+      }
+    }
+
+    for (const remoteRecordMeta of Object.values(manifest.records)) {
+      try {
+        keep.add(normalizePathForManifestEntry(remoteRecordMeta.path))
+      } catch {
+        // ignore invalid record path
+      }
+    }
+
+    for (const remoteBlobMeta of Object.values(manifest.blobs)) {
+      try {
+        keep.add(normalizePathForManifestEntry(remoteBlobMeta.path))
+      } catch {
+        // ignore invalid blob path
+      }
+    }
+
+    const roots = [STORAGE_V2_RECORD_DIR, STORAGE_V2_BLOB_DIR, STORAGE_V2_BUNDLE_DIR]
+    for (const relativeRoot of roots) {
+      const remoteFiles = await this.listRemoteFilesRecursively(client, basePath, relativeRoot)
+      for (const filePath of remoteFiles) {
+        if (keep.has(filePath)) {
+          continue
+        }
+
+        await this.removeRemoteFile(client, path.posix.join(basePath, filePath))
+      }
+    }
+  }
+
+  private async hasRemoteRecord(
+    client: WebDAVClient,
+    basePath: string,
+    meta: RemoteRecordMeta,
+    bundledRecord?: LocalRecord | null
+  ) {
+    if (meta.path === recordBundlePath()) {
+      return Boolean(bundledRecord)
+    }
+
+    try {
+      const relativePath = safeRemoteRelativePath(meta.path)
+      const remotePath = path.posix.join(basePath, relativePath)
+      return await runWebDavOperation(
+        `checking Storage v2 sync record existence ${remotePath}`,
+        () => client.exists(remotePath),
+        { logger }
+      )
+    } catch {
+      return false
     }
   }
 
@@ -1171,6 +1369,17 @@ export class StorageV2WebDavRecordSyncService {
       }
 
       if (localRecord.valueHash === remoteMeta.valueHash) {
+        const remoteRecordAccessible = await this.hasRemoteRecord(client, basePath, remoteMeta, bundledRecord)
+        if (!remoteRecordAccessible) {
+          await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords)
+          await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
+          await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
+          await this.setRecordSyncState(dbClient, id, localRecord.valueHash)
+          summary.storageUploaded += localRecord.deletedAt ? 0 : 1
+          summary.storageDeleted += localRecord.deletedAt ? 1 : 0
+          continue
+        }
+
         await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
         await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
         bundledRecords.set(id, localRecord)
@@ -1288,6 +1497,9 @@ export class StorageV2WebDavRecordSyncService {
     }
 
     await this.writeRecordBundle(client, basePath, manifest, bundledRecords)
+    await this.cleanupRemoteArtifacts(client, basePath, manifest).catch((error) => {
+      logger.warn('Failed to cleanup stale Storage v2 remote files', error as Error)
+    })
     return { manifest, summary }
   }
 }
