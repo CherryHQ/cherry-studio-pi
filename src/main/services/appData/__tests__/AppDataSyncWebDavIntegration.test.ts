@@ -1090,6 +1090,7 @@ describe('AppDataSyncService local WebDAV integration', () => {
       appRecord: { mode: 'device-a-user-value' },
       storageSetting: { owner: 'device-a-storage-value' }
     })
+    await expect(pathExists(path.join(remoteSyncRoot(server!, config.webdavPath), 'records'))).resolves.toBe(false)
     expect(remoteText).toContain('device-a-user-value')
     expect(remoteText).toContain('device-a-storage-value')
     expect(remoteText).not.toContain('device-b-default')
@@ -1296,7 +1297,7 @@ describe('AppDataSyncService local WebDAV integration', () => {
     await switchInstance(instanceB, homePath)
     await deleteInstanceData(Date.parse('2026-05-29T12:40:00.000Z'), '2026-05-29T12:40:00.000Z')
     const bDeletePush = await new AppDataSyncService(backupManager as never).syncNow(config)
-    expect(bDeletePush.deleted).toBeGreaterThan(0)
+    expect(bDeletePush.deleted).toBe(0)
     expect(bDeletePush.storageDeleted).toBeGreaterThan(0)
 
     await switchInstance(instanceA, homePath)
@@ -1350,7 +1351,7 @@ describe('AppDataSyncService local WebDAV integration', () => {
     const remoteText = await readAllRemoteText(server!.root)
 
     expect(conflictSummary.conflicts).toBe(0)
-    expect(conflictSummary.resolvedConflicts).toBeGreaterThan(0)
+    expect(conflictSummary.resolvedConflicts).toBe(0)
     expect(conflictSummary.storageConflicts).toBe(0)
     expect(conflictSummary.storageResolvedConflicts).toBeGreaterThan(0)
     expect(remoteText).toContain('edited-by-b')
@@ -1477,7 +1478,7 @@ describe('AppDataSyncService local WebDAV integration', () => {
     expect(remoteAfter).not.toContain('should-not-replace-corrupt-remote')
   })
 
-  it('fails safely when a remote record manifest entry points to a missing file', async () => {
+  it('fails safely when the remote Storage v2 bundle referenced by the manifest is missing', async () => {
     const homePath = path.join(tempRoot, 'home')
     const instanceA = makeInstance(tempRoot, 'device-a')
     const instanceB = makeInstance(tempRoot, 'device-b')
@@ -1495,8 +1496,9 @@ describe('AppDataSyncService local WebDAV integration', () => {
     await new AppDataSyncService(backupManager as never).syncNow(config)
 
     const manifest = await readRemoteManifest(server!, webdavPath)
-    const appMeta = manifest.records['settings:sync.integration.theme']
-    await fsp.rm(path.join(remoteSyncRoot(server!, webdavPath), appMeta.path), { force: true })
+    const storageBundlePath = manifest.storageV2?.bundle?.path
+    expect(storageBundlePath).toBeTruthy()
+    await fsp.rm(path.join(remoteSyncRoot(server!, webdavPath), storageBundlePath!), { force: true })
     const manifestBeforeBrokenSync = await fsp.readFile(
       path.join(remoteSyncRoot(server!, webdavPath), 'manifest.json'),
       'utf8'
@@ -1510,7 +1512,7 @@ describe('AppDataSyncService local WebDAV integration', () => {
       storageSettingUpdatedAt: '2026-05-29T12:20:00.000Z'
     })
     await expect(new AppDataSyncService(backupManager as never).syncNow(config)).rejects.toThrow(
-      '远端同步记录缺失：settings:sync.integration.theme'
+      '远端 Storage v2 数据包缺失或格式损坏'
     )
 
     await expect(fsp.readFile(path.join(remoteSyncRoot(server!, webdavPath), 'manifest.json'), 'utf8')).resolves.toBe(

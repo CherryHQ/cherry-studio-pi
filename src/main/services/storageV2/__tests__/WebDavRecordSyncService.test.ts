@@ -1299,6 +1299,78 @@ describe('StorageV2WebDavRecordSyncService', () => {
     ).toBe(false)
   })
 
+  it('auto-resolves exact concurrent Storage v2 edits with a deterministic content tie-breaker', async () => {
+    const remote = makeSharedWebDavStore()
+    const localRow = {
+      key: 'theme',
+      value_json: '{"mode":"alpha"}',
+      scope: 'app',
+      updated_at: '2026-05-29T12:30:00.000Z',
+      deleted_at: null,
+      version: 4
+    }
+    const remoteRow = {
+      ...localRow,
+      value_json: '{"mode":"omega"}'
+    }
+    const localHash = hashJson(localRow)
+    const remoteHash = hashJson(remoteRow)
+    const remoteRecord = {
+      id: 'settings:theme',
+      table: settingsTable,
+      idValues: ['theme'],
+      row: remoteRow,
+      valueHash: remoteHash,
+      updatedAt: Date.parse(remoteRow.updated_at),
+      deletedAt: null,
+      version: remoteRow.version
+    }
+    remote.files.set('/remote-root/sync/v1/storage-v2/records/settings/theme.json', JSON.stringify(remoteRecord))
+
+    const db = makeSettingsDb([localRow])
+    db.state.syncState.set('webdav-storage-record:settings:theme:hash', 'base-hash')
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    const result = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
+      remote.client as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {
+          'settings:theme': {
+            entityType: 'settings',
+            table: 'settings',
+            idValues: ['theme'],
+            valueHash: remoteHash,
+            updatedAt: remoteRecord.updatedAt,
+            deletedAt: null,
+            version: remoteRow.version,
+            path: 'storage-v2/records/settings/theme.json'
+          }
+        }
+      }
+    )
+
+    const localShouldWin = localHash >= remoteHash
+    const winnerRow = localShouldWin ? localRow : remoteRow
+    const winnerHash = localShouldWin ? localHash : remoteHash
+    const bundlePath = `/remote-root/sync/v1/${result.manifest.bundle?.path}`
+    const bundle = JSON.parse(String(remote.files.get(bundlePath)))
+
+    expect(result.summary.storageConflicts).toBe(0)
+    expect(result.summary.storageResolvedConflicts).toBe(1)
+    expect(result.manifest.records['settings:theme']?.valueHash).toBe(winnerHash)
+    expect(bundle.records['settings:theme'].valueHash).toBe(winnerHash)
+    expect(db.state.rows[0]).toMatchObject(winnerRow)
+    expect(
+      db.client.execute.mock.calls.some(([input]) => {
+        const sql = typeof input === 'string' ? input : input.sql
+        return sql.includes('INSERT INTO sync_conflicts')
+      })
+    ).toBe(false)
+  })
+
   it('simulates two devices syncing through the same WebDAV store', async () => {
     const remote = makeSharedWebDavStore()
     const deviceA = makeSettingsDb([

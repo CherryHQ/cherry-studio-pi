@@ -211,6 +211,18 @@ function recordId(scope: string, key: string) {
   return `${scope}:${key}`
 }
 
+function shouldLocalAppRecordWin(localRecord: AppDataRecord, remoteRecord: AppDataRecord) {
+  if (localRecord.updatedAt !== remoteRecord.updatedAt) {
+    return localRecord.updatedAt > remoteRecord.updatedAt
+  }
+
+  if (localRecord.version !== remoteRecord.version) {
+    return localRecord.version > remoteRecord.version
+  }
+
+  return localRecord.valueHash >= remoteRecord.valueHash
+}
+
 function encodePart(value: string) {
   return encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)
 }
@@ -1331,119 +1343,119 @@ export class AppDataSyncService {
     try {
       await this.assertWriteAccess(client, basePath)
 
-      let localRecords = await db.listRecords(undefined, true)
-      if (
-        localRecords.length === 0 &&
-        (await storageV2AppDataRuntimeRecoveryService.projectIfLegacyAppRecordListEmpty(
-          undefined,
-          'app-data-sync-empty'
-        ))
-      ) {
-        db = await getAppDataDatabase()
-        localRecords = await db.listRecords(undefined, true)
-      }
-      if (localRecords.length === 0) {
-        localRecords = await storageV2AppDataKvMirrorService.listRecords(undefined, true)
-      } else {
-        try {
-          const storageRecords = await storageV2AppDataKvMirrorService.listRecords(undefined, true)
-          localRecords = mergeAppDataRecords(localRecords, storageRecords)
-        } catch (error) {
-          logger.warn('Failed to merge Storage v2 app records into sync source', error as Error)
-        }
-      }
-      const localById = new Map(localRecords.map((record) => [recordId(record.scope, record.key), record]))
       const rawManifest = await this.readJson<RemoteManifest>(client, manifestPath, { throwOnInvalidJson: true })
       const manifest = this.normalizeManifest(rawManifest)
       const manifestBaseline = this.captureManifestBaseline(rawManifest, manifest)
       const remoteHadStorageDataBeforeSync = hasStorageV2RemoteData(manifest.storageV2)
-      const allIds = new Set([...localById.keys(), ...Object.keys(manifest.records)])
+      const remoteStorageEntityTypes = getStorageV2ManifestEntityTypes(manifest.storageV2)
+      let localStorageAppRecords: AppDataRecord[] | null = null
+      try {
+        localStorageAppRecords = await storageV2AppDataKvMirrorService.listRecords(undefined, true)
+      } catch (error) {
+        logger.warn('Failed to inspect Storage v2 app records before legacy app-data sync fallback', error as Error)
+      }
 
-      for (const id of allIds) {
-        const localRecord = localById.get(id)
-        const remoteMeta = manifest.records[id]
-        const lastHash = await this.getSyncState<string>(db, `record:${id}:hash`)
-
-        if (localRecord && !remoteMeta) {
-          await this.pushRecord(client, basePath, localRecord, manifest)
-          stageSyncState(`record:${id}:hash`, localRecord.valueHash)
-          summary.uploaded += localRecord.deletedAt ? 0 : 1
-          summary.deleted += localRecord.deletedAt ? 1 : 0
-          continue
+      if (remoteStorageEntityTypes.has('kv_record') || (localStorageAppRecords?.length ?? 0) > 0) {
+        manifest.records = {}
+      } else {
+        let localRecords = await db.listRecords(undefined, true)
+        if (
+          localRecords.length === 0 &&
+          (await storageV2AppDataRuntimeRecoveryService.projectIfLegacyAppRecordListEmpty(
+            undefined,
+            'app-data-sync-empty'
+          ))
+        ) {
+          db = await getAppDataDatabase()
+          localRecords = await db.listRecords(undefined, true)
         }
-
-        if (!localRecord && remoteMeta) {
-          const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
-          if (remoteRecord) {
-            await this.applyRemoteRecord(db, remoteRecord)
-            stageSyncState(`record:${id}:hash`, remoteRecord.valueHash)
-            summary.downloaded += remoteRecord.deletedAt ? 0 : 1
-            summary.deleted += remoteRecord.deletedAt ? 1 : 0
-          }
-          continue
-        }
-
-        if (!localRecord || !remoteMeta) {
-          summary.skipped += 1
-          continue
-        }
-
-        if (localRecord.valueHash === remoteMeta.valueHash) {
-          stageSyncState(`record:${id}:hash`, localRecord.valueHash)
-          summary.skipped += 1
-          continue
-        }
-
-        const localChanged = localRecord.valueHash !== lastHash
-        const remoteChanged = remoteMeta.valueHash !== lastHash
-
-        if (!lastHash) {
-          const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
-          if (remoteRecord) {
-            await this.applyRemoteRecord(db, remoteRecord)
-            stageSyncState(`record:${id}:hash`, remoteRecord.valueHash)
-            summary.downloaded += remoteRecord.deletedAt ? 0 : 1
-            summary.deleted += remoteRecord.deletedAt ? 1 : 0
-          } else {
-            summary.skipped += 1
-          }
-          continue
-        }
-
-        if (localChanged && !remoteChanged) {
-          await this.pushRecord(client, basePath, localRecord, manifest)
-          stageSyncState(`record:${id}:hash`, localRecord.valueHash)
-          summary.uploaded += localRecord.deletedAt ? 0 : 1
-          summary.deleted += localRecord.deletedAt ? 1 : 0
-          continue
-        }
-
-        const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
-        if (!remoteRecord) {
-          summary.skipped += 1
-          continue
-        }
-
-        if (!localChanged && remoteChanged) {
-          await this.applyRemoteRecord(db, remoteRecord)
-          stageSyncState(`record:${id}:hash`, remoteRecord.valueHash)
-          summary.downloaded += remoteRecord.deletedAt ? 0 : 1
-          summary.deleted += remoteRecord.deletedAt ? 1 : 0
-          continue
-        }
-
-        const unresolvedConflict =
-          localRecord.updatedAt === remoteRecord.updatedAt && localRecord.version === remoteRecord.version
-        if (unresolvedConflict) {
-          await this.createConflict(db, {
-            scope: localRecord.scope,
-            key: localRecord.key,
-            localRecord,
-            remoteRecord,
-            baseHash: lastHash
-          })
-          summary.conflicts += 1
+        if (localRecords.length === 0) {
+          localRecords = localStorageAppRecords ?? (await storageV2AppDataKvMirrorService.listRecords(undefined, true))
         } else {
+          try {
+            const storageRecords =
+              localStorageAppRecords ?? (await storageV2AppDataKvMirrorService.listRecords(undefined, true))
+            localRecords = mergeAppDataRecords(localRecords, storageRecords)
+          } catch (error) {
+            logger.warn('Failed to merge Storage v2 app records into sync source', error as Error)
+          }
+        }
+        const localById = new Map(localRecords.map((record) => [recordId(record.scope, record.key), record]))
+        const allIds = new Set([...localById.keys(), ...Object.keys(manifest.records)])
+
+        for (const id of allIds) {
+          const localRecord = localById.get(id)
+          const remoteMeta = manifest.records[id]
+          const lastHash = await this.getSyncState<string>(db, `record:${id}:hash`)
+
+          if (localRecord && !remoteMeta) {
+            await this.pushRecord(client, basePath, localRecord, manifest)
+            stageSyncState(`record:${id}:hash`, localRecord.valueHash)
+            summary.uploaded += localRecord.deletedAt ? 0 : 1
+            summary.deleted += localRecord.deletedAt ? 1 : 0
+            continue
+          }
+
+          if (!localRecord && remoteMeta) {
+            const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
+            if (remoteRecord) {
+              await this.applyRemoteRecord(db, remoteRecord)
+              stageSyncState(`record:${id}:hash`, remoteRecord.valueHash)
+              summary.downloaded += remoteRecord.deletedAt ? 0 : 1
+              summary.deleted += remoteRecord.deletedAt ? 1 : 0
+            }
+            continue
+          }
+
+          if (!localRecord || !remoteMeta) {
+            summary.skipped += 1
+            continue
+          }
+
+          if (localRecord.valueHash === remoteMeta.valueHash) {
+            stageSyncState(`record:${id}:hash`, localRecord.valueHash)
+            summary.skipped += 1
+            continue
+          }
+
+          const localChanged = localRecord.valueHash !== lastHash
+          const remoteChanged = remoteMeta.valueHash !== lastHash
+
+          if (!lastHash) {
+            const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
+            if (remoteRecord) {
+              await this.applyRemoteRecord(db, remoteRecord)
+              stageSyncState(`record:${id}:hash`, remoteRecord.valueHash)
+              summary.downloaded += remoteRecord.deletedAt ? 0 : 1
+              summary.deleted += remoteRecord.deletedAt ? 1 : 0
+            } else {
+              summary.skipped += 1
+            }
+            continue
+          }
+
+          if (localChanged && !remoteChanged) {
+            await this.pushRecord(client, basePath, localRecord, manifest)
+            stageSyncState(`record:${id}:hash`, localRecord.valueHash)
+            summary.uploaded += localRecord.deletedAt ? 0 : 1
+            summary.deleted += localRecord.deletedAt ? 1 : 0
+            continue
+          }
+
+          const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
+          if (!remoteRecord) {
+            summary.skipped += 1
+            continue
+          }
+
+          if (!localChanged && remoteChanged) {
+            await this.applyRemoteRecord(db, remoteRecord)
+            stageSyncState(`record:${id}:hash`, remoteRecord.valueHash)
+            summary.downloaded += remoteRecord.deletedAt ? 0 : 1
+            summary.deleted += remoteRecord.deletedAt ? 1 : 0
+            continue
+          }
+
           await this.createConflict(db, {
             scope: localRecord.scope,
             key: localRecord.key,
@@ -1453,21 +1465,17 @@ export class AppDataSyncService {
             resolvedAt: Date.now()
           })
           summary.resolvedConflicts += 1
-        }
 
-        const winner =
-          localRecord.updatedAt > remoteRecord.updatedAt ||
-          (localRecord.updatedAt === remoteRecord.updatedAt && localRecord.version >= remoteRecord.version)
-            ? localRecord
-            : remoteRecord
-        if (winner === localRecord) {
-          await this.pushRecord(client, basePath, localRecord, manifest)
-          summary.uploaded += localRecord.deletedAt ? 0 : 1
-        } else {
-          await this.applyRemoteRecord(db, remoteRecord)
-          summary.downloaded += remoteRecord.deletedAt ? 0 : 1
+          const winner = shouldLocalAppRecordWin(localRecord, remoteRecord) ? localRecord : remoteRecord
+          if (winner === localRecord) {
+            await this.pushRecord(client, basePath, localRecord, manifest)
+            summary.uploaded += localRecord.deletedAt ? 0 : 1
+          } else {
+            await this.applyRemoteRecord(db, remoteRecord)
+            summary.downloaded += remoteRecord.deletedAt ? 0 : 1
+          }
+          stageSyncState(`record:${id}:hash`, winner.valueHash)
         }
-        stageSyncState(`record:${id}:hash`, winner.valueHash)
       }
 
       const storageSync = await storageV2WebDavRecordSyncService.sync(client, basePath, manifest.storageV2, {

@@ -1342,6 +1342,18 @@ export class StorageV2WebDavRecordSyncService {
     )
   }
 
+  private shouldLocalRecordWin(localRecord: LocalRecord, remoteRecord: LocalRecord) {
+    if (localRecord.updatedAt !== remoteRecord.updatedAt) {
+      return localRecord.updatedAt > remoteRecord.updatedAt
+    }
+
+    if (localRecord.version !== remoteRecord.version) {
+      return localRecord.version > remoteRecord.version
+    }
+
+    return localRecord.valueHash >= remoteRecord.valueHash
+  }
+
   private async getLocalSkillIdByFolderName(client: Client, folderName: string) {
     const result = await client.execute({
       sql: 'SELECT id FROM skills WHERE folder_name = ? LIMIT 1',
@@ -1759,9 +1771,7 @@ export class StorageV2WebDavRecordSyncService {
       }
 
       if (this.areRecordRowsEquivalent(localRecord, remoteRecord)) {
-        const localWins =
-          localRecord.updatedAt > remoteRecord.updatedAt ||
-          (localRecord.updatedAt === remoteRecord.updatedAt && localRecord.version >= remoteRecord.version)
+        const localWins = this.shouldLocalRecordWin(localRecord, remoteRecord)
         const remoteWins = !localWins
         const winner = localWins ? localRecord : remoteRecord
 
@@ -1822,9 +1832,7 @@ export class StorageV2WebDavRecordSyncService {
         continue
       }
 
-      const localWins =
-        localRecord.updatedAt > remoteRecord.updatedAt ||
-        (localRecord.updatedAt === remoteRecord.updatedAt && localRecord.version >= remoteRecord.version)
+      const localWins = this.shouldLocalRecordWin(localRecord, remoteRecord)
       if (localWins) {
         await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords)
         await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
@@ -1839,23 +1847,13 @@ export class StorageV2WebDavRecordSyncService {
         stageRecordSyncState(id, remoteRecord.valueHash)
         summary.storageDownloaded += remoteRecord.deletedAt ? 0 : 1
       }
-      if (localRecord.updatedAt === remoteRecord.updatedAt && localRecord.version === remoteRecord.version) {
-        await this.recordConflictAudit(dbClient, {
-          localRecord,
-          remoteRecord,
-          baseHash: lastHash,
-          resolvedAt: null
-        })
-        summary.storageConflicts += 1
-      } else {
-        await this.recordConflictAudit(dbClient, {
-          localRecord,
-          remoteRecord,
-          baseHash: lastHash,
-          resolvedAt: new Date().toISOString()
-        })
-        summary.storageResolvedConflicts += 1
-      }
+      await this.recordConflictAudit(dbClient, {
+        localRecord,
+        remoteRecord,
+        baseHash: lastHash,
+        resolvedAt: new Date().toISOString()
+      })
+      summary.storageResolvedConflicts += 1
     }
 
     this.pruneManifestBlobsWithoutRecords(manifest, bundledRecords)

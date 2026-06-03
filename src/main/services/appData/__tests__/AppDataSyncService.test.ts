@@ -634,7 +634,7 @@ describe('AppDataSyncService', () => {
     )
   })
 
-  it('writes sync conflicts to Storage v2 before legacy app.db conflicts', async () => {
+  it('auto-resolves exact legacy app record conflicts with a deterministic content tie-breaker', async () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1760000000999)
     const localRecord = {
       ...remoteRecord,
@@ -659,31 +659,16 @@ describe('AppDataSyncService', () => {
     try {
       const summary = await new AppDataSyncService().syncNow(config)
 
-      expect(summary.conflicts).toBe(1)
+      expect(summary.conflicts).toBe(0)
+      expect(summary.resolvedConflicts).toBe(1)
     } finally {
       nowSpy.mockRestore()
     }
 
-    expect(events).toEqual(['storage-v2-conflict', 'legacy-conflict'])
-    expect(mocks.storageV2.upsertSyncConflict).toHaveBeenCalledWith(
-      expect.stringMatching(/^settings:theme:[a-f0-9]{32}$/),
-      expect.objectContaining({
-        scope: 'settings',
-        key: 'theme',
-        localRecord,
-        remoteRecord,
-        baseHash: 'base-hash'
-      })
-    )
-    expect(mocks.db.createConflict).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: expect.stringMatching(/^settings:theme:[a-f0-9]{32}$/),
-        localRecord,
-        remoteRecord,
-        baseHash: 'base-hash'
-      }),
-      { storageV2Mirrored: true }
-    )
+    expect(events).toEqual([])
+    expect(mocks.storageV2.upsertSyncConflict).not.toHaveBeenCalled()
+    expect(mocks.db.createConflict).not.toHaveBeenCalled()
+    expect(mocks.db.applyRemoteRecord).toHaveBeenCalledWith(remoteRecord, { storageV2Mirrored: true })
   })
 
   it('counts auto-resolved app record conflicts without storing user conflict records', async () => {
@@ -736,7 +721,7 @@ describe('AppDataSyncService', () => {
     expect(mocks.db.createConflict).not.toHaveBeenCalled()
   })
 
-  it('uploads Storage v2 app records when legacy runtime projection is unavailable', async () => {
+  it('skips legacy app-data record files when Storage v2 app records cover app data', async () => {
     const localRecord = {
       ...remoteRecord,
       valueHash: 'local-hash',
@@ -759,13 +744,10 @@ describe('AppDataSyncService', () => {
 
     const summary = await new AppDataSyncService().syncNow(config)
 
-    expect(summary.uploaded).toBe(1)
+    expect(summary.uploaded).toBe(0)
     expect(mocks.storageV2.listRecords).toHaveBeenCalledWith(undefined, true)
-    expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
-      expect.stringContaining('/records/settings/theme/local-hash.json'),
-      expect.stringContaining('"local-hash"'),
-      { overwrite: true }
-    )
+    expect([...mocks.remoteFiles.keys()].some((filePath) => String(filePath).includes('/records/'))).toBe(false)
+    expect(JSON.parse(String(mocks.remoteFiles.get('/remote-root/sync/v1/manifest.json'))).records).toEqual({})
   })
 
   it('does not project runtime caches for a first-time Storage v2 upload to an empty remote', async () => {
@@ -1035,7 +1017,7 @@ describe('AppDataSyncService', () => {
     }
   })
 
-  it('merges Storage v2 app records into sync when legacy app.db has partial data', async () => {
+  it('does not duplicate Storage v2 app records into legacy WebDAV record files', async () => {
     const legacyRecord = {
       ...remoteRecord,
       value: { mode: 'legacy' },
@@ -1078,18 +1060,10 @@ describe('AppDataSyncService', () => {
 
     const summary = await new AppDataSyncService().syncNow(config)
 
-    expect(summary.uploaded).toBe(2)
+    expect(summary.uploaded).toBe(0)
     expect(mocks.storageV2.listRecords).toHaveBeenCalledWith(undefined, true)
-    expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
-      expect.stringContaining('/records/settings/theme/storage-theme-hash.json'),
-      expect.stringContaining('storage-theme-hash'),
-      { overwrite: true }
-    )
-    expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
-      expect.stringContaining('/records/agent-tools/github/storage-github-hash.json'),
-      expect.stringContaining('storage-github-hash'),
-      { overwrite: true }
-    )
+    expect([...mocks.remoteFiles.keys()].some((filePath) => String(filePath).includes('/records/'))).toBe(false)
+    expect(JSON.parse(String(mocks.remoteFiles.get('/remote-root/sync/v1/manifest.json'))).records).toEqual({})
   })
 
   it('reads sync status summary from Storage v2 when the legacy app database is missing it', async () => {
