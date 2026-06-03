@@ -2253,6 +2253,47 @@ describe('StorageV2WebDavRecordSyncService', () => {
         secretKeyMaterial: 'dav-user:wrong-password'
       })
     ).rejects.toThrow('远端敏感配置无法解密')
+    expect(deviceB.state.credentials).toEqual([])
+    expect(mocks.secretVault.importPlaintextSecrets).not.toHaveBeenCalled()
+  })
+
+  it('does not write remote records that reference missing secret bundles', async () => {
+    const credentialRow: ProviderCredentialRow = {
+      provider_id: 'provider-1',
+      credential_kind: 'apiKey',
+      secret_ref: 'storage-v2://secret/provider/provider-1/apiKey',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      updated_by_device_id: 'device-a'
+    }
+    const deviceA = makeProviderCredentialDb({ credentials: [credentialRow] })
+    const deviceB = makeProviderCredentialDb({})
+    const service = new StorageV2WebDavRecordSyncService([providerCredentialTable])
+
+    mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({
+      'provider:provider-1:apiKey': {
+        value: 'sk-local-provider',
+        updatedAt: '2026-06-01T08:00:00.000Z'
+      }
+    })
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(deviceA.client as any)
+    const firstResult = await service.sync(
+      mocks.webdav as any,
+      '/remote-root/sync/v1',
+      { version: 1, blobs: {}, records: {} },
+      { secretKeyMaterial: 'dav-user:dav-password' }
+    )
+
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(deviceB.client as any)
+    await expect(
+      service.sync(
+        mocks.webdav as any,
+        '/remote-root/sync/v1',
+        { ...firstResult.manifest, secrets: null },
+        { secretKeyMaterial: 'dav-user:dav-password' }
+      )
+    ).rejects.toThrow('缺少敏感配置数据包')
+
+    expect(deviceB.state.credentials).toEqual([])
     expect(mocks.secretVault.importPlaintextSecrets).not.toHaveBeenCalled()
   })
 })

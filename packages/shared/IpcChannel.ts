@@ -320,6 +320,7 @@ export enum IpcChannel {
   DataSync_GetStatus = 'data-sync:get-status',
   DataSync_ListRemoteDirectories = 'data-sync:list-remote-directories',
   DataSync_CheckWriteAccess = 'data-sync:check-write-access',
+  DataSync_RecordFailure = 'data-sync:record-failure',
   SystemAgent_ListCapabilities = 'system-agent:list-capabilities',
   SystemAgent_PlanIntent = 'system-agent:plan-intent',
   SystemAgent_PlanEvent = 'system-agent:plan-event',

@@ -45,6 +45,11 @@ vi.mock('../StorageV2Repositories', () => ({
   storageV2SettingsRepository: mocks.settingsRepository
 }))
 
+import {
+  listStorageV2LegacyRuntimePolicies,
+  StorageV2LegacyRuntimeCleanupService
+} from '../LegacyRuntimeCleanupService'
+
 describe('StorageV2LegacyRuntimeCleanupService', () => {
   let tmpDir: string
   let configDir: string
@@ -61,9 +66,6 @@ describe('StorageV2LegacyRuntimeCleanupService', () => {
     fs.mkdirSync(userDataDir, { recursive: true })
     fs.mkdirSync(dataRoot, { recursive: true })
 
-    vi.doMock('../../../utils/file', () => ({
-      getConfigDir: () => configDir
-    }))
     vi.mocked(app.getPath).mockImplementation((key: string) => {
       if (key === 'userData') return userDataDir
       return tmpDir
@@ -74,17 +76,14 @@ describe('StorageV2LegacyRuntimeCleanupService', () => {
   })
 
   afterEach(() => {
-    vi.doUnmock('../../../utils/file')
     fs.rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  async function loadModule() {
-    vi.resetModules()
-    return import('../LegacyRuntimeCleanupService')
+  function createService() {
+    return new StorageV2LegacyRuntimeCleanupService({ configDir, userDataDir })
   }
 
-  it('defines explicit retention policy for legacy runtime stores and sensitive projections', async () => {
-    const { listStorageV2LegacyRuntimePolicies } = await loadModule()
+  it('defines explicit retention policy for legacy runtime stores and sensitive projections', () => {
     const policies = listStorageV2LegacyRuntimePolicies()
     const byId = new Map(policies.map((policy) => [policy.id, policy]))
 
@@ -118,9 +117,8 @@ describe('StorageV2LegacyRuntimeCleanupService', () => {
       }
       return null
     })
-    const { StorageV2LegacyRuntimeCleanupService } = await loadModule()
 
-    const report = await new StorageV2LegacyRuntimeCleanupService().cleanupSensitiveLegacyProjections()
+    const report = await createService().cleanupSensitiveLegacyProjections()
 
     expect(report.dryRun).toBe(true)
     expect(report.snapshotPath).toBeNull()
@@ -154,9 +152,8 @@ describe('StorageV2LegacyRuntimeCleanupService', () => {
       }
       return null
     })
-    const { StorageV2LegacyRuntimeCleanupService } = await loadModule()
 
-    const report = await new StorageV2LegacyRuntimeCleanupService().cleanupSensitiveLegacyProjections({ dryRun: false })
+    const report = await createService().cleanupSensitiveLegacyProjections({ dryRun: false })
 
     expect(mocks.database.createSnapshot).toHaveBeenCalledWith('before-sensitive-legacy-cleanup')
     expect(report.snapshotPath).toBe(path.join(dataRoot, 'snapshots', 'before-cleanup.db'))
@@ -179,9 +176,8 @@ describe('StorageV2LegacyRuntimeCleanupService', () => {
       }
       return null
     })
-    const { StorageV2LegacyRuntimeCleanupService } = await loadModule()
 
-    const report = await new StorageV2LegacyRuntimeCleanupService().cleanupSensitiveLegacyProjections({ dryRun: false })
+    const report = await createService().cleanupSensitiveLegacyProjections({ dryRun: false })
 
     expect(report.items.find((item) => item.id === 'anthropic-oauth-legacy')).toMatchObject({
       action: 'archive',

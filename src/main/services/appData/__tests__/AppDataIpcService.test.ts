@@ -612,4 +612,18 @@ describe('AppDataIpcService', () => {
 
     expect(appDataSyncService.recordSyncFailure).not.toHaveBeenCalled()
   })
+
+  it('records renderer-side data sync recovery failures', async () => {
+    await getHandler(IpcChannel.DataSync_RecordFailure)(
+      null,
+      '远端数据已同步到本机，但恢复到当前界面失败：hydrate failed'
+    )
+
+    expect(appDataSyncService.recordSyncFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: '远端数据已同步到本机，但恢复到当前界面失败：hydrate failed'
+      }),
+      { preserveLastSummary: true }
+    )
+  })
 })

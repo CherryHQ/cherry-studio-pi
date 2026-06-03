@@ -105,6 +105,14 @@ function hasRemoteRuntimeData(summary?: Partial<DataSyncSummary> | null) {
   )
 }
 
+async function rememberDataSyncFailure(message: string) {
+  try {
+    await window.api.dataSync.recordFailure?.(message)
+  } catch (error) {
+    logger.warn('Failed to record renderer data sync failure summary', error as Error)
+  }
+}
+
 async function hydrateRuntimeCacheAfterDataSync(context: string, options: { strict?: boolean } = {}) {
   try {
     await hydrateRuntimeCacheFromStorageV2({
@@ -115,9 +123,11 @@ async function hydrateRuntimeCacheAfterDataSync(context: string, options: { stri
   } catch (error) {
     logger.warn(`Failed to hydrate runtime cache ${context}`, error as Error)
     if (options.strict) {
-      throw new Error(
-        `远端数据已同步到本机，但恢复到当前界面失败：${error instanceof Error ? error.message : String(error)}`
-      )
+      const message = `远端数据已同步到本机，但恢复到当前界面失败：${
+        error instanceof Error ? error.message : String(error)
+      }`
+      await rememberDataSyncFailure(message)
+      throw new Error(message)
     }
   }
 }

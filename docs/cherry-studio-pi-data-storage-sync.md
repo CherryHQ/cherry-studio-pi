@@ -47,6 +47,11 @@ Contribution rules:
   local-only.
 - Sensitive values must use the Storage v2 secret vault and store only secret
   references in ordinary records.
+- A remote record that contains a `secret_ref` must not be applied to the local
+  database until the matching encrypted WebDAV secret bundle has been verified
+  and the referenced secret value has been imported locally. This prevents a
+  provider, model, channel, or setting from appearing synced while its required
+  credential is missing.
 - Model provider credentials require both the `provider_credentials` ref row and
   the encrypted secret vault bundle. Clearing a credential must publish a
   tombstone for the credential ref so older remote keys are not resurrected.
@@ -94,6 +99,9 @@ Merge rules:
 - Deletes are tombstones, not immediate remote removals, so offline devices can converge.
 - Remote bundle hash, secret hash, manifest generation, and sync lock ownership
   are checked before publishing the final manifest.
+- Remote Storage v2 rows with secret references are guarded before local write:
+  the client decrypts the remote secret bundle, verifies all referenced secret
+  ids exist, imports those secrets locally, and only then applies the row.
 - Stale remote artifacts are pruned after the manifest has been published.
 
 Runtime flow:

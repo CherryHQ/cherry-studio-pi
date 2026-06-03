@@ -261,7 +261,8 @@ const api = {
     listRemoteDirectories: (webdavConfig: WebDavConfig, remotePath?: string) =>
       ipcRenderer.invoke(IpcChannel.DataSync_ListRemoteDirectories, webdavConfig, remotePath),
     checkWriteAccess: (webdavConfig: WebDavConfig) =>
-      ipcRenderer.invoke(IpcChannel.DataSync_CheckWriteAccess, webdavConfig)
+      ipcRenderer.invoke(IpcChannel.DataSync_CheckWriteAccess, webdavConfig),
+    recordFailure: (message: string) => ipcRenderer.invoke(IpcChannel.DataSync_RecordFailure, message)
   },
   systemAgent: {
     listCapabilities: (options?: Record<string, unknown>) =>

@@ -88,6 +88,10 @@ function collectSecretRefs(value: unknown, refs: Set<string>, invalidRefs: Set<s
   }
 }
 
+export function collectStorageV2SecretRefsFromValue(value: unknown, refs: Set<string>, invalidRefs: Set<string>) {
+  collectSecretRefs(parseJsonValue(value), refs, invalidRefs)
+}
+
 function isMissingSchemaError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
   return /no such (table|column)|SQLITE_ERROR/i.test(message) && /no such (table|column)/i.test(message)
@@ -115,7 +119,7 @@ export async function scanStorageV2SecretReferences(client: Client): Promise<{
     }
 
     for (const row of result.rows) {
-      collectSecretRefs(parseJsonValue(row[query.column]), refs, invalidRefs)
+      collectStorageV2SecretRefsFromValue(row[query.column], refs, invalidRefs)
     }
   }
 

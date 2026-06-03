@@ -10,7 +10,7 @@ import { runWebDavOperation, WebDavOperationError } from '@main/services/WebDavR
 import type { WebDAVClient } from 'webdav'
 
 import { storageV2DataRootService } from './DataRootService'
-import { scanStorageV2SecretReferences } from './SecretRefIntegrity'
+import { collectStorageV2SecretRefsFromValue, scanStorageV2SecretReferences } from './SecretRefIntegrity'
 import { type StorageV2PlaintextSecretVaultEntry, storageV2SecretVaultService } from './SecretVaultService'
 import { storageV2Database } from './StorageV2Database'
 
@@ -133,6 +133,12 @@ export type StorageV2WebDavRecordSyncResult = {
 
 type StorageV2WebDavRecordSyncOptions = {
   secretKeyMaterial?: string
+}
+
+type RemoteSecretVaultCache = {
+  loaded: boolean
+  secrets: Record<string, StorageV2PlaintextSecretVaultEntry> | null
+  importedSecretIds: Set<string>
 }
 
 const EMPTY_SUMMARY: StorageV2WebDavRecordSyncSummary = {
@@ -1103,13 +1109,87 @@ export class StorageV2WebDavRecordSyncService {
     }
   }
 
+  private collectRecordSecretRefs(record: LocalRecord) {
+    const refs = new Set<string>()
+    const invalidRefs = new Set<string>()
+    for (const value of Object.values(record.row)) {
+      collectStorageV2SecretRefsFromValue(value, refs, invalidRefs)
+    }
+
+    return { refs, invalidRefs }
+  }
+
+  private async assertRemoteSecretsAvailableForRecord(
+    client: WebDAVClient,
+    basePath: string,
+    manifest: StorageV2WebDavRecordSyncManifest,
+    remoteRecord: LocalRecord,
+    options: StorageV2WebDavRecordSyncOptions,
+    cache: RemoteSecretVaultCache,
+    summary: StorageV2WebDavRecordSyncSummary
+  ) {
+    const { refs, invalidRefs } = this.collectRecordSecretRefs(remoteRecord)
+    if (invalidRefs.size > 0) {
+      throw new Error(
+        `远端 Storage v2 记录 ${remoteRecord.id} 包含无法识别的敏感配置引用：${[...invalidRefs].join(
+          ', '
+        )}。为避免写入不可用的模型配置，本次同步已停止。`
+      )
+    }
+    if (refs.size === 0) return
+
+    if (!cache.loaded) {
+      cache.secrets = await this.readRemoteSecretVaultBundle(client, basePath, manifest, options.secretKeyMaterial)
+      cache.loaded = true
+    }
+
+    if (!cache.secrets) {
+      throw new Error(
+        `远端 Storage v2 记录 ${remoteRecord.id} 引用了敏感配置，但 WebDAV 上缺少敏感配置数据包。为避免写入缺少密钥的模型配置，本次同步已停止。`
+      )
+    }
+
+    const missingSecretIds = [...refs].filter((secretId) => !cache.secrets?.[secretId])
+    if (missingSecretIds.length > 0) {
+      throw new Error(
+        `远端 Storage v2 记录 ${remoteRecord.id} 引用了缺失的敏感配置：${missingSecretIds.join(
+          ', '
+        )}。为避免写入缺少密钥的模型配置，本次同步已停止。`
+      )
+    }
+
+    const secretsToImport = Object.fromEntries(
+      [...refs]
+        .filter((secretId) => !cache.importedSecretIds.has(secretId))
+        .map((secretId) => [secretId, cache.secrets![secretId]])
+    )
+    if (Object.keys(secretsToImport).length === 0) return
+
+    try {
+      await storageV2SecretVaultService.importPlaintextSecrets(secretsToImport)
+    } catch (error) {
+      throw new Error(
+        `远端 Storage v2 记录 ${remoteRecord.id} 引用的敏感配置无法写入本机。为避免写入缺少密钥的模型配置，本次同步已停止：${errorMessage(
+          error
+        )}`,
+        { cause: error }
+      )
+    }
+
+    for (const secretId of Object.keys(secretsToImport)) {
+      cache.importedSecretIds.add(secretId)
+    }
+    summary.secretDownloaded += Object.keys(secretsToImport).length
+  }
+
   private async syncSecretVault(
     client: WebDAVClient,
     basePath: string,
     manifest: StorageV2WebDavRecordSyncManifest,
     summary: StorageV2WebDavRecordSyncSummary,
     options: StorageV2WebDavRecordSyncOptions,
-    referencedSecretIds: ReadonlySet<string>
+    referencedSecretIds: ReadonlySet<string>,
+    preImportedSecretIds: ReadonlySet<string> = new Set()
   ) {
     if (referencedSecretIds.size === 0) {
       manifest.secrets = null
@@ -1153,8 +1233,10 @@ export class StorageV2WebDavRecordSyncService {
       }
 
       if (!local && remote) {
-        remoteImports[secretId] = remote
-        summary.secretDownloaded += 1
+        if (!preImportedSecretIds.has(secretId)) {
+          remoteImports[secretId] = remote
+          summary.secretDownloaded += 1
+        }
         continue
       }
 
@@ -1176,8 +1258,10 @@ export class StorageV2WebDavRecordSyncService {
         remoteNeedsUpdate = true
       } else {
         merged[secretId] = remote
-        remoteImports[secretId] = remote
-        summary.secretDownloaded += 1
+        if (!preImportedSecretIds.has(secretId)) {
+          remoteImports[secretId] = remote
+          summary.secretDownloaded += 1
+        }
       }
     }
 
@@ -1760,6 +1844,11 @@ export class StorageV2WebDavRecordSyncService {
     const manifest = normalizeManifest(manifestInput ?? makeManifest())
     const summary = { ...EMPTY_SUMMARY }
     const pendingSyncStates = new Map<string, string>()
+    const remoteSecretVaultCache: RemoteSecretVaultCache = {
+      loaded: false,
+      secrets: null,
+      importedSecretIds: new Set()
+    }
     const stageRecordSyncState = (id: string, valueHash: string) => {
       pendingSyncStates.set(id, valueHash)
     }
@@ -1806,6 +1895,15 @@ export class StorageV2WebDavRecordSyncService {
 
         const remoteRecord = await this.pullRecord(client, basePath, remoteMeta, bundledRecord)
         if (remoteRecord) {
+          await this.assertRemoteSecretsAvailableForRecord(
+            client,
+            basePath,
+            manifest,
+            remoteRecord,
+            options,
+            remoteSecretVaultCache,
+            summary
+          )
           await this.applyRemoteRecordOrThrow(dbClient, remoteRecord)
           bundledRecords.set(id, remoteRecord)
           manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
@@ -1857,6 +1955,15 @@ export class StorageV2WebDavRecordSyncService {
         const winner = localWins ? localRecord : remoteRecord
 
         if (remoteWins) {
+          await this.assertRemoteSecretsAvailableForRecord(
+            client,
+            basePath,
+            manifest,
+            remoteRecord,
+            options,
+            remoteSecretVaultCache,
+            summary
+          )
           await this.applyRemoteRecordOrThrow(dbClient, remoteRecord)
         }
 
@@ -1875,6 +1982,15 @@ export class StorageV2WebDavRecordSyncService {
       const remoteChanged = remoteRecord.valueHash !== lastHash
 
       if (!lastHash) {
+        await this.assertRemoteSecretsAvailableForRecord(
+          client,
+          basePath,
+          manifest,
+          remoteRecord,
+          options,
+          remoteSecretVaultCache,
+          summary
+        )
         await this.applyRemoteRecordOrThrow(dbClient, remoteRecord)
         bundledRecords.set(id, remoteRecord)
         manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
@@ -1897,6 +2013,15 @@ export class StorageV2WebDavRecordSyncService {
       }
 
       if (!localChanged && remoteChanged) {
+        await this.assertRemoteSecretsAvailableForRecord(
+          client,
+          basePath,
+          manifest,
+          remoteRecord,
+          options,
+          remoteSecretVaultCache,
+          summary
+        )
         await this.applyRemoteRecordOrThrow(dbClient, remoteRecord)
         bundledRecords.set(id, remoteRecord)
         manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
@@ -1916,6 +2041,15 @@ export class StorageV2WebDavRecordSyncService {
         stageRecordSyncState(id, localRecord.valueHash)
         summary.storageUploaded += localRecord.deletedAt ? 0 : 1
       } else {
+        await this.assertRemoteSecretsAvailableForRecord(
+          client,
+          basePath,
+          manifest,
+          remoteRecord,
+          options,
+          remoteSecretVaultCache,
+          summary
+        )
         await this.applyRemoteRecordOrThrow(dbClient, remoteRecord)
         bundledRecords.set(id, remoteRecord)
         manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
@@ -1936,7 +2070,15 @@ export class StorageV2WebDavRecordSyncService {
     this.pruneManifestBlobsWithoutRecords(manifest, bundledRecords)
     await this.writeRecordBundle(client, basePath, manifest, bundledRecords)
     const referencedSecretIds = (await scanStorageV2SecretReferences(dbClient)).refs
-    await this.syncSecretVault(client, basePath, manifest, summary, options, referencedSecretIds)
+    await this.syncSecretVault(
+      client,
+      basePath,
+      manifest,
+      summary,
+      options,
+      referencedSecretIds,
+      remoteSecretVaultCache.importedSecretIds
+    )
     return {
       manifest,
       summary,

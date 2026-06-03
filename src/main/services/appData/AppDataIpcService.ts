@@ -32,8 +32,8 @@ function isDataSyncAlreadyRunningMessage(message: string) {
   return /Data sync is already running|已有数据同步正在进行|同步正在进行/i.test(message)
 }
 
-async function rememberDataSyncFailure(message: string) {
-  await appDataSyncService.recordSyncFailure(new Error(message)).catch((recordError) => {
+async function rememberDataSyncFailure(message: string, options: { preserveLastSummary?: boolean } = {}) {
+  await Promise.resolve(appDataSyncService.recordSyncFailure(new Error(message), options)).catch((recordError) => {
     logger.warn('Failed to record data sync failure summary', recordError as Error)
   })
 }
@@ -200,5 +200,9 @@ export function registerAppDataIpcHandlers() {
     } catch (error) {
       throwDataSyncUserError(error, '检查同步写入权限')
     }
+  })
+  ipcMain.handle(IpcChannel.DataSync_RecordFailure, async (_, message: string) => {
+    const failureMessage = message?.trim() || '同步数据失败：发生未知错误。'
+    await rememberDataSyncFailure(failureMessage, { preserveLastSummary: true })
   })
 }

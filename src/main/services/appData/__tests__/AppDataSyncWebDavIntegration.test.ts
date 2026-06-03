@@ -9,6 +9,7 @@ import { createClient, type InValue } from '@libsql/client'
 import { app } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { storageV2SecretVaultService } from '../../storageV2/SecretVaultService'
 import { storageV2Database } from '../../storageV2/StorageV2Database'
 import { AppDataDatabase, getAppDataDatabase } from '../AppDataDatabase'
 import { AppDataSyncService } from '../AppDataSyncService'
@@ -341,12 +342,21 @@ async function seedComprehensiveStorageV2Data(instance: TestInstance): Promise<C
     'Cherry Studio Pi comprehensive sync fixture',
     'provider/model/assistant/agent/knowledge/conversation/settings'
   ].join('\n')
+  const providerApiKeySecretRef = 'storage-v2://secret/provider/provider-sync-full-openai/apiKey'
+  const channelWebhookSecretRef = 'storage-v2://secret/channel/channel-sync-full/webhook'
   const blobBytes = Buffer.from(blobPayload, 'utf8')
   const blobChecksum = createHash('sha256').update(blobBytes).digest('hex')
   const blobPath = path.join(instance.dataRoot, blobStoragePath)
 
   await fsp.mkdir(path.dirname(blobPath), { recursive: true })
   await fsp.writeFile(blobPath, blobBytes)
+  await storageV2SecretVaultService.setSecret(
+    'provider',
+    'provider-sync-full-openai',
+    'apiKey',
+    'sk-sync-full-provider'
+  )
+  await storageV2SecretVaultService.setSecret('channel', 'channel-sync-full', 'webhook', 'whsec-sync-full-channel')
 
   const execute = (sql: string, args: InValue[] = []) => client.execute({ sql, args })
   const json = (value: unknown) => JSON.stringify(value)
@@ -371,7 +381,7 @@ async function seedComprehensiveStorageV2Data(instance: TestInstance): Promise<C
       'openai-compatible',
       '同步测试模型服务',
       'https://sync.example.test/v1',
-      json({ apiKeySecretRef: 'storage-v2://secret/provider-sync-full-openai/apiKey', timeoutMs: 30000 }),
+      json({ apiKeySecretRef: providerApiKeySecretRef, timeoutMs: 30000 }),
       createdAt,
       updatedAt
     ]
@@ -576,7 +586,7 @@ async function seedComprehensiveStorageV2Data(instance: TestInstance): Promise<C
       '同步测试频道',
       'agent-sync-full',
       'agent-session-sync-full',
-      json({ endpointSecretRef: 'storage-v2://secret/channel-sync-full/webhook' }),
+      json({ endpointSecretRef: channelWebhookSecretRef }),
       json(['chat-sync-full']),
       'soul',
       createdAt,
@@ -823,6 +833,16 @@ async function readComprehensiveStorageV2State(instance: TestInstance, fixture: 
   }
   const blobPath = path.join(instance.dataRoot, fixture.blobStoragePath)
   const blobContents = await fsp.readFile(blobPath)
+  const provider = await selectOne<{ name: string; config_json: string }>(
+    'SELECT name, config_json FROM providers WHERE id = ?',
+    ['provider-sync-full-openai']
+  )
+  const providerConfig = provider ? JSON.parse(String(provider.config_json)) : null
+  const channel = await selectOne<{ name: string; permission_mode: string; config_json: string }>(
+    'SELECT name, permission_mode, config_json FROM channels WHERE id = ?',
+    ['channel-sync-full']
+  )
+  const channelConfig = channel ? JSON.parse(String(channel.config_json)) : null
 
   return {
     counts: {
@@ -850,10 +870,11 @@ async function readComprehensiveStorageV2State(instance: TestInstance, fixture: 
       kv_records: await count('kv_records'),
       settings: await count('settings')
     },
-    provider: await selectOne<{ name: string; config_json: string }>(
-      'SELECT name, config_json FROM providers WHERE id = ?',
-      ['provider-sync-full-openai']
-    ),
+    provider,
+    providerApiKey:
+      typeof providerConfig?.apiKeySecretRef === 'string'
+        ? await storageV2SecretVaultService.getSecret(providerConfig.apiKeySecretRef)
+        : null,
     models: (await client.execute('SELECT id, capabilities_json FROM models ORDER BY sort_order')).rows.map((row) => ({
       id: String(row.id),
       capabilities: JSON.parse(String(row.capabilities_json))
@@ -904,10 +925,11 @@ async function readComprehensiveStorageV2State(instance: TestInstance, fixture: 
       'SELECT name, status FROM scheduled_tasks WHERE id = ?',
       ['task-sync-full']
     ),
-    channel: await selectOne<{ name: string; permission_mode: string }>(
-      'SELECT name, permission_mode FROM channels WHERE id = ?',
-      ['channel-sync-full']
-    ),
+    channel,
+    channelWebhook:
+      typeof channelConfig?.endpointSecretRef === 'string'
+        ? await storageV2SecretVaultService.getSecret(channelConfig.endpointSecretRef)
+        : null,
     taskRunLog: await selectOne<{ status: string; result_json: string }>(
       'SELECT status, result_json FROM task_run_logs WHERE task_id = ? AND run_at = ?',
       ['task-sync-full', '2026-05-29T13:10:00.000Z']
@@ -1182,6 +1204,7 @@ describe('AppDataSyncService local WebDAV integration', () => {
 
     expect(firstSummary.storageUploaded).toBe(expectedRecordCount)
     expect(firstSummary.blobUploaded).toBe(1)
+    expect(firstSummary.secretUploaded).toBe(2)
     expect(countRemoteStorageV2Records(remoteManifest)).toEqual(COMPREHENSIVE_REMOTE_ENTITY_COUNTS)
     expect(Object.keys(remoteManifest.storageV2?.records ?? {})).toHaveLength(expectedRecordCount)
     expect(remoteManifest.storageV2?.bundle).toMatchObject({
@@ -1208,15 +1231,17 @@ describe('AppDataSyncService local WebDAV integration', () => {
 
     expect(secondSummary.storageDownloaded).toBe(expectedRecordCount)
     expect(secondSummary.blobDownloaded).toBe(1)
+    expect(secondSummary.secretDownloaded).toBe(2)
     expect(secondSummary.storageConflicts).toBe(0)
     expect(deviceBState.counts).toEqual(COMPREHENSIVE_STORAGE_TABLE_COUNTS)
     expect(deviceBState.provider).toMatchObject({
       name: '同步测试模型服务'
     })
     expect(JSON.parse(deviceBState.provider!.config_json)).toEqual({
-      apiKeySecretRef: 'storage-v2://secret/provider-sync-full-openai/apiKey',
+      apiKeySecretRef: 'storage-v2://secret/provider/provider-sync-full-openai/apiKey',
       timeoutMs: 30000
     })
+    expect(deviceBState.providerApiKey).toBe('sk-sync-full-provider')
     expect(deviceBState.models).toEqual([
       { id: 'model-sync-full-chat', capabilities: ['chat', 'vision', 'tool_use'] },
       { id: 'model-sync-full-embedding', capabilities: ['embedding'] }
@@ -1278,8 +1303,10 @@ describe('AppDataSyncService local WebDAV integration', () => {
     })
     expect(deviceBState.channel).toEqual({
       name: '同步测试频道',
-      permission_mode: 'soul'
+      permission_mode: 'soul',
+      config_json: JSON.stringify({ endpointSecretRef: 'storage-v2://secret/channel/channel-sync-full/webhook' })
     })
+    expect(deviceBState.channelWebhook).toBe('whsec-sync-full-channel')
     expect(deviceBState.taskRunLog).toMatchObject({ status: 'success' })
     expect(JSON.parse(deviceBState.taskRunLog!.result_json)).toEqual({ output: 'fixture synced' })
     expect(JSON.parse(deviceBState.setting!.value_json)).toMatchObject({

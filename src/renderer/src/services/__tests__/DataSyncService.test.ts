@@ -18,7 +18,8 @@ const mocks = vi.hoisted(() => ({
   prepareStorageV2ForDataSync: vi.fn(),
   reportErrorToSystemAgent: vi.fn(),
   getStatus: vi.fn(),
-  syncNow: vi.fn()
+  syncNow: vi.fn(),
+  recordFailure: vi.fn()
 }))
 
 vi.mock('@renderer/store', () => ({
@@ -104,7 +105,8 @@ describe('DataSyncService', () => {
       value: {
         dataSync: {
           getStatus: mocks.getStatus,
-          syncNow: mocks.syncNow
+          syncNow: mocks.syncNow,
+          recordFailure: mocks.recordFailure
         }
       }
     })
@@ -228,6 +230,9 @@ describe('DataSyncService', () => {
     expect(mocks.hydrateStorageV2ConversationsIfDexieEmpty).toHaveBeenCalledWith('data-sync:after data sync', {
       strict: true
     })
+    expect(mocks.recordFailure).toHaveBeenCalledWith(
+      expect.stringContaining('远端数据已同步到本机，但恢复到当前界面失败')
+    )
   })
 
   it('fails the manual sync when downloaded remote data cannot be restored to runtime state', async () => {
@@ -242,6 +247,9 @@ describe('DataSyncService', () => {
 
     expect(mocks.prepareStorageV2ForDataSync).toHaveBeenCalledTimes(1)
     expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+    expect(mocks.recordFailure).toHaveBeenCalledWith(
+      expect.stringContaining('远端数据已同步到本机，但恢复到当前界面失败：hydrate failed')
+    )
     expect(getDataSyncRuntimeState().syncing).toBe(false)
   })
 

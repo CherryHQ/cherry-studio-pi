@@ -46,8 +46,15 @@ type SensitiveLegacyProjectionDefinition = {
   label: string
   settingKey: string
   secretRefField: string
-  getPath: () => string
+  getPath: (paths: StorageV2LegacyRuntimePaths) => string
 }
+
+type StorageV2LegacyRuntimePaths = {
+  configDir: string
+  userDataDir: string
+}
+
+type StorageV2LegacyRuntimeCleanupServiceOptions = Partial<StorageV2LegacyRuntimePaths>
 
 export const STORAGE_V2_LEGACY_RUNTIME_POLICIES: readonly StorageV2LegacyRuntimePolicy[] = [
   {
@@ -136,21 +143,21 @@ const SENSITIVE_LEGACY_PROJECTIONS: readonly SensitiveLegacyProjectionDefinition
     label: 'Anthropic OAuth legacy JSON',
     settingKey: 'anthropic.oauth.credentials',
     secretRefField: 'credentialsSecretRef',
-    getPath: () => path.join(getConfigDir(), 'oauth', 'anthropic.json')
+    getPath: ({ configDir }) => path.join(configDir, 'oauth', 'anthropic.json')
   },
   {
     id: 'copilot-token-user-data',
     label: 'Copilot legacy token in userData',
     settingKey: 'copilot.accessToken',
     secretRefField: 'accessTokenSecretRef',
-    getPath: () => path.join(app.getPath('userData'), '.copilot_token')
+    getPath: ({ userDataDir }) => path.join(userDataDir, '.copilot_token')
   },
   {
     id: 'copilot-token-config',
     label: 'Copilot legacy token in config',
     settingKey: 'copilot.accessToken',
     secretRefField: 'accessTokenSecretRef',
-    getPath: () => path.join(getConfigDir(), '.copilot_token')
+    getPath: ({ configDir }) => path.join(configDir, '.copilot_token')
   }
 ]
 
@@ -179,11 +186,21 @@ export function listStorageV2LegacyRuntimePolicies(): readonly StorageV2LegacyRu
 }
 
 export class StorageV2LegacyRuntimeCleanupService {
+  constructor(private readonly options: StorageV2LegacyRuntimeCleanupServiceOptions = {}) {}
+
+  private getRuntimePaths(): StorageV2LegacyRuntimePaths {
+    return {
+      configDir: this.options.configDir ?? getConfigDir(),
+      userDataDir: this.options.userDataDir ?? app.getPath('userData')
+    }
+  }
+
   async getSensitiveLegacyProjectionPlan(): Promise<StorageV2SensitiveLegacyProjectionCleanupReport> {
     const items: StorageV2SensitiveLegacyProjectionPlanItem[] = []
+    const runtimePaths = this.getRuntimePaths()
 
     for (const definition of SENSITIVE_LEGACY_PROJECTIONS) {
-      const projectionPath = definition.getPath()
+      const projectionPath = definition.getPath(runtimePaths)
       const exists = fs.existsSync(projectionPath)
       const setting = await storageV2SettingsRepository.get(definition.settingKey)
       const storageV2State = getStorageV2ProjectionState(setting, definition.secretRefField)

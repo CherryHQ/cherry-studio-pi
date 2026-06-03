@@ -1576,10 +1576,16 @@ export class AppDataSyncService {
     }
   }
 
-  async recordSyncFailure(error: unknown) {
+  async recordSyncFailure(error: unknown, options: { preserveLastSummary?: boolean } = {}) {
     const db = await getAppDataDatabase()
+    const previousSummary = options.preserveLastSummary
+      ? ((await db.getSyncState<DataSyncSummary>('last-sync-summary')) ??
+        (await storageV2AppDataKvMirrorService.getSyncState<DataSyncSummary>('last-sync-summary')) ??
+        null)
+      : null
     const summary: DataSyncSummary = {
       ...EMPTY_SUMMARY,
+      ...(previousSummary ?? {}),
       status: 'failed',
       error: errorMessage(error),
       lastSyncAt: Date.now()

@@ -1183,6 +1183,43 @@ describe('AppDataSyncService', () => {
     expect(mocks.storageV2.getSyncState).toHaveBeenCalledWith('last-sync-summary')
   })
 
+  it('preserves remote runtime summary details when recording renderer recovery failures', async () => {
+    const previousSummary = {
+      status: 'success',
+      error: null,
+      uploaded: 0,
+      downloaded: 0,
+      deleted: 0,
+      conflicts: 0,
+      resolvedConflicts: 0,
+      skipped: 4,
+      storageDownloaded: 3,
+      storageRecordCount: 3,
+      storageBlobCount: 1,
+      storageBundleHash: 'remote-bundle-hash',
+      remotePath: '/remote-root/sync/v1',
+      lastSyncAt: 1760000000300
+    }
+    mocks.db.getSyncState.mockImplementation(async (id: string) =>
+      id === 'last-sync-summary' ? previousSummary : null
+    )
+
+    await new AppDataSyncService().recordSyncFailure(new Error('hydrate failed'), { preserveLastSummary: true })
+
+    expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith(
+      'last-sync-summary',
+      expect.objectContaining({
+        status: 'failed',
+        error: 'hydrate failed',
+        storageDownloaded: 3,
+        storageRecordCount: 3,
+        storageBlobCount: 1,
+        storageBundleHash: 'remote-bundle-hash',
+        remotePath: '/remote-root/sync/v1'
+      })
+    )
+  })
+
   it('uses the Storage v2 app sync device id when legacy app.db is missing the original one', async () => {
     mocks.storageV2.getSyncState.mockImplementation(async (id: string) =>
       id === 'device-id' ? 'storage-device' : null
