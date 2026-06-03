@@ -800,7 +800,7 @@ describe('StorageV2WebDavRecordSyncService', () => {
     )
   })
 
-  it('downloads remote records when record hash metadata is stale', async () => {
+  it('fails safely when record hash metadata is stale', async () => {
     const remote = makeSharedWebDavStore()
     const remoteRow = {
       key: 'theme',
@@ -823,10 +823,8 @@ describe('StorageV2WebDavRecordSyncService', () => {
     }
     remote.files.set('/remote-root/sync/v1/storage-v2/records/settings/legacy-theme.json', JSON.stringify(remoteRecord))
 
-    const result = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
-      remote.client as any,
-      '/remote-root/sync/v1',
-      {
+    await expect(
+      new StorageV2WebDavRecordSyncService([settingsTable]).sync(remote.client as any, '/remote-root/sync/v1', {
         version: 1,
         blobs: {},
         records: {
@@ -841,20 +839,11 @@ describe('StorageV2WebDavRecordSyncService', () => {
             path: 'storage-v2/records/settings/legacy-theme.json'
           }
         }
-      }
-    )
-
-    expect(result.summary.storageDownloaded).toBe(1)
-    expect(result.manifest.records['settings:theme']).toMatchObject({
-      entityType: 'settings',
-      table: 'settings',
-      idValues: ['theme'],
-      valueHash: remoteHash,
-      path: expect.stringMatching(HASHED_BUNDLE_PATH)
-    })
+      })
+    ).rejects.toThrow('远端 Storage v2 记录 settings:theme 校验失败')
   })
 
-  it('does not create conflicts when rows are content-equivalent but hash metadata drifts', async () => {
+  it('fails safely when content-equivalent rows have drifting hash metadata', async () => {
     const remote = makeSharedWebDavStore()
     const localRow = {
       key: 'theme',
@@ -889,10 +878,8 @@ describe('StorageV2WebDavRecordSyncService', () => {
     db.state.syncState.set('webdav-storage-record:settings:theme:hash', 'historical-baseline')
     vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
 
-    const result = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
-      remote.client as any,
-      '/remote-root/sync/v1',
-      {
+    await expect(
+      new StorageV2WebDavRecordSyncService([settingsTable]).sync(remote.client as any, '/remote-root/sync/v1', {
         version: 1,
         blobs: {},
         records: {
@@ -907,22 +894,9 @@ describe('StorageV2WebDavRecordSyncService', () => {
             path: 'storage-v2/records/settings/legacy-theme.json'
           }
         }
-      }
-    )
-
-    expect(result.summary.storageConflicts).toBe(0)
-    expect(result.summary.storageResolvedConflicts).toBe(0)
-    expect(result.summary.storageSkipped).toBe(1)
-    expect(result.summary.storageUploaded).toBe(0)
-    expect(result.summary.storageDownloaded).toBe(0)
-    expect(result.manifest.records['settings:theme']).toMatchObject({
-      entityType: 'settings',
-      table: 'settings',
-      idValues: ['theme'],
-      valueHash: remoteHash,
-      path: expect.stringMatching(HASHED_BUNDLE_PATH)
-    })
-    expect(db.state.syncState.get('webdav-storage-record:settings:theme:hash')).toBe(remoteHash)
+      })
+    ).rejects.toThrow('远端 Storage v2 记录 settings:theme 校验失败')
+    expect(db.state.syncState.get('webdav-storage-record:settings:theme:hash')).toBe('historical-baseline')
   })
 
   it('rewrites a missing remote record referenced by equal hash into bundle-backed manifest', async () => {
@@ -1025,6 +999,60 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(remote.files.has('/remote-root/sync/v1/storage-v2/blobs/orphaned.bin')).toBe(true)
     expect(remote.files.has('/remote-root/sync/v1/storage-v2/bundle/old.json')).toBe(true)
     expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(true)
+  })
+
+  it('prunes stale remote Storage v2 artifacts after a manifest has been published', async () => {
+    const remote = makeSharedWebDavStore()
+    const localRow = {
+      key: 'theme',
+      value_json: '{"mode":"local"}',
+      scope: 'app',
+      updated_at: '2026-05-29T12:00:00.000Z',
+      deleted_at: null,
+      version: 1
+    }
+    const localHash = hashJson(localRow)
+    const staleRecord = {
+      id: 'settings:theme',
+      table: settingsTable,
+      idValues: ['theme'],
+      row: localRow,
+      valueHash: localHash,
+      updatedAt: Date.parse(localRow.updated_at),
+      deletedAt: null,
+      version: 1
+    }
+    remote.files.set('/remote-root/sync/v1/storage-v2/records/settings/theme-old.json', JSON.stringify(staleRecord))
+    remote.files.set('/remote-root/sync/v1/storage-v2/blobs/orphaned.bin', 'orphaned blob')
+    remote.files.set('/remote-root/sync/v1/storage-v2/bundle/old.json', 'orphaned bundle')
+
+    const db = makeSettingsDb([localRow])
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+    const service = new StorageV2WebDavRecordSyncService([settingsTable])
+    const result = await service.sync(remote.client as any, '/remote-root/sync/v1', {
+      version: 1,
+      blobs: {},
+      records: {
+        'settings:theme': {
+          entityType: 'settings',
+          table: 'settings',
+          idValues: ['theme'],
+          valueHash: localHash,
+          updatedAt: Date.parse(localRow.updated_at),
+          deletedAt: null,
+          version: 1,
+          path: 'storage-v2/records/settings/theme-old.json'
+        }
+      }
+    })
+
+    const currentBundlePath = `/remote-root/sync/v1/${result.manifest.bundle?.path}`
+    await service.pruneRemoteArtifacts(remote.client as any, '/remote-root/sync/v1', result.manifest)
+
+    expect(remote.files.has(currentBundlePath)).toBe(true)
+    expect(remote.files.has('/remote-root/sync/v1/storage-v2/records/settings/theme-old.json')).toBe(false)
+    expect(remote.files.has('/remote-root/sync/v1/storage-v2/blobs/orphaned.bin')).toBe(false)
+    expect(remote.files.has('/remote-root/sync/v1/storage-v2/bundle/old.json')).toBe(false)
   })
 
   it('prefers remote Storage v2 rows when a device has no prior sync baseline', async () => {

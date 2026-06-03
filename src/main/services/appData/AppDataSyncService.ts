@@ -15,6 +15,7 @@ import { storageV2FileLegacyProjectionService } from '@main/services/storageV2/F
 import {
   type StorageV2WebDavRecordSyncManifest,
   storageV2WebDavRecordSyncService,
+  type StorageV2WebDavRecordSyncStateCommit,
   type StorageV2WebDavRecordSyncSummary
 } from '@main/services/storageV2/WebDavRecordSyncService'
 import { hashJsonValue, writeWebDavJsonAtomically } from '@main/services/WebDavAtomic'
@@ -55,6 +56,7 @@ type RemoteSnapshotMeta = {
   fileName: string
   path: string
   byteSize: number
+  checksum?: string
   createdAt: string
   uploadedAt: number
   deviceId: string
@@ -166,6 +168,9 @@ const DATA_SYNC_SUFFIX = '/sync/v1'
 const STORAGE_V2_RUNTIME_PROJECTION_HASH_KEY = 'storage-v2-runtime-projection-hash'
 const REMOTE_SYNC_LOCK_FILE = '.sync.lock.json'
 const REMOTE_SYNC_LOCK_TTL_MS = 30 * 60 * 1000
+const REMOTE_SYNC_LOCK_RENEW_INTERVAL_MS = Math.max(60_000, Math.floor(REMOTE_SYNC_LOCK_TTL_MS / 3))
+const SNAPSHOT_RETENTION_PER_DEVICE = 3
+const SNAPSHOT_RETENTION_TOTAL = 20
 const NATIVE_WEB_DAV_LOCK_UNSUPPORTED_STATUSES = new Set([403, 405, 409, 501])
 
 const AGENT_RUNTIME_ENTITY_TYPES = new Set([
@@ -286,16 +291,28 @@ function safeFileSegment(value: string) {
   return value.replace(/[^a-z0-9_.-]+/gi, '-').replace(/^-|-$/g, '') || 'device'
 }
 
-function snapshotFileName(deviceId: string) {
-  return `cherry-studio-pi.data-sync.${safeFileSegment(deviceId)}.zip`
+function snapshotFileName(deviceId: string, uploadedAt: number) {
+  return `cherry-studio-pi.data-sync.${safeFileSegment(deviceId)}.${uploadedAt}.zip`
+}
+
+function normalizeRemoteRelativePath(value: string, label = 'Remote data sync path') {
+  const normalized = path.posix.normalize(value)
+  if (normalized.startsWith('../') || normalized.startsWith('/') || normalized === '..') {
+    throw new Error(`${label} is invalid`)
+  }
+  return normalized
 }
 
 function normalizeRemoteSnapshotPath(value: string) {
-  const normalized = path.posix.normalize(value)
-  if (normalized.startsWith('../') || normalized.startsWith('/') || normalized === '..') {
-    throw new Error('Remote data snapshot path is invalid')
-  }
-  return normalized
+  return normalizeRemoteRelativePath(value, 'Remote data snapshot path')
+}
+
+function sha256Buffer(value: Buffer) {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+async function sha256File(filePath: string): Promise<string> {
+  return sha256Buffer(await fsp.readFile(filePath))
 }
 
 function errorMessage(error: unknown) {
@@ -689,12 +706,66 @@ export class AppDataSyncService {
     }
   }
 
+  private startRemoteLockRenewal(client: WebDAVClient, lock: RemoteSyncLockHandle | null) {
+    let stopped = false
+    let renewalError: unknown = null
+    if (!lock || lock.type !== 'file') {
+      return {
+        stop: () => undefined,
+        getError: () => renewalError
+      }
+    }
+
+    const renew = async () => {
+      try {
+        const remoteLock = await this.readRemoteLock(client, lock.path)
+        if (!remoteLock || remoteLock.token !== lock.token || remoteLock.ownerId !== lock.ownerId) {
+          throw new Error('远端同步锁已被其他设备接管')
+        }
+
+        const renewedLock: RemoteSyncLock = {
+          ...remoteLock,
+          expiresAt: Date.now() + REMOTE_SYNC_LOCK_TTL_MS
+        }
+        await runWebDavOperation(
+          `renewing remote data sync lock ${lock.path}`,
+          () => client.putFileContents(lock.path, JSON.stringify(renewedLock, null, 2), { overwrite: true }),
+          { logger }
+        )
+      } catch (error) {
+        renewalError = error
+        logger.warn('Failed to renew remote data sync lock', error as Error)
+      }
+    }
+
+    const interval = setInterval(() => {
+      if (!stopped) {
+        void renew()
+      }
+    }, REMOTE_SYNC_LOCK_RENEW_INTERVAL_MS)
+    if (typeof interval === 'object' && interval && 'unref' in interval && typeof interval.unref === 'function') {
+      interval.unref()
+    }
+
+    return {
+      stop: () => {
+        stopped = true
+        clearInterval(interval)
+      },
+      getError: () => renewalError
+    }
+  }
+
   private async assertRemoteLockStillOwned(client: WebDAVClient, lock: RemoteSyncLockHandle | null) {
     if (!lock || lock.type === 'webdav') return
 
     const remoteLock = await this.readRemoteLock(client, lock.path)
     if (!remoteLock || remoteLock.token !== lock.token || remoteLock.ownerId !== lock.ownerId) {
       throw new Error('远端同步锁在同步过程中已被其他设备修改。为避免覆盖其他设备的数据，本次同步已停止，请重新同步。')
+    }
+
+    if (this.isRemoteLockExpired(remoteLock)) {
+      throw new Error('远端同步锁已过期。为避免长时间同步后覆盖其他设备的数据，本次同步已停止，请重新同步。')
     }
   }
 
@@ -822,7 +893,16 @@ export class AppDataSyncService {
   }
 
   private async pullRemoteRecord(client: WebDAVClient, basePath: string, meta: RemoteRecordMeta) {
-    return this.readJson<AppDataRecord>(client, path.posix.join(basePath, meta.path))
+    const remotePath = path.posix.join(basePath, normalizeRemoteRelativePath(meta.path, 'Remote data record path'))
+    const record = await this.readJson<AppDataRecord>(client, remotePath)
+    if (!record) {
+      throw new Error(`远端同步记录缺失：${meta.scope}:${meta.key}。为避免误判同步成功，本次同步已停止。`)
+    }
+    if (record.scope !== meta.scope || record.key !== meta.key || record.valueHash !== meta.valueHash) {
+      throw new Error(`远端同步记录校验失败：${meta.scope}:${meta.key}。为避免导入损坏数据，本次同步已停止。`)
+    }
+
+    return record
   }
 
   private async pushRecord(client: WebDAVClient, basePath: string, record: AppDataRecord, manifest: RemoteManifest) {
@@ -944,7 +1024,15 @@ export class AppDataSyncService {
       resolvedAt?: number | null
     }
   ) {
-    const id = `${input.scope}:${input.key}:${Date.now()}`
+    if (input.resolvedAt) {
+      return null
+    }
+
+    const id = `${input.scope}:${input.key}:${hashJsonValue({
+      baseHash: input.baseHash ?? null,
+      localHash: input.localRecord?.valueHash ?? null,
+      remoteHash: input.remoteRecord.valueHash
+    }).slice(0, 32)}`
     await storageV2AppDataKvMirrorService.upsertSyncConflict(id, input)
     await db.createConflict({ ...input, id }, { storageV2Mirrored: true })
     return id
@@ -958,7 +1046,7 @@ export class AppDataSyncService {
     summary: DataSyncSummary
   ) {
     const deviceId = db.getDeviceId()
-    const fileName = snapshotFileName(deviceId)
+    const fileName = snapshotFileName(deviceId, summary.lastSyncAt)
     const relativePath = `backups/${fileName}`
     const remotePath = path.posix.join(basePath, relativePath)
     const localBackupPath = await this.backupManager.backup(
@@ -970,6 +1058,7 @@ export class AppDataSyncService {
 
     try {
       const stat = await fsp.stat(localBackupPath)
+      const checksum = await sha256File(localBackupPath)
       await this.ensureDirectory(client, path.posix.dirname(remotePath))
       await runWebDavOperation(
         `uploading data sync snapshot ${remotePath}`,
@@ -980,12 +1069,14 @@ export class AppDataSyncService {
           }),
         { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
       )
+      await this.assertRemoteSnapshotIntegrity(client, remotePath, stat.size, checksum)
 
       const snapshot: RemoteSnapshotMeta = {
-        id: safeFileSegment(deviceId),
+        id: `${safeFileSegment(deviceId)}.${summary.lastSyncAt}`,
         fileName,
         path: relativePath,
         byteSize: stat.size,
+        checksum,
         createdAt: new Date(summary.lastSyncAt).toISOString(),
         uploadedAt: summary.lastSyncAt,
         deviceId,
@@ -996,6 +1087,7 @@ export class AppDataSyncService {
         ...manifest.snapshots,
         [snapshot.id]: snapshot
       }
+      this.pruneSnapshotManifest(manifest)
       manifest.latestSnapshot = snapshot
 
       summary.snapshotUploaded = true
@@ -1007,8 +1099,56 @@ export class AppDataSyncService {
   }
 
   private shouldUploadFullSnapshot(db: AppDataDatabase, manifest: RemoteManifest, now: number) {
-    const existingSnapshot = manifest.snapshots?.[safeFileSegment(db.getDeviceId())]
+    const deviceId = db.getDeviceId()
+    const existingSnapshot = Object.values(manifest.snapshots ?? {})
+      .filter((snapshot) => snapshot.deviceId === deviceId)
+      .sort((left, right) => right.uploadedAt - left.uploadedAt)[0]
     return !existingSnapshot?.uploadedAt || now - existingSnapshot.uploadedAt >= SNAPSHOT_UPLOAD_INTERVAL_MS
+  }
+
+  private pruneSnapshotManifest(manifest: RemoteManifest) {
+    const snapshots = Object.values(manifest.snapshots ?? {})
+      .filter((snapshot): snapshot is RemoteSnapshotMeta => Boolean(snapshot?.id && snapshot.path && snapshot.fileName))
+      .sort((left, right) => right.uploadedAt - left.uploadedAt)
+    const keepIds = new Set<string>()
+    const perDeviceCount = new Map<string, number>()
+
+    for (const snapshot of snapshots) {
+      const count = perDeviceCount.get(snapshot.deviceId) ?? 0
+      if (count < SNAPSHOT_RETENTION_PER_DEVICE) {
+        keepIds.add(snapshot.id)
+        perDeviceCount.set(snapshot.deviceId, count + 1)
+      }
+    }
+
+    for (const snapshot of snapshots) {
+      if (keepIds.size >= SNAPSHOT_RETENTION_TOTAL) break
+      keepIds.add(snapshot.id)
+    }
+
+    manifest.snapshots = Object.fromEntries(
+      snapshots.filter((snapshot) => keepIds.has(snapshot.id)).map((snapshot) => [snapshot.id, snapshot])
+    )
+    if (manifest.latestSnapshot && !manifest.snapshots[manifest.latestSnapshot.id]) {
+      manifest.latestSnapshot = snapshots.find((snapshot) => keepIds.has(snapshot.id)) ?? null
+    }
+  }
+
+  private async assertRemoteSnapshotIntegrity(
+    client: WebDAVClient,
+    remotePath: string,
+    byteSize: number,
+    checksum: string
+  ) {
+    const contents = await runWebDavOperation(
+      `verifying data sync snapshot ${remotePath}`,
+      () => client.getFileContents(remotePath, { format: 'binary' }),
+      { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
+    )
+    const buffer = bufferFromRemote(contents)
+    if (buffer.byteLength !== byteSize || sha256Buffer(buffer) !== checksum) {
+      throw new Error('远端安全快照校验失败。为避免发布无法恢复的数据，本次同步已停止。')
+    }
   }
 
   async restoreLatestSnapshot(config: WebDavConfig) {
@@ -1039,15 +1179,26 @@ export class AppDataSyncService {
       () => client.getFileContents(remotePath, { format: 'binary' }),
       { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
     )
+    const backupBuffer = bufferFromRemote(backupContents)
+    if (backupBuffer.byteLength !== snapshot.byteSize) {
+      throw new Error('远端安全快照大小不匹配。为避免恢复损坏数据，本次恢复已停止。')
+    }
+    if (snapshot.checksum && sha256Buffer(backupBuffer) !== snapshot.checksum) {
+      throw new Error('远端安全快照校验失败。为避免恢复损坏数据，本次恢复已停止。')
+    }
     const localBackupPath = path.join(
       process.env.TMPDIR || '/tmp',
       'cherry-studio-pi-data-sync',
-      path.basename(snapshot.fileName)
+      `${safeFileSegment(snapshot.id)}.${path.basename(snapshot.fileName)}`
     )
     await fsp.mkdir(path.dirname(localBackupPath), { recursive: true })
-    await fsp.writeFile(localBackupPath, bufferFromRemote(backupContents))
+    await fsp.writeFile(localBackupPath, backupBuffer)
 
-    return this.backupManager.restore(undefined as unknown as Electron.IpcMainInvokeEvent, localBackupPath)
+    try {
+      return await this.backupManager.restore(undefined as unknown as Electron.IpcMainInvokeEvent, localBackupPath)
+    } finally {
+      await fsp.rm(localBackupPath, { force: true }).catch(() => undefined)
+    }
   }
 
   async syncNow(config: WebDavConfig): Promise<DataSyncSummary> {
@@ -1082,9 +1233,15 @@ export class AppDataSyncService {
     const { client, basePath } = this.createWebDavClient(config)
     const manifestPath = path.posix.join(basePath, 'manifest.json')
     const summary: DataSyncSummary = { ...EMPTY_SUMMARY, remotePath: basePath, lastSyncAt: Date.now() }
+    const pendingSyncStates = new Map<string, unknown>()
+    const stageSyncState = (id: string, value: unknown) => {
+      pendingSyncStates.set(id, value)
+    }
+    let storageSyncStates: StorageV2WebDavRecordSyncStateCommit[] = []
 
     await this.ensureDirectory(client, basePath)
     const remoteLock = await this.acquireRemoteLock(client, basePath, db.getDeviceId())
+    const lockRenewal = this.startRemoteLockRenewal(client, remoteLock)
     try {
       await this.assertWriteAccess(client, basePath)
 
@@ -1123,7 +1280,7 @@ export class AppDataSyncService {
 
         if (localRecord && !remoteMeta) {
           await this.pushRecord(client, basePath, localRecord, manifest)
-          await this.setSyncState(db, `record:${id}:hash`, localRecord.valueHash)
+          stageSyncState(`record:${id}:hash`, localRecord.valueHash)
           summary.uploaded += localRecord.deletedAt ? 0 : 1
           summary.deleted += localRecord.deletedAt ? 1 : 0
           continue
@@ -1133,7 +1290,7 @@ export class AppDataSyncService {
           const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
           if (remoteRecord) {
             await this.applyRemoteRecord(db, remoteRecord)
-            await this.setSyncState(db, `record:${id}:hash`, remoteRecord.valueHash)
+            stageSyncState(`record:${id}:hash`, remoteRecord.valueHash)
             summary.downloaded += remoteRecord.deletedAt ? 0 : 1
             summary.deleted += remoteRecord.deletedAt ? 1 : 0
           }
@@ -1146,7 +1303,7 @@ export class AppDataSyncService {
         }
 
         if (localRecord.valueHash === remoteMeta.valueHash) {
-          await this.setSyncState(db, `record:${id}:hash`, localRecord.valueHash)
+          stageSyncState(`record:${id}:hash`, localRecord.valueHash)
           summary.skipped += 1
           continue
         }
@@ -1158,7 +1315,7 @@ export class AppDataSyncService {
           const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
           if (remoteRecord) {
             await this.applyRemoteRecord(db, remoteRecord)
-            await this.setSyncState(db, `record:${id}:hash`, remoteRecord.valueHash)
+            stageSyncState(`record:${id}:hash`, remoteRecord.valueHash)
             summary.downloaded += remoteRecord.deletedAt ? 0 : 1
             summary.deleted += remoteRecord.deletedAt ? 1 : 0
           } else {
@@ -1169,7 +1326,7 @@ export class AppDataSyncService {
 
         if (localChanged && !remoteChanged) {
           await this.pushRecord(client, basePath, localRecord, manifest)
-          await this.setSyncState(db, `record:${id}:hash`, localRecord.valueHash)
+          stageSyncState(`record:${id}:hash`, localRecord.valueHash)
           summary.uploaded += localRecord.deletedAt ? 0 : 1
           summary.deleted += localRecord.deletedAt ? 1 : 0
           continue
@@ -1183,7 +1340,7 @@ export class AppDataSyncService {
 
         if (!localChanged && remoteChanged) {
           await this.applyRemoteRecord(db, remoteRecord)
-          await this.setSyncState(db, `record:${id}:hash`, remoteRecord.valueHash)
+          stageSyncState(`record:${id}:hash`, remoteRecord.valueHash)
           summary.downloaded += remoteRecord.deletedAt ? 0 : 1
           summary.deleted += remoteRecord.deletedAt ? 1 : 0
           continue
@@ -1224,11 +1381,12 @@ export class AppDataSyncService {
           await this.applyRemoteRecord(db, remoteRecord)
           summary.downloaded += remoteRecord.deletedAt ? 0 : 1
         }
-        await this.setSyncState(db, `record:${id}:hash`, winner.valueHash)
+        stageSyncState(`record:${id}:hash`, winner.valueHash)
       }
 
       const storageSync = await storageV2WebDavRecordSyncService.sync(client, basePath, manifest.storageV2)
       manifest.storageV2 = storageSync.manifest
+      storageSyncStates = storageSync.syncStates ?? []
       this.addStorageV2Summary(summary, storageSync.summary)
       db = await this.projectStorageV2RuntimeAfterSync(db, manifest.storageV2, summary, {
         remoteHadStorageDataBeforeSync
@@ -1238,16 +1396,33 @@ export class AppDataSyncService {
         try {
           await this.pushFullSnapshot(client, basePath, db, manifest, summary)
         } catch (error) {
-          logger.warn('Data sync safety snapshot upload failed; record sync completed', error as Error)
+          throw new Error(
+            `安全快照上传失败。为避免发布缺少兜底恢复点的同步状态，本次同步已停止：${errorMessage(error)}`
+          )
         }
       }
 
       manifest.updatedAt = summary.lastSyncAt
       manifest.generation = manifestBaseline.generation + 1
       this.updateSummaryRemoteState(summary, manifest)
+      const renewalError = lockRenewal.getError()
+      if (renewalError) {
+        throw new Error(
+          `远端同步锁续租失败。为避免长时间同步后覆盖其他设备的数据，本次同步已停止：${errorMessage(renewalError)}`
+        )
+      }
       await this.assertRemoteLockStillOwned(client, remoteLock)
       await this.assertRemoteManifestUnchanged(client, manifestPath, manifestBaseline)
       await this.writeJson(client, manifestPath, manifest)
+      await storageV2WebDavRecordSyncService.commitRecordSyncStates(storageSyncStates)
+      await storageV2WebDavRecordSyncService
+        .pruneRemoteArtifacts(client, basePath, manifest.storageV2)
+        .catch((error) => {
+          logger.warn('Failed to prune stale Storage v2 WebDAV artifacts after sync', error as Error)
+        })
+      for (const [id, value] of pendingSyncStates) {
+        await this.setSyncState(db, id, value)
+      }
 
       summary.status = 'success'
       summary.error = null
@@ -1255,6 +1430,7 @@ export class AppDataSyncService {
 
       return summary
     } finally {
+      lockRenewal.stop()
       await this.releaseRemoteLock(client, remoteLock)
     }
   }

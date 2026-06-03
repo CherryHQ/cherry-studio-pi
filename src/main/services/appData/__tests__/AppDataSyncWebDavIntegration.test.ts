@@ -1477,7 +1477,7 @@ describe('AppDataSyncService local WebDAV integration', () => {
     expect(remoteAfter).not.toContain('should-not-replace-corrupt-remote')
   })
 
-  it('skips a remote record whose manifest entry points to a missing file', async () => {
+  it('fails safely when a remote record manifest entry points to a missing file', async () => {
     const homePath = path.join(tempRoot, 'home')
     const instanceA = makeInstance(tempRoot, 'device-a')
     const instanceB = makeInstance(tempRoot, 'device-b')
@@ -1497,6 +1497,10 @@ describe('AppDataSyncService local WebDAV integration', () => {
     const manifest = await readRemoteManifest(server!, webdavPath)
     const appMeta = manifest.records['settings:sync.integration.theme']
     await fsp.rm(path.join(remoteSyncRoot(server!, webdavPath), appMeta.path), { force: true })
+    const manifestBeforeBrokenSync = await fsp.readFile(
+      path.join(remoteSyncRoot(server!, webdavPath), 'manifest.json'),
+      'utf8'
+    )
 
     await switchInstance(instanceB, homePath)
     await seedInstanceData({
@@ -1505,9 +1509,13 @@ describe('AppDataSyncService local WebDAV integration', () => {
       storageSettingValue: { owner: 'local-fallback' },
       storageSettingUpdatedAt: '2026-05-29T12:20:00.000Z'
     })
-    const summary = await new AppDataSyncService(backupManager as never).syncNow(config)
+    await expect(new AppDataSyncService(backupManager as never).syncNow(config)).rejects.toThrow(
+      '远端同步记录缺失：settings:sync.integration.theme'
+    )
 
-    expect(summary.conflicts).toBe(0)
+    await expect(fsp.readFile(path.join(remoteSyncRoot(server!, webdavPath), 'manifest.json'), 'utf8')).resolves.toBe(
+      manifestBeforeBrokenSync
+    )
     await expect(readInstanceState()).resolves.toMatchObject({
       appRecord: { mode: 'local-fallback' }
     })

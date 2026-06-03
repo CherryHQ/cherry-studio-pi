@@ -525,6 +525,14 @@ export class AppDataDatabase {
         INSERT INTO sync_conflicts
           (id, scope, key, local_value, remote_value, base_hash, local_hash, remote_hash, created_at, resolved_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          local_value = excluded.local_value,
+          remote_value = excluded.remote_value,
+          base_hash = excluded.base_hash,
+          local_hash = excluded.local_hash,
+          remote_hash = excluded.remote_hash,
+          created_at = excluded.created_at,
+          resolved_at = excluded.resolved_at
       `,
       args: [
         id,

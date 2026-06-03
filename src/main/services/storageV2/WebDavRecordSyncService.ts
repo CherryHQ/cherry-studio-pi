@@ -91,6 +91,17 @@ export type StorageV2WebDavRecordSyncSummary = {
   blobDownloaded: number
 }
 
+export type StorageV2WebDavRecordSyncStateCommit = {
+  id: string
+  valueHash: string
+}
+
+export type StorageV2WebDavRecordSyncResult = {
+  manifest: StorageV2WebDavRecordSyncManifest
+  summary: StorageV2WebDavRecordSyncSummary
+  syncStates: StorageV2WebDavRecordSyncStateCommit[]
+}
+
 const EMPTY_SUMMARY: StorageV2WebDavRecordSyncSummary = {
   storageUploaded: 0,
   storageDownloaded: 0,
@@ -465,6 +476,10 @@ function bufferFromRemoteContents(value: string | Buffer | ArrayBuffer | unknown
   return Buffer.from(String(value))
 }
 
+function sha256Buffer(value: Buffer) {
+  return createHash('sha256').update(value).digest('hex')
+}
+
 function normalizeLocalStoragePath(input: string) {
   const normalized = path.normalize(input)
   if (path.isAbsolute(normalized) || normalized === '..' || normalized.startsWith(`..${path.sep}`)) {
@@ -615,6 +630,91 @@ export class StorageV2WebDavRecordSyncService {
     })
   }
 
+  private async listRemoteFilesRecursive(client: WebDAVClient, dirPath: string): Promise<string[]> {
+    try {
+      const exists = await runWebDavOperation(
+        `checking Storage v2 artifact directory ${dirPath}`,
+        () => client.exists(dirPath),
+        { logger }
+      )
+      if (!exists) return []
+    } catch (error) {
+      if (error instanceof WebDavOperationError && error.status === 404) return []
+      throw error
+    }
+
+    const contents = await runWebDavOperation(
+      `listing Storage v2 artifact directory ${dirPath}`,
+      () => client.getDirectoryContents(dirPath),
+      { logger }
+    )
+    const entries = Array.isArray(contents)
+      ? contents
+      : Array.isArray((contents as { data?: unknown } | null)?.data)
+        ? ((contents as { data: unknown[] }).data as Array<{ filename?: string; basename?: string; type?: string }>)
+        : []
+    const files: string[] = []
+
+    for (const entry of entries as Array<{ filename?: string; basename?: string; type?: string }>) {
+      const filename = entry.filename || path.posix.join(dirPath, entry.basename || '')
+      if (!filename || filename === dirPath) continue
+      if (entry.type === 'directory') {
+        files.push(...(await this.listRemoteFilesRecursive(client, filename)))
+      } else {
+        files.push(filename)
+      }
+    }
+
+    return files
+  }
+
+  private async deleteRemoteFileIfPossible(client: WebDAVClient, filePath: string) {
+    const deleteFile = (client as WebDAVClient & { deleteFile?: (targetPath: string) => Promise<void> }).deleteFile
+    if (typeof deleteFile !== 'function') return
+
+    await runWebDavOperation(
+      `deleting stale Storage v2 artifact ${filePath}`,
+      () => deleteFile.call(client, filePath),
+      {
+        logger
+      }
+    ).catch((error) => {
+      if (error instanceof WebDavOperationError && error.status === 404) return
+      throw error
+    })
+  }
+
+  async pruneRemoteArtifacts(
+    client: WebDAVClient,
+    basePath: string,
+    manifest: StorageV2WebDavRecordSyncManifest | null | undefined
+  ) {
+    if (!manifest) return
+
+    const referenced = new Set<string>()
+    const addReferencedPath = (relativePath: string | null | undefined) => {
+      if (!relativePath) return
+      referenced.add(path.posix.join(basePath, safeRemoteRelativePath(relativePath)))
+    }
+
+    addReferencedPath(manifest.bundle?.path)
+    for (const meta of Object.values(manifest.records ?? {})) {
+      addReferencedPath(meta.path)
+    }
+    for (const blob of Object.values(manifest.blobs ?? {})) {
+      addReferencedPath(blob.path)
+    }
+
+    const roots = ['storage-v2/records', STORAGE_V2_BUNDLE_DIR, 'storage-v2/blobs']
+    for (const root of roots) {
+      const files = await this.listRemoteFilesRecursive(client, path.posix.join(basePath, root))
+      for (const filePath of files) {
+        if (referenced.has(filePath)) continue
+        await this.deleteRemoteFileIfPossible(client, filePath)
+      }
+    }
+  }
+
   private normalizeBundledRecord(id: string, record: LocalRecord | null | undefined): LocalRecord | null {
     if (!record?.row || !record?.table?.entityType || !Array.isArray(record.idValues)) return null
 
@@ -648,7 +748,11 @@ export class StorageV2WebDavRecordSyncService {
       client,
       path.posix.join(basePath, safeRemoteRelativePath(manifest.bundle.path))
     )
-    if (!bundle?.records || typeof bundle.records !== 'object') return null
+    if (!bundle?.records || typeof bundle.records !== 'object') {
+      throw new Error(
+        '远端 Storage v2 数据包缺失或格式损坏。为避免把损坏状态当作成功同步，本次同步已停止，请重新同步或从安全快照恢复。'
+      )
+    }
 
     const records = Object.entries(bundle.records).reduce<Record<string, LocalRecord>>((result, [id, record]) => {
       const normalized = this.normalizeBundledRecord(id, record)
@@ -735,6 +839,7 @@ export class StorageV2WebDavRecordSyncService {
 
   private async listLocalRecords(client: Client): Promise<LocalRecord[]> {
     const records: LocalRecord[] = []
+    const referencedBlobIds = await this.getReferencedBlobIds(client)
 
     for (const table of this.tables) {
       const result = await client.execute(`SELECT * FROM ${table.table}`)
@@ -742,6 +847,7 @@ export class StorageV2WebDavRecordSyncService {
         const row = rowToPlain(sourceRow as Record<string, unknown>)
         const idValues = table.idColumns.map((column) => String(row[column] ?? ''))
         if (idValues.some((value) => !value)) continue
+        if (table.entityType === 'blob' && !referencedBlobIds.has(idValues[0])) continue
 
         const deletedAt = table.deletedAtColumn ? parseTime(row[table.deletedAtColumn]) || null : null
         const updatedAt = table.updatedAtColumn ? parseTime(row[table.updatedAtColumn]) : 0
@@ -761,6 +867,31 @@ export class StorageV2WebDavRecordSyncService {
     }
 
     return records
+  }
+
+  private async getReferencedBlobIds(client: Client) {
+    const blobIds = new Set<string>()
+    const queries = [
+      'SELECT blob_id AS id FROM files WHERE blob_id IS NOT NULL AND deleted_at IS NULL',
+      'SELECT blob_id AS id FROM message_blocks WHERE blob_id IS NOT NULL AND deleted_at IS NULL',
+      'SELECT avatar_blob_id AS id FROM profiles WHERE avatar_blob_id IS NOT NULL',
+      'SELECT avatar_blob_id AS id FROM assistants WHERE avatar_blob_id IS NOT NULL AND deleted_at IS NULL',
+      'SELECT avatar_blob_id AS id FROM agents WHERE avatar_blob_id IS NOT NULL AND deleted_at IS NULL'
+    ]
+
+    for (const sql of queries) {
+      try {
+        const result = await client.execute(sql)
+        for (const row of result.rows) {
+          const id = row.id
+          if (typeof id === 'string' && id) blobIds.add(id)
+        }
+      } catch (error) {
+        logger.warn('Failed to inspect Storage v2 blob references before sync', error as Error)
+      }
+    }
+
+    return blobIds
   }
 
   private async getRecordSyncState(client: Client, id: string): Promise<string | null> {
@@ -792,6 +923,16 @@ export class StorageV2WebDavRecordSyncService {
     })
   }
 
+  async commitRecordSyncStates(states: readonly StorageV2WebDavRecordSyncStateCommit[]) {
+    if (states.length === 0) return
+
+    const client = await storageV2Database.getClient()
+    for (const state of states) {
+      if (!state.id || !state.valueHash) continue
+      await this.setRecordSyncState(client, state.id, state.valueHash)
+    }
+  }
+
   private async recordConflictAudit(
     client: Client,
     input: {
@@ -801,7 +942,14 @@ export class StorageV2WebDavRecordSyncService {
       resolvedAt?: string | null
     }
   ) {
+    if (input.resolvedAt) return
+
     const createdAt = new Date().toISOString()
+    const conflictId = `webdav-storage-record:${input.localRecord.id}:${hashJson({
+      baseHash: input.baseHash ?? null,
+      localHash: input.localRecord.valueHash,
+      remoteHash: input.remoteRecord.valueHash
+    }).slice(0, 32)}`
     await client.execute({
       sql: `
         INSERT INTO sync_conflicts (
@@ -816,7 +964,7 @@ export class StorageV2WebDavRecordSyncService {
           resolved_at = excluded.resolved_at
       `,
       args: [
-        `webdav-storage-record:${input.localRecord.id}:${Date.now()}`,
+        conflictId,
         input.localRecord.table.entityType,
         input.localRecord.id,
         JSON.stringify({
@@ -869,23 +1017,28 @@ export class StorageV2WebDavRecordSyncService {
     meta: RemoteRecordMeta,
     bundledRecord?: LocalRecord | null
   ) {
-    if (!bundledRecord && isBundleRecordPath(meta.path)) return null
+    if (!bundledRecord && isBundleRecordPath(meta.path)) {
+      throw new Error(
+        `远端 Storage v2 数据包中缺少记录 ${meta.entityType}:${meta.idValues.join(':')}。为避免误判同步成功，本次同步已停止。`
+      )
+    }
 
     const record =
       bundledRecord ??
       (await this.readJson<LocalRecord>(client, path.posix.join(basePath, safeRemoteRelativePath(meta.path))))
-    if (!record?.row || !record?.table) return null
+    if (!record?.row || !record?.table) {
+      throw new Error(
+        `远端 Storage v2 记录 ${meta.entityType}:${meta.idValues.join(':')} 缺失或格式损坏。为避免导入不完整数据，本次同步已停止。`
+      )
+    }
     const table = this.tableByEntity(meta.entityType)
     if (!table) return null
 
     const valueHash = hashJson(record.row)
     if (valueHash !== meta.valueHash) {
-      logger.warn('Remote Storage v2 record hash mismatch', {
-        entityType: meta.entityType,
-        expected: meta.valueHash,
-        actual: valueHash,
-        idValues: meta.idValues
-      })
+      throw new Error(
+        `远端 Storage v2 记录 ${meta.entityType}:${meta.idValues.join(':')} 校验失败。为避免导入损坏数据，本次同步已停止。`
+      )
     }
 
     return {
@@ -1048,6 +1201,24 @@ export class StorageV2WebDavRecordSyncService {
     this.pruneManifestRecordCoveredByTombstone(manifest, record.row, bundledRecords)
   }
 
+  private pruneManifestBlobsWithoutRecords(
+    manifest: StorageV2WebDavRecordSyncManifest,
+    bundledRecords: Map<string, LocalRecord>
+  ) {
+    const activeBlobIds = new Set<string>()
+    for (const record of bundledRecords.values()) {
+      if (record.table.entityType === 'blob' && !record.deletedAt && record.idValues[0]) {
+        activeBlobIds.add(record.idValues[0])
+      }
+    }
+
+    for (const blobId of Object.keys(manifest.blobs)) {
+      if (!activeBlobIds.has(blobId)) {
+        delete manifest.blobs[blobId]
+      }
+    }
+  }
+
   private async isCoveredByLocalTombstone(client: Client, meta: RemoteRecordMeta) {
     const target = tombstoneTargetFromRecord(meta.entityType, meta.idValues)
     if (!target) return false
@@ -1086,9 +1257,16 @@ export class StorageV2WebDavRecordSyncService {
     if (!blobId || !storagePath || !checksum) return
 
     const localPath = this.blobLocalPath(storagePath)
-    if (!fs.existsSync(localPath)) return
+    if (!fs.existsSync(localPath)) {
+      throw new Error(`本地附件文件缺失，无法同步 blob ${blobId}。请先恢复本地文件，或删除对应引用后再同步。`)
+    }
 
     const stat = await fsp.stat(localPath)
+    const actualChecksum = await sha256File(localPath)
+    if (actualChecksum !== checksum) {
+      throw new Error(`本地附件文件校验失败，无法同步 blob ${blobId}。请先恢复或重新生成这个文件。`)
+    }
+
     const remote = manifest.blobs[blobId]
     if (remote?.checksum === checksum && remote.byteSize === stat.size) return
 
@@ -1104,6 +1282,8 @@ export class StorageV2WebDavRecordSyncService {
         }),
       { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
     )
+
+    await this.assertRemoteBlobIntegrity(client, remotePath, blobId, checksum, stat.size)
 
     manifest.blobs[blobId] = {
       id: blobId,
@@ -1127,7 +1307,11 @@ export class StorageV2WebDavRecordSyncService {
 
     const blobId = record.idValues[0]
     const blob = manifest.blobs[blobId]
-    if (!blob) return
+    if (!blob) {
+      throw new Error(
+        `远端 Storage v2 manifest 缺少 blob ${blobId} 的文件元数据。为避免导入不完整数据，本次同步已停止。`
+      )
+    }
 
     const localPath = this.blobLocalPath(blob.storagePath)
     if (fs.existsSync(localPath)) {
@@ -1144,9 +1328,43 @@ export class StorageV2WebDavRecordSyncService {
       () => client.getFileContents(remotePath, { format: 'binary' }),
       { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
     )
+    const buffer = bufferFromRemoteContents(contents)
+    this.assertBlobBufferIntegrity(buffer, blobId, blob.checksum, blob.byteSize)
+
     await fsp.mkdir(path.dirname(localPath), { recursive: true })
-    await fsp.writeFile(localPath, bufferFromRemoteContents(contents))
+    const tempPath = `${localPath}.sync-download-${process.pid}-${Date.now()}`
+    try {
+      await fsp.writeFile(tempPath, buffer)
+      await fsp.rename(tempPath, localPath)
+    } finally {
+      await fsp.rm(tempPath, { force: true }).catch(() => undefined)
+    }
     summary.blobDownloaded += 1
+  }
+
+  private assertBlobBufferIntegrity(buffer: Buffer, blobId: string, checksum: string, byteSize: number) {
+    if (buffer.byteLength !== byteSize) {
+      throw new Error(`远端附件文件大小不匹配，blob ${blobId} 已停止同步。`)
+    }
+
+    if (sha256Buffer(buffer) !== checksum) {
+      throw new Error(`远端附件文件校验失败，blob ${blobId} 已停止同步。`)
+    }
+  }
+
+  private async assertRemoteBlobIntegrity(
+    client: WebDAVClient,
+    remotePath: string,
+    blobId: string,
+    checksum: string,
+    byteSize: number
+  ) {
+    const contents = await runWebDavOperation(
+      `verifying uploaded Storage v2 blob ${remotePath}`,
+      () => client.getFileContents(remotePath, { format: 'binary' }),
+      { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
+    )
+    this.assertBlobBufferIntegrity(bufferFromRemoteContents(contents), blobId, checksum, byteSize)
   }
 
   private sortRecordIds(ids: Iterable<string>) {
@@ -1162,11 +1380,15 @@ export class StorageV2WebDavRecordSyncService {
     client: WebDAVClient,
     basePath: string,
     manifestInput?: StorageV2WebDavRecordSyncManifest | null
-  ): Promise<{ manifest: StorageV2WebDavRecordSyncManifest; summary: StorageV2WebDavRecordSyncSummary }> {
+  ): Promise<StorageV2WebDavRecordSyncResult> {
     this.skillIdRemaps.clear()
     const dbClient = await storageV2Database.getClient()
     const manifest = normalizeManifest(manifestInput ?? makeManifest())
     const summary = { ...EMPTY_SUMMARY }
+    const pendingSyncStates = new Map<string, string>()
+    const stageRecordSyncState = (id: string, valueHash: string) => {
+      pendingSyncStates.set(id, valueHash)
+    }
     await this.ensureDirectory(client, basePath)
     await this.assertWriteAccess(client, basePath)
     const localRecords = await this.listLocalRecords(dbClient)
@@ -1194,7 +1416,7 @@ export class StorageV2WebDavRecordSyncService {
         await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords)
         await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
         await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
-        await this.setRecordSyncState(dbClient, id, localRecord.valueHash)
+        stageRecordSyncState(id, localRecord.valueHash)
         summary.storageUploaded += localRecord.deletedAt ? 0 : 1
         summary.storageDeleted += localRecord.deletedAt ? 1 : 0
         continue
@@ -1214,7 +1436,7 @@ export class StorageV2WebDavRecordSyncService {
           manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
           await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
           this.pruneManifestRecordCoveredByTombstone(manifest, remoteRecord.row, bundledRecords)
-          await this.setRecordSyncState(dbClient, id, remoteRecord.valueHash)
+          stageRecordSyncState(id, remoteRecord.valueHash)
           summary.storageDownloaded += remoteRecord.deletedAt ? 0 : 1
           summary.storageDeleted += remoteRecord.deletedAt ? 1 : 0
         }
@@ -1232,7 +1454,7 @@ export class StorageV2WebDavRecordSyncService {
           await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords)
           await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
           await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
-          await this.setRecordSyncState(dbClient, id, localRecord.valueHash)
+          stageRecordSyncState(id, localRecord.valueHash)
           summary.storageUploaded += localRecord.deletedAt ? 0 : 1
           summary.storageDeleted += localRecord.deletedAt ? 1 : 0
           continue
@@ -1242,7 +1464,7 @@ export class StorageV2WebDavRecordSyncService {
         await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
         bundledRecords.set(id, localRecord)
         manifest.records[id] = recordMetaFromLocalRecord(localRecord, recordBundlePath())
-        await this.setRecordSyncState(dbClient, id, localRecord.valueHash)
+        stageRecordSyncState(id, localRecord.valueHash)
         summary.storageSkipped += 1
         continue
       }
@@ -1268,7 +1490,7 @@ export class StorageV2WebDavRecordSyncService {
 
         bundledRecords.set(id, winner)
         manifest.records[id] = recordMetaFromLocalRecord(winner, recordBundlePath())
-        await this.setRecordSyncState(dbClient, id, winner.valueHash)
+        stageRecordSyncState(id, winner.valueHash)
         this.pruneManifestRecordCoveredByTombstone(manifest, winner.row, bundledRecords)
         if (!localWins && remoteWins) {
           await this.ensureRemoteBlobFile(client, basePath, manifest, winner, summary)
@@ -1286,7 +1508,7 @@ export class StorageV2WebDavRecordSyncService {
           manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
           await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
           this.pruneManifestRecordCoveredByTombstone(manifest, remoteRecord.row, bundledRecords)
-          await this.setRecordSyncState(dbClient, id, remoteRecord.valueHash)
+          stageRecordSyncState(id, remoteRecord.valueHash)
           summary.storageDownloaded += remoteRecord.deletedAt ? 0 : 1
           summary.storageDeleted += remoteRecord.deletedAt ? 1 : 0
         } else {
@@ -1299,7 +1521,7 @@ export class StorageV2WebDavRecordSyncService {
         await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords)
         await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
         await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
-        await this.setRecordSyncState(dbClient, id, localRecord.valueHash)
+        stageRecordSyncState(id, localRecord.valueHash)
         summary.storageUploaded += localRecord.deletedAt ? 0 : 1
         summary.storageDeleted += localRecord.deletedAt ? 1 : 0
         continue
@@ -1311,7 +1533,7 @@ export class StorageV2WebDavRecordSyncService {
           manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
           await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
           this.pruneManifestRecordCoveredByTombstone(manifest, remoteRecord.row, bundledRecords)
-          await this.setRecordSyncState(dbClient, id, remoteRecord.valueHash)
+          stageRecordSyncState(id, remoteRecord.valueHash)
           summary.storageDownloaded += remoteRecord.deletedAt ? 0 : 1
           summary.storageDeleted += remoteRecord.deletedAt ? 1 : 0
         }
@@ -1325,14 +1547,14 @@ export class StorageV2WebDavRecordSyncService {
         await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords)
         await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
         await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
-        await this.setRecordSyncState(dbClient, id, localRecord.valueHash)
+        stageRecordSyncState(id, localRecord.valueHash)
         summary.storageUploaded += localRecord.deletedAt ? 0 : 1
       } else if (await this.applyRemoteRecord(dbClient, remoteRecord)) {
         bundledRecords.set(id, remoteRecord)
         manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
         await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
         this.pruneManifestRecordCoveredByTombstone(manifest, remoteRecord.row, bundledRecords)
-        await this.setRecordSyncState(dbClient, id, remoteRecord.valueHash)
+        stageRecordSyncState(id, remoteRecord.valueHash)
         summary.storageDownloaded += remoteRecord.deletedAt ? 0 : 1
       }
       if (localRecord.updatedAt === remoteRecord.updatedAt && localRecord.version === remoteRecord.version) {
@@ -1354,8 +1576,13 @@ export class StorageV2WebDavRecordSyncService {
       }
     }
 
+    this.pruneManifestBlobsWithoutRecords(manifest, bundledRecords)
     await this.writeRecordBundle(client, basePath, manifest, bundledRecords)
-    return { manifest, summary }
+    return {
+      manifest,
+      summary,
+      syncStates: Array.from(pendingSyncStates.entries()).map(([id, valueHash]) => ({ id, valueHash }))
+    }
   }
 }
 

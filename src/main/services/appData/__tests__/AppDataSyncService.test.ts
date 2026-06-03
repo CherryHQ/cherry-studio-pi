@@ -1,8 +1,11 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
+import { Readable } from 'node:stream'
 
 import type { WebDavConfig } from '@types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.unmock('node:fs')
 
 const mocks = vi.hoisted(() => ({
   db: {
@@ -34,7 +37,9 @@ const mocks = vi.hoisted(() => ({
     ensureDataRoot: vi.fn()
   },
   storageRecordSync: {
-    sync: vi.fn()
+    sync: vi.fn(),
+    commitRecordSyncStates: vi.fn(),
+    pruneRemoteArtifacts: vi.fn()
   },
   backupManager: {
     backup: vi.fn(),
@@ -119,6 +124,50 @@ const config: WebDavConfig = {
   webdavPath: '/remote-root'
 }
 
+async function normalizeUploadedContents(contents: unknown) {
+  if (contents && typeof (contents as any).on === 'function' && typeof (contents as any).read === 'function') {
+    const chunks: Buffer[] = []
+    await new Promise<void>((resolve, reject) => {
+      const stream = contents as {
+        on: (event: string, handler: (chunk?: Buffer | string | Uint8Array | Error) => void) => void
+      }
+      stream.on('data', (chunk) => {
+        if (chunk instanceof Error) return
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk ?? ''))
+      })
+      stream.on('end', () => resolve())
+      stream.on('error', (error) => reject(error))
+    })
+    return Buffer.concat(chunks)
+  }
+
+  if (contents instanceof Readable || (contents && typeof (contents as any)[Symbol.asyncIterator] === 'function')) {
+    const chunks: Buffer[] = []
+    for await (const chunk of contents as AsyncIterable<Buffer | string | Uint8Array>) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    }
+    return Buffer.concat(chunks)
+  }
+
+  if (contents && typeof (contents as any).on === 'function') {
+    const chunks: Buffer[] = []
+    await new Promise<void>((resolve, reject) => {
+      const stream = contents as {
+        on: (event: string, handler: (chunk?: Buffer | string | Uint8Array | Error) => void) => void
+      }
+      stream.on('data', (chunk) => {
+        if (chunk instanceof Error) return
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk ?? ''))
+      })
+      stream.on('end', () => resolve())
+      stream.on('error', (error) => reject(error))
+    })
+    return Buffer.concat(chunks)
+  }
+
+  return contents
+}
+
 const remoteRecord = {
   scope: 'settings',
   key: 'theme',
@@ -182,6 +231,7 @@ describe('AppDataSyncService', () => {
     mocks.dataRoot.ensureDataRoot.mockReturnValue({ dataRoot: '/tmp/cherry-studio-pi-data-root' })
     mocks.storageRecordSync.sync.mockResolvedValue({
       manifest: { version: 1, records: {}, blobs: {} },
+      syncStates: [],
       summary: {
         storageUploaded: 0,
         storageDownloaded: 0,
@@ -193,6 +243,8 @@ describe('AppDataSyncService', () => {
         blobDownloaded: 0
       }
     })
+    mocks.storageRecordSync.commitRecordSyncStates.mockResolvedValue(undefined)
+    mocks.storageRecordSync.pruneRemoteArtifacts.mockResolvedValue(undefined)
     mocks.backupManager.backup.mockImplementation(async (_event, fileName: string) => {
       const filePath = path.join('/tmp', fileName)
       await fsp.writeFile(filePath, 'backup')
@@ -212,7 +264,7 @@ describe('AppDataSyncService', () => {
       if (options?.overwrite === false && mocks.remoteFiles.has(filePath)) {
         return false
       }
-      mocks.remoteFiles.set(filePath, contents)
+      mocks.remoteFiles.set(filePath, await normalizeUploadedContents(contents))
       return true
     })
     mocks.webdav.deleteFile.mockImplementation(async (filePath: string) => {
@@ -556,7 +608,7 @@ describe('AppDataSyncService', () => {
     })
     mocks.db.createConflict.mockImplementation(async () => {
       events.push('legacy-conflict')
-      return 'settings:theme:1760000000999'
+      return 'settings:theme:stable-conflict-id'
     })
 
     try {
@@ -569,7 +621,7 @@ describe('AppDataSyncService', () => {
 
     expect(events).toEqual(['storage-v2-conflict', 'legacy-conflict'])
     expect(mocks.storageV2.upsertSyncConflict).toHaveBeenCalledWith(
-      'settings:theme:1760000000999',
+      expect.stringMatching(/^settings:theme:[a-f0-9]{32}$/),
       expect.objectContaining({
         scope: 'settings',
         key: 'theme',
@@ -580,7 +632,7 @@ describe('AppDataSyncService', () => {
     )
     expect(mocks.db.createConflict).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: 'settings:theme:1760000000999',
+        id: expect.stringMatching(/^settings:theme:[a-f0-9]{32}$/),
         localRecord,
         remoteRecord,
         baseHash: 'base-hash'
@@ -589,7 +641,7 @@ describe('AppDataSyncService', () => {
     )
   })
 
-  it('records auto-resolved app record conflicts with resolved timestamps', async () => {
+  it('counts auto-resolved app record conflicts without storing user conflict records', async () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1760000001777)
     const localRecord = {
       ...remoteRecord,
@@ -612,24 +664,8 @@ describe('AppDataSyncService', () => {
       nowSpy.mockRestore()
     }
 
-    expect(mocks.storageV2.upsertSyncConflict).toHaveBeenCalledWith(
-      'settings:theme:1760000001777',
-      expect.objectContaining({
-        scope: 'settings',
-        key: 'theme',
-        localRecord,
-        remoteRecord,
-        baseHash: 'base-hash',
-        resolvedAt: 1760000001777
-      })
-    )
-    expect(mocks.db.createConflict).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 'settings:theme:1760000001777',
-        resolvedAt: 1760000001777
-      }),
-      { storageV2Mirrored: true }
-    )
+    expect(mocks.storageV2.upsertSyncConflict).not.toHaveBeenCalled()
+    expect(mocks.db.createConflict).not.toHaveBeenCalled()
   })
 
   it('falls back to Storage v2 sync state when legacy app.db is missing the last hash', async () => {
@@ -716,6 +752,7 @@ describe('AppDataSyncService', () => {
     })
     mocks.storageRecordSync.sync.mockResolvedValueOnce({
       manifest: uploadedStorageManifest,
+      syncStates: [],
       summary: {
         storageUploaded: 1,
         storageDownloaded: 0,
@@ -799,6 +836,7 @@ describe('AppDataSyncService', () => {
     })
     mocks.storageRecordSync.sync.mockResolvedValueOnce({
       manifest: existingStorageManifest,
+      syncStates: [],
       summary: {
         storageUploaded: 0,
         storageDownloaded: 0,
@@ -849,16 +887,11 @@ describe('AppDataSyncService', () => {
     expect(summary.uploaded).toBe(0)
     expect(summary.snapshotUploaded).toBe(true)
     expect(mocks.storageRecordSync.sync).toHaveBeenCalledWith(mocks.webdav, '/remote-root/sync/v1', null)
-    expect(summary.snapshotFileName).toBe('cherry-studio-pi.data-sync.local-device.zip')
+    expect(summary.snapshotFileName).toMatch(/^cherry-studio-pi\.data-sync\.local-device\.\d+\.zip$/)
     expect(summary.snapshotBytes).toBe(6)
-    expect(mocks.backupManager.backup).toHaveBeenCalledWith(
-      undefined,
-      'cherry-studio-pi.data-sync.local-device.zip',
-      undefined,
-      false
-    )
+    expect(mocks.backupManager.backup).toHaveBeenCalledWith(undefined, summary.snapshotFileName, undefined, false)
     const snapshotUpload = mocks.webdav.putFileContents.mock.calls.find(([filePath]) =>
-      String(filePath).includes('/backups/cherry-studio-pi.data-sync.local-device.zip')
+      String(filePath).includes(`/backups/${summary.snapshotFileName}`)
     )
     expect(snapshotUpload?.[2]).toEqual({ overwrite: true, contentLength: 6 })
     expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
@@ -868,7 +901,7 @@ describe('AppDataSyncService', () => {
     )
   })
 
-  it('keeps record sync successful when the safety snapshot upload is temporarily unavailable', async () => {
+  it('fails safely when the required safety snapshot upload is temporarily unavailable', async () => {
     mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
       if (mocks.remoteFiles.has(filePath)) {
         return mocks.remoteFiles.get(filePath)
@@ -886,14 +919,13 @@ describe('AppDataSyncService', () => {
       if (options?.overwrite === false && mocks.remoteFiles.has(filePath)) {
         return false
       }
-      mocks.remoteFiles.set(filePath, contents)
+      mocks.remoteFiles.set(filePath, await normalizeUploadedContents(contents))
       return true
     })
 
-    const summary = await new AppDataSyncService().syncNow(config)
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('安全快照上传失败')
 
-    expect(summary.snapshotUploaded).toBe(false)
-    expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith('last-sync-summary', summary)
+    expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith('last-sync-summary', expect.anything())
   })
 
   it('skips full data snapshots when this device already uploaded a fresh one', async () => {

@@ -108,7 +108,7 @@ describe('StorageV2MirrorService', () => {
     await vi.advanceTimersByTimeAsync(0)
 
     expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
-    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), { dryRun: false, pruneMissing: true })
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), { dryRun: false, pruneMissing: false })
   })
 
   it('keeps the initial startup mirror non-pruning', async () => {
@@ -139,7 +139,7 @@ describe('StorageV2MirrorService', () => {
     )
   })
 
-  it('upgrades an identical startup snapshot to pruning after runtime changes resume', async () => {
+  it('does not rewrite an identical runtime snapshot just to prune missing data', async () => {
     const { storageV2MirrorService } = await import('../StorageV2MirrorService')
     const middleware = storageV2MirrorService.createMiddleware()({
       dispatch: vi.fn(),
@@ -151,17 +151,12 @@ describe('StorageV2MirrorService', () => {
 
     middleware({ type: 'settings/setLanguage' })
 
-    await vi.waitFor(() => {
-      expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(2)
-    })
+    await vi.advanceTimersByTimeAsync(1500)
     expect(importLegacyReduxSnapshot).toHaveBeenNthCalledWith(1, expect.any(Object), {
       dryRun: false,
       pruneMissing: false
     })
-    expect(importLegacyReduxSnapshot).toHaveBeenNthCalledWith(2, expect.any(Object), {
-      dryRun: false,
-      pruneMissing: true
-    })
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
   })
 
   it('retries a failed startup mirror without upgrading it to pruning', async () => {
@@ -252,7 +247,7 @@ describe('StorageV2MirrorService', () => {
     await vi.waitFor(() => {
       expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
     })
-    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), { dryRun: false, pruneMissing: true })
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), { dryRun: false, pruneMissing: false })
   })
 
   it('flushes persisted redux configuration slices without waiting for debounce', async () => {

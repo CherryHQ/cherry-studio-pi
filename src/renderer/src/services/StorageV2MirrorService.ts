@@ -158,7 +158,7 @@ class StorageV2MirrorService {
       if (!this.suspended && shouldMirrorAction(reduxAction)) {
         const mirrorImmediately = shouldMirrorActionImmediately(reduxAction)
         this.schedule(() => storeApi.getState() as Record<string, any>, mirrorImmediately ? 0 : DEFAULT_DEBOUNCE_MS, {
-          pruneMissing: true
+          pruneMissing: false
         })
         if (mirrorImmediately) {
           void this.flush()
@@ -173,7 +173,7 @@ class StorageV2MirrorService {
     if (this.suspended) return
     this.latestGetState = getState
     if (this.paused) return
-    const pruneMissing = options.pruneMissing !== false
+    const pruneMissing = options.pruneMissing === true
     this.pendingPruneMissing =
       this.pendingPruneMissing === null ? pruneMissing : this.pendingPruneMissing || pruneMissing
 
