@@ -572,6 +572,11 @@ sync_conflicts
 - 删除：软删除和 tombstone，不能立即物理删除。
 - secrets：默认不同步。
 
+当前 WebDAV 同步根为 `<webdavPath>/sync/v1`。`manifest.json` 是提交点，Storage v2 行数据以
+`storage-v2/bundle/<hash>.json` 内容寻址数据包发布，blob 和加密 secret bundle 独立保存。`.tmp-*.json`、
+`.cherry-studio-pi-write-test-*.tmp`、`.cherry-studio-pi-storage-write-test-*.tmp` 只是原子写入或权限探针产生的临时文件，不属于持久协议；成功发布 manifest 后必须清理这些根目录残留，清理失败不能显示同步成功。远端 manifest 指向的已知 Storage v2 记录如果无法真实写入本地数据库，也必须让本次同步失败，不能静默跳过。
+WebDAV record sync 承载的每一种实体都必须同时在 `SyncPolicy` 中登记，包括 profile、model、blob、assistant / agent version history 和 sync tombstone 这类支撑表，避免未来增量同步规则、贡献者指南和真实远端协议脱节。
+
 ## 备份和恢复
 
 备份包结构：

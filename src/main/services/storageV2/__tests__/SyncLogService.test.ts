@@ -2,6 +2,7 @@ import type { Client } from '@libsql/client'
 import { describe, expect, it, vi } from 'vitest'
 
 import { StorageV2SyncLogService } from '../SyncLogService'
+import { getStorageV2SyncPolicy } from '../SyncPolicy'
 
 function createClient() {
   const execute = vi.fn(async (input: string | { sql: string; args?: unknown[] }) => {
@@ -19,6 +20,12 @@ function createClient() {
 }
 
 describe('StorageV2SyncLogService', () => {
+  it('declares sync policies for Storage v2 entities carried by WebDAV record sync', () => {
+    for (const entityType of ['profile', 'model', 'blob', 'assistant_version', 'agent_version', 'sync_tombstone']) {
+      expect(getStorageV2SyncPolicy(entityType)).toEqual(expect.objectContaining({ entityType }))
+    }
+  })
+
   it('rejects unknown sync entity types before writing ledger rows', async () => {
     const { client, execute } = createClient()
 

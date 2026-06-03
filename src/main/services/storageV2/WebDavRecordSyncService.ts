@@ -170,6 +170,10 @@ const TOMBSTONE_PHYSICAL_DELETE_TARGETS = {
   }
 } as const
 
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
 const STORAGE_V2_SYNC_TABLES: readonly StorageV2SyncTable[] = [
   { entityType: 'profile', table: 'profiles', idColumns: ['id'], updatedAtColumn: 'updated_at' },
   {
@@ -1510,6 +1514,24 @@ export class StorageV2WebDavRecordSyncService {
     return true
   }
 
+  private async applyRemoteRecordOrThrow(client: Client, remote: LocalRecord) {
+    try {
+      const applied = await this.applyRemoteRecord(client, remote)
+      if (applied) return
+    } catch (error) {
+      throw new Error(
+        `远端 Storage v2 记录 ${remote.id} 无法写入本地数据库。为避免把未恢复的数据误判为同步成功，本次同步已停止：${errorMessage(
+          error
+        )}`,
+        { cause: error }
+      )
+    }
+
+    throw new Error(
+      `远端 Storage v2 记录 ${remote.id} 缺少当前版本可写入的必要字段。为避免把未恢复的数据误判为同步成功，本次同步已停止。`
+    )
+  }
+
   private async applyTombstoneTarget(client: Client, row: Record<string, unknown>) {
     const target = tombstoneTargetFromRow(row)
     if (!target) return false
@@ -1783,7 +1805,8 @@ export class StorageV2WebDavRecordSyncService {
         }
 
         const remoteRecord = await this.pullRecord(client, basePath, remoteMeta, bundledRecord)
-        if (remoteRecord && (await this.applyRemoteRecord(dbClient, remoteRecord))) {
+        if (remoteRecord) {
+          await this.applyRemoteRecordOrThrow(dbClient, remoteRecord)
           bundledRecords.set(id, remoteRecord)
           manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
           await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
@@ -1833,9 +1856,8 @@ export class StorageV2WebDavRecordSyncService {
         const remoteWins = !localWins
         const winner = localWins ? localRecord : remoteRecord
 
-        if (remoteWins && !(await this.applyRemoteRecord(dbClient, remoteRecord))) {
-          summary.storageSkipped += 1
-          continue
+        if (remoteWins) {
+          await this.applyRemoteRecordOrThrow(dbClient, remoteRecord)
         }
 
         bundledRecords.set(id, winner)
@@ -1853,17 +1875,14 @@ export class StorageV2WebDavRecordSyncService {
       const remoteChanged = remoteRecord.valueHash !== lastHash
 
       if (!lastHash) {
-        if (await this.applyRemoteRecord(dbClient, remoteRecord)) {
-          bundledRecords.set(id, remoteRecord)
-          manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
-          await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
-          this.pruneManifestRecordCoveredByTombstone(manifest, remoteRecord.row, bundledRecords)
-          stageRecordSyncState(id, remoteRecord.valueHash)
-          summary.storageDownloaded += remoteRecord.deletedAt ? 0 : 1
-          summary.storageDeleted += remoteRecord.deletedAt ? 1 : 0
-        } else {
-          summary.storageSkipped += 1
-        }
+        await this.applyRemoteRecordOrThrow(dbClient, remoteRecord)
+        bundledRecords.set(id, remoteRecord)
+        manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
+        await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
+        this.pruneManifestRecordCoveredByTombstone(manifest, remoteRecord.row, bundledRecords)
+        stageRecordSyncState(id, remoteRecord.valueHash)
+        summary.storageDownloaded += remoteRecord.deletedAt ? 0 : 1
+        summary.storageDeleted += remoteRecord.deletedAt ? 1 : 0
         continue
       }
 
@@ -1878,15 +1897,14 @@ export class StorageV2WebDavRecordSyncService {
       }
 
       if (!localChanged && remoteChanged) {
-        if (await this.applyRemoteRecord(dbClient, remoteRecord)) {
-          bundledRecords.set(id, remoteRecord)
-          manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
-          await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
-          this.pruneManifestRecordCoveredByTombstone(manifest, remoteRecord.row, bundledRecords)
-          stageRecordSyncState(id, remoteRecord.valueHash)
-          summary.storageDownloaded += remoteRecord.deletedAt ? 0 : 1
-          summary.storageDeleted += remoteRecord.deletedAt ? 1 : 0
-        }
+        await this.applyRemoteRecordOrThrow(dbClient, remoteRecord)
+        bundledRecords.set(id, remoteRecord)
+        manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
+        await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
+        this.pruneManifestRecordCoveredByTombstone(manifest, remoteRecord.row, bundledRecords)
+        stageRecordSyncState(id, remoteRecord.valueHash)
+        summary.storageDownloaded += remoteRecord.deletedAt ? 0 : 1
+        summary.storageDeleted += remoteRecord.deletedAt ? 1 : 0
         continue
       }
 
@@ -1897,7 +1915,8 @@ export class StorageV2WebDavRecordSyncService {
         await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
         stageRecordSyncState(id, localRecord.valueHash)
         summary.storageUploaded += localRecord.deletedAt ? 0 : 1
-      } else if (await this.applyRemoteRecord(dbClient, remoteRecord)) {
+      } else {
+        await this.applyRemoteRecordOrThrow(dbClient, remoteRecord)
         bundledRecords.set(id, remoteRecord)
         manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
         await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)

@@ -55,6 +55,10 @@ Contribution rules:
   be used as the remote record identity for data that can be created on multiple
   devices; for example, `task_run_logs` syncs by `task_id + run_at` and omits the
   local numeric `id` from the WebDAV bundle.
+- Every entity carried by WebDAV record sync must also have a `SyncPolicy`
+  entry, including profile/model/blob/version-history/tombstone support tables,
+  so future incremental sync and contributor guidance do not drift away from the
+  actual remote protocol.
 - WebDAV sync tests should cover two isolated local instances through a real
   local WebDAV server whenever a sync contract changes.
 
@@ -75,6 +79,10 @@ Files:
 - `backups/*.zip`: full safety snapshots for disaster recovery only.
 - `records/<scope>/<key>/<hash>.json`: legacy app-record compatibility files.
   These should stay small and are not the primary Storage v2 data path.
+- `.tmp-*.json` and `.cherry-studio-pi-*-write-test-*.tmp`: transient files
+  created by atomic WebDAV writes or write-access probes. They are never part of
+  the durable protocol and are pruned from the sync root after a successful
+  manifest publish.
 
 Merge rules:
 

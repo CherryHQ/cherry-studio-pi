@@ -963,6 +963,10 @@ describe('AppDataSyncService', () => {
 
   it('prunes stale app-data record and backup artifacts after publishing the manifest', async () => {
     mockDirectoryContentsFromRemoteFiles()
+    mocks.remoteFiles.set('/remote-root/sync/v1/.tmp-manifest.json-stale.json', JSON.stringify({ stale: true }))
+    mocks.remoteFiles.set('/remote-root/sync/v1/.tmp-.sync.lock.json-stale.json', JSON.stringify({ stale: true }))
+    mocks.remoteFiles.set('/remote-root/sync/v1/.cherry-studio-pi-write-test-stale.tmp', 'ok')
+    mocks.remoteFiles.set('/remote-root/sync/v1/.cherry-studio-pi-storage-write-test-stale.tmp', 'ok')
     mocks.remoteFiles.set('/remote-root/sync/v1/records/settings/theme.json', JSON.stringify(remoteRecord))
     mocks.remoteFiles.set('/remote-root/sync/v1/records/settings/stale-hash.json', JSON.stringify({ stale: true }))
     mocks.remoteFiles.set('/remote-root/sync/v1/backups/old-device-snapshot.zip', Buffer.from('old-backup'))
@@ -970,9 +974,19 @@ describe('AppDataSyncService', () => {
     const summary = await new AppDataSyncService().syncNow(config)
 
     expect(summary.status).toBe('success')
+    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/.tmp-manifest.json-stale.json')
+    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/.tmp-.sync.lock.json-stale.json')
+    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/.cherry-studio-pi-write-test-stale.tmp')
+    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(
+      '/remote-root/sync/v1/.cherry-studio-pi-storage-write-test-stale.tmp'
+    )
     expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/records/settings/stale-hash.json')
     expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/backups/old-device-snapshot.zip')
     expect(mocks.webdav.deleteFile).not.toHaveBeenCalledWith('/remote-root/sync/v1/records/settings/theme.json')
+    expect(mocks.remoteFiles.has('/remote-root/sync/v1/.tmp-manifest.json-stale.json')).toBe(false)
+    expect(mocks.remoteFiles.has('/remote-root/sync/v1/.tmp-.sync.lock.json-stale.json')).toBe(false)
+    expect(mocks.remoteFiles.has('/remote-root/sync/v1/.cherry-studio-pi-write-test-stale.tmp')).toBe(false)
+    expect(mocks.remoteFiles.has('/remote-root/sync/v1/.cherry-studio-pi-storage-write-test-stale.tmp')).toBe(false)
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/records/settings/stale-hash.json')).toBe(false)
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/backups/old-device-snapshot.zip')).toBe(false)
   })

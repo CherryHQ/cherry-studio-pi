@@ -1146,6 +1146,48 @@ describe('StorageV2WebDavRecordSyncService', () => {
     )
   })
 
+  it('fails visibly when a known remote Storage v2 row cannot be applied locally', async () => {
+    const remote = makeSharedWebDavStore()
+    const remoteRow = {}
+    const remoteHash = hashJson(remoteRow)
+    const remoteRecord = {
+      id: 'settings:theme',
+      table: settingsTable,
+      idValues: ['theme'],
+      row: remoteRow,
+      valueHash: remoteHash,
+      updatedAt: Date.parse('2026-05-29T12:10:00.000Z'),
+      deletedAt: null,
+      version: 2
+    }
+    remote.files.set('/remote-root/sync/v1/storage-v2/records/settings/theme.json', JSON.stringify(remoteRecord))
+
+    const db = makeSettingsDb([])
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([settingsTable]).sync(remote.client as any, '/remote-root/sync/v1', {
+        version: 1,
+        blobs: {},
+        records: {
+          'settings:theme': {
+            entityType: 'settings',
+            table: 'settings',
+            idValues: ['theme'],
+            valueHash: remoteHash,
+            updatedAt: remoteRecord.updatedAt,
+            deletedAt: null,
+            version: 2,
+            path: 'storage-v2/records/settings/theme.json'
+          }
+        }
+      })
+    ).rejects.toThrow('远端 Storage v2 记录 settings:theme 缺少当前版本可写入的必要字段')
+
+    expect(db.state.rows).toHaveLength(0)
+    expect(db.state.syncState.size).toBe(0)
+  })
+
   it('fails safely when record hash metadata is stale', async () => {
     const remote = makeSharedWebDavStore()
     const remoteRow = {

@@ -620,6 +620,31 @@ export class AppDataSyncService {
     }
   }
 
+  private async pruneRemoteRootTempArtifacts(client: WebDAVClient, basePath: string) {
+    const contents = await runWebDavOperation(
+      `listing remote sync root temporary artifacts ${basePath}`,
+      () => client.getDirectoryContents(basePath),
+      { logger }
+    )
+    const entries = normalizeDirectoryContents(contents)
+
+    for (const entry of entries) {
+      if (entry.type === 'directory') continue
+
+      const filename = entry.filename || path.posix.join(basePath, entry.basename || '')
+      const basename = entry.basename || path.posix.basename(filename)
+      if (!filename || !basename) continue
+
+      const isTemporaryJson = basename.startsWith('.tmp-') && basename.endsWith('.json')
+      const isLegacyWriteProbe =
+        basename.startsWith('.cherry-studio-pi-write-test-') ||
+        basename.startsWith('.cherry-studio-pi-storage-write-test-')
+      if (!isTemporaryJson && !isLegacyWriteProbe) continue
+
+      await this.removeRemoteFile(client, path.posix.normalize(filename))
+    }
+  }
+
   private normalizeRemoteLock(lock: RemoteSyncLock | null): RemoteSyncLock | null {
     if (!lock || lock.version !== 1 || !lock.ownerId || !lock.token) return null
 
@@ -1520,6 +1545,10 @@ export class AppDataSyncService {
       }
 
       const cleanupErrors: string[] = []
+      await this.pruneRemoteRootTempArtifacts(client, basePath).catch((error) => {
+        logger.warn('Failed to prune stale WebDAV sync root temporary artifacts after sync', error as Error)
+        cleanupErrors.push(errorMessage(error))
+      })
       await this.pruneRemoteAppDataArtifacts(client, basePath, manifest).catch((error) => {
         logger.warn('Failed to prune stale app data WebDAV artifacts after sync', error as Error)
         cleanupErrors.push(errorMessage(error))

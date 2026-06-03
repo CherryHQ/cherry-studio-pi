@@ -17,7 +17,10 @@ export type StorageV2SyncEntityType =
   | 'agent'
   | 'agent_session'
   | 'agent_skill'
+  | 'agent_version'
   | 'assistant'
+  | 'assistant_version'
+  | 'blob'
   | 'channel'
   | 'channel_task_subscription'
   | 'conversation'
@@ -27,11 +30,14 @@ export type StorageV2SyncEntityType =
   | 'kv_record'
   | 'message'
   | 'message_block'
+  | 'model'
+  | 'profile'
   | 'provider'
   | 'provider_credential'
   | 'scheduled_task'
   | 'settings'
   | 'skill'
+  | 'sync_tombstone'
   | 'task_run_log'
 
 export type StorageV2SyncMergeStrategy =
@@ -67,6 +73,19 @@ export type StorageV2SyncPolicy = {
 
 const STORAGE_V2_SYNC_POLICIES = [
   {
+    entityType: 'profile',
+    table: 'profiles',
+    idColumns: ['id'],
+    versioned: false,
+    updatedAtColumn: 'updated_at',
+    deletionSemantics: 'sync-ledger-delete-only',
+    mergeStrategy: 'last-write-wins',
+    secretMode: 'none',
+    clearSemantics: 'not-clearable',
+    conflictUi: 'diff',
+    notes: 'Profile metadata is user-visible identity data and is carried by WebDAV sync even before accounts exist.'
+  },
+  {
     entityType: 'settings',
     table: 'settings',
     idColumns: ['key'],
@@ -97,6 +116,21 @@ const STORAGE_V2_SYNC_POLICIES = [
       'Provider rows sync metadata and secret refs only. WebDAV data sync carries provider API keys through the encrypted secret vault bundle so multi-device model configuration can recover without storing plaintext in provider rows.'
   },
   {
+    entityType: 'model',
+    table: 'models',
+    idColumns: ['id'],
+    versioned: false,
+    updatedAtColumn: 'updated_at',
+    deletedAtColumn: 'deleted_at',
+    deletionSemantics: 'soft-delete-with-tombstone',
+    mergeStrategy: 'last-write-wins',
+    secretMode: 'none',
+    clearSemantics: 'deleted-at-tombstone',
+    conflictUi: 'diff',
+    notes:
+      'Model catalog rows are synced separately from provider metadata so custom model edits converge across devices.'
+  },
+  {
     entityType: 'provider_credential',
     table: 'provider_credentials',
     idColumns: ['provider_id', 'credential_kind'],
@@ -109,6 +143,20 @@ const STORAGE_V2_SYNC_POLICIES = [
     conflictUi: 'auto',
     notes:
       'Provider credential rows carry secret refs only. The encrypted secret vault bundle carries the referenced secret values; clearing a credential must publish a provider_credential tombstone so old remote refs are not resurrected.'
+  },
+  {
+    entityType: 'blob',
+    table: 'blobs',
+    idColumns: ['id'],
+    versioned: false,
+    updatedAtColumn: 'created_at',
+    deletionSemantics: 'append-only',
+    mergeStrategy: 'content-addressed',
+    secretMode: 'none',
+    clearSemantics: 'not-clearable',
+    conflictUi: 'none',
+    notes:
+      'Blob metadata is content-addressed; WebDAV sync uploads verified blob bytes separately and only publishes referenced blob records.'
   },
   {
     entityType: 'assistant',
@@ -125,6 +173,19 @@ const STORAGE_V2_SYNC_POLICIES = [
     notes: 'Assistant versions preserve historical snapshots; the active assistant row is last-writer-wins.'
   },
   {
+    entityType: 'assistant_version',
+    table: 'assistant_versions',
+    idColumns: ['id'],
+    versioned: false,
+    updatedAtColumn: 'created_at',
+    deletionSemantics: 'append-only',
+    mergeStrategy: 'append-only',
+    secretMode: 'none',
+    clearSemantics: 'not-clearable',
+    conflictUi: 'none',
+    notes: 'Assistant version rows are immutable history snapshots and are synced as append-only records.'
+  },
+  {
     entityType: 'agent',
     table: 'agents',
     idColumns: ['id'],
@@ -137,6 +198,19 @@ const STORAGE_V2_SYNC_POLICIES = [
     clearSemantics: 'deleted-at-tombstone',
     conflictUi: 'diff',
     notes: 'Agent metadata syncs separately from local workspace files; tool credentials must remain secret refs.'
+  },
+  {
+    entityType: 'agent_version',
+    table: 'agent_versions',
+    idColumns: ['id'],
+    versioned: false,
+    updatedAtColumn: 'created_at',
+    deletionSemantics: 'append-only',
+    mergeStrategy: 'append-only',
+    secretMode: 'none',
+    clearSemantics: 'not-clearable',
+    conflictUi: 'none',
+    notes: 'Agent version rows are immutable history snapshots and are synced as append-only records.'
   },
   {
     entityType: 'agent_session',
@@ -333,6 +407,20 @@ const STORAGE_V2_SYNC_POLICIES = [
     conflictUi: 'diff',
     notes:
       'App data records and caches are source-scoped; explicit cleared markers must not be treated as missing secrets.'
+  },
+  {
+    entityType: 'sync_tombstone',
+    table: 'sync_tombstones',
+    idColumns: ['entity_type', 'entity_id'],
+    versioned: true,
+    updatedAtColumn: 'deleted_at',
+    deletionSemantics: 'append-only',
+    mergeStrategy: 'last-write-wins',
+    secretMode: 'none',
+    clearSemantics: 'not-clearable',
+    conflictUi: 'none',
+    notes:
+      'Tombstone rows are deletion evidence for soft-deleted and join-table records; WebDAV sync must carry them so older remote rows are not resurrected.'
   }
 ] as const satisfies readonly StorageV2SyncPolicy[]
 

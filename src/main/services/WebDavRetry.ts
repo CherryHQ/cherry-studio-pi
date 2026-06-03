@@ -91,6 +91,21 @@ function isWriteOperation(operation: string) {
   return /\b(creating|writing|uploading|deleting|restoring)\b/i.test(operation)
 }
 
+function isActionableDataSyncMessage(message: string) {
+  return (
+    /^安全快照上传失败/.test(message) ||
+    /^远端旧同步文件清理失败/.test(message) ||
+    /^远端同步记录(缺失|校验失败)/.test(message) ||
+    /^远端同步状态/.test(message) ||
+    /^远端安全快照/.test(message) ||
+    /^远端 Storage v2 (数据包|记录|manifest)/.test(message) ||
+    /^远端附件文件/.test(message) ||
+    /^本地附件文件/.test(message) ||
+    /^远端敏感配置/.test(message) ||
+    /^远端数据已同步到本机/.test(message)
+  )
+}
+
 function describeWebDavError(error: unknown) {
   const status = getWebDavErrorStatus(error)
   const statusText = getWebDavErrorStatusText(error)
@@ -236,7 +251,11 @@ export function describeWebDavUserFacingError(error: unknown, action = WEB_DAV_D
     return `${prefix}：远端同步状态异常。${message}`
   }
 
-  if (/远端 Storage v2 数据包校验失败|Storage v2 .*bundle hash mismatch/i.test(message)) {
+  if (/Storage v2 .*bundle hash mismatch/i.test(message)) {
+    return `${prefix}：${message}`
+  }
+
+  if (isActionableDataSyncMessage(message)) {
     return `${prefix}：${message}`
   }
 

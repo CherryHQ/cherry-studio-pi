@@ -1512,13 +1512,24 @@ describe('AppDataSyncService local WebDAV integration', () => {
     })
 
     await new AppDataSyncService(backupManager as never).syncNow(config)
+    const syncRoot = remoteSyncRoot(server!, webdavPath)
+    await fsp.writeFile(path.join(syncRoot, '.tmp-manifest.json-crash-leftover.json'), '{"stale":true}', 'utf8')
+    await fsp.writeFile(path.join(syncRoot, '.tmp-.sync.lock.json-crash-leftover.json'), '{"stale":true}', 'utf8')
+    await fsp.writeFile(path.join(syncRoot, '.cherry-studio-pi-write-test-crash-leftover.tmp'), 'ok', 'utf8')
+    await fsp.writeFile(path.join(syncRoot, '.cherry-studio-pi-storage-write-test-crash-leftover.tmp'), 'ok', 'utf8')
     await new AppDataSyncService(backupManager as never).syncNow(config)
     await new AppDataSyncService(backupManager as never).syncNow(config)
 
-    const files = await listRemoteRelativeFiles(remoteSyncRoot(server!, webdavPath))
+    const files = await listRemoteRelativeFiles(syncRoot)
     const storageRecordFiles = files.filter((file) => file.startsWith('storage-v2/records/'))
     const bundleFiles = files.filter((file) => /^storage-v2\/bundle\/[a-f0-9]{64}\.json$/.test(file))
-    const temporaryFiles = files.filter((file) => file.includes('/.tmp-') || file.startsWith('.tmp-'))
+    const temporaryFiles = files.filter(
+      (file) =>
+        file.includes('/.tmp-') ||
+        file.startsWith('.tmp-') ||
+        file.startsWith('.cherry-studio-pi-write-test-') ||
+        file.startsWith('.cherry-studio-pi-storage-write-test-')
+    )
 
     expect(storageRecordFiles).toHaveLength(0)
     expect(bundleFiles).toHaveLength(1)

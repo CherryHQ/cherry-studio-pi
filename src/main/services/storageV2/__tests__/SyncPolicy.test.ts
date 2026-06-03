@@ -30,6 +30,15 @@ const LEDGER_ENTITY_TYPES = [
   'task_run_log'
 ]
 
+const WEB_DAV_RECORD_SYNC_SUPPORT_ENTITY_TYPES = [
+  'agent_version',
+  'assistant_version',
+  'blob',
+  'model',
+  'profile',
+  'sync_tombstone'
+]
+
 describe('Storage v2 sync policy', () => {
   it('defines stable device and conflict metadata for future account sync', () => {
     expect(STORAGE_V2_SYNC_POLICY_VERSION).toBe(1)
@@ -47,12 +56,19 @@ describe('Storage v2 sync policy', () => {
     ])
   })
 
-  it('covers every entity type currently written to sync_changes', () => {
+  it('covers every ledger entity and every WebDAV record sync support entity', () => {
     const policies = listStorageV2SyncPolicies()
     const entityTypes = policies.map((policy) => policy.entityType).sort()
 
-    expect(entityTypes).toEqual([...LEDGER_ENTITY_TYPES].sort())
+    expect(entityTypes).toEqual([...LEDGER_ENTITY_TYPES, ...WEB_DAV_RECORD_SYNC_SUPPORT_ENTITY_TYPES].sort())
     expect(new Set(entityTypes).size).toBe(entityTypes.length)
+
+    for (const entityType of LEDGER_ENTITY_TYPES) {
+      expect(assertStorageV2SyncPolicy(entityType), entityType).toBeTruthy()
+    }
+    for (const entityType of WEB_DAV_RECORD_SYNC_SUPPORT_ENTITY_TYPES) {
+      expect(assertStorageV2SyncPolicy(entityType), entityType).toBeTruthy()
+    }
   })
 
   it('pins version, updated_at, and deleted_at semantics for mutable rows', () => {

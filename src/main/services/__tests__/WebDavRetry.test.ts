@@ -61,6 +61,19 @@ describe('WebDavRetry', () => {
     expect(message).toContain('无法保证同步目录文件数量收敛')
   })
 
+  it('keeps Storage v2 sync protocol failures visible instead of replacing them with a generic message', () => {
+    const message = describeWebDavUserFacingError(
+      new Error(
+        '远端 Storage v2 记录 settings:theme 无法写入本地数据库。为避免把未恢复的数据误判为同步成功，本次同步已停止：SQLITE_CONSTRAINT'
+      ),
+      '同步数据'
+    )
+
+    expect(message).toContain('远端 Storage v2 记录 settings:theme 无法写入本地数据库')
+    expect(message).toContain('SQLITE_CONSTRAINT')
+    expect(message).not.toContain('发生未知错误')
+  })
+
   it('times out stalled WebDAV operations instead of waiting forever', async () => {
     await expect(
       runWebDavOperation('reading remote json /sync/v1/manifest.json', () => new Promise(() => undefined), {
