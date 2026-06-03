@@ -450,6 +450,10 @@ task_run_logs
   error
   version
 
+task_run_logs.id 是本机 SQLite 自增主键，只用于本地查询和旧运行时兼容；WebDAV 同步身份使用
+task_id + run_at，远端 bundle 不携带本机自增 id。这样两台设备离线运行任务时即使都生成本地
+id = 1，同步后也会保留两条运行日志，而不会互相覆盖。
+
 channels
   id
   type

@@ -90,6 +90,16 @@ const tombstoneTable = {
   versionColumn: 'version'
 } as const
 
+const taskRunLogTable = {
+  entityType: 'task_run_log',
+  table: 'task_run_logs',
+  idColumns: ['id'],
+  syncIdColumns: ['task_id', 'run_at'],
+  updatedAtColumn: 'run_at',
+  versionColumn: 'version',
+  omitColumnsFromSync: ['id']
+} as const
+
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize)
   if (!value || typeof value !== 'object') return value
@@ -762,6 +772,191 @@ describe('StorageV2WebDavRecordSyncService', () => {
 
       return { rows: [] }
     })
+  })
+
+  it('fails before syncing when the WebDAV path cannot delete probe files', async () => {
+    const remote = makeSharedWebDavStore()
+    remote.client.deleteFile.mockRejectedValueOnce(new Error('delete denied'))
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([settingsTable]).sync(remote.client as any, '/remote-root/sync/v1', {
+        version: 1,
+        blobs: {},
+        records: {}
+      })
+    ).rejects.toThrow('WebDAV request failed while deleting Storage v2 sync probe')
+
+    expect(remote.client.putFileContents).toHaveBeenCalledWith(
+      expect.stringContaining('/remote-root/sync/v1/.cherry-studio-pi-storage-write-test-'),
+      'ok',
+      { overwrite: true }
+    )
+  })
+
+  it('fails before syncing when the WebDAV client cannot delete remote files', async () => {
+    const remote = makeSharedWebDavStore()
+    const client = { ...remote.client }
+    delete (client as any).deleteFile
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([settingsTable]).sync(client as any, '/remote-root/sync/v1', {
+        version: 1,
+        blobs: {},
+        records: {}
+      })
+    ).rejects.toThrow('当前 WebDAV 客户端不支持删除远端文件')
+  })
+
+  it('syncs task run logs by natural identity instead of local autoincrement ids', async () => {
+    mocks.dbClient.execute.mockImplementation(async (input: string | { sql: string }) => {
+      const sql = typeof input === 'string' ? input : input.sql
+      if (sql.includes('SELECT * FROM task_run_logs')) {
+        return {
+          rows: [
+            {
+              id: 1,
+              task_id: 'task-1',
+              session_id: 'session-1',
+              run_at: '2026-05-29T12:00:00.000Z',
+              duration_ms: 123,
+              status: 'success',
+              result_json: '{"ok":true}',
+              error: null,
+              version: 2
+            }
+          ]
+        }
+      }
+      if (sql.includes('SELECT value_json FROM sync_state')) return { rows: [] }
+      if (sql.includes('INSERT INTO sync_state')) return { rows: [] }
+      return { rows: [] }
+    })
+
+    const result = await new StorageV2WebDavRecordSyncService([taskRunLogTable]).sync(
+      mocks.webdav as any,
+      '/remote-root/sync/v1',
+      null
+    )
+    const recordId = 'task_run_log:task-1:2026-05-29T12%3A00%3A00.000Z'
+    const bundlePath = `/remote-root/sync/v1/${result.manifest.bundle?.path}`
+    const bundle = JSON.parse(String(mocks.remoteFiles.get(bundlePath)))
+
+    expect(result.manifest.records[recordId]).toMatchObject({
+      entityType: 'task_run_log',
+      idValues: ['task-1', '2026-05-29T12:00:00.000Z'],
+      path: expect.stringMatching(HASHED_BUNDLE_PATH)
+    })
+    expect(bundle.records[recordId].row).toMatchObject({
+      task_id: 'task-1',
+      run_at: '2026-05-29T12:00:00.000Z',
+      status: 'success'
+    })
+    expect(bundle.records[recordId].row).not.toHaveProperty('id')
+  })
+
+  it('imports remote task run logs without overwriting a different local autoincrement row', async () => {
+    const remoteRow = {
+      task_id: 'remote-task',
+      session_id: 'remote-session',
+      run_at: '2026-05-29T12:30:00.000Z',
+      duration_ms: 321,
+      status: 'success',
+      result_json: '{"remote":true}',
+      error: null,
+      version: 1
+    }
+    const remoteHash = hashJson(remoteRow)
+    const remoteRecord = {
+      id: 'task_run_log:remote-task:2026-05-29T12%3A30%3A00.000Z',
+      table: taskRunLogTable,
+      idValues: ['remote-task', '2026-05-29T12:30:00.000Z'],
+      row: remoteRow,
+      valueHash: remoteHash,
+      updatedAt: Date.parse(remoteRow.run_at),
+      deletedAt: null,
+      version: 1
+    }
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/storage-v2/records/task_run_log/remote.json',
+      JSON.stringify(remoteRecord)
+    )
+
+    const executed: Array<string | { sql: string; args?: unknown[] }> = []
+    mocks.dbClient.execute.mockImplementation(async (input: string | { sql: string; args?: unknown[] }) => {
+      executed.push(input)
+      const sql = typeof input === 'string' ? input : input.sql
+      if (sql.includes('SELECT * FROM task_run_logs')) {
+        return {
+          rows: [
+            {
+              id: 1,
+              task_id: 'local-task',
+              session_id: 'local-session',
+              run_at: '2026-05-29T12:00:00.000Z',
+              duration_ms: 111,
+              status: 'success',
+              result_json: '{"local":true}',
+              error: null,
+              version: 1
+            }
+          ]
+        }
+      }
+      if (sql.includes('PRAGMA table_info(task_run_logs)')) {
+        return {
+          rows: [
+            { name: 'id' },
+            { name: 'task_id' },
+            { name: 'session_id' },
+            { name: 'run_at' },
+            { name: 'duration_ms' },
+            { name: 'status' },
+            { name: 'result_json' },
+            { name: 'error' },
+            { name: 'version' }
+          ]
+        }
+      }
+      if (sql.includes('SELECT id FROM task_run_logs WHERE task_id = ? AND run_at = ?')) {
+        return { rows: [] }
+      }
+      if (sql.includes('SELECT value_json FROM sync_state')) return { rows: [] }
+      if (sql.includes('INSERT INTO sync_state')) return { rows: [] }
+      return { rows: [] }
+    })
+
+    await new StorageV2WebDavRecordSyncService([taskRunLogTable]).sync(mocks.webdav as any, '/remote-root/sync/v1', {
+      version: 1,
+      blobs: {},
+      records: {
+        [remoteRecord.id]: {
+          entityType: 'task_run_log',
+          table: 'task_run_logs',
+          idValues: remoteRecord.idValues,
+          valueHash: remoteHash,
+          updatedAt: Date.parse(remoteRow.run_at),
+          deletedAt: null,
+          version: 1,
+          path: 'storage-v2/records/task_run_log/remote.json'
+        }
+      }
+    })
+
+    const insert = executed.find(
+      (entry) => typeof entry !== 'string' && entry.sql.includes('INSERT INTO task_run_logs')
+    ) as { sql: string; args?: unknown[] } | undefined
+    expect(insert?.sql).not.toContain('(id,')
+    expect(insert?.sql).toContain('task_id')
+    expect(insert?.args).toEqual([
+      'remote-task',
+      'remote-session',
+      '2026-05-29T12:30:00.000Z',
+      321,
+      'success',
+      '{"remote":true}',
+      null,
+      1
+    ])
   })
 
   it('uploads local Storage v2 rows as WebDAV records', async () => {

@@ -36,6 +36,31 @@ describe('WebDavRetry', () => {
     expect(message).toContain('数据同步需要支持 MKCOL、PUT、DELETE')
   })
 
+  it('describes probe delete failures as missing WebDAV delete permission', () => {
+    const error = new WebDavOperationError(
+      'deleting Storage v2 sync probe /remote-root/sync/v1/.cherry-studio-pi-storage-write-test.tmp',
+      new Error('delete denied')
+    )
+
+    const message = describeWebDavUserFacingError(error, '同步数据')
+
+    expect(message).toContain('WebDAV 服务拒绝写入')
+    expect(message).toContain('/remote-root/sync/v1/.cherry-studio-pi-storage-write-test.tmp')
+    expect(message).toContain('数据同步需要支持 MKCOL、PUT、DELETE')
+  })
+
+  it('keeps missing WebDAV delete support actionable', () => {
+    const message = describeWebDavUserFacingError(
+      new Error(
+        '当前 WebDAV 客户端不支持删除远端文件，无法保证同步目录文件数量收敛。请更换 WebDAV 服务或升级客户端后重试。'
+      ),
+      '同步数据'
+    )
+
+    expect(message).toContain('当前 WebDAV 客户端不支持删除远端文件')
+    expect(message).toContain('无法保证同步目录文件数量收敛')
+  })
+
   it('times out stalled WebDAV operations instead of waiting forever', async () => {
     await expect(
       runWebDavOperation('reading remote json /sync/v1/manifest.json', () => new Promise(() => undefined), {

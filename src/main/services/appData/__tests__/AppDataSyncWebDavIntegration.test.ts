@@ -283,6 +283,55 @@ async function seedInstanceData(input: {
   })
 }
 
+async function seedTaskRunLogCollisionFixture(input: {
+  agentId: string
+  taskId: string
+  taskName: string
+  runAt: string
+  result: unknown
+}) {
+  const client = await storageV2Database.getClient()
+  const createdAt = '2026-05-29T14:00:00.000Z'
+  await client.execute({
+    sql: `
+      INSERT INTO agents (
+        id, type, name, description, instructions, model_id, plan_model_id, small_model_id,
+        accessible_paths_json, mcps_json, allowed_tools_json, configuration_json, avatar_blob_id,
+        sort_order, created_at, updated_at, deleted_at, version
+      )
+      VALUES (?, 'custom', ?, NULL, '', NULL, NULL, NULL, '[]', '[]', '[]', '{}', NULL, 0, ?, ?, NULL, 1)
+    `,
+    args: [input.agentId, input.taskName, createdAt, createdAt]
+  })
+  await client.execute({
+    sql: `
+      INSERT INTO scheduled_tasks (
+        id, agent_id, name, prompt, schedule_type, schedule_value, timeout_minutes,
+        next_run, last_run, last_result, status, created_at, updated_at, deleted_at, version
+      )
+      VALUES (?, ?, ?, 'sync collision fixture', 'manual', '', 2, NULL, ?, NULL, 'active', ?, ?, NULL, 1)
+    `,
+    args: [input.taskId, input.agentId, input.taskName, input.runAt, createdAt, input.runAt]
+  })
+  await client.execute({
+    sql: `
+      INSERT INTO task_run_logs (id, task_id, session_id, run_at, duration_ms, status, result_json, error, version)
+      VALUES (1, ?, NULL, ?, 1, 'success', ?, NULL, 1)
+    `,
+    args: [input.taskId, input.runAt, JSON.stringify(input.result)]
+  })
+}
+
+async function readTaskRunLogNaturalKeys() {
+  const client = await storageV2Database.getClient()
+  const result = await client.execute('SELECT task_id, run_at, result_json FROM task_run_logs ORDER BY task_id, run_at')
+  return result.rows.map((row) => ({
+    taskId: String(row.task_id),
+    runAt: String(row.run_at),
+    result: JSON.parse(String(row.result_json))
+  }))
+}
+
 async function seedComprehensiveStorageV2Data(instance: TestInstance): Promise<ComprehensiveStorageFixture> {
   const client = await storageV2Database.getClient()
   const createdAt = '2026-05-29T13:00:00.000Z'
@@ -860,7 +909,8 @@ async function readComprehensiveStorageV2State(instance: TestInstance, fixture: 
       ['channel-sync-full']
     ),
     taskRunLog: await selectOne<{ status: string; result_json: string }>(
-      'SELECT status, result_json FROM task_run_logs WHERE id = 101'
+      'SELECT status, result_json FROM task_run_logs WHERE task_id = ? AND run_at = ?',
+      ['task-sync-full', '2026-05-29T13:10:00.000Z']
     ),
     setting: await selectOne<{ value_json: string }>('SELECT value_json FROM settings WHERE key = ?', [
       'settings.sync.fixture.preference'
@@ -1273,6 +1323,48 @@ describe('AppDataSyncService local WebDAV integration', () => {
     )
     expect(deviceBLegacyRuntimeState.fileHash).toBe(fixture.blobChecksum)
     expect(deviceBLegacyRuntimeState.filePayload).toBe(fixture.blobPayload)
+  })
+
+  it('preserves task run logs created with colliding local autoincrement ids on two devices', async () => {
+    const homePath = path.join(tempRoot, 'home')
+    const instanceA = makeInstance(tempRoot, 'device-a')
+    const instanceB = makeInstance(tempRoot, 'device-b')
+    const webdavPath = '/cherry-studio-pi-task-log-collision'
+    const config = makeConfig(server!, webdavPath)
+    const backupManager = makeBackupManager(tempRoot)
+
+    await switchInstance(instanceA, homePath)
+    await seedTaskRunLogCollisionFixture({
+      agentId: 'agent-log-a',
+      taskId: 'task-log-a',
+      taskName: 'A device task',
+      runAt: '2026-05-29T14:10:00.000Z',
+      result: { device: 'a' }
+    })
+    await new AppDataSyncService(backupManager as never).syncNow(config)
+
+    await switchInstance(instanceB, homePath)
+    await seedTaskRunLogCollisionFixture({
+      agentId: 'agent-log-b',
+      taskId: 'task-log-b',
+      taskName: 'B device task',
+      runAt: '2026-05-29T14:20:00.000Z',
+      result: { device: 'b' }
+    })
+    const secondSummary = await new AppDataSyncService(backupManager as never).syncNow(config)
+
+    expect(secondSummary.storageDownloaded).toBeGreaterThan(0)
+    await expect(readTaskRunLogNaturalKeys()).resolves.toEqual([
+      { taskId: 'task-log-a', runAt: '2026-05-29T14:10:00.000Z', result: { device: 'a' } },
+      { taskId: 'task-log-b', runAt: '2026-05-29T14:20:00.000Z', result: { device: 'b' } }
+    ])
+
+    await switchInstance(instanceA, homePath)
+    await new AppDataSyncService(backupManager as never).syncNow(config)
+    await expect(readTaskRunLogNaturalKeys()).resolves.toEqual([
+      { taskId: 'task-log-a', runAt: '2026-05-29T14:10:00.000Z', result: { device: 'a' } },
+      { taskId: 'task-log-b', runAt: '2026-05-29T14:20:00.000Z', result: { device: 'b' } }
+    ])
   })
 
   it('propagates later updates and tombstones between two devices', async () => {

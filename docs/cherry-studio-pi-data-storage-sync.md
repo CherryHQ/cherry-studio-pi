@@ -15,8 +15,10 @@
 - Minimize WebDAV request and file count by publishing Storage v2 rows as a
   content-addressed bundle instead of one remote file per row.
 - Make sync status honest: success is reported only after the manifest is
-  published, local sync state is committed, and runtime projection/hydration has
-  completed when remote data was downloaded.
+  published, local sync state is committed, stale remote artifacts are cleaned
+  up, and runtime projection/hydration has completed whenever remote Storage v2
+  runtime data exists, even if the current sync run only skipped unchanged
+  remote records.
 
 ## Local Storage Layout
 
@@ -49,6 +51,10 @@ Contribution rules:
   the encrypted secret vault bundle. Clearing a credential must publish a
   tombstone for the credential ref so older remote keys are not resurrected.
 - Deletions must create tombstones when another device may need to converge.
+- Sync identity must be stable across devices. Local autoincrement ids must not
+  be used as the remote record identity for data that can be created on multiple
+  devices; for example, `task_run_logs` syncs by `task_id + run_at` and omits the
+  local numeric `id` from the WebDAV bundle.
 - WebDAV sync tests should cover two isolated local instances through a real
   local WebDAV server whenever a sync contract changes.
 
@@ -90,8 +96,11 @@ Runtime flow:
   is enabled, `DataSyncService` debounces those signals and triggers WebDAV sync.
 - Before WebDAV sync, runtime mirrors are flushed with local-change notifications
   suppressed so sync preparation does not schedule a redundant sync.
-- After remote data is downloaded, Storage v2 is projected/hydrated back into
-  legacy runtime caches before the UI reports success.
+- After WebDAV sync observes remote Storage v2 runtime data, Storage v2 is
+  projected/hydrated back into legacy runtime caches before the UI reports
+  success. This strict recovery also runs when the current sync run only reports
+  unchanged remote records, because a new device may still need to rebuild its
+  Redux/Dexie/agent runtime cache from the already-downloaded Storage v2 bundle.
 
 The current implementation exposes IPC through `window.api.appData` and
 `window.api.dataSync`.

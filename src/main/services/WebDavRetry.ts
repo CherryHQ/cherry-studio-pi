@@ -220,6 +220,14 @@ export function describeWebDavUserFacingError(error: unknown, action = WEB_DAV_D
     return formatWebDavAlreadyRunningMessage(prefix)
   }
 
+  if (/当前 WebDAV 客户端不支持删除远端文件/i.test(message)) {
+    return `${prefix}：${message}`
+  }
+
+  if (/deleting .*sync probe/i.test(operation)) {
+    return formatWebDavWriteForbiddenMessage(prefix, targetText)
+  }
+
   if (/另一台设备正在同步这个 WebDAV 目录|远端同步锁|无法创建远端同步锁/i.test(message)) {
     return `${prefix}：${message}`
   }

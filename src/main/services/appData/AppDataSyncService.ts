@@ -482,13 +482,13 @@ export class AppDataSyncService {
 
     const maybeDeleteFile = (client as WebDAVClient & { deleteFile?: (filePath: string) => Promise<void> }).deleteFile
     if (typeof maybeDeleteFile !== 'function') {
-      return
+      throw new Error(
+        '当前 WebDAV 客户端不支持删除远端文件，无法保证同步目录文件数量收敛。请更换 WebDAV 服务或升级客户端后重试。'
+      )
     }
 
     await runWebDavOperation(`deleting remote sync probe ${probePath}`, () => maybeDeleteFile.call(client, probePath), {
       logger
-    }).catch((error) => {
-      logger.warn(`Failed to delete remote sync probe ${probePath}`, error as Error)
     })
   }
 
@@ -540,7 +540,11 @@ export class AppDataSyncService {
 
   private async removeRemoteFile(client: WebDAVClient, filePath: string) {
     const deleteFile = (client as WebDAVClient & { deleteFile?: (targetPath: string) => Promise<void> }).deleteFile
-    if (typeof deleteFile !== 'function') return
+    if (typeof deleteFile !== 'function') {
+      throw new Error(
+        '当前 WebDAV 客户端不支持删除远端文件，无法清理旧同步文件。请更换 WebDAV 服务或升级客户端后重试。'
+      )
+    }
 
     await runWebDavOperation(`deleting remote file ${filePath}`, () => deleteFile.call(client, filePath), {
       logger

@@ -382,6 +382,33 @@ describe('AppDataSyncService', () => {
     }
   })
 
+  it('rejects WebDAV write access when the sync path cannot delete probe files', async () => {
+    mocks.webdav.deleteFile.mockRejectedValueOnce(new Error('delete denied'))
+
+    await expect(new AppDataSyncService().checkWriteAccess(config)).rejects.toThrow(
+      'WebDAV request failed while deleting remote sync probe'
+    )
+
+    expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
+      expect.stringContaining('/remote-root/sync/v1/.cherry-studio-pi-write-test-'),
+      'ok',
+      { overwrite: true }
+    )
+  })
+
+  it('rejects WebDAV write access when the client cannot delete remote files', async () => {
+    const deleteFile = mocks.webdav.deleteFile
+    delete (mocks.webdav as any).deleteFile
+
+    try {
+      await expect(new AppDataSyncService().checkWriteAccess(config)).rejects.toThrow(
+        '当前 WebDAV 客户端不支持删除远端文件'
+      )
+    } finally {
+      mocks.webdav.deleteFile = deleteFile
+    }
+  })
+
   it('does not append the sync suffix twice when users paste the internal sync path', async () => {
     await new AppDataSyncService().syncNow({ ...config, webdavPath: '/remote-root/sync/v1' })
 

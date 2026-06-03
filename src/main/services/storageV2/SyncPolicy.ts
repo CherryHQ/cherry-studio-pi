@@ -53,6 +53,7 @@ export type StorageV2SyncPolicy = {
   entityType: StorageV2SyncEntityType
   table: string
   idColumns: readonly string[]
+  syncIdentityColumns?: readonly string[]
   versioned: boolean
   updatedAtColumn?: string
   deletedAtColumn?: string
@@ -252,13 +253,15 @@ const STORAGE_V2_SYNC_POLICIES = [
     entityType: 'task_run_log',
     table: 'task_run_logs',
     idColumns: ['id'],
+    syncIdentityColumns: ['task_id', 'run_at'],
     versioned: true,
     deletionSemantics: 'append-only',
     mergeStrategy: 'append-only',
     secretMode: 'none',
     clearSemantics: 'not-clearable',
     conflictUi: 'none',
-    notes: 'Task run logs are historical records and should not be merged by overwriting older runs.'
+    notes:
+      'Task run logs use task_id + run_at as sync identity because local autoincrement ids can collide across devices.'
   },
   {
     entityType: 'channel',

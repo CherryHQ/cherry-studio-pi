@@ -84,7 +84,7 @@
 
 状态：完成
 
-- [x] 统一所有表的 `version`、`updated_at`、`deleted_at` 语义；`SyncPolicy.ts` 已按 sync entity type 固化 versioned / updatedAt / deletedAt / deletionSemantics，append-only 的 `task_run_log` 使用事件时间语义。
+- [x] 统一所有表的 `version`、`updated_at`、`deleted_at` 语义；`SyncPolicy.ts` 已按 sync entity type 固化 versioned / updatedAt / deletedAt / deletionSemantics，append-only 的 `task_run_log` 使用事件时间语义，并用 `task_id + run_at` 作为跨设备同步身份，避免本地自增 id 碰撞。
 - [x] 完善 sync ledger 覆盖范围，保证未来跨设备可增量同步；当前 `sync_changes` 写入过的 entity type 都必须存在 policy，未知 entity type 会在 `SyncLogService` 入库前失败。
 - [x] 明确 settings、provider、assistant、conversation、agent、file、app data 的 merge 策略；已区分 source-scoped LWW、secret-ref LWW、parent-child ordered、content-addressed、append-only 和 composite join。
 - [x] 敏感密钥默认不云同步，只同步 secret ref/缺失状态；provider、channel、settings、kv_record 等策略均为 `secret-ref-only`，云同步层不得携带明文 secret。

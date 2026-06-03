@@ -21,11 +21,13 @@ type StorageV2SyncTable = {
   entityType: string
   table: string
   idColumns: readonly string[]
+  syncIdColumns?: readonly string[]
   updatedAtColumn?: string
   deletedAtColumn?: string
   versionColumn?: string
   blobStoragePathColumn?: string
   blobChecksumColumn?: string
+  omitColumnsFromSync?: readonly string[]
 }
 
 type LocalRecord = {
@@ -313,8 +315,10 @@ const STORAGE_V2_SYNC_TABLES: readonly StorageV2SyncTable[] = [
     entityType: 'task_run_log',
     table: 'task_run_logs',
     idColumns: ['id'],
+    syncIdColumns: ['task_id', 'run_at'],
     updatedAtColumn: 'run_at',
-    versionColumn: 'version'
+    versionColumn: 'version',
+    omitColumnsFromSync: ['id']
   },
   {
     entityType: 'kv_record',
@@ -670,16 +674,16 @@ export class StorageV2WebDavRecordSyncService {
 
     const maybeDeleteFile = (client as WebDAVClient & { deleteFile?: (filePath: string) => Promise<void> }).deleteFile
     if (typeof maybeDeleteFile !== 'function') {
-      return
+      throw new Error(
+        '当前 WebDAV 客户端不支持删除远端文件，无法保证 Storage v2 同步目录文件数量收敛。请更换 WebDAV 服务或升级客户端后重试。'
+      )
     }
 
     await runWebDavOperation(
       `deleting Storage v2 sync probe ${probePath}`,
       () => maybeDeleteFile.call(client, probePath),
       { logger }
-    ).catch((error) => {
-      logger.warn(`Failed to delete Storage v2 sync probe ${probePath}`, error as Error)
-    })
+    )
   }
 
   private async readJson<T>(client: WebDAVClient, filePath: string): Promise<T | null> {
@@ -787,7 +791,11 @@ export class StorageV2WebDavRecordSyncService {
 
   private async deleteRemoteFileIfPossible(client: WebDAVClient, filePath: string) {
     const deleteFile = (client as WebDAVClient & { deleteFile?: (targetPath: string) => Promise<void> }).deleteFile
-    if (typeof deleteFile !== 'function') return
+    if (typeof deleteFile !== 'function') {
+      throw new Error(
+        '当前 WebDAV 客户端不支持删除远端文件，无法清理旧 Storage v2 同步文件。请更换 WebDAV 服务或升级客户端后重试。'
+      )
+    }
 
     await runWebDavOperation(
       `deleting stale Storage v2 artifact ${filePath}`,
@@ -962,9 +970,13 @@ export class StorageV2WebDavRecordSyncService {
     for (const table of this.tables) {
       const result = await client.execute(`SELECT * FROM ${table.table}`)
       for (const sourceRow of result.rows) {
-        const row = rowToPlain(sourceRow as Record<string, unknown>)
-        const idValues = table.idColumns.map((column) => String(row[column] ?? ''))
+        const source = rowToPlain(sourceRow as Record<string, unknown>)
+        const idValues = (table.syncIdColumns ?? table.idColumns).map((column) => String(source[column] ?? ''))
         if (idValues.some((value) => !value)) continue
+        const row = { ...source }
+        for (const column of table.omitColumnsFromSync ?? []) {
+          delete row[column]
+        }
         if (table.entityType === 'blob' && !referencedBlobIds.has(idValues[0])) continue
 
         const deletedAt = table.deletedAtColumn ? parseTime(row[table.deletedAtColumn]) || null : null
@@ -1423,11 +1435,57 @@ export class StorageV2WebDavRecordSyncService {
     return row
   }
 
+  private async applyTaskRunLogRecord(client: Client, table: StorageV2SyncTable, row: Record<string, InValue>) {
+    const taskId = typeof row.task_id === 'string' ? row.task_id : ''
+    const runAt = typeof row.run_at === 'string' ? row.run_at : ''
+    if (!taskId || !runAt) return false
+
+    const columns = await this.getTableColumns(client, table.table)
+    const insertColumns = columns.filter(
+      (column) => column !== 'id' && Object.hasOwn(row, column) && !(table.omitColumnsFromSync ?? []).includes(column)
+    )
+    if (insertColumns.length === 0) return false
+
+    const existing = await client.execute({
+      sql: 'SELECT id FROM task_run_logs WHERE task_id = ? AND run_at = ? LIMIT 1',
+      args: [taskId, runAt]
+    })
+    const existingId = existing.rows[0]?.id
+
+    if (existingId !== undefined && existingId !== null) {
+      const updateColumns = insertColumns.filter((column) => column !== 'task_id' && column !== 'run_at')
+      if (updateColumns.length === 0) return true
+
+      await client.execute({
+        sql: `
+          UPDATE task_run_logs
+          SET ${updateColumns.map((column) => `${column} = ?`).join(', ')}
+          WHERE id = ?
+        `,
+        args: [...updateColumns.map((column) => row[column] ?? null), existingId as InValue]
+      })
+      return true
+    }
+
+    await client.execute({
+      sql: `
+        INSERT INTO task_run_logs (${insertColumns.join(', ')})
+        VALUES (${insertColumns.map(() => '?').join(', ')})
+      `,
+      args: insertColumns.map((column) => row[column] ?? null)
+    })
+    return true
+  }
+
   private async applyRemoteRecord(client: Client, remote: LocalRecord) {
     const table = this.tableByEntity(remote.table.entityType)
     if (!table) return false
 
     const row = await this.rewriteRemoteRowForLocalAliases(client, table, remote.row)
+    if (table.entityType === 'task_run_log') {
+      return this.applyTaskRunLogRecord(client, table, row)
+    }
+
     const columns = await this.getTableColumns(client, table.table)
     const insertColumns = columns.filter((column) => Object.hasOwn(row, column))
     if (insertColumns.length === 0) return false

@@ -99,5 +99,6 @@ describe('Storage v2 sync policy', () => {
     expect(assertStorageV2SyncPolicy('agent').mergeStrategy).toBe('last-write-wins')
     expect(assertStorageV2SyncPolicy('file').mergeStrategy).toBe('content-addressed')
     expect(assertStorageV2SyncPolicy('task_run_log').mergeStrategy).toBe('append-only')
+    expect(assertStorageV2SyncPolicy('task_run_log').syncIdentityColumns).toEqual(['task_id', 'run_at'])
   })
 })
