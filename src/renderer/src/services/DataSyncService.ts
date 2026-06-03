@@ -100,6 +100,15 @@ async function hydratePreviouslyDownloadedRemoteData() {
   await hydrateRuntimeCacheAfterDataSync('before data sync')
 }
 
+async function isMainProcessRunning() {
+  const status = await window.api.dataSync.getStatus().catch((error) => {
+    logger.warn('Failed to inspect main-process data sync status', error as Error)
+    return null
+  })
+
+  return Boolean(status?.syncing)
+}
+
 function getWebDavConfig(): WebDavConfig {
   const settings = store.getState().settings
   return {
@@ -119,6 +128,11 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
   const config = configOverride ?? getWebDavConfig()
   if (!config.webdavHost) {
     throw new Error('WebDAV host is required')
+  }
+
+  if (await isMainProcessRunning()) {
+    logger.info('Data sync already running in main process')
+    return null
   }
 
   setDataSyncRunning(true)

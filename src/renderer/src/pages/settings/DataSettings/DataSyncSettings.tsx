@@ -3,13 +3,7 @@ import { HStack } from '@renderer/components/Layout'
 import Selector from '@renderer/components/Selector'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useSettings } from '@renderer/hooks/useSettings'
-import {
-  getDataSyncRuntimeState,
-  startDataSyncAutoSync,
-  stopDataSyncAutoSync,
-  subscribeDataSyncRuntimeState,
-  syncAppDataNow
-} from '@renderer/services/DataSyncService'
+import { startDataSyncAutoSync, stopDataSyncAutoSync, syncAppDataNow } from '@renderer/services/DataSyncService'
 import { reportErrorToSystemAgent } from '@renderer/services/SystemAgentService'
 import { useAppDispatch } from '@renderer/store'
 import {
@@ -56,7 +50,7 @@ type SyncStatus = {
   deviceId: string
   lastSummary: SyncSummary
   conflicts: unknown[]
-  syncing?: boolean
+  syncing: boolean
   syncStartedAt?: number | null
 }
 
@@ -224,7 +218,7 @@ const DataSyncSettings: FC = () => {
   const [webdavPass, setWebdavPass] = useState(dataSyncWebdavPass)
   const [webdavPath, setWebdavPath] = useState(dataSyncWebdavPath)
   const [syncInterval, setSyncInterval] = useState(dataSyncSyncInterval)
-  const [syncing, setSyncing] = useState(() => getDataSyncRuntimeState().syncing)
+  const [syncing, setSyncing] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [diagnosing, setDiagnosing] = useState(false)
   const [diagnosis, setDiagnosis] = useState<DiagnosisState | null>(null)
@@ -261,7 +255,7 @@ const DataSyncSettings: FC = () => {
     try {
       const nextStatus = await window.api.dataSync.getStatus()
       setStatus(nextStatus)
-      setSyncing(Boolean(nextStatus.syncing) || getDataSyncRuntimeState().syncing)
+      setSyncing(Boolean(nextStatus.syncing))
       return nextStatus
     } finally {
       if (showLoading) {
@@ -270,15 +264,13 @@ const DataSyncSettings: FC = () => {
     }
   }
 
-  const isSyncStillRunning = (nextStatus?: SyncStatus | null) => {
-    return Boolean(nextStatus?.syncing) || getDataSyncRuntimeState().syncing
+  const isSyncing = (nextStatus?: SyncStatus | null) => {
+    return Boolean(nextStatus?.syncing)
   }
 
   useEffect(() => {
     void refreshStatus().catch(() => undefined)
   }, [])
-
-  useEffect(() => subscribeDataSyncRuntimeState((state) => setSyncing(state.syncing)), [])
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -294,7 +286,7 @@ const DataSyncSettings: FC = () => {
       return
     }
 
-    if (syncing || getDataSyncRuntimeState().syncing) {
+    if (syncing) {
       setSyncing(true)
       window.toast.info(t('settings.data.data_sync.toast.sync_running'))
       return
@@ -302,13 +294,13 @@ const DataSyncSettings: FC = () => {
 
     const config = saveWebDavConfig()
 
-    let keepSyncing = false
+    let latestStatus: SyncStatus | null = null
     setSyncing(true)
     try {
       const summary = await syncAppDataNow(config)
       if (!summary) {
         const nextStatus = await refreshStatus().catch(() => null)
-        keepSyncing = isSyncStillRunning(nextStatus)
+        latestStatus = nextStatus
         window.toast.info(t('settings.data.data_sync.toast.sync_running'))
         return
       }
@@ -320,13 +312,12 @@ const DataSyncSettings: FC = () => {
           lastSummary: summary
         }))
       }
-      await refreshStatus()
+      latestStatus = await refreshStatus()
       window.toast.success(t('settings.data.data_sync.toast.sync_success'))
     } catch (error) {
-      const nextStatus = await refreshStatus().catch(() => null)
+      latestStatus = await refreshStatus().catch(() => null)
       if (isDataSyncAlreadyRunningError(error)) {
-        keepSyncing = isSyncStillRunning(nextStatus)
-        setSyncing(keepSyncing)
+        setSyncing(isSyncing(latestStatus))
         window.toast.info(t('settings.data.data_sync.toast.sync_running'))
         return
       }
@@ -345,7 +336,11 @@ const DataSyncSettings: FC = () => {
         { showToast: true }
       )
     } finally {
-      setSyncing(keepSyncing || getDataSyncRuntimeState().syncing)
+      if (!latestStatus) {
+        latestStatus = await refreshStatus().catch(() => null)
+      }
+
+      setSyncing(isSyncing(latestStatus))
     }
   }
 

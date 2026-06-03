@@ -142,6 +142,20 @@ describe('DataSyncService', () => {
 
   it('hydrates previously downloaded remote data before preparing local mirrors', async () => {
     mocks.getStatus.mockResolvedValueOnce({
+      syncing: false,
+      lastSummary: {
+        status: 'success',
+        downloaded: 0,
+        storageDownloaded: 0,
+        blobDownloaded: 0,
+        deleted: 0,
+        storageDeleted: 0,
+        lastSyncAt: 1780058000000
+      },
+      conflicts: [],
+      syncStartedAt: null
+    })
+    mocks.getStatus.mockResolvedValueOnce({
       lastSummary: {
         status: 'success',
         downloaded: 0,

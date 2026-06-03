@@ -13,11 +13,6 @@ const mocks = vi.hoisted(() => ({
   stopDataSyncAutoSync: vi.fn(),
   syncAppDataNow: vi.fn(),
   reportErrorToSystemAgent: vi.fn(),
-  runtimeState: {
-    syncing: false,
-    syncStartedAt: null as number | null
-  },
-  runtimeListeners: new Set<(state: { syncing: boolean; syncStartedAt: number | null }) => void>(),
   toast: {
     error: vi.fn(),
     info: vi.fn(),
@@ -58,17 +53,8 @@ vi.mock('@renderer/services/SystemAgentService', () => ({
 }))
 
 vi.mock('@renderer/services/DataSyncService', () => ({
-  getDataSyncRuntimeState: () => mocks.runtimeState,
   startDataSyncAutoSync: mocks.startDataSyncAutoSync,
   stopDataSyncAutoSync: mocks.stopDataSyncAutoSync,
-  subscribeDataSyncRuntimeState: (listener: (state: { syncing: boolean; syncStartedAt: number | null }) => void) => {
-    mocks.runtimeListeners.add(listener)
-    listener(mocks.runtimeState)
-
-    return () => {
-      mocks.runtimeListeners.delete(listener)
-    }
-  },
   syncAppDataNow: mocks.syncAppDataNow
 }))
 
@@ -136,9 +122,6 @@ function runningStatus() {
 describe('DataSyncSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.runtimeListeners.clear()
-    mocks.runtimeState.syncing = false
-    mocks.runtimeState.syncStartedAt = null
     mocks.getStatus.mockResolvedValue(idleStatus())
     mocks.checkWriteAccess.mockResolvedValue({ ok: true, basePath: '/cherry-studio-pi/sync/v1' })
     mocks.listRemoteDirectories.mockResolvedValue({ path: '/', parentPath: null, directories: [] })
