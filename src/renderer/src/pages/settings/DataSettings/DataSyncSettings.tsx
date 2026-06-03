@@ -22,7 +22,7 @@ import {
 } from '@renderer/store/settings'
 import { Alert, Breadcrumb, Button, Empty, Input, List, Modal, Space, Spin, Typography } from 'antd'
 import dayjs from 'dayjs'
-import type { FC } from 'react'
+import type { CSSProperties, FC } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -171,6 +171,44 @@ function makeBreadcrumbItems(currentPath: string, onOpen: (path: string) => void
   })
 
   return items
+}
+
+const lastResultBodyStyle: CSSProperties = {
+  flex: '1 1 0',
+  minWidth: 0,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'stretch',
+  gap: 8
+}
+
+const lastResultMetaStyle: CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: '6px 12px',
+  minWidth: 0
+}
+
+const lastResultMetricGridStyle: CSSProperties = {
+  width: '100%',
+  minWidth: 0,
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))',
+  gap: '6px 12px'
+}
+
+const lastResultTextStyle: CSSProperties = {
+  minWidth: 0,
+  maxWidth: '100%',
+  whiteSpace: 'normal',
+  overflowWrap: 'anywhere',
+  wordBreak: 'break-word'
+}
+
+const lastResultErrorStyle: CSSProperties = {
+  ...lastResultTextStyle,
+  display: 'block'
 }
 
 const DataSyncSettings: FC = () => {
@@ -659,67 +697,73 @@ const DataSyncSettings: FC = () => {
       {summary && summary.lastSyncAt > 0 && (
         <>
           <SettingDivider />
-          <SettingRow>
+          <SettingRow style={{ alignItems: 'flex-start', gap: 16 }}>
             <SettingRowTitle>{t('settings.data.data_sync.last_result')}</SettingRowTitle>
-            <HStack gap="12px" style={{ flexWrap: 'wrap' }}>
-              <Typography.Text type="secondary">
-                {dayjs(summary.lastSyncAt).format('YYYY-MM-DD HH:mm:ss')}
-              </Typography.Text>
-              {summary.status && (
-                <Typography.Text type={summary.status === 'failed' ? 'danger' : 'success'}>
-                  {t(
-                    summary.status === 'failed'
-                      ? 'settings.data.data_sync.summary.status_failed'
-                      : 'settings.data.data_sync.summary.status_success'
-                  )}
+            <div data-testid="data-sync-last-result" style={lastResultBodyStyle}>
+              <div style={lastResultMetaStyle}>
+                <Typography.Text type="secondary" style={lastResultTextStyle}>
+                  {dayjs(summary.lastSyncAt).format('YYYY-MM-DD HH:mm:ss')}
                 </Typography.Text>
-              )}
+                {summary.status && (
+                  <Typography.Text
+                    type={summary.status === 'failed' ? 'danger' : 'success'}
+                    style={lastResultTextStyle}>
+                    {t(
+                      summary.status === 'failed'
+                        ? 'settings.data.data_sync.summary.status_failed'
+                        : 'settings.data.data_sync.summary.status_success'
+                    )}
+                  </Typography.Text>
+                )}
+                {summary.remotePath && (
+                  <Typography.Text type="secondary" copyable style={lastResultTextStyle}>
+                    {t('settings.data.data_sync.summary.remote_path', { path: summary.remotePath })}
+                  </Typography.Text>
+                )}
+              </div>
               {summary.error && (
-                <Typography.Text type="danger">
+                <Typography.Text type="danger" style={lastResultErrorStyle}>
                   {t('settings.data.data_sync.summary.error', { message: summary.error })}
                 </Typography.Text>
               )}
-              {summary.remotePath && (
-                <Typography.Text type="secondary" copyable>
-                  {t('settings.data.data_sync.summary.remote_path', { path: summary.remotePath })}
+              <div data-testid="data-sync-last-result-metrics" style={lastResultMetricGridStyle}>
+                <Typography.Text type="secondary" style={lastResultTextStyle}>
+                  {t('settings.data.data_sync.summary.uploaded', { count: summary.uploaded })}
                 </Typography.Text>
-              )}
-              <Typography.Text type="secondary">
-                {t('settings.data.data_sync.summary.uploaded', { count: summary.uploaded })}
-              </Typography.Text>
-              <Typography.Text type="secondary">
-                {t('settings.data.data_sync.summary.downloaded', { count: summary.downloaded })}
-              </Typography.Text>
-              <Typography.Text type="secondary">
-                {t('settings.data.data_sync.summary.deleted', { count: summary.deleted })}
-              </Typography.Text>
-              <Typography.Text type={summary.conflicts ? 'warning' : 'secondary'}>
-                {t('settings.data.data_sync.summary.conflicts', { count: summary.conflicts })}
-              </Typography.Text>
-              <Typography.Text type="secondary">
-                {t('settings.data.data_sync.storage.records', {
-                  uploaded: summary.storageUploaded ?? 0,
-                  downloaded: summary.storageDownloaded ?? 0
-                })}
-              </Typography.Text>
-              <Typography.Text type="secondary">
-                {t('settings.data.data_sync.storage.blobs', {
-                  uploaded: summary.blobUploaded ?? 0,
-                  downloaded: summary.blobDownloaded ?? 0
-                })}
-              </Typography.Text>
-              <Typography.Text type={summary.storageConflicts ? 'warning' : 'secondary'}>
-                {t('settings.data.data_sync.storage.conflicts', { count: summary.storageConflicts ?? 0 })}
-              </Typography.Text>
-              {summary.snapshotUploaded && (
-                <Typography.Text type="secondary">
-                  {t('settings.data.data_sync.snapshot.uploaded', {
-                    file: summary.snapshotFileName || '-',
-                    size: formatBytes(summary.snapshotBytes ?? 0)
+                <Typography.Text type="secondary" style={lastResultTextStyle}>
+                  {t('settings.data.data_sync.summary.downloaded', { count: summary.downloaded })}
+                </Typography.Text>
+                <Typography.Text type="secondary" style={lastResultTextStyle}>
+                  {t('settings.data.data_sync.summary.deleted', { count: summary.deleted })}
+                </Typography.Text>
+                <Typography.Text type={summary.conflicts ? 'warning' : 'secondary'} style={lastResultTextStyle}>
+                  {t('settings.data.data_sync.summary.conflicts', { count: summary.conflicts })}
+                </Typography.Text>
+                <Typography.Text type="secondary" style={lastResultTextStyle}>
+                  {t('settings.data.data_sync.storage.records', {
+                    uploaded: summary.storageUploaded ?? 0,
+                    downloaded: summary.storageDownloaded ?? 0
                   })}
                 </Typography.Text>
-              )}
-            </HStack>
+                <Typography.Text type="secondary" style={lastResultTextStyle}>
+                  {t('settings.data.data_sync.storage.blobs', {
+                    uploaded: summary.blobUploaded ?? 0,
+                    downloaded: summary.blobDownloaded ?? 0
+                  })}
+                </Typography.Text>
+                <Typography.Text type={summary.storageConflicts ? 'warning' : 'secondary'} style={lastResultTextStyle}>
+                  {t('settings.data.data_sync.storage.conflicts', { count: summary.storageConflicts ?? 0 })}
+                </Typography.Text>
+                {summary.snapshotUploaded && (
+                  <Typography.Text type="secondary" style={lastResultTextStyle}>
+                    {t('settings.data.data_sync.snapshot.uploaded', {
+                      file: summary.snapshotFileName || '-',
+                      size: formatBytes(summary.snapshotBytes ?? 0)
+                    })}
+                  </Typography.Text>
+                )}
+              </div>
+            </div>
           </SettingRow>
         </>
       )}

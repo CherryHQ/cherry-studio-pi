@@ -277,6 +277,35 @@ describe('DataSyncSettings', () => {
     expect(mocks.toast.error).not.toHaveBeenCalled()
   })
 
+  it('keeps long sync result details inside a wrapping summary layout', async () => {
+    const longRemotePath = `/dav/${'very-long-directory-name/'.repeat(16)}sync/v1`
+    const longError = `WebDAV returned a very long provider message: ${'permission-denied-'.repeat(20)}`
+    mocks.getStatus.mockResolvedValueOnce({
+      ...idleStatus(),
+      lastSummary: {
+        ...successSummary(),
+        status: 'failed',
+        error: longError,
+        remotePath: longRemotePath,
+        snapshotUploaded: true,
+        snapshotFileName: `${'cherry-studio-pi-'.repeat(8)}backup.zip`,
+        snapshotBytes: 1024 * 1024
+      }
+    })
+
+    render(<DataSyncSettings />)
+
+    const result = await screen.findByTestId('data-sync-last-result')
+    const metrics = await screen.findByTestId('data-sync-last-result-metrics')
+    const errorText = screen.getByText((content) => content.includes(longError))
+
+    expect(result).toHaveStyle('min-width: 0')
+    expect(metrics).toHaveStyle('display: grid')
+    expect(metrics).toHaveStyle('grid-template-columns: repeat(auto-fit, minmax(132px, 1fr))')
+    expect(errorText).toHaveStyle('overflow-wrap: anywhere')
+    expect(errorText).toHaveStyle('word-break: break-word')
+  })
+
   it('opens the remote directory browser from root so the default sync folder does not have to exist', async () => {
     mocks.listRemoteDirectories.mockResolvedValueOnce({
       path: '/',
