@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 
+import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
 
 const logger = loggerService.withContext('StorageV2LocalStorageSnapshot')
@@ -165,6 +166,7 @@ export async function flushStorageV2LocalStorageMirror() {
       lastLocalStorageMirrorSnapshotJson = snapshotJson
       lastLocalStorageMirrorError = null
       localStorageMirrorPending = false
+      notifyDataSyncLocalChange('local-storage')
       logger.debug('Mirrored durable localStorage values to Storage v2')
     })
     .catch((error) => {

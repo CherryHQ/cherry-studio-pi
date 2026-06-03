@@ -42,7 +42,14 @@ vi.mock('../SystemAgentService', () => ({
   reportErrorToSystemAgent: mocks.reportErrorToSystemAgent
 }))
 
-import { getDataSyncRuntimeState, subscribeDataSyncRuntimeState, syncAppDataNow } from '../DataSyncService'
+import { notifyDataSyncLocalChange } from '../DataSyncLocalChangeSignal'
+import {
+  getDataSyncRuntimeState,
+  startDataSyncAutoSync,
+  stopDataSyncAutoSync,
+  subscribeDataSyncRuntimeState,
+  syncAppDataNow
+} from '../DataSyncService'
 
 const successSummary = {
   status: 'success' as const,
@@ -115,6 +122,8 @@ describe('DataSyncService', () => {
   })
 
   afterEach(() => {
+    stopDataSyncAutoSync()
+    vi.useRealTimers()
     Object.defineProperty(window, 'api', {
       configurable: true,
       value: originalApi
@@ -313,5 +322,71 @@ describe('DataSyncService', () => {
     expect(states).toContain(true)
     expect(states.at(-1)).toBe(false)
     unsubscribe()
+  })
+
+  it('runs a debounced auto sync after local Storage v2 data changes', async () => {
+    vi.useFakeTimers()
+    mocks.getState.mockReturnValue({
+      settings: {
+        dataSyncWebdavHost: 'https://dav.example.test',
+        dataSyncWebdavUser: 'user',
+        dataSyncWebdavPass: 'pass',
+        dataSyncWebdavPath: '/cherry-studio-pi',
+        dataSyncAutoSync: true,
+        dataSyncSyncInterval: 15
+      }
+    })
+
+    startDataSyncAutoSync(false)
+    notifyDataSyncLocalChange('redux')
+
+    await vi.advanceTimersByTimeAsync(19_999)
+    expect(mocks.syncNow).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(1)
+
+    await vi.waitFor(() => {
+      expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+    })
+    expect(mocks.prepareStorageV2ForDataSync).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not schedule a redundant auto sync for mirror signals emitted while preparing sync data', async () => {
+    vi.useFakeTimers()
+    mocks.getState.mockReturnValue({
+      settings: {
+        dataSyncWebdavHost: 'https://dav.example.test',
+        dataSyncWebdavUser: 'user',
+        dataSyncWebdavPass: 'pass',
+        dataSyncWebdavPath: '/cherry-studio-pi',
+        dataSyncAutoSync: true,
+        dataSyncSyncInterval: 15
+      }
+    })
+    mocks.prepareStorageV2ForDataSync.mockImplementation(async () => {
+      notifyDataSyncLocalChange('redux')
+    })
+
+    startDataSyncAutoSync(false)
+    notifyDataSyncLocalChange('redux')
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    await vi.waitFor(() => {
+      expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+    })
+
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not sync local Storage v2 changes when auto sync is disabled', async () => {
+    vi.useFakeTimers()
+
+    startDataSyncAutoSync(false)
+    notifyDataSyncLocalChange('redux')
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(mocks.syncNow).not.toHaveBeenCalled()
+    expect(mocks.prepareStorageV2ForDataSync).not.toHaveBeenCalled()
   })
 })

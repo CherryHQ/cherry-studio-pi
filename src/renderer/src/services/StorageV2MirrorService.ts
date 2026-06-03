@@ -1,6 +1,7 @@
 import { loggerService } from '@logger'
 import type { Middleware } from '@reduxjs/toolkit'
 
+import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
 import { getStorageV2LocalStorageSnapshot } from './StorageV2LocalStorageSnapshot'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
 
@@ -259,6 +260,7 @@ class StorageV2MirrorService {
       this.lastSnapshotJson = snapshotJson
       this.lastSnapshotPruneMissing = pruneMissing
       this.lastError = null
+      notifyDataSyncLocalChange('redux')
       logger.debug('Mirrored Redux settings to Storage v2')
     } catch (error) {
       this.lastError = error

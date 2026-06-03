@@ -1,6 +1,7 @@
 import { loggerService } from '@logger'
 import db from '@renderer/databases'
 
+import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
 
 const logger = loggerService.withContext('StorageV2DexieSettingsMirrorService')
@@ -214,6 +215,9 @@ class StorageV2DexieSettingsMirrorService {
         `Mirrored ${settings.length} Dexie setting(s) and ${deletedIds.length} delete marker(s) to Storage v2`
       )
       this.lastError = null
+      if (settings.length > 0 || missingSettingIds.length > 0 || deletedIds.length > 0) {
+        notifyDataSyncLocalChange('dexie-settings')
+      }
     } catch (error) {
       for (const settingId of settingIds) {
         this.pendingSettingIds.add(settingId)

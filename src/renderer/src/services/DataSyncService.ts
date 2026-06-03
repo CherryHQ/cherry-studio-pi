@@ -2,11 +2,13 @@ import { loggerService } from '@logger'
 import store, { persistor } from '@renderer/store'
 import type { WebDavConfig } from '@renderer/types'
 
+import { subscribeDataSyncLocalChanges, suppressDataSyncLocalChangeNotifications } from './DataSyncLocalChangeSignal'
 import { hydrateRuntimeCacheFromStorageV2 } from './StorageV2HydrationService'
 import { prepareStorageV2ForDataSync } from './StorageV2Service'
 import { reportErrorToSystemAgent } from './SystemAgentService'
 
 const logger = loggerService.withContext('DataSyncService')
+const LOCAL_CHANGE_AUTO_SYNC_DEBOUNCE_MS = 20_000
 
 export type DataSyncSummary = {
   status?: 'success' | 'failed'
@@ -40,8 +42,11 @@ export type DataSyncSummary = {
 }
 
 let syncTimeout: NodeJS.Timeout | null = null
+let localChangeSyncTimeout: NodeJS.Timeout | null = null
+let localChangeUnsubscribe: (() => void) | null = null
 let autoSyncStarted = false
 let syncing = false
+let localChangeDuringSync = false
 let syncStartedAt: number | null = null
 const syncStateListeners = new Set<(state: DataSyncRuntimeState) => void>()
 
@@ -132,6 +137,52 @@ function getWebDavConfig(): WebDavConfig {
   }
 }
 
+function getAutoSyncIntervalMs() {
+  const settings = store.getState().settings
+  if (!settings.dataSyncAutoSync || !settings.dataSyncWebdavHost || settings.dataSyncSyncInterval <= 0) {
+    return null
+  }
+
+  return settings.dataSyncSyncInterval * 60 * 1000
+}
+
+function clearLocalChangeSyncTimeout() {
+  if (!localChangeSyncTimeout) return
+
+  clearTimeout(localChangeSyncTimeout)
+  localChangeSyncTimeout = null
+}
+
+function scheduleLocalChangeSync(delayMs = LOCAL_CHANGE_AUTO_SYNC_DEBOUNCE_MS) {
+  if (!autoSyncStarted || getAutoSyncIntervalMs() === null) return
+
+  clearLocalChangeSyncTimeout()
+  localChangeSyncTimeout = setTimeout(() => {
+    localChangeSyncTimeout = null
+    void performAutoSync()
+  }, delayMs)
+
+  logger.info('Data sync scheduled after local Storage v2 change', { delayMs })
+}
+
+function ensureLocalChangeAutoSyncSubscription() {
+  if (localChangeUnsubscribe) return
+
+  localChangeUnsubscribe = subscribeDataSyncLocalChanges((event) => {
+    if (!autoSyncStarted || getAutoSyncIntervalMs() === null) return
+
+    if (syncing) {
+      localChangeDuringSync = true
+      logger.debug('Queued data sync after current sync because local Storage v2 changed', {
+        reason: event.reason
+      })
+      return
+    }
+
+    scheduleLocalChangeSync()
+  })
+}
+
 export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<DataSyncSummary | null> {
   if (syncing) {
     logger.info('Data sync already running')
@@ -149,38 +200,51 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
   }
 
   setDataSyncRunning(true)
+  clearLocalChangeSyncTimeout()
   try {
     await hydratePreviouslyDownloadedRemoteData()
-    await prepareStorageV2ForDataSync()
+    await suppressDataSyncLocalChangeNotifications(() => prepareStorageV2ForDataSync())
     const summary = await window.api.dataSync.syncNow(config)
     await hydrateRuntimeCacheAfterDataSync('after data sync', { strict: hasDownloadedRemoteData(summary) })
     return summary
   } finally {
     setDataSyncRunning(false)
+    if (localChangeDuringSync) {
+      localChangeDuringSync = false
+      scheduleLocalChangeSync()
+    }
   }
 }
 
 export function stopDataSyncAutoSync() {
   autoSyncStarted = false
+  localChangeDuringSync = false
   if (syncTimeout) {
     clearTimeout(syncTimeout)
     syncTimeout = null
   }
+  clearLocalChangeSyncTimeout()
+  if (localChangeUnsubscribe) {
+    localChangeUnsubscribe()
+    localChangeUnsubscribe = null
+  }
 }
 
 export function startDataSyncAutoSync(immediate = false) {
-  const settings = store.getState().settings
-  if (!settings.dataSyncAutoSync || !settings.dataSyncWebdavHost || settings.dataSyncSyncInterval <= 0) {
+  const intervalMs = getAutoSyncIntervalMs()
+  if (intervalMs === null) {
     stopDataSyncAutoSync()
     return
   }
+
+  ensureLocalChangeAutoSyncSubscription()
 
   if (autoSyncStarted && syncTimeout) {
     return
   }
 
   autoSyncStarted = true
-  scheduleNextSync(immediate ? 1000 : settings.dataSyncSyncInterval * 60 * 1000)
+  scheduleNextSync(immediate ? 1000 : intervalMs)
 }
 
 function scheduleNextSync(delayMs: number) {
@@ -196,8 +260,8 @@ function scheduleNextSync(delayMs: number) {
 }
 
 async function performAutoSync() {
-  const settings = store.getState().settings
-  if (!settings.dataSyncAutoSync || !settings.dataSyncWebdavHost || settings.dataSyncSyncInterval <= 0) {
+  const intervalMs = getAutoSyncIntervalMs()
+  if (intervalMs === null) {
     stopDataSyncAutoSync()
     return
   }
@@ -212,7 +276,12 @@ async function performAutoSync() {
     })
   } finally {
     if (autoSyncStarted) {
-      scheduleNextSync(store.getState().settings.dataSyncSyncInterval * 60 * 1000)
+      const nextIntervalMs = getAutoSyncIntervalMs()
+      if (nextIntervalMs === null) {
+        stopDataSyncAutoSync()
+      } else {
+        scheduleNextSync(nextIntervalMs)
+      }
     }
   }
 }

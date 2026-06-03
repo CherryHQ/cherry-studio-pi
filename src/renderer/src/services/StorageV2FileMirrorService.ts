@@ -1,6 +1,7 @@
 import { loggerService } from '@logger'
 import db from '@renderer/databases'
 
+import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
 
 const logger = loggerService.withContext('StorageV2FileMirrorService')
@@ -128,6 +129,9 @@ class StorageV2FileMirrorService {
         `Mirrored ${files.length} file(s) and ${missingFileIds.length} missing file tombstone(s) to Storage v2`
       )
       this.lastError = null
+      if (files.length > 0 || missingFileIds.length > 0) {
+        notifyDataSyncLocalChange('file')
+      }
     } catch (error) {
       for (const fileId of fileIds) {
         this.pendingFileIds.add(fileId)
