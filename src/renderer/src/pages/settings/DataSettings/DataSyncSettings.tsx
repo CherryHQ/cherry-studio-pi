@@ -312,6 +312,7 @@ const DataSyncSettings: FC = () => {
     const config = saveWebDavConfig()
 
     let latestStatus: SyncStatus | null = null
+    let completedSummary: SyncSummary | null = null
     setSyncing(true)
     try {
       const summary = await syncAppDataNow(config)
@@ -323,6 +324,7 @@ const DataSyncSettings: FC = () => {
       }
 
       if (summary) {
+        completedSummary = summary
         setStatus((prev) => ({
           deviceId: prev?.deviceId || '',
           conflicts: prev?.conflicts || [],
@@ -331,7 +333,7 @@ const DataSyncSettings: FC = () => {
           syncStartedAt: prev?.syncStartedAt ?? null
         }))
       }
-      latestStatus = await refreshStatus()
+      latestStatus = await refreshStatus().catch(() => null)
       window.toast.success(t('settings.data.data_sync.toast.sync_success'))
     } catch (error) {
       latestStatus = await refreshStatus().catch(() => null)
@@ -355,7 +357,7 @@ const DataSyncSettings: FC = () => {
         { showToast: true }
       )
     } finally {
-      if (!latestStatus) {
+      if (!latestStatus && !completedSummary) {
         latestStatus = await refreshStatus().catch(() => null)
       }
 

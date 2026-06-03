@@ -270,6 +270,21 @@ describe('DataSyncSettings', () => {
     expect(mocks.toast.error).not.toHaveBeenCalled()
   })
 
+  it('does not turn a completed sync into a failure when status refresh fails afterward', async () => {
+    mocks.getStatus.mockResolvedValueOnce(idleStatus()).mockRejectedValueOnce(new Error('status refresh failed'))
+    mocks.syncAppDataNow.mockResolvedValueOnce(successSummary())
+
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(syncButton())
+
+    await waitFor(() => expect(mocks.toast.success).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_success'))
+    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+    expect(mocks.toast.error).not.toHaveBeenCalled()
+    expect(mocks.reportErrorToSystemAgent).not.toHaveBeenCalled()
+  })
+
   it('keeps long sync result details inside a wrapping summary layout', async () => {
     const longRemotePath = `/dav/${'very-long-directory-name/'.repeat(16)}sync/v1`
     const longError = `WebDAV returned a very long provider message: ${'permission-denied-'.repeat(20)}`
