@@ -1115,6 +1115,17 @@ describe('AppDataSyncService local WebDAV integration', () => {
     expect(firstSummary.blobUploaded).toBe(1)
     expect(countRemoteStorageV2Records(remoteManifest)).toEqual(COMPREHENSIVE_REMOTE_ENTITY_COUNTS)
     expect(Object.keys(remoteManifest.storageV2?.records ?? {})).toHaveLength(expectedRecordCount)
+    expect(remoteManifest.storageV2?.bundle).toMatchObject({
+      path: 'storage-v2/bundle/current.json',
+      recordCount: expectedRecordCount,
+      blobCount: 1
+    })
+    await expect(
+      pathExists(path.join(remoteSyncRoot(server!, webdavPath), 'storage-v2', 'bundle', 'current.json'))
+    ).resolves.toBe(true)
+    await expect(pathExists(path.join(remoteSyncRoot(server!, webdavPath), 'storage-v2', 'records'))).resolves.toBe(
+      false
+    )
     expect(remoteText).toContain('同步测试模型服务')
     expect(remoteText).toContain('同步测试助手')
     expect(remoteText).toContain('同步测试 Agent')
@@ -1300,7 +1311,7 @@ describe('AppDataSyncService local WebDAV integration', () => {
     })
   })
 
-  it('creates conflicts instead of silently overwriting when both devices edit after a shared baseline', async () => {
+  it('auto-resolves divergent edits by timestamp without accumulating conflict records', async () => {
     const homePath = path.join(tempRoot, 'home')
     const instanceA = makeInstance(tempRoot, 'device-a')
     const instanceB = makeInstance(tempRoot, 'device-b')
@@ -1338,8 +1349,8 @@ describe('AppDataSyncService local WebDAV integration', () => {
     const conflictSummary = await new AppDataSyncService(backupManager as never).syncNow(config)
     const remoteText = await readAllRemoteText(server!.root)
 
-    expect(conflictSummary.conflicts).toBeGreaterThan(0)
-    expect(conflictSummary.storageConflicts).toBeGreaterThan(0)
+    expect(conflictSummary.conflicts).toBe(0)
+    expect(conflictSummary.storageConflicts).toBe(0)
     expect(remoteText).toContain('edited-by-b')
   })
 

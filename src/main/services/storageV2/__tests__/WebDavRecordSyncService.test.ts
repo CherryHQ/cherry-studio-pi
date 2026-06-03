@@ -570,11 +570,19 @@ describe('StorageV2WebDavRecordSyncService', () => {
       expect.objectContaining({
         entityType: 'settings',
         table: 'settings',
-        idValues: ['theme']
+        idValues: ['theme'],
+        path: 'storage-v2/bundle/current.json'
+      })
+    )
+    expect(result.manifest.bundle).toEqual(
+      expect.objectContaining({
+        path: 'storage-v2/bundle/current.json',
+        recordCount: 1,
+        blobCount: 0
       })
     )
     expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
-      expect.stringContaining('/storage-v2/records/settings/'),
+      expect.stringContaining('/storage-v2/bundle/current.json'),
       expect.stringContaining('"key": "theme"'),
       { overwrite: true }
     )

@@ -359,7 +359,7 @@ describe('AppDataSyncService', () => {
       ...remoteRecord,
       value: { mode: 'light' },
       valueHash: 'local-hash',
-      updatedAt: 1760000000001,
+      updatedAt: remoteRecord.updatedAt,
       deviceId: 'local-device'
     }
     const events: string[] = []

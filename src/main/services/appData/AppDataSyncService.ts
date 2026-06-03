@@ -143,6 +143,16 @@ const AGENT_RUNTIME_ENTITY_TYPES = new Set([
 
 const FILE_RUNTIME_ENTITY_TYPES = new Set(['blob', 'file'])
 const APP_DATA_RUNTIME_ENTITY_TYPES = new Set(['kv_record'])
+const RENDERER_HYDRATION_ENTITY_TYPES = new Set([
+  'profile',
+  'provider',
+  'model',
+  'assistant',
+  'assistant_version',
+  'knowledge_base',
+  'knowledge_item',
+  'settings'
+])
 
 function recordId(scope: string, key: string) {
   return `${scope}:${key}`
@@ -607,6 +617,10 @@ export class AppDataSyncService {
       }
     }
 
+    if ([...entityTypes].some((entityType) => RENDERER_HYDRATION_ENTITY_TYPES.has(entityType))) {
+      projected = true
+    }
+
     if (!projected) return db
 
     await this.setSyncState(db, STORAGE_V2_RUNTIME_PROJECTION_HASH_KEY, fingerprint)
@@ -868,15 +882,24 @@ export class AppDataSyncService {
         continue
       }
 
-      await this.createConflict(db, {
-        scope: localRecord.scope,
-        key: localRecord.key,
-        localRecord,
-        remoteRecord,
-        baseHash: lastHash
-      })
+      const unresolvedConflict =
+        localRecord.updatedAt === remoteRecord.updatedAt && localRecord.version === remoteRecord.version
+      if (unresolvedConflict) {
+        await this.createConflict(db, {
+          scope: localRecord.scope,
+          key: localRecord.key,
+          localRecord,
+          remoteRecord,
+          baseHash: lastHash
+        })
+        summary.conflicts += 1
+      }
 
-      const winner = localRecord.updatedAt >= remoteRecord.updatedAt ? localRecord : remoteRecord
+      const winner =
+        localRecord.updatedAt > remoteRecord.updatedAt ||
+        (localRecord.updatedAt === remoteRecord.updatedAt && localRecord.version >= remoteRecord.version)
+          ? localRecord
+          : remoteRecord
       if (winner === localRecord) {
         await this.pushRecord(client, basePath, localRecord, manifest)
         summary.uploaded += localRecord.deletedAt ? 0 : 1
@@ -885,7 +908,6 @@ export class AppDataSyncService {
         summary.downloaded += remoteRecord.deletedAt ? 0 : 1
       }
       await this.setSyncState(db, `record:${id}:hash`, winner.valueHash)
-      summary.conflicts += 1
     }
 
     const storageSync = await storageV2WebDavRecordSyncService.sync(client, basePath, manifest.storageV2)
