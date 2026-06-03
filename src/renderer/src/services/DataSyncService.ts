@@ -3,6 +3,7 @@ import store, { persistor } from '@renderer/store'
 import type { WebDavConfig } from '@renderer/types'
 
 import { subscribeDataSyncLocalChanges, suppressDataSyncLocalChangeNotifications } from './DataSyncLocalChangeSignal'
+import { hydrateStorageV2ConversationsIfDexieEmpty } from './StorageV2ConversationHydrationService'
 import { hydrateRuntimeCacheFromStorageV2 } from './StorageV2HydrationService'
 import { prepareStorageV2ForDataSync } from './StorageV2Service'
 import { reportErrorToSystemAgent } from './SystemAgentService'
@@ -93,16 +94,30 @@ function hasDownloadedRemoteData(summary?: Partial<DataSyncSummary> | null) {
   )
 }
 
+function hasRemoteRuntimeData(summary?: Partial<DataSyncSummary> | null) {
+  if (!summary) return false
+
+  return (
+    hasDownloadedRemoteData(summary) ||
+    (summary.storageRecordCount ?? 0) > 0 ||
+    (summary.storageBlobCount ?? 0) > 0 ||
+    Boolean(summary.storageBundleHash)
+  )
+}
+
 async function hydrateRuntimeCacheAfterDataSync(context: string, options: { strict?: boolean } = {}) {
   try {
     await hydrateRuntimeCacheFromStorageV2({
       dispatch: store.dispatch,
       flush: () => persistor.flush()
     })
+    await hydrateStorageV2ConversationsIfDexieEmpty(`data-sync:${context}`, { strict: options.strict })
   } catch (error) {
     logger.warn(`Failed to hydrate runtime cache ${context}`, error as Error)
     if (options.strict) {
-      throw new Error(`远端数据已下载，但恢复到当前界面失败：${error instanceof Error ? error.message : String(error)}`)
+      throw new Error(
+        `远端数据已同步到本机，但恢复到当前界面失败：${error instanceof Error ? error.message : String(error)}`
+      )
     }
   }
 }
@@ -113,7 +128,7 @@ async function hydratePreviouslyDownloadedRemoteData() {
     return null
   })
 
-  if (!hasDownloadedRemoteData(status?.lastSummary)) return
+  if (!hasRemoteRuntimeData(status?.lastSummary)) return
 
   await hydrateRuntimeCacheAfterDataSync('before data sync', { strict: true })
 }
@@ -205,7 +220,7 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
     await hydratePreviouslyDownloadedRemoteData()
     await suppressDataSyncLocalChangeNotifications(() => prepareStorageV2ForDataSync())
     const summary = await window.api.dataSync.syncNow(config)
-    await hydrateRuntimeCacheAfterDataSync('after data sync', { strict: hasDownloadedRemoteData(summary) })
+    await hydrateRuntimeCacheAfterDataSync('after data sync', { strict: hasRemoteRuntimeData(summary) })
     return summary
   } finally {
     setDataSyncRunning(false)

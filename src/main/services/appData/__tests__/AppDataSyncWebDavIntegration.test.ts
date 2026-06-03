@@ -1036,6 +1036,24 @@ async function readAllRemoteText(root: string) {
   return values.join('\n')
 }
 
+async function listRemoteRelativeFiles(root: string) {
+  const values: string[] = []
+
+  async function walk(currentPath: string) {
+    for (const entry of await fsp.readdir(currentPath, { withFileTypes: true })) {
+      const entryPath = path.join(currentPath, entry.name)
+      if (entry.isDirectory()) {
+        await walk(entryPath)
+      } else {
+        values.push(path.relative(root, entryPath).split(path.sep).join('/'))
+      }
+    }
+  }
+
+  await walk(root)
+  return values.sort()
+}
+
 describe('AppDataSyncService local WebDAV integration', () => {
   let tempRoot: string
   let server: WebDavTestServer | null = null
@@ -1384,6 +1402,36 @@ describe('AppDataSyncService local WebDAV integration', () => {
     expect(secondSummary.storageConflicts).toBe(0)
     expect(secondSummary.storageResolvedConflicts).toBe(0)
     expect(secondSummary.snapshotUploaded).toBe(false)
+  })
+
+  it('keeps remote WebDAV artifacts bounded across repeated no-change syncs', async () => {
+    const homePath = path.join(tempRoot, 'home')
+    const instanceA = makeInstance(tempRoot, 'device-a')
+    const webdavPath = '/cherry-studio-pi-bounded-artifacts'
+    const config = makeConfig(server!, webdavPath)
+    const backupManager = makeBackupManager(tempRoot)
+
+    await switchInstance(instanceA, homePath)
+    await seedInstanceData({
+      appRecordValue: { mode: 'bounded' },
+      appRecordUpdatedAt: Date.parse('2026-05-29T12:00:00.000Z'),
+      storageSettingValue: { owner: 'bounded' },
+      storageSettingUpdatedAt: '2026-05-29T12:00:00.000Z'
+    })
+
+    await new AppDataSyncService(backupManager as never).syncNow(config)
+    await new AppDataSyncService(backupManager as never).syncNow(config)
+    await new AppDataSyncService(backupManager as never).syncNow(config)
+
+    const files = await listRemoteRelativeFiles(remoteSyncRoot(server!, webdavPath))
+    const storageRecordFiles = files.filter((file) => file.startsWith('storage-v2/records/'))
+    const bundleFiles = files.filter((file) => /^storage-v2\/bundle\/[a-f0-9]{64}\.json$/.test(file))
+    const temporaryFiles = files.filter((file) => file.includes('/.tmp-') || file.startsWith('.tmp-'))
+
+    expect(storageRecordFiles).toHaveLength(0)
+    expect(bundleFiles).toHaveLength(1)
+    expect(temporaryFiles).toHaveLength(0)
+    expect(files.filter((file) => file.startsWith('backups/'))).toHaveLength(1)
   })
 
   it('handles unicode and spaced WebDAV directory paths', async () => {

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
       dataSyncSyncInterval: 0
     }
   })),
+  hydrateStorageV2ConversationsIfDexieEmpty: vi.fn(),
   hydrateRuntimeCacheFromStorageV2: vi.fn(),
   persistorFlush: vi.fn(),
   prepareStorageV2ForDataSync: vi.fn(),
@@ -32,6 +33,10 @@ vi.mock('@renderer/store', () => ({
 
 vi.mock('../StorageV2HydrationService', () => ({
   hydrateRuntimeCacheFromStorageV2: mocks.hydrateRuntimeCacheFromStorageV2
+}))
+
+vi.mock('../StorageV2ConversationHydrationService', () => ({
+  hydrateStorageV2ConversationsIfDexieEmpty: mocks.hydrateStorageV2ConversationsIfDexieEmpty
 }))
 
 vi.mock('../StorageV2Service', () => ({
@@ -105,6 +110,7 @@ describe('DataSyncService', () => {
     })
     mocks.prepareStorageV2ForDataSync.mockResolvedValue(undefined)
     mocks.hydrateRuntimeCacheFromStorageV2.mockResolvedValue({})
+    mocks.hydrateStorageV2ConversationsIfDexieEmpty.mockResolvedValue(false)
     mocks.persistorFlush.mockResolvedValue(undefined)
     mocks.getStatus.mockResolvedValue({
       lastSummary: {
@@ -150,6 +156,9 @@ describe('DataSyncService', () => {
       dispatch: mocks.dispatch,
       flush: expect.any(Function)
     })
+    expect(mocks.hydrateStorageV2ConversationsIfDexieEmpty).toHaveBeenCalledWith('data-sync:after data sync', {
+      strict: false
+    })
   })
 
   it('hydrates previously downloaded remote data before preparing local mirrors', async () => {
@@ -184,6 +193,7 @@ describe('DataSyncService', () => {
     await syncAppDataNow()
 
     expect(mocks.hydrateRuntimeCacheFromStorageV2).toHaveBeenCalledTimes(2)
+    expect(mocks.hydrateStorageV2ConversationsIfDexieEmpty).toHaveBeenCalledTimes(2)
     expect(mocks.hydrateRuntimeCacheFromStorageV2.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.prepareStorageV2ForDataSync.mock.invocationCallOrder[0]
     )
@@ -204,6 +214,22 @@ describe('DataSyncService', () => {
     expect(mocks.hydrateRuntimeCacheFromStorageV2).toHaveBeenCalledTimes(1)
   })
 
+  it('uses strict hydration when the current sync has remote Storage v2 data even without new downloads', async () => {
+    mocks.syncNow.mockResolvedValueOnce({
+      ...successSummary,
+      storageSkipped: 3,
+      storageRecordCount: 3,
+      storageBundleHash: 'remote-bundle-hash'
+    })
+    mocks.hydrateStorageV2ConversationsIfDexieEmpty.mockRejectedValueOnce(new Error('conversation hydrate failed'))
+
+    await expect(syncAppDataNow()).rejects.toThrow('远端数据已同步到本机，但恢复到当前界面失败')
+
+    expect(mocks.hydrateStorageV2ConversationsIfDexieEmpty).toHaveBeenCalledWith('data-sync:after data sync', {
+      strict: true
+    })
+  })
+
   it('fails the manual sync when downloaded remote data cannot be restored to runtime state', async () => {
     mocks.syncNow.mockResolvedValueOnce({
       ...successSummary,
@@ -212,10 +238,25 @@ describe('DataSyncService', () => {
     })
     mocks.hydrateRuntimeCacheFromStorageV2.mockRejectedValueOnce(new Error('hydrate failed'))
 
-    await expect(syncAppDataNow()).rejects.toThrow('远端数据已下载，但恢复到当前界面失败')
+    await expect(syncAppDataNow()).rejects.toThrow('远端数据已同步到本机，但恢复到当前界面失败')
 
     expect(mocks.prepareStorageV2ForDataSync).toHaveBeenCalledTimes(1)
     expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+    expect(getDataSyncRuntimeState().syncing).toBe(false)
+  })
+
+  it('fails the manual sync when downloaded assistant conversations cannot hydrate into Dexie', async () => {
+    mocks.syncNow.mockResolvedValueOnce({
+      ...successSummary,
+      storageDownloaded: 2
+    })
+    mocks.hydrateStorageV2ConversationsIfDexieEmpty.mockRejectedValueOnce(new Error('conversation hydrate failed'))
+
+    await expect(syncAppDataNow()).rejects.toThrow('远端数据已同步到本机，但恢复到当前界面失败')
+
+    expect(mocks.hydrateStorageV2ConversationsIfDexieEmpty).toHaveBeenCalledWith('data-sync:after data sync', {
+      strict: true
+    })
     expect(getDataSyncRuntimeState().syncing).toBe(false)
   })
 
@@ -249,11 +290,43 @@ describe('DataSyncService', () => {
     })
     mocks.hydrateRuntimeCacheFromStorageV2.mockRejectedValueOnce(new Error('hydrate failed'))
 
-    await expect(syncAppDataNow()).rejects.toThrow('远端数据已下载，但恢复到当前界面失败')
+    await expect(syncAppDataNow()).rejects.toThrow('远端数据已同步到本机，但恢复到当前界面失败')
 
     expect(mocks.prepareStorageV2ForDataSync).not.toHaveBeenCalled()
     expect(mocks.syncNow).not.toHaveBeenCalled()
     expect(getDataSyncRuntimeState().syncing).toBe(false)
+  })
+
+  it('blocks the next sync when previous remote Storage v2 records still cannot hydrate', async () => {
+    mocks.getStatus.mockResolvedValueOnce({
+      syncing: false,
+      lastSummary: null,
+      conflicts: [],
+      syncStartedAt: null
+    })
+    mocks.getStatus.mockResolvedValueOnce({
+      syncing: false,
+      lastSummary: {
+        status: 'success',
+        downloaded: 0,
+        storageDownloaded: 0,
+        blobDownloaded: 0,
+        secretDownloaded: 0,
+        deleted: 0,
+        storageDeleted: 0,
+        storageRecordCount: 3,
+        storageBundleHash: 'remote-bundle-hash',
+        lastSyncAt: 1780058000000
+      },
+      conflicts: [],
+      syncStartedAt: null
+    })
+    mocks.hydrateStorageV2ConversationsIfDexieEmpty.mockRejectedValueOnce(new Error('conversation hydrate failed'))
+
+    await expect(syncAppDataNow()).rejects.toThrow('远端数据已同步到本机，但恢复到当前界面失败')
+
+    expect(mocks.prepareStorageV2ForDataSync).not.toHaveBeenCalled()
+    expect(mocks.syncNow).not.toHaveBeenCalled()
   })
 
   it('does not prepare Storage v2 when WebDAV is not configured', async () => {

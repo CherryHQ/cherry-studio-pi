@@ -370,7 +370,10 @@ async function shouldHydrateDexieConversationCache() {
   return topics.some((topic) => topic.messages?.some((message) => (message.blocks?.length ?? 0) > 0))
 }
 
-export async function hydrateStorageV2ConversationsIfDexieEmpty(reason: string): Promise<boolean> {
+export async function hydrateStorageV2ConversationsIfDexieEmpty(
+  reason: string,
+  options: { strict?: boolean } = {}
+): Promise<boolean> {
   if (hydrateConversationsPromise) {
     return hydrateConversationsPromise
   }
@@ -402,6 +405,7 @@ export async function hydrateStorageV2ConversationsIfDexieEmpty(reason: string):
       }
 
       let hydratedCount = 0
+      const failures: string[] = []
 
       for (const conversation of conversationsToHydrate) {
         try {
@@ -411,7 +415,12 @@ export async function hydrateStorageV2ConversationsIfDexieEmpty(reason: string):
           }
         } catch (error) {
           logger.warn('Failed to hydrate assistant conversation from Storage v2', error as Error)
+          failures.push(error instanceof Error ? error.message : String(error))
         }
+      }
+
+      if (options.strict && failures.length > 0) {
+        throw new Error(`Storage v2 assistant conversation hydration failed: ${failures.join('; ')}`)
       }
 
       if (hydratedCount > 0) {
@@ -424,6 +433,9 @@ export async function hydrateStorageV2ConversationsIfDexieEmpty(reason: string):
       return hydratedCount > 0
     } catch (error) {
       logger.warn('Failed to hydrate assistant conversations from Storage v2', error as Error)
+      if (options.strict) {
+        throw error
+      }
       return false
     } finally {
       hydrateConversationsPromise = null

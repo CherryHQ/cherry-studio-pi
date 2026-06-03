@@ -1510,17 +1510,26 @@ export class AppDataSyncService {
       await this.assertRemoteLockStillOwned(client, remoteLock)
       await this.assertRemoteManifestUnchanged(client, manifestPath, manifestBaseline)
       await this.writeJson(client, manifestPath, manifest)
+      await storageV2WebDavRecordSyncService.commitRecordSyncStates(storageSyncStates)
+      for (const [id, value] of pendingSyncStates) {
+        await this.setSyncState(db, id, value)
+      }
+
+      const cleanupErrors: string[] = []
       await this.pruneRemoteAppDataArtifacts(client, basePath, manifest).catch((error) => {
         logger.warn('Failed to prune stale app data WebDAV artifacts after sync', error as Error)
+        cleanupErrors.push(errorMessage(error))
       })
-      await storageV2WebDavRecordSyncService.commitRecordSyncStates(storageSyncStates)
       await storageV2WebDavRecordSyncService
         .pruneRemoteArtifacts(client, basePath, manifest.storageV2)
         .catch((error) => {
           logger.warn('Failed to prune stale Storage v2 WebDAV artifacts after sync', error as Error)
+          cleanupErrors.push(errorMessage(error))
         })
-      for (const [id, value] of pendingSyncStates) {
-        await this.setSyncState(db, id, value)
+      if (cleanupErrors.length > 0) {
+        throw new Error(
+          `远端旧同步文件清理失败。数据已经发布到远端，但为避免 WebDAV 文件数量持续增长，本次同步不会标记为成功。请稍后重试，或检查远端目录删除权限：${cleanupErrors.join('；')}`
+        )
       }
 
       summary.status = 'success'

@@ -950,6 +950,57 @@ describe('AppDataSyncService', () => {
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/backups/old-device-snapshot.zip')).toBe(false)
   })
 
+  it('fails visibly when stale Storage v2 cleanup cannot finish after publishing the manifest', async () => {
+    mocks.storageRecordSync.sync.mockResolvedValueOnce({
+      manifest: {
+        version: 1,
+        records: {
+          'settings:theme': {
+            entityType: 'settings',
+            table: 'settings',
+            idValues: ['theme'],
+            valueHash: 'storage-theme-hash',
+            updatedAt: 1760000000000,
+            deletedAt: null,
+            version: 1,
+            path: 'storage-v2/bundle/storage-theme.json'
+          }
+        },
+        blobs: {},
+        bundle: {
+          version: 1,
+          path: 'storage-v2/bundle/storage-theme.json',
+          valueHash: 'storage-bundle-hash',
+          recordCount: 1,
+          blobCount: 0,
+          updatedAt: 1760000000000
+        }
+      },
+      syncStates: [{ id: 'settings:theme', valueHash: 'storage-theme-hash' }],
+      summary: {
+        storageUploaded: 1,
+        storageDownloaded: 0,
+        storageDeleted: 0,
+        storageConflicts: 0,
+        storageResolvedConflicts: 0,
+        storageSkipped: 0,
+        blobUploaded: 0,
+        blobDownloaded: 0,
+        secretUploaded: 0,
+        secretDownloaded: 0
+      }
+    })
+    mocks.storageRecordSync.pruneRemoteArtifacts.mockRejectedValueOnce(new Error('delete denied'))
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端旧同步文件清理失败')
+
+    expect(mocks.storageRecordSync.commitRecordSyncStates).toHaveBeenCalledWith([
+      { id: 'settings:theme', valueHash: 'storage-theme-hash' }
+    ])
+    expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith('last-sync-summary', expect.anything())
+    expect(mocks.remoteFiles.has('/remote-root/sync/v1/manifest.json')).toBe(true)
+  })
+
   it('fails safely when the required safety snapshot upload is temporarily unavailable', async () => {
     mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
       if (mocks.remoteFiles.has(filePath)) {
