@@ -337,6 +337,7 @@ export class StorageV2AppDataKvMirrorService {
       localRecord?: AppDataRecordLike
       remoteRecord: AppDataRecordLike
       baseHash?: string | null
+      resolvedAt?: number | string | null
     }
   ) {
     const client = await storageV2Database.getClient()
@@ -350,7 +351,7 @@ export class StorageV2AppDataKvMirrorService {
             id, entity_type, entity_id, local_snapshot_json, remote_snapshot_json,
             base_version, created_at, resolved_at
           )
-          VALUES (?, 'app-record', ?, ?, ?, NULL, ?, NULL)
+          VALUES (?, 'app-record', ?, ?, ?, NULL, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
             local_snapshot_json = excluded.local_snapshot_json,
             remote_snapshot_json = excluded.remote_snapshot_json,
@@ -369,7 +370,8 @@ export class StorageV2AppDataKvMirrorService {
             hash: input.remoteRecord.valueHash ?? null,
             baseHash: input.baseHash ?? null
           }),
-          nowIso()
+          nowIso(),
+          input.resolvedAt ? toIsoTimestamp(input.resolvedAt) : null
         ]
       })
     })

@@ -35,11 +35,13 @@ type SyncSummary = {
   downloaded: number
   deleted: number
   conflicts: number
+  resolvedConflicts?: number
   skipped: number
   storageUploaded?: number
   storageDownloaded?: number
   storageDeleted?: number
   storageConflicts?: number
+  storageResolvedConflicts?: number
   storageSkipped?: number
   blobUploaded?: number
   blobDownloaded?: number
@@ -740,6 +742,11 @@ const DataSyncSettings: FC = () => {
                   {t('settings.data.data_sync.summary.conflicts', { count: summary.conflicts })}
                 </Typography.Text>
                 <Typography.Text type="secondary" style={lastResultTextStyle}>
+                  {t('settings.data.data_sync.summary.resolved_conflicts', {
+                    count: summary.resolvedConflicts ?? 0
+                  })}
+                </Typography.Text>
+                <Typography.Text type="secondary" style={lastResultTextStyle}>
                   {t('settings.data.data_sync.storage.records', {
                     uploaded: summary.storageUploaded ?? 0,
                     downloaded: summary.storageDownloaded ?? 0
@@ -753,6 +760,11 @@ const DataSyncSettings: FC = () => {
                 </Typography.Text>
                 <Typography.Text type={summary.storageConflicts ? 'warning' : 'secondary'} style={lastResultTextStyle}>
                   {t('settings.data.data_sync.storage.conflicts', { count: summary.storageConflicts ?? 0 })}
+                </Typography.Text>
+                <Typography.Text type="secondary" style={lastResultTextStyle}>
+                  {t('settings.data.data_sync.storage.resolved_conflicts', {
+                    count: summary.storageResolvedConflicts ?? 0
+                  })}
                 </Typography.Text>
                 {summary.snapshotUploaded && (
                   <Typography.Text type="secondary" style={lastResultTextStyle}>

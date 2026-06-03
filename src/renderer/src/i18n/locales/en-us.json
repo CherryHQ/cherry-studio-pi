@@ -4154,7 +4154,8 @@
         "storage": {
           "blobs": "Files up {{uploaded}} / down {{downloaded}}",
           "conflicts": "Record conflicts {{count}}",
-          "records": "Records up {{uploaded}} / down {{downloaded}}"
+          "records": "Records up {{uploaded}} / down {{downloaded}}",
+          "resolved_conflicts": "Record auto-resolved conflicts {{count}}"
         },
         "summary": {
           "conflicts": "Conflicts {{count}}",
@@ -4162,6 +4163,7 @@
           "downloaded": "Downloaded {{count}}",
           "error": "Error: {{message}}",
           "remote_path": "Remote path {{path}}",
+          "resolved_conflicts": "Auto-resolved conflicts {{count}}",
           "status_failed": "Failed",
           "status_success": "Success",
           "uploaded": "Uploaded {{count}}"

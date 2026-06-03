@@ -4154,7 +4154,8 @@
         "storage": {
           "blobs": "文件上传 {{uploaded}} / 下载 {{downloaded}}",
           "conflicts": "记录冲突 {{count}}",
-          "records": "记录上传 {{uploaded}} / 下载 {{downloaded}}"
+          "records": "记录上传 {{uploaded}} / 下载 {{downloaded}}",
+          "resolved_conflicts": "记录自动处理冲突 {{count}}"
         },
         "summary": {
           "conflicts": "冲突 {{count}}",
@@ -4162,6 +4163,7 @@
           "downloaded": "下载 {{count}}",
           "error": "错误：{{message}}",
           "remote_path": "远端目录 {{path}}",
+          "resolved_conflicts": "自动处理冲突 {{count}}",
           "status_failed": "失败",
           "status_success": "成功",
           "uploaded": "上传 {{count}}"

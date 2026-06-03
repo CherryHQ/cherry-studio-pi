@@ -4154,7 +4154,8 @@
         "storage": {
           "blobs": "檔案上傳 {{uploaded}} / 下載 {{downloaded}}",
           "conflicts": "記錄衝突 {{count}}",
-          "records": "記錄上傳 {{uploaded}} / 下載 {{downloaded}}"
+          "records": "記錄上傳 {{uploaded}} / 下載 {{downloaded}}",
+          "resolved_conflicts": "記錄自動處理衝突 {{count}}"
         },
         "summary": {
           "conflicts": "衝突 {{count}}",
@@ -4162,6 +4163,7 @@
           "downloaded": "下載 {{count}}",
           "error": "錯誤：{{message}}",
           "remote_path": "遠端目錄 {{path}}",
+          "resolved_conflicts": "自動處理衝突 {{count}}",
           "status_failed": "失敗",
           "status_success": "成功",
           "uploaded": "上傳 {{count}}"

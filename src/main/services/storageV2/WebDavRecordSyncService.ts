@@ -84,6 +84,7 @@ export type StorageV2WebDavRecordSyncSummary = {
   storageDownloaded: number
   storageDeleted: number
   storageConflicts: number
+  storageResolvedConflicts: number
   storageSkipped: number
   blobUploaded: number
   blobDownloaded: number
@@ -94,6 +95,7 @@ const EMPTY_SUMMARY: StorageV2WebDavRecordSyncSummary = {
   storageDownloaded: 0,
   storageDeleted: 0,
   storageConflicts: 0,
+  storageResolvedConflicts: 0,
   storageSkipped: 0,
   blobUploaded: 0,
   blobDownloaded: 0
@@ -734,6 +736,58 @@ export class StorageV2WebDavRecordSyncService {
     })
   }
 
+  private async recordConflictAudit(
+    client: Client,
+    input: {
+      localRecord: LocalRecord
+      remoteRecord: LocalRecord
+      baseHash?: string | null
+      resolvedAt?: string | null
+    }
+  ) {
+    const createdAt = new Date().toISOString()
+    await client.execute({
+      sql: `
+        INSERT INTO sync_conflicts (
+          id, entity_type, entity_id, local_snapshot_json, remote_snapshot_json,
+          base_version, created_at, resolved_at
+        )
+        VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          local_snapshot_json = excluded.local_snapshot_json,
+          remote_snapshot_json = excluded.remote_snapshot_json,
+          created_at = excluded.created_at,
+          resolved_at = excluded.resolved_at
+      `,
+      args: [
+        `webdav-storage-record:${input.localRecord.id}:${Date.now()}`,
+        input.localRecord.table.entityType,
+        input.localRecord.id,
+        JSON.stringify({
+          id: input.localRecord.id,
+          idValues: input.localRecord.idValues,
+          row: input.localRecord.row,
+          valueHash: input.localRecord.valueHash,
+          updatedAt: input.localRecord.updatedAt,
+          deletedAt: input.localRecord.deletedAt,
+          version: input.localRecord.version
+        }),
+        JSON.stringify({
+          id: input.remoteRecord.id,
+          idValues: input.remoteRecord.idValues,
+          row: input.remoteRecord.row,
+          valueHash: input.remoteRecord.valueHash,
+          updatedAt: input.remoteRecord.updatedAt,
+          deletedAt: input.remoteRecord.deletedAt,
+          version: input.remoteRecord.version,
+          baseHash: input.baseHash ?? null
+        }),
+        createdAt,
+        input.resolvedAt ?? null
+      ]
+    })
+  }
+
   private async pushRecord(
     client: WebDAVClient,
     basePath: string,
@@ -1183,7 +1237,21 @@ export class StorageV2WebDavRecordSyncService {
         summary.storageDownloaded += remoteRecord.deletedAt ? 0 : 1
       }
       if (localRecord.updatedAt === remoteRecord.updatedAt && localRecord.version === remoteRecord.version) {
+        await this.recordConflictAudit(dbClient, {
+          localRecord,
+          remoteRecord,
+          baseHash: lastHash,
+          resolvedAt: null
+        })
         summary.storageConflicts += 1
+      } else {
+        await this.recordConflictAudit(dbClient, {
+          localRecord,
+          remoteRecord,
+          baseHash: lastHash,
+          resolvedAt: new Date().toISOString()
+        })
+        summary.storageResolvedConflicts += 1
       }
     }
 

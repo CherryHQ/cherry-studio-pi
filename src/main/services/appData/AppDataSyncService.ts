@@ -83,11 +83,13 @@ export type DataSyncSummary = {
   downloaded: number
   deleted: number
   conflicts: number
+  resolvedConflicts: number
   skipped: number
   storageUploaded: number
   storageDownloaded: number
   storageDeleted: number
   storageConflicts: number
+  storageResolvedConflicts: number
   storageSkipped: number
   blobUploaded: number
   blobDownloaded: number
@@ -105,11 +107,13 @@ const EMPTY_SUMMARY: DataSyncSummary = {
   downloaded: 0,
   deleted: 0,
   conflicts: 0,
+  resolvedConflicts: 0,
   skipped: 0,
   storageUploaded: 0,
   storageDownloaded: 0,
   storageDeleted: 0,
   storageConflicts: 0,
+  storageResolvedConflicts: 0,
   storageSkipped: 0,
   blobUploaded: 0,
   blobDownloaded: 0,
@@ -515,6 +519,7 @@ export class AppDataSyncService {
     summary.storageDownloaded += storageSummary.storageDownloaded
     summary.storageDeleted += storageSummary.storageDeleted
     summary.storageConflicts += storageSummary.storageConflicts
+    summary.storageResolvedConflicts += storageSummary.storageResolvedConflicts
     summary.storageSkipped += storageSummary.storageSkipped
     summary.blobUploaded += storageSummary.blobUploaded
     summary.blobDownloaded += storageSummary.blobDownloaded
@@ -640,6 +645,7 @@ export class AppDataSyncService {
       localRecord?: AppDataRecord
       remoteRecord: AppDataRecord
       baseHash?: string | null
+      resolvedAt?: number | null
     }
   ) {
     const id = `${input.scope}:${input.key}:${Date.now()}`
@@ -893,6 +899,16 @@ export class AppDataSyncService {
           baseHash: lastHash
         })
         summary.conflicts += 1
+      } else {
+        await this.createConflict(db, {
+          scope: localRecord.scope,
+          key: localRecord.key,
+          localRecord,
+          remoteRecord,
+          baseHash: lastHash,
+          resolvedAt: Date.now()
+        })
+        summary.resolvedConflicts += 1
       }
 
       const winner =

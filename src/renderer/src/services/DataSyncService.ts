@@ -15,11 +15,13 @@ export type DataSyncSummary = {
   downloaded: number
   deleted: number
   conflicts: number
+  resolvedConflicts?: number
   skipped: number
   storageUploaded?: number
   storageDownloaded?: number
   storageDeleted?: number
   storageConflicts?: number
+  storageResolvedConflicts?: number
   storageSkipped?: number
   blobUploaded?: number
   blobDownloaded?: number

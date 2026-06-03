@@ -1350,7 +1350,9 @@ describe('AppDataSyncService local WebDAV integration', () => {
     const remoteText = await readAllRemoteText(server!.root)
 
     expect(conflictSummary.conflicts).toBe(0)
+    expect(conflictSummary.resolvedConflicts).toBeGreaterThan(0)
     expect(conflictSummary.storageConflicts).toBe(0)
+    expect(conflictSummary.storageResolvedConflicts).toBeGreaterThan(0)
     expect(remoteText).toContain('edited-by-b')
   })
 
@@ -1374,10 +1376,12 @@ describe('AppDataSyncService local WebDAV integration', () => {
     expect(secondSummary.downloaded).toBe(0)
     expect(secondSummary.deleted).toBe(0)
     expect(secondSummary.conflicts).toBe(0)
+    expect(secondSummary.resolvedConflicts).toBe(0)
     expect(secondSummary.storageUploaded).toBe(0)
     expect(secondSummary.storageDownloaded).toBe(0)
     expect(secondSummary.storageDeleted).toBe(0)
     expect(secondSummary.storageConflicts).toBe(0)
+    expect(secondSummary.storageResolvedConflicts).toBe(0)
     expect(secondSummary.snapshotUploaded).toBe(false)
   })
 

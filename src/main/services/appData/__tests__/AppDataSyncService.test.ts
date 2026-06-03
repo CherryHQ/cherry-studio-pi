@@ -181,6 +181,7 @@ describe('AppDataSyncService', () => {
         storageDownloaded: 0,
         storageDeleted: 0,
         storageConflicts: 0,
+        storageResolvedConflicts: 0,
         storageSkipped: 0,
         blobUploaded: 0,
         blobDownloaded: 0
@@ -405,6 +406,49 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('records auto-resolved app record conflicts with resolved timestamps', async () => {
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1760000001777)
+    const localRecord = {
+      ...remoteRecord,
+      value: { mode: 'light' },
+      valueHash: 'local-hash',
+      updatedAt: remoteRecord.updatedAt + 1,
+      deviceId: 'local-device'
+    }
+    mocks.db.listRecords.mockResolvedValue([localRecord])
+    mocks.db.getSyncState.mockImplementation(async (id: string) =>
+      id === 'record:settings:theme:hash' ? 'base-hash' : null
+    )
+
+    try {
+      const summary = await new AppDataSyncService().syncNow(config)
+
+      expect(summary.conflicts).toBe(0)
+      expect(summary.resolvedConflicts).toBe(1)
+    } finally {
+      nowSpy.mockRestore()
+    }
+
+    expect(mocks.storageV2.upsertSyncConflict).toHaveBeenCalledWith(
+      'settings:theme:1760000001777',
+      expect.objectContaining({
+        scope: 'settings',
+        key: 'theme',
+        localRecord,
+        remoteRecord,
+        baseHash: 'base-hash',
+        resolvedAt: 1760000001777
+      })
+    )
+    expect(mocks.db.createConflict).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'settings:theme:1760000001777',
+        resolvedAt: 1760000001777
+      }),
+      { storageV2Mirrored: true }
+    )
+  })
+
   it('falls back to Storage v2 sync state when legacy app.db is missing the last hash', async () => {
     const localRecord = {
       ...remoteRecord,
@@ -486,6 +530,7 @@ describe('AppDataSyncService', () => {
         storageDownloaded: 0,
         storageDeleted: 0,
         storageConflicts: 0,
+        storageResolvedConflicts: 0,
         storageSkipped: 0,
         blobUploaded: 0,
         blobDownloaded: 0
@@ -564,6 +609,7 @@ describe('AppDataSyncService', () => {
         storageDownloaded: 0,
         storageDeleted: 0,
         storageConflicts: 0,
+        storageResolvedConflicts: 0,
         storageSkipped: 3,
         blobUploaded: 0,
         blobDownloaded: 0
@@ -738,6 +784,7 @@ describe('AppDataSyncService', () => {
       downloaded: 2,
       deleted: 0,
       conflicts: 0,
+      resolvedConflicts: 0,
       skipped: 3,
       lastSyncAt: 1760000000300
     }

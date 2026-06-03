@@ -509,6 +509,7 @@ export class AppDataDatabase {
       localRecord?: AppDataRecord
       remoteRecord: AppDataRecord
       baseHash?: string | null
+      resolvedAt?: number | null
     },
     options: StorageV2WriteOptions = {}
   ) {
@@ -523,7 +524,7 @@ export class AppDataDatabase {
       sql: `
         INSERT INTO sync_conflicts
           (id, scope, key, local_value, remote_value, base_hash, local_hash, remote_hash, created_at, resolved_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       args: [
         id,
@@ -534,7 +535,8 @@ export class AppDataDatabase {
         input.baseHash ?? null,
         input.localRecord?.valueHash ?? null,
         input.remoteRecord.valueHash,
-        now()
+        now(),
+        input.resolvedAt ?? null
       ]
     })
 
