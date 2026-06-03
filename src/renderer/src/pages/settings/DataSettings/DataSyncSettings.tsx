@@ -309,7 +309,9 @@ const DataSyncSettings: FC = () => {
         setStatus((prev) => ({
           deviceId: prev?.deviceId || '',
           conflicts: prev?.conflicts || [],
-          lastSummary: summary
+          lastSummary: summary,
+          syncing: false,
+          syncStartedAt: prev?.syncStartedAt ?? null
         }))
       }
       latestStatus = await refreshStatus()
