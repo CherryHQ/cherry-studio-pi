@@ -666,6 +666,17 @@ export class StorageV2ProviderRepository {
           sql: "DELETE FROM provider_credentials WHERE provider_id = ? AND credential_kind = 'apiKey'",
           args: [provider.id]
         })
+        await storageV2SyncLogService.recordChange({
+          client,
+          entityType: 'provider_credential',
+          entityId: `${provider.id}:apiKey`,
+          operation: 'delete',
+          payload: {
+            providerId: provider.id,
+            credentialKind: 'apiKey'
+          },
+          version: 1
+        })
       }
 
       await storageV2SyncLogService.recordChange({
@@ -783,6 +794,18 @@ export class StorageV2ProviderRepository {
       await client.execute({
         sql: 'DELETE FROM provider_credentials WHERE provider_id = ?',
         args: [providerId]
+      })
+      await storageV2SyncLogService.recordChange({
+        client,
+        entityType: 'provider_credential',
+        entityId: `${providerId}:apiKey`,
+        operation: 'delete',
+        payload: {
+          providerId,
+          credentialKind: 'apiKey',
+          deletedAt
+        },
+        version: existingVersion > 0 ? existingVersion + 1 : 1
       })
       await storageV2SyncLogService.recordChange({
         client,

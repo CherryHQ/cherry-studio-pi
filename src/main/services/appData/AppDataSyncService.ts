@@ -198,6 +198,7 @@ const APP_DATA_RUNTIME_ENTITY_TYPES = new Set(['kv_record'])
 const RENDERER_HYDRATION_ENTITY_TYPES = new Set([
   'profile',
   'provider',
+  'provider_credential',
   'model',
   'assistant',
   'assistant_version',

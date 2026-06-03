@@ -23,6 +23,7 @@ const LEDGER_ENTITY_TYPES = [
   'message',
   'message_block',
   'provider',
+  'provider_credential',
   'scheduled_task',
   'settings',
   'skill',
@@ -71,6 +72,11 @@ describe('Storage v2 sync policy', () => {
     expect(assertStorageV2SyncPolicy('provider')).toMatchObject({
       mergeStrategy: 'last-write-wins-with-secret-ref',
       secretMode: 'secret-ref-only'
+    })
+    expect(assertStorageV2SyncPolicy('provider_credential')).toMatchObject({
+      mergeStrategy: 'last-write-wins-with-secret-ref',
+      secretMode: 'secret-ref-only',
+      clearSemantics: 'deleted-at-tombstone'
     })
     expect(assertStorageV2SyncPolicy('channel')).toMatchObject({
       mergeStrategy: 'last-write-wins-with-secret-ref',

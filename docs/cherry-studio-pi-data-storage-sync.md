@@ -26,9 +26,10 @@ Compatibility database: `${userData}/Data/app.db`
 
 Tables:
 
-- Storage v2 core tables: providers, models, assistants, agents, skills,
-  conversations, messages, message blocks, files, blobs, knowledge bases,
-  app `kv_records`, sync tombstones, sync state, and sync conflicts.
+- Storage v2 core tables: providers, provider credential secret refs, models,
+  assistants, agents, skills, conversations, messages, message blocks, files,
+  blobs, knowledge bases, app `kv_records`, sync tombstones, sync state, and
+  sync conflicts.
 - Storage v2 secret vault: encrypted local secret values referenced by durable
   records, for example model provider API keys and channel credentials.
 - `app.db`: legacy app-scoped key/value, cache, sync state, conflicts, and
@@ -44,6 +45,9 @@ Contribution rules:
   local-only.
 - Sensitive values must use the Storage v2 secret vault and store only secret
   references in ordinary records.
+- Model provider credentials require both the `provider_credentials` ref row and
+  the encrypted secret vault bundle. Clearing a credential must publish a
+  tombstone for the credential ref so older remote keys are not resurrected.
 - Deletions must create tombstones when another device may need to converge.
 - WebDAV sync tests should cover two isolated local instances through a real
   local WebDAV server whenever a sync contract changes.

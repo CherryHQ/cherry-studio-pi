@@ -190,7 +190,7 @@ describe('StorageV2ProviderRepository', () => {
 
   it('removes stale provider credentials when a new api key cannot be stored', async () => {
     const { client, execute } = createMockClient()
-    vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
+    const recordChange = vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
     vi.spyOn(storageV2Database, 'withTransaction').mockImplementation(async (_client, fn) => fn())
     vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(client)
 
@@ -211,6 +211,45 @@ describe('StorageV2ProviderRepository', () => {
           input.args?.[0] === 'provider-1'
       )
     ).toBe(true)
+    expect(recordChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: 'provider_credential',
+        entityId: 'provider-1:apiKey',
+        operation: 'delete'
+      })
+    )
+  })
+
+  it('records provider credential tombstones when deleting a provider', async () => {
+    const { client, execute } = createMockClient()
+    const recordChange = vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
+    vi.spyOn(storageV2Database, 'withTransaction').mockImplementation(async (_client, fn) => fn())
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(client)
+
+    await expect(new StorageV2ProviderRepository().delete('provider-1')).resolves.toEqual({ deleted: true })
+
+    expect(
+      execute.mock.calls.some(
+        ([input]) =>
+          typeof input !== 'string' &&
+          input.sql.includes('DELETE FROM provider_credentials') &&
+          input.args?.[0] === 'provider-1'
+      )
+    ).toBe(true)
+    expect(recordChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: 'provider_credential',
+        entityId: 'provider-1:apiKey',
+        operation: 'delete'
+      })
+    )
+    expect(recordChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: 'provider',
+        entityId: 'provider-1',
+        operation: 'delete'
+      })
+    )
   })
 
   it('soft deletes missing provider models instead of hard deleting model rows', async () => {

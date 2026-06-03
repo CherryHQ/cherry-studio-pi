@@ -28,6 +28,7 @@ export type StorageV2SyncEntityType =
   | 'message'
   | 'message_block'
   | 'provider'
+  | 'provider_credential'
   | 'scheduled_task'
   | 'settings'
   | 'skill'
@@ -93,6 +94,20 @@ const STORAGE_V2_SYNC_POLICIES = [
     conflictUi: 'diff',
     notes:
       'Provider rows sync metadata and secret refs only. WebDAV data sync carries provider API keys through the encrypted secret vault bundle so multi-device model configuration can recover without storing plaintext in provider rows.'
+  },
+  {
+    entityType: 'provider_credential',
+    table: 'provider_credentials',
+    idColumns: ['provider_id', 'credential_kind'],
+    versioned: false,
+    updatedAtColumn: 'updated_at',
+    deletionSemantics: 'sync-ledger-delete-only',
+    mergeStrategy: 'last-write-wins-with-secret-ref',
+    secretMode: 'secret-ref-only',
+    clearSemantics: 'deleted-at-tombstone',
+    conflictUi: 'auto',
+    notes:
+      'Provider credential rows carry secret refs only. The encrypted secret vault bundle carries the referenced secret values; clearing a credential must publish a provider_credential tombstone so old remote refs are not resurrected.'
   },
   {
     entityType: 'assistant',

@@ -59,6 +59,13 @@ const settingsTable = {
   versionColumn: 'version'
 } as const
 
+const providerCredentialTable = {
+  entityType: 'provider_credential',
+  table: 'provider_credentials',
+  idColumns: ['provider_id', 'credential_kind'],
+  updatedAtColumn: 'updated_at'
+} as const
+
 const agentSkillTable = {
   entityType: 'agent_skill',
   table: 'agent_skills',
@@ -108,6 +115,14 @@ type SettingsRow = {
   updated_at: string
   deleted_at: string | null
   version: number
+}
+
+type ProviderCredentialRow = {
+  provider_id: string
+  credential_kind: string
+  secret_ref: string
+  updated_at: string
+  updated_by_device_id: string | null
 }
 
 type AgentSkillRow = {
@@ -198,6 +213,121 @@ function makeSettingsDb(rows: SettingsRow[]) {
           } else {
             state.rows[index] = nextRow
           }
+          return { rows: [] }
+        }
+
+        return { rows: [] }
+      })
+    }
+  }
+}
+
+function makeProviderCredentialDb(input: { credentials?: ProviderCredentialRow[]; tombstones?: TombstoneRow[] }) {
+  const state = {
+    credentials: [...(input.credentials ?? [])],
+    tombstones: [...(input.tombstones ?? [])],
+    syncState: new Map<string, string>()
+  }
+
+  return {
+    state,
+    client: {
+      execute: vi.fn(async (input: string | { sql: string; args?: unknown[] }) => {
+        const sql = typeof input === 'string' ? input : input.sql
+        const args = typeof input === 'string' ? [] : (input.args ?? [])
+
+        if (sql.includes('SELECT * FROM provider_credentials')) {
+          return { rows: state.credentials.map((row) => ({ ...row })) }
+        }
+
+        if (sql.includes('SELECT * FROM sync_tombstones')) {
+          return { rows: state.tombstones.map((row) => ({ ...row })) }
+        }
+
+        if (sql.includes('SELECT deleted_at') && sql.includes('FROM sync_tombstones')) {
+          const row = state.tombstones.find(
+            (item) => item.entity_type === String(args[0]) && item.entity_id === String(args[1])
+          )
+          return { rows: row ? [{ deleted_at: row.deleted_at }] : [] }
+        }
+
+        if (sql.includes('SELECT value_json FROM sync_state')) {
+          const value = state.syncState.get(String(args[0]))
+          return { rows: value ? [{ value_json: JSON.stringify(value) }] : [] }
+        }
+
+        if (sql.includes('INSERT INTO sync_state')) {
+          state.syncState.set(String(args[0]), JSON.parse(String(args[1])))
+          return { rows: [] }
+        }
+
+        if (sql.includes('PRAGMA table_info(provider_credentials)')) {
+          return {
+            rows: [
+              { name: 'provider_id' },
+              { name: 'credential_kind' },
+              { name: 'secret_ref' },
+              { name: 'updated_at' },
+              { name: 'updated_by_device_id' }
+            ]
+          }
+        }
+
+        if (sql.includes('PRAGMA table_info(sync_tombstones)')) {
+          return {
+            rows: [
+              { name: 'entity_type' },
+              { name: 'entity_id' },
+              { name: 'deleted_at' },
+              { name: 'device_id' },
+              { name: 'version' }
+            ]
+          }
+        }
+
+        if (sql.includes('INSERT INTO provider_credentials')) {
+          const nextRow: ProviderCredentialRow = {
+            provider_id: String(args[0]),
+            credential_kind: String(args[1]),
+            secret_ref: String(args[2]),
+            updated_at: String(args[3]),
+            updated_by_device_id: args[4] == null ? null : String(args[4])
+          }
+          const index = state.credentials.findIndex(
+            (row) => row.provider_id === nextRow.provider_id && row.credential_kind === nextRow.credential_kind
+          )
+          if (index === -1) {
+            state.credentials.push(nextRow)
+          } else {
+            state.credentials[index] = nextRow
+          }
+          return { rows: [] }
+        }
+
+        if (sql.includes('INSERT INTO sync_tombstones')) {
+          const nextRow: TombstoneRow = {
+            entity_type: String(args[0]),
+            entity_id: String(args[1]),
+            deleted_at: String(args[2]),
+            device_id: String(args[3]),
+            version: Number(args[4])
+          }
+          const index = state.tombstones.findIndex(
+            (row) => row.entity_type === nextRow.entity_type && row.entity_id === nextRow.entity_id
+          )
+          if (index === -1) {
+            state.tombstones.push(nextRow)
+          } else {
+            state.tombstones[index] = nextRow
+          }
+          return { rows: [] }
+        }
+
+        if (sql.includes('DELETE FROM provider_credentials')) {
+          const [providerId, credentialKind] = args.map(String)
+          state.credentials = state.credentials.filter(
+            (row) => !(row.provider_id === providerId && row.credential_kind === credentialKind)
+          )
           return { rows: [] }
         }
 
@@ -1206,6 +1336,154 @@ describe('StorageV2WebDavRecordSyncService', () => {
           filePath.includes('/storage-v2/records/settings/') && String(contents).includes('device-b-default')
       )
     ).toBe(false)
+  })
+
+  it('includes provider credential refs in the default Storage v2 WebDAV bundle', async () => {
+    const remote = makeSharedWebDavStore()
+    const credentialRow: ProviderCredentialRow = {
+      provider_id: 'provider-1',
+      credential_kind: 'apiKey',
+      secret_ref: 'storage-v2://secret/provider/provider-1/apiKey',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      updated_by_device_id: 'device-a'
+    }
+
+    mocks.dbClient.execute.mockImplementation(async (input: string | { sql: string }) => {
+      const sql = typeof input === 'string' ? input : input.sql
+
+      if (sql.includes('SELECT * FROM provider_credentials')) {
+        return { rows: [credentialRow] }
+      }
+
+      if (sql.includes('SELECT value_json FROM sync_state') || sql.includes('INSERT INTO sync_state')) {
+        return { rows: [] }
+      }
+
+      return { rows: [] }
+    })
+
+    const result = await new StorageV2WebDavRecordSyncService().sync(remote.client as any, '/remote-root/sync/v1', null)
+
+    expect(result.summary.storageUploaded).toBe(1)
+    expect(result.manifest.records['provider_credential:provider-1:apiKey']).toEqual(
+      expect.objectContaining({
+        entityType: 'provider_credential',
+        table: 'provider_credentials',
+        idValues: ['provider-1', 'apiKey'],
+        valueHash: hashJson(credentialRow),
+        path: expect.stringMatching(HASHED_BUNDLE_PATH)
+      })
+    )
+  })
+
+  it('syncs provider credential refs and encrypted secret values to a second device', async () => {
+    const remote = makeSharedWebDavStore()
+    const credentialRow: ProviderCredentialRow = {
+      provider_id: 'provider-1',
+      credential_kind: 'apiKey',
+      secret_ref: 'storage-v2://secret/provider/provider-1/apiKey',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      updated_by_device_id: 'device-a'
+    }
+    const deviceA = makeProviderCredentialDb({ credentials: [credentialRow] })
+    const deviceB = makeProviderCredentialDb({})
+    const getClient = vi.mocked(storageV2Database.getClient)
+    const service = new StorageV2WebDavRecordSyncService([providerCredentialTable])
+
+    mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({
+      'provider:provider-1:apiKey': {
+        value: 'sk-provider-1',
+        updatedAt: '2026-06-01T08:00:00.000Z'
+      }
+    })
+    getClient.mockResolvedValueOnce(deviceA.client as any)
+    const firstSync = await service.sync(remote.client as any, '/remote-root/sync/v1', null, {
+      secretKeyMaterial: 'dav-user:dav-password'
+    })
+
+    mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({})
+    getClient.mockResolvedValueOnce(deviceB.client as any)
+    const secondSync = await service.sync(remote.client as any, '/remote-root/sync/v1', firstSync.manifest, {
+      secretKeyMaterial: 'dav-user:dav-password'
+    })
+
+    expect(firstSync.summary.storageUploaded).toBe(1)
+    expect(firstSync.summary.secretUploaded).toBe(1)
+    expect(secondSync.summary.storageDownloaded).toBe(1)
+    expect(secondSync.summary.secretDownloaded).toBe(1)
+    expect(deviceB.state.credentials).toEqual([credentialRow])
+    expect(mocks.secretVault.importPlaintextSecrets).toHaveBeenCalledWith({
+      'provider:provider-1:apiKey': {
+        value: 'sk-provider-1',
+        updatedAt: '2026-06-01T08:00:00.000Z'
+      }
+    })
+  })
+
+  it('uses local provider credential tombstones to avoid resurrecting stale remote key refs', async () => {
+    const remote = makeSharedWebDavStore()
+    const remoteRow: ProviderCredentialRow = {
+      provider_id: 'provider-1',
+      credential_kind: 'apiKey',
+      secret_ref: 'storage-v2://secret/provider/provider-1/apiKey',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      updated_by_device_id: 'device-a'
+    }
+    const remoteHash = hashJson(remoteRow)
+    remote.files.set(
+      '/remote-root/sync/v1/storage-v2/records/provider_credential/provider-1-apiKey.json',
+      JSON.stringify({
+        id: 'provider_credential:provider-1:apiKey',
+        table: providerCredentialTable,
+        idValues: ['provider-1', 'apiKey'],
+        row: remoteRow,
+        valueHash: remoteHash,
+        updatedAt: Date.parse(remoteRow.updated_at),
+        deletedAt: null,
+        version: 1
+      })
+    )
+
+    const db = makeProviderCredentialDb({
+      tombstones: [
+        {
+          entity_type: 'provider_credential',
+          entity_id: 'provider-1:apiKey',
+          deleted_at: '2026-06-01T08:10:00.000Z',
+          device_id: 'device-b',
+          version: 2
+        }
+      ]
+    })
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    const result = await new StorageV2WebDavRecordSyncService([providerCredentialTable, tombstoneTable]).sync(
+      remote.client as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {
+          'provider_credential:provider-1:apiKey': {
+            entityType: 'provider_credential',
+            table: 'provider_credentials',
+            idValues: ['provider-1', 'apiKey'],
+            valueHash: remoteHash,
+            updatedAt: Date.parse(remoteRow.updated_at),
+            deletedAt: null,
+            version: 1,
+            path: 'storage-v2/records/provider_credential/provider-1-apiKey.json'
+          }
+        }
+      }
+    )
+
+    expect(result.summary.storageDownloaded).toBe(0)
+    expect(db.state.credentials).toEqual([])
+    expect(result.manifest.records['provider_credential:provider-1:apiKey']).toBeUndefined()
+    expect(
+      Object.keys(result.manifest.records).some((id) => id.startsWith('sync_tombstone:provider_credential:'))
+    ).toBe(true)
   })
 
   it('maps remote builtin skill IDs to an existing local folder_name before applying agent skill rows', async () => {

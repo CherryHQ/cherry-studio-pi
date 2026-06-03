@@ -153,6 +153,10 @@ const SECRET_SYNC_KEY_CONTEXT = 'cherry-studio-pi:webdav-secret-sync:v1'
 const SECRET_SYNC_ENCRYPTION = 'cherry-webdav-secret-sync-aes-256-gcm' as const
 const GCM_IV_BYTE_LENGTH = 12
 const TOMBSTONE_PHYSICAL_DELETE_TARGETS = {
+  provider_credential: {
+    table: 'provider_credentials',
+    idColumns: ['provider_id', 'credential_kind']
+  },
   agent_skill: {
     table: 'agent_skills',
     idColumns: ['agent_id', 'skill_id']
@@ -179,6 +183,12 @@ const STORAGE_V2_SYNC_TABLES: readonly StorageV2SyncTable[] = [
     idColumns: ['id'],
     updatedAtColumn: 'updated_at',
     deletedAtColumn: 'deleted_at'
+  },
+  {
+    entityType: 'provider_credential',
+    table: 'provider_credentials',
+    idColumns: ['provider_id', 'credential_kind'],
+    updatedAtColumn: 'updated_at'
   },
   {
     entityType: 'blob',
