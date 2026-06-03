@@ -1510,6 +1510,38 @@ describe('StorageV2WebDavRecordSyncService', () => {
     })
   })
 
+  it('republishes a secret vault manifest when the semantic secret bundle path already exists', async () => {
+    const localSecrets = {
+      'provider:provider-1:apiKey': {
+        value: 'sk-local-provider',
+        updatedAt: '2026-06-01T08:00:00.000Z'
+      }
+    }
+
+    mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce(localSecrets)
+    const firstResult = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
+      mocks.webdav as any,
+      '/remote-root/sync/v1',
+      { version: 1, blobs: {}, records: {} },
+      { secretKeyMaterial: 'dav-user:dav-password' }
+    )
+    const remoteSecretPath = `/remote-root/sync/v1/${firstResult.manifest.secrets?.path}`
+    const firstCiphertext = String(mocks.remoteFiles.get(remoteSecretPath))
+
+    mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce(localSecrets)
+    const secondResult = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
+      mocks.webdav as any,
+      '/remote-root/sync/v1',
+      { version: 1, blobs: {}, records: {}, bundle: null, secrets: null },
+      { secretKeyMaterial: 'dav-user:dav-password' }
+    )
+
+    expect(secondResult.summary.secretUploaded).toBe(1)
+    expect(secondResult.manifest.secrets?.path).toBe(firstResult.manifest.secrets?.path)
+    expect(mocks.remoteFiles.get(remoteSecretPath)).toBeTruthy()
+    expect(String(mocks.remoteFiles.get(remoteSecretPath))).not.toBe(firstCiphertext)
+  })
+
   it('fails safely when the remote secret vault cannot be decrypted with the current WebDAV credentials', async () => {
     mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({
       'provider:provider-1:apiKey': {

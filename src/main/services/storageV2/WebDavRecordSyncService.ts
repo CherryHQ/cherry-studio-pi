@@ -1058,7 +1058,7 @@ export class StorageV2WebDavRecordSyncService {
       )
     }
 
-    await this.writeJson(client, path.posix.join(basePath, relativePath), bundle, { overwrite: false })
+    await this.writeJson(client, path.posix.join(basePath, relativePath), bundle, { overwrite: true })
     manifest.secrets = {
       version: 1,
       path: relativePath,

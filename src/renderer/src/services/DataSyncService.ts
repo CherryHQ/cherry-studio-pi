@@ -239,7 +239,7 @@ export function startDataSyncAutoSync(immediate = false) {
 
   ensureLocalChangeAutoSyncSubscription()
 
-  if (autoSyncStarted && syncTimeout) {
+  if (autoSyncStarted && syncTimeout && !immediate) {
     return
   }
 

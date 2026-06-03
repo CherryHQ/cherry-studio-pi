@@ -379,6 +379,32 @@ describe('DataSyncService', () => {
     expect(mocks.syncNow).toHaveBeenCalledTimes(1)
   })
 
+  it('reschedules an immediate auto sync when auto sync settings are changed while already running', async () => {
+    vi.useFakeTimers()
+    mocks.getState.mockReturnValue({
+      settings: {
+        dataSyncWebdavHost: 'https://dav.example.test',
+        dataSyncWebdavUser: 'user',
+        dataSyncWebdavPass: 'pass',
+        dataSyncWebdavPath: '/cherry-studio-pi',
+        dataSyncAutoSync: true,
+        dataSyncSyncInterval: 15
+      }
+    })
+
+    startDataSyncAutoSync(false)
+    startDataSyncAutoSync(true)
+
+    await vi.advanceTimersByTimeAsync(999)
+    expect(mocks.syncNow).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(1)
+
+    await vi.waitFor(() => {
+      expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it('does not sync local Storage v2 changes when auto sync is disabled', async () => {
     vi.useFakeTimers()
 
