@@ -27,7 +27,7 @@ function initAutoSync() {
       void startNutstoreAutoSync()
     }
     if (dataSyncAutoSync) {
-      startDataSyncAutoSync()
+      startDataSyncAutoSync(true)
     }
   }, 8000)
 }

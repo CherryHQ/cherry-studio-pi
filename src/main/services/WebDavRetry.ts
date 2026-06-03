@@ -220,6 +220,18 @@ export function describeWebDavUserFacingError(error: unknown, action = WEB_DAV_D
     return formatWebDavAlreadyRunningMessage(prefix)
   }
 
+  if (/另一台设备正在同步这个 WebDAV 目录|远端同步锁|无法创建远端同步锁/i.test(message)) {
+    return `${prefix}：${message}`
+  }
+
+  if (/远端同步状态在同步过程中|Remote sync metadata is corrupted/i.test(message)) {
+    return `${prefix}：远端同步状态异常。${message}`
+  }
+
+  if (/远端 Storage v2 数据包校验失败|Storage v2 .*bundle hash mismatch/i.test(message)) {
+    return `${prefix}：${message}`
+  }
+
   if (/Invalid URL|Only absolute URLs|URL/i.test(message)) {
     return formatWebDavInvalidUrlMessage(prefix)
   }

@@ -43,6 +43,11 @@ type SyncSummary = {
   snapshotFileName?: string | null
   snapshotBytes?: number
   remotePath?: string | null
+  remoteGeneration?: number | null
+  remoteManifestHash?: string | null
+  storageBundleHash?: string | null
+  storageRecordCount?: number
+  storageBlobCount?: number
   lastSyncAt: number
 }
 
@@ -505,7 +510,7 @@ const DataSyncSettings: FC = () => {
     dispatch(setDataSyncAutoSync(value > 0))
 
     if (value > 0) {
-      startDataSyncAutoSync(false)
+      startDataSyncAutoSync(true)
     } else {
       stopDataSyncAutoSync()
     }

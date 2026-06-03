@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import * as fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import https from 'node:https'
@@ -17,6 +17,7 @@ import {
   storageV2WebDavRecordSyncService,
   type StorageV2WebDavRecordSyncSummary
 } from '@main/services/storageV2/WebDavRecordSyncService'
+import { hashJsonValue, writeWebDavJsonAtomically } from '@main/services/WebDavAtomic'
 import { normalizeWebDavHost, runWebDavOperation, WebDavOperationError } from '@main/services/WebDavRetry'
 import type { WebDavConfig } from '@types'
 import { createClient, type FileStat, type WebDAVClient } from 'webdav'
@@ -41,6 +42,7 @@ type RemoteRecordMeta = {
 
 type RemoteManifest = {
   version: 1
+  generation: number
   updatedAt: number
   records: Record<string, RemoteRecordMeta>
   storageV2?: StorageV2WebDavRecordSyncManifest | null
@@ -57,6 +59,30 @@ type RemoteSnapshotMeta = {
   uploadedAt: number
   deviceId: string
   format: 'cherry-studio-direct-backup-zip'
+}
+
+type RemoteSyncLock = {
+  version: 1
+  ownerId: string
+  token: string
+  createdAt: number
+  expiresAt: number
+  app: 'cherry-studio-pi'
+  reason: 'data-sync'
+}
+
+type RemoteSyncLockHandle = {
+  type: 'webdav' | 'file'
+  path: string
+  ownerId: string
+  token: string
+  previousHeaders?: Record<string, string> | null
+}
+
+type RemoteManifestBaseline = {
+  existed: boolean
+  generation: number
+  hash: string | null
 }
 
 export type DataSyncRemoteDirectory = {
@@ -97,6 +123,11 @@ export type DataSyncSummary = {
   snapshotFileName: string | null
   snapshotBytes: number
   remotePath: string | null
+  remoteGeneration: number | null
+  remoteManifestHash: string | null
+  storageBundleHash: string | null
+  storageRecordCount: number
+  storageBlobCount: number
   lastSyncAt: number
 }
 
@@ -121,6 +152,11 @@ const EMPTY_SUMMARY: DataSyncSummary = {
   snapshotFileName: null,
   snapshotBytes: 0,
   remotePath: null,
+  remoteGeneration: null,
+  remoteManifestHash: null,
+  storageBundleHash: null,
+  storageRecordCount: 0,
+  storageBlobCount: 0,
   lastSyncAt: 0
 }
 
@@ -128,6 +164,9 @@ const SNAPSHOT_UPLOAD_INTERVAL_MS = 24 * 60 * 60 * 1000
 const DATA_SYNC_REMOTE_ROOT = '/cherry-studio-pi'
 const DATA_SYNC_SUFFIX = '/sync/v1'
 const STORAGE_V2_RUNTIME_PROJECTION_HASH_KEY = 'storage-v2-runtime-projection-hash'
+const REMOTE_SYNC_LOCK_FILE = '.sync.lock.json'
+const REMOTE_SYNC_LOCK_TTL_MS = 30 * 60 * 1000
+const NATIVE_WEB_DAV_LOCK_UNSUPPORTED_STATUSES = new Set([403, 405, 409, 501])
 
 const AGENT_RUNTIME_ENTITY_TYPES = new Set([
   'agent',
@@ -166,8 +205,8 @@ function encodePart(value: string) {
   return encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)
 }
 
-function recordPath(record: Pick<AppDataRecord, 'scope' | 'key'>) {
-  return `records/${encodePart(record.scope)}/${encodePart(record.key)}.json`
+function recordPath(record: Pick<AppDataRecord, 'scope' | 'key' | 'valueHash'>) {
+  return `records/${encodePart(record.scope)}/${encodePart(record.key)}/${encodePart(record.valueHash)}.json`
 }
 
 function normalizeWebDavDirectoryPath(webdavPath?: string) {
@@ -200,7 +239,15 @@ function normalizeDirectoryContents(contents: unknown): FileStat[] {
 }
 
 function makeManifest(): RemoteManifest {
-  return { version: 1, updatedAt: Date.now(), records: {}, storageV2: null, latestSnapshot: null, snapshots: {} }
+  return {
+    version: 1,
+    generation: 0,
+    updatedAt: Date.now(),
+    records: {},
+    storageV2: null,
+    latestSnapshot: null,
+    snapshots: {}
+  }
 }
 
 function bufferToString(value: string | Buffer | ArrayBuffer | unknown) {
@@ -437,11 +484,218 @@ export class AppDataSyncService {
 
   private async writeJson(client: WebDAVClient, filePath: string, data: unknown) {
     await this.ensureDirectory(client, path.posix.dirname(filePath))
-    await runWebDavOperation(
-      `writing remote json ${filePath}`,
-      () => client.putFileContents(filePath, JSON.stringify(data, null, 2), { overwrite: true }),
-      { logger }
-    )
+    await writeWebDavJsonAtomically(client, filePath, data, {
+      logger,
+      operation: 'remote sync json',
+      overwrite: true
+    })
+  }
+
+  private async removeRemoteFile(client: WebDAVClient, filePath: string) {
+    const deleteFile = (client as WebDAVClient & { deleteFile?: (targetPath: string) => Promise<void> }).deleteFile
+    if (typeof deleteFile !== 'function') return
+
+    await runWebDavOperation(`deleting remote file ${filePath}`, () => deleteFile.call(client, filePath), {
+      logger
+    }).catch((error) => {
+      if (error instanceof WebDavOperationError && error.status === 404) return
+      throw error
+    })
+  }
+
+  private normalizeRemoteLock(lock: RemoteSyncLock | null): RemoteSyncLock | null {
+    if (!lock || lock.version !== 1 || !lock.ownerId || !lock.token) return null
+
+    return {
+      version: 1,
+      ownerId: String(lock.ownerId),
+      token: String(lock.token),
+      createdAt: Number(lock.createdAt) || 0,
+      expiresAt: Number(lock.expiresAt) || 0,
+      app: 'cherry-studio-pi',
+      reason: 'data-sync'
+    }
+  }
+
+  private isRemoteLockExpired(lock: RemoteSyncLock, now = Date.now()) {
+    return !lock.expiresAt || lock.expiresAt <= now
+  }
+
+  private formatRemoteLockMessage(lock: RemoteSyncLock) {
+    const createdAt = lock.createdAt ? new Date(lock.createdAt).toLocaleString('zh-CN') : '未知时间'
+    const expiresAt = lock.expiresAt ? new Date(lock.expiresAt).toLocaleString('zh-CN') : '未知时间'
+    return `另一台设备正在同步这个 WebDAV 目录（设备：${lock.ownerId}，开始：${createdAt}，锁过期：${expiresAt}）。请等待它完成后再试；如果确认没有设备在同步，软件会在锁过期后自动清理。`
+  }
+
+  private async readRemoteLock(client: WebDAVClient, lockPath: string) {
+    try {
+      return this.normalizeRemoteLock(
+        await this.readJson<RemoteSyncLock>(client, lockPath, {
+          throwOnInvalidJson: true
+        })
+      )
+    } catch (error) {
+      throw new Error(`远端同步锁读取失败。为避免破坏远端数据，本次同步已停止：${errorMessage(error)}`)
+    }
+  }
+
+  private formatNativeWebDavLockHeader(token: string) {
+    const normalizedToken = token.replace(/^<|>$/g, '')
+    return `(<${normalizedToken}>)`
+  }
+
+  private async acquireNativeWebDavLock(
+    client: WebDAVClient,
+    basePath: string,
+    ownerId: string
+  ): Promise<RemoteSyncLockHandle | null> {
+    const lockMethod = client.lock
+    if (typeof lockMethod !== 'function') return null
+
+    try {
+      const lock = await runWebDavOperation(
+        `locking remote data sync directory ${basePath}`,
+        () => lockMethod.call(client, basePath, { timeout: `Second-${Math.ceil(REMOTE_SYNC_LOCK_TTL_MS / 1000)}` }),
+        { logger }
+      )
+
+      if (!lock?.token) return null
+
+      const previousHeaders = typeof client.getHeaders === 'function' ? client.getHeaders() : null
+      if (typeof client.setHeaders === 'function') {
+        client.setHeaders({
+          ...(previousHeaders ?? {}),
+          If: this.formatNativeWebDavLockHeader(lock.token)
+        })
+      }
+
+      return {
+        type: 'webdav',
+        path: basePath,
+        ownerId,
+        token: lock.token,
+        previousHeaders
+      }
+    } catch (error) {
+      if (error instanceof WebDavOperationError && error.transient) throw error
+      if (error instanceof WebDavOperationError && error.status === 423) {
+        throw new Error('另一台设备正在同步这个 WebDAV 目录。请等待它完成后再试。')
+      }
+
+      if (
+        error instanceof WebDavOperationError &&
+        error.status &&
+        NATIVE_WEB_DAV_LOCK_UNSUPPORTED_STATUSES.has(error.status)
+      ) {
+        return null
+      }
+
+      logger.warn('Native WebDAV directory lock is unavailable; falling back to file lock', error as Error)
+      return null
+    }
+  }
+
+  private async acquireRemoteLock(
+    client: WebDAVClient,
+    basePath: string,
+    ownerId: string
+  ): Promise<RemoteSyncLockHandle> {
+    const nativeLock = await this.acquireNativeWebDavLock(client, basePath, ownerId)
+    if (nativeLock) return nativeLock
+
+    const lockPath = path.posix.join(basePath, REMOTE_SYNC_LOCK_FILE)
+    const token = randomUUID()
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const now = Date.now()
+      const lock: RemoteSyncLock = {
+        version: 1,
+        ownerId,
+        token,
+        createdAt: now,
+        expiresAt: now + REMOTE_SYNC_LOCK_TTL_MS,
+        app: 'cherry-studio-pi',
+        reason: 'data-sync'
+      }
+
+      let created = false
+      try {
+        created = await runWebDavOperation(
+          `creating remote data sync lock ${lockPath}`,
+          () => client.putFileContents(lockPath, JSON.stringify(lock, null, 2), { overwrite: false }),
+          { logger }
+        )
+      } catch (error) {
+        if (error instanceof WebDavOperationError && error.transient) throw error
+        if (error instanceof WebDavOperationError && error.status && ![409, 412, 423].includes(error.status)) {
+          throw error
+        }
+        logger.warn('Failed to create remote data sync lock; inspecting existing lock', error as Error)
+      }
+
+      if (created) {
+        const remoteLock = await this.readRemoteLock(client, lockPath)
+        if (remoteLock?.token === token && remoteLock.ownerId === ownerId) {
+          return { type: 'file', path: lockPath, ownerId, token }
+        }
+      }
+
+      const existingLock = await this.readRemoteLock(client, lockPath)
+      if (!existingLock) continue
+
+      if (!this.isRemoteLockExpired(existingLock)) {
+        throw new Error(this.formatRemoteLockMessage(existingLock))
+      }
+
+      logger.warn('Removing expired remote data sync lock', existingLock)
+      await this.removeRemoteFile(client, lockPath)
+    }
+
+    throw new Error('无法创建远端同步锁。为避免多设备同时写入导致数据丢失，本次同步已停止，请稍后重试。')
+  }
+
+  private async releaseRemoteLock(client: WebDAVClient, lock: RemoteSyncLockHandle | null) {
+    if (!lock) return
+
+    if (lock.type === 'webdav') {
+      try {
+        await runWebDavOperation(
+          `unlocking remote data sync directory ${lock.path}`,
+          () => client.unlock(lock.path, lock.token),
+          {
+            logger
+          }
+        )
+      } catch (error) {
+        logger.warn('Failed to release native WebDAV data sync lock', error as Error)
+      } finally {
+        if (typeof client.setHeaders === 'function' && lock.previousHeaders) {
+          client.setHeaders(lock.previousHeaders)
+        }
+      }
+      return
+    }
+
+    try {
+      const remoteLock = await this.readRemoteLock(client, lock.path)
+      if (!remoteLock) return
+      if (remoteLock.token !== lock.token || remoteLock.ownerId !== lock.ownerId) {
+        logger.warn('Remote data sync lock owner changed before release; leaving it untouched', remoteLock)
+        return
+      }
+      await this.removeRemoteFile(client, lock.path)
+    } catch (error) {
+      logger.warn('Failed to release remote data sync lock', error as Error)
+    }
+  }
+
+  private async assertRemoteLockStillOwned(client: WebDAVClient, lock: RemoteSyncLockHandle | null) {
+    if (!lock || lock.type === 'webdav') return
+
+    const remoteLock = await this.readRemoteLock(client, lock.path)
+    if (!remoteLock || remoteLock.token !== lock.token || remoteLock.ownerId !== lock.ownerId) {
+      throw new Error('远端同步锁在同步过程中已被其他设备修改。为避免覆盖其他设备的数据，本次同步已停止，请重新同步。')
+    }
   }
 
   async listRemoteDirectories(config: WebDavConfig, remotePath = '/'): Promise<DataSyncRemoteDirectoryList> {
@@ -507,11 +761,53 @@ export class AppDataSyncService {
 
   private normalizeManifest(manifest: RemoteManifest | null): RemoteManifest {
     const nextManifest = manifest ?? makeManifest()
+    nextManifest.generation = Number.isFinite(nextManifest.generation) ? Number(nextManifest.generation) : 0
     nextManifest.records = nextManifest.records ?? {}
     nextManifest.storageV2 = nextManifest.storageV2 ?? null
     nextManifest.snapshots = nextManifest.snapshots ?? {}
     nextManifest.latestSnapshot = nextManifest.latestSnapshot ?? null
     return nextManifest
+  }
+
+  private captureManifestBaseline(
+    rawManifest: RemoteManifest | null,
+    manifest: RemoteManifest
+  ): RemoteManifestBaseline {
+    return {
+      existed: Boolean(rawManifest),
+      generation: manifest.generation,
+      hash: rawManifest ? hashJsonValue(manifest) : null
+    }
+  }
+
+  private async assertRemoteManifestUnchanged(
+    client: WebDAVClient,
+    manifestPath: string,
+    baseline: RemoteManifestBaseline
+  ) {
+    const latestRawManifest = await this.readJson<RemoteManifest>(client, manifestPath, { throwOnInvalidJson: true })
+    if (!baseline.existed && !latestRawManifest) return
+    if (!latestRawManifest) {
+      throw new Error('远端同步状态在同步过程中被删除。为避免覆盖其他设备的数据，本次同步已停止，请重新同步。')
+    }
+
+    const latestManifest = this.normalizeManifest(latestRawManifest)
+    const latestHash = hashJsonValue(latestManifest)
+    if (latestManifest.generation !== baseline.generation || latestHash !== baseline.hash) {
+      throw new Error(
+        '远端同步状态在同步过程中已被其他设备修改。为避免覆盖其他设备的数据，本次同步已停止，请重新同步。'
+      )
+    }
+  }
+
+  private updateSummaryRemoteState(summary: DataSyncSummary, manifest: RemoteManifest) {
+    summary.remoteGeneration = manifest.generation
+    summary.remoteManifestHash = hashJsonValue(manifest)
+    summary.storageBundleHash = manifest.storageV2?.bundle?.valueHash ?? null
+    summary.storageRecordCount =
+      manifest.storageV2?.bundle?.recordCount ?? Object.keys(manifest.storageV2?.records ?? {}).length
+    summary.storageBlobCount =
+      manifest.storageV2?.bundle?.blobCount ?? Object.keys(manifest.storageV2?.blobs ?? {}).length
   }
 
   private addStorageV2Summary(summary: DataSyncSummary, storageSummary: StorageV2WebDavRecordSyncSummary) {
@@ -788,169 +1084,179 @@ export class AppDataSyncService {
     const summary: DataSyncSummary = { ...EMPTY_SUMMARY, remotePath: basePath, lastSyncAt: Date.now() }
 
     await this.ensureDirectory(client, basePath)
-    await this.assertWriteAccess(client, basePath)
+    const remoteLock = await this.acquireRemoteLock(client, basePath, db.getDeviceId())
+    try {
+      await this.assertWriteAccess(client, basePath)
 
-    let localRecords = await db.listRecords(undefined, true)
-    if (
-      localRecords.length === 0 &&
-      (await storageV2AppDataRuntimeRecoveryService.projectIfLegacyAppRecordListEmpty(undefined, 'app-data-sync-empty'))
-    ) {
-      db = await getAppDataDatabase()
-      localRecords = await db.listRecords(undefined, true)
-    }
-    if (localRecords.length === 0) {
-      localRecords = await storageV2AppDataKvMirrorService.listRecords(undefined, true)
-    } else {
-      try {
-        const storageRecords = await storageV2AppDataKvMirrorService.listRecords(undefined, true)
-        localRecords = mergeAppDataRecords(localRecords, storageRecords)
-      } catch (error) {
-        logger.warn('Failed to merge Storage v2 app records into sync source', error as Error)
+      let localRecords = await db.listRecords(undefined, true)
+      if (
+        localRecords.length === 0 &&
+        (await storageV2AppDataRuntimeRecoveryService.projectIfLegacyAppRecordListEmpty(
+          undefined,
+          'app-data-sync-empty'
+        ))
+      ) {
+        db = await getAppDataDatabase()
+        localRecords = await db.listRecords(undefined, true)
       }
-    }
-    const localById = new Map(localRecords.map((record) => [recordId(record.scope, record.key), record]))
-    const manifest = this.normalizeManifest(
-      await this.readJson<RemoteManifest>(client, manifestPath, { throwOnInvalidJson: true })
-    )
-    const remoteHadStorageDataBeforeSync = hasStorageV2RemoteData(manifest.storageV2)
-    const allIds = new Set([...localById.keys(), ...Object.keys(manifest.records)])
-
-    for (const id of allIds) {
-      const localRecord = localById.get(id)
-      const remoteMeta = manifest.records[id]
-      const lastHash = await this.getSyncState<string>(db, `record:${id}:hash`)
-
-      if (localRecord && !remoteMeta) {
-        await this.pushRecord(client, basePath, localRecord, manifest)
-        await this.setSyncState(db, `record:${id}:hash`, localRecord.valueHash)
-        summary.uploaded += localRecord.deletedAt ? 0 : 1
-        summary.deleted += localRecord.deletedAt ? 1 : 0
-        continue
-      }
-
-      if (!localRecord && remoteMeta) {
-        const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
-        if (remoteRecord) {
-          await this.applyRemoteRecord(db, remoteRecord)
-          await this.setSyncState(db, `record:${id}:hash`, remoteRecord.valueHash)
-          summary.downloaded += remoteRecord.deletedAt ? 0 : 1
-          summary.deleted += remoteRecord.deletedAt ? 1 : 0
+      if (localRecords.length === 0) {
+        localRecords = await storageV2AppDataKvMirrorService.listRecords(undefined, true)
+      } else {
+        try {
+          const storageRecords = await storageV2AppDataKvMirrorService.listRecords(undefined, true)
+          localRecords = mergeAppDataRecords(localRecords, storageRecords)
+        } catch (error) {
+          logger.warn('Failed to merge Storage v2 app records into sync source', error as Error)
         }
-        continue
       }
+      const localById = new Map(localRecords.map((record) => [recordId(record.scope, record.key), record]))
+      const rawManifest = await this.readJson<RemoteManifest>(client, manifestPath, { throwOnInvalidJson: true })
+      const manifest = this.normalizeManifest(rawManifest)
+      const manifestBaseline = this.captureManifestBaseline(rawManifest, manifest)
+      const remoteHadStorageDataBeforeSync = hasStorageV2RemoteData(manifest.storageV2)
+      const allIds = new Set([...localById.keys(), ...Object.keys(manifest.records)])
 
-      if (!localRecord || !remoteMeta) {
-        summary.skipped += 1
-        continue
-      }
+      for (const id of allIds) {
+        const localRecord = localById.get(id)
+        const remoteMeta = manifest.records[id]
+        const lastHash = await this.getSyncState<string>(db, `record:${id}:hash`)
 
-      if (localRecord.valueHash === remoteMeta.valueHash) {
-        await this.setSyncState(db, `record:${id}:hash`, localRecord.valueHash)
-        summary.skipped += 1
-        continue
-      }
+        if (localRecord && !remoteMeta) {
+          await this.pushRecord(client, basePath, localRecord, manifest)
+          await this.setSyncState(db, `record:${id}:hash`, localRecord.valueHash)
+          summary.uploaded += localRecord.deletedAt ? 0 : 1
+          summary.deleted += localRecord.deletedAt ? 1 : 0
+          continue
+        }
 
-      const localChanged = localRecord.valueHash !== lastHash
-      const remoteChanged = remoteMeta.valueHash !== lastHash
+        if (!localRecord && remoteMeta) {
+          const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
+          if (remoteRecord) {
+            await this.applyRemoteRecord(db, remoteRecord)
+            await this.setSyncState(db, `record:${id}:hash`, remoteRecord.valueHash)
+            summary.downloaded += remoteRecord.deletedAt ? 0 : 1
+            summary.deleted += remoteRecord.deletedAt ? 1 : 0
+          }
+          continue
+        }
 
-      if (!lastHash) {
-        const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
-        if (remoteRecord) {
-          await this.applyRemoteRecord(db, remoteRecord)
-          await this.setSyncState(db, `record:${id}:hash`, remoteRecord.valueHash)
-          summary.downloaded += remoteRecord.deletedAt ? 0 : 1
-          summary.deleted += remoteRecord.deletedAt ? 1 : 0
-        } else {
+        if (!localRecord || !remoteMeta) {
           summary.skipped += 1
+          continue
         }
-        continue
+
+        if (localRecord.valueHash === remoteMeta.valueHash) {
+          await this.setSyncState(db, `record:${id}:hash`, localRecord.valueHash)
+          summary.skipped += 1
+          continue
+        }
+
+        const localChanged = localRecord.valueHash !== lastHash
+        const remoteChanged = remoteMeta.valueHash !== lastHash
+
+        if (!lastHash) {
+          const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
+          if (remoteRecord) {
+            await this.applyRemoteRecord(db, remoteRecord)
+            await this.setSyncState(db, `record:${id}:hash`, remoteRecord.valueHash)
+            summary.downloaded += remoteRecord.deletedAt ? 0 : 1
+            summary.deleted += remoteRecord.deletedAt ? 1 : 0
+          } else {
+            summary.skipped += 1
+          }
+          continue
+        }
+
+        if (localChanged && !remoteChanged) {
+          await this.pushRecord(client, basePath, localRecord, manifest)
+          await this.setSyncState(db, `record:${id}:hash`, localRecord.valueHash)
+          summary.uploaded += localRecord.deletedAt ? 0 : 1
+          summary.deleted += localRecord.deletedAt ? 1 : 0
+          continue
+        }
+
+        const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
+        if (!remoteRecord) {
+          summary.skipped += 1
+          continue
+        }
+
+        if (!localChanged && remoteChanged) {
+          await this.applyRemoteRecord(db, remoteRecord)
+          await this.setSyncState(db, `record:${id}:hash`, remoteRecord.valueHash)
+          summary.downloaded += remoteRecord.deletedAt ? 0 : 1
+          summary.deleted += remoteRecord.deletedAt ? 1 : 0
+          continue
+        }
+
+        const unresolvedConflict =
+          localRecord.updatedAt === remoteRecord.updatedAt && localRecord.version === remoteRecord.version
+        if (unresolvedConflict) {
+          await this.createConflict(db, {
+            scope: localRecord.scope,
+            key: localRecord.key,
+            localRecord,
+            remoteRecord,
+            baseHash: lastHash
+          })
+          summary.conflicts += 1
+        } else {
+          await this.createConflict(db, {
+            scope: localRecord.scope,
+            key: localRecord.key,
+            localRecord,
+            remoteRecord,
+            baseHash: lastHash,
+            resolvedAt: Date.now()
+          })
+          summary.resolvedConflicts += 1
+        }
+
+        const winner =
+          localRecord.updatedAt > remoteRecord.updatedAt ||
+          (localRecord.updatedAt === remoteRecord.updatedAt && localRecord.version >= remoteRecord.version)
+            ? localRecord
+            : remoteRecord
+        if (winner === localRecord) {
+          await this.pushRecord(client, basePath, localRecord, manifest)
+          summary.uploaded += localRecord.deletedAt ? 0 : 1
+        } else {
+          await this.applyRemoteRecord(db, remoteRecord)
+          summary.downloaded += remoteRecord.deletedAt ? 0 : 1
+        }
+        await this.setSyncState(db, `record:${id}:hash`, winner.valueHash)
       }
 
-      if (localChanged && !remoteChanged) {
-        await this.pushRecord(client, basePath, localRecord, manifest)
-        await this.setSyncState(db, `record:${id}:hash`, localRecord.valueHash)
-        summary.uploaded += localRecord.deletedAt ? 0 : 1
-        summary.deleted += localRecord.deletedAt ? 1 : 0
-        continue
+      const storageSync = await storageV2WebDavRecordSyncService.sync(client, basePath, manifest.storageV2)
+      manifest.storageV2 = storageSync.manifest
+      this.addStorageV2Summary(summary, storageSync.summary)
+      db = await this.projectStorageV2RuntimeAfterSync(db, manifest.storageV2, summary, {
+        remoteHadStorageDataBeforeSync
+      })
+
+      if (this.shouldUploadFullSnapshot(db, manifest, summary.lastSyncAt)) {
+        try {
+          await this.pushFullSnapshot(client, basePath, db, manifest, summary)
+        } catch (error) {
+          logger.warn('Data sync safety snapshot upload failed; record sync completed', error as Error)
+        }
       }
 
-      const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
-      if (!remoteRecord) {
-        summary.skipped += 1
-        continue
-      }
+      manifest.updatedAt = summary.lastSyncAt
+      manifest.generation = manifestBaseline.generation + 1
+      this.updateSummaryRemoteState(summary, manifest)
+      await this.assertRemoteLockStillOwned(client, remoteLock)
+      await this.assertRemoteManifestUnchanged(client, manifestPath, manifestBaseline)
+      await this.writeJson(client, manifestPath, manifest)
 
-      if (!localChanged && remoteChanged) {
-        await this.applyRemoteRecord(db, remoteRecord)
-        await this.setSyncState(db, `record:${id}:hash`, remoteRecord.valueHash)
-        summary.downloaded += remoteRecord.deletedAt ? 0 : 1
-        summary.deleted += remoteRecord.deletedAt ? 1 : 0
-        continue
-      }
+      summary.status = 'success'
+      summary.error = null
+      await this.setSyncState(db, 'last-sync-summary', summary)
 
-      const unresolvedConflict =
-        localRecord.updatedAt === remoteRecord.updatedAt && localRecord.version === remoteRecord.version
-      if (unresolvedConflict) {
-        await this.createConflict(db, {
-          scope: localRecord.scope,
-          key: localRecord.key,
-          localRecord,
-          remoteRecord,
-          baseHash: lastHash
-        })
-        summary.conflicts += 1
-      } else {
-        await this.createConflict(db, {
-          scope: localRecord.scope,
-          key: localRecord.key,
-          localRecord,
-          remoteRecord,
-          baseHash: lastHash,
-          resolvedAt: Date.now()
-        })
-        summary.resolvedConflicts += 1
-      }
-
-      const winner =
-        localRecord.updatedAt > remoteRecord.updatedAt ||
-        (localRecord.updatedAt === remoteRecord.updatedAt && localRecord.version >= remoteRecord.version)
-          ? localRecord
-          : remoteRecord
-      if (winner === localRecord) {
-        await this.pushRecord(client, basePath, localRecord, manifest)
-        summary.uploaded += localRecord.deletedAt ? 0 : 1
-      } else {
-        await this.applyRemoteRecord(db, remoteRecord)
-        summary.downloaded += remoteRecord.deletedAt ? 0 : 1
-      }
-      await this.setSyncState(db, `record:${id}:hash`, winner.valueHash)
+      return summary
+    } finally {
+      await this.releaseRemoteLock(client, remoteLock)
     }
-
-    const storageSync = await storageV2WebDavRecordSyncService.sync(client, basePath, manifest.storageV2)
-    manifest.storageV2 = storageSync.manifest
-    this.addStorageV2Summary(summary, storageSync.summary)
-    db = await this.projectStorageV2RuntimeAfterSync(db, manifest.storageV2, summary, {
-      remoteHadStorageDataBeforeSync
-    })
-
-    manifest.updatedAt = summary.lastSyncAt
-    await this.writeJson(client, manifestPath, manifest)
-
-    if (this.shouldUploadFullSnapshot(db, manifest, summary.lastSyncAt)) {
-      try {
-        await this.pushFullSnapshot(client, basePath, db, manifest, summary)
-        manifest.updatedAt = summary.lastSyncAt
-        await this.writeJson(client, manifestPath, manifest)
-      } catch (error) {
-        logger.warn('Data sync safety snapshot upload failed; record sync completed', error as Error)
-      }
-    }
-
-    summary.status = 'success'
-    summary.error = null
-    await this.setSyncState(db, 'last-sync-summary', summary)
-
-    return summary
   }
 
   async recordSyncFailure(error: unknown) {

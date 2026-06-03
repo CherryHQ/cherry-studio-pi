@@ -1116,12 +1116,12 @@ describe('AppDataSyncService local WebDAV integration', () => {
     expect(countRemoteStorageV2Records(remoteManifest)).toEqual(COMPREHENSIVE_REMOTE_ENTITY_COUNTS)
     expect(Object.keys(remoteManifest.storageV2?.records ?? {})).toHaveLength(expectedRecordCount)
     expect(remoteManifest.storageV2?.bundle).toMatchObject({
-      path: 'storage-v2/bundle/current.json',
+      path: expect.stringMatching(/^storage-v2\/bundle\/[a-f0-9]{64}\.json$/),
       recordCount: expectedRecordCount,
       blobCount: 1
     })
     await expect(
-      pathExists(path.join(remoteSyncRoot(server!, webdavPath), 'storage-v2', 'bundle', 'current.json'))
+      pathExists(path.join(remoteSyncRoot(server!, webdavPath), remoteManifest.storageV2!.bundle!.path))
     ).resolves.toBe(true)
     await expect(pathExists(path.join(remoteSyncRoot(server!, webdavPath), 'storage-v2', 'records'))).resolves.toBe(
       false

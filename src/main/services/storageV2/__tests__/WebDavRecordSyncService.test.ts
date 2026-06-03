@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   dbClient: {
     execute: vi.fn()
   },
+  remoteFiles: new Map<string, unknown>(),
   webdav: {
     exists: vi.fn(),
     createDirectory: vi.fn(),
@@ -498,7 +499,10 @@ function makeSharedWebDavStore() {
         }
         return files.get(filePath)
       }),
-      putFileContents: vi.fn(async (filePath: string, contents: unknown) => {
+      putFileContents: vi.fn(async (filePath: string, contents: unknown, options?: any) => {
+        if (options?.overwrite === false && files.has(filePath)) {
+          return false
+        }
         files.set(filePath, contents)
         return true
       }),
@@ -550,14 +554,32 @@ function makeSharedWebDavStore() {
   }
 }
 
+const HASHED_BUNDLE_PATH = /^storage-v2\/bundle\/[a-f0-9]{64}\.json$/
+
+function hasRemoteFile(remote: ReturnType<typeof makeSharedWebDavStore>, pattern: RegExp) {
+  return Array.from(remote.files.keys()).some((filePath) => pattern.test(filePath))
+}
+
 describe('StorageV2WebDavRecordSyncService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.webdav.exists.mockResolvedValue(true)
+    mocks.remoteFiles.clear()
+    mocks.webdav.exists.mockImplementation(async (filePath: string) => {
+      if (mocks.remoteFiles.has(filePath)) return true
+      return true
+    })
     mocks.webdav.createDirectory.mockResolvedValue(undefined)
-    mocks.webdav.putFileContents.mockResolvedValue(undefined)
-    mocks.webdav.getFileContents.mockResolvedValue('')
-    mocks.webdav.deleteFile.mockResolvedValue(undefined)
+    mocks.webdav.putFileContents.mockImplementation(async (filePath: string, contents: unknown, options?: any) => {
+      if (options?.overwrite === false && mocks.remoteFiles.has(filePath)) {
+        return false
+      }
+      mocks.remoteFiles.set(filePath, contents)
+      return true
+    })
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => mocks.remoteFiles.get(filePath) ?? '')
+    mocks.webdav.deleteFile.mockImplementation(async (filePath: string) => {
+      mocks.remoteFiles.delete(filePath)
+    })
     mocks.webdav.getDirectoryContents.mockResolvedValue([])
     mocks.dbClient.execute.mockImplementation(async (input: string | { sql: string }) => {
       const sql = typeof input === 'string' ? input : input.sql
@@ -626,21 +648,100 @@ describe('StorageV2WebDavRecordSyncService', () => {
         entityType: 'settings',
         table: 'settings',
         idValues: ['theme'],
-        path: 'storage-v2/bundle/current.json'
+        path: expect.stringMatching(HASHED_BUNDLE_PATH)
       })
     )
     expect(result.manifest.bundle).toEqual(
       expect.objectContaining({
-        path: 'storage-v2/bundle/current.json',
+        path: expect.stringMatching(HASHED_BUNDLE_PATH),
         recordCount: 1,
         blobCount: 0
       })
     )
     expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
-      expect.stringContaining('/storage-v2/bundle/current.json'),
+      expect.stringMatching(/\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/),
       expect.stringContaining('"key": "theme"'),
-      { overwrite: true }
+      { overwrite: false }
     )
+  })
+
+  it('publishes many Storage v2 rows as one content-addressed bundle instead of many record files', async () => {
+    const remote = makeSharedWebDavStore()
+    const db = makeSettingsDb([
+      {
+        key: 'theme',
+        value_json: '{"mode":"dark"}',
+        scope: 'app',
+        updated_at: '2026-05-29T12:00:00.000Z',
+        deleted_at: null,
+        version: 1
+      },
+      {
+        key: 'language',
+        value_json: '{"locale":"zh-CN"}',
+        scope: 'app',
+        updated_at: '2026-05-29T12:01:00.000Z',
+        deleted_at: null,
+        version: 1
+      }
+    ])
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    const result = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
+      remote.client as any,
+      '/remote-root/sync/v1',
+      null
+    )
+
+    const bundleFiles = Array.from(remote.files.keys()).filter((filePath) =>
+      /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/.test(filePath)
+    )
+    const recordFiles = Array.from(remote.files.keys()).filter((filePath) => filePath.includes('/storage-v2/records/'))
+
+    expect(result.summary.storageUploaded).toBe(2)
+    expect(result.manifest.bundle).toEqual(
+      expect.objectContaining({
+        path: expect.stringMatching(HASHED_BUNDLE_PATH),
+        recordCount: 2,
+        blobCount: 0
+      })
+    )
+    expect(bundleFiles).toHaveLength(1)
+    expect(recordFiles).toHaveLength(0)
+  })
+
+  it('fails safe when the remote Storage v2 bundle hash does not match the manifest', async () => {
+    const remote = makeSharedWebDavStore()
+    const corruptBundlePath = '/remote-root/sync/v1/storage-v2/bundle/corrupt.json'
+    remote.files.set(
+      corruptBundlePath,
+      JSON.stringify({
+        version: 1,
+        updatedAt: Date.parse('2026-05-29T12:00:00.000Z'),
+        records: {},
+        blobs: {}
+      })
+    )
+    const db = makeSettingsDb([])
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([settingsTable]).sync(remote.client as any, '/remote-root/sync/v1', {
+        version: 1,
+        blobs: {},
+        records: {},
+        bundle: {
+          version: 1,
+          path: 'storage-v2/bundle/corrupt.json',
+          valueHash: 'expected-bundle-hash',
+          recordCount: 0,
+          blobCount: 0,
+          updatedAt: Date.parse('2026-05-29T12:00:00.000Z')
+        }
+      })
+    ).rejects.toThrow('远端 Storage v2 数据包校验失败')
+
+    expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
   })
 
   it('downloads remote Storage v2 rows into the local database', async () => {
@@ -663,7 +764,7 @@ describe('StorageV2WebDavRecordSyncService', () => {
       deletedAt: null,
       version: 2
     }
-    mocks.webdav.getFileContents.mockResolvedValue(JSON.stringify(remoteRecord))
+    mocks.remoteFiles.set('/remote-root/sync/v1/storage-v2/records/settings/theme.json', JSON.stringify(remoteRecord))
 
     const result = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
       mocks.webdav as any,
@@ -749,7 +850,7 @@ describe('StorageV2WebDavRecordSyncService', () => {
       table: 'settings',
       idValues: ['theme'],
       valueHash: remoteHash,
-      path: 'storage-v2/bundle/current.json'
+      path: expect.stringMatching(HASHED_BUNDLE_PATH)
     })
   })
 
@@ -819,7 +920,7 @@ describe('StorageV2WebDavRecordSyncService', () => {
       table: 'settings',
       idValues: ['theme'],
       valueHash: remoteHash,
-      path: 'storage-v2/bundle/current.json'
+      path: expect.stringMatching(HASHED_BUNDLE_PATH)
     })
     expect(db.state.syncState.get('webdav-storage-record:settings:theme:hash')).toBe(remoteHash)
   })
@@ -865,12 +966,12 @@ describe('StorageV2WebDavRecordSyncService', () => {
       table: 'settings',
       idValues: ['theme'],
       valueHash: localHash,
-      path: 'storage-v2/bundle/current.json'
+      path: expect.stringMatching(HASHED_BUNDLE_PATH)
     })
-    expect(remote.files.has('/remote-root/sync/v1/storage-v2/bundle/current.json')).toBe(true)
+    expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(true)
   })
 
-  it('cleans up stale storage-v2 record files during sync', async () => {
+  it('keeps stale remote artifacts during normal sync instead of recursively deleting provider files', async () => {
     const remote = makeSharedWebDavStore()
     const localRow = {
       key: 'theme',
@@ -920,10 +1021,10 @@ describe('StorageV2WebDavRecordSyncService', () => {
     )
 
     expect(result.summary.storageUploaded).toBe(0)
-    expect(remote.files.has('/remote-root/sync/v1/storage-v2/records/settings/theme-old.json')).toBe(false)
-    expect(remote.files.has('/remote-root/sync/v1/storage-v2/blobs/orphaned.bin')).toBe(false)
-    expect(remote.files.has('/remote-root/sync/v1/storage-v2/bundle/old.json')).toBe(false)
-    expect(remote.files.has('/remote-root/sync/v1/storage-v2/bundle/current.json')).toBe(true)
+    expect(remote.files.has('/remote-root/sync/v1/storage-v2/records/settings/theme-old.json')).toBe(true)
+    expect(remote.files.has('/remote-root/sync/v1/storage-v2/blobs/orphaned.bin')).toBe(true)
+    expect(remote.files.has('/remote-root/sync/v1/storage-v2/bundle/old.json')).toBe(true)
+    expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(true)
   })
 
   it('prefers remote Storage v2 rows when a device has no prior sync baseline', async () => {
@@ -954,7 +1055,7 @@ describe('StorageV2WebDavRecordSyncService', () => {
       deletedAt: null,
       version: 2
     }
-    mocks.webdav.getFileContents.mockResolvedValue(JSON.stringify(remoteRecord))
+    mocks.remoteFiles.set('/remote-root/sync/v1/storage-v2/records/settings/theme.json', JSON.stringify(remoteRecord))
     mocks.dbClient.execute.mockImplementation(async (input: string | { sql: string }) => {
       const sql = typeof input === 'string' ? input : input.sql
       if (sql.includes('SELECT * FROM settings')) {

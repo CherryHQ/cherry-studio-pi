@@ -29,6 +29,11 @@ export type DataSyncSummary = {
   snapshotFileName?: string | null
   snapshotBytes?: number
   remotePath?: string | null
+  remoteGeneration?: number | null
+  remoteManifestHash?: string | null
+  storageBundleHash?: string | null
+  storageRecordCount?: number
+  storageBlobCount?: number
   lastSyncAt: number
 }
 
