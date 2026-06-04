@@ -638,7 +638,7 @@ describe('AppDataSyncService', () => {
     })
   })
 
-  it('prefers remote app records when a device has no prior sync baseline', async () => {
+  it('prefers remote app records and keeps a recovery audit when a device has no prior sync baseline', async () => {
     const localRecord = {
       ...remoteRecord,
       value: { mode: 'local-default' },
@@ -653,15 +653,18 @@ describe('AppDataSyncService', () => {
 
     expect(summary.downloaded).toBe(1)
     expect(summary.conflicts).toBe(0)
+    expect(summary.resolvedConflicts).toBe(1)
     expect(mocks.storageV2.upsertRecordSnapshot).toHaveBeenCalledWith(remoteRecord)
     expect(mocks.db.applyRemoteRecord).toHaveBeenCalledWith(remoteRecord, { storageV2Mirrored: true })
+    expect(mocks.storageV2.upsertSyncConflict).toHaveBeenCalled()
+    expect(mocks.db.createConflict).toHaveBeenCalled()
     expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith('record:settings:theme:hash', 'remote-hash')
     expect(mocks.webdav.putFileContents.mock.calls.some((call) => String(call[1]).includes('local-default-hash'))).toBe(
       false
     )
   })
 
-  it('auto-resolves exact legacy app record conflicts with a deterministic content tie-breaker', async () => {
+  it('auto-resolves exact legacy app record conflicts with a deterministic content tie-breaker and audit', async () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1760000000999)
     const localRecord = {
       ...remoteRecord,
@@ -692,13 +695,30 @@ describe('AppDataSyncService', () => {
       nowSpy.mockRestore()
     }
 
-    expect(events).toEqual([])
-    expect(mocks.storageV2.upsertSyncConflict).not.toHaveBeenCalled()
-    expect(mocks.db.createConflict).not.toHaveBeenCalled()
+    expect(events).toEqual(['storage-v2-conflict', 'legacy-conflict'])
+    expect(mocks.storageV2.upsertSyncConflict).toHaveBeenCalledWith(
+      expect.stringMatching(/^settings:theme:/),
+      expect.objectContaining({
+        baseHash: 'base-hash',
+        localRecord,
+        remoteRecord,
+        resolvedAt: 1760000000999
+      })
+    )
+    expect(mocks.db.createConflict).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: expect.stringMatching(/^settings:theme:/),
+        baseHash: 'base-hash',
+        localRecord,
+        remoteRecord,
+        resolvedAt: 1760000000999
+      }),
+      { storageV2Mirrored: true }
+    )
     expect(mocks.db.applyRemoteRecord).toHaveBeenCalledWith(remoteRecord, { storageV2Mirrored: true })
   })
 
-  it('counts auto-resolved app record conflicts without storing user conflict records', async () => {
+  it('counts auto-resolved app record conflicts and stores resolved conflict records', async () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1760000001777)
     const localRecord = {
       ...remoteRecord,
@@ -721,8 +741,25 @@ describe('AppDataSyncService', () => {
       nowSpy.mockRestore()
     }
 
-    expect(mocks.storageV2.upsertSyncConflict).not.toHaveBeenCalled()
-    expect(mocks.db.createConflict).not.toHaveBeenCalled()
+    expect(mocks.storageV2.upsertSyncConflict).toHaveBeenCalledWith(
+      expect.stringMatching(/^settings:theme:/),
+      expect.objectContaining({
+        baseHash: 'base-hash',
+        localRecord,
+        remoteRecord,
+        resolvedAt: 1760000001777
+      })
+    )
+    expect(mocks.db.createConflict).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: expect.stringMatching(/^settings:theme:/),
+        baseHash: 'base-hash',
+        localRecord,
+        remoteRecord,
+        resolvedAt: 1760000001777
+      }),
+      { storageV2Mirrored: true }
+    )
   })
 
   it('falls back to Storage v2 sync state when legacy app.db is missing the last hash', async () => {
@@ -945,8 +982,10 @@ describe('AppDataSyncService', () => {
     expect(summary.uploaded).toBe(0)
     expect(summary.snapshotUploaded).toBe(true)
     expect(mocks.storageRecordSync.sync).toHaveBeenCalledWith(mocks.webdav, '/remote-root/sync/v1', null, {
-      secretKeyMaterial: 'https://dav.example.com\nuser\npass'
+      secretKeyMaterial: expect.any(String),
+      legacySecretKeyMaterial: 'https://dav.example.com\nuser\npass'
     })
+    expect(summary.syncSpaceId).toEqual(expect.stringMatching(/^sync-space-/))
     expect(summary.snapshotFileName).toMatch(/^cherry-studio-pi\.data-sync\.local-device\.\d+\.zip$/)
     expect(summary.snapshotBytes).toBe(6)
     expect(mocks.backupManager.backup).toHaveBeenCalledWith(undefined, summary.snapshotFileName, undefined, false)
@@ -956,7 +995,7 @@ describe('AppDataSyncService', () => {
     expect(snapshotUpload?.[2]).toEqual({ overwrite: true, contentLength: 6 })
     expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
       expect.stringContaining('/manifest.json'),
-      expect.stringContaining('"latestSnapshot"'),
+      expect.stringContaining('"syncSpace"'),
       { overwrite: true }
     )
   })

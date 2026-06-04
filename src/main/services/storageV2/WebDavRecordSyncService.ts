@@ -133,6 +133,7 @@ export type StorageV2WebDavRecordSyncResult = {
 
 type StorageV2WebDavRecordSyncOptions = {
   secretKeyMaterial?: string
+  legacySecretKeyMaterial?: string
 }
 
 type RemoteSecretVaultCache = {
@@ -556,6 +557,13 @@ function deriveSecretSyncKey(secretKeyMaterial: string | undefined) {
     .update('\0')
     .update(secretKeyMaterial ?? '')
     .digest()
+}
+
+function uniqueSecretKeyMaterials(options: StorageV2WebDavRecordSyncOptions) {
+  return [options.secretKeyMaterial, options.legacySecretKeyMaterial].filter(
+    (value, index, values): value is string =>
+      typeof value === 'string' && values.findIndex((candidate) => candidate === value) === index
+  )
 }
 
 function secretEntryTimestamp(entry: StorageV2PlaintextSecretVaultEntry | undefined) {
@@ -1093,7 +1101,7 @@ export class StorageV2WebDavRecordSyncService {
     client: WebDAVClient,
     basePath: string,
     manifest: StorageV2WebDavRecordSyncManifest,
-    secretKeyMaterial: string | undefined
+    options: StorageV2WebDavRecordSyncOptions
   ): Promise<Record<string, StorageV2PlaintextSecretVaultEntry> | null> {
     if (!manifest.secrets?.path) return null
     if (manifest.secrets.encryption !== SECRET_SYNC_ENCRYPTION) {
@@ -1108,19 +1116,34 @@ export class StorageV2WebDavRecordSyncService {
       throw new Error('远端敏感配置数据包缺失或格式损坏。为避免模型配置残缺，本次同步已停止。')
     }
 
-    const key = deriveSecretSyncKey(secretKeyMaterial)
+    const keyMaterials = uniqueSecretKeyMaterials(options)
+    if (keyMaterials.length === 0) keyMaterials.push('')
     const secrets: Record<string, StorageV2PlaintextSecretVaultEntry> = {}
+    let lastDecryptError: unknown = null
     try {
-      for (const [secretId, entry] of Object.entries(bundle.secrets)) {
-        if (!entry?.encrypted || !entry.iv || !entry.authTag || !entry.updatedAt) continue
-        secrets[secretId] = {
-          value: decryptRemoteSecret(secretId, entry, key),
-          updatedAt: entry.updatedAt
+      for (const keyMaterial of keyMaterials) {
+        const candidateSecrets: Record<string, StorageV2PlaintextSecretVaultEntry> = {}
+        const key = deriveSecretSyncKey(keyMaterial)
+        try {
+          for (const [secretId, entry] of Object.entries(bundle.secrets)) {
+            if (!entry?.encrypted || !entry.iv || !entry.authTag || !entry.updatedAt) continue
+            candidateSecrets[secretId] = {
+              value: decryptRemoteSecret(secretId, entry, key),
+              updatedAt: entry.updatedAt
+            }
+          }
+          Object.assign(secrets, candidateSecrets)
+          lastDecryptError = null
+          break
+        } catch (error) {
+          lastDecryptError = error
         }
       }
+
+      if (lastDecryptError) throw lastDecryptError
     } catch (error) {
       throw new Error(
-        '远端敏感配置无法解密。请确认两台设备使用同一套 WebDAV 同步账号和密码；为避免写入不完整模型配置，本次同步已停止。',
+        '远端敏感配置无法解密。请确认这个目录来自同一个 Cherry Studio Pi 同步空间；如果这是旧版本创建的同步目录，请先用原来能同步密钥的设备成功同步一次完成升级。',
         { cause: error }
       )
     }
@@ -1194,7 +1217,7 @@ export class StorageV2WebDavRecordSyncService {
     if (refs.size === 0) return
 
     if (!cache.loaded) {
-      cache.secrets = await this.readRemoteSecretVaultBundle(client, basePath, manifest, options.secretKeyMaterial)
+      cache.secrets = await this.readRemoteSecretVaultBundle(client, basePath, manifest, options)
       cache.loaded = true
     }
 
@@ -1253,7 +1276,7 @@ export class StorageV2WebDavRecordSyncService {
 
     const [localSecretsAll, remoteSecretsAll] = await Promise.all([
       storageV2SecretVaultService.exportPlaintextSecrets(),
-      this.readRemoteSecretVaultBundle(client, basePath, manifest, options.secretKeyMaterial)
+      this.readRemoteSecretVaultBundle(client, basePath, manifest, options)
     ])
     const localSecrets = filterSecretsByReferencedIds(localSecretsAll, referencedSecretIds)
     const remoteSecrets = remoteSecretsAll ? filterSecretsByReferencedIds(remoteSecretsAll, referencedSecretIds) : null
@@ -1284,7 +1307,10 @@ export class StorageV2WebDavRecordSyncService {
     const merged: Record<string, StorageV2PlaintextSecretVaultEntry> = { ...remoteSecrets }
     const remoteImports: Record<string, StorageV2PlaintextSecretVaultEntry> = {}
     const allSecretIds = new Set([...localIds, ...remoteIds])
-    let remoteNeedsUpdate = false
+    let remoteNeedsUpdate =
+      Boolean(options.secretKeyMaterial) &&
+      Boolean(options.legacySecretKeyMaterial) &&
+      options.secretKeyMaterial !== options.legacySecretKeyMaterial
 
     for (const secretId of allSecretIds) {
       const local = localSecrets[secretId]
@@ -1388,8 +1414,6 @@ export class StorageV2WebDavRecordSyncService {
       resolvedAt?: string | null
     }
   ) {
-    if (input.resolvedAt) return
-
     const createdAt = new Date().toISOString()
     const conflictId = `webdav-storage-record:${input.localRecord.id}:${hashJson({
       baseHash: input.baseHash ?? null,
@@ -2048,6 +2072,12 @@ export class StorageV2WebDavRecordSyncService {
       const remoteChanged = remoteRecord.valueHash !== lastHash
 
       if (!lastHash) {
+        await this.recordConflictAudit(dbClient, {
+          localRecord,
+          remoteRecord,
+          baseHash: null,
+          resolvedAt: new Date().toISOString()
+        })
         await this.assertRemoteSecretsAvailableForRecord(
           client,
           basePath,
@@ -2065,6 +2095,7 @@ export class StorageV2WebDavRecordSyncService {
         stageRecordSyncState(id, remoteRecord.valueHash)
         summary.storageDownloaded += remoteRecord.deletedAt ? 0 : 1
         summary.storageDeleted += remoteRecord.deletedAt ? 1 : 0
+        summary.storageResolvedConflicts += 1
         continue
       }
 

@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import * as fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import https from 'node:https'
@@ -46,9 +46,19 @@ type RemoteManifest = {
   generation: number
   updatedAt: number
   records: Record<string, RemoteRecordMeta>
+  syncSpace?: RemoteSyncSpace | null
   storageV2?: StorageV2WebDavRecordSyncManifest | null
   latestSnapshot?: RemoteSnapshotMeta | null
   snapshots?: Record<string, RemoteSnapshotMeta>
+}
+
+type RemoteSyncSpace = {
+  version: 1
+  id: string
+  createdAt: number
+  keyMaterial: string
+  keyFormat: 'cherry-sync-space-key-v1'
+  secretEncryption: 'cherry-webdav-secret-sync-aes-256-gcm'
 }
 
 type RemoteSnapshotMeta = {
@@ -129,6 +139,7 @@ export type DataSyncSummary = {
   remotePath: string | null
   remoteGeneration: number | null
   remoteManifestHash: string | null
+  syncSpaceId: string | null
   storageBundleHash: string | null
   storageRecordCount: number
   storageBlobCount: number
@@ -160,6 +171,7 @@ const EMPTY_SUMMARY: DataSyncSummary = {
   remotePath: null,
   remoteGeneration: null,
   remoteManifestHash: null,
+  syncSpaceId: null,
   storageBundleHash: null,
   storageRecordCount: 0,
   storageBlobCount: 0,
@@ -169,6 +181,8 @@ const EMPTY_SUMMARY: DataSyncSummary = {
 const SNAPSHOT_UPLOAD_INTERVAL_MS = 24 * 60 * 60 * 1000
 const DATA_SYNC_REMOTE_ROOT = '/cherry-studio-pi'
 const DATA_SYNC_SUFFIX = '/sync/v1'
+const SYNC_SPACE_KEY_FORMAT = 'cherry-sync-space-key-v1' as const
+const SYNC_SPACE_SECRET_ENCRYPTION = 'cherry-webdav-secret-sync-aes-256-gcm' as const
 const STORAGE_V2_RUNTIME_PROJECTION_HASH_KEY = 'storage-v2-runtime-projection-hash'
 const REMOTE_SYNC_LOCK_FILE = '.sync.lock.json'
 const REMOTE_SYNC_LOCK_TTL_MS = 30 * 60 * 1000
@@ -266,10 +280,38 @@ function makeManifest(): RemoteManifest {
     generation: 0,
     updatedAt: Date.now(),
     records: {},
+    syncSpace: null,
     storageV2: null,
     latestSnapshot: null,
     snapshots: {}
   }
+}
+
+function randomSyncSpaceKeyMaterial() {
+  return randomBytes(32).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+function makeSyncSpace(now = Date.now()): RemoteSyncSpace {
+  return {
+    version: 1,
+    id: `sync-space-${randomUUID()}`,
+    createdAt: now,
+    keyMaterial: randomSyncSpaceKeyMaterial(),
+    keyFormat: SYNC_SPACE_KEY_FORMAT,
+    secretEncryption: SYNC_SPACE_SECRET_ENCRYPTION
+  }
+}
+
+function isUsableSyncSpace(value: RemoteSyncSpace | null | undefined): value is RemoteSyncSpace {
+  return (
+    value?.version === 1 &&
+    typeof value.id === 'string' &&
+    value.id.length > 0 &&
+    typeof value.keyMaterial === 'string' &&
+    value.keyMaterial.length >= 24 &&
+    value.keyFormat === SYNC_SPACE_KEY_FORMAT &&
+    value.secretEncryption === SYNC_SPACE_SECRET_ENCRYPTION
+  )
 }
 
 function bufferToString(value: string | Buffer | ArrayBuffer | unknown) {
@@ -959,10 +1001,18 @@ export class AppDataSyncService {
     const nextManifest = manifest ?? makeManifest()
     nextManifest.generation = Number.isFinite(nextManifest.generation) ? Number(nextManifest.generation) : 0
     nextManifest.records = nextManifest.records ?? {}
+    nextManifest.syncSpace = nextManifest.syncSpace ?? null
     nextManifest.storageV2 = nextManifest.storageV2 ?? null
     nextManifest.snapshots = nextManifest.snapshots ?? {}
     nextManifest.latestSnapshot = nextManifest.latestSnapshot ?? null
     return nextManifest
+  }
+
+  private ensureSyncSpace(manifest: RemoteManifest, now = Date.now()) {
+    if (isUsableSyncSpace(manifest.syncSpace)) return manifest.syncSpace
+
+    manifest.syncSpace = makeSyncSpace(now)
+    return manifest.syncSpace
   }
 
   private captureManifestBaseline(
@@ -999,6 +1049,7 @@ export class AppDataSyncService {
   private updateSummaryRemoteState(summary: DataSyncSummary, manifest: RemoteManifest) {
     summary.remoteGeneration = manifest.generation
     summary.remoteManifestHash = hashJsonValue(manifest)
+    summary.syncSpaceId = manifest.syncSpace?.id ?? null
     summary.storageBundleHash = manifest.storageV2?.bundle?.valueHash ?? null
     summary.storageRecordCount =
       manifest.storageV2?.bundle?.recordCount ?? Object.keys(manifest.storageV2?.records ?? {}).length
@@ -1151,10 +1202,6 @@ export class AppDataSyncService {
       resolvedAt?: number | null
     }
   ) {
-    if (input.resolvedAt) {
-      return null
-    }
-
     const id = `${input.scope}:${input.key}:${hashJsonValue({
       baseHash: input.baseHash ?? null,
       localHash: input.localRecord?.valueHash ?? null,
@@ -1375,6 +1422,9 @@ export class AppDataSyncService {
       const rawManifest = await this.readJson<RemoteManifest>(client, manifestPath, { throwOnInvalidJson: true })
       const manifest = this.normalizeManifest(rawManifest)
       const manifestBaseline = this.captureManifestBaseline(rawManifest, manifest)
+      const hadUsableSyncSpaceBeforeSync = isUsableSyncSpace(manifest.syncSpace)
+      const syncSpace = this.ensureSyncSpace(manifest, summary.lastSyncAt)
+      summary.syncSpaceId = syncSpace.id
       const remoteHadStorageDataBeforeSync = hasStorageV2RemoteData(manifest.storageV2)
       const remoteStorageEntityTypes = getStorageV2ManifestEntityTypes(manifest.storageV2)
       let localStorageAppRecords: AppDataRecord[] | null = null
@@ -1453,10 +1503,19 @@ export class AppDataSyncService {
           if (!lastHash) {
             const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
             if (remoteRecord) {
+              await this.createConflict(db, {
+                scope: localRecord.scope,
+                key: localRecord.key,
+                localRecord,
+                remoteRecord,
+                baseHash: null,
+                resolvedAt: Date.now()
+              })
               await this.applyRemoteRecord(db, remoteRecord)
               stageSyncState(`record:${id}:hash`, remoteRecord.valueHash)
               summary.downloaded += remoteRecord.deletedAt ? 0 : 1
               summary.deleted += remoteRecord.deletedAt ? 1 : 0
+              summary.resolvedConflicts += 1
             } else {
               summary.skipped += 1
             }
@@ -1508,7 +1567,10 @@ export class AppDataSyncService {
       }
 
       const storageSync = await storageV2WebDavRecordSyncService.sync(client, basePath, manifest.storageV2, {
-        secretKeyMaterial: `${normalizeWebDavHost(config.webdavHost)}\n${config.webdavUser ?? ''}\n${config.webdavPass ?? ''}`
+        secretKeyMaterial: syncSpace.keyMaterial,
+        legacySecretKeyMaterial: hadUsableSyncSpaceBeforeSync
+          ? undefined
+          : `${normalizeWebDavHost(config.webdavHost)}\n${config.webdavUser ?? ''}\n${config.webdavPass ?? ''}`
       })
       manifest.storageV2 = storageSync.manifest
       storageSyncStates = storageSync.syncStates ?? []

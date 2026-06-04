@@ -1449,7 +1449,7 @@ describe('AppDataSyncService local WebDAV integration', () => {
     })
   })
 
-  it('auto-resolves divergent edits by timestamp without accumulating conflict records', async () => {
+  it('auto-resolves divergent edits by timestamp while keeping recovery audit records', async () => {
     const homePath = path.join(tempRoot, 'home')
     const instanceA = makeInstance(tempRoot, 'device-a')
     const instanceB = makeInstance(tempRoot, 'device-b')
