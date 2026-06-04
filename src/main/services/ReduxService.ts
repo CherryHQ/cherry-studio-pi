@@ -117,6 +117,24 @@ export class ReduxService {
     }
   }
 
+  async prepareStorageV2ForDataSync(): Promise<void> {
+    try {
+      const webContents = await this.getWebContents()
+      await webContents.executeJavaScript(`
+        (async () => {
+          const prepareForDataSync = window.storageV2Runtime?.prepareForDataSync;
+          if (typeof prepareForDataSync !== 'function') {
+            throw new Error('Storage v2 runtime prepare API unavailable');
+          }
+          await prepareForDataSync();
+        })()
+      `)
+    } catch (error) {
+      logger.error('Failed to prepare Storage v2 runtime data before sync:', error as Error)
+      throw error
+    }
+  }
+
   // Batch dispatch actions
   async batch(actions: any[]): Promise<void> {
     for (const action of actions) {

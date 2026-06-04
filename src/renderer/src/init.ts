@@ -4,6 +4,7 @@ import { loggerService } from '@logger'
 import { startAutoSync } from './services/BackupService'
 import { startDataSyncAutoSync, startDataSyncExternalSyncListener } from './services/DataSyncService'
 import { startNutstoreAutoSync } from './services/NutstoreService'
+import { prepareStorageV2ForDataSync } from './services/StorageV2Service'
 import storeSyncService from './services/StoreSyncService'
 import { initSystemAgentErrorTriggers } from './services/SystemAgentService'
 import { webTraceService } from './services/WebTraceService'
@@ -44,11 +45,18 @@ function initSystemAgent() {
   initSystemAgentErrorTriggers()
 }
 
+function initStorageV2RuntimeBridge() {
+  window.storageV2Runtime = {
+    prepareForDataSync: prepareStorageV2ForDataSync
+  }
+}
+
 function initDataSyncExternalEvents() {
   startDataSyncExternalSyncListener()
 }
 
 initKeyv()
+initStorageV2RuntimeBridge()
 initSystemAgent()
 initDataSyncExternalEvents()
 initAutoSync()

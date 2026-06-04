@@ -58,4 +58,10 @@ describe('ReduxService provider cache invalidation', () => {
 
     expect(mockCacheRemove).not.toHaveBeenCalled()
   })
+
+  it('can ask the renderer to prepare Storage v2 runtime data before data sync', async () => {
+    await reduxService.prepareStorageV2ForDataSync()
+
+    expect(mockExecuteJavaScript).toHaveBeenCalledWith(expect.stringContaining('prepareForDataSync'))
+  })
 })

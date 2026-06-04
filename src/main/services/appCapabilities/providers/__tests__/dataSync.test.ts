@@ -12,7 +12,8 @@ const mocks = vi.hoisted(() => ({
   getAllWindows: vi.fn(),
   reduxService: {
     select: vi.fn(),
-    dispatch: vi.fn()
+    dispatch: vi.fn(),
+    prepareStorageV2ForDataSync: vi.fn()
   },
   appDataSyncService: {
     getStatus: vi.fn(),
@@ -79,6 +80,7 @@ describe('data sync app capabilities', () => {
     mocks.getAllWindows.mockReturnValue(mocks.browserWindows)
     mocks.reduxService.select.mockResolvedValue(settings)
     mocks.reduxService.dispatch.mockResolvedValue(undefined)
+    mocks.reduxService.prepareStorageV2ForDataSync.mockResolvedValue(undefined)
   })
 
   it('reads WebDAV config with secrets redacted', async () => {
@@ -143,11 +145,12 @@ describe('data sync app capabilities', () => {
     const result = await capability('dataSync.sync.now').execute({}, { source: 'agent', dryRun: true })
 
     expect(result.ok).toBe(true)
+    expect(mocks.reduxService.prepareStorageV2ForDataSync).not.toHaveBeenCalled()
     expect(result.summary).toContain('dry run')
     expect(mocks.appDataSyncService.syncNow).not.toHaveBeenCalled()
   })
 
-  it('broadcasts sync completion after agent-triggered data sync', async () => {
+  it('prepares renderer runtime data and broadcasts completion after agent-triggered data sync', async () => {
     const summary = {
       status: 'success',
       storageDownloaded: 2,
@@ -160,12 +163,16 @@ describe('data sync app capabilities', () => {
     const result = await capability('dataSync.sync.now').execute({}, { source: 'agent' })
 
     expect(result.ok).toBe(true)
+    expect(mocks.reduxService.prepareStorageV2ForDataSync).toHaveBeenCalledTimes(1)
     expect(mocks.appDataSyncService.syncNow).toHaveBeenCalledWith({
       webdavHost: 'https://dav.example.com',
       webdavUser: 'user',
       webdavPass: 'secret',
       webdavPath: '/sync-root'
     })
+    expect(mocks.reduxService.prepareStorageV2ForDataSync.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.appDataSyncService.syncNow.mock.invocationCallOrder[0]
+    )
     expect(mocks.browserWindows[0].webContents.send).toHaveBeenCalledWith(IpcChannel.DataSync_ExternalSyncCompleted, {
       completedAt: expect.any(Number),
       source: 'agent',

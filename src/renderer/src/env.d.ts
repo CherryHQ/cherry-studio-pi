@@ -54,5 +54,8 @@ declare global {
         updatedPermissions?: AgentPermissionUpdate[]
       }) => Promise<{ success: boolean }>
     }
+    storageV2Runtime?: {
+      prepareForDataSync: () => Promise<void>
+    }
   }
 }
