@@ -19,7 +19,10 @@ const mocks = vi.hoisted(() => ({
   reportErrorToSystemAgent: vi.fn(),
   getStatus: vi.fn(),
   syncNow: vi.fn(),
-  recordFailure: vi.fn()
+  recordFailure: vi.fn(),
+  onExternalSyncCompleted: vi.fn(),
+  externalSyncListener: null as ((payload: unknown) => void) | null,
+  externalSyncUnsubscribe: vi.fn()
 }))
 
 vi.mock('@renderer/store', () => ({
@@ -52,7 +55,9 @@ import { notifyDataSyncLocalChange } from '../DataSyncLocalChangeSignal'
 import {
   getDataSyncRuntimeState,
   startDataSyncAutoSync,
+  startDataSyncExternalSyncListener,
   stopDataSyncAutoSync,
+  stopDataSyncExternalSyncListener,
   subscribeDataSyncRuntimeState,
   syncAppDataNow
 } from '../DataSyncService'
@@ -106,9 +111,15 @@ describe('DataSyncService', () => {
         dataSync: {
           getStatus: mocks.getStatus,
           syncNow: mocks.syncNow,
-          recordFailure: mocks.recordFailure
+          recordFailure: mocks.recordFailure,
+          onExternalSyncCompleted: mocks.onExternalSyncCompleted
         }
       }
+    })
+    mocks.externalSyncListener = null
+    mocks.onExternalSyncCompleted.mockImplementation((listener: (payload: unknown) => void) => {
+      mocks.externalSyncListener = listener
+      return mocks.externalSyncUnsubscribe
     })
     mocks.prepareStorageV2ForDataSync.mockResolvedValue(undefined)
     mocks.hydrateRuntimeCacheFromStorageV2.mockResolvedValue({})
@@ -131,6 +142,7 @@ describe('DataSyncService', () => {
 
   afterEach(() => {
     stopDataSyncAutoSync()
+    stopDataSyncExternalSyncListener()
     vi.useRealTimers()
     Object.defineProperty(window, 'api', {
       configurable: true,
@@ -160,6 +172,27 @@ describe('DataSyncService', () => {
     })
     expect(mocks.hydrateStorageV2ConversationsIfDexieEmpty).toHaveBeenCalledWith('data-sync:after data sync', {
       strict: false
+    })
+  })
+
+  it('hydrates runtime after an external main-process sync completion event', async () => {
+    startDataSyncExternalSyncListener()
+
+    expect(mocks.onExternalSyncCompleted).toHaveBeenCalledTimes(1)
+    mocks.externalSyncListener?.({
+      source: 'agent',
+      summary: {
+        ...successSummary,
+        storageRecordCount: 4,
+        storageBundleHash: 'remote-bundle-hash'
+      }
+    })
+
+    await vi.waitFor(() => {
+      expect(mocks.hydrateRuntimeCacheFromStorageV2).toHaveBeenCalledTimes(1)
+    })
+    expect(mocks.hydrateStorageV2ConversationsIfDexieEmpty).toHaveBeenCalledWith('data-sync:after external data sync', {
+      strict: true
     })
   })
 

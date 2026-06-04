@@ -50,6 +50,7 @@ export type DataSyncSummary = {
 let syncTimeout: NodeJS.Timeout | null = null
 let localChangeSyncTimeout: NodeJS.Timeout | null = null
 let localChangeUnsubscribe: (() => void) | null = null
+let externalSyncCompleteUnsubscribe: (() => void) | null = null
 let autoSyncStarted = false
 let syncing = false
 let localChangeDuringSync = false
@@ -110,6 +111,20 @@ function hasRemoteRuntimeData(summary?: Partial<DataSyncSummary> | null) {
   )
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function getExternalDataSyncSummary(payload: unknown): Partial<DataSyncSummary> | null {
+  if (!isRecord(payload)) return null
+
+  if ('summary' in payload) {
+    return isRecord(payload.summary) ? (payload.summary as Partial<DataSyncSummary>) : null
+  }
+
+  return payload as Partial<DataSyncSummary>
+}
+
 async function rememberDataSyncFailure(message: string) {
   try {
     await window.api.dataSync.recordFailure?.(message)
@@ -135,6 +150,13 @@ async function hydrateRuntimeCacheAfterDataSync(context: string, options: { stri
       throw new Error(message)
     }
   }
+}
+
+async function hydrateRuntimeCacheAfterExternalDataSync(payload: unknown) {
+  const summary = getExternalDataSyncSummary(payload)
+  if (!hasRemoteRuntimeData(summary)) return
+
+  await hydrateRuntimeCacheAfterDataSync('after external data sync', { strict: true })
 }
 
 async function hydratePreviouslyDownloadedRemoteData() {
@@ -244,6 +266,30 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
       scheduleLocalChangeSync()
     }
   }
+}
+
+export function startDataSyncExternalSyncListener() {
+  if (externalSyncCompleteUnsubscribe) return
+
+  const subscribe = window.api?.dataSync?.onExternalSyncCompleted
+  if (typeof subscribe !== 'function') return
+
+  externalSyncCompleteUnsubscribe = subscribe((payload: unknown) => {
+    void hydrateRuntimeCacheAfterExternalDataSync(payload).catch((error) => {
+      logger.warn('Failed to hydrate runtime cache after external data sync completion', error as Error)
+      void reportErrorToSystemAgent(error, {
+        source: 'data-sync.external',
+        domain: 'dataSync'
+      })
+    })
+  })
+}
+
+export function stopDataSyncExternalSyncListener() {
+  if (!externalSyncCompleteUnsubscribe) return
+
+  externalSyncCompleteUnsubscribe()
+  externalSyncCompleteUnsubscribe = null
 }
 
 export function stopDataSyncAutoSync() {

@@ -2,7 +2,7 @@ import KeyvStorage from '@kangfenmao/keyv-storage'
 import { loggerService } from '@logger'
 
 import { startAutoSync } from './services/BackupService'
-import { startDataSyncAutoSync } from './services/DataSyncService'
+import { startDataSyncAutoSync, startDataSyncExternalSyncListener } from './services/DataSyncService'
 import { startNutstoreAutoSync } from './services/NutstoreService'
 import storeSyncService from './services/StoreSyncService'
 import { initSystemAgentErrorTriggers } from './services/SystemAgentService'
@@ -44,8 +44,13 @@ function initSystemAgent() {
   initSystemAgentErrorTriggers()
 }
 
+function initDataSyncExternalEvents() {
+  startDataSyncExternalSyncListener()
+}
+
 initKeyv()
 initSystemAgent()
+initDataSyncExternalEvents()
 initAutoSync()
 initStoreSync()
 initWebTrace()

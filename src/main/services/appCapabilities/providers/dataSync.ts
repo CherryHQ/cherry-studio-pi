@@ -1,7 +1,9 @@
 import { appDataSyncService } from '@main/services/appData/AppDataSyncService'
 import { reduxService } from '@main/services/ReduxService'
 import { describeWebDavUserFacingError } from '@main/services/WebDavRetry'
+import { IpcChannel } from '@shared/IpcChannel'
 import type { WebDavConfig } from '@types'
+import { BrowserWindow } from 'electron'
 
 import type { AppCapabilityDefinition } from '../types'
 import { okResult, sanitizeForAgent } from '../utils'
@@ -78,6 +80,20 @@ async function persistWebDavConfig(config: WebDavConfig, options: { autoSync?: b
   }
   if (typeof options.autoSync === 'boolean') {
     await reduxService.dispatch({ type: 'settings/setDataSyncAutoSync', payload: options.autoSync })
+  }
+}
+
+function broadcastExternalDataSyncCompleted(summary: unknown, source: string) {
+  const payload = {
+    completedAt: Date.now(),
+    source,
+    summary
+  }
+
+  for (const browserWindow of BrowserWindow.getAllWindows()) {
+    if (!browserWindow.isDestroyed()) {
+      browserWindow.webContents.send(IpcChannel.DataSync_ExternalSyncCompleted, payload)
+    }
   }
 }
 
@@ -263,10 +279,9 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
         if (input?.saveConfig === true) {
           await persistWebDavConfig(config)
         }
-        return okResult(
-          'Data sync completed',
-          sanitizeForAgent(await runWebDavCapability('同步数据', () => appDataSyncService.syncNow(config)))
-        )
+        const summary = await runWebDavCapability('同步数据', () => appDataSyncService.syncNow(config))
+        broadcastExternalDataSyncCompleted(summary, context.source)
+        return okResult('Data sync completed', sanitizeForAgent(summary))
       }
     },
     {

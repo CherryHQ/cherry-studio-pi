@@ -262,7 +262,16 @@ const api = {
       ipcRenderer.invoke(IpcChannel.DataSync_ListRemoteDirectories, webdavConfig, remotePath),
     checkWriteAccess: (webdavConfig: WebDavConfig) =>
       ipcRenderer.invoke(IpcChannel.DataSync_CheckWriteAccess, webdavConfig),
-    recordFailure: (message: string) => ipcRenderer.invoke(IpcChannel.DataSync_RecordFailure, message)
+    recordFailure: (message: string) => ipcRenderer.invoke(IpcChannel.DataSync_RecordFailure, message),
+    onExternalSyncCompleted: (callback: (payload: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
+        callback(payload)
+      }
+      ipcRenderer.on(IpcChannel.DataSync_ExternalSyncCompleted, listener)
+      return () => {
+        ipcRenderer.off(IpcChannel.DataSync_ExternalSyncCompleted, listener)
+      }
+    }
   },
   systemAgent: {
     listCapabilities: (options?: Record<string, unknown>) =>

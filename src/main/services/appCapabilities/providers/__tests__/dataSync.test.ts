@@ -1,6 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  browserWindows: [
+    {
+      isDestroyed: vi.fn(() => false),
+      webContents: {
+        send: vi.fn()
+      }
+    }
+  ],
+  getAllWindows: vi.fn(),
   reduxService: {
     select: vi.fn(),
     dispatch: vi.fn()
@@ -11,6 +20,12 @@ const mocks = vi.hoisted(() => ({
     checkWriteAccess: vi.fn(),
     syncNow: vi.fn(),
     restoreLatestSnapshot: vi.fn()
+  }
+}))
+
+vi.mock('electron', () => ({
+  BrowserWindow: {
+    getAllWindows: mocks.getAllWindows
   }
 }))
 
@@ -39,6 +54,8 @@ vi.mock('../../utils', () => ({
     )
 }))
 
+import { IpcChannel } from '@shared/IpcChannel'
+
 import { createDataSyncCapabilities } from '../dataSync'
 
 const settings = {
@@ -59,6 +76,7 @@ function capability(id: string) {
 describe('data sync app capabilities', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.getAllWindows.mockReturnValue(mocks.browserWindows)
     mocks.reduxService.select.mockResolvedValue(settings)
     mocks.reduxService.dispatch.mockResolvedValue(undefined)
   })
@@ -127,5 +145,31 @@ describe('data sync app capabilities', () => {
     expect(result.ok).toBe(true)
     expect(result.summary).toContain('dry run')
     expect(mocks.appDataSyncService.syncNow).not.toHaveBeenCalled()
+  })
+
+  it('broadcasts sync completion after agent-triggered data sync', async () => {
+    const summary = {
+      status: 'success',
+      storageDownloaded: 2,
+      storageRecordCount: 10,
+      storageBundleHash: 'bundle-hash',
+      lastSyncAt: 1780058147577
+    }
+    mocks.appDataSyncService.syncNow.mockResolvedValueOnce(summary)
+
+    const result = await capability('dataSync.sync.now').execute({}, { source: 'agent' })
+
+    expect(result.ok).toBe(true)
+    expect(mocks.appDataSyncService.syncNow).toHaveBeenCalledWith({
+      webdavHost: 'https://dav.example.com',
+      webdavUser: 'user',
+      webdavPass: 'secret',
+      webdavPath: '/sync-root'
+    })
+    expect(mocks.browserWindows[0].webContents.send).toHaveBeenCalledWith(IpcChannel.DataSync_ExternalSyncCompleted, {
+      completedAt: expect.any(Number),
+      source: 'agent',
+      summary
+    })
   })
 })
