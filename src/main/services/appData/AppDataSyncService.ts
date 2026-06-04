@@ -1391,18 +1391,15 @@ export class AppDataSyncService {
       throw new Error('WebDAV host is required')
     }
 
-    const db = await getAppDataDatabase()
     const { client, basePath } = this.createWebDavClient(config)
     const manifestPath = path.posix.join(basePath, 'manifest.json')
     const manifest = this.normalizeManifest(
       await this.readJson<RemoteManifest>(client, manifestPath, { throwOnInvalidJson: true })
     )
-    const localDeviceId = db.getDeviceId()
     const snapshots = Object.values(manifest.snapshots ?? {})
       .filter((snapshot): snapshot is RemoteSnapshotMeta => Boolean(snapshot?.path && snapshot.fileName))
       .sort((left, right) => right.uploadedAt - left.uploadedAt)
-    const snapshot =
-      snapshots.find((item) => item.deviceId !== localDeviceId) ?? manifest.latestSnapshot ?? snapshots[0] ?? null
+    const snapshot = snapshots[0] ?? manifest.latestSnapshot ?? null
 
     if (!snapshot) {
       throw new Error('No remote data snapshot is available')
