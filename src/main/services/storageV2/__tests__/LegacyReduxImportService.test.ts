@@ -100,6 +100,69 @@ describe('StorageV2LegacyReduxImportService', () => {
     expect(report.importedSecretCount).toBe(1)
   })
 
+  it('stores flat sensitive settings as secret refs', async () => {
+    mocks.secretVault.setSecret.mockImplementation(
+      async (scope: string, ownerId: string, kind: string) => `storage-v2://secret/${scope}/${ownerId}/${kind}`
+    )
+
+    const report = await new StorageV2LegacyReduxImportService().importSnapshot(
+      {
+        settings: {
+          dataSyncWebdavPass: 'sync-pass',
+          webdavPass: 'backup-pass',
+          notionApiKey: 'notion-secret',
+          yuqueToken: '',
+          language: 'zh-CN'
+        }
+      },
+      { dryRun: false }
+    )
+
+    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith(
+      'settings',
+      'dataSyncWebdavPass',
+      'dataSyncWebdavPassword',
+      'sync-pass'
+    )
+    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith(
+      'settings',
+      'webdavPass',
+      'backupWebdavPassword',
+      'backup-pass'
+    )
+    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith(
+      'settings',
+      'notionApiKey',
+      'notionApiKey',
+      'notion-secret'
+    )
+    expect(mocks.settingsRepository.set).toHaveBeenCalledWith(
+      'settings.dataSyncWebdavPass',
+      {
+        secretRef: 'storage-v2://secret/settings/dataSyncWebdavPass/dataSyncWebdavPassword'
+      },
+      'settings'
+    )
+    expect(mocks.settingsRepository.set).toHaveBeenCalledWith(
+      'settings.webdavPass',
+      {
+        secretRef: 'storage-v2://secret/settings/webdavPass/backupWebdavPassword'
+      },
+      'settings'
+    )
+    expect(mocks.settingsRepository.set).toHaveBeenCalledWith(
+      'settings.notionApiKey',
+      {
+        secretRef: 'storage-v2://secret/settings/notionApiKey/notionApiKey'
+      },
+      'settings'
+    )
+    expect(mocks.settingsRepository.set).toHaveBeenCalledWith('settings.yuqueToken', '', 'settings')
+    expect(mocks.settingsRepository.set).toHaveBeenCalledWith('settings.language', 'zh-CN', 'settings')
+    expect(report.secretCandidateCount).toBe(3)
+    expect(report.importedSecretCount).toBe(3)
+  })
+
   it('does not prune providers or assistants when importing a localStorage-only snapshot', async () => {
     await new StorageV2LegacyReduxImportService().importSnapshot(
       {

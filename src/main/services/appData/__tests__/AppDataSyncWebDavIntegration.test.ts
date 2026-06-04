@@ -345,6 +345,7 @@ async function seedComprehensiveStorageV2Data(instance: TestInstance): Promise<C
   ].join('\n')
   const providerApiKeySecretRef = 'storage-v2://secret/provider/provider-sync-full-openai/apiKey'
   const channelWebhookSecretRef = 'storage-v2://secret/channel/channel-sync-full/webhook'
+  const dataSyncWebdavPassSecretRef = 'storage-v2://secret/settings/dataSyncWebdavPass/dataSyncWebdavPassword'
   const blobBytes = Buffer.from(blobPayload, 'utf8')
   const blobChecksum = createHash('sha256').update(blobBytes).digest('hex')
   const blobPath = path.join(instance.dataRoot, blobStoragePath)
@@ -358,6 +359,12 @@ async function seedComprehensiveStorageV2Data(instance: TestInstance): Promise<C
     'sk-sync-full-provider'
   )
   await storageV2SecretVaultService.setSecret('channel', 'channel-sync-full', 'webhook', 'whsec-sync-full-channel')
+  await storageV2SecretVaultService.setSecret(
+    'settings',
+    'dataSyncWebdavPass',
+    'dataSyncWebdavPassword',
+    'sync-full-webdav-pass'
+  )
 
   const execute = (sql: string, args: InValue[] = []) => client.execute({ sql, args })
   const json = (value: unknown) => JSON.stringify(value)
@@ -764,6 +771,13 @@ async function seedComprehensiveStorageV2Data(instance: TestInstance): Promise<C
       updatedAt
     ]
   )
+  await execute(
+    `
+      INSERT INTO settings (key, value_json, scope, updated_at, updated_by_device_id, version, deleted_at)
+      VALUES (?, ?, 'settings', ?, 'device-a', 3, NULL)
+    `,
+    ['settings.dataSyncWebdavPass', json({ secretRef: dataSyncWebdavPassSecretRef }), updatedAt]
+  )
 
   return {
     blobChecksum,
@@ -851,6 +865,10 @@ async function readComprehensiveStorageV2State(instance: TestInstance, fixture: 
     ['channel-sync-full']
   )
   const channelConfig = channel ? JSON.parse(String(channel.config_json)) : null
+  const dataSyncPassSetting = await selectOne<{ value_json: string }>('SELECT value_json FROM settings WHERE key = ?', [
+    'settings.dataSyncWebdavPass'
+  ])
+  const dataSyncPassSettingValue = dataSyncPassSetting ? JSON.parse(String(dataSyncPassSetting.value_json)) : null
 
   return {
     counts: {
@@ -950,6 +968,11 @@ async function readComprehensiveStorageV2State(instance: TestInstance, fixture: 
     setting: await selectOne<{ value_json: string }>('SELECT value_json FROM settings WHERE key = ?', [
       'settings.sync.fixture.preference'
     ]),
+    dataSyncPassSetting,
+    dataSyncWebdavPass:
+      typeof dataSyncPassSettingValue?.secretRef === 'string'
+        ? await storageV2SecretVaultService.getSecret(dataSyncPassSettingValue.secretRef)
+        : null,
     kvRecord: await selectOne<{ value_json: string }>('SELECT value_json FROM kv_records WHERE scope = ? AND key = ?', [
       'ui',
       'sync.fixture.workspace'
@@ -1075,7 +1098,7 @@ const COMPREHENSIVE_STORAGE_TABLE_COUNTS = {
   knowledge_bases: 1,
   knowledge_items: 1,
   kv_records: 1,
-  settings: 1
+  settings: 2
 } as const
 
 const COMPREHENSIVE_REMOTE_ENTITY_COUNTS = {
@@ -1102,7 +1125,7 @@ const COMPREHENSIVE_REMOTE_ENTITY_COUNTS = {
   knowledge_base: 1,
   knowledge_item: 1,
   kv_record: 1,
-  settings: 1
+  settings: 2
 } as const
 
 async function readAllRemoteText(root: string) {
@@ -1229,7 +1252,7 @@ describe('AppDataSyncService local WebDAV integration', () => {
 
     expect(firstSummary.storageUploaded).toBe(expectedRecordCount)
     expect(firstSummary.blobUploaded).toBe(1)
-    expect(firstSummary.secretUploaded).toBe(2)
+    expect(firstSummary.secretUploaded).toBe(3)
     expect(countRemoteStorageV2Records(remoteManifest)).toEqual(COMPREHENSIVE_REMOTE_ENTITY_COUNTS)
     expect(Object.keys(remoteManifest.storageV2?.records ?? {})).toHaveLength(expectedRecordCount)
     expect(remoteManifest.storageV2?.bundle).toMatchObject({
@@ -1248,6 +1271,8 @@ describe('AppDataSyncService local WebDAV integration', () => {
     expect(remoteText).toContain('同步测试 Agent')
     expect(remoteText).toContain('同步测试知识库')
     expect(remoteText).toContain('settings.sync.fixture.preference')
+    expect(remoteText).toContain('settings.dataSyncWebdavPass')
+    expect(remoteText).not.toContain('sync-full-webdav-pass')
 
     await switchInstance(instanceB, homePath)
     const secondSummary = await new AppDataSyncService(backupManager as never).syncNow(config)
@@ -1256,7 +1281,7 @@ describe('AppDataSyncService local WebDAV integration', () => {
 
     expect(secondSummary.storageDownloaded).toBe(expectedRecordCount)
     expect(secondSummary.blobDownloaded).toBe(1)
-    expect(secondSummary.secretDownloaded).toBe(2)
+    expect(secondSummary.secretDownloaded).toBe(3)
     expect(secondSummary.storageConflicts).toBe(0)
     expect(secondSummary.storageResolvedConflicts).toBe(0)
     expect(deviceBState.counts).toEqual(COMPREHENSIVE_STORAGE_TABLE_COUNTS)
@@ -1342,6 +1367,10 @@ describe('AppDataSyncService local WebDAV integration', () => {
       locale: 'zh-CN',
       dataSync: { mode: 'webdav', realtime: true }
     })
+    expect(JSON.parse(deviceBState.dataSyncPassSetting!.value_json)).toEqual({
+      secretRef: 'storage-v2://secret/settings/dataSyncWebdavPass/dataSyncWebdavPassword'
+    })
+    expect(deviceBState.dataSyncWebdavPass).toBe('sync-full-webdav-pass')
     expect(JSON.parse(deviceBState.kvRecord!.value_json)).toEqual({
       layout: 'compact',
       sidebar: 'agents'

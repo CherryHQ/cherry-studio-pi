@@ -13,6 +13,7 @@ import { listStorageV2LegacyRuntimePolicies, storageV2LegacyRuntimeCleanupServic
 import { storageV2MigrationAuditService } from './MigrationAuditService'
 import { type StorageV2MigrationRunInput, storageV2MigrationRunService } from './MigrationRunService'
 import { storageV2SecretVaultService } from './SecretVaultService'
+import { STORAGE_V2_FLAT_SETTINGS_SECRET_FIELDS } from './SettingsSecretFields'
 import { storageV2StatisticsService } from './StatisticsService'
 import { storageV2Database } from './StorageV2Database'
 import {
@@ -244,6 +245,39 @@ async function restoreSecretField(owner: Record<string, any>, field: string, inc
 
   delete owner[secretRefKey]
   delete owner[unavailableKey]
+
+  return missingSecretCount
+}
+
+async function restoreFlatSettingsSecretFields(
+  settings: Record<string, unknown>,
+  includeSecrets: boolean
+): Promise<number> {
+  let missingSecretCount = 0
+
+  for (const field of STORAGE_V2_FLAT_SETTINGS_SECRET_FIELDS) {
+    const value = settings[field.key]
+
+    if (isRecord(value)) {
+      const secretRef = value.secretRef
+      if (typeof secretRef === 'string' && secretRef && includeSecrets) {
+        const secret = await storageV2SecretVaultService.getSecret(secretRef)
+        if (secret) {
+          settings[field.key] = secret
+        } else {
+          delete settings[field.key]
+          missingSecretCount++
+        }
+      } else {
+        delete settings[field.key]
+      }
+      continue
+    }
+
+    if (!includeSecrets && typeof value === 'string' && value) {
+      delete settings[field.key]
+    }
+  }
 
   return missingSecretCount
 }
@@ -705,6 +739,8 @@ export class StorageV2Service {
     if (isRecord(state.settings.apiServer)) {
       missingSecretCount += await restoreSecretField(state.settings.apiServer, 'apiKey', includeSecrets)
     }
+
+    missingSecretCount += await restoreFlatSettingsSecretFields(state.settings, includeSecrets)
 
     const llmSettings = cloneRecord(state.llm.settings)
     if (includeSecrets) {

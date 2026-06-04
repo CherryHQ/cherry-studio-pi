@@ -1,6 +1,7 @@
 import type { Assistant, Provider } from '@types'
 
 import { storageV2SecretVaultService } from './SecretVaultService'
+import { getStorageV2FlatSettingsSecretField } from './SettingsSecretFields'
 import {
   storageV2AssistantRepository,
   storageV2KnowledgeRepository,
@@ -825,6 +826,50 @@ async function sanitizeSettingsEntry(
   value: unknown,
   options: SecretSanitizerOptions
 ): Promise<SecretSanitizerResult> {
+  const flatSecretField = getStorageV2FlatSettingsSecretField(key)
+  if (flatSecretField) {
+    const secretValue = typeof value === 'string' ? value : null
+    if (!secretValue) {
+      return {
+        value,
+        secretCandidateCount: 0,
+        importedSecretCount: 0
+      }
+    }
+
+    let sanitizedValue: unknown = value
+    let importedSecretCount = 0
+
+    if (!options.dryRun && options.canImportSecrets) {
+      sanitizedValue = {
+        secretRef: await storageV2SecretVaultService.setSecret(
+          'settings',
+          flatSecretField.key,
+          flatSecretField.kind,
+          secretValue
+        )
+      }
+      importedSecretCount = 1
+    } else if (!options.dryRun) {
+      sanitizedValue = {
+        secretUnavailable: true
+      }
+    }
+
+    pushSecretWarning(
+      options,
+      1,
+      'Sensitive app settings were detected. Dry run did not write them to the secret vault.',
+      'Sensitive app settings were detected but local secret vault is unavailable.'
+    )
+
+    return {
+      value: options.dryRun ? value : sanitizedValue,
+      secretCandidateCount: 1,
+      importedSecretCount
+    }
+  }
+
   if (key !== 's3' && key !== 'apiServer') {
     return {
       value,

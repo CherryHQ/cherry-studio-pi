@@ -595,6 +595,46 @@ describe('StorageV2Service', () => {
     expect(mocks.secretVault.getSecret).toHaveBeenCalledWith(secretRef)
   })
 
+  it('restores flat sensitive settings from secret refs in core snapshots', async () => {
+    const dataSyncPassRef = 'storage-v2://secret/settings/dataSyncWebdavPass/dataSyncWebdavPassword'
+    const notionApiKeyRef = 'storage-v2://secret/settings/notionApiKey/notionApiKey'
+    mocks.settingsRepository.list.mockResolvedValue([
+      {
+        key: 'settings.dataSyncWebdavPass',
+        value: {
+          secretRef: dataSyncPassRef
+        },
+        scope: 'settings',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        version: 1,
+        deletedAt: null
+      },
+      {
+        key: 'settings.notionApiKey',
+        value: {
+          secretRef: notionApiKeyRef
+        },
+        scope: 'settings',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        version: 1,
+        deletedAt: null
+      }
+    ])
+    mocks.secretVault.getSecret.mockImplementation(async (secretRef: string) => {
+      if (secretRef === dataSyncPassRef) return 'sync-pass'
+      if (secretRef === notionApiKeyRef) return 'notion-secret'
+      return null
+    })
+
+    const snapshot = await new StorageV2Service().getCoreSnapshot({ includeSecrets: true })
+
+    expect(snapshot.settings.dataSyncWebdavPass).toBe('sync-pass')
+    expect(snapshot.settings.notionApiKey).toBe('notion-secret')
+    expect(snapshot.metadata.missingSecretCount).toBe(0)
+    expect(mocks.secretVault.getSecret).toHaveBeenCalledWith(dataSyncPassRef)
+    expect(mocks.secretVault.getSecret).toHaveBeenCalledWith(notionApiKeyRef)
+  })
+
   it('omits localStorage MCP provider tokens when exporting without secrets', async () => {
     mocks.settingsRepository.list.mockResolvedValue([
       {
@@ -603,6 +643,24 @@ describe('StorageV2Service', () => {
           bucket: 'user-bucket',
           secretAccessKey: 'legacy-s3-secret'
         },
+        scope: 'settings',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        version: 1,
+        deletedAt: null
+      },
+      {
+        key: 'settings.dataSyncWebdavPass',
+        value: {
+          secretRef: 'storage-v2://secret/settings/dataSyncWebdavPass/dataSyncWebdavPassword'
+        },
+        scope: 'settings',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        version: 1,
+        deletedAt: null
+      },
+      {
+        key: 'settings.webdavPass',
+        value: 'legacy-webdav-password',
         scope: 'settings',
         updatedAt: '2026-01-01T00:00:00.000Z',
         version: 1,
@@ -695,6 +753,8 @@ describe('StorageV2Service', () => {
     const snapshot = await new StorageV2Service().getCoreSnapshot()
 
     expect(snapshot.settings.s3).toEqual({ bucket: 'user-bucket' })
+    expect(snapshot.settings.dataSyncWebdavPass).toBeUndefined()
+    expect(snapshot.settings.webdavPass).toBeUndefined()
     expect(snapshot.llm.settings).toEqual({ awsBedrock: { region: 'us-east-1' } })
     expect(snapshot.redux.mcp).toEqual({ servers: [{ id: 'server-1' }] })
     expect(snapshot.redux.codeTools).toEqual({})
