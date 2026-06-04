@@ -13,12 +13,13 @@ import { storageV2DataRootService } from './DataRootService'
 import { collectStorageV2SecretRefsFromValue, scanStorageV2SecretReferences } from './SecretRefIntegrity'
 import { type StorageV2PlaintextSecretVaultEntry, storageV2SecretVaultService } from './SecretVaultService'
 import { storageV2Database } from './StorageV2Database'
+import { listStorageV2SyncPolicies, type StorageV2SyncEntityType, type StorageV2SyncPolicy } from './SyncPolicy'
 
 const logger = loggerService.withContext('StorageV2WebDavRecordSyncService')
 const LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS = 10 * 60 * 1000
 
 type StorageV2SyncTable = {
-  entityType: string
+  entityType: StorageV2SyncEntityType
   table: string
   idColumns: readonly string[]
   syncIdColumns?: readonly string[]
@@ -157,7 +158,7 @@ const EMPTY_SUMMARY: StorageV2WebDavRecordSyncSummary = {
   secretDownloaded: 0
 }
 
-const TOMBSTONE_ENTITY_TYPE = 'sync_tombstone'
+const TOMBSTONE_ENTITY_TYPE: StorageV2SyncEntityType = 'sync_tombstone'
 const STORAGE_V2_LEGACY_RECORD_BUNDLE_PATH = 'storage-v2/bundle/current.json'
 const STORAGE_V2_BUNDLE_DIR = 'storage-v2/bundle'
 const STORAGE_V2_SECRET_VAULT_DIR = 'storage-v2/secrets'
@@ -183,180 +184,39 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
-const STORAGE_V2_SYNC_TABLES: readonly StorageV2SyncTable[] = [
-  { entityType: 'profile', table: 'profiles', idColumns: ['id'], updatedAtColumn: 'updated_at' },
-  {
-    entityType: 'provider',
-    table: 'providers',
-    idColumns: ['id'],
-    updatedAtColumn: 'updated_at',
-    deletedAtColumn: 'deleted_at',
-    versionColumn: 'version'
-  },
-  {
-    entityType: 'model',
-    table: 'models',
-    idColumns: ['id'],
-    updatedAtColumn: 'updated_at',
-    deletedAtColumn: 'deleted_at'
-  },
-  {
-    entityType: 'provider_credential',
-    table: 'provider_credentials',
-    idColumns: ['provider_id', 'credential_kind'],
-    updatedAtColumn: 'updated_at'
-  },
-  {
-    entityType: 'blob',
-    table: 'blobs',
-    idColumns: ['id'],
-    updatedAtColumn: 'created_at',
+const STORAGE_V2_SYNC_TABLE_OVERRIDES = {
+  blob: {
     blobStoragePathColumn: 'storage_path',
     blobChecksumColumn: 'checksum'
   },
-  {
-    entityType: 'assistant',
-    table: 'assistants',
-    idColumns: ['id'],
-    updatedAtColumn: 'updated_at',
-    deletedAtColumn: 'deleted_at',
-    versionColumn: 'version'
-  },
-  { entityType: 'assistant_version', table: 'assistant_versions', idColumns: ['id'], updatedAtColumn: 'created_at' },
-  {
-    entityType: 'agent',
-    table: 'agents',
-    idColumns: ['id'],
-    updatedAtColumn: 'updated_at',
-    deletedAtColumn: 'deleted_at',
-    versionColumn: 'version'
-  },
-  { entityType: 'agent_version', table: 'agent_versions', idColumns: ['id'], updatedAtColumn: 'created_at' },
-  {
-    entityType: 'skill',
-    table: 'skills',
-    idColumns: ['id'],
-    updatedAtColumn: 'updated_at',
-    deletedAtColumn: 'deleted_at',
-    versionColumn: 'version'
-  },
-  {
-    entityType: 'agent_skill',
-    table: 'agent_skills',
-    idColumns: ['agent_id', 'skill_id'],
-    updatedAtColumn: 'updated_at'
-  },
-  {
-    entityType: 'agent_session',
-    table: 'agent_sessions',
-    idColumns: ['id'],
-    updatedAtColumn: 'updated_at',
-    deletedAtColumn: 'deleted_at',
-    versionColumn: 'version'
-  },
-  {
-    entityType: 'scheduled_task',
-    table: 'scheduled_tasks',
-    idColumns: ['id'],
-    updatedAtColumn: 'updated_at',
-    deletedAtColumn: 'deleted_at',
-    versionColumn: 'version'
-  },
-  {
-    entityType: 'channel',
-    table: 'channels',
-    idColumns: ['id'],
-    updatedAtColumn: 'updated_at',
-    deletedAtColumn: 'deleted_at',
-    versionColumn: 'version'
-  },
-  {
-    entityType: 'channel_task_subscription',
-    table: 'channel_task_subscriptions',
-    idColumns: ['channel_id', 'task_id'],
-    updatedAtColumn: 'updated_at'
-  },
-  {
-    entityType: 'conversation',
-    table: 'conversations',
-    idColumns: ['id'],
-    updatedAtColumn: 'updated_at',
-    deletedAtColumn: 'deleted_at',
-    versionColumn: 'version'
-  },
-  {
-    entityType: 'message',
-    table: 'messages',
-    idColumns: ['id'],
-    updatedAtColumn: 'updated_at',
-    deletedAtColumn: 'deleted_at',
-    versionColumn: 'version'
-  },
-  {
-    entityType: 'message_block',
-    table: 'message_blocks',
-    idColumns: ['id'],
-    updatedAtColumn: 'updated_at',
-    deletedAtColumn: 'deleted_at',
-    versionColumn: 'version'
-  },
-  {
-    entityType: 'file',
-    table: 'files',
-    idColumns: ['id'],
-    updatedAtColumn: 'updated_at',
-    deletedAtColumn: 'deleted_at',
-    versionColumn: 'version'
-  },
-  {
-    entityType: 'knowledge_base',
-    table: 'knowledge_bases',
-    idColumns: ['id'],
-    updatedAtColumn: 'updated_at',
-    deletedAtColumn: 'deleted_at',
-    versionColumn: 'version'
-  },
-  {
-    entityType: 'knowledge_item',
-    table: 'knowledge_items',
-    idColumns: ['id'],
-    updatedAtColumn: 'updated_at',
-    deletedAtColumn: 'deleted_at',
-    versionColumn: 'version'
-  },
-  {
-    entityType: 'task_run_log',
-    table: 'task_run_logs',
-    idColumns: ['id'],
-    syncIdColumns: ['task_id', 'run_at'],
+  task_run_log: {
     updatedAtColumn: 'run_at',
-    versionColumn: 'version',
     omitColumnsFromSync: ['id']
-  },
-  {
-    entityType: 'kv_record',
-    table: 'kv_records',
-    idColumns: ['scope', 'key'],
-    updatedAtColumn: 'updated_at',
-    deletedAtColumn: 'deleted_at',
-    versionColumn: 'version'
-  },
-  {
-    entityType: 'settings',
-    table: 'settings',
-    idColumns: ['key'],
-    updatedAtColumn: 'updated_at',
-    deletedAtColumn: 'deleted_at',
-    versionColumn: 'version'
-  },
-  {
-    entityType: TOMBSTONE_ENTITY_TYPE,
-    table: 'sync_tombstones',
-    idColumns: ['entity_type', 'entity_id'],
-    updatedAtColumn: 'deleted_at',
-    versionColumn: 'version'
   }
-] as const
+} as const satisfies Partial<
+  Record<StorageV2SyncEntityType, Partial<Omit<StorageV2SyncTable, 'entityType' | 'table' | 'idColumns'>>>
+>
+
+function storageV2SyncTableFromPolicy(policy: StorageV2SyncPolicy): StorageV2SyncTable {
+  const table: StorageV2SyncTable = {
+    entityType: policy.entityType,
+    table: policy.table,
+    idColumns: policy.idColumns
+  }
+
+  if (policy.syncIdentityColumns) table.syncIdColumns = policy.syncIdentityColumns
+  if (policy.updatedAtColumn) table.updatedAtColumn = policy.updatedAtColumn
+  if (policy.deletedAtColumn) table.deletedAtColumn = policy.deletedAtColumn
+  if (policy.versioned) table.versionColumn = 'version'
+
+  return {
+    ...table,
+    ...STORAGE_V2_SYNC_TABLE_OVERRIDES[policy.entityType]
+  }
+}
+
+const STORAGE_V2_SYNC_TABLES: readonly StorageV2SyncTable[] =
+  listStorageV2SyncPolicies().map(storageV2SyncTableFromPolicy)
 
 function makeManifest(): StorageV2WebDavRecordSyncManifest {
   return { version: 1, records: {}, blobs: {}, bundle: null }
