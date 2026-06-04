@@ -587,6 +587,13 @@ function filterSecretsByReferencedIds(
   return Object.fromEntries(Object.entries(secrets).filter(([secretId]) => referencedSecretIds.has(secretId)))
 }
 
+function formatLimitedList(values: Iterable<string>, limit = 8) {
+  const list = Array.from(values).filter(Boolean)
+  const visible = list.slice(0, limit)
+  const suffix = list.length > visible.length ? ` 等 ${list.length} 项` : ''
+  return `${visible.join('、')}${suffix}`
+}
+
 function encryptRemoteSecret(secretId: string, entry: StorageV2PlaintextSecretVaultEntry, key: Buffer) {
   const iv = randomBytes(GCM_IV_BYTE_LENGTH)
   const cipher = createCipheriv('aes-256-gcm', key, iv)
@@ -873,6 +880,23 @@ export class StorageV2WebDavRecordSyncService {
     }
   }
 
+  private assertRemoteManifestEntitiesSupported(manifest: StorageV2WebDavRecordSyncManifest) {
+    const unsupportedEntityTypes = new Set<string>()
+
+    for (const meta of Object.values(manifest.records ?? {})) {
+      if (!meta?.entityType || this.tableByEntity(meta.entityType)) continue
+      unsupportedEntityTypes.add(meta.entityType)
+    }
+
+    if (unsupportedEntityTypes.size === 0) return
+
+    throw new Error(
+      `远端 Storage v2 同步数据包含当前版本不支持的实体：${formatLimitedList(
+        unsupportedEntityTypes
+      )}。请先升级 Cherry Studio Pi 后再同步，避免旧版本覆盖或删除新版本数据。`
+    )
+  }
+
   private async readRecordBundle(
     client: WebDAVClient,
     basePath: string,
@@ -890,24 +914,55 @@ export class StorageV2WebDavRecordSyncService {
       )
     }
 
+    const valueHash = bundleHash({
+      records: bundle.records,
+      blobs: bundle.blobs ?? {}
+    })
+    if (manifest.bundle.valueHash && manifest.bundle.valueHash !== valueHash) {
+      throw new Error(
+        '远端 Storage v2 数据包校验失败。为避免覆盖或导入损坏数据，本次同步已停止，请重新同步或从安全快照恢复。'
+      )
+    }
+
+    const unsupportedEntityTypes = new Set<string>()
+    const malformedRecordIds: string[] = []
     const records = Object.entries(bundle.records).reduce<Record<string, LocalRecord>>((result, [id, record]) => {
+      const entityType = typeof record?.table?.entityType === 'string' ? record.table.entityType : null
+      if (entityType && !this.tableByEntity(entityType)) {
+        unsupportedEntityTypes.add(entityType)
+        return result
+      }
+
       const normalized = this.normalizeBundledRecord(id, record)
       if (normalized) {
         result[id] = normalized
+      } else {
+        malformedRecordIds.push(id)
       }
       return result
     }, {})
+
+    if (unsupportedEntityTypes.size > 0) {
+      throw new Error(
+        `远端 Storage v2 数据包包含当前版本不支持的实体：${formatLimitedList(
+          unsupportedEntityTypes
+        )}。请先升级 Cherry Studio Pi 后再同步，避免旧版本覆盖或删除新版本数据。`
+      )
+    }
+
+    if (malformedRecordIds.length > 0) {
+      throw new Error(
+        `远端 Storage v2 数据包包含无法识别或损坏的记录：${formatLimitedList(
+          malformedRecordIds
+        )}。为避免导入不完整数据，本次同步已停止，请重新同步或从安全快照恢复。`
+      )
+    }
+
     const normalizedBundle: StorageV2WebDavRecordSyncBundle = {
       version: 1,
       updatedAt: parseTime(bundle.updatedAt) || Date.now(),
       records,
       blobs: bundle.blobs ?? {}
-    }
-    const valueHash = bundleHash(normalizedBundle)
-    if (manifest.bundle.valueHash && manifest.bundle.valueHash !== valueHash) {
-      throw new Error(
-        '远端 Storage v2 数据包校验失败。为避免覆盖或导入损坏数据，本次同步已停止，请重新同步或从安全快照恢复。'
-      )
     }
 
     return normalizedBundle
@@ -1205,6 +1260,16 @@ export class StorageV2WebDavRecordSyncService {
 
     const localIds = Object.keys(localSecrets)
     const remoteIds = Object.keys(remoteSecrets ?? {})
+    const availableSecretIds = new Set([...localIds, ...remoteIds])
+    const missingSecretIds = [...referencedSecretIds].filter((secretId) => !availableSecretIds.has(secretId))
+    if (missingSecretIds.length > 0) {
+      throw new Error(
+        `Storage v2 记录引用了本机和远端都不存在的敏感配置：${formatLimitedList(
+          missingSecretIds
+        )}。请重新保存对应模型、服务或设置后再同步，避免发布缺少密钥的配置。`
+      )
+    }
+
     if (localIds.length === 0 && remoteIds.length === 0) {
       manifest.secrets = null
       return
@@ -1867,6 +1932,7 @@ export class StorageV2WebDavRecordSyncService {
         manifest.records[record.id] = recordMetaFromLocalRecord(record, recordBundlePath())
       }
     }
+    this.assertRemoteManifestEntitiesSupported(manifest)
     const ids = this.sortRecordIds(new Set([...localById.keys(), ...Object.keys(manifest.records)]))
 
     for (const id of ids) {
@@ -2068,17 +2134,25 @@ export class StorageV2WebDavRecordSyncService {
     }
 
     this.pruneManifestBlobsWithoutRecords(manifest, bundledRecords)
-    await this.writeRecordBundle(client, basePath, manifest, bundledRecords)
-    const referencedSecretIds = (await scanStorageV2SecretReferences(dbClient)).refs
+    const secretReferenceScan = await scanStorageV2SecretReferences(dbClient)
+    if (secretReferenceScan.invalidRefs.size > 0) {
+      throw new Error(
+        `Storage v2 数据中存在无法识别的敏感配置引用：${formatLimitedList(
+          secretReferenceScan.invalidRefs
+        )}。请重新保存对应模型、服务或设置后再同步。`
+      )
+    }
+
     await this.syncSecretVault(
       client,
       basePath,
       manifest,
       summary,
       options,
-      referencedSecretIds,
+      secretReferenceScan.refs,
       remoteSecretVaultCache.importedSecretIds
     )
+    await this.writeRecordBundle(client, basePath, manifest, bundledRecords)
     return {
       manifest,
       summary,

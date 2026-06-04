@@ -74,6 +74,19 @@ describe('WebDavRetry', () => {
     expect(message).not.toContain('发生未知错误')
   })
 
+  it('keeps local Storage v2 integrity failures actionable', () => {
+    const message = describeWebDavUserFacingError(
+      new Error(
+        'Storage v2 记录引用了本机和远端都不存在的敏感配置：provider:provider-1:apiKey。请重新保存对应模型、服务或设置后再同步，避免发布缺少密钥的配置。'
+      ),
+      '同步数据'
+    )
+
+    expect(message).toContain('本机和远端都不存在的敏感配置')
+    expect(message).toContain('请重新保存对应模型、服务或设置后再同步')
+    expect(message).not.toContain('发生未知错误')
+  })
+
   it('times out stalled WebDAV operations instead of waiting forever', async () => {
     await expect(
       runWebDavOperation('reading remote json /sync/v1/manifest.json', () => new Promise(() => undefined), {

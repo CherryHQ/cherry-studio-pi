@@ -102,7 +102,8 @@ function isActionableDataSyncMessage(message: string) {
     /^远端附件文件/.test(message) ||
     /^本地附件文件/.test(message) ||
     /^远端敏感配置/.test(message) ||
-    /^远端数据已同步到本机/.test(message)
+    /^远端数据已同步到本机/.test(message) ||
+    /^Storage v2 (记录引用了|数据中存在)/.test(message)
   )
 }
 

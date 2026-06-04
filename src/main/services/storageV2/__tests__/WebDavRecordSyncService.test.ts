@@ -1090,6 +1090,87 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
   })
 
+  it('fails safe when the remote manifest contains records from a newer Storage v2 entity', async () => {
+    const remote = makeSharedWebDavStore()
+    const db = makeSettingsDb([])
+    const remoteRow = { id: 'future-1', value: 'new-shape' }
+    const remoteHash = hashJson(remoteRow)
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([settingsTable]).sync(remote.client as any, '/remote-root/sync/v1', {
+        version: 1,
+        blobs: {},
+        records: {
+          'future_entity:future-1': {
+            entityType: 'future_entity',
+            table: 'future_entities',
+            idValues: ['future-1'],
+            valueHash: remoteHash,
+            updatedAt: Date.parse('2026-05-29T12:00:00.000Z'),
+            deletedAt: null,
+            version: 1,
+            path: 'storage-v2/records/future_entity/future-1.json'
+          }
+        }
+      } as any)
+    ).rejects.toThrow('不支持的实体：future_entity')
+
+    expect(db.state.rows).toEqual([])
+    expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
+  })
+
+  it('fails safe when the remote record bundle contains records from a newer Storage v2 entity', async () => {
+    const remote = makeSharedWebDavStore()
+    const db = makeSettingsDb([])
+    const remoteRow = { id: 'future-1', value: 'new-shape' }
+    const updatedAt = Date.parse('2026-05-29T12:00:00.000Z')
+    const remoteRecord = {
+      id: 'future_entity:future-1',
+      table: {
+        entityType: 'future_entity',
+        table: 'future_entities',
+        idColumns: ['id'],
+        updatedAtColumn: 'updated_at'
+      },
+      idValues: ['future-1'],
+      row: remoteRow,
+      valueHash: hashJson(remoteRow),
+      updatedAt,
+      deletedAt: null,
+      version: 1
+    }
+    const bundle = {
+      version: 1,
+      updatedAt,
+      records: {
+        [remoteRecord.id]: remoteRecord
+      },
+      blobs: {}
+    }
+    const bundleValueHash = hashJson({ records: bundle.records, blobs: bundle.blobs })
+    remote.files.set('/remote-root/sync/v1/storage-v2/bundle/future.json', JSON.stringify(bundle))
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([settingsTable]).sync(remote.client as any, '/remote-root/sync/v1', {
+        version: 1,
+        blobs: {},
+        records: {},
+        bundle: {
+          version: 1,
+          path: 'storage-v2/bundle/future.json',
+          valueHash: bundleValueHash,
+          recordCount: 1,
+          blobCount: 0,
+          updatedAt
+        }
+      })
+    ).rejects.toThrow('数据包包含当前版本不支持的实体：future_entity')
+
+    expect(db.state.rows).toEqual([])
+  })
+
   it('downloads remote Storage v2 rows into the local database', async () => {
     const remoteRow = {
       key: 'theme',
@@ -2255,6 +2336,59 @@ describe('StorageV2WebDavRecordSyncService', () => {
     ).rejects.toThrow('远端敏感配置无法解密')
     expect(deviceB.state.credentials).toEqual([])
     expect(mocks.secretVault.importPlaintextSecrets).not.toHaveBeenCalled()
+  })
+
+  it('does not publish local records that reference missing secret vault entries', async () => {
+    const credentialRow: ProviderCredentialRow = {
+      provider_id: 'provider-1',
+      credential_kind: 'apiKey',
+      secret_ref: 'storage-v2://secret/provider/provider-1/apiKey',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      updated_by_device_id: 'device-a'
+    }
+    const db = makeProviderCredentialDb({ credentials: [credentialRow] })
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+    mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({})
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([providerCredentialTable]).sync(
+        mocks.webdav as any,
+        '/remote-root/sync/v1',
+        { version: 1, blobs: {}, records: {}, bundle: null, secrets: null },
+        { secretKeyMaterial: 'dav-user:dav-password' }
+      )
+    ).rejects.toThrow('本机和远端都不存在的敏感配置')
+
+    expect(Array.from(mocks.remoteFiles.keys()).some((filePath) => filePath.includes('/storage-v2/bundle/'))).toBe(
+      false
+    )
+    expect(mocks.secretVault.importPlaintextSecrets).not.toHaveBeenCalled()
+  })
+
+  it('does not publish local records that contain invalid secret refs', async () => {
+    const credentialRow: ProviderCredentialRow = {
+      provider_id: 'provider-1',
+      credential_kind: 'apiKey',
+      secret_ref: 'storage-v2://secret/%',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      updated_by_device_id: 'device-a'
+    }
+    const db = makeProviderCredentialDb({ credentials: [credentialRow] })
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([providerCredentialTable]).sync(
+        mocks.webdav as any,
+        '/remote-root/sync/v1',
+        { version: 1, blobs: {}, records: {}, bundle: null, secrets: null },
+        { secretKeyMaterial: 'dav-user:dav-password' }
+      )
+    ).rejects.toThrow('无法识别的敏感配置引用')
+
+    expect(Array.from(mocks.remoteFiles.keys()).some((filePath) => filePath.includes('/storage-v2/bundle/'))).toBe(
+      false
+    )
+    expect(mocks.secretVault.exportPlaintextSecrets).not.toHaveBeenCalled()
   })
 
   it('does not write remote records that reference missing secret bundles', async () => {
