@@ -1176,6 +1176,7 @@ describe('AppDataSyncService local WebDAV integration', () => {
     expect(firstSummary.uploaded + (firstSummary.storageUploaded ?? 0)).toBeGreaterThan(0)
     expect(secondSummary.downloaded + (secondSummary.storageDownloaded ?? 0)).toBeGreaterThan(0)
     expect(secondSummary.conflicts + (secondSummary.storageConflicts ?? 0)).toBe(0)
+    expect(secondSummary.resolvedConflicts + (secondSummary.storageResolvedConflicts ?? 0)).toBe(0)
     expect(deviceBState).toEqual({
       appRecord: { mode: 'device-a-user-value' },
       storageSetting: { owner: 'device-a-storage-value' }
@@ -1233,6 +1234,7 @@ describe('AppDataSyncService local WebDAV integration', () => {
     expect(secondSummary.blobDownloaded).toBe(1)
     expect(secondSummary.secretDownloaded).toBe(2)
     expect(secondSummary.storageConflicts).toBe(0)
+    expect(secondSummary.storageResolvedConflicts).toBe(0)
     expect(deviceBState.counts).toEqual(COMPREHENSIVE_STORAGE_TABLE_COUNTS)
     expect(deviceBState.provider).toMatchObject({
       name: '同步测试模型服务'
