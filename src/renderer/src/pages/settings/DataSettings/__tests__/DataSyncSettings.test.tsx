@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   checkWriteAccess: vi.fn(),
   listRemoteDirectories: vi.fn(),
   restoreLatestSnapshot: vi.fn(),
+  showInFolder: vi.fn(),
   startDataSyncAutoSync: vi.fn(),
   stopDataSyncAutoSync: vi.fn(),
   subscribeDataSyncRuntimeState: vi.fn(),
@@ -130,6 +131,7 @@ describe('DataSyncSettings', () => {
     mocks.checkWriteAccess.mockResolvedValue({ ok: true, basePath: '/cherry-studio-pi/sync/v1' })
     mocks.listRemoteDirectories.mockResolvedValue({ path: '/', parentPath: null, directories: [] })
     mocks.restoreLatestSnapshot.mockResolvedValue(undefined)
+    mocks.showInFolder.mockResolvedValue(undefined)
     mocks.subscribeDataSyncRuntimeState.mockImplementation((listener: (state: { syncing: boolean }) => void) => {
       listener({ syncing: false })
       return vi.fn()
@@ -144,6 +146,9 @@ describe('DataSyncSettings', () => {
           listRemoteDirectories: mocks.listRemoteDirectories,
           restoreLatestSnapshot: mocks.restoreLatestSnapshot,
           syncNow: vi.fn()
+        },
+        file: {
+          showInFolder: mocks.showInFolder
         }
       }
     })
@@ -312,6 +317,59 @@ describe('DataSyncSettings', () => {
     expect(metrics).toHaveStyle('grid-template-columns: repeat(auto-fit, minmax(132px, 1fr))')
     expect(errorText).toHaveStyle('overflow-wrap: anywhere')
     expect(errorText).toHaveStyle('word-break: break-word')
+  })
+
+  it('reveals the local safety snapshot from the last sync result', async () => {
+    const snapshotPath = '/tmp/cherry-studio-pi.data-sync.join-safety.device-1.1780058147577.zip'
+    mocks.getStatus.mockResolvedValueOnce({
+      ...idleStatus(),
+      lastSummary: {
+        ...successSummary(),
+        joinSafetySnapshotCreated: true,
+        joinSafetySnapshotFileName: 'cherry-studio-pi.data-sync.join-safety.device-1.1780058147577.zip',
+        joinSafetySnapshotPath: snapshotPath,
+        joinSafetySnapshotBytes: 2048
+      }
+    })
+
+    render(<DataSyncSettings />)
+
+    fireEvent.click(await screen.findByLabelText('settings.data.data_sync.snapshot.open_local'))
+
+    expect(mocks.showInFolder).toHaveBeenCalledWith(snapshotPath)
+  })
+
+  it('reports local safety snapshot reveal failures to the system agent', async () => {
+    const snapshotPath = '/tmp/missing-safety-snapshot.zip'
+    mocks.showInFolder.mockRejectedValueOnce(new Error('file missing'))
+    mocks.getStatus.mockResolvedValueOnce({
+      ...idleStatus(),
+      lastSummary: {
+        ...successSummary(),
+        joinSafetySnapshotCreated: true,
+        joinSafetySnapshotFileName: 'missing-safety-snapshot.zip',
+        joinSafetySnapshotPath: snapshotPath,
+        joinSafetySnapshotBytes: 2048
+      }
+    })
+
+    render(<DataSyncSettings />)
+
+    fireEvent.click(await screen.findByLabelText('settings.data.data_sync.snapshot.open_local'))
+
+    await waitFor(() =>
+      expect(mocks.toast.error).toHaveBeenCalledWith(
+        expect.stringContaining('settings.data.data_sync.toast.open_snapshot_failed')
+      )
+    )
+    expect(mocks.reportErrorToSystemAgent).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        domain: 'dataSync',
+        source: 'settings.data_sync.open_local_safety_snapshot'
+      }),
+      { showToast: true }
+    )
   })
 
   it('opens the remote directory browser from root so the default sync folder does not have to exist', async () => {

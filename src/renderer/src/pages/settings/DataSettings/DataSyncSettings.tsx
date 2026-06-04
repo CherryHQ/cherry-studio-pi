@@ -19,7 +19,7 @@ import {
   setDataSyncWebdavPath,
   setDataSyncWebdavUser
 } from '@renderer/store/settings'
-import { Alert, Breadcrumb, Button, Empty, Input, List, Modal, Space, Spin, Typography } from 'antd'
+import { Alert, Breadcrumb, Button, Empty, Input, List, Modal, Space, Spin, Tooltip, Typography } from 'antd'
 import dayjs from 'dayjs'
 import type { CSSProperties, FC } from 'react'
 import { useEffect, useState } from 'react'
@@ -219,6 +219,13 @@ const lastResultTextStyle: CSSProperties = {
   wordBreak: 'break-word'
 }
 
+const lastResultActionStyle: CSSProperties = {
+  minWidth: 0,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6
+}
+
 const lastResultErrorStyle: CSSProperties = {
   ...lastResultTextStyle,
   display: 'block'
@@ -407,6 +414,25 @@ const DataSyncSettings: FC = () => {
         }
       }
     })
+  }
+
+  const revealLocalSafetySnapshot = async (filePath?: string | null) => {
+    if (!filePath) return
+
+    try {
+      await window.api.file.showInFolder(filePath)
+    } catch (error) {
+      window.toast.error(t('settings.data.data_sync.toast.open_snapshot_failed', { message: getErrorMessage(error) }))
+      void reportErrorToSystemAgent(
+        error,
+        {
+          source: 'settings.data_sync.open_local_safety_snapshot',
+          domain: 'dataSync',
+          details: { path: filePath }
+        },
+        { showToast: true }
+      )
+    }
   }
 
   const diagnoseNow = async () => {
@@ -796,15 +822,27 @@ const DataSyncSettings: FC = () => {
                   </Typography.Text>
                 )}
                 {summary.joinSafetySnapshotCreated && (
-                  <Typography.Text
-                    type="warning"
-                    copyable={summary.joinSafetySnapshotPath ? { text: summary.joinSafetySnapshotPath } : false}
-                    style={lastResultTextStyle}>
-                    {t('settings.data.data_sync.snapshot.join_safety', {
-                      file: summary.joinSafetySnapshotFileName || '-',
-                      size: formatBytes(summary.joinSafetySnapshotBytes ?? 0)
-                    })}
-                  </Typography.Text>
+                  <div style={lastResultActionStyle}>
+                    <Typography.Text
+                      type="warning"
+                      copyable={summary.joinSafetySnapshotPath ? { text: summary.joinSafetySnapshotPath } : false}
+                      style={lastResultTextStyle}>
+                      {t('settings.data.data_sync.snapshot.join_safety', {
+                        file: summary.joinSafetySnapshotFileName || '-',
+                        size: formatBytes(summary.joinSafetySnapshotBytes ?? 0)
+                      })}
+                    </Typography.Text>
+                    {summary.joinSafetySnapshotPath && (
+                      <Tooltip title={t('settings.data.data_sync.snapshot.open_local')}>
+                        <Button
+                          size="small"
+                          icon={<FolderOpenOutlined />}
+                          aria-label={t('settings.data.data_sync.snapshot.open_local')}
+                          onClick={() => void revealLocalSafetySnapshot(summary.joinSafetySnapshotPath)}
+                        />
+                      </Tooltip>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

@@ -4150,6 +4150,7 @@
         "restore_latest": "恢复安全快照",
         "snapshot": {
           "join_safety": "本机保护快照 {{file}}（{{size}}）",
+          "open_local": "定位本机保护快照",
           "uploaded": "安全快照 {{file}}（{{size}}）"
         },
         "storage": {
@@ -4175,6 +4176,7 @@
         "toast": {
           "diagnose_failed": "诊断失败：{{message}}",
           "diagnose_success": "WebDAV 同步诊断通过",
+          "open_snapshot_failed": "定位本机保护快照失败：{{message}}",
           "remote_path_selected": "已选择同步目录：{{path}}",
           "restore_failed": "恢复失败：{{message}}",
           "restore_success": "已开始恢复，应用将重启",

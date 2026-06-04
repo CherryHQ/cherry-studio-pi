@@ -4150,6 +4150,7 @@
         "restore_latest": "Restore safety snapshot",
         "snapshot": {
           "join_safety": "Local safety snapshot {{file}} ({{size}})",
+          "open_local": "Reveal local safety snapshot",
           "uploaded": "Safety snapshot {{file}} ({{size}})"
         },
         "storage": {
@@ -4175,6 +4176,7 @@
         "toast": {
           "diagnose_failed": "Diagnosis failed: {{message}}",
           "diagnose_success": "WebDAV sync diagnosis passed",
+          "open_snapshot_failed": "Failed to reveal local safety snapshot: {{message}}",
           "remote_path_selected": "Sync directory selected: {{path}}",
           "restore_failed": "Restore failed: {{message}}",
           "restore_success": "Restore started. The app will restart.",
