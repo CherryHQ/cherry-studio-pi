@@ -138,6 +138,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
 }
 
+function markRuntimeHydrationActionFromSync(action: Parameters<RuntimeHydrationTarget['dispatch']>[0]) {
+  const actionWithMeta = action as unknown as { meta?: unknown }
+  const meta = isRecord(actionWithMeta.meta) ? actionWithMeta.meta : {}
+
+  return {
+    ...action,
+    meta: {
+      ...meta,
+      fromSync: true
+    }
+  } as unknown as Parameters<RuntimeHydrationTarget['dispatch']>[0]
+}
+
+function dispatchRuntimeHydrationAction(
+  target: RuntimeHydrationTarget,
+  action: Parameters<RuntimeHydrationTarget['dispatch']>[0]
+) {
+  target.dispatch(markRuntimeHydrationActionFromSync(action))
+}
+
 function hasSnapshotEntries(value: unknown): boolean {
   return isRecord(value) && Object.keys(value).length > 0
 }
@@ -192,90 +212,90 @@ async function getRuntimeSnapshot() {
 
 async function applyRuntimeSnapshot(snapshot: StorageV2CoreSnapshot, target: RuntimeHydrationTarget) {
   if (snapshot.settings) {
-    target.dispatch(hydrateSettingsState(snapshot.settings))
+    dispatchRuntimeHydrationAction(target, hydrateSettingsState(snapshot.settings))
     if (typeof snapshot.settings.language === 'string' && typeof localStorage !== 'undefined') {
       localStorage.setItem('language', snapshot.settings.language)
     }
   }
 
   if (snapshot.llm) {
-    target.dispatch(hydrateLlmState(snapshot.llm))
+    dispatchRuntimeHydrationAction(target, hydrateLlmState(snapshot.llm))
   }
 
   if (snapshot.assistants) {
-    target.dispatch(hydrateAssistantsState(snapshot.assistants))
+    dispatchRuntimeHydrationAction(target, hydrateAssistantsState(snapshot.assistants))
   }
 
   if (snapshot.redux?.backup) {
-    target.dispatch(hydrateBackupState(snapshot.redux.backup))
+    dispatchRuntimeHydrationAction(target, hydrateBackupState(snapshot.redux.backup))
   }
 
   if (snapshot.redux?.codeTools) {
-    target.dispatch(hydrateCodeToolsState(snapshot.redux.codeTools))
+    dispatchRuntimeHydrationAction(target, hydrateCodeToolsState(snapshot.redux.codeTools))
   }
 
   if (snapshot.redux?.copilot) {
-    target.dispatch(hydrateCopilotState(snapshot.redux.copilot))
+    dispatchRuntimeHydrationAction(target, hydrateCopilotState(snapshot.redux.copilot))
   }
 
   if (snapshot.redux?.inputTools) {
-    target.dispatch(hydrateInputToolsState(snapshot.redux.inputTools))
+    dispatchRuntimeHydrationAction(target, hydrateInputToolsState(snapshot.redux.inputTools))
   }
 
   if (snapshot.redux?.knowledge) {
-    target.dispatch(hydrateKnowledgeState(snapshot.redux.knowledge))
+    dispatchRuntimeHydrationAction(target, hydrateKnowledgeState(snapshot.redux.knowledge))
   }
 
   if (snapshot.redux?.memory) {
-    target.dispatch(hydrateMemoryState(snapshot.redux.memory))
+    dispatchRuntimeHydrationAction(target, hydrateMemoryState(snapshot.redux.memory))
   }
 
   if (snapshot.redux?.minApps) {
-    target.dispatch(hydrateMinAppsState(snapshot.redux.minApps))
+    dispatchRuntimeHydrationAction(target, hydrateMinAppsState(snapshot.redux.minApps))
   }
 
   if (snapshot.redux?.mcp) {
-    target.dispatch(hydrateMcpState(snapshot.redux.mcp))
+    dispatchRuntimeHydrationAction(target, hydrateMcpState(snapshot.redux.mcp))
   }
 
   if (snapshot.redux?.note) {
-    target.dispatch(hydrateNoteState(snapshot.redux.note))
+    dispatchRuntimeHydrationAction(target, hydrateNoteState(snapshot.redux.note))
   }
 
   if (snapshot.redux?.nutstore) {
-    target.dispatch(hydrateNutstoreState(snapshot.redux.nutstore))
+    dispatchRuntimeHydrationAction(target, hydrateNutstoreState(snapshot.redux.nutstore))
   }
 
   if (snapshot.redux?.ocr) {
-    target.dispatch(hydrateOcrState(snapshot.redux.ocr))
+    dispatchRuntimeHydrationAction(target, hydrateOcrState(snapshot.redux.ocr))
   }
 
   if (snapshot.redux?.openclaw) {
-    target.dispatch(hydrateOpenClawState(snapshot.redux.openclaw))
+    dispatchRuntimeHydrationAction(target, hydrateOpenClawState(snapshot.redux.openclaw))
   }
 
   if (snapshot.redux?.paintings) {
-    target.dispatch(hydratePaintingsState(snapshot.redux.paintings))
+    dispatchRuntimeHydrationAction(target, hydratePaintingsState(snapshot.redux.paintings))
   }
 
   if (snapshot.redux?.preprocess) {
-    target.dispatch(hydratePreprocessState(snapshot.redux.preprocess))
+    dispatchRuntimeHydrationAction(target, hydratePreprocessState(snapshot.redux.preprocess))
   }
 
   if (snapshot.redux?.selectionStore) {
-    target.dispatch(hydrateSelectionState(snapshot.redux.selectionStore))
+    dispatchRuntimeHydrationAction(target, hydrateSelectionState(snapshot.redux.selectionStore))
   }
 
   if (snapshot.redux?.shortcuts) {
-    target.dispatch(hydrateShortcutsState(snapshot.redux.shortcuts))
+    dispatchRuntimeHydrationAction(target, hydrateShortcutsState(snapshot.redux.shortcuts))
   }
 
   if (snapshot.redux?.translate) {
-    target.dispatch(hydrateTranslateState(snapshot.redux.translate))
+    dispatchRuntimeHydrationAction(target, hydrateTranslateState(snapshot.redux.translate))
   }
 
   if (snapshot.redux?.websearch) {
-    target.dispatch(hydrateWebSearchState(snapshot.redux.websearch))
+    dispatchRuntimeHydrationAction(target, hydrateWebSearchState(snapshot.redux.websearch))
   }
 
   if (snapshot.localStorage) {

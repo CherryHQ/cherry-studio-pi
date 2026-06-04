@@ -250,6 +250,24 @@ describe('StorageV2MirrorService', () => {
     expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), { dryRun: false, pruneMissing: false })
   })
 
+  it('does not mirror runtime hydration actions restored from sync', async () => {
+    const { storageV2MirrorService } = await import('../StorageV2MirrorService')
+    const middleware = storageV2MirrorService.createMiddleware()({
+      dispatch: vi.fn(),
+      getState: createState
+    } as any)(vi.fn((action) => action))
+
+    middleware({ type: 'settings/hydrate', payload: { language: 'en-US' }, meta: { fromSync: true } })
+    await vi.advanceTimersByTimeAsync(1500)
+
+    expect(importLegacyReduxSnapshot).not.toHaveBeenCalled()
+
+    middleware({ type: 'settings/setLanguage' })
+    await vi.advanceTimersByTimeAsync(1500)
+
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
+  })
+
   it('flushes persisted redux configuration slices without waiting for debounce', async () => {
     const { storageV2MirrorService } = await import('../StorageV2MirrorService')
     const middleware = storageV2MirrorService.createMiddleware()({

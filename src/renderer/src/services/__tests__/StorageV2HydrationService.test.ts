@@ -243,7 +243,11 @@ describe('StorageV2HydrationService', () => {
 
     expect(target.shouldHydrateWhenDisabled).toHaveBeenCalled()
     expect(mocks.getStorageV2CoreSnapshot).toHaveBeenCalledWith({ includeSecrets: true })
-    expect(target.dispatch).toHaveBeenCalledWith({ type: 'settings/hydrate', payload: { language: 'zh-CN' } })
+    expect(target.dispatch).toHaveBeenCalledWith({
+      type: 'settings/hydrate',
+      payload: { language: 'zh-CN' },
+      meta: { fromSync: true }
+    })
     expect(target.dispatch).toHaveBeenCalledWith({
       type: 'llm/hydrate',
       payload: {
@@ -253,7 +257,8 @@ describe('StorageV2HydrationService', () => {
             name: 'OpenAI'
           }
         ]
-      }
+      },
+      meta: { fromSync: true }
     })
     expect(target.flush).toHaveBeenCalled()
   })
