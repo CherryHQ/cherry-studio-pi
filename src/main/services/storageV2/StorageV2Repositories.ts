@@ -7,6 +7,7 @@ import type { Assistant, Model, Provider } from '@types'
 
 import { storageV2DataRootService } from './DataRootService'
 import { storageV2Database } from './StorageV2Database'
+import { encodeStorageV2CompositeEntityId } from './SyncEntityId'
 import { storageV2SyncLogService } from './SyncLogService'
 
 type SettingRecord = {
@@ -669,7 +670,7 @@ export class StorageV2ProviderRepository {
         await storageV2SyncLogService.recordChange({
           client,
           entityType: 'provider_credential',
-          entityId: `${provider.id}:apiKey`,
+          entityId: encodeStorageV2CompositeEntityId([provider.id, 'apiKey']),
           operation: 'delete',
           payload: {
             providerId: provider.id,
@@ -798,7 +799,7 @@ export class StorageV2ProviderRepository {
       await storageV2SyncLogService.recordChange({
         client,
         entityType: 'provider_credential',
-        entityId: `${providerId}:apiKey`,
+        entityId: encodeStorageV2CompositeEntityId([providerId, 'apiKey']),
         operation: 'delete',
         payload: {
           providerId,

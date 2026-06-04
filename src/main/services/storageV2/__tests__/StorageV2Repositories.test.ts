@@ -7,6 +7,7 @@ import {
   StorageV2KnowledgeRepository,
   StorageV2ProviderRepository
 } from '../StorageV2Repositories'
+import { encodeStorageV2CompositeEntityId } from '../SyncEntityId'
 import { storageV2SyncLogService } from '../SyncLogService'
 
 function createMockClient() {
@@ -214,7 +215,7 @@ describe('StorageV2ProviderRepository', () => {
     expect(recordChange).toHaveBeenCalledWith(
       expect.objectContaining({
         entityType: 'provider_credential',
-        entityId: 'provider-1:apiKey',
+        entityId: encodeStorageV2CompositeEntityId(['provider-1', 'apiKey']),
         operation: 'delete'
       })
     )
@@ -239,7 +240,7 @@ describe('StorageV2ProviderRepository', () => {
     expect(recordChange).toHaveBeenCalledWith(
       expect.objectContaining({
         entityType: 'provider_credential',
-        entityId: 'provider-1:apiKey',
+        entityId: encodeStorageV2CompositeEntityId(['provider-1', 'apiKey']),
         operation: 'delete'
       })
     )

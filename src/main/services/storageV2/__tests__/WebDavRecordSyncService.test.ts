@@ -48,6 +48,7 @@ vi.mock('../SecretVaultService', () => ({
 }))
 
 import { storageV2Database } from '../StorageV2Database'
+import { encodeStorageV2CompositeEntityId } from '../SyncEntityId'
 import { StorageV2WebDavRecordSyncService } from '../WebDavRecordSyncService'
 
 const settingsTable = {
@@ -255,8 +256,9 @@ function makeProviderCredentialDb(input: { credentials?: ProviderCredentialRow[]
         }
 
         if (sql.includes('SELECT deleted_at') && sql.includes('FROM sync_tombstones')) {
+          const entityIds = new Set(args.slice(1).map(String))
           const row = state.tombstones.find(
-            (item) => item.entity_type === String(args[0]) && item.entity_id === String(args[1])
+            (item) => item.entity_type === String(args[0]) && entityIds.has(item.entity_id)
           )
           return { rows: row ? [{ deleted_at: row.deleted_at }] : [] }
         }
@@ -370,8 +372,9 @@ function makeAgentSkillDb(input: { agentSkills?: AgentSkillRow[]; tombstones?: T
         }
 
         if (sql.includes('SELECT deleted_at') && sql.includes('FROM sync_tombstones')) {
+          const entityIds = new Set(args.slice(1).map(String))
           const row = state.tombstones.find(
-            (item) => item.entity_type === String(args[0]) && item.entity_id === String(args[1])
+            (item) => item.entity_type === String(args[0]) && entityIds.has(item.entity_id)
           )
           return { rows: row ? [{ deleted_at: row.deleted_at }] : [] }
         }
@@ -2105,6 +2108,69 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(
       Object.keys(result.manifest.records).some((id) => id.startsWith('sync_tombstone:provider_credential:'))
     ).toBe(true)
+  })
+
+  it('uses encoded provider credential tombstones when provider ids contain separators', async () => {
+    const remote = makeSharedWebDavStore()
+    const remoteRow: ProviderCredentialRow = {
+      provider_id: 'provider:custom',
+      credential_kind: 'apiKey',
+      secret_ref: 'storage-v2://secret/provider/provider:custom/apiKey',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      updated_by_device_id: 'device-a'
+    }
+    const remoteHash = hashJson(remoteRow)
+    remote.files.set(
+      '/remote-root/sync/v1/storage-v2/records/provider_credential/provider-custom-apiKey.json',
+      JSON.stringify({
+        id: 'provider_credential:provider%3Acustom:apiKey',
+        table: providerCredentialTable,
+        idValues: ['provider:custom', 'apiKey'],
+        row: remoteRow,
+        valueHash: remoteHash,
+        updatedAt: Date.parse(remoteRow.updated_at),
+        deletedAt: null,
+        version: 1
+      })
+    )
+
+    const db = makeProviderCredentialDb({
+      tombstones: [
+        {
+          entity_type: 'provider_credential',
+          entity_id: encodeStorageV2CompositeEntityId(['provider:custom', 'apiKey']),
+          deleted_at: '2026-06-01T08:10:00.000Z',
+          device_id: 'device-b',
+          version: 2
+        }
+      ]
+    })
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    const result = await new StorageV2WebDavRecordSyncService([providerCredentialTable, tombstoneTable]).sync(
+      remote.client as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {
+          'provider_credential:provider%3Acustom:apiKey': {
+            entityType: 'provider_credential',
+            table: 'provider_credentials',
+            idValues: ['provider:custom', 'apiKey'],
+            valueHash: remoteHash,
+            updatedAt: Date.parse(remoteRow.updated_at),
+            deletedAt: null,
+            version: 1,
+            path: 'storage-v2/records/provider_credential/provider-custom-apiKey.json'
+          }
+        }
+      }
+    )
+
+    expect(result.summary.storageDownloaded).toBe(0)
+    expect(db.state.credentials).toEqual([])
+    expect(result.manifest.records['provider_credential:provider%3Acustom:apiKey']).toBeUndefined()
   })
 
   it('maps remote builtin skill IDs to an existing local folder_name before applying agent skill rows', async () => {

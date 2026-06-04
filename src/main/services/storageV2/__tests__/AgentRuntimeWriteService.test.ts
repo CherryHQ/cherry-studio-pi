@@ -30,6 +30,7 @@ vi.mock('../SyncLogService', () => ({
 }))
 
 import { StorageV2AgentRuntimeWriteService } from '../AgentRuntimeWriteService'
+import { encodeStorageV2CompositeEntityId } from '../SyncEntityId'
 
 describe('StorageV2AgentRuntimeWriteService', () => {
   beforeEach(() => {
@@ -355,14 +356,14 @@ describe('StorageV2AgentRuntimeWriteService', () => {
     expect(mocks.recordChange).toHaveBeenCalledWith(
       expect.objectContaining({
         entityType: 'channel_task_subscription',
-        entityId: 'channel-old:task-1',
+        entityId: encodeStorageV2CompositeEntityId(['channel-old', 'task-1']),
         operation: 'delete'
       })
     )
     expect(mocks.recordChange).toHaveBeenCalledWith(
       expect.objectContaining({
         entityType: 'channel_task_subscription',
-        entityId: 'channel-1:task-1'
+        entityId: encodeStorageV2CompositeEntityId(['channel-1', 'task-1'])
       })
     )
   })

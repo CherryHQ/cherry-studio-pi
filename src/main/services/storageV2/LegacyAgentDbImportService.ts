@@ -8,6 +8,7 @@ import { storageV2DataRootService } from './DataRootService'
 import { storageV2SecretVaultService } from './SecretVaultService'
 import { storageV2Database } from './StorageV2Database'
 import { type StorageV2ConversationImport, storageV2ConversationRepository } from './StorageV2Repositories'
+import { encodeStorageV2CompositeEntityId } from './SyncEntityId'
 import { storageV2SyncLogService } from './SyncLogService'
 
 type LegacyAgentDbSnapshotOptions = {
@@ -612,7 +613,7 @@ export class StorageV2LegacyAgentDbImportService {
       await storageV2SyncLogService.recordChange({
         client,
         entityType: 'agent_skill',
-        entityId: `${agentId}:${skillId}`,
+        entityId: encodeStorageV2CompositeEntityId([agentId, skillId]),
         payload: {
           agentId,
           skillId,
@@ -804,7 +805,7 @@ export class StorageV2LegacyAgentDbImportService {
       await storageV2SyncLogService.recordChange({
         client,
         entityType: 'channel_task_subscription',
-        entityId: `${channelId}:${taskId}`,
+        entityId: encodeStorageV2CompositeEntityId([channelId, taskId]),
         payload: {
           channelId,
           taskId
@@ -942,7 +943,7 @@ export class StorageV2LegacyAgentDbImportService {
       await storageV2SyncLogService.recordChange({
         client,
         entityType: 'agent_skill',
-        entityId: `${agentId}:${skillId}`,
+        entityId: encodeStorageV2CompositeEntityId([agentId, skillId]),
         operation: 'delete',
         payload: { agentId, skillId }
       })
@@ -986,7 +987,7 @@ export class StorageV2LegacyAgentDbImportService {
       await storageV2SyncLogService.recordChange({
         client,
         entityType: 'channel_task_subscription',
-        entityId: `${channelId}:${taskId}`,
+        entityId: encodeStorageV2CompositeEntityId([channelId, taskId]),
         operation: 'delete',
         payload: { channelId, taskId }
       })

@@ -12,6 +12,7 @@ import type {
 
 import { storageV2SecretVaultService } from './SecretVaultService'
 import { storageV2Database } from './StorageV2Database'
+import { encodeStorageV2CompositeEntityId } from './SyncEntityId'
 import { storageV2SyncLogService } from './SyncLogService'
 
 const CHANNEL_SECRET_KEYS = [
@@ -807,7 +808,7 @@ export class StorageV2AgentRuntimeWriteService {
       await storageV2SyncLogService.recordChange({
         client,
         entityType: 'channel_task_subscription',
-        entityId: `${channelId}:${taskId}`,
+        entityId: encodeStorageV2CompositeEntityId([channelId, taskId]),
         operation: 'delete',
         payload: { channelId, taskId }
       })
@@ -826,7 +827,7 @@ export class StorageV2AgentRuntimeWriteService {
       await storageV2SyncLogService.recordChange({
         client,
         entityType: 'channel_task_subscription',
-        entityId: `${channelId}:${taskId}`,
+        entityId: encodeStorageV2CompositeEntityId([channelId, taskId]),
         payload: { channelId, taskId }
       })
     }

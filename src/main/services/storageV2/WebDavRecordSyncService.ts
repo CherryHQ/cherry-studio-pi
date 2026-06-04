@@ -13,6 +13,11 @@ import { storageV2DataRootService } from './DataRootService'
 import { collectStorageV2SecretRefsFromValue, scanStorageV2SecretReferences } from './SecretRefIntegrity'
 import { type StorageV2PlaintextSecretVaultEntry, storageV2SecretVaultService } from './SecretVaultService'
 import { storageV2Database } from './StorageV2Database'
+import {
+  decodeStorageV2CompositeEntityId,
+  encodeStorageV2CompositeEntityId,
+  listStorageV2CompositeEntityIdCandidates
+} from './SyncEntityId'
 import { listStorageV2SyncPolicies, type StorageV2SyncEntityType, type StorageV2SyncPolicy } from './SyncPolicy'
 
 const logger = loggerService.withContext('StorageV2WebDavRecordSyncService')
@@ -371,7 +376,7 @@ function tombstoneTargetFromRecord(entityType: string, idValues: readonly string
 
   return {
     entityType,
-    entityId: idValues.join(':'),
+    entityIds: listStorageV2CompositeEntityIdCandidates(idValues),
     idValues
   }
 }
@@ -382,8 +387,8 @@ function tombstoneTargetFromRow(row: Record<string, unknown>) {
   if (!entityType || !entityId || !Object.hasOwn(TOMBSTONE_PHYSICAL_DELETE_TARGETS, entityType)) return null
 
   const target = TOMBSTONE_PHYSICAL_DELETE_TARGETS[entityType as keyof typeof TOMBSTONE_PHYSICAL_DELETE_TARGETS]
-  const idValues = entityId.split(':')
-  if (idValues.length !== target.idColumns.length || idValues.some((value) => !value)) return null
+  const idValues = decodeStorageV2CompositeEntityId(entityId, target.idColumns.length)
+  if (!idValues) return null
 
   return {
     entityType,
@@ -1468,11 +1473,11 @@ export class StorageV2WebDavRecordSyncService {
   }
 
   private rewriteAgentSkillEntityId(entityId: string) {
-    const parts = entityId.split(':')
-    if (parts.length !== 2) return entityId
+    const parts = decodeStorageV2CompositeEntityId(entityId, 2)
+    if (!parts) return entityId
 
     const mappedSkillId = this.skillIdRemaps.get(parts[1])
-    return mappedSkillId ? `${parts[0]}:${mappedSkillId}` : entityId
+    return mappedSkillId ? encodeStorageV2CompositeEntityId([parts[0], mappedSkillId]) : entityId
   }
 
   private async rewriteRemoteRowForLocalAliases(
@@ -1677,9 +1682,11 @@ export class StorageV2WebDavRecordSyncService {
       sql: `
         SELECT deleted_at
         FROM sync_tombstones
-        WHERE entity_type = ? AND entity_id = ?
+        WHERE entity_type = ? AND entity_id IN (${target.entityIds.map(() => '?').join(', ')})
+        ORDER BY deleted_at DESC
+        LIMIT 1
       `,
-      args: [target.entityType, target.entityId]
+      args: [target.entityType, ...target.entityIds]
     })
     const tombstoneDeletedAt = parseTime(result.rows[0]?.deleted_at)
     return tombstoneDeletedAt > 0 && tombstoneDeletedAt >= meta.updatedAt
