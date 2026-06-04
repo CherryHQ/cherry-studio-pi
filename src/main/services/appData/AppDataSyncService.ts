@@ -618,6 +618,43 @@ export class AppDataSyncService {
     })
   }
 
+  private isRemotePathUnderRoot(filePath: string, rootPath: string) {
+    const normalizedRoot = path.posix.normalize(rootPath).replace(/\/+$/g, '')
+    const normalizedFilePath = path.posix.normalize(filePath)
+    return normalizedFilePath === normalizedRoot || normalizedFilePath.startsWith(`${normalizedRoot}/`)
+  }
+
+  private hasReferencedPathUnderRoot(referenced: ReadonlySet<string>, rootPath: string) {
+    for (const filePath of referenced) {
+      if (this.isRemotePathUnderRoot(filePath, rootPath)) return true
+    }
+
+    return false
+  }
+
+  private async pruneRemoteArtifactRootIfUnreferenced(
+    client: WebDAVClient,
+    rootPath: string,
+    referenced: ReadonlySet<string>
+  ) {
+    if (this.hasReferencedPathUnderRoot(referenced, rootPath)) return false
+
+    try {
+      await this.removeRemoteFile(client, rootPath)
+      return true
+    } catch (error) {
+      if (error instanceof WebDavOperationError && error.transient) {
+        throw error
+      }
+
+      logger.warn(
+        `Failed to prune stale WebDAV artifact directory ${rootPath}; falling back to file cleanup`,
+        error as Error
+      )
+      return false
+    }
+  }
+
   private async listRemoteFilesRecursive(client: WebDAVClient, dirPath: string): Promise<string[]> {
     try {
       const exists = await runWebDavOperation(
@@ -676,7 +713,12 @@ export class AppDataSyncService {
     addReferencedPath(manifest.latestSnapshot?.path)
 
     for (const root of ['records', 'backups']) {
-      const files = await this.listRemoteFilesRecursive(client, path.posix.join(basePath, root))
+      const rootPath = path.posix.join(basePath, root)
+      if (await this.pruneRemoteArtifactRootIfUnreferenced(client, rootPath, referenced)) {
+        continue
+      }
+
+      const files = await this.listRemoteFilesRecursive(client, rootPath)
       for (const filePath of files) {
         if (referenced.has(filePath)) continue
         await this.removeRemoteFile(client, filePath)

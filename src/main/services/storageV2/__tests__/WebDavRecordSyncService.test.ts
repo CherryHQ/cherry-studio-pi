@@ -656,6 +656,13 @@ function makeSharedWebDavStore() {
       }),
       deleteFile: vi.fn(async (filePath: string) => {
         files.delete(filePath)
+        const normalized = path.posix.normalize(filePath).replace(/\/+$/g, '')
+        for (const key of Array.from(files.keys())) {
+          const remotePath = path.posix.normalize(String(key))
+          if (remotePath.startsWith(`${normalized}/`)) {
+            files.delete(key)
+          }
+        }
         return true
       }),
       getDirectoryContents: vi.fn(async (filePath: string) => {
@@ -738,6 +745,13 @@ describe('StorageV2WebDavRecordSyncService', () => {
     mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => mocks.remoteFiles.get(filePath) ?? '')
     mocks.webdav.deleteFile.mockImplementation(async (filePath: string) => {
       mocks.remoteFiles.delete(filePath)
+      const normalized = path.posix.normalize(filePath).replace(/\/+$/g, '')
+      for (const key of Array.from(mocks.remoteFiles.keys())) {
+        const remotePath = path.posix.normalize(String(key))
+        if (remotePath.startsWith(`${normalized}/`)) {
+          mocks.remoteFiles.delete(key)
+        }
+      }
     })
     mocks.webdav.getDirectoryContents.mockResolvedValue([])
     mocks.secretVault.exportPlaintextSecrets.mockResolvedValue({})
@@ -1519,6 +1533,9 @@ describe('StorageV2WebDavRecordSyncService', () => {
     const currentBundlePath = `/remote-root/sync/v1/${result.manifest.bundle?.path}`
     await service.pruneRemoteArtifacts(remote.client as any, '/remote-root/sync/v1', result.manifest)
 
+    expect(remote.client.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/storage-v2/records')
+    expect(remote.client.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/storage-v2/blobs')
+    expect(remote.client.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/storage-v2/secrets')
     expect(remote.files.has(currentBundlePath)).toBe(true)
     expect(remote.files.has('/remote-root/sync/v1/storage-v2/records/settings/theme-old.json')).toBe(false)
     expect(remote.files.has('/remote-root/sync/v1/storage-v2/blobs/orphaned.bin')).toBe(false)

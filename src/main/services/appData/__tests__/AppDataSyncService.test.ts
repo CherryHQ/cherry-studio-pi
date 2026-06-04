@@ -311,6 +311,13 @@ describe('AppDataSyncService', () => {
     })
     mocks.webdav.deleteFile.mockImplementation(async (filePath: string) => {
       mocks.remoteFiles.delete(filePath)
+      const normalized = path.posix.normalize(filePath).replace(/\/+$/g, '')
+      for (const key of Array.from(mocks.remoteFiles.keys())) {
+        const remotePath = path.posix.normalize(String(key))
+        if (remotePath.startsWith(`${normalized}/`)) {
+          mocks.remoteFiles.delete(key)
+        }
+      }
     })
     mocks.webdav.getDirectoryContents.mockResolvedValue([
       {
@@ -1133,6 +1140,38 @@ describe('AppDataSyncService', () => {
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/.cherry-studio-pi-storage-write-test-stale.tmp')).toBe(false)
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/records/settings/stale-hash.json')).toBe(false)
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/backups/old-device-snapshot.zip')).toBe(false)
+  })
+
+  it('prunes the stale app-data records directory in one request when Storage v2 owns app records', async () => {
+    mockDirectoryContentsFromRemoteFiles()
+    mocks.remoteFiles.set('/remote-root/sync/v1/records/settings/old-one.json', JSON.stringify({ stale: 1 }))
+    mocks.remoteFiles.set('/remote-root/sync/v1/records/settings/old-two.json', JSON.stringify({ stale: 2 }))
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
+      if (mocks.remoteFiles.has(filePath)) {
+        return mocks.remoteFiles.get(filePath)
+      }
+
+      if (filePath.endsWith('/manifest.json')) {
+        return JSON.stringify({
+          version: 1,
+          generation: 0,
+          updatedAt: 0,
+          records: {},
+          snapshots: {},
+          latestSnapshot: null,
+          storageV2: null
+        })
+      }
+
+      throw new Error(`Unexpected WebDAV read: ${filePath}`)
+    })
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.status).toBe('success')
+    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/records')
+    expect(mocks.remoteFiles.has('/remote-root/sync/v1/records/settings/old-one.json')).toBe(false)
+    expect(mocks.remoteFiles.has('/remote-root/sync/v1/records/settings/old-two.json')).toBe(false)
   })
 
   it('fails visibly when stale Storage v2 cleanup cannot finish after publishing the manifest', async () => {

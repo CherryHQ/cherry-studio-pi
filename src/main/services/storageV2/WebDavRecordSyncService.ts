@@ -835,6 +835,43 @@ export class StorageV2WebDavRecordSyncService {
     })
   }
 
+  private isRemotePathUnderRoot(filePath: string, rootPath: string) {
+    const normalizedRoot = path.posix.normalize(rootPath).replace(/\/+$/g, '')
+    const normalizedFilePath = path.posix.normalize(filePath)
+    return normalizedFilePath === normalizedRoot || normalizedFilePath.startsWith(`${normalizedRoot}/`)
+  }
+
+  private hasReferencedPathUnderRoot(referenced: ReadonlySet<string>, rootPath: string) {
+    for (const filePath of referenced) {
+      if (this.isRemotePathUnderRoot(filePath, rootPath)) return true
+    }
+
+    return false
+  }
+
+  private async pruneRemoteArtifactRootIfUnreferenced(
+    client: WebDAVClient,
+    rootPath: string,
+    referenced: ReadonlySet<string>
+  ) {
+    if (this.hasReferencedPathUnderRoot(referenced, rootPath)) return false
+
+    try {
+      await this.deleteRemoteFileIfPossible(client, rootPath)
+      return true
+    } catch (error) {
+      if (error instanceof WebDavOperationError && error.transient) {
+        throw error
+      }
+
+      logger.warn(
+        `Failed to prune stale Storage v2 artifact directory ${rootPath}; falling back to file cleanup`,
+        error as Error
+      )
+      return false
+    }
+  }
+
   async pruneRemoteArtifacts(
     client: WebDAVClient,
     basePath: string,
@@ -859,7 +896,12 @@ export class StorageV2WebDavRecordSyncService {
 
     const roots = ['storage-v2/records', STORAGE_V2_BUNDLE_DIR, 'storage-v2/blobs', STORAGE_V2_SECRET_VAULT_DIR]
     for (const root of roots) {
-      const files = await this.listRemoteFilesRecursive(client, path.posix.join(basePath, root))
+      const rootPath = path.posix.join(basePath, root)
+      if (await this.pruneRemoteArtifactRootIfUnreferenced(client, rootPath, referenced)) {
+        continue
+      }
+
+      const files = await this.listRemoteFilesRecursive(client, rootPath)
       for (const filePath of files) {
         if (referenced.has(filePath)) continue
         await this.deleteRemoteFileIfPossible(client, filePath)
