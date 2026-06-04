@@ -135,6 +135,7 @@ type StorageV2WebDavRecordSyncOptions = {
   secretKeyMaterial?: string
   legacySecretKeyMaterial?: string
   beforeRemoteConflictApply?: (input: { id: string; baseHash: string | null; firstJoin: boolean }) => Promise<void>
+  preferRemoteOnFirstJoin?: boolean
 }
 
 type RemoteSecretVaultCache = {
@@ -2115,12 +2116,15 @@ export class StorageV2WebDavRecordSyncService {
       const remoteChanged = remoteRecord.valueHash !== lastHash
 
       if (!lastHash) {
-        await this.recordConflictAudit(dbClient, {
-          localRecord,
-          remoteRecord,
-          baseHash: null,
-          resolvedAt: new Date().toISOString()
-        })
+        const treatAsFirstJoinHydration = options.preferRemoteOnFirstJoin === true
+        if (!treatAsFirstJoinHydration) {
+          await this.recordConflictAudit(dbClient, {
+            localRecord,
+            remoteRecord,
+            baseHash: null,
+            resolvedAt: new Date().toISOString()
+          })
+        }
         await this.assertRemoteSecretsAvailableForRecord(
           client,
           basePath,
@@ -2139,7 +2143,7 @@ export class StorageV2WebDavRecordSyncService {
         stageRecordSyncState(id, remoteRecord.valueHash)
         summary.storageDownloaded += remoteRecord.deletedAt ? 0 : 1
         summary.storageDeleted += remoteRecord.deletedAt ? 1 : 0
-        summary.storageResolvedConflicts += 1
+        summary.storageResolvedConflicts += treatAsFirstJoinHydration ? 0 : 1
         continue
       }
 

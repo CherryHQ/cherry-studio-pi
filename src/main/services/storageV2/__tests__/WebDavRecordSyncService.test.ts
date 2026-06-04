@@ -1657,6 +1657,121 @@ describe('StorageV2WebDavRecordSyncService', () => {
     ).toBe(true)
   })
 
+  it('hydrates remote Storage v2 rows without per-record conflict audits when joining an existing sync space', async () => {
+    const localRow = {
+      key: 'theme',
+      value_json: '{"mode":"local-default"}',
+      scope: 'app',
+      updated_at: '2026-05-29T12:20:00.000Z',
+      deleted_at: null,
+      version: 3
+    }
+    const remoteRow = {
+      key: 'theme',
+      value_json: '{"mode":"remote-user"}',
+      scope: 'app',
+      updated_at: '2026-05-29T12:10:00.000Z',
+      deleted_at: null,
+      version: 2
+    }
+    const remoteHash = hashJson(remoteRow)
+    const events: string[] = []
+    const beforeRemoteConflictApply = vi.fn(async () => {
+      events.push('before-remote-conflict-apply')
+    })
+    const remoteRecord = {
+      id: 'settings:theme',
+      table: settingsTable,
+      idValues: ['theme'],
+      row: remoteRow,
+      valueHash: remoteHash,
+      updatedAt: Date.parse('2026-05-29T12:10:00.000Z'),
+      deletedAt: null,
+      version: 2
+    }
+    mocks.remoteFiles.set('/remote-root/sync/v1/storage-v2/records/settings/theme.json', JSON.stringify(remoteRecord))
+    mocks.dbClient.execute.mockImplementation(async (input: string | { sql: string }) => {
+      const sql = typeof input === 'string' ? input : input.sql
+      if (sql.includes('SELECT * FROM settings')) {
+        return { rows: [localRow] }
+      }
+      if (sql.includes('PRAGMA table_info(settings)')) {
+        return {
+          rows: [
+            { name: 'key' },
+            { name: 'value_json' },
+            { name: 'scope' },
+            { name: 'updated_at' },
+            { name: 'deleted_at' },
+            { name: 'version' }
+          ]
+        }
+      }
+      if (sql.includes('INSERT INTO settings')) {
+        events.push('insert-settings')
+      }
+      return { rows: [] }
+    })
+
+    const result = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
+      mocks.webdav as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {
+          'settings:theme': {
+            entityType: 'settings',
+            table: 'settings',
+            idValues: ['theme'],
+            valueHash: remoteHash,
+            updatedAt: remoteRecord.updatedAt,
+            deletedAt: null,
+            version: 2,
+            path: 'storage-v2/records/settings/theme.json'
+          }
+        }
+      },
+      {
+        beforeRemoteConflictApply,
+        preferRemoteOnFirstJoin: true
+      }
+    )
+
+    const insertCall = mocks.dbClient.execute.mock.calls.find(([input]) => {
+      const sql = typeof input === 'string' ? input : input.sql
+      return sql.includes('INSERT INTO settings')
+    })
+
+    expect(result.summary.storageDownloaded).toBe(1)
+    expect(result.summary.storageUploaded).toBe(0)
+    expect(result.summary.storageConflicts).toBe(0)
+    expect(result.summary.storageResolvedConflicts).toBe(0)
+    expect(beforeRemoteConflictApply).toHaveBeenCalledWith({
+      id: 'settings:theme',
+      baseHash: null,
+      firstJoin: true
+    })
+    expect(events).toEqual(['before-remote-conflict-apply', 'insert-settings'])
+    expect(insertCall?.[0]).toEqual(
+      expect.objectContaining({
+        args: ['theme', '{"mode":"remote-user"}', 'app', '2026-05-29T12:10:00.000Z', null, 2]
+      })
+    )
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(
+        ([filePath, contents]) =>
+          String(filePath).includes('/storage-v2/records/settings/') && String(contents).includes('local-default')
+      )
+    ).toBe(false)
+    expect(
+      mocks.dbClient.execute.mock.calls.some(([input]) => {
+        const sql = typeof input === 'string' ? input : input.sql
+        return sql.includes('INSERT INTO sync_conflicts')
+      })
+    ).toBe(false)
+  })
+
   it('auto-resolves exact concurrent Storage v2 edits with a deterministic content tie-breaker', async () => {
     const remote = makeSharedWebDavStore()
     const localRow = {

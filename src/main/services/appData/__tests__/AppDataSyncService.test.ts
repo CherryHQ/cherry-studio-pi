@@ -731,6 +731,59 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('hydrates remote app records without per-record conflict audits when joining an existing sync space', async () => {
+    const localRecord = {
+      ...remoteRecord,
+      value: { mode: 'local-default' },
+      valueHash: 'local-default-hash',
+      updatedAt: remoteRecord.updatedAt + 60_000,
+      deviceId: 'new-device'
+    }
+    mocks.db.listRecords.mockResolvedValue([localRecord])
+    mocks.db.getSyncState.mockResolvedValue(null)
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
+      if (mocks.remoteFiles.has(filePath)) {
+        return mocks.remoteFiles.get(filePath)
+      }
+
+      if (filePath.endsWith('/manifest.json')) {
+        return JSON.stringify({
+          ...remoteManifest,
+          generation: 12,
+          syncSpace: {
+            version: 1,
+            id: 'sync-space-existing',
+            createdAt: 1760000000000,
+            keyMaterial: 'abcdefghijklmnopqrstuvwxyz123456',
+            keyFormat: 'cherry-sync-space-key-v1',
+            secretEncryption: 'cherry-webdav-secret-sync-aes-256-gcm'
+          }
+        })
+      }
+
+      if (filePath.endsWith('/records/settings/theme.json')) {
+        return JSON.stringify(remoteRecord)
+      }
+
+      throw new Error(`Unexpected WebDAV read: ${filePath}`)
+    })
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.downloaded).toBe(1)
+    expect(summary.conflicts).toBe(0)
+    expect(summary.resolvedConflicts).toBe(0)
+    expect(summary.joinSafetySnapshotCreated).toBe(true)
+    expect(mocks.storageV2.upsertRecordSnapshot).toHaveBeenCalledWith(remoteRecord)
+    expect(mocks.db.applyRemoteRecord).toHaveBeenCalledWith(remoteRecord, { storageV2Mirrored: true })
+    expect(mocks.storageV2.upsertSyncConflict).not.toHaveBeenCalled()
+    expect(mocks.db.createConflict).not.toHaveBeenCalled()
+    expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith('record:settings:theme:hash', 'remote-hash')
+    expect(mocks.webdav.putFileContents.mock.calls.some((call) => String(call[1]).includes('local-default-hash'))).toBe(
+      false
+    )
+  })
+
   it('preserves local safety snapshot details when recording a failure after remote conflict data is applied', async () => {
     const localRecord = {
       ...remoteRecord,
@@ -1028,6 +1081,14 @@ describe('AppDataSyncService', () => {
           version: 1,
           updatedAt: 1760000000000,
           records: {},
+          syncSpace: {
+            version: 1,
+            id: 'sync-space-existing',
+            createdAt: 1760000000000,
+            keyMaterial: 'abcdefghijklmnopqrstuvwxyz123456',
+            keyFormat: 'cherry-sync-space-key-v1',
+            secretEncryption: 'cherry-webdav-secret-sync-aes-256-gcm'
+          },
           storageV2: existingStorageManifest
         })
       }
@@ -1054,6 +1115,15 @@ describe('AppDataSyncService', () => {
 
     expect(summary.storageDownloaded).toBe(0)
     expect(summary.storageSkipped).toBe(3)
+    expect(mocks.storageRecordSync.sync).toHaveBeenCalledWith(
+      mocks.webdav,
+      '/remote-root/sync/v1',
+      existingStorageManifest,
+      expect.objectContaining({
+        legacySecretKeyMaterial: undefined,
+        preferRemoteOnFirstJoin: true
+      })
+    )
     expect(mocks.runtimeProjection.projectAgents).toHaveBeenCalledWith({
       archiveRoot: expect.stringContaining('/tmp/cherry-studio-pi-data-root/legacy/data-sync-runtime-projection-')
     })

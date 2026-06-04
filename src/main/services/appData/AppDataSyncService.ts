@@ -1528,8 +1528,10 @@ export class AppDataSyncService {
       const hadUsableSyncSpaceBeforeSync = isUsableSyncSpace(manifest.syncSpace)
       const syncSpace = this.ensureSyncSpace(manifest, summary.lastSyncAt)
       summary.syncSpaceId = syncSpace.id
+      const remoteHadAppDataRecordsBeforeSync = Object.keys(manifest.records ?? {}).length > 0
       const remoteHadStorageDataBeforeSync = hasStorageV2RemoteData(manifest.storageV2)
       const remoteStorageEntityTypes = getStorageV2ManifestEntityTypes(manifest.storageV2)
+      const preferRemoteAppDataOnFirstJoin = hadUsableSyncSpaceBeforeSync && remoteHadAppDataRecordsBeforeSync
       let localStorageAppRecords: AppDataRecord[] | null = null
       try {
         localStorageAppRecords = await storageV2AppDataKvMirrorService.listRecords(undefined, true)
@@ -1607,19 +1609,21 @@ export class AppDataSyncService {
             const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
             if (remoteRecord) {
               await this.createJoinSafetySnapshotOnce(db, summary)
-              await this.createConflict(db, {
-                scope: localRecord.scope,
-                key: localRecord.key,
-                localRecord,
-                remoteRecord,
-                baseHash: null,
-                resolvedAt: Date.now()
-              })
+              if (!preferRemoteAppDataOnFirstJoin) {
+                await this.createConflict(db, {
+                  scope: localRecord.scope,
+                  key: localRecord.key,
+                  localRecord,
+                  remoteRecord,
+                  baseHash: null,
+                  resolvedAt: Date.now()
+                })
+              }
               await this.applyRemoteRecord(db, remoteRecord)
               stageSyncState(`record:${id}:hash`, remoteRecord.valueHash)
               summary.downloaded += remoteRecord.deletedAt ? 0 : 1
               summary.deleted += remoteRecord.deletedAt ? 1 : 0
-              summary.resolvedConflicts += 1
+              summary.resolvedConflicts += preferRemoteAppDataOnFirstJoin ? 0 : 1
             } else {
               summary.skipped += 1
             }
@@ -1676,7 +1680,8 @@ export class AppDataSyncService {
         legacySecretKeyMaterial: hadUsableSyncSpaceBeforeSync
           ? undefined
           : `${normalizeWebDavHost(config.webdavHost)}\n${config.webdavUser ?? ''}\n${config.webdavPass ?? ''}`,
-        beforeRemoteConflictApply: async () => this.createJoinSafetySnapshotOnce(db, summary)
+        beforeRemoteConflictApply: async () => this.createJoinSafetySnapshotOnce(db, summary),
+        preferRemoteOnFirstJoin: hadUsableSyncSpaceBeforeSync && remoteHadStorageDataBeforeSync
       })
       manifest.storageV2 = storageSync.manifest
       storageSyncStates = storageSync.syncStates ?? []
