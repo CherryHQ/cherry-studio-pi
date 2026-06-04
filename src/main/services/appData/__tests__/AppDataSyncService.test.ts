@@ -675,6 +675,45 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('preserves local safety snapshot details when recording a failure after remote conflict data is applied', async () => {
+    const localRecord = {
+      ...remoteRecord,
+      value: { mode: 'local-default' },
+      valueHash: 'local-default-hash',
+      updatedAt: remoteRecord.updatedAt + 60_000,
+      deviceId: 'new-device'
+    }
+    mocks.db.listRecords.mockResolvedValue([localRecord])
+    mocks.db.getSyncState.mockResolvedValue(null)
+    mocks.storageRecordSync.pruneRemoteArtifacts.mockRejectedValueOnce(new Error('cleanup denied'))
+
+    const service = new AppDataSyncService()
+    await expect(service.syncNow(config)).rejects.toThrow('远端旧同步文件清理失败')
+
+    const failureSummary = await service.recordSyncFailure(new Error('cleanup denied'))
+
+    expect(failureSummary).toEqual(
+      expect.objectContaining({
+        status: 'failed',
+        error: 'cleanup denied',
+        joinSafetySnapshotCreated: true,
+        joinSafetySnapshotFileName: expect.stringMatching(
+          /^cherry-studio-pi\.data-sync\.join-safety\.local-device\.\d+\.zip$/
+        ),
+        joinSafetySnapshotPath: expect.stringContaining('cherry-studio-pi.data-sync.join-safety.local-device'),
+        joinSafetySnapshotBytes: 6
+      })
+    )
+    expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith(
+      'last-sync-summary',
+      expect.objectContaining({
+        status: 'failed',
+        joinSafetySnapshotCreated: true,
+        joinSafetySnapshotBytes: 6
+      })
+    )
+  })
+
   it('auto-resolves exact legacy app record conflicts with a deterministic content tie-breaker and audit', async () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1760000000999)
     const localRecord = {

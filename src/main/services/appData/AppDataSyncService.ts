@@ -150,6 +150,15 @@ export type DataSyncSummary = {
   lastSyncAt: number
 }
 
+type DataSyncFailureSafetySnapshot = Pick<
+  DataSyncSummary,
+  | 'joinSafetySnapshotCreated'
+  | 'joinSafetySnapshotFileName'
+  | 'joinSafetySnapshotPath'
+  | 'joinSafetySnapshotBytes'
+  | 'lastSyncAt'
+>
+
 const EMPTY_SUMMARY: DataSyncSummary = {
   status: undefined,
   error: null,
@@ -456,6 +465,7 @@ export class AppDataSyncService {
   private readonly backupManager: BackupManager
   private syncInFlight: Promise<DataSyncSummary> | null = null
   private syncStartedAt: number | null = null
+  private pendingFailureSafetySnapshot: DataSyncFailureSafetySnapshot | null = null
 
   constructor(backupManager = new BackupManager()) {
     this.backupManager = backupManager
@@ -1241,8 +1251,15 @@ export class AppDataSyncService {
       summary.joinSafetySnapshotFileName = fileName
       summary.joinSafetySnapshotPath = localBackupPath
       summary.joinSafetySnapshotBytes = stat?.size ?? 0
+      this.pendingFailureSafetySnapshot = {
+        joinSafetySnapshotCreated: summary.joinSafetySnapshotCreated,
+        joinSafetySnapshotFileName: summary.joinSafetySnapshotFileName,
+        joinSafetySnapshotPath: summary.joinSafetySnapshotPath,
+        joinSafetySnapshotBytes: summary.joinSafetySnapshotBytes,
+        lastSyncAt: summary.lastSyncAt
+      }
 
-      logger.info('Created local join safety snapshot before applying remote conflict data', {
+      logger.info('Created local safety snapshot before applying remote conflict data', {
         fileName,
         localBackupPath,
         byteSize: summary.joinSafetySnapshotBytes
@@ -1429,11 +1446,14 @@ export class AppDataSyncService {
     }
 
     this.syncStartedAt = Date.now()
+    this.pendingFailureSafetySnapshot = null
     const sync = this.performSyncNow(config)
     this.syncInFlight = sync
 
     try {
-      return await sync
+      const result = await sync
+      this.pendingFailureSafetySnapshot = null
+      return result
     } finally {
       if (this.syncInFlight === sync) {
         this.syncInFlight = null
@@ -1692,13 +1712,16 @@ export class AppDataSyncService {
         (await storageV2AppDataKvMirrorService.getSyncState<DataSyncSummary>('last-sync-summary')) ??
         null)
       : null
+    const pendingSafetySnapshot = this.pendingFailureSafetySnapshot
     const summary: DataSyncSummary = {
       ...EMPTY_SUMMARY,
       ...(previousSummary ?? {}),
+      ...(pendingSafetySnapshot ?? {}),
       status: 'failed',
       error: errorMessage(error),
       lastSyncAt: Date.now()
     }
+    this.pendingFailureSafetySnapshot = null
     await this.setSyncState(db, 'last-sync-summary', summary)
     return summary
   }
