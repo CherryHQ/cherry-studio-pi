@@ -8,6 +8,7 @@ import {
   formatWebDavLockedMessage,
   formatWebDavNetworkMessage,
   formatWebDavNotFoundMessage,
+  formatWebDavPreconditionMessage,
   formatWebDavRateLimitedMessage,
   formatWebDavReadForbiddenMessage,
   formatWebDavTargetText,
@@ -202,6 +203,10 @@ export function describeWebDavUserFacingError(error: unknown, action = WEB_DAV_D
 
     if (status === 409) {
       return formatWebDavConflictMessage(prefix)
+    }
+
+    if (status === 412) {
+      return formatWebDavPreconditionMessage(prefix, targetText)
     }
 
     if (status === 423) {

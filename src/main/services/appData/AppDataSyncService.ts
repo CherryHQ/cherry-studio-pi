@@ -21,6 +21,7 @@ import {
 import { hashJsonValue, writeWebDavJsonAtomically } from '@main/services/WebDavAtomic'
 import { normalizeWebDavHost, runWebDavOperation, WebDavOperationError } from '@main/services/WebDavRetry'
 import type { WebDavConfig } from '@types'
+import { XMLParser } from 'fast-xml-parser'
 import { createClient, type FileStat, type WebDAVClient } from 'webdav'
 
 import { type AppDataDatabase, type AppDataRecord, getAppDataDatabase } from './AppDataDatabase'
@@ -78,7 +79,10 @@ type RemoteSyncLock = {
   ownerId: string
   token: string
   createdAt: number
+  updatedAt: number
   expiresAt: number
+  leaseMs: number
+  runtimeId?: string
   app: 'cherry-studio-pi'
   reason: 'data-sync'
 }
@@ -88,7 +92,13 @@ type RemoteSyncLockHandle = {
   path: string
   ownerId: string
   token: string
+  runtimeId?: string
   previousHeaders?: Record<string, string> | null
+}
+
+type RemoteSyncLockEntry = {
+  path: string
+  lock: RemoteSyncLock
 }
 
 type RemoteManifestBaseline = {
@@ -201,12 +211,16 @@ const DATA_SYNC_SUFFIX = '/sync/v1'
 const SYNC_SPACE_KEY_FORMAT = 'cherry-sync-space-key-v1' as const
 const SYNC_SPACE_SECRET_ENCRYPTION = 'cherry-webdav-secret-sync-aes-256-gcm' as const
 const STORAGE_V2_RUNTIME_PROJECTION_HASH_KEY = 'storage-v2-runtime-projection-hash'
-const REMOTE_SYNC_LOCK_FILE = '.sync.lock.json'
-const REMOTE_SYNC_LOCK_TTL_MS = 30 * 60 * 1000
-const REMOTE_SYNC_LOCK_RENEW_INTERVAL_MS = Math.max(60_000, Math.floor(REMOTE_SYNC_LOCK_TTL_MS / 3))
+const LEGACY_REMOTE_SYNC_LOCK_FILE = '.sync.lock.json'
+const REMOTE_SYNC_LOCK_DIR = '.sync.locks'
+const REMOTE_SYNC_LOCK_TTL_MS = 2 * 60 * 1000
+const REMOTE_SYNC_LOCK_RENEW_INTERVAL_MS = 30 * 1000
+const REMOTE_SYNC_LOCK_STALE_HEARTBEAT_MS = 3 * 60 * 1000
 const SNAPSHOT_RETENTION_PER_DEVICE = 3
 const SNAPSHOT_RETENTION_TOTAL = 20
 const NATIVE_WEB_DAV_LOCK_UNSUPPORTED_STATUSES = new Set([403, 405, 409, 501])
+const NATIVE_WEB_DAV_LOCK_OPT_IN_ENV = 'CHERRY_STUDIO_DATA_SYNC_NATIVE_WEB_DAV_LOCK'
+const STORAGE_V2_WRITE_ACCESS_PROBE_DIR = 'storage-v2/secrets'
 
 const AGENT_RUNTIME_ENTITY_TYPES = new Set([
   'agent',
@@ -399,8 +413,16 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
+function isWebDavLockedError(error: unknown) {
+  return error instanceof WebDavOperationError && error.status === 423
+}
+
 function isIgnorableCreateDirectoryError(error: unknown) {
   return error instanceof WebDavOperationError && (error.status === 405 || error.status === 409)
+}
+
+function isPreconditionCreateDirectoryError(error: unknown) {
+  return error instanceof WebDavOperationError && error.status === 412
 }
 
 function storageV2ManifestRecordEntries(manifest?: StorageV2WebDavRecordSyncManifest | null) {
@@ -460,9 +482,36 @@ function getStorageV2ManifestEntityTypes(manifest?: StorageV2WebDavRecordSyncMan
   return new Set(storageV2ManifestRecordEntries(manifest).map(([, meta]) => meta.entityType))
 }
 
+function collectWebDavLockTokens(value: unknown, tokens = new Set<string>()) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectWebDavLockTokens(item, tokens)
+    }
+    return tokens
+  }
+
+  if (!value || typeof value !== 'object') return tokens
+
+  const source = value as Record<string, unknown>
+  const lockToken = source.locktoken
+  if (lockToken && typeof lockToken === 'object') {
+    const href = (lockToken as Record<string, unknown>).href
+    if (typeof href === 'string' && href.trim()) {
+      tokens.add(href.trim())
+    }
+  }
+
+  for (const child of Object.values(source)) {
+    collectWebDavLockTokens(child, tokens)
+  }
+
+  return tokens
+}
+
 export class AppDataSyncService {
   private static instance: AppDataSyncService | null = null
   private readonly backupManager: BackupManager
+  private readonly runtimeId = `${process.pid}-${randomUUID()}`
   private syncInFlight: Promise<DataSyncSummary> | null = null
   private syncStartedAt: number | null = null
   private pendingFailureSafetySnapshot: DataSyncFailureSafetySnapshot | null = null
@@ -532,14 +581,24 @@ export class AppDataSyncService {
         logger.warn(`Remote directory ${dirPath} already exists or was created concurrently`, error as Error)
         return
       }
+      if (isPreconditionCreateDirectoryError(error)) {
+        const existsAfterFailure = await runWebDavOperation(
+          `checking remote directory ${dirPath} after create precondition failure`,
+          () => client.exists(dirPath),
+          { logger }
+        ).catch(() => false)
+        if (existsAfterFailure) {
+          logger.warn(`Remote directory ${dirPath} exists after create precondition failure`, error as Error)
+          return
+        }
+      }
       throw error
     }
   }
 
-  private async assertWriteAccess(client: WebDAVClient, basePath: string) {
-    const probePath = path.posix.join(basePath, `.cherry-studio-pi-write-test-${Date.now()}.tmp`)
+  private async assertProbeWriteAccess(client: WebDAVClient, probePath: string, label: string) {
     await runWebDavOperation(
-      `writing remote sync probe ${probePath}`,
+      `writing ${label} ${probePath}`,
       () => client.putFileContents(probePath, 'ok', { overwrite: true }),
       { logger }
     )
@@ -551,9 +610,21 @@ export class AppDataSyncService {
       )
     }
 
-    await runWebDavOperation(`deleting remote sync probe ${probePath}`, () => maybeDeleteFile.call(client, probePath), {
+    await runWebDavOperation(`deleting ${label} ${probePath}`, () => maybeDeleteFile.call(client, probePath), {
       logger
     })
+  }
+
+  private async assertWriteAccess(client: WebDAVClient, basePath: string) {
+    const probePath = path.posix.join(basePath, `.cherry-studio-pi-write-test-${Date.now()}.tmp`)
+    await this.assertProbeWriteAccess(client, probePath, 'remote sync probe')
+  }
+
+  private async assertStorageV2WriteAccess(client: WebDAVClient, basePath: string) {
+    const storageProbeDir = path.posix.join(basePath, STORAGE_V2_WRITE_ACCESS_PROBE_DIR)
+    await this.ensureDirectory(client, storageProbeDir)
+    const probePath = path.posix.join(storageProbeDir, `.cherry-studio-pi-storage-write-test-${Date.now()}.tmp`)
+    await this.assertProbeWriteAccess(client, probePath, 'Storage v2 sync probe')
   }
 
   private async readJson<T>(
@@ -753,13 +824,19 @@ export class AppDataSyncService {
 
   private normalizeRemoteLock(lock: RemoteSyncLock | null): RemoteSyncLock | null {
     if (!lock || lock.version !== 1 || !lock.ownerId || !lock.token) return null
+    const createdAt = Number(lock.createdAt) || 0
+    const updatedAt = Number(lock.updatedAt) || createdAt
+    const leaseMs = Number(lock.leaseMs) || REMOTE_SYNC_LOCK_TTL_MS
 
     return {
       version: 1,
       ownerId: String(lock.ownerId),
       token: String(lock.token),
-      createdAt: Number(lock.createdAt) || 0,
+      createdAt,
+      updatedAt,
       expiresAt: Number(lock.expiresAt) || 0,
+      leaseMs,
+      runtimeId: typeof lock.runtimeId === 'string' ? lock.runtimeId : undefined,
       app: 'cherry-studio-pi',
       reason: 'data-sync'
     }
@@ -769,9 +846,23 @@ export class AppDataSyncService {
     return !lock.expiresAt || lock.expiresAt <= now
   }
 
-  private formatRemoteLockMessage(lock: RemoteSyncLock) {
+  private isRemoteLockHeartbeatStale(lock: RemoteSyncLock, now = Date.now()) {
+    const lastActivityAt = lock.updatedAt || lock.createdAt
+    return lastActivityAt > 0 && now - lastActivityAt >= REMOTE_SYNC_LOCK_STALE_HEARTBEAT_MS
+  }
+
+  private shouldReclaimRemoteLock(lock: RemoteSyncLock, ownerId: string, now = Date.now(), currentToken?: string) {
+    if (currentToken && lock.ownerId === ownerId && lock.token === currentToken) return false
+    return lock.ownerId === ownerId || this.isRemoteLockExpired(lock, now) || this.isRemoteLockHeartbeatStale(lock, now)
+  }
+
+  private formatRemoteLockMessage(lock: RemoteSyncLock, ownerId?: string) {
     const createdAt = lock.createdAt ? new Date(lock.createdAt).toLocaleString('zh-CN') : '未知时间'
+    const updatedAt = lock.updatedAt ? new Date(lock.updatedAt).toLocaleString('zh-CN') : createdAt
     const expiresAt = lock.expiresAt ? new Date(lock.expiresAt).toLocaleString('zh-CN') : '未知时间'
+    if (ownerId && lock.ownerId === ownerId) {
+      return `当前设备上一次同步还保留着远端锁（开始：${createdAt}，最近活动：${updatedAt}，锁过期：${expiresAt}）。软件会自动接管这个锁并重新同步；如果反复出现，请重启应用后再试。`
+    }
     return `另一台设备正在同步这个 WebDAV 目录（设备：${lock.ownerId}，开始：${createdAt}，锁过期：${expiresAt}）。请等待它完成后再试；如果确认没有设备在同步，软件会在锁过期后自动清理。`
   }
 
@@ -785,6 +876,253 @@ export class AppDataSyncService {
     } catch (error) {
       throw new Error(`远端同步锁读取失败。为避免破坏远端数据，本次同步已停止：${errorMessage(error)}`)
     }
+  }
+
+  private async discoverWebDavLockTokens(client: WebDAVClient, remotePath: string) {
+    const customRequest = client.customRequest
+    if (typeof customRequest !== 'function') return []
+
+    try {
+      const response = await runWebDavOperation(
+        `discovering remote WebDAV locks ${remotePath}`,
+        () =>
+          customRequest.call(client, remotePath, {
+            method: 'PROPFIND',
+            headers: {
+              Accept: 'application/xml,text/xml',
+              'Content-Type': 'application/xml; charset=utf-8',
+              Depth: '0'
+            },
+            data:
+              '<?xml version="1.0" encoding="utf-8"?>' +
+              '<d:propfind xmlns:d="DAV:"><d:prop><d:lockdiscovery/></d:prop></d:propfind>'
+          }),
+        { logger }
+      )
+      const xml = await response.text()
+      const parser = new XMLParser({
+        ignoreAttributes: false,
+        removeNSPrefix: true,
+        parseTagValue: false,
+        trimValues: true
+      })
+      return [...collectWebDavLockTokens(parser.parse(xml))]
+    } catch (error) {
+      if (error instanceof WebDavOperationError && error.status === 404) return []
+      logger.warn(`Failed to discover remote WebDAV locks ${remotePath}`, error as Error)
+      return []
+    }
+  }
+
+  private normalizeWebDavLockToken(token: string) {
+    return token.trim().replace(/^<|>$/g, '')
+  }
+
+  private async unlockRemotePathWithToken(client: WebDAVClient, remotePath: string, token: string) {
+    const normalizedToken = this.normalizeWebDavLockToken(token)
+    const candidates = [normalizedToken, `<${normalizedToken}>`]
+
+    for (const candidate of candidates) {
+      try {
+        await runWebDavOperation(
+          `unlocking discovered remote WebDAV lock ${remotePath}`,
+          () => client.unlock(remotePath, candidate),
+          { logger }
+        )
+        return true
+      } catch (error) {
+        logger.warn(`Failed to unlock discovered remote WebDAV lock ${remotePath}`, error as Error)
+      }
+    }
+
+    return false
+  }
+
+  private async unlockDiscoveredWebDavLocks(client: WebDAVClient, remotePath: string) {
+    const tokens = await this.discoverWebDavLockTokens(client, remotePath)
+    let unlocked = false
+    for (const token of tokens) {
+      unlocked = (await this.unlockRemotePathWithToken(client, remotePath, token)) || unlocked
+    }
+    return unlocked
+  }
+
+  private async unlockDiscoveredWebDavLocksForPath(client: WebDAVClient, targetPath: string) {
+    const candidates = new Set<string>()
+    let current = path.posix.normalize(targetPath)
+    for (let depth = 0; depth < 4 && current && current !== '/'; depth += 1) {
+      candidates.add(current)
+      current = path.posix.dirname(current)
+    }
+
+    for (const candidate of candidates) {
+      if (await this.unlockDiscoveredWebDavLocks(client, candidate)) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  private async removeReclaimableRemoteLock(
+    client: WebDAVClient,
+    lockPath: string,
+    lock: RemoteSyncLock | null,
+    ownerId: string,
+    options: { bestEffort?: boolean } = {}
+  ) {
+    if (lock) {
+      logger.warn('Removing reclaimable remote data sync lock', {
+        ownerId: lock.ownerId,
+        currentOwnerId: ownerId,
+        createdAt: lock.createdAt,
+        updatedAt: lock.updatedAt,
+        expiresAt: lock.expiresAt
+      })
+    } else {
+      logger.warn('Removing invalid remote data sync lock')
+    }
+    try {
+      await this.removeRemoteFile(client, lockPath)
+    } catch (error) {
+      if (isWebDavLockedError(error) && (await this.unlockDiscoveredWebDavLocksForPath(client, lockPath))) {
+        try {
+          await this.removeRemoteFile(client, lockPath)
+          return
+        } catch (retryError) {
+          logger.warn(
+            'Failed to remove reclaimable remote data sync lock after unlocking WebDAV path',
+            retryError as Error
+          )
+        }
+      }
+      if (options.bestEffort) {
+        logger.warn('Failed to remove reclaimable remote data sync lock; ignoring stale claim', error as Error)
+        return
+      }
+      throw error
+    }
+  }
+
+  private getLegacyRemoteLockPath(basePath: string) {
+    return path.posix.join(basePath, LEGACY_REMOTE_SYNC_LOCK_FILE)
+  }
+
+  private getRemoteLockDir(basePath: string) {
+    return path.posix.join(basePath, REMOTE_SYNC_LOCK_DIR)
+  }
+
+  private getRemoteLockClaimPath(basePath: string, ownerId: string, token: string) {
+    return path.posix.join(
+      this.getRemoteLockDir(basePath),
+      `${safeFileSegment(ownerId)}.${safeFileSegment(token)}.json`
+    )
+  }
+
+  private async ensureRemoteLockDirectory(client: WebDAVClient, basePath: string) {
+    const lockDir = this.getRemoteLockDir(basePath)
+    try {
+      await this.ensureDirectory(client, lockDir)
+      return
+    } catch (error) {
+      if (!isWebDavLockedError(error) || !(await this.unlockDiscoveredWebDavLocksForPath(client, lockDir))) {
+        throw error
+      }
+      await this.ensureDirectory(client, lockDir)
+    }
+  }
+
+  private async readRemoteLockIfExists(client: WebDAVClient, lockPath: string) {
+    const hasLock = await runWebDavOperation(
+      `checking remote data sync lock ${lockPath}`,
+      () => client.exists(lockPath),
+      {
+        logger
+      }
+    )
+    if (!hasLock) return { exists: false, lock: null }
+
+    return {
+      exists: true,
+      lock: await this.readRemoteLock(client, lockPath)
+    }
+  }
+
+  private async listRemoteLockClaims(client: WebDAVClient, basePath: string) {
+    const lockDir = this.getRemoteLockDir(basePath)
+    const exists = await runWebDavOperation(`checking remote data sync lock directory ${lockDir}`, () =>
+      client.exists(lockDir)
+    ).catch((error) => {
+      if (error instanceof WebDavOperationError && error.status === 404) return false
+      throw error
+    })
+    if (!exists) return []
+
+    const contents = await runWebDavOperation(
+      `listing remote data sync lock directory ${lockDir}`,
+      () => client.getDirectoryContents(lockDir),
+      { logger }
+    )
+    const entries = normalizeDirectoryContents(contents)
+    const claims: RemoteSyncLockEntry[] = []
+    const normalizedLockDir = path.posix.normalize(lockDir).replace(/\/+$/g, '')
+
+    for (const entry of entries) {
+      if (entry.type === 'directory') continue
+      const filename = entry.filename || path.posix.join(lockDir, entry.basename || '')
+      if (!filename || !filename.endsWith('.json')) continue
+      const lockPath = path.posix.normalize(filename)
+      if (!lockPath.startsWith(`${normalizedLockDir}/`)) continue
+      const lock = await this.readRemoteLock(client, lockPath)
+      if (lock) {
+        claims.push({ path: lockPath, lock })
+      } else {
+        await this.removeReclaimableRemoteLock(client, lockPath, null, 'unknown', { bestEffort: true })
+      }
+    }
+
+    return claims
+  }
+
+  private async listBlockingRemoteLocks(
+    client: WebDAVClient,
+    basePath: string,
+    ownerId: string,
+    options: { currentToken?: string } = {}
+  ) {
+    const blockingLocks: RemoteSyncLockEntry[] = []
+    const now = Date.now()
+    const legacyLockPath = this.getLegacyRemoteLockPath(basePath)
+    const legacyLock = await this.readRemoteLockIfExists(client, legacyLockPath)
+    if (legacyLock.exists) {
+      if (!legacyLock.lock) {
+        await this.removeReclaimableRemoteLock(client, legacyLockPath, null, ownerId, { bestEffort: true })
+      } else if (this.shouldReclaimRemoteLock(legacyLock.lock, ownerId, now, options.currentToken)) {
+        await this.removeReclaimableRemoteLock(client, legacyLockPath, legacyLock.lock, ownerId, { bestEffort: true })
+      } else {
+        blockingLocks.push({ path: legacyLockPath, lock: legacyLock.lock })
+      }
+    }
+
+    for (const claim of await this.listRemoteLockClaims(client, basePath)) {
+      if (options.currentToken && claim.lock.ownerId === ownerId && claim.lock.token === options.currentToken) {
+        continue
+      }
+      if (this.shouldReclaimRemoteLock(claim.lock, ownerId, now, options.currentToken)) {
+        await this.removeReclaimableRemoteLock(client, claim.path, claim.lock, ownerId, { bestEffort: true })
+      } else {
+        blockingLocks.push(claim)
+      }
+    }
+
+    return blockingLocks
+  }
+
+  private async assertRemoteLockAvailable(client: WebDAVClient, basePath: string, ownerId: string) {
+    const blockingLocks = await this.listBlockingRemoteLocks(client, basePath, ownerId)
+    if (blockingLocks.length === 0) return
+
+    throw new Error(this.formatRemoteLockMessage(blockingLocks[0].lock, ownerId))
   }
 
   private formatNativeWebDavLockHeader(token: string) {
@@ -822,6 +1160,7 @@ export class AppDataSyncService {
         path: basePath,
         ownerId,
         token: lock.token,
+        runtimeId: this.runtimeId,
         previousHeaders
       }
     } catch (error) {
@@ -848,20 +1187,27 @@ export class AppDataSyncService {
     basePath: string,
     ownerId: string
   ): Promise<RemoteSyncLockHandle> {
-    const nativeLock = await this.acquireNativeWebDavLock(client, basePath, ownerId)
-    if (nativeLock) return nativeLock
+    if (process.env[NATIVE_WEB_DAV_LOCK_OPT_IN_ENV] === '1') {
+      const nativeLock = await this.acquireNativeWebDavLock(client, basePath, ownerId)
+      if (nativeLock) return nativeLock
+    }
 
-    const lockPath = path.posix.join(basePath, REMOTE_SYNC_LOCK_FILE)
     const token = randomUUID()
+    const lockPath = this.getRemoteLockClaimPath(basePath, ownerId, token)
 
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await this.assertRemoteLockAvailable(client, basePath, ownerId)
+      await this.ensureRemoteLockDirectory(client, basePath)
       const now = Date.now()
       const lock: RemoteSyncLock = {
         version: 1,
         ownerId,
         token,
         createdAt: now,
+        updatedAt: now,
         expiresAt: now + REMOTE_SYNC_LOCK_TTL_MS,
+        leaseMs: REMOTE_SYNC_LOCK_TTL_MS,
+        runtimeId: this.runtimeId,
         app: 'cherry-studio-pi',
         reason: 'data-sync'
       }
@@ -869,12 +1215,15 @@ export class AppDataSyncService {
       let created = false
       try {
         created = await runWebDavOperation(
-          `creating remote data sync lock ${lockPath}`,
+          `creating remote data sync lock claim ${lockPath}`,
           () => client.putFileContents(lockPath, JSON.stringify(lock, null, 2), { overwrite: false }),
           { logger }
         )
       } catch (error) {
         if (error instanceof WebDavOperationError && error.transient) throw error
+        if (isWebDavLockedError(error) && (await this.unlockDiscoveredWebDavLocksForPath(client, lockPath))) {
+          continue
+        }
         if (error instanceof WebDavOperationError && error.status && ![409, 412, 423].includes(error.status)) {
           throw error
         }
@@ -884,19 +1233,31 @@ export class AppDataSyncService {
       if (created) {
         const remoteLock = await this.readRemoteLock(client, lockPath)
         if (remoteLock?.token === token && remoteLock.ownerId === ownerId) {
-          return { type: 'file', path: lockPath, ownerId, token }
+          const blockingLocks = await this.listBlockingRemoteLocks(client, basePath, ownerId, { currentToken: token })
+          if (blockingLocks.length > 0) {
+            await this.removeRemoteFile(client, lockPath).catch((error) => {
+              logger.warn('Failed to remove local remote data sync lock claim after losing acquisition race', error)
+            })
+            throw new Error(this.formatRemoteLockMessage(blockingLocks[0].lock, ownerId))
+          }
+
+          return { type: 'file', path: lockPath, ownerId, token, runtimeId: this.runtimeId }
         }
       }
 
       const existingLock = await this.readRemoteLock(client, lockPath)
-      if (!existingLock) continue
-
-      if (!this.isRemoteLockExpired(existingLock)) {
-        throw new Error(this.formatRemoteLockMessage(existingLock))
+      if (!existingLock) {
+        await this.removeReclaimableRemoteLock(client, lockPath, null, ownerId, { bestEffort: true }).catch((error) => {
+          logger.warn('Failed to remove invalid remote data sync lock before retrying', error as Error)
+        })
+        continue
       }
 
-      logger.warn('Removing expired remote data sync lock', existingLock)
-      await this.removeRemoteFile(client, lockPath)
+      if (!this.shouldReclaimRemoteLock(existingLock, ownerId, now, token)) {
+        throw new Error(this.formatRemoteLockMessage(existingLock, ownerId))
+      }
+
+      await this.removeReclaimableRemoteLock(client, lockPath, existingLock, ownerId, { bestEffort: true })
     }
 
     throw new Error('无法创建远端同步锁。为避免多设备同时写入导致数据丢失，本次同步已停止，请稍后重试。')
@@ -956,7 +1317,10 @@ export class AppDataSyncService {
 
         const renewedLock: RemoteSyncLock = {
           ...remoteLock,
-          expiresAt: Date.now() + REMOTE_SYNC_LOCK_TTL_MS
+          updatedAt: Date.now(),
+          expiresAt: Date.now() + REMOTE_SYNC_LOCK_TTL_MS,
+          leaseMs: REMOTE_SYNC_LOCK_TTL_MS,
+          runtimeId: lock.runtimeId ?? this.runtimeId
         }
         await runWebDavOperation(
           `renewing remote data sync lock ${lock.path}`,
@@ -997,6 +1361,20 @@ export class AppDataSyncService {
 
     if (this.isRemoteLockExpired(remoteLock)) {
       throw new Error('远端同步锁已过期。为避免长时间同步后覆盖其他设备的数据，本次同步已停止，请重新同步。')
+    }
+
+    const blockingLocks = await this.listBlockingRemoteLocks(
+      client,
+      path.posix.dirname(path.posix.dirname(lock.path)),
+      lock.ownerId,
+      {
+        currentToken: lock.token
+      }
+    )
+    if (blockingLocks.length > 0) {
+      throw new Error(
+        '远端同步锁在同步过程中发现其他设备的活动锁。为避免覆盖其他设备的数据，本次同步已停止，请重新同步。'
+      )
     }
   }
 
@@ -1054,9 +1432,12 @@ export class AppDataSyncService {
       throw new Error('WebDAV host is required')
     }
 
+    const db = await getAppDataDatabase()
     const { client, basePath } = this.createWebDavClient(config)
     await this.ensureDirectory(client, basePath)
+    await this.assertRemoteLockAvailable(client, basePath, db.getDeviceId())
     await this.assertWriteAccess(client, basePath)
+    await this.assertStorageV2WriteAccess(client, basePath)
 
     return { ok: true, basePath }
   }

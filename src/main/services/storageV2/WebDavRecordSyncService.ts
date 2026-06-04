@@ -536,6 +536,10 @@ function isIgnorableCreateDirectoryError(error: unknown) {
   return error instanceof WebDavOperationError && (error.status === 405 || error.status === 409)
 }
 
+function isPreconditionCreateDirectoryError(error: unknown) {
+  return error instanceof WebDavOperationError && error.status === 412
+}
+
 export class StorageV2WebDavRecordSyncService {
   private columnsByTable = new Map<string, string[]>()
   private skillIdRemaps = new Map<string, string>()
@@ -572,6 +576,17 @@ export class StorageV2WebDavRecordSyncService {
       if (isIgnorableCreateDirectoryError(error)) {
         logger.warn(`Remote directory ${dirPath} already exists or was created concurrently`, error as Error)
         return
+      }
+      if (isPreconditionCreateDirectoryError(error)) {
+        const existsAfterFailure = await runWebDavOperation(
+          `checking remote directory ${dirPath} after create precondition failure`,
+          () => client.exists(dirPath),
+          { logger }
+        ).catch(() => false)
+        if (existsAfterFailure) {
+          logger.warn(`Remote directory ${dirPath} exists after create precondition failure`, error as Error)
+          return
+        }
       }
       throw error
     }

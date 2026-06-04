@@ -53,6 +53,7 @@ const mocks = vi.hoisted(() => ({
     putFileContents: vi.fn(),
     deleteFile: vi.fn(),
     getDirectoryContents: vi.fn(),
+    customRequest: vi.fn(),
     lock: vi.fn(),
     unlock: vi.fn(),
     getHeaders: vi.fn(),
@@ -294,6 +295,9 @@ describe('AppDataSyncService', () => {
     })
     mocks.backupManager.restore.mockResolvedValue(undefined)
     mocks.webdav.exists.mockImplementation(async (filePath: string) => {
+      if (String(filePath).endsWith('/.sync.lock.json')) {
+        return mocks.remoteFiles.has(filePath)
+      }
       if (mocks.remoteFiles.has(filePath)) return true
       return true
     })
@@ -333,6 +337,9 @@ describe('AppDataSyncService', () => {
         lastmod: '2026-05-29T00:00:00.000Z'
       }
     ])
+    mocks.webdav.customRequest.mockResolvedValue({
+      text: async () => '<d:multistatus xmlns:d="DAV:" />'
+    })
     mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
       if (mocks.remoteFiles.has(filePath)) {
         return mocks.remoteFiles.get(filePath)
@@ -383,6 +390,15 @@ describe('AppDataSyncService', () => {
       expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(
         '/remote-root/sync/v1/.cherry-studio-pi-write-test-1760000000123.tmp'
       )
+      expect(mocks.webdav.exists).toHaveBeenCalledWith('/remote-root/sync/v1/storage-v2/secrets')
+      expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
+        '/remote-root/sync/v1/storage-v2/secrets/.cherry-studio-pi-storage-write-test-1760000000123.tmp',
+        'ok',
+        { overwrite: true }
+      )
+      expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(
+        '/remote-root/sync/v1/storage-v2/secrets/.cherry-studio-pi-storage-write-test-1760000000123.tmp'
+      )
       expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
     } finally {
       nowSpy.mockRestore()
@@ -423,21 +439,23 @@ describe('AppDataSyncService', () => {
     expect(mocks.webdav.exists).not.toHaveBeenCalledWith('/remote-root/sync/v1/sync/v1')
   })
 
-  it('uses a native WebDAV directory lock when the provider supports LOCK', async () => {
+  it('uses a portable remote file lock even when the provider supports native LOCK', async () => {
     await new AppDataSyncService().syncNow(config)
 
-    expect(mocks.webdav.lock).toHaveBeenCalledWith('/remote-root/sync/v1', { timeout: 'Second-1800' })
-    expect(mocks.webdav.setHeaders).toHaveBeenCalledWith({
-      Authorization: 'Basic token',
-      If: '(<opaquelocktoken:native-lock>)'
-    })
-    expect(mocks.webdav.unlock).toHaveBeenCalledWith('/remote-root/sync/v1', 'opaquelocktoken:native-lock')
-    expect(mocks.webdav.setHeaders).toHaveBeenLastCalledWith({ Authorization: 'Basic token' })
+    expect(mocks.webdav.lock).not.toHaveBeenCalled()
+    expect(mocks.webdav.setHeaders).not.toHaveBeenCalled()
+    expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/remote-root\/sync\/v1\/\.sync\.locks\/local-device\.[a-f0-9-]+\.json$/),
+      expect.stringContaining('"ownerId": "local-device"'),
+      { overwrite: false }
+    )
+    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/remote-root\/sync\/v1\/\.sync\.locks\/local-device\.[a-f0-9-]+\.json$/)
+    )
   })
 
-  it('rejects active remote file locks before mutating records when native locks are unavailable', async () => {
+  it('rejects active remote file locks before mutating records', async () => {
     const now = Date.now()
-    mocks.webdav.lock.mockRejectedValueOnce(new Error('Invalid response: 405 Method Not Allowed'))
     mocks.remoteFiles.set(
       '/remote-root/sync/v1/.sync.lock.json',
       JSON.stringify({
@@ -461,10 +479,121 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('reclaims a previous lock left by the same device before syncing', async () => {
+    const now = Date.now()
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/.sync.lock.json',
+      JSON.stringify({
+        version: 1,
+        ownerId: 'local-device',
+        token: 'previous-token',
+        createdAt: now,
+        updatedAt: now,
+        expiresAt: now + 10 * 60 * 1000,
+        leaseMs: 10 * 60 * 1000,
+        app: 'cherry-studio-pi',
+        reason: 'data-sync'
+      })
+    )
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.status).toBe('success')
+    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/.sync.lock.json')
+    expect(mocks.storageRecordSync.sync).toHaveBeenCalled()
+  })
+
+  it('reclaims stale remote file locks whose heartbeat stopped even if their old expiry is far away', async () => {
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1760000000000)
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/.sync.lock.json',
+      JSON.stringify({
+        version: 1,
+        ownerId: 'device-b',
+        token: 'stale-token',
+        createdAt: 1760000000000 - 10 * 60 * 1000,
+        expiresAt: 1760000000000 + 30 * 60 * 1000,
+        app: 'cherry-studio-pi',
+        reason: 'data-sync'
+      })
+    )
+
+    try {
+      const summary = await new AppDataSyncService().syncNow(config)
+
+      expect(summary.status).toBe('success')
+      expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/.sync.lock.json')
+      expect(mocks.storageRecordSync.sync).toHaveBeenCalled()
+    } finally {
+      nowSpy.mockRestore()
+    }
+  })
+
+  it('unlocks stale server-side WebDAV locks before creating the portable lock directory', async () => {
+    let lockDirectoryCreateAttempts = 0
+    mocks.webdav.exists.mockImplementation(async (filePath: string) => {
+      const remotePath = String(filePath)
+      if (remotePath.endsWith('/.sync.lock.json')) return false
+      if (remotePath === '/remote-root/sync/v1/.sync.locks') return false
+      if (remotePath.includes('/.sync.locks/')) return mocks.remoteFiles.has(remotePath)
+      if (mocks.remoteFiles.has(remotePath)) return true
+      return true
+    })
+    mocks.webdav.createDirectory.mockImplementation(async (dirPath: string) => {
+      if (dirPath === '/remote-root/sync/v1/.sync.locks' && lockDirectoryCreateAttempts === 0) {
+        lockDirectoryCreateAttempts += 1
+        throw new Error('Invalid response: 423 Locked')
+      }
+      lockDirectoryCreateAttempts += dirPath === '/remote-root/sync/v1/.sync.locks' ? 1 : 0
+    })
+    mocks.webdav.customRequest.mockImplementation(async (remotePath: string) => ({
+      text: async () =>
+        remotePath === '/remote-root/sync/v1'
+          ? '<d:multistatus xmlns:d="DAV:"><d:response><d:propstat><d:prop><d:lockdiscovery><d:activelock><d:locktoken><d:href>opaquelocktoken:server-stale</d:href></d:locktoken></d:activelock></d:lockdiscovery></d:prop></d:propstat></d:response></d:multistatus>'
+          : '<d:multistatus xmlns:d="DAV:" />'
+    }))
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.status).toBe('success')
+    expect(mocks.webdav.customRequest).toHaveBeenCalledWith(
+      '/remote-root/sync/v1',
+      expect.objectContaining({ method: 'PROPFIND' })
+    )
+    expect(mocks.webdav.unlock).toHaveBeenCalledWith('/remote-root/sync/v1', 'opaquelocktoken:server-stale')
+    expect(mocks.storageRecordSync.sync).toHaveBeenCalled()
+  })
+
+  it('reports active remote locks during WebDAV diagnosis instead of passing readiness checks', async () => {
+    const now = Date.now()
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/.sync.lock.json',
+      JSON.stringify({
+        version: 1,
+        ownerId: 'device-b',
+        token: 'token-b',
+        createdAt: now,
+        updatedAt: now,
+        expiresAt: now + 10 * 60 * 1000,
+        leaseMs: 10 * 60 * 1000,
+        app: 'cherry-studio-pi',
+        reason: 'data-sync'
+      })
+    )
+
+    await expect(new AppDataSyncService().checkWriteAccess(config)).rejects.toThrow(
+      '另一台设备正在同步这个 WebDAV 目录'
+    )
+
+    expect(mocks.webdav.putFileContents).not.toHaveBeenCalledWith(
+      expect.stringMatching(/\.cherry-studio-pi-write-test-/),
+      'ok',
+      expect.anything()
+    )
+  })
+
   it('stops before publishing the manifest when a fallback file lock is stolen mid-sync', async () => {
     const uploadedAt = Date.now()
-    const lockPath = '/remote-root/sync/v1/.sync.lock.json'
-    mocks.webdav.lock.mockRejectedValueOnce(new Error('Invalid response: 405 Method Not Allowed'))
     mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
       if (mocks.remoteFiles.has(filePath)) {
         return mocks.remoteFiles.get(filePath)
@@ -494,8 +623,10 @@ describe('AppDataSyncService', () => {
       throw new Error(`Unexpected WebDAV read: ${filePath}`)
     })
     mocks.storageRecordSync.sync.mockImplementationOnce(async () => {
+      const lockPath = [...mocks.remoteFiles.keys()].map(String).find((filePath) => filePath.includes('/.sync.locks/'))
+      expect(lockPath).toBeTruthy()
       mocks.remoteFiles.set(
-        lockPath,
+        lockPath!,
         JSON.stringify({
           version: 1,
           ownerId: 'device-b',
@@ -537,6 +668,9 @@ describe('AppDataSyncService', () => {
     mocks.webdav.exists.mockImplementation(async (filePath: string) => {
       if (filePath === '/remote-root/sync/v1') {
         throw new Error('Invalid response: 403 Forbidden')
+      }
+      if (String(filePath).includes('/.sync.lock') || String(filePath).includes('/.sync.locks')) {
+        return mocks.remoteFiles.has(filePath)
       }
 
       return true

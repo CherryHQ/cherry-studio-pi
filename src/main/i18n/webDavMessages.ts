@@ -27,6 +27,9 @@ export const formatWebDavNotFoundMessage = (prefix: string) =>
 export const formatWebDavConflictMessage = (prefix: string) =>
   `${prefix}：远程目录结构冲突。请重新选择一个已存在且可写的目录，软件会自动创建需要的子目录。`
 
+export const formatWebDavPreconditionMessage = (prefix: string, targetText: string) =>
+  `${prefix}：WebDAV 服务在创建或写入同步目录时返回前置条件失败${targetText}。常见原因是服务商不完全兼容 WebDAV 锁或目录创建语义。软件会尽量使用兼容的文件锁；如果仍失败，请在目录选择器里重新选择一个已存在且可写的上级目录后重试。`
+
 export const formatWebDavLockedMessage = (prefix: string) =>
   `${prefix}：远程目录或文件被 WebDAV 服务锁定。请稍后重试，或在服务端解除锁定。`
 

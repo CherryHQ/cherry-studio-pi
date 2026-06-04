@@ -49,6 +49,19 @@ describe('WebDavRetry', () => {
     expect(message).toContain('数据同步需要支持 MKCOL、PUT、DELETE')
   })
 
+  it('describes WebDAV precondition failures as directory or lock compatibility issues', () => {
+    const error = new WebDavOperationError(
+      'creating remote directory /remote-root/sync/v1/storage-v2/secrets',
+      new Error('Invalid response: 412 Precondition Failed')
+    )
+
+    const message = describeWebDavUserFacingError(error, '同步数据')
+
+    expect(message).toContain('前置条件失败')
+    expect(message).toContain('/remote-root/sync/v1/storage-v2/secrets')
+    expect(message).toContain('WebDAV 锁或目录创建语义')
+  })
+
   it('keeps missing WebDAV delete support actionable', () => {
     const message = describeWebDavUserFacingError(
       new Error(
