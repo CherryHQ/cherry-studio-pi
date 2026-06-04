@@ -654,11 +654,22 @@ describe('AppDataSyncService', () => {
     expect(summary.downloaded).toBe(1)
     expect(summary.conflicts).toBe(0)
     expect(summary.resolvedConflicts).toBe(1)
+    expect(summary.joinSafetySnapshotCreated).toBe(true)
+    expect(summary.joinSafetySnapshotFileName).toMatch(
+      /^cherry-studio-pi\.data-sync\.join-safety\.local-device\.\d+\.zip$/
+    )
+    expect(summary.joinSafetySnapshotBytes).toBe(6)
     expect(mocks.storageV2.upsertRecordSnapshot).toHaveBeenCalledWith(remoteRecord)
     expect(mocks.db.applyRemoteRecord).toHaveBeenCalledWith(remoteRecord, { storageV2Mirrored: true })
     expect(mocks.storageV2.upsertSyncConflict).toHaveBeenCalled()
     expect(mocks.db.createConflict).toHaveBeenCalled()
     expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith('record:settings:theme:hash', 'remote-hash')
+    expect(mocks.backupManager.backup).toHaveBeenCalledWith(
+      undefined,
+      summary.joinSafetySnapshotFileName,
+      undefined,
+      false
+    )
     expect(mocks.webdav.putFileContents.mock.calls.some((call) => String(call[1]).includes('local-default-hash'))).toBe(
       false
     )
@@ -981,10 +992,16 @@ describe('AppDataSyncService', () => {
 
     expect(summary.uploaded).toBe(0)
     expect(summary.snapshotUploaded).toBe(true)
-    expect(mocks.storageRecordSync.sync).toHaveBeenCalledWith(mocks.webdav, '/remote-root/sync/v1', null, {
-      secretKeyMaterial: expect.any(String),
-      legacySecretKeyMaterial: 'https://dav.example.com\nuser\npass'
-    })
+    expect(mocks.storageRecordSync.sync).toHaveBeenCalledWith(
+      mocks.webdav,
+      '/remote-root/sync/v1',
+      null,
+      expect.objectContaining({
+        secretKeyMaterial: expect.any(String),
+        legacySecretKeyMaterial: 'https://dav.example.com\nuser\npass',
+        beforeRemoteConflictApply: expect.any(Function)
+      })
+    )
     expect(summary.syncSpaceId).toEqual(expect.stringMatching(/^sync-space-/))
     expect(summary.snapshotFileName).toMatch(/^cherry-studio-pi\.data-sync\.local-device\.\d+\.zip$/)
     expect(summary.snapshotBytes).toBe(6)

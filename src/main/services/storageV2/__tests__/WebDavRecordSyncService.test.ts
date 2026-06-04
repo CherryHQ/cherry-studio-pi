@@ -1544,6 +1544,10 @@ describe('StorageV2WebDavRecordSyncService', () => {
       version: 2
     }
     const remoteHash = hashJson(remoteRow)
+    const events: string[] = []
+    const beforeRemoteConflictApply = vi.fn(async () => {
+      events.push('before-remote-conflict-apply')
+    })
     const remoteRecord = {
       id: 'settings:theme',
       table: settingsTable,
@@ -1572,6 +1576,9 @@ describe('StorageV2WebDavRecordSyncService', () => {
           ]
         }
       }
+      if (sql.includes('INSERT INTO settings')) {
+        events.push('insert-settings')
+      }
       return { rows: [] }
     })
 
@@ -1593,6 +1600,9 @@ describe('StorageV2WebDavRecordSyncService', () => {
             path: 'storage-v2/records/settings/theme.json'
           }
         }
+      },
+      {
+        beforeRemoteConflictApply
       }
     )
 
@@ -1605,6 +1615,12 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(result.summary.storageUploaded).toBe(0)
     expect(result.summary.storageConflicts).toBe(0)
     expect(result.summary.storageResolvedConflicts).toBe(1)
+    expect(beforeRemoteConflictApply).toHaveBeenCalledWith({
+      id: 'settings:theme',
+      baseHash: null,
+      firstJoin: true
+    })
+    expect(events).toEqual(['before-remote-conflict-apply', 'insert-settings'])
     expect(insertCall?.[0]).toEqual(
       expect.objectContaining({
         args: ['theme', '{"mode":"remote-user"}', 'app', '2026-05-29T12:10:00.000Z', null, 2]
@@ -1694,6 +1710,71 @@ describe('StorageV2WebDavRecordSyncService', () => {
         return sql.includes('INSERT INTO sync_conflicts')
       })
     ).toBe(true)
+  })
+
+  it('does not call the remote-conflict safety hook for normal remote-only Storage v2 updates', async () => {
+    const remote = makeSharedWebDavStore()
+    const localRow = {
+      key: 'theme',
+      value_json: '{"mode":"light"}',
+      scope: 'app',
+      updated_at: '2026-05-29T12:00:00.000Z',
+      deleted_at: null,
+      version: 1
+    }
+    const remoteRow = {
+      ...localRow,
+      value_json: '{"mode":"dark"}',
+      updated_at: '2026-05-29T12:10:00.000Z',
+      version: 2
+    }
+    const localHash = hashJson(localRow)
+    const remoteHash = hashJson(remoteRow)
+    const remoteRecord = {
+      id: 'settings:theme',
+      table: settingsTable,
+      idValues: ['theme'],
+      row: remoteRow,
+      valueHash: remoteHash,
+      updatedAt: Date.parse(remoteRow.updated_at),
+      deletedAt: null,
+      version: remoteRow.version
+    }
+    const beforeRemoteConflictApply = vi.fn()
+    remote.files.set('/remote-root/sync/v1/storage-v2/records/settings/theme.json', JSON.stringify(remoteRecord))
+
+    const db = makeSettingsDb([localRow])
+    db.state.syncState.set('webdav-storage-record:settings:theme:hash', localHash)
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    const result = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
+      remote.client as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {
+          'settings:theme': {
+            entityType: 'settings',
+            table: 'settings',
+            idValues: ['theme'],
+            valueHash: remoteHash,
+            updatedAt: remoteRecord.updatedAt,
+            deletedAt: null,
+            version: remoteRow.version,
+            path: 'storage-v2/records/settings/theme.json'
+          }
+        }
+      },
+      {
+        beforeRemoteConflictApply
+      }
+    )
+
+    expect(beforeRemoteConflictApply).not.toHaveBeenCalled()
+    expect(result.summary.storageDownloaded).toBe(1)
+    expect(result.summary.storageResolvedConflicts).toBe(0)
+    expect(db.state.rows[0]).toMatchObject(remoteRow)
   })
 
   it('simulates two devices syncing through the same WebDAV store', async () => {

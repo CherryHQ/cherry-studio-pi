@@ -136,6 +136,10 @@ export type DataSyncSummary = {
   snapshotUploaded: boolean
   snapshotFileName: string | null
   snapshotBytes: number
+  joinSafetySnapshotCreated: boolean
+  joinSafetySnapshotFileName: string | null
+  joinSafetySnapshotPath: string | null
+  joinSafetySnapshotBytes: number
   remotePath: string | null
   remoteGeneration: number | null
   remoteManifestHash: string | null
@@ -168,6 +172,10 @@ const EMPTY_SUMMARY: DataSyncSummary = {
   snapshotUploaded: false,
   snapshotFileName: null,
   snapshotBytes: 0,
+  joinSafetySnapshotCreated: false,
+  joinSafetySnapshotFileName: null,
+  joinSafetySnapshotPath: null,
+  joinSafetySnapshotBytes: 0,
   remotePath: null,
   remoteGeneration: null,
   remoteManifestHash: null,
@@ -352,6 +360,10 @@ function safeFileSegment(value: string) {
 
 function snapshotFileName(deviceId: string, uploadedAt: number) {
   return `cherry-studio-pi.data-sync.${safeFileSegment(deviceId)}.${uploadedAt}.zip`
+}
+
+function joinSafetySnapshotFileName(deviceId: string, createdAt: number) {
+  return `cherry-studio-pi.data-sync.join-safety.${safeFileSegment(deviceId)}.${createdAt}.zip`
 }
 
 function normalizeRemoteRelativePath(value: string, label = 'Remote data sync path') {
@@ -1212,6 +1224,38 @@ export class AppDataSyncService {
     return id
   }
 
+  private async createJoinSafetySnapshotOnce(db: AppDataDatabase, summary: DataSyncSummary) {
+    if (summary.joinSafetySnapshotCreated) return
+
+    const fileName = joinSafetySnapshotFileName(db.getDeviceId(), summary.lastSyncAt)
+    try {
+      const localBackupPath = await this.backupManager.backup(
+        undefined as unknown as Electron.IpcMainInvokeEvent,
+        fileName,
+        undefined,
+        false
+      )
+      const stat = await fsp.stat(localBackupPath).catch(() => null)
+
+      summary.joinSafetySnapshotCreated = true
+      summary.joinSafetySnapshotFileName = fileName
+      summary.joinSafetySnapshotPath = localBackupPath
+      summary.joinSafetySnapshotBytes = stat?.size ?? 0
+
+      logger.info('Created local join safety snapshot before applying remote conflict data', {
+        fileName,
+        localBackupPath,
+        byteSize: summary.joinSafetySnapshotBytes
+      })
+    } catch (error) {
+      throw new Error(
+        `本机已有数据与远端同步空间存在差异，但创建本地保护快照失败。为避免本机数据被覆盖，本次同步已停止：${errorMessage(
+          error
+        )}`
+      )
+    }
+  }
+
   private async pushFullSnapshot(
     client: WebDAVClient,
     basePath: string,
@@ -1503,6 +1547,7 @@ export class AppDataSyncService {
           if (!lastHash) {
             const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
             if (remoteRecord) {
+              await this.createJoinSafetySnapshotOnce(db, summary)
               await this.createConflict(db, {
                 scope: localRecord.scope,
                 key: localRecord.key,
@@ -1559,6 +1604,7 @@ export class AppDataSyncService {
             await this.pushRecord(client, basePath, localRecord, manifest)
             summary.uploaded += localRecord.deletedAt ? 0 : 1
           } else {
+            await this.createJoinSafetySnapshotOnce(db, summary)
             await this.applyRemoteRecord(db, remoteRecord)
             summary.downloaded += remoteRecord.deletedAt ? 0 : 1
           }
@@ -1570,7 +1616,8 @@ export class AppDataSyncService {
         secretKeyMaterial: syncSpace.keyMaterial,
         legacySecretKeyMaterial: hadUsableSyncSpaceBeforeSync
           ? undefined
-          : `${normalizeWebDavHost(config.webdavHost)}\n${config.webdavUser ?? ''}\n${config.webdavPass ?? ''}`
+          : `${normalizeWebDavHost(config.webdavHost)}\n${config.webdavUser ?? ''}\n${config.webdavPass ?? ''}`,
+        beforeRemoteConflictApply: async () => this.createJoinSafetySnapshotOnce(db, summary)
       })
       manifest.storageV2 = storageSync.manifest
       storageSyncStates = storageSync.syncStates ?? []

@@ -134,6 +134,7 @@ export type StorageV2WebDavRecordSyncResult = {
 type StorageV2WebDavRecordSyncOptions = {
   secretKeyMaterial?: string
   legacySecretKeyMaterial?: string
+  beforeRemoteConflictApply?: (input: { id: string; baseHash: string | null; firstJoin: boolean }) => Promise<void>
 }
 
 type RemoteSecretVaultCache = {
@@ -2087,6 +2088,7 @@ export class StorageV2WebDavRecordSyncService {
           remoteSecretVaultCache,
           summary
         )
+        await options.beforeRemoteConflictApply?.({ id, baseHash: null, firstJoin: true })
         await this.applyRemoteRecordOrThrow(dbClient, remoteRecord)
         bundledRecords.set(id, remoteRecord)
         manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
@@ -2147,6 +2149,7 @@ export class StorageV2WebDavRecordSyncService {
           remoteSecretVaultCache,
           summary
         )
+        await options.beforeRemoteConflictApply?.({ id, baseHash: lastHash, firstJoin: false })
         await this.applyRemoteRecordOrThrow(dbClient, remoteRecord)
         bundledRecords.set(id, remoteRecord)
         manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())

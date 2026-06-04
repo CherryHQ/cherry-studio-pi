@@ -33,9 +33,14 @@ export type DataSyncSummary = {
   snapshotUploaded?: boolean
   snapshotFileName?: string | null
   snapshotBytes?: number
+  joinSafetySnapshotCreated?: boolean
+  joinSafetySnapshotFileName?: string | null
+  joinSafetySnapshotPath?: string | null
+  joinSafetySnapshotBytes?: number
   remotePath?: string | null
   remoteGeneration?: number | null
   remoteManifestHash?: string | null
+  syncSpaceId?: string | null
   storageBundleHash?: string | null
   storageRecordCount?: number
   storageBlobCount?: number

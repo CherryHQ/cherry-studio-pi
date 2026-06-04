@@ -4149,6 +4149,7 @@
         "restore_confirm_title": "恢復安全快照？",
         "restore_latest": "恢復安全快照",
         "snapshot": {
+          "join_safety": "本機保護快照 {{file}}（{{size}}）",
           "uploaded": "安全快照 {{file}}（{{size}}）"
         },
         "storage": {

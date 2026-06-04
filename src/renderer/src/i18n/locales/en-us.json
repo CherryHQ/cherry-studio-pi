@@ -4149,6 +4149,7 @@
         "restore_confirm_title": "Restore safety snapshot?",
         "restore_latest": "Restore safety snapshot",
         "snapshot": {
+          "join_safety": "Local safety snapshot {{file}} ({{size}})",
           "uploaded": "Safety snapshot {{file}} ({{size}})"
         },
         "storage": {

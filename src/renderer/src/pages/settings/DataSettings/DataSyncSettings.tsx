@@ -49,9 +49,14 @@ type SyncSummary = {
   snapshotUploaded?: boolean
   snapshotFileName?: string | null
   snapshotBytes?: number
+  joinSafetySnapshotCreated?: boolean
+  joinSafetySnapshotFileName?: string | null
+  joinSafetySnapshotPath?: string | null
+  joinSafetySnapshotBytes?: number
   remotePath?: string | null
   remoteGeneration?: number | null
   remoteManifestHash?: string | null
+  syncSpaceId?: string | null
   storageBundleHash?: string | null
   storageRecordCount?: number
   storageBlobCount?: number
@@ -787,6 +792,17 @@ const DataSyncSettings: FC = () => {
                     {t('settings.data.data_sync.snapshot.uploaded', {
                       file: summary.snapshotFileName || '-',
                       size: formatBytes(summary.snapshotBytes ?? 0)
+                    })}
+                  </Typography.Text>
+                )}
+                {summary.joinSafetySnapshotCreated && (
+                  <Typography.Text
+                    type="warning"
+                    copyable={summary.joinSafetySnapshotPath ? { text: summary.joinSafetySnapshotPath } : false}
+                    style={lastResultTextStyle}>
+                    {t('settings.data.data_sync.snapshot.join_safety', {
+                      file: summary.joinSafetySnapshotFileName || '-',
+                      size: formatBytes(summary.joinSafetySnapshotBytes ?? 0)
                     })}
                   </Typography.Text>
                 )}
