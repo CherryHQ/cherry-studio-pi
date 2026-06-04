@@ -2,7 +2,11 @@ import { loggerService } from '@logger'
 import store, { persistor } from '@renderer/store'
 import type { WebDavConfig } from '@renderer/types'
 
-import { subscribeDataSyncLocalChanges, suppressDataSyncLocalChangeNotifications } from './DataSyncLocalChangeSignal'
+import {
+  notifyDataSyncLocalChange,
+  subscribeDataSyncLocalChanges,
+  suppressDataSyncLocalChangeNotifications
+} from './DataSyncLocalChangeSignal'
 import { hydrateStorageV2ConversationsIfDexieEmpty } from './StorageV2ConversationHydrationService'
 import { hydrateRuntimeCacheFromStorageV2 } from './StorageV2HydrationService'
 import { prepareStorageV2ForDataSync } from './StorageV2Service'
@@ -51,6 +55,7 @@ let syncTimeout: NodeJS.Timeout | null = null
 let localChangeSyncTimeout: NodeJS.Timeout | null = null
 let localChangeUnsubscribe: (() => void) | null = null
 let externalSyncCompleteUnsubscribe: (() => void) | null = null
+let storageV2LocalChangeUnsubscribe: (() => void) | null = null
 let autoSyncStarted = false
 let syncing = false
 let localChangeDuringSync = false
@@ -217,8 +222,27 @@ function scheduleLocalChangeSync(delayMs = LOCAL_CHANGE_AUTO_SYNC_DEBOUNCE_MS) {
   logger.info('Data sync scheduled after local Storage v2 change', { delayMs })
 }
 
+function ensureMainProcessStorageV2ChangeSubscription() {
+  if (storageV2LocalChangeUnsubscribe) return
+
+  const subscribe = window.api?.dataSync?.onLocalStorageV2Changed
+  if (typeof subscribe !== 'function') return
+
+  storageV2LocalChangeUnsubscribe = subscribe((payload: unknown) => {
+    if (syncing) {
+      logger.debug('Ignored main-process Storage v2 local change while data sync is running', { payload })
+      return
+    }
+
+    notifyDataSyncLocalChange('storage-v2')
+  })
+}
+
 function ensureLocalChangeAutoSyncSubscription() {
-  if (localChangeUnsubscribe) return
+  if (localChangeUnsubscribe) {
+    ensureMainProcessStorageV2ChangeSubscription()
+    return
+  }
 
   localChangeUnsubscribe = subscribeDataSyncLocalChanges((event) => {
     if (!autoSyncStarted || getAutoSyncIntervalMs() === null) return
@@ -233,6 +257,7 @@ function ensureLocalChangeAutoSyncSubscription() {
 
     scheduleLocalChangeSync()
   })
+  ensureMainProcessStorageV2ChangeSubscription()
 }
 
 export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<DataSyncSummary | null> {
@@ -303,6 +328,10 @@ export function stopDataSyncAutoSync() {
   if (localChangeUnsubscribe) {
     localChangeUnsubscribe()
     localChangeUnsubscribe = null
+  }
+  if (storageV2LocalChangeUnsubscribe) {
+    storageV2LocalChangeUnsubscribe()
+    storageV2LocalChangeUnsubscribe = null
   }
 }
 

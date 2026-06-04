@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 
 import type { Client } from '@libsql/client'
+import { IpcChannel } from '@shared/IpcChannel'
+import { BrowserWindow } from 'electron'
 
 import { storageV2Database } from './StorageV2Database'
 import { assertStorageV2SyncPolicy, STORAGE_V2_SYNC_DEVICE_ID_META_KEY } from './SyncPolicy'
@@ -17,12 +19,33 @@ type StorageV2ChangeInput = {
   version?: number
 }
 
+export type StorageV2LocalChangePayload = {
+  entityType: string
+  entityId: string
+  operation: StorageV2ChangeOperation
+  version: number
+  deviceId: string
+  changedAt: string
+}
+
 function now() {
   return new Date().toISOString()
 }
 
 function toJson(value: unknown) {
   return JSON.stringify(value ?? null)
+}
+
+function broadcastStorageV2LocalChange(payload: StorageV2LocalChangePayload) {
+  try {
+    for (const browserWindow of BrowserWindow.getAllWindows()) {
+      if (!browserWindow.isDestroyed()) {
+        browserWindow.webContents.send(IpcChannel.DataSync_LocalStorageV2Changed, payload)
+      }
+    }
+  } catch {
+    // Sync triggers are best-effort; storage writes must not fail because a window is unavailable.
+  }
 }
 
 export class StorageV2SyncLogService {
@@ -97,6 +120,15 @@ export class StorageV2SyncLogService {
         args: [input.entityType, input.entityId, createdAt, deviceId, version]
       })
     }
+
+    broadcastStorageV2LocalChange({
+      entityType: input.entityType,
+      entityId: input.entityId,
+      operation,
+      version,
+      deviceId,
+      changedAt: createdAt
+    })
   }
 }
 

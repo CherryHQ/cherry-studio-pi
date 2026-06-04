@@ -11,6 +11,7 @@ export type DataSyncLocalChangeReason =
   | 'dexie-settings'
   | 'dexie-table'
   | 'local-storage'
+  | 'storage-v2'
 
 export type DataSyncLocalChangeEvent = {
   reason: DataSyncLocalChangeReason

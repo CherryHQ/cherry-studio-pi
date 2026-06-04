@@ -21,8 +21,11 @@ const mocks = vi.hoisted(() => ({
   syncNow: vi.fn(),
   recordFailure: vi.fn(),
   onExternalSyncCompleted: vi.fn(),
+  onLocalStorageV2Changed: vi.fn(),
   externalSyncListener: null as ((payload: unknown) => void) | null,
-  externalSyncUnsubscribe: vi.fn()
+  localStorageV2ChangeListener: null as ((payload: unknown) => void) | null,
+  externalSyncUnsubscribe: vi.fn(),
+  localStorageV2ChangeUnsubscribe: vi.fn()
 }))
 
 vi.mock('@renderer/store', () => ({
@@ -112,14 +115,20 @@ describe('DataSyncService', () => {
           getStatus: mocks.getStatus,
           syncNow: mocks.syncNow,
           recordFailure: mocks.recordFailure,
-          onExternalSyncCompleted: mocks.onExternalSyncCompleted
+          onExternalSyncCompleted: mocks.onExternalSyncCompleted,
+          onLocalStorageV2Changed: mocks.onLocalStorageV2Changed
         }
       }
     })
     mocks.externalSyncListener = null
+    mocks.localStorageV2ChangeListener = null
     mocks.onExternalSyncCompleted.mockImplementation((listener: (payload: unknown) => void) => {
       mocks.externalSyncListener = listener
       return mocks.externalSyncUnsubscribe
+    })
+    mocks.onLocalStorageV2Changed.mockImplementation((listener: (payload: unknown) => void) => {
+      mocks.localStorageV2ChangeListener = listener
+      return mocks.localStorageV2ChangeUnsubscribe
     })
     mocks.prepareStorageV2ForDataSync.mockResolvedValue(undefined)
     mocks.hydrateRuntimeCacheFromStorageV2.mockResolvedValue({})
@@ -465,6 +474,39 @@ describe('DataSyncService', () => {
     expect(mocks.prepareStorageV2ForDataSync).toHaveBeenCalledTimes(1)
   })
 
+  it('runs a debounced auto sync after main-process Storage v2 data changes', async () => {
+    vi.useFakeTimers()
+    mocks.getState.mockReturnValue({
+      settings: {
+        dataSyncWebdavHost: 'https://dav.example.test',
+        dataSyncWebdavUser: 'user',
+        dataSyncWebdavPass: 'pass',
+        dataSyncWebdavPath: '/cherry-studio-pi',
+        dataSyncAutoSync: true,
+        dataSyncSyncInterval: 15
+      }
+    })
+
+    startDataSyncAutoSync(false)
+    expect(mocks.onLocalStorageV2Changed).toHaveBeenCalledTimes(1)
+
+    mocks.localStorageV2ChangeListener?.({
+      entityType: 'agent',
+      entityId: 'agent-1',
+      operation: 'upsert'
+    })
+
+    await vi.advanceTimersByTimeAsync(19_999)
+    expect(mocks.syncNow).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(1)
+
+    await vi.waitFor(() => {
+      expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+    })
+    expect(mocks.prepareStorageV2ForDataSync).toHaveBeenCalledTimes(1)
+  })
+
   it('does not schedule a redundant auto sync for mirror signals emitted while preparing sync data', async () => {
     vi.useFakeTimers()
     mocks.getState.mockReturnValue({
@@ -479,6 +521,38 @@ describe('DataSyncService', () => {
     })
     mocks.prepareStorageV2ForDataSync.mockImplementation(async () => {
       notifyDataSyncLocalChange('redux')
+    })
+
+    startDataSyncAutoSync(false)
+    notifyDataSyncLocalChange('redux')
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    await vi.waitFor(() => {
+      expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+    })
+
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not schedule a redundant auto sync for main-process signals emitted while preparing sync data', async () => {
+    vi.useFakeTimers()
+    mocks.getState.mockReturnValue({
+      settings: {
+        dataSyncWebdavHost: 'https://dav.example.test',
+        dataSyncWebdavUser: 'user',
+        dataSyncWebdavPass: 'pass',
+        dataSyncWebdavPath: '/cherry-studio-pi',
+        dataSyncAutoSync: true,
+        dataSyncSyncInterval: 15
+      }
+    })
+    mocks.prepareStorageV2ForDataSync.mockImplementation(async () => {
+      mocks.localStorageV2ChangeListener?.({
+        entityType: 'agent',
+        entityId: 'agent-1',
+        operation: 'upsert'
+      })
     })
 
     startDataSyncAutoSync(false)

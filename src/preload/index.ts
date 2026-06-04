@@ -271,6 +271,15 @@ const api = {
       return () => {
         ipcRenderer.off(IpcChannel.DataSync_ExternalSyncCompleted, listener)
       }
+    },
+    onLocalStorageV2Changed: (callback: (payload: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
+        callback(payload)
+      }
+      ipcRenderer.on(IpcChannel.DataSync_LocalStorageV2Changed, listener)
+      return () => {
+        ipcRenderer.off(IpcChannel.DataSync_LocalStorageV2Changed, listener)
+      }
     }
   },
   systemAgent: {
