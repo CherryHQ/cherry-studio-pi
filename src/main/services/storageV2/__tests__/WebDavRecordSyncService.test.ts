@@ -2348,6 +2348,69 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(Object.keys(result.manifest.records).some((id) => id.startsWith('sync_tombstone:agent_skill:'))).toBe(true)
   })
 
+  it('does not upload stale local association rows covered by newer remote tombstones', async () => {
+    const remote = makeSharedWebDavStore()
+    const associationRow: AgentSkillRow = {
+      agent_id: 'agent-1',
+      skill_id: 'skill-1',
+      enabled: 1,
+      created_at: '2026-05-29T12:00:00.000Z',
+      updated_at: '2026-05-29T12:00:00.000Z'
+    }
+    const tombstoneEntityId = encodeStorageV2CompositeEntityId(['agent-1', 'skill-1'])
+    const tombstoneRow: TombstoneRow = {
+      entity_type: 'agent_skill',
+      entity_id: tombstoneEntityId,
+      deleted_at: '2026-05-29T12:10:00.000Z',
+      device_id: 'device-b',
+      version: 2
+    }
+    const tombstoneHash = hashJson(tombstoneRow)
+    remote.files.set(
+      '/remote-root/sync/v1/storage-v2/records/sync_tombstone/delete.json',
+      JSON.stringify({
+        id: 'sync_tombstone:agent_skill:%5B%22agent-1%22%2C%22skill-1%22%5D',
+        table: tombstoneTable,
+        idValues: ['agent_skill', tombstoneEntityId],
+        row: tombstoneRow,
+        valueHash: tombstoneHash,
+        updatedAt: Date.parse(tombstoneRow.deleted_at),
+        deletedAt: null,
+        version: 2
+      })
+    )
+
+    const db = makeAgentSkillDb({ agentSkills: [associationRow] })
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    const result = await new StorageV2WebDavRecordSyncService([agentSkillTable, tombstoneTable]).sync(
+      remote.client as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {
+          'sync_tombstone:agent_skill:%5B%22agent-1%22%2C%22skill-1%22%5D': {
+            entityType: 'sync_tombstone',
+            table: 'sync_tombstones',
+            idValues: ['agent_skill', tombstoneEntityId],
+            valueHash: tombstoneHash,
+            updatedAt: Date.parse(tombstoneRow.deleted_at),
+            deletedAt: null,
+            version: 2,
+            path: 'storage-v2/records/sync_tombstone/delete.json'
+          }
+        }
+      }
+    )
+
+    expect(result.summary.storageUploaded).toBe(0)
+    expect(result.summary.storageDownloaded).toBe(1)
+    expect(db.state.agentSkills).toEqual([])
+    expect(db.state.tombstones).toEqual([tombstoneRow])
+    expect(result.manifest.records['agent_skill:agent-1:skill-1']).toBeUndefined()
+  })
+
   it('applies remote tombstones to physically deleted association rows', async () => {
     const remote = makeSharedWebDavStore()
     const associationRow: AgentSkillRow = {

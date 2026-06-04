@@ -396,6 +396,27 @@ function tombstoneTargetFromRow(row: Record<string, unknown>) {
   }
 }
 
+function tombstoneTargetFromMeta(meta: RemoteRecordMeta) {
+  if (meta.entityType !== TOMBSTONE_ENTITY_TYPE) return null
+
+  const entityType = meta.idValues[0]
+  const entityId = meta.idValues[1]
+  if (!entityType || !entityId || !Object.hasOwn(TOMBSTONE_PHYSICAL_DELETE_TARGETS, entityType)) return null
+
+  const target = TOMBSTONE_PHYSICAL_DELETE_TARGETS[entityType as keyof typeof TOMBSTONE_PHYSICAL_DELETE_TARGETS]
+  const idValues = decodeStorageV2CompositeEntityId(entityId, target.idColumns.length)
+  if (!idValues) return null
+
+  return {
+    entityType,
+    idValues
+  }
+}
+
+function sameIdValues(left: readonly string[], right: readonly string[]) {
+  return left.length === right.length && left.every((value, index) => value === right[index])
+}
+
 function bufferToString(value: string | Buffer | ArrayBuffer | unknown) {
   if (typeof value === 'string') return value
   if (Buffer.isBuffer(value)) return value.toString('utf8')
@@ -1692,6 +1713,47 @@ export class StorageV2WebDavRecordSyncService {
     return tombstoneDeletedAt > 0 && tombstoneDeletedAt >= meta.updatedAt
   }
 
+  private async isCoveredByRemoteTombstone(
+    client: WebDAVClient,
+    basePath: string,
+    manifest: StorageV2WebDavRecordSyncManifest,
+    record: LocalRecord,
+    bundledRecords: Map<string, LocalRecord>,
+    remoteTombstoneRecordCache: Map<string, LocalRecord | null>
+  ) {
+    const target = tombstoneTargetFromRecord(record.table.entityType, record.idValues)
+    if (!target) return false
+
+    for (const [tombstoneId, meta] of Object.entries(manifest.records)) {
+      if (meta.entityType !== TOMBSTONE_ENTITY_TYPE) continue
+
+      let tombstoneTarget = tombstoneTargetFromMeta(meta)
+      let tombstoneUpdatedAt = meta.updatedAt
+
+      if (!tombstoneTarget) {
+        let tombstoneRecord = bundledRecords.get(tombstoneId) ?? remoteTombstoneRecordCache.get(tombstoneId)
+        if (tombstoneRecord === undefined) {
+          tombstoneRecord = await this.pullRecord(client, basePath, meta, bundledRecords.get(tombstoneId))
+          remoteTombstoneRecordCache.set(tombstoneId, tombstoneRecord)
+        }
+        if (!tombstoneRecord) continue
+
+        tombstoneTarget = tombstoneTargetFromRow(tombstoneRecord.row)
+        tombstoneUpdatedAt = tombstoneRecord.updatedAt
+      }
+
+      if (
+        tombstoneTarget?.entityType === target.entityType &&
+        sameIdValues(tombstoneTarget.idValues, target.idValues) &&
+        tombstoneUpdatedAt >= record.updatedAt
+      ) {
+        return true
+      }
+    }
+
+    return false
+  }
+
   private blobLocalPath(storagePath: string) {
     const dataRoot = storageV2DataRootService.ensureDataRoot().dataRoot
     return path.join(dataRoot, normalizeLocalStoragePath(storagePath))
@@ -1849,6 +1911,7 @@ export class StorageV2WebDavRecordSyncService {
       secrets: null,
       importedSecretIds: new Set()
     }
+    const remoteTombstoneRecordCache = new Map<string, LocalRecord | null>()
     const stageRecordSyncState = (id: string, valueHash: string) => {
       pendingSyncStates.set(id, valueHash)
     }
@@ -1877,6 +1940,20 @@ export class StorageV2WebDavRecordSyncService {
       const lastHash = await this.getRecordSyncState(dbClient, id)
 
       if (localRecord && !remoteMeta) {
+        if (
+          await this.isCoveredByRemoteTombstone(
+            client,
+            basePath,
+            manifest,
+            localRecord,
+            bundledRecords,
+            remoteTombstoneRecordCache
+          )
+        ) {
+          summary.storageSkipped += 1
+          continue
+        }
+
         await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords)
         await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
         await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
