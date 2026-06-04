@@ -1727,31 +1727,77 @@ export class StorageV2WebDavRecordSyncService {
     for (const [tombstoneId, meta] of Object.entries(manifest.records)) {
       if (meta.entityType !== TOMBSTONE_ENTITY_TYPE) continue
 
-      let tombstoneTarget = tombstoneTargetFromMeta(meta)
-      let tombstoneUpdatedAt = meta.updatedAt
-
-      if (!tombstoneTarget) {
-        let tombstoneRecord = bundledRecords.get(tombstoneId) ?? remoteTombstoneRecordCache.get(tombstoneId)
-        if (tombstoneRecord === undefined) {
-          tombstoneRecord = await this.pullRecord(client, basePath, meta, bundledRecords.get(tombstoneId))
-          remoteTombstoneRecordCache.set(tombstoneId, tombstoneRecord)
-        }
-        if (!tombstoneRecord) continue
-
-        tombstoneTarget = tombstoneTargetFromRow(tombstoneRecord.row)
-        tombstoneUpdatedAt = tombstoneRecord.updatedAt
-      }
+      const tombstone = await this.getRemoteTombstoneTarget(
+        client,
+        basePath,
+        tombstoneId,
+        meta,
+        bundledRecords,
+        remoteTombstoneRecordCache
+      )
+      if (!tombstone) continue
 
       if (
-        tombstoneTarget?.entityType === target.entityType &&
-        sameIdValues(tombstoneTarget.idValues, target.idValues) &&
-        tombstoneUpdatedAt >= record.updatedAt
+        tombstone.target.entityType === target.entityType &&
+        sameIdValues(tombstone.target.idValues, target.idValues) &&
+        tombstone.updatedAt >= record.updatedAt
       ) {
         return true
       }
     }
 
     return false
+  }
+
+  private async getRemoteTombstoneTarget(
+    client: WebDAVClient,
+    basePath: string,
+    tombstoneId: string,
+    meta: RemoteRecordMeta,
+    bundledRecords: Map<string, LocalRecord>,
+    remoteTombstoneRecordCache: Map<string, LocalRecord | null>
+  ) {
+    let target = tombstoneTargetFromMeta(meta)
+    let updatedAt = meta.updatedAt
+
+    if (!target) {
+      let tombstoneRecord = bundledRecords.get(tombstoneId) ?? remoteTombstoneRecordCache.get(tombstoneId)
+      if (tombstoneRecord === undefined) {
+        tombstoneRecord = await this.pullRecord(client, basePath, meta, bundledRecords.get(tombstoneId))
+        remoteTombstoneRecordCache.set(tombstoneId, tombstoneRecord)
+      }
+      if (!tombstoneRecord) return null
+
+      target = tombstoneTargetFromRow(tombstoneRecord.row)
+      updatedAt = tombstoneRecord.updatedAt
+    }
+
+    return target ? { target, updatedAt } : null
+  }
+
+  private async isStaleRemoteTombstoneCoveredByLocalRecord(
+    client: WebDAVClient,
+    basePath: string,
+    tombstoneId: string,
+    meta: RemoteRecordMeta,
+    localById: Map<string, LocalRecord>,
+    bundledRecords: Map<string, LocalRecord>,
+    remoteTombstoneRecordCache: Map<string, LocalRecord | null>
+  ) {
+    if (meta.entityType !== TOMBSTONE_ENTITY_TYPE) return false
+
+    const tombstone = await this.getRemoteTombstoneTarget(
+      client,
+      basePath,
+      tombstoneId,
+      meta,
+      bundledRecords,
+      remoteTombstoneRecordCache
+    )
+    if (!tombstone) return false
+
+    const targetRecord = localById.get(recordId(tombstone.target.entityType, tombstone.target.idValues))
+    return Boolean(targetRecord && !targetRecord.deletedAt && targetRecord.updatedAt > tombstone.updatedAt)
   }
 
   private blobLocalPath(storagePath: string) {
@@ -1964,6 +2010,23 @@ export class StorageV2WebDavRecordSyncService {
       }
 
       if (!localRecord && remoteMeta) {
+        if (
+          await this.isStaleRemoteTombstoneCoveredByLocalRecord(
+            client,
+            basePath,
+            id,
+            remoteMeta,
+            localById,
+            bundledRecords,
+            remoteTombstoneRecordCache
+          )
+        ) {
+          delete manifest.records[id]
+          bundledRecords.delete(id)
+          summary.storageSkipped += 1
+          continue
+        }
+
         if (await this.isCoveredByLocalTombstone(dbClient, remoteMeta)) {
           delete manifest.records[id]
           bundledRecords.delete(id)
