@@ -38,6 +38,7 @@ describe('StorageV2ProviderWriteService', () => {
 
   it('upserts provider lists with stable sort order before Redux state is changed', async () => {
     const upsertProvider = vi.fn().mockResolvedValue({ skippedSecret: false })
+    const events: string[] = []
     Object.defineProperty(window, 'api', {
       configurable: true,
       value: {
@@ -47,12 +48,21 @@ describe('StorageV2ProviderWriteService', () => {
       }
     })
 
+    const { subscribeDataSyncLocalChanges } = await import('../DataSyncLocalChangeSignal')
     const { upsertStorageV2ProviderList } = await import('../StorageV2ProviderWriteService')
+    const unsubscribe = subscribeDataSyncLocalChanges((event) => {
+      events.push(event.reason)
+    })
 
-    await upsertStorageV2ProviderList([provider('provider-a'), provider('provider-b')])
+    try {
+      await upsertStorageV2ProviderList([provider('provider-a'), provider('provider-b')])
+    } finally {
+      unsubscribe()
+    }
 
     expect(upsertProvider).toHaveBeenNthCalledWith(1, expect.objectContaining({ id: 'provider-a' }), 0)
     expect(upsertProvider).toHaveBeenNthCalledWith(2, expect.objectContaining({ id: 'provider-b' }), 1)
+    expect(events).toEqual(['provider'])
   })
 
   it('queues model mutations for the same provider so rapid writes build on pending state', async () => {
@@ -114,5 +124,33 @@ describe('StorageV2ProviderWriteService', () => {
     await expect(upsertStorageV2Provider(provider('provider-a'))).rejects.toThrow(
       'Storage v2 provider upsert API unavailable'
     )
+  })
+
+  it('notifies data sync after direct provider upserts', async () => {
+    const upsertProvider = vi.fn().mockResolvedValue({ skippedSecret: false })
+    const events: string[] = []
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          upsertProvider
+        }
+      }
+    })
+
+    const { subscribeDataSyncLocalChanges } = await import('../DataSyncLocalChangeSignal')
+    const { upsertStorageV2Provider } = await import('../StorageV2ProviderWriteService')
+    const unsubscribe = subscribeDataSyncLocalChanges((event) => {
+      events.push(event.reason)
+    })
+
+    try {
+      await upsertStorageV2Provider(provider('provider-a'), 2)
+    } finally {
+      unsubscribe()
+    }
+
+    expect(upsertProvider).toHaveBeenCalledWith(expect.objectContaining({ id: 'provider-a' }), 2)
+    expect(events).toEqual(['provider'])
   })
 })

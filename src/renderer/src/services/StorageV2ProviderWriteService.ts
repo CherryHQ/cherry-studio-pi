@@ -1,5 +1,7 @@
 import type { Provider } from '@renderer/types'
 
+import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
+
 const pendingProviderById = new Map<string, Provider>()
 const providerWriteQueueById = new Map<string, Promise<unknown>>()
 
@@ -19,7 +21,9 @@ function getSortOrder(providerId: string, providers: Provider[]) {
 }
 
 export async function upsertStorageV2Provider(provider: Provider, sortOrder = 0) {
-  return getUpsertProviderApi()(provider, sortOrder)
+  const result = await getUpsertProviderApi()(provider, sortOrder)
+  notifyDataSyncLocalChange('provider')
+  return result
 }
 
 export async function upsertStorageV2ProviderList(providers: Provider[]) {
@@ -27,6 +31,9 @@ export async function upsertStorageV2ProviderList(providers: Provider[]) {
 
   for (const [index, provider] of providers.entries()) {
     await upsertProvider(provider, index)
+  }
+  if (providers.length > 0) {
+    notifyDataSyncLocalChange('provider')
   }
 }
 

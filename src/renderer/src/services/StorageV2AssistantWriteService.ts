@@ -1,5 +1,7 @@
 import type { Assistant } from '@renderer/types'
 
+import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
+
 const pendingAssistantById = new Map<string, Assistant>()
 const assistantWriteQueueById = new Map<string, Promise<unknown>>()
 
@@ -19,7 +21,9 @@ function getSortOrder(assistantId: string, assistants: Assistant[]) {
 }
 
 export async function upsertStorageV2Assistant(assistant: Assistant, sortOrder = 0) {
-  return getUpsertAssistantApi()(assistant, sortOrder)
+  const result = await getUpsertAssistantApi()(assistant, sortOrder)
+  notifyDataSyncLocalChange('assistant')
+  return result
 }
 
 export async function upsertStorageV2AssistantList(assistants: Assistant[]) {
@@ -27,6 +31,9 @@ export async function upsertStorageV2AssistantList(assistants: Assistant[]) {
 
   for (const [index, assistant] of assistants.entries()) {
     await upsertAssistant(assistant, index)
+  }
+  if (assistants.length > 0) {
+    notifyDataSyncLocalChange('assistant')
   }
 }
 
