@@ -5,6 +5,7 @@ import { isMac } from '@renderer/config/constant'
 import { loadCustomMiniApp, ORIGIN_DEFAULT_MIN_APPS, updateAllMinApps } from '@renderer/config/minapps'
 import { useMinapps } from '@renderer/hooks/useMinapps'
 import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
+import { notifyDataSyncLocalChange } from '@renderer/services/DataSyncLocalChangeSignal'
 import type { MinAppType } from '@renderer/types'
 import { classNames } from '@renderer/utils'
 import { extractHtmlTitle, getFileNameFromHtmlTitle } from '@renderer/utils/formats'
@@ -169,6 +170,7 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({ open, title, ht
       const currentHtml = codeEditorRef.current?.getContent?.() || html
       const htmlTitle = extractHtmlTitle(currentHtml) || title || 'HTML Artifact'
       const installed = await window.api.appData.installHtmlArtifact({ title: htmlTitle, html: currentHtml })
+      notifyDataSyncLocalChange('app-data')
       const newApp: MinAppType = {
         id: `artifact:${installed.id}`,
         name: htmlTitle,

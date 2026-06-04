@@ -1,6 +1,7 @@
 import { Navbar, NavbarCenter } from '@renderer/components/app/Navbar'
 import { HStack } from '@renderer/components/Layout'
 import { useRuntime } from '@renderer/hooks/useRuntime'
+import { notifyDataSyncLocalChange } from '@renderer/services/DataSyncLocalChangeSignal'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import { Button, Input, Select, Space, Typography } from 'antd'
 import { Bot, ExternalLink, Send, Settings } from 'lucide-react'
@@ -102,6 +103,7 @@ const AgentToolInstallPage: FC<Props> = ({ tool }) => {
     setSaving(true)
     try {
       await window.api.appData.set('agent-tools', tool, config)
+      notifyDataSyncLocalChange('app-data')
       window.toast.success(t('agentTools.install.saved'))
     } finally {
       setSaving(false)

@@ -7,6 +7,7 @@ export type DataSyncLocalChangeReason =
   | 'agent'
   | 'assistant'
   | 'provider'
+  | 'app-data'
   | 'dexie-settings'
   | 'dexie-table'
   | 'local-storage'
