@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { storageV2SecretVaultService } from '../../storageV2/SecretVaultService'
 import { storageV2Database } from '../../storageV2/StorageV2Database'
+import { listStorageV2SyncPolicies } from '../../storageV2/SyncPolicy'
 import { AppDataDatabase, getAppDataDatabase } from '../AppDataDatabase'
 import { AppDataSyncService } from '../AppDataSyncService'
 
@@ -385,6 +386,13 @@ async function seedComprehensiveStorageV2Data(instance: TestInstance): Promise<C
       createdAt,
       updatedAt
     ]
+  )
+  await execute(
+    `
+      INSERT INTO provider_credentials (provider_id, credential_kind, secret_ref, updated_at, updated_by_device_id)
+      VALUES (?, ?, ?, ?, ?)
+    `,
+    ['provider-sync-full-openai', 'apiKey', providerApiKeySecretRef, updatedAt, 'device-a']
   )
   await execute(
     `
@@ -848,6 +856,7 @@ async function readComprehensiveStorageV2State(instance: TestInstance, fixture: 
     counts: {
       profiles: await count('profiles'),
       providers: await count('providers'),
+      provider_credentials: await count('provider_credentials'),
       models: await count('models'),
       blobs: await count('blobs'),
       assistants: await count('assistants'),
@@ -875,6 +884,10 @@ async function readComprehensiveStorageV2State(instance: TestInstance, fixture: 
       typeof providerConfig?.apiKeySecretRef === 'string'
         ? await storageV2SecretVaultService.getSecret(providerConfig.apiKeySecretRef)
         : null,
+    providerCredential: await selectOne<{ secret_ref: string }>(
+      'SELECT secret_ref FROM provider_credentials WHERE provider_id = ? AND credential_kind = ?',
+      ['provider-sync-full-openai', 'apiKey']
+    ),
     models: (await client.execute('SELECT id, capabilities_json FROM models ORDER BY sort_order')).rows.map((row) => ({
       id: String(row.id),
       capabilities: JSON.parse(String(row.capabilities_json))
@@ -1041,6 +1054,7 @@ function countRemoteStorageV2Records(manifest: { storageV2?: { records?: Record<
 const COMPREHENSIVE_STORAGE_TABLE_COUNTS = {
   profiles: 1,
   providers: 1,
+  provider_credentials: 1,
   models: 2,
   blobs: 1,
   assistants: 1,
@@ -1067,6 +1081,7 @@ const COMPREHENSIVE_STORAGE_TABLE_COUNTS = {
 const COMPREHENSIVE_REMOTE_ENTITY_COUNTS = {
   profile: 1,
   provider: 1,
+  provider_credential: 1,
   model: 2,
   blob: 1,
   assistant: 1,
@@ -1142,6 +1157,15 @@ describe('AppDataSyncService local WebDAV integration', () => {
     await server?.close()
     await fsp.rm(tempRoot, { recursive: true, force: true })
     vi.restoreAllMocks()
+  })
+
+  it('keeps the comprehensive multi-device fixture aligned with Storage v2 sync policies', () => {
+    const regularSyncEntityTypes = listStorageV2SyncPolicies()
+      .map((policy) => policy.entityType)
+      .filter((entityType) => entityType !== 'sync_tombstone')
+      .sort()
+
+    expect(Object.keys(COMPREHENSIVE_REMOTE_ENTITY_COUNTS).sort()).toEqual(regularSyncEntityTypes)
   })
 
   it('syncs two isolated instances through a real local WebDAV server', async () => {
@@ -1244,6 +1268,9 @@ describe('AppDataSyncService local WebDAV integration', () => {
       timeoutMs: 30000
     })
     expect(deviceBState.providerApiKey).toBe('sk-sync-full-provider')
+    expect(deviceBState.providerCredential).toEqual({
+      secret_ref: 'storage-v2://secret/provider/provider-sync-full-openai/apiKey'
+    })
     expect(deviceBState.models).toEqual([
       { id: 'model-sync-full-chat', capabilities: ['chat', 'vision', 'tool_use'] },
       { id: 'model-sync-full-embedding', capabilities: ['embedding'] }
