@@ -164,6 +164,10 @@ function isDataSyncAlreadyRunningError(error: unknown) {
   return /Data sync is already running|已有数据同步正在进行|同步正在进行/i.test(getErrorMessage(error))
 }
 
+function readClipboardText(clipboardData: DataTransfer) {
+  return clipboardData.getData('text/plain') || clipboardData.getData('text') || clipboardData.getData('Text')
+}
+
 function makeBreadcrumbItems(currentPath: string, onOpen: (path: string) => void) {
   const normalized = normalizeDirectoryBrowserPath(currentPath || '/')
   const parts = normalized.split('/').filter(Boolean)
@@ -653,9 +657,19 @@ const DataSyncSettings: FC = () => {
         <Input
           placeholder="https://example.com/dav"
           value={webdavHost}
-          onChange={(event) => setWebdavHost(event.target.value)}
+          onChange={(event) => {
+            const value = event.target.value
+            try {
+              if (applyStructuredWebDavInput(value)) {
+                return
+              }
+            } catch {
+              // Keep the raw value visible while the user is still editing; validation runs on blur/actions.
+            }
+            setWebdavHost(value)
+          }}
           onPaste={(event) => {
-            const text = event.clipboardData.getData('text')
+            const text = readClipboardText(event.clipboardData)
             if (!text) return
 
             try {
@@ -687,7 +701,8 @@ const DataSyncSettings: FC = () => {
             }
           }}
           style={{ width: 280 }}
-          type="url"
+          inputMode="url"
+          type="text"
         />
       </SettingRow>
       <SettingDivider />

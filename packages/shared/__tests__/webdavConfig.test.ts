@@ -19,6 +19,17 @@ describe('webdavConfig', () => {
     })
   })
 
+  it('splits a WebDAV account block after a URL input collapses newlines into spaces', () => {
+    const parsed = parseWebDavInput('http://192.168.1.100:8080/ 账号：webdav 密码：test-webdav-password')
+
+    expect(parsed).toMatchObject({
+      structured: true,
+      webdavHost: 'http://192.168.1.100:8080/',
+      webdavUser: 'webdav',
+      webdavPass: 'test-webdav-password'
+    })
+  })
+
   it('builds a WebDAV URL from provider-style protocol server port and path fields', () => {
     const parsed = parseWebDavInput(`协议：https
 服务器地址：openapi.alipan.com

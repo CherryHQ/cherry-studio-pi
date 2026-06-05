@@ -18,18 +18,30 @@ const DEFAULT_WEBDAV_SYNC_PATH = '/cherry-studio-pi'
 const URL_PATTERN = /\b(?:https?|webdav|webdavs):\/\/[^\s"'<>，。；]+/i
 const HOST_PATTERN =
   /\b(?:localhost|(?:\d{1,3}\.){3}\d{1,3}|[a-z\d](?:[a-z\d-]*[a-z\d])?(?:\.[a-z\d](?:[a-z\d-]*[a-z\d])?)+)(?::\d{1,5})?(?:\/[^\s"'<>，。；]*)?/i
+const FIELD_LABEL_PATTERN =
+  'webdav\\s*url|webdav\\s*host|server(?:\\s*address)?|sync(?:\\s*directory)?|sync(?:\\s*path)?|username|password|protocol|account|token|host|pass|path|port|user|服务器地址|同步目录|同步路径|服务地址|用户名|服务器|协议|账户|账号|密码|口令|路径|地址|端口|用户'
 
 function readLabeledValue(text: string, labels: string[]) {
-  const pattern = new RegExp(`^\\s*(?:${labels.join('|')})\\s*[:：=]\\s*(.+?)\\s*$`, 'i')
+  const linePattern = new RegExp(`^\\s*(?:${labels.join('|')})\\s*[:：=]\\s*(.+?)\\s*$`, 'i')
   for (const line of text.split(/\r?\n/)) {
-    const match = line.match(pattern)
+    const match = line.match(linePattern)
     if (match?.[1]) return match[1].trim()
   }
+
+  const inlinePattern = new RegExp(
+    `(?:^|[\\s,，;；])(?:${labels.join('|')})\\s*[:：=]\\s*(.+?)(?=(?:[\\s,，;；]+(?:${FIELD_LABEL_PATTERN})\\s*[:：=])|$)`,
+    'i'
+  )
+  const inlineMatch = text.match(inlinePattern)
+  if (inlineMatch?.[1]) return inlineMatch[1].trim()
+
   return ''
 }
 
 function hasCredentialLabel(text: string) {
-  return /(^|\n)\s*(账号|账户|用户名|用户|密码|口令|account|username|user|password|pass|token)\s*[:：=]/i.test(text)
+  return /(?:^|[\s,，;；])(账号|账户|用户名|用户|密码|口令|account|username|user|password|pass|token)\s*[:：=]/i.test(
+    text
+  )
 }
 
 function decodeUrlCredential(value: string) {

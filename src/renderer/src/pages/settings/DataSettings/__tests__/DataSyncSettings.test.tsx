@@ -330,6 +330,25 @@ describe('DataSyncSettings', () => {
     })
   })
 
+  it('splits WebDAV credentials from URL field changes when Windows does not preserve paste events', async () => {
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.change(screen.getByPlaceholderText('https://example.com/dav'), {
+      target: {
+        value: 'http://192.168.1.100:8080/ 账号：webdav 密码：test-webdav-password'
+      }
+    })
+
+    expect(screen.getByDisplayValue('http://192.168.1.100:8080')).toBeTruthy()
+    expect(screen.getByDisplayValue('webdav')).toBeTruthy()
+    expect(screen.getByDisplayValue('test-webdav-password')).toBeTruthy()
+    expect(mocks.dispatch).toHaveBeenCalledWith({
+      type: 'settings/setDataSyncWebdavHost',
+      payload: 'http://192.168.1.100:8080'
+    })
+  })
+
   it('does not turn a completed sync into a failure when status refresh fails afterward', async () => {
     mocks.getStatus.mockResolvedValueOnce(idleStatus()).mockRejectedValueOnce(new Error('status refresh failed'))
     mocks.syncAppDataNow.mockResolvedValueOnce(successSummary())
