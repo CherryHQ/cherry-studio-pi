@@ -1250,6 +1250,7 @@ describe('AppDataSyncService local WebDAV integration', () => {
     storageV2Database.close()
     delete process.env.CHERRY_STUDIO_STORAGE_V2_ROOT
     delete process.env.CHERRY_STUDIO_DATA_SYNC_REMOTE_SNAPSHOT
+    delete process.env.CHERRY_STUDIO_DATA_SYNC_LOCAL_SAFETY_SNAPSHOT
     await server?.close()
     await fsp.rm(tempRoot, { recursive: true, force: true })
     vi.restoreAllMocks()
@@ -1376,7 +1377,7 @@ describe('AppDataSyncService local WebDAV integration', () => {
     await expect(readInstanceNote(instanceB, noteRelativePath)).resolves.toBe(noteContents)
   })
 
-  it('syncs critical runtime directories as compressed bundles instead of many WebDAV files', async () => {
+  it('syncs lightweight runtime directories as compressed bundles instead of many WebDAV files', async () => {
     const homePath = path.join(tempRoot, 'home')
     const instanceA = makeInstance(tempRoot, 'device-a')
     const instanceB = makeInstance(tempRoot, 'device-b')
@@ -1392,13 +1393,6 @@ describe('AppDataSyncService local WebDAV integration', () => {
       '# Sync Fixture\n\nThis skill should travel with WebDAV sync.',
       '2026-05-29T12:00:00.000Z'
     )
-    await writeInstanceRuntimeFile(
-      instanceA,
-      'Workbench',
-      'custom-dashboard.html',
-      '<main>Cherry Studio Pi workbench fixture</main>',
-      '2026-05-29T12:01:00.000Z'
-    )
     await seedInstanceMemoryDatabase(instanceA, '用户记忆应该跟随多端同步。')
     const firstSummary = await new AppDataSyncService(backupManager as never).syncNow(config)
     const uploadedManifest = await readRemoteManifest(server!, webdavPath)
@@ -1406,21 +1400,19 @@ describe('AppDataSyncService local WebDAV integration', () => {
     const remoteFiles = await listRemoteRelativeFiles(syncRoot)
     const runtimeBundles = remoteFiles.filter((file) => file.startsWith('runtime-directories/bundles/'))
 
-    expect(firstSummary.uploaded).toBeGreaterThanOrEqual(3)
+    expect(firstSummary.uploaded).toBeGreaterThanOrEqual(2)
     expect(Object.keys(uploadedManifest.runtimeDirectories?.directories ?? {})).toEqual(
-      expect.arrayContaining(['Memory', 'Skills', 'Workbench'])
+      expect.arrayContaining(['Memory', 'Skills'])
     )
-    expect(runtimeBundles).toHaveLength(3)
+    expect(uploadedManifest.runtimeDirectories?.directories.Workbench).toBeUndefined()
+    expect(runtimeBundles).toHaveLength(2)
 
     await switchInstance(instanceB, homePath)
     const secondSummary = await new AppDataSyncService(backupManager as never).syncNow(config)
 
-    expect(secondSummary.downloaded).toBeGreaterThanOrEqual(3)
+    expect(secondSummary.downloaded).toBeGreaterThanOrEqual(2)
     await expect(readInstanceRuntimeFile(instanceB, 'Skills', 'sync-fixture/SKILL.md')).resolves.toContain(
       'Sync Fixture'
-    )
-    await expect(readInstanceRuntimeFile(instanceB, 'Workbench', 'custom-dashboard.html')).resolves.toContain(
-      'workbench fixture'
     )
     await expect(readInstanceMemoryDatabase(instanceB)).resolves.toBe('用户记忆应该跟随多端同步。')
   })

@@ -824,6 +824,55 @@ describe('StorageV2WebDavRecordSyncService', () => {
     ).rejects.toThrow('当前 WebDAV 客户端不支持删除远端文件')
   })
 
+  it('fails clearly before upload when a local record is too large for WebDAV sync', async () => {
+    mocks.dbClient.execute.mockImplementation(async (input: string | { sql: string }) => {
+      const sql = typeof input === 'string' ? input : input.sql
+      if (sql.includes('SELECT * FROM settings')) {
+        return {
+          rows: [
+            {
+              key: 'oversized-log',
+              value_json: JSON.stringify({ output: 'x'.repeat(2 * 1024 * 1024) }),
+              scope: 'data-sync-test',
+              updated_at: '2026-05-29T12:00:00.000Z',
+              deleted_at: null,
+              version: 1
+            }
+          ]
+        }
+      }
+      if (sql.includes('SELECT value_json FROM sync_state')) return { rows: [] }
+      if (sql.includes('INSERT INTO sync_state')) return { rows: [] }
+      if (sql.includes('PRAGMA table_info(settings)')) {
+        return {
+          rows: [
+            { name: 'key' },
+            { name: 'value_json' },
+            { name: 'scope' },
+            { name: 'updated_at' },
+            { name: 'deleted_at' },
+            { name: 'version' }
+          ]
+        }
+      }
+      return { rows: [] }
+    })
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([settingsTable]).sync(mocks.webdav as any, '/remote-root/sync/v1', {
+        version: 1,
+        blobs: {},
+        records: {}
+      })
+    ).rejects.toThrow('记录过大')
+
+    expect(mocks.webdav.putFileContents).not.toHaveBeenCalledWith(
+      expect.stringContaining('/storage-v2/bundle/'),
+      expect.anything(),
+      expect.anything()
+    )
+  })
+
   it('syncs task run logs by natural identity instead of local autoincrement ids', async () => {
     mocks.dbClient.execute.mockImplementation(async (input: string | { sql: string }) => {
       const sql = typeof input === 'string' ? input : input.sql

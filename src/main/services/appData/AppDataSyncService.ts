@@ -131,7 +131,7 @@ type LocalRuntimeDirectorySnapshot = {
   bundle: Buffer
 }
 
-type RuntimeDirectoryName = 'Memory' | 'Skills' | 'MCP' | 'Workbench' | 'Channels' | 'Workspace'
+type RuntimeDirectoryName = 'Memory' | 'Skills' | 'MCP' | 'Channels'
 
 type RuntimeDirectoryPolicy = {
   name: RuntimeDirectoryName
@@ -304,6 +304,7 @@ const EMPTY_SUMMARY: DataSyncSummary = {
 
 const SNAPSHOT_UPLOAD_INTERVAL_MS = 24 * 60 * 60 * 1000
 const REMOTE_FULL_SNAPSHOT_OPT_IN_ENV = 'CHERRY_STUDIO_DATA_SYNC_REMOTE_SNAPSHOT'
+const LOCAL_JOIN_SAFETY_SNAPSHOT_OPT_IN_ENV = 'CHERRY_STUDIO_DATA_SYNC_LOCAL_SAFETY_SNAPSHOT'
 const DATA_SYNC_REMOTE_ROOT = '/cherry-studio-pi'
 const DATA_SYNC_SUFFIX = '/sync/v1'
 const SYNC_SPACE_KEY_FORMAT = 'cherry-sync-space-key-v1' as const
@@ -316,13 +317,13 @@ const NOTES_REMOTE_ARTIFACT_ROOT = 'notes'
 const NOTES_SYNC_STATE_PREFIX = 'notes-file'
 const RUNTIME_DIRECTORIES_REMOTE_ROOT = 'runtime-directories'
 const RUNTIME_DIRECTORY_SYNC_STATE_PREFIX = 'runtime-directory'
-const RUNTIME_DIRECTORY_DEFAULT_MAX_FILE_BYTES = 32 * 1024 * 1024
-const RUNTIME_DIRECTORY_DEFAULT_MAX_TOTAL_BYTES = 256 * 1024 * 1024
+const RUNTIME_DIRECTORY_DEFAULT_MAX_FILE_BYTES = 8 * 1024 * 1024
+const RUNTIME_DIRECTORY_DEFAULT_MAX_TOTAL_BYTES = 32 * 1024 * 1024
 const RUNTIME_DIRECTORY_POLICIES: readonly RuntimeDirectoryPolicy[] = [
   {
     name: 'Memory',
-    maxFileBytes: 128 * 1024 * 1024,
-    maxTotalBytes: 256 * 1024 * 1024,
+    maxFileBytes: 16 * 1024 * 1024,
+    maxTotalBytes: 64 * 1024 * 1024,
     snapshot: 'memory'
   },
   {
@@ -332,11 +333,6 @@ const RUNTIME_DIRECTORY_POLICIES: readonly RuntimeDirectoryPolicy[] = [
   },
   {
     name: 'MCP',
-    maxFileBytes: 128 * 1024 * 1024,
-    maxTotalBytes: 512 * 1024 * 1024
-  },
-  {
-    name: 'Workbench',
     maxFileBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_FILE_BYTES,
     maxTotalBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_TOTAL_BYTES
   },
@@ -344,11 +340,6 @@ const RUNTIME_DIRECTORY_POLICIES: readonly RuntimeDirectoryPolicy[] = [
     name: 'Channels',
     maxFileBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_FILE_BYTES,
     maxTotalBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_TOTAL_BYTES
-  },
-  {
-    name: 'Workspace',
-    maxFileBytes: 64 * 1024 * 1024,
-    maxTotalBytes: 512 * 1024 * 1024
   }
 ] as const
 const LEGACY_REMOTE_SYNC_LOCK_FILE = '.sync.lock.json'
@@ -366,7 +357,8 @@ const STORAGE_V2_WRITE_ACCESS_PROBE_DIRS = [
   'storage-v2/bundle',
   'storage-v2/secrets',
   'storage-v2/blobs',
-  'backups'
+  NOTES_REMOTE_ARTIFACT_ROOT,
+  `${RUNTIME_DIRECTORIES_REMOTE_ROOT}/bundles`
 ] as const
 
 const AGENT_RUNTIME_ENTITY_TYPES = new Set([
@@ -659,6 +651,10 @@ function normalizeRuntimeDirectoryName(value: string): RuntimeDirectoryName {
 
 function shouldAttemptRemoteFullSnapshotUpload() {
   return process.env[REMOTE_FULL_SNAPSHOT_OPT_IN_ENV] === '1'
+}
+
+function shouldCreateLocalJoinSafetySnapshot() {
+  return process.env[LOCAL_JOIN_SAFETY_SNAPSHOT_OPT_IN_ENV] === '1'
 }
 
 function sha256Buffer(value: Buffer) {
@@ -2880,6 +2876,18 @@ export class AppDataSyncService {
   private async createJoinSafetySnapshotOnce(db: AppDataDatabase, summary: DataSyncSummary) {
     if (summary.joinSafetySnapshotCreated) return
 
+    if (!shouldCreateLocalJoinSafetySnapshot()) {
+      await this.pruneLocalDataSyncTempBackups({ keepLatestJoinSafety: 0 })
+      logger.info(
+        'Skipped local full data-sync safety snapshot; record-level conflict audits protect synced data by default',
+        {
+          deviceId: db.getDeviceId(),
+          lastSyncAt: summary.lastSyncAt
+        }
+      )
+      return
+    }
+
     const fileName = joinSafetySnapshotFileName(db.getDeviceId(), summary.lastSyncAt)
     try {
       await this.pruneLocalDataSyncTempBackups({ keepLatestJoinSafety: 0 })
@@ -3168,7 +3176,9 @@ export class AppDataSyncService {
     this.pendingFailureSafetySnapshot = null
     const sync = this.withSyncRunDeadline(
       (async () => {
-        await this.pruneLocalDataSyncTempBackups()
+        await this.pruneLocalDataSyncTempBackups({
+          keepLatestJoinSafety: shouldCreateLocalJoinSafetySnapshot() ? DATA_SYNC_JOIN_SAFETY_LOCAL_RETENTION : 0
+        })
         return this.performSyncNow(normalizedConfig, context)
       })(),
       context

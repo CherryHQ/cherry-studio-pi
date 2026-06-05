@@ -438,6 +438,36 @@ describe('StorageV2AgentRuntimeWriteService', () => {
     )
   })
 
+  it('caps oversized task run log results before writing Storage v2', async () => {
+    mocks.client.execute
+      .mockResolvedValueOnce({ rows: [], columns: [], columnTypes: [], lastInsertRowid: 43n })
+      .mockResolvedValueOnce({ rows: [{ version: 1 }], columns: [], columnTypes: [] })
+
+    await new StorageV2AgentRuntimeWriteService().createTaskRunLog({
+      task_id: 'task-oversized',
+      session_id: null,
+      run_at: '2026-05-29T00:00:00.000Z',
+      duration_ms: 0,
+      status: 'success',
+      result: JSON.stringify({ output: 'x'.repeat(300 * 1024) }),
+      error: 'e'.repeat(40 * 1024)
+    })
+
+    const insertCall = mocks.client.execute.mock.calls.find(
+      ([input]) => typeof input !== 'string' && input.sql.includes('INSERT INTO task_run_logs')
+    )
+    expect(insertCall).toBeTruthy()
+    const args = (insertCall![0] as { args: unknown[] }).args
+    const result = JSON.parse(String(args[5]))
+    expect(result).toMatchObject({
+      truncated: true,
+      reason: 'task-run-result-too-large',
+      maxByteSize: 256 * 1024
+    })
+    expect(Buffer.byteLength(String(args[5]), 'utf8')).toBeLessThan(256 * 1024)
+    expect(String(args[6])).toContain('[truncated')
+  })
+
   it('does not persist plaintext channel secrets when safeStorage is unavailable', async () => {
     mocks.secretVault.isAvailable.mockReturnValue(false)
 

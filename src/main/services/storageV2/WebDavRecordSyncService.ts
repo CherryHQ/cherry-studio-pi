@@ -22,6 +22,9 @@ import { listStorageV2SyncPolicies, type StorageV2SyncEntityType, type StorageV2
 
 const logger = loggerService.withContext('StorageV2WebDavRecordSyncService')
 const LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS = 10 * 60 * 1000
+const MAX_SYNC_RECORD_JSON_BYTES = 2 * 1024 * 1024
+const MAX_SYNC_RECORD_BUNDLE_JSON_BYTES = 64 * 1024 * 1024
+const MAX_SYNC_BLOB_BYTES = 64 * 1024 * 1024
 
 type StorageV2SyncTable = {
   entityType: StorageV2SyncEntityType
@@ -271,6 +274,10 @@ function hashJson(value: unknown) {
   return createHash('sha256')
     .update(JSON.stringify(canonicalize(value)))
     .digest('hex')
+}
+
+function jsonByteLength(value: unknown) {
+  return Buffer.byteLength(JSON.stringify(canonicalize(value)), 'utf8')
 }
 
 function bundleHash(bundle: Pick<StorageV2WebDavRecordSyncBundle, 'records' | 'blobs'>) {
@@ -947,6 +954,16 @@ export class StorageV2WebDavRecordSyncService {
     }
   }
 
+  private assertRecordRowWithinSyncBudget(entityType: string, row: Record<string, InValue>) {
+    const byteSize = jsonByteLength(row)
+    if (byteSize <= MAX_SYNC_RECORD_JSON_BYTES) return
+
+    throw new Error(
+      `同步数据失败：${entityType} 记录过大（${byteSize} 字节，限制 ${MAX_SYNC_RECORD_JSON_BYTES} 字节）。` +
+        '这通常是任务日志、工具输出或消息块保存了过大的原始内容。请清理对应记录后重试。'
+    )
+  }
+
   private async writeRecordBundle(
     client: WebDAVClient,
     basePath: string,
@@ -954,6 +971,14 @@ export class StorageV2WebDavRecordSyncService {
     recordsById: Map<string, LocalRecord>
   ) {
     const bundle = this.buildBundle(recordsById, manifest.blobs)
+    const bundleByteSize = jsonByteLength(bundle)
+    if (bundleByteSize > MAX_SYNC_RECORD_BUNDLE_JSON_BYTES) {
+      throw new Error(
+        `同步数据失败：Storage v2 记录包过大（${bundleByteSize} 字节，限制 ${MAX_SYNC_RECORD_BUNDLE_JSON_BYTES} 字节）。` +
+          '请先清理任务运行日志、超长消息或大附件，再重新同步。'
+      )
+    }
+
     const valueHash = bundleHash(bundle)
     const relativePath = recordBundlePath(valueHash)
     await this.writeJson(client, path.posix.join(basePath, relativePath), bundle, { overwrite: false })
@@ -1002,6 +1027,7 @@ export class StorageV2WebDavRecordSyncService {
         const updatedAt = table.updatedAtColumn ? parseTime(row[table.updatedAtColumn]) : 0
         const version = table.versionColumn ? Number(row[table.versionColumn] ?? 1) : 1
 
+        this.assertRecordRowWithinSyncBudget(table.entityType, row)
         records.push({
           id: recordId(table.entityType, idValues),
           table,
@@ -1843,6 +1869,13 @@ export class StorageV2WebDavRecordSyncService {
     }
 
     const stat = await fsp.stat(localPath)
+    if (stat.size > MAX_SYNC_BLOB_BYTES) {
+      throw new Error(
+        `同步数据失败：附件 ${blobId} 过大（${stat.size} 字节，限制 ${MAX_SYNC_BLOB_BYTES} 字节）。` +
+          'WebDAV 多端同步不适合搬运超大附件；请删除该附件引用或改用手动备份。'
+      )
+    }
+
     const actualChecksum = await sha256File(localPath)
     if (actualChecksum !== checksum) {
       throw new Error(`本地附件文件校验失败，无法同步 blob ${blobId}。请先恢复或重新生成这个文件。`)

@@ -24,6 +24,10 @@ const CHANNEL_SECRET_KEYS = [
   'verification_token'
 ] as const
 
+const TASK_RUN_LOG_RESULT_JSON_MAX_BYTES = 256 * 1024
+const TASK_RUN_LOG_RESULT_PREVIEW_CHARS = 32 * 1024
+const TASK_RUN_LOG_ERROR_MAX_CHARS = 32 * 1024
+
 type ChannelRuntimeRow = Pick<
   ChannelRow | InsertChannelRow,
   'id' | 'type' | 'name' | 'agentId' | 'sessionId' | 'config' | 'isActive' | 'activeChatIds' | 'permissionMode'
@@ -156,6 +160,32 @@ function parseJson(value: unknown): unknown {
 function normalizeJson(value: unknown, fallback: unknown) {
   const parsed = parseJson(value)
   return toJson(parsed ?? fallback)
+}
+
+function byteLength(value: string) {
+  return Buffer.byteLength(value, 'utf8')
+}
+
+function normalizeTaskRunResultJson(value: unknown) {
+  const json = normalizeJson(value, null)
+  const originalByteSize = byteLength(json)
+  if (originalByteSize <= TASK_RUN_LOG_RESULT_JSON_MAX_BYTES) return json
+
+  return toJson({
+    truncated: true,
+    reason: 'task-run-result-too-large',
+    originalByteSize,
+    maxByteSize: TASK_RUN_LOG_RESULT_JSON_MAX_BYTES,
+    preview: json.slice(0, TASK_RUN_LOG_RESULT_PREVIEW_CHARS)
+  })
+}
+
+function normalizeTaskRunError(value: unknown) {
+  if (value == null) return null
+  const text = String(value)
+  if (text.length <= TASK_RUN_LOG_ERROR_MAX_CHARS) return text
+
+  return `${text.slice(0, TASK_RUN_LOG_ERROR_MAX_CHARS)}\n...[truncated ${text.length - TASK_RUN_LOG_ERROR_MAX_CHARS} chars]`
 }
 
 function normalizeValue<T>(value: unknown, fallback: T): T | unknown {
@@ -552,8 +582,8 @@ export class StorageV2AgentRuntimeWriteService {
           log.run_at,
           log.duration_ms ?? 0,
           log.status,
-          normalizeJson(log.result, null),
-          log.error ?? null
+          normalizeTaskRunResultJson(log.result),
+          normalizeTaskRunError(log.error)
         ]
       })
       logId = toNumericId(result.lastInsertRowid)
@@ -607,10 +637,10 @@ export class StorageV2AgentRuntimeWriteService {
       addField('status', updates.status)
     }
     if (Object.prototype.hasOwnProperty.call(updates, 'result')) {
-      addField('result_json', normalizeJson(updates.result, null))
+      addField('result_json', normalizeTaskRunResultJson(updates.result))
     }
     if (Object.prototype.hasOwnProperty.call(updates, 'error')) {
-      addField('error', updates.error ?? null)
+      addField('error', normalizeTaskRunError(updates.error))
     }
 
     if (setClauses.length === 0) return

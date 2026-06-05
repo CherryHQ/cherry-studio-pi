@@ -287,6 +287,7 @@ describe('AppDataSyncService', () => {
     vi.useRealTimers()
     vi.clearAllMocks()
     delete process.env.CHERRY_STUDIO_DATA_SYNC_REMOTE_SNAPSHOT
+    delete process.env.CHERRY_STUDIO_DATA_SYNC_LOCAL_SAFETY_SNAPSHOT
     delete process.env.CHERRY_STUDIO_DATA_SYNC_MAX_RUNTIME_MS
     await fsp.rm(mocks.notesDir, { recursive: true, force: true })
     await fsp.rm(mocks.runtimeDataRoot, { recursive: true, force: true })
@@ -483,7 +484,13 @@ describe('AppDataSyncService', () => {
       expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(
         '/remote-root/sync/v1/.cherry-studio-pi-write-test-1760000000123.tmp'
       )
-      for (const probeDir of ['storage-v2/bundle', 'storage-v2/secrets', 'storage-v2/blobs', 'backups']) {
+      for (const probeDir of [
+        'storage-v2/bundle',
+        'storage-v2/secrets',
+        'storage-v2/blobs',
+        'notes',
+        'runtime-directories/bundles'
+      ]) {
         expect(mocks.webdav.exists).toHaveBeenCalledWith(`/remote-root/sync/v1/${probeDir}`)
         expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
           `/remote-root/sync/v1/${probeDir}/.cherry-studio-pi-storage-write-test-1760000000123.tmp`,
@@ -980,30 +987,29 @@ describe('AppDataSyncService', () => {
     expect(summary.downloaded).toBe(1)
     expect(summary.conflicts).toBe(0)
     expect(summary.resolvedConflicts).toBe(1)
-    expect(summary.joinSafetySnapshotCreated).toBe(true)
-    expect(summary.joinSafetySnapshotFileName).toMatch(
-      /^cherry-studio-pi\.data-sync\.join-safety\.local-device\.\d+\.zip$/
-    )
-    expect(summary.joinSafetySnapshotBytes).toBe(6)
+    expect(summary.joinSafetySnapshotCreated).toBe(false)
+    expect(summary.joinSafetySnapshotFileName).toBeNull()
+    expect(summary.joinSafetySnapshotBytes).toBe(0)
     expect(mocks.storageV2.upsertRecordSnapshot).toHaveBeenCalledWith(remoteRecord)
     expect(mocks.db.applyRemoteRecord).toHaveBeenCalledWith(remoteRecord, { storageV2Mirrored: true })
     expect(mocks.storageV2.upsertSyncConflict).toHaveBeenCalled()
     expect(mocks.db.createConflict).toHaveBeenCalled()
     expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith('record:settings:theme:hash', 'remote-hash')
-    expect(mocks.backupManager.backup).toHaveBeenCalledWith(
-      undefined,
-      summary.joinSafetySnapshotFileName,
-      undefined,
-      false
-    )
+    expect(mocks.backupManager.backup).not.toHaveBeenCalled()
     expect(mocks.webdav.putFileContents.mock.calls.some((call) => String(call[1]).includes('local-default-hash'))).toBe(
       false
     )
   })
 
-  it('prunes stale local data sync temp backups when creating a join safety snapshot', async () => {
-    const staleJoinSafetyPath = '/tmp/cherry-studio-pi.data-sync.join-safety.local-device.1.zip'
-    const staleFullSnapshotPath = '/tmp/cherry-studio-pi.data-sync.local-device.1.zip'
+  it('prunes stale local data sync temp backups without creating a join safety snapshot by default', async () => {
+    const tempBackupDir = path.join(
+      process.env.TMPDIR || process.env.TEMP || process.env.TMP || '/tmp',
+      'cherry-studio',
+      'backup'
+    )
+    await fsp.mkdir(tempBackupDir, { recursive: true })
+    const staleJoinSafetyPath = path.join(tempBackupDir, 'cherry-studio-pi.data-sync.join-safety.local-device.1.zip')
+    const staleFullSnapshotPath = path.join(tempBackupDir, 'cherry-studio-pi.data-sync.local-device.1.zip')
     await fsp.writeFile(staleJoinSafetyPath, 'stale-join-safety')
     await fsp.writeFile(staleFullSnapshotPath, 'stale-full-snapshot')
 
@@ -1019,10 +1025,38 @@ describe('AppDataSyncService', () => {
 
     const summary = await new AppDataSyncService().syncNow(config)
 
-    expect(summary.joinSafetySnapshotPath).toBeTruthy()
+    expect(summary.joinSafetySnapshotCreated).toBe(false)
+    expect(summary.joinSafetySnapshotPath).toBeNull()
     expect(await pathExists(staleJoinSafetyPath)).toBe(false)
     expect(await pathExists(staleFullSnapshotPath)).toBe(false)
-    expect(await pathExists(summary.joinSafetySnapshotPath!)).toBe(true)
+    expect(mocks.backupManager.backup).not.toHaveBeenCalled()
+  })
+
+  it('creates a local join safety snapshot only when explicitly enabled', async () => {
+    process.env.CHERRY_STUDIO_DATA_SYNC_LOCAL_SAFETY_SNAPSHOT = '1'
+    const localRecord = {
+      ...remoteRecord,
+      value: { mode: 'local-default' },
+      valueHash: 'local-default-hash',
+      updatedAt: remoteRecord.updatedAt + 60_000,
+      deviceId: 'new-device'
+    }
+    mocks.db.listRecords.mockResolvedValue([localRecord])
+    mocks.db.getSyncState.mockResolvedValue(null)
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.joinSafetySnapshotCreated).toBe(true)
+    expect(summary.joinSafetySnapshotFileName).toMatch(
+      /^cherry-studio-pi\.data-sync\.join-safety\.local-device\.\d+\.zip$/
+    )
+    expect(summary.joinSafetySnapshotBytes).toBe(6)
+    expect(mocks.backupManager.backup).toHaveBeenCalledWith(
+      undefined,
+      summary.joinSafetySnapshotFileName,
+      undefined,
+      false
+    )
   })
 
   it('hydrates remote app records without per-record conflict audits when joining an existing sync space', async () => {
@@ -1067,7 +1101,7 @@ describe('AppDataSyncService', () => {
     expect(summary.downloaded).toBe(1)
     expect(summary.conflicts).toBe(0)
     expect(summary.resolvedConflicts).toBe(0)
-    expect(summary.joinSafetySnapshotCreated).toBe(true)
+    expect(summary.joinSafetySnapshotCreated).toBe(false)
     expect(mocks.storageV2.upsertRecordSnapshot).toHaveBeenCalledWith(remoteRecord)
     expect(mocks.db.applyRemoteRecord).toHaveBeenCalledWith(remoteRecord, { storageV2Mirrored: true })
     expect(mocks.storageV2.upsertSyncConflict).not.toHaveBeenCalled()
@@ -1078,7 +1112,7 @@ describe('AppDataSyncService', () => {
     )
   })
 
-  it('preserves local safety snapshot details when recording a failure after remote conflict data is applied', async () => {
+  it('does not create full local safety snapshots for failure summaries by default', async () => {
     const localRecord = {
       ...remoteRecord,
       value: { mode: 'local-default' },
@@ -1099,22 +1133,21 @@ describe('AppDataSyncService', () => {
       expect.objectContaining({
         status: 'failed',
         error: 'cleanup denied',
-        joinSafetySnapshotCreated: true,
-        joinSafetySnapshotFileName: expect.stringMatching(
-          /^cherry-studio-pi\.data-sync\.join-safety\.local-device\.\d+\.zip$/
-        ),
-        joinSafetySnapshotPath: expect.stringContaining('cherry-studio-pi.data-sync.join-safety.local-device'),
-        joinSafetySnapshotBytes: 6
+        joinSafetySnapshotCreated: false,
+        joinSafetySnapshotFileName: null,
+        joinSafetySnapshotPath: null,
+        joinSafetySnapshotBytes: 0
       })
     )
     expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith(
       'last-sync-summary',
       expect.objectContaining({
         status: 'failed',
-        joinSafetySnapshotCreated: true,
-        joinSafetySnapshotBytes: 6
+        joinSafetySnapshotCreated: false,
+        joinSafetySnapshotBytes: 0
       })
     )
+    expect(mocks.backupManager.backup).not.toHaveBeenCalled()
   })
 
   it('auto-resolves exact legacy app record conflicts with a deterministic content tie-breaker and audit', async () => {
