@@ -1,4 +1,5 @@
 import { OGCard } from '@renderer/components/OGCard'
+import { canFetchLinkPreviewMetadata } from '@renderer/utils/url'
 import { Popover } from 'antd'
 import React, { memo, useMemo, useState } from 'react'
 
@@ -19,6 +20,7 @@ const Hyperlink: React.FC<HyperLinkProps> = ({ children, href }) => {
   }, [href])
 
   if (!href) return children
+  if (!canFetchLinkPreviewMetadata(href)) return children
 
   return (
     <Popover

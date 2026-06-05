@@ -119,11 +119,9 @@ describe('Hyperlink', () => {
       </Hyperlink>
     )
 
-    // decodeURIComponent succeeds => "not/url" is displayed
+    expect(screen.queryByTestId('popover')).toBeNull()
     expect(screen.queryByTestId('favicon')).toBeNull()
-    // Since there's no hostname and no og:title, title shows empty, but text shows the URL
-    expect(screen.getByTestId('title')).toBeEmptyDOMElement()
-    expect(screen.getByTestId('text')).toHaveTextContent('not/url')
+    expect(screen.getByText('child')).toBeInTheDocument()
   })
 
   it('should not render favicon for non-http(s) scheme without hostname (mailto:)', () => {
@@ -133,10 +131,32 @@ describe('Hyperlink', () => {
       </Hyperlink>
     )
 
-    // Decoded to mailto:test@example.com, hostname is empty => no favicon
+    expect(screen.queryByTestId('popover')).toBeNull()
     expect(screen.queryByTestId('favicon')).toBeNull()
-    // Since there's no hostname and no og:title, title shows empty, but text shows the decoded URL
-    expect(screen.getByTestId('title')).toBeEmptyDOMElement()
-    expect(screen.getByTestId('text')).toHaveTextContent('mailto:test@example.com')
+    expect(screen.getByText('child')).toBeInTheDocument()
+  })
+
+  it('should not create a preview request for private network urls', () => {
+    render(
+      <Hyperlink href="http://192.168.1.100:8080/">
+        <span>child</span>
+      </Hyperlink>
+    )
+
+    expect(screen.queryByTestId('popover')).toBeNull()
+    expect(screen.queryByTestId('og-card')).toBeNull()
+    expect(screen.getByText('child')).toBeInTheDocument()
+  })
+
+  it('should not create a preview request when the url contains credential labels', () => {
+    render(
+      <Hyperlink href="http://example.com/%0A%0A%E8%B4%A6%E5%8F%B7%EF%BC%9Awebdav">
+        <span>child</span>
+      </Hyperlink>
+    )
+
+    expect(screen.queryByTestId('popover')).toBeNull()
+    expect(screen.queryByTestId('og-card')).toBeNull()
+    expect(screen.getByText('child')).toBeInTheDocument()
   })
 })

@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { normalizeWebDavConfig } from '@shared/webdavConfig'
 import type { WebDavConfig } from '@types'
 import https from 'https'
 import path from 'path'
@@ -13,17 +14,41 @@ import type {
 import { createClient } from 'webdav'
 
 const logger = loggerService.withContext('WebDav')
+const DEFAULT_BACKUP_WEBDAV_PATH = '/cherry-studio'
+
+function redactWebDavHostForLog(webdavHost: string) {
+  try {
+    const url = new URL(webdavHost)
+    url.username = ''
+    url.password = ''
+    return url.toString()
+  } catch {
+    return webdavHost.replace(/\s+/g, ' ')
+  }
+}
 
 export default class WebDav {
   public instance: WebDAVClient | undefined
   private webdavPath: string
 
   constructor(params: WebDavConfig) {
-    this.webdavPath = params.webdavPath || '/'
+    const normalizedConfig = normalizeWebDavConfig(params, {
+      defaultPath: DEFAULT_BACKUP_WEBDAV_PATH,
+      requireCredentials: true
+    })
 
-    this.instance = createClient(params.webdavHost, {
-      username: params.webdavUser,
-      password: params.webdavPass,
+    this.webdavPath = normalizedConfig.webdavPath || '/'
+
+    logger.info('Creating WebDAV client', {
+      host: redactWebDavHostForLog(normalizedConfig.webdavHost),
+      path: this.webdavPath,
+      hasUsername: Boolean(normalizedConfig.webdavUser),
+      hasPassword: Boolean(normalizedConfig.webdavPass)
+    })
+
+    this.instance = createClient(normalizedConfig.webdavHost, {
+      username: normalizedConfig.webdavUser,
+      password: normalizedConfig.webdavPass,
       maxBodyLength: Infinity,
       maxContentLength: Infinity,
       httpsAgent: new https.Agent({

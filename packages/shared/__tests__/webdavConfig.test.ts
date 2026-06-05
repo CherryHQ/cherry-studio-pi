@@ -61,6 +61,22 @@ describe('webdavConfig', () => {
     expect(config.webdavPath).toBe('/Cherry Studio Pi')
   })
 
+  it('strips encoded line-break credential tails from the URL before requests are built', () => {
+    const config = normalizeWebDavConfig(
+      {
+        webdavHost:
+          'http://192.168.1.100:8080/%0A%0A%E8%B4%A6%E5%8F%B7%EF%BC%9Awebdav%0A%E5%AF%86%E7%A0%81%EF%BC%9Atest-webdav-password',
+        webdavUser: 'webdav',
+        webdavPass: 'test-webdav-password'
+      },
+      { requireCredentials: true }
+    )
+
+    expect(config.webdavHost).toBe('http://192.168.1.100:8080')
+    expect(config.webdavUser).toBe('webdav')
+    expect(config.webdavPass).toBe('test-webdav-password')
+  })
+
   it('rejects data sync WebDAV config without credentials before anonymous requests are sent', () => {
     expect(() =>
       normalizeWebDavConfig(

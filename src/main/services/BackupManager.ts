@@ -18,6 +18,7 @@ import type { Stats } from 'node:fs'
 
 import { loggerService } from '@logger'
 import { IpcChannel } from '@shared/IpcChannel'
+import { normalizeWebDavConfig } from '@shared/webdavConfig'
 import type { WebDavConfig } from '@types'
 import type { S3Config } from '@types'
 import archiver from 'archiver'
@@ -39,6 +40,7 @@ import WebDav from './WebDav'
 import { windowService } from './WindowService'
 
 const logger = loggerService.withContext('BackupManager')
+const DEFAULT_BACKUP_WEBDAV_PATH = '/cherry-studio'
 
 interface CopyDirOptions {
   dereferenceSymlinks: boolean
@@ -1028,17 +1030,21 @@ class BackupManager {
    * @returns WebDav instance
    */
   private getWebDavInstance(config: WebDavConfig): WebDav {
+    const normalizedConfig = normalizeWebDavConfig(config, {
+      defaultPath: DEFAULT_BACKUP_WEBDAV_PATH,
+      requireCredentials: true
+    })
     // Check if core connection config has changed
-    const configChanged = !this.isWebDavConfigEqual(this.cachedWebdavConnectionConfig, config)
+    const configChanged = !this.isWebDavConfigEqual(this.cachedWebdavConnectionConfig, normalizedConfig)
 
     if (configChanged || !this.webdavInstance) {
-      this.webdavInstance = new WebDav(config)
+      this.webdavInstance = new WebDav(normalizedConfig)
       // Only cache connection-related config fields
       this.cachedWebdavConnectionConfig = {
-        webdavHost: config.webdavHost,
-        webdavUser: config.webdavUser,
-        webdavPass: config.webdavPass,
-        webdavPath: config.webdavPath
+        webdavHost: normalizedConfig.webdavHost,
+        webdavUser: normalizedConfig.webdavUser,
+        webdavPass: normalizedConfig.webdavPass,
+        webdavPath: normalizedConfig.webdavPath
       }
       logger.debug('[BackupManager] Created new WebDav instance')
     } else {

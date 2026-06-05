@@ -554,18 +554,20 @@ const DataSyncSettings: FC = () => {
   const summary = status?.lastSummary
   const effectiveSyncPath = getEffectiveSyncPath(webdavPath)
 
-  const loadRemoteDirectories = async (path: string) => {
+  const loadRemoteDirectories = async (path: string, configOverride?: ReturnType<typeof normalizeWebDavConfig>) => {
     let normalizedConfig: ReturnType<typeof normalizeWebDavConfig>
     try {
-      normalizedConfig = normalizeWebDavConfig(
-        {
-          webdavHost,
-          webdavUser,
-          webdavPass,
-          webdavPath
-        },
-        { defaultPath: DEFAULT_REMOTE_PATH, requireCredentials: true }
-      )
+      normalizedConfig =
+        configOverride ??
+        normalizeWebDavConfig(
+          {
+            webdavHost,
+            webdavUser,
+            webdavPass,
+            webdavPath
+          },
+          { defaultPath: DEFAULT_REMOTE_PATH, requireCredentials: true }
+        )
     } catch (error) {
       window.toast.error(getErrorMessage(error))
       return
@@ -598,8 +600,8 @@ const DataSyncSettings: FC = () => {
           domain: 'dataSync',
           details: {
             remotePath: path,
-            webdavHost,
-            webdavPath: normalizeRemotePathInput(webdavPath)
+            webdavHost: normalizedConfig.webdavHost,
+            webdavPath: normalizedConfig.webdavPath
           }
         },
         { showToast: true }
@@ -618,7 +620,7 @@ const DataSyncSettings: FC = () => {
     const normalizedConfig = trySaveWebDavConfig()
     if (!normalizedConfig) return
     setDirectoryBrowserOpen(true)
-    void loadRemoteDirectories(getDirectoryBrowserStartPath(normalizedConfig.webdavPath))
+    void loadRemoteDirectories(getDirectoryBrowserStartPath(normalizedConfig.webdavPath), normalizedConfig)
   }
 
   const selectRemotePath = (path: string) => {

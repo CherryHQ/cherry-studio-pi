@@ -422,6 +422,27 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('never forwards encoded credential tails as the WebDAV request URL', async () => {
+    await new AppDataSyncService().listRemoteDirectories(
+      {
+        webdavHost:
+          'http://192.168.1.100:8080/%0A%0A%E8%B4%A6%E5%8F%B7%EF%BC%9Awebdav%0A%E5%AF%86%E7%A0%81%EF%BC%9Atest-webdav-password',
+        webdavUser: 'webdav',
+        webdavPass: 'test-webdav-password',
+        webdavPath: '/remote-root'
+      },
+      '/'
+    )
+
+    expect(createClient).toHaveBeenLastCalledWith(
+      'http://192.168.1.100:8080',
+      expect.objectContaining({
+        username: 'webdav',
+        password: 'test-webdav-password'
+      })
+    )
+  })
+
   it('rejects data sync WebDAV access without credentials before sending anonymous requests', async () => {
     await expect(
       new AppDataSyncService().checkWriteAccess({

@@ -20,6 +20,7 @@ const HOST_PATTERN =
   /\b(?:localhost|(?:\d{1,3}\.){3}\d{1,3}|[a-z\d](?:[a-z\d-]*[a-z\d])?(?:\.[a-z\d](?:[a-z\d-]*[a-z\d])?)+)(?::\d{1,5})?(?:\/[^\s"'<>，。；]*)?/i
 const FIELD_LABEL_PATTERN =
   'webdav\\s*url|webdav\\s*host|server(?:\\s*address)?|sync(?:\\s*directory)?|sync(?:\\s*path)?|username|password|protocol|account|token|host|pass|path|port|user|服务器地址|同步目录|同步路径|服务地址|用户名|服务器|协议|账户|账号|密码|口令|路径|地址|端口|用户'
+const ENCODED_LINE_BREAK_PATTERN = /%(?:0d|0a)/i
 
 function readLabeledValue(text: string, labels: string[]) {
   const linePattern = new RegExp(`^\\s*(?:${labels.join('|')})\\s*[:：=]\\s*(.+?)\\s*$`, 'i')
@@ -44,6 +45,16 @@ function hasCredentialLabel(text: string) {
   )
 }
 
+function stripStructuredTailFromHost(value: string) {
+  const trimmed = value.trim()
+  const controlIndex = trimmed.search(/[\r\n]/)
+  const encodedLineBreakIndex = trimmed.search(ENCODED_LINE_BREAK_PATTERN)
+  const indexes = [controlIndex, encodedLineBreakIndex].filter((index) => index >= 0)
+
+  if (indexes.length === 0) return trimmed
+  return trimmed.slice(0, Math.min(...indexes)).trim()
+}
+
 function decodeUrlCredential(value: string) {
   try {
     return decodeURIComponent(value)
@@ -54,7 +65,7 @@ function decodeUrlCredential(value: string) {
 
 export function normalizeWebDavHost(webdavHost?: string) {
   const parsed = parseWebDavInput(webdavHost ?? '')
-  const trimmed = parsed.webdavHost.trim()
+  const trimmed = stripStructuredTailFromHost(parsed.webdavHost)
   if (!trimmed) return ''
   return /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
 }
@@ -92,6 +103,7 @@ export function parseWebDavInput(input?: string): ParsedWebDavInput {
   if (!webdavHost) {
     webdavHost = text.match(URL_PATTERN)?.[0] ?? ''
   }
+  webdavHost = stripStructuredTailFromHost(webdavHost)
 
   if (!webdavHost && server) {
     const scheme = protocol && /^[a-z][a-z\d+.-]*$/i.test(protocol) ? protocol : 'https'
@@ -121,7 +133,7 @@ export function normalizeWebDavConfig<T extends WebDavLikeConfig>(
 ): T & Required<WebDavLikeConfig> {
   const defaultPath = options.defaultPath ?? DEFAULT_WEBDAV_SYNC_PATH
   const parsedFromHost = parseWebDavInput(config.webdavHost)
-  const rawHost = (parsedFromHost.webdavHost || config.webdavHost || '').trim()
+  const rawHost = stripStructuredTailFromHost(parsedFromHost.webdavHost || config.webdavHost || '')
   const userFromConfig = config.webdavUser?.trim() ?? ''
   const passFromConfig = config.webdavPass?.trim() ?? ''
   let webdavUser = userFromConfig || parsedFromHost.webdavUser

@@ -18,6 +18,7 @@ import {
   setWebdavSyncInterval as _setWebdavSyncInterval,
   setWebdavUser as _setWebdavUser
 } from '@renderer/store/settings'
+import { normalizeWebDavConfig, normalizeWebDavHost, parseWebDavInput } from '@shared/webdavConfig'
 import { Button, Input, Switch, Tooltip } from 'antd'
 import dayjs from 'dayjs'
 import type { FC } from 'react'
@@ -25,6 +26,8 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
+
+const DEFAULT_BACKUP_WEBDAV_PATH = '/cherry-studio'
 
 const WebDavSettings: FC = () => {
   const {
@@ -59,6 +62,10 @@ const WebDavSettings: FC = () => {
   // 把之前备份的文件定时上传到 webdav，首先先配置 webdav 的 host, port, user, pass, path
 
   const onSyncIntervalChange = (value: number) => {
+    if (value > 0 && !trySaveWebDavConfig()) {
+      return
+    }
+
     setSyncInterval(value)
     dispatch(_setWebdavSyncInterval(value))
     if (value === 0) {
@@ -112,7 +119,69 @@ const WebDavSettings: FC = () => {
   const { isModalVisible, handleBackup, handleCancel, backuping, customFileName, setCustomFileName, showBackupModal } =
     useWebdavBackupModal()
 
+  const saveWebDavConfig = () => {
+    const normalized = normalizeWebDavConfig(
+      {
+        webdavHost,
+        webdavUser,
+        webdavPass,
+        webdavPath
+      },
+      { defaultPath: DEFAULT_BACKUP_WEBDAV_PATH, requireCredentials: true }
+    )
+
+    setWebdavHost(normalized.webdavHost)
+    setWebdavUser(normalized.webdavUser)
+    setWebdavPass(normalized.webdavPass)
+    setWebdavPath(normalized.webdavPath)
+    dispatch(_setWebdavHost(normalized.webdavHost))
+    dispatch(_setWebdavUser(normalized.webdavUser))
+    dispatch(_setWebdavPass(normalized.webdavPass))
+    dispatch(_setWebdavPath(normalized.webdavPath))
+    return normalized
+  }
+
+  const trySaveWebDavConfig = () => {
+    try {
+      return saveWebDavConfig()
+    } catch (error) {
+      window.toast.error(error instanceof Error ? error.message : String(error))
+      return null
+    }
+  }
+
+  const applyStructuredWebDavInput = (value: string) => {
+    const parsed = parseWebDavInput(value)
+    if (!parsed.structured) return false
+
+    const normalized = normalizeWebDavConfig(
+      {
+        webdavHost: parsed.webdavHost,
+        webdavUser: parsed.webdavUser || webdavUser,
+        webdavPass: parsed.webdavPass || webdavPass,
+        webdavPath: parsed.webdavPath || webdavPath
+      },
+      { defaultPath: DEFAULT_BACKUP_WEBDAV_PATH, requireCredentials: true }
+    )
+
+    setWebdavHost(normalized.webdavHost)
+    setWebdavUser(normalized.webdavUser)
+    setWebdavPass(normalized.webdavPass)
+    setWebdavPath(normalized.webdavPath)
+    dispatch(_setWebdavHost(normalized.webdavHost))
+    dispatch(_setWebdavUser(normalized.webdavUser))
+    dispatch(_setWebdavPass(normalized.webdavPass))
+    dispatch(_setWebdavPath(normalized.webdavPath))
+    return true
+  }
+
+  const showSavedBackupModal = () => {
+    if (!trySaveWebDavConfig()) return
+    void showBackupModal()
+  }
+
   const showBackupManager = () => {
+    if (!trySaveWebDavConfig()) return
     setBackupManagerVisible(true)
   }
 
@@ -129,10 +198,32 @@ const WebDavSettings: FC = () => {
         <Input
           placeholder={t('settings.data.webdav.host.placeholder')}
           value={webdavHost}
-          onChange={(e) => setWebdavHost(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value
+            try {
+              if (applyStructuredWebDavInput(value)) {
+                return
+              }
+            } catch {
+              // Keep the raw value while the user is still editing; validation runs on blur/actions.
+            }
+            setWebdavHost(value)
+          }}
           style={{ width: 250 }}
-          type="url"
-          onBlur={() => dispatch(_setWebdavHost(webdavHost || ''))}
+          inputMode="url"
+          type="text"
+          onBlur={() => {
+            try {
+              if (applyStructuredWebDavInput(webdavHost || '')) {
+                return
+              }
+              const normalizedHost = normalizeWebDavHost(webdavHost)
+              setWebdavHost(normalizedHost)
+              dispatch(_setWebdavHost(normalizedHost))
+            } catch (error) {
+              window.toast.error(error instanceof Error ? error.message : String(error))
+            }
+          }}
         />
       </SettingRow>
       <SettingDivider />
@@ -172,7 +263,7 @@ const WebDavSettings: FC = () => {
       <SettingRow>
         <SettingRowTitle>{t('settings.general.backup.title')}</SettingRowTitle>
         <HStack gap="5px" justifyContent="space-between">
-          <Button onClick={showBackupModal} icon={<SaveOutlined />} loading={backuping}>
+          <Button onClick={showSavedBackupModal} icon={<SaveOutlined />} loading={backuping}>
             {t('settings.data.webdav.backup.button')}
           </Button>
           <Button onClick={showBackupManager} icon={<FolderOpenOutlined />} disabled={!webdavHost}>

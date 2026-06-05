@@ -470,6 +470,37 @@ describe('DataSyncSettings', () => {
     expect(await screen.findByText('/dav')).toBeTruthy()
   })
 
+  it('opens the remote directory browser with the normalized current form config', async () => {
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.change(screen.getByPlaceholderText('https://example.com/dav'), {
+      target: {
+        value:
+          'http://192.168.1.100:8080/%0A%0A%E8%B4%A6%E5%8F%B7%EF%BC%9Awebdav%0A%E5%AF%86%E7%A0%81%EF%BC%9Atest-webdav-password'
+      }
+    })
+    fireEvent.change(screen.getByPlaceholderText('settings.data.data_sync.username_placeholder'), {
+      target: { value: 'webdav' }
+    })
+    fireEvent.change(screen.getByPlaceholderText('settings.data.data_sync.password_placeholder'), {
+      target: { value: 'test-webdav-password' }
+    })
+    fireEvent.click(screen.getByText('settings.data.data_sync.remote_path_browse'))
+
+    await waitFor(() =>
+      expect(mocks.listRemoteDirectories).toHaveBeenCalledWith(
+        expect.objectContaining({
+          webdavHost: 'http://192.168.1.100:8080',
+          webdavUser: 'webdav',
+          webdavPass: 'test-webdav-password',
+          webdavPath: '/cherry-studio-pi'
+        }),
+        '/'
+      )
+    )
+  })
+
   it('shows directory browser failures without leaving the directory loader stuck', async () => {
     mocks.listRemoteDirectories.mockRejectedValueOnce(
       new Error('同步数据失败：当前账号没有访问这个 WebDAV 目录的权限。')

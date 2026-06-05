@@ -435,6 +435,17 @@ function normalizeBasePath(webdavPath?: string) {
     : path.posix.join(basePath, 'sync', 'v1')
 }
 
+function redactWebDavHostForLog(webdavHost: string) {
+  try {
+    const url = new URL(webdavHost)
+    url.username = ''
+    url.password = ''
+    return url.toString()
+  } catch {
+    return webdavHost.replace(/\s+/g, ' ')
+  }
+}
+
 function parentDirectoryPath(directoryPath: string) {
   if (directoryPath === '/') return null
   return path.posix.dirname(directoryPath) || '/'
@@ -853,6 +864,15 @@ export class AppDataSyncService {
   private createWebDavClient(config: WebDavConfig) {
     const normalizedConfig = this.normalizeSyncWebDavConfig(config)
     const webdavHost = normalizeWebDavHost(normalizedConfig.webdavHost)
+    const basePath = normalizeBasePath(normalizedConfig.webdavPath)
+
+    logger.info('Creating data sync WebDAV client', {
+      host: redactWebDavHostForLog(webdavHost),
+      basePath,
+      hasUsername: Boolean(normalizedConfig.webdavUser),
+      hasPassword: Boolean(normalizedConfig.webdavPass)
+    })
+
     const client = createClient(webdavHost, {
       username: normalizedConfig.webdavUser,
       password: normalizedConfig.webdavPass,
@@ -863,13 +883,22 @@ export class AppDataSyncService {
 
     return {
       client,
-      basePath: normalizeBasePath(normalizedConfig.webdavPath)
+      basePath
     }
   }
 
   private createRawWebDavClient(config: WebDavConfig) {
     const normalizedConfig = this.normalizeSyncWebDavConfig(config)
-    return createClient(normalizeWebDavHost(normalizedConfig.webdavHost), {
+    const webdavHost = normalizeWebDavHost(normalizedConfig.webdavHost)
+
+    logger.info('Creating data sync WebDAV directory client', {
+      host: redactWebDavHostForLog(webdavHost),
+      path: normalizedConfig.webdavPath,
+      hasUsername: Boolean(normalizedConfig.webdavUser),
+      hasPassword: Boolean(normalizedConfig.webdavPass)
+    })
+
+    return createClient(webdavHost, {
       username: normalizedConfig.webdavUser,
       password: normalizedConfig.webdavPass,
       maxBodyLength: Infinity,
