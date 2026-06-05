@@ -1177,6 +1177,7 @@ describe('AppDataSyncService local WebDAV integration', () => {
     await AppDataDatabase.close()
     storageV2Database.close()
     delete process.env.CHERRY_STUDIO_STORAGE_V2_ROOT
+    delete process.env.CHERRY_STUDIO_DATA_SYNC_REMOTE_SNAPSHOT
     await server?.close()
     await fsp.rm(tempRoot, { recursive: true, force: true })
     vi.restoreAllMocks()
@@ -1619,7 +1620,7 @@ describe('AppDataSyncService local WebDAV integration', () => {
     expect(storageRecordFiles).toHaveLength(0)
     expect(bundleFiles).toHaveLength(1)
     expect(temporaryFiles).toHaveLength(0)
-    expect(files.filter((file) => file.startsWith('backups/'))).toHaveLength(1)
+    expect(files.filter((file) => file.startsWith('backups/'))).toHaveLength(0)
   })
 
   it('handles unicode and spaced WebDAV directory paths', async () => {

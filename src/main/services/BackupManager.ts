@@ -43,6 +43,7 @@ const logger = loggerService.withContext('BackupManager')
 interface CopyDirOptions {
   dereferenceSymlinks: boolean
   sourceRootRealPath?: string
+  skipGeneratedDataArtifacts?: boolean
 }
 
 interface EffectiveEntryStats {
@@ -227,13 +228,14 @@ class BackupManager {
 
         if (await fs.pathExists(sourcePath)) {
           const storageV2SnapshotPath = await this.createStorageV2SnapshotIfAvailable(sourcePath)
-          const totalSize = await this.getDirSize(sourcePath, { dereferenceSymlinks: true })
+          const dataCopyOptions = { dereferenceSymlinks: true, skipGeneratedDataArtifacts: true }
+          const totalSize = await this.getDirSize(sourcePath, dataCopyOptions)
 
           await this.copyDirWithProgress(
             sourcePath,
             tempDataDir,
             this.createCopyProgressHandler(totalSize, 52, 80, 'copying_files', onProgress),
-            { dereferenceSymlinks: true }
+            dataCopyOptions
           )
           await this.replaceStorageV2DatabaseCopy(tempDataDir, storageV2SnapshotPath)
         }
@@ -325,14 +327,15 @@ class BackupManager {
         const storageV2SnapshotPath = await this.createStorageV2SnapshotIfAvailable(sourcePath)
 
         // Get total size of source directory
-        const totalSize = await this.getDirSize(sourcePath, { dereferenceSymlinks: true })
+        const dataCopyOptions = { dereferenceSymlinks: true, skipGeneratedDataArtifacts: true }
+        const totalSize = await this.getDirSize(sourcePath, dataCopyOptions)
 
         // Use streaming copy
         await this.copyDirWithProgress(
           sourcePath,
           tempDataDir,
           this.createCopyProgressHandler(totalSize, 0, 50, 'copying_files', onProgress),
-          { dereferenceSymlinks: true }
+          dataCopyOptions
         )
         await this.replaceStorageV2DatabaseCopy(tempDataDir, storageV2SnapshotPath)
 
@@ -957,6 +960,9 @@ class BackupManager {
 
       for (const item of items) {
         const fullPath = path.join(dirPath, item.name)
+        if (this.shouldSkipGeneratedDataBackupEntry(fullPath, copyOptions)) {
+          continue
+        }
         const entry = await this.getEffectiveEntryStats(fullPath, copyOptions)
 
         if (!entry) {
@@ -1104,6 +1110,9 @@ class BackupManager {
         for (const item of items) {
           const sourcePath = path.join(src, item.name)
           const destPath = path.join(dest, item.name)
+          if (this.shouldSkipGeneratedDataBackupEntry(sourcePath, copyOptions)) {
+            continue
+          }
           const entry = await this.getEffectiveEntryStats(sourcePath, copyOptions)
 
           if (!entry) {
@@ -1149,6 +1158,27 @@ class BackupManager {
 
     activeDirectoryRealPaths.add(realPath)
     return realPath
+  }
+
+  private shouldSkipGeneratedDataBackupEntry(sourcePath: string, options: CopyDirOptions) {
+    if (!options.skipGeneratedDataArtifacts || !options.sourceRootRealPath) {
+      return false
+    }
+
+    const relativePath = path.relative(options.sourceRootRealPath, sourcePath).replace(/\\/g, '/')
+    const shouldSkip =
+      relativePath === 'snapshots' ||
+      relativePath.startsWith('snapshots/') ||
+      /^legacy\/data-sync-runtime-projection-[^/]+(?:\/|$)/.test(relativePath)
+
+    if (shouldSkip) {
+      logger.info('[backupDirect] Skipping generated data artifact during backup copy', {
+        path: sourcePath,
+        relativePath
+      })
+    }
+
+    return shouldSkip
   }
 
   private async getEffectiveEntryStats(

@@ -206,6 +206,7 @@ const EMPTY_SUMMARY: DataSyncSummary = {
 }
 
 const SNAPSHOT_UPLOAD_INTERVAL_MS = 24 * 60 * 60 * 1000
+const REMOTE_FULL_SNAPSHOT_OPT_IN_ENV = 'CHERRY_STUDIO_DATA_SYNC_REMOTE_SNAPSHOT'
 const DATA_SYNC_REMOTE_ROOT = '/cherry-studio-pi'
 const DATA_SYNC_SUFFIX = '/sync/v1'
 const SYNC_SPACE_KEY_FORMAT = 'cherry-sync-space-key-v1' as const
@@ -404,6 +405,10 @@ function normalizeRemoteRelativePath(value: string, label = 'Remote data sync pa
 
 function normalizeRemoteSnapshotPath(value: string) {
   return normalizeRemoteRelativePath(value, 'Remote data snapshot path')
+}
+
+function shouldAttemptRemoteFullSnapshotUpload() {
+  return process.env[REMOTE_FULL_SNAPSHOT_OPT_IN_ENV] === '1'
 }
 
 function sha256Buffer(value: Buffer) {
@@ -1764,6 +1769,10 @@ export class AppDataSyncService {
   }
 
   private shouldUploadFullSnapshot(db: AppDataDatabase, manifest: RemoteManifest, now: number) {
+    if (!shouldAttemptRemoteFullSnapshotUpload()) {
+      return false
+    }
+
     const deviceId = db.getDeviceId()
     const existingSnapshot = Object.values(manifest.snapshots ?? {})
       .filter((snapshot) => snapshot.deviceId === deviceId)
@@ -1913,6 +1922,10 @@ export class AppDataSyncService {
       const rawManifest = await this.readJson<RemoteManifest>(client, manifestPath, { throwOnInvalidJson: true })
       const manifest = this.normalizeManifest(rawManifest)
       const manifestBaseline = this.captureManifestBaseline(rawManifest, manifest)
+      if (!shouldAttemptRemoteFullSnapshotUpload()) {
+        manifest.snapshots = {}
+        manifest.latestSnapshot = null
+      }
       const hadUsableSyncSpaceBeforeSync = isUsableSyncSpace(manifest.syncSpace)
       const syncSpace = this.ensureSyncSpace(manifest, summary.lastSyncAt)
       summary.syncSpaceId = syncSpace.id
@@ -2082,9 +2095,7 @@ export class AppDataSyncService {
         try {
           await this.pushFullSnapshot(client, basePath, db, manifest, summary)
         } catch (error) {
-          throw new Error(
-            `安全快照上传失败。为避免发布缺少兜底恢复点的同步状态，本次同步已停止：${errorMessage(error)}`
-          )
+          logger.warn('Skipping optional remote full data sync snapshot after upload failure', error as Error)
         }
       }
 

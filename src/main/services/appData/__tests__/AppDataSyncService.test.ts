@@ -251,6 +251,7 @@ function mockDirectoryContentsFromRemoteFiles() {
 describe('AppDataSyncService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    delete process.env.CHERRY_STUDIO_DATA_SYNC_REMOTE_SNAPSHOT
     mocks.remoteFiles.clear()
     mocks.db.listRecords.mockResolvedValue([])
     mocks.db.getSyncState.mockResolvedValue(null)
@@ -1277,7 +1278,32 @@ describe('AppDataSyncService', () => {
     )
   })
 
-  it('uploads a full data snapshot even when app records are empty', async () => {
+  it('does not upload optional full data snapshots by default', async () => {
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
+      if (mocks.remoteFiles.has(filePath)) {
+        return mocks.remoteFiles.get(filePath)
+      }
+
+      if (filePath.endsWith('/manifest.json')) {
+        return JSON.stringify({ version: 1, updatedAt: 0, records: {} })
+      }
+      throw new Error(`Unexpected WebDAV read: ${filePath}`)
+    })
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.status).toBe('success')
+    expect(summary.snapshotUploaded).toBe(false)
+    expect(mocks.backupManager.backup).not.toHaveBeenCalled()
+    expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
+      expect.stringContaining('/manifest.json'),
+      expect.stringContaining('"syncSpace"'),
+      { overwrite: true }
+    )
+  })
+
+  it('uploads an optional full data snapshot when explicitly enabled', async () => {
+    process.env.CHERRY_STUDIO_DATA_SYNC_REMOTE_SNAPSHOT = '1'
     mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
       if (mocks.remoteFiles.has(filePath)) {
         return mocks.remoteFiles.get(filePath)
@@ -1338,7 +1364,7 @@ describe('AppDataSyncService', () => {
       '/remote-root/sync/v1/.cherry-studio-pi-storage-write-test-stale.tmp'
     )
     expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/records/settings/stale-hash.json')
-    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/backups/old-device-snapshot.zip')
+    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/backups')
     expect(mocks.webdav.deleteFile).not.toHaveBeenCalledWith('/remote-root/sync/v1/records/settings/theme.json')
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/.tmp-manifest.json-stale.json')).toBe(false)
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/.tmp-.sync.lock.json-stale.json')).toBe(false)
@@ -1431,7 +1457,8 @@ describe('AppDataSyncService', () => {
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/manifest.json')).toBe(true)
   })
 
-  it('fails safely when the required safety snapshot upload is temporarily unavailable', async () => {
+  it('keeps data sync successful when the optional full snapshot upload is unavailable', async () => {
+    process.env.CHERRY_STUDIO_DATA_SYNC_REMOTE_SNAPSHOT = '1'
     mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
       if (mocks.remoteFiles.has(filePath)) {
         return mocks.remoteFiles.get(filePath)
@@ -1453,9 +1480,11 @@ describe('AppDataSyncService', () => {
       return true
     })
 
-    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('安全快照上传失败')
+    const summary = await new AppDataSyncService().syncNow(config)
 
-    expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith('last-sync-summary', expect.anything())
+    expect(summary.status).toBe('success')
+    expect(summary.snapshotUploaded).toBe(false)
+    expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith('last-sync-summary', expect.any(Object))
   })
 
   it('skips full data snapshots when this device already uploaded a fresh one', async () => {

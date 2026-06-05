@@ -336,6 +336,79 @@ describe('BackupManager.copyDirWithProgress - Symlink Handling', () => {
     expect(onProgress).toHaveBeenCalledWith(5)
   })
 
+  it('should skip generated Data artifacts when staging backup files', async () => {
+    vi.mocked(fs.readdir).mockImplementation(async (dir) => {
+      const dirPath = String(dir)
+      if (dirPath === '/data') {
+        return [
+          createDirent('main.db'),
+          createDirent('snapshots'),
+          createDirent('legacy'),
+          createDirent('Agents')
+        ] as never
+      }
+      if (dirPath === '/data/snapshots') {
+        return [createDirent('old-direct-backup.db')] as never
+      }
+      if (dirPath === '/data/legacy') {
+        return [createDirent('data-sync-runtime-projection-1780627569906'), createDirent('manual-archive')] as never
+      }
+      if (dirPath === '/data/legacy/data-sync-runtime-projection-1780627569906') {
+        return [createDirent('agents.db')] as never
+      }
+      if (dirPath === '/data/legacy/manual-archive') {
+        return [createDirent('notes.json')] as never
+      }
+      if (dirPath === '/data/Agents') {
+        return [createDirent('SOUL.md')] as never
+      }
+      return [] as never
+    })
+    vi.mocked(fs.lstat).mockImplementation(async (entryPath) => {
+      const sourcePath = String(entryPath)
+      if (
+        sourcePath === '/data/snapshots' ||
+        sourcePath === '/data/legacy' ||
+        sourcePath === '/data/legacy/data-sync-runtime-projection-1780627569906' ||
+        sourcePath === '/data/legacy/manual-archive' ||
+        sourcePath === '/data/Agents'
+      ) {
+        return createStats('directory') as never
+      }
+      return createStats('file', 5) as never
+    })
+
+    const onProgress = vi.fn()
+
+    await (backupManager as any).copyDirWithProgress('/data', '/dest', onProgress, {
+      dereferenceSymlinks: true,
+      skipGeneratedDataArtifacts: true
+    })
+
+    expect(fs.copy).toHaveBeenCalledWith('/data/main.db', '/dest/main.db')
+    expect(fs.copy).toHaveBeenCalledWith(
+      '/data/legacy/manual-archive/notes.json',
+      '/dest/legacy/manual-archive/notes.json'
+    )
+    expect(fs.copy).toHaveBeenCalledWith('/data/Agents/SOUL.md', '/dest/Agents/SOUL.md')
+    expect(fs.copy).not.toHaveBeenCalledWith(
+      '/data/snapshots/old-direct-backup.db',
+      '/dest/snapshots/old-direct-backup.db'
+    )
+    expect(fs.copy).not.toHaveBeenCalledWith(
+      '/data/legacy/data-sync-runtime-projection-1780627569906/agents.db',
+      '/dest/legacy/data-sync-runtime-projection-1780627569906/agents.db'
+    )
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping generated data artifact'),
+      expect.objectContaining({ relativePath: 'snapshots' })
+    )
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping generated data artifact'),
+      expect.objectContaining({ relativePath: 'legacy/data-sync-runtime-projection-1780627569906' })
+    )
+  })
+
   it('should skip symlinks during restore copy', async () => {
     vi.mocked(fs.readdir).mockResolvedValue([createDirent('restore-link')] as never)
     vi.mocked(fs.lstat).mockResolvedValue(createStats('symlink') as never)
