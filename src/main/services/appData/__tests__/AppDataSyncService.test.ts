@@ -3,7 +3,7 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 
 import type { WebDavConfig } from '@types'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.unmock('node:fs')
 
@@ -190,6 +190,10 @@ async function normalizeUploadedContents(contents: unknown) {
   return contents
 }
 
+async function pathExists(filePath: string) {
+  return Boolean(await fsp.stat(filePath).catch(() => null))
+}
+
 const remoteRecord = {
   scope: 'settings',
   key: 'theme',
@@ -270,6 +274,15 @@ function mockDirectoryContentsFromRemoteFiles() {
 }
 
 describe('AppDataSyncService', () => {
+  afterEach(async () => {
+    const tempEntries = await fsp.readdir('/tmp').catch(() => [])
+    await Promise.all(
+      tempEntries
+        .filter((entry) => /^cherry-studio-pi\.data-sync\..+\.zip$/.test(entry))
+        .map((entry) => fsp.rm(path.join('/tmp', entry), { force: true }))
+    )
+  })
+
   beforeEach(async () => {
     vi.useRealTimers()
     vi.clearAllMocks()
@@ -986,6 +999,30 @@ describe('AppDataSyncService', () => {
     expect(mocks.webdav.putFileContents.mock.calls.some((call) => String(call[1]).includes('local-default-hash'))).toBe(
       false
     )
+  })
+
+  it('prunes stale local data sync temp backups when creating a join safety snapshot', async () => {
+    const staleJoinSafetyPath = '/tmp/cherry-studio-pi.data-sync.join-safety.local-device.1.zip'
+    const staleFullSnapshotPath = '/tmp/cherry-studio-pi.data-sync.local-device.1.zip'
+    await fsp.writeFile(staleJoinSafetyPath, 'stale-join-safety')
+    await fsp.writeFile(staleFullSnapshotPath, 'stale-full-snapshot')
+
+    const localRecord = {
+      ...remoteRecord,
+      value: { mode: 'local-default' },
+      valueHash: 'local-default-hash',
+      updatedAt: remoteRecord.updatedAt + 60_000,
+      deviceId: 'new-device'
+    }
+    mocks.db.listRecords.mockResolvedValue([localRecord])
+    mocks.db.getSyncState.mockResolvedValue(null)
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.joinSafetySnapshotPath).toBeTruthy()
+    expect(await pathExists(staleJoinSafetyPath)).toBe(false)
+    expect(await pathExists(staleFullSnapshotPath)).toBe(false)
+    expect(await pathExists(summary.joinSafetySnapshotPath!)).toBe(true)
   })
 
   it('hydrates remote app records without per-record conflict audits when joining an existing sync space', async () => {

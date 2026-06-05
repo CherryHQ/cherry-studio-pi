@@ -95,16 +95,16 @@ function isWriteOperation(operation: string) {
 
 function isActionableDataSyncMessage(message: string) {
   return (
-    /^安全快照上传失败/.test(message) ||
-    /^远端旧同步文件清理失败/.test(message) ||
+    message.startsWith('安全快照上传失败') ||
+    message.startsWith('远端旧同步文件清理失败') ||
     /^远端同步记录(缺失|校验失败)/.test(message) ||
-    /^远端同步状态/.test(message) ||
-    /^远端安全快照/.test(message) ||
+    message.startsWith('远端同步状态') ||
+    message.startsWith('远端安全快照') ||
     /^远端 Storage v2 (数据包|记录|manifest)/.test(message) ||
-    /^远端附件文件/.test(message) ||
-    /^本地附件文件/.test(message) ||
-    /^远端敏感配置/.test(message) ||
-    /^远端数据已同步到本机/.test(message) ||
+    message.startsWith('远端附件文件') ||
+    message.startsWith('本地附件文件') ||
+    message.startsWith('远端敏感配置') ||
+    message.startsWith('远端数据已同步到本机') ||
     /^Storage v2 (记录引用了|数据中存在)/.test(message)
   )
 }

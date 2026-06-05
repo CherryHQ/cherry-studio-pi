@@ -308,6 +308,9 @@ const DATA_SYNC_REMOTE_ROOT = '/cherry-studio-pi'
 const DATA_SYNC_SUFFIX = '/sync/v1'
 const SYNC_SPACE_KEY_FORMAT = 'cherry-sync-space-key-v1' as const
 const SYNC_SPACE_SECRET_ENCRYPTION = 'cherry-webdav-secret-sync-aes-256-gcm' as const
+const DATA_SYNC_TEMP_BACKUP_FILE_PATTERN = /^cherry-studio-pi\.data-sync\..+\.zip$/
+const DATA_SYNC_JOIN_SAFETY_FILE_PATTERN = /^cherry-studio-pi\.data-sync\.join-safety\..+\.zip$/
+const DATA_SYNC_JOIN_SAFETY_LOCAL_RETENTION = 1
 const STORAGE_V2_RUNTIME_PROJECTION_HASH_KEY = 'storage-v2-runtime-projection-hash'
 const NOTES_REMOTE_ARTIFACT_ROOT = 'notes'
 const NOTES_SYNC_STATE_PREFIX = 'notes-file'
@@ -544,6 +547,18 @@ function snapshotFileName(deviceId: string, uploadedAt: number) {
 
 function joinSafetySnapshotFileName(deviceId: string, createdAt: number) {
   return `cherry-studio-pi.data-sync.join-safety.${safeFileSegment(deviceId)}.${createdAt}.zip`
+}
+
+function isManagedDataSyncTempBackupFile(fileName: string) {
+  return DATA_SYNC_TEMP_BACKUP_FILE_PATTERN.test(fileName)
+}
+
+function isJoinSafetyTempBackupFile(fileName: string) {
+  return DATA_SYNC_JOIN_SAFETY_FILE_PATTERN.test(fileName)
+}
+
+function getDataSyncTempBackupDir() {
+  return path.join(process.env.TMPDIR || process.env.TEMP || process.env.TMP || '/tmp', 'cherry-studio', 'backup')
 }
 
 function normalizeRemoteRelativePath(value: string, label = 'Remote data sync path') {
@@ -1541,7 +1556,7 @@ export class AppDataSyncService {
       const previousHeaders = typeof client.getHeaders === 'function' ? client.getHeaders() : null
       if (typeof client.setHeaders === 'function') {
         client.setHeaders({
-          ...(previousHeaders ?? {}),
+          ...previousHeaders,
           If: this.formatNativeWebDavLockHeader(lock.token)
         })
       }
@@ -2680,7 +2695,7 @@ export class AppDataSyncService {
       const bundle = await this.pullRuntimeDirectoryBundle(client, basePath, remoteMeta)
       await this.applyRuntimeDirectoryBundle(remoteMeta, bundle)
       stageSyncState(
-        runtimeDirectorySyncStateKey(deviceId, remoteMeta.name as RuntimeDirectoryName),
+        runtimeDirectorySyncStateKey(deviceId, remoteMeta.name),
         runtimeDirectoryContentCursor(remoteMeta.valueHash)
       )
       summary.downloaded += 1
@@ -2867,6 +2882,7 @@ export class AppDataSyncService {
 
     const fileName = joinSafetySnapshotFileName(db.getDeviceId(), summary.lastSyncAt)
     try {
+      await this.pruneLocalDataSyncTempBackups({ keepLatestJoinSafety: 0 })
       const localBackupPath = await this.backupManager.backup(
         undefined as unknown as Electron.IpcMainInvokeEvent,
         fileName,
@@ -2874,6 +2890,7 @@ export class AppDataSyncService {
         false
       )
       const stat = await fsp.stat(localBackupPath).catch(() => null)
+      await this.pruneLocalDataSyncTempBackups({ keepPath: localBackupPath })
 
       summary.joinSafetySnapshotCreated = true
       summary.joinSafetySnapshotFileName = fileName
@@ -2898,6 +2915,82 @@ export class AppDataSyncService {
           error
         )}`
       )
+    }
+  }
+
+  private async pruneLocalDataSyncTempBackups(
+    options: { keepPath?: string | null; keepLatestJoinSafety?: number } = {}
+  ) {
+    const keepLatestJoinSafety = options.keepLatestJoinSafety ?? DATA_SYNC_JOIN_SAFETY_LOCAL_RETENTION
+    const keepPath = options.keepPath ? path.resolve(options.keepPath) : null
+    const directories = new Set<string>([getDataSyncTempBackupDir()])
+    if (keepPath) {
+      directories.add(path.dirname(keepPath))
+    }
+
+    for (const directory of directories) {
+      let entries: fs.Dirent[]
+      try {
+        entries = await fsp.readdir(directory, { withFileTypes: true })
+      } catch (error: any) {
+        if (error?.code !== 'ENOENT') {
+          logger.warn('Failed to list data sync temp backup directory for cleanup', {
+            directory,
+            error: errorMessage(error)
+          })
+        }
+        continue
+      }
+
+      const candidates = (
+        await Promise.all(
+          entries
+            .filter((entry) => entry.isFile() && isManagedDataSyncTempBackupFile(entry.name))
+            .map(async (entry) => {
+              const filePath = path.resolve(directory, entry.name)
+              const stat = await fsp.stat(filePath).catch(() => null)
+              if (!stat?.isFile()) return null
+              return {
+                filePath,
+                fileName: entry.name,
+                mtimeMs: stat.mtimeMs,
+                size: stat.size
+              }
+            })
+        )
+      ).filter((item): item is { filePath: string; fileName: string; mtimeMs: number; size: number } => Boolean(item))
+
+      const keepPaths = new Set<string>()
+      if (keepPath) {
+        keepPaths.add(keepPath)
+      }
+
+      const latestJoinSafety = candidates
+        .filter((candidate) => isJoinSafetyTempBackupFile(candidate.fileName))
+        .sort((left, right) => right.mtimeMs - left.mtimeMs)
+        .slice(0, keepLatestJoinSafety)
+      for (const candidate of latestJoinSafety) {
+        keepPaths.add(candidate.filePath)
+      }
+
+      for (const candidate of candidates) {
+        if (keepPaths.has(candidate.filePath)) continue
+
+        await fsp
+          .rm(candidate.filePath, { force: true })
+          .then(() => {
+            logger.info('Removed stale data sync temp backup', {
+              filePath: candidate.filePath,
+              byteSize: candidate.size
+            })
+          })
+          .catch((error) => {
+            logger.warn('Failed to remove stale data sync temp backup', {
+              filePath: candidate.filePath,
+              error: errorMessage(error)
+            })
+          })
+      }
     }
   }
 
@@ -3073,7 +3166,13 @@ export class AppDataSyncService {
     const context = this.createSyncRunContext()
     this.syncStartedAt = context.startedAt
     this.pendingFailureSafetySnapshot = null
-    const sync = this.withSyncRunDeadline(this.performSyncNow(normalizedConfig, context), context)
+    const sync = this.withSyncRunDeadline(
+      (async () => {
+        await this.pruneLocalDataSyncTempBackups()
+        return this.performSyncNow(normalizedConfig, context)
+      })(),
+      context
+    )
     this.syncInFlight = sync
 
     try {
@@ -3400,8 +3499,8 @@ export class AppDataSyncService {
     const pendingSafetySnapshot = this.pendingFailureSafetySnapshot
     const summary: DataSyncSummary = {
       ...EMPTY_SUMMARY,
-      ...(previousSummary ?? {}),
-      ...(pendingSafetySnapshot ?? {}),
+      ...previousSummary,
+      ...pendingSafetySnapshot,
       status: 'failed',
       error: errorMessage(error),
       lastSyncAt: Date.now()

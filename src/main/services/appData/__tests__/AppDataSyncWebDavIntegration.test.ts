@@ -1239,7 +1239,9 @@ describe('AppDataSyncService local WebDAV integration', () => {
   let server: WebDavTestServer | null = null
 
   beforeEach(async () => {
-    tempRoot = await fsp.mkdtemp(path.join(process.cwd(), '.context', 'webdav-sync-integration-'))
+    const tempParent = path.join(process.cwd(), '.context')
+    await fsp.mkdir(tempParent, { recursive: true })
+    tempRoot = await fsp.mkdtemp(path.join(tempParent, 'webdav-sync-integration-'))
     server = await startWebDavServer(path.join(tempRoot, 'webdav-root'))
   })
 
@@ -1922,7 +1924,10 @@ describe('AppDataSyncService local WebDAV integration', () => {
     const manifest = await readRemoteManifest(server!, webdavPath)
     const storageBundlePath = manifest.storageV2?.bundle?.path
     expect(storageBundlePath).toBeTruthy()
-    await fsp.rm(path.join(remoteSyncRoot(server!, webdavPath), storageBundlePath!), { force: true })
+    if (!storageBundlePath) {
+      throw new Error('Expected Storage v2 bundle path to exist')
+    }
+    await fsp.rm(path.join(remoteSyncRoot(server!, webdavPath), storageBundlePath), { force: true })
     const manifestBeforeBrokenSync = await fsp.readFile(
       path.join(remoteSyncRoot(server!, webdavPath), 'manifest.json'),
       'utf8'
