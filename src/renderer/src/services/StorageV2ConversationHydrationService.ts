@@ -14,6 +14,8 @@ import { getStorageV2AutoHydrateEnabled } from './StorageV2HydrationService'
 import { listStorageV2Conversations, listStorageV2Messages } from './StorageV2Service'
 
 const logger = loggerService.withContext('StorageV2ConversationHydrationService')
+const STORAGE_V2_MESSAGE_PAGE_SIZE = 1000
+const MAX_STORAGE_V2_MESSAGE_PAGES_PER_TOPIC = 1000
 let filesPathPromise: Promise<string | null> | null = null
 let hydrateConversationsPromise: Promise<boolean> | null = null
 
@@ -265,20 +267,55 @@ async function seedDexieTopic(
 }
 
 async function listAllStorageV2Messages(topicId: string): Promise<StorageV2StoredMessage[]> {
-  const pageSize = 1000
   const messages: StorageV2StoredMessage[] = []
+  const seenMessageIds = new Set<string>()
+  let previousPageSignature: string | null = null
 
-  for (let offset = 0; ; offset += pageSize) {
+  for (
+    let pageIndex = 0, offset = 0;
+    pageIndex < MAX_STORAGE_V2_MESSAGE_PAGES_PER_TOPIC;
+    pageIndex += 1, offset += STORAGE_V2_MESSAGE_PAGE_SIZE
+  ) {
     const page = (await listStorageV2Messages(topicId, {
-      limit: pageSize,
+      limit: STORAGE_V2_MESSAGE_PAGE_SIZE,
       offset
     })) as StorageV2StoredMessage[]
-    messages.push(...page)
 
-    if (page.length < pageSize) {
+    if (page.length === 0) {
+      return messages
+    }
+
+    const pageSignature = page.map((message) => message.id).join('\u0001')
+    if (pageSignature === previousPageSignature) {
+      throw new Error(
+        `Storage v2 会话消息分页没有前进（topic: ${topicId}, offset: ${offset}）。为避免同步后恢复阶段无限等待，已停止本次恢复。`
+      )
+    }
+    previousPageSignature = pageSignature
+
+    let newMessageCount = 0
+    for (const message of page) {
+      if (seenMessageIds.has(message.id)) continue
+
+      seenMessageIds.add(message.id)
+      messages.push(message)
+      newMessageCount += 1
+    }
+
+    if (newMessageCount === 0) {
+      throw new Error(
+        `Storage v2 会话消息分页只返回重复数据（topic: ${topicId}, offset: ${offset}）。为避免同步后恢复阶段无限等待，已停止本次恢复。`
+      )
+    }
+
+    if (page.length < STORAGE_V2_MESSAGE_PAGE_SIZE) {
       return messages
     }
   }
+
+  throw new Error(
+    `Storage v2 会话消息超过 ${MAX_STORAGE_V2_MESSAGE_PAGES_PER_TOPIC * STORAGE_V2_MESSAGE_PAGE_SIZE} 条仍未读完（topic: ${topicId}）。为避免同步后恢复阶段无限等待，已停止本次恢复。`
+  )
 }
 
 export async function shouldPreferStorageV2ConversationReads(): Promise<boolean> {

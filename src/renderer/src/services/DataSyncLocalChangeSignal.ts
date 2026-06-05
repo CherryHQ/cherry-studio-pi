@@ -69,11 +69,23 @@ export function subscribeDataSyncLocalChanges(listener: (event: DataSyncLocalCha
   }
 }
 
-export async function suppressDataSyncLocalChangeNotifications<T>(callback: () => Promise<T>): Promise<T> {
+export function beginDataSyncLocalChangeNotificationSuppression() {
   notificationSuppressionDepth += 1
+  let released = false
+
+  return () => {
+    if (released) return
+
+    released = true
+    notificationSuppressionDepth = Math.max(0, notificationSuppressionDepth - 1)
+  }
+}
+
+export async function suppressDataSyncLocalChangeNotifications<T>(callback: () => Promise<T>): Promise<T> {
+  const release = beginDataSyncLocalChangeNotificationSuppression()
   try {
     return await callback()
   } finally {
-    notificationSuppressionDepth = Math.max(0, notificationSuppressionDepth - 1)
+    release()
   }
 }

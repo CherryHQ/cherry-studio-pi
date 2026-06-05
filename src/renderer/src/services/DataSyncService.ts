@@ -3,9 +3,9 @@ import store, { persistor } from '@renderer/store'
 import type { WebDavConfig } from '@renderer/types'
 
 import {
+  beginDataSyncLocalChangeNotificationSuppression,
   notifyDataSyncLocalChange,
-  subscribeDataSyncLocalChanges,
-  suppressDataSyncLocalChangeNotifications
+  subscribeDataSyncLocalChanges
 } from './DataSyncLocalChangeSignal'
 import { hydrateStorageV2ConversationsIfDexieEmpty } from './StorageV2ConversationHydrationService'
 import { hydrateRuntimeCacheFromStorageV2 } from './StorageV2HydrationService'
@@ -15,6 +15,9 @@ import { reportErrorToSystemAgent } from './SystemAgentService'
 const logger = loggerService.withContext('DataSyncService')
 const LOCAL_CHANGE_AUTO_SYNC_DEBOUNCE_MS = 20_000
 const RENDERER_SYNC_RECONCILE_GRACE_MS = 60_000
+const RENDERER_SYNC_STATUS_TIMEOUT_MS = 30_000
+const RENDERER_SYNC_STAGE_TIMEOUT_MS = 5 * 60_000
+const MAIN_PROCESS_SYNC_TIMEOUT_MS = 15 * 60_000
 
 export type DataSyncSummary = {
   status?: 'success' | 'failed'
@@ -62,6 +65,18 @@ let syncing = false
 let localChangeDuringSync = false
 let syncStartedAt: number | null = null
 const syncStateListeners = new Set<(state: DataSyncRuntimeState) => void>()
+
+class DataSyncStageTimeoutError extends Error {
+  constructor(
+    readonly stageName: string,
+    readonly timeoutMs: number
+  ) {
+    super(
+      `数据同步在“${stageName}”阶段超过 ${formatDurationZh(timeoutMs)} 仍未完成，已自动结束本次操作。请重新点击同步；如果仍然失败，请把最近结果和日志发给开发者定位。`
+    )
+    this.name = 'DataSyncStageTimeoutError'
+  }
+}
 
 export type DataSyncRuntimeState = {
   syncing: boolean
@@ -115,6 +130,60 @@ function hasRemoteRuntimeData(summary?: Partial<DataSyncSummary> | null) {
     (summary.storageBlobCount ?? 0) > 0 ||
     Boolean(summary.storageBundleHash)
   )
+}
+
+function formatDurationZh(durationMs: number) {
+  const totalSeconds = Math.max(Math.ceil(durationMs / 1000), 1)
+  if (totalSeconds < 60) return `${totalSeconds} 秒`
+
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return seconds > 0 ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分钟`
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error && error.message ? error.message : String(error)
+}
+
+function isDataSyncAlreadyRunningMessage(message: string) {
+  return /Data sync is already running|已有数据同步正在进行|同步正在进行/i.test(message)
+}
+
+function isStageTimeoutError(error: unknown): error is DataSyncStageTimeoutError {
+  return error instanceof DataSyncStageTimeoutError
+}
+
+async function withDataSyncStageTimeout<T>(
+  stageName: string,
+  operation: () => Promise<T>,
+  timeoutMs = RENDERER_SYNC_STAGE_TIMEOUT_MS
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      reject(new DataSyncStageTimeoutError(stageName, timeoutMs))
+    }, timeoutMs)
+
+    const maybeNodeTimer = timeout as ReturnType<typeof setTimeout> & { unref?: () => void }
+    maybeNodeTimer.unref?.()
+  })
+
+  try {
+    return await Promise.race([operation(), timeoutPromise])
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout)
+    }
+  }
+}
+
+async function prepareStorageV2ForDataSyncWithSuppressedNotifications() {
+  const releaseNotificationSuppression = beginDataSyncLocalChangeNotificationSuppression()
+  try {
+    await withDataSyncStageTimeout('准备本机数据', () => prepareStorageV2ForDataSync())
+  } finally {
+    releaseNotificationSuppression()
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -285,7 +354,11 @@ function ensureLocalChangeAutoSyncSubscription() {
 
 export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<DataSyncSummary | null> {
   if (syncing) {
-    await reconcileRendererSyncStateWithMainProcess()
+    await withDataSyncStageTimeout(
+      '检查当前同步状态',
+      () => reconcileRendererSyncStateWithMainProcess(),
+      RENDERER_SYNC_STATUS_TIMEOUT_MS
+    )
     if (syncing) {
       logger.info('Data sync already running')
       return null
@@ -297,7 +370,9 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
     throw new Error('WebDAV host is required')
   }
 
-  if (await isMainProcessRunning()) {
+  if (
+    await withDataSyncStageTimeout('检查主进程同步状态', () => isMainProcessRunning(), RENDERER_SYNC_STATUS_TIMEOUT_MS)
+  ) {
     logger.info('Data sync already running in main process')
     return null
   }
@@ -305,11 +380,23 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
   setDataSyncRunning(true)
   clearLocalChangeSyncTimeout()
   try {
-    await hydratePreviouslyDownloadedRemoteData()
-    await suppressDataSyncLocalChangeNotifications(() => prepareStorageV2ForDataSync())
-    const summary = await window.api.dataSync.syncNow(config)
-    await hydrateRuntimeCacheAfterDataSync('after data sync', { strict: hasRemoteRuntimeData(summary) })
+    await withDataSyncStageTimeout('恢复上次远端数据', () => hydratePreviouslyDownloadedRemoteData())
+    await prepareStorageV2ForDataSyncWithSuppressedNotifications()
+    const summary = await withDataSyncStageTimeout(
+      '执行 WebDAV 同步',
+      () => window.api.dataSync.syncNow(config),
+      MAIN_PROCESS_SYNC_TIMEOUT_MS
+    )
+    await withDataSyncStageTimeout('恢复同步后的界面数据', () =>
+      hydrateRuntimeCacheAfterDataSync('after data sync', { strict: hasRemoteRuntimeData(summary) })
+    )
     return summary
+  } catch (error) {
+    const message = getErrorMessage(error)
+    if (isStageTimeoutError(error) || !isDataSyncAlreadyRunningMessage(message)) {
+      await rememberDataSyncFailure(message)
+    }
+    throw error
   } finally {
     setDataSyncRunning(false)
     if (localChangeDuringSync) {

@@ -60,6 +60,18 @@ import {
   shouldPreferStorageV2ConversationReads
 } from '../StorageV2ConversationHydrationService'
 
+function storageV2Message(id: string) {
+  return {
+    id,
+    role: 'assistant',
+    status: null,
+    metadata: null,
+    createdAt: '2026-01-01T00:00:01.000Z',
+    updatedAt: null,
+    blocks: []
+  }
+}
+
 describe('StorageV2ConversationHydrationService', () => {
   let originalApi: unknown
 
@@ -535,6 +547,30 @@ describe('StorageV2ConversationHydrationService', () => {
         messages: [expect.objectContaining({ id: 'message-2', topicId: 'missing-topic' })]
       })
     )
+  })
+
+  it('fails strict hydration instead of looping forever when message pagination does not advance', async () => {
+    const repeatedPage = Array.from({ length: 1000 }, (_, index) => storageV2Message(`message-${index}`))
+    mocks.topicsCount.mockResolvedValue(0)
+    mocks.messageBlocksCount.mockResolvedValue(0)
+    mocks.listStorageV2Conversations.mockResolvedValue([
+      {
+        id: 'topic-loop',
+        ownerId: 'assistant-1',
+        title: 'Looping Topic',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:01.000Z'
+      }
+    ])
+    mocks.listStorageV2Messages.mockResolvedValue(repeatedPage)
+
+    await expect(
+      hydrateStorageV2ConversationsIfDexieEmpty('data-sync:after data sync', { strict: true })
+    ).rejects.toThrow('分页没有前进')
+
+    expect(mocks.listStorageV2Messages).toHaveBeenNthCalledWith(1, 'topic-loop', { limit: 1000, offset: 0 })
+    expect(mocks.listStorageV2Messages).toHaveBeenNthCalledWith(2, 'topic-loop', { limit: 1000, offset: 1000 })
+    expect(mocks.listStorageV2Messages).toHaveBeenCalledTimes(2)
   })
 
   it('rechecks existing empty Dexie topic caches against Storage v2', async () => {

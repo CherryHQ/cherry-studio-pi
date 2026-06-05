@@ -467,6 +467,39 @@ describe('DataSyncService', () => {
     unsubscribe()
   })
 
+  it('fails and records a renderer-stage timeout when local sync preparation hangs', async () => {
+    vi.useFakeTimers()
+    const pendingPrepare = deferred<void>()
+    mocks.prepareStorageV2ForDataSync.mockReturnValueOnce(pendingPrepare.promise)
+
+    const sync = syncAppDataNow()
+    await vi.waitFor(() => expect(getDataSyncRuntimeState().syncing).toBe(true))
+    const rejection = expect(sync).rejects.toThrow('准备本机数据')
+
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
+
+    await rejection
+    expect(mocks.syncNow).not.toHaveBeenCalled()
+    expect(mocks.recordFailure).toHaveBeenCalledWith(expect.stringContaining('准备本机数据'))
+    expect(getDataSyncRuntimeState().syncing).toBe(false)
+  })
+
+  it('fails and records a renderer-stage timeout when the main sync IPC never returns', async () => {
+    vi.useFakeTimers()
+    const pendingSync = deferred<typeof successSummary>()
+    mocks.syncNow.mockReturnValueOnce(pendingSync.promise)
+
+    const sync = syncAppDataNow()
+    await vi.waitFor(() => expect(getDataSyncRuntimeState().syncing).toBe(true))
+    const rejection = expect(sync).rejects.toThrow('执行 WebDAV 同步')
+
+    await vi.advanceTimersByTimeAsync(15 * 60_000)
+
+    await rejection
+    expect(mocks.recordFailure).toHaveBeenCalledWith(expect.stringContaining('执行 WebDAV 同步'))
+    expect(getDataSyncRuntimeState().syncing).toBe(false)
+  })
+
   it('runs a debounced auto sync after local Storage v2 data changes', async () => {
     vi.useFakeTimers()
     mocks.getState.mockReturnValue({
