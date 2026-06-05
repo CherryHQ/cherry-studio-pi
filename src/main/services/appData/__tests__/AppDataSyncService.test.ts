@@ -135,6 +135,8 @@ vi.mock('@main/utils/file', () => ({
   getNotesDir: () => mocks.notesDir
 }))
 
+import { createClient } from 'webdav'
+
 import { AppDataSyncService } from '../AppDataSyncService'
 
 const config: WebDavConfig = {
@@ -397,6 +399,38 @@ describe('AppDataSyncService', () => {
         }
       ]
     })
+  })
+
+  it('splits pasted WebDAV credentials before creating the setup browser client', async () => {
+    await new AppDataSyncService().listRemoteDirectories(
+      {
+        webdavHost: `http://192.168.1.100:8080/
+
+账号：webdav
+密码：test-webdav-password`,
+        webdavPath: '/remote-root'
+      },
+      '/'
+    )
+
+    expect(createClient).toHaveBeenLastCalledWith(
+      'http://192.168.1.100:8080',
+      expect.objectContaining({
+        username: 'webdav',
+        password: 'test-webdav-password'
+      })
+    )
+  })
+
+  it('rejects data sync WebDAV access without credentials before sending anonymous requests', async () => {
+    await expect(
+      new AppDataSyncService().checkWriteAccess({
+        webdavHost: 'http://192.168.1.100:8080',
+        webdavPath: '/remote-root'
+      })
+    ).rejects.toThrow('WebDAV 用户名和密码不能为空')
+
+    expect(mocks.webdav.exists).not.toHaveBeenCalled()
   })
 
   it('checks WebDAV write access against the actual sync path', async () => {

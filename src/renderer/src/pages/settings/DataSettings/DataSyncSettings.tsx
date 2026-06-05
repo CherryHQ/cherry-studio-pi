@@ -20,6 +20,7 @@ import {
   setDataSyncWebdavPath,
   setDataSyncWebdavUser
 } from '@renderer/store/settings'
+import { normalizeWebDavConfig, normalizeWebDavHost, parseWebDavInput } from '@shared/webdavConfig'
 import { Alert, Breadcrumb, Button, Empty, Input, List, Modal, Space, Spin, Tooltip, Typography } from 'antd'
 import dayjs from 'dayjs'
 import type { CSSProperties, FC } from 'react'
@@ -110,9 +111,7 @@ function formatBytes(value: number) {
 }
 
 function normalizeWebdavHostInput(value: string) {
-  const trimmed = value.trim()
-  if (!trimmed) return ''
-  return /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+  return normalizeWebDavHost(value)
 }
 
 function normalizeRemotePathInput(value?: string) {
@@ -255,22 +254,60 @@ const DataSyncSettings: FC = () => {
   const [directoryError, setDirectoryError] = useState<string | null>(null)
   const [remoteDirectoryList, setRemoteDirectoryList] = useState<RemoteDirectoryList | null>(null)
 
+  const applyStructuredWebDavInput = (value: string) => {
+    const parsed = parseWebDavInput(value)
+    if (!parsed.structured) return false
+
+    const normalized = normalizeWebDavConfig(
+      {
+        webdavHost: parsed.webdavHost,
+        webdavUser: parsed.webdavUser || webdavUser,
+        webdavPass: parsed.webdavPass || webdavPass,
+        webdavPath: parsed.webdavPath || webdavPath
+      },
+      { defaultPath: DEFAULT_REMOTE_PATH }
+    )
+
+    setWebdavHost(normalized.webdavHost)
+    setWebdavUser(normalized.webdavUser)
+    setWebdavPass(normalized.webdavPass)
+    setWebdavPath(normalized.webdavPath)
+    dispatch(setDataSyncWebdavHost(normalized.webdavHost))
+    dispatch(setDataSyncWebdavUser(normalized.webdavUser))
+    dispatch(setDataSyncWebdavPass(normalized.webdavPass))
+    dispatch(setDataSyncWebdavPath(normalized.webdavPath))
+    return true
+  }
+
   const saveWebDavConfig = (nextPath = webdavPath) => {
-    const normalizedHost = normalizeWebdavHostInput(webdavHost)
-    const normalizedPath = normalizeRemotePathInput(nextPath)
+    const normalized = normalizeWebDavConfig(
+      {
+        webdavHost,
+        webdavUser,
+        webdavPass,
+        webdavPath: nextPath
+      },
+      { defaultPath: DEFAULT_REMOTE_PATH }
+    )
 
-    setWebdavHost(normalizedHost)
-    setWebdavPath(normalizedPath)
-    dispatch(setDataSyncWebdavHost(normalizedHost))
-    dispatch(setDataSyncWebdavUser(webdavUser || ''))
-    dispatch(setDataSyncWebdavPass(webdavPass || ''))
-    dispatch(setDataSyncWebdavPath(normalizedPath))
+    setWebdavHost(normalized.webdavHost)
+    setWebdavUser(normalized.webdavUser)
+    setWebdavPass(normalized.webdavPass)
+    setWebdavPath(normalized.webdavPath)
+    dispatch(setDataSyncWebdavHost(normalized.webdavHost))
+    dispatch(setDataSyncWebdavUser(normalized.webdavUser))
+    dispatch(setDataSyncWebdavPass(normalized.webdavPass))
+    dispatch(setDataSyncWebdavPath(normalized.webdavPath))
 
-    return {
-      webdavHost: normalizedHost,
-      webdavUser,
-      webdavPass,
-      webdavPath: normalizedPath
+    return normalized
+  }
+
+  const trySaveWebDavConfig = (nextPath = webdavPath) => {
+    try {
+      return saveWebDavConfig(nextPath)
+    } catch (error) {
+      window.toast.error(getErrorMessage(error))
+      return null
     }
   }
 
@@ -342,7 +379,8 @@ const DataSyncSettings: FC = () => {
       return
     }
 
-    const config = saveWebDavConfig()
+    const config = trySaveWebDavConfig()
+    if (!config) return
 
     let latestStatus: SyncStatus | null = null
     let completedSummary: SyncSummary | null = null
@@ -404,7 +442,8 @@ const DataSyncSettings: FC = () => {
       return
     }
 
-    const config = saveWebDavConfig()
+    const config = trySaveWebDavConfig()
+    if (!config) return
 
     Modal.confirm({
       title: t('settings.data.data_sync.restore_confirm_title'),
@@ -462,7 +501,8 @@ const DataSyncSettings: FC = () => {
       return
     }
 
-    const config = saveWebDavConfig()
+    const config = trySaveWebDavConfig()
+    if (!config) return
 
     setDiagnosing(true)
     try {
@@ -511,8 +551,23 @@ const DataSyncSettings: FC = () => {
   const effectiveSyncPath = getEffectiveSyncPath(webdavPath)
 
   const loadRemoteDirectories = async (path: string) => {
-    const normalizedHost = normalizeWebdavHostInput(webdavHost)
-    if (!normalizedHost) {
+    let normalizedConfig: ReturnType<typeof normalizeWebDavConfig>
+    try {
+      normalizedConfig = normalizeWebDavConfig(
+        {
+          webdavHost,
+          webdavUser,
+          webdavPass,
+          webdavPath
+        },
+        { defaultPath: DEFAULT_REMOTE_PATH, requireCredentials: true }
+      )
+    } catch (error) {
+      window.toast.error(getErrorMessage(error))
+      return
+    }
+
+    if (!normalizedConfig.webdavHost) {
       window.toast.warning(t('settings.data.data_sync.toast.webdav_required'))
       return
     }
@@ -522,10 +577,10 @@ const DataSyncSettings: FC = () => {
     try {
       const result = await window.api.dataSync.listRemoteDirectories(
         {
-          webdavHost: normalizedHost,
-          webdavUser,
-          webdavPass,
-          webdavPath: normalizeRemotePathInput(webdavPath)
+          webdavHost: normalizedConfig.webdavHost,
+          webdavUser: normalizedConfig.webdavUser,
+          webdavPass: normalizedConfig.webdavPass,
+          webdavPath: normalizedConfig.webdavPath
         },
         path
       )
@@ -556,13 +611,15 @@ const DataSyncSettings: FC = () => {
       return
     }
 
-    const normalizedConfig = saveWebDavConfig()
+    const normalizedConfig = trySaveWebDavConfig()
+    if (!normalizedConfig) return
     setDirectoryBrowserOpen(true)
     void loadRemoteDirectories(getDirectoryBrowserStartPath(normalizedConfig.webdavPath))
   }
 
   const selectRemotePath = (path: string) => {
-    saveWebDavConfig(path)
+    const config = trySaveWebDavConfig(path)
+    if (!config) return
     setDirectoryBrowserOpen(false)
     window.toast.success(
       t('settings.data.data_sync.toast.remote_path_selected', { path: normalizeRemotePathInput(path) })
@@ -571,7 +628,7 @@ const DataSyncSettings: FC = () => {
 
   const onSyncIntervalChange = (value: number) => {
     setSyncInterval(value)
-    saveWebDavConfig()
+    if (!trySaveWebDavConfig()) return
     dispatch(setDataSyncSyncInterval(value))
     dispatch(setDataSyncAutoSync(value > 0))
 
@@ -597,15 +654,36 @@ const DataSyncSettings: FC = () => {
           placeholder="https://example.com/dav"
           value={webdavHost}
           onChange={(event) => setWebdavHost(event.target.value)}
+          onPaste={(event) => {
+            const text = event.clipboardData.getData('text')
+            if (!text) return
+
+            try {
+              if (applyStructuredWebDavInput(text)) {
+                event.preventDefault()
+              }
+            } catch (error) {
+              event.preventDefault()
+              window.toast.error(getErrorMessage(error))
+            }
+          }}
           onBlur={() => {
-            const normalizedHost = normalizeWebdavHostInput(webdavHost)
-            setWebdavHost(normalizedHost)
-            dispatch(setDataSyncWebdavHost(normalizedHost))
-            if (!normalizedHost) {
-              setSyncInterval(0)
-              dispatch(setDataSyncSyncInterval(0))
-              dispatch(setDataSyncAutoSync(false))
-              stopDataSyncAutoSync()
+            try {
+              if (applyStructuredWebDavInput(webdavHost)) {
+                return
+              }
+
+              const normalizedHost = normalizeWebdavHostInput(webdavHost)
+              setWebdavHost(normalizedHost)
+              dispatch(setDataSyncWebdavHost(normalizedHost))
+              if (!normalizedHost) {
+                setSyncInterval(0)
+                dispatch(setDataSyncSyncInterval(0))
+                dispatch(setDataSyncAutoSync(false))
+                stopDataSyncAutoSync()
+              }
+            } catch (error) {
+              window.toast.error(getErrorMessage(error))
             }
           }}
           style={{ width: 280 }}

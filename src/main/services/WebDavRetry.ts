@@ -20,6 +20,7 @@ import {
   WEB_DAV_DEFAULT_ACTION,
   WEB_DAV_NETWORK_ERROR_PATTERNS
 } from '@main/i18n/webDavMessages'
+import { normalizeWebDavHost as normalizeSharedWebDavHost } from '@shared/webdavConfig'
 
 type WebDavRetryLogger = {
   warn: (message: string, ...data: any[]) => void
@@ -170,9 +171,7 @@ export class WebDavOperationError extends Error {
 }
 
 export function normalizeWebDavHost(webdavHost?: string) {
-  const trimmed = webdavHost?.trim() ?? ''
-  if (!trimmed) return ''
-  return /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+  return normalizeSharedWebDavHost(webdavHost)
 }
 
 export function describeWebDavUserFacingError(error: unknown, action = WEB_DAV_DEFAULT_ACTION) {
@@ -262,6 +261,10 @@ export function describeWebDavUserFacingError(error: unknown, action = WEB_DAV_D
   }
 
   if (isActionableDataSyncMessage(message)) {
+    return `${prefix}：${message}`
+  }
+
+  if (/WebDAV (URL|用户名|密码)|账号或密码文本/.test(message)) {
     return `${prefix}：${message}`
   }
 

@@ -25,6 +25,7 @@ import { hashJsonValue, writeWebDavJsonAtomically } from '@main/services/WebDavA
 import { normalizeWebDavHost, runWebDavOperation, WebDavOperationError } from '@main/services/WebDavRetry'
 import { getDataPath } from '@main/utils'
 import { getNotesDir } from '@main/utils/file'
+import { normalizeWebDavConfig } from '@shared/webdavConfig'
 import type { WebDavConfig } from '@types'
 import { XMLParser } from 'fast-xml-parser'
 import { createClient, type FileStat, type WebDAVClient } from 'webdav'
@@ -842,11 +843,19 @@ export class AppDataSyncService {
     })
   }
 
+  private normalizeSyncWebDavConfig(config: WebDavConfig) {
+    return normalizeWebDavConfig(config, {
+      defaultPath: DATA_SYNC_REMOTE_ROOT,
+      requireCredentials: true
+    })
+  }
+
   private createWebDavClient(config: WebDavConfig) {
-    const webdavHost = normalizeWebDavHost(config.webdavHost)
+    const normalizedConfig = this.normalizeSyncWebDavConfig(config)
+    const webdavHost = normalizeWebDavHost(normalizedConfig.webdavHost)
     const client = createClient(webdavHost, {
-      username: config.webdavUser,
-      password: config.webdavPass,
+      username: normalizedConfig.webdavUser,
+      password: normalizedConfig.webdavPass,
       maxBodyLength: Infinity,
       maxContentLength: Infinity,
       httpsAgent: new https.Agent({ rejectUnauthorized: false })
@@ -854,14 +863,15 @@ export class AppDataSyncService {
 
     return {
       client,
-      basePath: normalizeBasePath(config.webdavPath)
+      basePath: normalizeBasePath(normalizedConfig.webdavPath)
     }
   }
 
   private createRawWebDavClient(config: WebDavConfig) {
-    return createClient(normalizeWebDavHost(config.webdavHost), {
-      username: config.webdavUser,
-      password: config.webdavPass,
+    const normalizedConfig = this.normalizeSyncWebDavConfig(config)
+    return createClient(normalizeWebDavHost(normalizedConfig.webdavHost), {
+      username: normalizedConfig.webdavUser,
+      password: normalizedConfig.webdavPass,
       maxBodyLength: Infinity,
       maxContentLength: Infinity,
       httpsAgent: new https.Agent({ rejectUnauthorized: false })
@@ -1761,11 +1771,9 @@ export class AppDataSyncService {
   }
 
   async listRemoteDirectories(config: WebDavConfig, remotePath = '/'): Promise<DataSyncRemoteDirectoryList> {
-    if (!normalizeWebDavHost(config.webdavHost)) {
-      throw new Error('WebDAV host is required')
-    }
+    const normalizedConfig = this.normalizeSyncWebDavConfig(config)
 
-    const client = this.createRawWebDavClient(config)
+    const client = this.createRawWebDavClient(normalizedConfig)
     let currentPath = normalizeWebDavDirectoryPath(remotePath || '/')
     let contents: FileStat[]
 
@@ -1810,12 +1818,10 @@ export class AppDataSyncService {
   }
 
   async checkWriteAccess(config: WebDavConfig): Promise<DataSyncWriteAccessResult> {
-    if (!normalizeWebDavHost(config.webdavHost)) {
-      throw new Error('WebDAV host is required')
-    }
+    const normalizedConfig = this.normalizeSyncWebDavConfig(config)
 
     const db = await getAppDataDatabase()
-    const { client, basePath } = this.createWebDavClient(config)
+    const { client, basePath } = this.createWebDavClient(normalizedConfig)
     await this.ensureDirectory(client, basePath)
     await this.assertRemoteLockAvailable(client, basePath, db.getDeviceId())
     await this.assertWriteAccess(client, basePath)
@@ -2984,11 +2990,9 @@ export class AppDataSyncService {
   }
 
   async restoreLatestSnapshot(config: WebDavConfig) {
-    if (!normalizeWebDavHost(config.webdavHost)) {
-      throw new Error('WebDAV host is required')
-    }
+    const normalizedConfig = this.normalizeSyncWebDavConfig(config)
 
-    const { client, basePath } = this.createWebDavClient(config)
+    const { client, basePath } = this.createWebDavClient(normalizedConfig)
     const manifestPath = path.posix.join(basePath, 'manifest.json')
     const manifest = this.normalizeManifest(
       await this.readJson<RemoteManifest>(client, manifestPath, { throwOnInvalidJson: true })
@@ -3031,9 +3035,7 @@ export class AppDataSyncService {
   }
 
   async syncNow(config: WebDavConfig): Promise<DataSyncSummary> {
-    if (!normalizeWebDavHost(config.webdavHost)) {
-      throw new Error('WebDAV host is required')
-    }
+    const normalizedConfig = this.normalizeSyncWebDavConfig(config)
 
     if (this.syncInFlight) {
       throw new Error(DATA_SYNC_ALREADY_RUNNING_ERROR)
@@ -3042,7 +3044,7 @@ export class AppDataSyncService {
     const context = this.createSyncRunContext()
     this.syncStartedAt = context.startedAt
     this.pendingFailureSafetySnapshot = null
-    const sync = this.withSyncRunDeadline(this.performSyncNow(config, context), context)
+    const sync = this.withSyncRunDeadline(this.performSyncNow(normalizedConfig, context), context)
     this.syncInFlight = sync
 
     try {
@@ -3058,13 +3060,11 @@ export class AppDataSyncService {
   }
 
   private async performSyncNow(config: WebDavConfig, context: SyncRunContext): Promise<DataSyncSummary> {
-    if (!normalizeWebDavHost(config.webdavHost)) {
-      throw new Error('WebDAV host is required')
-    }
+    const normalizedConfig = this.normalizeSyncWebDavConfig(config)
 
     this.assertSyncRunActive(context, '初始化同步')
     let db = await getAppDataDatabase()
-    const { client, basePath } = this.createWebDavClient(config)
+    const { client, basePath } = this.createWebDavClient(normalizedConfig)
     const manifestPath = path.posix.join(basePath, 'manifest.json')
     const summary: DataSyncSummary = { ...EMPTY_SUMMARY, remotePath: basePath, lastSyncAt: Date.now() }
     const pendingSyncStates = new Map<string, unknown>()
@@ -3257,7 +3257,7 @@ export class AppDataSyncService {
         secretKeyMaterial: syncSpace.keyMaterial,
         legacySecretKeyMaterial: hadUsableSyncSpaceBeforeSync
           ? undefined
-          : `${normalizeWebDavHost(config.webdavHost)}\n${config.webdavUser ?? ''}\n${config.webdavPass ?? ''}`,
+          : `${normalizeWebDavHost(normalizedConfig.webdavHost)}\n${normalizedConfig.webdavUser}\n${normalizedConfig.webdavPass}`,
         beforeRemoteConflictApply: async () => this.createJoinSafetySnapshotOnce(db, summary),
         preferRemoteOnFirstJoin: hadUsableSyncSpaceBeforeSync && remoteHadStorageDataBeforeSync,
         assertActive: () => this.assertSyncRunActive(context, '同步 Storage v2 数据')

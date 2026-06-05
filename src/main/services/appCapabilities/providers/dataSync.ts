@@ -2,6 +2,7 @@ import { appDataSyncService } from '@main/services/appData/AppDataSyncService'
 import { reduxService } from '@main/services/ReduxService'
 import { describeWebDavUserFacingError } from '@main/services/WebDavRetry'
 import { IpcChannel } from '@shared/IpcChannel'
+import { normalizeWebDavConfig } from '@shared/webdavConfig'
 import type { WebDavConfig } from '@types'
 import { BrowserWindow } from 'electron'
 
@@ -36,12 +37,15 @@ async function getStoredWebDavConfig(): Promise<WebDavConfig> {
 
 async function resolveWebDavConfig(input: any): Promise<WebDavConfig> {
   const stored = await getStoredWebDavConfig()
-  return {
-    webdavHost: input?.webdavHost ?? stored.webdavHost,
-    webdavUser: input?.webdavUser ?? stored.webdavUser,
-    webdavPass: input?.webdavPass ?? stored.webdavPass,
-    webdavPath: input?.webdavPath ?? stored.webdavPath
-  }
+  return normalizeWebDavConfig(
+    {
+      webdavHost: input?.webdavHost ?? stored.webdavHost,
+      webdavUser: input?.webdavUser ?? stored.webdavUser,
+      webdavPass: input?.webdavPass ?? stored.webdavPass,
+      webdavPath: input?.webdavPath ?? stored.webdavPath
+    },
+    { defaultPath: DEFAULT_DATA_SYNC_PATH }
+  )
 }
 
 function hasWebDavHost(config: WebDavConfig) {

@@ -1,0 +1,65 @@
+import { describe, expect, it } from 'vitest'
+
+import { normalizeWebDavConfig, parseWebDavInput } from '../webdavConfig'
+
+describe('webdavConfig', () => {
+  it('splits a pasted WebDAV account block into separate fields', () => {
+    const input = `http://192.168.1.100:8080/
+
+账号：webdav
+密码：test-webdav-password`
+
+    const parsed = parseWebDavInput(input)
+
+    expect(parsed).toMatchObject({
+      structured: true,
+      webdavHost: 'http://192.168.1.100:8080/',
+      webdavUser: 'webdav',
+      webdavPass: 'test-webdav-password'
+    })
+  })
+
+  it('builds a WebDAV URL from provider-style protocol server port and path fields', () => {
+    const parsed = parseWebDavInput(`协议：https
+服务器地址：openapi.alipan.com
+端口：443
+路径：/dav
+账号：test-webdav-user
+密码：secret`)
+
+    expect(parsed).toMatchObject({
+      structured: true,
+      webdavHost: 'https://openapi.alipan.com:443/dav',
+      webdavUser: 'test-webdav-user',
+      webdavPass: 'secret'
+    })
+  })
+
+  it('normalizes URL-embedded credentials into WebDAV auth fields', () => {
+    const config = normalizeWebDavConfig(
+      {
+        webdavHost: 'http://webdav:test-webdav-password@192.168.1.100:8080',
+        webdavPath: 'Cherry Studio Pi'
+      },
+      { requireCredentials: true }
+    )
+
+    expect(config.webdavHost).toBe('http://192.168.1.100:8080')
+    expect(config.webdavUser).toBe('webdav')
+    expect(config.webdavPass).toBe('test-webdav-password')
+    expect(config.webdavPath).toBe('/Cherry Studio Pi')
+  })
+
+  it('rejects data sync WebDAV config without credentials before anonymous requests are sent', () => {
+    expect(() =>
+      normalizeWebDavConfig(
+        {
+          webdavHost: 'http://192.168.1.100:8080',
+          webdavUser: '',
+          webdavPass: ''
+        },
+        { requireCredentials: true }
+      )
+    ).toThrow('WebDAV 用户名和密码不能为空')
+  })
+})

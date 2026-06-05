@@ -300,6 +300,36 @@ describe('DataSyncSettings', () => {
     expect(mocks.toast.error).not.toHaveBeenCalled()
   })
 
+  it('splits a pasted WebDAV account block in the URL field into host username and password', async () => {
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.paste(screen.getByPlaceholderText('https://example.com/dav'), {
+      clipboardData: {
+        getData: () => `http://192.168.1.100:8080/
+
+账号：webdav
+密码：test-webdav-password`
+      }
+    })
+
+    expect(screen.getByDisplayValue('http://192.168.1.100:8080')).toBeTruthy()
+    expect(screen.getByDisplayValue('webdav')).toBeTruthy()
+    expect(screen.getByDisplayValue('test-webdav-password')).toBeTruthy()
+    expect(mocks.dispatch).toHaveBeenCalledWith({
+      type: 'settings/setDataSyncWebdavHost',
+      payload: 'http://192.168.1.100:8080'
+    })
+    expect(mocks.dispatch).toHaveBeenCalledWith({
+      type: 'settings/setDataSyncWebdavUser',
+      payload: 'webdav'
+    })
+    expect(mocks.dispatch).toHaveBeenCalledWith({
+      type: 'settings/setDataSyncWebdavPass',
+      payload: 'test-webdav-password'
+    })
+  })
+
   it('does not turn a completed sync into a failure when status refresh fails afterward', async () => {
     mocks.getStatus.mockResolvedValueOnce(idleStatus()).mockRejectedValueOnce(new Error('status refresh failed'))
     mocks.syncAppDataNow.mockResolvedValueOnce(successSummary())
