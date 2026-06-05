@@ -390,15 +390,17 @@ describe('AppDataSyncService', () => {
       expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(
         '/remote-root/sync/v1/.cherry-studio-pi-write-test-1760000000123.tmp'
       )
-      expect(mocks.webdav.exists).toHaveBeenCalledWith('/remote-root/sync/v1/storage-v2/secrets')
-      expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
-        '/remote-root/sync/v1/storage-v2/secrets/.cherry-studio-pi-storage-write-test-1760000000123.tmp',
-        'ok',
-        { overwrite: true }
-      )
-      expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(
-        '/remote-root/sync/v1/storage-v2/secrets/.cherry-studio-pi-storage-write-test-1760000000123.tmp'
-      )
+      for (const probeDir of ['storage-v2/bundle', 'storage-v2/secrets', 'storage-v2/blobs', 'backups']) {
+        expect(mocks.webdav.exists).toHaveBeenCalledWith(`/remote-root/sync/v1/${probeDir}`)
+        expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
+          `/remote-root/sync/v1/${probeDir}/.cherry-studio-pi-storage-write-test-1760000000123.tmp`,
+          'ok',
+          { overwrite: true }
+        )
+        expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(
+          `/remote-root/sync/v1/${probeDir}/.cherry-studio-pi-storage-write-test-1760000000123.tmp`
+        )
+      }
       expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
     } finally {
       nowSpy.mockRestore()

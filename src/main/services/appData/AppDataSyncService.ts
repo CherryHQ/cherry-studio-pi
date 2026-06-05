@@ -220,7 +220,12 @@ const SNAPSHOT_RETENTION_PER_DEVICE = 3
 const SNAPSHOT_RETENTION_TOTAL = 20
 const NATIVE_WEB_DAV_LOCK_UNSUPPORTED_STATUSES = new Set([403, 405, 409, 501])
 const NATIVE_WEB_DAV_LOCK_OPT_IN_ENV = 'CHERRY_STUDIO_DATA_SYNC_NATIVE_WEB_DAV_LOCK'
-const STORAGE_V2_WRITE_ACCESS_PROBE_DIR = 'storage-v2/secrets'
+const STORAGE_V2_WRITE_ACCESS_PROBE_DIRS = [
+  'storage-v2/bundle',
+  'storage-v2/secrets',
+  'storage-v2/blobs',
+  'backups'
+] as const
 
 const AGENT_RUNTIME_ENTITY_TYPES = new Set([
   'agent',
@@ -621,10 +626,12 @@ export class AppDataSyncService {
   }
 
   private async assertStorageV2WriteAccess(client: WebDAVClient, basePath: string) {
-    const storageProbeDir = path.posix.join(basePath, STORAGE_V2_WRITE_ACCESS_PROBE_DIR)
-    await this.ensureDirectory(client, storageProbeDir)
-    const probePath = path.posix.join(storageProbeDir, `.cherry-studio-pi-storage-write-test-${Date.now()}.tmp`)
-    await this.assertProbeWriteAccess(client, probePath, 'Storage v2 sync probe')
+    for (const relativeProbeDir of STORAGE_V2_WRITE_ACCESS_PROBE_DIRS) {
+      const storageProbeDir = path.posix.join(basePath, relativeProbeDir)
+      await this.ensureDirectory(client, storageProbeDir)
+      const probePath = path.posix.join(storageProbeDir, `.cherry-studio-pi-storage-write-test-${Date.now()}.tmp`)
+      await this.assertProbeWriteAccess(client, probePath, `Storage v2 sync probe ${relativeProbeDir}`)
+    }
   }
 
   private async readJson<T>(
