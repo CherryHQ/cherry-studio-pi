@@ -45,6 +45,7 @@ const mocks = vi.hoisted(() => ({
     backup: vi.fn(),
     restore: vi.fn()
   },
+  notesDir: '/tmp/cherry-studio-pi-app-data-sync-service-notes',
   remoteFiles: new Map<string, unknown>(),
   webdav: {
     exists: vi.fn(),
@@ -114,6 +115,10 @@ vi.mock('@main/services/storageV2/DataRootService', () => ({
 
 vi.mock('@main/services/storageV2/WebDavRecordSyncService', () => ({
   storageV2WebDavRecordSyncService: mocks.storageRecordSync
+}))
+
+vi.mock('@main/utils/file', () => ({
+  getNotesDir: () => mocks.notesDir
 }))
 
 import { AppDataSyncService } from '../AppDataSyncService'
@@ -249,11 +254,12 @@ function mockDirectoryContentsFromRemoteFiles() {
 }
 
 describe('AppDataSyncService', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useRealTimers()
     vi.clearAllMocks()
     delete process.env.CHERRY_STUDIO_DATA_SYNC_REMOTE_SNAPSHOT
     delete process.env.CHERRY_STUDIO_DATA_SYNC_MAX_RUNTIME_MS
+    await fsp.rm(mocks.notesDir, { recursive: true, force: true })
     mocks.remoteFiles.clear()
     mocks.db.listRecords.mockResolvedValue([])
     mocks.db.getSyncState.mockResolvedValue(null)

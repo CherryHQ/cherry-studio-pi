@@ -20,6 +20,7 @@ import {
 } from '@main/services/storageV2/WebDavRecordSyncService'
 import { hashJsonValue, writeWebDavJsonAtomically } from '@main/services/WebDavAtomic'
 import { normalizeWebDavHost, runWebDavOperation, WebDavOperationError } from '@main/services/WebDavRetry'
+import { getNotesDir } from '@main/utils/file'
 import type { WebDavConfig } from '@types'
 import { XMLParser } from 'fast-xml-parser'
 import { createClient, type FileStat, type WebDAVClient } from 'webdav'
@@ -49,8 +50,34 @@ type RemoteManifest = {
   records: Record<string, RemoteRecordMeta>
   syncSpace?: RemoteSyncSpace | null
   storageV2?: StorageV2WebDavRecordSyncManifest | null
+  notes?: RemoteNotesManifest | null
   latestSnapshot?: RemoteSnapshotMeta | null
   snapshots?: Record<string, RemoteSnapshotMeta>
+}
+
+type RemoteNotesFileMeta = {
+  version: 1
+  relativePath: string
+  valueHash: string
+  byteSize: number
+  updatedAt: number
+  deletedAt?: number | null
+  deviceId: string
+  path: string | null
+}
+
+type RemoteNotesManifest = {
+  version: 1
+  updatedAt: number
+  files: Record<string, RemoteNotesFileMeta>
+}
+
+type LocalNotesFile = {
+  relativePath: string
+  localPath: string
+  valueHash: string
+  byteSize: number
+  updatedAt: number
 }
 
 type RemoteSyncSpace = {
@@ -222,6 +249,8 @@ const DATA_SYNC_SUFFIX = '/sync/v1'
 const SYNC_SPACE_KEY_FORMAT = 'cherry-sync-space-key-v1' as const
 const SYNC_SPACE_SECRET_ENCRYPTION = 'cherry-webdav-secret-sync-aes-256-gcm' as const
 const STORAGE_V2_RUNTIME_PROJECTION_HASH_KEY = 'storage-v2-runtime-projection-hash'
+const NOTES_REMOTE_ARTIFACT_ROOT = 'notes'
+const NOTES_SYNC_STATE_PREFIX = 'notes-file'
 const LEGACY_REMOTE_SYNC_LOCK_FILE = '.sync.lock.json'
 const REMOTE_SYNC_LOCK_DIR = '.sync.locks'
 const REMOTE_SYNC_LOCK_TTL_MS = 2 * 60 * 1000
@@ -331,6 +360,7 @@ function makeManifest(): RemoteManifest {
     records: {},
     syncSpace: null,
     storageV2: null,
+    notes: null,
     latestSnapshot: null,
     snapshots: {}
   }
@@ -417,6 +447,57 @@ function normalizeRemoteRelativePath(value: string, label = 'Remote data sync pa
 
 function normalizeRemoteSnapshotPath(value: string) {
   return normalizeRemoteRelativePath(value, 'Remote data snapshot path')
+}
+
+function normalizeNotesRelativePath(value: string, label = 'Notes file path') {
+  const rawPath = String(value ?? '').replace(/\\/g, '/')
+  if (!rawPath || !rawPath.trim() || /^[a-z]:\//i.test(rawPath)) {
+    throw new Error(`${label} is invalid`)
+  }
+
+  const normalized = path.posix.normalize(rawPath.replace(/^\/+/g, ''))
+  if (!normalized || normalized === '.' || normalized === '..' || normalized.startsWith('../')) {
+    throw new Error(`${label} is invalid`)
+  }
+
+  return normalized
+}
+
+function hashText(value: string) {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+function notesFileRemotePath(relativePath: string, valueHash: string) {
+  const pathHash = hashText(relativePath)
+  return `${NOTES_REMOTE_ARTIFACT_ROOT}/files/${pathHash.slice(0, 2)}/${pathHash}/${valueHash}.bin`
+}
+
+function notesSyncStateKey(deviceId: string, relativePath: string) {
+  return `${NOTES_SYNC_STATE_PREFIX}:${hashText(`${deviceId}\0${relativePath}`)}`
+}
+
+function notesContentCursor(valueHash: string) {
+  return `content:${valueHash}`
+}
+
+function notesRemoteCursor(meta: RemoteNotesFileMeta) {
+  return meta.deletedAt ? `deleted:${meta.valueHash}:${meta.deletedAt}` : notesContentCursor(meta.valueHash)
+}
+
+function localNotesCursor(file: LocalNotesFile) {
+  return notesContentCursor(file.valueHash)
+}
+
+function shouldLocalNotesFileWin(localFile: LocalNotesFile, remoteFile: RemoteNotesFileMeta) {
+  if (localFile.updatedAt !== remoteFile.updatedAt) {
+    return localFile.updatedAt > remoteFile.updatedAt
+  }
+
+  return localFile.valueHash >= remoteFile.valueHash
+}
+
+function isIgnoredNotesEntry(name: string) {
+  return name === '.DS_Store' || name === 'Thumbs.db' || name.includes('.cherry-studio-pi-sync-download-')
 }
 
 function shouldAttemptRemoteFullSnapshotUpload() {
@@ -883,8 +964,13 @@ export class AppDataSyncService {
       addReferencedPath(snapshot.path)
     }
     addReferencedPath(manifest.latestSnapshot?.path)
+    for (const note of Object.values(manifest.notes?.files ?? {})) {
+      if (!note.deletedAt) {
+        addReferencedPath(note.path)
+      }
+    }
 
-    for (const root of ['records', 'backups']) {
+    for (const root of ['records', 'backups', NOTES_REMOTE_ARTIFACT_ROOT]) {
       const rootPath = path.posix.join(basePath, root)
       if (await this.pruneRemoteArtifactRootIfUnreferenced(client, rootPath, referenced)) {
         continue
@@ -1601,12 +1687,55 @@ export class AppDataSyncService {
     return { ok: true, basePath }
   }
 
+  private normalizeNotesManifest(manifest?: RemoteNotesManifest | null): RemoteNotesManifest {
+    const files: Record<string, RemoteNotesFileMeta> = Object.create(null)
+
+    for (const [id, meta] of Object.entries(manifest?.files ?? {})) {
+      if (!meta || typeof meta !== 'object') {
+        throw new Error(`远端笔记同步状态损坏：${id}`)
+      }
+
+      const relativePath = normalizeNotesRelativePath(meta.relativePath || id, 'Remote notes file path')
+      const valueHash = typeof meta.valueHash === 'string' ? meta.valueHash : ''
+      if (!/^[a-f0-9]{64}$/i.test(valueHash)) {
+        throw new Error(`远端笔记文件校验信息损坏：${relativePath}`)
+      }
+
+      const deletedAt = meta.deletedAt == null ? null : Number(meta.deletedAt)
+      const pathValue = meta.path == null ? null : normalizeRemoteRelativePath(meta.path, 'Remote notes artifact path')
+      if (!deletedAt && !pathValue) {
+        throw new Error(`远端笔记文件缺少内容文件：${relativePath}`)
+      }
+      if (pathValue && !pathValue.startsWith(`${NOTES_REMOTE_ARTIFACT_ROOT}/`)) {
+        throw new Error(`远端笔记文件路径越界：${relativePath}`)
+      }
+
+      files[relativePath] = {
+        version: 1,
+        relativePath,
+        valueHash: valueHash.toLowerCase(),
+        byteSize: Math.max(0, Number(meta.byteSize) || 0),
+        updatedAt: Math.max(0, Number(meta.updatedAt) || deletedAt || 0),
+        deletedAt: deletedAt && Number.isFinite(deletedAt) ? deletedAt : null,
+        deviceId: typeof meta.deviceId === 'string' && meta.deviceId ? meta.deviceId : 'unknown',
+        path: pathValue
+      }
+    }
+
+    return {
+      version: 1,
+      updatedAt: Math.max(0, Number(manifest?.updatedAt) || 0),
+      files
+    }
+  }
+
   private normalizeManifest(manifest: RemoteManifest | null): RemoteManifest {
     const nextManifest = manifest ?? makeManifest()
     nextManifest.generation = Number.isFinite(nextManifest.generation) ? Number(nextManifest.generation) : 0
     nextManifest.records = nextManifest.records ?? {}
     nextManifest.syncSpace = nextManifest.syncSpace ?? null
     nextManifest.storageV2 = nextManifest.storageV2 ?? null
+    nextManifest.notes = this.normalizeNotesManifest(nextManifest.notes)
     nextManifest.snapshots = nextManifest.snapshots ?? {}
     nextManifest.latestSnapshot = nextManifest.latestSnapshot ?? null
     return nextManifest
@@ -1706,6 +1835,318 @@ export class AppDataSyncService {
   private async applyRemoteRecord(db: AppDataDatabase, record: AppDataRecord) {
     await storageV2AppDataKvMirrorService.upsertRecordSnapshot(record)
     await db.applyRemoteRecord(record, { storageV2Mirrored: true })
+  }
+
+  private resolveLocalNotesFilePath(rootDir: string, relativePath: string) {
+    const resolvedRoot = path.resolve(rootDir)
+    const resolvedPath = path.resolve(resolvedRoot, ...normalizeNotesRelativePath(relativePath).split('/'))
+    const relativeToRoot = path.relative(resolvedRoot, resolvedPath)
+    if (!relativeToRoot || relativeToRoot.startsWith('..') || path.isAbsolute(relativeToRoot)) {
+      throw new Error(`笔记文件路径越界：${relativePath}`)
+    }
+
+    return resolvedPath
+  }
+
+  private async listLocalNotesFiles(rootDir: string, context: SyncRunContext): Promise<LocalNotesFile[]> {
+    const files: LocalNotesFile[] = []
+
+    const walk = async (currentDir: string) => {
+      this.assertSyncRunActive(context, '扫描本地笔记文件')
+      const entries = await fsp.readdir(currentDir, { withFileTypes: true }).catch((error) => {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+        throw error
+      })
+
+      for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+        this.assertSyncRunActive(context, '扫描本地笔记文件')
+        if (isIgnoredNotesEntry(entry.name) || entry.isSymbolicLink()) continue
+
+        const localPath = path.join(currentDir, entry.name)
+        if (entry.isDirectory()) {
+          await walk(localPath)
+          continue
+        }
+        if (!entry.isFile()) continue
+
+        const stat = await fsp.stat(localPath)
+        if (!stat.isFile()) continue
+
+        const relativePath = normalizeNotesRelativePath(path.relative(rootDir, localPath).split(path.sep).join('/'))
+        files.push({
+          relativePath,
+          localPath,
+          valueHash: await sha256File(localPath),
+          byteSize: stat.size,
+          updatedAt: Math.max(0, Math.floor(stat.mtimeMs))
+        })
+      }
+    }
+
+    await fsp.mkdir(rootDir, { recursive: true })
+    await walk(rootDir)
+    return files.sort((left, right) => left.relativePath.localeCompare(right.relativePath))
+  }
+
+  private assertNotesFileBufferIntegrity(
+    buffer: Buffer,
+    meta: Pick<RemoteNotesFileMeta, 'relativePath' | 'valueHash' | 'byteSize'>
+  ) {
+    if (buffer.byteLength !== meta.byteSize) {
+      throw new Error(`远端笔记文件大小不匹配：${meta.relativePath}。为避免导入损坏笔记，本次同步已停止。`)
+    }
+
+    if (sha256Buffer(buffer) !== meta.valueHash) {
+      throw new Error(`远端笔记文件校验失败：${meta.relativePath}。为避免导入损坏笔记，本次同步已停止。`)
+    }
+  }
+
+  private async assertRemoteNotesFileIntegrity(
+    client: WebDAVClient,
+    remotePath: string,
+    meta: Pick<RemoteNotesFileMeta, 'relativePath' | 'valueHash' | 'byteSize'>
+  ) {
+    const contents = await runWebDavOperation(
+      `verifying uploaded notes file ${remotePath}`,
+      () => client.getFileContents(remotePath, { format: 'binary' }),
+      { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
+    )
+    this.assertNotesFileBufferIntegrity(bufferFromRemote(contents), meta)
+  }
+
+  private async pushNotesFile(
+    client: WebDAVClient,
+    basePath: string,
+    manifest: RemoteNotesManifest,
+    localFile: LocalNotesFile,
+    deviceId: string
+  ) {
+    const relativePath = notesFileRemotePath(localFile.relativePath, localFile.valueHash)
+    const remotePath = path.posix.join(basePath, relativePath)
+
+    await this.ensureDirectory(client, path.posix.dirname(remotePath))
+    await runWebDavOperation(
+      `uploading notes file ${remotePath}`,
+      () =>
+        client.putFileContents(remotePath, fs.createReadStream(localFile.localPath), {
+          overwrite: true,
+          contentLength: localFile.byteSize
+        }),
+      { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
+    )
+    await this.assertRemoteNotesFileIntegrity(client, remotePath, {
+      relativePath: localFile.relativePath,
+      valueHash: localFile.valueHash,
+      byteSize: localFile.byteSize
+    })
+
+    manifest.files[localFile.relativePath] = {
+      version: 1,
+      relativePath: localFile.relativePath,
+      valueHash: localFile.valueHash,
+      byteSize: localFile.byteSize,
+      updatedAt: localFile.updatedAt,
+      deletedAt: null,
+      deviceId,
+      path: relativePath
+    }
+  }
+
+  private async pullNotesFile(client: WebDAVClient, basePath: string, rootDir: string, meta: RemoteNotesFileMeta) {
+    if (meta.deletedAt || !meta.path) return
+
+    const relativePath = normalizeNotesRelativePath(meta.relativePath)
+    const remotePath = path.posix.join(basePath, normalizeRemoteRelativePath(meta.path, 'Remote notes artifact path'))
+    const contents = await runWebDavOperation(
+      `downloading notes file ${remotePath}`,
+      () => client.getFileContents(remotePath, { format: 'binary' }),
+      { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
+    )
+    const buffer = bufferFromRemote(contents)
+    this.assertNotesFileBufferIntegrity(buffer, meta)
+
+    const localPath = this.resolveLocalNotesFilePath(rootDir, relativePath)
+    await fsp.mkdir(path.dirname(localPath), { recursive: true })
+    const tempPath = `${localPath}.cherry-studio-pi-sync-download-${process.pid}-${Date.now()}-${randomBytes(
+      4
+    ).toString('hex')}.tmp`
+
+    try {
+      await fsp.writeFile(tempPath, buffer)
+      await fsp.rename(tempPath, localPath)
+      const mtime = new Date(Math.max(0, meta.updatedAt))
+      await fsp.utimes(localPath, mtime, mtime).catch(() => undefined)
+    } finally {
+      await fsp.rm(tempPath, { force: true }).catch(() => undefined)
+    }
+  }
+
+  private async removeLocalNotesFile(rootDir: string, relativePath: string) {
+    await fsp.rm(this.resolveLocalNotesFilePath(rootDir, relativePath), { force: true })
+  }
+
+  private markNotesFileDeleted(
+    manifest: RemoteNotesManifest,
+    relativePath: string,
+    previous: Pick<RemoteNotesFileMeta, 'valueHash' | 'updatedAt' | 'deviceId'>,
+    deviceId: string,
+    deletedAt: number
+  ) {
+    manifest.files[relativePath] = {
+      version: 1,
+      relativePath,
+      valueHash: previous.valueHash,
+      byteSize: 0,
+      updatedAt: deletedAt,
+      deletedAt,
+      deviceId: deviceId || previous.deviceId,
+      path: null
+    }
+  }
+
+  private async syncDefaultNotesDirectory(
+    client: WebDAVClient,
+    basePath: string,
+    inputManifest: RemoteNotesManifest | null | undefined,
+    db: AppDataDatabase,
+    summary: DataSyncSummary,
+    context: SyncRunContext,
+    stageSyncState: (id: string, value: unknown) => void
+  ) {
+    const notesManifest = this.normalizeNotesManifest(inputManifest)
+    const deviceId = db.getDeviceId()
+    const rootDir = getNotesDir()
+    const localFiles = await this.listLocalNotesFiles(rootDir, context)
+    const localByPath = new Map(localFiles.map((file) => [file.relativePath, file]))
+    const remoteActiveCount = Object.values(notesManifest.files).filter((meta) => !meta.deletedAt).length
+    const protectEmptyLocalDirectory = localFiles.length === 0 && remoteActiveCount > 0
+    const allPaths = Array.from(new Set([...localByPath.keys(), ...Object.keys(notesManifest.files)])).sort(
+      (left, right) => left.localeCompare(right)
+    )
+    let manifestChanged = false
+
+    const uploadLocal = async (localFile: LocalNotesFile) => {
+      this.assertSyncRunActive(context, '上传本地笔记文件')
+      await this.pushNotesFile(client, basePath, notesManifest, localFile, deviceId)
+      stageSyncState(notesSyncStateKey(deviceId, localFile.relativePath), localNotesCursor(localFile))
+      summary.uploaded += 1
+      manifestChanged = true
+    }
+
+    const downloadRemote = async (remoteMeta: RemoteNotesFileMeta, localFile?: LocalNotesFile) => {
+      this.assertSyncRunActive(context, '下载远端笔记文件')
+      if (localFile && localFile.valueHash !== remoteMeta.valueHash) {
+        await this.createJoinSafetySnapshotOnce(db, summary)
+      }
+      await this.pullNotesFile(client, basePath, rootDir, remoteMeta)
+      stageSyncState(notesSyncStateKey(deviceId, remoteMeta.relativePath), notesRemoteCursor(remoteMeta))
+      summary.downloaded += 1
+    }
+
+    const deleteRemote = (relativePath: string, remoteMeta: RemoteNotesFileMeta) => {
+      this.markNotesFileDeleted(notesManifest, relativePath, remoteMeta, deviceId, summary.lastSyncAt)
+      stageSyncState(notesSyncStateKey(deviceId, relativePath), notesRemoteCursor(notesManifest.files[relativePath]))
+      summary.deleted += 1
+      manifestChanged = true
+    }
+
+    const deleteLocal = async (relativePath: string, remoteMeta: RemoteNotesFileMeta) => {
+      this.assertSyncRunActive(context, '删除本地笔记文件')
+      await this.removeLocalNotesFile(rootDir, relativePath)
+      stageSyncState(notesSyncStateKey(deviceId, relativePath), notesRemoteCursor(remoteMeta))
+      summary.deleted += 1
+    }
+
+    for (const relativePath of allPaths) {
+      this.assertSyncRunActive(context, '同步默认笔记目录')
+      const localFile = localByPath.get(relativePath)
+      const remoteMeta = notesManifest.files[relativePath]
+      const syncKey = notesSyncStateKey(deviceId, relativePath)
+      const lastCursorValue = await this.getSyncState<unknown>(db, syncKey)
+      const lastCursor = typeof lastCursorValue === 'string' ? lastCursorValue : null
+
+      if (localFile && !remoteMeta) {
+        await uploadLocal(localFile)
+        continue
+      }
+
+      if (!localFile && remoteMeta) {
+        if (remoteMeta.deletedAt) {
+          stageSyncState(syncKey, notesRemoteCursor(remoteMeta))
+          summary.skipped += 1
+          continue
+        }
+
+        if (!protectEmptyLocalDirectory && lastCursor === notesRemoteCursor(remoteMeta)) {
+          deleteRemote(relativePath, remoteMeta)
+          continue
+        }
+
+        await downloadRemote(remoteMeta)
+        continue
+      }
+
+      if (!localFile || !remoteMeta) {
+        summary.skipped += 1
+        continue
+      }
+
+      const localCursor = localNotesCursor(localFile)
+      if (remoteMeta.deletedAt) {
+        const localChanged = localCursor !== lastCursor
+        const remoteDeletedAt = remoteMeta.deletedAt || remoteMeta.updatedAt
+        if (localChanged && localFile.updatedAt > remoteDeletedAt) {
+          summary.resolvedConflicts += 1
+          await uploadLocal(localFile)
+        } else {
+          await deleteLocal(relativePath, remoteMeta)
+        }
+        continue
+      }
+
+      const remoteCursor = notesRemoteCursor(remoteMeta)
+      if (localFile.valueHash === remoteMeta.valueHash) {
+        stageSyncState(syncKey, localCursor)
+        summary.skipped += 1
+        continue
+      }
+
+      const localChanged = localCursor !== lastCursor
+      const remoteChanged = remoteCursor !== lastCursor
+
+      if (!lastCursor) {
+        summary.resolvedConflicts += 1
+        if (shouldLocalNotesFileWin(localFile, remoteMeta)) {
+          await uploadLocal(localFile)
+        } else {
+          await downloadRemote(remoteMeta, localFile)
+        }
+        continue
+      }
+
+      if (localChanged && !remoteChanged) {
+        await uploadLocal(localFile)
+        continue
+      }
+
+      if (!localChanged && remoteChanged) {
+        await downloadRemote(remoteMeta)
+        continue
+      }
+
+      summary.resolvedConflicts += 1
+      if (shouldLocalNotesFileWin(localFile, remoteMeta)) {
+        await uploadLocal(localFile)
+      } else {
+        await downloadRemote(remoteMeta, localFile)
+      }
+    }
+
+    if (manifestChanged) {
+      notesManifest.updatedAt = summary.lastSyncAt
+    }
+
+    return notesManifest
   }
 
   private async setSyncState(db: AppDataDatabase, id: string, value: unknown) {
@@ -2259,6 +2700,17 @@ export class AppDataSyncService {
       db = await this.projectStorageV2RuntimeAfterSync(db, manifest.storageV2, summary, {
         remoteHadStorageDataBeforeSync
       })
+
+      this.assertSyncRunActive(context, '同步默认笔记文件')
+      manifest.notes = await this.syncDefaultNotesDirectory(
+        client,
+        basePath,
+        manifest.notes,
+        db,
+        summary,
+        context,
+        stageSyncState
+      )
 
       if (this.shouldUploadFullSnapshot(db, manifest, summary.lastSyncAt)) {
         try {

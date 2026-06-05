@@ -1066,6 +1066,22 @@ async function readRemoteManifest(server: WebDavTestServer, webdavPath: string) 
   return JSON.parse(await fsp.readFile(path.join(remoteSyncRoot(server, webdavPath), 'manifest.json'), 'utf8'))
 }
 
+function notesSyncStateKey(deviceId: string, relativePath: string) {
+  return `notes-file:${createHash('sha256').update(`${deviceId}\0${relativePath}`).digest('hex')}`
+}
+
+async function writeInstanceNote(instance: TestInstance, relativePath: string, contents: string, updatedAt: string) {
+  const notePath = path.join(instance.dataRoot, 'Notes', ...relativePath.split('/'))
+  await fsp.mkdir(path.dirname(notePath), { recursive: true })
+  await fsp.writeFile(notePath, contents, 'utf8')
+  const mtime = new Date(updatedAt)
+  await fsp.utimes(notePath, mtime, mtime)
+}
+
+async function readInstanceNote(instance: TestInstance, relativePath: string) {
+  return fsp.readFile(path.join(instance.dataRoot, 'Notes', ...relativePath.split('/')), 'utf8')
+}
+
 function countRemoteStorageV2Records(manifest: { storageV2?: { records?: Record<string, { entityType: string }> } }) {
   const counts: Record<string, number> = {}
   for (const record of Object.values(manifest.storageV2?.records ?? {})) {
@@ -1234,6 +1250,74 @@ describe('AppDataSyncService local WebDAV integration', () => {
     expect(remoteText).toContain('device-a-storage-value')
     expect(remoteText).not.toContain('device-b-default')
     expect(remoteText).not.toContain('device-b-storage-default')
+  })
+
+  it('syncs default Notes directory files to a newly joined empty device', async () => {
+    const homePath = path.join(tempRoot, 'home')
+    const instanceA = makeInstance(tempRoot, 'device-a')
+    const instanceB = makeInstance(tempRoot, 'device-b')
+    const webdavPath = '/cherry-studio-pi-notes'
+    const config = makeConfig(server!, webdavPath)
+    const backupManager = makeBackupManager(tempRoot)
+    const noteRelativePath = 'projects/pi-roadmap.md'
+    const noteContents = '# Cherry Studio Pi\n\n默认笔记目录应该跟随多端同步。'
+
+    await switchInstance(instanceA, homePath)
+    await writeInstanceNote(instanceA, noteRelativePath, noteContents, '2026-05-29T12:00:00.000Z')
+    const firstSummary = await new AppDataSyncService(backupManager as never).syncNow(config)
+    const uploadedManifest = await readRemoteManifest(server!, webdavPath)
+
+    expect(firstSummary.uploaded).toBe(1)
+    expect(uploadedManifest.notes?.files?.[noteRelativePath]).toMatchObject({
+      relativePath: noteRelativePath,
+      deletedAt: null,
+      byteSize: Buffer.byteLength(noteContents)
+    })
+    await expect(
+      pathExists(path.join(remoteSyncRoot(server!, webdavPath), uploadedManifest.notes.files[noteRelativePath].path))
+    ).resolves.toBe(true)
+
+    await switchInstance(instanceB, homePath)
+    const secondSummary = await new AppDataSyncService(backupManager as never).syncNow(config)
+    const downloadedManifest = await readRemoteManifest(server!, webdavPath)
+
+    expect(secondSummary.downloaded).toBe(1)
+    expect(downloadedManifest.notes?.files?.[noteRelativePath]?.deletedAt ?? null).toBeNull()
+    await expect(readInstanceNote(instanceB, noteRelativePath)).resolves.toBe(noteContents)
+  })
+
+  it('treats an empty local Notes directory as recovery instead of deleting remote notes', async () => {
+    const homePath = path.join(tempRoot, 'home')
+    const instanceA = makeInstance(tempRoot, 'device-a')
+    const instanceB = makeInstance(tempRoot, 'device-b')
+    const webdavPath = '/cherry-studio-pi-notes-empty-recovery'
+    const config = makeConfig(server!, webdavPath)
+    const backupManager = makeBackupManager(tempRoot)
+    const noteRelativePath = 'daily/2026-05-29.md'
+    const noteContents = '空目录不能被误判为删除远端笔记。'
+
+    await switchInstance(instanceA, homePath)
+    await writeInstanceNote(instanceA, noteRelativePath, noteContents, '2026-05-29T12:00:00.000Z')
+    await new AppDataSyncService(backupManager as never).syncNow(config)
+    const manifestBeforeRecovery = await readRemoteManifest(server!, webdavPath)
+    const remoteNote = manifestBeforeRecovery.notes.files[noteRelativePath]
+
+    await switchInstance(instanceB, homePath)
+    const db = await getAppDataDatabase()
+    await db.setSyncState(notesSyncStateKey(db.getDeviceId(), noteRelativePath), `content:${remoteNote.valueHash}`, {
+      storageV2Mirrored: true
+    })
+    const recoverySummary = await new AppDataSyncService(backupManager as never).syncNow(config)
+    const manifestAfterRecovery = await readRemoteManifest(server!, webdavPath)
+
+    expect(recoverySummary.downloaded).toBe(1)
+    expect(recoverySummary.deleted).toBe(0)
+    expect(manifestAfterRecovery.notes.files[noteRelativePath]).toMatchObject({
+      relativePath: noteRelativePath,
+      valueHash: remoteNote.valueHash,
+      deletedAt: null
+    })
+    await expect(readInstanceNote(instanceB, noteRelativePath)).resolves.toBe(noteContents)
   })
 
   it('syncs comprehensive Storage v2 data across models, assistants, agents, knowledge, files, chats and settings', async () => {
