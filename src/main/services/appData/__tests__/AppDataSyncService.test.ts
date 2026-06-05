@@ -46,6 +46,10 @@ const mocks = vi.hoisted(() => ({
     restore: vi.fn()
   },
   notesDir: '/tmp/cherry-studio-pi-app-data-sync-service-notes',
+  runtimeDataRoot: '/tmp/cherry-studio-pi-app-data-sync-service-runtime',
+  memory: {
+    close: vi.fn()
+  },
   remoteFiles: new Map<string, unknown>(),
   webdav: {
     exists: vi.fn(),
@@ -73,6 +77,12 @@ vi.mock('@logger', () => ({
 
 vi.mock('@main/services/BackupManager', () => ({
   default: vi.fn(() => mocks.backupManager)
+}))
+
+vi.mock('@main/services/memory/MemoryService', () => ({
+  default: {
+    getInstance: () => mocks.memory
+  }
 }))
 
 vi.mock('webdav', () => ({
@@ -115,6 +125,10 @@ vi.mock('@main/services/storageV2/DataRootService', () => ({
 
 vi.mock('@main/services/storageV2/WebDavRecordSyncService', () => ({
   storageV2WebDavRecordSyncService: mocks.storageRecordSync
+}))
+
+vi.mock('@main/utils', () => ({
+  getDataPath: (subPath?: string) => (subPath ? path.join(mocks.runtimeDataRoot, subPath) : mocks.runtimeDataRoot)
 }))
 
 vi.mock('@main/utils/file', () => ({
@@ -260,7 +274,9 @@ describe('AppDataSyncService', () => {
     delete process.env.CHERRY_STUDIO_DATA_SYNC_REMOTE_SNAPSHOT
     delete process.env.CHERRY_STUDIO_DATA_SYNC_MAX_RUNTIME_MS
     await fsp.rm(mocks.notesDir, { recursive: true, force: true })
+    await fsp.rm(mocks.runtimeDataRoot, { recursive: true, force: true })
     mocks.remoteFiles.clear()
+    mocks.memory.close.mockResolvedValue(undefined)
     mocks.db.listRecords.mockResolvedValue([])
     mocks.db.getSyncState.mockResolvedValue(null)
     mocks.db.setSyncState.mockResolvedValue(undefined)

@@ -3,9 +3,12 @@ import * as fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import https from 'node:https'
 import path from 'node:path'
+import { gunzipSync, gzipSync } from 'node:zlib'
 
+import { createClient as createLibsqlClient } from '@libsql/client'
 import { loggerService } from '@logger'
 import BackupManager from '@main/services/BackupManager'
+import MemoryService from '@main/services/memory/MemoryService'
 import { storageV2AgentLegacyProjectionService } from '@main/services/storageV2/AgentLegacyProjectionService'
 import { storageV2AppDataKvMirrorService } from '@main/services/storageV2/AppDataKvMirrorService'
 import { storageV2AppDataLegacyProjectionService } from '@main/services/storageV2/AppDataLegacyProjectionService'
@@ -20,6 +23,7 @@ import {
 } from '@main/services/storageV2/WebDavRecordSyncService'
 import { hashJsonValue, writeWebDavJsonAtomically } from '@main/services/WebDavAtomic'
 import { normalizeWebDavHost, runWebDavOperation, WebDavOperationError } from '@main/services/WebDavRetry'
+import { getDataPath } from '@main/utils'
 import { getNotesDir } from '@main/utils/file'
 import type { WebDavConfig } from '@types'
 import { XMLParser } from 'fast-xml-parser'
@@ -51,6 +55,7 @@ type RemoteManifest = {
   syncSpace?: RemoteSyncSpace | null
   storageV2?: StorageV2WebDavRecordSyncManifest | null
   notes?: RemoteNotesManifest | null
+  runtimeDirectories?: RemoteRuntimeDirectoriesManifest | null
   latestSnapshot?: RemoteSnapshotMeta | null
   snapshots?: Record<string, RemoteSnapshotMeta>
 }
@@ -78,6 +83,60 @@ type LocalNotesFile = {
   valueHash: string
   byteSize: number
   updatedAt: number
+}
+
+type RemoteRuntimeDirectoryMeta = {
+  version: 1
+  name: RuntimeDirectoryName
+  valueHash: string
+  byteSize: number
+  compressedByteSize: number
+  fileCount: number
+  updatedAt: number
+  deviceId: string
+  path: string
+}
+
+type RemoteRuntimeDirectoriesManifest = {
+  version: 1
+  updatedAt: number
+  directories: Record<string, RemoteRuntimeDirectoryMeta>
+}
+
+type RuntimeDirectoryFileEntry = {
+  relativePath: string
+  valueHash: string
+  byteSize: number
+  updatedAt: number
+  mode: number
+  contentBase64: string
+}
+
+type RuntimeDirectoryBundle = {
+  version: 1
+  name: RuntimeDirectoryName
+  updatedAt: number
+  files: Record<string, RuntimeDirectoryFileEntry>
+}
+
+type LocalRuntimeDirectorySnapshot = {
+  name: RuntimeDirectoryName
+  rootDir: string
+  fileCount: number
+  byteSize: number
+  compressedByteSize: number
+  updatedAt: number
+  valueHash: string
+  bundle: Buffer
+}
+
+type RuntimeDirectoryName = 'Memory' | 'Skills' | 'MCP' | 'Workbench' | 'Channels' | 'Workspace'
+
+type RuntimeDirectoryPolicy = {
+  name: RuntimeDirectoryName
+  maxTotalBytes: number
+  maxFileBytes: number
+  snapshot?: 'memory'
 }
 
 type RemoteSyncSpace = {
@@ -251,6 +310,43 @@ const SYNC_SPACE_SECRET_ENCRYPTION = 'cherry-webdav-secret-sync-aes-256-gcm' as 
 const STORAGE_V2_RUNTIME_PROJECTION_HASH_KEY = 'storage-v2-runtime-projection-hash'
 const NOTES_REMOTE_ARTIFACT_ROOT = 'notes'
 const NOTES_SYNC_STATE_PREFIX = 'notes-file'
+const RUNTIME_DIRECTORIES_REMOTE_ROOT = 'runtime-directories'
+const RUNTIME_DIRECTORY_SYNC_STATE_PREFIX = 'runtime-directory'
+const RUNTIME_DIRECTORY_DEFAULT_MAX_FILE_BYTES = 32 * 1024 * 1024
+const RUNTIME_DIRECTORY_DEFAULT_MAX_TOTAL_BYTES = 256 * 1024 * 1024
+const RUNTIME_DIRECTORY_POLICIES: readonly RuntimeDirectoryPolicy[] = [
+  {
+    name: 'Memory',
+    maxFileBytes: 128 * 1024 * 1024,
+    maxTotalBytes: 256 * 1024 * 1024,
+    snapshot: 'memory'
+  },
+  {
+    name: 'Skills',
+    maxFileBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_FILE_BYTES,
+    maxTotalBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_TOTAL_BYTES
+  },
+  {
+    name: 'MCP',
+    maxFileBytes: 128 * 1024 * 1024,
+    maxTotalBytes: 512 * 1024 * 1024
+  },
+  {
+    name: 'Workbench',
+    maxFileBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_FILE_BYTES,
+    maxTotalBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_TOTAL_BYTES
+  },
+  {
+    name: 'Channels',
+    maxFileBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_FILE_BYTES,
+    maxTotalBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_TOTAL_BYTES
+  },
+  {
+    name: 'Workspace',
+    maxFileBytes: 64 * 1024 * 1024,
+    maxTotalBytes: 512 * 1024 * 1024
+  }
+] as const
 const LEGACY_REMOTE_SYNC_LOCK_FILE = '.sync.lock.json'
 const REMOTE_SYNC_LOCK_DIR = '.sync.locks'
 const REMOTE_SYNC_LOCK_TTL_MS = 2 * 60 * 1000
@@ -361,6 +457,7 @@ function makeManifest(): RemoteManifest {
     syncSpace: null,
     storageV2: null,
     notes: null,
+    runtimeDirectories: null,
     latestSnapshot: null,
     snapshots: {}
   }
@@ -476,7 +573,15 @@ function notesSyncStateKey(deviceId: string, relativePath: string) {
   return `${NOTES_SYNC_STATE_PREFIX}:${hashText(`${deviceId}\0${relativePath}`)}`
 }
 
+function runtimeDirectorySyncStateKey(deviceId: string, name: RuntimeDirectoryName) {
+  return `${RUNTIME_DIRECTORY_SYNC_STATE_PREFIX}:${hashText(`${deviceId}\0${name}`)}`
+}
+
 function notesContentCursor(valueHash: string) {
+  return `content:${valueHash}`
+}
+
+function runtimeDirectoryContentCursor(valueHash: string) {
   return `content:${valueHash}`
 }
 
@@ -500,6 +605,31 @@ function isIgnoredNotesEntry(name: string) {
   return name === '.DS_Store' || name === 'Thumbs.db' || name.includes('.cherry-studio-pi-sync-download-')
 }
 
+function runtimeDirectoryBundlePath(name: RuntimeDirectoryName, valueHash: string) {
+  return `${RUNTIME_DIRECTORIES_REMOTE_ROOT}/bundles/${encodePart(name)}/${valueHash}.json.gz`
+}
+
+function isIgnoredRuntimeDirectoryEntry(name: string) {
+  const lowerName = name.toLowerCase()
+  return (
+    name === '.DS_Store' ||
+    name === 'Thumbs.db' ||
+    lowerName.endsWith('.tmp') ||
+    lowerName.endsWith('.temp') ||
+    lowerName.endsWith('.log') ||
+    lowerName.includes('.cherry-studio-pi-sync-download-')
+  )
+}
+
+function normalizeRuntimeDirectoryName(value: string): RuntimeDirectoryName {
+  const policy = RUNTIME_DIRECTORY_POLICIES.find((item) => item.name === value)
+  if (!policy) {
+    throw new Error(`远端运行时目录同步状态包含未知目录：${value}`)
+  }
+
+  return policy.name
+}
+
 function shouldAttemptRemoteFullSnapshotUpload() {
   return process.env[REMOTE_FULL_SNAPSHOT_OPT_IN_ENV] === '1'
 }
@@ -514,6 +644,10 @@ async function sha256File(filePath: string): Promise<string> {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
+}
+
+function quoteSqlString(value: string) {
+  return `'${value.replace(/'/g, "''")}'`
 }
 
 function configuredDataSyncMaxRuntimeMs() {
@@ -969,8 +1103,11 @@ export class AppDataSyncService {
         addReferencedPath(note.path)
       }
     }
+    for (const directory of Object.values(manifest.runtimeDirectories?.directories ?? {})) {
+      addReferencedPath(directory.path)
+    }
 
-    for (const root of ['records', 'backups', NOTES_REMOTE_ARTIFACT_ROOT]) {
+    for (const root of ['records', 'backups', NOTES_REMOTE_ARTIFACT_ROOT, RUNTIME_DIRECTORIES_REMOTE_ROOT]) {
       const rootPath = path.posix.join(basePath, root)
       if (await this.pruneRemoteArtifactRootIfUnreferenced(client, rootPath, referenced)) {
         continue
@@ -1729,6 +1866,47 @@ export class AppDataSyncService {
     }
   }
 
+  private normalizeRuntimeDirectoriesManifest(
+    manifest?: RemoteRuntimeDirectoriesManifest | null
+  ): RemoteRuntimeDirectoriesManifest {
+    const directories: Record<string, RemoteRuntimeDirectoryMeta> = Object.create(null)
+
+    for (const [id, meta] of Object.entries(manifest?.directories ?? {})) {
+      if (!meta || typeof meta !== 'object') {
+        throw new Error(`远端运行时目录同步状态损坏：${id}`)
+      }
+
+      const name = normalizeRuntimeDirectoryName(meta.name || id)
+      const valueHash = typeof meta.valueHash === 'string' ? meta.valueHash : ''
+      if (!/^[a-f0-9]{64}$/i.test(valueHash)) {
+        throw new Error(`远端运行时目录校验信息损坏：${name}`)
+      }
+
+      const remotePath = normalizeRemoteRelativePath(meta.path, 'Remote runtime directory bundle path')
+      if (!remotePath.startsWith(`${RUNTIME_DIRECTORIES_REMOTE_ROOT}/`)) {
+        throw new Error(`远端运行时目录文件路径越界：${name}`)
+      }
+
+      directories[name] = {
+        version: 1,
+        name,
+        valueHash: valueHash.toLowerCase(),
+        byteSize: Math.max(0, Number(meta.byteSize) || 0),
+        compressedByteSize: Math.max(0, Number(meta.compressedByteSize) || 0),
+        fileCount: Math.max(0, Number(meta.fileCount) || 0),
+        updatedAt: Math.max(0, Number(meta.updatedAt) || 0),
+        deviceId: typeof meta.deviceId === 'string' && meta.deviceId ? meta.deviceId : 'unknown',
+        path: remotePath
+      }
+    }
+
+    return {
+      version: 1,
+      updatedAt: Math.max(0, Number(manifest?.updatedAt) || 0),
+      directories
+    }
+  }
+
   private normalizeManifest(manifest: RemoteManifest | null): RemoteManifest {
     const nextManifest = manifest ?? makeManifest()
     nextManifest.generation = Number.isFinite(nextManifest.generation) ? Number(nextManifest.generation) : 0
@@ -1736,6 +1914,7 @@ export class AppDataSyncService {
     nextManifest.syncSpace = nextManifest.syncSpace ?? null
     nextManifest.storageV2 = nextManifest.storageV2 ?? null
     nextManifest.notes = this.normalizeNotesManifest(nextManifest.notes)
+    nextManifest.runtimeDirectories = this.normalizeRuntimeDirectoriesManifest(nextManifest.runtimeDirectories)
     nextManifest.snapshots = nextManifest.snapshots ?? {}
     nextManifest.latestSnapshot = nextManifest.latestSnapshot ?? null
     return nextManifest
@@ -2147,6 +2326,397 @@ export class AppDataSyncService {
     }
 
     return notesManifest
+  }
+
+  private getRuntimeDirectoryRoot(name: RuntimeDirectoryName) {
+    return getDataPath(name)
+  }
+
+  private async createRuntimeDirectorySource(policy: RuntimeDirectoryPolicy, context: SyncRunContext) {
+    const sourceRoot = this.getRuntimeDirectoryRoot(policy.name)
+    if (policy.snapshot !== 'memory') {
+      return { sourceRoot, cleanup: async () => undefined }
+    }
+
+    this.assertSyncRunActive(context, '创建记忆目录同步快照')
+    const stagingRoot = path.join(
+      storageV2DataRootService.ensureDataRoot().dataRoot,
+      'temp',
+      `data-sync-runtime-directory-${process.pid}-${Date.now()}-${randomBytes(4).toString('hex')}`,
+      policy.name
+    )
+    await this.snapshotMemoryDirectory(sourceRoot, stagingRoot)
+    return {
+      sourceRoot: stagingRoot,
+      cleanup: async () => {
+        await fsp.rm(path.dirname(stagingRoot), { recursive: true, force: true }).catch(() => undefined)
+      }
+    }
+  }
+
+  private async snapshotMemoryDirectory(sourceRoot: string, targetRoot: string) {
+    await fsp.rm(targetRoot, { recursive: true, force: true }).catch(() => undefined)
+    await fsp.mkdir(targetRoot, { recursive: true })
+
+    const entries = await fsp.readdir(sourceRoot, { withFileTypes: true }).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+      throw error
+    })
+
+    for (const entry of entries) {
+      if (entry.name === 'memories.db' || entry.name === 'memories.db-wal' || entry.name === 'memories.db-shm') {
+        continue
+      }
+
+      const sourcePath = path.join(sourceRoot, entry.name)
+      const targetPath = path.join(targetRoot, entry.name)
+      if (entry.isDirectory()) {
+        await fsp.cp(sourcePath, targetPath, { recursive: true, force: true })
+      } else if (entry.isFile()) {
+        await fsp.copyFile(sourcePath, targetPath)
+      }
+    }
+
+    const memoryDbPath = path.join(sourceRoot, 'memories.db')
+    if (!fs.existsSync(memoryDbPath)) return
+
+    const client = createLibsqlClient({
+      url: `file:${memoryDbPath}`,
+      intMode: 'number'
+    })
+
+    try {
+      await client.execute(`VACUUM INTO ${quoteSqlString(path.join(targetRoot, 'memories.db'))}`)
+    } finally {
+      client.close()
+    }
+  }
+
+  private async collectRuntimeDirectoryFiles(
+    rootDir: string,
+    policy: RuntimeDirectoryPolicy,
+    context: SyncRunContext
+  ): Promise<RuntimeDirectoryFileEntry[]> {
+    const files: RuntimeDirectoryFileEntry[] = []
+    let totalBytes = 0
+
+    const walk = async (currentDir: string) => {
+      this.assertSyncRunActive(context, `扫描${policy.name}目录`)
+      const entries = await fsp.readdir(currentDir, { withFileTypes: true }).catch((error) => {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+        throw error
+      })
+
+      for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+        this.assertSyncRunActive(context, `扫描${policy.name}目录`)
+        if (isIgnoredRuntimeDirectoryEntry(entry.name) || entry.isSymbolicLink()) continue
+
+        const localPath = path.join(currentDir, entry.name)
+        if (entry.isDirectory()) {
+          await walk(localPath)
+          continue
+        }
+        if (!entry.isFile()) continue
+
+        const stat = await fsp.stat(localPath)
+        if (!stat.isFile()) continue
+        if (stat.size > policy.maxFileBytes) {
+          throw new Error(
+            `${policy.name} 目录中的文件过大（${path.relative(rootDir, localPath)}，${stat.size} 字节）。为避免 WebDAV 流量或单文件限制，本次同步已停止；请清理该目录或改用完整备份。`
+          )
+        }
+
+        totalBytes += stat.size
+        if (totalBytes > policy.maxTotalBytes) {
+          throw new Error(
+            `${policy.name} 目录过大（超过 ${policy.maxTotalBytes} 字节）。为避免 WebDAV 流量或频率限制，本次同步已停止；请清理该目录或改用完整备份。`
+          )
+        }
+
+        const relativePath = normalizeNotesRelativePath(path.relative(rootDir, localPath).split(path.sep).join('/'))
+        const contents = await fsp.readFile(localPath)
+        files.push({
+          relativePath,
+          valueHash: sha256Buffer(contents),
+          byteSize: stat.size,
+          updatedAt: Math.max(0, Math.floor(stat.mtimeMs)),
+          mode: stat.mode & 0o777,
+          contentBase64: contents.toString('base64')
+        })
+      }
+    }
+
+    await walk(rootDir)
+    return files.sort((left, right) => left.relativePath.localeCompare(right.relativePath))
+  }
+
+  private async createRuntimeDirectorySnapshot(
+    policy: RuntimeDirectoryPolicy,
+    context: SyncRunContext
+  ): Promise<LocalRuntimeDirectorySnapshot | null> {
+    const source = await this.createRuntimeDirectorySource(policy, context)
+
+    try {
+      const files = await this.collectRuntimeDirectoryFiles(source.sourceRoot, policy, context)
+      if (files.length === 0) return null
+
+      const updatedAt = Math.max(0, ...files.map((file) => file.updatedAt))
+      const byteSize = files.reduce((sum, file) => sum + file.byteSize, 0)
+      const valueHash = hashJsonValue(
+        files.map((file) => [file.relativePath, file.valueHash, file.byteSize, file.mode])
+      )
+      const bundle: RuntimeDirectoryBundle = {
+        version: 1,
+        name: policy.name,
+        updatedAt,
+        files: Object.fromEntries(files.map((file) => [file.relativePath, file]))
+      }
+      const bundleBuffer = gzipSync(Buffer.from(JSON.stringify(bundle), 'utf8'), { level: 9 })
+
+      return {
+        name: policy.name,
+        rootDir: this.getRuntimeDirectoryRoot(policy.name),
+        fileCount: files.length,
+        byteSize,
+        compressedByteSize: bundleBuffer.byteLength,
+        updatedAt,
+        valueHash,
+        bundle: bundleBuffer
+      }
+    } finally {
+      await source.cleanup()
+    }
+  }
+
+  private async pushRuntimeDirectoryBundle(
+    client: WebDAVClient,
+    basePath: string,
+    manifest: RemoteRuntimeDirectoriesManifest,
+    snapshot: LocalRuntimeDirectorySnapshot,
+    deviceId: string
+  ) {
+    const relativePath = runtimeDirectoryBundlePath(snapshot.name, snapshot.valueHash)
+    const remotePath = path.posix.join(basePath, relativePath)
+
+    await this.ensureDirectory(client, path.posix.dirname(remotePath))
+    const exists = await runWebDavOperation(
+      `checking runtime directory bundle ${remotePath}`,
+      () => client.exists(remotePath),
+      {
+        logger
+      }
+    ).catch(() => false)
+    if (!exists) {
+      await runWebDavOperation(
+        `uploading runtime directory bundle ${remotePath}`,
+        () =>
+          client.putFileContents(remotePath, snapshot.bundle, {
+            overwrite: false,
+            contentLength: snapshot.bundle.byteLength
+          }),
+        { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
+      )
+    }
+
+    manifest.directories[snapshot.name] = {
+      version: 1,
+      name: snapshot.name,
+      valueHash: snapshot.valueHash,
+      byteSize: snapshot.byteSize,
+      compressedByteSize: snapshot.compressedByteSize,
+      fileCount: snapshot.fileCount,
+      updatedAt: snapshot.updatedAt,
+      deviceId,
+      path: relativePath
+    }
+  }
+
+  private parseRuntimeDirectoryBundle(buffer: Buffer, meta: RemoteRuntimeDirectoryMeta): RuntimeDirectoryBundle {
+    let bundle: RuntimeDirectoryBundle
+    try {
+      bundle = JSON.parse(gunzipSync(buffer).toString('utf8')) as RuntimeDirectoryBundle
+    } catch (error) {
+      throw new Error(
+        `远端 ${meta.name} 目录数据包无法解压或解析。为避免写入损坏数据，本次同步已停止：${errorMessage(error)}`
+      )
+    }
+
+    if (bundle.version !== 1 || bundle.name !== meta.name || !bundle.files || typeof bundle.files !== 'object') {
+      throw new Error(`远端 ${meta.name} 目录数据包格式不正确。为避免写入损坏数据，本次同步已停止。`)
+    }
+
+    const files = Object.values(bundle.files).sort((left, right) => left.relativePath.localeCompare(right.relativePath))
+    const valueHash = hashJsonValue(files.map((file) => [file.relativePath, file.valueHash, file.byteSize, file.mode]))
+    if (valueHash !== meta.valueHash) {
+      throw new Error(`远端 ${meta.name} 目录数据包校验失败。为避免写入损坏数据，本次同步已停止。`)
+    }
+
+    return bundle
+  }
+
+  private async pullRuntimeDirectoryBundle(client: WebDAVClient, basePath: string, meta: RemoteRuntimeDirectoryMeta) {
+    const remotePath = path.posix.join(basePath, normalizeRemoteRelativePath(meta.path, 'Remote runtime bundle path'))
+    const contents = await runWebDavOperation(
+      `downloading runtime directory bundle ${remotePath}`,
+      () => client.getFileContents(remotePath, { format: 'binary' }),
+      { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
+    )
+    const buffer = bufferFromRemote(contents)
+    if (meta.compressedByteSize > 0 && buffer.byteLength !== meta.compressedByteSize) {
+      throw new Error(`远端 ${meta.name} 目录数据包大小不匹配。为避免写入损坏数据，本次同步已停止。`)
+    }
+
+    return this.parseRuntimeDirectoryBundle(buffer, meta)
+  }
+
+  private async applyRuntimeDirectoryBundle(meta: RemoteRuntimeDirectoryMeta, bundle: RuntimeDirectoryBundle) {
+    const rootDir = this.getRuntimeDirectoryRoot(meta.name)
+    const tempDir = `${rootDir}.cherry-studio-pi-sync-download-${process.pid}-${Date.now()}-${randomBytes(4).toString(
+      'hex'
+    )}`
+
+    await fsp.rm(tempDir, { recursive: true, force: true }).catch(() => undefined)
+    await fsp.mkdir(tempDir, { recursive: true })
+
+    try {
+      for (const file of Object.values(bundle.files)) {
+        const relativePath = normalizeNotesRelativePath(file.relativePath)
+        const buffer = Buffer.from(file.contentBase64, 'base64')
+        if (buffer.byteLength !== file.byteSize || sha256Buffer(buffer) !== file.valueHash) {
+          throw new Error(`远端 ${meta.name} 目录中的文件校验失败：${relativePath}`)
+        }
+
+        const target = this.resolveLocalNotesFilePath(tempDir, relativePath)
+        await fsp.mkdir(path.dirname(target), { recursive: true })
+        await fsp.writeFile(target, buffer, { mode: file.mode || 0o644 })
+        const mtime = new Date(Math.max(0, file.updatedAt))
+        await fsp.utimes(target, mtime, mtime).catch(() => undefined)
+        await fsp.chmod(target, file.mode || 0o644).catch(() => undefined)
+      }
+
+      if (meta.name === 'Memory') {
+        await MemoryService.getInstance()
+          .close()
+          .catch((error) => {
+            logger.warn('Failed to close MemoryService before applying synced memory directory', error as Error)
+          })
+      }
+
+      await fsp.rm(rootDir, { recursive: true, force: true }).catch(() => undefined)
+      await fsp.mkdir(path.dirname(rootDir), { recursive: true })
+      await fsp.rename(tempDir, rootDir)
+    } finally {
+      await fsp.rm(tempDir, { recursive: true, force: true }).catch(() => undefined)
+    }
+  }
+
+  private async syncRuntimeDirectories(
+    client: WebDAVClient,
+    basePath: string,
+    inputManifest: RemoteRuntimeDirectoriesManifest | null | undefined,
+    db: AppDataDatabase,
+    summary: DataSyncSummary,
+    context: SyncRunContext,
+    stageSyncState: (id: string, value: unknown) => void
+  ) {
+    const directoriesManifest = this.normalizeRuntimeDirectoriesManifest(inputManifest)
+    const deviceId = db.getDeviceId()
+    let manifestChanged = false
+
+    const uploadSnapshot = async (snapshot: LocalRuntimeDirectorySnapshot) => {
+      this.assertSyncRunActive(context, `上传${snapshot.name}目录`)
+      await this.pushRuntimeDirectoryBundle(client, basePath, directoriesManifest, snapshot, deviceId)
+      stageSyncState(
+        runtimeDirectorySyncStateKey(deviceId, snapshot.name),
+        runtimeDirectoryContentCursor(snapshot.valueHash)
+      )
+      summary.uploaded += 1
+      manifestChanged = true
+    }
+
+    const downloadRemote = async (
+      remoteMeta: RemoteRuntimeDirectoryMeta,
+      localSnapshot?: LocalRuntimeDirectorySnapshot | null
+    ) => {
+      this.assertSyncRunActive(context, `下载${remoteMeta.name}目录`)
+      if (localSnapshot && localSnapshot.valueHash !== remoteMeta.valueHash) {
+        await this.createJoinSafetySnapshotOnce(db, summary)
+      }
+      const bundle = await this.pullRuntimeDirectoryBundle(client, basePath, remoteMeta)
+      await this.applyRuntimeDirectoryBundle(remoteMeta, bundle)
+      stageSyncState(
+        runtimeDirectorySyncStateKey(deviceId, remoteMeta.name as RuntimeDirectoryName),
+        runtimeDirectoryContentCursor(remoteMeta.valueHash)
+      )
+      summary.downloaded += 1
+    }
+
+    for (const policy of RUNTIME_DIRECTORY_POLICIES) {
+      this.assertSyncRunActive(context, `同步${policy.name}目录`)
+      const localSnapshot = await this.createRuntimeDirectorySnapshot(policy, context)
+      const remoteMeta = directoriesManifest.directories[policy.name]
+      const syncKey = runtimeDirectorySyncStateKey(deviceId, policy.name)
+      const lastCursorValue = await this.getSyncState<unknown>(db, syncKey)
+      const lastCursor = typeof lastCursorValue === 'string' ? lastCursorValue : null
+
+      if (localSnapshot && !remoteMeta) {
+        await uploadSnapshot(localSnapshot)
+        continue
+      }
+
+      if (!localSnapshot && remoteMeta) {
+        await downloadRemote(remoteMeta, null)
+        continue
+      }
+
+      if (!localSnapshot || !remoteMeta) {
+        summary.skipped += 1
+        continue
+      }
+
+      const localCursor = runtimeDirectoryContentCursor(localSnapshot.valueHash)
+      const remoteCursor = runtimeDirectoryContentCursor(remoteMeta.valueHash)
+      if (localSnapshot.valueHash === remoteMeta.valueHash) {
+        stageSyncState(syncKey, localCursor)
+        summary.skipped += 1
+        continue
+      }
+
+      const localChanged = localCursor !== lastCursor
+      const remoteChanged = remoteCursor !== lastCursor
+      if (!lastCursor) {
+        summary.resolvedConflicts += 1
+        if (localSnapshot.updatedAt > remoteMeta.updatedAt) {
+          await uploadSnapshot(localSnapshot)
+        } else {
+          await downloadRemote(remoteMeta, localSnapshot)
+        }
+        continue
+      }
+
+      if (localChanged && !remoteChanged) {
+        await uploadSnapshot(localSnapshot)
+        continue
+      }
+
+      if (!localChanged && remoteChanged) {
+        await downloadRemote(remoteMeta, localSnapshot)
+        continue
+      }
+
+      summary.resolvedConflicts += 1
+      if (localSnapshot.updatedAt > remoteMeta.updatedAt) {
+        await uploadSnapshot(localSnapshot)
+      } else {
+        await downloadRemote(remoteMeta, localSnapshot)
+      }
+    }
+
+    if (manifestChanged) {
+      directoriesManifest.updatedAt = summary.lastSyncAt
+    }
+
+    return directoriesManifest
   }
 
   private async setSyncState(db: AppDataDatabase, id: string, value: unknown) {
@@ -2706,6 +3276,17 @@ export class AppDataSyncService {
         client,
         basePath,
         manifest.notes,
+        db,
+        summary,
+        context,
+        stageSyncState
+      )
+
+      this.assertSyncRunActive(context, '同步运行时目录')
+      manifest.runtimeDirectories = await this.syncRuntimeDirectories(
+        client,
+        basePath,
+        manifest.runtimeDirectories,
         db,
         summary,
         context,

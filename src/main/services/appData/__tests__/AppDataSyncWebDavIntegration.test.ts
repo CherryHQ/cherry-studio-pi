@@ -1082,6 +1082,60 @@ async function readInstanceNote(instance: TestInstance, relativePath: string) {
   return fsp.readFile(path.join(instance.dataRoot, 'Notes', ...relativePath.split('/')), 'utf8')
 }
 
+async function writeInstanceRuntimeFile(
+  instance: TestInstance,
+  dirname: string,
+  relativePath: string,
+  contents: string,
+  updatedAt: string
+) {
+  const filePath = path.join(instance.dataRoot, dirname, ...relativePath.split('/'))
+  await fsp.mkdir(path.dirname(filePath), { recursive: true })
+  await fsp.writeFile(filePath, contents, 'utf8')
+  const mtime = new Date(updatedAt)
+  await fsp.utimes(filePath, mtime, mtime)
+}
+
+async function readInstanceRuntimeFile(instance: TestInstance, dirname: string, relativePath: string) {
+  return fsp.readFile(path.join(instance.dataRoot, dirname, ...relativePath.split('/')), 'utf8')
+}
+
+async function seedInstanceMemoryDatabase(instance: TestInstance, memory: string) {
+  const memoryDir = path.join(instance.dataRoot, 'Memory')
+  await fsp.mkdir(memoryDir, { recursive: true })
+  const client = createClient({
+    url: `file:${path.join(memoryDir, 'memories.db')}`,
+    intMode: 'number'
+  })
+
+  try {
+    await client.execute('CREATE TABLE memories (id TEXT PRIMARY KEY, memory TEXT NOT NULL)')
+    await client.execute({
+      sql: 'INSERT INTO memories (id, memory) VALUES (?, ?)',
+      args: ['memory-sync-runtime', memory]
+    })
+  } finally {
+    client.close()
+  }
+}
+
+async function readInstanceMemoryDatabase(instance: TestInstance) {
+  const client = createClient({
+    url: `file:${path.join(instance.dataRoot, 'Memory', 'memories.db')}`,
+    intMode: 'number'
+  })
+
+  try {
+    const result = await client.execute({
+      sql: 'SELECT memory FROM memories WHERE id = ?',
+      args: ['memory-sync-runtime']
+    })
+    return String(result.rows[0]?.memory ?? '')
+  } finally {
+    client.close()
+  }
+}
+
 function countRemoteStorageV2Records(manifest: { storageV2?: { records?: Record<string, { entityType: string }> } }) {
   const counts: Record<string, number> = {}
   for (const record of Object.values(manifest.storageV2?.records ?? {})) {
@@ -1318,6 +1372,55 @@ describe('AppDataSyncService local WebDAV integration', () => {
       deletedAt: null
     })
     await expect(readInstanceNote(instanceB, noteRelativePath)).resolves.toBe(noteContents)
+  })
+
+  it('syncs critical runtime directories as compressed bundles instead of many WebDAV files', async () => {
+    const homePath = path.join(tempRoot, 'home')
+    const instanceA = makeInstance(tempRoot, 'device-a')
+    const instanceB = makeInstance(tempRoot, 'device-b')
+    const webdavPath = '/cherry-studio-pi-runtime-directories'
+    const config = makeConfig(server!, webdavPath)
+    const backupManager = makeBackupManager(tempRoot)
+
+    await switchInstance(instanceA, homePath)
+    await writeInstanceRuntimeFile(
+      instanceA,
+      'Skills',
+      'sync-fixture/SKILL.md',
+      '# Sync Fixture\n\nThis skill should travel with WebDAV sync.',
+      '2026-05-29T12:00:00.000Z'
+    )
+    await writeInstanceRuntimeFile(
+      instanceA,
+      'Workbench',
+      'custom-dashboard.html',
+      '<main>Cherry Studio Pi workbench fixture</main>',
+      '2026-05-29T12:01:00.000Z'
+    )
+    await seedInstanceMemoryDatabase(instanceA, '用户记忆应该跟随多端同步。')
+    const firstSummary = await new AppDataSyncService(backupManager as never).syncNow(config)
+    const uploadedManifest = await readRemoteManifest(server!, webdavPath)
+    const syncRoot = remoteSyncRoot(server!, webdavPath)
+    const remoteFiles = await listRemoteRelativeFiles(syncRoot)
+    const runtimeBundles = remoteFiles.filter((file) => file.startsWith('runtime-directories/bundles/'))
+
+    expect(firstSummary.uploaded).toBeGreaterThanOrEqual(3)
+    expect(Object.keys(uploadedManifest.runtimeDirectories?.directories ?? {})).toEqual(
+      expect.arrayContaining(['Memory', 'Skills', 'Workbench'])
+    )
+    expect(runtimeBundles).toHaveLength(3)
+
+    await switchInstance(instanceB, homePath)
+    const secondSummary = await new AppDataSyncService(backupManager as never).syncNow(config)
+
+    expect(secondSummary.downloaded).toBeGreaterThanOrEqual(3)
+    await expect(readInstanceRuntimeFile(instanceB, 'Skills', 'sync-fixture/SKILL.md')).resolves.toContain(
+      'Sync Fixture'
+    )
+    await expect(readInstanceRuntimeFile(instanceB, 'Workbench', 'custom-dashboard.html')).resolves.toContain(
+      'workbench fixture'
+    )
+    await expect(readInstanceMemoryDatabase(instanceB)).resolves.toBe('用户记忆应该跟随多端同步。')
   })
 
   it('syncs comprehensive Storage v2 data across models, assistants, agents, knowledge, files, chats and settings', async () => {
