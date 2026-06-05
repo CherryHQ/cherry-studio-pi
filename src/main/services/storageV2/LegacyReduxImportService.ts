@@ -87,6 +87,7 @@ const DURABLE_LOCAL_STORAGE_KEYS = new Set([
 export type StorageV2LegacyImportOptions = {
   dryRun?: boolean
   pruneMissing?: boolean
+  protectExistingFromDefaults?: boolean
 }
 
 export type StorageV2LegacyImportReport = {
@@ -108,6 +109,21 @@ export type StorageV2LegacyImportReport = {
   skippedSecretCount: number
   warnings: string[]
 }
+
+const STARTUP_DEFAULT_PROTECTED_SETTINGS = new Map<string, unknown[]>([
+  ['settings.webdavHost', ['']],
+  ['settings.webdavUser', ['']],
+  ['settings.webdavPass', ['']],
+  ['settings.webdavPath', ['', '/cherry-studio']],
+  ['settings.webdavAutoSync', [false]],
+  ['settings.webdavSyncInterval', [0, '0', '']],
+  ['settings.dataSyncWebdavHost', ['']],
+  ['settings.dataSyncWebdavUser', ['']],
+  ['settings.dataSyncWebdavPass', ['']],
+  ['settings.dataSyncWebdavPath', ['', '/cherry-studio-pi']],
+  ['settings.dataSyncAutoSync', [false]],
+  ['settings.dataSyncSyncInterval', [0, '0', '']]
+])
 
 function parseMaybeJson<T>(value: T | string | undefined): T | undefined {
   if (typeof value !== 'string') return value
@@ -196,6 +212,59 @@ function cloneJsonObject(value: unknown): Record<string, any> {
 
 function isRecord(value: unknown): value is Record<string, any> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function stableStringify(value: unknown) {
+  return JSON.stringify(value)
+}
+
+function isMeaningfulStoredSettingValue(value: unknown): boolean {
+  if (value == null) return false
+  if (typeof value === 'string') return value.trim().length > 0
+  if (typeof value === 'number') return value !== 0
+  if (typeof value === 'boolean') return value === true
+  if (Array.isArray(value)) return value.length > 0
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some(isMeaningfulStoredSettingValue)
+  }
+
+  return true
+}
+
+function isStartupDefaultProtectedValue(key: string, value: unknown): boolean {
+  return (STARTUP_DEFAULT_PROTECTED_SETTINGS.get(key) ?? []).some(
+    (defaultValue) => stableStringify(defaultValue) === stableStringify(value)
+  )
+}
+
+async function filterStartupDefaultProtectedSettings(
+  settingsEntries: Array<[string, unknown, string]>,
+  options: {
+    protectExistingFromDefaults: boolean
+    warnings: string[]
+  }
+) {
+  if (!options.protectExistingFromDefaults) return settingsEntries
+
+  const filteredEntries: Array<[string, unknown, string]> = []
+
+  for (const entry of settingsEntries) {
+    const [key, value] = entry
+    if (!isStartupDefaultProtectedValue(key, value)) {
+      filteredEntries.push(entry)
+      continue
+    }
+
+    const existingValue = await storageV2SettingsRepository.get(key)
+    if (isMeaningfulStoredSettingValue(existingValue) && stableStringify(existingValue) !== stableStringify(value)) {
+      options.warnings.push(`Skipped startup default overwrite for ${key}.`)
+      continue
+    }
+
+    filteredEntries.push(entry)
+  }
+
+  return filteredEntries
 }
 
 function getNestedValue(root: Record<string, any>, path: string[]): unknown {
@@ -922,6 +991,7 @@ export class StorageV2LegacyReduxImportService {
   ): Promise<StorageV2LegacyImportReport> {
     const dryRun = options.dryRun !== false
     const pruneMissing = options.pruneMissing !== false
+    const protectExistingFromDefaults = options.protectExistingFromDefaults === true
     const snapshot = normalizeSnapshot(input)
     const warnings: string[] = []
 
@@ -1146,7 +1216,12 @@ export class StorageV2LegacyReduxImportService {
     }
 
     if (!dryRun) {
-      for (const [key, value, scope] of settingsEntries) {
+      const writeableSettingsEntries = await filterStartupDefaultProtectedSettings(settingsEntries, {
+        protectExistingFromDefaults,
+        warnings
+      })
+
+      for (const [key, value, scope] of writeableSettingsEntries) {
         await storageV2SettingsRepository.set(key, value, scope)
       }
 

@@ -82,6 +82,8 @@ type RemoteSyncLock = {
   updatedAt: number
   expiresAt: number
   leaseMs: number
+  deadlineAt?: number
+  maxRuntimeMs?: number
   runtimeId?: string
   app: 'cherry-studio-pi'
   reason: 'data-sync'
@@ -105,6 +107,14 @@ type RemoteManifestBaseline = {
   existed: boolean
   generation: number
   hash: string | null
+}
+
+type SyncRunContext = {
+  startedAt: number
+  deadlineAt: number
+  maxRuntimeMs: number
+  aborted: boolean
+  abortReason: string | null
 }
 
 export type DataSyncRemoteDirectory = {
@@ -217,6 +227,8 @@ const REMOTE_SYNC_LOCK_DIR = '.sync.locks'
 const REMOTE_SYNC_LOCK_TTL_MS = 2 * 60 * 1000
 const REMOTE_SYNC_LOCK_RENEW_INTERVAL_MS = 30 * 1000
 const REMOTE_SYNC_LOCK_STALE_HEARTBEAT_MS = 3 * 60 * 1000
+const DEFAULT_DATA_SYNC_MAX_RUNTIME_MS = 10 * 60 * 1000
+const DATA_SYNC_MAX_RUNTIME_ENV = 'CHERRY_STUDIO_DATA_SYNC_MAX_RUNTIME_MS'
 const SNAPSHOT_RETENTION_PER_DEVICE = 3
 const SNAPSHOT_RETENTION_TOTAL = 20
 const NATIVE_WEB_DAV_LOCK_UNSUPPORTED_STATUSES = new Set([403, 405, 409, 501])
@@ -423,6 +435,23 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
 
+function configuredDataSyncMaxRuntimeMs() {
+  const parsed = Number(process.env[DATA_SYNC_MAX_RUNTIME_ENV])
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DATA_SYNC_MAX_RUNTIME_MS
+}
+
+function formatDurationZh(ms: number) {
+  const totalSeconds = Math.max(1, Math.ceil(ms / 1000))
+  if (totalSeconds < 60) return `${totalSeconds} 秒`
+
+  const totalMinutes = Math.ceil(totalSeconds / 60)
+  if (totalMinutes < 60) return `${totalMinutes} 分钟`
+
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return minutes > 0 ? `${hours} 小时 ${minutes} 分钟` : `${hours} 小时`
+}
+
 function isWebDavLockedError(error: unknown) {
   return error instanceof WebDavOperationError && error.status === 423
 }
@@ -536,6 +565,66 @@ export class AppDataSyncService {
     }
 
     return AppDataSyncService.instance
+  }
+
+  private createSyncRunContext(): SyncRunContext {
+    const startedAt = Date.now()
+    const maxRuntimeMs = configuredDataSyncMaxRuntimeMs()
+    return {
+      startedAt,
+      deadlineAt: startedAt + maxRuntimeMs,
+      maxRuntimeMs,
+      aborted: false,
+      abortReason: null
+    }
+  }
+
+  private formatSyncDeadlineExceededMessage(context: SyncRunContext, stage?: string) {
+    const stageText = stage ? `（阶段：${stage}）` : ''
+    return `同步超过 ${formatDurationZh(
+      context.maxRuntimeMs
+    )}仍未完成${stageText}。为避免远端锁被长时间占用，本次同步已停止；请稍后重试，如果再次出现请检查 WebDAV 服务响应或本机数据文件是否异常。`
+  }
+
+  private abortSyncRun(context: SyncRunContext, reason: string) {
+    context.aborted = true
+    context.abortReason = reason
+    return new Error(reason)
+  }
+
+  private assertSyncRunActive(context: SyncRunContext, stage?: string) {
+    if (context.aborted) {
+      throw new Error(context.abortReason ?? this.formatSyncDeadlineExceededMessage(context, stage))
+    }
+
+    if (Date.now() >= context.deadlineAt) {
+      throw this.abortSyncRun(context, this.formatSyncDeadlineExceededMessage(context, stage))
+    }
+  }
+
+  private withSyncRunDeadline<T>(promise: Promise<T>, context: SyncRunContext): Promise<T> {
+    const remainingMs = Math.max(0, context.deadlineAt - Date.now())
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(this.abortSyncRun(context, this.formatSyncDeadlineExceededMessage(context)))
+      }, remainingMs)
+      if (typeof timeoutId === 'object' && timeoutId && 'unref' in timeoutId && typeof timeoutId.unref === 'function') {
+        timeoutId.unref()
+      }
+    })
+
+    promise.catch((error) => {
+      if (context.aborted) {
+        logger.warn('Background data sync stopped after the run deadline', error as Error)
+      }
+    })
+
+    return Promise.race([promise, timeout]).finally(() => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+    })
   }
 
   private createWebDavClient(config: WebDavConfig) {
@@ -839,6 +928,8 @@ export class AppDataSyncService {
     const createdAt = Number(lock.createdAt) || 0
     const updatedAt = Number(lock.updatedAt) || createdAt
     const leaseMs = Number(lock.leaseMs) || REMOTE_SYNC_LOCK_TTL_MS
+    const deadlineAt = Number(lock.deadlineAt) || undefined
+    const maxRuntimeMs = Number(lock.maxRuntimeMs) || undefined
 
     return {
       version: 1,
@@ -848,6 +939,8 @@ export class AppDataSyncService {
       updatedAt,
       expiresAt: Number(lock.expiresAt) || 0,
       leaseMs,
+      deadlineAt,
+      maxRuntimeMs,
       runtimeId: typeof lock.runtimeId === 'string' ? lock.runtimeId : undefined,
       app: 'cherry-studio-pi',
       reason: 'data-sync'
@@ -863,19 +956,42 @@ export class AppDataSyncService {
     return lastActivityAt > 0 && now - lastActivityAt >= REMOTE_SYNC_LOCK_STALE_HEARTBEAT_MS
   }
 
+  private getRemoteLockDeadlineAt(lock: RemoteSyncLock) {
+    const deadlineAt = Number(lock.deadlineAt) || 0
+    if (deadlineAt > 0) return deadlineAt
+
+    const createdAt = Number(lock.createdAt) || 0
+    if (createdAt <= 0) return 0
+
+    const maxRuntimeMs = Number(lock.maxRuntimeMs) || configuredDataSyncMaxRuntimeMs()
+    return createdAt + Math.max(1, maxRuntimeMs)
+  }
+
+  private isRemoteLockRuntimeExceeded(lock: RemoteSyncLock, now = Date.now()) {
+    const deadlineAt = this.getRemoteLockDeadlineAt(lock)
+    return deadlineAt > 0 && deadlineAt <= now
+  }
+
   private shouldReclaimRemoteLock(lock: RemoteSyncLock, ownerId: string, now = Date.now(), currentToken?: string) {
     if (currentToken && lock.ownerId === ownerId && lock.token === currentToken) return false
-    return lock.ownerId === ownerId || this.isRemoteLockExpired(lock, now) || this.isRemoteLockHeartbeatStale(lock, now)
+    return (
+      lock.ownerId === ownerId ||
+      this.isRemoteLockExpired(lock, now) ||
+      this.isRemoteLockHeartbeatStale(lock, now) ||
+      this.isRemoteLockRuntimeExceeded(lock, now)
+    )
   }
 
   private formatRemoteLockMessage(lock: RemoteSyncLock, ownerId?: string) {
     const createdAt = lock.createdAt ? new Date(lock.createdAt).toLocaleString('zh-CN') : '未知时间'
     const updatedAt = lock.updatedAt ? new Date(lock.updatedAt).toLocaleString('zh-CN') : createdAt
     const expiresAt = lock.expiresAt ? new Date(lock.expiresAt).toLocaleString('zh-CN') : '未知时间'
+    const deadlineAt = this.getRemoteLockDeadlineAt(lock)
+    const deadlineText = deadlineAt ? new Date(deadlineAt).toLocaleString('zh-CN') : '未知时间'
     if (ownerId && lock.ownerId === ownerId) {
-      return `当前设备上一次同步还保留着远端锁（开始：${createdAt}，最近活动：${updatedAt}，锁过期：${expiresAt}）。软件会自动接管这个锁并重新同步；如果反复出现，请重启应用后再试。`
+      return `当前设备上一次同步还保留着远端锁（开始：${createdAt}，最近活动：${updatedAt}，锁过期：${expiresAt}，最长占用到：${deadlineText}）。软件会自动接管这个锁并重新同步；如果反复出现，请重启应用后再试。`
     }
-    return `另一台设备正在同步这个 WebDAV 目录（设备：${lock.ownerId}，开始：${createdAt}，锁过期：${expiresAt}）。请等待它完成后再试；如果确认没有设备在同步，软件会在锁过期后自动清理。`
+    return `另一台设备正在同步这个 WebDAV 目录（设备：${lock.ownerId}，开始：${createdAt}，最近活动：${updatedAt}，锁过期：${expiresAt}，最长占用到：${deadlineText}）。请等待它完成后再试；如果那台设备长时间卡住，软件会在最长占用时间后自动接管。`
   }
 
   private async readRemoteLock(client: WebDAVClient, lockPath: string) {
@@ -989,7 +1105,8 @@ export class AppDataSyncService {
         currentOwnerId: ownerId,
         createdAt: lock.createdAt,
         updatedAt: lock.updatedAt,
-        expiresAt: lock.expiresAt
+        expiresAt: lock.expiresAt,
+        deadlineAt: this.getRemoteLockDeadlineAt(lock)
       })
     } else {
       logger.warn('Removing invalid remote data sync lock')
@@ -1197,7 +1314,8 @@ export class AppDataSyncService {
   private async acquireRemoteLock(
     client: WebDAVClient,
     basePath: string,
-    ownerId: string
+    ownerId: string,
+    context: SyncRunContext
   ): Promise<RemoteSyncLockHandle> {
     if (process.env[NATIVE_WEB_DAV_LOCK_OPT_IN_ENV] === '1') {
       const nativeLock = await this.acquireNativeWebDavLock(client, basePath, ownerId)
@@ -1208,6 +1326,7 @@ export class AppDataSyncService {
     const lockPath = this.getRemoteLockClaimPath(basePath, ownerId, token)
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
+      this.assertSyncRunActive(context, '创建远端同步锁')
       await this.assertRemoteLockAvailable(client, basePath, ownerId)
       await this.ensureRemoteLockDirectory(client, basePath)
       const now = Date.now()
@@ -1217,8 +1336,10 @@ export class AppDataSyncService {
         token,
         createdAt: now,
         updatedAt: now,
-        expiresAt: now + REMOTE_SYNC_LOCK_TTL_MS,
+        expiresAt: Math.min(now + REMOTE_SYNC_LOCK_TTL_MS, context.deadlineAt),
         leaseMs: REMOTE_SYNC_LOCK_TTL_MS,
+        deadlineAt: context.deadlineAt,
+        maxRuntimeMs: context.maxRuntimeMs,
         runtimeId: this.runtimeId,
         app: 'cherry-studio-pi',
         reason: 'data-sync'
@@ -1310,9 +1431,10 @@ export class AppDataSyncService {
     }
   }
 
-  private startRemoteLockRenewal(client: WebDAVClient, lock: RemoteSyncLockHandle | null) {
+  private startRemoteLockRenewal(client: WebDAVClient, lock: RemoteSyncLockHandle | null, context: SyncRunContext) {
     let stopped = false
     let renewalError: unknown = null
+    let interval: ReturnType<typeof setInterval> | null = null
     if (!lock || lock.type !== 'file') {
       return {
         stop: () => undefined,
@@ -1322,16 +1444,25 @@ export class AppDataSyncService {
 
     const renew = async () => {
       try {
+        this.assertSyncRunActive(context, '续租远端同步锁')
         const remoteLock = await this.readRemoteLock(client, lock.path)
         if (!remoteLock || remoteLock.token !== lock.token || remoteLock.ownerId !== lock.ownerId) {
           throw new Error('远端同步锁已被其他设备接管')
         }
 
+        const now = Date.now()
+        const expiresAt = Math.min(now + REMOTE_SYNC_LOCK_TTL_MS, context.deadlineAt)
+        if (expiresAt <= now) {
+          throw this.abortSyncRun(context, this.formatSyncDeadlineExceededMessage(context, '续租远端同步锁'))
+        }
+
         const renewedLock: RemoteSyncLock = {
           ...remoteLock,
-          updatedAt: Date.now(),
-          expiresAt: Date.now() + REMOTE_SYNC_LOCK_TTL_MS,
+          updatedAt: now,
+          expiresAt,
           leaseMs: REMOTE_SYNC_LOCK_TTL_MS,
+          deadlineAt: context.deadlineAt,
+          maxRuntimeMs: context.maxRuntimeMs,
           runtimeId: lock.runtimeId ?? this.runtimeId
         }
         await runWebDavOperation(
@@ -1342,10 +1473,17 @@ export class AppDataSyncService {
       } catch (error) {
         renewalError = error
         logger.warn('Failed to renew remote data sync lock', error as Error)
+        if (context.aborted || Date.now() >= context.deadlineAt) {
+          stopped = true
+          if (interval) {
+            clearInterval(interval)
+            interval = null
+          }
+        }
       }
     }
 
-    const interval = setInterval(() => {
+    interval = setInterval(() => {
       if (!stopped) {
         void renew()
       }
@@ -1357,7 +1495,10 @@ export class AppDataSyncService {
     return {
       stop: () => {
         stopped = true
-        clearInterval(interval)
+        if (interval) {
+          clearInterval(interval)
+          interval = null
+        }
       },
       getError: () => renewalError
     }
@@ -1373,6 +1514,12 @@ export class AppDataSyncService {
 
     if (this.isRemoteLockExpired(remoteLock)) {
       throw new Error('远端同步锁已过期。为避免长时间同步后覆盖其他设备的数据，本次同步已停止，请重新同步。')
+    }
+
+    if (this.isRemoteLockRuntimeExceeded(remoteLock)) {
+      throw new Error(
+        '远端同步锁已超过最长占用时间。为避免长时间同步后覆盖其他设备的数据，本次同步已停止，请重新同步。'
+      )
     }
 
     const blockingLocks = await this.listBlockingRemoteLocks(
@@ -1881,9 +2028,10 @@ export class AppDataSyncService {
       throw new Error(DATA_SYNC_ALREADY_RUNNING_ERROR)
     }
 
-    this.syncStartedAt = Date.now()
+    const context = this.createSyncRunContext()
+    this.syncStartedAt = context.startedAt
     this.pendingFailureSafetySnapshot = null
-    const sync = this.performSyncNow(config)
+    const sync = this.withSyncRunDeadline(this.performSyncNow(config, context), context)
     this.syncInFlight = sync
 
     try {
@@ -1898,11 +2046,12 @@ export class AppDataSyncService {
     }
   }
 
-  private async performSyncNow(config: WebDavConfig): Promise<DataSyncSummary> {
+  private async performSyncNow(config: WebDavConfig, context: SyncRunContext): Promise<DataSyncSummary> {
     if (!normalizeWebDavHost(config.webdavHost)) {
       throw new Error('WebDAV host is required')
     }
 
+    this.assertSyncRunActive(context, '初始化同步')
     let db = await getAppDataDatabase()
     const { client, basePath } = this.createWebDavClient(config)
     const manifestPath = path.posix.join(basePath, 'manifest.json')
@@ -1913,13 +2062,18 @@ export class AppDataSyncService {
     }
     let storageSyncStates: StorageV2WebDavRecordSyncStateCommit[] = []
 
+    this.assertSyncRunActive(context, '准备远端目录')
     await this.ensureDirectory(client, basePath)
-    const remoteLock = await this.acquireRemoteLock(client, basePath, db.getDeviceId())
-    const lockRenewal = this.startRemoteLockRenewal(client, remoteLock)
+    this.assertSyncRunActive(context, '创建远端同步锁')
+    const remoteLock = await this.acquireRemoteLock(client, basePath, db.getDeviceId(), context)
+    const lockRenewal = this.startRemoteLockRenewal(client, remoteLock, context)
     try {
+      this.assertSyncRunActive(context, '检查远端写入权限')
       await this.assertWriteAccess(client, basePath)
 
+      this.assertSyncRunActive(context, '读取远端同步状态')
       const rawManifest = await this.readJson<RemoteManifest>(client, manifestPath, { throwOnInvalidJson: true })
+      this.assertSyncRunActive(context, '合并远端同步状态')
       const manifest = this.normalizeManifest(rawManifest)
       const manifestBaseline = this.captureManifestBaseline(rawManifest, manifest)
       if (!shouldAttemptRemoteFullSnapshotUpload()) {
@@ -1944,6 +2098,7 @@ export class AppDataSyncService {
         manifest.records = {}
       } else {
         let localRecords = await db.listRecords(undefined, true)
+        this.assertSyncRunActive(context, '读取本地应用数据')
         if (
           localRecords.length === 0 &&
           (await storageV2AppDataRuntimeRecoveryService.projectIfLegacyAppRecordListEmpty(
@@ -1953,6 +2108,7 @@ export class AppDataSyncService {
         ) {
           db = await getAppDataDatabase()
           localRecords = await db.listRecords(undefined, true)
+          this.assertSyncRunActive(context, '恢复本地应用数据')
         }
         if (localRecords.length === 0) {
           localRecords = localStorageAppRecords ?? (await storageV2AppDataKvMirrorService.listRecords(undefined, true))
@@ -1969,11 +2125,13 @@ export class AppDataSyncService {
         const allIds = new Set([...localById.keys(), ...Object.keys(manifest.records)])
 
         for (const id of allIds) {
+          this.assertSyncRunActive(context, '同步应用数据记录')
           const localRecord = localById.get(id)
           const remoteMeta = manifest.records[id]
           const lastHash = await this.getSyncState<string>(db, `record:${id}:hash`)
 
           if (localRecord && !remoteMeta) {
+            this.assertSyncRunActive(context, '上传应用数据记录')
             await this.pushRecord(client, basePath, localRecord, manifest)
             stageSyncState(`record:${id}:hash`, localRecord.valueHash)
             summary.uploaded += localRecord.deletedAt ? 0 : 1
@@ -1982,8 +2140,10 @@ export class AppDataSyncService {
           }
 
           if (!localRecord && remoteMeta) {
+            this.assertSyncRunActive(context, '下载应用数据记录')
             const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
             if (remoteRecord) {
+              this.assertSyncRunActive(context, '写入本地应用数据记录')
               await this.applyRemoteRecord(db, remoteRecord)
               stageSyncState(`record:${id}:hash`, remoteRecord.valueHash)
               summary.downloaded += remoteRecord.deletedAt ? 0 : 1
@@ -2032,6 +2192,7 @@ export class AppDataSyncService {
           }
 
           if (localChanged && !remoteChanged) {
+            this.assertSyncRunActive(context, '上传应用数据变更')
             await this.pushRecord(client, basePath, localRecord, manifest)
             stageSyncState(`record:${id}:hash`, localRecord.valueHash)
             summary.uploaded += localRecord.deletedAt ? 0 : 1
@@ -2039,6 +2200,7 @@ export class AppDataSyncService {
             continue
           }
 
+          this.assertSyncRunActive(context, '读取远端应用数据变更')
           const remoteRecord = await this.pullRemoteRecord(client, basePath, remoteMeta)
           if (!remoteRecord) {
             summary.skipped += 1
@@ -2046,6 +2208,7 @@ export class AppDataSyncService {
           }
 
           if (!localChanged && remoteChanged) {
+            this.assertSyncRunActive(context, '应用远端应用数据变更')
             await this.applyRemoteRecord(db, remoteRecord)
             stageSyncState(`record:${id}:hash`, remoteRecord.valueHash)
             summary.downloaded += remoteRecord.deletedAt ? 0 : 1
@@ -2065,9 +2228,11 @@ export class AppDataSyncService {
 
           const winner = shouldLocalAppRecordWin(localRecord, remoteRecord) ? localRecord : remoteRecord
           if (winner === localRecord) {
+            this.assertSyncRunActive(context, '上传冲突解决结果')
             await this.pushRecord(client, basePath, localRecord, manifest)
             summary.uploaded += localRecord.deletedAt ? 0 : 1
           } else {
+            this.assertSyncRunActive(context, '应用冲突解决结果')
             await this.createJoinSafetySnapshotOnce(db, summary)
             await this.applyRemoteRecord(db, remoteRecord)
             summary.downloaded += remoteRecord.deletedAt ? 0 : 1
@@ -2076,29 +2241,35 @@ export class AppDataSyncService {
         }
       }
 
+      this.assertSyncRunActive(context, '同步 Storage v2 数据')
       const storageSync = await storageV2WebDavRecordSyncService.sync(client, basePath, manifest.storageV2, {
         secretKeyMaterial: syncSpace.keyMaterial,
         legacySecretKeyMaterial: hadUsableSyncSpaceBeforeSync
           ? undefined
           : `${normalizeWebDavHost(config.webdavHost)}\n${config.webdavUser ?? ''}\n${config.webdavPass ?? ''}`,
         beforeRemoteConflictApply: async () => this.createJoinSafetySnapshotOnce(db, summary),
-        preferRemoteOnFirstJoin: hadUsableSyncSpaceBeforeSync && remoteHadStorageDataBeforeSync
+        preferRemoteOnFirstJoin: hadUsableSyncSpaceBeforeSync && remoteHadStorageDataBeforeSync,
+        assertActive: () => this.assertSyncRunActive(context, '同步 Storage v2 数据')
       })
+      this.assertSyncRunActive(context, '合并 Storage v2 同步结果')
       manifest.storageV2 = storageSync.manifest
       storageSyncStates = storageSync.syncStates ?? []
       this.addStorageV2Summary(summary, storageSync.summary)
+      this.assertSyncRunActive(context, '投影同步后的运行时数据')
       db = await this.projectStorageV2RuntimeAfterSync(db, manifest.storageV2, summary, {
         remoteHadStorageDataBeforeSync
       })
 
       if (this.shouldUploadFullSnapshot(db, manifest, summary.lastSyncAt)) {
         try {
+          this.assertSyncRunActive(context, '上传远端安全快照')
           await this.pushFullSnapshot(client, basePath, db, manifest, summary)
         } catch (error) {
           logger.warn('Skipping optional remote full data sync snapshot after upload failure', error as Error)
         }
       }
 
+      this.assertSyncRunActive(context, '发布远端同步状态')
       manifest.updatedAt = summary.lastSyncAt
       manifest.generation = manifestBaseline.generation + 1
       this.updateSummaryRemoteState(summary, manifest)
@@ -2108,23 +2279,31 @@ export class AppDataSyncService {
           `远端同步锁续租失败。为避免长时间同步后覆盖其他设备的数据，本次同步已停止：${errorMessage(renewalError)}`
         )
       }
+      this.assertSyncRunActive(context, '确认远端同步锁')
       await this.assertRemoteLockStillOwned(client, remoteLock)
+      this.assertSyncRunActive(context, '确认远端同步状态未被修改')
       await this.assertRemoteManifestUnchanged(client, manifestPath, manifestBaseline)
+      this.assertSyncRunActive(context, '写入远端同步状态')
       await this.writeJson(client, manifestPath, manifest)
+      this.assertSyncRunActive(context, '提交本地同步游标')
       await storageV2WebDavRecordSyncService.commitRecordSyncStates(storageSyncStates)
       for (const [id, value] of pendingSyncStates) {
+        this.assertSyncRunActive(context, '提交本地应用数据同步游标')
         await this.setSyncState(db, id, value)
       }
 
       const cleanupErrors: string[] = []
+      this.assertSyncRunActive(context, '清理远端临时文件')
       await this.pruneRemoteRootTempArtifacts(client, basePath).catch((error) => {
         logger.warn('Failed to prune stale WebDAV sync root temporary artifacts after sync', error as Error)
         cleanupErrors.push(errorMessage(error))
       })
+      this.assertSyncRunActive(context, '清理远端应用数据旧文件')
       await this.pruneRemoteAppDataArtifacts(client, basePath, manifest).catch((error) => {
         logger.warn('Failed to prune stale app data WebDAV artifacts after sync', error as Error)
         cleanupErrors.push(errorMessage(error))
       })
+      this.assertSyncRunActive(context, '清理远端 Storage v2 旧文件')
       await storageV2WebDavRecordSyncService
         .pruneRemoteArtifacts(client, basePath, manifest.storageV2)
         .catch((error) => {
@@ -2139,6 +2318,7 @@ export class AppDataSyncService {
 
       summary.status = 'success'
       summary.error = null
+      this.assertSyncRunActive(context, '记录同步结果')
       await this.setSyncState(db, 'last-sync-summary', summary)
 
       return summary

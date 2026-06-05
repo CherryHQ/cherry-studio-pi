@@ -348,8 +348,10 @@ const api = {
     projectFilesToLegacyRuntime: () => ipcRenderer.invoke(IpcChannel.StorageV2_FilesProjectLegacy),
     upsertFile: (file: unknown) => ipcRenderer.invoke(IpcChannel.StorageV2_FileUpsert, file),
     deleteFile: (fileId: string) => ipcRenderer.invoke(IpcChannel.StorageV2_FileDelete, fileId),
-    importLegacyReduxSnapshot: (snapshot: unknown, options?: { dryRun?: boolean; pruneMissing?: boolean }) =>
-      ipcRenderer.invoke(IpcChannel.StorageV2_ImportLegacyReduxSnapshot, snapshot, options),
+    importLegacyReduxSnapshot: (
+      snapshot: unknown,
+      options?: { dryRun?: boolean; pruneMissing?: boolean; protectExistingFromDefaults?: boolean }
+    ) => ipcRenderer.invoke(IpcChannel.StorageV2_ImportLegacyReduxSnapshot, snapshot, options),
     importLegacyDexieSnapshot: (snapshot: unknown, options?: { dryRun?: boolean; pruneMissing?: boolean }) =>
       ipcRenderer.invoke(IpcChannel.StorageV2_ImportLegacyDexieSnapshot, snapshot, options),
     importLegacyAgentDb: (options?: {

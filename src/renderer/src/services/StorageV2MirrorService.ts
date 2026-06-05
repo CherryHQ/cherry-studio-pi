@@ -18,6 +18,7 @@ type StateGetter = () => Record<string, any>
 
 type MirrorScheduleOptions = {
   pruneMissing?: boolean
+  protectExistingFromDefaults?: boolean
 }
 
 const MIRRORED_ACTION_PREFIXES = [
@@ -76,6 +77,20 @@ const IMMEDIATE_MIRRORED_ACTION_PREFIXES = [
   'shortcuts/',
   'translate/',
   'websearch/'
+]
+const STARTUP_PROTECTED_SETTINGS_ACTION_PREFIXES = [
+  'settings/setWebdavHost',
+  'settings/setWebdavUser',
+  'settings/setWebdavPass',
+  'settings/setWebdavPath',
+  'settings/setWebdavAutoSync',
+  'settings/setWebdavSyncInterval',
+  'settings/setDataSyncWebdavHost',
+  'settings/setDataSyncWebdavUser',
+  'settings/setDataSyncWebdavPass',
+  'settings/setDataSyncWebdavPath',
+  'settings/setDataSyncAutoSync',
+  'settings/setDataSyncSyncInterval'
 ]
 const DEFAULT_DEBOUNCE_MS = 1200
 
@@ -139,6 +154,11 @@ function shouldMirrorActionImmediately(action: ReduxAction) {
   return IMMEDIATE_MIRRORED_ACTION_PREFIXES.some((prefix) => action.type!.startsWith(prefix))
 }
 
+function canOverwriteStartupProtectedDefaults(action: ReduxAction) {
+  if (!action.type || action.meta?.fromSync) return false
+  return STARTUP_PROTECTED_SETTINGS_ACTION_PREFIXES.some((prefix) => action.type!.startsWith(prefix))
+}
+
 class StorageV2MirrorService {
   private timer: ReturnType<typeof setTimeout> | null = null
   private latestGetState: StateGetter | null = null
@@ -149,7 +169,9 @@ class StorageV2MirrorService {
   private suspended = false
   private paused = false
   private pendingPruneMissing: boolean | null = null
+  private pendingProtectExistingFromDefaults: boolean | null = null
   private lastError: unknown = null
+  private lastSnapshotProtectExistingFromDefaults: boolean | null = null
 
   createMiddleware(): Middleware {
     return (storeApi) => (next) => (action) => {
@@ -159,7 +181,8 @@ class StorageV2MirrorService {
       if (!this.suspended && shouldMirrorAction(reduxAction)) {
         const mirrorImmediately = shouldMirrorActionImmediately(reduxAction)
         this.schedule(() => storeApi.getState() as Record<string, any>, mirrorImmediately ? 0 : DEFAULT_DEBOUNCE_MS, {
-          pruneMissing: false
+          pruneMissing: false,
+          protectExistingFromDefaults: !canOverwriteStartupProtectedDefaults(reduxAction)
         })
         if (mirrorImmediately) {
           void this.flush()
@@ -173,10 +196,16 @@ class StorageV2MirrorService {
   schedule(getState: StateGetter, debounceMs = DEFAULT_DEBOUNCE_MS, options: MirrorScheduleOptions = {}) {
     if (this.suspended) return
     this.latestGetState = getState
-    if (this.paused) return
     const pruneMissing = options.pruneMissing === true
+    const protectExistingFromDefaults =
+      options.protectExistingFromDefaults ?? this.pendingProtectExistingFromDefaults ?? false
     this.pendingPruneMissing =
       this.pendingPruneMissing === null ? pruneMissing : this.pendingPruneMissing || pruneMissing
+    this.pendingProtectExistingFromDefaults =
+      this.pendingProtectExistingFromDefaults === null
+        ? protectExistingFromDefaults
+        : this.pendingProtectExistingFromDefaults && protectExistingFromDefaults
+    if (this.paused) return
 
     if (this.timer) {
       clearTimeout(this.timer)
@@ -189,7 +218,7 @@ class StorageV2MirrorService {
   }
 
   scheduleStartupMirror(getState: StateGetter) {
-    this.schedule(getState, DEFAULT_DEBOUNCE_MS, { pruneMissing: false })
+    this.schedule(getState, DEFAULT_DEBOUNCE_MS, { pruneMissing: false, protectExistingFromDefaults: true })
   }
 
   async flush() {
@@ -248,17 +277,27 @@ class StorageV2MirrorService {
     const snapshot = getMirrorSnapshot(this.latestGetState())
     const snapshotJson = JSON.stringify(snapshot)
     const pruneMissing = this.pendingPruneMissing !== false
+    const protectExistingFromDefaults = this.pendingProtectExistingFromDefaults === true
     const needsPruneUpgrade = pruneMissing && this.lastSnapshotPruneMissing !== true
-    if (snapshotJson === this.lastSnapshotJson && !needsPruneUpgrade) {
+    const needsProtectionDowngrade =
+      this.lastSnapshotProtectExistingFromDefaults === true && !protectExistingFromDefaults
+    if (snapshotJson === this.lastSnapshotJson && !needsPruneUpgrade && !needsProtectionDowngrade) {
       this.pendingPruneMissing = null
+      this.pendingProtectExistingFromDefaults = null
       return
     }
 
     try {
-      await window.api.storageV2.importLegacyReduxSnapshot(snapshot, { dryRun: false, pruneMissing })
+      await window.api.storageV2.importLegacyReduxSnapshot(snapshot, {
+        dryRun: false,
+        pruneMissing,
+        protectExistingFromDefaults
+      })
       this.pendingPruneMissing = null
+      this.pendingProtectExistingFromDefaults = null
       this.lastSnapshotJson = snapshotJson
       this.lastSnapshotPruneMissing = pruneMissing
+      this.lastSnapshotProtectExistingFromDefaults = protectExistingFromDefaults
       this.lastError = null
       notifyDataSyncLocalChange('redux')
       logger.debug('Mirrored Redux settings to Storage v2')
@@ -288,7 +327,9 @@ class StorageV2MirrorService {
     this.latestGetState = null
     this.needsFollowUp = false
     this.pendingPruneMissing = null
+    this.pendingProtectExistingFromDefaults = null
     this.lastSnapshotPruneMissing = null
+    this.lastSnapshotProtectExistingFromDefaults = null
     this.lastError = null
 
     if (this.timer) {
@@ -307,12 +348,17 @@ class StorageV2MirrorService {
     }
   }
 
-  resumeRuntimeMirroring(options: { scheduleLatest?: boolean; pruneMissing?: boolean } = {}) {
+  resumeRuntimeMirroring(
+    options: { scheduleLatest?: boolean; pruneMissing?: boolean; protectExistingFromDefaults?: boolean } = {}
+  ) {
     if (this.suspended) return
     this.paused = false
 
     if (options.scheduleLatest && this.latestGetState) {
-      this.schedule(this.latestGetState, 0, { pruneMissing: options.pruneMissing })
+      this.schedule(this.latestGetState, 0, {
+        pruneMissing: options.pruneMissing,
+        protectExistingFromDefaults: options.protectExistingFromDefaults
+      })
     }
   }
 

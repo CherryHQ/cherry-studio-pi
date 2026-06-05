@@ -4,6 +4,7 @@ import Selector from '@renderer/components/Selector'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useSettings } from '@renderer/hooks/useSettings'
 import {
+  refreshDataSyncRuntimeStateFromMain,
   startDataSyncAutoSync,
   stopDataSyncAutoSync,
   subscribeDataSyncRuntimeState,
@@ -281,7 +282,17 @@ const DataSyncSettings: FC = () => {
       const nextStatus = await window.api.dataSync.getStatus()
       setStatus(nextStatus)
       setSyncing(Boolean(nextStatus.syncing))
+      if (!nextStatus.syncing) {
+        const runtimeState = await refreshDataSyncRuntimeStateFromMain().catch(() => null)
+        if (runtimeState) {
+          setRuntimeSyncing(runtimeState.syncing)
+        }
+      }
       return nextStatus
+    } catch (error) {
+      setSyncing(false)
+      setStatus((prev) => (prev ? { ...prev, syncing: false, syncStartedAt: null } : prev))
+      return null
     } finally {
       if (showLoading) {
         setStatusRefreshing(false)
@@ -308,6 +319,16 @@ const DataSyncSettings: FC = () => {
 
     return () => window.clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    if (!syncInProgress) return
+
+    const timer = window.setInterval(() => {
+      void refreshStatus().catch(() => undefined)
+    }, 2_000)
+
+    return () => window.clearInterval(timer)
+  }, [syncInProgress])
 
   const syncNow = async () => {
     if (!webdavHost) {

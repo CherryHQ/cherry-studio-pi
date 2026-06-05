@@ -142,6 +142,7 @@ type StorageV2WebDavRecordSyncOptions = {
   legacySecretKeyMaterial?: string
   beforeRemoteConflictApply?: (input: { id: string; baseHash: string | null; firstJoin: boolean }) => Promise<void>
   preferRemoteOnFirstJoin?: boolean
+  assertActive?: () => void
 }
 
 type RemoteSecretVaultCache = {
@@ -1976,11 +1977,16 @@ export class StorageV2WebDavRecordSyncService {
     const stageRecordSyncState = (id: string, valueHash: string) => {
       pendingSyncStates.set(id, valueHash)
     }
+    options.assertActive?.()
     await this.ensureDirectory(client, basePath)
+    options.assertActive?.()
     await this.assertWriteAccess(client, basePath)
+    options.assertActive?.()
     const localRecords = await this.listLocalRecords(dbClient)
+    options.assertActive?.()
     const localById = new Map(localRecords.map((record) => [record.id, record]))
     const remoteBundle = await this.readRecordBundle(client, basePath, manifest)
+    options.assertActive?.()
     const bundledRecords = new Map<string, LocalRecord>(Object.entries(remoteBundle?.records ?? {}))
     if (remoteBundle) {
       manifest.blobs = {
@@ -1995,10 +2001,12 @@ export class StorageV2WebDavRecordSyncService {
     const ids = this.sortRecordIds(new Set([...localById.keys(), ...Object.keys(manifest.records)]))
 
     for (const id of ids) {
+      options.assertActive?.()
       const localRecord = localById.get(id)
       const remoteMeta = manifest.records[id]
       const bundledRecord = bundledRecords.get(id)
       const lastHash = await this.getRecordSyncState(dbClient, id)
+      options.assertActive?.()
 
       if (localRecord && !remoteMeta) {
         if (
@@ -2015,8 +2023,11 @@ export class StorageV2WebDavRecordSyncService {
           continue
         }
 
+        options.assertActive?.()
         await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords)
+        options.assertActive?.()
         await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
+        options.assertActive?.()
         await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
         stageRecordSyncState(id, localRecord.valueHash)
         summary.storageUploaded += localRecord.deletedAt ? 0 : 1
@@ -2049,8 +2060,10 @@ export class StorageV2WebDavRecordSyncService {
           continue
         }
 
+        options.assertActive?.()
         const remoteRecord = await this.pullRecord(client, basePath, remoteMeta, bundledRecord)
         if (remoteRecord) {
+          options.assertActive?.()
           await this.assertRemoteSecretsAvailableForRecord(
             client,
             basePath,
@@ -2060,9 +2073,11 @@ export class StorageV2WebDavRecordSyncService {
             remoteSecretVaultCache,
             summary
           )
+          options.assertActive?.()
           await this.applyRemoteRecordOrThrow(dbClient, remoteRecord)
           bundledRecords.set(id, remoteRecord)
           manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
+          options.assertActive?.()
           await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
           this.pruneManifestRecordCoveredByTombstone(manifest, remoteRecord.row, bundledRecords)
           stageRecordSyncState(id, remoteRecord.valueHash)
@@ -2080,8 +2095,11 @@ export class StorageV2WebDavRecordSyncService {
       if (localRecord.valueHash === remoteMeta.valueHash) {
         const remoteRecordAccessible = await this.hasRemoteRecord(client, basePath, remoteMeta, bundledRecord)
         if (!remoteRecordAccessible) {
+          options.assertActive?.()
           await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords)
+          options.assertActive?.()
           await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
+          options.assertActive?.()
           await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
           stageRecordSyncState(id, localRecord.valueHash)
           summary.storageUploaded += localRecord.deletedAt ? 0 : 1
@@ -2089,7 +2107,9 @@ export class StorageV2WebDavRecordSyncService {
           continue
         }
 
+        options.assertActive?.()
         await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
+        options.assertActive?.()
         await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
         bundledRecords.set(id, localRecord)
         manifest.records[id] = recordMetaFromLocalRecord(localRecord, recordBundlePath())
@@ -2099,6 +2119,7 @@ export class StorageV2WebDavRecordSyncService {
       }
 
       const localChanged = localRecord.valueHash !== lastHash
+      options.assertActive?.()
       const remoteRecord = await this.pullRecord(client, basePath, remoteMeta, bundledRecord)
       if (!remoteRecord) {
         summary.storageSkipped += 1
@@ -2111,6 +2132,7 @@ export class StorageV2WebDavRecordSyncService {
         const winner = localWins ? localRecord : remoteRecord
 
         if (remoteWins) {
+          options.assertActive?.()
           await this.assertRemoteSecretsAvailableForRecord(
             client,
             basePath,
@@ -2120,6 +2142,7 @@ export class StorageV2WebDavRecordSyncService {
             remoteSecretVaultCache,
             summary
           )
+          options.assertActive?.()
           await this.applyRemoteRecordOrThrow(dbClient, remoteRecord)
         }
 
@@ -2128,8 +2151,10 @@ export class StorageV2WebDavRecordSyncService {
         stageRecordSyncState(id, winner.valueHash)
         this.pruneManifestRecordCoveredByTombstone(manifest, winner.row, bundledRecords)
         if (!localWins && remoteWins) {
+          options.assertActive?.()
           await this.ensureRemoteBlobFile(client, basePath, manifest, winner, summary)
         }
+        options.assertActive?.()
         await this.applyLocalTombstoneRecord(dbClient, manifest, winner, bundledRecords)
         summary.storageSkipped += 1
         continue
@@ -2147,6 +2172,7 @@ export class StorageV2WebDavRecordSyncService {
             resolvedAt: new Date().toISOString()
           })
         }
+        options.assertActive?.()
         await this.assertRemoteSecretsAvailableForRecord(
           client,
           basePath,
@@ -2156,10 +2182,13 @@ export class StorageV2WebDavRecordSyncService {
           remoteSecretVaultCache,
           summary
         )
+        options.assertActive?.()
         await options.beforeRemoteConflictApply?.({ id, baseHash: null, firstJoin: true })
+        options.assertActive?.()
         await this.applyRemoteRecordOrThrow(dbClient, remoteRecord)
         bundledRecords.set(id, remoteRecord)
         manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
+        options.assertActive?.()
         await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
         this.pruneManifestRecordCoveredByTombstone(manifest, remoteRecord.row, bundledRecords)
         stageRecordSyncState(id, remoteRecord.valueHash)
@@ -2170,8 +2199,11 @@ export class StorageV2WebDavRecordSyncService {
       }
 
       if (localChanged && !remoteChanged) {
+        options.assertActive?.()
         await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords)
+        options.assertActive?.()
         await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
+        options.assertActive?.()
         await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
         stageRecordSyncState(id, localRecord.valueHash)
         summary.storageUploaded += localRecord.deletedAt ? 0 : 1
@@ -2180,6 +2212,7 @@ export class StorageV2WebDavRecordSyncService {
       }
 
       if (!localChanged && remoteChanged) {
+        options.assertActive?.()
         await this.assertRemoteSecretsAvailableForRecord(
           client,
           basePath,
@@ -2189,9 +2222,11 @@ export class StorageV2WebDavRecordSyncService {
           remoteSecretVaultCache,
           summary
         )
+        options.assertActive?.()
         await this.applyRemoteRecordOrThrow(dbClient, remoteRecord)
         bundledRecords.set(id, remoteRecord)
         manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
+        options.assertActive?.()
         await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
         this.pruneManifestRecordCoveredByTombstone(manifest, remoteRecord.row, bundledRecords)
         stageRecordSyncState(id, remoteRecord.valueHash)
@@ -2202,12 +2237,16 @@ export class StorageV2WebDavRecordSyncService {
 
       const localWins = this.shouldLocalRecordWin(localRecord, remoteRecord)
       if (localWins) {
+        options.assertActive?.()
         await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords)
+        options.assertActive?.()
         await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
+        options.assertActive?.()
         await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
         stageRecordSyncState(id, localRecord.valueHash)
         summary.storageUploaded += localRecord.deletedAt ? 0 : 1
       } else {
+        options.assertActive?.()
         await this.assertRemoteSecretsAvailableForRecord(
           client,
           basePath,
@@ -2217,10 +2256,13 @@ export class StorageV2WebDavRecordSyncService {
           remoteSecretVaultCache,
           summary
         )
+        options.assertActive?.()
         await options.beforeRemoteConflictApply?.({ id, baseHash: lastHash, firstJoin: false })
+        options.assertActive?.()
         await this.applyRemoteRecordOrThrow(dbClient, remoteRecord)
         bundledRecords.set(id, remoteRecord)
         manifest.records[id] = recordMetaFromLocalRecord(remoteRecord, recordBundlePath())
+        options.assertActive?.()
         await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
         this.pruneManifestRecordCoveredByTombstone(manifest, remoteRecord.row, bundledRecords)
         stageRecordSyncState(id, remoteRecord.valueHash)
@@ -2235,8 +2277,10 @@ export class StorageV2WebDavRecordSyncService {
       summary.storageResolvedConflicts += 1
     }
 
+    options.assertActive?.()
     this.pruneManifestBlobsWithoutRecords(manifest, bundledRecords)
     const secretReferenceScan = await scanStorageV2SecretReferences(dbClient)
+    options.assertActive?.()
     if (secretReferenceScan.invalidRefs.size > 0) {
       throw new Error(
         `Storage v2 数据中存在无法识别的敏感配置引用：${formatLimitedList(
@@ -2254,7 +2298,9 @@ export class StorageV2WebDavRecordSyncService {
       secretReferenceScan.refs,
       remoteSecretVaultCache.importedSecretIds
     )
+    options.assertActive?.()
     await this.writeRecordBundle(client, basePath, manifest, bundledRecords)
+    options.assertActive?.()
     return {
       manifest,
       summary,

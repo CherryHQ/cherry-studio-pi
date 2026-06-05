@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
     setSecret: vi.fn()
   },
   settingsRepository: {
+    get: vi.fn(),
     set: vi.fn()
   },
   providerRepository: {
@@ -39,6 +40,7 @@ describe('StorageV2LegacyReduxImportService', () => {
     vi.clearAllMocks()
     mocks.secretVault.isAvailable.mockReturnValue(true)
     mocks.secretVault.setSecret.mockResolvedValue('storage-v2://secret/mcp-provider-token/mcprouter_token/token')
+    mocks.settingsRepository.get.mockResolvedValue(null)
     mocks.providerRepository.deleteMissing.mockResolvedValue(0)
     mocks.assistantRepository.deleteMissing.mockResolvedValue(0)
     mocks.knowledgeRepository.importBases.mockResolvedValue({
@@ -161,6 +163,64 @@ describe('StorageV2LegacyReduxImportService', () => {
     expect(mocks.settingsRepository.set).toHaveBeenCalledWith('settings.language', 'zh-CN', 'settings')
     expect(report.secretCandidateCount).toBe(3)
     expect(report.importedSecretCount).toBe(3)
+  })
+
+  it('skips startup default WebDAV settings when Storage v2 already has meaningful values', async () => {
+    mocks.settingsRepository.get.mockImplementation(async (key: string) => {
+      if (key === 'settings.dataSyncWebdavHost') return 'https://dav.example.com'
+      if (key === 'settings.dataSyncWebdavUser') return 'webdav-user'
+      if (key === 'settings.dataSyncWebdavPass') {
+        return { secretRef: 'storage-v2://secret/settings/dataSyncWebdavPass/dataSyncWebdavPassword' }
+      }
+      if (key === 'settings.dataSyncWebdavPath') return '/sync'
+      if (key === 'settings.dataSyncAutoSync') return true
+      if (key === 'settings.dataSyncSyncInterval') return 5
+      return null
+    })
+
+    const report = await new StorageV2LegacyReduxImportService().importSnapshot(
+      {
+        settings: {
+          dataSyncWebdavHost: '',
+          dataSyncWebdavUser: '',
+          dataSyncWebdavPass: '',
+          dataSyncWebdavPath: '/cherry-studio-pi',
+          dataSyncAutoSync: false,
+          dataSyncSyncInterval: 0,
+          language: 'zh-CN'
+        }
+      },
+      { dryRun: false, protectExistingFromDefaults: true }
+    )
+
+    expect(mocks.settingsRepository.set).toHaveBeenCalledWith('settings.language', 'zh-CN', 'settings')
+    expect(mocks.settingsRepository.set).not.toHaveBeenCalledWith(
+      'settings.dataSyncWebdavHost',
+      expect.anything(),
+      'settings'
+    )
+    expect(mocks.settingsRepository.set).not.toHaveBeenCalledWith(
+      'settings.dataSyncWebdavPass',
+      expect.anything(),
+      'settings'
+    )
+    expect(report.warnings).toContain('Skipped startup default overwrite for settings.dataSyncWebdavHost.')
+    expect(report.warnings).toContain('Skipped startup default overwrite for settings.dataSyncWebdavPass.')
+  })
+
+  it('allows explicit WebDAV settings clears when startup default protection is disabled', async () => {
+    mocks.settingsRepository.get.mockResolvedValue('https://dav.example.com')
+
+    await new StorageV2LegacyReduxImportService().importSnapshot(
+      {
+        settings: {
+          dataSyncWebdavHost: ''
+        }
+      },
+      { dryRun: false, protectExistingFromDefaults: false }
+    )
+
+    expect(mocks.settingsRepository.set).toHaveBeenCalledWith('settings.dataSyncWebdavHost', '', 'settings')
   })
 
   it('does not prune providers or assistants when importing a localStorage-only snapshot', async () => {

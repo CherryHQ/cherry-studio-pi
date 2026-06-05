@@ -14,6 +14,7 @@ import { reportErrorToSystemAgent } from './SystemAgentService'
 
 const logger = loggerService.withContext('DataSyncService')
 const LOCAL_CHANGE_AUTO_SYNC_DEBOUNCE_MS = 20_000
+const RENDERER_SYNC_RECONCILE_GRACE_MS = 60_000
 
 export type DataSyncSummary = {
   status?: 'success' | 'failed'
@@ -184,6 +185,28 @@ async function isMainProcessRunning() {
   return Boolean(status?.syncing)
 }
 
+async function reconcileRendererSyncStateWithMainProcess() {
+  const mainProcessRunning = await isMainProcessRunning()
+  if (
+    syncing &&
+    !mainProcessRunning &&
+    syncStartedAt !== null &&
+    Date.now() - syncStartedAt > RENDERER_SYNC_RECONCILE_GRACE_MS
+  ) {
+    logger.warn('Clearing stale renderer data sync runtime state because the main process is idle', {
+      syncStartedAt
+    })
+    setDataSyncRunning(false)
+  }
+
+  return mainProcessRunning
+}
+
+export async function refreshDataSyncRuntimeStateFromMain(): Promise<DataSyncRuntimeState> {
+  await reconcileRendererSyncStateWithMainProcess()
+  return getDataSyncRuntimeState()
+}
+
 function getWebDavConfig(): WebDavConfig {
   const settings = store.getState().settings
   return {
@@ -262,8 +285,11 @@ function ensureLocalChangeAutoSyncSubscription() {
 
 export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<DataSyncSummary | null> {
   if (syncing) {
-    logger.info('Data sync already running')
-    return null
+    await reconcileRendererSyncStateWithMainProcess()
+    if (syncing) {
+      logger.info('Data sync already running')
+      return null
+    }
   }
 
   const config = configOverride ?? getWebDavConfig()

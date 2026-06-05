@@ -88,7 +88,11 @@ describe('StorageV2MirrorService', () => {
     await vi.advanceTimersByTimeAsync(1500)
 
     expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
-    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), { dryRun: false, pruneMissing: false })
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), {
+      dryRun: false,
+      pruneMissing: false,
+      protectExistingFromDefaults: true
+    })
   })
 
   it('can queue the latest paused runtime state when mirroring resumes', async () => {
@@ -108,7 +112,11 @@ describe('StorageV2MirrorService', () => {
     await vi.advanceTimersByTimeAsync(0)
 
     expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
-    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), { dryRun: false, pruneMissing: false })
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), {
+      dryRun: false,
+      pruneMissing: false,
+      protectExistingFromDefaults: true
+    })
   })
 
   it('keeps the initial startup mirror non-pruning', async () => {
@@ -118,7 +126,11 @@ describe('StorageV2MirrorService', () => {
     await vi.advanceTimersByTimeAsync(1500)
 
     expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
-    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), { dryRun: false, pruneMissing: false })
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), {
+      dryRun: false,
+      pruneMissing: false,
+      protectExistingFromDefaults: true
+    })
   })
 
   it('does not prune Storage v2 with an empty startup runtime snapshot', async () => {
@@ -135,7 +147,7 @@ describe('StorageV2MirrorService', () => {
           note: {}
         })
       }),
-      { dryRun: false, pruneMissing: false }
+      { dryRun: false, pruneMissing: false, protectExistingFromDefaults: true }
     )
   })
 
@@ -154,7 +166,8 @@ describe('StorageV2MirrorService', () => {
     await vi.advanceTimersByTimeAsync(1500)
     expect(importLegacyReduxSnapshot).toHaveBeenNthCalledWith(1, expect.any(Object), {
       dryRun: false,
-      pruneMissing: false
+      pruneMissing: false,
+      protectExistingFromDefaults: true
     })
     expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
   })
@@ -172,11 +185,13 @@ describe('StorageV2MirrorService', () => {
     expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(2)
     expect(importLegacyReduxSnapshot).toHaveBeenNthCalledWith(1, expect.any(Object), {
       dryRun: false,
-      pruneMissing: false
+      pruneMissing: false,
+      protectExistingFromDefaults: true
     })
     expect(importLegacyReduxSnapshot).toHaveBeenNthCalledWith(2, expect.any(Object), {
       dryRun: false,
-      pruneMissing: false
+      pruneMissing: false,
+      protectExistingFromDefaults: true
     })
   })
 
@@ -231,7 +246,8 @@ describe('StorageV2MirrorService', () => {
     await vi.advanceTimersByTimeAsync(1)
     expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), {
       dryRun: false,
-      pruneMissing: false
+      pruneMissing: false,
+      protectExistingFromDefaults: true
     })
   })
 
@@ -247,7 +263,32 @@ describe('StorageV2MirrorService', () => {
     await vi.waitFor(() => {
       expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
     })
-    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), { dryRun: false, pruneMissing: false })
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(expect.any(Object), {
+      dryRun: false,
+      pruneMissing: false,
+      protectExistingFromDefaults: true
+    })
+  })
+
+  it('lets explicit WebDAV config actions overwrite startup-protected defaults', async () => {
+    const { storageV2MirrorService } = await import('../StorageV2MirrorService')
+    const middleware = storageV2MirrorService.createMiddleware()({
+      dispatch: vi.fn(),
+      getState: createState
+    } as any)(vi.fn((action) => action))
+
+    storageV2MirrorService.scheduleStartupMirror(createState)
+    await vi.advanceTimersByTimeAsync(1500)
+
+    middleware({ type: 'settings/setDataSyncWebdavHost' })
+    await vi.advanceTimersByTimeAsync(1500)
+
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(2)
+    expect(importLegacyReduxSnapshot).toHaveBeenNthCalledWith(2, expect.any(Object), {
+      dryRun: false,
+      pruneMissing: false,
+      protectExistingFromDefaults: false
+    })
   })
 
   it('does not mirror runtime hydration actions restored from sync', async () => {

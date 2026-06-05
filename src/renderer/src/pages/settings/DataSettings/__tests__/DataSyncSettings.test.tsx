@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   listRemoteDirectories: vi.fn(),
   restoreLatestSnapshot: vi.fn(),
   showInFolder: vi.fn(),
+  refreshDataSyncRuntimeStateFromMain: vi.fn(),
   startDataSyncAutoSync: vi.fn(),
   stopDataSyncAutoSync: vi.fn(),
   subscribeDataSyncRuntimeState: vi.fn(),
@@ -55,6 +56,7 @@ vi.mock('@renderer/services/SystemAgentService', () => ({
 }))
 
 vi.mock('@renderer/services/DataSyncService', () => ({
+  refreshDataSyncRuntimeStateFromMain: mocks.refreshDataSyncRuntimeStateFromMain,
   startDataSyncAutoSync: mocks.startDataSyncAutoSync,
   stopDataSyncAutoSync: mocks.stopDataSyncAutoSync,
   subscribeDataSyncRuntimeState: mocks.subscribeDataSyncRuntimeState,
@@ -132,6 +134,7 @@ describe('DataSyncSettings', () => {
     mocks.listRemoteDirectories.mockResolvedValue({ path: '/', parentPath: null, directories: [] })
     mocks.restoreLatestSnapshot.mockResolvedValue(undefined)
     mocks.showInFolder.mockResolvedValue(undefined)
+    mocks.refreshDataSyncRuntimeStateFromMain.mockResolvedValue({ syncing: false, syncStartedAt: null })
     mocks.subscribeDataSyncRuntimeState.mockImplementation((listener: (state: { syncing: boolean }) => void) => {
       listener({ syncing: false })
       return vi.fn()
@@ -194,6 +197,28 @@ describe('DataSyncSettings', () => {
     expect(mocks.syncAppDataNow).not.toHaveBeenCalled()
     expect(mocks.toast.success).not.toHaveBeenCalled()
     expect(mocks.toast.info).not.toHaveBeenCalledWith('settings.data.data_sync.toast.sync_success')
+  })
+
+  it('clears a stale busy button when status refresh reports the main process is idle', async () => {
+    mocks.getStatus.mockResolvedValueOnce(runningStatus()).mockResolvedValueOnce(idleStatus())
+
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(syncButton()).toHaveClass('ant-btn-loading'))
+
+    fireEvent.click(screen.getByText('settings.data.data_sync.refresh_status'))
+
+    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+  })
+
+  it('does not leave the sync button stuck when status refresh fails', async () => {
+    mocks.getStatus.mockResolvedValueOnce(runningStatus()).mockRejectedValueOnce(new Error('status unavailable'))
+
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(syncButton()).toHaveClass('ant-btn-loading'))
+
+    fireEvent.click(screen.getByText('settings.data.data_sync.refresh_status'))
+
+    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
   })
 
   it('treats a null sync summary as an in-flight duplicate instead of success', async () => {

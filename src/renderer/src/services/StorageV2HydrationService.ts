@@ -64,7 +64,7 @@ type RuntimeHydrationTarget = {
       | ReturnType<typeof hydrateWebSearchState>
   ) => unknown
   flush?: () => Promise<unknown>
-  shouldHydrateWhenDisabled?: () => boolean
+  shouldHydrateWhenDisabled?: () => boolean | Promise<boolean>
 }
 
 type StorageV2CoreSnapshot = {
@@ -382,7 +382,7 @@ export async function maybeHydrateRuntimeCacheFromStorageV2(
   target: RuntimeHydrationTarget
 ): Promise<AutoHydrateResult> {
   const autoHydrateEnabled = await getStorageV2AutoHydrateEnabled()
-  const shouldBootstrapFromStorageV2 = !autoHydrateEnabled && target.shouldHydrateWhenDisabled?.() === true
+  const shouldBootstrapFromStorageV2 = !autoHydrateEnabled && (await target.shouldHydrateWhenDisabled?.()) === true
 
   if (!autoHydrateEnabled && !shouldBootstrapFromStorageV2) {
     return {

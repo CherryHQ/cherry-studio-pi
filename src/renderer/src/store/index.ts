@@ -102,10 +102,93 @@ const persistedReducer = persistReducer(
 )
 
 const REDUX_PERSIST_STORAGE_KEY = 'persist:cherry-studio'
+const DEFAULT_DATA_SYNC_WEBDAV_PATH = '/cherry-studio-pi'
 
 function isReduxPersistCacheMissing() {
   if (typeof localStorage === 'undefined') return false
   return localStorage.getItem(REDUX_PERSIST_STORAGE_KEY) == null
+}
+
+function parseMaybeJson<T>(value: unknown): T | null {
+  if (typeof value !== 'string') return null
+
+  try {
+    return JSON.parse(value) as T
+  } catch {
+    return null
+  }
+}
+
+function getPersistedReduxSlice<T extends Record<string, unknown>>(sliceName: string): T | null {
+  if (typeof localStorage === 'undefined') return null
+
+  const persistedRoot = parseMaybeJson<Record<string, unknown>>(localStorage.getItem(REDUX_PERSIST_STORAGE_KEY))
+  const serializedSlice = persistedRoot?.[sliceName]
+
+  return parseMaybeJson<T>(serializedSlice)
+}
+
+function isBlankString(value: unknown) {
+  return typeof value !== 'string' || value.trim().length === 0
+}
+
+function isDefaultDataSyncPath(value: unknown) {
+  return isBlankString(value) || value === DEFAULT_DATA_SYNC_WEBDAV_PATH
+}
+
+function hasBlankPersistedDataSyncConfig() {
+  const settings = getPersistedReduxSlice<Record<string, unknown>>('settings')
+  if (!settings) return true
+
+  return (
+    isBlankString(settings.dataSyncWebdavHost) &&
+    isBlankString(settings.dataSyncWebdavUser) &&
+    isBlankString(settings.dataSyncWebdavPass) &&
+    isDefaultDataSyncPath(settings.dataSyncWebdavPath) &&
+    settings.dataSyncAutoSync !== true &&
+    Number(settings.dataSyncSyncInterval || 0) === 0
+  )
+}
+
+function isMeaningfulStorageV2Setting(value: unknown) {
+  if (value == null) return false
+  if (typeof value === 'string') return value.trim().length > 0
+  if (typeof value === 'number') return value !== 0
+  if (typeof value === 'boolean') return value === true
+  if (Array.isArray(value)) return value.length > 0
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some(isMeaningfulStorageV2Setting)
+  }
+  return true
+}
+
+async function hasStorageV2DataSyncConfig() {
+  if (typeof window === 'undefined' || typeof window.api?.storageV2?.getSetting !== 'function') return false
+
+  const [host, user, password, path, autoSync, interval] = await Promise.all([
+    window.api.storageV2.getSetting('settings.dataSyncWebdavHost'),
+    window.api.storageV2.getSetting('settings.dataSyncWebdavUser'),
+    window.api.storageV2.getSetting('settings.dataSyncWebdavPass'),
+    window.api.storageV2.getSetting('settings.dataSyncWebdavPath'),
+    window.api.storageV2.getSetting('settings.dataSyncAutoSync'),
+    window.api.storageV2.getSetting('settings.dataSyncSyncInterval')
+  ])
+
+  return (
+    isMeaningfulStorageV2Setting(host) ||
+    isMeaningfulStorageV2Setting(user) ||
+    isMeaningfulStorageV2Setting(password) ||
+    (isMeaningfulStorageV2Setting(path) && path !== DEFAULT_DATA_SYNC_WEBDAV_PATH) ||
+    isMeaningfulStorageV2Setting(autoSync) ||
+    isMeaningfulStorageV2Setting(interval)
+  )
+}
+
+async function shouldBootstrapRuntimeCacheFromStorageV2() {
+  if (isReduxPersistCacheMissing()) return true
+  if (!hasBlankPersistedDataSyncConfig()) return false
+
+  return hasStorageV2DataSyncConfig()
 }
 
 /**
@@ -169,7 +252,7 @@ export const persistor = persistStore(store, undefined, () => {
   void maybeHydrateRuntimeCacheFromStorageV2({
     dispatch: store.dispatch,
     flush: () => persistor.flush(),
-    shouldHydrateWhenDisabled: isReduxPersistCacheMissing
+    shouldHydrateWhenDisabled: shouldBootstrapRuntimeCacheFromStorageV2
   })
     .then((result) => {
       if (result.hydrated) {

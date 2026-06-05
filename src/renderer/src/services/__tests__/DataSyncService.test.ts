@@ -57,6 +57,7 @@ vi.mock('../SystemAgentService', () => ({
 import { notifyDataSyncLocalChange } from '../DataSyncLocalChangeSignal'
 import {
   getDataSyncRuntimeState,
+  refreshDataSyncRuntimeStateFromMain,
   startDataSyncAutoSync,
   startDataSyncExternalSyncListener,
   stopDataSyncAutoSync,
@@ -427,6 +428,25 @@ describe('DataSyncService', () => {
 
     await expect(syncAppDataNow()).resolves.toBeNull()
     expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+
+    pendingSync.resolve(successSummary)
+    await expect(firstSync).resolves.toEqual(successSummary)
+  })
+
+  it('reconciles stale renderer sync state when the main process is idle', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-05T03:00:00.000Z'))
+    const pendingSync = deferred<typeof successSummary>()
+    mocks.syncNow.mockReturnValueOnce(pendingSync.promise)
+
+    const firstSync = syncAppDataNow()
+    await vi.waitFor(() => expect(getDataSyncRuntimeState().syncing).toBe(true))
+
+    vi.setSystemTime(new Date('2026-06-05T03:01:01.000Z'))
+    await expect(refreshDataSyncRuntimeStateFromMain()).resolves.toEqual({
+      syncing: false,
+      syncStartedAt: null
+    })
 
     pendingSync.resolve(successSummary)
     await expect(firstSync).resolves.toEqual(successSummary)

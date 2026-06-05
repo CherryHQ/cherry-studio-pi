@@ -250,8 +250,10 @@ function mockDirectoryContentsFromRemoteFiles() {
 
 describe('AppDataSyncService', () => {
   beforeEach(() => {
+    vi.useRealTimers()
     vi.clearAllMocks()
     delete process.env.CHERRY_STUDIO_DATA_SYNC_REMOTE_SNAPSHOT
+    delete process.env.CHERRY_STUDIO_DATA_SYNC_MAX_RUNTIME_MS
     mocks.remoteFiles.clear()
     mocks.db.listRecords.mockResolvedValue([])
     mocks.db.getSyncState.mockResolvedValue(null)
@@ -452,6 +454,19 @@ describe('AppDataSyncService', () => {
       expect.stringContaining('"ownerId": "local-device"'),
       { overwrite: false }
     )
+    const lockWrite = mocks.webdav.putFileContents.mock.calls.find(
+      ([filePath, , options]) => String(filePath).includes('/.sync.locks/') && options?.overwrite === false
+    )
+    expect(lockWrite).toBeTruthy()
+    const lockPayload = JSON.parse(String(lockWrite?.[1]))
+    expect(lockPayload).toEqual(
+      expect.objectContaining({
+        ownerId: 'local-device',
+        deadlineAt: expect.any(Number),
+        maxRuntimeMs: 10 * 60 * 1000
+      })
+    )
+    expect(lockPayload.expiresAt).toBeLessThanOrEqual(lockPayload.deadlineAt)
     expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(
       expect.stringMatching(/^\/remote-root\/sync\/v1\/\.sync\.locks\/local-device\.[a-f0-9-]+\.json$/)
     )
@@ -516,6 +531,34 @@ describe('AppDataSyncService', () => {
         token: 'stale-token',
         createdAt: 1760000000000 - 10 * 60 * 1000,
         expiresAt: 1760000000000 + 30 * 60 * 1000,
+        app: 'cherry-studio-pi',
+        reason: 'data-sync'
+      })
+    )
+
+    try {
+      const summary = await new AppDataSyncService().syncNow(config)
+
+      expect(summary.status).toBe('success')
+      expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/.sync.lock.json')
+      expect(mocks.storageRecordSync.sync).toHaveBeenCalled()
+    } finally {
+      nowSpy.mockRestore()
+    }
+  })
+
+  it('reclaims old remote file locks even when an older app version keeps refreshing their heartbeat', async () => {
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1760000000000)
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/.sync.lock.json',
+      JSON.stringify({
+        version: 1,
+        ownerId: 'device-b',
+        token: 'long-running-token',
+        createdAt: 1760000000000 - 11 * 60 * 1000,
+        updatedAt: 1760000000000,
+        expiresAt: 1760000000000 + 2 * 60 * 1000,
+        leaseMs: 2 * 60 * 1000,
         app: 'cherry-studio-pi',
         reason: 'data-sync'
       })
@@ -1701,5 +1744,84 @@ describe('AppDataSyncService', () => {
         syncStartedAt: null
       })
     )
+  })
+
+  it('times out a hung sync, stops reporting syncing, and does not publish the manifest later', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-05T08:00:00.000Z'))
+    process.env.CHERRY_STUDIO_DATA_SYNC_MAX_RUNTIME_MS = '1000'
+    const pendingStorageSync = deferred<{
+      manifest: { version: 1; records: Record<string, never>; blobs: Record<string, never> }
+      syncStates: never[]
+      summary: {
+        storageUploaded: number
+        storageDownloaded: number
+        storageDeleted: number
+        storageConflicts: number
+        storageResolvedConflicts: number
+        storageSkipped: number
+        blobUploaded: number
+        blobDownloaded: number
+        secretUploaded: number
+        secretDownloaded: number
+      }
+    }>()
+    mocks.storageRecordSync.sync.mockReturnValueOnce(pendingStorageSync.promise)
+
+    const service = new AppDataSyncService()
+    const sync = service.syncNow(config)
+
+    await vi.waitFor(() => expect(mocks.storageRecordSync.sync).toHaveBeenCalled())
+    await expect(service.getStatus()).resolves.toEqual(
+      expect.objectContaining({
+        syncing: true,
+        syncStartedAt: expect.any(Number)
+      })
+    )
+
+    const lockPath = mocks.webdav.putFileContents.mock.calls
+      .map(([filePath]) => String(filePath))
+      .find((filePath) => filePath.includes('/.sync.locks/'))
+    expect(lockPath).toBeTruthy()
+    const lockWritesBeforeTimeout = mocks.webdav.putFileContents.mock.calls.filter(
+      ([filePath]) => String(filePath) === lockPath
+    ).length
+
+    const timeoutExpectation = expect(sync).rejects.toThrow('同步超过 1 秒仍未完成')
+    await vi.advanceTimersByTimeAsync(1001)
+    await timeoutExpectation
+    await expect(service.getStatus()).resolves.toEqual(
+      expect.objectContaining({
+        syncing: false,
+        syncStartedAt: null
+      })
+    )
+
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(mocks.webdav.putFileContents.mock.calls.filter(([filePath]) => String(filePath) === lockPath)).toHaveLength(
+      lockWritesBeforeTimeout
+    )
+
+    pendingStorageSync.resolve({
+      manifest: { version: 1, records: {}, blobs: {} },
+      syncStates: [],
+      summary: {
+        storageUploaded: 0,
+        storageDownloaded: 0,
+        storageDeleted: 0,
+        storageConflicts: 0,
+        storageResolvedConflicts: 0,
+        storageSkipped: 0,
+        blobUploaded: 0,
+        blobDownloaded: 0,
+        secretUploaded: 0,
+        secretDownloaded: 0
+      }
+    })
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/manifest.json'))
+    ).toBe(false)
   })
 })
