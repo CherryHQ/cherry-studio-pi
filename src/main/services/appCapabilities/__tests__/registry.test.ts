@@ -77,6 +77,26 @@ describe('AppCapabilityRegistry', () => {
     ])
   })
 
+  it('normalizes unsafe search inputs before paging results', () => {
+    const registry = new AppCapabilityRegistry()
+    registry.register(capability({ id: 'a.first' }))
+    registry.register(capability({ id: 'b.second' }))
+    registry.register(capability({ id: 'c.third' }))
+
+    expect(registry.search({ query: '', limit: 'bad' as any }).map((item) => item.id)).toEqual([
+      'a.first',
+      'b.second',
+      'c.third'
+    ])
+    expect(registry.search({ query: '', limit: Number.NaN }).map((item) => item.id)).toEqual([
+      'a.first',
+      'b.second',
+      'c.third'
+    ])
+    expect(registry.search({ query: '', limit: 0 }).map((item) => item.id)).toEqual(['a.first'])
+    expect(() => registry.search({ query: 42 as any })).not.toThrow()
+  })
+
   it('looks up a single descriptor without listing and sorting all capabilities', () => {
     const registry = new AppCapabilityRegistry()
     registry.register(capability({ id: 'settings.hidden', hidden: true }))

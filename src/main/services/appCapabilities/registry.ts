@@ -6,6 +6,8 @@ import type {
 } from './types'
 
 const normalize = (value: string) => value.toLowerCase().replace(/[_./:-]+/g, ' ')
+const DEFAULT_SEARCH_LIMIT = 8
+const MAX_SEARCH_LIMIT = 50
 
 const tokenize = (value: string) =>
   normalize(value)
@@ -44,6 +46,13 @@ const expandQueryTerms = (query: string) => {
     }
   }
   return Array.from(expanded)
+}
+
+const normalizeSearchLimit = (value: unknown) => {
+  const parsed =
+    typeof value === 'string' && !value.trim() ? DEFAULT_SEARCH_LIMIT : Number(value ?? DEFAULT_SEARCH_LIMIT)
+  const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_SEARCH_LIMIT
+  return Math.max(1, Math.min(safeLimit, MAX_SEARCH_LIMIT))
 }
 
 type SearchIndexEntry = {
@@ -87,8 +96,8 @@ export class AppCapabilityRegistry {
   }
 
   search(options: AppCapabilitySearchOptions = {}): AppCapabilityDescriptor[] {
-    const query = (options.query ?? '').trim()
-    const limit = Math.max(1, Math.min(options.limit ?? 8, 50))
+    const query = String(options.query ?? '').trim()
+    const limit = normalizeSearchLimit(options.limit)
     if (!query) {
       return this.sortedCapabilities(options)
         .slice(0, limit)
