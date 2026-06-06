@@ -27,7 +27,7 @@ import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
 
-const DEFAULT_BACKUP_WEBDAV_PATH = '/cherry-studio'
+const DEFAULT_BACKUP_WEBDAV_PATH = '/cherry-studio-pi'
 
 const WebDavSettings: FC = () => {
   const {

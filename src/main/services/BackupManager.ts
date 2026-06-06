@@ -40,7 +40,7 @@ import WebDav from './WebDav'
 import { windowService } from './WindowService'
 
 const logger = loggerService.withContext('BackupManager')
-const DEFAULT_BACKUP_WEBDAV_PATH = '/cherry-studio'
+const DEFAULT_BACKUP_WEBDAV_PATH = '/cherry-studio-pi'
 
 interface CopyDirOptions {
   dereferenceSymlinks: boolean

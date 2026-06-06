@@ -7,13 +7,13 @@ type UpdateMirror = 'github' | 'gitcode'
 
 const CHANNELS: UpgradeChannel[] = ['latest', 'rc', 'beta']
 const MIRRORS: UpdateMirror[] = ['github', 'gitcode']
-const GITHUB_REPO = 'CherryHQ/cherry-studio'
-const GITCODE_REPO = 'CherryHQ/cherry-studio'
+const GITHUB_REPO = 'CherryHQ/cherry-studio-pi'
+const GITCODE_REPO = 'CherryHQ/cherry-studio-pi'
 const DEFAULT_FEED_TEMPLATES: Record<UpdateMirror, string> = {
   github: `https://github.com/${GITHUB_REPO}/releases/download/{{tag}}`,
   gitcode: `https://gitcode.com/${GITCODE_REPO}/releases/download/{{tag}}`
 }
-const GITCODE_LATEST_FALLBACK = 'https://releases.cherry-ai.com'
+const GITCODE_LATEST_FALLBACK = `https://github.com/${GITHUB_REPO}/releases/latest/download`
 
 interface CliOptions {
   tag?: string

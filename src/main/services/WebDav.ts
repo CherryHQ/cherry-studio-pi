@@ -14,7 +14,7 @@ import type {
 import { createClient } from 'webdav'
 
 const logger = loggerService.withContext('WebDav')
-const DEFAULT_BACKUP_WEBDAV_PATH = '/cherry-studio'
+const DEFAULT_BACKUP_WEBDAV_PATH = '/cherry-studio-pi'
 
 function redactWebDavHostForLog(webdavHost: string) {
   try {

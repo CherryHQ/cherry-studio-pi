@@ -32,7 +32,6 @@
     "release": "node scripts/version.js",
     "publish": "pnpm build:check && pnpm release patch push",
     "publish:artifacts": "cd packages/artifacts && npm publish && cd -",
-    "pulish:artifacts": "pnpm publish:artifacts",
     "agents:generate": "NODE_ENV='development' drizzle-kit generate --config src/main/services/agents/drizzle.config.ts",
     "agents:push": "NODE_ENV='development' drizzle-kit push --config src/main/services/agents/drizzle.config.ts",
     "agents:studio": "NODE_ENV='development' drizzle-kit studio --config src/main/services/agents/drizzle.config.ts",

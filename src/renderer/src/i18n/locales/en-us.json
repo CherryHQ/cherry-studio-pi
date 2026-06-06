@@ -4618,7 +4618,7 @@
         },
         "root": {
           "label": "Backup Directory (Optional)",
-          "placeholder": "e.g: /cherry-studio"
+          "placeholder": "e.g: /cherry-studio-pi"
         },
         "secretAccessKey": {
           "label": "Secret Access Key",

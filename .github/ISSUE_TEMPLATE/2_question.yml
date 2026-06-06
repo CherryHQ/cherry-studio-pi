@@ -17,7 +17,7 @@ body:
       options:
         - label: I understand that issues are meant for feedback and problem-solving, not for venting, and I will provide as much detail as possible to help resolve the issue.
           required: true
-        - label: I have checked the pinned issues and searched through the existing [open issues](https://github.com/CherryHQ/cherry-studio/issues), [closed issues](https://github.com/CherryHQ/cherry-studio/issues?q=is%3Aissue%20state%3Aclosed), and [discussions](https://github.com/CherryHQ/cherry-studio/discussions) and did not find a similar suggestion.
+        - label: I have checked the pinned issues and searched through the existing [open issues](https://github.com/CherryHQ/cherry-studio-pi/issues), [closed issues](https://github.com/CherryHQ/cherry-studio-pi/issues?q=is%3Aissue%20state%3Aclosed), and [discussions](https://github.com/CherryHQ/cherry-studio-pi/discussions) and did not find a similar suggestion.
           required: true
         - label: I confirm that I am here to ask questions and discuss issues, not to report bugs or request features.
           required: true
@@ -38,7 +38,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: What version of Cherry Studio are you running?
+      description: What version of Cherry Studio Pi are you running?
       placeholder: e.g. v1.0.0
     validations:
       required: true

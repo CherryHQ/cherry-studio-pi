@@ -765,7 +765,7 @@
     },
     "authHeaderText": "Usar no cabeçalho de autorização:",
     "configuration": "Configuração",
-    "description": "Expõe as capacidades de IA do Cherry Studio através de APIs HTTP compatíveis com OpenAI",
+    "description": "Expõe as capacidades de IA do Cherry Studio Pi através de APIs HTTP compatíveis com OpenAI",
     "documentation": {
       "title": "Documentação API"
     },
@@ -3002,12 +3002,12 @@
       "select_other_provider": "Selecionar Outro Provedor",
       "setup_hint": "Por favor, configure pelo menos um provedor para a melhor experiência",
       "subtitle": "Desfrute de serviços de IA de alto nível com CherryIN",
-      "title": "Bem-vindo ao Cherry Studio"
+      "title": "Bem-vindo ao Cherry Studio Pi"
     }
   },
   "openclaw": {
     "checking_installation": "Verificando a instalação do OpenClaw...",
-    "description": "Integre provedores do Cherry Studio com o Gateway OpenClaw para habilitar agentes de codificação de IA como Claude Code, Qwen-Coder e muitos outros.",
+    "description": "Integre provedores do Cherry Studio Pi com o Gateway OpenClaw para habilitar agentes de codificação de IA como Claude Code, Qwen-Coder e muitos outros.",
     "error": {
       "select_provider_model": "Por favor, selecione primeiro um provedor e um modelo."
     },
@@ -3045,7 +3045,7 @@
       "title": "Configuração do Modelo"
     },
     "node_missing": {
-      "description": "O OpenClaw requer Node.js/npm. Por favor, instale o Node.js primeiro e, em seguida, reinicie o Cherry Studio.",
+      "description": "O OpenClaw requer Node.js/npm. Por favor, instale o Node.js primeiro e, em seguida, reinicie o Cherry Studio Pi.",
       "download_button": "Baixar Node.js",
       "hint": "macOS: brew install node | Windows: Baixe a versão LTS em nodejs.org",
       "title": "Node.js Necessário"
@@ -3844,7 +3844,7 @@
           },
           "description": {
             "0": "O Assistente de Seleção de Texto precisa da permissão de «<strong>Funcionalidades de Acesso</strong>» para funcionar corretamente.",
-            "1": "Clique em «<strong>Ir para Configurações</strong>» e, na janela pop-up de solicitação de permissão que aparecerá em seguida, clique no botão «<strong>Abrir Configurações do Sistema</strong>», depois localize «<strong>Cherry Studio</strong>» na lista de aplicativos e ative o interruptor de permissão.",
+            "1": "Clique em «<strong>Ir para Configurações</strong>» e, na janela pop-up de solicitação de permissão que aparecerá em seguida, clique no botão «<strong>Abrir Configurações do Sistema</strong>», depois localize «<strong>Cherry Studio Pi</strong>» na lista de aplicativos e ative o interruptor de permissão.",
             "2": "Após concluir a configuração, ative novamente o Assistente de Seleção de Texto."
           },
           "title": "Permissão de Acessibilidade"
@@ -3856,7 +3856,7 @@
         "title": "Lista de Seleção de Aplicativos",
         "user_tips": {
           "mac": "Insira o Bundle ID do aplicativo, um por linha, sem distinção entre maiúsculas e minúsculas, correspondência parcial permitida. Por exemplo: com.google.Chrome, com.apple.mail, etc.",
-          "windows": "Insira o nome do arquivo executável do aplicativo, um por linha, sem distinção entre maiúsculas e minúsculas, correspondência parcial permitida. Por exemplo: chrome.exe, weixin.exe, Cherry Studio.exe, etc."
+          "windows": "Insira o nome do arquivo executável do aplicativo, um por linha, sem distinção entre maiúsculas e minúsculas, correspondência parcial permitida. Por exemplo: chrome.exe, weixin.exe, Cherry Studio Pi.exe, etc."
         }
       },
       "linux": {
@@ -3868,7 +3868,7 @@
         "wayland_checklist_subtitle": "Certifique-se de que as seguintes condições sejam atendidas para otimizar a experiência com Wayland:",
         "wayland_description": "Você está em uma sessão Wayland. Devido a limitações do sistema, a barra de ferramentas pode aparecer apenas no centro da tela em vez de seguir o texto selecionado em alguns ambientes de desktop. Recomenda-se alternar para uma sessão X11 para a experiência completa.",
         "wayland_title": "Aviso de Sessão Wayland",
-        "xwayland_fail": "Não ativado, por favor inicie o Cherry Studio com a flag `--ozone-platform=x11`",
+        "xwayland_fail": "Não ativado, por favor inicie o Cherry Studio Pi com a flag `--ozone-platform=x11`",
         "xwayland_label": "Modo XWayland:",
         "xwayland_pass": "Ativado"
       },
@@ -4228,7 +4228,7 @@
           "button": "Iniciar transferência",
           "connected": "Conectado",
           "connection_failed": "Falha na conexão",
-          "content": "Certifique-se de que o computador e o telefone estejam na mesma rede para usar a transferência via LAN. Abra o aplicativo Cherry Studio e escaneie este código QR.",
+          "content": "Certifique-se de que o computador e o telefone estejam na mesma rede para usar a transferência via LAN. Abra o aplicativo Cherry Studio Pi e escaneie este código QR.",
           "device_list_title": "Dispositivos de rede local",
           "discovered_devices": "Dispositivos descobertos",
           "error": {
@@ -4254,14 +4254,14 @@
             "test_message_received": "Recebido pong de {{device}}",
             "test_message_sent": "Enviou payload de teste hello world"
           },
-          "idle_hint": "Digitalização pausada. Inicie a digitalização para encontrar pares do Cherry Studio na sua rede local.",
+          "idle_hint": "Digitalização pausada. Inicie a digitalização para encontrar pares do Cherry Studio Pi na sua rede local.",
           "ip_addresses": "Endereços IP",
           "last_seen": "Visto pela última vez às {{time}}",
           "metadata": "Metadados",
-          "no_connection_warning": "Por favor, abra a Transferência LAN no Cherry Studio mobile",
+          "no_connection_warning": "Por favor, abra a Transferência LAN no Cherry Studio Pi mobile",
           "no_devices": "Ainda não foram encontrados pares de LAN.",
           "scan_devices": "Escaneie dispositivos",
-          "scanning_hint": "Escaneando sua rede local por pares do Cherry Studio...",
+          "scanning_hint": "Escaneando sua rede local por pares do Cherry Studio Pi...",
           "send_file": "Enviar Arquivo",
           "status": {
             "completed": "Transferência concluída",
@@ -4613,7 +4613,7 @@
         },
         "root": {
           "label": "Diretório de backup (opcional)",
-          "placeholder": "Por exemplo: /cherry-studio"
+          "placeholder": "Por exemplo: /cherry-studio-pi"
         },
         "secretAccessKey": {
           "label": "Chave de Acesso Secreta",
@@ -4649,7 +4649,7 @@
           "title": "Detecção de Conexão"
         },
         "root_path": "Caminho Raiz do Documento",
-        "root_path_placeholder": "Exemplo: /CherryStudio",
+        "root_path_placeholder": "Exemplo: /CherryStudioPi",
         "title": "Configuração do Siyuan Notebook",
         "token": {
           "help": "Obtenha em Siyuan Notebook -> Configurações -> Sobre",
@@ -5348,7 +5348,7 @@
       },
       "oauth": {
         "callback": {
-          "message": "Você pode fechar esta página e retornar ao Cherry Studio",
+          "message": "Você pode fechar esta página e retornar ao Cherry Studio Pi",
           "title": "Autenticação Bem-Sucedida"
         }
       },

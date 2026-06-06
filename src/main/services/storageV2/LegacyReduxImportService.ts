@@ -114,7 +114,7 @@ const STARTUP_DEFAULT_PROTECTED_SETTINGS = new Map<string, unknown[]>([
   ['settings.webdavHost', ['']],
   ['settings.webdavUser', ['']],
   ['settings.webdavPass', ['']],
-  ['settings.webdavPath', ['', '/cherry-studio']],
+  ['settings.webdavPath', ['', '/cherry-studio', '/cherry-studio-pi']],
   ['settings.webdavAutoSync', [false]],
   ['settings.webdavSyncInterval', [0, '0', '']],
   ['settings.dataSyncWebdavHost', ['']],
