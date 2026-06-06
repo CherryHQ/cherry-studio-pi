@@ -489,6 +489,37 @@ exit 1
     expect(resultText(result).length).toBeLessThan(25_000)
   })
 
+  it('normalizes HTTPRequest URLs before fetching', async () => {
+    vi.mocked(net.fetch).mockResolvedValueOnce({
+      headers: { get: vi.fn(() => 'text/plain') },
+      status: 200,
+      statusText: 'OK',
+      ok: true,
+      url: 'https://example.test/ok',
+      text: vi.fn(async () => 'ok')
+    } as any)
+
+    const request = getTool('HTTPRequest', tmpDir, [tmpDir])
+    const result = await request.execute('http-normalized-url', {
+      url: '  https://example.test/ok  '
+    })
+
+    expect(net.fetch).toHaveBeenCalledWith('https://example.test/ok', expect.objectContaining({ method: 'GET' }))
+    expect(result.details).toMatchObject({ ok: true })
+    expect(resultText(result)).toBe('ok')
+  })
+
+  it('rejects non-http HTTPRequest URLs before fetching', async () => {
+    const request = getTool('HTTPRequest', tmpDir, [tmpDir])
+    const result = await request.execute('http-file-url', {
+      url: 'file:///etc/passwd'
+    })
+
+    expect(net.fetch).not.toHaveBeenCalled()
+    expect(result.details).toMatchObject({ isError: true })
+    expect(resultText(result)).toContain('only supports http:// and https://')
+  })
+
   it('marks AppCallCapability as a direct app bridge that does not require tool permission', () => {
     expect(builtinTools.find((tool) => tool.id === 'AppCallCapability')).toMatchObject({
       requirePermissions: false

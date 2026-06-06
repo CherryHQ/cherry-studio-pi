@@ -53,6 +53,26 @@ const normalizeOutputCharLimit = (value: unknown, fallback = MAX_SUCCESS_OUTPUT_
   return Math.min(Math.max(Math.floor(numeric), 1), MAX_SUCCESS_OUTPUT_CHARS)
 }
 
+const normalizeHttpRequestUrl = (value: unknown) => {
+  const rawUrl = String(value ?? '').trim()
+  if (!rawUrl) {
+    throw new Error('HTTPRequest requires a non-empty http:// or https:// URL')
+  }
+
+  let parsedUrl: URL
+  try {
+    parsedUrl = new URL(rawUrl)
+  } catch {
+    throw new Error('HTTPRequest URL is invalid; provide an absolute http:// or https:// URL')
+  }
+
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    throw new Error(`HTTPRequest only supports http:// and https:// URLs, got ${parsedUrl.protocol || 'unknown'}`)
+  }
+
+  return parsedUrl.toString()
+}
+
 const truncateOutput = (text: string, maxChars: number) => {
   const normalizedMaxChars = Number.isFinite(maxChars) ? Math.max(Math.floor(maxChars), 0) : 0
   if (text.length <= normalizedMaxChars) return { text, truncated: false }
@@ -986,8 +1006,9 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
       return safeExecute('HTTPRequest', async () => {
         const input = params as ToolParams
         const { net } = await import('electron')
+        const url = normalizeHttpRequestUrl(input.url)
         const method = String(input.method ?? 'GET').toUpperCase()
-        const response = await net.fetch(input.url, {
+        const response = await net.fetch(url, {
           method,
           headers: input.headers,
           body: method === 'GET' || method === 'HEAD' ? undefined : input.body,
