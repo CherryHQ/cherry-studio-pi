@@ -21,6 +21,8 @@ const MAX_SCAN_FILE_BYTES = 512 * 1024
 const MAX_SUCCESS_OUTPUT_CHARS = 24_000
 const MAX_ERROR_OUTPUT_CHARS = 8_000
 const MAX_SEARCH_RESULTS = 200
+const MAX_SEARCH_FILE_CANDIDATES = MAX_SEARCH_RESULTS * 20
+const MAX_APP_CAPABILITY_STRUCTURED_CHARS = 12_000
 const BASH_TIMEOUT_MS = 120_000
 const BASH_MAX_BUFFER = 1024 * 1024
 
@@ -46,6 +48,56 @@ const truncateOutput = (text: string, maxChars: number) => {
   const tailLength = maxChars - headLength
   return {
     text: `${text.slice(0, headLength)}\n\n[...truncated ${text.length - maxChars} chars...]\n\n${text.slice(-tailLength)}`,
+    truncated: true
+  }
+}
+
+const stringifyToolValue = (value: unknown, space?: number) => {
+  const seen = new WeakSet<object>()
+  return (
+    JSON.stringify(
+      value,
+      (_key, currentValue) => {
+        if (typeof currentValue === 'bigint') return currentValue.toString()
+        if (!currentValue || typeof currentValue !== 'object') return currentValue
+        if (seen.has(currentValue)) return '[Circular]'
+        seen.add(currentValue)
+        return currentValue
+      },
+      space
+    ) ?? String(value)
+  )
+}
+
+const compactAppCapabilityResult = (result: any, maxChars: number) => {
+  const serialized = stringifyToolValue(result)
+  if (serialized.length <= maxChars) {
+    return {
+      result,
+      truncated: false
+    }
+  }
+
+  const dataPreview =
+    result?.data === undefined ? undefined : truncateOutput(stringifyToolValue(result.data, 2), maxChars)
+  const compacted = {
+    ok: result?.ok === true,
+    isError: result?.isError === true,
+    summary: result?.summary,
+    error: result?.error,
+    warnings: result?.warnings,
+    artifacts: result?.artifacts,
+    ...(dataPreview
+      ? {
+          dataPreview: dataPreview.text,
+          dataTruncated: dataPreview.truncated
+        }
+      : {}),
+    resultTruncated: true
+  }
+
+  return {
+    result: compacted,
     truncated: true
   }
 }
@@ -263,10 +315,13 @@ const toDisplayPath = (target: string, cwd: string) => {
 }
 
 async function walkFiles(root: string, cwd: string, roots: string[], results: string[] = []): Promise<string[]> {
+  if (results.length >= MAX_SEARCH_FILE_CANDIDATES) return results
+
   const resolvedRoot = resolveAllowedPath(root, cwd)
   const entries = await fs.readdir(resolvedRoot, { withFileTypes: true })
 
   for (const entry of entries) {
+    if (results.length >= MAX_SEARCH_FILE_CANDIDATES) break
     if (entry.name === 'node_modules' || entry.name === '.git') continue
     const entryPath = path.join(resolvedRoot, entry.name)
     if (entry.isDirectory()) {
@@ -276,7 +331,6 @@ async function walkFiles(root: string, cwd: string, roots: string[], results: st
     if (entry.isFile()) {
       results.push(entryPath)
     }
-    if (results.length >= MAX_SEARCH_RESULTS * 20) break
   }
 
   return results
@@ -667,16 +721,21 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
           signal,
           dryRun: input.dryRun === true
         })
+        const compacted = compactAppCapabilityResult(result, MAX_APP_CAPABILITY_STRUCTURED_CHARS)
         const text = truncateOutput(
-          JSON.stringify(result, null, 2),
+          stringifyToolValue(compacted.result, 2),
           result.ok ? MAX_SUCCESS_OUTPUT_CHARS : MAX_ERROR_OUTPUT_CHARS
         )
         return result.ok
-          ? textResult(text.text, { capabilityId: input.id, truncated: text.truncated, structuredContent: result })
+          ? textResult(text.text, {
+              capabilityId: input.id,
+              truncated: text.truncated || compacted.truncated,
+              structuredContent: compacted.result
+            })
           : errorTextResult(text.text, {
               capabilityId: input.id,
-              truncated: text.truncated,
-              structuredContent: result
+              truncated: text.truncated || compacted.truncated,
+              structuredContent: compacted.result
             })
       })
     }
@@ -822,7 +881,9 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
                 ignore: ['**/.git/**', '**/node_modules/**'],
                 unique: true
               })
-            ).map((file) => path.join(searchRoot, file))
+            )
+              .slice(0, MAX_SEARCH_FILE_CANDIDATES)
+              .map((file) => path.join(searchRoot, file))
           : await walkFiles(searchRoot, cwd, roots)
         const matches: string[] = []
 

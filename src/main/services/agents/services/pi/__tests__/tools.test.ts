@@ -462,6 +462,45 @@ exit 1
     expect(resultText(result)).toContain('Backup created')
   })
 
+  it('compacts large AppCallCapability results before returning them to the agent', async () => {
+    vi.mocked(appCapabilityService.call).mockResolvedValueOnce({
+      ok: true,
+      summary: 'Large settings read',
+      data: { text: 'x'.repeat(80_000) }
+    })
+
+    const call = getTool('AppCallCapability', tmpDir, [tmpDir])
+    const result = await call.execute('app-call-large', {
+      id: 'settings.read',
+      input: {}
+    })
+
+    expect(result.details).toMatchObject({ truncated: true })
+    expect(result.details?.structuredContent).toMatchObject({
+      summary: 'Large settings read',
+      resultTruncated: true
+    })
+    expect(JSON.stringify(result.details?.structuredContent).length).toBeLessThan(20_000)
+    expect(resultText(result).length).toBeLessThan(20_000)
+  })
+
+  it('limits Grep glob candidates before scanning matched files', async () => {
+    for (let index = 0; index < 4100; index += 1) {
+      await fs.writeFile(path.join(tmpDir, `file-${String(index).padStart(4, '0')}.txt`), 'miss\n', 'utf8')
+    }
+    await fs.writeFile(path.join(tmpDir, 'file-9999.txt'), 'needle\n', 'utf8')
+
+    const grep = getTool('Grep', tmpDir, [tmpDir])
+    const result = await grep.execute('grep-many', {
+      pattern: 'needle',
+      path: tmpDir,
+      glob: '*.txt'
+    })
+
+    expect(result.details).toMatchObject({ count: 0 })
+    expect(resultText(result)).toBe('No matches found')
+  })
+
   it('truncates noisy Bash failures', async () => {
     const bash = getTool('Bash', tmpDir, [tmpDir])
     const result = await bash.execute('bash-3', {

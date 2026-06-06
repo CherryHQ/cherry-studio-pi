@@ -7,6 +7,11 @@ import { getName, getNotesDir, scanDir } from '@main/utils/file'
 import type { AppCapabilityDefinition } from '../types'
 import { okResult, resolveInsideRoot } from '../utils'
 
+const DEFAULT_NOTE_SEARCH_LIMIT = 100
+const MAX_NOTE_SEARCH_LIMIT = 200
+const MAX_NOTE_SEARCH_FILES = 5_000
+const MAX_NOTE_SEARCH_FILE_BYTES = 512 * 1024
+
 async function getNotesRoot() {
   const noteState = await reduxService.select<any>('state.note').catch(() => null)
   return path.resolve(noteState?.notesPath || getNotesDir())
@@ -18,6 +23,12 @@ function flattenNotes(nodes: any[], result: any[] = []) {
     if (node.children) flattenNotes(node.children, result)
   }
   return result
+}
+
+function normalizeSearchLimit(value: unknown) {
+  const parsed = Number(value ?? DEFAULT_NOTE_SEARCH_LIMIT)
+  const safeLimit = Number.isFinite(parsed) ? parsed : DEFAULT_NOTE_SEARCH_LIMIT
+  return Math.max(1, Math.min(safeLimit, MAX_NOTE_SEARCH_LIMIT))
 }
 
 export function createNotesCapabilities(): AppCapabilityDefinition[] {
@@ -80,16 +91,26 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
         if (!query) throw new Error('Missing search query')
 
         const root = await getNotesRoot()
-        const files = flattenNotes(await scanDir(root)).slice(0, Number(input?.limit || 100))
+        const limit = normalizeSearchLimit(input?.limit)
+        const files = flattenNotes(await scanDir(root)).slice(0, MAX_NOTE_SEARCH_FILES)
         const matches: any[] = []
         for (const file of files) {
+          if (matches.length >= limit) break
+          const stat = await fs.stat(file.externalPath).catch(() => null)
+          if (!stat?.isFile() || stat.size > MAX_NOTE_SEARCH_FILE_BYTES) continue
           const content = await fs.readFile(file.externalPath, 'utf8').catch(() => '')
           const index = content.toLowerCase().indexOf(query)
           if (index >= 0 || file.name.toLowerCase().includes(query)) {
             matches.push({ ...file, snippet: content.slice(Math.max(index - 80, 0), index + 180) })
           }
         }
-        return okResult('Notes searched', { query, root, matches })
+        return okResult('Notes searched', {
+          query,
+          root,
+          matches,
+          scannedFiles: files.length,
+          scanTruncated: files.length >= MAX_NOTE_SEARCH_FILES
+        })
       }
     },
     {

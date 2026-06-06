@@ -1,0 +1,109 @@
+import fs from 'node:fs/promises'
+import path from 'node:path'
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const mocks = vi.hoisted(() => ({
+  notesRoot: '',
+  reduxSelect: vi.fn(),
+  scanDir: vi.fn(),
+  getName: vi.fn()
+}))
+
+vi.mock('@main/services/ReduxService', () => ({
+  reduxService: {
+    select: mocks.reduxSelect
+  }
+}))
+
+vi.mock('@main/services/WindowService', () => ({
+  windowService: {
+    getMainWindow: vi.fn()
+  }
+}))
+
+vi.mock('@main/utils/file', () => ({
+  getName: mocks.getName,
+  getNotesDir: () => mocks.notesRoot,
+  scanDir: mocks.scanDir
+}))
+
+import { createNotesCapabilities } from '../providers/notes'
+
+const getCapability = (id: string) => {
+  const capability = createNotesCapabilities().find((item) => item.id === id)
+  if (!capability) throw new Error(`Missing capability ${id}`)
+  return capability
+}
+
+describe('notes app capabilities', () => {
+  let tmpDir: string
+
+  beforeEach(async () => {
+    tmpDir = `/tmp/cherry-notes-capability-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    await fs.mkdir(tmpDir, { recursive: true })
+    mocks.notesRoot = tmpDir
+    mocks.reduxSelect.mockReset()
+    mocks.reduxSelect.mockResolvedValue({ notesPath: tmpDir })
+    mocks.scanDir.mockReset()
+    mocks.getName.mockReset()
+    mocks.getName.mockReturnValue('Untitled')
+  })
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true })
+  })
+
+  it('treats notes.search limit as a result limit instead of a file scan limit', async () => {
+    const nodes: any[] = []
+    for (let index = 0; index < 20; index += 1) {
+      const filePath = path.join(tmpDir, `miss-${index}.md`)
+      await fs.writeFile(filePath, 'ordinary note\n', 'utf8')
+      nodes.push({
+        type: 'file',
+        name: `miss-${index}`,
+        treePath: `/miss-${index}`,
+        externalPath: filePath
+      })
+    }
+
+    const targetPath = path.join(tmpDir, 'target.md')
+    await fs.writeFile(targetPath, 'needle appears late\n', 'utf8')
+    nodes.push({
+      type: 'file',
+      name: 'target',
+      treePath: '/target',
+      externalPath: targetPath
+    })
+    mocks.scanDir.mockResolvedValue(nodes)
+
+    const result = await getCapability('notes.search').execute({ query: 'needle', limit: 1 }, { source: 'agent' })
+
+    expect(result.ok).toBe(true)
+    expect((result.data as any).matches).toEqual([
+      expect.objectContaining({
+        name: 'target',
+        snippet: expect.stringContaining('needle')
+      })
+    ])
+    expect((result.data as any).scannedFiles).toBe(21)
+  })
+
+  it('skips oversized note files during notes.search', async () => {
+    const largePath = path.join(tmpDir, 'large.md')
+    await fs.writeFile(largePath, `${'x'.repeat(512 * 1024 + 1)}needle`, 'utf8')
+    mocks.scanDir.mockResolvedValue([
+      {
+        type: 'file',
+        name: 'large',
+        treePath: '/large',
+        externalPath: largePath
+      }
+    ])
+
+    const result = await getCapability('notes.search').execute({ query: 'needle' }, { source: 'agent' })
+
+    expect(result.ok).toBe(true)
+    expect((result.data as any).matches).toEqual([])
+  })
+})
