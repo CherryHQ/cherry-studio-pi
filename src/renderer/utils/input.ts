@@ -9,6 +9,17 @@ export const getTextFromDropEvent = async (e: React.DragEvent<HTMLDivElement>): 
   return e.dataTransfer.getData('text')
 }
 
+function parseCodefilesPathList(filePathListString: string): string[] {
+  try {
+    const value: unknown = JSON.parse(filePathListString)
+    if (!Array.isArray(value)) return []
+    return value.filter((item): item is string => typeof item === 'string' && item.length > 0)
+  } catch (error) {
+    logger.error('getFilesFromDropEvent - invalid codefiles data:', error as Error)
+    return []
+  }
+}
+
 export const getFilesFromDropEvent = async (e: React.DragEvent<HTMLDivElement>): Promise<FileMetadata[]> => {
   if (e.dataTransfer.files.length > 0) {
     // 使用新的API获取文件路径
@@ -42,18 +53,28 @@ export const getFilesFromDropEvent = async (e: React.DragEvent<HTMLDivElement>):
       for (const item of e.dataTransfer.items) {
         const { type } = item
         if (type === 'codefiles') {
-          item.getAsString(async (filePathListString) => {
-            const filePathList: string[] = JSON.parse(filePathListString)
-            const filePathListPromises = filePathList.map((filePath) => window.api.file.get(filePath))
-            resolve(
-              await Promise.allSettled(filePathListPromises).then((results) =>
-                results
-                  .filter((result) => result.status === 'fulfilled')
-                  .filter((result) => result.value !== null)
-                  .map((result) => result.value!)
+          try {
+            item.getAsString(async (filePathListString) => {
+              const filePathList = parseCodefilesPathList(filePathListString)
+              if (filePathList.length === 0) {
+                resolve([])
+                return
+              }
+
+              const filePathListPromises = filePathList.map(async (filePath) => window.api.file.get(filePath))
+              resolve(
+                await Promise.allSettled(filePathListPromises).then((results) =>
+                  results
+                    .filter((result) => result.status === 'fulfilled')
+                    .filter((result) => result.value !== null)
+                    .map((result) => result.value!)
+                )
               )
-            )
-          })
+            })
+          } catch (error) {
+            logger.error('getFilesFromDropEvent - get codefiles data error:', error as Error)
+            resolve([])
+          }
 
           existCodefilesFormat = true
           break

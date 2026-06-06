@@ -4,12 +4,22 @@ import {
   ClawhubSkillDetailSchema,
   SkillsShSearchResponseSchema
 } from '@types'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import claudePluginsFixture from './fixtures/claude-plugins-search.json'
 import clawhubDetailFixture from './fixtures/clawhub-detail.json'
 import clawhubSearchFixture from './fixtures/clawhub-search.json'
 import skillsShFixture from './fixtures/skills-sh-search.json'
+
+vi.mock('@logger', () => ({
+  loggerService: {
+    withContext: () => ({
+      warn: vi.fn()
+    })
+  }
+}))
+
+import { searchSkills } from '../SkillSearchService'
 
 // =============================================================================
 // Schema validation against fixtures
@@ -301,5 +311,27 @@ describe('Skill search deduplication', () => {
     expect(deduped).toHaveLength(2)
     expect(deduped[0].slug).toBe('a')
     expect(deduped[1].slug).toBe('d')
+  })
+})
+
+describe('searchSkills', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', vi.fn())
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('settles slow registry requests so the search UI cannot hang indefinitely', async () => {
+    vi.mocked(fetch).mockReturnValue(new Promise<Response>(() => {}))
+
+    const searchPromise = searchSkills('code-review')
+    await vi.advanceTimersByTimeAsync(8_000)
+
+    await expect(searchPromise).resolves.toEqual([])
+    expect(fetch).toHaveBeenCalledTimes(3)
   })
 })

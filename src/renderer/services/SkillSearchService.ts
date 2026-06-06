@@ -13,7 +13,7 @@ const CLAUDE_PLUGINS_API = 'https://claude-plugins.dev/api/skills'
 const SKILLS_SH_API = 'https://skills.sh/api/search'
 const CLAWHUB_API = 'https://clawhub.ai/api/v1/search'
 
-const REQUEST_TIMEOUT_MS = 15_000
+const REQUEST_TIMEOUT_MS = 8_000
 
 // ===========================================================================
 // Normalizers: source-specific response → unified SkillSearchResult[]
@@ -82,11 +82,19 @@ function normalizeClawhub(raw: unknown): SkillSearchResult[] {
 
 async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<Response>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort()
+      reject(new DOMException(`Request timed out after ${REQUEST_TIMEOUT_MS}ms`, 'AbortError'))
+    }, REQUEST_TIMEOUT_MS)
+    timer.unref?.()
+  })
+
   try {
-    return await fetch(url, { ...init, signal: controller.signal })
+    return await Promise.race([fetch(url, { ...init, signal: controller.signal }), timeout])
   } finally {
-    clearTimeout(timer)
+    if (timer) clearTimeout(timer)
   }
 }
 
