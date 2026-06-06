@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 
+import { loggerService } from '@logger'
 import { LRUCache } from 'lru-cache'
 import type { HighlighterCore, SpecialLanguage, ThemedToken } from 'shiki/core'
 
@@ -7,10 +8,12 @@ import type { HighlighterCore, SpecialLanguage, ThemedToken } from 'shiki/core'
 import type { ShikiStreamTokenizerOptions } from '../services/ShikiStreamTokenizer'
 import { ShikiStreamTokenizer } from '../services/ShikiStreamTokenizer'
 
-const logger = {
-  debug: (...args: unknown[]) => console.debug('[ShikiStreamWorker]', ...args),
-  error: (...args: unknown[]) => console.error('[ShikiStreamWorker]', ...args)
+const createWorkerLogger = () => {
+  const sourceLogger = loggerService.initWindowSource('Worker') || loggerService
+  return sourceLogger.withContext('ShikiStream')
 }
+
+const logger = createWorkerLogger()
 
 // Worker 消息类型
 type WorkerMessageType = 'init' | 'highlight' | 'cleanup' | 'dispose'
