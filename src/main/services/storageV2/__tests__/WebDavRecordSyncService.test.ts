@@ -1438,6 +1438,67 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(db.state.blobs).toEqual([])
   })
 
+  it('rejects remote Storage v2 blob metadata that disagrees with the row before writing local DB', async () => {
+    const blobRow: BlobRow = {
+      id: 'blob-1',
+      storage_path: 'blobs/blob-1.bin',
+      checksum: 'a'.repeat(64),
+      byte_size: 128,
+      mime_type: 'application/octet-stream',
+      created_at: '2026-06-01T08:00:00.000Z',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      deleted_at: null,
+      version: 1
+    }
+    const remoteRecord = {
+      id: 'blob:blob-1',
+      table: blobTable,
+      idValues: ['blob-1'],
+      row: blobRow,
+      valueHash: hashJson(blobRow),
+      updatedAt: Date.parse(blobRow.updated_at),
+      deletedAt: null,
+      version: 1
+    }
+    const recordPath = '/remote-root/sync/v1/storage-v2/records/blob/blob-1.json'
+    const blobPath = '/remote-root/sync/v1/storage-v2/blobs/blob-1-wrong.bin'
+    const db = makeBlobDb()
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+    mocks.remoteFiles.set(recordPath, JSON.stringify(remoteRecord))
+    mocks.remoteFiles.set(blobPath, Buffer.from('wrong blob metadata'))
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([blobTable]).sync(mocks.webdav as any, '/remote-root/sync/v1', {
+        version: 1,
+        records: {
+          [remoteRecord.id]: {
+            entityType: 'blob',
+            table: 'blobs',
+            idValues: remoteRecord.idValues,
+            valueHash: remoteRecord.valueHash,
+            updatedAt: remoteRecord.updatedAt,
+            deletedAt: null,
+            version: 1,
+            path: 'storage-v2/records/blob/blob-1.json'
+          }
+        },
+        blobs: {
+          'blob-1': {
+            id: 'blob-1',
+            checksum: 'b'.repeat(64),
+            byteSize: blobRow.byte_size,
+            storagePath: blobRow.storage_path,
+            path: 'storage-v2/blobs/blob-1-wrong.bin',
+            updatedAt: remoteRecord.updatedAt
+          }
+        }
+      })
+    ).rejects.toThrow('文件元数据与 Storage v2 记录不一致')
+
+    expect(mocks.webdav.getFileContents).not.toHaveBeenCalledWith(blobPath, expect.anything())
+    expect(db.state.blobs).toEqual([])
+  })
+
   it('fails safe when the remote manifest contains records from a newer Storage v2 entity', async () => {
     const remote = makeSharedWebDavStore()
     const db = makeSettingsDb([])

@@ -2140,13 +2140,40 @@ export class StorageV2WebDavRecordSyncService {
     record: LocalRecord,
     summary: StorageV2WebDavRecordSyncSummary
   ) {
-    if (record.table.entityType !== 'blob') return
+    const storagePathColumn = record.table.blobStoragePathColumn
+    const checksumColumn = record.table.blobChecksumColumn
+    if (!storagePathColumn || !checksumColumn) return
 
     const blobId = record.idValues[0]
+    const expectedStoragePath = String(record.row[storagePathColumn] ?? '')
+    const expectedChecksum = String(record.row[checksumColumn] ?? '')
+    if (!blobId || !expectedStoragePath || !expectedChecksum) {
+      throw new Error(`远端附件记录 ${record.id} 缺少必要的文件路径或校验信息，本次同步已停止。`)
+    }
+
     const blob = manifest.blobs[blobId]
     if (!blob) {
       throw new Error(
         `远端 Storage v2 manifest 缺少 blob ${blobId} 的文件元数据。为避免导入不完整数据，本次同步已停止。`
+      )
+    }
+    const expectedByteSizeValue = record.row.byte_size ?? record.row.size ?? record.row.byteSize
+    const hasExpectedByteSize =
+      expectedByteSizeValue !== undefined && expectedByteSizeValue !== null && expectedByteSizeValue !== ''
+    const expectedByteSize = hasExpectedByteSize ? Number(expectedByteSizeValue) : null
+    if (
+      hasExpectedByteSize &&
+      (expectedByteSize === null || !Number.isFinite(expectedByteSize) || expectedByteSize < 0)
+    ) {
+      throw new Error(`远端附件记录 ${record.id} 缺少有效的文件大小，本次同步已停止。`)
+    }
+    if (
+      blob.storagePath !== expectedStoragePath ||
+      blob.checksum !== expectedChecksum ||
+      (expectedByteSize !== null && blob.byteSize !== expectedByteSize)
+    ) {
+      throw new Error(
+        `远端附件 ${blobId} 的文件元数据与 Storage v2 记录不一致。为避免写入无法打开或校验失败的本地附件，本次同步已停止。`
       )
     }
     if (!Number.isFinite(blob.byteSize) || blob.byteSize < 0) {
@@ -2158,7 +2185,7 @@ export class StorageV2WebDavRecordSyncService {
       )
     }
 
-    const localPath = this.blobLocalPath(blob.storagePath)
+    const localPath = this.blobLocalPath(expectedStoragePath)
     if (fs.existsSync(localPath)) {
       try {
         if ((await sha256File(localPath)) === blob.checksum) return
