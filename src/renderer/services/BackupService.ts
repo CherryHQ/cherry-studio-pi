@@ -598,6 +598,46 @@ let isLocalAutoBackupRunning = false
 
 type BackupType = 'webdav' | 's3' | 'local'
 
+function isAutoSyncStarted(backupType: BackupType) {
+  if (backupType === 'webdav') {
+    return webdavAutoSyncStarted
+  }
+  if (backupType === 's3') {
+    return s3AutoSyncStarted
+  }
+  return localAutoSyncStarted
+}
+
+function setAutoSyncStarted(backupType: BackupType, started: boolean) {
+  if (backupType === 'webdav') {
+    webdavAutoSyncStarted = started
+  } else if (backupType === 's3') {
+    s3AutoSyncStarted = started
+  } else {
+    localAutoSyncStarted = started
+  }
+}
+
+function isAutoBackupRunning(backupType: BackupType) {
+  if (backupType === 'webdav') {
+    return isWebdavAutoBackupRunning
+  }
+  if (backupType === 's3') {
+    return isS3AutoBackupRunning
+  }
+  return isLocalAutoBackupRunning
+}
+
+function setAutoBackupRunning(backupType: BackupType, running: boolean) {
+  if (backupType === 'webdav') {
+    isWebdavAutoBackupRunning = running
+  } else if (backupType === 's3') {
+    isS3AutoBackupRunning = running
+  } else {
+    isLocalAutoBackupRunning = running
+  }
+}
+
 export function startAutoSync(immediate = false, type?: BackupType) {
   // 如果没有指定类型，启动所有配置的自动同步
   if (!type) {
@@ -631,8 +671,8 @@ export function startAutoSync(immediate = false, type?: BackupType) {
       return
     }
 
-    webdavAutoSyncStarted = true
     stopAutoSync('webdav')
+    webdavAutoSyncStarted = true
     scheduleNextBackup(immediate ? 'immediate' : 'fromLastSyncTime', 'webdav')
   } else if (type === 's3') {
     if (s3AutoSyncStarted) {
@@ -647,8 +687,8 @@ export function startAutoSync(immediate = false, type?: BackupType) {
       return
     }
 
-    s3AutoSyncStarted = true
     stopAutoSync('s3')
+    s3AutoSyncStarted = true
     scheduleNextBackup(immediate ? 'immediate' : 'fromLastSyncTime', 's3')
   } else if (type === 'local') {
     if (localAutoSyncStarted) {
@@ -663,8 +703,8 @@ export function startAutoSync(immediate = false, type?: BackupType) {
       return
     }
 
-    localAutoSyncStarted = true
     stopAutoSync('local')
+    localAutoSyncStarted = true
     scheduleNextBackup(immediate ? 'immediate' : 'fromLastSyncTime', 'local')
   }
 
@@ -705,6 +745,11 @@ export function startAutoSync(immediate = false, type?: BackupType) {
       return
     }
 
+    if (!isAutoSyncStarted(backupType)) {
+      logger.verbose(`${logPrefix} Auto sync stopped, skip scheduling`)
+      return
+    }
+
     if (!syncInterval || syncInterval <= 0) {
       logger.verbose(`${logPrefix} Invalid sync interval, auto sync disabled`)
       stopAutoSync(backupType)
@@ -742,23 +787,24 @@ export function startAutoSync(immediate = false, type?: BackupType) {
   }
 
   async function performAutoBackup(backupType: BackupType) {
-    let isRunning: boolean
     let logPrefix: string
 
     if (backupType === 'webdav') {
-      isRunning = isWebdavAutoBackupRunning
       logPrefix = '[WebdavAutoSync]'
     } else if (backupType === 's3') {
-      isRunning = isS3AutoBackupRunning
       logPrefix = '[S3AutoSync]'
     } else if (backupType === 'local') {
-      isRunning = isLocalAutoBackupRunning
       logPrefix = '[LocalAutoSync]'
     } else {
       return
     }
 
-    if (isRunning || isManualBackupRunning) {
+    if (!isAutoSyncStarted(backupType)) {
+      logger.verbose(`${logPrefix} Auto sync stopped, skip backup`)
+      return
+    }
+
+    if (isAutoBackupRunning(backupType) || isManualBackupRunning) {
       logger.verbose(`${logPrefix} Backup already in progress, rescheduling`)
       scheduleNextBackup('fromNow', backupType)
       return
@@ -774,130 +820,99 @@ export function startAutoSync(immediate = false, type?: BackupType) {
       return
     }
 
-    // 设置运行状态
-    if (backupType === 'webdav') {
-      isWebdavAutoBackupRunning = true
-    } else if (backupType === 's3') {
-      isS3AutoBackupRunning = true
-    } else if (backupType === 'local') {
-      isLocalAutoBackupRunning = true
-    }
+    setAutoBackupRunning(backupType, true)
 
     const maxRetries = 4
     let retryCount = 0
 
-    while (retryCount < maxRetries) {
-      try {
-        logger.verbose(`${logPrefix} Starting auto backup... (attempt ${retryCount + 1}/${maxRetries})`)
-
-        if (backupType === 'webdav') {
-          await backupToWebdav({ autoBackupProcess: true })
-          store.dispatch(
-            setWebDAVSyncState({
-              lastSyncError: null,
-              lastSyncTime: Date.now(),
-              syncing: false
-            })
-          )
-        } else if (backupType === 's3') {
-          await backupToS3({ autoBackupProcess: true })
-          store.dispatch(
-            setS3SyncState({
-              lastSyncError: null,
-              lastSyncTime: Date.now(),
-              syncing: false
-            })
-          )
-        } else if (backupType === 'local') {
-          await backupToLocal({ autoBackupProcess: true })
-          store.dispatch(
-            setLocalBackupSyncState({
-              lastSyncError: null,
-              lastSyncTime: Date.now(),
-              syncing: false
-            })
-          )
-        }
-
-        // 重置运行状态
-        if (backupType === 'webdav') {
-          isWebdavAutoBackupRunning = false
-        } else if (backupType === 's3') {
-          isS3AutoBackupRunning = false
-        } else if (backupType === 'local') {
-          isLocalAutoBackupRunning = false
-        }
-
-        scheduleNextBackup('fromNow', backupType)
-        break
-      } catch (error: any) {
-        retryCount++
-        if (retryCount === maxRetries) {
-          logger.error(`${logPrefix} Auto backup failed after all retries:`, error)
+    try {
+      while (retryCount < maxRetries && isAutoSyncStarted(backupType)) {
+        try {
+          logger.verbose(`${logPrefix} Starting auto backup... (attempt ${retryCount + 1}/${maxRetries})`)
 
           if (backupType === 'webdav') {
+            await backupToWebdav({ autoBackupProcess: true })
             store.dispatch(
               setWebDAVSyncState({
-                lastSyncError: 'Auto backup failed',
+                lastSyncError: null,
                 lastSyncTime: Date.now(),
                 syncing: false
               })
             )
           } else if (backupType === 's3') {
+            await backupToS3({ autoBackupProcess: true })
             store.dispatch(
               setS3SyncState({
-                lastSyncError: 'Auto backup failed',
+                lastSyncError: null,
                 lastSyncTime: Date.now(),
                 syncing: false
               })
             )
           } else if (backupType === 'local') {
+            await backupToLocal({ autoBackupProcess: true })
             store.dispatch(
               setLocalBackupSyncState({
-                lastSyncError: 'Auto backup failed',
+                lastSyncError: null,
                 lastSyncTime: Date.now(),
                 syncing: false
               })
             )
           }
 
-          await window.modal.error({
-            title: i18n.t('message.backup.failed'),
-            content: `${logPrefix} ${new Date().toLocaleString()} ` + error.message
-          })
-
           scheduleNextBackup('fromNow', backupType)
+          break
+        } catch (error: any) {
+          retryCount++
+          if (retryCount === maxRetries) {
+            logger.error(`${logPrefix} Auto backup failed after all retries:`, error)
 
-          // 重置运行状态
-          if (backupType === 'webdav') {
-            isWebdavAutoBackupRunning = false
-          } else if (backupType === 's3') {
-            isS3AutoBackupRunning = false
-          } else if (backupType === 'local') {
-            isLocalAutoBackupRunning = false
-          }
-        } else {
-          const backoffDelay = Math.pow(2, retryCount - 1) * 10000 - 3000
-          logger.warn(`${logPrefix} Failed, retry ${retryCount}/${maxRetries} after ${backoffDelay / 1000}s`)
+            if (backupType === 'webdav') {
+              store.dispatch(
+                setWebDAVSyncState({
+                  lastSyncError: 'Auto backup failed',
+                  lastSyncTime: Date.now(),
+                  syncing: false
+                })
+              )
+            } else if (backupType === 's3') {
+              store.dispatch(
+                setS3SyncState({
+                  lastSyncError: 'Auto backup failed',
+                  lastSyncTime: Date.now(),
+                  syncing: false
+                })
+              )
+            } else if (backupType === 'local') {
+              store.dispatch(
+                setLocalBackupSyncState({
+                  lastSyncError: 'Auto backup failed',
+                  lastSyncTime: Date.now(),
+                  syncing: false
+                })
+              )
+            }
 
-          await new Promise((resolve) => setTimeout(resolve, backoffDelay))
+            await window.modal.error({
+              title: i18n.t('message.backup.failed'),
+              content: `${logPrefix} ${new Date().toLocaleString()} ` + error.message
+            })
 
-          // 检查是否被用户停止
-          let currentRunning: boolean
-          if (backupType === 'webdav') {
-            currentRunning = isWebdavAutoBackupRunning
-          } else if (backupType === 's3') {
-            currentRunning = isS3AutoBackupRunning
+            scheduleNextBackup('fromNow', backupType)
           } else {
-            currentRunning = isLocalAutoBackupRunning
-          }
+            const backoffDelay = Math.pow(2, retryCount - 1) * 10000 - 3000
+            logger.warn(`${logPrefix} Failed, retry ${retryCount}/${maxRetries} after ${backoffDelay / 1000}s`)
 
-          if (!currentRunning) {
-            logger.info(`${logPrefix} retry cancelled by user, exit`)
-            break
+            await new Promise((resolve) => setTimeout(resolve, backoffDelay))
+
+            if (!isAutoSyncStarted(backupType)) {
+              logger.info(`${logPrefix} retry cancelled by user, exit`)
+              break
+            }
           }
         }
       }
+    } finally {
+      setAutoBackupRunning(backupType, false)
     }
   }
 }
@@ -917,24 +932,21 @@ export function stopAutoSync(type?: BackupType) {
       clearTimeout(webdavSyncTimeout)
       webdavSyncTimeout = null
     }
-    isWebdavAutoBackupRunning = false
-    webdavAutoSyncStarted = false
+    setAutoSyncStarted('webdav', false)
   } else if (type === 's3') {
     if (s3SyncTimeout) {
       logger.info('[S3AutoSync] Stopping auto sync')
       clearTimeout(s3SyncTimeout)
       s3SyncTimeout = null
     }
-    isS3AutoBackupRunning = false
-    s3AutoSyncStarted = false
+    setAutoSyncStarted('s3', false)
   } else if (type === 'local') {
     if (localSyncTimeout) {
       logger.info('[LocalAutoSync] Stopping auto sync')
       clearTimeout(localSyncTimeout)
       localSyncTimeout = null
     }
-    isLocalAutoBackupRunning = false
-    localAutoSyncStarted = false
+    setAutoSyncStarted('local', false)
   }
 }
 

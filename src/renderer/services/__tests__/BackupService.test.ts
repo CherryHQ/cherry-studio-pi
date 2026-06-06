@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   i18nT: vi.fn((key: string) => key),
   logger: {
     error: vi.fn(),
+    info: vi.fn(),
     verbose: vi.fn(),
     warn: vi.fn()
   },
@@ -82,7 +83,15 @@ vi.mock('../StorageV2Service', () => ({
   suspendStorageV2RuntimeMirrorsUntilReload: mocks.suspendStorageV2RuntimeMirrorsUntilReload
 }))
 
-import { backupToLocal, backupToS3, backupToWebdav, handleData, reset } from '../BackupService'
+import {
+  backupToLocal,
+  backupToS3,
+  backupToWebdav,
+  handleData,
+  reset,
+  startAutoSync,
+  stopAutoSync
+} from '../BackupService'
 
 describe('BackupService legacy restore', () => {
   let originalApi: unknown
@@ -137,7 +146,8 @@ describe('BackupService legacy restore', () => {
     Object.defineProperty(window, 'modal', {
       configurable: true,
       value: {
-        confirm: vi.fn()
+        confirm: vi.fn(),
+        error: vi.fn()
       }
     })
     Object.defineProperty(window, 'toast', {
@@ -151,6 +161,7 @@ describe('BackupService legacy restore', () => {
   })
 
   afterEach(() => {
+    stopAutoSync()
     localStorage.clear()
     vi.useRealTimers()
     vi.restoreAllMocks()
@@ -436,5 +447,78 @@ describe('BackupService legacy restore', () => {
       'cherry-studio-pi.20260601000000.host-a.mac.zip',
       '/resolved-backups'
     )
+  })
+
+  it('runs WebDAV auto sync after starting immediate auto sync', async () => {
+    mocks.storeState = {
+      backup: {
+        webdavSync: {}
+      },
+      messages: {
+        loadingByTopic: {}
+      },
+      settings: {
+        s3: {},
+        webdavAutoSync: true,
+        webdavHost: 'https://webdav.example',
+        webdavUser: 'user',
+        webdavPass: 'pass',
+        webdavPath: '/backup',
+        webdavSyncInterval: 10,
+        webdavMaxBackups: 0,
+        webdavSkipBackupFile: false,
+        webdavDisableStream: false
+      }
+    }
+
+    startAutoSync(true, 'webdav')
+
+    await vi.advanceTimersByTimeAsync(999)
+    expect(window.api.backup.backupToWebdav).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect(window.api.backup.backupToWebdav).toHaveBeenCalledTimes(1)
+    stopAutoSync('webdav')
+  })
+
+  it('does not reschedule WebDAV auto sync after it is stopped during an in-flight backup', async () => {
+    mocks.storeState = {
+      backup: {
+        webdavSync: {}
+      },
+      messages: {
+        loadingByTopic: {}
+      },
+      settings: {
+        s3: {},
+        webdavAutoSync: true,
+        webdavHost: 'https://webdav.example',
+        webdavUser: 'user',
+        webdavPass: 'pass',
+        webdavPath: '/backup',
+        webdavSyncInterval: 10,
+        webdavMaxBackups: 0,
+        webdavSkipBackupFile: false,
+        webdavDisableStream: false
+      }
+    }
+    let finishBackup!: (value: boolean) => void
+    vi.mocked(window.api.backup.backupToWebdav).mockReturnValueOnce(
+      new Promise<boolean>((resolve) => {
+        finishBackup = resolve
+      })
+    )
+
+    startAutoSync(true, 'webdav')
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(window.api.backup.backupToWebdav).toHaveBeenCalledTimes(1)
+
+    stopAutoSync('webdav')
+    finishBackup(true)
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000 + 1000)
+
+    expect(window.api.backup.backupToWebdav).toHaveBeenCalledTimes(1)
   })
 })
