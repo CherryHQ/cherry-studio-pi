@@ -22,6 +22,9 @@ export const PAINTING_NAMESPACES = [
 const DEFAULT_PAINTING_HISTORY_LIMIT = 50
 const MAX_PAINTING_HISTORY_LIMIT = 200
 const MAX_PAINTING_PROMPT_CHARS = 500
+const MAX_RAW_PAINTING_STRING_CHARS = 2_000
+const MAX_RAW_PAINTING_ARRAY_ITEMS = 20
+const MAX_RAW_PAINTING_DEPTH = 4
 
 function normalizeListLimit(value: unknown) {
   const parsed =
@@ -42,6 +45,44 @@ function truncateText(value: unknown, maxChars = MAX_PAINTING_PROMPT_CHARS) {
   if (typeof value !== 'string') return undefined
   if (value.length <= maxChars) return value
   return `${value.slice(0, maxChars)}...`
+}
+
+function truncateRawString(value: string) {
+  if (value.length <= MAX_RAW_PAINTING_STRING_CHARS) return value
+  return `${value.slice(0, MAX_RAW_PAINTING_STRING_CHARS)}...[truncated ${value.length - MAX_RAW_PAINTING_STRING_CHARS} chars]`
+}
+
+function compactRawPaintingValue(value: unknown, depth: number, seen: WeakSet<object>): unknown {
+  if (typeof value === 'string') return truncateRawString(value)
+  if (value === null || typeof value === 'number' || typeof value === 'boolean') return value
+  if (typeof value === 'bigint') return value.toString()
+  if (typeof value === 'undefined' || typeof value === 'function' || typeof value === 'symbol') return undefined
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString()
+  if (typeof value !== 'object') return undefined
+  if (seen.has(value)) return '[Circular]'
+  if (depth >= MAX_RAW_PAINTING_DEPTH) return '[Object truncated]'
+
+  seen.add(value)
+  try {
+    if (Array.isArray(value)) {
+      const items = value
+        .slice(0, MAX_RAW_PAINTING_ARRAY_ITEMS)
+        .map((item) => compactRawPaintingValue(item, depth + 1, seen) ?? null)
+      if (value.length > MAX_RAW_PAINTING_ARRAY_ITEMS) {
+        items.push(`[...truncated ${value.length - MAX_RAW_PAINTING_ARRAY_ITEMS} items...]`)
+      }
+      return items
+    }
+
+    const output: Record<string, unknown> = {}
+    for (const [key, childValue] of Object.entries(value as Record<string, unknown>)) {
+      const compacted = compactRawPaintingValue(childValue, depth + 1, seen)
+      if (compacted !== undefined) output[key] = compacted
+    }
+    return output
+  } finally {
+    seen.delete(value)
+  }
 }
 
 function compactPainting(namespace: string, painting: any, index: number) {
@@ -71,6 +112,14 @@ function compactPainting(namespace: string, painting: any, index: number) {
   }
 }
 
+function compactRawPainting(namespace: string, painting: any, index: number) {
+  const compacted = compactRawPaintingValue(painting, 0, new WeakSet())
+  if (compacted && typeof compacted === 'object' && !Array.isArray(compacted)) {
+    return { ...(compacted as Record<string, unknown>), namespace, index }
+  }
+  return { namespace, index, value: compacted }
+}
+
 export function listPaintingHistory(paintings: any, input: any) {
   const namespace = String(input?.namespace || '')
   const includeRaw = input?.includeRaw === true
@@ -92,7 +141,7 @@ export function listPaintingHistory(paintings: any, input: any) {
     compacted: !includeRaw,
     paintings: sanitizeForAgent(
       page.map(({ namespace, painting, index }) =>
-        includeRaw ? { namespace, index, ...painting } : compactPainting(namespace, painting, index)
+        includeRaw ? compactRawPainting(namespace, painting, index) : compactPainting(namespace, painting, index)
       )
     ),
     counts: Object.fromEntries(PAINTING_NAMESPACES.map((name) => [name, paintings?.[name]?.length || 0]))
@@ -133,7 +182,8 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
           includeRaw: {
             type: 'boolean',
             default: false,
-            description: 'Return raw painting objects. Defaults to compact summaries to avoid huge image payloads.'
+            description:
+              'Return bounded raw painting objects. Defaults to compact summaries to avoid huge image payloads.'
           }
         }
       },

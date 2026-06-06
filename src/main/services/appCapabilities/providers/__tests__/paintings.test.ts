@@ -132,5 +132,33 @@ describe('painting app capabilities', () => {
       id: 'silicon-1',
       imageFile: expect.stringContaining('data:image/png;base64')
     })
+    expect(((result.data as any).paintings[0].imageFile as string).length).toBeLessThan(2_100)
+    expect((result.data as any).paintings[0].imageFile).toContain('[truncated ')
+    expect((result.data as any).paintings[0].imageFile).not.toContain('x'.repeat(5_000))
+  })
+
+  it('bounds raw painting arrays before returning them to agents', async () => {
+    mocks.reduxService.select.mockImplementation(async (path: string) => {
+      if (path === 'state.paintings') {
+        return {
+          siliconflow_paintings: [
+            {
+              id: 'many-files',
+              files: Array.from({ length: 30 }, (_, index) => ({ id: `file-${index}` }))
+            }
+          ]
+        }
+      }
+      if (path === 'state.settings') return { defaultPaintingProvider: 'silicon' }
+      return null
+    })
+
+    const result = await capability('paintings.history.list').execute(
+      { namespace: 'siliconflow_paintings', includeRaw: true },
+      { source: 'agent' }
+    )
+
+    expect((result.data as any).paintings[0].files).toHaveLength(21)
+    expect((result.data as any).paintings[0].files.at(-1)).toBe('[...truncated 10 items...]')
   })
 })
