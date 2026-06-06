@@ -594,6 +594,39 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('rejects active remote lock claims from another device before mutating records', async () => {
+    mockDirectoryContentsFromRemoteFiles()
+    const now = Date.now()
+    const lockPath = '/remote-root/sync/v1/.sync.locks/device-b.token-b.json'
+    mocks.remoteFiles.set(
+      lockPath,
+      JSON.stringify({
+        version: 1,
+        ownerId: 'device-b',
+        token: 'token-b',
+        runtimeId: 'device-b-runtime',
+        createdAt: now,
+        updatedAt: now,
+        expiresAt: now + 2 * 60 * 1000,
+        leaseMs: 2 * 60 * 1000,
+        deadlineAt: now + 10 * 60 * 1000,
+        maxRuntimeMs: 10 * 60 * 1000,
+        app: 'cherry-studio-pi',
+        reason: 'data-sync'
+      })
+    )
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('另一台设备正在同步这个 WebDAV 目录')
+
+    expect(mocks.webdav.deleteFile).not.toHaveBeenCalledWith(lockPath)
+    expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
+    expect(mocks.webdav.putFileContents).not.toHaveBeenCalledWith(
+      expect.stringMatching(/\.cherry-studio-pi-write-test-/),
+      'ok',
+      expect.anything()
+    )
+  })
+
   it('reclaims a previous lock left by the same device before syncing', async () => {
     const now = Date.now()
     mocks.remoteFiles.set(
@@ -1376,6 +1409,53 @@ describe('AppDataSyncService', () => {
     const summary = await new AppDataSyncService().syncNow(config)
 
     expect(summary.storageUploaded).toBe(1)
+    expect(mocks.runtimeProjection.projectAgents).not.toHaveBeenCalled()
+    expect(mocks.runtimeProjection.projectFiles).not.toHaveBeenCalled()
+    expect(mocks.runtimeProjection.projectAppData).not.toHaveBeenCalled()
+  })
+
+  it('rejects oversized remote runtime directory manifests before downloading bundles', async () => {
+    const oversizedHash = 'a'.repeat(64)
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
+      if (mocks.remoteFiles.has(filePath)) {
+        return mocks.remoteFiles.get(filePath)
+      }
+
+      if (filePath.endsWith('/manifest.json')) {
+        return JSON.stringify({
+          version: 1,
+          updatedAt: 1760000000000,
+          records: {},
+          runtimeDirectories: {
+            version: 1,
+            updatedAt: 1760000000000,
+            directories: {
+              Skills: {
+                version: 1,
+                name: 'Skills',
+                valueHash: oversizedHash,
+                byteSize: 32 * 1024 * 1024 + 1,
+                compressedByteSize: 1024,
+                fileCount: 1,
+                updatedAt: 1760000000000,
+                deviceId: 'device-b',
+                path: `runtime-directories/bundles/Skills/${oversizedHash}.json.gz`
+              }
+            }
+          }
+        })
+      }
+
+      throw new Error(`Unexpected WebDAV read: ${filePath}`)
+    })
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端 Skills 目录过大')
+
+    expect(
+      mocks.webdav.getFileContents.mock.calls.some(([filePath]) =>
+        String(filePath).includes('/runtime-directories/bundles/Skills/')
+      )
+    ).toBe(false)
     expect(mocks.runtimeProjection.projectAgents).not.toHaveBeenCalled()
     expect(mocks.runtimeProjection.projectFiles).not.toHaveBeenCalled()
     expect(mocks.runtimeProjection.projectAppData).not.toHaveBeenCalled()

@@ -642,12 +642,18 @@ function isIgnoredRuntimeDirectoryEntry(name: string) {
 }
 
 function normalizeRuntimeDirectoryName(value: string): RuntimeDirectoryName {
-  const policy = RUNTIME_DIRECTORY_POLICIES.find((item) => item.name === value)
-  if (!policy) {
-    throw new Error(`远端运行时目录同步状态包含未知目录：${value}`)
-  }
+  return getRuntimeDirectoryPolicy(value).name
+}
 
-  return policy.name
+function getRuntimeDirectoryPolicy(value: string): RuntimeDirectoryPolicy {
+  const policy = RUNTIME_DIRECTORY_POLICIES.find((item) => item.name === value)
+  if (!policy) throw new Error(`远端运行时目录同步状态包含未知目录：${value}`)
+
+  return policy
+}
+
+function runtimeDirectoryCompressedByteLimit(policy: RuntimeDirectoryPolicy) {
+  return Math.max(policy.maxTotalBytes * 2, policy.maxTotalBytes + 1024 * 1024)
 }
 
 function shouldAttemptRemoteFullSnapshotUpload() {
@@ -2586,6 +2592,7 @@ export class AppDataSyncService {
   }
 
   private parseRuntimeDirectoryBundle(buffer: Buffer, meta: RemoteRuntimeDirectoryMeta): RuntimeDirectoryBundle {
+    const policy = getRuntimeDirectoryPolicy(meta.name)
     let bundle: RuntimeDirectoryBundle
     try {
       bundle = JSON.parse(gunzipSync(buffer).toString('utf8')) as RuntimeDirectoryBundle
@@ -2600,6 +2607,34 @@ export class AppDataSyncService {
     }
 
     const files = Object.values(bundle.files).sort((left, right) => left.relativePath.localeCompare(right.relativePath))
+    let totalBytes = 0
+    for (const file of files) {
+      normalizeNotesRelativePath(file.relativePath, `Remote ${meta.name} directory file path`)
+      const byteSize = Number(file.byteSize)
+      if (!Number.isFinite(byteSize) || byteSize < 0) {
+        throw new Error(`远端 ${meta.name} 目录数据包包含无效文件大小。为避免写入损坏数据，本次同步已停止。`)
+      }
+      if (byteSize > policy.maxFileBytes) {
+        throw new Error(
+          `远端 ${meta.name} 目录中的文件过大（${file.relativePath}，${byteSize} 字节）。为避免 WebDAV 流量或单文件限制，本次同步已停止。`
+        )
+      }
+      totalBytes += byteSize
+      if (totalBytes > policy.maxTotalBytes) {
+        throw new Error(
+          `远端 ${meta.name} 目录过大（超过 ${policy.maxTotalBytes} 字节）。为避免 WebDAV 流量或频率限制，本次同步已停止。`
+        )
+      }
+      if (typeof file.contentBase64 !== 'string') {
+        throw new Error(`远端 ${meta.name} 目录数据包包含无效文件内容。为避免写入损坏数据，本次同步已停止。`)
+      }
+    }
+    if (meta.fileCount > 0 && files.length !== meta.fileCount) {
+      throw new Error(`远端 ${meta.name} 目录数据包文件数量不匹配。为避免写入损坏数据，本次同步已停止。`)
+    }
+    if (meta.byteSize > 0 && totalBytes !== meta.byteSize) {
+      throw new Error(`远端 ${meta.name} 目录数据包总大小不匹配。为避免写入损坏数据，本次同步已停止。`)
+    }
     const valueHash = hashJsonValue(files.map((file) => [file.relativePath, file.valueHash, file.byteSize, file.mode]))
     if (valueHash !== meta.valueHash) {
       throw new Error(`远端 ${meta.name} 目录数据包校验失败。为避免写入损坏数据，本次同步已停止。`)
@@ -2609,6 +2644,18 @@ export class AppDataSyncService {
   }
 
   private async pullRuntimeDirectoryBundle(client: WebDAVClient, basePath: string, meta: RemoteRuntimeDirectoryMeta) {
+    const policy = getRuntimeDirectoryPolicy(meta.name)
+    if (meta.byteSize > policy.maxTotalBytes) {
+      throw new Error(
+        `远端 ${meta.name} 目录过大（${meta.byteSize} 字节，限制 ${policy.maxTotalBytes} 字节）。为避免 WebDAV 流量或频率限制，本次同步已停止。`
+      )
+    }
+    const maxCompressedBytes = runtimeDirectoryCompressedByteLimit(policy)
+    if (meta.compressedByteSize > maxCompressedBytes) {
+      throw new Error(
+        `远端 ${meta.name} 目录数据包过大（${meta.compressedByteSize} 字节，限制 ${maxCompressedBytes} 字节）。为避免 WebDAV 流量或频率限制，本次同步已停止。`
+      )
+    }
     const remotePath = path.posix.join(basePath, normalizeRemoteRelativePath(meta.path, 'Remote runtime bundle path'))
     const contents = await runWebDavOperation(
       `downloading runtime directory bundle ${remotePath}`,
