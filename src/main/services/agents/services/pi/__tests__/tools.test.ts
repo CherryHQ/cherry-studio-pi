@@ -119,15 +119,21 @@ describe('Pi tools', () => {
   it('truncates large reads with a recovery hint', async () => {
     const filePath = path.join(tmpDir, 'large-read.txt')
     await fs.writeFile(filePath, 'x'.repeat(120 * 1024), 'utf8')
+    const readFileSpy = vi.spyOn(fs, 'readFile')
 
-    const read = getTool('Read', tmpDir, [tmpDir])
-    const result = await read.execute('read-1', {
-      file_path: filePath
-    })
+    try {
+      const read = getTool('Read', tmpDir, [tmpDir])
+      const result = await read.execute('read-1', {
+        file_path: filePath
+      })
 
-    expect(result.details).toMatchObject({ truncated: true })
-    expect(resultText(result).length).toBeLessThan(100_000)
-    expect(resultText(result)).toContain('Use offset/limit or Grep')
+      expect(result.details).toMatchObject({ truncated: true })
+      expect(readFileSpy).not.toHaveBeenCalled()
+      expect(resultText(result).length).toBeLessThan(100_000)
+      expect(resultText(result)).toContain('Use offset/limit or Grep')
+    } finally {
+      readFileSpy.mockRestore()
+    }
   })
 
   it('prompts before reading outside accessible roots', async () => {

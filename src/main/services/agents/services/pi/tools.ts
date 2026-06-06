@@ -52,6 +52,30 @@ const truncateOutput = (text: string, maxChars: number) => {
   }
 }
 
+const readFileHead = async (filePath: string, maxBytes: number) => {
+  const stat = await fs.stat(filePath)
+  if (stat.size <= maxBytes) {
+    return {
+      buffer: await fs.readFile(filePath),
+      bytes: stat.size,
+      truncated: false
+    }
+  }
+
+  const handle = await fs.open(filePath, 'r')
+  try {
+    const buffer = Buffer.alloc(maxBytes)
+    const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0)
+    return {
+      buffer: buffer.subarray(0, bytesRead),
+      bytes: stat.size,
+      truncated: true
+    }
+  } finally {
+    await handle.close()
+  }
+}
+
 const stringifyToolValue = (value: unknown, space?: number) => {
   const seen = new WeakSet<object>()
   return (
@@ -446,18 +470,24 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
         const input = params as ToolParams
         const filePath = resolveAllowedPath(input.file_path ?? input.path, cwd)
         await ensurePathAccess('Read', toolCallId, input, [filePath], 'read', signal)
-        const buffer = await fs.readFile(filePath)
-        const truncated = buffer.byteLength > MAX_READ_BYTES && !input.limit
+        const hasLineWindow = Boolean(input.offset || input.limit)
+        const { buffer, bytes, truncated } = hasLineWindow
+          ? {
+              buffer: await fs.readFile(filePath),
+              bytes: (await fs.stat(filePath)).size,
+              truncated: false
+            }
+          : await readFileHead(filePath, MAX_READ_BYTES)
         let text = truncated ? buffer.subarray(0, MAX_READ_BYTES).toString('utf8') : buffer.toString('utf8')
         const lines = text.split(/\r?\n/)
-        if (input.offset || input.limit) {
+        if (hasLineWindow) {
           const start = Math.max((input.offset ?? 1) - 1, 0)
           text = lines.slice(start, input.limit ? start + input.limit : undefined).join('\n')
         }
         if (truncated) {
-          text += `\n\n[Read truncated at ${MAX_READ_BYTES} bytes from ${buffer.byteLength} bytes. Use offset/limit or Grep for targeted reads.]`
+          text += `\n\n[Read truncated at ${MAX_READ_BYTES} bytes from ${bytes} bytes. Use offset/limit or Grep for targeted reads.]`
         }
-        return textResult(text, { path: filePath, truncated, bytes: buffer.byteLength })
+        return textResult(text, { path: filePath, truncated, bytes })
       })
     }
   }
