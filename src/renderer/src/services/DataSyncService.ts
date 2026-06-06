@@ -230,6 +230,32 @@ async function hydrateRuntimeCacheAfterExternalDataSync(payload: unknown) {
   await hydrateRuntimeCacheAfterDataSync('after external data sync', { strict: true })
 }
 
+function continueMainSyncAfterRendererTimeout(syncPromise: Promise<DataSyncSummary>) {
+  void syncPromise
+    .then(async (summary) => {
+      await hydrateRuntimeCacheAfterDataSync('after delayed data sync', {
+        strict: hasRemoteRuntimeData(summary)
+      })
+    })
+    .catch(async (error) => {
+      logger.warn('Main-process data sync finished with an error after renderer IPC timeout', error as Error)
+      await rememberDataSyncFailure(getErrorMessage(error))
+      void reportErrorToSystemAgent(error, {
+        source: 'data-sync.delayed',
+        domain: 'dataSync'
+      })
+    })
+    .finally(() => {
+      void reconcileRendererSyncStateWithMainProcess().catch((error) => {
+        logger.warn('Failed to reconcile data sync runtime state after delayed sync completion', error as Error)
+      })
+      if (localChangeDuringSync) {
+        localChangeDuringSync = false
+        scheduleLocalChangeSync()
+      }
+    })
+}
+
 async function hydratePreviouslyDownloadedRemoteData() {
   const status = await window.api.dataSync.getStatus().catch((error) => {
     logger.warn('Failed to inspect previous data sync status before sync', error as Error)
@@ -385,12 +411,14 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
 
   setDataSyncRunning(true)
   clearLocalChangeSyncTimeout()
+  let mainSyncPromise: Promise<DataSyncSummary> | null = null
   try {
     await withDataSyncStageTimeout('恢复上次远端数据', () => hydratePreviouslyDownloadedRemoteData())
     await prepareStorageV2ForDataSyncWithSuppressedNotifications()
+    mainSyncPromise = window.api.dataSync.syncNow(config)
     const summary = await withDataSyncStageTimeout(
       '执行 WebDAV 同步',
-      () => window.api.dataSync.syncNow(config),
+      () => mainSyncPromise as Promise<DataSyncSummary>,
       MAIN_PROCESS_SYNC_TIMEOUT_MS
     )
     await withDataSyncStageTimeout('恢复同步后的界面数据', () =>
@@ -409,6 +437,9 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
       const mainProcessRunning = await reconcileRendererSyncStateWithMainProcess().catch(() => false)
       if (mainProcessRunning) {
         logger.info('Main-process data sync is still running after renderer IPC timeout')
+        if (mainSyncPromise) {
+          continueMainSyncAfterRendererTimeout(mainSyncPromise)
+        }
         return null
       }
     }

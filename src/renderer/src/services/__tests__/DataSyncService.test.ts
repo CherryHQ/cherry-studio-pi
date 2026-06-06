@@ -56,6 +56,7 @@ vi.mock('../SystemAgentService', () => ({
 
 import { notifyDataSyncLocalChange } from '../DataSyncLocalChangeSignal'
 import {
+  type DataSyncSummary,
   getDataSyncRuntimeState,
   refreshDataSyncRuntimeStateFromMain,
   startDataSyncAutoSync,
@@ -66,7 +67,7 @@ import {
   syncAppDataNow
 } from '../DataSyncService'
 
-const successSummary = {
+const successSummary: DataSyncSummary = {
   status: 'success' as const,
   error: null,
   uploaded: 0,
@@ -89,6 +90,9 @@ const successSummary = {
   snapshotFileName: null,
   snapshotBytes: 0,
   remotePath: '/cherry-studio-pi/sync/v1',
+  storageBundleHash: null,
+  storageRecordCount: 0,
+  storageBlobCount: 0,
   lastSyncAt: 1780058147577
 }
 
@@ -544,6 +548,17 @@ describe('DataSyncService', () => {
         conflicts: [],
         syncStartedAt: mainStartedAt
       })
+      .mockResolvedValueOnce({
+        syncing: false,
+        lastSummary: {
+          ...successSummary,
+          storageDownloaded: 2,
+          storageRecordCount: 3,
+          storageBundleHash: 'remote-bundle-hash'
+        },
+        conflicts: [],
+        syncStartedAt: null
+      })
 
     const sync = syncAppDataNow()
     await vi.waitFor(() => expect(getDataSyncRuntimeState().syncing).toBe(true))
@@ -557,8 +572,26 @@ describe('DataSyncService', () => {
       syncStartedAt: mainStartedAt
     })
 
-    vi.setSystemTime(new Date(mainStartedAt + 16 * 60_000))
-    mocks.getStatus.mockResolvedValueOnce({ syncing: false, lastSummary: null, conflicts: [], syncStartedAt: null })
+    pendingSync.resolve({
+      ...successSummary,
+      storageDownloaded: 2,
+      storageRecordCount: 3,
+      storageBundleHash: 'remote-bundle-hash'
+    })
+    await vi.advanceTimersByTimeAsync(0)
+
+    await vi.waitFor(() => {
+      expect(mocks.hydrateRuntimeCacheFromStorageV2).toHaveBeenCalledTimes(1)
+    })
+    expect(mocks.hydrateStorageV2ConversationsIfDexieEmpty).toHaveBeenCalledWith('data-sync:after delayed data sync', {
+      strict: true
+    })
+    await vi.waitFor(() => {
+      expect(getDataSyncRuntimeState()).toEqual({
+        syncing: false,
+        syncStartedAt: null
+      })
+    })
     await expect(refreshDataSyncRuntimeStateFromMain()).resolves.toEqual({
       syncing: false,
       syncStartedAt: null

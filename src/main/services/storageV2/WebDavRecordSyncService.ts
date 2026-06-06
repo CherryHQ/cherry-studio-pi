@@ -1302,6 +1302,19 @@ export class StorageV2WebDavRecordSyncService {
     return { refs, invalidRefs }
   }
 
+  private collectBundledRecordSecretRefs(records: Iterable<LocalRecord>) {
+    const refs = new Set<string>()
+    const invalidRefs = new Set<string>()
+
+    for (const record of records) {
+      const recordRefs = this.collectRecordSecretRefs(record)
+      for (const ref of recordRefs.refs) refs.add(ref)
+      for (const ref of recordRefs.invalidRefs) invalidRefs.add(ref)
+    }
+
+    return { refs, invalidRefs }
+  }
+
   private async assertRemoteSecretsAvailableForRecord(
     client: WebDAVClient,
     basePath: string,
@@ -2511,14 +2524,17 @@ export class StorageV2WebDavRecordSyncService {
     options.assertActive?.()
     this.pruneManifestBlobsWithoutRecords(manifest, bundledRecords)
     const secretReferenceScan = await scanStorageV2SecretReferences(dbClient)
+    const bundledSecretReferenceScan = this.collectBundledRecordSecretRefs(bundledRecords.values())
     options.assertActive?.()
-    if (secretReferenceScan.invalidRefs.size > 0) {
+    const invalidSecretRefs = new Set([...secretReferenceScan.invalidRefs, ...bundledSecretReferenceScan.invalidRefs])
+    if (invalidSecretRefs.size > 0) {
       throw new Error(
         `Storage v2 数据中存在无法识别的敏感配置引用：${formatLimitedList(
-          secretReferenceScan.invalidRefs
+          invalidSecretRefs
         )}。请重新保存对应模型、服务或设置后再同步。`
       )
     }
+    const referencedSecretIds = new Set([...secretReferenceScan.refs, ...bundledSecretReferenceScan.refs])
 
     await this.syncSecretVault(
       client,
@@ -2526,7 +2542,7 @@ export class StorageV2WebDavRecordSyncService {
       manifest,
       summary,
       options,
-      secretReferenceScan.refs,
+      referencedSecretIds,
       remoteSecretVaultCache.importedSecretIds
     )
     options.assertActive?.()

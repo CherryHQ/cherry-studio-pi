@@ -257,10 +257,14 @@ function makeSettingsDb(rows: SettingsRow[]) {
   }
 }
 
-function makeProviderCredentialDb(input: { credentials?: ProviderCredentialRow[]; tombstones?: TombstoneRow[] }) {
+function makeProviderCredentialDb(options: {
+  credentials?: ProviderCredentialRow[]
+  tombstones?: TombstoneRow[]
+  hideCredentialSecretRefScan?: boolean
+}) {
   const state = {
-    credentials: [...(input.credentials ?? [])],
-    tombstones: [...(input.tombstones ?? [])],
+    credentials: [...(options.credentials ?? [])],
+    tombstones: [...(options.tombstones ?? [])],
     syncState: new Map<string, string>()
   }
 
@@ -270,6 +274,10 @@ function makeProviderCredentialDb(input: { credentials?: ProviderCredentialRow[]
       execute: vi.fn(async (input: string | { sql: string; args?: unknown[] }) => {
         const sql = typeof input === 'string' ? input : input.sql
         const args = typeof input === 'string' ? [] : (input.args ?? [])
+
+        if (options.hideCredentialSecretRefScan && /SELECT\s+secret_ref\s+FROM\s+provider_credentials/i.test(sql)) {
+          return { rows: [] }
+        }
 
         if (/SELECT\b/i.test(sql) && sql.includes('FROM provider_credentials')) {
           return { rows: state.credentials.map((row) => ({ ...row })) }
@@ -2338,9 +2346,16 @@ describe('StorageV2WebDavRecordSyncService', () => {
       return { rows: [] }
     })
 
+    mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({
+      'provider:provider-1:apiKey': {
+        value: 'sk-provider-1',
+        updatedAt: '2026-06-01T08:00:00.000Z'
+      }
+    })
     const result = await new StorageV2WebDavRecordSyncService().sync(remote.client as any, '/remote-root/sync/v1', null)
 
     expect(result.summary.storageUploaded).toBe(1)
+    expect(result.summary.secretUploaded).toBe(1)
     expect(result.manifest.records['provider_credential:provider-1:apiKey']).toEqual(
       expect.objectContaining({
         entityType: 'provider_credential',
@@ -2388,6 +2403,54 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(secondSync.summary.storageDownloaded).toBe(1)
     expect(secondSync.summary.secretDownloaded).toBe(1)
     expect(deviceB.state.credentials).toEqual([credentialRow])
+    expect(mocks.secretVault.importPlaintextSecrets).toHaveBeenCalledWith({
+      'provider:provider-1:apiKey': {
+        value: 'sk-provider-1',
+        updatedAt: '2026-06-01T08:00:00.000Z'
+      }
+    })
+  })
+
+  it('keeps remote secret vault metadata when DB ref scanning misses refs still present in the sync bundle', async () => {
+    const remote = makeSharedWebDavStore()
+    const credentialRow: ProviderCredentialRow = {
+      provider_id: 'provider-1',
+      credential_kind: 'apiKey',
+      secret_ref: 'storage-v2://secret/provider/provider-1/apiKey',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      updated_by_device_id: 'device-a'
+    }
+    const deviceA = makeProviderCredentialDb({ credentials: [credentialRow] })
+    const deviceB = makeProviderCredentialDb({
+      credentials: [credentialRow],
+      hideCredentialSecretRefScan: true
+    })
+    const getClient = vi.mocked(storageV2Database.getClient)
+    const service = new StorageV2WebDavRecordSyncService([providerCredentialTable])
+
+    mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({
+      'provider:provider-1:apiKey': {
+        value: 'sk-provider-1',
+        updatedAt: '2026-06-01T08:00:00.000Z'
+      }
+    })
+    getClient.mockResolvedValueOnce(deviceA.client as any)
+    const firstSync = await service.sync(remote.client as any, '/remote-root/sync/v1', null, {
+      secretKeyMaterial: 'dav-user:dav-password'
+    })
+
+    mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({})
+    getClient.mockResolvedValueOnce(deviceB.client as any)
+    const secondSync = await service.sync(remote.client as any, '/remote-root/sync/v1', firstSync.manifest, {
+      secretKeyMaterial: 'dav-user:dav-password'
+    })
+
+    expect(secondSync.manifest.secrets).toMatchObject({
+      version: 1,
+      secretCount: 1,
+      encryption: 'cherry-webdav-secret-sync-aes-256-gcm'
+    })
+    expect(secondSync.summary.secretDownloaded).toBe(1)
     expect(mocks.secretVault.importPlaintextSecrets).toHaveBeenCalledWith({
       'provider:provider-1:apiKey': {
         value: 'sk-provider-1',
