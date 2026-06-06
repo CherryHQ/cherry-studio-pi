@@ -137,8 +137,7 @@ export function hasPath(url: string): boolean {
   try {
     const parsedUrl = new URL(url)
     return parsedUrl.pathname !== '/' && parsedUrl.pathname !== ''
-  } catch (error) {
-    logger.error('Invalid URL:', error as Error)
+  } catch {
     return false
   }
 }
