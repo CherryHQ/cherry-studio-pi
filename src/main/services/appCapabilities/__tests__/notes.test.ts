@@ -144,6 +144,33 @@ describe('notes app capabilities', () => {
     expect((result.data as any).matches).toEqual([])
   })
 
+  it('returns filename matches without reading oversized note content', async () => {
+    const largePath = path.join(tmpDir, 'needle-large.md')
+    await fs.writeFile(largePath, 'x'.repeat(512 * 1024 + 1), 'utf8')
+    mocks.scanDir.mockResolvedValue([
+      {
+        type: 'file',
+        name: 'needle-large',
+        treePath: '/needle-large',
+        externalPath: largePath
+      }
+    ])
+    const readFileSpy = vi.spyOn(fs, 'readFile')
+
+    const result = await getCapability('notes.search').execute({ query: 'needle' }, { source: 'agent' })
+
+    expect(result.ok).toBe(true)
+    expect((result.data as any).matches).toEqual([
+      expect.objectContaining({
+        name: 'needle-large',
+        match: 'name',
+        snippet: ''
+      })
+    ])
+    expect(readFileSpy).not.toHaveBeenCalled()
+    readFileSpy.mockRestore()
+  })
+
   it('returns a bounded preview when reading oversized notes', async () => {
     const notePath = path.join(tmpDir, 'large-note.md')
     await fs.writeFile(notePath, 'a'.repeat(2048), 'utf8')
