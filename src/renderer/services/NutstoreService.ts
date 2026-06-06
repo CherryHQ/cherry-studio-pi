@@ -228,13 +228,16 @@ export async function startNutstoreAutoSync() {
     return
   }
 
-  autoSyncStarted = true
-
   stopNutstoreAutoSync()
+  autoSyncStarted = true
 
   scheduleNextBackup()
 
   function scheduleNextBackup() {
+    if (!autoSyncStarted) {
+      return
+    }
+
     if (syncTimeout) {
       clearTimeout(syncTimeout)
       syncTimeout = null
@@ -266,6 +269,10 @@ export async function startNutstoreAutoSync() {
   }
 
   async function performAutoBackup() {
+    if (!autoSyncStarted) {
+      return
+    }
+
     if (isAutoBackupRunning || isManualBackupRunning) {
       logger.verbose('[Nutstore AutoSync] Backup already in progress, rescheduling')
       scheduleNextBackup()
@@ -280,7 +287,9 @@ export async function startNutstoreAutoSync() {
       logger.error('[Nutstore AutoSync] Auto backup failed:', error as Error)
     } finally {
       isAutoBackupRunning = false
-      scheduleNextBackup()
+      if (autoSyncStarted) {
+        scheduleNextBackup()
+      }
     }
   }
 }
@@ -291,7 +300,6 @@ export function stopNutstoreAutoSync() {
     clearTimeout(syncTimeout)
     syncTimeout = null
   }
-  isAutoBackupRunning = false
   autoSyncStarted = false
 }
 
