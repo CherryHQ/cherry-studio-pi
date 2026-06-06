@@ -233,6 +233,10 @@ export const persistor = persistStore(store, undefined, () => {
     // Use setTimeout to ensure this runs after the store is fully initialized
     setTimeout(async () => {
       try {
+        if (typeof window.api?.getAppInfo !== 'function') {
+          return
+        }
+
         const info = await window.api.getAppInfo()
         store.dispatch(setNotesPath(info.notesPath))
         logger.info('Initialized notes path on startup:', info.notesPath)

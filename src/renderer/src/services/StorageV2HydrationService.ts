@@ -114,7 +114,7 @@ type AutoHydrateResult =
     }
   | {
       hydrated: false
-      reason: 'disabled' | 'empty'
+      reason: 'disabled' | 'empty' | 'unavailable'
     }
 
 function parseAutoHydrateSetting(value: unknown): boolean {
@@ -123,6 +123,10 @@ function parseAutoHydrateSetting(value: unknown): boolean {
     return (value as { enabled?: unknown }).enabled === true
   }
   return false
+}
+
+function hasStorageV2CoreSnapshotApi(): boolean {
+  return typeof window !== 'undefined' && typeof window.api?.storageV2?.getCoreSnapshot === 'function'
 }
 
 function hasMeaningfulSnapshotValue(value: unknown): boolean {
@@ -346,7 +350,7 @@ async function applyRuntimeSnapshot(snapshot: StorageV2CoreSnapshot, target: Run
 
 export async function getStorageV2AutoHydrateEnabled(): Promise<boolean> {
   if (
-    typeof window === 'undefined' ||
+    !hasStorageV2CoreSnapshotApi() ||
     typeof window.api?.storageV2?.getSetting !== 'function' ||
     typeof window.api.storageV2.getCoreSnapshot !== 'function'
   ) {
@@ -381,6 +385,13 @@ export async function hydrateRuntimeCacheFromStorageV2(target: RuntimeHydrationT
 export async function maybeHydrateRuntimeCacheFromStorageV2(
   target: RuntimeHydrationTarget
 ): Promise<AutoHydrateResult> {
+  if (!hasStorageV2CoreSnapshotApi()) {
+    return {
+      hydrated: false,
+      reason: 'unavailable'
+    }
+  }
+
   const autoHydrateEnabled = await getStorageV2AutoHydrateEnabled()
   const shouldBootstrapFromStorageV2 = !autoHydrateEnabled && (await target.shouldHydrateWhenDisabled?.()) === true
 

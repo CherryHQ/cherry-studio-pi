@@ -15,7 +15,7 @@ import { isGeminiWebSearchProvider, isSupportUrlContextProvider } from '@rendere
 import { Form, Input, Tooltip } from 'antd'
 import { CircleX, Hammer, Plus, Sparkles } from 'lucide-react'
 import type { FC } from 'react'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
 
@@ -380,32 +380,44 @@ const MCPToolsButton: FC<Props> = ({ quickPanel, setInputValue, resizeTextArea, 
     [activedMcpServers, form, t, insertPromptIntoTextArea]
   )
 
-  const promptList = useMemo(async () => {
-    const prompts: MCPPrompt[] = []
+  const listPromptsForActiveServers = useCallback(async (): Promise<MCPPrompt[]> => {
+    const results = await Promise.allSettled(activedMcpServers.map((server) => window.api.mcp.listPrompts(server)))
+    const prompts = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
 
-    for (const server of activedMcpServers) {
-      const serverPrompts = await window.api.mcp.listPrompts(server)
-      prompts.push(...serverPrompts)
+    if (
+      activedMcpServers.length > 0 &&
+      prompts.length === 0 &&
+      results.some((result) => result.status === 'rejected')
+    ) {
+      throw results.find((result) => result.status === 'rejected')?.reason
     }
 
-    return prompts.map((prompt) => ({
-      label: prompt.name,
-      description: prompt.description,
-      icon: <Hammer />,
-      action: () => handlePromptSelect(prompt as MCPPromptWithArgs)
-    }))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return prompts
   }, [activedMcpServers])
 
   const openPromptList = useCallback(async () => {
-    const prompts = await promptList
-    quickPanelHook.open({
-      title: t('settings.mcp.title'),
-      list: prompts,
-      symbol: QuickPanelReservedSymbol.McpPrompt,
-      multiple: true
-    })
-  }, [promptList, quickPanelHook, t])
+    try {
+      const prompts = await listPromptsForActiveServers()
+      if (!isMountedRef.current) return
+
+      quickPanelHook.open({
+        title: t('settings.mcp.title'),
+        list: prompts.map((prompt) => ({
+          label: prompt.name,
+          description: prompt.description,
+          icon: <Hammer />,
+          action: () => handlePromptSelect(prompt as MCPPromptWithArgs)
+        })),
+        symbol: QuickPanelReservedSymbol.McpPrompt,
+        multiple: true
+      })
+    } catch (error: any) {
+      window.modal.error({
+        title: t('common.error'),
+        content: error?.message || t('settings.mcp.prompts.genericError')
+      })
+    }
+  }, [handlePromptSelect, listPromptsForActiveServers, quickPanelHook, t])
 
   const handleResourceSelect = useCallback(
     (resource: MCPResource) => {
@@ -452,47 +464,44 @@ const MCPToolsButton: FC<Props> = ({ quickPanel, setInputValue, resizeTextArea, 
     [activedMcpServers, t, insertPromptIntoTextArea]
   )
 
-  const [resourcesList, setResourcesList] = useState<QuickPanelListItem[]>([])
+  const listResourcesForActiveServers = useCallback(async (): Promise<MCPResource[]> => {
+    const results = await Promise.allSettled(activedMcpServers.map((server) => window.api.mcp.listResources(server)))
+    const resources = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
 
-  useEffect(() => {
-    let isMounted = true
-
-    const fetchResources = async () => {
-      const resources: MCPResource[] = []
-
-      for (const server of activedMcpServers) {
-        const serverResources = await window.api.mcp.listResources(server)
-        resources.push(...serverResources)
-      }
-
-      if (isMounted) {
-        setResourcesList(
-          resources.map((resource) => ({
-            label: resource.name,
-            description: resource.description,
-            icon: <Hammer />,
-            action: () => handleResourceSelect(resource)
-          }))
-        )
-      }
+    if (
+      activedMcpServers.length > 0 &&
+      resources.length === 0 &&
+      results.some((result) => result.status === 'rejected')
+    ) {
+      throw results.find((result) => result.status === 'rejected')?.reason
     }
 
-    void fetchResources()
-
-    return () => {
-      isMounted = false
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return resources
   }, [activedMcpServers])
 
   const openResourcesList = useCallback(async () => {
-    quickPanelHook.open({
-      title: t('settings.mcp.title'),
-      list: resourcesList,
-      symbol: QuickPanelReservedSymbol.McpResource,
-      multiple: true
-    })
-  }, [resourcesList, quickPanelHook, t])
+    try {
+      const resources = await listResourcesForActiveServers()
+      if (!isMountedRef.current) return
+
+      quickPanelHook.open({
+        title: t('settings.mcp.title'),
+        list: resources.map((resource) => ({
+          label: resource.name,
+          description: resource.description,
+          icon: <Hammer />,
+          action: () => handleResourceSelect(resource)
+        })),
+        symbol: QuickPanelReservedSymbol.McpResource,
+        multiple: true
+      })
+    } catch (error: any) {
+      window.modal.error({
+        title: t('common.error'),
+        content: error?.message || t('settings.mcp.resources.genericError')
+      })
+    }
+  }, [handleResourceSelect, listResourcesForActiveServers, quickPanelHook, t])
 
   const handleOpenQuickPanel = useCallback(() => {
     if (quickPanelHook.isVisible && quickPanelHook.symbol === QuickPanelReservedSymbol.Mcp) {

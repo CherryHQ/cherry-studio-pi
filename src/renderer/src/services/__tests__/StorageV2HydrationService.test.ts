@@ -206,6 +206,27 @@ describe('StorageV2HydrationService', () => {
     expect(target.dispatch).not.toHaveBeenCalled()
   })
 
+  it('skips auto hydrate when the Storage v2 snapshot API is unavailable', async () => {
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          getSetting: vi.fn().mockResolvedValue({ enabled: false })
+        }
+      }
+    })
+    const target = { dispatch: vi.fn(), flush: vi.fn(), shouldHydrateWhenDisabled: vi.fn(() => true) }
+
+    await expect(maybeHydrateRuntimeCacheFromStorageV2(target)).resolves.toEqual({
+      hydrated: false,
+      reason: 'unavailable'
+    })
+
+    expect(target.shouldHydrateWhenDisabled).not.toHaveBeenCalled()
+    expect(mocks.getStorageV2CoreSnapshot).not.toHaveBeenCalled()
+    expect(target.dispatch).not.toHaveBeenCalled()
+  })
+
   it('bootstraps from Storage v2 when auto hydrate is disabled but the Redux persist cache is missing', async () => {
     ;(window.api.storageV2.getSetting as ReturnType<typeof vi.fn>).mockResolvedValue({ enabled: false })
     mocks.getStorageV2CoreSnapshot.mockResolvedValue({
