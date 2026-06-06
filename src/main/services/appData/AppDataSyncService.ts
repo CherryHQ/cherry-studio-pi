@@ -361,6 +361,8 @@ const REMOTE_SYNC_LOCK_RENEW_INTERVAL_MS = 30 * 1000
 const REMOTE_SYNC_LOCK_STALE_HEARTBEAT_MS = 3 * 60 * 1000
 const DEFAULT_DATA_SYNC_MAX_RUNTIME_MS = 10 * 60 * 1000
 const DATA_SYNC_MAX_RUNTIME_ENV = 'CHERRY_STUDIO_DATA_SYNC_MAX_RUNTIME_MS'
+const DATA_SYNC_CLEANUP_MAX_FILES_ENV = 'CHERRY_STUDIO_DATA_SYNC_CLEANUP_MAX_FILES'
+const DEFAULT_REMOTE_ARTIFACT_CLEANUP_MAX_FILES = 20_000
 const SNAPSHOT_RETENTION_PER_DEVICE = 3
 const SNAPSHOT_RETENTION_TOTAL = 20
 const NATIVE_WEB_DAV_LOCK_UNSUPPORTED_STATUSES = new Set([403, 405, 409, 501])
@@ -694,6 +696,11 @@ function quoteSqlString(value: string) {
 function configuredDataSyncMaxRuntimeMs() {
   const parsed = Number(process.env[DATA_SYNC_MAX_RUNTIME_ENV])
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DATA_SYNC_MAX_RUNTIME_MS
+}
+
+function configuredRemoteArtifactCleanupMaxFiles() {
+  const parsed = Number(process.env[DATA_SYNC_CLEANUP_MAX_FILES_ENV])
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_REMOTE_ARTIFACT_CLEANUP_MAX_FILES
 }
 
 function formatDurationZh(ms: number) {
@@ -1172,7 +1179,21 @@ export class AppDataSyncService {
     }
   }
 
-  private async listRemoteFilesRecursive(client: WebDAVClient, dirPath: string): Promise<string[]> {
+  private assertRemoteArtifactCleanupFileBudget(counter: { files: number }, rootPath: string) {
+    const maxFiles = configuredRemoteArtifactCleanupMaxFiles()
+    if (counter.files <= maxFiles) return
+
+    throw new Error(
+      `远端同步目录旧文件数量过多（${rootPath} 已超过 ${maxFiles} 个）。为避免 WebDAV 清理阶段长时间卡住，本次同步已停止；请清理远端目录中的异常旧文件后重试。`
+    )
+  }
+
+  private async listRemoteFilesRecursive(
+    client: WebDAVClient,
+    dirPath: string,
+    options: { context?: SyncRunContext; counter?: { files: number }; rootPath?: string } = {}
+  ): Promise<string[]> {
+    options.context && this.assertSyncRunActive(options.context, '清理远端旧文件')
     try {
       const exists = await runWebDavOperation(
         `checking remote artifact directory ${dirPath}`,
@@ -1195,16 +1216,27 @@ export class AppDataSyncService {
     const entries = normalizeDirectoryContents(contents)
     const files: string[] = []
     const normalizedDirPath = path.posix.normalize(dirPath).replace(/\/+$/g, '')
+    const counter = options.counter ?? { files: 0 }
+    const rootPath = options.rootPath ?? normalizedDirPath
 
     for (const entry of entries) {
+      options.context && this.assertSyncRunActive(options.context, '清理远端旧文件')
       const filename = entry.filename || path.posix.join(dirPath, entry.basename || '')
       if (!filename || filename === dirPath) continue
       const normalizedFilename = path.posix.normalize(filename)
       if (normalizedFilename !== normalizedDirPath && !normalizedFilename.startsWith(`${normalizedDirPath}/`)) continue
 
       if (entry.type === 'directory') {
-        files.push(...(await this.listRemoteFilesRecursive(client, normalizedFilename)))
+        files.push(
+          ...(await this.listRemoteFilesRecursive(client, normalizedFilename, {
+            context: options.context,
+            counter,
+            rootPath
+          }))
+        )
       } else {
+        counter.files += 1
+        this.assertRemoteArtifactCleanupFileBudget(counter, rootPath)
         files.push(normalizedFilename)
       }
     }
@@ -1212,7 +1244,12 @@ export class AppDataSyncService {
     return files
   }
 
-  private async pruneRemoteAppDataArtifacts(client: WebDAVClient, basePath: string, manifest: RemoteManifest) {
+  private async pruneRemoteAppDataArtifacts(
+    client: WebDAVClient,
+    basePath: string,
+    manifest: RemoteManifest,
+    context?: SyncRunContext
+  ) {
     const referenced = new Set<string>()
     const addReferencedPath = (relativePath: string | null | undefined) => {
       if (!relativePath) return
@@ -1238,28 +1275,37 @@ export class AppDataSyncService {
     }
 
     for (const root of ['records', 'backups', NOTES_REMOTE_ARTIFACT_ROOT, RUNTIME_DIRECTORIES_REMOTE_ROOT]) {
+      context && this.assertSyncRunActive(context, '清理远端应用数据旧文件')
       const rootPath = path.posix.join(basePath, root)
       if (await this.pruneRemoteArtifactRootIfUnreferenced(client, rootPath, referenced)) {
         continue
       }
 
-      const files = await this.listRemoteFilesRecursive(client, rootPath)
+      const files = await this.listRemoteFilesRecursive(client, rootPath, { context })
       for (const filePath of files) {
+        context && this.assertSyncRunActive(context, '清理远端应用数据旧文件')
         if (referenced.has(filePath)) continue
         await this.removeRemoteFile(client, filePath)
       }
     }
   }
 
-  private async pruneRemoteRootTempArtifacts(client: WebDAVClient, basePath: string) {
+  private async pruneRemoteRootTempArtifacts(client: WebDAVClient, basePath: string, context?: SyncRunContext) {
+    context && this.assertSyncRunActive(context, '清理远端临时文件')
     const contents = await runWebDavOperation(
       `listing remote sync root temporary artifacts ${basePath}`,
       () => client.getDirectoryContents(basePath),
       { logger }
     )
     const entries = normalizeDirectoryContents(contents)
+    if (entries.length > configuredRemoteArtifactCleanupMaxFiles()) {
+      throw new Error(
+        `远端同步根目录文件数量过多（${entries.length} 个，限制 ${configuredRemoteArtifactCleanupMaxFiles()} 个）。为避免 WebDAV 清理阶段长时间卡住，本次同步已停止；请清理远端目录中的异常临时文件后重试。`
+      )
+    }
 
     for (const entry of entries) {
+      context && this.assertSyncRunActive(context, '清理远端临时文件')
       if (entry.type === 'directory') continue
 
       const filename = entry.filename || path.posix.join(basePath, entry.basename || '')
@@ -3698,18 +3744,20 @@ export class AppDataSyncService {
 
       const cleanupErrors: string[] = []
       this.assertSyncRunActive(context, '清理远端临时文件')
-      await this.pruneRemoteRootTempArtifacts(client, basePath).catch((error) => {
+      await this.pruneRemoteRootTempArtifacts(client, basePath, context).catch((error) => {
         logger.warn('Failed to prune stale WebDAV sync root temporary artifacts after sync', error as Error)
         cleanupErrors.push(errorMessage(error))
       })
       this.assertSyncRunActive(context, '清理远端应用数据旧文件')
-      await this.pruneRemoteAppDataArtifacts(client, basePath, manifest).catch((error) => {
+      await this.pruneRemoteAppDataArtifacts(client, basePath, manifest, context).catch((error) => {
         logger.warn('Failed to prune stale app data WebDAV artifacts after sync', error as Error)
         cleanupErrors.push(errorMessage(error))
       })
       this.assertSyncRunActive(context, '清理远端 Storage v2 旧文件')
       await storageV2WebDavRecordSyncService
-        .pruneRemoteArtifacts(client, basePath, manifest.storageV2)
+        .pruneRemoteArtifacts(client, basePath, manifest.storageV2, {
+          assertActive: () => this.assertSyncRunActive(context, '清理远端 Storage v2 旧文件')
+        })
         .catch((error) => {
           logger.warn('Failed to prune stale Storage v2 WebDAV artifacts after sync', error as Error)
           cleanupErrors.push(errorMessage(error))

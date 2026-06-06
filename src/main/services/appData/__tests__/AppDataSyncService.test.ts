@@ -291,6 +291,7 @@ describe('AppDataSyncService', () => {
     delete process.env.CHERRY_STUDIO_DATA_SYNC_REMOTE_SNAPSHOT
     delete process.env.CHERRY_STUDIO_DATA_SYNC_LOCAL_SAFETY_SNAPSHOT
     delete process.env.CHERRY_STUDIO_DATA_SYNC_MAX_RUNTIME_MS
+    delete process.env.CHERRY_STUDIO_DATA_SYNC_CLEANUP_MAX_FILES
     await fsp.rm(mocks.notesDir, { recursive: true, force: true })
     await fsp.rm(mocks.runtimeDataRoot, { recursive: true, force: true })
     mocks.remoteFiles.clear()
@@ -1875,6 +1876,18 @@ describe('AppDataSyncService', () => {
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/.cherry-studio-pi-storage-write-test-stale.tmp')).toBe(false)
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/records/settings/stale-hash.json')).toBe(false)
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/backups/old-device-snapshot.zip')).toBe(false)
+  })
+
+  it('fails visibly when stale app-data cleanup exceeds the remote file budget after publishing', async () => {
+    process.env.CHERRY_STUDIO_DATA_SYNC_CLEANUP_MAX_FILES = '1'
+    mockDirectoryContentsFromRemoteFiles()
+    mocks.remoteFiles.set('/remote-root/sync/v1/records/settings/theme.json', JSON.stringify(remoteRecord))
+    mocks.remoteFiles.set('/remote-root/sync/v1/records/settings/stale-hash.json', JSON.stringify({ stale: true }))
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端同步目录旧文件数量过多')
+
+    expect(mocks.remoteFiles.has('/remote-root/sync/v1/manifest.json')).toBe(true)
+    expect(mocks.remoteFiles.has('/remote-root/sync/v1/records/settings/stale-hash.json')).toBe(true)
   })
 
   it('prunes the stale app-data records directory in one request when Storage v2 owns app records', async () => {

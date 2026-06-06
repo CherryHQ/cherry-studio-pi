@@ -831,6 +831,7 @@ function hasRemoteFile(remote: ReturnType<typeof makeSharedWebDavStore>, pattern
 
 describe('StorageV2WebDavRecordSyncService', () => {
   beforeEach(() => {
+    delete process.env.CHERRY_STUDIO_DATA_SYNC_CLEANUP_MAX_FILES
     mocks.dbClient.execute.mockReset()
     mocks.webdav.exists.mockReset()
     mocks.webdav.stat.mockReset()
@@ -1865,6 +1866,36 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(remote.files.has('/remote-root/sync/v1/storage-v2/blobs/orphaned.bin')).toBe(false)
     expect(remote.files.has('/remote-root/sync/v1/storage-v2/bundle/old.json')).toBe(false)
     expect(remote.files.has('/remote-root/sync/v1/storage-v2/secrets/old.json')).toBe(false)
+  })
+
+  it('fails visibly when stale Storage v2 cleanup exceeds the remote file budget', async () => {
+    process.env.CHERRY_STUDIO_DATA_SYNC_CLEANUP_MAX_FILES = '1'
+    const remote = makeSharedWebDavStore()
+    remote.files.set('/remote-root/sync/v1/storage-v2/bundle/current.json', JSON.stringify({ current: true }))
+    remote.files.set('/remote-root/sync/v1/storage-v2/bundle/stale.json', JSON.stringify({ stale: true }))
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([settingsTable]).pruneRemoteArtifacts(
+        remote.client as any,
+        '/remote-root/sync/v1',
+        {
+          version: 1,
+          records: {},
+          blobs: {},
+          bundle: {
+            version: 1,
+            path: 'storage-v2/bundle/current.json',
+            valueHash: 'current-hash',
+            recordCount: 0,
+            blobCount: 0,
+            updatedAt: Date.parse('2026-05-29T12:00:00.000Z')
+          },
+          secrets: null
+        }
+      )
+    ).rejects.toThrow('远端 Storage v2 同步旧文件数量过多')
+
+    expect(remote.files.has('/remote-root/sync/v1/storage-v2/bundle/stale.json')).toBe(true)
   })
 
   it('prefers remote Storage v2 rows and keeps a recovery audit when a device has no prior sync baseline', async () => {

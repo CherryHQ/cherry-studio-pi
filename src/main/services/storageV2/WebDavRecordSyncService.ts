@@ -29,6 +29,8 @@ const MAX_SYNC_RECORD_BUNDLE_REMOTE_JSON_BYTES = MAX_SYNC_RECORD_BUNDLE_JSON_BYT
 const MAX_SYNC_BLOB_BYTES = 64 * 1024 * 1024
 const MAX_SYNC_SECRET_BUNDLE_JSON_BYTES = 8 * 1024 * 1024
 const MAX_SYNC_SECRET_COUNT = 10_000
+const DATA_SYNC_CLEANUP_MAX_FILES_ENV = 'CHERRY_STUDIO_DATA_SYNC_CLEANUP_MAX_FILES'
+const DEFAULT_REMOTE_ARTIFACT_CLEANUP_MAX_FILES = 20_000
 
 type StorageV2SyncTable = {
   entityType: StorageV2SyncEntityType
@@ -502,6 +504,11 @@ function formatLimitedList(values: Iterable<string>, limit = 8) {
   return `${visible.join('、')}${suffix}`
 }
 
+function configuredRemoteArtifactCleanupMaxFiles() {
+  const parsed = Number(process.env[DATA_SYNC_CLEANUP_MAX_FILES_ENV])
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_REMOTE_ARTIFACT_CLEANUP_MAX_FILES
+}
+
 function encryptRemoteSecret(secretId: string, entry: StorageV2PlaintextSecretVaultEntry, key: Buffer) {
   const iv = randomBytes(GCM_IV_BYTE_LENGTH)
   const cipher = createCipheriv('aes-256-gcm', key, iv)
@@ -746,7 +753,21 @@ export class StorageV2WebDavRecordSyncService {
     })
   }
 
-  private async listRemoteFilesRecursive(client: WebDAVClient, dirPath: string): Promise<string[]> {
+  private assertRemoteArtifactCleanupFileBudget(counter: { files: number }, rootPath: string) {
+    const maxFiles = configuredRemoteArtifactCleanupMaxFiles()
+    if (counter.files <= maxFiles) return
+
+    throw new Error(
+      `远端 Storage v2 同步旧文件数量过多（${rootPath} 已超过 ${maxFiles} 个）。为避免 WebDAV 清理阶段长时间卡住，本次同步已停止；请清理远端目录中的异常旧文件后重试。`
+    )
+  }
+
+  private async listRemoteFilesRecursive(
+    client: WebDAVClient,
+    dirPath: string,
+    options: { assertActive?: () => void; counter?: { files: number }; rootPath?: string } = {}
+  ): Promise<string[]> {
+    options.assertActive?.()
     try {
       const exists = await runWebDavOperation(
         `checking Storage v2 artifact directory ${dirPath}`,
@@ -771,15 +792,26 @@ export class StorageV2WebDavRecordSyncService {
         : []
     const files: string[] = []
     const normalizedDirPath = path.posix.normalize(dirPath).replace(/\/+$/g, '')
+    const counter = options.counter ?? { files: 0 }
+    const rootPath = options.rootPath ?? normalizedDirPath
 
     for (const entry of entries as Array<{ filename?: string; basename?: string; type?: string }>) {
+      options.assertActive?.()
       const filename = entry.filename || path.posix.join(dirPath, entry.basename || '')
       if (!filename || filename === dirPath) continue
       const normalizedFilename = path.posix.normalize(filename)
       if (normalizedFilename !== normalizedDirPath && !normalizedFilename.startsWith(`${normalizedDirPath}/`)) continue
       if (entry.type === 'directory') {
-        files.push(...(await this.listRemoteFilesRecursive(client, normalizedFilename)))
+        files.push(
+          ...(await this.listRemoteFilesRecursive(client, normalizedFilename, {
+            assertActive: options.assertActive,
+            counter,
+            rootPath
+          }))
+        )
       } else {
+        counter.files += 1
+        this.assertRemoteArtifactCleanupFileBudget(counter, rootPath)
         files.push(normalizedFilename)
       }
     }
@@ -847,7 +879,8 @@ export class StorageV2WebDavRecordSyncService {
   async pruneRemoteArtifacts(
     client: WebDAVClient,
     basePath: string,
-    manifest: StorageV2WebDavRecordSyncManifest | null | undefined
+    manifest: StorageV2WebDavRecordSyncManifest | null | undefined,
+    options: { assertActive?: () => void } = {}
   ) {
     if (!manifest) return
 
@@ -868,13 +901,15 @@ export class StorageV2WebDavRecordSyncService {
 
     const roots = ['storage-v2/records', STORAGE_V2_BUNDLE_DIR, 'storage-v2/blobs', STORAGE_V2_SECRET_VAULT_DIR]
     for (const root of roots) {
+      options.assertActive?.()
       const rootPath = path.posix.join(basePath, root)
       if (await this.pruneRemoteArtifactRootIfUnreferenced(client, rootPath, referenced)) {
         continue
       }
 
-      const files = await this.listRemoteFilesRecursive(client, rootPath)
+      const files = await this.listRemoteFilesRecursive(client, rootPath, { assertActive: options.assertActive })
       for (const filePath of files) {
+        options.assertActive?.()
         if (referenced.has(filePath)) continue
         await this.deleteRemoteFileIfPossible(client, filePath)
       }
