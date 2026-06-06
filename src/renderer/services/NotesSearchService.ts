@@ -91,6 +91,11 @@ export async function searchFileContent(
       return null
     }
 
+    const normalizedKeyword = keyword.trim()
+    if (!normalizedKeyword) {
+      return null
+    }
+
     const content = await window.api.file.readExternal(node.externalPath)
 
     if (!content) {
@@ -107,7 +112,7 @@ export async function searchFileContent(
     }
 
     const flags = caseSensitive ? 'g' : 'gi'
-    const pattern = useRegex ? new RegExp(keyword, flags) : new RegExp(escapeRegex(keyword), flags)
+    const pattern = useRegex ? new RegExp(normalizedKeyword, flags) : new RegExp(escapeRegex(normalizedKeyword), flags)
 
     const lines = content.split('\n')
     const matches: SearchMatch[] = []
@@ -118,6 +123,11 @@ export async function searchFileContent(
 
       let match: RegExpExecArray | null
       while ((match = pattern.exec(line)) !== null) {
+        if (match[0].length === 0) {
+          pattern.lastIndex += 1
+          continue
+        }
+
         const matchStart = match.index
         const matchEnd = matchStart + match[0].length
 
@@ -152,7 +162,7 @@ export async function searchFileContent(
       return null
     }
 
-    const score = calculateRelevanceScore(node, keyword, matches)
+    const score = calculateRelevanceScore(node, normalizedKeyword, matches)
 
     return {
       ...node,
@@ -170,8 +180,11 @@ export async function searchFileContent(
  * Check if filename matches keyword
  */
 export function matchFileName(node: NotesTreeNode, keyword: string, caseSensitive = false): boolean {
+  const normalizedKeyword = keyword.trim()
+  if (!normalizedKeyword) return false
+
   const name = caseSensitive ? node.name : node.name.toLowerCase()
-  const key = caseSensitive ? keyword : keyword.toLowerCase()
+  const key = caseSensitive ? normalizedKeyword : normalizedKeyword.toLowerCase()
   return name.includes(key)
 }
 
@@ -212,11 +225,16 @@ export async function searchAllFiles(
   const startTime = performance.now()
   const CONCURRENCY = 5
   const results: SearchResult[] = []
+  const normalizedKeyword = keyword.trim()
+
+  if (!normalizedKeyword) {
+    return []
+  }
 
   const fileNodes = flattenTreeToFiles(nodes)
 
   logger.debug('Starting full-text search', {
-    keyword: summarizeTextForLog(keyword),
+    keyword: summarizeTextForLog(normalizedKeyword),
     totalFiles: fileNodes.length,
     options
   })
@@ -232,8 +250,8 @@ export async function searchAllFiles(
       const node = fileNodes[nextFileIndex++]
       if (!node) break
 
-      const nameMatch = matchFileName(node, keyword, options.caseSensitive)
-      const contentResult = await searchFileContent(node, keyword, options)
+      const nameMatch = matchFileName(node, normalizedKeyword, options.caseSensitive)
+      const contentResult = await searchFileContent(node, normalizedKeyword, options)
 
       if (nameMatch && contentResult) {
         results.push({
@@ -269,7 +287,7 @@ export async function searchAllFiles(
   )
 
   logger.debug('Full-text search completed', {
-    keyword: summarizeTextForLog(keyword),
+    keyword: summarizeTextForLog(normalizedKeyword),
     durationMs: Number(duration),
     totalFiles: fileNodes.length,
     resultsFound: sortedResults.length,

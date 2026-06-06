@@ -1,7 +1,7 @@
 import type { NotesTreeNode } from '@renderer/types/note'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { flattenTreeToFiles } from '../NotesSearchService'
+import { flattenTreeToFiles, matchFileName, searchAllFiles, searchFileContent } from '../NotesSearchService'
 
 const makeNode = (id: string, type: NotesTreeNode['type'], children?: NotesTreeNode[]): NotesTreeNode => ({
   id,
@@ -15,6 +15,20 @@ const makeNode = (id: string, type: NotesTreeNode['type'], children?: NotesTreeN
 })
 
 describe('NotesSearchService', () => {
+  const readExternalMock = vi.fn()
+
+  beforeEach(() => {
+    readExternalMock.mockReset()
+    Object.defineProperty(window, 'api', {
+      value: {
+        file: {
+          readExternal: readExternalMock
+        }
+      },
+      configurable: true
+    })
+  })
+
   it('flattens file nodes in the same pre-order as the note tree', () => {
     const tree = [
       makeNode('root-file', 'file'),
@@ -44,5 +58,24 @@ describe('NotesSearchService', () => {
     }
 
     expect(flattenTreeToFiles([current]).map((node) => node.id)).toEqual(['leaf-file'])
+  })
+
+  it('does not treat blank keywords as filename matches', () => {
+    expect(matchFileName(makeNode('note.md', 'file'), '   ')).toBe(false)
+  })
+
+  it('does not scan files for blank full-text searches', async () => {
+    const result = await searchAllFiles([makeNode('note.md', 'file')], '   ')
+
+    expect(result).toEqual([])
+    expect(readExternalMock).not.toHaveBeenCalled()
+  })
+
+  it('skips zero-length regex matches instead of looping forever', async () => {
+    readExternalMock.mockResolvedValue('alpha\nbeta')
+
+    const result = await searchFileContent(makeNode('note.md', 'file'), '^', { useRegex: true })
+
+    expect(result).toBeNull()
   })
 })

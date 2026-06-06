@@ -54,7 +54,7 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
     enabledRef.current = enabled
   }, [searchOptions, maxResults, enabled])
 
-  const cancel = useCallback(() => {
+  const cancelSearch = useCallback((updateSearching = true) => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
       abortControllerRef.current = null
@@ -63,8 +63,14 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
       clearTimeout(debounceTimerRef.current)
       debounceTimerRef.current = null
     }
-    setIsSearching(false)
+    if (updateSearching) {
+      setIsSearching(false)
+    }
   }, [])
+
+  const cancel = useCallback(() => {
+    cancelSearch()
+  }, [cancelSearch])
 
   const reset = useCallback(() => {
     cancel()
@@ -79,11 +85,14 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
         return
       }
 
-      cancel()
+      cancelSearch(false)
+      const normalizedKeyword = keyword.trim()
 
-      if (!keyword) {
+      if (!normalizedKeyword) {
         setResults([])
         setStats({ total: 0, fileNameMatches: 0, contentMatches: 0, bothMatches: 0 })
+        setError(null)
+        setIsSearching(false)
         return
       }
 
@@ -96,7 +105,7 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
       try {
         const searchResults = await searchAllFiles(
           nodes,
-          keyword.trim(),
+          normalizedKeyword,
           searchOptionsRef.current,
           abortController.signal
         )
@@ -126,7 +135,7 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
         }
       }
     },
-    [cancel]
+    [cancelSearch]
   )
 
   const search = useCallback(
