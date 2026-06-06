@@ -43,19 +43,21 @@ export class AppCapabilityService {
     context: Partial<AppCapabilityContext> = {}
   ): Promise<AppCapabilityResult<T>> {
     this.ensureInitialized()
-    const capability = this.registry.get(id)
+    const capabilityId = String(id ?? '').trim()
+    const displayCapabilityId = capabilityId || '(empty)'
+    const capability = this.registry.get(capabilityId)
     if (!capability) {
       return {
         ok: false,
         isError: true,
-        summary: `Capability not found: ${id}`,
-        error: `Capability not found: ${id}`
+        summary: `Capability not found: ${displayCapabilityId}`,
+        error: `Capability not found: ${displayCapabilityId}`
       }
     }
 
     try {
       logger.info('Calling app capability', {
-        id,
+        id: capabilityId,
         source: context.source ?? 'system',
         risk: capability.risk,
         dryRun: context.dryRun === true
@@ -69,11 +71,11 @@ export class AppCapabilityService {
       })) as AppCapabilityResult<T>
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      logger.warn('App capability failed', { id, error: message })
+      logger.warn('App capability failed', { id: capabilityId, error: message })
       return {
         ok: false,
         isError: true,
-        summary: `${id} failed: ${message}`,
+        summary: `${capabilityId} failed: ${message}`,
         error: message
       }
     }
