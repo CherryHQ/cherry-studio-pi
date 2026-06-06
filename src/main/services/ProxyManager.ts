@@ -4,7 +4,7 @@ import type { ProxyConfig } from 'electron'
 import { app, session } from 'electron'
 import { getSystemProxy } from 'os-proxy-config'
 
-import { NodeProxyController } from './proxy/nodeProxy'
+import { getEffectiveProxyBypassRules, NodeProxyController } from './proxy/nodeProxy'
 
 const logger = loggerService.withContext('ProxyManager')
 
@@ -78,11 +78,24 @@ export class ProxyManager extends BaseService {
   }
 
   private setGlobalProxy(config: ProxyConfig) {
+    const effectiveConfig = this.getEffectiveProxyConfig(config)
+
     this.nodeProxyController.configure({
-      proxyRules: config.mode === 'direct' ? undefined : config.proxyRules,
-      proxyBypassRules: config.proxyBypassRules
+      proxyRules: effectiveConfig.mode === 'direct' ? undefined : effectiveConfig.proxyRules,
+      proxyBypassRules: effectiveConfig.proxyBypassRules
     })
-    void this.setSessionsProxy(config)
+    void this.setSessionsProxy(effectiveConfig)
+  }
+
+  private getEffectiveProxyConfig(config: ProxyConfig): ProxyConfig {
+    if (config.mode === 'direct' || !config.proxyRules?.trim()) {
+      return config
+    }
+
+    return {
+      ...config,
+      proxyBypassRules: getEffectiveProxyBypassRules(config.proxyBypassRules).join(',')
+    }
   }
 
   private async setSessionsProxy(config: ProxyConfig): Promise<void> {

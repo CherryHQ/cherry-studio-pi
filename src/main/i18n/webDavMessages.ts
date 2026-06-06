@@ -3,7 +3,21 @@ export const WEB_DAV_DEFAULT_ACTION = '访问 WebDAV'
 export const WEB_DAV_NETWORK_ERROR_PATTERNS = [
   { pattern: /\bENOTFOUND\b|\bEAI_AGAIN\b/i, message: '无法解析 WebDAV 地址，请检查域名或当前网络 DNS。' },
   { pattern: /\bECONNREFUSED\b/i, message: 'WebDAV 服务拒绝连接，请确认地址和端口正确，服务正在运行。' },
-  { pattern: /\bETIMEDOUT\b|\bESOCKETTIMEDOUT\b|timeout/i, message: '连接 WebDAV 超时，请稍后重试或检查网络。' },
+  {
+    pattern: /\bENETUNREACH\b|\bEHOSTUNREACH\b|no route to host|network is unreachable|host is unreachable/i,
+    message:
+      '当前网络无法到达 WebDAV 地址。如果这是局域网地址，请检查 Windows 防火墙是否允许 Cherry Studio Pi 访问专用网络，并确认 VPN/TUN 没有关闭局域网访问。'
+  },
+  {
+    pattern: /\bEACCES\b|\bEPERM\b|permission denied|access denied/i,
+    message:
+      '系统或安全软件阻止了 WebDAV 连接。请在 Windows 防火墙里允许 Cherry Studio Pi 访问专用网络，或检查杀毒/网络管控软件的拦截规则。'
+  },
+  {
+    pattern: /\bETIMEDOUT\b|\bESOCKETTIMEDOUT\b|timeout/i,
+    message:
+      '连接 WebDAV 超时。如果这是局域网 WebDAV，请检查 Windows 防火墙的专用网络权限，以及 VPN/TUN 是否开启了“允许局域网连接”或类似选项。'
+  },
   { pattern: /\bECONNRESET\b|\bsocket hang up\b/i, message: '连接被 WebDAV 服务中断，请稍后重试。' },
   { pattern: /\bCERT_|certificate|self[- ]signed/i, message: 'WebDAV HTTPS 证书异常，请检查服务端证书配置。' }
 ]

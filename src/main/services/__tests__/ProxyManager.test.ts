@@ -3,10 +3,13 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   applyNodeProxyFromEnvironment,
   buildNodeProxyEnvironment,
+  DEFAULT_NODE_PROXY_BYPASS_RULES,
+  getEffectiveProxyBypassRules,
   getNodeProxyConfigFromEnvironment,
   getProxyEnvironment,
   getProxyProtocol,
-  ProxyBypassRuleMatcher
+  ProxyBypassRuleMatcher,
+  resolveHttpRequestUrlForProxyBypass
 } from '../proxy/nodeProxy'
 
 // Mock lifecycle to allow direct instantiation
@@ -36,6 +39,11 @@ describe('ProxyManager - bypass evaluation', () => {
 
   const updateByPassRules = (rules: string[]) => matcher.updateByPassRules(rules)
   const isByPass = (url: string) => matcher.isByPass(url)
+  const expectDefaultBypassRules = (value?: string) => {
+    const rules = value?.split(',') ?? []
+
+    expect(rules).toEqual(expect.arrayContaining([...DEFAULT_NODE_PROXY_BYPASS_RULES]))
+  }
 
   beforeEach(() => {
     matcher = new ProxyBypassRuleMatcher()
@@ -115,13 +123,55 @@ describe('ProxyManager - bypass evaluation', () => {
     expect(isByPass('http://localhost')).toBe(true)
     expect(isByPass('http://127.0.0.1')).toBe(true)
     expect(isByPass('http://[::1]')).toBe(true)
+    expect(isByPass('http://nas')).toBe(true)
     expect(isByPass('http://dev.localdomain')).toBe(false)
   })
 
+  it('adds local and private network ranges to effective bypass rules by default', () => {
+    updateByPassRules(getEffectiveProxyBypassRules('api.example.com'))
+
+    expect(isByPass('http://localhost')).toBe(true)
+    expect(isByPass('http://127.0.0.1')).toBe(true)
+    expect(isByPass('http://192.168.1.100:8080/dav')).toBe(true)
+    expect(isByPass('http://10.23.45.67')).toBe(true)
+    expect(isByPass('http://172.16.10.20')).toBe(true)
+    expect(isByPass('http://172.31.255.255')).toBe(true)
+    expect(isByPass('http://172.32.0.1')).toBe(false)
+    expect(isByPass('http://nas')).toBe(true)
+    expect(isByPass('http://printer.local')).toBe(true)
+    expect(isByPass('https://api.example.com')).toBe(true)
+  })
+
+  it('resolves request-option URLs before checking proxy bypass rules', () => {
+    expect(
+      resolveHttpRequestUrlForProxyBypass(
+        undefined,
+        {
+          protocol: 'http:',
+          host: '192.168.1.100:8080',
+          path: '/dav'
+        },
+        'https:'
+      )
+    ).toBe('http://192.168.1.100:8080/dav')
+
+    expect(
+      resolveHttpRequestUrlForProxyBypass(
+        undefined,
+        {
+          hostname: 'fe80::1',
+          port: 8080,
+          path: 'dav'
+        },
+        'https:'
+      )
+    ).toBe('https://[fe80::1]:8080/dav')
+  })
+
   it('exports standard HTTP proxy env vars for http proxies', () => {
     const env = buildNodeProxyEnvironment({
       proxyRules: 'http://127.0.0.1:7890',
-      proxyBypassRules: 'localhost,*.local'
+      proxyBypassRules: 'api.example.com'
     })
 
     expect(env.HTTP_PROXY).toBe('http://127.0.0.1:7890')
@@ -129,14 +179,15 @@ describe('ProxyManager - bypass evaluation', () => {
     expect(env.http_proxy).toBe('http://127.0.0.1:7890')
     expect(env.https_proxy).toBe('http://127.0.0.1:7890')
     expect(env.ALL_PROXY).toBe('http://127.0.0.1:7890')
-    expect(env.NO_PROXY).toBe('localhost,*.local')
-    expect(env.no_proxy).toBe('localhost,*.local')
+    expectDefaultBypassRules(env.NO_PROXY)
+    expect(env.NO_PROXY?.split(',')).toContain('api.example.com')
+    expect(env.no_proxy).toBe(env.NO_PROXY)
   })
 
   it('exports only socks-compatible env vars for socks proxies', () => {
     const env = buildNodeProxyEnvironment({
       proxyRules: 'socks5://127.0.0.1:6153',
-      proxyBypassRules: 'localhost,*.local'
+      proxyBypassRules: 'api.example.com'
     })
 
     expect(env.SOCKS_PROXY).toBe('socks5://127.0.0.1:6153')
@@ -147,100 +198,22 @@ describe('ProxyManager - bypass evaluation', () => {
     expect(env.HTTPS_PROXY).toBeUndefined()
     expect(env.http_proxy).toBeUndefined()
     expect(env.https_proxy).toBeUndefined()
-    expect(env.NO_PROXY).toBe('localhost,*.local')
-    expect(env.no_proxy).toBe('localhost,*.local')
+    expectDefaultBypassRules(env.NO_PROXY)
+    expect(env.NO_PROXY?.split(',')).toContain('api.example.com')
+    expect(env.no_proxy).toBe(env.NO_PROXY)
   })
 
   it('returns empty env when proxy rules are missing', () => {
     expect(buildNodeProxyEnvironment({})).toEqual({})
   })
 
-  it('omits no_proxy env vars when bypass rules are missing', () => {
+  it('exports default no_proxy env vars when user bypass rules are missing', () => {
     const env = buildNodeProxyEnvironment({
       proxyRules: 'http://127.0.0.1:7890'
     })
 
-    expect(env.NO_PROXY).toBeUndefined()
-    expect(env.no_proxy).toBeUndefined()
-  })
-
-  it('returns false when bootstrap env has no proxy rules', () => {
-    expect(applyNodeProxyFromEnvironment({})).toBe(false)
-  })
-
-  it('returns null for invalid proxy urls when detecting protocol', () => {
-    expect(getProxyProtocol('127.0.0.1:7890')).toBe(null)
-  })
-
-  it('extracts only proxy-related env vars', () => {
-    expect(
-      getProxyEnvironment({
-        HTTP_PROXY: 'http://127.0.0.1:7890',
-        NO_PROXY: 'localhost',
-        PATH: '/usr/bin'
-      })
-    ).toEqual({
-      HTTP_PROXY: 'http://127.0.0.1:7890',
-      NO_PROXY: 'localhost'
-    })
-  })
-
-  it('derives proxy config from standard proxy env vars', () => {
-    expect(
-      getNodeProxyConfigFromEnvironment({
-        ALL_PROXY: 'socks5://127.0.0.1:6153',
-        NO_PROXY: 'localhost'
-      })
-    ).toEqual({
-      proxyRules: 'socks5://127.0.0.1:6153',
-      proxyBypassRules: 'localhost'
-    })
-  })
-
-  it('exports standard HTTP proxy env vars for http proxies', () => {
-    const env = buildNodeProxyEnvironment({
-      proxyRules: 'http://127.0.0.1:7890',
-      proxyBypassRules: 'localhost,*.local'
-    })
-
-    expect(env.HTTP_PROXY).toBe('http://127.0.0.1:7890')
-    expect(env.HTTPS_PROXY).toBe('http://127.0.0.1:7890')
-    expect(env.http_proxy).toBe('http://127.0.0.1:7890')
-    expect(env.https_proxy).toBe('http://127.0.0.1:7890')
-    expect(env.ALL_PROXY).toBe('http://127.0.0.1:7890')
-    expect(env.NO_PROXY).toBe('localhost,*.local')
-    expect(env.no_proxy).toBe('localhost,*.local')
-  })
-
-  it('exports only socks-compatible env vars for socks proxies', () => {
-    const env = buildNodeProxyEnvironment({
-      proxyRules: 'socks5://127.0.0.1:6153',
-      proxyBypassRules: 'localhost,*.local'
-    })
-
-    expect(env.SOCKS_PROXY).toBe('socks5://127.0.0.1:6153')
-    expect(env.socks_proxy).toBe('socks5://127.0.0.1:6153')
-    expect(env.ALL_PROXY).toBe('socks5://127.0.0.1:6153')
-    expect(env.all_proxy).toBe('socks5://127.0.0.1:6153')
-    expect(env.HTTP_PROXY).toBeUndefined()
-    expect(env.HTTPS_PROXY).toBeUndefined()
-    expect(env.http_proxy).toBeUndefined()
-    expect(env.https_proxy).toBeUndefined()
-    expect(env.NO_PROXY).toBe('localhost,*.local')
-    expect(env.no_proxy).toBe('localhost,*.local')
-  })
-
-  it('returns empty env when proxy rules are missing', () => {
-    expect(buildNodeProxyEnvironment({})).toEqual({})
-  })
-
-  it('omits no_proxy env vars when bypass rules are missing', () => {
-    const env = buildNodeProxyEnvironment({
-      proxyRules: 'http://127.0.0.1:7890'
-    })
-
-    expect(env.NO_PROXY).toBeUndefined()
-    expect(env.no_proxy).toBeUndefined()
+    expectDefaultBypassRules(env.NO_PROXY)
+    expect(env.no_proxy).toBe(env.NO_PROXY)
   })
 
   it('returns false when bootstrap env has no proxy rules', () => {

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   translateHistoryPut: vi.fn(),
   translateLanguagesDelete: vi.fn(),
   translateLanguagesPut: vi.fn(),
+  reloadPersistCacheFromStorage: vi.fn(),
   transaction: vi.fn(async (...args: unknown[]) => {
     const callback = args.at(-1)
     if (typeof callback === 'function') {
@@ -46,6 +47,12 @@ vi.mock('@renderer/databases', () => ({
       put: mocks.translateLanguagesPut
     },
     transaction: mocks.transaction
+  }
+}))
+
+vi.mock('@renderer/data/CacheService', () => ({
+  cacheService: {
+    reloadPersistCacheFromStorage: mocks.reloadPersistCacheFromStorage
   }
 }))
 
@@ -144,6 +151,7 @@ describe('StorageV2HydrationService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
     originalApi = window.api
     Object.defineProperty(window, 'api', {
       configurable: true,
@@ -157,6 +165,7 @@ describe('StorageV2HydrationService', () => {
   })
 
   afterEach(() => {
+    localStorage.clear()
     vi.restoreAllMocks()
     Object.defineProperty(window, 'api', {
       configurable: true,
@@ -314,6 +323,47 @@ describe('StorageV2HydrationService', () => {
     })
     expect(target.dispatch).not.toHaveBeenCalled()
     expect(target.flush).not.toHaveBeenCalled()
+  })
+
+  it('hydrates durable localStorage values and reloads renderer persist cache', async () => {
+    mocks.getStorageV2CoreSnapshot.mockResolvedValue({
+      generatedAt: '2026-01-01T00:00:00.000Z',
+      settings: {},
+      llm: { providers: [] },
+      assistants: { assistants: [] },
+      redux: {},
+      localStorage: {
+        durableValues: {
+          'privacy-popup-accepted': 'true'
+        },
+        mcpProviderTokens: {}
+      },
+      metadata: {
+        includeSecrets: true,
+        settingCount: 1,
+        providerCount: 0,
+        assistantCount: 0,
+        topicCount: 0,
+        reduxSliceCount: 0,
+        missingSecretCount: 0
+      }
+    })
+    const target = { dispatch: vi.fn(), flush: vi.fn() }
+
+    await expect(maybeHydrateRuntimeCacheFromStorageV2(target)).resolves.toEqual({
+      hydrated: true,
+      snapshot: expect.objectContaining({
+        localStorage: expect.objectContaining({
+          durableValues: {
+            'privacy-popup-accepted': 'true'
+          }
+        })
+      })
+    })
+
+    expect(localStorage.getItem('privacy-popup-accepted')).toBe('true')
+    expect(mocks.reloadPersistCacheFromStorage).toHaveBeenCalledTimes(1)
+    expect(target.flush).toHaveBeenCalled()
   })
 
   it('hydrates Dexie settings from Storage v2 into the legacy runtime cache', async () => {

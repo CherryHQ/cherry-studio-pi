@@ -8,6 +8,7 @@
  * scenarios the upgrade actually changes: object/array/record values that
  * are reconstructed as new references on every write.
  */
+import { RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY } from '@shared/data/cache/cacheSchemas'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Undo the global mock from renderer.setup.ts — we want the REAL CacheService
@@ -21,6 +22,7 @@ beforeEach(() => {
   broadcastSync.mockClear()
   onSync.mockClear()
   getAllShared.mockClear()
+  localStorage.clear()
 
   Object.defineProperty(window, 'api', {
     configurable: true,
@@ -35,6 +37,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  localStorage.clear()
   vi.restoreAllMocks()
 })
 
@@ -117,6 +120,31 @@ describe('renderer CacheService equality semantics', () => {
 
       service.setPersist(key, [{ id: 't1' }, { id: 't2' }] as any)
       expect(broadcastSync).toHaveBeenCalledTimes(1)
+    })
+
+    it('reloads restored persist cache from localStorage into active windows', async () => {
+      const service = await createService()
+      const key = 'ui.sidebar.width'
+      const sub = vi.fn()
+
+      service.subscribe(key, sub)
+      localStorage.setItem(
+        RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY,
+        JSON.stringify({
+          [key]: 320
+        })
+      )
+      broadcastSync.mockClear()
+
+      service.reloadPersistCacheFromStorage()
+
+      expect(service.getPersist(key)).toBe(320)
+      expect(sub).toHaveBeenCalledTimes(1)
+      expect(broadcastSync).toHaveBeenCalledWith({
+        type: 'persist',
+        key,
+        value: 320
+      })
     })
   })
 })

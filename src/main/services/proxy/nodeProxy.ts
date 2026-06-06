@@ -9,6 +9,20 @@ import { Dispatcher, EnvHttpProxyAgent, getGlobalDispatcher, setGlobalDispatcher
 export const CHERRY_NODE_PROXY_RULES_ENV = 'CHERRY_STUDIO_NODE_PROXY_RULES'
 export const CHERRY_NODE_PROXY_BYPASS_RULES_ENV = 'CHERRY_STUDIO_NODE_PROXY_BYPASS_RULES'
 
+export const DEFAULT_NODE_PROXY_BYPASS_RULES = [
+  '<local>',
+  'localhost',
+  '127.0.0.1',
+  '::1',
+  '10.0.0.0/8',
+  '172.16.0.0/12',
+  '192.168.0.0/16',
+  '169.254.0.0/16',
+  'fc00::/7',
+  'fe80::/10',
+  '*.local'
+] as const
+
 const NODE_PROXY_ENV_KEYS = [
   CHERRY_NODE_PROXY_RULES_ENV,
   CHERRY_NODE_PROXY_BYPASS_RULES_ENV,
@@ -34,6 +48,9 @@ interface NodeProxyLogger {
   error?: (message: string, ...data: any[]) => void
   warn?: (message: string, ...data: any[]) => void
 }
+
+type HttpRequestCallback = (res: http.IncomingMessage) => void
+type HttpRequestMethod = typeof http.request | typeof http.get | typeof https.request | typeof https.get
 
 type HostnameMatchType = 'exact' | 'wildcardSubdomain' | 'generalWildcard'
 
@@ -240,7 +257,7 @@ const isLocalHostname = (hostname: string): boolean => {
     return parsed.range() === 'loopback'
   }
 
-  return false
+  return !normalized.includes('.') && !normalized.includes(':')
 }
 
 export const normalizeProxyBypassRules = (rules?: string | string[]): string[] => {
@@ -254,6 +271,24 @@ export const normalizeProxyBypassRules = (rules?: string | string[]): string[] =
         .map((rule) => rule.trim())
         .filter((rule) => rule.length > 0)
     : []
+}
+
+export const getEffectiveProxyBypassRules = (rules?: string | string[]): string[] => {
+  const seen = new Set<string>()
+  const effectiveRules: string[] = []
+
+  for (const rule of [...DEFAULT_NODE_PROXY_BYPASS_RULES, ...normalizeProxyBypassRules(rules)]) {
+    const normalizedRule = rule.trim()
+    const key = normalizedRule.toLowerCase()
+    if (!normalizedRule || seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    effectiveRules.push(normalizedRule)
+  }
+
+  return effectiveRules
 }
 
 export const getProxyEnvironment = (env: NodeJS.ProcessEnv = process.env): Record<string, string> => {
@@ -401,7 +436,7 @@ export const buildNodeProxyEnvironment = (config: NodeProxyConfig): Record<strin
     return {}
   }
 
-  const normalizedByPassRules = normalizeProxyBypassRules(config.proxyBypassRules)
+  const normalizedByPassRules = getEffectiveProxyBypassRules(config.proxyBypassRules)
   const proxyProtocol = getProxyProtocol(proxyUrl)
   const env: Record<string, string> = {
     [CHERRY_NODE_PROXY_RULES_ENV]: proxyUrl,
@@ -430,6 +465,96 @@ export const buildNodeProxyEnvironment = (config: NodeProxyConfig): Record<strin
   env.all_proxy = proxyUrl
 
   return env
+}
+
+const normalizeRequestProtocol = (protocol: unknown, defaultProtocol: 'http:' | 'https:'): 'http:' | 'https:' => {
+  if (typeof protocol !== 'string' || protocol.trim() === '') {
+    return defaultProtocol
+  }
+
+  const normalizedProtocol = protocol.trim().toLowerCase()
+  if (normalizedProtocol === 'https' || normalizedProtocol === 'https:') {
+    return 'https:'
+  }
+
+  return 'http:'
+}
+
+const getRequestOptionValue = (value: unknown): string | undefined => {
+  if (typeof value === 'string' && value.trim() !== '') {
+    return value.trim()
+  }
+
+  if (typeof value === 'number') {
+    return String(value)
+  }
+
+  return undefined
+}
+
+const splitHostAndPort = (host: string): { hostname: string; port?: string } => {
+  if (host.startsWith('[')) {
+    const ipv6Match = host.match(/^\[([^\]]+)\](?::(\d+))?$/)
+    if (ipv6Match) {
+      return {
+        hostname: ipv6Match[1],
+        port: ipv6Match[2]
+      }
+    }
+
+    return { hostname: host.replace(/^\[|\]$/g, '') }
+  }
+
+  const lastColonIndex = host.lastIndexOf(':')
+  if (lastColonIndex > -1 && !host.slice(0, lastColonIndex).includes(':')) {
+    const hostname = host.slice(0, lastColonIndex)
+    const port = host.slice(lastColonIndex + 1)
+    if (hostname && /^\d+$/.test(port)) {
+      return { hostname, port }
+    }
+  }
+
+  return { hostname: host }
+}
+
+const formatHostnameForUrl = (hostname: string): string => {
+  const cleanedHostname = hostname.replace(/^\[|\]$/g, '')
+  if (ipaddr.isValid(cleanedHostname) && ipaddr.parse(cleanedHostname).kind() === 'ipv6') {
+    return `[${cleanedHostname}]`
+  }
+
+  return cleanedHostname
+}
+
+export const resolveHttpRequestUrlForProxyBypass = (
+  url: string | URL | undefined,
+  options: http.RequestOptions | https.RequestOptions,
+  defaultProtocol: 'http:' | 'https:'
+): string | null => {
+  try {
+    if (url) {
+      return url.toString()
+    }
+
+    const href = getRequestOptionValue((options as http.RequestOptions & { href?: unknown }).href)
+    if (href) {
+      return href
+    }
+
+    const protocol = normalizeRequestProtocol(options.protocol, defaultProtocol)
+    const hostnameOption = getRequestOptionValue(options.hostname)
+    const hostOption = getRequestOptionValue(options.host)
+    const hostParts = splitHostAndPort(hostnameOption || hostOption || 'localhost')
+    const port = getRequestOptionValue(options.port) || hostParts.port
+    const pathname = getRequestOptionValue(options.path) || '/'
+    const normalizedPathname = pathname.startsWith('/') ? pathname : `/${pathname}`
+    const formattedHostname = formatHostnameForUrl(hostParts.hostname)
+    const formattedPort = port ? `:${port}` : ''
+
+    return `${protocol}//${formattedHostname}${formattedPort}${normalizedPathname}`
+  } catch {
+    return null
+  }
 }
 
 class SelectiveDispatcher extends Dispatcher {
@@ -497,7 +622,7 @@ export class NodeProxyController {
 
   configure(config: NodeProxyConfig): void {
     const proxyUrl = config.proxyRules?.trim()
-    const normalizedByPassRules = normalizeProxyBypassRules(config.proxyBypassRules)
+    const normalizedByPassRules = getEffectiveProxyBypassRules(config.proxyBypassRules)
     const configKey = JSON.stringify({
       proxyUrl: proxyUrl ?? null,
       proxyByPassRules: normalizedByPassRules
@@ -562,39 +687,48 @@ export class NodeProxyController {
 
     const agent = new ProxyAgent()
     this.proxyAgent = agent
-    http.get = this.bindHttpMethod(this.originalHttpGet, agent)
-    http.request = this.bindHttpMethod(this.originalHttpRequest, agent)
-    https.get = this.bindHttpMethod(this.originalHttpsGet, agent)
-    https.request = this.bindHttpMethod(this.originalHttpsRequest, agent)
+    http.get = this.bindHttpMethod(this.originalHttpGet, agent, 'http:')
+    http.request = this.bindHttpMethod(this.originalHttpRequest, agent, 'http:')
+    https.get = this.bindHttpMethod(this.originalHttpsGet, agent, 'https:')
+    https.request = this.bindHttpMethod(this.originalHttpsRequest, agent, 'https:')
   }
 
-  // oxlint-disable-next-line @typescript-eslint/no-unsafe-function-type
-  private bindHttpMethod(originalMethod: Function, agent: http.Agent | https.Agent) {
-    return (...args: any[]) => {
+  private bindHttpMethod<T extends HttpRequestMethod>(
+    originalMethod: T,
+    agent: http.Agent | https.Agent,
+    defaultProtocol: 'http:' | 'https:'
+  ): T {
+    const toRequestOptions = (value: unknown): http.RequestOptions | https.RequestOptions =>
+      value && typeof value === 'object' ? { ...(value as http.RequestOptions | https.RequestOptions) } : {}
+    const callOriginalMethod = (...methodArgs: unknown[]) =>
+      (originalMethod as (...args: unknown[]) => http.ClientRequest)(...methodArgs)
+
+    const boundMethod = (...args: unknown[]): http.ClientRequest => {
       let url: string | URL | undefined
       let options: http.RequestOptions | https.RequestOptions
-      let callback: ((res: http.IncomingMessage) => void) | undefined
+      let callback: HttpRequestCallback | undefined
 
       if (typeof args[0] === 'string' || args[0] instanceof URL) {
         url = args[0]
         if (typeof args[1] === 'function') {
           options = {}
-          callback = args[1]
+          callback = args[1] as HttpRequestCallback
         } else {
-          options = {
-            ...args[1]
-          }
-          callback = args[2]
+          options = toRequestOptions(args[1])
+          callback = typeof args[2] === 'function' ? (args[2] as HttpRequestCallback) : undefined
         }
       } else {
-        options = {
-          ...args[0]
-        }
-        callback = args[1]
+        options = toRequestOptions(args[0])
+        callback = typeof args[1] === 'function' ? (args[1] as HttpRequestCallback) : undefined
       }
 
-      if (url && this.proxyBypassRuleMatcher.isByPass(url.toString(), this.logger)) {
-        return originalMethod(url, options, callback)
+      const bypassUrl = resolveHttpRequestUrlForProxyBypass(url, options, defaultProtocol)
+      if (bypassUrl && this.proxyBypassRuleMatcher.isByPass(bypassUrl, this.logger)) {
+        if (url) {
+          return callOriginalMethod(url, options, callback)
+        }
+
+        return callOriginalMethod(options, callback)
       }
 
       if (options.agent instanceof https.Agent) {
@@ -603,11 +737,13 @@ export class NodeProxyController {
 
       options.agent = agent
       if (url) {
-        return originalMethod(url, options, callback)
+        return callOriginalMethod(url, options, callback)
       }
 
-      return originalMethod(options, callback)
+      return callOriginalMethod(options, callback)
     }
+
+    return boundMethod as T
   }
 
   private setGlobalFetchProxy(proxyUrl: string | undefined) {

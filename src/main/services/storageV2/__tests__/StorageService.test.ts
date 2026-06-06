@@ -1,3 +1,4 @@
+import { RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY } from '@shared/data/cache/cacheSchemas'
 import type { Assistant, Provider } from '@types'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -572,7 +573,10 @@ describe('StorageV2Service', () => {
         key: 'localStorage.durableValues',
         value: {
           language: 'zh-CN',
-          'onboarding-completed': 'true'
+          'onboarding-completed': 'true',
+          [RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY]: JSON.stringify({
+            'ui.sidebar.width': 320
+          })
         },
         scope: 'localStorage',
         updatedAt: '2026-01-01T00:00:00.000Z',
@@ -607,7 +611,10 @@ describe('StorageV2Service', () => {
 
     expect(snapshot.localStorage.durableValues).toEqual({
       language: 'zh-CN',
-      'onboarding-completed': 'true'
+      'onboarding-completed': 'true',
+      [RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY]: JSON.stringify({
+        'ui.sidebar.width': 320
+      })
     })
     expect(snapshot.localStorage.mcpProviderTokens).toEqual({
       mcprouter_token: 'restored-token',

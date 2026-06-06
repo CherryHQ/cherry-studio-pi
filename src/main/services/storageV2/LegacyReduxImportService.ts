@@ -1,3 +1,7 @@
+import {
+  RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY,
+  serializeRendererPersistCacheValue
+} from '@shared/data/cache/cacheSchemas'
 import type { Assistant, Provider } from '@types'
 
 import { storageV2SecretVaultService } from './SecretVaultService'
@@ -81,7 +85,8 @@ const DURABLE_LOCAL_STORAGE_KEYS = new Set([
   'language',
   'memory_currentUserId',
   'onboarding-completed',
-  'privacy-popup-accepted'
+  'privacy-popup-accepted',
+  RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY
 ])
 
 export type StorageV2LegacyImportOptions = {
@@ -500,7 +505,17 @@ function sanitizeDurableLocalStorageValues(value: unknown): Record<string, strin
   const durableValues: Record<string, string> = {}
 
   for (const [key, item] of Object.entries(value)) {
-    if (DURABLE_LOCAL_STORAGE_KEYS.has(key) && typeof item === 'string' && item) {
+    if (!DURABLE_LOCAL_STORAGE_KEYS.has(key)) continue
+
+    if (key === RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY) {
+      const sanitizedPersistCache = serializeRendererPersistCacheValue(item)
+      if (sanitizedPersistCache) {
+        durableValues[key] = sanitizedPersistCache
+      }
+      continue
+    }
+
+    if (typeof item === 'string' && item) {
       durableValues[key] = item
     }
   }

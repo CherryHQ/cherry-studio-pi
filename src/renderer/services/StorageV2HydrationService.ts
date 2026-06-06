@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { cacheService } from '@renderer/data/CacheService'
 import db from '@renderer/databases'
 import { type AssistantsState, hydrateAssistantsState } from '@renderer/store/assistants'
 import { type BackupState, hydrateBackupState } from '@renderer/store/backup'
@@ -305,6 +306,7 @@ async function applyRuntimeSnapshot(snapshot: StorageV2CoreSnapshot, target: Run
 
   if (snapshot.localStorage) {
     applyStorageV2LocalStorageSnapshot(snapshot.localStorage)
+    cacheService.reloadPersistCacheFromStorage()
   }
 
   if (snapshot.dexieSettings) {

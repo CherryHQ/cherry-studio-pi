@@ -322,6 +322,59 @@ export const DefaultRendererPersistCache: RendererPersistCacheSchema = {
   'ui.emoji.recently_used': []
 }
 
+export const RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY = 'cs_cache_persist'
+
+function parseRendererPersistCacheCandidate(value: unknown): Record<string, unknown> | null {
+  const candidate = (() => {
+    if (typeof value !== 'string') return value
+
+    try {
+      return JSON.parse(value) as unknown
+    } catch {
+      return null
+    }
+  })()
+
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return null
+  }
+
+  return candidate as Record<string, unknown>
+}
+
+function isRendererPersistCacheDefaultValue(key: RendererPersistCacheKey, value: unknown): boolean {
+  try {
+    return JSON.stringify(value) === JSON.stringify(DefaultRendererPersistCache[key])
+  } catch {
+    return false
+  }
+}
+
+export function sanitizeRendererPersistCacheValue(value: unknown): Partial<RendererPersistCacheSchema> | null {
+  const candidate = parseRendererPersistCacheCandidate(value)
+  if (!candidate) return null
+
+  const sanitized: Partial<RendererPersistCacheSchema> = {}
+  for (const key of Object.keys(DefaultRendererPersistCache) as RendererPersistCacheKey[]) {
+    if (!Object.hasOwn(candidate, key)) continue
+
+    const item = candidate[key]
+    if (!isRendererPersistCacheDefaultValue(key, item)) {
+      ;(sanitized as Record<string, unknown>)[key] = item
+    }
+  }
+
+  return sanitized
+}
+
+export function serializeRendererPersistCacheValue(value: unknown): string | null {
+  const sanitized = sanitizeRendererPersistCacheValue(value)
+  if (!sanitized) return null
+  if (Object.keys(sanitized).length === 0) return null
+
+  return JSON.stringify(sanitized)
+}
+
 // ============================================================================
 // Cache Key Types
 // ============================================================================

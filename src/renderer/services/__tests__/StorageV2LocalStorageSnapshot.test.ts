@@ -1,3 +1,4 @@
+import { RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY } from '@shared/data/cache/cacheSchemas'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -49,6 +50,39 @@ describe('StorageV2LocalStorageSnapshot', () => {
     })
   })
 
+  it('captures renderer persist cache with schema whitelisting', () => {
+    localStorage.setItem(
+      RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY,
+      JSON.stringify({
+        'ui.sidebar.width': 280,
+        'ui.emoji.recently_used': ['sparkles'],
+        'unknown.large.cache': 'ignore-me'
+      })
+    )
+
+    const snapshot = getStorageV2LocalStorageSnapshot()
+
+    expect(JSON.parse(snapshot.durableValues[RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY])).toEqual({
+      'ui.sidebar.width': 280,
+      'ui.emoji.recently_used': ['sparkles']
+    })
+  })
+
+  it('does not mirror renderer persist cache when it only contains defaults', () => {
+    localStorage.setItem(
+      RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY,
+      JSON.stringify({
+        'ui.tab.pinned_tabs': [],
+        'ui.sidebar.width': 65,
+        'settings.provider.last_selected_provider_id': null
+      })
+    )
+
+    expect(getStorageV2LocalStorageSnapshot().durableValues).not.toHaveProperty(
+      RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY
+    )
+  })
+
   it('restores durable localStorage values and MCP provider tokens into localStorage', () => {
     localStorage.setItem('mcprouter_token', 'old-token')
 
@@ -73,6 +107,23 @@ describe('StorageV2LocalStorageSnapshot', () => {
     expect(localStorage.getItem('ai302_token')).toBe('ai302-secret')
     expect(localStorage.getItem('bailian_token')).toBe('bailian-secret')
     expect(localStorage.getItem('unexpected_token')).toBeNull()
+  })
+
+  it('restores renderer persist cache with schema whitelisting', () => {
+    applyStorageV2LocalStorageSnapshot({
+      durableValues: {
+        [RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY]: JSON.stringify({
+          'ui.tab.pinned_tabs': [{ id: 'assistant-list' }],
+          'settings.provider.last_selected_provider_id': 'openai',
+          unexpected_key: 'ignored'
+        })
+      }
+    })
+
+    expect(JSON.parse(localStorage.getItem(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY) ?? '{}')).toEqual({
+      'ui.tab.pinned_tabs': [{ id: 'assistant-list' }],
+      'settings.provider.last_selected_provider_id': 'openai'
+    })
   })
 
   it('mirrors the current localStorage snapshot to Storage v2 on demand', async () => {

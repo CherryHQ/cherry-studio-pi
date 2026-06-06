@@ -26,7 +26,7 @@ import type {
   SharedCacheKey,
   UseCacheKey
 } from '@shared/data/cache/cacheSchemas'
-import { DefaultRendererPersistCache } from '@shared/data/cache/cacheSchemas'
+import { DefaultRendererPersistCache, RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY } from '@shared/data/cache/cacheSchemas'
 import type {
   CacheEntry,
   CacheEntryDetail,
@@ -36,8 +36,6 @@ import type {
   CacheTierSummary
 } from '@shared/data/cache/cacheTypes'
 import { isEqual } from 'lodash'
-
-const STORAGE_PERSIST_KEY = 'cs_cache_persist'
 
 const logger = loggerService.withContext('CacheService')
 
@@ -609,6 +607,28 @@ export class CacheService {
     return this.persistCache.has(key)
   }
 
+  /**
+   * Reload persist cache from localStorage after Storage v2 restores durable
+   * renderer state. This keeps active windows in sync without requiring restart.
+   */
+  reloadPersistCacheFromStorage(): void {
+    const previousValues = new Map(this.persistCache)
+
+    this.loadPersistCache()
+
+    for (const key of Object.keys(DefaultRendererPersistCache) as RendererPersistCacheKey[]) {
+      const value = this.persistCache.get(key)
+      if (isEqual(previousValues.get(key), value)) continue
+
+      this.notifySubscribers(key)
+      this.broadcastSync({
+        type: 'persist',
+        key,
+        value
+      })
+    }
+  }
+
   // Note: No deletePersist method as discussed
 
   // ============ Hook Reference Management ============
@@ -956,7 +976,7 @@ export class CacheService {
     }
 
     try {
-      const stored = localStorage.getItem(STORAGE_PERSIST_KEY)
+      const stored = localStorage.getItem(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY)
       if (!stored) {
         // No stored data, save defaults to localStorage
         this.savePersistCache()
@@ -979,7 +999,7 @@ export class CacheService {
       logger.debug('Loaded persist cache from localStorage with defaults')
     } catch (error) {
       logger.error('Failed to load persist cache:', error as Error)
-      localStorage.removeItem(STORAGE_PERSIST_KEY)
+      localStorage.removeItem(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY)
       // Fallback to defaults only
       logger.debug('Fallback to default persist cache values')
     }
@@ -1005,7 +1025,7 @@ export class CacheService {
         )
       }
 
-      localStorage.setItem(STORAGE_PERSIST_KEY, jsonData)
+      localStorage.setItem(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY, jsonData)
       logger.verbose(`Saved persist cache to localStorage, size: ${(size / (1024 * 1024)).toFixed(2)} MB`)
     } catch (error) {
       logger.error('Failed to save persist cache:', error as Error)

@@ -1,4 +1,8 @@
 import { loggerService } from '@logger'
+import {
+  RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY,
+  serializeRendererPersistCacheValue
+} from '@shared/data/cache/cacheSchemas'
 
 import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
@@ -18,7 +22,8 @@ const DURABLE_LOCAL_STORAGE_KEYS = [
   'language',
   'memory_currentUserId',
   'onboarding-completed',
-  'privacy-popup-accepted'
+  'privacy-popup-accepted',
+  RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY
 ] as const
 
 const MCP_PROVIDER_TOKEN_KEY_SET = new Set<string>(MCP_PROVIDER_TOKEN_KEYS)
@@ -41,6 +46,14 @@ export type StorageV2LocalStorageSnapshot = {
   mcpProviderTokens: Record<string, string>
 }
 
+function sanitizeDurableLocalStorageValue(key: string, value: unknown): string | null {
+  if (key === RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY) {
+    return serializeRendererPersistCacheValue(value)
+  }
+
+  return typeof value === 'string' && value ? value : null
+}
+
 export function getStorageV2LocalStorageSnapshot(): StorageV2LocalStorageSnapshot {
   const clearedMcpProviderTokenKeys: string[] = []
   const durableValues: Record<string, string> = {}
@@ -52,8 +65,9 @@ export function getStorageV2LocalStorageSnapshot(): StorageV2LocalStorageSnapsho
 
   for (const key of DURABLE_LOCAL_STORAGE_KEYS) {
     const value = localStorage.getItem(key)
-    if (value) {
-      durableValues[key] = value
+    const sanitizedValue = sanitizeDurableLocalStorageValue(key, value)
+    if (sanitizedValue) {
+      durableValues[key] = sanitizedValue
     }
   }
 
@@ -73,8 +87,11 @@ export function applyStorageV2LocalStorageSnapshot(snapshot: Partial<StorageV2Lo
   if (typeof localStorage === 'undefined') return
 
   for (const [key, value] of Object.entries(snapshot.durableValues ?? {})) {
-    if (DURABLE_LOCAL_STORAGE_KEY_SET.has(key) && typeof value === 'string' && value) {
-      localStorage.setItem(key, value)
+    if (DURABLE_LOCAL_STORAGE_KEY_SET.has(key)) {
+      const sanitizedValue = sanitizeDurableLocalStorageValue(key, value)
+      if (sanitizedValue) {
+        localStorage.setItem(key, sanitizedValue)
+      }
     }
   }
 

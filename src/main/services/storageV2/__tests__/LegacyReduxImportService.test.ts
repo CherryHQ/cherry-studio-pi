@@ -1,3 +1,4 @@
+import { RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY } from '@shared/data/cache/cacheSchemas'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -58,6 +59,10 @@ describe('StorageV2LegacyReduxImportService', () => {
           clearedMcpProviderTokenKeys: ['modelscope_token', 'unexpected_token', 'modelscope_token'],
           durableValues: {
             language: 'zh-CN',
+            [RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY]: JSON.stringify({
+              'ui.sidebar.width': 320,
+              unexpected_cache_key: 'ignored'
+            }),
             ignoredEmpty: '',
             ignoredNonString: true
           },
@@ -89,7 +94,10 @@ describe('StorageV2LegacyReduxImportService', () => {
     expect(mocks.settingsRepository.set).toHaveBeenCalledWith(
       'localStorage.durableValues',
       {
-        language: 'zh-CN'
+        language: 'zh-CN',
+        [RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY]: JSON.stringify({
+          'ui.sidebar.width': 320
+        })
       },
       'localStorage'
     )
