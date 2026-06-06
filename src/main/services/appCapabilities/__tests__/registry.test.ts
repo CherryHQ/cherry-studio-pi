@@ -58,6 +58,25 @@ describe('AppCapabilityRegistry', () => {
     ])
   })
 
+  it('limits empty searches before materializing schemas', () => {
+    const registry = new AppCapabilityRegistry()
+    registry.register(capability({ id: 'a.first' }))
+    const lateCapability = capability({ id: 'z.late' })
+    Object.defineProperty(lateCapability, 'inputSchema', {
+      get: () => {
+        throw new Error('late schema should not be materialized')
+      }
+    })
+    registry.register(lateCapability)
+
+    expect(registry.search({ query: '', limit: 1, includeSchemas: true })).toEqual([
+      expect.objectContaining({
+        id: 'a.first',
+        inputSchema: { type: 'object', properties: {} }
+      })
+    ])
+  })
+
   it('looks up a single descriptor without listing and sorting all capabilities', () => {
     const registry = new AppCapabilityRegistry()
     registry.register(capability({ id: 'settings.hidden', hidden: true }))

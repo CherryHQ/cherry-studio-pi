@@ -46,14 +46,21 @@ const expandQueryTerms = (query: string) => {
   return Array.from(expanded)
 }
 
+type SearchIndexEntry = {
+  capability: AppCapabilityDefinition
+  fields: Array<readonly [normalized: string, weight: number]>
+}
+
 export class AppCapabilityRegistry {
   private readonly capabilities = new Map<string, AppCapabilityDefinition>()
+  private readonly searchIndex = new Map<string, SearchIndexEntry>()
 
   register(capability: AppCapabilityDefinition): void {
     if (this.capabilities.has(capability.id)) {
       throw new Error(`Duplicate app capability: ${capability.id}`)
     }
     this.capabilities.set(capability.id, capability)
+    this.searchIndex.set(capability.id, this.toSearchIndexEntry(capability))
   }
 
   registerMany(capabilities: AppCapabilityDefinition[]): void {
@@ -74,30 +81,37 @@ export class AppCapabilityRegistry {
   }
 
   list(options: AppCapabilityListOptions = {}): AppCapabilityDescriptor[] {
-    return Array.from(this.capabilities.values())
-      .filter((capability) => this.matchesListOptions(capability, options))
-      .map((capability) => this.toDescriptor(capability, options.includeSchemas === true))
-      .sort((a, b) => a.id.localeCompare(b.id))
+    return this.sortedCapabilities(options).map((capability) =>
+      this.toDescriptor(capability, options.includeSchemas === true)
+    )
   }
 
   search(options: AppCapabilitySearchOptions = {}): AppCapabilityDescriptor[] {
     const query = (options.query ?? '').trim()
     const limit = Math.max(1, Math.min(options.limit ?? 8, 50))
     if (!query) {
-      return this.list(options).slice(0, limit)
+      return this.sortedCapabilities(options)
+        .slice(0, limit)
+        .map((capability) => this.toDescriptor(capability, options.includeSchemas === true))
     }
 
     const terms = expandQueryTerms(query)
-    return Array.from(this.capabilities.values())
-      .filter((capability) => this.matchesListOptions(capability, options))
-      .map((capability) => ({
-        capability,
-        score: this.score(capability, terms)
+    return Array.from(this.searchIndex.values())
+      .filter((entry) => this.matchesListOptions(entry.capability, options))
+      .map((entry) => ({
+        capability: entry.capability,
+        score: this.score(entry, terms)
       }))
       .filter((item) => item.score > 0)
       .sort((a, b) => b.score - a.score || a.capability.id.localeCompare(b.capability.id))
       .slice(0, limit)
       .map((item) => this.toDescriptor(item.capability, options.includeSchemas === true))
+  }
+
+  private sortedCapabilities(options: AppCapabilityListOptions): AppCapabilityDefinition[] {
+    return Array.from(this.capabilities.values())
+      .filter((capability) => this.matchesListOptions(capability, options))
+      .sort((a, b) => a.id.localeCompare(b.id))
   }
 
   private matchesListOptions(capability: AppCapabilityDefinition, options: AppCapabilityListOptions): boolean {
@@ -107,24 +121,27 @@ export class AppCapabilityRegistry {
     return true
   }
 
-  private score(capability: AppCapabilityDefinition, terms: string[]): number {
+  private toSearchIndexEntry(capability: AppCapabilityDefinition): SearchIndexEntry {
     const fields = [
-      [capability.id, 12],
-      [capability.domain, 8],
-      [capability.title, 7],
-      [capability.description, 4],
-      [(capability.tags ?? []).join(' '), 5],
-      [(capability.aliases ?? []).join(' '), 6],
-      [(capability.examples ?? []).join(' '), 3]
-    ] as const
+      [normalize(capability.id), 12],
+      [normalize(capability.domain), 8],
+      [normalize(capability.title), 7],
+      [normalize(capability.description), 4],
+      [normalize((capability.tags ?? []).join(' ')), 5],
+      [normalize((capability.aliases ?? []).join(' ')), 6],
+      [normalize((capability.examples ?? []).join(' ')), 3]
+    ] satisfies SearchIndexEntry['fields']
 
+    return { capability, fields }
+  }
+
+  private score(entry: SearchIndexEntry, terms: string[]): number {
     let score = 0
     for (const term of terms) {
-      for (const [field, weight] of fields) {
-        const normalized = normalize(field)
-        if (normalized === term) {
+      for (const [field, weight] of entry.fields) {
+        if (field === term) {
           score += weight * 2
-        } else if (normalized.includes(term)) {
+        } else if (field.includes(term)) {
           score += weight
         }
       }
