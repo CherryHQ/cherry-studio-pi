@@ -1,11 +1,24 @@
 import { describe, expect, it } from 'vitest'
 
-import { canFetchLinkPreviewMetadata, getUrlOriginOrFallback } from '../url'
+import { canFetchLinkPreviewMetadata, getUrlHostname, getUrlHostnameOrFallback, getUrlOriginOrFallback } from '../url'
 
 describe('url utils', () => {
   it('returns origin or the original value', () => {
     expect(getUrlOriginOrFallback('https://example.com/path')).toBe('https://example.com')
     expect(getUrlOriginOrFallback('not-url')).toBe('not-url')
+  })
+
+  it('extracts hostnames without throwing on malformed values', () => {
+    expect(getUrlHostname('https://docs.example.com/path')).toBe('docs.example.com')
+    expect(getUrlHostname('http://')).toBeUndefined()
+    expect(getUrlHostname(undefined)).toBeUndefined()
+    expect(getUrlHostname({ url: 'https://example.com' })).toBeUndefined()
+  })
+
+  it('returns a display fallback when hostname extraction fails', () => {
+    expect(getUrlHostnameOrFallback('https://example.com/path')).toBe('example.com')
+    expect(getUrlHostnameOrFallback('http://')).toBe('http://')
+    expect(getUrlHostnameOrFallback(null)).toBe('')
   })
 
   it('allows ordinary public http links for metadata previews', () => {

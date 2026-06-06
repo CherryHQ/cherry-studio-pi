@@ -6,6 +6,22 @@ export function getUrlOriginOrFallback(url: string): string {
   }
 }
 
+export function getUrlHostname(url: unknown): string | undefined {
+  const value = String(url ?? '').trim()
+  if (!value) return undefined
+
+  try {
+    return new URL(value).hostname || undefined
+  } catch {
+    return undefined
+  }
+}
+
+export function getUrlHostnameOrFallback(url: unknown): string {
+  const value = String(url ?? '').trim()
+  return getUrlHostname(value) || value
+}
+
 const CREDENTIAL_LABEL_PATTERN =
   /(?:^|[\s,，;；])(账号|账户|用户名|用户|密码|口令|account|username|user|password|pass|token)\s*[:：=]/i
 const ENCODED_LINE_BREAK_PATTERN = /%(?:0d|0a)/i

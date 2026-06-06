@@ -5,6 +5,7 @@ import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
 import type { Citation } from '@renderer/types'
 import { fetchWebContent, fetchXOEmbed, isXPostUrl } from '@renderer/utils/fetch'
 import { cleanMarkdownContent } from '@renderer/utils/formats'
+import { getUrlHostname } from '@renderer/utils/url'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { Button, message, Popover, Skeleton } from 'antd'
 import { Check, Copy, FileSearch } from 'lucide-react'
@@ -93,15 +94,15 @@ const CitationsList: React.FC<CitationsListProps> = ({ citations }) => {
         }}>
         <OpenButton type="text">
           <PreviewIcons>
-            {previewItems.map((c, i) => (
-              <PreviewIcon key={i} style={{ zIndex: previewItems.length - i }}>
-                {c.type === 'websearch' && c.url ? (
-                  <Favicon hostname={new URL(c.url).hostname} alt={c.title || ''} />
-                ) : (
-                  <FileSearch width={16} />
-                )}
-              </PreviewIcon>
-            ))}
+            {previewItems.map((c, i) => {
+              const hostname = c.type === 'websearch' ? getUrlHostname(c.url) : undefined
+
+              return (
+                <PreviewIcon key={i} style={{ zIndex: previewItems.length - i }}>
+                  {hostname ? <Favicon hostname={hostname} alt={c.title || ''} /> : <FileSearch width={16} />}
+                </PreviewIcon>
+              )
+            })}
           </PreviewIcons>
           {t('message.citation', { count })}
         </OpenButton>
@@ -138,6 +139,7 @@ const CopyButton: React.FC<{ content: string }> = ({ content }) => {
 
 const WebSearchCitation: React.FC<{ citation: Citation }> = ({ citation }) => {
   const isXPost = Boolean(citation.url && isXPostUrl(citation.url))
+  const hostname = getUrlHostname(citation.url)
 
   const { data: fetchedContent, isLoading } = useQuery({
     queryKey: ['webContent', citation.url],
@@ -170,9 +172,13 @@ const WebSearchCitation: React.FC<{ citation: Citation }> = ({ citation }) => {
     <ContextMenu>
       <WebSearchCard>
         <WebSearchCardHeader>
-          {citation.showFavicon && citation.url && (
-            <Favicon hostname={new URL(citation.url).hostname} alt={citation.title || citation.hostname || ''} />
-          )}
+          {citation.showFavicon &&
+            citation.url &&
+            (hostname ? (
+              <Favicon hostname={hostname} alt={citation.title || citation.hostname || ''} />
+            ) : (
+              <FileSearch width={16} />
+            ))}
           <CitationLink className="text-nowrap" href={citation.url} onClick={(e) => handleLinkClick(citation.url, e)}>
             {displayTitle || <span className="hostname">{citation.hostname}</span>}
           </CitationLink>

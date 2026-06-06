@@ -1,6 +1,7 @@
 import Favicon from '@renderer/components/Icons/FallbackFavicon'
 import MarqueeText from '@renderer/components/MarqueeText'
 import { fetchXOEmbed, isXPostUrl } from '@renderer/utils/fetch'
+import { getUrlHostnameOrFallback } from '@renderer/utils/url'
 import { useQuery } from '@tanstack/react-query'
 import { Tooltip } from 'antd'
 import React, { memo, useCallback, useMemo } from 'react'
@@ -20,11 +21,7 @@ interface CitationTooltipProps {
 
 const CitationTooltip: React.FC<CitationTooltipProps> = ({ children, citation }) => {
   const hostname = useMemo(() => {
-    try {
-      return new URL(citation.url).hostname
-    } catch {
-      return citation.url
-    }
+    return getUrlHostnameOrFallback(citation.url)
   }, [citation.url])
 
   const isXPost = useMemo(() => isXPostUrl(citation.url), [citation.url])

@@ -29,6 +29,7 @@ import type {
 import { WEB_SEARCH_SOURCE } from '@renderer/types'
 import type { CitationMessageBlock, MessageBlock, ToolMessageBlock } from '@renderer/types/newMessage'
 import { MessageBlockType } from '@renderer/types/newMessage'
+import { getUrlHostnameOrFallback } from '@renderer/utils/url'
 
 import type { RootState } from './index' // 确认 RootState 从 store/index.ts 导出
 
@@ -136,12 +137,7 @@ export const formatCitationsFromBlock = (block: CitationMessageBlock | undefined
       case WEB_SEARCH_SOURCE.OPENAI_RESPONSE:
         formattedCitations =
           (block.response.results as OpenAI.Responses.ResponseOutputText.URLCitation[])?.map((result, index) => {
-            let hostname: string | undefined
-            try {
-              hostname = result.title ? undefined : new URL(result.url).hostname
-            } catch {
-              hostname = result.url
-            }
+            const hostname = result.title ? undefined : getUrlHostnameOrFallback(result.url)
             return {
               number: index + 1,
               url: result.url,
@@ -156,12 +152,7 @@ export const formatCitationsFromBlock = (block: CitationMessageBlock | undefined
         formattedCitations =
           (block.response.results as OpenAI.Chat.Completions.ChatCompletionMessage.Annotation[])?.map((url, index) => {
             const urlCitation = url.url_citation
-            let hostname: string | undefined
-            try {
-              hostname = urlCitation.title ? undefined : new URL(urlCitation.url).hostname
-            } catch {
-              hostname = urlCitation.url
-            }
+            const hostname = urlCitation.title ? undefined : getUrlHostnameOrFallback(urlCitation.url)
             return {
               number: index + 1,
               url: urlCitation.url,
@@ -176,12 +167,7 @@ export const formatCitationsFromBlock = (block: CitationMessageBlock | undefined
         formattedCitations =
           (block.response.results as Array<WebSearchResultBlock>)?.map((result, index) => {
             const { url } = result
-            let hostname: string | undefined
-            try {
-              hostname = new URL(url).hostname
-            } catch {
-              hostname = url
-            }
+            const hostname = getUrlHostnameOrFallback(url)
             return {
               number: index + 1,
               url: url,
@@ -197,7 +183,7 @@ export const formatCitationsFromBlock = (block: CitationMessageBlock | undefined
           (block.response.results as any[])?.map((result, index) => ({
             number: index + 1,
             url: result.url || result, // 兼容旧数据
-            title: result.title || new URL(result).hostname, // 兼容旧数据
+            title: result.title || getUrlHostnameOrFallback(result.url || result), // 兼容旧数据
             showFavicon: true,
             type: 'websearch'
           })) || []
@@ -207,25 +193,15 @@ export const formatCitationsFromBlock = (block: CitationMessageBlock | undefined
         formattedCitations =
           (block.response.results as AISDKWebSearchResult[])?.map((result, index) => {
             const url = result.url
-            try {
-              const hostname = new URL(result.url).hostname
-              // xAI source events use citation number as title, fall back to hostname
-              const title = result.title && /^\d+$/.test(result.title) ? hostname : result.title || hostname
-              return {
-                number: index + 1,
-                url,
-                title,
-                showFavicon: true,
-                type: 'websearch'
-              }
-            } catch {
-              return {
-                number: index + 1,
-                url,
-                hostname: url,
-                showFavicon: true,
-                type: 'websearch'
-              }
+            const hostname = getUrlHostnameOrFallback(url)
+            // xAI source events use citation number as title, fall back to hostname
+            const title = result.title && /^\d+$/.test(result.title) ? hostname : result.title || hostname
+            return {
+              number: index + 1,
+              url,
+              title,
+              showFavicon: true,
+              type: 'websearch'
             }
           }) || []
         break
@@ -233,25 +209,15 @@ export const formatCitationsFromBlock = (block: CitationMessageBlock | undefined
         formattedCitations =
           (block.response.results as AISDKWebSearchResult[])?.map((result, index) => {
             const url = result.url
-            try {
-              const hostname = new URL(result.url).hostname
-              const content = result.providerMetadata && result.providerMetadata['openrouter']?.content
-              return {
-                number: index + 1,
-                url,
-                title: result.title || hostname,
-                content: content as string,
-                showFavicon: true,
-                type: 'websearch'
-              }
-            } catch {
-              return {
-                number: index + 1,
-                url,
-                hostname: url,
-                showFavicon: true,
-                type: 'websearch'
-              }
+            const hostname = getUrlHostnameOrFallback(url)
+            const content = result.providerMetadata && result.providerMetadata['openrouter']?.content
+            return {
+              number: index + 1,
+              url,
+              title: result.title || hostname,
+              content: content as string,
+              showFavicon: true,
+              type: 'websearch'
             }
           }) || []
         break
@@ -282,7 +248,7 @@ export const formatCitationsFromBlock = (block: CitationMessageBlock | undefined
           (block.response?.results as AISDKWebSearchResult[])?.map((result, index) => ({
             number: index + 1,
             url: result.url,
-            title: result.title || new URL(result.url).hostname,
+            title: result.title || getUrlHostnameOrFallback(result.url),
             showFavicon: true,
             type: 'websearch',
             providerMetadata: result?.providerMetadata
