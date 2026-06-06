@@ -5,7 +5,6 @@ import { useAssistant, useAssistants } from '@renderer/hooks/useAssistant'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { useTags } from '@renderer/hooks/useTags'
 import AssistantSettingsPopup from '@renderer/pages/settings/AssistantSettings'
-import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import type { Assistant, AssistantsSortType } from '@renderer/types'
 import { cn, uuid } from '@renderer/utils'
 import { hasTopicPendingRequests } from '@renderer/utils/queue'
@@ -63,7 +62,7 @@ const AssistantItem: FC<AssistantItemProps> = ({
   const { t } = useTranslation()
   const { allTags } = useTags()
   const { removeAllTopics } = useAssistant(assistant.id)
-  const { clickAssistantToShowTopic, topicPosition, setAssistantIconType } = useSettings()
+  const { setAssistantIconType } = useSettings()
   const { assistants, updateAssistants } = useAssistants()
 
   const [isPending, setIsPending] = useState(false)
@@ -131,13 +130,8 @@ const AssistantItem: FC<AssistantItemProps> = ({
   )
 
   const handleSwitch = useCallback(async () => {
-    if (clickAssistantToShowTopic) {
-      if (topicPosition === 'left') {
-        void EventEmitter.emit(EVENT_NAMES.SWITCH_TOPIC_SIDEBAR)
-      }
-    }
     onSwitch(assistant)
-  }, [clickAssistantToShowTopic, onSwitch, assistant, topicPosition])
+  }, [onSwitch, assistant])
 
   const assistantName = useMemo(() => assistant.name || t('chat.default.name'), [assistant.name, t])
   const fullAssistantName = useMemo(
