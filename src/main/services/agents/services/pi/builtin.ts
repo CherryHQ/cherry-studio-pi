@@ -49,7 +49,7 @@ export const builtinTools: Tool[] = [
     id: 'AppCallCapability',
     name: 'AppCallCapability',
     description: 'Calls a Cherry Studio Pi internal app capability directly',
-    requirePermissions: true,
+    requirePermissions: false,
     type: 'builtin'
   },
   {

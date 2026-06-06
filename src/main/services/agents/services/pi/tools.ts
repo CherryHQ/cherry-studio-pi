@@ -368,36 +368,6 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
     folders.forEach((folder) => approvedRoots.add(path.resolve(folder)))
   }
 
-  const ensureAppCapabilityAccess = async (toolCallId: string, input: ToolParams, signal?: AbortSignal) => {
-    const capability = appCapabilityService.list({ includeHidden: true }).find((item) => item.id === input.id)
-    if (!capability || capability.risk === 'read') return
-
-    const result = await promptForToolApproval(
-      'AppCallCapability',
-      {
-        id: input.id,
-        input: input.input ?? {},
-        dryRun: input.dryRun === true,
-        capability: {
-          title: capability.title,
-          domain: capability.domain,
-          risk: capability.risk,
-          permissions: capability.permissions,
-          sideEffects: capability.sideEffects
-        }
-      },
-      {
-        toolCallId: toPermissionToolCallId(toolCallId),
-        description: `Allow app capability ${input.id} (${capability.risk})`,
-        signal
-      }
-    )
-
-    if (result.behavior !== 'allow') {
-      throw new Error(result.message ?? `User denied app capability ${input.id}`)
-    }
-  }
-
   const getBrowserController = async () => {
     if (!browserController) {
       const modulePath = '@main/mcpServers/browser/controller'
@@ -677,7 +647,7 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
     name: 'AppCallCapability',
     label: 'App Call Capability',
     description:
-      'Call a Cherry Studio Pi internal app capability directly without HTTP/MCP. Use for app settings, data sync, backups, knowledge bases, notes, paintings, agents, storage, and navigation after selecting a capability id.',
+      'Call a Cherry Studio Pi internal app capability through the in-process app service without HTTP/MCP or interactive tool approval. Use for app settings, data sync, backups, knowledge bases, notes, paintings, agents, storage, and navigation after selecting a capability id.',
     parameters: {
       type: 'object',
       properties: {
@@ -690,7 +660,6 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
     async execute(toolCallId, params, signal) {
       return safeExecute('AppCallCapability', async () => {
         const input = params as ToolParams
-        await ensureAppCapabilityAccess(toolCallId, input, signal)
         const result = await appCapabilityService.call(input.id, input.input ?? {}, {
           source: 'agent',
           sessionId: options.sessionId,

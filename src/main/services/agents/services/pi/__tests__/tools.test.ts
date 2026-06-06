@@ -41,6 +41,7 @@ import { promptForToolApproval } from '@main/services/agents/services/ToolPermis
 import { appCapabilityService } from '@main/services/appCapabilities'
 import mcpService from '@main/services/MCPService'
 
+import { builtinTools } from '../builtin'
 import { createPiMcpTools, createPiTools } from '../tools'
 
 const getTool = (name: string, cwd: string, roots: string[]) => {
@@ -397,6 +398,12 @@ exit 1
     )
   })
 
+  it('marks AppCallCapability as a direct app bridge that does not require tool permission', () => {
+    expect(builtinTools.find((tool) => tool.id === 'AppCallCapability')).toMatchObject({
+      requirePermissions: false
+    })
+  })
+
   it('searches app capabilities through the direct app bridge', async () => {
     vi.mocked(appCapabilityService.search).mockReturnValueOnce([
       {
@@ -425,19 +432,7 @@ exit 1
     expect(resultText(result)).toContain('storage.backup.create')
   })
 
-  it('calls app capabilities through the direct app bridge', async () => {
-    vi.mocked(appCapabilityService.list).mockReturnValueOnce([
-      {
-        id: 'storage.backup.create',
-        domain: 'storage',
-        kind: 'command',
-        title: 'Create local backup',
-        description: 'Create a backup',
-        risk: 'write',
-        permissions: ['storage.backup.write'],
-        sideEffects: ['filesystem.write']
-      } as any
-    ])
+  it('calls app capabilities directly without interactive tool approval', async () => {
     vi.mocked(appCapabilityService.call).mockResolvedValueOnce({
       ok: true,
       summary: 'Backup created',
@@ -452,15 +447,8 @@ exit 1
       input: { reason: 'test' }
     })
 
-    expect(promptForToolApproval).toHaveBeenCalledWith(
-      'AppCallCapability',
-      expect.objectContaining({
-        id: 'storage.backup.create',
-        input: { reason: 'test' },
-        capability: expect.objectContaining({ risk: 'write' })
-      }),
-      expect.objectContaining({ toolCallId: 'session-1:app-call' })
-    )
+    expect(promptForToolApproval).not.toHaveBeenCalled()
+    expect(appCapabilityService.list).not.toHaveBeenCalled()
     expect(appCapabilityService.call).toHaveBeenCalledWith(
       'storage.backup.create',
       { reason: 'test' },
