@@ -11,6 +11,8 @@ const DEFAULT_NOTE_SEARCH_LIMIT = 100
 const MAX_NOTE_SEARCH_LIMIT = 200
 const MAX_NOTE_SEARCH_FILES = 5_000
 const MAX_NOTE_SEARCH_FILE_BYTES = 512 * 1024
+const DEFAULT_NOTE_READ_MAX_BYTES = 512 * 1024
+const MAX_NOTE_READ_MAX_BYTES = 2 * 1024 * 1024
 
 async function getNotesRoot() {
   const noteState = await reduxService.select<any>('state.note').catch(() => null)
@@ -26,9 +28,45 @@ function flattenNotes(nodes: any[], result: any[] = []) {
 }
 
 function normalizeSearchLimit(value: unknown) {
-  const parsed = Number(value ?? DEFAULT_NOTE_SEARCH_LIMIT)
-  const safeLimit = Number.isFinite(parsed) ? parsed : DEFAULT_NOTE_SEARCH_LIMIT
+  const parsed =
+    typeof value === 'string' && !value.trim() ? DEFAULT_NOTE_SEARCH_LIMIT : Number(value ?? DEFAULT_NOTE_SEARCH_LIMIT)
+  const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_NOTE_SEARCH_LIMIT
   return Math.max(1, Math.min(safeLimit, MAX_NOTE_SEARCH_LIMIT))
+}
+
+function normalizeReadMaxBytes(value: unknown) {
+  const parsed =
+    typeof value === 'string' && !value.trim()
+      ? DEFAULT_NOTE_READ_MAX_BYTES
+      : Number(value ?? DEFAULT_NOTE_READ_MAX_BYTES)
+  const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_NOTE_READ_MAX_BYTES
+  return Math.max(1, Math.min(safeLimit, MAX_NOTE_READ_MAX_BYTES))
+}
+
+async function readTextFilePreview(filePath: string, maxBytes: number) {
+  const stat = await fs.stat(filePath)
+  if (stat.size <= maxBytes) {
+    return {
+      content: await fs.readFile(filePath, 'utf8'),
+      byteSize: stat.size,
+      truncated: false,
+      maxBytes
+    }
+  }
+
+  const handle = await fs.open(filePath, 'r')
+  try {
+    const buffer = Buffer.alloc(maxBytes)
+    const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0)
+    return {
+      content: buffer.subarray(0, bytesRead).toString('utf8'),
+      byteSize: stat.size,
+      truncated: true,
+      maxBytes
+    }
+  } finally {
+    await handle.close()
+  }
 }
 
 export function createNotesCapabilities(): AppCapabilityDefinition[] {
@@ -56,7 +94,12 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       inputSchema: {
         type: 'object',
         properties: {
-          path: { type: 'string', description: 'Note path relative to the notes root' }
+          path: { type: 'string', description: 'Note path relative to the notes root' },
+          maxBytes: {
+            type: 'number',
+            default: DEFAULT_NOTE_READ_MAX_BYTES,
+            description: 'Maximum UTF-8 bytes to return before truncating the note preview'
+          }
         },
         required: ['path']
       },
@@ -65,7 +108,10 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any) => {
         const root = await getNotesRoot()
         const filePath = resolveInsideRoot(root, String(input?.path || ''), '.md')
-        return okResult('Note read', { path: filePath, content: await fs.readFile(filePath, 'utf8') })
+        return okResult('Note read', {
+          path: filePath,
+          ...(await readTextFilePreview(filePath, normalizeReadMaxBytes(input?.maxBytes)))
+        })
       }
     },
     {

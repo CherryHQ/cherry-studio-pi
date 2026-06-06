@@ -25,7 +25,11 @@ vi.mock('@main/services/WindowService', () => ({
 vi.mock('@main/utils/file', () => ({
   getName: mocks.getName,
   getNotesDir: () => mocks.notesRoot,
-  scanDir: mocks.scanDir
+  scanDir: mocks.scanDir,
+  isPathInside: (childPath: string, parentPath: string) => {
+    const relative = path.relative(path.resolve(parentPath), path.resolve(childPath))
+    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
+  }
 }))
 
 import { createNotesCapabilities } from '../providers/notes'
@@ -105,5 +109,24 @@ describe('notes app capabilities', () => {
 
     expect(result.ok).toBe(true)
     expect((result.data as any).matches).toEqual([])
+  })
+
+  it('returns a bounded preview when reading oversized notes', async () => {
+    const notePath = path.join(tmpDir, 'large-note.md')
+    await fs.writeFile(notePath, 'a'.repeat(2048), 'utf8')
+
+    const result = await getCapability('notes.read').execute(
+      {
+        path: 'large-note',
+        maxBytes: 128
+      },
+      { source: 'agent' }
+    )
+
+    expect(result.ok).toBe(true)
+    expect((result.data as any).content).toHaveLength(128)
+    expect((result.data as any).truncated).toBe(true)
+    expect((result.data as any).byteSize).toBe(2048)
+    expect((result.data as any).maxBytes).toBe(128)
   })
 })

@@ -182,6 +182,35 @@ describe('StorageV2ConversationRepository', () => {
       expect.objectContaining({ entityType: 'conversation', entityId: 'topic-1', operation: 'delete', version: 4 })
     )
   })
+
+  it('normalizes invalid message pagination before querying SQLite', async () => {
+    const execute = vi.fn(async () => ({ rows: [], columns: [], columnTypes: [] }))
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue({ execute } as unknown as Client)
+
+    const repository = new StorageV2ConversationRepository()
+    await repository.listMessages('topic-1', { limit: Number.NaN, offset: -10 })
+    await repository.listMessages('topic-2', { limit: '5000' as any, offset: '2.8' as any })
+    await repository.listMessages('topic-3', { limit: '' as any, offset: '' as any })
+
+    expect(execute).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        args: ['topic-1', 200, 0]
+      })
+    )
+    expect(execute).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        args: ['topic-2', 1000, 2]
+      })
+    )
+    expect(execute).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        args: ['topic-3', 200, 0]
+      })
+    )
+  })
 })
 
 describe('StorageV2ProviderRepository', () => {

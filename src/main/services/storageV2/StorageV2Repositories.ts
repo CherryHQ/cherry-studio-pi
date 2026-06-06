@@ -176,6 +176,12 @@ function parseJson<T>(value: unknown, fallback: T): T {
   }
 }
 
+function normalizeIntegerInRange(value: unknown, fallback: number, min: number, max: number) {
+  const parsed = typeof value === 'string' && !value.trim() ? fallback : Number(value ?? fallback)
+  const normalized = Number.isFinite(parsed) ? Math.trunc(parsed) : fallback
+  return Math.min(Math.max(normalized, min), max)
+}
+
 function isRecord(value: unknown): value is Record<string, any> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
 }
@@ -1273,8 +1279,8 @@ export class StorageV2ConversationRepository {
     } = {}
   ): Promise<StoredMessage[]> {
     const client = await storageV2Database.getClient()
-    const limit = Math.min(Math.max(options.limit ?? 200, 1), 1000)
-    const offset = Math.max(options.offset ?? 0, 0)
+    const limit = normalizeIntegerInRange(options.limit, 200, 1, 1000)
+    const offset = normalizeIntegerInRange(options.offset, 0, 0, Number.MAX_SAFE_INTEGER)
     const messagesResult = await client.execute({
       sql: `
         SELECT id, conversation_id, role, status, parent_id, request_id, model_id, provider_id,
