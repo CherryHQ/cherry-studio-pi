@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest'
 
 import {
   summarizeAssistantForLog,
+  summarizeMessagesForLog,
   summarizeObjectShapeForLog,
   summarizeProviderConfigForLog,
-  summarizeProviderForLog
+  summarizeProviderForLog,
+  summarizeTextForLog
 } from '../logging'
 
 describe('aiCore logging summaries', () => {
@@ -88,5 +90,31 @@ describe('aiCore logging summaries', () => {
     expect(serialized).not.toContain('raw-config-header-secret')
     expect(serialized).not.toContain('raw-option-secret')
     expect(serialized).not.toContain('medium')
+  })
+
+  it('summarizes text and messages without raw content', () => {
+    const textSummary = summarizeTextForLog('private user message')
+    const messagesSummary = summarizeMessagesForLog([
+      { role: 'user', content: 'raw user content' },
+      { role: 'assistant', content: 'raw assistant content' }
+    ])
+    const serialized = JSON.stringify({ textSummary, messagesSummary })
+
+    expect(textSummary).toMatchObject({
+      type: 'string',
+      length: 20,
+      trimmedLength: 20,
+      isEmpty: false
+    })
+    expect(messagesSummary).toEqual({
+      type: 'array',
+      length: 2,
+      roles: ['user', 'assistant'],
+      truncated: false,
+      truncatedCount: 0
+    })
+    expect(serialized).not.toContain('private user message')
+    expect(serialized).not.toContain('raw user content')
+    expect(serialized).not.toContain('raw assistant content')
   })
 })

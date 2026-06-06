@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeMessagesForLog, summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import { getModel } from '@renderer/hooks/useModel'
 import type { AssistantMessage } from '@renderer/types'
 import {
@@ -62,7 +63,7 @@ export class MemoryProcessor {
 
       // Parse response using Zod schema
       try {
-        logger.debug(`Response content for extraction: ${responseContent}`)
+        logger.debug('Memory fact extraction response received', summarizeTextForLog(responseContent))
         const jsonParsed = jaison(responseContent)
         // Handle both expected format and potential variations
         let dataToValidate = jsonParsed
@@ -76,7 +77,10 @@ export class MemoryProcessor {
         const parsed = FactRetrievalSchema.parse(dataToValidate)
         return parsed.facts
       } catch (error) {
-        logger.error(`Failed to parse fact extraction response: responseContent: ${responseContent}`, error as Error)
+        logger.error('Failed to parse fact extraction response', {
+          response: summarizeTextForLog(responseContent),
+          error
+        })
         return []
       }
     } catch (error) {
@@ -132,13 +136,16 @@ export class MemoryProcessor {
       }
 
       try {
-        logger.debug(`Response content for memory update: ${responseContent}`)
+        logger.debug('Memory update response received', summarizeTextForLog(responseContent))
         const jsonParsed = jaison(responseContent)
         // Handle both direct array and wrapped object format
         const dataToValidate = Array.isArray(jsonParsed) ? jsonParsed : jsonParsed.memory
         parsed = MemoryUpdateSchema.parse(dataToValidate)
       } catch (error) {
-        logger.error(`Failed to parse memory update response: responseContent: ${responseContent}`, error as Error)
+        logger.error('Failed to parse memory update response', {
+          response: summarizeTextForLog(responseContent),
+          error
+        })
         return []
       }
     }
@@ -239,9 +246,12 @@ export class MemoryProcessor {
         limit
       })
 
-      logger.debug(
-        `Searching memories with query: ${query} for user: ${userId} and assistant: ${assistantId} result: ${result}`
-      )
+      logger.debug('Memory search completed', {
+        query: summarizeTextForLog(query),
+        userId,
+        assistantId,
+        resultCount: result.results.length
+      })
       return result.results
     } catch (error) {
       logger.error('Error searching memories:', error as Error)
@@ -266,6 +276,15 @@ export class MemoryProcessor {
       assistantId,
       userId,
       lastMessageId
+    }
+  }
+
+  static summarizeProcessingResultForLog(result: { facts?: unknown[]; operations?: unknown[] }) {
+    return {
+      factCount: result.facts?.length ?? 0,
+      operationCount: result.operations?.length ?? 0,
+      facts: summarizeMessagesForLog(result.facts ?? []),
+      operations: summarizeMessagesForLog(result.operations ?? [])
     }
   }
 }

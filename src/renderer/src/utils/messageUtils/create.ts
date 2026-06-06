@@ -237,9 +237,7 @@ export function createToolBlock(
     metadata: metadata,
     ...baseOnlyOverrides
   }
-  logger.info('createToolBlock_baseOverrides', baseOverrides.metadata)
   const baseBlock = createBaseMessageBlock(messageId, MessageBlockType.TOOL, baseOverrides)
-  logger.info('createToolBlock_baseBlock', baseBlock.metadata)
   return {
     ...baseBlock,
     toolId,

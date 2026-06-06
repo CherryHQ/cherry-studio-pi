@@ -44,6 +44,19 @@ const { TextArea } = Input
 
 const logger = loggerService.withContext('AddAgentPopup')
 
+function summarizeAgentEntityForLog(agent: AgentEntity) {
+  return {
+    id: agent.id,
+    type: agent.type,
+    name: agent.name,
+    hasInstructions: Boolean(agent.instructions),
+    modelId: agent.model,
+    accessiblePathCount: agent.accessible_paths?.length ?? 0,
+    allowedToolCount: agent.allowed_tools?.length ?? 0,
+    configurationKeys: Object.keys(agent.configuration ?? {})
+  }
+}
+
 type WizardStep = 'identity' | 'instructions' | 'model' | 'capabilities'
 
 const CREATE_STEPS: WizardStep[] = ['identity', 'instructions', 'model', 'capabilities']
@@ -341,7 +354,7 @@ const PopupContainer: React.FC<Props> = ({ agent, afterSubmit, resolve }) => {
 
         const result = await updateAgent(updatePayload)
         if (result) {
-          logger.debug('Updated agent', result)
+          logger.debug('Updated agent', summarizeAgentEntityForLog(result))
           afterSubmit?.(result)
         } else {
           logger.error('Update failed.')

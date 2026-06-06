@@ -1,5 +1,6 @@
 import { LoadingOutlined } from '@ant-design/icons'
 import { loggerService } from '@logger'
+import { summarizeAssistantForLog } from '@renderer/aiCore/utils/logging'
 import CopyButton from '@renderer/components/CopyButton'
 import { useTopicMessages } from '@renderer/hooks/useMessageOperations'
 import { useSettings } from '@renderer/hooks/useSettings'
@@ -114,7 +115,9 @@ const ActionGeneral: FC<Props> = React.memo(({ action, scrollToBottom }) => {
     }
 
     if (!assistantRef.current || !topicRef.current) return
-    logger.debug('Before peocess message', { assistant: assistantRef.current })
+    logger.debug('Before processing selection action message', {
+      assistant: summarizeAssistantForLog(assistantRef.current)
+    })
     void processMessages(
       assistantRef.current,
       topicRef.current,

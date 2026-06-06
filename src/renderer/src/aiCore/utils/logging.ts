@@ -27,6 +27,36 @@ export function summarizeObjectShapeForLog(input: unknown, depth = 2): unknown {
   }
 }
 
+export function summarizeTextForLog(input: unknown): Record<string, unknown> {
+  if (typeof input !== 'string') {
+    return { value: summarizeObjectShapeForLog(input) }
+  }
+
+  return {
+    type: 'string',
+    length: input.length,
+    trimmedLength: input.trim().length,
+    isEmpty: input.trim().length === 0
+  }
+}
+
+export function summarizeMessagesForLog(messages: unknown[]) {
+  const roleSampleLimit = 50
+  const sampledMessages = messages.slice(0, roleSampleLimit)
+
+  return {
+    type: 'array',
+    length: messages.length,
+    roles: sampledMessages.map((message) => {
+      if (!message || typeof message !== 'object') return undefined
+      const role = (message as { role?: unknown }).role
+      return typeof role === 'string' ? role : undefined
+    }),
+    truncated: messages.length > roleSampleLimit,
+    truncatedCount: Math.max(0, messages.length - roleSampleLimit)
+  }
+}
+
 export function summarizeAssistantForLog(assistant: Assistant) {
   return {
     id: assistant.id,

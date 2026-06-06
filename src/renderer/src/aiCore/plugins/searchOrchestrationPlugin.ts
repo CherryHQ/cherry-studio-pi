@@ -231,10 +231,12 @@ async function storeConversationMemory(
     memoryProcessor
       .processConversation(conversationMessages, processorConfig)
       .then((result) => {
-        logger.info('Memory processing completed:', result)
+        logger.info('Memory processing completed', MemoryProcessor.summarizeProcessingResultForLog(result))
         if (result.facts?.length > 0) {
-          logger.info('Extracted facts from conversation:', result.facts)
-          logger.info('Memory operations performed:', result.operations)
+          logger.info('Memory facts extracted from conversation', {
+            factCount: result.facts.length,
+            operationCount: result.operations?.length ?? 0
+          })
         } else {
           logger.info('No facts extracted from conversation')
         }

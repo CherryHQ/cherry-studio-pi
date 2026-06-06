@@ -40,6 +40,18 @@ function summarizeApiKeysResponseForLog(response: unknown) {
   return { shape: typeof response }
 }
 
+function summarizeJsonResponseForLog(response: unknown) {
+  if (!response || typeof response !== 'object') {
+    return { shape: typeof response }
+  }
+
+  return {
+    shape: Array.isArray(response) ? 'array' : 'object',
+    keys: Array.isArray(response) ? undefined : Object.keys(response as Record<string, unknown>),
+    itemCount: Array.isArray(response) ? response.length : undefined
+  }
+}
+
 // Zod schemas for API response validation
 const BalanceDataSchema = z.object({
   quota: z.number(),
@@ -460,7 +472,7 @@ class CherryINOAuthService {
       }
 
       const json = await response.json()
-      logger.debug('Balance API raw response:', json)
+      logger.debug('Balance API response received', summarizeJsonResponseForLog(json))
       const parsed = BalanceResponseSchema.parse(json)
 
       if (!parsed.success) {

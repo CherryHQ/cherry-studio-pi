@@ -38,6 +38,13 @@ import { stepCountIs } from 'ai'
 
 import { getAiSdkProviderId } from '../provider/factory'
 import type { ProviderCapabilities } from '../types'
+import {
+  summarizeAssistantForLog,
+  summarizeMessagesForLog,
+  summarizeObjectShapeForLog,
+  summarizeProviderForLog,
+  summarizeTextForLog
+} from '../utils/logging'
 import { setupToolsConfig } from '../utils/mcp'
 import { buildProviderOptions } from '../utils/options'
 import { buildProviderBuiltinWebSearchConfig } from '../utils/websearch'
@@ -239,7 +246,20 @@ export async function buildStreamTextParams(
     params.system = systemPrompt
   }
 
-  logger.debug('params', params)
+  logger.debug('Built streamText params', {
+    assistant: summarizeAssistantForLog(assistant),
+    modelId: model.id,
+    provider: summarizeProviderForLog(provider),
+    messages: summarizeMessagesForLog(sdkMessages),
+    hasSystemPrompt: Boolean(systemPrompt),
+    systemPrompt: summarizeTextForLog(systemPrompt),
+    toolCount: tools ? Object.keys(tools).length : 0,
+    headerKeys: Object.keys(headers ?? {}),
+    providerOptions: summarizeObjectShapeForLog(providerOptions),
+    standardParamKeys: Object.keys(standardParams),
+    maxToolCalls,
+    capabilities: { enableReasoning, enableWebSearch, enableGenerateImage, enableUrlContext }
+  })
 
   return {
     params,

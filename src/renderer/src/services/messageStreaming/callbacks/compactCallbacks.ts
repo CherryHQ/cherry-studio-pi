@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeObjectShapeForLog, summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import type { AppDispatch, RootState } from '@renderer/store'
 import { updateOneBlock } from '@renderer/store/messageBlock'
 import { newMessagesActions } from '@renderer/store/newMessage'
@@ -56,7 +57,10 @@ export const createCompactCallbacks = (deps: CompactCallbacksDeps) => {
    * Called when raw data is received from the stream
    */
   const onRawData = (content: unknown, metadata?: Record<string, any>) => {
-    logger.debug('Raw data received', { content, metadata })
+    logger.debug('Raw stream data received', {
+      content: summarizeTextForLog(content),
+      metadata: summarizeObjectShapeForLog(metadata)
+    })
 
     const rawValue = content as AgentRawValue
 

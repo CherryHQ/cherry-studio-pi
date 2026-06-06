@@ -179,7 +179,10 @@ class WebSearchService {
   public async checkSearch(provider: WebSearchProvider): Promise<{ valid: boolean; error?: any }> {
     try {
       const response = await this.search(provider, 'test query')
-      logger.debug('Search response:', response)
+      logger.debug('Search provider check response received', {
+        providerId: provider.id,
+        resultCount: response.results?.length ?? 0
+      })
       // 优化的判断条件：检查结果是否有效且没有错误
       return { valid: response.results !== undefined, error: undefined }
     } catch (error) {
