@@ -74,6 +74,10 @@ function needsApproval(risk: AppCapabilityRisk) {
   return risk !== 'read'
 }
 
+function canAutoRunWithoutApproval(capability: AppCapabilityDescriptor) {
+  return capability.risk === 'read' || capability.supportsDryRun === true
+}
+
 function makeIntentQuery(input: SystemAgentPlanIntentInput) {
   return String(input.intent || input.query || '').trim()
 }
@@ -138,13 +142,13 @@ export class SystemAgentRuntimeService {
     const autoRuns: SystemAgentAutoRun[] = []
 
     if (input.autoRunReadOnly !== false) {
-      const readOnlyCapability = plan.capabilities.find((capability) => capability.risk === 'read')
-      if (readOnlyCapability) {
-        const result = await appCapabilityService.call(readOnlyCapability.id, input.capabilityInput ?? {}, {
+      const safeCapability = plan.capabilities.find(canAutoRunWithoutApproval)
+      if (safeCapability) {
+        const result = await appCapabilityService.call(safeCapability.id, input.capabilityInput ?? {}, {
           source: 'system',
           dryRun: true
         })
-        autoRuns.push({ capability: readOnlyCapability, result })
+        autoRuns.push({ capability: safeCapability, result })
       }
     }
 
@@ -185,13 +189,15 @@ export class SystemAgentRuntimeService {
     input: unknown = {},
     options: SystemAgentCapabilityCallOptions = {}
   ): Promise<AppCapabilityResult<T>> {
-    const capability = appCapabilityService.get(id, { includeHidden: true, includeSchemas: true })
+    const capabilityId = String(id ?? '').trim()
+    const displayCapabilityId = capabilityId || '(empty)'
+    const capability = appCapabilityService.get(capabilityId, { includeHidden: true, includeSchemas: false })
     if (!capability) {
       return {
         ok: false,
         isError: true,
-        summary: `Capability not found: ${id}`,
-        error: `Capability not found: ${id}`
+        summary: `Capability not found: ${displayCapabilityId}`,
+        error: `Capability not found: ${displayCapabilityId}`
       }
     }
 
@@ -199,19 +205,19 @@ export class SystemAgentRuntimeService {
       return {
         ok: false,
         isError: true,
-        summary: `${id} requires approval`,
-        error: formatSystemAgentApprovalRequiredError(id, capability.risk)
+        summary: `${capabilityId} requires approval`,
+        error: formatSystemAgentApprovalRequiredError(capabilityId, capability.risk)
       }
     }
 
     logger.info('Calling system agent capability', {
-      id,
+      id: capabilityId,
       risk: capability.risk,
       approved: options.approved === true,
       dryRun: options.dryRun === true
     })
 
-    return appCapabilityService.call<T>(id, input, {
+    return appCapabilityService.call<T>(capabilityId, input, {
       source: 'ui',
       sessionId: options.sessionId,
       toolCallId: options.toolCallId,

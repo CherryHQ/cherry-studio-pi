@@ -55,16 +55,25 @@ describe('SystemAgentRuntimeService', () => {
     expect(plan.guidance).toContain('需要用户确认')
   })
 
-  it('auto-runs the best read-only capability for error events', async () => {
-    const readCapability = {
+  it('auto-runs the best safe capability for error events', async () => {
+    const dryRunWriteCapability = {
       id: 'dataSync.webdav.diagnose',
       domain: 'dataSync',
       kind: 'query',
       title: 'Diagnose WebDAV data sync',
       description: 'Diagnose sync errors',
+      risk: 'write',
+      supportsDryRun: true
+    }
+    const readCapability = {
+      id: 'dataSync.status.get',
+      domain: 'dataSync',
+      kind: 'query',
+      title: 'Get data sync status',
+      description: 'Read sync status',
       risk: 'read'
     }
-    mocks.appCapabilityService.search.mockReturnValueOnce([writeCapability, readCapability])
+    mocks.appCapabilityService.search.mockReturnValueOnce([writeCapability, dryRunWriteCapability, readCapability])
     mocks.appCapabilityService.call.mockResolvedValueOnce({ ok: true, summary: 'diagnosed' })
 
     const result = await new SystemAgentRuntimeService().handleEvent({
@@ -101,7 +110,7 @@ describe('SystemAgentRuntimeService', () => {
     expect(result.error).toContain('需要用户确认')
     expect(mocks.appCapabilityService.get).toHaveBeenCalledWith('dataSync.sync.now', {
       includeHidden: true,
-      includeSchemas: true
+      includeSchemas: false
     })
     expect(mocks.appCapabilityService.call).not.toHaveBeenCalled()
   })
@@ -119,7 +128,7 @@ describe('SystemAgentRuntimeService', () => {
     expect(result).toEqual({ ok: true, summary: 'done' })
     expect(mocks.appCapabilityService.get).toHaveBeenCalledWith('dataSync.sync.now', {
       includeHidden: true,
-      includeSchemas: true
+      includeSchemas: false
     })
     expect(mocks.appCapabilityService.call).toHaveBeenCalledWith(
       'dataSync.sync.now',
@@ -130,6 +139,26 @@ describe('SystemAgentRuntimeService', () => {
         toolCallId: undefined,
         dryRun: undefined
       }
+    )
+  })
+
+  it('normalizes capability ids before approval checks and direct calls', async () => {
+    mocks.appCapabilityService.get.mockReturnValueOnce({ ...writeCapability, risk: 'read' })
+    mocks.appCapabilityService.call.mockResolvedValueOnce({ ok: true, summary: 'done' })
+
+    const result = await new SystemAgentRuntimeService().callCapability(' \n dataSync.sync.now \t ', {
+      saveConfig: false
+    })
+
+    expect(result).toEqual({ ok: true, summary: 'done' })
+    expect(mocks.appCapabilityService.get).toHaveBeenCalledWith('dataSync.sync.now', {
+      includeHidden: true,
+      includeSchemas: false
+    })
+    expect(mocks.appCapabilityService.call).toHaveBeenCalledWith(
+      'dataSync.sync.now',
+      { saveConfig: false },
+      expect.objectContaining({ source: 'ui' })
     )
   })
 })
