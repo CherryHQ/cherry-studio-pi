@@ -1,3 +1,4 @@
+import type { Dirent } from 'node:fs'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -25,6 +26,37 @@ const MAX_AUDIT_DEPTH = 8
 type AuditStatsBudget = {
   visited: number
   truncated: boolean
+}
+
+async function readDirectoryEntriesBounded(
+  targetPath: string,
+  maxEntries: number,
+  budget: AuditStatsBudget
+): Promise<Dirent[]> {
+  if (typeof fs.opendir !== 'function') {
+    const entries = await fs.readdir(targetPath, { withFileTypes: true })
+    if (entries.length > maxEntries) {
+      markStatsTruncated(budget)
+      return entries.slice(0, maxEntries)
+    }
+    return entries
+  }
+
+  const entries: Dirent[] = []
+  const directory = await fs.opendir(targetPath)
+  try {
+    for await (const entry of directory) {
+      if (entries.length >= maxEntries) {
+        markStatsTruncated(budget)
+        break
+      }
+      entries.push(entry)
+    }
+  } finally {
+    await directory.close().catch(() => undefined)
+  }
+
+  return entries
 }
 
 const KNOWN_DATA_ROOT_ENTRIES = new Set([
@@ -134,10 +166,9 @@ async function collectStats(
   let sizeBytes = 0
   let fileCount = 0
   let directoryCount = 1
-  const entries = await fs.readdir(targetPath, { withFileTypes: true })
-  const visibleEntries = entries.slice(0, MAX_AUDIT_DIRECTORY_ENTRIES)
+  const visibleEntries = await readDirectoryEntriesBounded(targetPath, MAX_AUDIT_DIRECTORY_ENTRIES, budget)
 
-  if (entries.length > visibleEntries.length || depth >= MAX_AUDIT_DEPTH) {
+  if (depth >= MAX_AUDIT_DEPTH) {
     markStatsTruncated(budget)
   }
 

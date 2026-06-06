@@ -64,11 +64,11 @@ class SpanCacheService implements TraceCache {
       await this.cleanHistoryTrace(topicId, traceId || '', modelName)
       await this.saveSpans(topicId)
     } else if (traceId) {
-      await fs.rm(path.join(this.fileDir, topicId, traceId))
+      await fs.rm(path.join(this.fileDir, topicId, traceId), { force: true })
     } else {
       const files = await fs.readdir(path.join(this.fileDir, topicId))
       for (const file of files) {
-        await fs.rm(path.join(this.fileDir, topicId, file))
+        await fs.rm(path.join(this.fileDir, topicId, file), { force: true })
       }
     }
   }
@@ -381,7 +381,10 @@ class SpanCacheService implements TraceCache {
       await fs.access(filePath)
       return true
     } catch (err) {
-      logger.error('delete trace file error:', err as Error)
+      const code = typeof err === 'object' && err && 'code' in err ? err.code : undefined
+      if (code !== 'ENOENT') {
+        logger.warn('Failed to access trace file:', err as Error)
+      }
       return false
     }
   }

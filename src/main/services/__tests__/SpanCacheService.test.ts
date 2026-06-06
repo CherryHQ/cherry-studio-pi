@@ -105,11 +105,29 @@ describe('SpanCacheService', () => {
     bindTopic('trace-clean-b', 'topic-clean-b')
     saveEntity(makeSpan({ id: 'span-clean-a', traceId: 'trace-clean-a' }))
     saveEntity(makeSpan({ id: 'span-clean-b', traceId: 'trace-clean-b' }))
+    mocks.fs.readdir.mockResolvedValueOnce(['trace-clean-a', 'trace-clean-b'])
 
     await cleanTopic('topic-clean-a')
 
     expect(getEntity('span-clean-a')).toBeUndefined()
     expect(getEntity('span-clean-b')).toBeDefined()
     expect(mocks.fs.readdir).toHaveBeenCalledTimes(1)
+    expect(mocks.fs.rm).toHaveBeenCalledWith(expect.stringContaining('trace-clean-a'), { force: true })
+    expect(mocks.fs.rm).toHaveBeenCalledWith(expect.stringContaining('trace-clean-b'), { force: true })
+  })
+
+  it('cleans a single persisted trace idempotently', async () => {
+    await cleanTopic('topic-clean-one', 'trace-clean-one')
+
+    expect(mocks.fs.rm).toHaveBeenCalledWith(expect.stringContaining('trace-clean-one'), { force: true })
+  })
+
+  it('returns no historical spans without error logging when the trace file is missing', async () => {
+    mocks.fs.access.mockRejectedValueOnce(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }))
+
+    await expect(getSpans('topic-missing', 'trace-missing')).resolves.toEqual([])
+
+    expect(mocks.logger.error).not.toHaveBeenCalled()
+    expect(mocks.logger.warn).not.toHaveBeenCalled()
   })
 })
