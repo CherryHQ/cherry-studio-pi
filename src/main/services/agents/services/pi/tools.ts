@@ -686,7 +686,7 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
     name: 'BrowserOpen',
     label: 'Browser Open',
     description:
-      'Open a URL in Cherry Studio browser automation and optionally return page content. Use for rendered pages, navigation, login flows, or pages that need JavaScript.',
+      'Open a URL in Cherry Studio Pi browser automation and optionally return page content. Use for rendered pages, navigation, login flows, or pages that need JavaScript.',
     parameters: {
       type: 'object',
       properties: {
@@ -749,7 +749,7 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
   const browserResetTool: AgentTool<any> = {
     name: 'BrowserReset',
     label: 'Browser Reset',
-    description: 'Close Cherry Studio browser automation windows and clear browser automation state.',
+    description: 'Close Cherry Studio Pi browser automation windows and clear browser automation state.',
     parameters: { type: 'object', properties: {} } as any,
     async execute(_toolCallId, params) {
       return safeExecute('BrowserReset', async () => {

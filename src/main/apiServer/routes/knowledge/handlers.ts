@@ -98,7 +98,7 @@ export const listKnowledgeBases = async (req: ValidationRequest, res: Response):
         logger.warn('Redux store not available, returning 503')
         return res.status(503).json({
           error: {
-            message: 'Knowledge bases are only available when Cherry Studio window is open',
+            message: 'Knowledge bases are only available when Cherry Studio Pi window is open',
             type: 'service_unavailable',
             code: 'REDUX_UNAVAILABLE'
           }
@@ -153,7 +153,7 @@ export const getKnowledgeBase = async (req: ValidationRequest, res: Response): P
     if (isReduxUnavailableError(error)) {
       return res.status(503).json({
         error: {
-          message: 'Knowledge bases are only available when Cherry Studio window is open',
+          message: 'Knowledge bases are only available when Cherry Studio Pi window is open',
           type: 'service_unavailable',
           code: 'REDUX_UNAVAILABLE'
         }
@@ -324,7 +324,7 @@ export const searchKnowledge = async (req: ValidationRequest, res: Response): Pr
         results: [],
         total: 0,
         searched_bases: [],
-        warnings: ['No knowledge bases configured. Please add knowledge bases in Cherry Studio.']
+        warnings: ['No knowledge bases configured. Please add knowledge bases in Cherry Studio Pi.']
       })
     }
 
@@ -411,7 +411,7 @@ export const searchKnowledge = async (req: ValidationRequest, res: Response): Pr
     if (isReduxUnavailableError(error)) {
       return res.status(503).json({
         error: {
-          message: 'Knowledge bases are only available when Cherry Studio window is open',
+          message: 'Knowledge bases are only available when Cherry Studio Pi window is open',
           type: 'service_unavailable',
           code: 'REDUX_UNAVAILABLE'
         }

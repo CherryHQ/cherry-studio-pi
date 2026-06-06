@@ -8,6 +8,7 @@ import {
   hasEnglishUIText,
   isInCodeContext,
   isNonUIString,
+  shouldSkipFile,
   shouldSkipNode
 } from '../check-hardcoded-strings'
 
@@ -180,6 +181,12 @@ describe('check-hardcoded-strings', () => {
 
     it('should NOT skip regular TypeScript files', () => {
       expect(mockShouldSkipFile(`${mockSrcDir}/utils/helper.ts`)).toBe(false)
+    })
+
+    it('should skip service-layer operational diagnostic files', () => {
+      expect(shouldSkipFile(`${mockSrcDir}/services/DataSyncService.ts`, mockSrcDir)).toBe(true)
+      expect(shouldSkipFile(`${mockSrcDir}/services/storageV2/WebDavRecordSyncService.ts`, mockSrcDir)).toBe(true)
+      expect(shouldSkipFile(`${mockSrcDir}/components/DataSyncSettings.tsx`, mockSrcDir)).toBe(false)
     })
   })
 

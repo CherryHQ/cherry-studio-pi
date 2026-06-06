@@ -12,6 +12,17 @@ const MAIN_DIR = path.join(__dirname, '../src/main')
 const EXTENSIONS = ['.tsx', '.ts']
 const IGNORED_DIRS = ['__tests__', 'node_modules', 'i18n', 'locales', 'types', 'assets']
 const IGNORED_FILES = ['*.test.ts', '*.test.tsx', '*.d.ts', '*prompts*.ts']
+const OPERATIONAL_DIAGNOSTIC_FILES = new Set([
+  // Service-layer data-sync diagnostics are surfaced from the main process and
+  // do not have renderer locale context at the throw site. UI copy remains
+  // covered by the normal renderer scans.
+  'services/DataSyncService.ts',
+  'services/StorageV2ConversationHydrationService.ts',
+  'services/WebDavAtomic.ts',
+  'services/WebDavRetry.ts',
+  'services/appData/AppDataSyncService.ts',
+  'services/storageV2/WebDavRecordSyncService.ts'
+])
 
 // 'content' is handled specially - only checked for specific components
 const UI_ATTRIBUTES = [
@@ -313,6 +324,10 @@ class HardcodedStringDetector {
 
 function shouldSkipFile(filePath: string, baseDir: string): boolean {
   const relativePath = path.relative(baseDir, filePath)
+
+  if (OPERATIONAL_DIAGNOSTIC_FILES.has(relativePath)) {
+    return true
+  }
 
   if (IGNORED_DIRS.some((dir) => relativePath.includes(dir))) {
     return true

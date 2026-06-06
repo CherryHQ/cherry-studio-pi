@@ -174,7 +174,7 @@ describe('Knowledge Handlers', () => {
       expect(statusMock).toHaveBeenCalledWith(503)
       expect(jsonMock).toHaveBeenCalledWith({
         error: {
-          message: 'Knowledge bases are only available when Cherry Studio window is open',
+          message: 'Knowledge bases are only available when Cherry Studio Pi window is open',
           type: 'service_unavailable',
           code: 'REDUX_UNAVAILABLE'
         }
@@ -256,7 +256,7 @@ describe('Knowledge Handlers', () => {
         results: [],
         total: 0,
         searched_bases: [],
-        warnings: ['No knowledge bases configured. Please add knowledge bases in Cherry Studio.']
+        warnings: ['No knowledge bases configured. Please add knowledge bases in Cherry Studio Pi.']
       })
     })
 
