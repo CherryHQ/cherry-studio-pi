@@ -132,6 +132,42 @@ function getServerLogger(server: MCPServer, extra?: Record<string, any>) {
   return loggerService.withContext('MCPService', { ...base, ...extra })
 }
 
+function normalizeToolInputSchema(server: MCPServer, tool: SDKTool): MCPTool['inputSchema'] {
+  const parsed = MCPToolInputSchema.safeParse(tool.inputSchema)
+  if (parsed.success) {
+    return parsed.data
+  }
+
+  getServerLogger(server, { tool: tool.name }).warn('Invalid MCP tool inputSchema, using permissive object schema', {
+    error: parsed.error.message,
+    inputSchema: redactSensitiveMCPLogData(tool.inputSchema)
+  })
+
+  return {
+    type: 'object',
+    properties: {},
+    required: [],
+    additionalProperties: true
+  }
+}
+
+function normalizeToolOutputSchema(server: MCPServer, tool: SDKTool): MCPTool['outputSchema'] | undefined {
+  if (!tool.outputSchema) {
+    return undefined
+  }
+
+  const parsed = MCPToolOutputSchema.safeParse(tool.outputSchema)
+  if (parsed.success) {
+    return parsed.data
+  }
+
+  getServerLogger(server, { tool: tool.name }).warn('Invalid MCP tool outputSchema, ignoring output schema', {
+    error: parsed.error.message,
+    outputSchema: redactSensitiveMCPLogData(tool.outputSchema)
+  })
+  return undefined
+}
+
 /**
  * Higher-order function to add caching capability to any async function
  * @param fn The original function to be wrapped with caching
@@ -922,11 +958,11 @@ class McpService {
     try {
       const { tools } = await client.listTools()
       const serverTools: MCPTool[] = []
-      tools.map((tool: SDKTool) => {
+      for (const tool of tools) {
         const serverTool: MCPTool = {
           ...tool,
-          inputSchema: MCPToolInputSchema.parse(tool.inputSchema),
-          outputSchema: tool.outputSchema ? MCPToolOutputSchema.parse(tool.outputSchema) : undefined,
+          inputSchema: normalizeToolInputSchema(server, tool),
+          outputSchema: normalizeToolOutputSchema(server, tool),
           id: buildFunctionCallToolName(server.name, tool.name),
           serverId: server.id,
           serverName: server.name,
@@ -934,7 +970,7 @@ class McpService {
         }
         serverTools.push(serverTool)
         getServerLogger(server).debug(`Listing tools`, { tool: serverTool })
-      })
+      }
       return serverTools
     } catch (error: unknown) {
       getServerLogger(server).error(`Failed to list tools`, error as Error)

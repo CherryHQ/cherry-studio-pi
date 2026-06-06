@@ -40,6 +40,14 @@ vi.mock('@renderer/utils/userConfirmation', () => ({
 describe('mcp utils', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubGlobal('window', {
+      api: {
+        mcp: {
+          abortTool: vi.fn(async () => true),
+          resolveHubTool: vi.fn(async () => null)
+        }
+      }
+    })
   })
 
   describe('setupToolsConfig', () => {
@@ -398,7 +406,7 @@ describe('mcp utils', () => {
 
     it('should JSON.stringify unknown content types', () => {
       const item = { type: 'unknown' as any, foo: 'bar' }
-      expect(mcpResultToTextSummary({ content: [item] })).toBe(JSON.stringify(item))
+      expect(mcpResultToTextSummary({ content: [item] })).toBe(JSON.stringify(item, null, 2))
     })
 
     it('should join multiple content parts with newline', () => {
@@ -411,8 +419,41 @@ describe('mcp utils', () => {
       expect(result).toBe('Description\n[Image: image/png, delivered to user]')
     })
 
-    it('should JSON.stringify result when content is missing', () => {
-      expect(mcpResultToTextSummary(null as any)).toBe('null')
+    it('should preserve structured content when content is missing', () => {
+      expect(
+        mcpResultToTextSummary({
+          structuredContent: {
+            result: 'ok',
+            count: 2
+          }
+        } as any)
+      ).toBe('{\n  "result": "ok",\n  "count": 2\n}')
+    })
+
+    it('should append structured content after text content', () => {
+      expect(
+        mcpResultToTextSummary({
+          content: [{ type: 'text', text: 'done' }],
+          structuredContent: { file: '/tmp/a.txt' }
+        })
+      ).toBe('done\nStructured content:\n{\n  "file": "/tmp/a.txt"\n}')
+    })
+
+    it('should omit large structured binary fields', () => {
+      const summary = mcpResultToTextSummary({
+        structuredContent: {
+          blob: 'a'.repeat(3000),
+          value: 'kept'
+        }
+      } as any)
+
+      expect(summary).toContain('[Large blob omitted: 3000 characters]')
+      expect(summary).toContain('"value": "kept"')
+      expect(summary).not.toContain('a'.repeat(3000))
+    })
+
+    it('should handle missing result gracefully', () => {
+      expect(mcpResultToTextSummary(null as any)).toBe('')
       expect(mcpResultToTextSummary({} as any)).toBe('{}')
     })
 
@@ -568,6 +609,48 @@ describe('mcp utils', () => {
         content: [{ type: 'text', text: 'Auto-approved success' }],
         isError: false
       })
+    })
+
+    it('should abort active MCP tool when the AI SDK abort signal fires', async () => {
+      const { callMCPTool, isToolAutoApproved } = await import('@renderer/utils/mcp-tools')
+
+      vi.mocked(isToolAutoApproved).mockReturnValue(true)
+      let resolveCall: (value: { content: { type: 'text'; text: string }[]; isError: false }) => void = () => undefined
+      vi.mocked(callMCPTool).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveCall = resolve
+          })
+      )
+
+      const mcpTools: MCPTool[] = [
+        {
+          id: 'abortable-tool-id',
+          serverId: 'test-server',
+          serverName: 'test-server',
+          name: 'abortable-tool',
+          description: 'Abortable tool',
+          type: 'mcp',
+          inputSchema: {
+            type: 'object',
+            properties: {}
+          }
+        }
+      ]
+
+      const controller = new AbortController()
+      const tools = convertMcpToolsToAiSdkTools(mcpTools)
+      const tool = tools['abortable-tool-id'] as Tool
+      const execution = tool.execute!(
+        {},
+        { messages: [], abortSignal: controller.signal, toolCallId: 'abort-call-123' }
+      )
+
+      controller.abort()
+
+      expect(window.api.mcp.abortTool).toHaveBeenCalledWith('abort-call-123')
+      resolveCall({ content: [{ type: 'text', text: 'finished' }], isError: false })
+      await expect(execution).resolves.toEqual({ content: [{ type: 'text', text: 'finished' }], isError: false })
     })
   })
 })

@@ -8,6 +8,18 @@ import { nanoid } from 'nanoid'
 
 const logger = loggerService.withContext('Utils:MCPTools')
 
+function formatToolError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message || error.name || 'No error details available'
+  }
+
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return String(error)
+  }
+}
+
 export async function callBuiltInTool(toolResponse: MCPToolResponse): Promise<MCPCallToolResponse | undefined> {
   logger.info(`[BuiltIn] Calling Built-in Tool: ${toolResponse.tool.name}`, toolResponse.tool)
 
@@ -79,15 +91,15 @@ export async function callMCPTool(
     return resp
   } catch (e) {
     logger.error(`Error calling Tool: ${toolResponse.tool.serverName} ${toolResponse.tool.name}`, e as Error)
-    return Promise.resolve({
+    return {
       isError: true,
       content: [
         {
           type: 'text',
-          text: `Error calling tool ${toolResponse.tool.name}: ${e instanceof Error ? e.stack || e.message || 'No error details available' : JSON.stringify(e)}`
+          text: `Error calling tool ${toolResponse.tool.name}: ${formatToolError(e)}`
         }
       ]
-    })
+    }
   }
 }
 

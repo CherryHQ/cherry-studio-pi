@@ -14,6 +14,8 @@ import type { JSONSchema7 } from 'json-schema'
 
 const logger = loggerService.withContext('MCP-utils')
 
+const MAX_MODEL_OUTPUT_CHARS = 60_000
+
 // Setup tools configuration based on provided parameters
 export function setupToolsConfig(
   mcpTools?: MCPTool[],
@@ -28,6 +30,43 @@ export function setupToolsConfig(
   tools = convertMcpToolsToAiSdkTools(mcpTools, allowedTools)
 
   return tools
+}
+
+function truncateModelOutput(text: string): string {
+  if (text.length <= MAX_MODEL_OUTPUT_CHARS) {
+    return text
+  }
+  return `${text.slice(0, MAX_MODEL_OUTPUT_CHARS)}\n\n[Output truncated: ${text.length - MAX_MODEL_OUTPUT_CHARS} more characters]`
+}
+
+function stringifyForModel(value: unknown): string {
+  if (typeof value === 'string') {
+    return truncateModelOutput(value)
+  }
+
+  const seen = new WeakSet<object>()
+  try {
+    return truncateModelOutput(
+      JSON.stringify(
+        value,
+        (key, val) => {
+          if (typeof val === 'string' && /^(blob|data|base64|image|audio)$/i.test(key) && val.length > 2048) {
+            return `[Large ${key} omitted: ${val.length} characters]`
+          }
+          if (val && typeof val === 'object') {
+            if (seen.has(val)) {
+              return '[Circular]'
+            }
+            seen.add(val)
+          }
+          return val
+        },
+        2
+      ) ?? ''
+    )
+  } catch {
+    return truncateModelOutput(String(value))
+  }
 }
 
 /**
@@ -48,38 +87,64 @@ export function hasMultimodalContent(result: MCPCallToolResponse): boolean {
  * 避免 base64 数据超出消息大小限制（如 kimi 的 4MB 限制）。
  */
 export function mcpResultToTextSummary(result: MCPCallToolResponse): string {
-  if (!result || !result.content || !Array.isArray(result.content)) {
-    return JSON.stringify(result)
+  if (!result) {
+    return ''
   }
 
   const parts: string[] = []
-  for (const item of result.content) {
-    switch (item.type) {
-      case 'text':
-        parts.push(item.text || '')
-        break
-      case 'image':
-        parts.push(`[Image: ${item.mimeType || 'image/png'}, delivered to user]`)
-        break
-      case 'audio':
-        parts.push(`[Audio: ${item.mimeType || 'audio/mp3'}, delivered to user]`)
-        break
-      case 'resource':
-        if (item.resource?.blob) {
-          parts.push(
-            `[Resource: ${item.resource.mimeType || 'application/octet-stream'}, uri=${item.resource.uri || 'unknown'}, delivered to user]`
-          )
-        } else {
-          parts.push(item.resource?.text || JSON.stringify(item))
-        }
-        break
-      default:
-        parts.push(JSON.stringify(item))
-        break
+  const content = Array.isArray(result.content) ? result.content : undefined
+
+  if (content) {
+    for (const item of content) {
+      switch (item.type) {
+        case 'text':
+          parts.push(item.text || '')
+          break
+        case 'image':
+          parts.push(`[Image: ${item.mimeType || 'image/png'}, delivered to user]`)
+          break
+        case 'audio':
+          parts.push(`[Audio: ${item.mimeType || 'audio/mp3'}, delivered to user]`)
+          break
+        case 'resource':
+          if (item.resource?.blob) {
+            parts.push(
+              `[Resource: ${item.resource.mimeType || 'application/octet-stream'}, uri=${item.resource.uri || 'unknown'}, delivered to user]`
+            )
+          } else {
+            parts.push(item.resource?.text || stringifyForModel(item))
+          }
+          break
+        default:
+          parts.push(stringifyForModel(item))
+          break
+      }
     }
   }
 
-  return parts.join('\n')
+  if (result.structuredContent !== undefined) {
+    const structuredText = stringifyForModel(result.structuredContent)
+    parts.push(parts.length > 0 ? `Structured content:\n${structuredText}` : structuredText)
+  }
+
+  const text = parts.filter(Boolean).join('\n')
+  if (text || content || result.structuredContent !== undefined) {
+    return truncateModelOutput(text)
+  }
+
+  return stringifyForModel(result)
+}
+
+function cancelledToolResult(toolName: string): MCPCallToolResponse {
+  return {
+    content: [
+      {
+        type: 'text',
+        text: `Tool "${toolName}" was cancelled.`
+      }
+    ],
+    isError: false
+  }
 }
 
 /**
@@ -94,92 +159,111 @@ export function convertMcpToolsToAiSdkTools(mcpTools: MCPTool[], allowedTools?: 
     tools[mcpTool.id] = tool({
       description: mcpTool.description || `Tool from ${mcpTool.serverName}`,
       inputSchema: jsonSchema(mcpTool.inputSchema as JSONSchema7),
-      execute: async (params, { toolCallId }) => {
-        // 检查是否启用自动批准
-        const server = getMcpServerByTool(mcpTool)
-        let isAutoApproveEnabled = isToolAutoApproved(mcpTool, server, allowedTools)
+      execute: async (params, { toolCallId, abortSignal }) => {
+        if (abortSignal?.aborted) {
+          return cancelledToolResult(mcpTool.name)
+        }
 
-        // For hub invoke/exec, resolve the underlying tool and check its server's auto-approve config
-        if (
-          !isAutoApproveEnabled &&
-          mcpTool.serverId === 'hub' &&
-          (mcpTool.name === 'invoke' || mcpTool.name === 'exec')
-        ) {
-          const underlyingToolName = (params as Record<string, unknown>)?.name as string | undefined
-          if (underlyingToolName) {
-            try {
-              const resolved = await window.api.mcp.resolveHubTool(underlyingToolName)
-              if (resolved) {
-                const underlyingServer = store.getState().mcp.servers.find((s) => s.id === resolved.serverId)
-                if (underlyingServer) {
-                  isAutoApproveEnabled = !underlyingServer.disabledAutoApproveTools?.includes(resolved.toolName)
+        const abortActiveTool = () => {
+          void window.api.mcp.abortTool(toolCallId).catch((err) => {
+            logger.warn(`Failed to abort MCP tool: ${mcpTool.name}`, err as Error)
+          })
+        }
+        abortSignal?.addEventListener('abort', abortActiveTool, { once: true })
+
+        // 检查是否启用自动批准
+        try {
+          const server = getMcpServerByTool(mcpTool)
+          let isAutoApproveEnabled = isToolAutoApproved(mcpTool, server, allowedTools)
+
+          // For hub invoke/exec, resolve the underlying tool and check its server's auto-approve config
+          if (
+            !isAutoApproveEnabled &&
+            mcpTool.serverId === 'hub' &&
+            (mcpTool.name === 'invoke' || mcpTool.name === 'exec')
+          ) {
+            const underlyingToolName = (params as Record<string, unknown>)?.name as string | undefined
+            if (underlyingToolName) {
+              try {
+                const resolved = await window.api.mcp.resolveHubTool(underlyingToolName)
+                if (resolved) {
+                  const underlyingServer = store.getState().mcp.servers.find((s) => s.id === resolved.serverId)
+                  if (underlyingServer) {
+                    isAutoApproveEnabled = !underlyingServer.disabledAutoApproveTools?.includes(resolved.toolName)
+                  }
                 }
+              } catch (err) {
+                logger.warn('Failed to resolve hub tool for auto-approve check', err as Error)
               }
-            } catch (err) {
-              logger.warn('Failed to resolve hub tool for auto-approve check', err as Error)
             }
           }
-        }
 
-        let confirmed = true
+          let confirmed = true
 
-        if (!isAutoApproveEnabled) {
-          // Register mapping so confirmSameNameTools can batch-confirm pending tools.
-          // For hub invoke/exec, use the underlying tool name so tools targeting the
-          // same underlying server+tool are grouped together.
-          const mappingName =
-            mcpTool.serverId === 'hub' && (mcpTool.name === 'invoke' || mcpTool.name === 'exec')
-              ? ((params as Record<string, unknown>)?.name as string) || mcpTool.name
-              : mcpTool.name
-          setToolIdToNameMapping(toolCallId, mappingName)
+          if (!isAutoApproveEnabled) {
+            // Register mapping so confirmSameNameTools can batch-confirm pending tools.
+            // For hub invoke/exec, use the underlying tool name so tools targeting the
+            // same underlying server+tool are grouped together.
+            const mappingName =
+              mcpTool.serverId === 'hub' && (mcpTool.name === 'invoke' || mcpTool.name === 'exec')
+                ? ((params as Record<string, unknown>)?.name as string) || mcpTool.name
+                : mcpTool.name
+            setToolIdToNameMapping(toolCallId, mappingName)
 
-          // Send system notification for tool approval
-          sendToolApprovalNotification(mcpTool.name)
+            // Send system notification for tool approval
+            sendToolApprovalNotification(mcpTool.name)
 
-          // 请求用户确认
-          logger.debug(`Requesting user confirmation for tool: ${mcpTool.name}`)
-          confirmed = await requestToolConfirmation(toolCallId)
+            // 请求用户确认
+            logger.debug(`Requesting user confirmation for tool: ${mcpTool.name}`)
+            confirmed = await requestToolConfirmation(toolCallId)
 
-          if (confirmed) {
-            // Auto-confirm other pending tools with the same name
-            confirmSameNameTools(mappingName)
+            if (confirmed) {
+              // Auto-confirm other pending tools with the same name
+              confirmSameNameTools(mappingName)
+            }
           }
-        }
 
-        if (!confirmed) {
-          // 用户拒绝执行工具
-          logger.debug(`User cancelled tool execution: ${mcpTool.name}`)
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `User declined to execute tool "${mcpTool.name}".`
-              }
-            ],
-            isError: false
+          if (!confirmed) {
+            // 用户拒绝执行工具
+            logger.debug(`User cancelled tool execution: ${mcpTool.name}`)
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `User declined to execute tool "${mcpTool.name}".`
+                }
+              ],
+              isError: false
+            }
           }
+
+          if (abortSignal?.aborted) {
+            return cancelledToolResult(mcpTool.name)
+          }
+
+          // 用户确认或自动批准，执行工具
+          logger.debug(`Executing tool: ${mcpTool.name}`)
+
+          // 创建适配的 MCPToolResponse 对象
+          const toolResponse: MCPToolResponse = {
+            id: toolCallId,
+            tool: mcpTool,
+            arguments: params,
+            status: 'pending',
+            toolCallId
+          }
+
+          const result = await callMCPTool(toolResponse)
+
+          // 返回结果，AI SDK 会处理序列化
+          if (result.isError) {
+            return Promise.reject(result)
+          }
+          // 返回工具执行结果
+          return result
+        } finally {
+          abortSignal?.removeEventListener('abort', abortActiveTool)
         }
-
-        // 用户确认或自动批准，执行工具
-        logger.debug(`Executing tool: ${mcpTool.name}`)
-
-        // 创建适配的 MCPToolResponse 对象
-        const toolResponse: MCPToolResponse = {
-          id: toolCallId,
-          tool: mcpTool,
-          arguments: params,
-          status: 'pending',
-          toolCallId
-        }
-
-        const result = await callMCPTool(toolResponse)
-
-        // 返回结果，AI SDK 会处理序列化
-        if (result.isError) {
-          return Promise.reject(result)
-        }
-        // 返回工具执行结果
-        return result
       },
       // 将多模态结果 (image/audio/resource blob) 转为文本摘要，避免 base64 超出消息大小限制。
       // 图片/音频已通过 IMAGE_COMPLETE chunk 展示给用户。

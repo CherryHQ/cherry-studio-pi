@@ -135,6 +135,69 @@ describe('MCPService.listAllActiveServerTools', () => {
   })
 })
 
+describe('MCPService.listToolsImpl', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    CacheService.clear()
+  })
+
+  it('keeps listing tools when one tool has a non-standard schema', async () => {
+    vi.spyOn(mcpService, 'initClient').mockResolvedValue({
+      listTools: vi.fn(async () => ({
+        tools: [
+          {
+            name: 'bad_schema_tool',
+            description: 'A tool with a schema shape seen in the wild',
+            inputSchema: {
+              type: ['object', 'null'],
+              properties: 'not-an-object'
+            },
+            outputSchema: true
+          },
+          {
+            name: 'normal_tool',
+            description: 'A normal tool',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: { type: 'string' }
+              }
+            }
+          }
+        ]
+      }))
+    } as any)
+
+    const tools = await (mcpService as any).listToolsImpl({
+      id: 'server-id',
+      name: 'Server',
+      isActive: true
+    } satisfies MCPServer)
+
+    expect(tools).toHaveLength(2)
+    expect(tools[0]).toMatchObject({
+      name: 'bad_schema_tool',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: true
+      },
+      outputSchema: undefined
+    })
+    expect(tools[1]).toMatchObject({
+      name: 'normal_tool',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string' }
+        },
+        required: []
+      }
+    })
+  })
+})
+
 describe('MCPService MCP log redaction', () => {
   afterEach(() => {
     vi.restoreAllMocks()

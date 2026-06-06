@@ -964,7 +964,7 @@ export interface MCPToolResultContent {
 }
 
 export interface MCPCallToolResponse {
-  content: MCPToolResultContent[]
+  content?: MCPToolResultContent[]
   structuredContent?: unknown
   isError?: boolean
 }

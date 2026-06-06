@@ -19,33 +19,37 @@ export interface BaseTool {
 //   providerExecuted?: boolean // 标识是Provider端执行还是客户端执行
 // }
 
-export const MCPToolOutputSchema = z
-  .object({
-    type: z.literal('object'),
-    properties: z.object({}).loose().optional(),
-    required: z.array(z.string()).optional()
-  })
-  .loose()
+const JsonObjectSchema = z.object({}).loose()
+
+export interface MCPToolInputJsonSchema {
+  type: 'object'
+  properties?: Record<string, unknown>
+  required?: string[]
+  [key: string]: unknown
+}
+
+export type MCPToolOutputJsonSchema = Record<string, unknown>
 
 export const MCPToolInputSchema = z
   .object({
-    type: z.literal('object'),
-    properties: z.object({}).loose().optional(),
+    type: z.unknown().optional(),
+    properties: JsonObjectSchema.optional(),
     required: z.array(z.string()).optional()
   })
   .loose()
-  .transform((schema) => {
-    if (!schema.properties) {
-      schema.properties = {}
+  .transform((schema): MCPToolInputJsonSchema => {
+    return {
+      ...schema,
+      type: 'object' as const,
+      properties: schema.properties ?? {},
+      required: schema.required ?? []
     }
-    if (!schema.required) {
-      schema.required = []
-    }
-    return schema
   })
 
+export const MCPToolOutputSchema: z.ZodType<MCPToolOutputJsonSchema> = JsonObjectSchema
+
 export interface BuiltinTool extends BaseTool {
-  inputSchema: z.infer<typeof MCPToolInputSchema>
+  inputSchema: MCPToolInputJsonSchema
   type: 'builtin'
 }
 
@@ -55,8 +59,8 @@ export interface MCPTool extends BaseTool {
   serverName: string
   name: string
   description?: string
-  inputSchema: z.infer<typeof MCPToolInputSchema>
-  outputSchema?: z.infer<typeof MCPToolOutputSchema>
+  inputSchema: MCPToolInputJsonSchema
+  outputSchema?: MCPToolOutputJsonSchema
   isBuiltIn?: boolean // 标识是否为内置工具，内置工具不需要通过MCP协议调用
   type: 'mcp'
 }
