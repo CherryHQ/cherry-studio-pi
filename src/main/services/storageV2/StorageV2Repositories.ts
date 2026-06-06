@@ -99,6 +99,11 @@ type StoredMessage = {
   blocks: StoredMessageBlock[]
 }
 
+export type StorageV2ProviderUpsertOptions = {
+  clearCredential?: boolean
+  preserveExistingCredential?: boolean
+}
+
 const LEGACY_FILE_TYPES = new Set(['image', 'video', 'audio', 'text', 'document', 'other'])
 
 export type StorageV2ConversationImport = {
@@ -560,12 +565,20 @@ export class StorageV2SettingsRepository {
 }
 
 export class StorageV2ProviderRepository {
-  async upsert(provider: Provider, sortOrder = 0, credentialRef?: string): Promise<{ skippedSecret: boolean }> {
+  async upsert(
+    provider: Provider,
+    sortOrder = 0,
+    credentialRef?: string,
+    options: StorageV2ProviderUpsertOptions = {}
+  ): Promise<{ skippedSecret: boolean }> {
     const client = await storageV2Database.getClient()
     const timestamp = now()
     const config = stripProviderConfig(provider)
     const models = normalizeProviderModels(provider)
     const modelIds = models.map((model) => `${provider.id}:${model.id}`)
+    const shouldClearCredential =
+      options.clearCredential === true ||
+      Boolean(provider.apiKey && !credentialRef && !options.preserveExistingCredential)
 
     await withTransaction(client, async () => {
       await client.execute({
@@ -662,7 +675,7 @@ export class StorageV2ProviderRepository {
           `,
           args: [provider.id, credentialRef, timestamp]
         })
-      } else {
+      } else if (shouldClearCredential) {
         await client.execute({
           sql: "DELETE FROM provider_credentials WHERE provider_id = ? AND credential_kind = 'apiKey'",
           args: [provider.id]

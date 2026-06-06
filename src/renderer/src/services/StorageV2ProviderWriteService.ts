@@ -5,6 +5,11 @@ import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
 const pendingProviderById = new Map<string, Provider>()
 const providerWriteQueueById = new Map<string, Promise<unknown>>()
 
+type ProviderCredentialWriteOptions = {
+  clearCredential?: boolean
+  preserveExistingCredential?: boolean
+}
+
 function getUpsertProviderApi() {
   const upsertProvider = window.api?.storageV2?.upsertProvider
 
@@ -20,8 +25,12 @@ function getSortOrder(providerId: string, providers: Provider[]) {
   return index === -1 ? 0 : index
 }
 
-export async function upsertStorageV2Provider(provider: Provider, sortOrder = 0) {
-  const result = await getUpsertProviderApi()(provider, sortOrder)
+export async function upsertStorageV2Provider(
+  provider: Provider,
+  sortOrder = 0,
+  options: ProviderCredentialWriteOptions = { preserveExistingCredential: true }
+) {
+  const result = await getUpsertProviderApi()(provider, sortOrder, undefined, options)
   notifyDataSyncLocalChange('provider')
   return result
 }
@@ -30,7 +39,7 @@ export async function upsertStorageV2ProviderList(providers: Provider[]) {
   const upsertProvider = getUpsertProviderApi()
 
   for (const [index, provider] of providers.entries()) {
-    await upsertProvider(provider, index)
+    await upsertProvider(provider, index, undefined, { preserveExistingCredential: true })
   }
   if (providers.length > 0) {
     notifyDataSyncLocalChange('provider')
@@ -40,7 +49,8 @@ export async function upsertStorageV2ProviderList(providers: Provider[]) {
 export async function mutateStorageV2ProviderFirst(
   providerId: string,
   providers: Provider[],
-  mutate: (provider: Provider) => Provider
+  mutate: (provider: Provider) => Provider,
+  options: ProviderCredentialWriteOptions = { preserveExistingCredential: true }
 ) {
   const baseProvider = pendingProviderById.get(providerId) ?? providers.find((provider) => provider.id === providerId)
 
@@ -53,7 +63,9 @@ export async function mutateStorageV2ProviderFirst(
   pendingProviderById.set(providerId, nextProvider)
 
   const previousQueue = providerWriteQueueById.get(providerId) ?? Promise.resolve()
-  const writeTask = previousQueue.catch(() => undefined).then(() => upsertStorageV2Provider(nextProvider, sortOrder))
+  const writeTask = previousQueue
+    .catch(() => undefined)
+    .then(() => upsertStorageV2Provider(nextProvider, sortOrder, options))
   const queuedTask = writeTask.finally(() => {
     if (pendingProviderById.get(providerId) === nextProvider) {
       pendingProviderById.delete(providerId)

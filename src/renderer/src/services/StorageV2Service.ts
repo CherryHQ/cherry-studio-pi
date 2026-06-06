@@ -533,7 +533,11 @@ export async function prepareStorageV2ForDataSync() {
   const reduxSnapshot = getLegacyReduxSnapshotForStorageV2()
   const dexieSnapshot = await getLegacyDexieSnapshotForStorageV2()
 
-  await window.api.storageV2.importLegacyReduxSnapshot(reduxSnapshot, { dryRun: false, pruneMissing: false })
+  await window.api.storageV2.importLegacyReduxSnapshot(reduxSnapshot, {
+    dryRun: false,
+    pruneMissing: false,
+    protectExistingFromDefaults: true
+  })
   await window.api.storageV2.importLegacyDexieSnapshot(dexieSnapshot, { dryRun: false, pruneMissing: false })
   await window.api.storageV2.importLegacyAgentDb({ dryRun: false, createSnapshot: false, pruneMissing: false })
   await window.api.storageV2.importLegacyAppDb({ dryRun: false, createSnapshot: false, pruneMissing: false })

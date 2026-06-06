@@ -48,8 +48,15 @@ export function registerStorageV2IpcHandlers() {
   )
   ipcMain.handle(IpcChannel.StorageV2_SettingsList, (_event, scope?: string) => storageV2Service.listSettings(scope))
   ipcMain.handle(IpcChannel.StorageV2_ProvidersList, () => storageV2Service.listProviders())
-  ipcMain.handle(IpcChannel.StorageV2_ProviderUpsert, (_event, provider, sortOrder?: number, credentialRef?: string) =>
-    storageV2Service.upsertProvider(provider, sortOrder, credentialRef)
+  ipcMain.handle(
+    IpcChannel.StorageV2_ProviderUpsert,
+    (
+      _event,
+      provider,
+      sortOrder?: number,
+      credentialRef?: string,
+      options?: { clearCredential?: boolean; preserveExistingCredential?: boolean }
+    ) => storageV2Service.upsertProvider(provider, sortOrder, credentialRef, options)
   )
   ipcMain.handle(IpcChannel.StorageV2_ProviderDelete, (_event, providerId: string) =>
     storageV2Service.deleteProvider(providerId)

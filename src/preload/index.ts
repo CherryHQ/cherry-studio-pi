@@ -317,8 +317,12 @@ const api = {
       ipcRenderer.invoke(IpcChannel.StorageV2_SettingsSet, key, value, scope),
     listSettings: (scope?: string) => ipcRenderer.invoke(IpcChannel.StorageV2_SettingsList, scope),
     listProviders: () => ipcRenderer.invoke(IpcChannel.StorageV2_ProvidersList),
-    upsertProvider: (provider: Provider, sortOrder?: number, credentialRef?: string) =>
-      ipcRenderer.invoke(IpcChannel.StorageV2_ProviderUpsert, provider, sortOrder, credentialRef),
+    upsertProvider: (
+      provider: Provider,
+      sortOrder?: number,
+      credentialRef?: string,
+      options?: { clearCredential?: boolean; preserveExistingCredential?: boolean }
+    ) => ipcRenderer.invoke(IpcChannel.StorageV2_ProviderUpsert, provider, sortOrder, credentialRef, options),
     deleteProvider: (providerId: string) => ipcRenderer.invoke(IpcChannel.StorageV2_ProviderDelete, providerId),
     listAssistants: () => ipcRenderer.invoke(IpcChannel.StorageV2_AssistantsList),
     upsertAssistant: (assistant: Assistant, sortOrder?: number) =>

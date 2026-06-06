@@ -1231,7 +1231,7 @@ export class StorageV2LegacyReduxImportService {
             ? await storageV2SecretVaultService.setSecret('provider', provider.id, 'apiKey', provider.apiKey)
             : undefined
         if (credentialRef) importedSecretCount++
-        await storageV2ProviderRepository.upsert(provider, index, credentialRef)
+        await storageV2ProviderRepository.upsert(provider, index, credentialRef, { preserveExistingCredential: true })
       }
 
       for (const [index, assistant] of assistantList.entries()) {

@@ -221,6 +221,38 @@ describe('StorageV2ProviderRepository', () => {
     )
   })
 
+  it('preserves existing provider credentials when metadata snapshots do not carry api keys', async () => {
+    const { client, execute } = createMockClient()
+    const recordChange = vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
+    vi.spyOn(storageV2Database, 'withTransaction').mockImplementation(async (_client, fn) => fn())
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(client)
+
+    const result = await new StorageV2ProviderRepository().upsert({
+      id: 'provider-1',
+      type: 'openai',
+      name: 'OpenAI',
+      apiKey: '',
+      models: []
+    } as any)
+
+    expect(result.skippedSecret).toBe(false)
+    expect(
+      execute.mock.calls.some(
+        ([input]) =>
+          typeof input !== 'string' &&
+          input.sql.includes('DELETE FROM provider_credentials') &&
+          input.args?.[0] === 'provider-1'
+      )
+    ).toBe(false)
+    expect(recordChange).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: 'provider_credential',
+        entityId: encodeStorageV2CompositeEntityId(['provider-1', 'apiKey']),
+        operation: 'delete'
+      })
+    )
+  })
+
   it('records provider credential tombstones when deleting a provider', async () => {
     const { client, execute } = createMockClient()
     const recordChange = vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)

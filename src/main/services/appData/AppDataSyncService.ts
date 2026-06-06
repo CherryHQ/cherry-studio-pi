@@ -312,6 +312,7 @@ const SYNC_SPACE_SECRET_ENCRYPTION = 'cherry-webdav-secret-sync-aes-256-gcm' as 
 const DATA_SYNC_TEMP_BACKUP_FILE_PATTERN = /^cherry-studio-pi\.data-sync\..+\.zip$/
 const DATA_SYNC_JOIN_SAFETY_FILE_PATTERN = /^cherry-studio-pi\.data-sync\.join-safety\..+\.zip$/
 const DATA_SYNC_JOIN_SAFETY_LOCAL_RETENTION = 1
+const DATA_SYNC_SYNC_SPACE_ID_STATE_KEY = 'data-sync-sync-space-id'
 const STORAGE_V2_RUNTIME_PROJECTION_HASH_KEY = 'storage-v2-runtime-projection-hash'
 const NOTES_REMOTE_ARTIFACT_ROOT = 'notes'
 const NOTES_SYNC_STATE_PREFIX = 'notes-file'
@@ -3235,7 +3236,14 @@ export class AppDataSyncService {
       const remoteHadAppDataRecordsBeforeSync = Object.keys(manifest.records ?? {}).length > 0
       const remoteHadStorageDataBeforeSync = hasStorageV2RemoteData(manifest.storageV2)
       const remoteStorageEntityTypes = getStorageV2ManifestEntityTypes(manifest.storageV2)
-      const preferRemoteAppDataOnFirstJoin = hadUsableSyncSpaceBeforeSync && remoteHadAppDataRecordsBeforeSync
+      const previousSyncSpaceId =
+        (await this.getSyncState<string>(db, DATA_SYNC_SYNC_SPACE_ID_STATE_KEY)) ??
+        (await this.getSyncState<DataSyncSummary>(db, 'last-sync-summary'))?.syncSpaceId ??
+        null
+      const joiningExistingSyncSpace =
+        hadUsableSyncSpaceBeforeSync && (!previousSyncSpaceId || previousSyncSpaceId !== syncSpace.id)
+      const preferRemoteAppDataOnFirstJoin = joiningExistingSyncSpace && remoteHadAppDataRecordsBeforeSync
+      const preferRemoteStorageOnFirstJoin = joiningExistingSyncSpace && remoteHadStorageDataBeforeSync
       let localStorageAppRecords: AppDataRecord[] | null = null
       try {
         localStorageAppRecords = await storageV2AppDataKvMirrorService.listRecords(undefined, true)
@@ -3397,7 +3405,7 @@ export class AppDataSyncService {
           ? undefined
           : `${normalizeWebDavHost(normalizedConfig.webdavHost)}\n${normalizedConfig.webdavUser}\n${normalizedConfig.webdavPass}`,
         beforeRemoteConflictApply: async () => this.createJoinSafetySnapshotOnce(db, summary),
-        preferRemoteOnFirstJoin: hadUsableSyncSpaceBeforeSync && remoteHadStorageDataBeforeSync,
+        preferRemoteOnFirstJoin: preferRemoteStorageOnFirstJoin,
         assertActive: () => this.assertSyncRunActive(context, '同步 Storage v2 数据')
       })
       this.assertSyncRunActive(context, '合并 Storage v2 同步结果')
@@ -3457,6 +3465,7 @@ export class AppDataSyncService {
       this.assertSyncRunActive(context, '写入远端同步状态')
       await this.writeJson(client, manifestPath, manifest)
       this.assertSyncRunActive(context, '提交本地同步游标')
+      stageSyncState(DATA_SYNC_SYNC_SPACE_ID_STATE_KEY, syncSpace.id)
       await storageV2WebDavRecordSyncService.commitRecordSyncStates(storageSyncStates)
       for (const [id, value] of pendingSyncStates) {
         this.assertSyncRunActive(context, '提交本地应用数据同步游标')

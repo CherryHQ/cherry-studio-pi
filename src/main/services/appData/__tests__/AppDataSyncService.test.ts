@@ -1468,6 +1468,79 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('does not prefer remote Storage v2 records after the same sync space was already joined', async () => {
+    const existingStorageManifest = {
+      version: 1,
+      records: {
+        'provider:openai': {
+          entityType: 'provider',
+          table: 'providers',
+          idValues: ['openai'],
+          valueHash: 'provider-hash',
+          updatedAt: 1760000000000,
+          deletedAt: null,
+          version: 1,
+          path: 'storage-v2/records/provider/openai.json'
+        }
+      },
+      blobs: {}
+    }
+    mocks.storageV2.getSyncState.mockImplementation(async (id: string) =>
+      id === 'data-sync-sync-space-id' ? 'sync-space-existing' : null
+    )
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
+      if (mocks.remoteFiles.has(filePath)) {
+        return mocks.remoteFiles.get(filePath)
+      }
+
+      if (filePath.endsWith('/manifest.json')) {
+        return JSON.stringify({
+          version: 1,
+          updatedAt: 1760000000000,
+          records: {},
+          syncSpace: {
+            version: 1,
+            id: 'sync-space-existing',
+            createdAt: 1760000000000,
+            keyMaterial: 'abcdefghijklmnopqrstuvwxyz123456',
+            keyFormat: 'cherry-sync-space-key-v1',
+            secretEncryption: 'cherry-webdav-secret-sync-aes-256-gcm'
+          },
+          storageV2: existingStorageManifest
+        })
+      }
+      throw new Error(`Unexpected WebDAV read: ${filePath}`)
+    })
+    mocks.storageRecordSync.sync.mockResolvedValueOnce({
+      manifest: existingStorageManifest,
+      syncStates: [],
+      summary: {
+        storageUploaded: 0,
+        storageDownloaded: 0,
+        storageDeleted: 0,
+        storageConflicts: 0,
+        storageResolvedConflicts: 0,
+        storageSkipped: 1,
+        blobUploaded: 0,
+        blobDownloaded: 0,
+        secretUploaded: 0,
+        secretDownloaded: 0
+      }
+    })
+
+    await new AppDataSyncService().syncNow(config)
+
+    expect(mocks.storageRecordSync.sync).toHaveBeenCalledWith(
+      mocks.webdav,
+      '/remote-root/sync/v1',
+      existingStorageManifest,
+      expect.objectContaining({
+        preferRemoteOnFirstJoin: false
+      })
+    )
+    expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith('data-sync-sync-space-id', 'sync-space-existing')
+  })
+
   it('does not upload optional full data snapshots by default', async () => {
     mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
       if (mocks.remoteFiles.has(filePath)) {

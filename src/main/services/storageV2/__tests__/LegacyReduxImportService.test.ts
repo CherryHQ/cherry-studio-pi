@@ -287,7 +287,8 @@ describe('StorageV2LegacyReduxImportService', () => {
     expect(mocks.providerRepository.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'openai' }),
       0,
-      undefined
+      undefined,
+      { preserveExistingCredential: true }
     )
     expect(mocks.assistantRepository.upsert).toHaveBeenCalledWith(expect.objectContaining({ id: 'assistant-1' }), 0)
     expect(mocks.knowledgeRepository.importBases).toHaveBeenCalledWith([expect.objectContaining({ id: 'kb-1' })], {
@@ -339,8 +340,40 @@ describe('StorageV2LegacyReduxImportService', () => {
         ]
       }),
       0,
-      undefined
+      undefined,
+      { preserveExistingCredential: true }
     )
     expect(mocks.providerRepository.deleteMissing).toHaveBeenCalledWith(['openai'])
+  })
+
+  it('preserves existing provider credentials when secret vault is unavailable', async () => {
+    mocks.secretVault.isAvailable.mockReturnValue(false)
+
+    const report = await new StorageV2LegacyReduxImportService().importSnapshot(
+      {
+        llm: {
+          providers: [
+            {
+              id: 'openai',
+              name: 'OpenAI',
+              type: 'openai',
+              apiKey: 'sk-local',
+              models: []
+            } as any
+          ]
+        }
+      },
+      { dryRun: false }
+    )
+
+    expect(report.importedSecretCount).toBe(0)
+    expect(report.warnings).toContain('Provider API keys were detected but local secret vault is unavailable.')
+    expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
+    expect(mocks.providerRepository.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'openai', apiKey: 'sk-local' }),
+      0,
+      undefined,
+      { preserveExistingCredential: true }
+    )
   })
 })

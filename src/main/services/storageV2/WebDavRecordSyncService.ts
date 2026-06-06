@@ -1707,6 +1707,49 @@ export class StorageV2WebDavRecordSyncService {
     bundledRecords?.delete(id)
   }
 
+  private getLocalTombstoneTargetRecordId(record: LocalRecord) {
+    if (record.table.entityType !== TOMBSTONE_ENTITY_TYPE) return null
+
+    const target = tombstoneTargetFromRow(record.row)
+    return target ? recordId(target.entityType, target.idValues) : null
+  }
+
+  private async deleteLocalTombstoneRecord(client: Client, record: LocalRecord) {
+    if (record.table.entityType !== TOMBSTONE_ENTITY_TYPE) return false
+
+    const entityType = typeof record.row.entity_type === 'string' ? record.row.entity_type : ''
+    const entityId = typeof record.row.entity_id === 'string' ? record.row.entity_id : ''
+    if (!entityType || !entityId) return false
+
+    await client.execute({
+      sql: 'DELETE FROM sync_tombstones WHERE entity_type = ? AND entity_id = ?',
+      args: [entityType, entityId]
+    })
+    return true
+  }
+
+  private async discardLocalFirstJoinTombstoneIfRemoteHasRecord(
+    client: Client,
+    manifest: StorageV2WebDavRecordSyncManifest,
+    record: LocalRecord,
+    bundledRecords?: Map<string, LocalRecord>
+  ) {
+    const targetId = this.getLocalTombstoneTargetRecordId(record)
+    if (!targetId) return false
+
+    const targetMeta = manifest.records[targetId]
+    if (!targetMeta || targetMeta.deletedAt) return false
+
+    await this.deleteLocalTombstoneRecord(client, record)
+    bundledRecords?.delete(record.id)
+    delete manifest.records[record.id]
+    logger.warn('Discarded local first-join tombstone because the remote sync space has an active record', {
+      tombstoneId: record.id,
+      targetId
+    })
+    return true
+  }
+
   private async applyLocalTombstoneRecord(
     client: Client,
     manifest: StorageV2WebDavRecordSyncManifest,
@@ -2043,6 +2086,15 @@ export class StorageV2WebDavRecordSyncService {
 
       if (localRecord && !remoteMeta) {
         if (
+          options.preferRemoteOnFirstJoin === true &&
+          !lastHash &&
+          (await this.discardLocalFirstJoinTombstoneIfRemoteHasRecord(dbClient, manifest, localRecord, bundledRecords))
+        ) {
+          summary.storageSkipped += 1
+          continue
+        }
+
+        if (
           await this.isCoveredByRemoteTombstone(
             client,
             basePath,
@@ -2086,7 +2138,8 @@ export class StorageV2WebDavRecordSyncService {
           continue
         }
 
-        if (await this.isCoveredByLocalTombstone(dbClient, remoteMeta)) {
+        const coveredByLocalTombstone = await this.isCoveredByLocalTombstone(dbClient, remoteMeta)
+        if (coveredByLocalTombstone && !(options.preferRemoteOnFirstJoin === true && !lastHash)) {
           delete manifest.records[id]
           bundledRecords.delete(id)
           summary.storageSkipped += 1

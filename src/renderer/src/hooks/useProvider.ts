@@ -54,6 +54,13 @@ function runProviderUpdate(task: () => Promise<void>, reason: string) {
   })
 }
 
+function getProviderCredentialWriteOptions(updates: Partial<Provider>) {
+  const hasApiKeyUpdate = Object.hasOwn(updates as Record<string, unknown>, 'apiKey')
+  const clearsApiKey = hasApiKeyUpdate && typeof updates.apiKey === 'string' && updates.apiKey.trim().length === 0
+
+  return clearsApiKey ? { clearCredential: true } : { preserveExistingCredential: true }
+}
+
 const selectProviders = (state: RootState) => state.llm.providers
 
 const selectEnabledProviders = createSelector(selectProviders, (providers) =>
@@ -98,10 +105,15 @@ export function useProviders() {
     },
     updateProvider: (updates: Partial<Provider> & { id: string }) => {
       runProviderUpdate(async () => {
-        await mutateStorageV2ProviderFirst(updates.id, reduxStore.getState().llm.providers, (provider) => ({
-          ...provider,
-          ...updates
-        }))
+        await mutateStorageV2ProviderFirst(
+          updates.id,
+          reduxStore.getState().llm.providers,
+          (provider) => ({
+            ...provider,
+            ...updates
+          }),
+          getProviderCredentialWriteOptions(updates)
+        )
         dispatch(updateProvider(updates))
         flushProviderMirror('llm-update-provider')
       }, 'update-provider')
@@ -201,10 +213,15 @@ export function useProvider(id: string) {
     models: provider?.models ?? [],
     updateProvider: (updates: Partial<Provider>) => {
       runProviderUpdate(async () => {
-        await mutateStorageV2ProviderFirst(id, reduxStore.getState().llm.providers, (provider) => ({
-          ...provider,
-          ...updates
-        }))
+        await mutateStorageV2ProviderFirst(
+          id,
+          reduxStore.getState().llm.providers,
+          (provider) => ({
+            ...provider,
+            ...updates
+          }),
+          getProviderCredentialWriteOptions(updates)
+        )
         dispatch(updateProvider({ id, ...updates }))
         flushProviderMirror('llm-update-provider')
       }, 'update-provider')

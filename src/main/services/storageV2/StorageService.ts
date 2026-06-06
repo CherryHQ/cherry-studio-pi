@@ -105,6 +105,14 @@ function deleteNestedValue(root: Record<string, any>, path: readonly string[]) {
   delete current[path[path.length - 1]]
 }
 
+function makeStorageV2SecretRef(scope: string, ownerId: string, kind: string) {
+  return `storage-v2://secret/${[scope, ownerId, kind].map((part) => encodeURIComponent(part)).join('/')}`
+}
+
+function isNonEmptyString(value: string | undefined): value is string {
+  return typeof value === 'string' && value.length > 0
+}
+
 function isSensitiveHeaderName(headerName: string) {
   return /(authorization|cookie|token|secret|api[-_]?key|x[-_].*key)/i.test(headerName)
 }
@@ -783,14 +791,22 @@ export class StorageV2Service {
         })
 
         if (includeSecrets) {
-          const apiKeyRef = credentialRefsByProvider.get(provider.id)?.apiKey
-          if (apiKeyRef) {
+          const storedApiKeyRef = credentialRefsByProvider.get(provider.id)?.apiKey
+          const fallbackApiKeyRef = makeStorageV2SecretRef('provider', provider.id, 'apiKey')
+          const apiKeyRefs = Array.from(new Set([storedApiKeyRef, fallbackApiKeyRef].filter(isNonEmptyString)))
+          let restoredApiKey = false
+
+          for (const apiKeyRef of apiKeyRefs) {
             const apiKey = await storageV2SecretVaultService.getSecret(apiKeyRef)
             if (apiKey) {
               snapshot.apiKey = apiKey
-            } else {
-              missingSecretCount++
+              restoredApiKey = true
+              break
             }
+          }
+
+          if (storedApiKeyRef && !restoredApiKey) {
+            missingSecretCount++
           }
         }
 
@@ -976,13 +992,24 @@ export class StorageV2Service {
     return storageV2ProviderRepository.list()
   }
 
-  async upsertProvider(provider: Provider, sortOrder?: number, credentialRef?: string) {
+  async upsertProvider(
+    provider: Provider,
+    sortOrder?: number,
+    credentialRef?: string,
+    options: { clearCredential?: boolean; preserveExistingCredential?: boolean } = {}
+  ) {
     const nextCredentialRef =
       credentialRef ??
       (provider.apiKey
         ? await storageV2SecretVaultService.setSecret('provider', provider.id, 'apiKey', provider.apiKey)
         : undefined)
-    return storageV2ProviderRepository.upsert(provider, sortOrder, nextCredentialRef)
+    const upsertOptions = { ...options }
+    if (options.clearCredential === true) {
+      upsertOptions.clearCredential = true
+    }
+    return Object.keys(upsertOptions).length > 0
+      ? storageV2ProviderRepository.upsert(provider, sortOrder, nextCredentialRef, upsertOptions)
+      : storageV2ProviderRepository.upsert(provider, sortOrder, nextCredentialRef)
   }
 
   async deleteProvider(providerId: string) {

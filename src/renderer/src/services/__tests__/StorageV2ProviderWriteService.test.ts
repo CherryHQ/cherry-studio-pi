@@ -60,8 +60,12 @@ describe('StorageV2ProviderWriteService', () => {
       unsubscribe()
     }
 
-    expect(upsertProvider).toHaveBeenNthCalledWith(1, expect.objectContaining({ id: 'provider-a' }), 0)
-    expect(upsertProvider).toHaveBeenNthCalledWith(2, expect.objectContaining({ id: 'provider-b' }), 1)
+    expect(upsertProvider).toHaveBeenNthCalledWith(1, expect.objectContaining({ id: 'provider-a' }), 0, undefined, {
+      preserveExistingCredential: true
+    })
+    expect(upsertProvider).toHaveBeenNthCalledWith(2, expect.objectContaining({ id: 'provider-b' }), 1, undefined, {
+      preserveExistingCredential: true
+    })
     expect(events).toEqual(['provider'])
   })
 
@@ -150,7 +154,41 @@ describe('StorageV2ProviderWriteService', () => {
       unsubscribe()
     }
 
-    expect(upsertProvider).toHaveBeenCalledWith(expect.objectContaining({ id: 'provider-a' }), 2)
+    expect(upsertProvider).toHaveBeenCalledWith(expect.objectContaining({ id: 'provider-a' }), 2, undefined, {
+      preserveExistingCredential: true
+    })
     expect(events).toEqual(['provider'])
+  })
+
+  it('only clears provider credentials when explicitly requested', async () => {
+    const upsertProvider = vi.fn().mockResolvedValue({ skippedSecret: false })
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          upsertProvider
+        }
+      }
+    })
+
+    const { mutateStorageV2ProviderFirst } = await import('../StorageV2ProviderWriteService')
+    const providers = [provider('provider-a')]
+
+    await mutateStorageV2ProviderFirst(
+      'provider-a',
+      providers,
+      (current) => ({
+        ...current,
+        apiKey: ''
+      }),
+      { clearCredential: true }
+    )
+
+    expect(upsertProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'provider-a', apiKey: '' }),
+      0,
+      undefined,
+      { clearCredential: true }
+    )
   })
 })

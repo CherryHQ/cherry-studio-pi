@@ -343,6 +343,14 @@ function makeProviderCredentialDb(input: { credentials?: ProviderCredentialRow[]
           return { rows: [] }
         }
 
+        if (sql.includes('DELETE FROM sync_tombstones')) {
+          const [entityType, entityId] = args.map(String)
+          state.tombstones = state.tombstones.filter(
+            (row) => !(row.entity_type === entityType && row.entity_id === entityId)
+          )
+          return { rows: [] }
+        }
+
         return { rows: [] }
       })
     }
@@ -2157,6 +2165,71 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(
       Object.keys(result.manifest.records).some((id) => id.startsWith('sync_tombstone:provider_credential:'))
     ).toBe(true)
+  })
+
+  it('ignores stale local provider credential tombstones when first joining an existing sync space', async () => {
+    const credentialRow: ProviderCredentialRow = {
+      provider_id: 'provider-1',
+      credential_kind: 'apiKey',
+      secret_ref: 'storage-v2://secret/provider/provider-1/apiKey',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      updated_by_device_id: 'device-a'
+    }
+    const deviceA = makeProviderCredentialDb({ credentials: [credentialRow] })
+    const deviceB = makeProviderCredentialDb({
+      tombstones: [
+        {
+          entity_type: 'provider_credential',
+          entity_id: 'provider-1:apiKey',
+          deleted_at: '2026-06-01T08:10:00.000Z',
+          device_id: 'device-b',
+          version: 2
+        }
+      ]
+    })
+    const service = new StorageV2WebDavRecordSyncService([providerCredentialTable, tombstoneTable])
+
+    mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({
+      'provider:provider-1:apiKey': {
+        value: 'sk-provider-1',
+        updatedAt: '2026-06-01T08:00:00.000Z'
+      }
+    })
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(deviceA.client as any)
+    const firstResult = await service.sync(
+      mocks.webdav as any,
+      '/remote-root/sync/v1',
+      { version: 1, blobs: {}, records: {}, bundle: null, secrets: null },
+      { secretKeyMaterial: 'sync-space-key-material' }
+    )
+
+    mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({})
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(deviceB.client as any)
+    const secondResult = await service.sync(mocks.webdav as any, '/remote-root/sync/v1', firstResult.manifest, {
+      secretKeyMaterial: 'sync-space-key-material',
+      preferRemoteOnFirstJoin: true
+    })
+
+    expect(secondResult.summary.storageDownloaded).toBe(1)
+    expect(secondResult.summary.secretDownloaded).toBe(1)
+    expect(deviceB.state.credentials).toEqual([
+      expect.objectContaining({
+        provider_id: 'provider-1',
+        credential_kind: 'apiKey',
+        secret_ref: 'storage-v2://secret/provider/provider-1/apiKey'
+      })
+    ])
+    expect(deviceB.state.tombstones).toEqual([])
+    expect(secondResult.manifest.records['provider_credential:provider-1:apiKey']).toBeDefined()
+    expect(
+      Object.keys(secondResult.manifest.records).some((id) => id.startsWith('sync_tombstone:provider_credential:'))
+    ).toBe(false)
+    expect(mocks.secretVault.importPlaintextSecrets).toHaveBeenCalledWith({
+      'provider:provider-1:apiKey': {
+        value: 'sk-provider-1',
+        updatedAt: '2026-06-01T08:00:00.000Z'
+      }
+    })
   })
 
   it('uses encoded provider credential tombstones when provider ids contain separators', async () => {
