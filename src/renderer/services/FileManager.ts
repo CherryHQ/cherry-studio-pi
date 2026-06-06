@@ -31,7 +31,7 @@ function summarizeFileForLog(file: FileMetadata | undefined): FileLogSummary | n
 }
 
 function getCachedFilesPath(): string | undefined {
-  return cacheService.get('app.path.files') as string | undefined
+  return cacheService.get('app.path.files')
 }
 
 function getStoredFilePath(file: FileMetadata): string {

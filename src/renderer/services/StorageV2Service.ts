@@ -295,11 +295,11 @@ function getUniqueAssistants(): LegacyAssistant[] {
   const assistantsById = new Map<string, LegacyAssistant>()
 
   if (state.assistants.defaultAssistant?.id) {
-    assistantsById.set(state.assistants.defaultAssistant.id, state.assistants.defaultAssistant as LegacyAssistant)
+    assistantsById.set(state.assistants.defaultAssistant.id, state.assistants.defaultAssistant)
   }
 
   for (const assistant of state.assistants.assistants ?? []) {
-    assistantsById.set(assistant.id, assistant as LegacyAssistant)
+    assistantsById.set(assistant.id, assistant)
   }
 
   return Array.from(assistantsById.values())

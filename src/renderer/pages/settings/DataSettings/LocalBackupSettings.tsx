@@ -101,7 +101,7 @@ const LocalBackupSettings: React.FC = () => {
       setResolvedLocalBackupDir(await window.api.resolvePath(value))
 
       await setLocalBackupAutoSync(true)
-      void startAutoSync(true, 'local')
+      startAutoSync(true, 'local')
       return
     }
 

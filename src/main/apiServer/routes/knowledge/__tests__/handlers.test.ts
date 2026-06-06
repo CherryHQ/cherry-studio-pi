@@ -137,7 +137,7 @@ describe('Knowledge Handlers', () => {
 
       req.validatedQuery = { limit: 20, offset: 0 }
 
-      await listKnowledgeBases(req as ValidationRequest, res as Response)
+      await listKnowledgeBases(req, res as Response)
 
       expect(jsonMock).toHaveBeenCalledWith({
         knowledge_bases: mockBases,
@@ -154,7 +154,7 @@ describe('Knowledge Handlers', () => {
 
       req.validatedQuery = { limit: 20, offset: 0 }
 
-      await listKnowledgeBases(req as ValidationRequest, res as Response)
+      await listKnowledgeBases(req, res as Response)
 
       expect(jsonMock).toHaveBeenCalledWith({
         knowledge_bases: mockBases,
@@ -204,7 +204,7 @@ describe('Knowledge Handlers', () => {
 
       req.validatedParams = { id: 'kb-storage-v2' }
 
-      await getKnowledgeBase(req as ValidationRequest, res as Response)
+      await getKnowledgeBase(req, res as Response)
 
       expect(jsonMock).toHaveBeenCalledWith(mockBase)
       expect(statusMock).not.toHaveBeenCalled()
@@ -329,7 +329,7 @@ describe('Knowledge Handlers', () => {
 
       req.validatedBody = { query: 'storage query', document_count: 5 }
 
-      await searchKnowledge(req as ValidationRequest, res as Response)
+      await searchKnowledge(req, res as Response)
 
       expect(statusMock).not.toHaveBeenCalled()
       expect(KnowledgeService.search).toHaveBeenCalledWith(

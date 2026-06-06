@@ -127,7 +127,7 @@ class ImportServiceClass {
         settings: DEFAULT_ASSISTANT_SETTINGS
       }
 
-      await upsertStorageV2AssistantList([assistant, ...(store.getState().assistants.assistants as LegacyAssistant[])])
+      await upsertStorageV2AssistantList([assistant, ...store.getState().assistants.assistants])
       store.dispatch(addAssistant(assistant))
 
       logger.info(
