@@ -67,6 +67,23 @@ describe('SystemAgentService', () => {
     expect(window.api.systemAgent.handleEvent).toHaveBeenCalledTimes(2)
   })
 
+  it('supports longer dedupe windows for noisy automatic diagnostics', async () => {
+    await handleSystemAgentEvent({ source: 'test.long-dedupe', message: 'same error' }, { dedupeMs: 10 * 60_000 })
+    await handleSystemAgentEvent({ source: 'test.long-dedupe', message: 'same error' }, { dedupeMs: 10 * 60_000 })
+
+    expect(window.api.systemAgent.handleEvent).toHaveBeenCalledTimes(1)
+
+    vi.setSystemTime(new Date('2026-06-06T00:00:31Z'))
+    await handleSystemAgentEvent({ source: 'test.long-dedupe', message: 'same error' }, { dedupeMs: 10 * 60_000 })
+
+    expect(window.api.systemAgent.handleEvent).toHaveBeenCalledTimes(1)
+
+    vi.setSystemTime(new Date('2026-06-06T00:10:01Z'))
+    await handleSystemAgentEvent({ source: 'test.long-dedupe', message: 'same error' }, { dedupeMs: 10 * 60_000 })
+
+    expect(window.api.systemAgent.handleEvent).toHaveBeenCalledTimes(2)
+  })
+
   it('keeps the dedupe cache bounded so old unique errors cannot leak forever', async () => {
     for (let i = 0; i < 205; i += 1) {
       await handleSystemAgentEvent({ source: `test.bounded.${i}`, message: 'unique error' })

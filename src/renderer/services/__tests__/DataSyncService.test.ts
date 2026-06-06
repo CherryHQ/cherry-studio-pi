@@ -744,6 +744,89 @@ describe('DataSyncService', () => {
     })
   })
 
+  it('backs off failed auto sync retries and throttles system agent diagnostics', async () => {
+    vi.useFakeTimers()
+    mocks.getState.mockReturnValue({
+      settings: {
+        dataSyncWebdavHost: 'https://dav.example.test',
+        dataSyncWebdavUser: 'user',
+        dataSyncWebdavPass: 'pass',
+        dataSyncWebdavPath: '/cherry-studio-pi',
+        dataSyncAutoSync: true,
+        dataSyncSyncInterval: 1
+      }
+    })
+    const syncError = new Error('另一台设备正在同步这个 WebDAV 目录')
+    mocks.syncNow.mockRejectedValue(syncError)
+
+    startDataSyncAutoSync(true)
+
+    await vi.advanceTimersByTimeAsync(999)
+    expect(mocks.syncNow).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(1)
+    await vi.waitFor(() => {
+      expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+    })
+    expect(mocks.reportErrorToSystemAgent).toHaveBeenCalledWith(
+      syncError,
+      {
+        source: 'data-sync.auto',
+        domain: 'dataSync'
+      },
+      {
+        dedupeMs: 10 * 60_000
+      }
+    )
+
+    await vi.advanceTimersByTimeAsync(4 * 60_000)
+    expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(60_000)
+    await vi.waitFor(() => {
+      expect(mocks.syncNow).toHaveBeenCalledTimes(2)
+    })
+
+    await vi.advanceTimersByTimeAsync(9 * 60_000)
+    expect(mocks.syncNow).toHaveBeenCalledTimes(2)
+
+    await vi.advanceTimersByTimeAsync(60_000)
+    await vi.waitFor(() => {
+      expect(mocks.syncNow).toHaveBeenCalledTimes(3)
+    })
+  })
+
+  it('defers local-change auto syncs to the existing failure retry during backoff', async () => {
+    vi.useFakeTimers()
+    mocks.getState.mockReturnValue({
+      settings: {
+        dataSyncWebdavHost: 'https://dav.example.test',
+        dataSyncWebdavUser: 'user',
+        dataSyncWebdavPass: 'pass',
+        dataSyncWebdavPath: '/cherry-studio-pi',
+        dataSyncAutoSync: true,
+        dataSyncSyncInterval: 1
+      }
+    })
+    mocks.syncNow.mockRejectedValueOnce(new Error('503 Service Unavailable')).mockResolvedValue(successSummary)
+
+    startDataSyncAutoSync(true)
+
+    await vi.advanceTimersByTimeAsync(1000)
+    await vi.waitFor(() => {
+      expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+    })
+
+    notifyDataSyncLocalChange('redux')
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(5 * 60_000 - 20_000)
+    await vi.waitFor(() => {
+      expect(mocks.syncNow).toHaveBeenCalledTimes(2)
+    })
+  })
+
   it('does not sync local Storage v2 changes when auto sync is disabled', async () => {
     vi.useFakeTimers()
 

@@ -19,6 +19,9 @@ const RENDERER_SYNC_RECONCILE_GRACE_MS = 60_000
 const RENDERER_SYNC_STATUS_TIMEOUT_MS = 30_000
 const RENDERER_SYNC_STAGE_TIMEOUT_MS = 5 * 60_000
 const MAIN_PROCESS_SYNC_TIMEOUT_MS = 15 * 60_000
+const AUTO_SYNC_FAILURE_MIN_RETRY_MS = 5 * 60_000
+const AUTO_SYNC_FAILURE_MAX_RETRY_MS = 30 * 60_000
+const AUTO_SYNC_SYSTEM_AGENT_DEDUPE_MS = 10 * 60_000
 
 export type DataSyncSummary = {
   status?: 'success' | 'failed'
@@ -65,6 +68,8 @@ let autoSyncStarted = false
 let syncing = false
 let localChangeDuringSync = false
 let syncStartedAt: number | null = null
+let autoSyncFailureCount = 0
+let autoSyncCooldownUntil = 0
 const syncStateListeners = new Set<(state: DataSyncRuntimeState) => void>()
 
 class DataSyncStageTimeoutError extends Error {
@@ -328,6 +333,20 @@ function getAutoSyncIntervalMs() {
   return settings.dataSyncSyncInterval * 60 * 1000
 }
 
+function getAutoSyncCooldownRemainingMs(now = Date.now()) {
+  return Math.max(autoSyncCooldownUntil - now, 0)
+}
+
+function getAutoSyncFailureRetryDelayMs(intervalMs: number) {
+  const exponentialDelay = AUTO_SYNC_FAILURE_MIN_RETRY_MS * 2 ** Math.max(autoSyncFailureCount - 1, 0)
+  return Math.max(intervalMs, Math.min(exponentialDelay, AUTO_SYNC_FAILURE_MAX_RETRY_MS))
+}
+
+function resetAutoSyncFailureBackoff() {
+  autoSyncFailureCount = 0
+  autoSyncCooldownUntil = 0
+}
+
 function clearLocalChangeSyncTimeout() {
   if (!localChangeSyncTimeout) return
 
@@ -338,13 +357,27 @@ function clearLocalChangeSyncTimeout() {
 function scheduleLocalChangeSync(delayMs = LOCAL_CHANGE_AUTO_SYNC_DEBOUNCE_MS) {
   if (!autoSyncStarted || getAutoSyncIntervalMs() === null) return
 
+  const cooldownRemainingMs = getAutoSyncCooldownRemainingMs()
+  if (cooldownRemainingMs > delayMs && syncTimeout) {
+    logger.info('Local change sync deferred to existing auto sync failure retry', {
+      cooldownRemainingMs,
+      autoSyncFailureCount
+    })
+    return
+  }
+
+  const effectiveDelayMs = Math.max(delayMs, cooldownRemainingMs)
   clearLocalChangeSyncTimeout()
   localChangeSyncTimeout = setTimeout(() => {
     localChangeSyncTimeout = null
     void performAutoSync()
-  }, delayMs)
+  }, effectiveDelayMs)
 
-  logger.info('Data sync scheduled after local Storage v2 change', { delayMs })
+  logger.info('Data sync scheduled after local Storage v2 change', {
+    delayMs: effectiveDelayMs,
+    requestedDelayMs: delayMs,
+    autoSyncFailureCount
+  })
 }
 
 function ensureMainProcessStorageV2ChangeSubscription() {
@@ -488,6 +521,7 @@ export function stopDataSyncExternalSyncListener() {
 export function stopDataSyncAutoSync() {
   autoSyncStarted = false
   localChangeDuringSync = false
+  resetAutoSyncFailureBackoff()
   if (syncTimeout) {
     clearTimeout(syncTimeout)
     syncTimeout = null
@@ -525,11 +559,16 @@ function scheduleNextSync(delayMs: number) {
     clearTimeout(syncTimeout)
   }
 
+  const effectiveDelayMs = Math.max(delayMs, getAutoSyncCooldownRemainingMs())
   syncTimeout = setTimeout(() => {
     void performAutoSync()
-  }, delayMs)
+  }, effectiveDelayMs)
 
-  logger.info('Data sync scheduled', { delayMs })
+  logger.info('Data sync scheduled', {
+    delayMs: effectiveDelayMs,
+    requestedDelayMs: delayMs,
+    autoSyncFailureCount
+  })
 }
 
 async function performAutoSync() {
@@ -539,14 +578,37 @@ async function performAutoSync() {
     return
   }
 
+  const cooldownRemainingMs = getAutoSyncCooldownRemainingMs()
+  if (cooldownRemainingMs > 0) {
+    logger.info('Skipping auto data sync during failure backoff', {
+      cooldownRemainingMs,
+      autoSyncFailureCount
+    })
+    scheduleNextSync(cooldownRemainingMs)
+    return
+  }
+
   try {
     await syncAppDataNow()
+    resetAutoSyncFailureBackoff()
   } catch (error) {
-    logger.warn('Auto data sync failed', error as Error)
-    void reportErrorToSystemAgent(error, {
-      source: 'data-sync.auto',
-      domain: 'dataSync'
+    autoSyncFailureCount += 1
+    const retryDelayMs = getAutoSyncFailureRetryDelayMs(intervalMs)
+    autoSyncCooldownUntil = Date.now() + retryDelayMs
+    logger.warn('Auto data sync failed; backing off before next retry', error as Error, {
+      autoSyncFailureCount,
+      retryDelayMs
     })
+    void reportErrorToSystemAgent(
+      error,
+      {
+        source: 'data-sync.auto',
+        domain: 'dataSync'
+      },
+      {
+        dedupeMs: AUTO_SYNC_SYSTEM_AGENT_DEDUPE_MS
+      }
+    )
   } finally {
     if (autoSyncStarted) {
       const nextIntervalMs = getAutoSyncIntervalMs()

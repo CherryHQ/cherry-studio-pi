@@ -3,6 +3,7 @@ import i18n from '@renderer/i18n'
 
 const logger = loggerService.withContext('SystemAgentService')
 const EVENT_DEDUP_MS = 30_000
+const MAX_EVENT_DEDUP_MS = 10 * 60_000
 const MAX_RECENT_EVENTS = 200
 const recentEvents = new Map<string, number>()
 let errorTriggersInitialized = false
@@ -22,6 +23,7 @@ type SystemAgentEventInput = {
 type ReportOptions = {
   showToast?: boolean
   dedupe?: boolean
+  dedupeMs?: number
 }
 
 function errorMessage(error: unknown) {
@@ -34,9 +36,9 @@ function dedupeKey(input: SystemAgentEventInput) {
   return [input.type ?? 'event', input.domain ?? '', input.source, input.code ?? '', input.message ?? ''].join('|')
 }
 
-function pruneRecentEvents(now: number) {
+function pruneRecentEvents(now: number, maxAgeMs = EVENT_DEDUP_MS) {
   for (const [key, timestamp] of recentEvents) {
-    if (now - timestamp >= EVENT_DEDUP_MS) {
+    if (now - timestamp >= maxAgeMs) {
       recentEvents.delete(key)
     }
   }
@@ -48,20 +50,21 @@ function pruneRecentEvents(now: number) {
   }
 }
 
-function shouldSkipDuplicate(input: SystemAgentEventInput) {
+function shouldSkipDuplicate(input: SystemAgentEventInput, dedupeMs = EVENT_DEDUP_MS) {
   const key = dedupeKey(input)
   const now = Date.now()
-  pruneRecentEvents(now)
+  const normalizedDedupeMs = Math.min(Math.max(dedupeMs, 0), MAX_EVENT_DEDUP_MS)
+  pruneRecentEvents(now, Math.max(EVENT_DEDUP_MS, normalizedDedupeMs))
 
   const last = recentEvents.get(key) ?? 0
-  if (now - last < EVENT_DEDUP_MS) return true
+  if (now - last < normalizedDedupeMs) return true
   recentEvents.set(key, now)
-  pruneRecentEvents(now)
+  pruneRecentEvents(now, Math.max(EVENT_DEDUP_MS, normalizedDedupeMs))
   return false
 }
 
 export async function handleSystemAgentEvent(input: SystemAgentEventInput, options: ReportOptions = {}) {
-  if (options.dedupe !== false && shouldSkipDuplicate(input)) {
+  if (options.dedupe !== false && shouldSkipDuplicate(input, options.dedupeMs)) {
     return null
   }
 
