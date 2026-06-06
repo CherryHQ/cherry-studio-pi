@@ -2074,6 +2074,7 @@
         "newest": "最新優先",
         "oldest": "最早優先"
       },
+      "stats": "找到 {{count}} 條結果，用時 {{time}} 秒",
       "topics": {
         "empty": "沒有找到相關話題，按 Enter 鍵搜尋所有訊息"
       }

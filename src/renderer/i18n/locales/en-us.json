@@ -2074,6 +2074,7 @@
         "newest": "Newest first",
         "oldest": "Oldest first"
       },
+      "stats": "Found {{count}} results in {{time}} seconds",
       "topics": {
         "empty": "No topics found, press Enter to search all messages"
       }

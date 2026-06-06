@@ -17,6 +17,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
+import { buildHighlightedTextParts } from './searchResultHighlighter'
+
 const { Text, Title } = Typography
 
 type SearchResult = {
@@ -230,11 +232,13 @@ const SearchResults: FC<Props> = ({ keywords, onMessageClick, onTopicClick, ...p
         return searchRegexes.every((regex) => regex.test(searchableContent))
       })
 
-    const messages = topics?.flatMap((topic) => topic.messages)
+    const messagesById = new Map(
+      (topics?.flatMap((topic) => topic.messages) ?? []).map((message) => [message.id, message])
+    )
 
     const results = await Promise.all(
       blocks.map(async (block) => {
-        const message = messages?.find((message) => message.id === block.messageId)
+        const message = messagesById.get(block.messageId)
         if (message) {
           const topic = storeTopicsMap.get(message.topicId)
           if (topic) {
@@ -273,18 +277,15 @@ const SearchResults: FC<Props> = ({ keywords, onMessageClick, onTopicClick, ...p
     return results
   }, [searchResults, sortOrder])
 
-  const highlightText = (text: string) => {
-    // Escape HTML entities to prevent XSS from LLM response content
-    const escapeHtml = (s: string) =>
-      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-    const safeText = escapeHtml(text)
-    const highlightRegex = buildKeywordUnionRegex(searchTerms, { matchMode, flags: 'gi' })
-    if (!highlightRegex) {
-      return <span dangerouslySetInnerHTML={{ __html: safeText }} />
-    }
-    const highlightedText = safeText.replace(highlightRegex, (match) => `<mark>${match}</mark>`)
-    return <span dangerouslySetInnerHTML={{ __html: highlightedText }} />
-  }
+  const highlightRegex = useMemo(
+    () => buildKeywordUnionRegex(searchTerms, { matchMode, flags: 'gi' }),
+    [matchMode, searchTerms]
+  )
+
+  const highlightText = useCallback(
+    (text: string) => <span>{buildHighlightedTextParts(text, highlightRegex)}</span>,
+    [highlightRegex]
+  )
 
   useEffect(() => {
     void onSearch()
@@ -332,7 +333,7 @@ const SearchResults: FC<Props> = ({ keywords, onMessageClick, onTopicClick, ...p
         </SearchToolbar>
         {sortedSearchResults.length > 0 && (
           <SearchStats>
-            Found {searchStats.count} results in {searchStats.time.toFixed(3)} seconds
+            {t('history.search.stats', { count: searchStats.count, time: searchStats.time.toFixed(3) })}
           </SearchStats>
         )}
         <List
