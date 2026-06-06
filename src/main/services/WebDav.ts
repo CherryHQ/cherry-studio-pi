@@ -68,7 +68,7 @@ export default class WebDav {
     options?: PutFileContentsOptions
   ) => {
     if (!this.instance) {
-      return new Error('WebDAV client not initialized')
+      throw new Error('WebDAV client not initialized')
     }
 
     try {

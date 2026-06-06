@@ -50,6 +50,7 @@ const FallbackFavicon: React.FC<FallbackFaviconProps> = ({ hostname, alt }) => {
   const [faviconState, setFaviconState] = useState<FaviconState>({ status: 'idle' })
 
   useEffect(() => {
+    let cancelled = false
     // Reset state when hostname changes
     setFaviconState({ status: 'loading' })
 
@@ -92,11 +93,11 @@ const FallbackFavicon: React.FC<FallbackFaviconProps> = ({ hostname, alt }) => {
           throw new Error(`Failed to fetch ${url}`)
         })
         .catch((error) => {
-          // Rethrow aborted errors but silence other failures
+          // Rethrow failures so Promise.any waits for a real successful favicon source.
           if (error.name === 'AbortError') {
             throw error
           }
-          return null // Return null for failed requests
+          throw error
         })
     )
 
@@ -119,15 +120,18 @@ const FallbackFavicon: React.FC<FallbackFaviconProps> = ({ hostname, alt }) => {
       timeoutPromise
     ])
       .then((url) => {
+        if (cancelled || signal.aborted) return
         setFaviconState({ status: 'loaded', src: url })
       })
       .catch((error) => {
+        if (cancelled || signal.aborted) return
         logger.error('All favicon requests failed:', error)
         setFaviconState({ status: 'loaded', src: faviconUrls[0] })
       })
 
     // Cleanup function
     return () => {
+      cancelled = true
       controller.abort()
     }
   }, [hostname]) // Only depend on hostname

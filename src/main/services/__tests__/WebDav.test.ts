@@ -58,4 +58,15 @@ describe('WebDav', () => {
 
     expect(createClient).not.toHaveBeenCalled()
   })
+
+  it('throws instead of returning an Error object when upload is called without an initialized client', async () => {
+    const webdav = new WebDav({
+      webdavHost: 'http://192.168.1.100:8080',
+      webdavUser: 'webdav',
+      webdavPass: 'test-webdav-password'
+    })
+    webdav.instance = undefined
+
+    await expect(webdav.putFileContents('backup.zip', 'data')).rejects.toThrow('WebDAV client not initialized')
+  })
 })
