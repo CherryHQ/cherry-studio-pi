@@ -58,6 +58,39 @@ describe('notes app capabilities', () => {
     await fs.rm(tmpDir, { recursive: true, force: true })
   })
 
+  it('lists notes through a bounded lightweight scanner instead of returning the full tree', async () => {
+    for (const name of ['alpha', 'beta', 'gamma']) {
+      await fs.writeFile(path.join(tmpDir, `${name}.md`), `${name}\n`, 'utf8')
+    }
+
+    const result = await getCapability('notes.list').execute({ limit: 2 }, { source: 'agent' })
+
+    expect(result.ok).toBe(true)
+    expect((result.data as any).notes).toEqual([
+      expect.objectContaining({ type: 'file', name: 'alpha', treePath: '/alpha' }),
+      expect.objectContaining({ type: 'file', name: 'beta', treePath: '/beta' })
+    ])
+    expect((result.data as any).truncated).toBe(true)
+    expect((result.data as any).nextOffset).toBe(2)
+    expect(mocks.scanDir).not.toHaveBeenCalled()
+  })
+
+  it('supports notes.list offset pagination', async () => {
+    for (const name of ['alpha', 'beta', 'gamma', 'omega']) {
+      await fs.writeFile(path.join(tmpDir, `${name}.md`), `${name}\n`, 'utf8')
+    }
+
+    const result = await getCapability('notes.list').execute({ limit: 2, offset: 2 }, { source: 'agent' })
+
+    expect(result.ok).toBe(true)
+    expect((result.data as any).notes).toEqual([
+      expect.objectContaining({ name: 'gamma' }),
+      expect.objectContaining({ name: 'omega' })
+    ])
+    expect((result.data as any).truncated).toBe(false)
+    expect((result.data as any).nextOffset).toBeNull()
+  })
+
   it('treats notes.search limit as a result limit instead of a file scan limit', async () => {
     const nodes: any[] = []
     for (let index = 0; index < 20; index += 1) {

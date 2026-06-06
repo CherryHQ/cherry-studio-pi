@@ -13,6 +13,10 @@ const MAX_NOTE_SEARCH_FILES = 5_000
 const MAX_NOTE_SEARCH_FILE_BYTES = 512 * 1024
 const DEFAULT_NOTE_READ_MAX_BYTES = 512 * 1024
 const MAX_NOTE_READ_MAX_BYTES = 2 * 1024 * 1024
+const DEFAULT_NOTE_LIST_LIMIT = 100
+const MAX_NOTE_LIST_LIMIT = 500
+const MAX_NOTE_LIST_SCAN_ENTRIES = 5_000
+const MAX_NOTE_LIST_DEPTH = 10
 
 async function getNotesRoot() {
   const noteState = await reduxService.select<any>('state.note').catch(() => null)
@@ -32,6 +36,19 @@ function normalizeSearchLimit(value: unknown) {
     typeof value === 'string' && !value.trim() ? DEFAULT_NOTE_SEARCH_LIMIT : Number(value ?? DEFAULT_NOTE_SEARCH_LIMIT)
   const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_NOTE_SEARCH_LIMIT
   return Math.max(1, Math.min(safeLimit, MAX_NOTE_SEARCH_LIMIT))
+}
+
+function normalizeListLimit(value: unknown) {
+  const parsed =
+    typeof value === 'string' && !value.trim() ? DEFAULT_NOTE_LIST_LIMIT : Number(value ?? DEFAULT_NOTE_LIST_LIMIT)
+  const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_NOTE_LIST_LIMIT
+  return Math.max(1, Math.min(safeLimit, MAX_NOTE_LIST_LIMIT))
+}
+
+function normalizeOffset(value: unknown) {
+  const parsed = typeof value === 'string' && !value.trim() ? 0 : Number(value ?? 0)
+  const safeOffset = Number.isFinite(parsed) ? Math.trunc(parsed) : 0
+  return Math.max(0, safeOffset)
 }
 
 function normalizeReadMaxBytes(value: unknown) {
@@ -69,6 +86,94 @@ async function readTextFilePreview(filePath: string, maxBytes: number) {
   }
 }
 
+async function listNoteEntries(root: string, input: any) {
+  const limit = normalizeListLimit(input?.limit)
+  const offset = normalizeOffset(input?.offset)
+  const collected: any[] = []
+  const stack = [{ dirPath: root, depth: 0 }]
+  let skipped = 0
+  let scannedEntries = 0
+  let hitScanLimit = false
+
+  while (stack.length > 0 && collected.length <= limit) {
+    const current = stack.pop()!
+    const entries = await fs.readdir(current.dirPath, { withFileTypes: true }).catch(() => [])
+    const childDirectories: Array<{ dirPath: string; depth: number }> = []
+
+    entries.sort((left, right) => {
+      if (left.isDirectory() !== right.isDirectory()) return left.isDirectory() ? -1 : 1
+      return left.name.localeCompare(right.name)
+    })
+
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue
+      scannedEntries += 1
+      if (scannedEntries > MAX_NOTE_LIST_SCAN_ENTRIES) {
+        hitScanLimit = true
+        break
+      }
+
+      const entryPath = path.join(current.dirPath, entry.name)
+      const relativePath = path.relative(root, entryPath).replace(/\\/g, '/')
+
+      if (entry.isDirectory()) {
+        const stats = await fs.stat(entryPath).catch(() => null)
+        const item = {
+          type: 'folder',
+          name: entry.name,
+          treePath: `/${relativePath}`,
+          externalPath: entryPath,
+          updatedAt: stats?.mtime.toISOString() ?? null
+        }
+        if (skipped < offset) {
+          skipped += 1
+        } else {
+          collected.push(item)
+        }
+        if (current.depth < MAX_NOTE_LIST_DEPTH) {
+          childDirectories.push({ dirPath: entryPath, depth: current.depth + 1 })
+        }
+      } else if (entry.isFile() && path.extname(entry.name).toLowerCase() === '.md') {
+        const stats = await fs.stat(entryPath).catch(() => null)
+        const treePath = `/${relativePath.replace(/\.md$/i, '')}`
+        const item = {
+          type: 'file',
+          name: path.basename(entry.name, path.extname(entry.name)),
+          treePath,
+          externalPath: entryPath,
+          byteSize: stats?.size ?? null,
+          updatedAt: stats?.mtime.toISOString() ?? null
+        }
+        if (skipped < offset) {
+          skipped += 1
+        } else {
+          collected.push(item)
+        }
+      }
+
+      if (collected.length > limit) break
+    }
+
+    for (const child of childDirectories.reverse()) {
+      stack.push(child)
+    }
+
+    if (hitScanLimit) break
+  }
+
+  const hasMore = collected.length > limit || stack.length > 0 || hitScanLimit
+  return {
+    notes: collected.slice(0, limit),
+    limit,
+    offset,
+    nextOffset: hasMore ? offset + limit : null,
+    truncated: hasMore,
+    scannedEntries,
+    scanLimit: MAX_NOTE_LIST_SCAN_ENTRIES,
+    scanLimitReached: hitScanLimit
+  }
+}
+
 export function createNotesCapabilities(): AppCapabilityDefinition[] {
   return [
     {
@@ -77,12 +182,18 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       kind: 'query',
       title: 'List notes',
       description: 'List notes from the configured notes directory.',
-      inputSchema: { type: 'object', properties: {} },
+      inputSchema: {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', default: DEFAULT_NOTE_LIST_LIMIT },
+          offset: { type: 'number', default: 0 }
+        }
+      },
       risk: 'read',
       tags: ['notes', 'files', 'markdown'],
-      execute: async () => {
+      execute: async (input: any) => {
         const root = await getNotesRoot()
-        return okResult('Notes listed', { root, notes: await scanDir(root) })
+        return okResult('Notes listed', { root, ...(await listNoteEntries(root, input)) })
       }
     },
     {
