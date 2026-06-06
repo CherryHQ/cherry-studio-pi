@@ -5,11 +5,24 @@ const mocks = vi.hoisted(() => ({
   filesDelete: vi.fn(),
   filesGet: vi.fn(),
   filesUpdate: vi.fn(),
+  localBase64File: vi.fn(),
   localFileDelete: vi.fn(),
+  localFileUpload: vi.fn(),
+  logger: {
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn()
+  },
   mirrorFlush: vi.fn(),
   mirrorScheduleFile: vi.fn(),
   storageV2DeleteFile: vi.fn(),
   storageV2UpsertFile: vi.fn()
+}))
+
+vi.mock('@logger', () => ({
+  loggerService: {
+    withContext: () => mocks.logger
+  }
 }))
 
 vi.mock('@renderer/databases', () => ({
@@ -59,7 +72,9 @@ describe('FileManager', () => {
       configurable: true,
       value: {
         file: {
-          delete: mocks.localFileDelete
+          base64File: mocks.localBase64File,
+          delete: mocks.localFileDelete,
+          upload: mocks.localFileUpload
         },
         storageV2: {
           deleteFile: mocks.storageV2DeleteFile,
@@ -190,6 +205,111 @@ describe('FileManager', () => {
     expect(mocks.storageV2UpsertFile.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.filesAdd.mock.invocationCallOrder[0]
     )
+  })
+
+  it('logs only file summaries when adding base64 files', async () => {
+    const sourceFile = {
+      id: 'file-base64',
+      name: 'image.png',
+      origin_name: 'image.png',
+      path: '/private/user/image.png',
+      size: 1024,
+      ext: '.png',
+      type: 'image',
+      count: 1,
+      data: 'RAW_BASE64_PAYLOAD_SHOULD_NOT_LOG'
+    }
+    const storedFile = {
+      ...sourceFile,
+      id: 'file-base64-stored',
+      path: '/private/user/stored-image.png',
+      data: 'STORED_BASE64_PAYLOAD_SHOULD_NOT_LOG'
+    }
+    mocks.localBase64File.mockResolvedValue(storedFile)
+    mocks.filesGet.mockResolvedValue(undefined)
+    mocks.filesAdd.mockResolvedValue('file-base64-stored')
+    mocks.storageV2UpsertFile.mockResolvedValue({ id: 'file-base64-stored' })
+
+    const { default: FileManager } = await import('../FileManager')
+
+    await expect(FileManager.addBase64File(sourceFile as any)).resolves.toBe(storedFile)
+
+    expect(mocks.localBase64File).toHaveBeenCalledWith('file-base64.png')
+    expect(mocks.storageV2UpsertFile).toHaveBeenCalledWith(storedFile)
+    expect(mocks.logger.info).toHaveBeenCalledWith('Adding base64 file', {
+      id: 'file-base64',
+      name: 'image.png',
+      origin_name: 'image.png',
+      size: 1024,
+      ext: '.png',
+      type: 'image',
+      count: 1,
+      tokens: undefined,
+      purpose: undefined
+    })
+
+    const logged = JSON.stringify(mocks.logger.info.mock.calls)
+    expect(logged).not.toContain('RAW_BASE64_PAYLOAD_SHOULD_NOT_LOG')
+    expect(logged).not.toContain('STORED_BASE64_PAYLOAD_SHOULD_NOT_LOG')
+    expect(logged).not.toContain('/private/user')
+  })
+
+  it('logs only file summaries when uploading files', async () => {
+    const sourceFile = {
+      id: 'file-upload',
+      name: 'draft.txt',
+      origin_name: 'draft.txt',
+      path: '/private/user/draft.txt',
+      size: 2048,
+      ext: '.txt',
+      type: 'text',
+      count: 1,
+      data: 'RAW_UPLOAD_PAYLOAD_SHOULD_NOT_LOG'
+    }
+    const uploadedFile = {
+      ...sourceFile,
+      id: 'file-uploaded',
+      path: '/private/user/uploaded-draft.txt',
+      data: 'UPLOADED_PAYLOAD_SHOULD_NOT_LOG'
+    }
+    mocks.localFileUpload.mockResolvedValue(uploadedFile)
+    mocks.filesGet.mockResolvedValue(undefined)
+    mocks.filesAdd.mockResolvedValue('file-uploaded')
+    mocks.storageV2UpsertFile.mockResolvedValue({ id: 'file-uploaded' })
+
+    const { default: FileManager } = await import('../FileManager')
+
+    await expect(FileManager.uploadFile(sourceFile as any)).resolves.toBe(uploadedFile)
+
+    expect(mocks.localFileUpload).toHaveBeenCalledWith(sourceFile)
+    expect(mocks.storageV2UpsertFile).toHaveBeenCalledWith(uploadedFile)
+    expect(mocks.logger.info).toHaveBeenCalledWith('Uploading file', {
+      id: 'file-upload',
+      name: 'draft.txt',
+      origin_name: 'draft.txt',
+      size: 2048,
+      ext: '.txt',
+      type: 'text',
+      count: 1,
+      tokens: undefined,
+      purpose: undefined
+    })
+    expect(mocks.logger.info).toHaveBeenCalledWith('Uploaded file', {
+      id: 'file-uploaded',
+      name: 'draft.txt',
+      origin_name: 'draft.txt',
+      size: 2048,
+      ext: '.txt',
+      type: 'text',
+      count: 1,
+      tokens: undefined,
+      purpose: undefined
+    })
+
+    const logged = JSON.stringify(mocks.logger.info.mock.calls)
+    expect(logged).not.toContain('RAW_UPLOAD_PAYLOAD_SHOULD_NOT_LOG')
+    expect(logged).not.toContain('UPLOADED_PAYLOAD_SHOULD_NOT_LOG')
+    expect(logged).not.toContain('/private/user')
   })
 
   it('stops adding legacy metadata when the Storage v2 file upsert fails', async () => {

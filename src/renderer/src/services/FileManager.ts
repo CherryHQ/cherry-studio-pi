@@ -10,6 +10,26 @@ import { storageV2FileRecoveryService } from './StorageV2FileRecoveryService'
 
 const logger = loggerService.withContext('FileManager')
 
+type FileLogSummary = Partial<
+  Pick<FileMetadata, 'id' | 'name' | 'origin_name' | 'size' | 'ext' | 'type' | 'count' | 'tokens' | 'purpose'>
+>
+
+function summarizeFileForLog(file: FileMetadata | undefined): FileLogSummary | null {
+  if (!file) return null
+
+  return {
+    id: file.id,
+    name: file.name,
+    origin_name: file.origin_name,
+    size: file.size,
+    ext: file.ext,
+    type: file.type,
+    count: file.count,
+    tokens: file.tokens,
+    purpose: file.purpose
+  }
+}
+
 class FileManager {
   private static async upsertStorageV2File(file: FileMetadata | undefined): Promise<void> {
     if (!file) return
@@ -74,7 +94,7 @@ class FileManager {
   }
 
   static async addBase64File(file: FileMetadata): Promise<FileMetadata> {
-    logger.info(`Adding base64 file: ${JSON.stringify(file)}`)
+    logger.info('Adding base64 file', summarizeFileForLog(file))
 
     const base64File = await window.api.file.base64File(file.id + file.ext)
     const fileRecord = await db.files.get(base64File.id)
@@ -93,10 +113,10 @@ class FileManager {
   }
 
   static async uploadFile(file: FileMetadata): Promise<FileMetadata> {
-    logger.info(`Uploading file: ${JSON.stringify(file)}`)
+    logger.info('Uploading file', summarizeFileForLog(file))
 
     const uploadFile = await window.api.file.upload(file)
-    logger.info('Uploaded file:', uploadFile)
+    logger.info('Uploaded file', summarizeFileForLog(uploadFile))
     const fileRecord = await db.files.get(uploadFile.id)
 
     if (fileRecord) {
@@ -142,7 +162,7 @@ class FileManager {
   static async deleteFile(id: string, force: boolean = false): Promise<void> {
     const file = await this.getFile(id)
 
-    logger.info('Deleting file:', file)
+    logger.info('Deleting file', summarizeFileForLog(file))
 
     if (!file) {
       return
