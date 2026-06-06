@@ -1,3 +1,4 @@
+import { loggerService } from '@logger'
 import { LoadingIcon } from '@renderer/components/Icons'
 import db from '@renderer/databases'
 import useScrollPosition from '@renderer/hooks/useScrollPosition'
@@ -20,6 +21,7 @@ import styled from 'styled-components'
 import { buildHighlightedTextParts } from './searchResultHighlighter'
 
 const { Text, Title } = Typography
+const logger = loggerService.withContext('SearchResults')
 
 type SearchResult = {
   message: Message
@@ -190,6 +192,7 @@ const SearchResults: FC<Props> = ({ keywords, onMessageClick, onTopicClick, ...p
   const { t } = useTranslation()
   const { handleScroll, containerRef } = useScrollPosition('SearchResults')
   const observerRef = useRef<MutationObserver | null>(null)
+  const searchSeqRef = useRef(0)
 
   const [matchMode, setMatchMode] = useState<KeywordMatchMode>('whole-word')
   const [sortOrder, setSortOrder] = useState<ResultSortOrder>('newest')
@@ -211,57 +214,81 @@ const SearchResults: FC<Props> = ({ keywords, onMessageClick, onTopicClick, ...p
   const [isLoading, setIsLoading] = useState(false)
 
   const onSearch = useCallback(async () => {
-    setSearchResults([])
-    setIsLoading(true)
+    const searchSeq = (searchSeqRef.current += 1)
+    const newSearchTerms = splitKeywordsToTerms(keywords)
 
-    if (keywords.length === 0) {
+    if (newSearchTerms.length === 0) {
       setSearchStats({ count: 0, time: 0 })
       setSearchTerms([])
+      setSearchResults([])
       setIsLoading(false)
       return
     }
 
-    const startTime = performance.now()
-    const newSearchTerms = splitKeywordsToTerms(keywords)
-    const searchRegexes = buildKeywordRegexes(newSearchTerms, { matchMode, flags: 'i' })
-
-    const blocks = (await db.message_blocks.toArray())
-      .filter((block) => block.type === MessageBlockType.MAIN_TEXT)
-      .filter((block) => {
-        const searchableContent = stripMarkdownFormatting(block.content)
-        return searchRegexes.every((regex) => regex.test(searchableContent))
-      })
-
-    const messagesById = new Map(
-      (topics?.flatMap((topic) => topic.messages) ?? []).map((message) => [message.id, message])
-    )
-
-    const results = await Promise.all(
-      blocks.map(async (block) => {
-        const message = messagesById.get(block.messageId)
-        if (message) {
-          const topic = storeTopicsMap.get(message.topicId)
-          if (topic) {
-            return {
-              message,
-              topic,
-              content: block.content,
-              snippet: buildSearchSnippet(block.content, newSearchTerms, matchMode)
-            }
-          }
-        }
-        return null
-      })
-    ).then((results) => results.filter(Boolean) as SearchResult[])
-
-    const endTime = performance.now()
-    setSearchResults(results)
-    setSearchStats({
-      count: results.length,
-      time: (endTime - startTime) / 1000
-    })
+    setSearchResults([])
     setSearchTerms(newSearchTerms)
-    setIsLoading(false)
+    setIsLoading(true)
+
+    const startTime = performance.now()
+    try {
+      const searchRegexes = buildKeywordRegexes(newSearchTerms, { matchMode, flags: 'i' })
+      const messagesById = new Map(
+        (topics?.flatMap((topic) => topic.messages) ?? []).map((message) => [message.id, message])
+      )
+      const results: SearchResult[] = []
+
+      const blocks = await db.message_blocks.toArray()
+      for (const block of blocks) {
+        if (block.type !== MessageBlockType.MAIN_TEXT) {
+          continue
+        }
+
+        const searchableContent = stripMarkdownFormatting(block.content)
+        if (!searchRegexes.every((regex) => regex.test(searchableContent))) {
+          continue
+        }
+
+        const message = messagesById.get(block.messageId)
+        if (!message) {
+          continue
+        }
+
+        const topic = storeTopicsMap.get(message.topicId)
+        if (!topic) {
+          continue
+        }
+
+        results.push({
+          message,
+          topic,
+          content: block.content,
+          snippet: buildSearchSnippet(block.content, newSearchTerms, matchMode)
+        })
+      }
+
+      if (searchSeq !== searchSeqRef.current) {
+        return
+      }
+
+      const endTime = performance.now()
+      setSearchResults(results)
+      setSearchStats({
+        count: results.length,
+        time: (endTime - startTime) / 1000
+      })
+    } catch (error) {
+      if (searchSeq !== searchSeqRef.current) {
+        return
+      }
+
+      logger.error('Failed to search history messages', error as Error)
+      setSearchResults([])
+      setSearchStats({ count: 0, time: 0 })
+    } finally {
+      if (searchSeq === searchSeqRef.current) {
+        setIsLoading(false)
+      }
+    }
   }, [keywords, matchMode, storeTopicsMap, topics])
 
   const sortedSearchResults = useMemo(() => {
@@ -290,6 +317,12 @@ const SearchResults: FC<Props> = ({ keywords, onMessageClick, onTopicClick, ...p
   useEffect(() => {
     void onSearch()
   }, [onSearch])
+
+  useEffect(() => {
+    return () => {
+      searchSeqRef.current += 1
+    }
+  }, [])
 
   useEffect(() => {
     if (!containerRef.current) return
