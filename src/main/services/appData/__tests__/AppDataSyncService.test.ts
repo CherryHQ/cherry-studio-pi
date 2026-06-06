@@ -54,6 +54,7 @@ const mocks = vi.hoisted(() => ({
   remoteFiles: new Map<string, unknown>(),
   webdav: {
     exists: vi.fn(),
+    stat: vi.fn(),
     createDirectory: vi.fn(),
     getFileContents: vi.fn(),
     putFileContents: vi.fn(),
@@ -342,6 +343,13 @@ describe('AppDataSyncService', () => {
       }
       if (mocks.remoteFiles.has(filePath)) return true
       return true
+    })
+    mocks.webdav.stat.mockImplementation(async (filePath: string) => {
+      const value = mocks.remoteFiles.get(filePath)
+      if (Buffer.isBuffer(value)) return { size: value.byteLength }
+      if (typeof value === 'string') return { size: Buffer.byteLength(value, 'utf8') }
+      if (value instanceof ArrayBuffer) return { size: value.byteLength }
+      return { size: value == null ? 0 : Buffer.byteLength(String(value), 'utf8') }
     })
     mocks.webdav.createDirectory.mockResolvedValue(undefined)
     mocks.webdav.lock.mockResolvedValue({ token: 'opaquelocktoken:native-lock', serverTimeout: 'Second-1800' })
@@ -1413,6 +1421,82 @@ describe('AppDataSyncService', () => {
     expect(mocks.runtimeProjection.projectAgents).not.toHaveBeenCalled()
     expect(mocks.runtimeProjection.projectFiles).not.toHaveBeenCalled()
     expect(mocks.runtimeProjection.projectAppData).not.toHaveBeenCalled()
+  })
+
+  it('rejects oversized remote manifests before downloading them', async () => {
+    const manifestPath = '/remote-root/sync/v1/manifest.json'
+    mocks.webdav.stat.mockImplementation(async (filePath: string) => {
+      if (filePath === manifestPath) return { size: 17 * 1024 * 1024 }
+      const value = mocks.remoteFiles.get(filePath)
+      if (Buffer.isBuffer(value)) return { size: value.byteLength }
+      if (typeof value === 'string') return { size: Buffer.byteLength(value, 'utf8') }
+      return { size: 0 }
+    })
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端同步状态 manifest.json过大')
+
+    expect(mocks.webdav.getFileContents).not.toHaveBeenCalledWith(manifestPath, { format: 'binary' })
+    expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
+  })
+
+  it('rejects oversized remote notes files before downloading their contents', async () => {
+    const notePath = '/remote-root/sync/v1/notes/files/big-note.bin'
+    mocks.remoteFiles.set(notePath, Buffer.from('oversized placeholder'))
+    mocks.webdav.stat.mockImplementation(async (filePath: string) => {
+      if (filePath === notePath) return { size: 65 * 1024 * 1024 }
+      const value = mocks.remoteFiles.get(filePath)
+      if (Buffer.isBuffer(value)) return { size: value.byteLength }
+      if (typeof value === 'string') return { size: Buffer.byteLength(value, 'utf8') }
+      return { size: 0 }
+    })
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
+      if (mocks.remoteFiles.has(filePath)) {
+        return mocks.remoteFiles.get(filePath)
+      }
+
+      if (filePath.endsWith('/manifest.json')) {
+        return JSON.stringify({
+          version: 1,
+          updatedAt: 1760000000000,
+          records: {},
+          notes: {
+            version: 1,
+            updatedAt: 1760000000000,
+            files: {
+              'big.md': {
+                version: 1,
+                relativePath: 'big.md',
+                valueHash: 'a'.repeat(64),
+                byteSize: 1,
+                updatedAt: 1760000000000,
+                deletedAt: null,
+                deviceId: 'device-b',
+                path: 'notes/files/big-note.bin'
+              }
+            }
+          }
+        })
+      }
+
+      throw new Error(`Unexpected WebDAV read: ${filePath}`)
+    })
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端笔记文件 big.md过大')
+
+    expect(mocks.webdav.getFileContents).not.toHaveBeenCalledWith(notePath, { format: 'binary' })
+  })
+
+  it('rejects oversized local notes files before uploading them', async () => {
+    const localNotePath = path.join(mocks.notesDir, 'big.md')
+    await fsp.mkdir(path.dirname(localNotePath), { recursive: true })
+    await fsp.writeFile(localNotePath, '')
+    await fsp.truncate(localNotePath, 65 * 1024 * 1024)
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('本地笔记文件过大')
+
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).includes('/notes/files/'))
+    ).toBe(false)
   })
 
   it('rejects oversized remote runtime directory manifests before downloading bundles', async () => {

@@ -308,6 +308,8 @@ const REMOTE_FULL_SNAPSHOT_OPT_IN_ENV = 'CHERRY_STUDIO_DATA_SYNC_REMOTE_SNAPSHOT
 const LOCAL_JOIN_SAFETY_SNAPSHOT_OPT_IN_ENV = 'CHERRY_STUDIO_DATA_SYNC_LOCAL_SAFETY_SNAPSHOT'
 const DATA_SYNC_REMOTE_ROOT = '/cherry-studio-pi'
 const DATA_SYNC_SUFFIX = '/sync/v1'
+const REMOTE_MANIFEST_MAX_BYTES = 16 * 1024 * 1024
+const REMOTE_APP_DATA_RECORD_MAX_BYTES = 2 * 1024 * 1024
 const SYNC_SPACE_KEY_FORMAT = 'cherry-sync-space-key-v1' as const
 const SYNC_SPACE_SECRET_ENCRYPTION = 'cherry-webdav-secret-sync-aes-256-gcm' as const
 const DATA_SYNC_TEMP_BACKUP_FILE_PATTERN = /^cherry-studio-pi\.data-sync\..+\.zip$/
@@ -317,6 +319,9 @@ const DATA_SYNC_SYNC_SPACE_ID_STATE_KEY = 'data-sync-sync-space-id'
 const STORAGE_V2_RUNTIME_PROJECTION_HASH_KEY = 'storage-v2-runtime-projection-hash'
 const NOTES_REMOTE_ARTIFACT_ROOT = 'notes'
 const NOTES_SYNC_STATE_PREFIX = 'notes-file'
+const NOTES_MAX_FILE_BYTES = 64 * 1024 * 1024
+const NOTES_MAX_TOTAL_BYTES = 512 * 1024 * 1024
+const NOTES_MAX_FILE_COUNT = 10_000
 const RUNTIME_DIRECTORIES_REMOTE_ROOT = 'runtime-directories'
 const RUNTIME_DIRECTORY_SYNC_STATE_PREFIX = 'runtime-directory'
 const RUNTIME_DIRECTORY_DEFAULT_MAX_FILE_BYTES = 8 * 1024 * 1024
@@ -504,22 +509,6 @@ function isUsableSyncSpace(value: RemoteSyncSpace | null | undefined): value is 
   )
 }
 
-function bufferToString(value: string | Buffer | ArrayBuffer | unknown) {
-  if (typeof value === 'string') {
-    return value
-  }
-
-  if (Buffer.isBuffer(value)) {
-    return value.toString('utf8')
-  }
-
-  if (value instanceof ArrayBuffer) {
-    return Buffer.from(value).toString('utf8')
-  }
-
-  return String(value)
-}
-
 function bufferFromRemote(value: string | Buffer | ArrayBuffer | unknown) {
   if (Buffer.isBuffer(value)) {
     return value
@@ -588,6 +577,10 @@ function normalizeNotesRelativePath(value: string, label = 'Notes file path') {
 
 function hashText(value: string) {
   return createHash('sha256').update(value).digest('hex')
+}
+
+function jsonByteLength(value: unknown) {
+  return Buffer.byteLength(JSON.stringify(value), 'utf8')
 }
 
 function notesFileRemotePath(relativePath: string, valueHash: string) {
@@ -713,6 +706,13 @@ function formatDurationZh(ms: number) {
   const hours = Math.floor(totalMinutes / 60)
   const minutes = totalMinutes % 60
   return minutes > 0 ? `${hours} 小时 ${minutes} 分钟` : `${hours} 小时`
+}
+
+class RemoteSyncSizeLimitError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'RemoteSyncSizeLimitError'
+  }
 }
 
 function isWebDavLockedError(error: unknown) {
@@ -1019,23 +1019,74 @@ export class AppDataSyncService {
     }
   }
 
+  private async getRemoteFileByteSize(client: WebDAVClient, filePath: string): Promise<number | null> {
+    const stat = (client as WebDAVClient & { stat?: (targetPath: string) => Promise<unknown> }).stat
+    if (typeof stat !== 'function') return null
+
+    try {
+      const result = await runWebDavOperation(
+        `checking remote file size ${filePath}`,
+        () => stat.call(client, filePath),
+        {
+          logger
+        }
+      )
+      const size = Number((result as { size?: unknown } | null)?.size)
+      return Number.isFinite(size) && size >= 0 ? size : null
+    } catch (error) {
+      if (error instanceof WebDavOperationError && error.transient) throw error
+      logger.warn(`Failed to check remote file size ${filePath}; falling back to bounded download`, error as Error)
+      return null
+    }
+  }
+
+  private async assertRemoteFileWithinByteLimit(
+    client: WebDAVClient,
+    filePath: string,
+    label: string,
+    maxBytes: number
+  ) {
+    const byteSize = await this.getRemoteFileByteSize(client, filePath)
+    if (byteSize == null || byteSize <= maxBytes) return
+
+    throw new RemoteSyncSizeLimitError(
+      `${label}过大（${byteSize} 字节，限制 ${maxBytes} 字节）。为避免长时间下载或占用过多内存，本次同步已停止。`
+    )
+  }
+
+  private assertRemoteBufferWithinByteLimit(buffer: Buffer, label: string, maxBytes: number) {
+    if (buffer.byteLength <= maxBytes) return
+
+    throw new RemoteSyncSizeLimitError(
+      `${label}过大（${buffer.byteLength} 字节，限制 ${maxBytes} 字节）。为避免长时间解析或占用过多内存，本次同步已停止。`
+    )
+  }
+
   private async readJson<T>(
     client: WebDAVClient,
     filePath: string,
-    options: { throwOnInvalidJson?: boolean } = {}
+    options: { throwOnInvalidJson?: boolean; maxBytes?: number; label?: string } = {}
   ): Promise<T | null> {
     try {
       if (!(await runWebDavOperation(`checking remote json ${filePath}`, () => client.exists(filePath), { logger }))) {
         return null
       }
 
+      const label = options.label ?? '远端同步 JSON'
+      if (options.maxBytes) {
+        await this.assertRemoteFileWithinByteLimit(client, filePath, label, options.maxBytes)
+      }
       const contents = await runWebDavOperation(
         `reading remote json ${filePath}`,
         () => client.getFileContents(filePath, { format: 'binary' }),
         { logger }
       )
+      const buffer = bufferFromRemote(contents)
+      if (options.maxBytes) {
+        this.assertRemoteBufferWithinByteLimit(buffer, label, options.maxBytes)
+      }
       try {
-        return JSON.parse(bufferToString(contents)) as T
+        return JSON.parse(buffer.toString('utf8')) as T
       } catch (error) {
         if (options.throwOnInvalidJson) {
           throw new Error(`Remote sync metadata is corrupted: ${filePath}`, { cause: error })
@@ -1043,6 +1094,9 @@ export class AppDataSyncService {
         throw error
       }
     } catch (error) {
+      if (error instanceof RemoteSyncSizeLimitError) {
+        throw error
+      }
       if (error instanceof WebDavOperationError && error.transient) {
         throw error
       }
@@ -1924,17 +1978,38 @@ export class AppDataSyncService {
       if (pathValue && !pathValue.startsWith(`${NOTES_REMOTE_ARTIFACT_ROOT}/`)) {
         throw new Error(`远端笔记文件路径越界：${relativePath}`)
       }
+      const byteSize = Number(meta.byteSize)
+      if (!deletedAt && (!Number.isFinite(byteSize) || byteSize < 0)) {
+        throw new Error(`远端笔记文件大小无效：${relativePath}。为避免导入异常笔记，本次同步已停止。`)
+      }
+      if (!deletedAt && byteSize > NOTES_MAX_FILE_BYTES) {
+        throw new Error(
+          `远端笔记文件过大：${relativePath}（${byteSize} 字节，限制 ${NOTES_MAX_FILE_BYTES} 字节）。WebDAV 多端同步不适合搬运超大笔记或附件，请清理后重试。`
+        )
+      }
 
       files[relativePath] = {
         version: 1,
         relativePath,
         valueHash: valueHash.toLowerCase(),
-        byteSize: Math.max(0, Number(meta.byteSize) || 0),
+        byteSize: Math.max(0, byteSize || 0),
         updatedAt: Math.max(0, Number(meta.updatedAt) || deletedAt || 0),
         deletedAt: deletedAt && Number.isFinite(deletedAt) ? deletedAt : null,
         deviceId: typeof meta.deviceId === 'string' && meta.deviceId ? meta.deviceId : 'unknown',
         path: pathValue
       }
+    }
+    const activeFiles = Object.values(files).filter((meta) => !meta.deletedAt)
+    if (activeFiles.length > NOTES_MAX_FILE_COUNT) {
+      throw new Error(
+        `远端笔记文件数量过多（${activeFiles.length} 个，限制 ${NOTES_MAX_FILE_COUNT} 个）。为避免 WebDAV 频率限制，本次同步已停止。`
+      )
+    }
+    const activeTotalBytes = activeFiles.reduce((sum, meta) => sum + meta.byteSize, 0)
+    if (activeTotalBytes > NOTES_MAX_TOTAL_BYTES) {
+      throw new Error(
+        `远端笔记目录过大（${activeTotalBytes} 字节，限制 ${NOTES_MAX_TOTAL_BYTES} 字节）。WebDAV 多端同步不适合搬运超大目录，请清理后重试。`
+      )
     }
 
     return {
@@ -2021,7 +2096,11 @@ export class AppDataSyncService {
     manifestPath: string,
     baseline: RemoteManifestBaseline
   ) {
-    const latestRawManifest = await this.readJson<RemoteManifest>(client, manifestPath, { throwOnInvalidJson: true })
+    const latestRawManifest = await this.readJson<RemoteManifest>(client, manifestPath, {
+      throwOnInvalidJson: true,
+      maxBytes: REMOTE_MANIFEST_MAX_BYTES,
+      label: '远端同步状态 manifest.json'
+    })
     if (!baseline.existed && !latestRawManifest) return
     if (!latestRawManifest) {
       throw new Error('远端同步状态在同步过程中被删除。为避免覆盖其他设备的数据，本次同步已停止，请重新同步。')
@@ -2062,7 +2141,10 @@ export class AppDataSyncService {
 
   private async pullRemoteRecord(client: WebDAVClient, basePath: string, meta: RemoteRecordMeta) {
     const remotePath = path.posix.join(basePath, normalizeRemoteRelativePath(meta.path, 'Remote data record path'))
-    const record = await this.readJson<AppDataRecord>(client, remotePath)
+    const record = await this.readJson<AppDataRecord>(client, remotePath, {
+      maxBytes: REMOTE_APP_DATA_RECORD_MAX_BYTES,
+      label: `远端应用数据记录 ${meta.scope}:${meta.key}`
+    })
     if (!record) {
       throw new Error(`远端同步记录缺失：${meta.scope}:${meta.key}。为避免误判同步成功，本次同步已停止。`)
     }
@@ -2075,6 +2157,12 @@ export class AppDataSyncService {
 
   private async pushRecord(client: WebDAVClient, basePath: string, record: AppDataRecord, manifest: RemoteManifest) {
     const relativePath = recordPath(record)
+    const byteSize = jsonByteLength(record)
+    if (byteSize > REMOTE_APP_DATA_RECORD_MAX_BYTES) {
+      throw new Error(
+        `同步数据失败：应用数据记录 ${record.scope}:${record.key} 过大（${byteSize} 字节，限制 ${REMOTE_APP_DATA_RECORD_MAX_BYTES} 字节）。请清理异常大的设置或缓存后重试。`
+      )
+    }
     await this.writeJson(client, path.posix.join(basePath, relativePath), record)
 
     manifest.records[recordId(record.scope, record.key)] = {
@@ -2107,6 +2195,7 @@ export class AppDataSyncService {
 
   private async listLocalNotesFiles(rootDir: string, context: SyncRunContext): Promise<LocalNotesFile[]> {
     const files: LocalNotesFile[] = []
+    let totalBytes = 0
 
     const walk = async (currentDir: string) => {
       this.assertSyncRunActive(context, '扫描本地笔记文件')
@@ -2128,8 +2217,24 @@ export class AppDataSyncService {
 
         const stat = await fsp.stat(localPath)
         if (!stat.isFile()) continue
-
         const relativePath = normalizeNotesRelativePath(path.relative(rootDir, localPath).split(path.sep).join('/'))
+        if (stat.size > NOTES_MAX_FILE_BYTES) {
+          throw new Error(
+            `本地笔记文件过大：${relativePath}（${stat.size} 字节，限制 ${NOTES_MAX_FILE_BYTES} 字节）。WebDAV 多端同步不适合搬运超大笔记或附件，请清理后重试。`
+          )
+        }
+        totalBytes += stat.size
+        if (totalBytes > NOTES_MAX_TOTAL_BYTES) {
+          throw new Error(
+            `本地笔记目录过大（超过 ${NOTES_MAX_TOTAL_BYTES} 字节）。WebDAV 多端同步不适合搬运超大目录，请清理后重试。`
+          )
+        }
+        if (files.length + 1 > NOTES_MAX_FILE_COUNT) {
+          throw new Error(
+            `本地笔记文件数量过多（超过 ${NOTES_MAX_FILE_COUNT} 个）。为避免 WebDAV 频率限制，本次同步已停止；请清理后重试。`
+          )
+        }
+
         files.push({
           relativePath,
           localPath,
@@ -2213,7 +2318,16 @@ export class AppDataSyncService {
     if (meta.deletedAt || !meta.path) return
 
     const relativePath = normalizeNotesRelativePath(meta.relativePath)
+    if (!Number.isFinite(meta.byteSize) || meta.byteSize < 0) {
+      throw new Error(`远端笔记文件大小无效：${relativePath}。为避免导入异常笔记，本次同步已停止。`)
+    }
+    if (meta.byteSize > NOTES_MAX_FILE_BYTES) {
+      throw new Error(
+        `远端笔记文件过大：${relativePath}（${meta.byteSize} 字节，限制 ${NOTES_MAX_FILE_BYTES} 字节）。WebDAV 多端同步不适合搬运超大笔记或附件，请清理后重试。`
+      )
+    }
     const remotePath = path.posix.join(basePath, normalizeRemoteRelativePath(meta.path, 'Remote notes artifact path'))
+    await this.assertRemoteFileWithinByteLimit(client, remotePath, `远端笔记文件 ${relativePath}`, NOTES_MAX_FILE_BYTES)
     const contents = await runWebDavOperation(
       `downloading notes file ${remotePath}`,
       () => client.getFileContents(remotePath, { format: 'binary' }),
@@ -3215,7 +3329,11 @@ export class AppDataSyncService {
     const { client, basePath } = this.createWebDavClient(normalizedConfig)
     const manifestPath = path.posix.join(basePath, 'manifest.json')
     const manifest = this.normalizeManifest(
-      await this.readJson<RemoteManifest>(client, manifestPath, { throwOnInvalidJson: true })
+      await this.readJson<RemoteManifest>(client, manifestPath, {
+        throwOnInvalidJson: true,
+        maxBytes: REMOTE_MANIFEST_MAX_BYTES,
+        label: '远端同步状态 manifest.json'
+      })
     )
     const snapshots = Object.values(manifest.snapshots ?? {})
       .filter((snapshot): snapshot is RemoteSnapshotMeta => Boolean(snapshot?.path && snapshot.fileName))
@@ -3318,7 +3436,11 @@ export class AppDataSyncService {
       await this.assertWriteAccess(client, basePath)
 
       this.assertSyncRunActive(context, '读取远端同步状态')
-      const rawManifest = await this.readJson<RemoteManifest>(client, manifestPath, { throwOnInvalidJson: true })
+      const rawManifest = await this.readJson<RemoteManifest>(client, manifestPath, {
+        throwOnInvalidJson: true,
+        maxBytes: REMOTE_MANIFEST_MAX_BYTES,
+        label: '远端同步状态 manifest.json'
+      })
       this.assertSyncRunActive(context, '合并远端同步状态')
       const manifest = this.normalizeManifest(rawManifest)
       const manifestBaseline = this.captureManifestBaseline(rawManifest, manifest)
@@ -3559,6 +3681,12 @@ export class AppDataSyncService {
       this.assertSyncRunActive(context, '确认远端同步状态未被修改')
       await this.assertRemoteManifestUnchanged(client, manifestPath, manifestBaseline)
       this.assertSyncRunActive(context, '写入远端同步状态')
+      const manifestByteSize = jsonByteLength(manifest)
+      if (manifestByteSize > REMOTE_MANIFEST_MAX_BYTES) {
+        throw new Error(
+          `远端同步状态 manifest.json 过大（${manifestByteSize} 字节，限制 ${REMOTE_MANIFEST_MAX_BYTES} 字节）。为避免 WebDAV 同步状态膨胀，本次同步已停止；请减少同步的笔记、运行时目录或旧数据记录后重试。`
+        )
+      }
       await this.writeJson(client, manifestPath, manifest)
       this.assertSyncRunActive(context, '提交本地同步游标')
       stageSyncState(DATA_SYNC_SYNC_SPACE_ID_STATE_KEY, syncSpace.id)
