@@ -15,6 +15,9 @@ import { okResult, sanitizeForAgent } from '../utils'
 const logger = loggerService.withContext('AppCapabilities:Knowledge')
 
 type ProviderRuntimeConfig = { apiKey: string; baseURL: string }
+type ProviderConfigResolver = (providerId: string) => Promise<ProviderRuntimeConfig | null>
+
+const KNOWLEDGE_SEARCH_CONCURRENCY = 3
 
 function firstApiKey(value: unknown): string {
   return typeof value === 'string' ? (value.split(',')[0]?.trim() ?? '') : ''
@@ -79,13 +82,48 @@ async function getProviderConfig(providerId: string): Promise<ProviderRuntimeCon
   return getProviderConfigFromStorageV2(providerId)
 }
 
-async function toKnowledgeBaseParams(base: KnowledgeBase): Promise<KnowledgeBaseParams> {
+function createCachedProviderConfigResolver(): ProviderConfigResolver {
+  const cache = new Map<string, Promise<ProviderRuntimeConfig | null>>()
+  return (providerId: string) => {
+    const cached = cache.get(providerId)
+    if (cached) return cached
+
+    const next = getProviderConfig(providerId)
+    cache.set(providerId, next)
+    return next
+  }
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let nextIndex = 0
+
+  const workers = Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex
+      nextIndex += 1
+      results[currentIndex] = await mapper(items[currentIndex])
+    }
+  })
+
+  await Promise.all(workers)
+  return results
+}
+
+async function toKnowledgeBaseParams(
+  base: KnowledgeBase,
+  resolveProviderConfig: ProviderConfigResolver = getProviderConfig
+): Promise<KnowledgeBaseParams> {
   const embedProviderId = base.model?.provider
   if (!embedProviderId) {
     throw new Error(`Knowledge base "${base.name}" is missing embedding model provider configuration`)
   }
 
-  const embedConfig = await getProviderConfig(embedProviderId)
+  const embedConfig = await resolveProviderConfig(embedProviderId)
   if (!embedConfig) {
     throw new Error(`Provider "${embedProviderId}" not found for knowledge base "${base.name}"`)
   }
@@ -105,7 +143,7 @@ async function toKnowledgeBaseParams(base: KnowledgeBase): Promise<KnowledgeBase
   }
 
   if (base.rerankModel?.provider) {
-    const rerankConfig = await getProviderConfig(base.rerankModel.provider)
+    const rerankConfig = await resolveProviderConfig(base.rerankModel.provider)
     if (rerankConfig) {
       params.rerankApiClient = {
         model: base.rerankModel.id || '',
@@ -235,33 +273,32 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         const documentCount = Math.max(1, Math.min(Number(input?.document_count || 5), 20))
         const bases = await listKnowledgeBases()
         const targetBases = ids?.length ? bases.filter((base) => ids.includes(base.id)) : bases
-        const resultsPerBase = await Promise.all(
-          targetBases.map(async (base) => {
-            try {
-              const params = await toKnowledgeBaseParams(base)
-              const results = await KnowledgeService.search({} as Electron.IpcMainInvokeEvent, {
-                search: query,
-                base: params
-              })
-              return {
-                baseId: base.id,
-                baseName: base.name,
-                results: results.slice(0, documentCount).map((result) => ({
-                  ...result,
-                  knowledge_base_id: base.id,
-                  knowledge_base_name: base.name
-                }))
-              }
-            } catch (error) {
-              return {
-                baseId: base.id,
-                baseName: base.name,
-                results: [],
-                error: error instanceof Error ? error.message : String(error)
-              }
+        const resolveProviderConfig = createCachedProviderConfigResolver()
+        const resultsPerBase = await mapWithConcurrency(targetBases, KNOWLEDGE_SEARCH_CONCURRENCY, async (base) => {
+          try {
+            const params = await toKnowledgeBaseParams(base, resolveProviderConfig)
+            const results = await KnowledgeService.search({} as Electron.IpcMainInvokeEvent, {
+              search: query,
+              base: params
+            })
+            return {
+              baseId: base.id,
+              baseName: base.name,
+              results: results.slice(0, documentCount).map((result) => ({
+                ...result,
+                knowledge_base_id: base.id,
+                knowledge_base_name: base.name
+              }))
             }
-          })
-        )
+          } catch (error) {
+            return {
+              baseId: base.id,
+              baseName: base.name,
+              results: [],
+              error: error instanceof Error ? error.message : String(error)
+            }
+          }
+        })
         const results = resultsPerBase.flatMap((item) => item.results)
         const warnings = resultsPerBase.flatMap((item) => (item.error ? [`${item.baseName}: ${item.error}`] : []))
         return {
