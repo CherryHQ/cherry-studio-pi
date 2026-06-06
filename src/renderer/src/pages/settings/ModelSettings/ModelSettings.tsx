@@ -37,7 +37,7 @@ const ModelSettings: FC<ModelSettingsProps> = ({
   const { defaultModel, quickModel, translateModel, setDefaultModel, setQuickModel, setTranslateModel } =
     useDefaultModel()
   const { providers } = useProviders()
-  const allModels = providers.map((p) => p.models).flat()
+  const allModels = useMemo(() => providers.flatMap((p) => p.models), [providers])
   const { theme } = useTheme()
   const { t } = useTranslation()
   const { translateModelPrompt } = useSettings()

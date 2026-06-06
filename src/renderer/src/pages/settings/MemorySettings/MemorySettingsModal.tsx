@@ -5,13 +5,13 @@ import { InfoTooltip } from '@renderer/components/TooltipIcons'
 import { isEmbeddingModel, isRerankModel } from '@renderer/config/models'
 import { useModel } from '@renderer/hooks/useModel'
 import { useProviders } from '@renderer/hooks/useProvider'
-import { getModelUniqId } from '@renderer/services/ModelService'
+import { findModelByUniqId, getModelUniqId } from '@renderer/services/ModelService'
 import { selectMemoryConfig, updateMemoryConfig } from '@renderer/store/memory'
 import type { Model } from '@renderer/types'
 import { Flex, Form, Modal } from 'antd'
 import { t } from 'i18next'
 import type { FC } from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 
 const logger = loggerService.withContext('MemorySettingsModal')
@@ -33,6 +33,7 @@ const MemorySettingsModal: FC<MemorySettingsModalProps> = ({ visible, onSubmit, 
   const { providers } = useProviders()
   const dispatch = useDispatch()
   const memoryConfig = useSelector(selectMemoryConfig)
+  const allModels = useMemo(() => providers.flatMap((p) => p.models), [providers])
   const [loading, setLoading] = useState(false)
 
   // Get all models for lookup
@@ -54,13 +55,8 @@ const MemorySettingsModal: FC<MemorySettingsModalProps> = ({ visible, onSubmit, 
 
   const handleFormSubmit = async (values: formValue) => {
     try {
-      // Convert model IDs back to Model objects
-      // values.llmModel and values.embeddingModel are JSON strings from getModelUniqId()
-      // e.g., '{"id":"gpt-4","provider":"openai"}'
-      // We need to find models by comparing with getModelUniqId() result
-      const allModels = providers.flatMap((p) => p.models)
-      const llmModel = allModels.find((m) => getModelUniqId(m) === values.llmModel)
-      const embeddingModel = allModels.find((m) => getModelUniqId(m) === values.embeddingModel)
+      const llmModel = findModelByUniqId(allModels, values.llmModel)
+      const embeddingModel = findModelByUniqId(allModels, values.embeddingModel)
 
       if (embeddingModel) {
         setLoading(true)
@@ -145,9 +141,7 @@ const MemorySettingsModal: FC<MemorySettingsModalProps> = ({ visible, onSubmit, 
           shouldUpdate={(prevValues, currentValues) => prevValues.embeddingModel !== currentValues.embeddingModel}>
           {({ getFieldValue }) => {
             const embeddingModelId = getFieldValue('embeddingModel')
-            // embeddingModelId is a JSON string from getModelUniqId(), find model by comparing
-            const allModels = providers.flatMap((p) => p.models)
-            const embeddingModel = allModels.find((m) => getModelUniqId(m) === embeddingModelId)
+            const embeddingModel = findModelByUniqId(allModels, embeddingModelId)
             return (
               <Form.Item
                 label={

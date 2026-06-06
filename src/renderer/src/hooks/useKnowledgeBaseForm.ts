@@ -1,7 +1,7 @@
 import { getEmbeddingMaxContext } from '@renderer/config/embedings'
 import { usePreprocessProviders } from '@renderer/hooks/usePreprocess'
 import { useProviders } from '@renderer/hooks/useProvider'
-import { getModelUniqId } from '@renderer/services/ModelService'
+import { findModelByUniqId } from '@renderer/services/ModelService'
 import type { KnowledgeBase } from '@renderer/types'
 import { nanoid } from 'nanoid'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -63,24 +63,24 @@ export const useKnowledgeBaseForm = (base?: KnowledgeBase) => {
     return [preprocessOptions]
   }, [preprocessProviders, t])
 
+  const allModels = useMemo(() => providers.flatMap((p) => p.models), [providers])
+
   const handleEmbeddingModelChange = useCallback(
     (value: string) => {
-      const model = providers.flatMap((p) => p.models).find((m) => getModelUniqId(m) === value)
+      const model = findModelByUniqId(allModels, value)
       if (model) {
         setNewBase((prev) => ({ ...prev, model }))
       }
     },
-    [providers]
+    [allModels]
   )
 
   const handleRerankModelChange = useCallback(
     (value: string) => {
-      const rerankModel = value
-        ? providers.flatMap((p) => p.models).find((m) => getModelUniqId(m) === value)
-        : undefined
+      const rerankModel = value ? findModelByUniqId(allModels, value) : undefined
       setNewBase((prev) => ({ ...prev, rerankModel }))
     },
-    [providers]
+    [allModels]
   )
 
   const handleDimensionChange = useCallback((value: number | null) => {

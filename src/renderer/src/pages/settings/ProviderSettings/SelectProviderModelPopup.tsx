@@ -3,7 +3,7 @@ import { TopView } from '@renderer/components/TopView'
 import { isRerankModel } from '@renderer/config/models'
 import { useTimer } from '@renderer/hooks/useTimer'
 import i18n from '@renderer/i18n'
-import { getModelUniqId } from '@renderer/services/ModelService'
+import { findModelByUniqId, getModelUniqId } from '@renderer/services/ModelService'
 import type { Model, Provider } from '@renderer/types'
 import { Modal } from 'antd'
 import { first } from 'lodash'
@@ -71,7 +71,7 @@ const PopupContainer: React.FC<Props> = ({ provider, resolve, reject }) => {
         placeholder={i18n.t('settings.models.empty')}
         style={{ width: '100%' }}
         onChange={(value) => {
-          setModel(models.find((m) => value === getModelUniqId(m)))
+          setModel(findModelByUniqId(models, value))
         }}
       />
     </Modal>

@@ -9,7 +9,7 @@ import { useProviders } from '@renderer/hooks/useProvider'
 import { useTimer } from '@renderer/hooks/useTimer'
 import { getAssistantSettings, getProviderByModel } from '@renderer/services/AssistantService'
 import { loggerService } from '@renderer/services/LoggerService'
-import { getModelUniqId } from '@renderer/services/ModelService'
+import { findModelByUniqId, getModelUniqId } from '@renderer/services/ModelService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import { setIsBunInstalled } from '@renderer/store/mcp'
 import type { EndpointType, Model } from '@renderer/types'
@@ -37,6 +37,7 @@ const CodeToolsPage: FC = () => {
   const { t } = useTranslation()
   const { providers } = useProviders()
   const dispatch = useAppDispatch()
+  const allModels = useMemo(() => providers.flatMap((p) => p.models), [providers])
   const isBunInstalled = useAppSelector((state) => state.mcp.isBunInstalled)
   const {
     selectedCliTool,
@@ -159,14 +160,7 @@ const CodeToolsPage: FC = () => {
       return
     }
 
-    // 从所有 providers 中查找选中的模型
-    for (const provider of providers || []) {
-      const model = provider.models.find((m) => getModelUniqId(m) === value)
-      if (model) {
-        setModel(model)
-        break
-      }
-    }
+    setModel(findModelByUniqId(allModels, value) ?? null)
   }
 
   // 处理删除目录

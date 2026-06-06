@@ -4,6 +4,7 @@ import i18n from '@renderer/i18n'
 const logger = loggerService.withContext('SystemAgentService')
 const EVENT_DEDUP_MS = 30_000
 const recentEvents = new Map<string, number>()
+let errorTriggersInitialized = false
 
 type SystemAgentEventInput = {
   type?: 'error' | 'event'
@@ -90,6 +91,9 @@ export function reportErrorToSystemAgent(
 }
 
 export function initSystemAgentErrorTriggers() {
+  if (errorTriggersInitialized) return
+  errorTriggersInitialized = true
+
   window.addEventListener('error', (event) => {
     void reportErrorToSystemAgent(event.error || event.message, {
       source: 'renderer.window.error',

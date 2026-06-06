@@ -25,6 +25,7 @@ export class StoreSyncService {
     syncList: []
   }
   private broadcastSyncRemover: (() => void) | null = null
+  private beforeUnloadHandler = () => this.unsubscribe()
 
   private constructor() {
     return
@@ -112,9 +113,7 @@ export class StoreSyncService {
 
     void window.api.storeSync.subscribe()
 
-    window.addEventListener('beforeunload', () => {
-      this.unsubscribe()
-    })
+    window.addEventListener('beforeunload', this.beforeUnloadHandler)
   }
 
   /**
@@ -130,6 +129,8 @@ export class StoreSyncService {
       this.broadcastSyncRemover()
       this.broadcastSyncRemover = null
     }
+
+    window.removeEventListener('beforeunload', this.beforeUnloadHandler)
   }
 }
 

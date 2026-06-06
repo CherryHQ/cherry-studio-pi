@@ -4,7 +4,7 @@ import path from 'node:path'
 import { loggerService } from '@logger'
 import { isMac } from '@main/constant'
 import { appCapabilityService } from '@main/services/appCapabilities'
-import { pickPath, sanitizeForAgent } from '@main/services/appCapabilities/utils'
+import { isAllowedAppRoute, normalizeAppRoute, pickPath, sanitizeForAgent } from '@main/services/appCapabilities/utils'
 import { reduxService } from '@main/services/ReduxService'
 import { windowService } from '@main/services/WindowService'
 import { getName, getNotesDir, isPathInside, scanDir } from '@main/utils/file'
@@ -63,18 +63,16 @@ const PAINTING_NAMESPACES = [
   'ppio_edit'
 ]
 
-const NAVIGATION_ROUTE_PREFIXES = ['/', '/settings', '/knowledge', '/paintings', '/notes', '/agents']
-
 async function navigate(route: string) {
-  if (!route.startsWith('/')) route = `/${route}`
-  if (!NAVIGATION_ROUTE_PREFIXES.some((prefix) => route === prefix || route.startsWith(`${prefix}/`))) {
-    throw new Error(`Navigation route is not allowed: ${route}`)
+  const nextRoute = normalizeAppRoute(route)
+  if (!isAllowedAppRoute(nextRoute)) {
+    throw new Error(`Navigation route is not allowed: ${nextRoute}`)
   }
 
   const win = windowService.getMainWindow()
   if (!win || win.isDestroyed()) throw new Error('Main window is not available')
 
-  await win.webContents.executeJavaScript(`window.navigate(${JSON.stringify(route)})`)
+  await win.webContents.executeJavaScript(`window.navigate(${JSON.stringify(nextRoute)})`)
   if (isMac) windowService.showMainWindow()
 }
 

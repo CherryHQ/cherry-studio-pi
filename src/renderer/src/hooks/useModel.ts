@@ -1,9 +1,11 @@
+import { useMemo } from 'react'
+
 import { useProviders } from './useProvider'
 import { getStoreProviders } from './useStore'
 
 export function useModel(id?: string, providerId?: string) {
   const { providers } = useProviders()
-  const allModels = providers.map((p) => p.models).flat()
+  const allModels = useMemo(() => providers.flatMap((p) => p.models), [providers])
   return allModels.find((m) => {
     if (providerId) {
       return m.id === id && m.provider === providerId
@@ -15,7 +17,7 @@ export function useModel(id?: string, providerId?: string) {
 
 export function getModel(id?: string, providerId?: string) {
   const providers = getStoreProviders()
-  const allModels = providers.map((p) => p.models).flat()
+  const allModels = providers.flatMap((p) => p.models)
   return allModels.find((m) => {
     if (providerId) {
       return m.id === id && m.provider === providerId

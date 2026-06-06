@@ -6,6 +6,7 @@ import { isPathInside } from '@main/utils/file'
 
 const SENSITIVE_KEY_PATTERN = /api[-_]?key|token|secret|pass|password|authorization|cookie/i
 const CIRCULAR_REFERENCE_PLACEHOLDER = '[Circular]'
+const NAVIGATION_ROUTE_PREFIXES = ['/', '/settings', '/knowledge', '/paintings', '/notes', '/agents']
 
 export const okResult = <T>(summary: string, data?: T): { ok: true; summary: string; data?: T } => ({
   ok: true,
@@ -15,28 +16,55 @@ export const okResult = <T>(summary: string, data?: T): { ok: true; summary: str
 
 export const sanitizeForAgent = (value: unknown): unknown => {
   const seen = new WeakSet<object>()
-  const text = JSON.stringify(value, (key, item) => {
-    if (SENSITIVE_KEY_PATTERN.test(key) && typeof item === 'string') {
-      return item ? '[redacted]' : item
+  return sanitizeJsonValue(value, '', seen)
+}
+
+function sanitizeJsonValue(value: unknown, key: string, seen: WeakSet<object>): unknown {
+  if (SENSITIVE_KEY_PATTERN.test(key) && typeof value === 'string') {
+    return value ? '[redacted]' : value
+  }
+
+  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value
+  }
+  if (typeof value === 'bigint') return value.toString()
+  if (typeof value === 'undefined' || typeof value === 'function' || typeof value === 'symbol') return undefined
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString()
+  }
+
+  if (typeof value !== 'object') return undefined
+  if (seen.has(value)) return CIRCULAR_REFERENCE_PLACEHOLDER
+
+  seen.add(value)
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => sanitizeJsonValue(item, '', seen) ?? null)
     }
-    if (typeof item === 'bigint') {
-      return item.toString()
-    }
-    if (item && typeof item === 'object') {
-      if (seen.has(item)) {
-        return CIRCULAR_REFERENCE_PLACEHOLDER
+
+    const output: Record<string, unknown> = {}
+    for (const [childKey, childValue] of Object.entries(value as Record<string, unknown>)) {
+      const sanitized = sanitizeJsonValue(childValue, childKey, seen)
+      if (sanitized !== undefined) {
+        output[childKey] = sanitized
       }
-      seen.add(item)
     }
-    return item
-  })
-  return text === undefined ? undefined : JSON.parse(text)
+    return output
+  } finally {
+    seen.delete(value)
+  }
 }
 
 export const pickPath = (value: any, keyPath = '') => {
   if (!keyPath) return value
   return keyPath.split('.').reduce((current, key) => current?.[key], value)
 }
+
+export const normalizeAppRoute = (route: string) => (route.startsWith('/') ? route : `/${route}`)
+
+export const isAllowedAppRoute = (route: string) =>
+  NAVIGATION_ROUTE_PREFIXES.some((prefix) => route === prefix || route.startsWith(`${prefix}/`))
 
 export const resolveInsideRoot = (root: string, input?: string, defaultExt?: string) => {
   const raw = (input || '').trim()
@@ -49,9 +77,8 @@ export const resolveInsideRoot = (root: string, input?: string, defaultExt?: str
 }
 
 export const navigateApp = async (route: string) => {
-  const nextRoute = route.startsWith('/') ? route : `/${route}`
-  const allowed = ['/', '/settings', '/settings/', '/knowledge', '/paintings', '/notes', '/agents']
-  if (!allowed.some((prefix) => nextRoute === prefix || nextRoute.startsWith(`${prefix}/`))) {
+  const nextRoute = normalizeAppRoute(route)
+  if (!isAllowedAppRoute(nextRoute)) {
     throw new Error(`Navigation route is not allowed: ${nextRoute}`)
   }
 

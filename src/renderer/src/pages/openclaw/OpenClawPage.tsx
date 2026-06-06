@@ -5,6 +5,7 @@ import ModelSelector from '@renderer/components/ModelSelector'
 import { useMinappPopup } from '@renderer/hooks/useMinappPopup'
 import { useProviders } from '@renderer/hooks/useProvider'
 import { loggerService } from '@renderer/services/LoggerService'
+import { findModelByUniqId } from '@renderer/services/ModelService'
 import { useAppDispatch, useAppSelector } from '@renderer/store'
 import {
   type GatewayStatus,
@@ -26,6 +27,7 @@ import UpdateButton from './components/UpdateButton'
 const logger = loggerService.withContext('OpenClawPage')
 
 const DEFAULT_DOCS_URL = 'https://docs.openclaw.ai/'
+const OPENCLAW_NO_API_KEY_PROVIDERS = ['ollama', 'lmstudio', 'gpustack']
 
 interface TitleSectionProps {
   title: string
@@ -89,23 +91,20 @@ const OpenClawPage: FC = () => {
   const [uninstallSuccess, setUninstallSuccess] = useState(false)
   const [isOpenClawUpdating, setIsOpenClawUpdating] = useState(false)
 
-  const noApiKeyProviders = ['ollama', 'lmstudio', 'gpustack']
-  const availableProviders = providers.filter((p) => p.enabled && (p.apiKey || noApiKeyProviders.includes(p.type)))
+  const availableProviders = useMemo(
+    () => providers.filter((p) => p.enabled && (p.apiKey || OPENCLAW_NO_API_KEY_PROVIDERS.includes(p.type))),
+    [providers]
+  )
 
   const selectedModelInfo = useMemo(() => {
     if (!selectedModelUniqId) return null
-    try {
-      const parsed = JSON.parse(selectedModelUniqId) as { id: string; provider: string }
-      for (const p of availableProviders) {
-        const model = p.models.find((m) => m.id === parsed.id && m.provider === parsed.provider)
-        if (model) {
-          return { provider: p, model }
-        }
-      }
-    } catch {
-      // Invalid JSON
-    }
-    return null
+    const model = findModelByUniqId(
+      availableProviders.flatMap((p) => p.models),
+      selectedModelUniqId
+    )
+    if (!model) return null
+    const provider = availableProviders.find((p) => p.id === model.provider)
+    return provider ? { provider, model } : null
   }, [selectedModelUniqId, availableProviders])
 
   const selectedProvider = selectedModelInfo?.provider ?? null
