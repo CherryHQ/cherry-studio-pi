@@ -1134,15 +1134,21 @@ export class StorageV2WebDavRecordSyncService {
         label: '远端 Storage v2 记录包'
       }
     )
-    if (!bundle?.records || typeof bundle.records !== 'object') {
+    if (!isPlainRecord(bundle?.records)) {
       throw new Error(
         '远端 Storage v2 数据包缺失或格式损坏。为避免把损坏状态当作成功同步，本次同步已停止，请重新同步或从安全快照恢复。'
+      )
+    }
+    const rawBundleBlobs = bundle.blobs ?? {}
+    if (!isPlainRecord(rawBundleBlobs)) {
+      throw new Error(
+        '远端 Storage v2 数据包 blobs 格式损坏。为避免导入不完整附件，本次同步已停止，请重新同步或从安全快照恢复。'
       )
     }
 
     const valueHash = bundleHash({
       records: bundle.records,
-      blobs: bundle.blobs ?? {}
+      blobs: rawBundleBlobs
     })
     if (manifest.bundle.valueHash && manifest.bundle.valueHash !== valueHash) {
       throw new Error(
@@ -1183,12 +1189,20 @@ export class StorageV2WebDavRecordSyncService {
         )}。为避免导入不完整数据，本次同步已停止，请重新同步或从安全快照恢复。`
       )
     }
+    const normalizedBlobs = normalizeRemoteBlobMetaMap(rawBundleBlobs)
+    const actualRecordCount = Object.keys(records).length
+    const actualBlobCount = Object.keys(normalizedBlobs).length
+    if (manifest.bundle.recordCount !== actualRecordCount || manifest.bundle.blobCount !== actualBlobCount) {
+      throw new Error(
+        `远端 Storage v2 数据包数量与 manifest 不一致（记录 ${actualRecordCount}/${manifest.bundle.recordCount}，附件 ${actualBlobCount}/${manifest.bundle.blobCount}）。为避免导入不完整数据，本次同步已停止，请重新同步或从安全快照恢复。`
+      )
+    }
 
     const normalizedBundle: StorageV2WebDavRecordSyncBundle = {
       version: 1,
       updatedAt: parseTime(bundle.updatedAt) || Date.now(),
       records,
-      blobs: bundle.blobs ?? {}
+      blobs: normalizedBlobs
     }
     const normalizedBundleByteSize = jsonByteLength(normalizedBundle)
     if (normalizedBundleByteSize > MAX_SYNC_RECORD_BUNDLE_JSON_BYTES) {
