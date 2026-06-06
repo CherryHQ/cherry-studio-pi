@@ -10,6 +10,16 @@ import { type CreateDirectoryOptions } from 'webdav'
 import { handleData } from './BackupService'
 
 const logger = loggerService.withContext('NutstoreService')
+const MANAGED_BACKUP_FILE_NAME_PATTERN = /^cherry-studio(?:-pi)?\.\d{12,14}(?:\..+)?\.zip$/
+
+function isManagedBackupFileName(fileName: string) {
+  return MANAGED_BACKUP_FILE_NAME_PATTERN.test(fileName)
+}
+
+function backupModifiedTime(file: { modifiedTime?: string | null }) {
+  const modifiedTime = Date.parse(file.modifiedTime || '')
+  return Number.isFinite(modifiedTime) ? modifiedTime : 0
+}
 
 function getNutstoreToken() {
   const nutstoreToken = store.getState().nutstore.nutstoreToken
@@ -78,8 +88,8 @@ async function cleanupOldBackups(webdavConfig: WebDavConfig, maxBackups: number)
     }
 
     const backupFiles = files
-      .filter((file) => file.fileName.startsWith('cherry-studio') && file.fileName.endsWith('.zip'))
-      .sort((a, b) => new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime())
+      .filter((file) => isManagedBackupFileName(file.fileName))
+      .sort((a, b) => backupModifiedTime(b) - backupModifiedTime(a))
 
     if (backupFiles.length < maxBackups) {
       logger.info(`[cleanupOldBackups] No cleanup needed: ${backupFiles.length}/${maxBackups} backups`)

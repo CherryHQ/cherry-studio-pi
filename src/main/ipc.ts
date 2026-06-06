@@ -516,8 +516,9 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
     }
 
     if (isWin && isPortable) {
+      const execPath = process.env.PORTABLE_EXECUTABLE_FILE || app.getPath('exe')
       options = options || {}
-      options.execPath = process.env.PORTABLE_EXECUTABLE_FILE
+      options.execPath = execPath
       options.args = options.args || []
     }
 

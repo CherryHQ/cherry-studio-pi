@@ -13,6 +13,24 @@ import { importLegacyDexieToStorageV2, suspendStorageV2RuntimeMirrorsUntilReload
 
 const logger = loggerService.withContext('BackupService')
 const STORAGE_V2_AUTO_HYDRATE_SETTING_KEY = 'storage_v2.runtime.auto_hydrate'
+const MANAGED_BACKUP_FILE_NAME_PATTERN = /^cherry-studio(?:-pi)?\.\d{12,14}(?:\..+)?\.zip$/
+
+function isManagedBackupFileName(fileName: string) {
+  return MANAGED_BACKUP_FILE_NAME_PATTERN.test(fileName)
+}
+
+function isCurrentDeviceManagedBackupFile(fileName: string, hostname: string, deviceType: string) {
+  return isManagedBackupFileName(fileName) && fileName.includes(hostname) && fileName.includes(deviceType)
+}
+
+function backupModifiedTime(file: { modifiedTime?: string | null }) {
+  const modifiedTime = Date.parse(file.modifiedTime || '')
+  return Number.isFinite(modifiedTime) ? modifiedTime : 0
+}
+
+function sortBackupFilesNewestFirst<T extends { fileName: string; modifiedTime?: string | null }>(files: T[]) {
+  return [...files].sort((a, b) => backupModifiedTime(b) - backupModifiedTime(a))
+}
 
 async function disableStorageV2AutoHydrateAfterLegacyRestore() {
   try {
@@ -300,10 +318,9 @@ export async function backupToWebdav({
           })
 
           // 筛选当前设备的备份文件
-          const currentDeviceFiles = files.filter((file) => {
-            // 检查文件名是否包含当前设备的标识信息
-            return file.fileName.includes(deviceType) && file.fileName.includes(hostname)
-          })
+          const currentDeviceFiles = sortBackupFilesNewestFirst(
+            files.filter((file) => isCurrentDeviceManagedBackupFile(file.fileName, hostname, deviceType))
+          )
 
           // 如果当前设备的备份文件数量超过最大保留数量，删除最旧的文件
           if (currentDeviceFiles.length > webdavMaxBackups) {
@@ -476,9 +493,9 @@ export async function backupToS3({
           const files = await window.api.backup.listS3Files(s3Config)
 
           // 筛选当前设备的备份文件
-          const currentDeviceFiles = files.filter((file) => {
-            return file.fileName.includes(deviceType) && file.fileName.includes(hostname)
-          })
+          const currentDeviceFiles = sortBackupFilesNewestFirst(
+            files.filter((file) => isCurrentDeviceManagedBackupFile(file.fileName, hostname, deviceType))
+          )
 
           // 如果当前设备的备份文件数量超过最大保留数量，删除最旧的文件
           if (currentDeviceFiles.length > s3Config.maxBackups) {
@@ -1112,15 +1129,12 @@ export async function backupToLocal({
           const files = await window.api.backup.listLocalBackupFiles(localBackupDir)
 
           // Filter backups for current device
-          const currentDeviceFiles = files.filter((file) => {
-            return file.fileName.includes(deviceType) && file.fileName.includes(hostname)
-          })
+          const currentDeviceFiles = sortBackupFilesNewestFirst(
+            files.filter((file) => isCurrentDeviceManagedBackupFile(file.fileName, hostname, deviceType))
+          )
 
           if (currentDeviceFiles.length > localBackupMaxBackups) {
-            // Sort by modified time (oldest first)
-            const filesToDelete = currentDeviceFiles
-              .sort((a, b) => new Date(a.modifiedTime).getTime() - new Date(b.modifiedTime).getTime())
-              .slice(0, currentDeviceFiles.length - localBackupMaxBackups)
+            const filesToDelete = currentDeviceFiles.slice(localBackupMaxBackups)
 
             // Delete older backups
             for (const file of filesToDelete) {

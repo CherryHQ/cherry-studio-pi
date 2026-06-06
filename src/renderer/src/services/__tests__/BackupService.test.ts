@@ -13,6 +13,15 @@ const mocks = vi.hoisted(() => ({
     verbose: vi.fn(),
     warn: vi.fn()
   },
+  storeState: {
+    backup: {},
+    messages: {
+      loadingByTopic: {}
+    },
+    settings: {
+      s3: {}
+    }
+  } as any,
   importLegacyDexieToStorageV2: vi.fn(),
   suspendStorageV2RuntimeMirrorsUntilReload: vi.fn()
 }))
@@ -41,15 +50,7 @@ vi.mock('@renderer/i18n', () => ({
 vi.mock('@renderer/store', () => ({
   default: {
     dispatch: vi.fn(),
-    getState: vi.fn(() => ({
-      backup: {},
-      messages: {
-        loadingByTopic: {}
-      },
-      settings: {
-        s3: {}
-      }
-    }))
+    getState: vi.fn(() => mocks.storeState)
   },
   handleSaveData: mocks.handleSaveData
 }))
@@ -77,7 +78,7 @@ vi.mock('../StorageV2Service', () => ({
   suspendStorageV2RuntimeMirrorsUntilReload: mocks.suspendStorageV2RuntimeMirrorsUntilReload
 }))
 
-import { handleData, reset } from '../BackupService'
+import { backupToLocal, backupToS3, backupToWebdav, handleData, reset } from '../BackupService'
 
 describe('BackupService legacy restore', () => {
   let originalApi: unknown
@@ -89,6 +90,16 @@ describe('BackupService legacy restore', () => {
     vi.clearAllMocks()
     mocks.db.tables = []
     mocks.db.table.mockReset()
+    mocks.handleSaveData.mockResolvedValue(undefined)
+    mocks.storeState = {
+      backup: {},
+      messages: {
+        loadingByTopic: {}
+      },
+      settings: {
+        s3: {}
+      }
+    }
     localStorage.clear()
     originalApi = window.api
     originalModal = window.modal
@@ -98,6 +109,22 @@ describe('BackupService legacy restore', () => {
       value: {
         relaunchApp: vi.fn(),
         resetData: vi.fn().mockResolvedValue(undefined),
+        resolvePath: vi.fn(async (targetPath: string) => targetPath),
+        backup: {
+          backupToLocalDir: vi.fn().mockResolvedValue(true),
+          backupToS3: vi.fn().mockResolvedValue(true),
+          backupToWebdav: vi.fn().mockResolvedValue(true),
+          deleteLocalBackupFile: vi.fn().mockResolvedValue(true),
+          deleteS3File: vi.fn().mockResolvedValue(true),
+          deleteWebdavFile: vi.fn().mockResolvedValue(true),
+          listLocalBackupFiles: vi.fn().mockResolvedValue([]),
+          listS3Files: vi.fn().mockResolvedValue([]),
+          listWebdavFiles: vi.fn().mockResolvedValue([])
+        },
+        system: {
+          getDeviceType: vi.fn().mockResolvedValue('mac'),
+          getHostname: vi.fn().mockResolvedValue('host-a')
+        },
         storageV2: {
           setSetting: vi.fn().mockResolvedValue(undefined)
         }
@@ -274,5 +301,121 @@ describe('BackupService legacy restore', () => {
     expect(tableClear).not.toHaveBeenCalled()
     expect(mocks.suspendStorageV2RuntimeMirrorsUntilReload).not.toHaveBeenCalled()
     expect(window.toast.error).toHaveBeenCalledWith('notes.settings.data.reset_failed')
+  })
+
+  it('only deletes current-device managed WebDAV backups during cleanup', async () => {
+    mocks.storeState.settings = {
+      s3: {},
+      webdavHost: 'https://webdav.example',
+      webdavUser: 'user',
+      webdavPass: 'pass',
+      webdavPath: '/backup',
+      webdavMaxBackups: 1,
+      webdavSkipBackupFile: false,
+      webdavDisableStream: false
+    }
+    vi.mocked(window.api.backup.listWebdavFiles).mockResolvedValue([
+      {
+        fileName: 'cherry-studio-pi.20260603000000.host-a.mac.zip',
+        modifiedTime: '2026-06-03T00:00:00.000Z',
+        size: 1
+      },
+      {
+        fileName: 'cherry-studio-pi.data-sync.join-safety.host-a.mac.1.zip',
+        modifiedTime: '2026-06-01T00:00:00.000Z',
+        size: 1
+      },
+      {
+        fileName: 'project.host-a.mac.zip',
+        modifiedTime: '2026-06-01T00:00:00.000Z',
+        size: 1
+      },
+      {
+        fileName: 'cherry-studio-pi.20260601000000.host-a.mac.zip',
+        modifiedTime: '2026-06-01T00:00:00.000Z',
+        size: 1
+      }
+    ])
+
+    await backupToWebdav()
+
+    expect(window.api.backup.deleteWebdavFile).toHaveBeenCalledTimes(1)
+    expect(window.api.backup.deleteWebdavFile).toHaveBeenCalledWith(
+      'cherry-studio-pi.20260601000000.host-a.mac.zip',
+      expect.objectContaining({
+        webdavHost: 'https://webdav.example',
+        webdavPath: '/backup'
+      })
+    )
+  })
+
+  it('only deletes current-device managed S3 backups during cleanup', async () => {
+    const s3Config = {
+      maxBackups: 1,
+      bucket: 'bucket'
+    }
+    mocks.storeState.settings = {
+      s3: s3Config
+    }
+    vi.mocked(window.api.backup.listS3Files).mockResolvedValue([
+      {
+        fileName: 'cherry-studio-pi.20260603000000.host-a.mac.zip',
+        modifiedTime: '2026-06-03T00:00:00.000Z',
+        size: 1
+      },
+      {
+        fileName: 'cherry-studio-pi.data-sync.join-safety.host-a.mac.1.zip',
+        modifiedTime: '2026-06-01T00:00:00.000Z',
+        size: 1
+      },
+      {
+        fileName: 'cherry-studio-pi.20260601000000.host-a.mac.zip',
+        modifiedTime: '2026-06-01T00:00:00.000Z',
+        size: 1
+      }
+    ])
+
+    await backupToS3()
+
+    expect(window.api.backup.deleteS3File).toHaveBeenCalledTimes(1)
+    expect(window.api.backup.deleteS3File).toHaveBeenCalledWith(
+      'cherry-studio-pi.20260601000000.host-a.mac.zip',
+      s3Config
+    )
+  })
+
+  it('only deletes current-device managed local backups during cleanup', async () => {
+    mocks.storeState.settings = {
+      s3: {},
+      localBackupDir: '/configured-backups',
+      localBackupMaxBackups: 1,
+      localBackupSkipBackupFile: false
+    }
+    vi.mocked(window.api.resolvePath).mockResolvedValue('/resolved-backups')
+    vi.mocked(window.api.backup.listLocalBackupFiles).mockResolvedValue([
+      {
+        fileName: 'cherry-studio-pi.20260603000000.host-a.mac.zip',
+        modifiedTime: '2026-06-03T00:00:00.000Z',
+        size: 1
+      },
+      {
+        fileName: 'notes.host-a.mac.zip',
+        modifiedTime: '2026-06-01T00:00:00.000Z',
+        size: 1
+      },
+      {
+        fileName: 'cherry-studio-pi.20260601000000.host-a.mac.zip',
+        modifiedTime: '2026-06-01T00:00:00.000Z',
+        size: 1
+      }
+    ])
+
+    await backupToLocal()
+
+    expect(window.api.backup.deleteLocalBackupFile).toHaveBeenCalledTimes(1)
+    expect(window.api.backup.deleteLocalBackupFile).toHaveBeenCalledWith(
+      'cherry-studio-pi.20260601000000.host-a.mac.zip',
+      '/resolved-backups'
+    )
   })
 })
