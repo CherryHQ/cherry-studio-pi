@@ -1,6 +1,11 @@
 import { PlusOutlined, UploadOutlined } from '@ant-design/icons'
 import { loggerService } from '@logger'
-import { loadCustomMiniApp, ORIGIN_DEFAULT_MIN_APPS, updateAllMinApps } from '@renderer/config/minapps'
+import {
+  loadCustomMiniApp,
+  ORIGIN_DEFAULT_MIN_APPS,
+  readCustomMiniAppsFile,
+  updateAllMinApps
+} from '@renderer/config/minapps'
 import { useMinapps } from '@renderer/hooks/useMinapps'
 import type { MinAppType } from '@renderer/types'
 import { Button, Form, Input, Modal, Radio, Upload } from 'antd'
@@ -32,8 +37,7 @@ const NewAppButton: FC<Props> = ({ size = 60 }) => {
 
   const handleAddCustomApp = async (values: any) => {
     try {
-      const content = await window.api.file.read('custom-minapps.json')
-      const customApps = JSON.parse(content)
+      const customApps = await readCustomMiniAppsFile()
 
       // Check for duplicate ID
       if (customApps.some((app: MinAppType) => app.id === values.id)) {

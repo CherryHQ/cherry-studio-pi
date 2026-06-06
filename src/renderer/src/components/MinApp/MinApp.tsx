@@ -2,7 +2,12 @@ import { loggerService } from '@logger'
 import MinAppIcon from '@renderer/components/Icons/MinAppIcon'
 import IndicatorLight from '@renderer/components/IndicatorLight'
 import MarqueeText from '@renderer/components/MarqueeText'
-import { loadCustomMiniApp, ORIGIN_DEFAULT_MIN_APPS, updateAllMinApps } from '@renderer/config/minapps'
+import {
+  loadCustomMiniApp,
+  ORIGIN_DEFAULT_MIN_APPS,
+  readCustomMiniAppsFile,
+  updateAllMinApps
+} from '@renderer/config/minapps'
 import { useMinappPopup } from '@renderer/hooks/useMinappPopup'
 import { useMinapps } from '@renderer/hooks/useMinapps'
 import { useRuntime } from '@renderer/hooks/useRuntime'
@@ -92,8 +97,7 @@ const MinApp: FC<Props> = ({ app, onClick, size = 60, isLast }) => {
             danger: true,
             onClick: async () => {
               try {
-                const content = await window.api.file.read('custom-minapps.json')
-                const customApps = JSON.parse(content)
+                const customApps = await readCustomMiniAppsFile()
                 const updatedApps = customApps.filter((customApp: MinAppType) => customApp.id !== app.id)
                 await window.api.file.writeWithId('custom-minapps.json', JSON.stringify(updatedApps, null, 2))
                 window.toast.success(t('settings.miniapps.custom.remove_success'))

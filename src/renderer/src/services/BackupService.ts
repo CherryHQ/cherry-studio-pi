@@ -20,7 +20,7 @@ function isManagedBackupFileName(fileName: string) {
 }
 
 function isCurrentDeviceManagedBackupFile(fileName: string, hostname: string, deviceType: string) {
-  return isManagedBackupFileName(fileName) && fileName.includes(hostname) && fileName.includes(deviceType)
+  return isManagedBackupFileName(fileName) && fileName.endsWith(`.${hostname}.${deviceType}.zip`)
 }
 
 function backupModifiedTime(file: { modifiedTime?: string | null }) {

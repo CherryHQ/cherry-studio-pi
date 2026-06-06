@@ -2,7 +2,12 @@ import type { CodeEditorHandles } from '@renderer/components/CodeEditor'
 import CodeEditor from '@renderer/components/CodeEditor'
 import { CopyIcon, FilePngIcon } from '@renderer/components/Icons'
 import { isMac } from '@renderer/config/constant'
-import { loadCustomMiniApp, ORIGIN_DEFAULT_MIN_APPS, updateAllMinApps } from '@renderer/config/minapps'
+import {
+  loadCustomMiniApp,
+  ORIGIN_DEFAULT_MIN_APPS,
+  readCustomMiniAppsFile,
+  updateAllMinApps
+} from '@renderer/config/minapps'
 import { useMinapps } from '@renderer/hooks/useMinapps'
 import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
 import { notifyDataSyncLocalChange } from '@renderer/services/DataSyncLocalChangeSignal'
@@ -179,14 +184,7 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({ open, title, ht
         addTime: new Date().toISOString(),
         supportedRegions: ['CN', 'Global']
       }
-      let customApps: MinAppType[] = []
-
-      try {
-        customApps = JSON.parse(await window.api.file.read('custom-minapps.json'))
-      } catch {
-        customApps = []
-      }
-
+      const customApps = await readCustomMiniAppsFile()
       const nextCustomApps = [...customApps.filter((app) => app.id !== newApp.id), newApp]
       await window.api.file.writeWithId('custom-minapps.json', JSON.stringify(nextCustomApps, null, 2))
 

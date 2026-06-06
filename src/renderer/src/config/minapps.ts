@@ -61,20 +61,30 @@ import ZhipuProviderLogo from '@renderer/assets/images/providers/zhipu.png?url'
 import type { MinAppType } from '@renderer/types'
 
 const logger = loggerService.withContext('Config:minapps')
+const CUSTOM_MIN_APPS_FILE_NAME = 'custom-minapps.json'
+
+export const readCustomMiniAppsFile = async (): Promise<MinAppType[]> => {
+  let content: string
+  try {
+    content = await window.api.file.read(CUSTOM_MIN_APPS_FILE_NAME)
+  } catch {
+    await window.api.file.writeWithId(CUSTOM_MIN_APPS_FILE_NAME, '[]')
+    return []
+  }
+
+  try {
+    const customApps = JSON.parse(content)
+    return Array.isArray(customApps) ? customApps : []
+  } catch (error) {
+    logger.warn('Failed to parse custom mini apps file, falling back to an empty list', error as Error)
+    return []
+  }
+}
 
 // 加载自定义小应用
 const loadCustomMiniApp = async (): Promise<MinAppType[]> => {
   try {
-    let content: string
-    try {
-      content = await window.api.file.read('custom-minapps.json')
-    } catch (error) {
-      // 如果文件不存在，创建一个空的 JSON 数组
-      content = '[]'
-      await window.api.file.writeWithId('custom-minapps.json', content)
-    }
-
-    const customApps = JSON.parse(content)
+    const customApps = await readCustomMiniAppsFile()
     const now = new Date().toISOString()
 
     return customApps.map((app: any) => ({

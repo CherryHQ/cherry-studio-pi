@@ -331,6 +331,11 @@ describe('BackupService legacy restore', () => {
         size: 1
       },
       {
+        fileName: 'cherry-studio-pi.20260602000000.host-a2.mac.zip',
+        modifiedTime: '2026-06-02T00:00:00.000Z',
+        size: 1
+      },
+      {
         fileName: 'cherry-studio-pi.20260601000000.host-a.mac.zip',
         modifiedTime: '2026-06-01T00:00:00.000Z',
         size: 1
@@ -369,6 +374,11 @@ describe('BackupService legacy restore', () => {
         size: 1
       },
       {
+        fileName: 'cherry-studio-pi.20260602000000.host-a2.mac.zip',
+        modifiedTime: '2026-06-02T00:00:00.000Z',
+        size: 1
+      },
+      {
         fileName: 'cherry-studio-pi.20260601000000.host-a.mac.zip',
         modifiedTime: '2026-06-01T00:00:00.000Z',
         size: 1
@@ -401,6 +411,11 @@ describe('BackupService legacy restore', () => {
       {
         fileName: 'notes.host-a.mac.zip',
         modifiedTime: '2026-06-01T00:00:00.000Z',
+        size: 1
+      },
+      {
+        fileName: 'cherry-studio-pi.20260602000000.host-a2.mac.zip',
+        modifiedTime: '2026-06-02T00:00:00.000Z',
         size: 1
       },
       {
