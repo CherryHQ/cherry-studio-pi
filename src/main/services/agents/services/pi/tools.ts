@@ -17,6 +17,7 @@ import fg from 'fast-glob'
 
 const execFileAsync = promisify(execFile)
 const MAX_READ_BYTES = 96 * 1024
+const READ_LINE_WINDOW_CHUNK_BYTES = 64 * 1024
 const MAX_SCAN_FILE_BYTES = 512 * 1024
 const MAX_SUCCESS_OUTPUT_CHARS = 24_000
 const MAX_ERROR_OUTPUT_CHARS = 8_000
@@ -70,6 +71,116 @@ const readFileHead = async (filePath: string, maxBytes: number) => {
       buffer: buffer.subarray(0, bytesRead),
       bytes: stat.size,
       truncated: true
+    }
+  } finally {
+    await handle.close()
+  }
+}
+
+const normalizeReadLineOffset = (offset: unknown) => {
+  const numeric = Number(offset ?? 1)
+  return Number.isFinite(numeric) ? Math.max(Math.floor(numeric) - 1, 0) : 0
+}
+
+const normalizeReadLineLimit = (limit: unknown) => {
+  if (typeof limit === 'undefined' || limit === null) return undefined
+  const numeric = Number(limit)
+  return Number.isFinite(numeric) ? Math.max(Math.floor(numeric), 0) : undefined
+}
+
+const readFileLineWindow = async (filePath: string, offset: unknown, limit: unknown, signal?: AbortSignal) => {
+  const stat = await fs.stat(filePath)
+  const startIndex = normalizeReadLineOffset(offset)
+  const maxLines = normalizeReadLineLimit(limit)
+  if (maxLines === 0) {
+    return {
+      text: '',
+      bytes: stat.size
+    }
+  }
+
+  if (signal?.aborted) {
+    throw new Error('Read aborted')
+  }
+
+  const lines: string[] = []
+  let pending = ''
+  let lineIndex = 0
+  let endedWithNewline = false
+  const decoder = new TextDecoder()
+  const buffer = Buffer.alloc(READ_LINE_WINDOW_CHUNK_BYTES)
+
+  const collectLine = (rawLine: string) => {
+    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
+    if (lineIndex >= startIndex) {
+      lines.push(line)
+      if (typeof maxLines === 'number' && lines.length >= maxLines) {
+        return true
+      }
+    }
+    lineIndex++
+    return false
+  }
+
+  const consumeText = (text: string) => {
+    if (text.length > 0) {
+      endedWithNewline = text.endsWith('\n')
+    }
+    pending += text
+
+    let newlineIndex = pending.indexOf('\n')
+    while (newlineIndex >= 0) {
+      const line = pending.slice(0, newlineIndex)
+      pending = pending.slice(newlineIndex + 1)
+      if (collectLine(line)) {
+        return true
+      }
+      newlineIndex = pending.indexOf('\n')
+    }
+
+    return false
+  }
+
+  const handle = await fs.open(filePath, 'r')
+  try {
+    let position = 0
+    while (position < stat.size) {
+      if (signal?.aborted) {
+        throw new Error('Read aborted')
+      }
+
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, position)
+      if (bytesRead <= 0) break
+
+      position += bytesRead
+      if (consumeText(decoder.decode(buffer.subarray(0, bytesRead), { stream: position < stat.size }))) {
+        return {
+          text: lines.join('\n'),
+          bytes: stat.size
+        }
+      }
+    }
+
+    const tail = decoder.decode()
+    if (tail && consumeText(tail)) {
+      return {
+        text: lines.join('\n'),
+        bytes: stat.size
+      }
+    }
+
+    if (pending.length > 0 || endedWithNewline) {
+      if (collectLine(pending)) {
+        return {
+          text: lines.join('\n'),
+          bytes: stat.size
+        }
+      }
+    }
+
+    return {
+      text: lines.join('\n'),
+      bytes: stat.size
     }
   } finally {
     await handle.close()
@@ -525,19 +636,19 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
         const input = params as ToolParams
         const filePath = resolveAllowedPath(input.file_path ?? input.path, cwd)
         await ensurePathAccess('Read', toolCallId, input, [filePath], 'read', signal)
-        const hasLineWindow = Boolean(input.offset || input.limit)
-        const { buffer, bytes, truncated } = hasLineWindow
-          ? {
-              buffer: await fs.readFile(filePath),
-              bytes: (await fs.stat(filePath)).size,
-              truncated: false
-            }
-          : await readFileHead(filePath, MAX_READ_BYTES)
-        let text = truncated ? buffer.subarray(0, MAX_READ_BYTES).toString('utf8') : buffer.toString('utf8')
-        const lines = text.split(/\r?\n/)
+        const hasLineWindow = typeof input.offset !== 'undefined' || typeof input.limit !== 'undefined'
+        let bytes = 0
+        let truncated = false
+        let text = ''
         if (hasLineWindow) {
-          const start = Math.max((input.offset ?? 1) - 1, 0)
-          text = lines.slice(start, input.limit ? start + input.limit : undefined).join('\n')
+          const lineWindow = await readFileLineWindow(filePath, input.offset, input.limit, signal)
+          text = lineWindow.text
+          bytes = lineWindow.bytes
+        } else {
+          const result = await readFileHead(filePath, MAX_READ_BYTES)
+          bytes = result.bytes
+          truncated = result.truncated
+          text = result.buffer.toString('utf8')
         }
         if (truncated) {
           text += `\n\n[Read truncated at ${MAX_READ_BYTES} bytes from ${bytes} bytes. Use offset/limit or Grep for targeted reads.]`

@@ -140,6 +140,44 @@ describe('Pi tools', () => {
     }
   })
 
+  it('streams line-window reads without loading the whole file', async () => {
+    const filePath = path.join(tmpDir, 'large-window-read.txt')
+    const lines = Array.from({ length: 20_000 }, (_, index) => `line-${index + 1}`)
+    await fs.writeFile(filePath, lines.join('\n'), 'utf8')
+    const readFileSpy = vi.spyOn(fs, 'readFile')
+
+    try {
+      const read = getTool('Read', tmpDir, [tmpDir])
+      const result = await read.execute('read-window', {
+        file_path: filePath,
+        offset: 10_000,
+        limit: 3
+      })
+
+      expect(result.details).toMatchObject({ truncated: false })
+      expect(readFileSpy).not.toHaveBeenCalled()
+      expect(resultText(result)).toBe('line-10000\nline-10001\nline-10002')
+    } finally {
+      readFileSpy.mockRestore()
+    }
+  })
+
+  it('preserves utf-8 text while streaming line-window reads', async () => {
+    const filePath = path.join(tmpDir, 'large-window-read-utf8.txt')
+    const lines = Array.from({ length: 10_000 }, (_, index) => `第 ${index + 1} 行 🍒`)
+    await fs.writeFile(filePath, lines.join('\n'), 'utf8')
+
+    const read = getTool('Read', tmpDir, [tmpDir])
+    const result = await read.execute('read-window-utf8', {
+      file_path: filePath,
+      offset: 9999,
+      limit: 2
+    })
+
+    expect(result.details).toMatchObject({ truncated: false })
+    expect(resultText(result)).toBe('第 9999 行 🍒\n第 10000 行 🍒')
+  })
+
   it('prompts before reading outside accessible roots', async () => {
     const outsideFile = `/tmp/cherry-pi-outside-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`
     await fs.writeFile(outsideFile, 'outside ok', 'utf8')
