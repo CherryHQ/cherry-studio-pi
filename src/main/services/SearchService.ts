@@ -74,6 +74,44 @@ export class SearchService extends BaseService {
     }
   }
 
+  private async waitForSearchWindowLoad(window: BrowserWindow): Promise<void> {
+    await new Promise<void>((resolve) => {
+      let settled = false
+      let settleDelay: ReturnType<typeof setTimeout> | null = null
+
+      const loadTimeout = setTimeout(() => {
+        finish()
+      }, 10000)
+      loadTimeout.unref?.()
+
+      const cleanup = () => {
+        clearTimeout(loadTimeout)
+        if (settleDelay) {
+          clearTimeout(settleDelay)
+          settleDelay = null
+        }
+        window.webContents.removeListener('did-finish-load', onLoaded)
+      }
+
+      const finish = () => {
+        if (settled) return
+        settled = true
+        cleanup()
+        resolve()
+      }
+
+      const onLoaded = () => {
+        if (settled) return
+        clearTimeout(loadTimeout)
+        // Small delay to ensure JavaScript has executed
+        settleDelay = setTimeout(finish, 500)
+        settleDelay.unref?.()
+      }
+
+      window.webContents.once('did-finish-load', onLoaded)
+    })
+  }
+
   public async openUrlInSearchWindow(uid: string, url: string): Promise<any> {
     let window = this.searchWindows[uid]
     logger.debug(`Searching with URL: ${url}`)
@@ -86,14 +124,7 @@ export class SearchService extends BaseService {
 
     // Get the page content after loading the URL
     // Wait for the page to fully load before getting the content
-    await new Promise<void>((resolve) => {
-      const loadTimeout = setTimeout(() => resolve(), 10000) // 10 second timeout
-      window.webContents.once('did-finish-load', () => {
-        clearTimeout(loadTimeout)
-        // Small delay to ensure JavaScript has executed
-        setTimeout(resolve, 500)
-      })
-    })
+    await this.waitForSearchWindowLoad(window)
 
     // Get the page content after ensuring it's fully loaded
     return await window.webContents.executeJavaScript('document.documentElement.outerHTML')
