@@ -422,6 +422,7 @@ describe('AppDataSyncService', () => {
       if (Buffer.isBuffer(value)) return { size: value.byteLength }
       if (typeof value === 'string') return { size: Buffer.byteLength(value, 'utf8') }
       if (value instanceof ArrayBuffer) return { size: value.byteLength }
+      if (ArrayBuffer.isView(value)) return { size: value.byteLength }
       return { size: value == null ? 0 : Buffer.byteLength(String(value), 'utf8') }
     })
     mocks.webdav.createDirectory.mockResolvedValue(undefined)
@@ -1031,20 +1032,24 @@ describe('AppDataSyncService', () => {
     }
     mocks.remoteFiles.set(
       '/remote-root/sync/v1/manifest.json',
-      JSON.stringify({
-        version: 1,
-        generation: 2,
-        updatedAt: 1760000001000,
-        records: {},
-        latestSnapshot: oldSnapshot,
-        snapshots: {
-          [oldSnapshot.id]: oldSnapshot,
-          [latestSnapshot.id]: latestSnapshot
-        }
-      })
+      new Uint8Array(
+        Buffer.from(
+          JSON.stringify({
+            version: 1,
+            generation: 2,
+            updatedAt: 1760000001000,
+            records: {},
+            latestSnapshot: oldSnapshot,
+            snapshots: {
+              [oldSnapshot.id]: oldSnapshot,
+              [latestSnapshot.id]: latestSnapshot
+            }
+          })
+        )
+      )
     )
     mocks.remoteFiles.set('/remote-root/sync/v1/backups/old-device.zip', Buffer.from('old'))
-    mocks.remoteFiles.set('/remote-root/sync/v1/backups/local-device.zip', Buffer.from('latest'))
+    mocks.remoteFiles.set('/remote-root/sync/v1/backups/local-device.zip', new Uint8Array(Buffer.from('latest')))
 
     await new AppDataSyncService().restoreLatestSnapshot(config)
 

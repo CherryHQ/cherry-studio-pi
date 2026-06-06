@@ -598,6 +598,7 @@ function bufferFromRemoteContents(value: string | Buffer | ArrayBuffer | unknown
   if (Buffer.isBuffer(value)) return value
   if (typeof value === 'string') return Buffer.from(value)
   if (value instanceof ArrayBuffer) return Buffer.from(value)
+  if (ArrayBuffer.isView(value)) return Buffer.from(value.buffer, value.byteOffset, value.byteLength)
   return Buffer.from(String(value))
 }
 

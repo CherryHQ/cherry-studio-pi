@@ -624,6 +624,10 @@ function bufferFromRemote(value: string | Buffer | ArrayBuffer | unknown) {
     return Buffer.from(value)
   }
 
+  if (ArrayBuffer.isView(value)) {
+    return Buffer.from(value.buffer, value.byteOffset, value.byteLength)
+  }
+
   return Buffer.from(String(value))
 }
 

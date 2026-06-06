@@ -748,6 +748,7 @@ function makeSharedWebDavStore() {
     if (Buffer.isBuffer(value)) return value.byteLength
     if (typeof value === 'string') return Buffer.byteLength(value, 'utf8')
     if (value instanceof ArrayBuffer) return value.byteLength
+    if (ArrayBuffer.isView(value)) return value.byteLength
     return value == null ? 0 : Buffer.byteLength(String(value), 'utf8')
   }
   return {
@@ -862,6 +863,7 @@ describe('StorageV2WebDavRecordSyncService', () => {
       if (Buffer.isBuffer(value)) return { size: value.byteLength }
       if (typeof value === 'string') return { size: Buffer.byteLength(value, 'utf8') }
       if (value instanceof ArrayBuffer) return { size: value.byteLength }
+      if (ArrayBuffer.isView(value)) return { size: value.byteLength }
       return { size: value == null ? 0 : Buffer.byteLength(String(value), 'utf8') }
     })
     mocks.webdav.createDirectory.mockResolvedValue(undefined)
@@ -1895,7 +1897,10 @@ describe('StorageV2WebDavRecordSyncService', () => {
       deletedAt: null,
       version: 2
     }
-    mocks.remoteFiles.set('/remote-root/sync/v1/storage-v2/records/settings/theme.json', JSON.stringify(remoteRecord))
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/storage-v2/records/settings/theme.json',
+      new Uint8Array(Buffer.from(JSON.stringify(remoteRecord)))
+    )
 
     const result = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
       mocks.webdav as any,

@@ -54,6 +54,7 @@ export function webDavBufferToString(value: string | Buffer | ArrayBuffer | unkn
   if (typeof value === 'string') return value
   if (Buffer.isBuffer(value)) return value.toString('utf8')
   if (value instanceof ArrayBuffer) return Buffer.from(value).toString('utf8')
+  if (ArrayBuffer.isView(value)) return Buffer.from(value.buffer, value.byteOffset, value.byteLength).toString('utf8')
   return String(value)
 }
 
@@ -61,6 +62,7 @@ function webDavBufferByteLength(value: string | Buffer | ArrayBuffer | unknown) 
   if (typeof value === 'string') return Buffer.byteLength(value, 'utf8')
   if (Buffer.isBuffer(value)) return value.byteLength
   if (value instanceof ArrayBuffer) return value.byteLength
+  if (ArrayBuffer.isView(value)) return value.byteLength
   return Buffer.byteLength(String(value), 'utf8')
 }
 
