@@ -101,11 +101,49 @@ describe('settings app capabilities', () => {
     })
   })
 
+  it('normalizes setting update paths before dispatching', async () => {
+    const result = await capability('settings.value.set').execute(
+      { path: ' apiServer.port ', value: 23334 },
+      { source: 'agent' }
+    )
+
+    expect(mocks.reduxService.dispatch).toHaveBeenCalledWith({
+      type: 'settings/setApiServerPort',
+      payload: 23334
+    })
+    expect(result.data).toEqual({
+      path: 'apiServer.port',
+      value: 23334
+    })
+  })
+
   it('rejects empty setting paths without reading all settings', async () => {
     await expect(capability('settings.value.get').execute({ path: '   ' }, { source: 'agent' })).rejects.toThrow(
       'Setting path is required'
     )
 
     expect(mocks.reduxService.select).not.toHaveBeenCalled()
+  })
+
+  it('rejects empty setting update paths without dispatching', async () => {
+    await expect(
+      capability('settings.value.set').execute({ path: '   ', value: 'dark' }, { source: 'agent' })
+    ).rejects.toThrow('Setting path is required')
+
+    expect(mocks.reduxService.dispatch).not.toHaveBeenCalled()
+  })
+
+  it('normalizes settings section and route inputs before opening', async () => {
+    const bySection = await capability('settings.open').execute({ section: ' data ' }, { source: 'agent' })
+
+    expect(mocks.navigateApp).toHaveBeenCalledWith('/settings/data')
+    expect(bySection.data).toEqual({ route: '/settings/data' })
+
+    mocks.navigateApp.mockClear()
+
+    const byRoute = await capability('settings.open').execute({ route: ' /settings/about ' }, { source: 'agent' })
+
+    expect(mocks.navigateApp).toHaveBeenCalledWith('/settings/about')
+    expect(byRoute.data).toEqual({ route: '/settings/about' })
   })
 })

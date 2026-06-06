@@ -121,7 +121,7 @@ function compactRawPainting(namespace: string, painting: any, index: number) {
 }
 
 export function listPaintingHistory(paintings: any, input: any) {
-  const namespace = String(input?.namespace || '')
+  const namespace = String(input?.namespace || '').trim()
   const includeRaw = input?.includeRaw === true
   const limit = normalizeListLimit(input?.limit)
   const offset = normalizeOffset(input?.offset)
@@ -211,8 +211,10 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       permissions: ['paintings.write'],
       tags: ['paintings', 'settings', 'provider'],
       execute: async (input: any) => {
-        await reduxService.dispatch({ type: 'settings/setDefaultPaintingProvider', payload: input?.provider })
-        return okResult('Default painting provider updated', { defaultProvider: input?.provider })
+        const provider = String(input?.provider ?? '').trim()
+        if (!provider) throw new Error('Painting provider is required')
+        await reduxService.dispatch({ type: 'settings/setDefaultPaintingProvider', payload: provider })
+        return okResult('Default painting provider updated', { defaultProvider: provider })
       }
     },
     {
@@ -230,7 +232,11 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['paintings', 'image', 'drawing', 'open'],
       execute: async (input: any) => {
-        const provider = input?.provider || (await reduxService.select<any>('state.settings'))?.defaultPaintingProvider
+        const inputProvider = typeof input?.provider === 'string' ? input.provider.trim() : ''
+        const settings = inputProvider ? null : await reduxService.select<any>('state.settings')
+        const provider =
+          inputProvider ||
+          (typeof settings?.defaultPaintingProvider === 'string' ? settings.defaultPaintingProvider.trim() : '')
         const route = provider ? `/paintings/${provider}` : '/paintings'
         await navigateApp(route)
         return okResult('Painting workspace opened', { route })
@@ -258,7 +264,11 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['model.call', 'network'],
       tags: ['paintings', 'image', 'generate', 'drawing'],
       execute: async (input: any) => {
-        const provider = input?.provider || (await reduxService.select<any>('state.settings'))?.defaultPaintingProvider
+        const inputProvider = typeof input?.provider === 'string' ? input.provider.trim() : ''
+        const settings = inputProvider ? null : await reduxService.select<any>('state.settings')
+        const provider =
+          inputProvider ||
+          (typeof settings?.defaultPaintingProvider === 'string' ? settings.defaultPaintingProvider.trim() : '')
         const route = provider ? `/paintings/${provider}` : '/paintings'
         await navigateApp(route)
         return {

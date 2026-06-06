@@ -1,5 +1,5 @@
 import type { AppCapabilityDefinition } from '../types'
-import { navigateApp, okResult } from '../utils'
+import { navigateApp, normalizeAppRoute, okResult } from '../utils'
 
 export function createNavigationCapabilities(): AppCapabilityDefinition[] {
   return [
@@ -22,7 +22,7 @@ export function createNavigationCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['app', 'ui', 'navigation', 'open'],
       execute: async (input: any) => {
-        const route = String(input?.route || '/')
+        const route = normalizeAppRoute(String(input?.route || '/'))
         await navigateApp(route)
         return okResult('Application navigated', { route })
       }

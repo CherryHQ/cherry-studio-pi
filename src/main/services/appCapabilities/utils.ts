@@ -127,7 +127,10 @@ export const pickPath = (value: any, keyPath = '') => {
   return keyPath.split('.').reduce((current, key) => current?.[key], value)
 }
 
-export const normalizeAppRoute = (route: string) => (route.startsWith('/') ? route : `/${route}`)
+export const normalizeAppRoute = (route: string) => {
+  const raw = String(route || '/').trim()
+  return raw.startsWith('/') ? raw : `/${raw}`
+}
 
 export const isAllowedAppRoute = (route: string) =>
   NAVIGATION_ROUTE_PREFIXES.some((prefix) => route === prefix || route.startsWith(`${prefix}/`))

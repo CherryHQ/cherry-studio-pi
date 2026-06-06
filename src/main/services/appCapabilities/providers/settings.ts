@@ -165,7 +165,8 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       tags: ['settings', 'preferences', 'update', 'write'],
       examples: ['Change language', 'Set theme', 'Set default painting provider', 'Enable API server'],
       execute: async (input: any) => {
-        const keyPath = String(input?.path ?? '')
+        const keyPath = String(input?.path ?? '').trim()
+        if (!keyPath) throw new Error('Setting path is required')
         const action = SETTINGS_SETTERS[keyPath]
         if (!action) throw new Error(`Unsupported setting path: ${keyPath}`)
         await reduxService.dispatch({ type: action, payload: input?.value })
@@ -191,8 +192,10 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['settings', 'navigation', 'open'],
       execute: async (input: any) => {
-        const section = SETTINGS_SECTIONS.find((item) => item.id === input?.section || item.route === input?.route)
-        const route = section?.route || input?.route || '/settings/provider'
+        const sectionInput = typeof input?.section === 'string' ? input.section.trim() : ''
+        const routeInput = typeof input?.route === 'string' ? input.route.trim() : ''
+        const section = SETTINGS_SECTIONS.find((item) => item.id === sectionInput || item.route === routeInput)
+        const route = section?.route || routeInput || '/settings/provider'
         await navigateApp(route)
         return okResult('Settings section opened', { route })
       }

@@ -177,6 +177,8 @@ describe('app capability utils', () => {
 
   it('normalizes and validates application routes', () => {
     expect(normalizeAppRoute('settings/data')).toBe('/settings/data')
+    expect(normalizeAppRoute('  settings/data  ')).toBe('/settings/data')
+    expect(normalizeAppRoute('   ')).toBe('/')
     expect(isAllowedAppRoute('/settings/data')).toBe(true)
     expect(isAllowedAppRoute('/agents/session-1')).toBe(true)
     expect(isAllowedAppRoute('/settings-malicious')).toBe(false)

@@ -119,6 +119,18 @@ describe('painting app capabilities', () => {
     ])
   })
 
+  it('normalizes painting history namespace filters', async () => {
+    const result = await capability('paintings.history.list').execute(
+      { namespace: ' siliconflow_paintings ', limit: 1 },
+      { source: 'agent' }
+    )
+
+    expect(result.data).toMatchObject({
+      namespace: 'siliconflow_paintings',
+      total: 2
+    })
+  })
+
   it('returns raw painting history only when explicitly requested', async () => {
     const result = await capability('paintings.history.list').execute(
       { namespace: 'siliconflow_paintings', limit: 1, includeRaw: true },
@@ -160,5 +172,33 @@ describe('painting app capabilities', () => {
 
     expect((result.data as any).paintings[0].files).toHaveLength(21)
     expect((result.data as any).paintings[0].files.at(-1)).toBe('[...truncated 10 items...]')
+  })
+
+  it('normalizes painting provider updates', async () => {
+    const result = await capability('paintings.defaultProvider.set').execute(
+      { provider: ' openai ' },
+      { source: 'agent' }
+    )
+
+    expect(mocks.reduxService.dispatch).toHaveBeenCalledWith({
+      type: 'settings/setDefaultPaintingProvider',
+      payload: 'openai'
+    })
+    expect(result.data).toEqual({ defaultProvider: 'openai' })
+  })
+
+  it('rejects empty painting provider updates', async () => {
+    await expect(
+      capability('paintings.defaultProvider.set').execute({ provider: '   ' }, { source: 'agent' })
+    ).rejects.toThrow('Painting provider is required')
+
+    expect(mocks.reduxService.dispatch).not.toHaveBeenCalled()
+  })
+
+  it('normalizes painting provider routes before opening', async () => {
+    const result = await capability('paintings.open').execute({ provider: ' openai ' }, { source: 'agent' })
+
+    expect(mocks.navigateApp).toHaveBeenCalledWith('/paintings/openai')
+    expect(result.data).toEqual({ route: '/paintings/openai' })
   })
 })
