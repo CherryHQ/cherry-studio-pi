@@ -310,6 +310,8 @@ vi.mock('@cherrystudio/ui', () => {
       open ? React.createElement('div', { ...props, 'data-testid': 'dialog' }, children) : null,
     DialogContent: ({ children, ...props }) =>
       React.createElement('div', { ...props, 'data-testid': 'dialog-content' }, children),
+    Divider: ({ children, ...props }) =>
+      React.createElement('div', { ...props, role: 'separator', 'data-testid': 'divider' }, children),
     DialogHeader: ({ children, ...props }) =>
       React.createElement('div', { ...props, 'data-testid': 'dialog-header' }, children),
     DialogTitle: ({ children, ...props }) =>

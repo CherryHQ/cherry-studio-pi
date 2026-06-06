@@ -36,6 +36,21 @@ class PyodideService {
   private initRetryCount: number = 0
   private resolvers: Map<string, { resolve: (value: any) => void; reject: (error: Error) => void }> = new Map()
 
+  private rejectPendingRequests(error: Error): void {
+    this.resolvers.forEach((resolver) => {
+      resolver.reject(error)
+    })
+    this.resolvers.clear()
+  }
+
+  private terminateWorker(): void {
+    if (this.worker) {
+      this.worker.terminate()
+      this.worker = null
+    }
+    this.initPromise = null
+  }
+
   /**
    * 初始化 Pyodide Worker
    */
@@ -59,32 +74,38 @@ class PyodideService {
           // 设置通用消息处理器
           this.worker.onmessage = this.handleMessage.bind(this)
 
-          // 设置初始化超时
-          const timeout = setTimeout(() => {
-            this.worker = null
-            this.initPromise = null
-            this.initRetryCount++
-            reject(new Error('Pyodide initialization timeout'))
-          }, SERVICE_CONFIG.WORKER.REQUEST_TIMEOUT.INIT)
+          const timeoutRef: { current?: ReturnType<typeof setTimeout> } = {}
+          const clearInitTimeout = () => {
+            if (!timeoutRef.current) return
+
+            clearTimeout(timeoutRef.current)
+            timeoutRef.current = undefined
+          }
 
           // 设置初始化处理器
           const initHandler = (event: MessageEvent) => {
             if (event.data?.type === 'initialized') {
-              clearTimeout(timeout)
+              clearInitTimeout()
               this.worker?.removeEventListener('message', initHandler)
               this.initRetryCount = 0
               this.initPromise = null
               resolve()
             } else if (event.data?.type === 'init-error') {
-              clearTimeout(timeout)
+              clearInitTimeout()
               this.worker?.removeEventListener('message', initHandler)
-              this.worker?.terminate()
-              this.worker = null
-              this.initPromise = null
+              this.terminateWorker()
               this.initRetryCount++
               reject(new Error(`Pyodide initialization failed: ${event.data.error}`))
             }
           }
+
+          // 设置初始化超时
+          timeoutRef.current = setTimeout(() => {
+            this.worker?.removeEventListener('message', initHandler)
+            this.terminateWorker()
+            this.initRetryCount++
+            reject(new Error('Pyodide initialization timeout'))
+          }, SERVICE_CONFIG.WORKER.REQUEST_TIMEOUT.INIT)
 
           this.worker.addEventListener('message', initHandler)
         })
@@ -158,8 +179,13 @@ class PyodideService {
 
         // 设置消息超时
         const timeoutId = setTimeout(() => {
+          if (!this.resolvers.has(id)) return
+
+          const timeoutError = new Error('Python execution timed out')
           this.resolvers.delete(id)
-          reject(new Error('Python execution timed out'))
+          this.terminateWorker()
+          this.rejectPendingRequests(timeoutError)
+          reject(timeoutError)
         }, timeout)
 
         this.resolvers.set(id, {
@@ -247,18 +273,11 @@ class PyodideService {
    * 释放 Pyodide Worker 资源
    */
   public terminate(): void {
-    if (this.worker) {
-      this.worker.terminate()
-      this.worker = null
-      this.initPromise = null
-      this.initRetryCount = 0
+    this.terminateWorker()
+    this.initRetryCount = 0
 
-      // 清理所有等待的请求
-      this.resolvers.forEach((resolver) => {
-        resolver.reject(new Error('Worker terminated'))
-      })
-      this.resolvers.clear()
-    }
+    // 清理所有等待的请求
+    this.rejectPendingRequests(new Error('Worker terminated'))
   }
 }
 

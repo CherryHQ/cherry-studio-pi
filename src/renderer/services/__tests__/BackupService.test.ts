@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
     }
   } as any,
   importLegacyDexieToStorageV2: vi.fn(),
+  notificationSend: vi.fn(),
   suspendStorageV2RuntimeMirrorsUntilReload: vi.fn()
 }))
 
@@ -68,8 +69,11 @@ vi.mock('@renderer/utils', () => ({
 vi.mock('../NotificationService', () => ({
   NotificationService: {
     getInstance: vi.fn(() => ({
-      send: vi.fn()
+      send: mocks.notificationSend
     }))
+  },
+  notificationService: {
+    send: mocks.notificationSend
   }
 }))
 
