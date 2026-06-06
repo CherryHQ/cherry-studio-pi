@@ -799,7 +799,14 @@ function sha256Buffer(value: Buffer) {
 }
 
 async function sha256File(filePath: string): Promise<string> {
-  return sha256Buffer(await fsp.readFile(filePath))
+  const hash = createHash('sha256')
+  await new Promise<void>((resolve, reject) => {
+    const stream = fs.createReadStream(filePath)
+    stream.on('data', (chunk) => hash.update(chunk))
+    stream.on('error', reject)
+    stream.on('end', resolve)
+  })
+  return hash.digest('hex')
 }
 
 function errorMessage(error: unknown) {

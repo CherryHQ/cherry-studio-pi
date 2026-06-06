@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream'
+
 import type { SpanEntity } from '@mcp-trace/trace-core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -157,5 +159,34 @@ describe('SpanCacheService', () => {
 
     expect(mocks.logger.error).not.toHaveBeenCalled()
     expect(mocks.logger.warn).not.toHaveBeenCalled()
+  })
+
+  it('streams historical trace files line by line and closes the file handle', async () => {
+    const close = vi.fn(async () => undefined)
+    const createReadStream = vi.fn(() => {
+      const matchingSpan = JSON.stringify(
+        makeSpan({ id: 'span-history-a', topicId: 'topic-history', traceId: 'trace-history' })
+      )
+      const secondMatchingSpan = JSON.stringify(
+        makeSpan({ id: 'span-history-b', topicId: 'topic-history', traceId: 'trace-history' })
+      )
+      const otherTopicSpan = JSON.stringify(
+        makeSpan({ id: 'span-history-other', topicId: 'topic-other', traceId: 'trace-history' })
+      )
+      const contents = `${matchingSpan}\n{broken-json\n${secondMatchingSpan}\n${otherTopicSpan}\n`
+
+      return Readable.from([contents.slice(0, 20), contents.slice(20, 80), contents.slice(80)])
+    })
+
+    mocks.fs.open.mockResolvedValueOnce({ createReadStream, close })
+
+    await expect(getSpans('topic-history', 'trace-history')).resolves.toEqual([
+      expect.objectContaining({ id: 'span-history-a' }),
+      expect.objectContaining({ id: 'span-history-b' })
+    ])
+
+    expect(createReadStream).toHaveBeenCalledWith({ encoding: 'utf8' })
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(mocks.logger.error).toHaveBeenCalledTimes(1)
   })
 })

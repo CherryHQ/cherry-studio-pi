@@ -24,6 +24,20 @@ function parseJsonAttributeValue(value: unknown) {
   }
 }
 
+function parseTraceLine(line: string): SpanEntity | null {
+  const trimmed = line.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  try {
+    return JSON.parse(trimmed) as SpanEntity
+  } catch (error) {
+    logger.error(`JSON解析失败: ${trimmed.slice(0, 2000)}`, error as Error)
+    return null
+  }
+}
+
 class SpanCacheService implements TraceCache {
   private topicMap: Map<string, string> = new Map<string, string>()
   private fileDir: string
@@ -346,29 +360,35 @@ class SpanCacheService implements TraceCache {
 
     try {
       const fileHandle = await fs.open(filePath, 'r')
-      const stream = fileHandle.createReadStream()
-      const chunks: string[] = []
+      const spans: SpanEntity[] = []
+      let pendingLine = ''
 
-      for await (const chunk of stream) {
-        chunks.push(chunk.toString())
-      }
-      await fileHandle.close()
+      try {
+        const stream = fileHandle.createReadStream({ encoding: 'utf8' })
 
-      // 使用生成器逐行处理
-      const parseLines = function* (text: string) {
-        for (const line of text.split('\n')) {
-          const trimmed = line.trim()
-          if (trimmed) {
-            try {
-              yield JSON.parse(trimmed) as SpanEntity
-            } catch (e) {
-              logger.error(`JSON解析失败: ${trimmed}`, e as Error)
+        for await (const chunk of stream) {
+          pendingLine += String(chunk)
+
+          let newlineIndex = pendingLine.indexOf('\n')
+          while (newlineIndex >= 0) {
+            const span = parseTraceLine(pendingLine.slice(0, newlineIndex))
+            if (span) {
+              spans.push(span)
             }
+            pendingLine = pendingLine.slice(newlineIndex + 1)
+            newlineIndex = pendingLine.indexOf('\n')
           }
         }
+
+        const span = parseTraceLine(pendingLine)
+        if (span) {
+          spans.push(span)
+        }
+      } finally {
+        await fileHandle.close().catch(() => undefined)
       }
 
-      return Array.from(parseLines(chunks.join('')))
+      return spans
         .filter((span) => span.topicId === topicId && span.traceId === traceId && span.modelName)
         .filter((span) => !modelName || span.modelName === modelName)
     } catch (err) {
