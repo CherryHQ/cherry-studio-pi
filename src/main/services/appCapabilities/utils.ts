@@ -24,8 +24,10 @@ export const sanitizeForAgent = (value: unknown): unknown => {
 }
 
 function sanitizeJsonValue(value: unknown, key: string, seen: WeakSet<object>, depth: number): unknown {
-  if (SENSITIVE_KEY_PATTERN.test(key) && typeof value === 'string') {
-    return value ? '[redacted]' : value
+  if (SENSITIVE_KEY_PATTERN.test(key)) {
+    if (typeof value === 'string') return value ? '[redacted]' : value
+    if (value === null || typeof value === 'undefined' || typeof value === 'boolean') return value
+    return '[redacted]'
   }
 
   if (typeof value === 'string') {
@@ -86,15 +88,32 @@ function sanitizeJsonValue(value: unknown, key: string, seen: WeakSet<object>, d
     }
 
     const output: Record<string, unknown> = {}
-    const entries = Object.entries(value as Record<string, unknown>)
-    for (const [childKey, childValue] of entries.slice(0, MAX_AGENT_OBJECT_KEYS)) {
+    const objectValue = value as Record<string, unknown>
+    let visitedKeys = 0
+    let truncatedKeys = 0
+    for (const childKey in objectValue) {
+      if (!Object.prototype.hasOwnProperty.call(objectValue, childKey)) continue
+      if (visitedKeys >= MAX_AGENT_OBJECT_KEYS) {
+        truncatedKeys += 1
+        continue
+      }
+      visitedKeys += 1
+
+      let childValue: unknown
+      try {
+        childValue = objectValue[childKey]
+      } catch {
+        output[childKey] = '[Unreadable property]'
+        continue
+      }
+
       const sanitized = sanitizeJsonValue(childValue, childKey, seen, depth + 1)
       if (sanitized !== undefined) {
         output[childKey] = sanitized
       }
     }
-    if (entries.length > MAX_AGENT_OBJECT_KEYS) {
-      output.__truncatedKeys = entries.length - MAX_AGENT_OBJECT_KEYS
+    if (truncatedKeys > 0) {
+      output.__truncatedKeys = truncatedKeys
     }
     return output
   } finally {

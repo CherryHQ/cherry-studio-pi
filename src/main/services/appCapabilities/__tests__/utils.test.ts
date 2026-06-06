@@ -14,6 +14,11 @@ describe('app capability utils', () => {
       sanitizeForAgent({
         apiKey: 'sk-secret',
         authorization: 'Bearer token',
+        authToken: {
+          value: 'nested secret should not be traversed'
+        },
+        cookieJar: ['session-secret'],
+        hasPassword: true,
         nested: {
           name: 'visible',
           cookie: ''
@@ -22,6 +27,9 @@ describe('app capability utils', () => {
     ).toEqual({
       apiKey: '[redacted]',
       authorization: '[redacted]',
+      authToken: '[redacted]',
+      cookieJar: '[redacted]',
+      hasPassword: true,
       nested: {
         name: 'visible',
         cookie: ''
@@ -113,6 +121,42 @@ describe('app capability utils', () => {
     expect(sanitized.items.at(-1)).toBe('[...truncated 5 items...]')
     expect(Object.keys(sanitized.object)).toHaveLength(201)
     expect(sanitized.object.__truncatedKeys).toBe(5)
+  })
+
+  it('does not read object properties beyond the agent key limit', () => {
+    const object: Record<string, unknown> = {}
+    for (let index = 0; index < 205; index += 1) {
+      Object.defineProperty(object, `key${index}`, {
+        enumerable: true,
+        get: () => {
+          if (index >= 200) throw new Error('truncated getter should not be read')
+          return index
+        }
+      })
+    }
+
+    const sanitized = sanitizeForAgent({ object }) as any
+
+    expect(Object.keys(sanitized.object)).toHaveLength(201)
+    expect(sanitized.object.__truncatedKeys).toBe(5)
+    expect(sanitized.object.key199).toBe(199)
+  })
+
+  it('keeps a single unreadable object property from breaking the whole result', () => {
+    const object: Record<string, unknown> = { ok: true }
+    Object.defineProperty(object, 'broken', {
+      enumerable: true,
+      get: () => {
+        throw new Error('getter failed')
+      }
+    })
+
+    expect(sanitizeForAgent({ object })).toEqual({
+      object: {
+        ok: true,
+        broken: '[Unreadable property]'
+      }
+    })
   })
 
   it('bounds deeply nested objects before returning them to agents', () => {
