@@ -10,6 +10,13 @@ import { storageV2Database } from './StorageV2Database'
 import { encodeStorageV2CompositeEntityId } from './SyncEntityId'
 import { storageV2SyncLogService } from './SyncLogService'
 
+type LegacyAssistantView = Assistant & {
+  topics?: Array<Record<string, unknown> & { messages?: unknown[] }>
+  model?: Model
+  defaultModel?: Model
+  tags?: string[]
+}
+
 type SettingRecord = {
   key: string
   value: unknown
@@ -889,10 +896,11 @@ export class StorageV2AssistantRepository {
   async upsert(assistant: Assistant, sortOrder = 0): Promise<void> {
     const client = await storageV2Database.getClient()
     const timestamp = now()
+    const legacyAssistant = assistant as LegacyAssistantView
     const snapshot = {
       ...assistant,
-      topics: Array.isArray(assistant.topics)
-        ? assistant.topics.map((topic) => ({
+      topics: Array.isArray(legacyAssistant.topics)
+        ? legacyAssistant.topics.map((topic) => ({
             ...topic,
             messages: []
           }))
@@ -924,12 +932,12 @@ export class StorageV2AssistantRepository {
           assistant.name,
           assistant.description ?? null,
           assistant.prompt ?? null,
-          assistant.model?.id ?? assistant.defaultModel?.id ?? null,
+          assistant.modelId ?? legacyAssistant.model?.id ?? legacyAssistant.defaultModel?.id ?? null,
           toJson({
             settings: assistant.settings ?? null,
             snapshot
           }),
-          toJson(assistant.tags ?? null),
+          toJson(legacyAssistant.tags ?? null),
           sortOrder,
           timestamp,
           timestamp
@@ -943,8 +951,8 @@ export class StorageV2AssistantRepository {
         payload: {
           id: assistant.id,
           name: assistant.name,
-          modelId: assistant.model?.id ?? assistant.defaultModel?.id ?? null,
-          tags: assistant.tags ?? null
+          modelId: assistant.modelId ?? legacyAssistant.model?.id ?? legacyAssistant.defaultModel?.id ?? null,
+          tags: legacyAssistant.tags ?? null
         },
         version: await getVersion(client, 'assistants', assistant.id)
       })

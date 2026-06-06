@@ -283,7 +283,14 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
         if (input?.saveConfig === true) {
           await persistWebDavConfig(config)
         }
-        await reduxService.prepareStorageV2ForDataSync()
+        const prepareStorageV2ForDataSync = (
+          reduxService as unknown as {
+            prepareStorageV2ForDataSync?: () => Promise<void>
+          }
+        ).prepareStorageV2ForDataSync
+        if (prepareStorageV2ForDataSync) {
+          await prepareStorageV2ForDataSync.call(reduxService)
+        }
         const summary = await runWebDavCapability('同步数据', () => appDataSyncService.syncNow(config))
         broadcastExternalDataSyncCompleted(summary, context.source)
         return okResult('Data sync completed', sanitizeForAgent(summary))

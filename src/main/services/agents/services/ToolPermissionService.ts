@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto'
 
+import { application } from '@application'
 import { loggerService } from '@logger'
-import type { AgentPermissionUpdate } from '@shared/agents/types'
+import { WindowType } from '@main/core/window/types'
+import type { AgentPermissionUpdate } from '@shared/ai/types'
 import { IpcChannel } from '@shared/IpcChannel'
 import { ipcMain } from 'electron'
-
-import { windowService } from '../../WindowService'
 
 const logger = loggerService.withContext('AgentToolPermissionService')
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000
@@ -109,7 +109,7 @@ const broadcastToRenderer = (
   channel: IpcChannel,
   payload: RendererPermissionRequestPayload | RendererPermissionResultPayload
 ): boolean => {
-  const mainWindow = typeof windowService.getMainWindow === 'function' ? windowService.getMainWindow() : null
+  const mainWindow = application.get('WindowManager').getWindowsByType(WindowType.Main)[0]
 
   if (!mainWindow) {
     logger.warn('Unable to send agent tool permission payload because main window is unavailable', {
@@ -208,7 +208,7 @@ export async function promptForToolApproval(
     return { behavior: 'deny', message: 'Tool request was cancelled before prompting the user' }
   }
 
-  const mainWindow = typeof windowService.getMainWindow === 'function' ? windowService.getMainWindow() : null
+  const mainWindow = application.get('WindowManager').getWindowsByType(WindowType.Main)[0]
   if (!mainWindow) {
     return { behavior: 'deny', message: 'Unable to request approval because the renderer window is unavailable' }
   }

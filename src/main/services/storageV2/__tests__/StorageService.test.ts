@@ -454,13 +454,13 @@ describe('StorageV2Service', () => {
   })
 
   it('upserts assistants through the structured Storage v2 repository', async () => {
-    const assistant: Assistant = {
+    const assistant = {
       id: 'assistant-1',
       name: 'Assistant',
       prompt: 'Be helpful',
       topics: [],
       type: 'assistant'
-    }
+    } as unknown as Assistant
 
     await expect(new StorageV2Service().upsertAssistant(assistant, 4)).resolves.toBeUndefined()
 

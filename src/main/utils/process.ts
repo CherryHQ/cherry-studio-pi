@@ -1,4 +1,6 @@
+import { application } from '@application'
 import { loggerService } from '@logger'
+import { isWin } from '@main/core/platform'
 import type { GitBashPathInfo, GitBashPathSource } from '@shared/config/constant'
 import { HOME_CHERRY_DIR } from '@shared/config/constant'
 import chardet from 'chardet'
@@ -8,17 +10,14 @@ import iconv from 'iconv-lite'
 import os from 'os'
 import path from 'path'
 
-import { isWin } from '../constant'
 import { ConfigKeys, configManager } from '../services/ConfigManager'
-import { getResourcePath } from '.'
-import { summarizeProcessOutputForLog } from './logging'
 import getShellEnv, { refreshShellEnv } from './shell-env'
 
 const logger = loggerService.withContext('Utils:Process')
 
 export function runInstallScript(scriptPath: string, extraEnv?: Record<string, string>): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    const installScriptPath = path.join(getResourcePath(), 'scripts', scriptPath)
+    const installScriptPath = path.join(application.getPath('app.root.resources.scripts'), scriptPath)
     logger.info(`Running script at: ${installScriptPath}`)
 
     const nodeProcess = spawn(process.execPath, [installScriptPath], {
@@ -26,11 +25,11 @@ export function runInstallScript(scriptPath: string, extraEnv?: Record<string, s
     })
 
     nodeProcess.stdout.on('data', (data) => {
-      logger.debug('Script output received', { output: summarizeProcessOutputForLog(data.toString()) })
+      logger.debug(`Script output: ${data}`)
     })
 
     nodeProcess.stderr.on('data', (data) => {
-      logger.error('Script error received', { output: summarizeProcessOutputForLog(data.toString()) })
+      logger.error(`Script error: ${data}`)
     })
 
     nodeProcess.on('close', (code) => {
@@ -214,7 +213,7 @@ export interface FindExecutableOptions {
 
 /**
  * Find executable in common paths or PATH environment variable
- * Find executable with security checks
+ * Based on Claude Code's implementation with security checks
  * @param name - Name of the executable to find (without extension)
  * @param options - Optional configuration for extensions and common paths
  * @returns Full path to the executable or null if not found

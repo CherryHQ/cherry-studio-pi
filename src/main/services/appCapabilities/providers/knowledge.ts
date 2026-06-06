@@ -1,5 +1,5 @@
 import { loggerService } from '@logger'
-import KnowledgeService from '@main/services/KnowledgeService'
+import { knowledgeService } from '@main/services/KnowledgeService'
 import { reduxService } from '@main/services/ReduxService'
 import { storageV2SecretVaultService } from '@main/services/storageV2/SecretVaultService'
 import {
@@ -275,7 +275,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         const warnings: string[] = []
         if (input?.initialize !== false) {
           try {
-            await KnowledgeService.create({} as Electron.IpcMainInvokeEvent, await toKnowledgeBaseParams(base))
+            await knowledgeService.create({} as Electron.IpcMainInvokeEvent, await toKnowledgeBaseParams(base))
           } catch (error) {
             warnings.push(`Vector store was not initialized: ${error instanceof Error ? error.message : String(error)}`)
           }
@@ -322,7 +322,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         const resultsPerBase = await mapWithConcurrency(targetBases, KNOWLEDGE_SEARCH_CONCURRENCY, async (base) => {
           try {
             const params = await toKnowledgeBaseParams(base, resolveProviderConfig)
-            const results = await KnowledgeService.search({} as Electron.IpcMainInvokeEvent, {
+            const results = await knowledgeService.search({} as Electron.IpcMainInvokeEvent, {
               search: query,
               base: params
             })
@@ -383,7 +383,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         const base = (await listKnowledgeBases()).find((item) => item.id === input?.baseId)
         if (!base) throw new Error(`Knowledge base not found: ${input?.baseId}`)
         const knowledgeItem = input?.item as KnowledgeItem
-        const result = await KnowledgeService.add({} as Electron.IpcMainInvokeEvent, {
+        const result = await knowledgeService.add({} as Electron.IpcMainInvokeEvent, {
           base: await toKnowledgeBaseParams(base),
           item: knowledgeItem,
           forceReload: input?.forceReload,
@@ -415,7 +415,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         const base = (await listKnowledgeBases()).find((item) => item.id === input?.baseId)
         if (!base) throw new Error(`Knowledge base not found: ${input?.baseId}`)
         if (context.dryRun) return okResult('Knowledge base reset dry run completed', { baseId: base.id })
-        await KnowledgeService.reset({} as Electron.IpcMainInvokeEvent, await toKnowledgeBaseParams(base))
+        await knowledgeService.reset({} as Electron.IpcMainInvokeEvent, await toKnowledgeBaseParams(base))
         return okResult('Knowledge base reset', { baseId: base.id, name: base.name })
       }
     }

@@ -2,8 +2,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { loggerService } from '@logger'
-import { isMac, isWin } from '@main/constant'
-import { summarizeProcessOutputForLog } from '@main/utils/logging'
+import { isMac, isWin } from '@main/core/platform'
 import { execFileSync, spawn } from 'child_process'
 
 const logger = loggerService.withContext('ShellEnv')
@@ -225,13 +224,10 @@ function getLoginShellEnvironment(): Promise<Record<string, string>> {
 
     // Protects against shells that wait for user input or hang during profile sourcing.
     timeoutId = setTimeout(() => {
-      const errorMessage = `Timed out after ${SHELL_ENV_TIMEOUT_MS}ms while retrieving shell environment`
-      logger.error('Timed out while retrieving shell environment', {
-        timeoutMs: SHELL_ENV_TIMEOUT_MS,
-        shellPath,
-        cwd: homeDirectory,
-        commandArgCount: commandArgs.length
-      })
+      const errorMessage = `Timed out after ${SHELL_ENV_TIMEOUT_MS}ms while retrieving shell environment. Shell: ${shellPath}. Args: ${commandArgs.join(
+        ' '
+      )}. CWD: ${homeDirectory}`
+      logger.error(errorMessage)
       child.kill()
       rejectOnce(new Error(errorMessage))
     }, SHELL_ENV_TIMEOUT_MS)
@@ -255,22 +251,15 @@ function getLoginShellEnvironment(): Promise<Record<string, string>> {
       }
 
       if (code !== 0) {
-        const errorMessage = `Shell process exited with code ${code} while retrieving shell environment`
-        logger.error(errorMessage, {
-          shellPath,
-          cwd: homeDirectory,
-          commandArgCount: commandArgs.length,
-          stderr: summarizeProcessOutputForLog(errorOutput)
-        })
+        const errorMessage = `Shell process exited with code ${code}. Shell: ${shellPath}. Args: ${commandArgs.join(' ')}. CWD: ${homeDirectory}. Stderr: ${errorOutput.trim()}`
+        logger.error(errorMessage)
         return rejectOnce(new Error(errorMessage))
       }
 
       if (errorOutput.trim()) {
         // Some shells might output warnings or non-fatal errors to stderr
         // during profile loading. Log it, but proceed if exit code is 0.
-        logger.warn('Shell process stderr output received even with exit code 0', {
-          stderr: summarizeProcessOutputForLog(errorOutput)
-        })
+        logger.warn(`Shell process stderr output (even with exit code 0):\n${errorOutput.trim()}`)
       }
 
       // Convert each VAR=VALUE line into our env map.

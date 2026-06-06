@@ -48,6 +48,18 @@ vi.mock('@main/constant', () => ({
   isWin: false
 }))
 
+vi.mock('@main/core/platform', () => ({
+  isWin: false
+}))
+
+vi.mock('@application', () => ({
+  application: {
+    get: vi.fn(() => ({
+      broadcastToType: vi.fn()
+    }))
+  }
+}))
+
 vi.mock('@main/utils/ipService', () => ({
   isUserInChina: vi.fn(() => Promise.resolve(false))
 }))
@@ -74,14 +86,6 @@ vi.mock('@shared/utils', () => ({
   withoutTrailingSlash: vi.fn((url: string) => url.replace(/\/+$/, ''))
 }))
 
-vi.mock('@main/services/WindowService', () => ({
-  windowService: {
-    getMainWindow: vi.fn(() => ({
-      webContents: { send: vi.fn() }
-    }))
-  }
-}))
-
 vi.mock('../VertexAIService', () => ({
   default: { getInstance: vi.fn() }
 }))
@@ -96,7 +100,8 @@ vi.mock('../storageV2/StorageV2Repositories', () => ({
 
 async function loadOpenClawService() {
   vi.resetModules()
-  return (await import('../OpenClawService')).openClawService
+  const { OpenClawService } = await import('../OpenClawService')
+  return new OpenClawService()
 }
 
 const provider = {
@@ -129,9 +134,7 @@ describe('OpenClawService Storage v2 config snapshot', () => {
   it('mirrors generated OpenClaw config to Storage v2 secret vault', async () => {
     const service = await loadOpenClawService()
 
-    await expect(
-      service.syncProviderConfig({} as Electron.IpcMainInvokeEvent, provider, primaryModel)
-    ).resolves.toEqual({ success: true })
+    await expect(service.syncProviderConfig(provider, primaryModel)).resolves.toEqual({ success: true })
 
     const writtenConfig = getWrittenConfig()
     expect(writtenConfig.models.providers['cherry-openai'].apiKey).toBe('sk-one')
@@ -178,9 +181,7 @@ describe('OpenClawService Storage v2 config snapshot', () => {
     mocks.secretVault.getSecret.mockResolvedValue(JSON.stringify(restoredConfig))
     const service = await loadOpenClawService()
 
-    await expect(
-      service.syncProviderConfig({} as Electron.IpcMainInvokeEvent, provider, primaryModel)
-    ).resolves.toEqual({ success: true })
+    await expect(service.syncProviderConfig(provider, primaryModel)).resolves.toEqual({ success: true })
 
     const writtenConfig = getWrittenConfig()
     expect(writtenConfig.gateway.auth.token).toBe('restored-token')
@@ -208,9 +209,7 @@ describe('OpenClawService Storage v2 config snapshot', () => {
     mocks.fs.readFileSync.mockReturnValue(JSON.stringify(legacyConfig))
     const service = await loadOpenClawService()
 
-    await expect(
-      service.syncProviderConfig({} as Electron.IpcMainInvokeEvent, provider, primaryModel)
-    ).resolves.toEqual({ success: true })
+    await expect(service.syncProviderConfig(provider, primaryModel)).resolves.toEqual({ success: true })
 
     expect(fs.renameSync).toHaveBeenCalledWith(
       '/mock/home/.openclaw/openclaw.json',
@@ -233,9 +232,7 @@ describe('OpenClawService Storage v2 config snapshot', () => {
     mocks.secretVault.setSecret.mockRejectedValueOnce(new Error('vault locked'))
     const service = await loadOpenClawService()
 
-    await expect(
-      service.syncProviderConfig({} as Electron.IpcMainInvokeEvent, provider, primaryModel)
-    ).resolves.toEqual({
+    await expect(service.syncProviderConfig(provider, primaryModel)).resolves.toEqual({
       success: false,
       message: 'vault locked'
     })

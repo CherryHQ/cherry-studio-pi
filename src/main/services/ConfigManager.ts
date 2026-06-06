@@ -15,15 +15,15 @@
  * --------------------------------------------------------------------------
  */
 import { loggerService } from '@logger'
-import type { UpgradeChannel } from '@shared/config/constant'
 import { defaultLanguage, ZOOM_SHORTCUTS } from '@shared/config/constant'
-import type { LanguageVarious, Shortcut } from '@types'
-import { ThemeMode } from '@types'
+import type { LanguageVarious, UpgradeChannel } from '@shared/data/preference/preferenceTypes'
+import { ThemeMode } from '@shared/data/preference/preferenceTypes'
+import type { Shortcut } from '@types'
 import { app } from 'electron'
 import Store from 'electron-store'
 import { v7 as uuid } from 'uuid'
 
-import { locales } from '../utils/locales'
+import { locales } from '../utils/language'
 import { storageV2SettingsRepository } from './storageV2/StorageV2Repositories'
 
 const logger = loggerService.withContext('ConfigManager')

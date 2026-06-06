@@ -1,7 +1,8 @@
 import path from 'node:path'
 
-import { isMac } from '@main/constant'
-import { windowService } from '@main/services/WindowService'
+import { application } from '@application'
+import { isMac } from '@main/core/platform'
+import { WindowType } from '@main/core/window/types'
 import { isPathInside } from '@main/utils/file'
 
 const SENSITIVE_KEY_PATTERN = /api[-_]?key|private[-_]?key|token|secret|pass|password|authorization|cookie/i
@@ -147,9 +148,9 @@ export const navigateApp = async (route: string) => {
     throw new Error(`Navigation route is not allowed: ${nextRoute}`)
   }
 
-  const win = windowService.getMainWindow()
+  const win = application.get('WindowManager').getWindowsByType(WindowType.Main)[0]
   if (!win || win.isDestroyed()) throw new Error('Main window is not available')
 
   await win.webContents.executeJavaScript(`window.navigate(${JSON.stringify(nextRoute)})`)
-  if (isMac) windowService.showMainWindow()
+  if (isMac) application.get('MainWindowService').showMainWindow()
 }

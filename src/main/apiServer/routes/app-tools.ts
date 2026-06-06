@@ -1,13 +1,14 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
+import { application } from '@application'
 import { loggerService } from '@logger'
-import { isMac } from '@main/constant'
+import { isMac } from '@main/core/platform'
+import { WindowType } from '@main/core/window/types'
 import { appCapabilityService } from '@main/services/appCapabilities'
 import { listPaintingHistory, PAINTING_NAMESPACES } from '@main/services/appCapabilities/providers/paintings'
 import { isAllowedAppRoute, normalizeAppRoute, pickPath, sanitizeForAgent } from '@main/services/appCapabilities/utils'
 import { reduxService } from '@main/services/ReduxService'
-import { windowService } from '@main/services/WindowService'
 import { getName, getNotesDir, isPathInside, scanDir } from '@main/utils/file'
 import express from 'express'
 
@@ -54,11 +55,11 @@ async function navigate(route: string) {
     throw new Error(`Navigation route is not allowed: ${nextRoute}`)
   }
 
-  const win = windowService.getMainWindow()
+  const win = application.get('WindowManager').getWindowsByType(WindowType.Main)[0]
   if (!win || win.isDestroyed()) throw new Error('Main window is not available')
 
   await win.webContents.executeJavaScript(`window.navigate(${JSON.stringify(nextRoute)})`)
-  if (isMac) windowService.showMainWindow()
+  if (isMac) application.get('MainWindowService').showMainWindow()
 }
 
 async function getNotesRoot() {

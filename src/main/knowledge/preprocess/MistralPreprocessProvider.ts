@@ -2,7 +2,7 @@ import fs from 'node:fs'
 
 import { loggerService } from '@logger'
 import { fileStorage } from '@main/services/FileStorage'
-import { MistralClientManager } from '@main/services/MistralClientManager'
+import { mistralClientManager } from '@main/services/MistralClientManager'
 import { MistralService } from '@main/services/remotefile/MistralService'
 import { summarizeObjectShapeForLog, summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
 import type { Mistral } from '@mistralai/mistralai'
@@ -25,7 +25,7 @@ export default class MistralPreprocessProvider extends BasePreprocessProvider {
 
   constructor(provider: PreprocessProvider) {
     super(provider)
-    const clientManager = MistralClientManager.getInstance()
+    const clientManager = mistralClientManager
     const aiProvider: Provider = {
       id: provider.id,
       type: 'mistral',
@@ -36,7 +36,7 @@ export default class MistralPreprocessProvider extends BasePreprocessProvider {
     }
     clientManager.initializeClient(aiProvider)
     this.sdk = clientManager.getClient()
-    this.fileService = new MistralService(aiProvider)
+    this.fileService = new MistralService(provider.apiKey!, provider.apiHost)
   }
 
   private async preupload(file: FileMetadata): Promise<PreuploadResponse> {

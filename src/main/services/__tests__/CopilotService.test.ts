@@ -61,7 +61,7 @@ vi.mock('@logger', () => ({
 
 async function loadCopilotService() {
   vi.resetModules()
-  return (await import('../CopilotService')).default
+  return (await import('../CopilotService')).copilotService
 }
 
 describe('CopilotService Storage v2 token persistence', () => {

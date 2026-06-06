@@ -9,7 +9,7 @@ import {
   readTextFileWithAutoEncoding,
   scanDir
 } from '@main/utils/file'
-import { t } from '@main/utils/locales'
+import { t } from '@main/utils/language'
 import { summarizeTextForLog } from '@main/utils/logging'
 import { getRipgrepBinaryPath, runRipgrep } from '@main/utils/ripgrep'
 import { documentExts, imageExts, KB, MB } from '@shared/config/constant'

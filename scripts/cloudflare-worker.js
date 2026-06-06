@@ -3,13 +3,11 @@ const config = {
   R2_CUSTOM_DOMAIN: 'cherrystudio.ocool.online',
   R2_BUCKET_NAME: 'cherrystudio',
   // 缓存键名
-  CACHE_KEY: 'cherry-studio-pi-latest-release',
+  CACHE_KEY: 'cherry-studio-latest-release',
   VERSION_DB: 'versions.json',
   LOG_FILE: 'logs.json',
   MAX_LOGS: 1000 // 最多保存多少条日志
 }
-
-const RESERVED_R2_KEYS = new Set([config.CACHE_KEY, config.VERSION_DB, config.LOG_FILE])
 
 // Worker 入口函数
 const worker = {
@@ -160,7 +158,7 @@ async function getLatestRelease(env) {
     return new Response(
       JSON.stringify({
         error: '获取版本信息失败: ' + error.message,
-        detail: '请稍后再试'
+        detail: '请稍���再试'
       }),
       {
         status: 500,
@@ -201,19 +199,12 @@ async function handleDownload(env, filename) {
  * 根据文件扩展名获取对应的 Content-Type
  */
 function getContentType(filename) {
-  const lowerName = filename.toLowerCase()
-  if (lowerName.endsWith('.tar.gz') || lowerName.endsWith('.tgz')) {
-    return 'application/gzip'
-  }
-
-  const ext = lowerName.split('.').pop()
+  const ext = filename.split('.').pop().toLowerCase()
   const types = {
     exe: 'application/x-msdownload', // Windows 可执行文件
     dmg: 'application/x-apple-diskimage', // macOS 安装包
     zip: 'application/zip', // 压缩包
-    appimage: 'application/x-executable', // Linux 可执行文件
-    yml: 'application/x-yaml',
-    yaml: 'application/x-yaml',
+    AppImage: 'application/x-executable', // Linux 可执行文件
     blockmap: 'application/octet-stream' // 更新文件
   }
   return types[ext] || 'application/octet-stream'
@@ -357,10 +348,8 @@ async function getCachedRelease(env) {
 // 新增：只检查新版本并更新
 async function checkNewRelease(env) {
   try {
-    let cacheData = null
-
     // 获取 GitHub 最新版本
-    const githubResponse = await fetch('https://api.github.com/repos/CherryHQ/cherry-studio-pi/releases/latest', {
+    const githubResponse = await fetch('https://api.github.com/repos/CherryHQ/cherry-studio/releases/latest', {
       headers: { 'User-Agent': 'CloudflareWorker' }
     })
 
@@ -449,7 +438,7 @@ async function checkNewRelease(env) {
       await env.R2_BUCKET.put(config.VERSION_DB, JSON.stringify(versions, null, 2))
 
       // 更新缓存
-      cacheData = {
+      const cacheData = {
         version,
         publishedAt: releaseData.published_at,
         changelog: releaseData.body,
@@ -488,7 +477,7 @@ async function checkNewRelease(env) {
           const oldFiles = versions.versions[oldVersion].files
           for (const file of oldFiles) {
             try {
-              if (file.uploaded && !keepFiles.has(file.name)) {
+              if (file.uploaded) {
                 await env.R2_BUCKET.delete(file.name)
                 await addLog(env, 'INFO', `删除旧文件: ${file.name}`)
               }
@@ -501,10 +490,6 @@ async function checkNewRelease(env) {
 
         // 清理可能遗留的旧文件
         for (const file of allFiles) {
-          if (RESERVED_R2_KEYS.has(file.name)) {
-            continue
-          }
-
           if (!keepFiles.has(file.name)) {
             try {
               await env.R2_BUCKET.delete(file.name)
@@ -522,7 +507,7 @@ async function checkNewRelease(env) {
       await addLog(env, 'INFO', '所有文件完整性检查通过，无需更新')
     }
 
-    return cacheData
+    return hasUpdates ? cacheData : null
   } catch (error) {
     await addLog(env, 'ERROR', '检查新版本失败', error.message)
     throw error

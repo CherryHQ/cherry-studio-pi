@@ -16,7 +16,7 @@
  */
 import { type Client, createClient } from '@libsql/client'
 import { loggerService } from '@logger'
-import { isDev } from '@main/constant'
+import { isDev } from '@main/core/platform'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
 import { drizzle } from 'drizzle-orm/libsql'
 import { app } from 'electron'

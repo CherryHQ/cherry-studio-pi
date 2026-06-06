@@ -1,10 +1,11 @@
+import { agentSessionService } from '@data/services/AgentSessionService'
+import { agentTaskService } from '@data/services/AgentTaskService'
 import { modelsService } from '@main/apiServer/services/models'
 import {
   createAgentWithStorageV2Recovery,
   getAgentWithStorageV2Recovery,
   listAgentsWithStorageV2Recovery
 } from '@main/services/agents/AgentStorageV2ReadThrough'
-import { sessionService, taskService } from '@main/services/agents/services'
 
 import type { AppCapabilityDefinition } from '../types'
 import { okResult, sanitizeForAgent } from '../utils'
@@ -33,6 +34,26 @@ function agentListOptions(input: any = {}) {
     ...rest,
     limit: normalizeListLimit(limit),
     offset: normalizeOffset(offset)
+  }
+}
+
+async function listAgentTasks(input: any = {}) {
+  const options = agentListOptions(input)
+  const agentId = typeof input?.agentId === 'string' && input.agentId ? input.agentId : undefined
+
+  if (agentId) {
+    return agentTaskService.listTasks(agentId, options)
+  }
+
+  const { agents } = await listAgentsWithStorageV2Recovery({ limit: MAX_AGENT_CAPABILITY_LIST_LIMIT })
+  const taskGroups = await Promise.all(agents.map((agent) => agentTaskService.listTasks(agent.id, options)))
+  const tasks = taskGroups.flatMap((group) => group.tasks)
+  const offset = options.offset ?? 0
+  const limit = options.limit ?? DEFAULT_AGENT_CAPABILITY_LIST_LIMIT
+
+  return {
+    tasks: tasks.slice(offset, offset + limit),
+    total: tasks.length
   }
 }
 
@@ -128,7 +149,9 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
           ...input,
           type: input?.type || 'claude-code'
         })
-        const session = await sessionService.createSession(agent.id, {}).catch(() => null)
+        const session = await agentSessionService
+          .createSession({ agentId: agent.id, name: input?.sessionName || 'Default session' })
+          .catch(() => null)
         return {
           ok: true,
           summary: `Agent created: ${agent.name}`,
@@ -155,7 +178,12 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any) =>
         okResult(
           'Agent sessions listed',
-          sanitizeForAgent(await sessionService.listSessions(input?.agentId, agentListOptions(input)))
+          sanitizeForAgent(
+            await agentSessionService.listByCursor({
+              agentId: input?.agentId,
+              limit: normalizeListLimit(input?.limit)
+            })
+          )
         )
     },
     {
@@ -181,7 +209,11 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       tags: ['agents', 'sessions', 'create'],
       execute: async (input: any) => {
         const { agentId, ...sessionInput } = input ?? {}
-        const session = await sessionService.createSession(String(agentId), sessionInput)
+        const session = await agentSessionService.createSession({
+          agentId: String(agentId),
+          name: sessionInput.name || 'New session',
+          description: sessionInput.description
+        })
         return okResult('Agent session created', sanitizeForAgent(session))
       }
     },
@@ -200,8 +232,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['agents', 'tasks', 'schedule'],
-      execute: async (input: any) =>
-        okResult('Agent tasks listed', sanitizeForAgent(await taskService.listAllTasks(agentListOptions(input))))
+      execute: async (input: any) => okResult('Agent tasks listed', sanitizeForAgent(await listAgentTasks(input)))
     },
     {
       id: 'agents.task.create',
@@ -222,7 +253,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['database.write'],
       tags: ['agents', 'tasks', 'schedule', 'create'],
       execute: async (input: any) => {
-        const task = await taskService.createTask(String(input?.agentId), input?.task)
+        const task = await agentTaskService.createTask(String(input?.agentId), input?.task)
         return okResult('Agent task created', sanitizeForAgent(task))
       }
     }

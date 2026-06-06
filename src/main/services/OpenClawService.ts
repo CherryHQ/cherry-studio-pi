@@ -5,10 +5,12 @@ import { Socket } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 
+import { application } from '@application'
 import { loggerService } from '@logger'
-import { isWin } from '@main/constant'
+import { BaseService, DependsOn, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
+import { isWin } from '@main/core/platform'
+import { WindowType } from '@main/core/window/types'
 import { isUserInChina } from '@main/utils/ipService'
-import { summarizeProcessOutputForLog } from '@main/utils/logging'
 import { crossPlatformSpawn, findExecutableInEnv, getBinaryPath, runInstallScript } from '@main/utils/process'
 import getShellEnv, { refreshShellEnv } from '@main/utils/shell-env'
 import type { OperationResult } from '@shared/config/types'
@@ -16,13 +18,43 @@ import { IpcChannel } from '@shared/IpcChannel'
 import { formatApiHost, hasAPIVersion, withoutTrailingSlash } from '@shared/utils'
 import type { Model, Provider, ProviderType, VertexProvider } from '@types'
 
-import { storageV2SecretVaultService } from './storageV2/SecretVaultService'
-import { storageV2SettingsRepository } from './storageV2/StorageV2Repositories'
-import { parseCurrentVersion, parseUpdateStatus } from './utils/openClawParsers'
-import VertexAIService from './VertexAIService'
-import { windowService } from './WindowService'
+import { vertexAiService } from './VertexAiService'
 
 const logger = loggerService.withContext('OpenClawService')
+
+/**
+ * Parse the current version from `openclaw --version` output.
+ * Example input: "OpenClaw 2026.3.9 (fe96034)"
+ */
+export function parseCurrentVersion(versionOutput: string): string | null {
+  const match = versionOutput.match(/OpenClaw\s+([\d.]+)/i)
+  return match?.[1] ?? null
+}
+
+/**
+ * Parse the update status from `openclaw update status` output.
+ * Returns the latest version string if a **binary** update is available, otherwise null.
+ *
+ * Cherry Studio installs OpenClaw as a standalone binary, so we only care about
+ * binary-channel updates. npm/pkg-channel updates are ignored because they
+ * require a different upgrade path (`npm update -g`).
+ *
+ * The table output contains a row like:
+ *   │ Update   │ available · binary · 2026.3.12 │
+ * And a summary line like:
+ *   Update available (binary 2026.3.12). Run: openclaw update
+ */
+export function parseUpdateStatus(statusOutput: string): string | null {
+  // Match binary-channel update from table row: "available · binary · <version>"
+  const tableMatch = statusOutput.match(/available\s*·\s*binary\s*·?\s*([\d.]+)/i)
+  if (tableMatch) return tableMatch[1]
+
+  // Match binary-channel update from summary line: "Update available (binary <version>)"
+  const summaryMatch = statusOutput.match(/Update available\s*\(binary\s+([\d.]+)\)/i)
+  if (summaryMatch) return summaryMatch[1]
+
+  return null
+}
 
 const OPENCLAW_CONFIG_DIR = path.join(os.homedir(), '.openclaw')
 const OPENCLAW_CONFIG_PATH = path.join(OPENCLAW_CONFIG_DIR, 'openclaw.json')
@@ -30,8 +62,6 @@ const OPENCLAW_CONFIG_BAK_PATH = path.join(OPENCLAW_CONFIG_DIR, 'openclaw.json.b
 const OPENCLAW_LEGACY_CONFIG_PATH = path.join(OPENCLAW_CONFIG_DIR, 'openclaw.cherry.json')
 const SYMLINK_PATH = '/usr/local/bin/openclaw'
 const DEFAULT_GATEWAY_PORT = 18790
-const STORAGE_V2_OPENCLAW_SCOPE = 'openclaw'
-const STORAGE_V2_OPENCLAW_CONFIG_SETTING_KEY = 'openclaw.config'
 
 export type GatewayStatus = 'stopped' | 'starting' | 'running' | 'error'
 
@@ -82,11 +112,6 @@ export interface OpenClawProviderConfig {
   models: OpenClawModelConfig[]
 }
 
-type OpenClawStorageV2ConfigSetting = {
-  configSecretRef?: string
-  updatedAt?: string
-}
-
 /**
  * OpenClaw API types
  * - 'openai-completions': For OpenAI-compatible chat completions API
@@ -134,17 +159,10 @@ function isVertexProvider(provider: Provider): provider is VertexProvider {
   return provider.type === 'vertexai'
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
-}
-
-function getStorageV2OpenClawConfigSecretRef(value: unknown): string | null {
-  if (!isRecord(value)) return null
-  const secretRef = (value as OpenClawStorageV2ConfigSetting).configSecretRef
-  return typeof secretRef === 'string' && secretRef ? secretRef : null
-}
-
-class OpenClawService {
+@Injectable('OpenClawService')
+@ServicePhase(Phase.WhenReady)
+@DependsOn(['WindowManager'])
+export class OpenClawService extends BaseService {
   private gatewayStatus: GatewayStatus = 'stopped'
   private gatewayPort: number = DEFAULT_GATEWAY_PORT
   private gatewayAuthToken: string = ''
@@ -153,19 +171,29 @@ class OpenClawService {
     return `ws://127.0.0.1:${this.gatewayPort}/ws`
   }
 
-  constructor() {
-    this.checkInstalled = this.checkInstalled.bind(this)
-    this.install = this.install.bind(this)
-    this.uninstall = this.uninstall.bind(this)
-    this.startGateway = this.startGateway.bind(this)
-    this.stopGateway = this.stopGateway.bind(this)
-    this.getStatus = this.getStatus.bind(this)
-    this.checkHealth = this.checkHealth.bind(this)
-    this.getDashboardUrl = this.getDashboardUrl.bind(this)
-    this.syncProviderConfig = this.syncProviderConfig.bind(this)
-    this.getChannelStatus = this.getChannelStatus.bind(this)
-    this.checkUpdate = this.checkUpdate.bind(this)
-    this.performUpdate = this.performUpdate.bind(this)
+  protected async onInit(): Promise<void> {
+    this.registerIpcHandlers()
+  }
+
+  protected async onStop(): Promise<void> {
+    await this.stopGateway()
+  }
+
+  private registerIpcHandlers(): void {
+    this.ipcHandle(IpcChannel.OpenClaw_CheckInstalled, () => this.checkInstalled())
+    this.ipcHandle(IpcChannel.OpenClaw_Install, () => this.install())
+    this.ipcHandle(IpcChannel.OpenClaw_Uninstall, () => this.uninstall())
+    this.ipcHandle(IpcChannel.OpenClaw_StartGateway, (_e, port?: number) => this.startGateway(port))
+    this.ipcHandle(IpcChannel.OpenClaw_StopGateway, () => this.stopGateway())
+    this.ipcHandle(IpcChannel.OpenClaw_GetStatus, () => this.getStatus())
+    this.ipcHandle(IpcChannel.OpenClaw_CheckHealth, () => this.checkHealth())
+    this.ipcHandle(IpcChannel.OpenClaw_GetDashboardUrl, () => this.getDashboardUrl())
+    this.ipcHandle(IpcChannel.OpenClaw_SyncConfig, (_e, provider, primaryModel) =>
+      this.syncProviderConfig(provider, primaryModel)
+    )
+    this.ipcHandle(IpcChannel.OpenClaw_GetChannels, () => this.getChannelStatus())
+    this.ipcHandle(IpcChannel.OpenClaw_CheckUpdate, () => this.checkUpdate())
+    this.ipcHandle(IpcChannel.OpenClaw_PerformUpdate, () => this.performUpdate())
   }
 
   /**
@@ -201,8 +229,9 @@ class OpenClawService {
    * Send install progress to renderer
    */
   private sendInstallProgress(message: string, type: 'info' | 'warn' | 'error' = 'info') {
-    const win = windowService.getMainWindow()
-    win?.webContents.send(IpcChannel.OpenClaw_InstallProgress, { message, type })
+    application
+      .get('WindowManager')
+      .broadcastToType(WindowType.Main, IpcChannel.OpenClaw_InstallProgress, { message, type })
   }
 
   /**
@@ -356,7 +385,7 @@ class OpenClawService {
   /**
    * Start the OpenClaw Gateway
    */
-  public async startGateway(_: Electron.IpcMainInvokeEvent, port?: number): Promise<OperationResult> {
+  public async startGateway(port?: number): Promise<OperationResult> {
     this.gatewayPort = port ?? DEFAULT_GATEWAY_PORT
 
     // Prevent concurrent startup calls
@@ -598,32 +627,20 @@ class OpenClawService {
       })
 
       const timeout = setTimeout(() => {
-        logger.warn('Gateway command timed out', {
-          command: args[0],
-          argCount: args.length,
-          timeoutMs,
-          stdout: summarizeProcessOutputForLog(stdout),
-          stderr: summarizeProcessOutputForLog(stderr)
-        })
+        logger.warn(`Gateway command timed out: ${args.join(' ')}`)
         proc.kill('SIGKILL')
         resolve({ code: null, stdout, stderr })
       }, timeoutMs)
 
       proc.on('exit', (code) => {
         clearTimeout(timeout)
-        logger.info('Gateway command completed', {
-          command: args[0],
-          argCount: args.length,
-          code,
-          stdout: summarizeProcessOutputForLog(stdout),
-          stderr: summarizeProcessOutputForLog(stderr)
-        })
+        logger.info(`Gateway command [${args.join(' ')}]:`, { code, stdout: stdout.trim(), stderr: stderr.trim() })
         resolve({ code, stdout, stderr })
       })
 
       proc.on('error', (err) => {
         clearTimeout(timeout)
-        logger.error('Gateway command error', { command: args[0], argCount: args.length, error: err.message })
+        logger.error(`Gateway command error [${args.join(' ')}]:`, err)
         resolve({ code: null, stdout, stderr: err.message })
       })
     })
@@ -723,8 +740,9 @@ class OpenClawService {
   }
 
   /**
-   * Get OpenClaw Dashboard URL (for opening in minapp).
-   * The Control UI uses ?token= to auto-authenticate the WebSocket connection.
+   * Get OpenClaw Dashboard URL (for opening in miniapp).
+   * The Control UI uses #token= to bootstrap WebSocket authentication while
+   * keeping the token client-side instead of sending it in HTTP requests.
    */
   public getDashboardUrl(): string {
     // Ensure we have the token (may have been lost after app restart)
@@ -745,7 +763,6 @@ class OpenClawService {
    */
   private loadAuthTokenFromConfig(): void {
     try {
-      this.migrateLegacyConfigProjection()
       if (fs.existsSync(OPENCLAW_CONFIG_PATH)) {
         const content = fs.readFileSync(OPENCLAW_CONFIG_PATH, 'utf-8')
         const config = JSON.parse(content) as OpenClawConfig
@@ -755,8 +772,8 @@ class OpenClawService {
           logger.info('Recovered auth token from config file')
         }
       }
-    } catch {
-      logger.debug('Failed to load auth token from config file')
+    } catch (error) {
+      logger.warn('Failed to load auth token from config file', error as Error)
     }
   }
 
@@ -767,90 +784,34 @@ class OpenClawService {
     return crypto.randomBytes(24).toString('base64url')
   }
 
-  private migrateLegacyConfigProjection(): void {
-    if (!fs.existsSync(OPENCLAW_LEGACY_CONFIG_PATH)) return
-
-    if (fs.existsSync(OPENCLAW_CONFIG_PATH)) {
-      fs.renameSync(OPENCLAW_CONFIG_PATH, OPENCLAW_CONFIG_BAK_PATH)
-      logger.info('Migrated openclaw.json -> openclaw.json.bak')
-    }
-    fs.renameSync(OPENCLAW_LEGACY_CONFIG_PATH, OPENCLAW_CONFIG_PATH)
-    logger.info('Migrated openclaw.cherry.json -> openclaw.json')
-  }
-
-  private parseConfig(content: string): OpenClawConfig | null {
-    const parsed = JSON.parse(content)
-    return isRecord(parsed) ? (parsed as OpenClawConfig) : null
-  }
-
-  private async loadConfigFromStorageV2(): Promise<OpenClawConfig | null> {
-    const setting = await storageV2SettingsRepository.get(STORAGE_V2_OPENCLAW_CONFIG_SETTING_KEY)
-    const secretRef = getStorageV2OpenClawConfigSecretRef(setting)
-    if (!secretRef) return null
-
-    const secret = await storageV2SecretVaultService.getSecret(secretRef)
-    if (!secret) return null
-
-    return this.parseConfig(secret)
-  }
-
-  private async saveConfigToStorageV2(config: OpenClawConfig): Promise<void> {
-    const secretRef = await storageV2SecretVaultService.setSecret(
-      STORAGE_V2_OPENCLAW_SCOPE,
-      'default',
-      'config',
-      JSON.stringify(config)
-    )
-    await storageV2SettingsRepository.set(
-      STORAGE_V2_OPENCLAW_CONFIG_SETTING_KEY,
-      {
-        configSecretRef: secretRef,
-        updatedAt: new Date().toISOString()
-      } satisfies OpenClawStorageV2ConfigSetting,
-      STORAGE_V2_OPENCLAW_SCOPE
-    )
-  }
-
   /**
    * Sync Cherry Studio Provider configuration to OpenClaw
    */
-  public async syncProviderConfig(
-    _: Electron.IpcMainInvokeEvent,
-    provider: Provider,
-    primaryModel: Model
-  ): Promise<OperationResult> {
+  public async syncProviderConfig(provider: Provider, primaryModel: Model): Promise<OperationResult> {
     try {
       // Ensure config directory exists
       if (!fs.existsSync(OPENCLAW_CONFIG_DIR)) {
         fs.mkdirSync(OPENCLAW_CONFIG_DIR, { recursive: true })
       }
 
-      this.migrateLegacyConfigProjection()
+      // Migrate legacy openclaw.cherry.json → openclaw.json
+      if (fs.existsSync(OPENCLAW_LEGACY_CONFIG_PATH)) {
+        if (fs.existsSync(OPENCLAW_CONFIG_PATH)) {
+          fs.renameSync(OPENCLAW_CONFIG_PATH, OPENCLAW_CONFIG_BAK_PATH)
+          logger.info('Migrated openclaw.json → openclaw.json.bak')
+        }
+        fs.renameSync(OPENCLAW_LEGACY_CONFIG_PATH, OPENCLAW_CONFIG_PATH)
+        logger.info('Migrated openclaw.cherry.json → openclaw.json')
+      }
 
       // Read existing config
       let config: OpenClawConfig = {}
-      let hasExistingConfig = false
       if (fs.existsSync(OPENCLAW_CONFIG_PATH)) {
         try {
           const content = fs.readFileSync(OPENCLAW_CONFIG_PATH, 'utf-8')
-          const parsedConfig = this.parseConfig(content)
-          if (parsedConfig) {
-            config = parsedConfig
-            hasExistingConfig = true
-          }
+          config = JSON.parse(content)
         } catch {
           logger.warn('Failed to parse existing OpenClaw config, creating new one')
-        }
-      }
-
-      if (!hasExistingConfig) {
-        const storageV2Config = await this.loadConfigFromStorageV2().catch((error) => {
-          logger.warn('Failed to load OpenClaw config from Storage v2:', error as Error)
-          return null
-        })
-        if (storageV2Config) {
-          config = storageV2Config
-          hasExistingConfig = true
         }
       }
 
@@ -862,13 +823,13 @@ class OpenClawService {
       const apiType = this.determineApiType(provider, primaryModel)
       const baseUrl = this.getBaseUrlForApiType(provider, apiType)
 
-      // Get API key - for vertexai, get access token from VertexAIService
+      // Get API key - for vertexai, get access token from VertexAiService
       // If multiple API keys are configured (comma-separated), use the first one
       // Some providers like Ollama and LM Studio don't require API keys
       let apiKey = provider.apiKey ? provider.apiKey.split(',')[0].trim() : ''
       if (isVertexProvider(provider)) {
         try {
-          const vertexService = VertexAIService.getInstance()
+          const vertexService = vertexAiService
           apiKey = await vertexService.getAccessToken({
             projectId: provider.project,
             serviceAccount: {
@@ -912,13 +873,13 @@ class OpenClawService {
       }
 
       // Set gateway mode to local (required for gateway to start)
-      const existingGatewayToken = config.gateway?.auth?.token
       config.gateway = config.gateway || {}
       config.gateway.mode = 'local'
       config.gateway.port = this.gatewayPort
       // Auto-generate auth token if not already set, and store it for API calls
-      const token = this.gatewayAuthToken || existingGatewayToken || this.generateAuthToken()
+      const token = this.gatewayAuthToken || this.generateAuthToken()
       config.gateway.auth = { token }
+      this.gatewayAuthToken = token
 
       // Update config
       config.models.providers[providerKey] = openclawProvider
@@ -930,11 +891,8 @@ class OpenClawService {
         primary: `${providerKey}/${primaryModel.id}`
       }
 
-      await this.saveConfigToStorageV2(config)
-
-      // Write external runtime projection only after the Storage v2 snapshot is durable.
+      // Write config file
       fs.writeFileSync(OPENCLAW_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
-      this.gatewayAuthToken = token
 
       logger.info(`Synced provider ${provider.id} to OpenClaw config`)
       return { success: true }
@@ -1019,12 +977,12 @@ class OpenClawService {
 
       if (code !== 0) {
         const errMsg = stderr.trim() || `Update failed with code ${code}`
-        logger.error('OpenClaw update failed', { error: summarizeProcessOutputForLog(errMsg) })
+        logger.error('OpenClaw update failed:', { error: errMsg })
         this.sendInstallProgress(errMsg, 'error')
         return { success: false, message: errMsg }
       }
 
-      logger.info('OpenClaw updated successfully', { output: summarizeProcessOutputForLog(stdout) })
+      logger.info('OpenClaw updated successfully', { output: stdout.trim() })
       this.sendInstallProgress('OpenClaw updated successfully!')
       return { success: true }
     } catch (error) {
@@ -1179,5 +1137,3 @@ class OpenClawService {
     return withoutTrailingSlash(apiHost)
   }
 }
-
-export const openClawService = new OpenClawService()

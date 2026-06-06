@@ -4,6 +4,7 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 
 import { loggerService } from '@logger'
+import { isWin } from '@main/core/platform'
 import { getResourcePath } from '@main/utils'
 import { findExecutableInEnv, getBinaryName, getGitBashPathInfo, runInstallScript } from '@main/utils/process'
 import {
@@ -14,8 +15,6 @@ import {
   isManagedRuntimeDisabled
 } from '@main/utils/rtk'
 import type { EnvironmentDependenciesStatus, EnvironmentDependencyStatus } from '@shared/config/types'
-
-import { isWin } from '../constant'
 
 const execFileAsync = promisify(execFile)
 const logger = loggerService.withContext('EnvironmentDependencyService')

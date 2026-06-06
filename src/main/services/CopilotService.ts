@@ -1,11 +1,8 @@
+import { application } from '@application'
 import { loggerService } from '@logger'
-import { app, net } from 'electron'
+import { net, safeStorage } from 'electron'
 import fs from 'fs'
 import path from 'path'
-
-import { getConfigDir } from '../utils/file'
-import { storageV2SecretVaultService } from './storageV2/SecretVaultService'
-import { storageV2SettingsRepository } from './storageV2/StorageV2Repositories'
 
 const logger = loggerService.withContext('CopilotService')
 
@@ -33,18 +30,6 @@ const CONFIG = {
     COPILOT_TOKEN: 'https://api.github.com/copilot_internal/v2/token'
   },
   TOKEN_FILE_NAME: '.copilot_token'
-}
-const STORAGE_V2_COPILOT_TOKEN_SETTING_KEY = 'copilot.accessToken'
-
-type CopilotTokenStorageV2Setting = {
-  accessTokenSecretRef?: string
-  clearedAt?: string
-  updatedAt?: string
-}
-
-type StorageV2CopilotTokenRead = {
-  cleared: boolean
-  token: string | null
 }
 
 // 接口定义移到顶部，便于查阅
@@ -79,6 +64,9 @@ class CopilotServiceError extends Error {
 }
 
 class CopilotService {
+  // Memoized backing field for the lazy `tokenFilePath` getter below.
+  // `undefined` until first access; resolved exactly once and cached.
+  private _tokenFilePath: string | undefined
   private headers: Record<string, string>
 
   constructor() {
@@ -89,111 +77,46 @@ class CopilotService {
     }
   }
 
-  private getTokenFilePaths = (): string[] => {
-    return [
-      path.join(app.getPath('userData'), CONFIG.TOKEN_FILE_NAME),
-      path.join(getConfigDir(), CONFIG.TOKEN_FILE_NAME)
-    ]
+  // TODO(v2): Lazy + memoized getter is a workaround, not a fix.
+  //
+  // The real problem is that `CopilotService` is exported as a top-level
+  // singleton at the bottom of this file
+  // (`export const copilotService = new CopilotService()`). That
+  // singleton is instantiated during the static import graph of
+  // `src/main/index.ts` (via `ipc.ts`), BEFORE
+  // `application.bootstrap()` runs and builds the path registry. The
+  // previous shape resolved `tokenFilePath` in the constructor
+  // (`this.tokenFilePath = this.getTokenFilePath()`), which called
+  // `application.getPath(...)` at instantiation time and threw
+  // "PATHS not initialized".
+  //
+  // Lazy + cached resolution defers the path lookup until first *access*
+  // (cached because `getTokenFilePath` does an `fs.existsSync` syscall
+  // for the legacy-path fallback — we don't want that on every read).
+  // But the class itself is still being constructed too early. We've
+  // merely moved the path lookup out of construction; we have NOT
+  // solved the architectural issue.
+  //
+  // The proper v2 fix is to migrate `CopilotService` into the lifecycle
+  // system: extend `BaseService`, add `@Injectable`, register in
+  // `serviceRegistry.ts`, and have callers resolve it via
+  // `application.get('CopilotService')` instead of importing the
+  // singleton. Once that's done, the DI container will instantiate it
+  // inside `application.bootstrap()` after the path registry is built,
+  // and the constructor can resolve `tokenFilePath` directly again.
+  // Until then, keep this lazy getter — do NOT move the assignment
+  // back to the constructor.
+  private get tokenFilePath(): string {
+    return (this._tokenFilePath ??= this.getTokenFilePath())
   }
 
-  private getStorageV2AccessTokenSecretRef(value: unknown): string | null {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-    const secretRef = (value as CopilotTokenStorageV2Setting).accessTokenSecretRef
-    return typeof secretRef === 'string' && secretRef ? secretRef : null
-  }
-
-  private isStorageV2TokenCleared(value: unknown): boolean {
-    return Boolean(
-      value && typeof value === 'object' && !Array.isArray(value) && (value as CopilotTokenStorageV2Setting).clearedAt
-    )
-  }
-
-  private saveAccessTokenToStorageV2 = async (token: string): Promise<void> => {
-    const secretRef = await storageV2SecretVaultService.setSecret('copilot', 'github', 'accessToken', token)
-    await storageV2SettingsRepository.set(
-      STORAGE_V2_COPILOT_TOKEN_SETTING_KEY,
-      {
-        accessTokenSecretRef: secretRef,
-        updatedAt: new Date().toISOString()
-      } satisfies CopilotTokenStorageV2Setting,
-      'copilot'
-    )
-  }
-
-  private readAccessTokenFromStorageV2 = async (): Promise<StorageV2CopilotTokenRead> => {
-    const setting = await storageV2SettingsRepository.get(STORAGE_V2_COPILOT_TOKEN_SETTING_KEY)
-    if (this.isStorageV2TokenCleared(setting)) {
-      return {
-        cleared: true,
-        token: null
-      }
+  private getTokenFilePath = (): string => {
+    // Legacy path: token was previously stored directly under userData
+    const oldTokenFilePath = path.join(application.getPath('app.userdata'), CONFIG.TOKEN_FILE_NAME)
+    if (fs.existsSync(oldTokenFilePath)) {
+      return oldTokenFilePath
     }
-
-    const secretRef = this.getStorageV2AccessTokenSecretRef(setting)
-    if (!secretRef) {
-      return {
-        cleared: false,
-        token: null
-      }
-    }
-
-    return {
-      cleared: false,
-      token: await storageV2SecretVaultService.getSecret(secretRef)
-    }
-  }
-
-  private readAccessTokenFromLegacyFile = async (): Promise<string | null> => {
-    for (const tokenFilePath of this.getTokenFilePaths()) {
-      try {
-        const token = (await fs.promises.readFile(tokenFilePath, 'utf-8')).trim()
-        if (/^(gh[opsur]_|github_pat_)/.test(token)) {
-          return token
-        }
-      } catch (error) {
-        if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
-          continue
-        }
-        throw error
-      }
-    }
-
-    return null
-  }
-
-  private readAccessToken = async (): Promise<string> => {
-    const storageToken = await this.readAccessTokenFromStorageV2().catch((error): StorageV2CopilotTokenRead => {
-      logger.warn('Failed to read Copilot access token from Storage v2', error as Error)
-      return {
-        cleared: false,
-        token: null
-      }
-    })
-    if (storageToken.cleared) {
-      throw new CopilotServiceError('未找到Copilot访问令牌，请重新授权')
-    }
-    if (storageToken.token) return storageToken.token
-
-    const legacyToken = await this.readAccessTokenFromLegacyFile()
-    if (legacyToken) {
-      await this.saveAccessTokenToStorageV2(legacyToken).catch((error) => {
-        logger.warn('Failed to mirror legacy Copilot access token to Storage v2', error as Error)
-      })
-      return legacyToken
-    }
-
-    throw new CopilotServiceError('未找到Copilot访问令牌，请重新授权')
-  }
-
-  private clearAccessTokenInStorageV2 = async (): Promise<void> => {
-    await storageV2SettingsRepository.set(
-      STORAGE_V2_COPILOT_TOKEN_SETTING_KEY,
-      {
-        clearedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      } satisfies CopilotTokenStorageV2Setting,
-      'copilot'
-    )
+    return application.getPath('feature.copilot.token_file')
   }
 
   /**
@@ -329,16 +252,14 @@ class CopilotService {
    */
   public saveCopilotToken = async (_: Electron.IpcMainInvokeEvent, token: string): Promise<void> => {
     try {
-      await this.saveAccessTokenToStorageV2(token)
-      for (const tokenFilePath of this.getTokenFilePaths()) {
-        try {
-          await fs.promises.unlink(tokenFilePath)
-        } catch (error) {
-          if (!(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')) {
-            logger.warn('Failed to remove legacy Copilot token file', error as Error)
-          }
-        }
+      const encryptedToken = safeStorage.encryptString(token)
+      // 确保目录存在
+      const dir = path.dirname(this.tokenFilePath)
+      if (!fs.existsSync(dir)) {
+        await fs.promises.mkdir(dir, { recursive: true })
       }
+
+      await fs.promises.writeFile(this.tokenFilePath, encryptedToken)
     } catch (error) {
       logger.error('Failed to save token:', error as Error)
       throw new CopilotServiceError('无法保存访问令牌', error)
@@ -355,7 +276,8 @@ class CopilotService {
     try {
       this.updateHeaders(headers)
 
-      const access_token = await this.readAccessToken()
+      const encryptedToken = await fs.promises.readFile(this.tokenFilePath)
+      const access_token = safeStorage.decryptString(Buffer.from(encryptedToken))
 
       const response = await net.fetch(CONFIG.API_URLS.COPILOT_TOKEN, {
         method: 'GET',
@@ -381,19 +303,14 @@ class CopilotService {
    */
   public logout = async (): Promise<void> => {
     try {
-      await this.clearAccessTokenInStorageV2()
-
-      for (const tokenFilePath of this.getTokenFilePaths()) {
-        try {
-          await fs.promises.access(tokenFilePath)
-          await fs.promises.unlink(tokenFilePath)
-        } catch (error) {
-          if (!(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')) {
-            throw error
-          }
-        }
+      try {
+        await fs.promises.access(this.tokenFilePath)
+        await fs.promises.unlink(this.tokenFilePath)
+        logger.debug('Successfully logged out from Copilot')
+      } catch (error) {
+        // 文件不存在不是错误，只是记录一下
+        logger.debug('Token file not found, nothing to delete')
       }
-      logger.debug('Successfully logged out from Copilot')
     } catch (error) {
       logger.error('Failed to logout:', error as Error)
       throw new CopilotServiceError('无法完成退出登录操作', error)
@@ -408,4 +325,4 @@ class CopilotService {
   }
 }
 
-export default new CopilotService()
+export const copilotService = new CopilotService()

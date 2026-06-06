@@ -63,7 +63,8 @@ vi.mock('../storageV2/StorageV2Repositories', () => ({
 
 async function loadOvmsManager() {
   vi.resetModules()
-  return (await import('../OvmsManager')).ovmsManager!
+  const { OvmsManager } = await import('../OvmsManager')
+  return new OvmsManager()
 }
 
 const configPath = '/mock/home/.cherrystudio/ovms/ovms/models/config.json'
