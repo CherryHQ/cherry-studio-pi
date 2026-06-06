@@ -151,6 +151,7 @@ type StorageV2WebDavRecordSyncOptions = {
   legacySecretKeyMaterial?: string
   beforeRemoteConflictApply?: (input: { id: string; baseHash: string | null; firstJoin: boolean }) => Promise<void>
   preferRemoteOnFirstJoin?: boolean
+  skipWriteAccessProbe?: boolean
   assertActive?: () => void
 }
 
@@ -1266,7 +1267,8 @@ export class StorageV2WebDavRecordSyncService {
     client: WebDAVClient,
     basePath: string,
     manifest: StorageV2WebDavRecordSyncManifest,
-    recordsById: Map<string, LocalRecord>
+    recordsById: Map<string, LocalRecord>,
+    options: { verifiedRemoteBundle?: { path: string; valueHash: string } | null } = {}
   ) {
     const bundle = this.buildBundle(recordsById, manifest.blobs)
     const bundleByteSize = jsonByteLength(bundle)
@@ -1279,7 +1281,11 @@ export class StorageV2WebDavRecordSyncService {
 
     const valueHash = bundleHash(bundle)
     const relativePath = recordBundlePath(valueHash)
-    await this.writeJson(client, path.posix.join(basePath, relativePath), bundle, { overwrite: false })
+    const remoteBundleAlreadyVerified =
+      options.verifiedRemoteBundle?.path === relativePath && options.verifiedRemoteBundle.valueHash === valueHash
+    if (!remoteBundleAlreadyVerified) {
+      await this.writeJson(client, path.posix.join(basePath, relativePath), bundle, { overwrite: false })
+    }
 
     manifest.records = Object.fromEntries(
       Object.entries(bundle.records).map(([id, record]) => [id, recordMetaFromLocalRecord(record, relativePath)])
@@ -2455,11 +2461,14 @@ export class StorageV2WebDavRecordSyncService {
     options.assertActive?.()
     await this.ensureDirectory(client, basePath)
     options.assertActive?.()
-    await this.assertWriteAccess(client, basePath)
+    if (!options.skipWriteAccessProbe) {
+      await this.assertWriteAccess(client, basePath)
+    }
     options.assertActive?.()
     const localRecords = await this.listLocalRecords(dbClient)
     options.assertActive?.()
     const localById = new Map(localRecords.map((record) => [record.id, record]))
+    const initialBundleMeta = manifest.bundle
     const remoteBundle = await this.readRecordBundle(client, basePath, manifest)
     options.assertActive?.()
     const bundledRecords = new Map<string, LocalRecord>(Object.entries(remoteBundle?.records ?? {}))
@@ -2793,7 +2802,15 @@ export class StorageV2WebDavRecordSyncService {
       remoteSecretVaultCache.importedSecretIds
     )
     options.assertActive?.()
-    await this.writeRecordBundle(client, basePath, manifest, bundledRecords)
+    await this.writeRecordBundle(client, basePath, manifest, bundledRecords, {
+      verifiedRemoteBundle:
+        remoteBundle && initialBundleMeta
+          ? {
+              path: initialBundleMeta.path,
+              valueHash: initialBundleMeta.valueHash
+            }
+          : null
+    })
     options.assertActive?.()
     return {
       manifest,

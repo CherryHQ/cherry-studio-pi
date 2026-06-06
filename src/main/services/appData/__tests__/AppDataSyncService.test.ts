@@ -2293,7 +2293,8 @@ describe('AppDataSyncService', () => {
       existingStorageManifest,
       expect.objectContaining({
         legacySecretKeyMaterial: undefined,
-        preferRemoteOnFirstJoin: true
+        preferRemoteOnFirstJoin: true,
+        skipWriteAccessProbe: true
       })
     )
     expect(mocks.runtimeProjection.projectAgents).toHaveBeenCalledWith({
@@ -2380,7 +2381,8 @@ describe('AppDataSyncService', () => {
       '/remote-root/sync/v1',
       existingStorageManifest,
       expect.objectContaining({
-        preferRemoteOnFirstJoin: false
+        preferRemoteOnFirstJoin: false,
+        skipWriteAccessProbe: true
       })
     )
     expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith('data-sync-sync-space-id', 'sync-space-existing')
@@ -2434,7 +2436,8 @@ describe('AppDataSyncService', () => {
       expect.objectContaining({
         secretKeyMaterial: expect.any(String),
         legacySecretKeyMaterial: 'https://dav.example.com\nuser\npass',
-        beforeRemoteConflictApply: expect.any(Function)
+        beforeRemoteConflictApply: expect.any(Function),
+        skipWriteAccessProbe: true
       })
     )
     expect(summary.syncSpaceId).toEqual(expect.stringMatching(/^sync-space-/))

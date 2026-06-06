@@ -3954,6 +3954,7 @@ export class AppDataSyncService {
           : `${normalizeWebDavHost(normalizedConfig.webdavHost)}\n${normalizedConfig.webdavUser}\n${normalizedConfig.webdavPass}`,
         beforeRemoteConflictApply: async () => this.createJoinSafetySnapshotOnce(db, summary),
         preferRemoteOnFirstJoin: preferRemoteStorageOnFirstJoin,
+        skipWriteAccessProbe: true,
         assertActive: () => this.assertSyncRunActive(context, '同步 Storage v2 数据')
       })
       this.assertSyncRunActive(context, '合并 Storage v2 同步结果')

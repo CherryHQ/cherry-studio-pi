@@ -951,6 +951,76 @@ describe('StorageV2WebDavRecordSyncService', () => {
     ).rejects.toThrow('当前 WebDAV 客户端不支持删除远端文件')
   })
 
+  it('can skip the Storage v2 write probe when the app data sync caller already verified WebDAV access', async () => {
+    const remote = makeSharedWebDavStore()
+    const db = makeSettingsDb([])
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
+      remote.client as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {}
+      },
+      { skipWriteAccessProbe: true }
+    )
+
+    expect(
+      remote.client.putFileContents.mock.calls.some(([filePath]) =>
+        String(filePath).includes('.cherry-studio-pi-storage-write-test-')
+      )
+    ).toBe(false)
+    expect(
+      remote.client.deleteFile.mock.calls.some(([filePath]) =>
+        String(filePath).includes('.cherry-studio-pi-storage-write-test-')
+      )
+    ).toBe(false)
+  })
+
+  it('does not re-download or upload an unchanged verified record bundle during a no-op sync', async () => {
+    const remote = makeSharedWebDavStore()
+    const db = makeSettingsDb([
+      {
+        key: 'theme',
+        value_json: JSON.stringify({ mode: 'dark' }),
+        scope: 'settings',
+        updated_at: '2026-06-06T08:00:00.000Z',
+        deleted_at: null,
+        version: 1
+      }
+    ])
+    const service = new StorageV2WebDavRecordSyncService([settingsTable])
+
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+    const firstResult = await service.sync(
+      remote.client as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {}
+      },
+      { skipWriteAccessProbe: true }
+    )
+
+    const bundlePath = `/remote-root/sync/v1/${firstResult.manifest.bundle?.path}`
+    remote.client.getFileContents.mockClear()
+    remote.client.putFileContents.mockClear()
+
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+    const secondResult = await service.sync(remote.client as any, '/remote-root/sync/v1', firstResult.manifest, {
+      skipWriteAccessProbe: true
+    })
+
+    expect(secondResult.manifest.bundle?.valueHash).toBe(firstResult.manifest.bundle?.valueHash)
+    expect(remote.client.getFileContents.mock.calls.filter(([filePath]) => filePath === bundlePath)).toHaveLength(1)
+    expect(
+      remote.client.putFileContents.mock.calls.some(([filePath]) => String(filePath).includes('/storage-v2/bundle/'))
+    ).toBe(false)
+  })
+
   it('fails clearly before upload when a local record is too large for WebDAV sync', async () => {
     mocks.dbClient.execute.mockImplementation(async (input: string | { sql: string }) => {
       const sql = typeof input === 'string' ? input : input.sql
