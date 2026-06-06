@@ -357,8 +357,10 @@ describe('StorageV2Service', () => {
 
     await expect(service.getFile('file-1')).resolves.toEqual(file)
     await expect(service.listFiles()).resolves.toEqual([file])
+    await expect(service.listFiles({ limit: 10, offset: 20 })).resolves.toEqual([file])
     await expect(service.projectFilesToLegacyRuntime()).resolves.toEqual(projectionReport)
     expect(mocks.fileRepository.get).toHaveBeenCalledWith('file-1')
+    expect(mocks.fileRepository.list).toHaveBeenCalledWith({ limit: 10, offset: 20 })
     expect(mocks.fileProjectionService.projectToLegacyRuntime).toHaveBeenCalled()
   })
 

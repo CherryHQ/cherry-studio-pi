@@ -3,6 +3,15 @@ import { storageV2Service } from '@main/services/storageV2/StorageService'
 import type { AppCapabilityDefinition } from '../types'
 import { okResult, sanitizeForAgent } from '../utils'
 
+const DEFAULT_AGENT_LIST_LIMIT = 50
+
+function agentListOptions(input: any) {
+  return {
+    limit: input?.limit ?? DEFAULT_AGENT_LIST_LIMIT,
+    offset: input?.offset
+  }
+}
+
 export function createStorageCapabilities(): AppCapabilityDefinition[] {
   return [
     {
@@ -159,10 +168,17 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       kind: 'query',
       title: 'List assistants',
       description: 'List assistant records from Storage v2.',
-      inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['storage', 'assistants'],
-      execute: async () => okResult('Assistants listed', sanitizeForAgent(await storageV2Service.listAssistants()))
+      inputSchema: {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', description: 'Maximum assistants to return; defaults to 50' },
+          offset: { type: 'number', description: 'Pagination offset' }
+        }
+      },
+      execute: async (input: any) =>
+        okResult('Assistants listed', sanitizeForAgent(await storageV2Service.listAssistants(agentListOptions(input))))
     },
     {
       id: 'storage.conversations.list',
@@ -174,7 +190,9 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
         type: 'object',
         properties: {
           ownerType: { type: 'string' },
-          ownerId: { type: 'string' }
+          ownerId: { type: 'string' },
+          limit: { type: 'number', description: 'Maximum conversations to return; defaults to 50' },
+          offset: { type: 'number', description: 'Pagination offset' }
         }
       },
       risk: 'read',
@@ -185,7 +203,8 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
           sanitizeForAgent(
             await storageV2Service.listConversations({
               ownerType: input?.ownerType,
-              ownerId: input?.ownerId
+              ownerId: input?.ownerId,
+              ...agentListOptions(input)
             })
           )
         )
@@ -224,10 +243,17 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       kind: 'query',
       title: 'List files',
       description: 'List file records from Storage v2.',
-      inputSchema: { type: 'object', properties: {} },
+      inputSchema: {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', description: 'Maximum files to return; defaults to 50' },
+          offset: { type: 'number', description: 'Pagination offset' }
+        }
+      },
       risk: 'read',
       tags: ['storage', 'files'],
-      execute: async () => okResult('Files listed', sanitizeForAgent(await storageV2Service.listFiles()))
+      execute: async (input: any) =>
+        okResult('Files listed', sanitizeForAgent(await storageV2Service.listFiles(agentListOptions(input))))
     },
     {
       id: 'storage.file.get',

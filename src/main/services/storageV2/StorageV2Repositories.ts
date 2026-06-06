@@ -138,6 +138,11 @@ export type StorageV2MessageBlocksUpsertOptions = {
   pruneMissing?: boolean
 }
 
+export type StorageV2ListOptions = {
+  limit?: number
+  offset?: number
+}
+
 export type StorageV2FileImport = Record<string, any> & {
   id?: string
   name?: string
@@ -180,6 +185,20 @@ function normalizeIntegerInRange(value: unknown, fallback: number, min: number, 
   const parsed = typeof value === 'string' && !value.trim() ? fallback : Number(value ?? fallback)
   const normalized = Number.isFinite(parsed) ? Math.trunc(parsed) : fallback
   return Math.min(Math.max(normalized, min), max)
+}
+
+function normalizeOptionalPagination(options?: StorageV2ListOptions) {
+  if (options?.limit === undefined && options?.offset === undefined) {
+    return { sql: '', args: [] as number[] }
+  }
+
+  return {
+    sql: ' LIMIT ? OFFSET ?',
+    args: [
+      normalizeIntegerInRange(options?.limit, 200, 1, 1000),
+      normalizeIntegerInRange(options?.offset, 0, 0, Number.MAX_SAFE_INTEGER)
+    ]
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, any> {
@@ -932,15 +951,20 @@ export class StorageV2AssistantRepository {
     })
   }
 
-  async list(): Promise<StoredAssistant[]> {
+  async list(options: StorageV2ListOptions = {}): Promise<StoredAssistant[]> {
     const client = await storageV2Database.getClient()
-    const result = await client.execute(`
-      SELECT id, name, description, prompt, model_id, settings_json, tags_json, sort_order,
-             created_at, updated_at, deleted_at, version
-      FROM assistants
-      WHERE deleted_at IS NULL
-      ORDER BY sort_order ASC, name ASC
-    `)
+    const pagination = normalizeOptionalPagination(options)
+    const result = await client.execute({
+      sql: `
+        SELECT id, name, description, prompt, model_id, settings_json, tags_json, sort_order,
+               created_at, updated_at, deleted_at, version
+        FROM assistants
+        WHERE deleted_at IS NULL
+        ORDER BY sort_order ASC, name ASC
+        ${pagination.sql}
+      `,
+      args: pagination.args
+    })
 
     return result.rows.map((row) => {
       const settingsPayload = parseJson<{
@@ -1228,10 +1252,12 @@ export class StorageV2ConversationRepository {
     }
   }
 
-  async list(filter: { ownerType?: string; ownerId?: string } = {}): Promise<StoredConversation[]> {
+  async list(
+    filter: { ownerType?: string; ownerId?: string } & StorageV2ListOptions = {}
+  ): Promise<StoredConversation[]> {
     const client = await storageV2Database.getClient()
     const clauses = ['deleted_at IS NULL']
-    const args: string[] = []
+    const args: Array<string | number> = []
 
     if (filter.ownerType) {
       clauses.push('owner_type = ?')
@@ -1243,6 +1269,7 @@ export class StorageV2ConversationRepository {
       args.push(filter.ownerId)
     }
 
+    const pagination = normalizeOptionalPagination(filter)
     const result = await client.execute({
       sql: `
         SELECT id, kind, owner_type, owner_id, session_id, title, pinned, archived, sort_order,
@@ -1250,8 +1277,9 @@ export class StorageV2ConversationRepository {
         FROM conversations
         WHERE ${clauses.join(' AND ')}
         ORDER BY pinned DESC, updated_at DESC, sort_order ASC
+        ${pagination.sql}
       `,
-      args
+      args: [...args, ...pagination.args]
     })
 
     return result.rows.map((row) => ({
@@ -1995,23 +2023,28 @@ export class StorageV2FileRepository {
     return row ? this.toLegacyFile(row) : null
   }
 
-  async list(): Promise<Array<Record<string, any>>> {
+  async list(options: StorageV2ListOptions = {}): Promise<Array<Record<string, any>>> {
     const client = await storageV2Database.getClient()
-    const result = await client.execute(`
-      SELECT
-        f.id,
-        f.original_name,
-        f.display_name,
-        f.metadata_json,
-        f.created_at,
-        b.ext AS blob_ext,
-        b.mime AS blob_mime,
-        b.size AS blob_size
-      FROM files f
-      INNER JOIN blobs b ON b.id = f.blob_id
-      WHERE f.deleted_at IS NULL
-      ORDER BY f.created_at ASC, f.id ASC
-    `)
+    const pagination = normalizeOptionalPagination(options)
+    const result = await client.execute({
+      sql: `
+        SELECT
+          f.id,
+          f.original_name,
+          f.display_name,
+          f.metadata_json,
+          f.created_at,
+          b.ext AS blob_ext,
+          b.mime AS blob_mime,
+          b.size AS blob_size
+        FROM files f
+        INNER JOIN blobs b ON b.id = f.blob_id
+        WHERE f.deleted_at IS NULL
+        ORDER BY f.created_at ASC, f.id ASC
+        ${pagination.sql}
+      `,
+      args: pagination.args
+    })
 
     return result.rows.map((row) => this.toLegacyFile(row as Record<string, any>))
   }

@@ -25,6 +25,7 @@ import {
   type StorageV2ConversationUpsertOptions,
   storageV2FileRepository,
   storageV2KnowledgeRepository,
+  type StorageV2ListOptions,
   type StorageV2MessageBlocksUpsertOptions,
   storageV2ProviderRepository,
   storageV2SettingsRepository
@@ -1016,8 +1017,8 @@ export class StorageV2Service {
     return storageV2ProviderRepository.delete(providerId)
   }
 
-  async listAssistants() {
-    return storageV2AssistantRepository.list()
+  async listAssistants(options?: StorageV2ListOptions) {
+    return storageV2AssistantRepository.list(options)
   }
 
   async upsertAssistant(assistant: Assistant, sortOrder?: number) {
@@ -1028,7 +1029,7 @@ export class StorageV2Service {
     return storageV2AssistantRepository.delete(assistantId)
   }
 
-  async listConversations(filter?: { ownerType?: string; ownerId?: string }) {
+  async listConversations(filter?: { ownerType?: string; ownerId?: string } & StorageV2ListOptions) {
     return storageV2ConversationRepository.list(filter)
   }
 
@@ -1060,8 +1061,8 @@ export class StorageV2Service {
     return storageV2ConversationRepository.delete(conversationId)
   }
 
-  async listFiles() {
-    return storageV2FileRepository.list()
+  async listFiles(options?: StorageV2ListOptions) {
+    return storageV2FileRepository.list(options)
   }
 
   async getFile(fileId: string) {

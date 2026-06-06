@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { storageV2Database } from '../StorageV2Database'
 import {
   StorageV2ConversationRepository,
+  StorageV2FileRepository,
   StorageV2KnowledgeRepository,
   StorageV2ProviderRepository
 } from '../StorageV2Repositories'
@@ -208,6 +209,44 @@ describe('StorageV2ConversationRepository', () => {
       3,
       expect.objectContaining({
         args: ['topic-3', 200, 0]
+      })
+    )
+  })
+
+  it('normalizes optional conversation pagination before querying SQLite', async () => {
+    const execute = vi.fn(async () => ({ rows: [], columns: [], columnTypes: [] }))
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue({ execute } as unknown as Client)
+
+    await new StorageV2ConversationRepository().list({
+      ownerType: 'assistant',
+      limit: '5000' as any,
+      offset: '2.8' as any
+    })
+
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sql: expect.stringContaining('LIMIT ? OFFSET ?'),
+        args: ['assistant', 1000, 2]
+      })
+    )
+  })
+})
+
+describe('StorageV2FileRepository', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('normalizes optional file pagination before querying SQLite', async () => {
+    const execute = vi.fn(async () => ({ rows: [], columns: [], columnTypes: [] }))
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue({ execute } as unknown as Client)
+
+    await new StorageV2FileRepository().list({ limit: Number.NaN, offset: -10 })
+
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sql: expect.stringContaining('LIMIT ? OFFSET ?'),
+        args: [200, 0]
       })
     )
   })
