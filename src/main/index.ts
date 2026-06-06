@@ -28,6 +28,7 @@ import mcpService from './services/MCPService'
 import { localTransferService } from './services/LocalTransferService'
 import { openClawService } from './services/OpenClawService'
 import { nodeTraceService } from './services/NodeTraceService'
+import powerSaveBlockerService from './services/PowerSaveBlockerService'
 import powerMonitorService from './services/PowerMonitorService'
 import {
   COMPATIBLE_PROTOCOLS,
@@ -286,6 +287,7 @@ if (!app.requestSingleInstanceLock()) {
 
     lanTransferClientService.dispose()
     localTransferService.dispose()
+    powerSaveBlockerService.releaseAll('app-before-quit')
   })
 
   app.on('will-quit', async () => {

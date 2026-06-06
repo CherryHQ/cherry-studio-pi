@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 
 import { loggerService } from '@logger'
+import powerSaveBlockerService from '@main/services/PowerSaveBlockerService'
 import { storageV2AgentDbMirrorService } from '@main/services/storageV2/AgentDbMirrorService'
 import type { GetAgentSessionResponse, PermissionMode } from '@types'
 
@@ -579,6 +580,9 @@ export class ChannelMessageHandler {
     images?: ImageAttachment[],
     rendererIsWatching: boolean = false
   ): Promise<string> {
+    const powerLease = powerSaveBlockerService.acquire('agent-channel-stream', {
+      detail: `${session.agent_id}:${session.id}:${adapter.channelId}`
+    })
     // Use the pre-computed rendererIsWatching flag from processIncoming.
     // When renderer is watching: persist=false (renderer handles rich block persistence),
     //   stream chunks and events are forwarded to the renderer via the bus.
@@ -663,6 +667,7 @@ export class ChannelMessageHandler {
       }
       throw error
     } finally {
+      powerLease.release()
       storageV2AgentDbMirrorService.schedule()
     }
   }

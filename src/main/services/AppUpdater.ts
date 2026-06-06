@@ -14,9 +14,25 @@ import semver from 'semver'
 
 import { analyticsService } from './AnalyticsService'
 import { configManager } from './ConfigManager'
+import powerSaveBlockerService, { type PowerSaveBlockerLease } from './PowerSaveBlockerService'
 import { windowService } from './WindowService'
 
 const logger = loggerService.withContext('AppUpdater')
+const INSTALL_PREPARE_TIMEOUT_MS = 15_000
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+    timeout.unref?.()
+
+    promise
+      .then(resolve)
+      .catch(reject)
+      .finally(() => clearTimeout(timeout))
+  })
+}
 
 function getCommonHeaders() {
   return {
@@ -62,6 +78,8 @@ export default class AppUpdater {
   autoUpdater: _AppUpdater = autoUpdater
   private cancellationToken: CancellationToken = new CancellationToken()
   private updateCheckResult: UpdateCheckResult | null = null
+  private downloadPowerLease: PowerSaveBlockerLease | null = null
+  private installPowerLease: PowerSaveBlockerLease | null = null
 
   constructor() {
     autoUpdater.logger = logger as Logger
@@ -77,11 +95,16 @@ export default class AppUpdater {
     }
 
     autoUpdater.on('error', (error) => {
+      this.releaseDownloadPowerBlocker()
+      this.releaseInstallPowerBlocker()
       logger.error('update error', error)
       windowService.getMainWindow()?.webContents.send(IpcChannel.UpdateError, error)
     })
 
     autoUpdater.on('update-available', (releaseInfo: UpdateInfo) => {
+      if (autoUpdater.autoDownload) {
+        this.startDownloadPowerBlocker('auto-download')
+      }
       logger.info('update available', releaseInfo)
       const processedReleaseInfo = this.processReleaseInfo(releaseInfo)
       windowService.getMainWindow()?.webContents.send(IpcChannel.UpdateAvailable, processedReleaseInfo)
@@ -89,16 +112,21 @@ export default class AppUpdater {
 
     // 检测到不需要更新时
     autoUpdater.on('update-not-available', () => {
+      this.releaseDownloadPowerBlocker()
       windowService.getMainWindow()?.webContents.send(IpcChannel.UpdateNotAvailable)
     })
 
     // 更新下载进度
     autoUpdater.on('download-progress', (progress) => {
+      if (progress.percent < 100) {
+        this.startDownloadPowerBlocker('download-progress')
+      }
       windowService.getMainWindow()?.webContents.send(IpcChannel.DownloadProgress, progress)
     })
 
     // 当需要更新的内容下载完成后
     autoUpdater.on('update-downloaded', (releaseInfo: UpdateInfo) => {
+      this.releaseDownloadPowerBlocker()
       const processedReleaseInfo = this.processReleaseInfo(releaseInfo)
       windowService.getMainWindow()?.webContents.send(IpcChannel.UpdateDownloaded, processedReleaseInfo)
       logger.info('update downloaded', processedReleaseInfo)
@@ -109,6 +137,30 @@ export default class AppUpdater {
     }
 
     this.autoUpdater = autoUpdater
+  }
+
+  private startDownloadPowerBlocker(trigger: string): void {
+    if (this.downloadPowerLease) return
+    this.downloadPowerLease = powerSaveBlockerService.acquire('update-download', {
+      detail: trigger
+    })
+  }
+
+  private releaseDownloadPowerBlocker(): void {
+    this.downloadPowerLease?.release()
+    this.downloadPowerLease = null
+  }
+
+  private startInstallPowerBlocker(): void {
+    if (this.installPowerLease) return
+    this.installPowerLease = powerSaveBlockerService.acquire('update-install', {
+      detail: 'quit-and-install'
+    })
+  }
+
+  private releaseInstallPowerBlocker(): void {
+    this.installPowerLease?.release()
+    this.installPowerLease = null
   }
 
   public setAutoUpdate(isActive: boolean) {
@@ -297,6 +349,7 @@ export default class AppUpdater {
     if (this.autoUpdater.autoDownload) {
       this.updateCheckResult?.cancellationToken?.cancel()
     }
+    this.releaseDownloadPowerBlocker()
   }
 
   public async checkForUpdates() {
@@ -326,6 +379,7 @@ export default class AppUpdater {
       if (this.updateCheckResult?.isUpdateAvailable && !this.autoUpdater.autoDownload) {
         // 如果 autoDownload 为 false，则需要再调用下面的函数触发下
         // do not use await, because it will block the return of this function
+        this.startDownloadPowerBlocker('manual-download')
         logger.info('downloadUpdate manual by check for updates', this.cancellationToken)
         void this.autoUpdater.downloadUpdate(this.cancellationToken)
       }
@@ -335,6 +389,7 @@ export default class AppUpdater {
         updateInfo: this.updateCheckResult?.isUpdateAvailable ? this.updateCheckResult?.updateInfo : null
       }
     } catch (error) {
+      this.releaseDownloadPowerBlocker()
       logger.error('Failed to check for update:', error as Error)
       return {
         currentVersion: app.getVersion(),
@@ -343,9 +398,61 @@ export default class AppUpdater {
     }
   }
 
-  public quitAndInstall() {
+  private async prepareForInstall(): Promise<void> {
+    const { flushAppRuntimeData } = await import('./AppRuntimeSaveService')
+    const { schedulerService } = await import('./agents/services/SchedulerService')
+    const { channelManager } = await import('./agents/services/channels')
+    const { default: mcpService } = await import('./MCPService')
+    const { apiServerService } = await import('./ApiServerService')
+    const { openClawService } = await import('./OpenClawService')
+
+    schedulerService.stopAll()
+
+    const cleanupResults = await withTimeout(
+      Promise.allSettled([
+        flushAppRuntimeData({ window: windowService.getMainWindow(), timeoutMs: 5000 }),
+        channelManager.stop(),
+        mcpService.cleanup(),
+        apiServerService.stop(),
+        openClawService.stopGateway()
+      ]),
+      INSTALL_PREPARE_TIMEOUT_MS,
+      'Preparing app services for update install'
+    )
+
+    const failures = cleanupResults.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+    if (failures.length > 0) {
+      throw new Error(
+        failures
+          .map((failure) => (failure.reason instanceof Error ? failure.reason.message : String(failure.reason)))
+          .join('; ')
+      )
+    }
+  }
+
+  public async quitAndInstall() {
+    this.releaseDownloadPowerBlocker()
+    this.startInstallPowerBlocker()
+
+    try {
+      await this.prepareForInstall()
+    } catch (error) {
+      this.releaseInstallPowerBlocker()
+      throw error
+    }
+
     app.isQuitting = true
-    setImmediate(() => autoUpdater.quitAndInstall(true, true))
+    setImmediate(() => {
+      try {
+        autoUpdater.quitAndInstall(true, true)
+      } catch (error) {
+        this.releaseInstallPowerBlocker()
+        logger.error('Failed to start update installer', error as Error)
+        windowService.getMainWindow()?.webContents.send(IpcChannel.UpdateError, error)
+      }
+    })
+
+    return { success: true }
   }
 
   /**

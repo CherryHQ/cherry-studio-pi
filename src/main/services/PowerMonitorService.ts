@@ -5,6 +5,7 @@ import { BrowserWindow } from 'electron'
 import { powerMonitor } from 'electron'
 
 const logger = loggerService.withContext('PowerMonitorService')
+const SHUTDOWN_HANDLER_TIMEOUT_MS = 10_000
 
 type ShutdownHandler = () => void | Promise<void>
 
@@ -12,6 +13,7 @@ export class PowerMonitorService {
   private static instance: PowerMonitorService
   private initialized = false
   private shutdownHandlers: ShutdownHandler[] = []
+  private shutdownWindow: BrowserWindow | null = null
 
   private constructor() {
     // Private constructor to prevent direct instantiation
@@ -42,6 +44,8 @@ export class PowerMonitorService {
       return
     }
 
+    this.initPowerStateListeners()
+
     if (isWin) {
       this.initWindowsShutdownHandler()
     } else if (isMac || isLinux) {
@@ -52,6 +56,29 @@ export class PowerMonitorService {
     logger.info('PowerMonitorService initialized', { platform: process.platform })
   }
 
+  private initPowerStateListeners(): void {
+    try {
+      powerMonitor.on('suspend', () => {
+        logger.warn('System suspend event detected', { platform: process.platform })
+      })
+      powerMonitor.on('resume', () => {
+        logger.info('System resume event detected', { platform: process.platform })
+      })
+      powerMonitor.on('on-ac', () => {
+        logger.info('System switched to AC power')
+      })
+      powerMonitor.on('on-battery', () => {
+        logger.info('System switched to battery power')
+      })
+      powerMonitor.on('speed-limit-change', (details) => {
+        logger.warn('System CPU speed limit changed', { limit: details.limit })
+      })
+      logger.info('Electron power state listeners registered')
+    } catch (error) {
+      logger.error('Failed to initialize power state listeners', error as Error)
+    }
+  }
+
   /**
    * Execute all registered shutdown handlers
    */
@@ -59,11 +86,39 @@ export class PowerMonitorService {
     logger.info('Executing shutdown handlers', { count: this.shutdownHandlers.length })
     for (const handler of this.shutdownHandlers) {
       try {
-        await handler()
+        await this.runShutdownHandlerWithTimeout(handler)
       } catch (error) {
         logger.error('Error executing shutdown handler', error as Error)
       }
     }
+  }
+
+  private async runShutdownHandlerWithTimeout(handler: ShutdownHandler): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      let settled = false
+      let timeout: ReturnType<typeof setTimeout> | null = null
+
+      const finish = (error?: Error) => {
+        if (settled) return
+        settled = true
+        if (timeout) clearTimeout(timeout)
+        if (error) {
+          reject(error)
+        } else {
+          resolve()
+        }
+      }
+
+      timeout = setTimeout(() => {
+        finish(new Error(`Shutdown handler timed out after ${SHUTDOWN_HANDLER_TIMEOUT_MS}ms`))
+      }, SHUTDOWN_HANDLER_TIMEOUT_MS)
+      timeout.unref?.()
+
+      Promise.resolve()
+        .then(handler)
+        .then(() => finish())
+        .catch((error) => finish(error as Error))
+    })
   }
 
   /**
@@ -71,9 +126,17 @@ export class PowerMonitorService {
    */
   private initWindowsShutdownHandler(): void {
     try {
-      const zeroMemoryWindow = new BrowserWindow({ show: false })
+      this.shutdownWindow = new BrowserWindow({
+        show: false,
+        skipTaskbar: true,
+        focusable: false,
+        frame: false,
+        webPreferences: {
+          sandbox: true
+        }
+      })
       // Set the window handle for the shutdown handler
-      ElectronShutdownHandler.setWindowHandle(zeroMemoryWindow.getNativeWindowHandle())
+      ElectronShutdownHandler.setWindowHandle(this.shutdownWindow.getNativeWindowHandle())
 
       // Listen for shutdown event
       ElectronShutdownHandler.on('shutdown', async () => {
@@ -86,6 +149,8 @@ export class PowerMonitorService {
 
       logger.info('Windows shutdown handler registered')
     } catch (error) {
+      this.shutdownWindow?.destroy()
+      this.shutdownWindow = null
       logger.error('Failed to initialize Windows shutdown handler', error as Error)
     }
   }

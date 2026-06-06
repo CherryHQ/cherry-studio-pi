@@ -11,6 +11,8 @@
 !include x64.nsh
 !include FileFunc.nsh
 
+!define ES_CONTINUOUS_SYSTEM_REQUIRED 0x80000001
+
 ; https://github.com/electron-userland/electron-builder/issues/1122
 !ifndef BUILD_UNINSTALLER
   ; Check VC++ Redistributable based on architecture stored in $1
@@ -81,6 +83,11 @@
 !endif
 
 !macro customInit
+  ; Keep the Windows installer/update process awake while it replaces app files.
+  ; The Electron app has already exited during auto-update, so the installer
+  ; process must own this request itself.
+  System::Call 'kernel32::SetThreadExecutionState(i ${ES_CONTINUOUS_SYSTEM_REQUIRED})i.r0'
+
   ; If a per-machine (all users) installation exists, ensure we have admin privileges.
   ; Without elevation, the installer cannot close the running app or manage the
   ; per-machine installation, causing "cannot close app" errors during both
@@ -169,4 +176,20 @@
     Pop $2
     Pop $1
     Pop $0
+!macroend
+
+!macro customInstall
+  ; Reassert the execution state at the start of file replacement. The flag is
+  ; automatically cleared when the installer exits; no persistent power setting
+  ; is changed on the user's machine.
+  System::Call 'kernel32::SetThreadExecutionState(i ${ES_CONTINUOUS_SYSTEM_REQUIRED})i.r0'
+!macroend
+
+!macro customUnInit
+  ; Uninstall can also be a long-running file operation on slow disks.
+  System::Call 'kernel32::SetThreadExecutionState(i ${ES_CONTINUOUS_SYSTEM_REQUIRED})i.r0'
+!macroend
+
+!macro customUnInstall
+  System::Call 'kernel32::SetThreadExecutionState(i ${ES_CONTINUOUS_SYSTEM_REQUIRED})i.r0'
 !macroend

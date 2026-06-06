@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { modelsService } from '@main/apiServer/services/models'
+import powerSaveBlockerService from '@main/services/PowerSaveBlockerService'
 import { storageV2AgentDbMirrorService } from '@main/services/storageV2/AgentDbMirrorService'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { ApiModelsFilter, CreateSessionMessageRequest, ListOptions, ScheduledTaskEntity } from '@types'
@@ -166,6 +167,9 @@ const startMessageStream = async (sender: WebContents, payload: MessageStreamSta
   }
 
   const abortController = new AbortController()
+  const powerLease = powerSaveBlockerService.acquire('agent-message-stream', {
+    detail: `${agentId}:${sessionId}:${requestId}`
+  })
   activeMessageStreams.set(requestId, abortController)
 
   try {
@@ -221,6 +225,7 @@ const startMessageStream = async (sender: WebContents, payload: MessageStreamSta
         })
       } finally {
         activeMessageStreams.delete(requestId)
+        powerLease.release()
         reader.releaseLock()
       }
     })()
@@ -228,6 +233,7 @@ const startMessageStream = async (sender: WebContents, payload: MessageStreamSta
     return { success: true }
   } catch (error) {
     activeMessageStreams.delete(requestId)
+    powerLease.release()
     throw error
   }
 }

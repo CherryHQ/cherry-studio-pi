@@ -1,6 +1,17 @@
 import type { UpdateInfo } from 'builder-util-runtime'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+const lifecycleMocks = vi.hoisted(() => ({
+  powerLeaseRelease: vi.fn(),
+  powerAcquire: vi.fn(),
+  flushAppRuntimeData: vi.fn(),
+  schedulerStopAll: vi.fn(),
+  channelStop: vi.fn(),
+  mcpCleanup: vi.fn(),
+  apiServerStop: vi.fn(),
+  openClawStopGateway: vi.fn()
+}))
+
 // Mock dependencies
 vi.mock('@logger', () => ({
   loggerService: {
@@ -25,6 +36,46 @@ vi.mock('../ConfigManager', () => ({
 vi.mock('../WindowService', () => ({
   windowService: {
     getMainWindow: vi.fn()
+  }
+}))
+
+vi.mock('../PowerSaveBlockerService', () => ({
+  default: {
+    acquire: lifecycleMocks.powerAcquire
+  }
+}))
+
+vi.mock('../AppRuntimeSaveService', () => ({
+  flushAppRuntimeData: lifecycleMocks.flushAppRuntimeData
+}))
+
+vi.mock('../agents/services/SchedulerService', () => ({
+  schedulerService: {
+    stopAll: lifecycleMocks.schedulerStopAll
+  }
+}))
+
+vi.mock('../agents/services/channels', () => ({
+  channelManager: {
+    stop: lifecycleMocks.channelStop
+  }
+}))
+
+vi.mock('../MCPService', () => ({
+  default: {
+    cleanup: lifecycleMocks.mcpCleanup
+  }
+}))
+
+vi.mock('../ApiServerService', () => ({
+  apiServerService: {
+    stop: lifecycleMocks.apiServerStop
+  }
+}))
+
+vi.mock('../OpenClawService', () => ({
+  openClawService: {
+    stopGateway: lifecycleMocks.openClawStopGateway
   }
 }))
 
@@ -87,6 +138,7 @@ vi.mock('electron-updater', () => ({
 // Import after mocks
 import { UpdateMirror } from '@shared/config/constant'
 import { app, net } from 'electron'
+import { autoUpdater } from 'electron-updater'
 
 import AppUpdater from '../AppUpdater'
 import { configManager } from '../ConfigManager'
@@ -96,6 +148,12 @@ describe('AppUpdater', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    lifecycleMocks.powerAcquire.mockReturnValue({ release: lifecycleMocks.powerLeaseRelease })
+    lifecycleMocks.flushAppRuntimeData.mockResolvedValue(undefined)
+    lifecycleMocks.channelStop.mockResolvedValue(undefined)
+    lifecycleMocks.mcpCleanup.mockResolvedValue(undefined)
+    lifecycleMocks.apiServerStop.mockResolvedValue(undefined)
+    lifecycleMocks.openClawStopGateway.mockResolvedValue(undefined)
     appUpdater = new AppUpdater()
   })
 
@@ -275,6 +333,40 @@ describe('AppUpdater', () => {
       const result = (appUpdater as any).processReleaseInfo(releaseInfo)
 
       expect(result.releaseNotes).toBeNull()
+    })
+  })
+
+  describe('quitAndInstall', () => {
+    it('prepares services under a power blocker before starting installer', async () => {
+      const result = await appUpdater.quitAndInstall()
+
+      expect(result).toEqual({ success: true })
+      expect(lifecycleMocks.powerAcquire).toHaveBeenCalledWith('update-install', {
+        detail: 'quit-and-install'
+      })
+      expect(lifecycleMocks.schedulerStopAll).toHaveBeenCalled()
+      expect(lifecycleMocks.flushAppRuntimeData).toHaveBeenCalled()
+      expect(lifecycleMocks.channelStop).toHaveBeenCalled()
+      expect(lifecycleMocks.mcpCleanup).toHaveBeenCalled()
+      expect(lifecycleMocks.apiServerStop).toHaveBeenCalled()
+      expect(lifecycleMocks.openClawStopGateway).toHaveBeenCalled()
+
+      await vi.waitFor(() => {
+        expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true)
+      })
+      expect(lifecycleMocks.powerLeaseRelease).not.toHaveBeenCalled()
+    })
+
+    it('releases install power blocker and does not start installer when preparation fails', async () => {
+      lifecycleMocks.flushAppRuntimeData.mockRejectedValueOnce(new Error('flush failed'))
+
+      await expect(appUpdater.quitAndInstall()).rejects.toThrow('flush failed')
+
+      expect(lifecycleMocks.powerAcquire).toHaveBeenCalledWith('update-install', {
+        detail: 'quit-and-install'
+      })
+      expect(lifecycleMocks.powerLeaseRelease).toHaveBeenCalled()
+      expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled()
     })
   })
 

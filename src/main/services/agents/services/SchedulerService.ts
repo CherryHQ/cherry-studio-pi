@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import powerSaveBlockerService from '@main/services/PowerSaveBlockerService'
 import { storageV2AgentDbMirrorService } from '@main/services/storageV2/AgentDbMirrorService'
 import type { CherryClawConfiguration, ScheduledTaskEntity } from '@types'
 
@@ -183,6 +184,9 @@ class SchedulerService {
   private async runTask(task: ScheduledTaskEntity): Promise<void> {
     const startTime = Date.now()
     const abortController = new AbortController()
+    const powerLease = powerSaveBlockerService.acquire('agent-scheduled-task', {
+      detail: `${task.agent_id}:${task.id}`
+    })
     const runningTask: RunningTask = {
       taskId: task.id,
       agentId: task.agent_id,
@@ -329,6 +333,7 @@ class SchedulerService {
     } finally {
       if (timeoutTimer) clearTimeout(timeoutTimer)
       this.activeTasks.delete(task.id)
+      powerLease.release()
       storageV2AgentDbMirrorService.schedule()
     }
 
