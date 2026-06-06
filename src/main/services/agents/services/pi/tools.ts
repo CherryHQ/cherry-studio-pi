@@ -84,6 +84,33 @@ const normalizeHttpRequestMethod = (value: unknown) => {
   return method
 }
 
+const normalizeHttpRequestHeaders = (value: unknown) => {
+  if (typeof value === 'undefined' || value === null) return undefined
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('HTTPRequest headers must be an object with string-compatible values')
+  }
+
+  const headers: Record<string, string> = {}
+  for (const [rawName, rawValue] of Object.entries(value as Record<string, unknown>)) {
+    const name = rawName.trim()
+    if (!name || !/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(name)) {
+      throw new Error('HTTPRequest header name is invalid; provide valid HTTP header field names')
+    }
+    if (typeof rawValue === 'undefined' || rawValue === null) continue
+    if (typeof rawValue === 'object' || typeof rawValue === 'function' || typeof rawValue === 'symbol') {
+      throw new Error(`HTTPRequest header '${name}' must be a string-compatible scalar value`)
+    }
+
+    const headerValue = String(rawValue)
+    if (/[\r\n]/.test(headerValue)) {
+      throw new Error(`HTTPRequest header '${name}' value cannot contain line breaks`)
+    }
+    headers[name] = headerValue
+  }
+
+  return Object.keys(headers).length ? headers : undefined
+}
+
 const truncateOutput = (text: string, maxChars: number) => {
   const normalizedMaxChars = Number.isFinite(maxChars) ? Math.max(Math.floor(maxChars), 0) : 0
   if (text.length <= normalizedMaxChars) return { text, truncated: false }
@@ -1019,9 +1046,10 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
         const { net } = await import('electron')
         const url = normalizeHttpRequestUrl(input.url)
         const method = normalizeHttpRequestMethod(input.method)
+        const headers = normalizeHttpRequestHeaders(input.headers)
         const response = await net.fetch(url, {
           method,
-          headers: input.headers,
+          headers,
           body: method === 'GET' || method === 'HEAD' ? undefined : input.body,
           signal
         })
