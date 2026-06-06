@@ -1192,7 +1192,7 @@ class CodeToolsService {
         const command = envPrefix ? `${envPrefix} && ${baseCommand}` : baseCommand
 
         // Create temp bat file for debugging and avoid complex command line escaping issues
-        const tempDir = path.join(os.tmpdir(), 'cherrystudio')
+        const tempDir = path.join(os.tmpdir(), 'cherrystudiopi')
         const timestamp = Date.now()
         const batFileName = `launch_${cliTool}_${timestamp}.bat`
         const batFilePath = path.join(tempDir, batFileName)

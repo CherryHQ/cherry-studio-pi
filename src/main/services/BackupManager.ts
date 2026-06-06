@@ -60,8 +60,8 @@ interface ProgressData {
 }
 
 class BackupManager {
-  private tempDir = path.join(app.getPath('temp'), 'cherry-studio', 'backup', 'temp')
-  private backupDir = path.join(app.getPath('temp'), 'cherry-studio', 'backup')
+  private tempDir = path.join(app.getPath('temp'), 'cherry-studio-pi', 'backup', 'temp')
+  private backupDir = path.join(app.getPath('temp'), 'cherry-studio-pi', 'backup')
 
   // Cached instance to avoid recreating
   private s3Storage: S3Storage | null = null

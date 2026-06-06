@@ -1183,12 +1183,18 @@ describe('AppDataSyncService', () => {
   it('prunes stale local data sync temp backups without creating a join safety snapshot by default', async () => {
     const tempBackupDir = path.join(
       process.env.TMPDIR || process.env.TEMP || process.env.TMP || '/tmp',
+      'cherry-studio-pi',
+      'backup'
+    )
+    const legacyTempBackupDir = path.join(
+      process.env.TMPDIR || process.env.TEMP || process.env.TMP || '/tmp',
       'cherry-studio',
       'backup'
     )
     await fsp.mkdir(tempBackupDir, { recursive: true })
+    await fsp.mkdir(legacyTempBackupDir, { recursive: true })
     const staleJoinSafetyPath = path.join(tempBackupDir, 'cherry-studio-pi.data-sync.join-safety.local-device.1.zip')
-    const staleFullSnapshotPath = path.join(tempBackupDir, 'cherry-studio-pi.data-sync.local-device.1.zip')
+    const staleFullSnapshotPath = path.join(legacyTempBackupDir, 'cherry-studio-pi.data-sync.local-device.1.zip')
     await fsp.writeFile(staleJoinSafetyPath, 'stale-join-safety')
     await fsp.writeFile(staleFullSnapshotPath, 'stale-full-snapshot')
 

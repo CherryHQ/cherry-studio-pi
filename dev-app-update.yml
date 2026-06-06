@@ -2,7 +2,7 @@
 # url: http://127.0.0.1:8080
 # updaterCacheDirName: cherry-studio-updater
 # provider: github
-# repo: cherry-studio
-# owner: kangfenmao
+# repo: cherry-studio-pi
+# owner: CherryHQ
 provider: generic
 url: https://releases.cherry-ai.com

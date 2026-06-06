@@ -375,7 +375,7 @@ export function withSpanResult<F extends (...args: any) => any>(
 }
 
 export const spanManagerService = new SpanManagerService()
-export const webTracer = trace.getTracer('CherryStudio', '1.0.0')
+export const webTracer = trace.getTracer('CherryStudioPi', '1.0.0')
 export const addSpan = spanManagerService.addSpan.bind(spanManagerService)
 export const startTrace = spanManagerService.startTrace.bind(spanManagerService)
 export const endTrace = spanManagerService.endTrace.bind(spanManagerService)

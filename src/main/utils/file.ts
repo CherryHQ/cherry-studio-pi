@@ -164,7 +164,7 @@ export function getAllFiles(dirPath: string, arrayOfFiles: FileMetadata[] = []):
 }
 
 export function getTempDir() {
-  return path.join(app.getPath('temp'), 'CherryStudio')
+  return path.join(app.getPath('temp'), 'CherryStudioPi')
 }
 
 export function getFilesDir() {

@@ -105,7 +105,7 @@ export class AppMenuService {
           {
             label: appMenu.documentation,
             click: () => {
-              void shell.openExternal('https://github.com/CherryHQ/cherry-studio#readme')
+              void shell.openExternal('https://github.com/CherryHQ/cherry-studio-pi#readme')
             }
           },
           {

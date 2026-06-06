@@ -648,6 +648,10 @@ function isJoinSafetyTempBackupFile(fileName: string) {
 }
 
 function getDataSyncTempBackupDir() {
+  return path.join(process.env.TMPDIR || process.env.TEMP || process.env.TMP || '/tmp', 'cherry-studio-pi', 'backup')
+}
+
+function getLegacyDataSyncTempBackupDir() {
   return path.join(process.env.TMPDIR || process.env.TEMP || process.env.TMP || '/tmp', 'cherry-studio', 'backup')
 }
 
@@ -3542,7 +3546,7 @@ export class AppDataSyncService {
   ) {
     const keepLatestJoinSafety = options.keepLatestJoinSafety ?? DATA_SYNC_JOIN_SAFETY_LOCAL_RETENTION
     const keepPath = options.keepPath ? path.resolve(options.keepPath) : null
-    const directories = new Set<string>([getDataSyncTempBackupDir()])
+    const directories = new Set<string>([getDataSyncTempBackupDir(), getLegacyDataSyncTempBackupDir()])
     if (keepPath) {
       directories.add(path.dirname(keepPath))
     }

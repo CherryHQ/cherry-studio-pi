@@ -22,7 +22,7 @@ import { defineConfig } from 'drizzle-kit'
 function getDefaultDbUrl(): string {
   const platform = process.platform
   const home = process.env.HOME ?? process.env.USERPROFILE ?? ''
-  const appName = process.env.NODE_ENV === 'development' ? 'CherryStudioDev' : 'CherryStudio'
+  const appName = process.env.NODE_ENV === 'development' ? 'CherryStudioPiDev' : 'CherryStudioPi'
 
   switch (platform) {
     case 'darwin':

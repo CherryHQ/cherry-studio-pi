@@ -26,6 +26,10 @@ import styled from 'styled-components'
 
 import { SettingContainer, SettingDivider, SettingGroup, SettingRow, SettingTitle } from '.'
 
+const GITHUB_REPO_URL = 'https://github.com/CherryHQ/cherry-studio-pi'
+const GITHUB_RELEASES_URL = `${GITHUB_REPO_URL}/releases`
+const GITHUB_FEEDBACK_URL = `${GITHUB_REPO_URL}/issues/new/choose`
+
 const AboutSettings: FC = () => {
   const [version, setVersion] = useState('')
   const [isPortable, setIsPortable] = useState(false)
@@ -87,7 +91,7 @@ const AboutSettings: FC = () => {
   const showReleases = async () => {
     const { appPath } = await window.api.getAppInfo()
     openSmartMinapp({
-      id: 'cherrystudio-releases',
+      id: 'cherrystudio-pi-releases',
       name: t('settings.about.releases.title'),
       url: `file://${appPath}/resources/cherry-studio/releases.html?theme=${theme === ThemeMode.dark ? 'dark' : 'light'}`,
       logo: AppLogo
@@ -179,7 +183,7 @@ const AboutSettings: FC = () => {
         <SettingTitle>
           {t('settings.about.title')}
           <HStack alignItems="center">
-            <Link to="https://github.com/CherryHQ/cherry-studio">
+            <Link to={GITHUB_REPO_URL}>
               <GithubOutlined style={{ marginRight: 4, color: 'var(--color-text)', fontSize: 20 }} />
             </Link>
           </HStack>
@@ -187,7 +191,7 @@ const AboutSettings: FC = () => {
         <SettingDivider />
         <AboutHeader>
           <Row align="middle">
-            <AvatarWrapper onClick={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio')}>
+            <AvatarWrapper onClick={() => onOpenWebsite(GITHUB_REPO_URL)}>
               {update.downloadProgress > 0 && (
                 <ProgressCircle
                   type="circle"
@@ -204,7 +208,7 @@ const AboutSettings: FC = () => {
               <Title>{APP_NAME}</Title>
               <Description>{t('settings.about.description')}</Description>
               <Tag
-                onClick={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio/releases')}
+                onClick={() => onOpenWebsite(GITHUB_RELEASES_URL)}
                 color="cyan"
                 style={{ marginTop: 8, cursor: 'pointer' }}>
                 v{version}
@@ -307,9 +311,7 @@ const AboutSettings: FC = () => {
             <Github size={18} />
             {t('settings.about.feedback.title')}
           </SettingRowTitle>
-          <Button onClick={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio/issues/new/choose')}>
-            {t('settings.about.feedback.button')}
-          </Button>
+          <Button onClick={() => onOpenWebsite(GITHUB_FEEDBACK_URL)}>{t('settings.about.feedback.button')}</Button>
         </SettingRow>
         <SettingDivider />
         <SettingRow>

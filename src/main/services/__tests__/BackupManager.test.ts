@@ -514,7 +514,7 @@ describe('BackupManager Storage v2 backup snapshot handling', () => {
     )
 
     const snapshotPath = await (backupManager as any).createStorageV2SnapshotIfAvailable('/mock/userData/Data')
-    await (backupManager as any).replaceStorageV2DatabaseCopy('/tmp/cherry-studio/backup/temp/Data', snapshotPath)
+    await (backupManager as any).replaceStorageV2DatabaseCopy('/tmp/cherry-studio-pi/backup/temp/Data', snapshotPath)
 
     expect(mockStorageV2SecretVaultService.waitForIdle).toHaveBeenCalledTimes(1)
     expect(mockStorageV2SecretVaultService.waitForIdle.mock.invocationCallOrder[0]).toBeLessThan(
@@ -523,10 +523,10 @@ describe('BackupManager Storage v2 backup snapshot handling', () => {
     expect(mockStorageV2Database.createSnapshot).toHaveBeenCalledWith('direct-backup')
     expect(fs.copy).toHaveBeenCalledWith(
       '/mock/userData/Data/snapshots/direct-backup.db',
-      '/tmp/cherry-studio/backup/temp/Data/main.db'
+      '/tmp/cherry-studio-pi/backup/temp/Data/main.db'
     )
-    expect(fs.remove).toHaveBeenCalledWith('/tmp/cherry-studio/backup/temp/Data/main.db-wal')
-    expect(fs.remove).toHaveBeenCalledWith('/tmp/cherry-studio/backup/temp/Data/main.db-shm')
+    expect(fs.remove).toHaveBeenCalledWith('/tmp/cherry-studio-pi/backup/temp/Data/main.db-wal')
+    expect(fs.remove).toHaveBeenCalledWith('/tmp/cherry-studio-pi/backup/temp/Data/main.db-shm')
   })
 
   it('does not mix a snapshot from a different active data root into the copied root', async () => {
@@ -567,7 +567,7 @@ describe('BackupManager.restore temp isolation', () => {
   it('cleans the restore temp directory before extracting a backup', async () => {
     await expect(backupManager.restore({} as Electron.IpcMainInvokeEvent, '/backup.zip')).resolves.toBe('{"version":5}')
 
-    const tempDir = '/tmp/cherry-studio/backup/temp'
+    const tempDir = '/tmp/cherry-studio-pi/backup/temp'
     expect(fs.remove).toHaveBeenCalledWith(tempDir)
     expect(fs.ensureDir).toHaveBeenCalledWith(tempDir)
     expect(vi.mocked(fs.remove).mock.invocationCallOrder[0]).toBeLessThan(
@@ -591,7 +591,7 @@ describe('BackupManager.restore temp isolation', () => {
   })
 
   it('stages direct backup Data restores beside the active Data root', async () => {
-    const tempDir = '/tmp/cherry-studio/backup/temp'
+    const tempDir = '/tmp/cherry-studio-pi/backup/temp'
     vi.mocked(fs.pathExists).mockImplementation(async (candidate) => String(candidate) === `${tempDir}/Data`)
     vi.mocked(fs.readJson).mockResolvedValue({ appName: 'Cherry Studio Pi', platform: process.platform } as never)
     vi.mocked(fs.readdir).mockResolvedValue(['main.db'] as never)
@@ -611,7 +611,7 @@ describe('BackupManager.restore temp isolation', () => {
   })
 
   it('stages legacy backup Data restores beside the active Data root', async () => {
-    const tempDir = '/tmp/cherry-studio/backup/temp'
+    const tempDir = '/tmp/cherry-studio-pi/backup/temp'
     vi.mocked(fs.readFile).mockResolvedValue('legacy-state' as never)
     vi.mocked(fs.pathExists).mockImplementation(async (candidate) => String(candidate) === `${tempDir}/Data`)
     vi.mocked(fs.readdir).mockResolvedValue(['app.db'] as never)
@@ -629,7 +629,7 @@ describe('BackupManager.restore temp isolation', () => {
   })
 
   it('disables Storage v2 auto hydrate when a direct backup restores only runtime cache', async () => {
-    const tempDir = '/tmp/cherry-studio/backup/temp'
+    const tempDir = '/tmp/cherry-studio-pi/backup/temp'
     vi.mocked(fs.pathExists).mockImplementation(async (candidate) => {
       const path = String(candidate)
       return path === `${tempDir}/metadata.json` || path === `${tempDir}/Data`

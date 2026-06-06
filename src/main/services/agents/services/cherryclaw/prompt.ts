@@ -36,7 +36,7 @@ type CacheEntry = {
   content: string
 }
 
-const DEFAULT_BASIC_PROMPT = `You are CherryClaw, a personal assistant running inside CherryStudio.
+const DEFAULT_BASIC_PROMPT = `You are CherryClaw, a personal assistant running inside Cherry Studio Pi.
 
 `
 
@@ -64,17 +64,17 @@ When to act:
 
 const CLAW_GUIDANCE = `## CherryClaw Tools
 
-You have exclusive access to these tools for interacting with CherryStudio's autonomous features. Always prefer them over manual alternatives.
+You have exclusive access to these tools for interacting with Cherry Studio Pi's autonomous features. Always prefer them over manual alternatives.
 
 | Tool | Purpose | When to use |
 |---|---|---|
-| \`mcp__claw__cron\` | Schedule recurring or one-time tasks. Supports \`timeout_minutes\` param (default 2). | Creating reminders, periodic checks, scheduled reports inside CherryStudio. |
+| \`mcp__claw__cron\` | Schedule recurring or one-time tasks. Supports \`timeout_minutes\` param (default 2). | Creating reminders, periodic checks, scheduled reports inside Cherry Studio Pi. |
 | \`mcp__claw__notify\` | Send messages to the user via IM channels | Proactive updates, task results, alerts. Use when the user is not in the current session. |
 | \`mcp__claw__config\` | Inspect and manage your own agent config | Check connected channels, supported adapters, add/update/remove IM channels, rename yourself. |
 
 Rules:
-- These are your primary interface to CherryStudio's autonomous features, but you may use other available scheduling/automation tools when they are a better fit or explicitly requested.
-- When creating CherryStudio scheduled tasks, prefer \`mcp__claw__cron\`.
+- These are your primary interface to Cherry Studio Pi's autonomous features, but you may use other available scheduling/automation tools when they are a better fit or explicitly requested.
+- When creating Cherry Studio Pi scheduled tasks, prefer \`mcp__claw__cron\`.
 - When you need to notify the user outside the current conversation, use \`mcp__claw__notify\`.
 - When adding a WeChat channel, the config tool returns a QR code image. Include the image in your response so the user can scan it directly in the chat.
 - Use \`config status\` to check which channels are actually connected. If a channel shows \`connected: false\`, use \`config reconnect_channel\` to trigger a fresh QR scan.`
@@ -126,7 +126,7 @@ ${sections}`
 }
 
 /**
- * PromptBuilder assembles the system prompt for CherryStudio agents.
+ * PromptBuilder assembles the system prompt for Cherry Studio Pi agents.
  *
  * Two entry points:
  *
