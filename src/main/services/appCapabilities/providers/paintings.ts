@@ -19,6 +19,86 @@ export const PAINTING_NAMESPACES = [
   'ppio_edit'
 ]
 
+const DEFAULT_PAINTING_HISTORY_LIMIT = 50
+const MAX_PAINTING_HISTORY_LIMIT = 200
+const MAX_PAINTING_PROMPT_CHARS = 500
+
+function normalizeListLimit(value: unknown) {
+  const parsed =
+    typeof value === 'string' && !value.trim()
+      ? DEFAULT_PAINTING_HISTORY_LIMIT
+      : Number(value ?? DEFAULT_PAINTING_HISTORY_LIMIT)
+  const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_PAINTING_HISTORY_LIMIT
+  return Math.max(1, Math.min(safeLimit, MAX_PAINTING_HISTORY_LIMIT))
+}
+
+function normalizeOffset(value: unknown) {
+  const parsed = typeof value === 'string' && !value.trim() ? 0 : Number(value ?? 0)
+  const safeOffset = Number.isFinite(parsed) ? Math.trunc(parsed) : 0
+  return Math.max(0, safeOffset)
+}
+
+function truncateText(value: unknown, maxChars = MAX_PAINTING_PROMPT_CHARS) {
+  if (typeof value !== 'string') return undefined
+  if (value.length <= maxChars) return value
+  return `${value.slice(0, maxChars)}...`
+}
+
+function compactPainting(namespace: string, painting: any, index: number) {
+  return {
+    namespace,
+    index,
+    id: painting?.id,
+    providerId: painting?.providerId,
+    model: painting?.model ?? painting?.priceModel,
+    status: painting?.status ?? painting?.ppioStatus,
+    prompt: truncateText(painting?.prompt),
+    negativePrompt: truncateText(painting?.negativePrompt ?? painting?.negative_prompt),
+    generationMode: painting?.generationMode,
+    size: painting?.size ?? painting?.imageSize ?? painting?.image_size,
+    aspectRatio: painting?.aspectRatio ?? painting?.aspect_ratio,
+    urlsCount: Array.isArray(painting?.urls) ? painting.urls.length : 0,
+    filesCount: Array.isArray(painting?.files) ? painting.files.length : 0,
+    files: Array.isArray(painting?.files)
+      ? painting.files.map((file: any) => ({
+          id: file?.id,
+          name: file?.name ?? file?.origin_name,
+          type: file?.type,
+          ext: file?.ext,
+          size: file?.size
+        }))
+      : []
+  }
+}
+
+export function listPaintingHistory(paintings: any, input: any) {
+  const namespace = String(input?.namespace || '')
+  const includeRaw = input?.includeRaw === true
+  const limit = normalizeListLimit(input?.limit)
+  const offset = normalizeOffset(input?.offset)
+  const selectedNamespaces = namespace ? [namespace] : PAINTING_NAMESPACES
+  const records = selectedNamespaces.flatMap((name) => {
+    const list = Array.isArray(paintings?.[name]) ? paintings[name] : []
+    return list.map((painting: any, index: number) => ({ namespace: name, painting, index }))
+  })
+  const page = records.slice(offset, offset + limit)
+
+  return {
+    namespace: namespace || undefined,
+    total: records.length,
+    limit,
+    offset,
+    nextOffset: offset + limit < records.length ? offset + limit : null,
+    compacted: !includeRaw,
+    paintings: sanitizeForAgent(
+      page.map(({ namespace, painting, index }) =>
+        includeRaw ? { namespace, index, ...painting } : compactPainting(namespace, painting, index)
+      )
+    ),
+    counts: Object.fromEntries(PAINTING_NAMESPACES.map((name) => [name, paintings?.[name]?.length || 0]))
+  }
+}
+
 export function createPaintingCapabilities(): AppCapabilityDefinition[] {
   return [
     {
@@ -47,19 +127,21 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       inputSchema: {
         type: 'object',
         properties: {
-          namespace: { type: 'string', enum: PAINTING_NAMESPACES, description: 'Optional painting namespace' }
+          namespace: { type: 'string', enum: PAINTING_NAMESPACES, description: 'Optional painting namespace' },
+          limit: { type: 'number', default: DEFAULT_PAINTING_HISTORY_LIMIT },
+          offset: { type: 'number', default: 0 },
+          includeRaw: {
+            type: 'boolean',
+            default: false,
+            description: 'Return raw painting objects. Defaults to compact summaries to avoid huge image payloads.'
+          }
         }
       },
       risk: 'read',
       tags: ['paintings', 'image', 'history'],
       execute: async (input: any) => {
         const paintings = await reduxService.select<any>('state.paintings')
-        const namespace = String(input?.namespace || '')
-        return okResult('Painting history listed', {
-          namespace: namespace || undefined,
-          paintings: sanitizeForAgent(namespace ? paintings?.[namespace] || [] : paintings),
-          counts: Object.fromEntries(PAINTING_NAMESPACES.map((name) => [name, paintings?.[name]?.length || 0]))
-        })
+        return okResult('Painting history listed', listPaintingHistory(paintings, input))
       }
     },
     {

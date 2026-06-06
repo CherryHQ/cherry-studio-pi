@@ -4,6 +4,7 @@ import path from 'node:path'
 import { loggerService } from '@logger'
 import { isMac } from '@main/constant'
 import { appCapabilityService } from '@main/services/appCapabilities'
+import { listPaintingHistory, PAINTING_NAMESPACES } from '@main/services/appCapabilities/providers/paintings'
 import { isAllowedAppRoute, normalizeAppRoute, pickPath, sanitizeForAgent } from '@main/services/appCapabilities/utils'
 import { reduxService } from '@main/services/ReduxService'
 import { windowService } from '@main/services/WindowService'
@@ -46,22 +47,6 @@ const SETTINGS_SETTERS: Record<string, string> = {
   defaultPaintingProvider: 'settings/setDefaultPaintingProvider',
   enableDeveloperMode: 'settings/setEnableDeveloperMode'
 }
-
-const PAINTING_NAMESPACES = [
-  'siliconflow_paintings',
-  'dmxapi_paintings',
-  'tokenflux_paintings',
-  'zhipu_paintings',
-  'aihubmix_image_generate',
-  'aihubmix_image_remix',
-  'aihubmix_image_edit',
-  'aihubmix_image_upscale',
-  'openai_image_generate',
-  'openai_image_edit',
-  'ovms_paintings',
-  'ppio_draw',
-  'ppio_edit'
-]
 
 async function navigate(route: string) {
   const nextRoute = normalizeAppRoute(route)
@@ -288,12 +273,7 @@ appToolsRouter.get('/paintings/providers', async (_req, res, next) => {
 appToolsRouter.get('/paintings', async (req, res, next) => {
   try {
     const paintings = await reduxService.select<any>('state.paintings')
-    const namespace = String(req.query.namespace || '')
-    res.json({
-      namespace: namespace || undefined,
-      paintings: namespace ? paintings?.[namespace] || [] : paintings,
-      counts: Object.fromEntries(PAINTING_NAMESPACES.map((name) => [name, paintings?.[name]?.length || 0]))
-    })
+    res.json(listPaintingHistory(paintings, req.query))
   } catch (error) {
     next(error)
   }
