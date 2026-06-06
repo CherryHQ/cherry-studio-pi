@@ -101,14 +101,19 @@ const FallbackFavicon: React.FC<FallbackFaviconProps> = ({ hostname, alt }) => {
         })
     )
 
+    let fallbackTimer: ReturnType<typeof setTimeout> | undefined
+    const clearFallbackTimer = () => {
+      if (fallbackTimer !== undefined) {
+        clearTimeout(fallbackTimer)
+        fallbackTimer = undefined
+      }
+    }
+
     // Create a timeout promise
     const timeoutPromise = new Promise<string>((resolve) => {
-      const timer = setTimeout(() => {
+      fallbackTimer = setTimeout(() => {
         resolve(faviconUrls[0]) // Default to first URL after timeout
       }, 2000)
-
-      // Clear timeout if signal is aborted
-      signal.addEventListener('abort', () => clearTimeout(timer))
     })
 
     // Use Promise.race to get the first successful result
@@ -127,6 +132,12 @@ const FallbackFavicon: React.FC<FallbackFaviconProps> = ({ hostname, alt }) => {
         if (cancelled || signal.aborted) return
         logger.error('All favicon requests failed:', error)
         setFaviconState({ status: 'loaded', src: faviconUrls[0] })
+      })
+      .finally(() => {
+        clearFallbackTimer()
+        if (!signal.aborted) {
+          controller.abort()
+        }
       })
 
     // Cleanup function

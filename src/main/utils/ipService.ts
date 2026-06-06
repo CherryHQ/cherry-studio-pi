@@ -2,12 +2,18 @@ import { loggerService } from '@logger'
 import { net } from 'electron'
 
 const logger = loggerService.withContext('IpService')
+let ipCountryPromise: Promise<string> | null = null
 
 /**
  * 获取用户的IP地址所在国家
  * @returns 返回国家代码，默认为'CN'
  */
-export async function getIpCountry(): Promise<string> {
+export function getIpCountry(): Promise<string> {
+  ipCountryPromise ??= fetchIpCountry()
+  return ipCountryPromise
+}
+
+async function fetchIpCountry(): Promise<string> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 5000)
 
@@ -17,11 +23,11 @@ export async function getIpCountry(): Promise<string> {
     })
 
     const data = await ipinfo.json()
-    const country = data.country_code || 'CN'
+    const country = typeof data.country_code === 'string' && data.country_code.trim() ? data.country_code : 'CN'
     logger.info(`Detected user IP address country: ${country}`)
     return country
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (isAbortLikeError(error)) {
       logger.warn('IP country lookup timed out; defaulting to CN')
       return 'CN'
     }
@@ -31,6 +37,11 @@ export async function getIpCountry(): Promise<string> {
   } finally {
     clearTimeout(timeoutId)
   }
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  return error.name === 'AbortError' || /aborted|abort/i.test(error.message)
 }
 
 /**
