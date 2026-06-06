@@ -2580,6 +2580,190 @@ describe('AppDataSyncService', () => {
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/manifest.json')).toBe(true)
   })
 
+  it('skips deep remote artifact cleanup when artifact references are unchanged and cleanup is fresh', async () => {
+    const existingStorageManifest = {
+      version: 1,
+      records: {
+        'settings:theme': {
+          entityType: 'settings',
+          table: 'settings',
+          idValues: ['theme'],
+          valueHash: 'storage-theme-hash',
+          updatedAt: 1760000000000,
+          deletedAt: null,
+          version: 1,
+          path: 'storage-v2/bundle/storage-bundle-hash.json'
+        }
+      },
+      blobs: {},
+      bundle: {
+        version: 1,
+        path: 'storage-v2/bundle/storage-bundle-hash.json',
+        valueHash: 'storage-bundle-hash',
+        recordCount: 1,
+        blobCount: 0,
+        updatedAt: 1760000000000
+      }
+    }
+    mocks.storageV2.getSyncState.mockImplementation(async (id: string) => {
+      if (id === 'data-sync-sync-space-id') return 'sync-space-existing'
+      if (id === 'data-sync-last-remote-artifact-cleanup-at') return Date.now()
+      return null
+    })
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
+      if (mocks.remoteFiles.has(filePath)) {
+        return mocks.remoteFiles.get(filePath)
+      }
+
+      if (filePath.endsWith('/manifest.json')) {
+        return JSON.stringify({
+          version: 1,
+          generation: 3,
+          updatedAt: 1760000000000,
+          records: {},
+          syncSpace: {
+            version: 1,
+            id: 'sync-space-existing',
+            createdAt: 1760000000000,
+            keyMaterial: 'abcdefghijklmnopqrstuvwxyz123456',
+            keyFormat: 'cherry-sync-space-key-v1',
+            secretEncryption: 'cherry-webdav-secret-sync-aes-256-gcm'
+          },
+          storageV2: existingStorageManifest
+        })
+      }
+
+      throw new Error(`Unexpected WebDAV read: ${filePath}`)
+    })
+    mocks.storageRecordSync.sync.mockResolvedValueOnce({
+      manifest: existingStorageManifest,
+      syncStates: [],
+      summary: {
+        storageUploaded: 0,
+        storageDownloaded: 0,
+        storageDeleted: 0,
+        storageConflicts: 0,
+        storageResolvedConflicts: 0,
+        storageSkipped: 1,
+        blobUploaded: 0,
+        blobDownloaded: 0,
+        secretUploaded: 0,
+        secretDownloaded: 0
+      }
+    })
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.status).toBe('success')
+    expect(mocks.storageRecordSync.pruneRemoteArtifacts).not.toHaveBeenCalled()
+    expect(mocks.webdav.getDirectoryContents).toHaveBeenCalledWith('/remote-root/sync/v1')
+    expect(mocks.webdav.getDirectoryContents).not.toHaveBeenCalledWith('/remote-root/sync/v1/records')
+    expect(mocks.webdav.getDirectoryContents).not.toHaveBeenCalledWith('/remote-root/sync/v1/storage-v2/bundle')
+    expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith(
+      'data-sync-last-remote-artifact-cleanup-at',
+      expect.anything()
+    )
+  })
+
+  it('still runs deep remote artifact cleanup when Storage v2 artifact references change', async () => {
+    const previousStorageManifest = {
+      version: 1,
+      records: {},
+      blobs: {},
+      bundle: {
+        version: 1,
+        path: 'storage-v2/bundle/old-bundle.json',
+        valueHash: 'old-bundle',
+        recordCount: 0,
+        blobCount: 0,
+        updatedAt: 1760000000000
+      }
+    }
+    const nextStorageManifest = {
+      version: 1,
+      records: {
+        'settings:theme': {
+          entityType: 'settings',
+          table: 'settings',
+          idValues: ['theme'],
+          valueHash: 'storage-theme-hash',
+          updatedAt: 1760000000001,
+          deletedAt: null,
+          version: 1,
+          path: 'storage-v2/bundle/new-bundle.json'
+        }
+      },
+      blobs: {},
+      bundle: {
+        version: 1,
+        path: 'storage-v2/bundle/new-bundle.json',
+        valueHash: 'new-bundle',
+        recordCount: 1,
+        blobCount: 0,
+        updatedAt: 1760000000001
+      }
+    }
+    mocks.storageV2.getSyncState.mockImplementation(async (id: string) => {
+      if (id === 'data-sync-sync-space-id') return 'sync-space-existing'
+      if (id === 'data-sync-last-remote-artifact-cleanup-at') return Date.now()
+      return null
+    })
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
+      if (mocks.remoteFiles.has(filePath)) {
+        return mocks.remoteFiles.get(filePath)
+      }
+
+      if (filePath.endsWith('/manifest.json')) {
+        return JSON.stringify({
+          version: 1,
+          generation: 3,
+          updatedAt: 1760000000000,
+          records: {},
+          syncSpace: {
+            version: 1,
+            id: 'sync-space-existing',
+            createdAt: 1760000000000,
+            keyMaterial: 'abcdefghijklmnopqrstuvwxyz123456',
+            keyFormat: 'cherry-sync-space-key-v1',
+            secretEncryption: 'cherry-webdav-secret-sync-aes-256-gcm'
+          },
+          storageV2: previousStorageManifest
+        })
+      }
+
+      throw new Error(`Unexpected WebDAV read: ${filePath}`)
+    })
+    mocks.storageRecordSync.sync.mockResolvedValueOnce({
+      manifest: nextStorageManifest,
+      syncStates: [{ id: 'settings:theme', valueHash: 'storage-theme-hash' }],
+      summary: {
+        storageUploaded: 1,
+        storageDownloaded: 0,
+        storageDeleted: 0,
+        storageConflicts: 0,
+        storageResolvedConflicts: 0,
+        storageSkipped: 0,
+        blobUploaded: 0,
+        blobDownloaded: 0,
+        secretUploaded: 0,
+        secretDownloaded: 0
+      }
+    })
+
+    await new AppDataSyncService().syncNow(config)
+
+    expect(mocks.storageRecordSync.pruneRemoteArtifacts).toHaveBeenCalledWith(
+      mocks.webdav,
+      '/remote-root/sync/v1',
+      nextStorageManifest,
+      expect.objectContaining({ assertActive: expect.any(Function) })
+    )
+    expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith(
+      'data-sync-last-remote-artifact-cleanup-at',
+      expect.any(Number)
+    )
+  })
+
   it('keeps data sync successful when the optional full snapshot upload is unavailable', async () => {
     process.env.CHERRY_STUDIO_DATA_SYNC_REMOTE_SNAPSHOT = '1'
     mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {

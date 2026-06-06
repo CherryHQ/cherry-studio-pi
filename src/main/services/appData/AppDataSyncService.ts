@@ -365,7 +365,9 @@ const REMOTE_SYNC_LOCK_STALE_HEARTBEAT_MS = 3 * 60 * 1000
 const DEFAULT_DATA_SYNC_MAX_RUNTIME_MS = 10 * 60 * 1000
 const DATA_SYNC_MAX_RUNTIME_ENV = 'CHERRY_STUDIO_DATA_SYNC_MAX_RUNTIME_MS'
 const DATA_SYNC_CLEANUP_MAX_FILES_ENV = 'CHERRY_STUDIO_DATA_SYNC_CLEANUP_MAX_FILES'
+const DATA_SYNC_LAST_REMOTE_ARTIFACT_CLEANUP_AT_STATE_KEY = 'data-sync-last-remote-artifact-cleanup-at'
 const DEFAULT_REMOTE_ARTIFACT_CLEANUP_MAX_FILES = 20_000
+const REMOTE_ARTIFACT_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000
 const SNAPSHOT_RETENTION_PER_DEVICE = 3
 const SNAPSHOT_RETENTION_TOTAL = 20
 const NATIVE_WEB_DAV_LOCK_UNSUPPORTED_STATUSES = new Set([403, 405, 409, 501])
@@ -904,6 +906,89 @@ function storageV2ManifestFingerprint(manifest?: StorageV2WebDavRecordSyncManife
       })
     )
     .digest('hex')
+}
+
+function appDataArtifactFingerprint(manifest?: RemoteManifest | null) {
+  const recordEntries = Object.entries(manifest?.records ?? {}).sort(([left], [right]) => left.localeCompare(right))
+  const snapshotEntries = Object.entries(manifest?.snapshots ?? {}).sort(([left], [right]) => left.localeCompare(right))
+  const noteEntries = Object.entries(manifest?.notes?.files ?? {})
+    .filter(([, meta]) => !meta.deletedAt)
+    .sort(([left], [right]) => left.localeCompare(right))
+  const runtimeDirectoryEntries = Object.entries(manifest?.runtimeDirectories?.directories ?? {}).sort(
+    ([left], [right]) => left.localeCompare(right)
+  )
+  const hasArtifacts =
+    recordEntries.length > 0 ||
+    snapshotEntries.length > 0 ||
+    Boolean(manifest?.latestSnapshot?.path) ||
+    noteEntries.length > 0 ||
+    runtimeDirectoryEntries.length > 0
+  if (!hasArtifacts) return null
+
+  return hashJsonValue({
+    records: recordEntries.map(([id, meta]) => [
+      id,
+      meta.scope,
+      meta.key,
+      meta.valueHash,
+      meta.updatedAt,
+      meta.deletedAt ?? null,
+      meta.deviceId,
+      meta.version,
+      meta.path
+    ]),
+    snapshots: snapshotEntries.map(([id, meta]) => [
+      id,
+      meta.fileName,
+      meta.path,
+      meta.byteSize,
+      meta.checksum ?? null,
+      meta.createdAt,
+      meta.uploadedAt,
+      meta.deviceId,
+      meta.format
+    ]),
+    latestSnapshot: manifest?.latestSnapshot
+      ? [
+          manifest.latestSnapshot.id,
+          manifest.latestSnapshot.fileName,
+          manifest.latestSnapshot.path,
+          manifest.latestSnapshot.byteSize,
+          manifest.latestSnapshot.checksum ?? null,
+          manifest.latestSnapshot.createdAt,
+          manifest.latestSnapshot.uploadedAt,
+          manifest.latestSnapshot.deviceId,
+          manifest.latestSnapshot.format
+        ]
+      : null,
+    notes: noteEntries.map(([id, meta]) => [
+      id,
+      meta.relativePath,
+      meta.valueHash,
+      meta.byteSize,
+      meta.updatedAt,
+      meta.deviceId,
+      meta.path
+    ]),
+    runtimeDirectories: runtimeDirectoryEntries.map(([id, meta]) => [
+      id,
+      meta.name,
+      meta.valueHash,
+      meta.byteSize,
+      meta.compressedByteSize,
+      meta.fileCount,
+      meta.updatedAt,
+      meta.deviceId,
+      meta.path
+    ])
+  })
+}
+
+function isRemoteArtifactCleanupDue(lastCleanupAt: unknown, now: number) {
+  const timestamp = Number(lastCleanupAt ?? 0)
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return true
+  if (timestamp > now + REMOTE_ARTIFACT_CLEANUP_INTERVAL_MS) return true
+  return now - timestamp >= REMOTE_ARTIFACT_CLEANUP_INTERVAL_MS
 }
 
 function getStorageV2ManifestEntityTypes(manifest?: StorageV2WebDavRecordSyncManifest | null) {
@@ -3759,6 +3844,8 @@ export class AppDataSyncService {
       this.assertSyncRunActive(context, '合并远端同步状态')
       const manifest = this.normalizeManifest(rawManifest)
       const manifestBaseline = this.captureManifestBaseline(rawManifest, manifest)
+      const appDataArtifactFingerprintBeforeSync = appDataArtifactFingerprint(manifest)
+      const storageV2ArtifactFingerprintBeforeSync = storageV2ManifestFingerprint(manifest.storageV2)
       if (!shouldAttemptRemoteFullSnapshotUpload()) {
         manifest.snapshots = {}
         manifest.latestSnapshot = null
@@ -3775,6 +3862,11 @@ export class AppDataSyncService {
         (await this.getSyncState<string>(db, DATA_SYNC_SYNC_SPACE_ID_STATE_KEY)) ??
         (await this.getSyncState<DataSyncSummary>(db, 'last-sync-summary'))?.syncSpaceId ??
         null
+      const lastRemoteArtifactCleanupAt = await this.getSyncState<number>(
+        db,
+        DATA_SYNC_LAST_REMOTE_ARTIFACT_CLEANUP_AT_STATE_KEY
+      )
+      const remoteArtifactCleanupDue = isRemoteArtifactCleanupDue(lastRemoteArtifactCleanupAt, summary.lastSyncAt)
       const joiningExistingSyncSpace =
         hadUsableSyncSpaceBeforeSync && (!previousSyncSpaceId || previousSyncSpaceId !== syncSpace.id)
       const preferRemoteAppDataOnFirstJoin = joiningExistingSyncSpace && remoteHadAppDataRecordsBeforeSync
@@ -4030,29 +4122,51 @@ export class AppDataSyncService {
       }
 
       const cleanupErrors: string[] = []
+      const appDataArtifactsChanged = appDataArtifactFingerprintBeforeSync !== appDataArtifactFingerprint(manifest)
+      const storageV2ArtifactsChanged =
+        storageV2ArtifactFingerprintBeforeSync !== storageV2ManifestFingerprint(manifest.storageV2)
+      const shouldPruneAppDataArtifacts = remoteArtifactCleanupDue || appDataArtifactsChanged
+      const shouldPruneStorageV2Artifacts = remoteArtifactCleanupDue || storageV2ArtifactsChanged
+      let ranRemoteArtifactCleanup = false
       this.assertSyncRunActive(context, '清理远端临时文件')
       await this.pruneRemoteRootTempArtifacts(client, basePath, context).catch((error) => {
         logger.warn('Failed to prune stale WebDAV sync root temporary artifacts after sync', error as Error)
         cleanupErrors.push(errorMessage(error))
       })
-      this.assertSyncRunActive(context, '清理远端应用数据旧文件')
-      await this.pruneRemoteAppDataArtifacts(client, basePath, manifest, context).catch((error) => {
-        logger.warn('Failed to prune stale app data WebDAV artifacts after sync', error as Error)
-        cleanupErrors.push(errorMessage(error))
-      })
-      this.assertSyncRunActive(context, '清理远端 Storage v2 旧文件')
-      await storageV2WebDavRecordSyncService
-        .pruneRemoteArtifacts(client, basePath, manifest.storageV2, {
-          assertActive: () => this.assertSyncRunActive(context, '清理远端 Storage v2 旧文件')
-        })
-        .catch((error) => {
-          logger.warn('Failed to prune stale Storage v2 WebDAV artifacts after sync', error as Error)
+
+      if (shouldPruneAppDataArtifacts) {
+        ranRemoteArtifactCleanup = true
+        this.assertSyncRunActive(context, '清理远端应用数据旧文件')
+        await this.pruneRemoteAppDataArtifacts(client, basePath, manifest, context).catch((error) => {
+          logger.warn('Failed to prune stale app data WebDAV artifacts after sync', error as Error)
           cleanupErrors.push(errorMessage(error))
         })
+      } else {
+        logger.info('Skipped deep app data WebDAV artifact cleanup because remote artifact references did not change')
+      }
+
+      if (shouldPruneStorageV2Artifacts) {
+        ranRemoteArtifactCleanup = true
+        this.assertSyncRunActive(context, '清理远端 Storage v2 旧文件')
+        await storageV2WebDavRecordSyncService
+          .pruneRemoteArtifacts(client, basePath, manifest.storageV2, {
+            assertActive: () => this.assertSyncRunActive(context, '清理远端 Storage v2 旧文件')
+          })
+          .catch((error) => {
+            logger.warn('Failed to prune stale Storage v2 WebDAV artifacts after sync', error as Error)
+            cleanupErrors.push(errorMessage(error))
+          })
+      } else {
+        logger.info('Skipped deep Storage v2 WebDAV artifact cleanup because remote artifact references did not change')
+      }
       if (cleanupErrors.length > 0) {
         throw new Error(
           `远端旧同步文件清理失败。数据已经发布到远端，但为避免 WebDAV 文件数量持续增长，本次同步不会标记为成功。请稍后重试，或检查远端目录删除权限：${cleanupErrors.join('；')}`
         )
+      }
+      if (ranRemoteArtifactCleanup) {
+        this.assertSyncRunActive(context, '记录远端旧文件清理时间')
+        await this.setSyncState(db, DATA_SYNC_LAST_REMOTE_ARTIFACT_CLEANUP_AT_STATE_KEY, summary.lastSyncAt)
       }
 
       summary.status = 'success'
