@@ -10,9 +10,51 @@ const SECRET_REF_QUERIES = [
   },
   { source: 'settings.value_json', column: 'value_json', sql: 'SELECT value_json FROM settings' },
   { source: 'providers.config_json', column: 'config_json', sql: 'SELECT config_json FROM providers' },
+  { source: 'models.config_json', column: 'config_json', sql: 'SELECT config_json FROM models' },
   { source: 'assistants.settings_json', column: 'settings_json', sql: 'SELECT settings_json FROM assistants' },
+  {
+    source: 'assistant_versions.snapshot_json',
+    column: 'snapshot_json',
+    sql: 'SELECT snapshot_json FROM assistant_versions'
+  },
+  {
+    source: 'agents.accessible_paths_json',
+    column: 'accessible_paths_json',
+    sql: 'SELECT accessible_paths_json FROM agents'
+  },
+  { source: 'agents.mcps_json', column: 'mcps_json', sql: 'SELECT mcps_json FROM agents' },
+  { source: 'agents.allowed_tools_json', column: 'allowed_tools_json', sql: 'SELECT allowed_tools_json FROM agents' },
   { source: 'agents.configuration_json', column: 'configuration_json', sql: 'SELECT configuration_json FROM agents' },
+  {
+    source: 'agent_versions.snapshot_json',
+    column: 'snapshot_json',
+    sql: 'SELECT snapshot_json FROM agent_versions'
+  },
+  {
+    source: 'agent_sessions.inherited_config_json',
+    column: 'inherited_config_json',
+    sql: 'SELECT inherited_config_json FROM agent_sessions'
+  },
+  {
+    source: 'agent_sessions.current_config_json',
+    column: 'current_config_json',
+    sql: 'SELECT current_config_json FROM agent_sessions'
+  },
+  { source: 'messages.token_usage_json', column: 'token_usage_json', sql: 'SELECT token_usage_json FROM messages' },
+  { source: 'messages.metadata_json', column: 'metadata_json', sql: 'SELECT metadata_json FROM messages' },
+  {
+    source: 'message_blocks.payload_json',
+    column: 'payload_json',
+    sql: 'SELECT payload_json FROM message_blocks'
+  },
+  { source: 'files.metadata_json', column: 'metadata_json', sql: 'SELECT metadata_json FROM files' },
+  { source: 'skills.tags_json', column: 'tags_json', sql: 'SELECT tags_json FROM skills' },
   { source: 'channels.config_json', column: 'config_json', sql: 'SELECT config_json FROM channels' },
+  {
+    source: 'channels.active_chat_ids_json',
+    column: 'active_chat_ids_json',
+    sql: 'SELECT active_chat_ids_json FROM channels'
+  },
   {
     source: 'knowledge_bases.settings_json',
     column: 'settings_json',
@@ -24,6 +66,7 @@ const SECRET_REF_QUERIES = [
     sql: 'SELECT metadata_json FROM knowledge_items'
   },
   { source: 'kv_records.value_json', column: 'value_json', sql: 'SELECT value_json FROM kv_records' },
+  { source: 'sync_changes.payload_json', column: 'payload_json', sql: 'SELECT payload_json FROM sync_changes' },
   { source: 'sync_state.value_json', column: 'value_json', sql: 'SELECT value_json FROM sync_state' },
   {
     source: 'sync_conflicts.local_snapshot_json',

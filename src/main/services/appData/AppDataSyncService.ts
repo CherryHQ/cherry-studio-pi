@@ -752,6 +752,14 @@ function hasStorageV2RemoteData(manifest?: StorageV2WebDavRecordSyncManifest | n
   )
 }
 
+function hasRuntimeDirectoriesRemoteData(manifest?: RemoteRuntimeDirectoriesManifest | null) {
+  return Object.keys(manifest?.directories ?? {}).length > 0
+}
+
+function hasNotesRemoteData(manifest?: RemoteNotesManifest | null) {
+  return Object.values(manifest?.files ?? {}).some((meta) => !meta.deletedAt)
+}
+
 function storageV2ManifestFingerprint(manifest?: StorageV2WebDavRecordSyncManifest | null) {
   if (!hasStorageV2RemoteData(manifest)) return null
 
@@ -2443,7 +2451,8 @@ export class AppDataSyncService {
     db: AppDataDatabase,
     summary: DataSyncSummary,
     context: SyncRunContext,
-    stageSyncState: (id: string, value: unknown) => void
+    stageSyncState: (id: string, value: unknown) => void,
+    options: { preferRemoteOnFirstJoin?: boolean } = {}
   ) {
     const notesManifest = this.normalizeNotesManifest(inputManifest)
     const deviceId = db.getDeviceId()
@@ -2547,6 +2556,11 @@ export class AppDataSyncService {
       const remoteChanged = remoteCursor !== lastCursor
 
       if (!lastCursor) {
+        if (options.preferRemoteOnFirstJoin) {
+          await downloadRemote(remoteMeta, localFile)
+          continue
+        }
+
         summary.resolvedConflicts += 1
         if (shouldLocalNotesFileWin(localFile, remoteMeta)) {
           await uploadLocal(localFile)
@@ -2957,7 +2971,8 @@ export class AppDataSyncService {
     db: AppDataDatabase,
     summary: DataSyncSummary,
     context: SyncRunContext,
-    stageSyncState: (id: string, value: unknown) => void
+    stageSyncState: (id: string, value: unknown) => void,
+    options: { preferRemoteOnFirstJoin?: boolean } = {}
   ) {
     const directoriesManifest = this.normalizeRuntimeDirectoriesManifest(inputManifest)
     const deviceId = db.getDeviceId()
@@ -3025,6 +3040,11 @@ export class AppDataSyncService {
       const localChanged = localCursor !== lastCursor
       const remoteChanged = remoteCursor !== lastCursor
       if (!lastCursor) {
+        if (options.preferRemoteOnFirstJoin) {
+          await downloadRemote(remoteMeta, localSnapshot)
+          continue
+        }
+
         summary.resolvedConflicts += 1
         if (localSnapshot.updatedAt > remoteMeta.updatedAt) {
           await uploadSnapshot(localSnapshot)
@@ -3544,6 +3564,8 @@ export class AppDataSyncService {
       summary.syncSpaceId = syncSpace.id
       const remoteHadAppDataRecordsBeforeSync = Object.keys(manifest.records ?? {}).length > 0
       const remoteHadStorageDataBeforeSync = hasStorageV2RemoteData(manifest.storageV2)
+      const remoteHadNotesBeforeSync = hasNotesRemoteData(manifest.notes)
+      const remoteHadRuntimeDirectoriesBeforeSync = hasRuntimeDirectoriesRemoteData(manifest.runtimeDirectories)
       const remoteStorageEntityTypes = getStorageV2ManifestEntityTypes(manifest.storageV2)
       const previousSyncSpaceId =
         (await this.getSyncState<string>(db, DATA_SYNC_SYNC_SPACE_ID_STATE_KEY)) ??
@@ -3553,6 +3575,9 @@ export class AppDataSyncService {
         hadUsableSyncSpaceBeforeSync && (!previousSyncSpaceId || previousSyncSpaceId !== syncSpace.id)
       const preferRemoteAppDataOnFirstJoin = joiningExistingSyncSpace && remoteHadAppDataRecordsBeforeSync
       const preferRemoteStorageOnFirstJoin = joiningExistingSyncSpace && remoteHadStorageDataBeforeSync
+      const preferRemoteNotesOnFirstJoin = joiningExistingSyncSpace && remoteHadNotesBeforeSync
+      const preferRemoteRuntimeDirectoriesOnFirstJoin =
+        joiningExistingSyncSpace && remoteHadRuntimeDirectoriesBeforeSync
       let localStorageAppRecords: AppDataRecord[] | null = null
       try {
         localStorageAppRecords = await storageV2AppDataKvMirrorService.listRecords(undefined, true)
@@ -3734,7 +3759,8 @@ export class AppDataSyncService {
         db,
         summary,
         context,
-        stageSyncState
+        stageSyncState,
+        { preferRemoteOnFirstJoin: preferRemoteNotesOnFirstJoin }
       )
 
       this.assertSyncRunActive(context, '同步运行时目录')
@@ -3745,7 +3771,8 @@ export class AppDataSyncService {
         db,
         summary,
         context,
-        stageSyncState
+        stageSyncState,
+        { preferRemoteOnFirstJoin: preferRemoteRuntimeDirectoriesOnFirstJoin }
       )
 
       if (this.shouldUploadFullSnapshot(db, manifest, summary.lastSyncAt)) {

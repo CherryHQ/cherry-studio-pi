@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { Readable } from 'node:stream'
@@ -233,6 +234,69 @@ function deferred<T>() {
   })
 
   return { promise, resolve, reject }
+}
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalize)
+  if (!value || typeof value !== 'object') return value
+
+  return Object.keys(value as Record<string, unknown>)
+    .sort()
+    .reduce<Record<string, unknown>>((result, key) => {
+      result[key] = canonicalize((value as Record<string, unknown>)[key])
+      return result
+    }, {})
+}
+
+function hashJson(value: unknown) {
+  return createHash('sha256')
+    .update(JSON.stringify(canonicalize(value)))
+    .digest('hex')
+}
+
+function sha256Buffer(value: Buffer) {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+function notesRemotePath(relativePath: string, valueHash: string) {
+  const pathHash = createHash('sha256').update(relativePath).digest('hex')
+  return `notes/files/${pathHash.slice(0, 2)}/${pathHash}/${valueHash}.bin`
+}
+
+function createRuntimeDirectoryBundle(input: {
+  name: 'Memory' | 'Skills' | 'MCP' | 'Channels'
+  relativePath: string
+  content: string
+  updatedAt: number
+  mode?: number
+}) {
+  const content = Buffer.from(input.content, 'utf8')
+  const mode = input.mode ?? 0o644
+  const file = {
+    relativePath: input.relativePath,
+    valueHash: sha256Buffer(content),
+    byteSize: content.byteLength,
+    updatedAt: input.updatedAt,
+    mode,
+    contentBase64: content.toString('base64')
+  }
+  const valueHash = hashJson([[file.relativePath, file.valueHash, file.byteSize, file.mode]])
+  const bundle = {
+    version: 1,
+    name: input.name,
+    updatedAt: input.updatedAt,
+    files: {
+      [input.relativePath]: file
+    }
+  }
+  const compressed = gzipSync(Buffer.from(JSON.stringify(bundle), 'utf8'), { level: 9 })
+
+  return {
+    valueHash,
+    byteSize: file.byteSize,
+    compressed,
+    fileCount: 1
+  }
 }
 
 function mockDirectoryContentsFromRemoteFiles() {
@@ -1653,6 +1717,120 @@ describe('AppDataSyncService', () => {
       mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/manifest.json'))
     ).toBe(false)
     expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith('last-sync-summary', expect.anything())
+  })
+
+  it('prefers remote notes when first joining an existing sync space', async () => {
+    const localNotePath = path.join(mocks.notesDir, 'daily.md')
+    await fsp.mkdir(path.dirname(localNotePath), { recursive: true })
+    await fsp.writeFile(localNotePath, '# Local Default Note')
+    await fsp.utimes(localNotePath, new Date('2026-06-06T12:00:00.000Z'), new Date('2026-06-06T12:00:00.000Z'))
+
+    const remoteContent = Buffer.from('# Remote Synced Note', 'utf8')
+    const valueHash = sha256Buffer(remoteContent)
+    const remoteRelativePath = notesRemotePath('daily.md', valueHash)
+    const remoteNotePath = `/remote-root/sync/v1/${remoteRelativePath}`
+    mocks.remoteFiles.set(remoteNotePath, remoteContent)
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 3,
+        updatedAt: 1760000000000,
+        records: {},
+        syncSpace: {
+          version: 1,
+          id: 'sync-space-existing',
+          createdAt: 1760000000000,
+          keyMaterial: 'abcdefghijklmnopqrstuvwxyz123456',
+          keyFormat: 'cherry-sync-space-key-v1',
+          secretEncryption: 'cherry-webdav-secret-sync-aes-256-gcm'
+        },
+        notes: {
+          version: 1,
+          updatedAt: 1760000000000,
+          files: {
+            'daily.md': {
+              version: 1,
+              relativePath: 'daily.md',
+              valueHash,
+              byteSize: remoteContent.byteLength,
+              updatedAt: Date.parse('2026-06-01T12:00:00.000Z'),
+              deletedAt: null,
+              deviceId: 'remote-device',
+              path: remoteRelativePath
+            }
+          }
+        }
+      })
+    )
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    await expect(fsp.readFile(localNotePath, 'utf8')).resolves.toBe('# Remote Synced Note')
+    expect(summary.downloaded).toBeGreaterThanOrEqual(1)
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).includes('/notes/files/'))
+    ).toBe(false)
+  })
+
+  it('prefers remote runtime directories when first joining an existing sync space', async () => {
+    const localSkillPath = path.join(mocks.runtimeDataRoot, 'Skills', 'sync-fixture', 'SKILL.md')
+    await fsp.mkdir(path.dirname(localSkillPath), { recursive: true })
+    await fsp.writeFile(localSkillPath, '# Local Default Skill')
+    await fsp.utimes(localSkillPath, new Date('2026-06-06T12:00:00.000Z'), new Date('2026-06-06T12:00:00.000Z'))
+
+    const remoteBundle = createRuntimeDirectoryBundle({
+      name: 'Skills',
+      relativePath: 'sync-fixture/SKILL.md',
+      content: '# Remote Synced Skill',
+      updatedAt: Date.parse('2026-06-01T12:00:00.000Z')
+    })
+    const remoteBundlePath = `/remote-root/sync/v1/runtime-directories/bundles/Skills/${remoteBundle.valueHash}.json.gz`
+    mocks.remoteFiles.set(remoteBundlePath, remoteBundle.compressed)
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 7,
+        updatedAt: 1760000000000,
+        records: {},
+        syncSpace: {
+          version: 1,
+          id: 'sync-space-existing',
+          createdAt: 1760000000000,
+          keyMaterial: 'abcdefghijklmnopqrstuvwxyz123456',
+          keyFormat: 'cherry-sync-space-key-v1',
+          secretEncryption: 'cherry-webdav-secret-sync-aes-256-gcm'
+        },
+        runtimeDirectories: {
+          version: 1,
+          updatedAt: 1760000000000,
+          directories: {
+            Skills: {
+              version: 1,
+              name: 'Skills',
+              valueHash: remoteBundle.valueHash,
+              byteSize: remoteBundle.byteSize,
+              compressedByteSize: remoteBundle.compressed.byteLength,
+              fileCount: remoteBundle.fileCount,
+              updatedAt: Date.parse('2026-06-01T12:00:00.000Z'),
+              deviceId: 'remote-device',
+              path: `runtime-directories/bundles/Skills/${remoteBundle.valueHash}.json.gz`
+            }
+          }
+        }
+      })
+    )
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    await expect(fsp.readFile(localSkillPath, 'utf8')).resolves.toBe('# Remote Synced Skill')
+    expect(summary.downloaded).toBeGreaterThanOrEqual(1)
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) =>
+        String(filePath).includes('/runtime-directories/bundles/Skills/')
+      )
+    ).toBe(false)
   })
 
   it('projects previously synced Storage v2 remote records even when the current record sync only skips them', async () => {
