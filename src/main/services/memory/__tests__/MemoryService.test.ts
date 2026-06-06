@@ -180,6 +180,49 @@ describe('MemoryService migration', () => {
     )
   })
 
+  it('lists memories even when one row has malformed metadata', async () => {
+    mocks.client.execute.mockImplementation(async (input: string | { sql: string; args?: unknown[] }) => {
+      const sql = typeof input === 'string' ? input : input.sql
+      if (sql.includes('SELECT COUNT(*) as total FROM memories')) {
+        return { rows: [{ total: 2 }], columns: [], columnTypes: [] }
+      }
+      if (sql.includes('SELECT') && sql.includes('FROM memories m') && sql.includes('ORDER BY m.created_at')) {
+        return {
+          rows: [
+            {
+              id: 'memory-1',
+              memory: 'First memory',
+              hash: 'hash-1',
+              metadata: '{"source":"valid"}',
+              created_at: '2026-06-06T00:00:00.000Z',
+              updated_at: '2026-06-06T00:00:00.000Z'
+            },
+            {
+              id: 'memory-2',
+              memory: 'Second memory',
+              hash: 'hash-2',
+              metadata: '{bad-json',
+              created_at: '2026-06-06T00:01:00.000Z',
+              updated_at: '2026-06-06T00:01:00.000Z'
+            }
+          ],
+          columns: [],
+          columnTypes: []
+        }
+      }
+      return { rows: [], columns: [], columnTypes: [] }
+    })
+
+    const result = await MemoryService.reload().list()
+
+    expect(result.error).toBeUndefined()
+    expect(result.count).toBe(2)
+    expect(result.memories).toEqual([
+      expect.objectContaining({ id: 'memory-1', metadata: { source: 'valid' } }),
+      expect.objectContaining({ id: 'memory-2', metadata: undefined })
+    ])
+  })
+
   it('rolls back a single memory delete when delete history cannot be recorded', async () => {
     mocks.client.execute.mockImplementation(async (input: string | { sql: string; args?: unknown[] }) => {
       const sql = typeof input === 'string' ? input : input.sql
@@ -234,6 +277,29 @@ describe('MemoryService migration', () => {
     expect(calls).toContain('BEGIN IMMEDIATE')
     expect(calls).toContain('ROLLBACK')
     expect(calls).not.toContain('COMMIT')
+    expect(mocks.client.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sql: expect.stringContaining('UPDATE memories'),
+        args: ['New memory', expect.any(String), null, '{"source":"new"}', expect.any(String), 'memory-1']
+      })
+    )
+  })
+
+  it('updates memory when existing metadata is malformed', async () => {
+    mocks.client.execute.mockImplementation(async (input: string | { sql: string; args?: unknown[] }) => {
+      const sql = typeof input === 'string' ? input : input.sql
+      if (sql.includes('SELECT memory, metadata FROM memories WHERE id')) {
+        return {
+          rows: [{ memory: 'Old memory', metadata: '{bad-json' }],
+          columns: [],
+          columnTypes: []
+        }
+      }
+      return { rows: [], columns: [], columnTypes: [] }
+    })
+
+    await MemoryService.reload().update('memory-1', 'New memory', { source: 'new' })
+
     expect(mocks.client.execute).toHaveBeenCalledWith(
       expect.objectContaining({
         sql: expect.stringContaining('UPDATE memories'),

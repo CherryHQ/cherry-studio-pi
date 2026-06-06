@@ -135,6 +135,38 @@ export class MemoryService {
     }
   }
 
+  private parseMetadata(value: unknown, context: string): Record<string, any> | undefined {
+    if (value === undefined || value === null || value === '') return undefined
+
+    try {
+      const parsed = JSON.parse(String(value)) as unknown
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, any>
+      }
+
+      logger.warn('Ignoring memory metadata because it is not a JSON object', { context })
+    } catch (error) {
+      logger.warn('Ignoring malformed memory metadata', {
+        context,
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+
+    return undefined
+  }
+
+  private rowToMemoryItem(row: any, score?: number): MemoryItem {
+    return {
+      id: row.id as string,
+      memory: row.memory as string,
+      hash: (row.hash as string) || undefined,
+      metadata: this.parseMetadata(row.metadata, `memory:${String(row.id ?? 'unknown')}`),
+      createdAt: row.created_at as string,
+      updatedAt: row.updated_at as string,
+      ...(score === undefined ? {} : { score })
+    }
+  }
+
   /**
    * Initialize the database connection and create tables
    */
@@ -419,14 +451,7 @@ export class MemoryService {
         args: params
       })
 
-      const memories: MemoryItem[] = result.rows.map((row: any) => ({
-        id: row.id as string,
-        memory: row.memory as string,
-        hash: (row.hash as string) || undefined,
-        metadata: row.metadata ? JSON.parse(row.metadata as string) : undefined,
-        createdAt: row.created_at as string,
-        updatedAt: row.updated_at as string
-      }))
+      const memories: MemoryItem[] = result.rows.map((row: any) => this.rowToMemoryItem(row))
 
       return {
         memories,
@@ -484,14 +509,7 @@ export class MemoryService {
         args: params
       })
 
-      const memories: MemoryItem[] = result.rows.map((row: any) => ({
-        id: row.id as string,
-        memory: row.memory as string,
-        hash: (row.hash as string) || undefined,
-        metadata: row.metadata ? JSON.parse(row.metadata as string) : undefined,
-        createdAt: row.created_at as string,
-        updatedAt: row.updated_at as string
-      }))
+      const memories: MemoryItem[] = result.rows.map((row: any) => this.rowToMemoryItem(row))
 
       return {
         memories,
@@ -563,7 +581,7 @@ export class MemoryService {
 
       const row = current.rows[0] as any
       const previousMemory = row.memory as string
-      const previousMetadata = row.metadata ? JSON.parse(row.metadata as string) : {}
+      const previousMetadata = this.parseMetadata(row.metadata, `memory:${String(id)}`) ?? {}
 
       // Generate new hash
       const hash = crypto.createHash('sha256').update(memory.trim()).digest('hex')
@@ -833,15 +851,9 @@ export class MemoryService {
         args: params
       })
 
-      const memories: MemoryItem[] = result.rows.map((row: any) => ({
-        id: row.id as string,
-        memory: row.memory as string,
-        hash: (row.hash as string) || undefined,
-        metadata: row.metadata ? JSON.parse(row.metadata as string) : undefined,
-        createdAt: row.created_at as string,
-        updatedAt: row.updated_at as string,
-        score: row.vector_similarity as number
-      }))
+      const memories: MemoryItem[] = result.rows.map((row: any) =>
+        this.rowToMemoryItem(row, row.vector_similarity as number)
+      )
 
       return {
         memories,
