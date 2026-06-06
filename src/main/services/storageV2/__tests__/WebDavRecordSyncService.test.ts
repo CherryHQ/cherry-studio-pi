@@ -1311,6 +1311,40 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
   })
 
+  it('fails safe when the remote Storage v2 bundle manifest is missing its hash', async () => {
+    const remote = makeSharedWebDavStore()
+    const bundlePath = '/remote-root/sync/v1/storage-v2/bundle/no-hash.json'
+    remote.files.set(
+      bundlePath,
+      JSON.stringify({
+        version: 1,
+        updatedAt: Date.parse('2026-05-29T12:00:00.000Z'),
+        records: {},
+        blobs: {}
+      })
+    )
+    const db = makeSettingsDb([])
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([settingsTable]).sync(remote.client as any, '/remote-root/sync/v1', {
+        version: 1,
+        blobs: {},
+        records: {},
+        bundle: {
+          version: 1,
+          path: 'storage-v2/bundle/no-hash.json',
+          recordCount: 0,
+          blobCount: 0,
+          updatedAt: Date.parse('2026-05-29T12:00:00.000Z')
+        } as any
+      })
+    ).rejects.toThrow('远端 Storage v2 bundle manifest 格式损坏')
+
+    expect(remote.client.getFileContents).not.toHaveBeenCalledWith(bundlePath, expect.anything())
+    expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
+  })
+
   it('fails safe when the remote Storage v2 records manifest is not an object', async () => {
     const remote = makeSharedWebDavStore()
     const db = makeSettingsDb([

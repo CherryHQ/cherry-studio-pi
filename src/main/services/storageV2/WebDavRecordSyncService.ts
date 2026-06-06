@@ -345,7 +345,13 @@ function normalizeRemoteBlobMetaMap(value: unknown) {
 
 function normalizeRemoteBundleMeta(value: unknown) {
   if (value == null) return null
-  if (!isPlainRecord(value) || typeof value.path !== 'string' || !value.path) {
+  if (
+    !isPlainRecord(value) ||
+    typeof value.path !== 'string' ||
+    !value.path ||
+    typeof value.valueHash !== 'string' ||
+    !value.valueHash
+  ) {
     throw new Error('远端 Storage v2 bundle manifest 格式损坏。为避免导入不完整数据，本次同步已停止。')
   }
 
@@ -354,7 +360,7 @@ function normalizeRemoteBundleMeta(value: unknown) {
   return {
     version: 1,
     path: value.path,
-    valueHash: typeof value.valueHash === 'string' ? value.valueHash : '',
+    valueHash: value.valueHash,
     recordCount: Number.isFinite(recordCount) && recordCount >= 0 ? recordCount : 0,
     blobCount: Number.isFinite(blobCount) && blobCount >= 0 ? blobCount : 0,
     updatedAt: parseTime(value.updatedAt)
