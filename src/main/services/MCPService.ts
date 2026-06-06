@@ -76,25 +76,41 @@ const logger = loggerService.withContext('MCPService')
 // still letting users raise it further via `server.timeout`.
 const MCP_CONNECT_TIMEOUT_FLOOR_MS = 180_000
 
-// Redact potentially sensitive fields in objects (headers, tokens, api keys)
-function redactSensitive(input: any): any {
-  const SENSITIVE_KEYS = ['authorization', 'Authorization', 'apiKey', 'api_key', 'apikey', 'token', 'access_token']
-  const MAX_STRING = 300
+const MCP_LOG_SENSITIVE_KEY_PATTERN =
+  /api[-_]?key|private[-_]?key|token|secret|pass(word|phrase)?|passwd|authorization|cookie/i
 
-  const redact = (val: any): any => {
+// Redact potentially sensitive fields before they enter user-visible MCP logs.
+export function redactSensitiveMCPLogData(input: unknown): unknown {
+  const MAX_STRING = 300
+  const seen = new WeakSet<object>()
+
+  const truncateString = (value: string): string =>
+    value.length > MAX_STRING ? `${value.slice(0, MAX_STRING)}…<${value.length - MAX_STRING} more>` : value
+
+  const redact = (val: unknown): unknown => {
     if (val == null) return val
-    if (typeof val === 'string') {
-      return val.length > MAX_STRING ? `${val.slice(0, MAX_STRING)}…<${val.length - MAX_STRING} more>` : val
-    }
+    if (typeof val === 'string') return truncateString(val)
     if (Array.isArray(val)) return val.map((v) => redact(v))
     if (typeof val === 'object') {
-      const out: Record<string, any> = {}
-      for (const [k, v] of Object.entries(val)) {
-        if (SENSITIVE_KEYS.includes(k)) {
-          out[k] = '<redacted>'
-        } else {
-          out[k] = redact(v)
+      if (seen.has(val)) return '<circular>'
+      seen.add(val)
+
+      if (val instanceof Error) {
+        const errorData: Record<string, unknown> = {
+          name: val.name,
+          message: truncateString(val.message)
         }
+
+        for (const [k, v] of Object.entries(val)) {
+          errorData[k] = MCP_LOG_SENSITIVE_KEY_PATTERN.test(k) ? '<redacted>' : redact(v)
+        }
+
+        return errorData
+      }
+
+      const out: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(val)) {
+        out[k] = MCP_LOG_SENSITIVE_KEY_PATTERN.test(k) ? '<redacted>' : redact(v)
       }
       return out
     }
@@ -386,7 +402,7 @@ class McpService {
               }
               // redact headers before logging
               getServerLogger(server).debug(`StreamableHTTPClientTransport options`, {
-                options: redactSensitive(options)
+                options: redactSensitiveMCPLogData(options)
               })
               return new StreamableHTTPClientTransport(new URL(server.baseUrl), options)
             } else if (server.type === 'sse') {
@@ -669,7 +685,7 @@ class McpService {
             timestamp: Date.now(),
             level: 'error',
             message: `Error activating server: ${(error as Error)?.message}`,
-            data: redactSensitive(error),
+            data: redactSensitiveMCPLogData(error),
             source: 'client'
           })
           throw error
@@ -729,7 +745,8 @@ class McpService {
       // Set up logging message notification handler
       client.setNotificationHandler(LoggingMessageNotificationSchema, async (notification) => {
         const data = notification.params?.data
-        const message = safeSerialize(notification.params.data) ?? 'No data'
+        const redactedData = redactSensitiveMCPLogData(data)
+        const message = safeSerialize(redactedData) ?? 'No data'
         logger.debug(`Message from server ${server.name}: ${message}`)
         if (data) {
           this.emitServerLog(server, {
@@ -737,7 +754,7 @@ class McpService {
             // FIXME: as MCPServerLogEntry['level'] not type safe
             level: (notification.params?.level as MCPServerLogEntry['level']) || 'info',
             message,
-            data: redactSensitive(notification.params?.data),
+            data: redactedData,
             source: notification.params?.logger || 'server'
           })
         }
@@ -889,7 +906,7 @@ class McpService {
         timestamp: Date.now(),
         level: 'error',
         message: `Connectivity check failed: ${(error as Error).message}`,
-        data: redactSensitive(error),
+        data: redactSensitiveMCPLogData(error),
         source: 'connectivity'
       })
       // Close the client if connectivity check fails to ensure a clean state for the next attempt
@@ -960,7 +977,7 @@ class McpService {
     const callToolFunc = async ({ server, name, args }: CallToolArgs) => {
       try {
         getServerLogger(server, { tool: name, callId: toolCallId }).debug(`Calling tool`, {
-          args: redactSensitive(args)
+          args: redactSensitiveMCPLogData(args)
         })
         if (typeof args === 'string') {
           try {
@@ -1195,7 +1212,7 @@ class McpService {
 
       // Try to get server information which may include version
       const serverInfo = client.getServerVersion()
-      getServerLogger(server).debug(`Server info`, redactSensitive(serverInfo))
+      getServerLogger(server).debug(`Server info`, redactSensitiveMCPLogData(serverInfo) as Record<string, unknown>)
 
       if (serverInfo && serverInfo.version) {
         getServerLogger(server).debug(`Server version`, { version: serverInfo.version })
