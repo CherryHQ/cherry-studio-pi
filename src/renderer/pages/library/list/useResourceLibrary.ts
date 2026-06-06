@@ -264,26 +264,36 @@ export function useResourceLibrary({
     basePrompts.error ??
     filteredPrompts.error
 
+  const refetchBaseAssistants = baseAssistants.refetch
+  const refetchFilteredAssistants = filteredAssistants.refetch
+  const refetchBaseAgents = baseAgents.refetch
+  const refetchFilteredAgents = filteredAgents.refetch
+  const refetchSkills = skills.refetch
+  const refetchFilteredSkills = filteredSkills.refetch
+  const refetchBasePrompts = basePrompts.refetch
+  const refetchFilteredPrompts = filteredPrompts.refetch
+  const refetchTags = tagList.refetch
+
   const refetch = useCallback(() => {
-    baseAssistants.refetch()
-    filteredAssistants.refetch()
-    baseAgents.refetch()
-    filteredAgents.refetch()
-    skills.refetch()
-    filteredSkills.refetch()
-    basePrompts.refetch()
-    filteredPrompts.refetch()
-    tagList.refetch()
+    refetchBaseAssistants()
+    refetchFilteredAssistants()
+    refetchBaseAgents()
+    refetchFilteredAgents()
+    refetchSkills()
+    refetchFilteredSkills()
+    refetchBasePrompts()
+    refetchFilteredPrompts()
+    refetchTags()
   }, [
-    baseAssistants.refetch,
-    filteredAssistants.refetch,
-    baseAgents.refetch,
-    filteredAgents.refetch,
-    skills.refetch,
-    filteredSkills.refetch,
-    basePrompts.refetch,
-    filteredPrompts.refetch,
-    tagList.refetch
+    refetchBaseAssistants,
+    refetchFilteredAssistants,
+    refetchBaseAgents,
+    refetchFilteredAgents,
+    refetchSkills,
+    refetchFilteredSkills,
+    refetchBasePrompts,
+    refetchFilteredPrompts,
+    refetchTags
   ])
 
   return {
