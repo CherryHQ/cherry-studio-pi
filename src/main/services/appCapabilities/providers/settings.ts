@@ -82,6 +82,17 @@ export const SETTINGS_SETTERS: Record<string, string> = {
 }
 
 const pathEnum = Object.keys(SETTINGS_SETTERS).sort()
+const SENSITIVE_SETTING_PATH_PATTERN = /api[-_]?key|token|secret|pass|password|authorization|cookie/i
+
+function sanitizeSettingValueForAgent(keyPath: string, value: unknown) {
+  if (SENSITIVE_SETTING_PATH_PATTERN.test(keyPath)) {
+    if (typeof value === 'string') return value ? '[redacted]' : value
+    if (value === null || typeof value === 'undefined' || typeof value === 'boolean') return value
+    return '[redacted]'
+  }
+
+  return sanitizeForAgent(value)
+}
 
 export function createSettingsCapabilities(): AppCapabilityDefinition[] {
   return [
@@ -129,7 +140,10 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
         const keyPath = String(input?.path ?? '').trim()
         if (!keyPath) throw new Error('Setting path is required')
         const settings = await reduxService.select('state.settings')
-        return okResult('Setting value read', { path: keyPath, value: sanitizeForAgent(pickPath(settings, keyPath)) })
+        return okResult('Setting value read', {
+          path: keyPath,
+          value: sanitizeSettingValueForAgent(keyPath, pickPath(settings, keyPath))
+        })
       }
     },
     {
@@ -155,7 +169,10 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
         const action = SETTINGS_SETTERS[keyPath]
         if (!action) throw new Error(`Unsupported setting path: ${keyPath}`)
         await reduxService.dispatch({ type: action, payload: input?.value })
-        return okResult('Setting updated', { path: keyPath, value: sanitizeForAgent(input?.value) })
+        return okResult('Setting updated', {
+          path: keyPath,
+          value: sanitizeSettingValueForAgent(keyPath, input?.value)
+        })
       }
     },
     {
