@@ -60,22 +60,19 @@ export const TracePage: React.FC<TracePageProp> = ({ topicId, traceId, modelName
   const getRootSpan = (spans: SpanEntity[]): TraceModal[] => {
     const map: Map<string, TraceModal> = new Map()
 
-    spans.map((span) => {
+    spans.forEach((span) => {
       map.set(span.id, { ...span, children: [], percent: 100, start: 0 })
     })
 
-    return Array.from(
-      map.values().filter((span) => {
-        if (span.parentId && map.has(span.parentId)) {
-          const parent = map.get(span.parentId)
-          if (parent) {
-            parent.children.push(span)
-          }
-          return false
-        }
-        return true
-      })
-    )
+    const roots: TraceModal[] = []
+    for (const span of map.values()) {
+      if (span.parentId && map.has(span.parentId)) {
+        map.get(span.parentId)?.children.push(span)
+      } else {
+        roots.push(span)
+      }
+    }
+    return roots
   }
 
   const findNodeById = useCallback((nodes: TraceModal[], id: string): TraceModal | null => {

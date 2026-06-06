@@ -185,9 +185,7 @@ export class SystemAgentRuntimeService {
     input: unknown = {},
     options: SystemAgentCapabilityCallOptions = {}
   ): Promise<AppCapabilityResult<T>> {
-    const capability = appCapabilityService
-      .list({ includeHidden: true, includeSchemas: true })
-      .find((item) => item.id === id)
+    const capability = appCapabilityService.get(id, { includeHidden: true, includeSchemas: true })
     if (!capability) {
       return {
         ok: false,

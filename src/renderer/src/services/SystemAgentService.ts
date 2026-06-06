@@ -3,6 +3,7 @@ import i18n from '@renderer/i18n'
 
 const logger = loggerService.withContext('SystemAgentService')
 const EVENT_DEDUP_MS = 30_000
+const MAX_RECENT_EVENTS = 200
 const recentEvents = new Map<string, number>()
 let errorTriggersInitialized = false
 
@@ -33,12 +34,29 @@ function dedupeKey(input: SystemAgentEventInput) {
   return [input.type ?? 'event', input.domain ?? '', input.source, input.code ?? '', input.message ?? ''].join('|')
 }
 
+function pruneRecentEvents(now: number) {
+  for (const [key, timestamp] of recentEvents) {
+    if (now - timestamp >= EVENT_DEDUP_MS) {
+      recentEvents.delete(key)
+    }
+  }
+
+  while (recentEvents.size > MAX_RECENT_EVENTS) {
+    const oldestKey = recentEvents.keys().next().value
+    if (!oldestKey) break
+    recentEvents.delete(oldestKey)
+  }
+}
+
 function shouldSkipDuplicate(input: SystemAgentEventInput) {
   const key = dedupeKey(input)
   const now = Date.now()
+  pruneRecentEvents(now)
+
   const last = recentEvents.get(key) ?? 0
   if (now - last < EVENT_DEDUP_MS) return true
   recentEvents.set(key, now)
+  pruneRecentEvents(now)
   return false
 }
 

@@ -3033,7 +3033,7 @@ describe('AppDataSyncService', () => {
     )
   })
 
-  it('keeps reporting syncing while a timed-out background sync is still exiting', async () => {
+  it('clears local in-flight status after the sync runtime deadline even if the background promise is still exiting', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-05T08:00:00.000Z'))
     process.env.CHERRY_STUDIO_DATA_SYNC_MAX_RUNTIME_MS = '1000'
@@ -3079,8 +3079,8 @@ describe('AppDataSyncService', () => {
     await timeoutExpectation
     await expect(service.getStatus()).resolves.toEqual(
       expect.objectContaining({
-        syncing: true,
-        syncStartedAt: expect.any(Number)
+        syncing: false,
+        syncStartedAt: null
       })
     )
 
@@ -3118,7 +3118,7 @@ describe('AppDataSyncService', () => {
     )
   })
 
-  it('does not start another sync while a timed-out background sync is still exiting', async () => {
+  it('allows a retry after the local sync runtime deadline while the stale background promise exits safely', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-05T08:00:00.000Z'))
     process.env.CHERRY_STUDIO_DATA_SYNC_MAX_RUNTIME_MS = '1000'
@@ -3149,13 +3149,13 @@ describe('AppDataSyncService', () => {
     await timeoutExpectation
     await expect(service.getStatus()).resolves.toEqual(
       expect.objectContaining({
-        syncing: true,
-        syncStartedAt: expect.any(Number)
+        syncing: false,
+        syncStartedAt: null
       })
     )
 
-    await expect(service.syncNow(config)).rejects.toThrow('Data sync is already running')
-    expect(mocks.storageRecordSync.sync).toHaveBeenCalledTimes(1)
+    await expect(service.syncNow(config)).resolves.toEqual(expect.objectContaining({ status: 'success' }))
+    expect(mocks.storageRecordSync.sync).toHaveBeenCalledTimes(2)
 
     pendingStorageSync.resolve({
       manifest: { version: 1, records: {}, blobs: {} },
@@ -3174,8 +3174,5 @@ describe('AppDataSyncService', () => {
       }
     })
     await vi.advanceTimersByTimeAsync(0)
-
-    await expect(service.syncNow(config)).resolves.toEqual(expect.objectContaining({ status: 'success' }))
-    expect(mocks.storageRecordSync.sync).toHaveBeenCalledTimes(2)
   })
 })

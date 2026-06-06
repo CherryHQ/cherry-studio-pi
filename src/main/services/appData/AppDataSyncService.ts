@@ -1039,6 +1039,7 @@ export class AppDataSyncService {
   private readonly runtimeId = `${process.pid}-${randomUUID()}`
   private syncInFlight: Promise<DataSyncSummary> | null = null
   private syncBackgroundInFlight: Promise<DataSyncSummary> | null = null
+  private syncRunContext: SyncRunContext | null = null
   private syncStartedAt: number | null = null
   private pendingFailureSafetySnapshot: DataSyncFailureSafetySnapshot | null = null
 
@@ -1124,7 +1125,30 @@ export class AppDataSyncService {
   private clearSyncStartedAtIfIdle() {
     if (!this.syncInFlight && !this.syncBackgroundInFlight) {
       this.syncStartedAt = null
+      this.syncRunContext = null
     }
+  }
+
+  private clearExpiredInFlightSync(now = Date.now()) {
+    const context = this.syncRunContext
+    if (!context || (!this.syncInFlight && !this.syncBackgroundInFlight)) return false
+    if (!context.aborted && now < context.deadlineAt) return false
+
+    const reason = context.abortReason ?? this.formatSyncDeadlineExceededMessage(context)
+    if (!context.aborted) {
+      this.abortSyncRun(context, reason)
+    }
+
+    logger.warn('Clearing expired local data sync in-flight state', {
+      startedAt: context.startedAt,
+      deadlineAt: context.deadlineAt,
+      reason
+    })
+    this.syncInFlight = null
+    this.syncBackgroundInFlight = null
+    this.syncStartedAt = null
+    this.syncRunContext = null
+    return true
   }
 
   private createWebDavClient(config: WebDavConfig) {
@@ -3786,12 +3810,14 @@ export class AppDataSyncService {
   async syncNow(config: WebDavConfig): Promise<DataSyncSummary> {
     const normalizedConfig = this.normalizeSyncWebDavConfig(config)
 
+    this.clearExpiredInFlightSync()
     if (this.syncInFlight || this.syncBackgroundInFlight) {
       throw new Error(DATA_SYNC_ALREADY_RUNNING_ERROR)
     }
 
     const context = this.createSyncRunContext()
     this.syncStartedAt = context.startedAt
+    this.syncRunContext = context
     this.pendingFailureSafetySnapshot = null
     const backgroundSync = (async () => {
       await this.pruneLocalDataSyncTempBackups({
@@ -3820,6 +3846,9 @@ export class AppDataSyncService {
       if (this.syncInFlight === sync) {
         this.syncInFlight = null
         this.clearSyncStartedAtIfIdle()
+      }
+      if (context.aborted) {
+        this.clearExpiredInFlightSync()
       }
     }
   }
@@ -4224,6 +4253,7 @@ export class AppDataSyncService {
   }
 
   async getStatus() {
+    this.clearExpiredInFlightSync()
     const db = await getAppDataDatabase()
     const storageDeviceId = await storageV2AppDataKvMirrorService.getSyncState<string>('device-id')
     const lastSummary =

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   appCapabilityService: {
+    get: vi.fn(),
     list: vi.fn(),
     search: vi.fn(),
     call: vi.fn()
@@ -92,17 +93,21 @@ describe('SystemAgentRuntimeService', () => {
   })
 
   it('blocks write capabilities until the caller confirms approval', async () => {
-    mocks.appCapabilityService.list.mockReturnValueOnce([writeCapability])
+    mocks.appCapabilityService.get.mockReturnValueOnce(writeCapability)
 
     const result = await new SystemAgentRuntimeService().callCapability('dataSync.sync.now')
 
     expect(result.ok).toBe(false)
     expect(result.error).toContain('需要用户确认')
+    expect(mocks.appCapabilityService.get).toHaveBeenCalledWith('dataSync.sync.now', {
+      includeHidden: true,
+      includeSchemas: true
+    })
     expect(mocks.appCapabilityService.call).not.toHaveBeenCalled()
   })
 
   it('calls approved capabilities through the shared app capability service', async () => {
-    mocks.appCapabilityService.list.mockReturnValueOnce([writeCapability])
+    mocks.appCapabilityService.get.mockReturnValueOnce(writeCapability)
     mocks.appCapabilityService.call.mockResolvedValueOnce({ ok: true, summary: 'done' })
 
     const result = await new SystemAgentRuntimeService().callCapability(
@@ -112,6 +117,10 @@ describe('SystemAgentRuntimeService', () => {
     )
 
     expect(result).toEqual({ ok: true, summary: 'done' })
+    expect(mocks.appCapabilityService.get).toHaveBeenCalledWith('dataSync.sync.now', {
+      includeHidden: true,
+      includeSchemas: true
+    })
     expect(mocks.appCapabilityService.call).toHaveBeenCalledWith(
       'dataSync.sync.now',
       { saveConfig: false },

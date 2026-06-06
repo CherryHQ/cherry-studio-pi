@@ -58,6 +58,19 @@ describe('AppCapabilityRegistry', () => {
     ])
   })
 
+  it('looks up a single descriptor without listing and sorting all capabilities', () => {
+    const registry = new AppCapabilityRegistry()
+    registry.register(capability({ id: 'settings.hidden', hidden: true }))
+
+    expect(registry.getDescriptor('settings.hidden')).toBeUndefined()
+    expect(registry.getDescriptor('settings.hidden', { includeHidden: true, includeSchemas: true })).toEqual(
+      expect.objectContaining({
+        id: 'settings.hidden',
+        inputSchema: { type: 'object', properties: {} }
+      })
+    )
+  })
+
   it('expands common Chinese product intents before scoring', () => {
     const registry = new AppCapabilityRegistry()
     registry.register(capability({ id: 'settings.read' }))

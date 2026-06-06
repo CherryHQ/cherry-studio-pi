@@ -16,7 +16,6 @@ class SpanCacheService implements TraceCache {
   private topicMap: Map<string, string> = new Map<string, string>()
   private fileDir: string
   private cache: Map<string, SpanEntity> = new Map<string, SpanEntity>()
-  pri
 
   constructor() {
     this.fileDir = path.join(os.homedir(), HOME_CHERRY_DIR, 'trace')
@@ -56,7 +55,7 @@ class SpanCacheService implements TraceCache {
   }
 
   async cleanTopic(topicId: string, traceId?: string, modelName?: string) {
-    const spans = Array.from(this.cache.values().filter((e) => e.topicId === topicId))
+    const spans = Array.from(this.cache.values()).filter((e) => e.topicId === topicId)
     spans.map((e) => e.id).forEach((id) => this.cache.delete(id))
 
     await this._checkFolder(path.join(this.fileDir, topicId))
@@ -100,7 +99,7 @@ class SpanCacheService implements TraceCache {
     if (!traceId) {
       return
     }
-    const spans = Array.from(this.cache.values().filter((e) => e.traceId === traceId || !e.modelName))
+    const spans = Array.from(this.cache.values()).filter((e) => e.traceId === traceId || !e.modelName)
     await this._saveToFile(spans, traceId, topicId)
     this.topicMap.delete(traceId)
     this._cleanCache(traceId)
@@ -108,17 +107,13 @@ class SpanCacheService implements TraceCache {
 
   async getSpans(topicId: string, traceId: string, modelName?: string) {
     if (this.topicMap.has(traceId)) {
-      const spans: SpanEntity[] = []
-      this.cache
-        .values()
+      return Array.from(this.cache.values())
         .filter((spanEntity) => {
           return spanEntity.traceId === traceId && spanEntity.modelName
         })
         .filter((spanEntity) => {
           return !modelName || spanEntity.modelName === modelName
         })
-        .forEach((sp) => spans.push(sp))
-      return spans
     } else {
       return this._getHisData(topicId, traceId, modelName)
     }
@@ -268,8 +263,7 @@ class SpanCacheService implements TraceCache {
   }
 
   private _cleanCache(traceId: string, modelName?: string) {
-    this.cache
-      .values()
+    Array.from(this.cache.values())
       .filter((span) => {
         return span && span.traceId === traceId && (!modelName || span.modelName === modelName)
       })

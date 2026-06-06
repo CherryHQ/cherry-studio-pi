@@ -32,6 +32,11 @@ export class AppCapabilityService {
     return this.registry.search(options)
   }
 
+  get(id: string, options: Pick<AppCapabilityListOptions, 'includeHidden' | 'includeSchemas'> = {}) {
+    this.ensureInitialized()
+    return this.registry.getDescriptor(id, options)
+  }
+
   async call<T = unknown>(
     id: string,
     input: unknown = {},

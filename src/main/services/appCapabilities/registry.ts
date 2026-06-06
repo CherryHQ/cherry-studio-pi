@@ -66,6 +66,13 @@ export class AppCapabilityRegistry {
     return this.capabilities.get(id)
   }
 
+  getDescriptor(id: string, options: Pick<AppCapabilityListOptions, 'includeHidden' | 'includeSchemas'> = {}) {
+    const capability = this.capabilities.get(id)
+    if (!capability) return undefined
+    if (!options.includeHidden && capability.hidden) return undefined
+    return this.toDescriptor(capability, options.includeSchemas === true)
+  }
+
   list(options: AppCapabilityListOptions = {}): AppCapabilityDescriptor[] {
     return Array.from(this.capabilities.values())
       .filter((capability) => this.matchesListOptions(capability, options))
