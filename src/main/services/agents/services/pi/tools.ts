@@ -93,17 +93,72 @@ const stringifyToolValue = (value: unknown, space?: number) => {
   )
 }
 
+const exceedsToolValueCharBudget = (value: unknown, maxChars: number) => {
+  const seen = new WeakSet<object>()
+  let estimatedChars = 0
+
+  const add = (chars: number) => {
+    estimatedChars += chars
+    return estimatedChars > maxChars
+  }
+
+  const visit = (currentValue: unknown): boolean => {
+    if (typeof currentValue === 'string') {
+      return add(JSON.stringify(currentValue).length)
+    }
+    if (typeof currentValue === 'number' || typeof currentValue === 'boolean' || typeof currentValue === 'bigint') {
+      return add(String(currentValue).length)
+    }
+    if (currentValue === null || typeof currentValue === 'undefined') {
+      return add(4)
+    }
+    if (typeof currentValue === 'function' || typeof currentValue === 'symbol') {
+      return add(4)
+    }
+    if (typeof currentValue !== 'object') {
+      return add(String(currentValue).length)
+    }
+    if (seen.has(currentValue)) {
+      return add('"[Circular]"'.length)
+    }
+
+    seen.add(currentValue)
+    try {
+      if (Array.isArray(currentValue)) {
+        if (add(2)) return true
+        for (const item of currentValue) {
+          if (visit(item) || add(1)) return true
+        }
+        return false
+      }
+
+      if (add(2)) return true
+      for (const [key, childValue] of Object.entries(currentValue as Record<string, unknown>)) {
+        if (add(JSON.stringify(key).length + 1) || visit(childValue) || add(1)) return true
+      }
+      return false
+    } finally {
+      seen.delete(currentValue)
+    }
+  }
+
+  return visit(value)
+}
+
+const previewToolValue = (value: unknown, maxChars: number, space?: number) => {
+  if (typeof value === 'string') return truncateOutput(value, maxChars)
+  return truncateOutput(stringifyToolValue(value, space), maxChars)
+}
+
 const compactAppCapabilityResult = (result: any, maxChars: number) => {
-  const serialized = stringifyToolValue(result)
-  if (serialized.length <= maxChars) {
+  if (!exceedsToolValueCharBudget(result, maxChars) && stringifyToolValue(result).length <= maxChars) {
     return {
       result,
       truncated: false
     }
   }
 
-  const dataPreview =
-    result?.data === undefined ? undefined : truncateOutput(stringifyToolValue(result.data, 2), maxChars)
+  const dataPreview = result?.data === undefined ? undefined : previewToolValue(result.data, maxChars, 2)
   const compacted = {
     ok: result?.ok === true,
     isError: result?.isError === true,
