@@ -1311,6 +1311,50 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
   })
 
+  it('fails safe when the remote Storage v2 records manifest is not an object', async () => {
+    const remote = makeSharedWebDavStore()
+    const db = makeSettingsDb([
+      {
+        key: 'theme',
+        value_json: '{"mode":"local"}',
+        scope: 'app',
+        updated_at: '2026-05-29T12:00:00.000Z',
+        deleted_at: null,
+        version: 1
+      }
+    ])
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([settingsTable]).sync(remote.client as any, '/remote-root/sync/v1', {
+        version: 1,
+        records: [] as any,
+        blobs: {},
+        bundle: null
+      } as any)
+    ).rejects.toThrow('远端 Storage v2 records manifest 格式损坏')
+
+    expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
+  })
+
+  it('fails safe when the remote Storage v2 blobs manifest is not an object', async () => {
+    const remote = makeSharedWebDavStore()
+    const db = makeBlobDb()
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([blobTable]).sync(remote.client as any, '/remote-root/sync/v1', {
+        version: 1,
+        records: {},
+        blobs: 'corrupted' as any,
+        bundle: null
+      } as any)
+    ).rejects.toThrow('远端 Storage v2 blobs manifest 格式损坏')
+
+    expect(db.state.blobs).toEqual([])
+    expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
+  })
+
   it('rejects oversized remote Storage v2 secret bundles before downloading them', async () => {
     const credentialRow: ProviderCredentialRow = {
       provider_id: 'provider-1',

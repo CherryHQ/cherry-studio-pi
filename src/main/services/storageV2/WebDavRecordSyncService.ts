@@ -258,13 +258,140 @@ function makeManifest(): StorageV2WebDavRecordSyncManifest {
   return { version: 1, records: {}, blobs: {}, bundle: null }
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function normalizeManifestObjectMap<T>(
+  value: unknown,
+  label: string,
+  normalizeEntry: (id: string, value: unknown) => T
+) {
+  if (value == null) return {}
+  if (!isPlainRecord(value)) {
+    throw new Error(`${label} 格式损坏。为避免把损坏的远端同步状态当作空数据覆盖，本次同步已停止。`)
+  }
+
+  return Object.fromEntries(Object.entries(value).map(([id, entry]) => [id, normalizeEntry(id, entry)]))
+}
+
+function normalizeRemoteRecordMetaMap(value: unknown) {
+  return normalizeManifestObjectMap<RemoteRecordMeta>(value, '远端 Storage v2 records manifest', (id, entry) => {
+    if (
+      !isPlainRecord(entry) ||
+      typeof entry.entityType !== 'string' ||
+      !entry.entityType ||
+      !Array.isArray(entry.idValues) ||
+      entry.idValues.some((idValue) => typeof idValue !== 'string') ||
+      typeof entry.valueHash !== 'string' ||
+      !entry.valueHash ||
+      typeof entry.path !== 'string' ||
+      !entry.path
+    ) {
+      throw new Error(
+        `远端 Storage v2 records manifest 中的记录 ${id} 格式损坏。为避免导入或发布不完整数据，本次同步已停止。`
+      )
+    }
+
+    const version = Number(entry.version ?? 1)
+    return {
+      entityType: entry.entityType,
+      table: typeof entry.table === 'string' && entry.table ? entry.table : entry.entityType,
+      idValues: entry.idValues,
+      valueHash: entry.valueHash,
+      updatedAt: parseTime(entry.updatedAt),
+      deletedAt: entry.deletedAt == null ? null : parseTime(entry.deletedAt) || null,
+      version: Number.isFinite(version) ? version : 1,
+      path: entry.path
+    }
+  })
+}
+
+function normalizeRemoteBlobMetaMap(value: unknown) {
+  return normalizeManifestObjectMap<RemoteBlobMeta>(value, '远端 Storage v2 blobs manifest', (id, entry) => {
+    if (
+      !isPlainRecord(entry) ||
+      typeof entry.id !== 'string' ||
+      !entry.id ||
+      typeof entry.checksum !== 'string' ||
+      !entry.checksum ||
+      typeof entry.storagePath !== 'string' ||
+      !entry.storagePath ||
+      typeof entry.path !== 'string' ||
+      !entry.path
+    ) {
+      throw new Error(
+        `远端 Storage v2 blobs manifest 中的附件 ${id} 格式损坏。为避免导入或发布不完整附件，本次同步已停止。`
+      )
+    }
+
+    const byteSize = Number(entry.byteSize)
+    if (!Number.isFinite(byteSize) || byteSize < 0) {
+      throw new Error(
+        `远端 Storage v2 blobs manifest 中的附件 ${id} 文件大小无效。为避免导入异常附件，本次同步已停止。`
+      )
+    }
+
+    return {
+      id: entry.id,
+      checksum: entry.checksum,
+      byteSize,
+      storagePath: entry.storagePath,
+      path: entry.path,
+      updatedAt: parseTime(entry.updatedAt)
+    }
+  })
+}
+
+function normalizeRemoteBundleMeta(value: unknown) {
+  if (value == null) return null
+  if (!isPlainRecord(value) || typeof value.path !== 'string' || !value.path) {
+    throw new Error('远端 Storage v2 bundle manifest 格式损坏。为避免导入不完整数据，本次同步已停止。')
+  }
+
+  const recordCount = Number(value.recordCount ?? 0)
+  const blobCount = Number(value.blobCount ?? 0)
+  return {
+    version: 1,
+    path: value.path,
+    valueHash: typeof value.valueHash === 'string' ? value.valueHash : '',
+    recordCount: Number.isFinite(recordCount) && recordCount >= 0 ? recordCount : 0,
+    blobCount: Number.isFinite(blobCount) && blobCount >= 0 ? blobCount : 0,
+    updatedAt: parseTime(value.updatedAt)
+  } satisfies RemoteRecordBundleMeta
+}
+
+function normalizeRemoteSecretMeta(value: unknown) {
+  if (value == null) return null
+  if (
+    !isPlainRecord(value) ||
+    typeof value.path !== 'string' ||
+    !value.path ||
+    typeof value.valueHash !== 'string' ||
+    !value.valueHash ||
+    value.encryption !== SECRET_SYNC_ENCRYPTION
+  ) {
+    throw new Error('远端 Storage v2 敏感配置 manifest 格式损坏。为避免导入不完整模型密钥，本次同步已停止。')
+  }
+
+  const secretCount = Number(value.secretCount ?? 0)
+  return {
+    version: 1,
+    path: value.path,
+    valueHash: value.valueHash,
+    secretCount: Number.isFinite(secretCount) && secretCount >= 0 ? secretCount : 0,
+    updatedAt: parseTime(value.updatedAt),
+    encryption: SECRET_SYNC_ENCRYPTION
+  } satisfies RemoteSecretVaultMeta
+}
+
 function normalizeManifest(manifest?: StorageV2WebDavRecordSyncManifest | null): StorageV2WebDavRecordSyncManifest {
   return {
     version: 1,
-    records: manifest?.records ?? {},
-    blobs: manifest?.blobs ?? {},
-    bundle: manifest?.bundle ?? null,
-    secrets: manifest?.secrets ?? null
+    records: normalizeRemoteRecordMetaMap(manifest?.records),
+    blobs: normalizeRemoteBlobMetaMap(manifest?.blobs),
+    bundle: normalizeRemoteBundleMeta(manifest?.bundle),
+    secrets: normalizeRemoteSecretMeta(manifest?.secrets)
   }
 }
 
