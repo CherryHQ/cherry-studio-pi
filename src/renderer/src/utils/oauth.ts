@@ -3,6 +3,22 @@ import { PPIO_APP_SECRET, PPIO_CLIENT_ID, SILICON_CLIENT_ID, TOKENFLUX_HOST } fr
 import i18n, { getLanguageCode } from '@renderer/i18n'
 
 const logger = loggerService.withContext('Utils:oauth')
+const oauthMessageCleanups = new Map<string, () => void>()
+
+function replaceOAuthMessageHandler(provider: string, handler: (event: MessageEvent) => void) {
+  oauthMessageCleanups.get(provider)?.()
+
+  window.addEventListener('message', handler)
+  const cleanup = () => {
+    window.removeEventListener('message', handler)
+    if (oauthMessageCleanups.get(provider) === cleanup) {
+      oauthMessageCleanups.delete(provider)
+    }
+  }
+  oauthMessageCleanups.set(provider, cleanup)
+
+  return cleanup
+}
 
 export const oauthWithSiliconFlow = async (setKey) => {
   const authUrl = `https://account.siliconflow.cn/oauth?client_id=${SILICON_CLIENT_ID}`
@@ -13,20 +29,21 @@ export const oauthWithSiliconFlow = async (setKey) => {
     'width=720,height=720,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes'
   )
 
+  let cleanup: () => void = () => undefined
   const messageHandler = (event) => {
-    if (event.data.length > 0 && event.data[0]['secretKey'] !== undefined) {
-      setKey(event.data[0]['secretKey'])
+    const payload = event.data
+    if (Array.isArray(payload) && payload[0]?.secretKey !== undefined) {
+      setKey(payload[0].secretKey)
       popup?.close()
-      window.removeEventListener('message', messageHandler)
+      cleanup()
     }
   }
 
-  window.removeEventListener('message', messageHandler)
-  window.addEventListener('message', messageHandler)
+  cleanup = replaceOAuthMessageHandler('siliconflow', messageHandler)
 }
 
 export const oauthWithAihubmix = async (setKey) => {
-  const authUrl = ` https://console.aihubmix.com/token?client_id=cherry_studio_oauth&lang=${getLanguageCode()}&aff=SJyh`
+  const authUrl = `https://console.aihubmix.com/token?client_id=cherry_studio_oauth&lang=${getLanguageCode()}&aff=SJyh`
 
   const popup = window.open(
     authUrl,
@@ -34,10 +51,11 @@ export const oauthWithAihubmix = async (setKey) => {
     'width=720,height=720,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes'
   )
 
+  let cleanup: () => void = () => undefined
   const messageHandler = async (event) => {
     const data = event.data
 
-    if (data && data.key === 'cherry_studio_oauth_callback') {
+    if (data?.key === 'cherry_studio_oauth_callback' && data.data) {
       const { iv, encryptedData } = data.data
 
       try {
@@ -47,18 +65,18 @@ export const oauthWithAihubmix = async (setKey) => {
         if (api_keys && api_keys.length > 0) {
           setKey(api_keys[0].value)
           popup?.close()
-          window.removeEventListener('message', messageHandler)
+          cleanup()
         }
       } catch (error) {
         logger.error('[oauthWithAihubmix] error', error as Error)
         popup?.close()
+        cleanup()
         window.toast.error(i18n.t('settings.provider.oauth.error'))
       }
     }
   }
 
-  window.removeEventListener('message', messageHandler)
-  window.addEventListener('message', messageHandler)
+  cleanup = replaceOAuthMessageHandler('aihubmix', messageHandler)
 }
 
 export const oauthWithPPIO = async (setKey) => {
@@ -79,6 +97,7 @@ export const oauthWithPPIO = async (setKey) => {
   logger.debug('[PPIO OAuth] Setting up protocol listener')
 
   return new Promise<string>((resolve, reject) => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
     const removeListener = window.api.protocol.onReceiveData(async (data) => {
       try {
         const url = new URL(data.url)
@@ -130,9 +149,26 @@ export const oauthWithPPIO = async (setKey) => {
         logger.error('[PPIO OAuth] Error processing callback:', error as Error)
         reject(error)
       } finally {
-        removeListener()
+        cleanup()
       }
     })
+
+    function cleanup(): void {
+      removeListener()
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+        timeoutId = null
+      }
+    }
+
+    timeoutId = setTimeout(
+      () => {
+        logger.warn('[PPIO OAuth] Flow timed out')
+        cleanup()
+        reject(new Error('OAuth flow timed out'))
+      },
+      10 * 60 * 1000
+    )
   })
 }
 
@@ -160,16 +196,17 @@ export const oauthWith302AI = async (setKey) => {
     'width=720,height=720,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes'
   )
 
+  let cleanup: () => void = () => undefined
   const messageHandler = (event) => {
-    if (event.data && event.data.data.apikey !== undefined) {
-      setKey(event.data.data.apikey)
+    const apiKey = event.data?.data?.apikey
+    if (apiKey !== undefined) {
+      setKey(apiKey)
       popup?.close()
-      window.removeEventListener('message', messageHandler)
+      cleanup()
     }
   }
 
-  window.removeEventListener('message', messageHandler)
-  window.addEventListener('message', messageHandler)
+  cleanup = replaceOAuthMessageHandler('302ai', messageHandler)
 }
 
 export const oauthWithAiOnly = async (setKey) => {
@@ -181,16 +218,17 @@ export const oauthWithAiOnly = async (setKey) => {
     'width=720,height=720,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes'
   )
 
+  let cleanup: () => void = () => undefined
   const messageHandler = (event) => {
-    if (event.data.length > 0 && event.data[0]['secretKey'] !== undefined) {
-      setKey(event.data[0]['secretKey'])
+    const payload = event.data
+    if (Array.isArray(payload) && payload[0]?.secretKey !== undefined) {
+      setKey(payload[0].secretKey)
       popup?.close()
-      window.removeEventListener('message', messageHandler)
+      cleanup()
     }
   }
 
-  window.removeEventListener('message', messageHandler)
-  window.addEventListener('message', messageHandler)
+  cleanup = replaceOAuthMessageHandler('aionly', messageHandler)
 }
 
 export interface NewApiOAuthConfig {

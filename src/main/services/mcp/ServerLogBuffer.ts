@@ -14,7 +14,7 @@ export class ServerLogBuffer {
   private logs: Map<string, MCPServerLogEntry[]> = new Map()
 
   constructor(maxEntries = 200) {
-    this.maxEntries = maxEntries
+    this.maxEntries = normalizeMaxEntries(maxEntries)
   }
 
   append(serverKey: string, entry: MCPServerLogEntry) {
@@ -33,4 +33,8 @@ export class ServerLogBuffer {
   remove(serverKey: string) {
     this.logs.delete(serverKey)
   }
+}
+
+function normalizeMaxEntries(maxEntries: number) {
+  return Number.isFinite(maxEntries) ? Math.max(0, Math.floor(maxEntries)) : 0
 }

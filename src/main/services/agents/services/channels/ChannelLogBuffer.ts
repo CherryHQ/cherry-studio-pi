@@ -9,14 +9,14 @@ export class ChannelLogBuffer {
   private logs: Map<string, ChannelLogEntry[]> = new Map()
 
   constructor(maxEntries = 200) {
-    this.maxEntries = maxEntries
+    this.maxEntries = normalizeMaxEntries(maxEntries)
   }
 
   append(channelId: string, entry: ChannelLogEntry) {
     const list = this.logs.get(channelId) ?? []
     list.push(entry)
-    while (list.length > this.maxEntries) {
-      list.shift()
+    if (list.length > this.maxEntries) {
+      list.splice(0, list.length - this.maxEntries)
     }
     this.logs.set(channelId, list)
   }
@@ -28,4 +28,8 @@ export class ChannelLogBuffer {
   remove(channelId: string) {
     this.logs.delete(channelId)
   }
+}
+
+function normalizeMaxEntries(maxEntries: number) {
+  return Number.isFinite(maxEntries) ? Math.max(0, Math.floor(maxEntries)) : 0
 }

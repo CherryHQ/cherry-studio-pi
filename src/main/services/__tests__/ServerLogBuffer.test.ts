@@ -26,4 +26,14 @@ describe('ServerLogBuffer', () => {
     expect(buffer.get('one')).toHaveLength(1)
     expect(buffer.get('two')).toHaveLength(1)
   })
+
+  it('normalizes invalid max entries to an empty bounded buffer', () => {
+    const negativeBuffer = new ServerLogBuffer(-1)
+    negativeBuffer.append('srv', { timestamp: 1, level: 'info', message: 'a' })
+    expect(negativeBuffer.get('srv')).toEqual([])
+
+    const nanBuffer = new ServerLogBuffer(Number.NaN)
+    nanBuffer.append('srv', { timestamp: 1, level: 'info', message: 'a' })
+    expect(nanBuffer.get('srv')).toEqual([])
+  })
 })
