@@ -486,6 +486,10 @@ function makeManifest(): RemoteManifest {
   }
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
 function randomSyncSpaceKeyMaterial() {
   return randomBytes(32).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
 }
@@ -511,6 +515,97 @@ function isUsableSyncSpace(value: RemoteSyncSpace | null | undefined): value is 
     value.keyFormat === SYNC_SPACE_KEY_FORMAT &&
     value.secretEncryption === SYNC_SPACE_SECRET_ENCRYPTION
   )
+}
+
+function normalizeRemoteSyncSpace(value: unknown): RemoteSyncSpace | null {
+  if (value == null) return null
+  if (!isPlainRecord(value) || !isUsableSyncSpace(value as RemoteSyncSpace)) {
+    throw new Error('远端同步空间信息损坏。为避免使用错误密钥覆盖或导入多端同步数据，本次同步已停止。')
+  }
+  return value as RemoteSyncSpace
+}
+
+function normalizeAppDataRecordManifest(value: unknown): Record<string, RemoteRecordMeta> {
+  if (value == null) return {}
+  if (!isPlainRecord(value)) {
+    throw new Error('远端应用数据 records manifest 格式损坏。为避免把损坏状态当作空数据覆盖，本次同步已停止。')
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([id, meta]) => {
+      if (
+        !isPlainRecord(meta) ||
+        typeof meta.scope !== 'string' ||
+        !meta.scope ||
+        typeof meta.key !== 'string' ||
+        !meta.key ||
+        typeof meta.valueHash !== 'string' ||
+        !meta.valueHash ||
+        typeof meta.path !== 'string' ||
+        !meta.path
+      ) {
+        throw new Error(
+          `远端应用数据 records manifest 中的记录 ${id} 格式损坏。为避免导入或发布不完整数据，本次同步已停止。`
+        )
+      }
+
+      return [
+        id,
+        {
+          scope: meta.scope,
+          key: meta.key,
+          valueHash: meta.valueHash,
+          updatedAt: Math.max(0, Number(meta.updatedAt) || 0),
+          deletedAt: meta.deletedAt == null ? null : Math.max(0, Number(meta.deletedAt) || 0),
+          deviceId: typeof meta.deviceId === 'string' && meta.deviceId ? meta.deviceId : 'unknown',
+          version: Math.max(1, Number(meta.version) || 1),
+          path: normalizeRemoteRelativePath(meta.path, 'Remote app data record path')
+        }
+      ]
+    })
+  )
+}
+
+function normalizeRemoteSnapshotMeta(value: unknown, id: string): RemoteSnapshotMeta {
+  if (
+    !isPlainRecord(value) ||
+    typeof value.id !== 'string' ||
+    !value.id ||
+    typeof value.fileName !== 'string' ||
+    !value.fileName ||
+    typeof value.path !== 'string' ||
+    !value.path
+  ) {
+    throw new Error(`远端安全快照 manifest 中的记录 ${id} 格式损坏。为避免清理或恢复错误快照，本次同步已停止。`)
+  }
+
+  return {
+    id: value.id,
+    fileName: value.fileName,
+    path: normalizeRemoteSnapshotPath(value.path),
+    byteSize: Math.max(0, Number(value.byteSize) || 0),
+    checksum: typeof value.checksum === 'string' && value.checksum ? value.checksum : undefined,
+    createdAt: typeof value.createdAt === 'string' && value.createdAt ? value.createdAt : new Date(0).toISOString(),
+    uploadedAt: Math.max(0, Number(value.uploadedAt) || 0),
+    deviceId: typeof value.deviceId === 'string' && value.deviceId ? value.deviceId : 'unknown',
+    format: 'cherry-studio-direct-backup-zip'
+  }
+}
+
+function normalizeSnapshotManifest(value: unknown): Record<string, RemoteSnapshotMeta> {
+  if (value == null) return {}
+  if (!isPlainRecord(value)) {
+    throw new Error('远端安全快照 manifest 格式损坏。为避免把损坏状态当作空快照覆盖，本次同步已停止。')
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([id, snapshot]) => [id, normalizeRemoteSnapshotMeta(snapshot, id)])
+  )
+}
+
+function normalizeLatestSnapshotMeta(value: unknown): RemoteSnapshotMeta | null {
+  if (value == null) return null
+  return normalizeRemoteSnapshotMeta(value, 'latestSnapshot')
 }
 
 function bufferFromRemote(value: string | Buffer | ArrayBuffer | unknown) {
@@ -2039,6 +2134,13 @@ export class AppDataSyncService {
   }
 
   private normalizeNotesManifest(manifest?: RemoteNotesManifest | null): RemoteNotesManifest {
+    if (manifest != null && !isPlainRecord(manifest)) {
+      throw new Error('远端笔记同步 manifest 格式损坏。为避免把损坏状态当作空笔记覆盖，本次同步已停止。')
+    }
+    if (manifest?.files != null && !isPlainRecord(manifest.files)) {
+      throw new Error('远端笔记文件 manifest 格式损坏。为避免把损坏状态当作空笔记覆盖，本次同步已停止。')
+    }
+
     const files: Record<string, RemoteNotesFileMeta> = Object.create(null)
 
     for (const [id, meta] of Object.entries(manifest?.files ?? {})) {
@@ -2104,6 +2206,13 @@ export class AppDataSyncService {
   private normalizeRuntimeDirectoriesManifest(
     manifest?: RemoteRuntimeDirectoriesManifest | null
   ): RemoteRuntimeDirectoriesManifest {
+    if (manifest != null && !isPlainRecord(manifest)) {
+      throw new Error('远端运行时目录同步 manifest 格式损坏。为避免把损坏状态当作空目录覆盖，本次同步已停止。')
+    }
+    if (manifest?.directories != null && !isPlainRecord(manifest.directories)) {
+      throw new Error('远端运行时目录列表 manifest 格式损坏。为避免把损坏状态当作空目录覆盖，本次同步已停止。')
+    }
+
     const directories: Record<string, RemoteRuntimeDirectoryMeta> = Object.create(null)
 
     for (const [id, meta] of Object.entries(manifest?.directories ?? {})) {
@@ -2143,15 +2252,22 @@ export class AppDataSyncService {
   }
 
   private normalizeManifest(manifest: RemoteManifest | null): RemoteManifest {
+    if (manifest != null && !isPlainRecord(manifest)) {
+      throw new Error('远端同步状态 manifest.json 格式损坏。为避免覆盖其他设备的数据，本次同步已停止。')
+    }
+
     const nextManifest = manifest ?? makeManifest()
     nextManifest.generation = Number.isFinite(nextManifest.generation) ? Number(nextManifest.generation) : 0
-    nextManifest.records = nextManifest.records ?? {}
-    nextManifest.syncSpace = nextManifest.syncSpace ?? null
+    nextManifest.records = normalizeAppDataRecordManifest(nextManifest.records)
+    nextManifest.syncSpace = normalizeRemoteSyncSpace(nextManifest.syncSpace)
+    if (nextManifest.storageV2 != null && !isPlainRecord(nextManifest.storageV2)) {
+      throw new Error('远端 Storage v2 manifest 格式损坏。为避免把损坏状态当作空数据覆盖，本次同步已停止。')
+    }
     nextManifest.storageV2 = nextManifest.storageV2 ?? null
     nextManifest.notes = this.normalizeNotesManifest(nextManifest.notes)
     nextManifest.runtimeDirectories = this.normalizeRuntimeDirectoriesManifest(nextManifest.runtimeDirectories)
-    nextManifest.snapshots = nextManifest.snapshots ?? {}
-    nextManifest.latestSnapshot = nextManifest.latestSnapshot ?? null
+    nextManifest.snapshots = normalizeSnapshotManifest(nextManifest.snapshots)
+    nextManifest.latestSnapshot = normalizeLatestSnapshotMeta(nextManifest.latestSnapshot)
     return nextManifest
   }
 

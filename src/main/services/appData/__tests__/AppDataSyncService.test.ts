@@ -1547,6 +1547,69 @@ describe('AppDataSyncService', () => {
     expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
   })
 
+  it('rejects malformed remote app-data record manifests before publishing', async () => {
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 3,
+        updatedAt: 1760000000000,
+        records: []
+      })
+    )
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端应用数据 records manifest 格式损坏')
+
+    expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/manifest.json'))
+    ).toBe(false)
+  })
+
+  it('rejects malformed top-level Storage v2 manifests before publishing', async () => {
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 3,
+        updatedAt: 1760000000000,
+        records: {},
+        storageV2: 'corrupted'
+      })
+    )
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端 Storage v2 manifest 格式损坏')
+
+    expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/manifest.json'))
+    ).toBe(false)
+  })
+
+  it('rejects malformed remote notes manifests before treating them as empty', async () => {
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 3,
+        updatedAt: 1760000000000,
+        records: {},
+        notes: {
+          version: 1,
+          updatedAt: 1760000000000,
+          files: []
+        }
+      })
+    )
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端笔记文件 manifest 格式损坏')
+
+    expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/manifest.json'))
+    ).toBe(false)
+  })
+
   it('rejects oversized remote notes files before downloading their contents', async () => {
     const notePath = '/remote-root/sync/v1/notes/files/big-note.bin'
     mocks.remoteFiles.set(notePath, Buffer.from('oversized placeholder'))
