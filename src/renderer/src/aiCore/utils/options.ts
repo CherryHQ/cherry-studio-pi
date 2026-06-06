@@ -47,6 +47,12 @@ import { getAiSdkProviderId } from '../provider/factory'
 import type { ProviderCapabilities } from '../types'
 import { buildGeminiGenerateImageParams } from './image'
 import {
+  summarizeAssistantForLog,
+  summarizeModelForLog,
+  summarizeObjectShapeForLog,
+  summarizeProviderForLog
+} from './logging'
+import {
   getAnthropicReasoningParams,
   getBedrockReasoningParams,
   getCustomParameters,
@@ -162,7 +168,13 @@ export function buildProviderOptions(
   standardParams: Partial<Record<AiSdkParam, any>>
 } {
   const rawProviderId = getAiSdkProviderId(actualProvider)
-  logger.debug('buildProviderOptions', { assistant, model, actualProvider, capabilities, rawProviderId })
+  logger.debug('buildProviderOptions', {
+    assistant: summarizeAssistantForLog(assistant),
+    model: summarizeModelForLog(model),
+    actualProvider: summarizeProviderForLog(actualProvider),
+    capabilities,
+    rawProviderId
+  })
   // 构建 provider 特定的选项
   let providerSpecificOptions: Record<string, any> = {}
   const serviceTier = getServiceTier(model, actualProvider)
@@ -219,13 +231,18 @@ export function buildProviderOptions(
       }
       break
   }
-  logger.debug('Built providerSpecificOptions', { providerSpecificOptions })
+  logger.debug('Built providerSpecificOptions', {
+    providerSpecificOptions: summarizeObjectShapeForLog(providerSpecificOptions)
+  })
   /**
    * Retrieve custom parameters and separate standard parameters from provider-specific parameters.
    */
   const customParams = getCustomParameters(assistant)
   const { standardParams, providerParams } = extractAiSdkStandardParams(customParams)
-  logger.debug('Extracted standardParams and providerParams', { standardParams, providerParams })
+  logger.debug('Extracted standardParams and providerParams', {
+    standardParamKeys: Object.keys(standardParams),
+    providerParams: summarizeObjectShapeForLog(providerParams)
+  })
 
   /**
    * Get the actual AI SDK provider ID(s) from the already-built providerSpecificOptions.
@@ -303,7 +320,9 @@ export function buildProviderOptions(
       }
     }
   }
-  logger.debug('Final providerSpecificOptions after merging providerParams', { providerSpecificOptions })
+  logger.debug('Final providerSpecificOptions after merging providerParams', {
+    providerSpecificOptions: summarizeObjectShapeForLog(providerSpecificOptions)
+  })
 
   // 返回 AI Core SDK 要求的格式：{ 'providerId': providerOptions } 以及提取的标准参数
   return {

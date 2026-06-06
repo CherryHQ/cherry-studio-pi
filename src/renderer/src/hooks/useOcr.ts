@@ -22,7 +22,12 @@ export const useOcr = () => {
    */
   const ocrImage = useCallback(
     async (image: ImageFileMetadata) => {
-      logger.debug('ocrImage', { config: imageProvider.config })
+      logger.debug('ocrImage', {
+        providerId: imageProvider.id,
+        providerName: imageProvider.name,
+        configKeys: Object.keys(imageProvider.config ?? {}),
+        apiConfigKeys: Object.keys(imageProvider.config?.api ?? {})
+      })
       return OcrService.ocr(image, imageProvider)
     },
     [imageProvider]

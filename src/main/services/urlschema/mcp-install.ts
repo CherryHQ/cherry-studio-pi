@@ -7,6 +7,52 @@ import { windowService } from '../WindowService'
 
 const logger = loggerService.withContext('URLSchema:handleMcpProtocolUrl')
 
+function summarizeMCPServerForProtocolLog(server: MCPServer) {
+  return {
+    id: server.id,
+    name: server.name,
+    type: server.type,
+    provider: server.provider,
+    hasCommand: Boolean(server.command),
+    argsCount: server.args?.length ?? 0,
+    envKeys: Object.keys(server.env ?? {}),
+    headerKeys: Object.keys(server.headers ?? {}),
+    hasBaseUrl: Boolean(server.baseUrl)
+  }
+}
+
+function summarizeMCPInstallPayloadForLog(jsonConfig: unknown) {
+  if (Array.isArray(jsonConfig)) {
+    return {
+      shape: 'array',
+      count: jsonConfig.length,
+      servers: jsonConfig.map((server) => summarizeMCPServerForProtocolLog(server as MCPServer))
+    }
+  }
+
+  if (!jsonConfig || typeof jsonConfig !== 'object') {
+    return { shape: typeof jsonConfig }
+  }
+
+  const config = jsonConfig as { mcpServers?: Record<string, MCPServer> } & MCPServer
+  if (config.mcpServers) {
+    const servers = Object.entries(config.mcpServers)
+    return {
+      shape: 'mcpServers',
+      count: servers.length,
+      servers: servers.map(([name, server]) =>
+        summarizeMCPServerForProtocolLog({ ...server, name: server.name ?? name })
+      )
+    }
+  }
+
+  return {
+    shape: 'server',
+    count: 1,
+    servers: [summarizeMCPServerForProtocolLog(config)]
+  }
+}
+
 function installMCPServer(server: MCPServer) {
   const mainWindow = windowService.getMainWindow()
   const now = Date.now()
@@ -58,9 +104,8 @@ export function handleMcpProtocolUrl(url: URL) {
 
       if (data) {
         const stringify = Buffer.from(data, 'base64').toString('utf8')
-        logger.debug(`install MCP servers from urlschema: ${stringify}`)
         const jsonConfig = JSON.parse(stringify)
-        logger.debug(`install MCP servers from urlschema: ${JSON.stringify(jsonConfig)}`)
+        logger.debug('Install MCP servers from urlschema', summarizeMCPInstallPayloadForLog(jsonConfig))
 
         // support both {mcpServers: [servers]}, [servers] and {server}
         if (jsonConfig.mcpServers) {

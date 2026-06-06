@@ -139,7 +139,7 @@ class WebSearchService {
    */
   public getWebSearchProvider(providerId?: string): WebSearchProvider | undefined {
     const { providers } = this.getWebSearchState()
-    logger.debug('providers', providers)
+    logger.debug('Resolving web search provider', { providerId, providerCount: providers.length })
     const provider = providers.find((provider) => provider.id === providerId)
 
     return provider

@@ -1,0 +1,92 @@
+import type { Assistant, Model, Provider } from '@renderer/types'
+import { describe, expect, it } from 'vitest'
+
+import {
+  summarizeAssistantForLog,
+  summarizeObjectShapeForLog,
+  summarizeProviderConfigForLog,
+  summarizeProviderForLog
+} from '../logging'
+
+describe('aiCore logging summaries', () => {
+  it('summarizes provider inputs without secret values or prompts', () => {
+    const assistant = {
+      id: 'assistant-1',
+      name: 'Assistant',
+      type: 'assistant',
+      prompt: 'raw-system-prompt-secret',
+      topics: [],
+      settings: {
+        customParameters: [{ name: 'apiKey', value: 'raw-custom-param-secret', type: 'string' }]
+      }
+    } as Assistant
+
+    const provider = {
+      id: 'openai',
+      name: 'OpenAI',
+      type: 'openai',
+      apiKey: 'raw-provider-secret',
+      apiHost: 'https://api.example.com/v1?token=raw-url-secret',
+      models: [],
+      extra_headers: {
+        Authorization: 'Bearer raw-header-secret'
+      }
+    } as Provider
+
+    const summary = {
+      assistant: summarizeAssistantForLog(assistant),
+      provider: summarizeProviderForLog(provider)
+    }
+    const serialized = JSON.stringify(summary)
+
+    expect(summary.assistant.hasPrompt).toBe(true)
+    expect(summary.provider.hasApiKey).toBe(true)
+    expect(summary.provider.extraHeaderKeys).toEqual(['Authorization'])
+    expect(serialized).not.toContain('raw-system-prompt-secret')
+    expect(serialized).not.toContain('raw-custom-param-secret')
+    expect(serialized).not.toContain('raw-provider-secret')
+    expect(serialized).not.toContain('raw-url-secret')
+    expect(serialized).not.toContain('raw-header-secret')
+  })
+
+  it('summarizes provider configs and provider options by shape only', () => {
+    const model = {
+      id: 'gpt-4',
+      name: 'GPT-4',
+      provider: 'openai',
+      group: 'OpenAI'
+    } as Model
+
+    const providerConfig = {
+      providerId: 'openai-compatible',
+      endpoint: 'chat/completions',
+      providerSettings: {
+        apiKey: 'raw-config-secret',
+        baseURL: 'https://api.example.com?token=raw-config-url-secret',
+        headers: {
+          Authorization: 'Bearer raw-config-header-secret'
+        },
+        model
+      }
+    } as any
+
+    const summary = {
+      config: summarizeProviderConfigForLog(providerConfig),
+      options: summarizeObjectShapeForLog({
+        openai: {
+          reasoningEffort: 'medium',
+          customSecret: 'raw-option-secret'
+        }
+      })
+    }
+    const serialized = JSON.stringify(summary)
+
+    expect(serialized).toContain('apiKey')
+    expect(serialized).toContain('Authorization')
+    expect(serialized).not.toContain('raw-config-secret')
+    expect(serialized).not.toContain('raw-config-url-secret')
+    expect(serialized).not.toContain('raw-config-header-secret')
+    expect(serialized).not.toContain('raw-option-secret')
+    expect(serialized).not.toContain('medium')
+  })
+})

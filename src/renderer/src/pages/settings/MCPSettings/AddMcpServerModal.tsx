@@ -171,7 +171,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
             })
             .filter((arg) => arg.trim() !== '' && arg !== '--' && arg !== '=' && !arg.startsWith('--='))
 
-          logger.debug('Processed DXT args:', processedArgs)
+          logger.debug('Processed DXT args', { argsCount: processedArgs.length })
 
           // Create MCPServer from DXT manifest
           const newServer: MCPServer = {

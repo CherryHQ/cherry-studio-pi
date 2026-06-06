@@ -522,7 +522,7 @@ class DxtService {
 
       logger.debug('Resolved MCP config:', {
         command: resolvedConfig.command,
-        args: resolvedConfig.args,
+        argsCount: resolvedConfig.args?.length ?? 0,
         env: resolvedConfig.env ? Object.keys(resolvedConfig.env) : undefined
       })
 

@@ -8,6 +8,38 @@ import { reduxService } from './ReduxService'
 
 const logger = loggerService.withContext('CherryINOAuthService')
 
+function summarizeTokenResponseForLog(response: unknown) {
+  if (!response || typeof response !== 'object') {
+    return { type: typeof response }
+  }
+
+  const tokenResponse = response as Record<string, unknown>
+  return {
+    hasAccessToken: typeof tokenResponse.access_token === 'string' && tokenResponse.access_token.length > 0,
+    hasRefreshToken: typeof tokenResponse.refresh_token === 'string' && tokenResponse.refresh_token.length > 0,
+    tokenType: typeof tokenResponse.token_type === 'string' ? tokenResponse.token_type : undefined,
+    expiresIn: typeof tokenResponse.expires_in === 'number' ? tokenResponse.expires_in : undefined,
+    keys: Object.keys(tokenResponse)
+  }
+}
+
+function summarizeApiKeysResponseForLog(response: unknown) {
+  if (Array.isArray(response)) {
+    return { shape: 'array', keyCount: response.length }
+  }
+
+  if (response && typeof response === 'object') {
+    const record = response as Record<string, unknown>
+    return {
+      shape: 'object',
+      keys: Object.keys(record),
+      keyCount: Array.isArray(record.data) ? record.data.length : undefined
+    }
+  }
+
+  return { shape: typeof response }
+}
+
 // Zod schemas for API response validation
 const BalanceDataSchema = z.object({
   quota: z.number(),
@@ -214,7 +246,7 @@ class CherryINOAuthService {
       }
 
       const tokenJson = await tokenResponse.json()
-      logger.debug('Token exchange raw response:', tokenJson)
+      logger.debug('Token exchange response received', summarizeTokenResponseForLog(tokenJson))
       const tokenData = TokenResponseSchema.parse(tokenJson)
 
       const { access_token: accessToken, refresh_token: refreshToken } = tokenData
@@ -238,7 +270,7 @@ class CherryINOAuthService {
       }
 
       const apiKeysJson = await apiKeysResponse.json()
-      logger.debug('API keys raw response:', apiKeysJson)
+      logger.debug('API keys response received', summarizeApiKeysResponseForLog(apiKeysJson))
       // Schema transforms and extracts keys to string array
       const keysArray = ApiKeysResponseSchema.parse(apiKeysJson)
       const apiKeys = keysArray.filter(Boolean).join(',')

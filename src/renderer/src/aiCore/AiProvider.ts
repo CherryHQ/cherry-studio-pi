@@ -14,6 +14,7 @@ import { adaptProvider, getActualProvider, providerToAiSdkConfig } from './provi
 import { listModels } from './services/listModels'
 import type { AppProviderSettingsMap, CompletionsResult, ProviderConfig } from './types'
 import type { AiSdkMiddlewareConfig } from './types/middlewareConfig'
+import { summarizeProviderConfigForLog } from './utils/logging'
 
 const logger = loggerService.withContext('AiProvider')
 
@@ -104,7 +105,7 @@ export default class AiProvider {
       // If config wasn't set in constructor (when provider only), generate it now
       this.config = await Promise.resolve(providerToAiSdkConfig(this.actualProvider, this.model))
     }
-    logger.debug('Using provider config for completions', this.config)
+    logger.debug('Using provider config for completions', summarizeProviderConfigForLog(this.config))
 
     // 注意：模型对象将由 createExecutor 内部处理，不再需要预先创建
 
