@@ -509,6 +509,62 @@ describe('DataSyncService', () => {
     expect(getDataSyncRuntimeState().syncing).toBe(false)
   })
 
+  it('keeps renderer runtime busy when a main sync timeout leaves the main process running', async () => {
+    vi.useFakeTimers()
+    const mainStartedAt = Date.parse('2026-06-06T10:00:00.000Z')
+    vi.setSystemTime(new Date(mainStartedAt))
+    const pendingSync = deferred<typeof successSummary>()
+    mocks.syncNow.mockReturnValueOnce(pendingSync.promise)
+    mocks.getStatus
+      .mockResolvedValueOnce({ syncing: false, lastSummary: null, conflicts: [], syncStartedAt: null })
+      .mockResolvedValueOnce({
+        syncing: false,
+        lastSummary: {
+          status: 'success',
+          downloaded: 0,
+          storageDownloaded: 0,
+          blobDownloaded: 0,
+          secretDownloaded: 0,
+          deleted: 0,
+          storageDeleted: 0,
+          lastSyncAt: 0
+        },
+        conflicts: [],
+        syncStartedAt: null
+      })
+      .mockResolvedValueOnce({
+        syncing: true,
+        lastSummary: null,
+        conflicts: [],
+        syncStartedAt: mainStartedAt
+      })
+      .mockResolvedValueOnce({
+        syncing: true,
+        lastSummary: null,
+        conflicts: [],
+        syncStartedAt: mainStartedAt
+      })
+
+    const sync = syncAppDataNow()
+    await vi.waitFor(() => expect(getDataSyncRuntimeState().syncing).toBe(true))
+
+    await vi.advanceTimersByTimeAsync(15 * 60_000)
+
+    await expect(sync).resolves.toBeNull()
+    expect(mocks.recordFailure).not.toHaveBeenCalled()
+    expect(getDataSyncRuntimeState()).toEqual({
+      syncing: true,
+      syncStartedAt: mainStartedAt
+    })
+
+    vi.setSystemTime(new Date(mainStartedAt + 16 * 60_000))
+    mocks.getStatus.mockResolvedValueOnce({ syncing: false, lastSummary: null, conflicts: [], syncStartedAt: null })
+    await expect(refreshDataSyncRuntimeStateFromMain()).resolves.toEqual({
+      syncing: false,
+      syncStartedAt: null
+    })
+  })
+
   it('runs a debounced auto sync after local Storage v2 data changes', async () => {
     vi.useFakeTimers()
     mocks.getState.mockReturnValue({

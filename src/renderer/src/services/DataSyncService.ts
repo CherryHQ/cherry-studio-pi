@@ -99,9 +99,9 @@ export function subscribeDataSyncRuntimeState(listener: (state: DataSyncRuntimeS
   }
 }
 
-function setDataSyncRunning(nextSyncing: boolean) {
+function setDataSyncRunning(nextSyncing: boolean, nextStartedAt?: number | null) {
   syncing = nextSyncing
-  syncStartedAt = nextSyncing ? Date.now() : null
+  syncStartedAt = nextSyncing ? (nextStartedAt ?? syncStartedAt ?? Date.now()) : null
   const nextState = getDataSyncRuntimeState()
   for (const listener of syncStateListeners) {
     listener(nextState)
@@ -241,17 +241,27 @@ async function hydratePreviouslyDownloadedRemoteData() {
   await hydrateRuntimeCacheAfterDataSync('before data sync', { strict: true })
 }
 
-async function isMainProcessRunning() {
-  const status = await window.api.dataSync.getStatus().catch((error) => {
+async function getMainProcessDataSyncStatus() {
+  return window.api.dataSync.getStatus().catch((error) => {
     logger.warn('Failed to inspect main-process data sync status', error as Error)
     return null
   })
+}
+
+async function isMainProcessRunning() {
+  const status = await getMainProcessDataSyncStatus()
 
   return Boolean(status?.syncing)
 }
 
 async function reconcileRendererSyncStateWithMainProcess() {
-  const mainProcessRunning = await isMainProcessRunning()
+  const status = await getMainProcessDataSyncStatus()
+  const mainProcessRunning = Boolean(status?.syncing)
+  if (mainProcessRunning) {
+    setDataSyncRunning(true, typeof status?.syncStartedAt === 'number' ? status.syncStartedAt : null)
+    return true
+  }
+
   if (
     syncing &&
     !mainProcessRunning &&
@@ -391,13 +401,25 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
     const message = getErrorMessage(error)
     if (isDataSyncAlreadyRunningMessage(message)) {
       logger.info('Data sync already running in main process')
+      await reconcileRendererSyncStateWithMainProcess().catch(() => undefined)
       return null
+    }
+
+    if (error instanceof DataSyncStageTimeoutError && error.stageName === '执行 WebDAV 同步') {
+      const mainProcessRunning = await reconcileRendererSyncStateWithMainProcess().catch(() => false)
+      if (mainProcessRunning) {
+        logger.info('Main-process data sync is still running after renderer IPC timeout')
+        return null
+      }
     }
 
     await rememberDataSyncFailure(message)
     throw error
   } finally {
     setDataSyncRunning(false)
+    await reconcileRendererSyncStateWithMainProcess().catch((error) => {
+      logger.warn('Failed to reconcile data sync runtime state after sync completion', error as Error)
+    })
     if (localChangeDuringSync) {
       localChangeDuringSync = false
       scheduleLocalChangeSync()
