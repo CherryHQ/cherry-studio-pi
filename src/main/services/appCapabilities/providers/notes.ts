@@ -23,6 +23,38 @@ async function getNotesRoot() {
   return path.resolve(noteState?.notesPath || getNotesDir())
 }
 
+function normalizeOptionalText(value: unknown, fallback = '') {
+  if (typeof value === 'string') return value.trim()
+  if (value === null || typeof value === 'undefined') return fallback
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return String(value).trim()
+  return fallback
+}
+
+function normalizeRequiredText(value: unknown, label: string) {
+  const text = normalizeOptionalText(value)
+  if (!text) throw new Error(`${label} is required`)
+  return text
+}
+
+function normalizeNoteContent(value: unknown) {
+  if (typeof value === 'string') return value
+  if (value === null || typeof value === 'undefined') return ''
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value, null, 2) ?? ''
+    } catch {
+      return String(value)
+    }
+  }
+  return String(value)
+}
+
+function assertNotNotesRoot(root: string, target: string) {
+  if (path.resolve(root) === path.resolve(target)) {
+    throw new Error('Cannot delete the notes root directory')
+  }
+}
+
 function normalizeSearchLimit(value: unknown) {
   const parsed =
     typeof value === 'string' && !value.trim() ? DEFAULT_NOTE_SEARCH_LIMIT : Number(value ?? DEFAULT_NOTE_SEARCH_LIMIT)
@@ -272,7 +304,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       tags: ['notes', 'read', 'markdown'],
       execute: async (input: any) => {
         const root = await getNotesRoot()
-        const filePath = resolveInsideRoot(root, String(input?.path || ''), '.md')
+        const filePath = resolveInsideRoot(root, normalizeRequiredText(input?.path, 'Note path'), '.md')
         return okResult('Note read', {
           path: filePath,
           ...(await readTextFilePreview(filePath, normalizeReadMaxBytes(input?.maxBytes)))
@@ -357,11 +389,11 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       tags: ['notes', 'create', 'markdown'],
       execute: async (input: any) => {
         const root = await getNotesRoot()
-        const parent = resolveInsideRoot(root, input?.parent || '')
+        const parent = resolveInsideRoot(root, normalizeOptionalText(input?.parent))
         await fs.mkdir(parent, { recursive: true })
-        const safeName = getName(parent, input?.name || 'Untitled', true)
+        const safeName = getName(parent, normalizeOptionalText(input?.name, 'Untitled') || 'Untitled', true)
         const filePath = path.join(parent, `${safeName}.md`)
-        await fs.writeFile(filePath, input?.content || '', 'utf8')
+        await fs.writeFile(filePath, normalizeNoteContent(input?.content), 'utf8')
         return {
           ok: true,
           summary: `Note created: ${safeName}`,
@@ -390,8 +422,8 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       tags: ['notes', 'write', 'markdown'],
       execute: async (input: any) => {
         const root = await getNotesRoot()
-        const filePath = resolveInsideRoot(root, input?.path, '.md')
-        await fs.writeFile(filePath, input?.content || '', 'utf8')
+        const filePath = resolveInsideRoot(root, normalizeRequiredText(input?.path, 'Note path'), '.md')
+        await fs.writeFile(filePath, normalizeNoteContent(input?.content), 'utf8')
         return okResult('Note written', { path: filePath })
       }
     },
@@ -415,7 +447,8 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       tags: ['notes', 'delete'],
       execute: async (input: any, context) => {
         const root = await getNotesRoot()
-        const target = resolveInsideRoot(root, String(input?.path || ''))
+        const target = resolveInsideRoot(root, normalizeRequiredText(input?.path, 'Note path'))
+        assertNotNotesRoot(root, target)
         if (context.dryRun) return okResult('Note delete dry run completed', { path: target })
         await fs.rm(target, { force: true, recursive: true })
         return okResult('Note deleted', { path: target })

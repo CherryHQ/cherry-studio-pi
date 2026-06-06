@@ -189,4 +189,66 @@ describe('notes app capabilities', () => {
     expect((result.data as any).byteSize).toBe(2048)
     expect((result.data as any).maxBytes).toBe(128)
   })
+
+  it('normalizes note read paths before resolving them', async () => {
+    const notePath = path.join(tmpDir, 'daily.md')
+    await fs.writeFile(notePath, 'today\n', 'utf8')
+
+    const result = await getCapability('notes.read').execute({ path: ' daily ' }, { source: 'agent' })
+
+    expect(result.ok).toBe(true)
+    expect((result.data as any).path).toBe(notePath)
+    expect((result.data as any).content).toBe('today\n')
+  })
+
+  it('normalizes note create and write inputs before touching the filesystem', async () => {
+    mocks.getName.mockImplementation((_parent: string, name: string) => name)
+
+    const created = await getCapability('notes.create').execute(
+      {
+        parent: ' folder ',
+        name: ' Daily ',
+        content: { title: 'Morning', done: false }
+      },
+      { source: 'agent' }
+    )
+
+    const filePath = path.join(tmpDir, 'folder', 'Daily.md')
+    expect(created.data).toEqual({ path: filePath, name: 'Daily' })
+    expect(await fs.readFile(filePath, 'utf8')).toBe('{\n  "title": "Morning",\n  "done": false\n}')
+
+    const written = await getCapability('notes.write').execute(
+      {
+        path: ' folder/Daily ',
+        content: 123
+      },
+      { source: 'agent' }
+    )
+
+    expect(written.data).toEqual({ path: filePath })
+    expect(await fs.readFile(filePath, 'utf8')).toBe('123')
+  })
+
+  it('rejects empty note paths with clear errors', async () => {
+    await expect(getCapability('notes.read').execute({ path: '   ' }, { source: 'agent' })).rejects.toThrow(
+      'Note path is required'
+    )
+    await expect(
+      getCapability('notes.write').execute({ path: '   ', content: 'content' }, { source: 'agent' })
+    ).rejects.toThrow('Note path is required')
+    await expect(getCapability('notes.delete').execute({ path: '   ' }, { source: 'agent' })).rejects.toThrow(
+      'Note path is required'
+    )
+  })
+
+  it('does not allow deleting the notes root directory', async () => {
+    const rmSpy = vi.spyOn(fs, 'rm')
+
+    await expect(getCapability('notes.delete').execute({ path: ' . ' }, { source: 'agent' })).rejects.toThrow(
+      'Cannot delete the notes root directory'
+    )
+    expect(rmSpy).not.toHaveBeenCalled()
+
+    rmSpy.mockRestore()
+  })
 })
