@@ -7,6 +7,7 @@ const ALLOWED_EXTERNAL_PROTOCOLS = new Set([
   'https:',
   'mailto:',
   'obsidian:',
+  'x-apple.systempreferences:',
   'vscode:',
   'vscode-insiders:',
   'cursor:',

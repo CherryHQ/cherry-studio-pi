@@ -316,7 +316,7 @@ export class WindowService {
         }
       }
 
-      if (url.includes('http://file/')) {
+      if (url.startsWith('http://file/')) {
         const fileName = url.replace('http://file/', '')
         if (!fileName) {
           logger.warn('Blocked empty file name in http://file/ URL')
