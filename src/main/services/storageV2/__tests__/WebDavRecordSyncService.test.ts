@@ -2135,6 +2135,110 @@ describe('StorageV2WebDavRecordSyncService', () => {
     ).toBe(false)
   })
 
+  it('defers local-only Storage v2 records when first joining an existing sync space', async () => {
+    const localOnlyRow = {
+      key: 'local-only',
+      value_json: '{"mode":"default"}',
+      scope: 'app',
+      updated_at: '2026-05-29T12:20:00.000Z',
+      deleted_at: null,
+      version: 1
+    }
+    const remoteRow = {
+      key: 'theme',
+      value_json: '{"mode":"remote-user"}',
+      scope: 'app',
+      updated_at: '2026-05-29T12:10:00.000Z',
+      deleted_at: null,
+      version: 2
+    }
+    const remoteHash = hashJson(remoteRow)
+    const db = makeSettingsDb([localOnlyRow])
+    mocks.dbClient = db.client
+    const remoteRecord = {
+      id: 'settings:theme',
+      table: settingsTable,
+      idValues: ['theme'],
+      row: remoteRow,
+      valueHash: remoteHash,
+      updatedAt: Date.parse('2026-05-29T12:10:00.000Z'),
+      deletedAt: null,
+      version: 2
+    }
+    mocks.remoteFiles.set('/remote-root/sync/v1/storage-v2/records/settings/theme.json', JSON.stringify(remoteRecord))
+
+    const result = await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
+      mocks.webdav as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {
+          'settings:theme': {
+            entityType: 'settings',
+            table: 'settings',
+            idValues: ['theme'],
+            valueHash: remoteHash,
+            updatedAt: remoteRecord.updatedAt,
+            deletedAt: null,
+            version: 2,
+            path: 'storage-v2/records/settings/theme.json'
+          }
+        }
+      },
+      {
+        preferRemoteOnFirstJoin: true
+      }
+    )
+
+    expect(result.summary.storageDownloaded).toBe(1)
+    expect(result.summary.storageUploaded).toBe(0)
+    expect(result.summary.storageSkipped).toBeGreaterThanOrEqual(1)
+    expect(result.manifest.records['settings:local-only']).toBeUndefined()
+    expect(result.syncStates).toEqual(
+      expect.arrayContaining([
+        {
+          id: 'settings:local-only',
+          valueHash: `deferred-local:${hashJson(localOnlyRow)}`
+        }
+      ])
+    )
+  })
+
+  it('does not publish or require secrets from deferred local-only first-join records', async () => {
+    const credentialRow: ProviderCredentialRow = {
+      provider_id: 'local-provider',
+      credential_kind: 'apiKey',
+      secret_ref: 'storage-v2://secret/provider/local-provider/apiKey',
+      updated_at: '2026-05-29T12:20:00.000Z',
+      updated_by_device_id: 'device-b'
+    }
+    const db = makeProviderCredentialDb({ credentials: [credentialRow] })
+    mocks.dbClient = db.client
+    mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({})
+
+    const result = await new StorageV2WebDavRecordSyncService([providerCredentialTable]).sync(
+      mocks.webdav as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {}
+      },
+      {
+        preferRemoteOnFirstJoin: true,
+        secretKeyMaterial: 'sync-space-key-material'
+      }
+    )
+
+    expect(result.summary.storageUploaded).toBe(0)
+    expect(result.summary.storageSkipped).toBe(1)
+    expect(result.summary.secretUploaded).toBe(0)
+    expect(result.manifest.records['provider_credential:local-provider:apiKey']).toBeUndefined()
+    expect(result.manifest.secrets).toBeNull()
+    expect(mocks.secretVault.exportPlaintextSecrets).not.toHaveBeenCalled()
+  })
+
   it('auto-resolves exact concurrent Storage v2 edits with a deterministic content tie-breaker', async () => {
     const remote = makeSharedWebDavStore()
     const localRow = {

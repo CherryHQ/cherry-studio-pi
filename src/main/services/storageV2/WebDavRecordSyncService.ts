@@ -180,6 +180,20 @@ const STORAGE_V2_SECRET_VAULT_DIR = 'storage-v2/secrets'
 const SECRET_SYNC_KEY_CONTEXT = 'cherry-studio-pi:webdav-secret-sync:v1'
 const SECRET_SYNC_ENCRYPTION = 'cherry-webdav-secret-sync-aes-256-gcm' as const
 const GCM_IV_BYTE_LENGTH = 12
+const FIRST_JOIN_DEFER_LOCAL_ONLY_ENTITY_TYPES = new Set<StorageV2SyncEntityType>([
+  'assistant',
+  'assistant_version',
+  'knowledge_base',
+  'knowledge_item',
+  'kv_record',
+  'model',
+  'profile',
+  'provider',
+  'provider_credential',
+  'settings',
+  'skill',
+  'agent_skill'
+])
 const TOMBSTONE_PHYSICAL_DELETE_TARGETS = {
   provider_credential: {
     table: 'provider_credentials',
@@ -488,6 +502,14 @@ function secretVaultValueHash(secrets: Record<string, StorageV2PlaintextSecretVa
 
 function secretVaultUpdatedAt(secrets: Record<string, StorageV2PlaintextSecretVaultEntry>) {
   return Math.max(0, ...Object.values(secrets).map(secretEntryTimestamp))
+}
+
+function deferredLocalRecordHash(valueHash: string) {
+  return `deferred-local:${valueHash}`
+}
+
+function shouldDeferLocalOnlyFirstJoinRecord(record: LocalRecord) {
+  return FIRST_JOIN_DEFER_LOCAL_ONLY_ENTITY_TYPES.has(record.table.entityType)
 }
 
 function filterSecretsByReferencedIds(
@@ -2266,6 +2288,17 @@ export class StorageV2WebDavRecordSyncService {
           continue
         }
 
+        if (options.preferRemoteOnFirstJoin === true && !lastHash && shouldDeferLocalOnlyFirstJoinRecord(localRecord)) {
+          stageRecordSyncState(id, deferredLocalRecordHash(localRecord.valueHash))
+          summary.storageSkipped += 1
+          continue
+        }
+
+        if (lastHash === deferredLocalRecordHash(localRecord.valueHash)) {
+          summary.storageSkipped += 1
+          continue
+        }
+
         options.assertActive?.()
         await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords)
         options.assertActive?.()
@@ -2523,8 +2556,15 @@ export class StorageV2WebDavRecordSyncService {
 
     options.assertActive?.()
     this.pruneManifestBlobsWithoutRecords(manifest, bundledRecords)
-    const secretReferenceScan = await scanStorageV2SecretReferences(dbClient)
     const bundledSecretReferenceScan = this.collectBundledRecordSecretRefs(bundledRecords.values())
+    const secretReferenceScan =
+      options.preferRemoteOnFirstJoin === true
+        ? {
+            refs: new Set<string>(),
+            invalidRefs: new Set<string>(),
+            skippedSources: []
+          }
+        : await scanStorageV2SecretReferences(dbClient)
     options.assertActive?.()
     const invalidSecretRefs = new Set([...secretReferenceScan.invalidRefs, ...bundledSecretReferenceScan.invalidRefs])
     if (invalidSecretRefs.size > 0) {

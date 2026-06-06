@@ -608,6 +608,10 @@ function runtimeDirectoryContentCursor(valueHash: string) {
   return `content:${valueHash}`
 }
 
+function deferredLocalSyncCursor(cursor: string) {
+  return `deferred-local:${cursor}`
+}
+
 function notesRemoteCursor(meta: RemoteNotesFileMeta) {
   return meta.deletedAt ? `deleted:${meta.valueHash}:${meta.deletedAt}` : notesContentCursor(meta.valueHash)
 }
@@ -2505,8 +2509,19 @@ export class AppDataSyncService {
       const syncKey = notesSyncStateKey(deviceId, relativePath)
       const lastCursorValue = await this.getSyncState<unknown>(db, syncKey)
       const lastCursor = typeof lastCursorValue === 'string' ? lastCursorValue : null
+      const localCursor = localFile ? localNotesCursor(localFile) : null
 
       if (localFile && !remoteMeta) {
+        if (options.preferRemoteOnFirstJoin && !lastCursor) {
+          stageSyncState(syncKey, deferredLocalSyncCursor(localCursor!))
+          summary.skipped += 1
+          continue
+        }
+        if (lastCursor === deferredLocalSyncCursor(localCursor!)) {
+          summary.skipped += 1
+          continue
+        }
+
         await uploadLocal(localFile)
         continue
       }
@@ -2532,7 +2547,6 @@ export class AppDataSyncService {
         continue
       }
 
-      const localCursor = localNotesCursor(localFile)
       if (remoteMeta.deletedAt) {
         const localChanged = localCursor !== lastCursor
         const remoteDeletedAt = remoteMeta.deletedAt || remoteMeta.updatedAt
@@ -3013,8 +3027,19 @@ export class AppDataSyncService {
       const syncKey = runtimeDirectorySyncStateKey(deviceId, policy.name)
       const lastCursorValue = await this.getSyncState<unknown>(db, syncKey)
       const lastCursor = typeof lastCursorValue === 'string' ? lastCursorValue : null
+      const localCursor = localSnapshot ? runtimeDirectoryContentCursor(localSnapshot.valueHash) : null
 
       if (localSnapshot && !remoteMeta) {
+        if (options.preferRemoteOnFirstJoin && !lastCursor) {
+          stageSyncState(syncKey, deferredLocalSyncCursor(localCursor!))
+          summary.skipped += 1
+          continue
+        }
+        if (lastCursor === deferredLocalSyncCursor(localCursor!)) {
+          summary.skipped += 1
+          continue
+        }
+
         await uploadSnapshot(localSnapshot)
         continue
       }
@@ -3029,7 +3054,6 @@ export class AppDataSyncService {
         continue
       }
 
-      const localCursor = runtimeDirectoryContentCursor(localSnapshot.valueHash)
       const remoteCursor = runtimeDirectoryContentCursor(remoteMeta.valueHash)
       if (localSnapshot.valueHash === remoteMeta.valueHash) {
         stageSyncState(syncKey, localCursor)
@@ -3622,6 +3646,16 @@ export class AppDataSyncService {
           const lastHash = await this.getSyncState<string>(db, `record:${id}:hash`)
 
           if (localRecord && !remoteMeta) {
+            if (preferRemoteAppDataOnFirstJoin && !lastHash) {
+              stageSyncState(`record:${id}:hash`, deferredLocalSyncCursor(localRecord.valueHash))
+              summary.skipped += 1
+              continue
+            }
+            if (lastHash === deferredLocalSyncCursor(localRecord.valueHash)) {
+              summary.skipped += 1
+              continue
+            }
+
             this.assertSyncRunActive(context, '上传应用数据记录')
             await this.pushRecord(client, basePath, localRecord, manifest)
             stageSyncState(`record:${id}:hash`, localRecord.valueHash)

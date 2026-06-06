@@ -1719,11 +1719,60 @@ describe('AppDataSyncService', () => {
     expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith('last-sync-summary', expect.anything())
   })
 
+  it('defers local-only app data records when first joining an existing sync space', async () => {
+    mocks.db.listRecords.mockResolvedValueOnce([
+      {
+        scope: 'settings',
+        key: 'local-only',
+        value: { mode: 'default' },
+        valueHash: 'local-only-hash',
+        updatedAt: 1760100000000,
+        deletedAt: null,
+        deviceId: 'local-device',
+        version: 1
+      }
+    ])
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 2,
+        updatedAt: 1760000000000,
+        records: remoteManifest.records,
+        syncSpace: {
+          version: 1,
+          id: 'sync-space-existing',
+          createdAt: 1760000000000,
+          keyMaterial: 'abcdefghijklmnopqrstuvwxyz123456',
+          keyFormat: 'cherry-sync-space-key-v1',
+          secretEncryption: 'cherry-webdav-secret-sync-aes-256-gcm'
+        }
+      })
+    )
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.downloaded).toBe(1)
+    expect(summary.skipped).toBeGreaterThanOrEqual(1)
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) =>
+        String(filePath).includes('/records/settings/local-only/')
+      )
+    ).toBe(false)
+    expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith(
+      'record:settings:local-only:hash',
+      'deferred-local:local-only-hash'
+    )
+  })
+
   it('prefers remote notes when first joining an existing sync space', async () => {
     const localNotePath = path.join(mocks.notesDir, 'daily.md')
+    const localOnlyNotePath = path.join(mocks.notesDir, 'local-only.md')
     await fsp.mkdir(path.dirname(localNotePath), { recursive: true })
     await fsp.writeFile(localNotePath, '# Local Default Note')
+    await fsp.writeFile(localOnlyNotePath, '# Local Only Default Note')
     await fsp.utimes(localNotePath, new Date('2026-06-06T12:00:00.000Z'), new Date('2026-06-06T12:00:00.000Z'))
+    await fsp.utimes(localOnlyNotePath, new Date('2026-06-06T12:00:00.000Z'), new Date('2026-06-06T12:00:00.000Z'))
 
     const remoteContent = Buffer.from('# Remote Synced Note', 'utf8')
     const valueHash = sha256Buffer(remoteContent)
@@ -1767,6 +1816,7 @@ describe('AppDataSyncService', () => {
     const summary = await new AppDataSyncService().syncNow(config)
 
     await expect(fsp.readFile(localNotePath, 'utf8')).resolves.toBe('# Remote Synced Note')
+    await expect(fsp.readFile(localOnlyNotePath, 'utf8')).resolves.toBe('# Local Only Default Note')
     expect(summary.downloaded).toBeGreaterThanOrEqual(1)
     expect(
       mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).includes('/notes/files/'))
@@ -1775,9 +1825,13 @@ describe('AppDataSyncService', () => {
 
   it('prefers remote runtime directories when first joining an existing sync space', async () => {
     const localSkillPath = path.join(mocks.runtimeDataRoot, 'Skills', 'sync-fixture', 'SKILL.md')
+    const localOnlyMcpPath = path.join(mocks.runtimeDataRoot, 'MCP', 'local-server.json')
     await fsp.mkdir(path.dirname(localSkillPath), { recursive: true })
+    await fsp.mkdir(path.dirname(localOnlyMcpPath), { recursive: true })
     await fsp.writeFile(localSkillPath, '# Local Default Skill')
+    await fsp.writeFile(localOnlyMcpPath, '{"name":"local-only"}')
     await fsp.utimes(localSkillPath, new Date('2026-06-06T12:00:00.000Z'), new Date('2026-06-06T12:00:00.000Z'))
+    await fsp.utimes(localOnlyMcpPath, new Date('2026-06-06T12:00:00.000Z'), new Date('2026-06-06T12:00:00.000Z'))
 
     const remoteBundle = createRuntimeDirectoryBundle({
       name: 'Skills',
@@ -1825,10 +1879,11 @@ describe('AppDataSyncService', () => {
     const summary = await new AppDataSyncService().syncNow(config)
 
     await expect(fsp.readFile(localSkillPath, 'utf8')).resolves.toBe('# Remote Synced Skill')
+    await expect(fsp.readFile(localOnlyMcpPath, 'utf8')).resolves.toBe('{"name":"local-only"}')
     expect(summary.downloaded).toBeGreaterThanOrEqual(1)
     expect(
       mocks.webdav.putFileContents.mock.calls.some(([filePath]) =>
-        String(filePath).includes('/runtime-directories/bundles/Skills/')
+        String(filePath).includes('/runtime-directories/bundles/')
       )
     ).toBe(false)
   })
