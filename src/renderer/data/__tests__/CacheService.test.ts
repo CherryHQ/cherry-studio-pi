@@ -146,5 +146,41 @@ describe('renderer CacheService equality semantics', () => {
         value: 320
       })
     })
+
+    it('drops invalid persisted localStorage values while loading defaults', async () => {
+      localStorage.setItem(
+        RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY,
+        JSON.stringify({
+          'ui.sidebar.width': 'wide',
+          'settings.provider.openai.alert.dismissed': 'true',
+          'ui.emoji.recently_used': ['🧠', 42],
+          'ui.tab.pinned_tabs': [
+            {
+              id: 'valid-tab',
+              type: 'route',
+              url: '/home',
+              title: 'Home'
+            },
+            {
+              id: 'broken-tab'
+            }
+          ]
+        })
+      )
+
+      const service = await createService()
+
+      expect(service.getPersist('ui.sidebar.width')).toBe(65)
+      expect(service.getPersist('settings.provider.openai.alert.dismissed')).toBe(false)
+      expect(service.getPersist('ui.emoji.recently_used')).toEqual(['🧠'])
+      expect(service.getPersist('ui.tab.pinned_tabs')).toEqual([
+        {
+          id: 'valid-tab',
+          type: 'route',
+          url: '/home',
+          title: 'Home'
+        }
+      ])
+    })
   })
 })

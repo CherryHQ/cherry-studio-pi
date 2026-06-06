@@ -56,6 +56,11 @@ describe('StorageV2LocalStorageSnapshot', () => {
       JSON.stringify({
         'ui.sidebar.width': 280,
         'ui.emoji.recently_used': ['sparkles'],
+        'feature.mcp.is_uv_installed': 'yes',
+        'ui.assistant.multi_model_ids': {
+          assistant_valid: ['model-a', 'model-b'],
+          assistant_invalid: [1, null]
+        },
         'unknown.large.cache': 'ignore-me'
       })
     )
@@ -64,6 +69,9 @@ describe('StorageV2LocalStorageSnapshot', () => {
 
     expect(JSON.parse(snapshot.durableValues[RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY])).toEqual({
       'ui.sidebar.width': 280,
+      'ui.assistant.multi_model_ids': {
+        assistant_valid: ['model-a', 'model-b']
+      },
       'ui.emoji.recently_used': ['sparkles']
     })
   })
@@ -113,15 +121,38 @@ describe('StorageV2LocalStorageSnapshot', () => {
     applyStorageV2LocalStorageSnapshot({
       durableValues: {
         [RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY]: JSON.stringify({
-          'ui.tab.pinned_tabs': [{ id: 'assistant-list' }],
+          'ui.tab.pinned_tabs': [
+            {
+              id: 'assistant-list',
+              type: 'route',
+              url: '/assistants',
+              title: 'Assistants',
+              lastAccessTime: 100,
+              isPinned: true,
+              unsafeField: 'ignored'
+            },
+            {
+              id: 'broken-tab'
+            }
+          ],
           'settings.provider.last_selected_provider_id': 'openai',
+          'settings.provider.openai.alert.dismissed': 'true',
           unexpected_key: 'ignored'
         })
       }
     })
 
     expect(JSON.parse(localStorage.getItem(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY) ?? '{}')).toEqual({
-      'ui.tab.pinned_tabs': [{ id: 'assistant-list' }],
+      'ui.tab.pinned_tabs': [
+        {
+          id: 'assistant-list',
+          type: 'route',
+          url: '/assistants',
+          title: 'Assistants',
+          lastAccessTime: 100,
+          isPinned: true
+        }
+      ],
       'settings.provider.last_selected_provider_id': 'openai'
     })
   })

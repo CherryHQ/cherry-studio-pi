@@ -342,11 +342,111 @@ function parseRendererPersistCacheCandidate(value: unknown): Record<string, unkn
   return candidate as Record<string, unknown>
 }
 
-function isRendererPersistCacheDefaultValue(key: RendererPersistCacheKey, value: unknown): boolean {
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function areJsonEquivalent(left: unknown, right: unknown): boolean {
   try {
-    return JSON.stringify(value) === JSON.stringify(DefaultRendererPersistCache[key])
+    return JSON.stringify(left) === JSON.stringify(right)
   } catch {
     return false
+  }
+}
+
+function isRendererPersistCacheDefaultValue(key: RendererPersistCacheKey, value: unknown): boolean {
+  return areJsonEquivalent(value, DefaultRendererPersistCache[key])
+}
+
+function sanitizeTabSavedState(value: unknown): CacheValueTypes.TabSavedState | undefined {
+  if (!isRecordValue(value)) return undefined
+
+  const savedState: CacheValueTypes.TabSavedState = {}
+  if (typeof value.scrollPosition === 'number' && Number.isFinite(value.scrollPosition)) {
+    savedState.scrollPosition = value.scrollPosition
+  }
+
+  return Object.keys(savedState).length > 0 ? savedState : undefined
+}
+
+function sanitizePersistTab(value: unknown): CacheValueTypes.Tab | null {
+  if (!isRecordValue(value)) return null
+
+  if (
+    typeof value.id !== 'string' ||
+    !value.id ||
+    (value.type !== 'route' && value.type !== 'webview') ||
+    typeof value.url !== 'string' ||
+    typeof value.title !== 'string'
+  ) {
+    return null
+  }
+
+  const tab: CacheValueTypes.Tab = {
+    id: value.id,
+    type: value.type,
+    url: value.url,
+    title: value.title
+  }
+
+  if (typeof value.icon === 'string') tab.icon = value.icon
+  if (isRecordValue(value.metadata)) tab.metadata = value.metadata
+  if (typeof value.lastAccessTime === 'number' && Number.isFinite(value.lastAccessTime)) {
+    tab.lastAccessTime = value.lastAccessTime
+  }
+  if (typeof value.isDormant === 'boolean') tab.isDormant = value.isDormant
+  if (typeof value.isPinned === 'boolean') tab.isPinned = value.isPinned
+
+  const savedState = sanitizeTabSavedState(value.savedState)
+  if (savedState) tab.savedState = savedState
+
+  return tab
+}
+
+function sanitizePersistTabs(value: unknown): CacheValueTypes.Tab[] | null {
+  if (!Array.isArray(value)) return null
+  return value.map(sanitizePersistTab).filter((item): item is CacheValueTypes.Tab => Boolean(item))
+}
+
+function sanitizeStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null
+  return value.filter((item): item is string => typeof item === 'string' && item.length > 0)
+}
+
+function sanitizeMultiModelIds(value: unknown): Record<string, string[]> | null {
+  if (!isRecordValue(value)) return null
+
+  const sanitized: Record<string, string[]> = {}
+  for (const [assistantId, modelIds] of Object.entries(value)) {
+    if (!assistantId) continue
+    const sanitizedModelIds = sanitizeStringArray(modelIds)
+    if (sanitizedModelIds && sanitizedModelIds.length > 0) {
+      sanitized[assistantId] = sanitizedModelIds
+    }
+  }
+
+  return sanitized
+}
+
+function sanitizeRendererPersistCacheEntry(key: RendererPersistCacheKey, value: unknown): unknown {
+  switch (key) {
+    case 'ui.tab.pinned_tabs':
+    case 'ui.sidebar.docked_tabs':
+      return sanitizePersistTabs(value)
+    case 'ui.sidebar.width':
+      return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
+    case 'settings.provider.last_selected_provider_id':
+      return value === null || typeof value === 'string' ? value : undefined
+    case 'settings.provider.openai.alert.dismissed':
+    case 'feature.mcp.is_uv_installed':
+    case 'feature.mcp.is_bun_installed':
+      return typeof value === 'boolean' ? value : undefined
+    case 'ui.assistant.multi_model_ids':
+      return sanitizeMultiModelIds(value)
+    case 'ui.emoji.recently_used':
+      return sanitizeStringArray(value)
+    default:
+      return undefined
   }
 }
 
@@ -358,8 +458,8 @@ export function sanitizeRendererPersistCacheValue(value: unknown): Partial<Rende
   for (const key of Object.keys(DefaultRendererPersistCache) as RendererPersistCacheKey[]) {
     if (!Object.hasOwn(candidate, key)) continue
 
-    const item = candidate[key]
-    if (!isRendererPersistCacheDefaultValue(key, item)) {
+    const item = sanitizeRendererPersistCacheEntry(key, candidate[key])
+    if (item !== undefined && !isRendererPersistCacheDefaultValue(key, item)) {
       ;(sanitized as Record<string, unknown>)[key] = item
     }
   }

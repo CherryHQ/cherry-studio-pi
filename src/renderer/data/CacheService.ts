@@ -26,7 +26,11 @@ import type {
   SharedCacheKey,
   UseCacheKey
 } from '@shared/data/cache/cacheSchemas'
-import { DefaultRendererPersistCache, RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY } from '@shared/data/cache/cacheSchemas'
+import {
+  DefaultRendererPersistCache,
+  RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY,
+  sanitizeRendererPersistCacheValue
+} from '@shared/data/cache/cacheSchemas'
 import type {
   CacheEntry,
   CacheEntryDetail,
@@ -984,7 +988,7 @@ export class CacheService {
         return
       }
 
-      const data = JSON.parse(stored)
+      const data = sanitizeRendererPersistCacheValue(stored) ?? {}
 
       // Only load keys that exist in schema, overriding defaults
       const schemaKeys = Object.keys(DefaultRendererPersistCache) as RendererPersistCacheKey[]
