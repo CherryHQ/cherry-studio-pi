@@ -43,7 +43,8 @@ function summarizeKnowledgeBaseForAgent(base: KnowledgeBase, input: any = {}) {
   const includeItems = input?.includeItems === true
   const itemLimit = normalizeKnowledgeBaseItemPreviewLimit(input?.itemLimit)
   const items = Array.isArray(base.items) ? base.items : []
-  const { items: _items, ...summary } = base
+  const summary = { ...base } as Partial<KnowledgeBase>
+  delete summary.items
 
   return {
     ...summary,
