@@ -791,6 +791,7 @@ export class AppDataSyncService {
   private readonly backupManager: BackupManager
   private readonly runtimeId = `${process.pid}-${randomUUID()}`
   private syncInFlight: Promise<DataSyncSummary> | null = null
+  private syncBackgroundInFlight: Promise<DataSyncSummary> | null = null
   private syncStartedAt: number | null = null
   private pendingFailureSafetySnapshot: DataSyncFailureSafetySnapshot | null = null
 
@@ -1248,12 +1249,18 @@ export class AppDataSyncService {
 
   private shouldReclaimRemoteLock(lock: RemoteSyncLock, ownerId: string, now = Date.now(), currentToken?: string) {
     if (currentToken && lock.ownerId === ownerId && lock.token === currentToken) return false
-    return (
-      lock.ownerId === ownerId ||
+    if (
       this.isRemoteLockExpired(lock, now) ||
       this.isRemoteLockHeartbeatStale(lock, now) ||
       this.isRemoteLockRuntimeExceeded(lock, now)
-    )
+    ) {
+      return true
+    }
+
+    // Legacy same-device locks did not include runtimeId, so they can be reclaimed
+    // after a restart. Fresh locks from the current lock format must stay blocking:
+    // a second app process or a timed-out background run may still be mutating data.
+    return lock.ownerId === ownerId && !lock.runtimeId
   }
 
   private formatRemoteLockMessage(lock: RemoteSyncLock, ownerId?: string) {
@@ -1263,7 +1270,7 @@ export class AppDataSyncService {
     const deadlineAt = this.getRemoteLockDeadlineAt(lock)
     const deadlineText = deadlineAt ? new Date(deadlineAt).toLocaleString('zh-CN') : '未知时间'
     if (ownerId && lock.ownerId === ownerId) {
-      return `当前设备上一次同步还保留着远端锁（开始：${createdAt}，最近活动：${updatedAt}，锁过期：${expiresAt}，最长占用到：${deadlineText}）。软件会自动接管这个锁并重新同步；如果反复出现，请重启应用后再试。`
+      return `当前设备已有一次同步正在占用这个 WebDAV 目录（开始：${createdAt}，最近活动：${updatedAt}，锁过期：${expiresAt}，最长占用到：${deadlineText}）。请等待它完成后再试；如果长时间卡住，软件会在最长占用时间后自动接管。`
     }
     return `另一台设备正在同步这个 WebDAV 目录（设备：${lock.ownerId}，开始：${createdAt}，最近活动：${updatedAt}，锁过期：${expiresAt}，最长占用到：${deadlineText}）。请等待它完成后再试；如果那台设备长时间卡住，软件会在最长占用时间后自动接管。`
   }
@@ -3168,22 +3175,29 @@ export class AppDataSyncService {
   async syncNow(config: WebDavConfig): Promise<DataSyncSummary> {
     const normalizedConfig = this.normalizeSyncWebDavConfig(config)
 
-    if (this.syncInFlight) {
+    if (this.syncInFlight || this.syncBackgroundInFlight) {
       throw new Error(DATA_SYNC_ALREADY_RUNNING_ERROR)
     }
 
     const context = this.createSyncRunContext()
     this.syncStartedAt = context.startedAt
     this.pendingFailureSafetySnapshot = null
-    const sync = this.withSyncRunDeadline(
-      (async () => {
-        await this.pruneLocalDataSyncTempBackups({
-          keepLatestJoinSafety: shouldCreateLocalJoinSafetySnapshot() ? DATA_SYNC_JOIN_SAFETY_LOCAL_RETENTION : 0
-        })
-        return this.performSyncNow(normalizedConfig, context)
-      })(),
-      context
-    )
+    const backgroundSync = (async () => {
+      await this.pruneLocalDataSyncTempBackups({
+        keepLatestJoinSafety: shouldCreateLocalJoinSafetySnapshot() ? DATA_SYNC_JOIN_SAFETY_LOCAL_RETENTION : 0
+      })
+      return this.performSyncNow(normalizedConfig, context)
+    })()
+    this.syncBackgroundInFlight = backgroundSync
+    backgroundSync
+      .finally(() => {
+        if (this.syncBackgroundInFlight === backgroundSync) {
+          this.syncBackgroundInFlight = null
+        }
+      })
+      .catch(() => undefined)
+
+    const sync = this.withSyncRunDeadline(backgroundSync, context)
     this.syncInFlight = sync
 
     try {

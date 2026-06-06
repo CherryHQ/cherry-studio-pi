@@ -149,10 +149,6 @@ function isDataSyncAlreadyRunningMessage(message: string) {
   return /Data sync is already running|已有数据同步正在进行|同步正在进行/i.test(message)
 }
 
-function isStageTimeoutError(error: unknown): error is DataSyncStageTimeoutError {
-  return error instanceof DataSyncStageTimeoutError
-}
-
 async function withDataSyncStageTimeout<T>(
   stageName: string,
   operation: () => Promise<T>,
@@ -393,9 +389,12 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
     return summary
   } catch (error) {
     const message = getErrorMessage(error)
-    if (isStageTimeoutError(error) || !isDataSyncAlreadyRunningMessage(message)) {
-      await rememberDataSyncFailure(message)
+    if (isDataSyncAlreadyRunningMessage(message)) {
+      logger.info('Data sync already running in main process')
+      return null
     }
+
+    await rememberDataSyncFailure(message)
     throw error
   } finally {
     setDataSyncRunning(false)

@@ -433,6 +433,15 @@ describe('DataSyncService', () => {
     await expect(firstSync).resolves.toEqual(successSummary)
   })
 
+  it('returns null when the main process rejects because a sync is still running', async () => {
+    mocks.syncNow.mockRejectedValueOnce(new Error('已有数据同步正在进行'))
+
+    await expect(syncAppDataNow()).resolves.toBeNull()
+
+    expect(mocks.recordFailure).not.toHaveBeenCalled()
+    expect(getDataSyncRuntimeState().syncing).toBe(false)
+  })
+
   it('reconciles stale renderer sync state when the main process is idle', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-05T03:00:00.000Z'))

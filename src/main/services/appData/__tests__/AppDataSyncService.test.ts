@@ -618,6 +618,35 @@ describe('AppDataSyncService', () => {
     expect(mocks.storageRecordSync.sync).toHaveBeenCalled()
   })
 
+  it('keeps a fresh same-device runtime lock blocking instead of deleting it', async () => {
+    mockDirectoryContentsFromRemoteFiles()
+    const service = new AppDataSyncService()
+    const now = Date.now()
+    const lockPath = '/remote-root/sync/v1/.sync.locks/local-device.active-token.json'
+    mocks.remoteFiles.set(
+      lockPath,
+      JSON.stringify({
+        version: 1,
+        ownerId: 'local-device',
+        token: 'active-token',
+        runtimeId: (service as any).runtimeId,
+        createdAt: now,
+        updatedAt: now,
+        expiresAt: now + 2 * 60 * 1000,
+        leaseMs: 2 * 60 * 1000,
+        deadlineAt: now + 10 * 60 * 1000,
+        maxRuntimeMs: 10 * 60 * 1000,
+        app: 'cherry-studio-pi',
+        reason: 'data-sync'
+      })
+    )
+
+    await expect(service.syncNow(config)).rejects.toThrow('当前设备已有一次同步正在占用这个 WebDAV 目录')
+
+    expect(mocks.webdav.deleteFile).not.toHaveBeenCalledWith(lockPath)
+    expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
+  })
+
   it('reclaims stale remote file locks whose heartbeat stopped even if their old expiry is far away', async () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1760000000000)
     mocks.remoteFiles.set(
@@ -2043,5 +2072,66 @@ describe('AppDataSyncService', () => {
     expect(
       mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/manifest.json'))
     ).toBe(false)
+  })
+
+  it('does not start another sync while a timed-out background sync is still exiting', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-05T08:00:00.000Z'))
+    process.env.CHERRY_STUDIO_DATA_SYNC_MAX_RUNTIME_MS = '1000'
+    const pendingStorageSync = deferred<{
+      manifest: { version: 1; records: Record<string, never>; blobs: Record<string, never> }
+      syncStates: never[]
+      summary: {
+        storageUploaded: number
+        storageDownloaded: number
+        storageDeleted: number
+        storageConflicts: number
+        storageResolvedConflicts: number
+        storageSkipped: number
+        blobUploaded: number
+        blobDownloaded: number
+        secretUploaded: number
+        secretDownloaded: number
+      }
+    }>()
+    mocks.storageRecordSync.sync.mockReturnValueOnce(pendingStorageSync.promise)
+
+    const service = new AppDataSyncService()
+    const sync = service.syncNow(config)
+    await vi.waitFor(() => expect(mocks.storageRecordSync.sync).toHaveBeenCalledTimes(1))
+
+    const timeoutExpectation = expect(sync).rejects.toThrow('同步超过 1 秒仍未完成')
+    await vi.advanceTimersByTimeAsync(1001)
+    await timeoutExpectation
+    await expect(service.getStatus()).resolves.toEqual(
+      expect.objectContaining({
+        syncing: false,
+        syncStartedAt: null
+      })
+    )
+
+    await expect(service.syncNow(config)).rejects.toThrow('Data sync is already running')
+    expect(mocks.storageRecordSync.sync).toHaveBeenCalledTimes(1)
+
+    pendingStorageSync.resolve({
+      manifest: { version: 1, records: {}, blobs: {} },
+      syncStates: [],
+      summary: {
+        storageUploaded: 0,
+        storageDownloaded: 0,
+        storageDeleted: 0,
+        storageConflicts: 0,
+        storageResolvedConflicts: 0,
+        storageSkipped: 0,
+        blobUploaded: 0,
+        blobDownloaded: 0,
+        secretUploaded: 0,
+        secretDownloaded: 0
+      }
+    })
+    await vi.advanceTimersByTimeAsync(0)
+
+    await expect(service.syncNow(config)).resolves.toEqual(expect.objectContaining({ status: 'success' }))
+    expect(mocks.storageRecordSync.sync).toHaveBeenCalledTimes(2)
   })
 })
