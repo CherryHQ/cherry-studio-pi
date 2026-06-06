@@ -161,7 +161,7 @@ const WebSearchCitation: React.FC<{ citation: Citation }> = ({ citation }) => {
 
   const { data: oembedData } = useQuery({
     queryKey: ['xOembed', citation.url],
-    queryFn: () => fetchXOEmbed(citation.url),
+    queryFn: async () => (await fetchXOEmbed(citation.url)) ?? null,
     enabled: isXPost && Boolean(citation.url),
     staleTime: Infinity
   })

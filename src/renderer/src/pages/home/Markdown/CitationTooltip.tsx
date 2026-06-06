@@ -28,7 +28,7 @@ const CitationTooltip: React.FC<CitationTooltipProps> = ({ children, citation })
 
   const { data: oembedData } = useQuery({
     queryKey: ['xOembed', citation.url],
-    queryFn: () => fetchXOEmbed(citation.url),
+    queryFn: async () => (await fetchXOEmbed(citation.url)) ?? null,
     enabled: isXPost && !citation.content?.trim(),
     staleTime: Infinity
   })
