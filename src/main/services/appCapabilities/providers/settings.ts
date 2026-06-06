@@ -120,13 +120,15 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
         type: 'object',
         properties: {
           path: { type: 'string', description: 'Setting path, for example theme or apiServer.port' }
-        }
+        },
+        required: ['path']
       },
       risk: 'read',
       tags: ['settings', 'preferences', 'get'],
       execute: async (input: any) => {
+        const keyPath = String(input?.path ?? '').trim()
+        if (!keyPath) throw new Error('Setting path is required')
         const settings = await reduxService.select('state.settings')
-        const keyPath = String(input?.path ?? '')
         return okResult('Setting value read', { path: keyPath, value: sanitizeForAgent(pickPath(settings, keyPath)) })
       }
     },
