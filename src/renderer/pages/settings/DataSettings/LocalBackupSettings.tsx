@@ -44,14 +44,14 @@ const LocalBackupSettings: React.FC = () => {
 
   const { localBackupSync } = useAppSelector((state) => state.backup)
 
-  const onSyncIntervalChange = (value: number) => {
-    void setLocalBackupSyncInterval(value)
+  const onSyncIntervalChange = async (value: number) => {
+    await setLocalBackupSyncInterval(value)
     if (value === 0) {
-      void setLocalBackupAutoSync(false)
+      await setLocalBackupAutoSync(false)
       stopAutoSync('local')
     } else {
-      void setLocalBackupAutoSync(true)
-      void startAutoSync(false, 'local')
+      await setLocalBackupAutoSync(true)
+      startAutoSync(false, 'local')
     }
   }
 

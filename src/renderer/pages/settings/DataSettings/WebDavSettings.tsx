@@ -36,13 +36,13 @@ const WebDavSettings: FC = () => {
   // 把之前备份的文件定时上传到 webdav，首先先配置 webdav 的 host, port, user, pass, path
 
   const onSyncIntervalChange = async (value: number) => {
-    void setWebdavSyncInterval(value)
+    await setWebdavSyncInterval(value)
     if (value === 0) {
       await setWebdavAutoSync(false)
       stopAutoSync('webdav')
     } else {
       await setWebdavAutoSync(true)
-      void startAutoSync(false, 'webdav')
+      startAutoSync(false, 'webdav')
     }
   }
 

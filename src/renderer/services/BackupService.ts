@@ -1,3 +1,4 @@
+import { preferenceService } from '@data/PreferenceService'
 import { loggerService } from '@logger'
 import db from '@renderer/databases'
 import { upgradeToV7, upgradeToV8 } from '@renderer/databases/upgrades'
@@ -6,6 +7,7 @@ import store, { handleSaveData } from '@renderer/store'
 import { setLocalBackupSyncState, setS3SyncState, setWebDAVSyncState } from '@renderer/store/backup'
 import type { S3Config, WebDavConfig } from '@renderer/types'
 import { uuid } from '@renderer/utils'
+import type { UnifiedPreferenceKeyType, UnifiedPreferenceType } from '@shared/data/preference/preferenceTypes'
 import dayjs from 'dayjs'
 
 import { notificationService } from './NotificationService'
@@ -30,6 +32,59 @@ function backupModifiedTime(file: { modifiedTime?: string | null }) {
 
 function sortBackupFilesNewestFirst<T extends { fileName: string; modifiedTime?: string | null }>(files: T[]) {
   return [...files].sort((a, b) => backupModifiedTime(b) - backupModifiedTime(a))
+}
+
+function getCachedPreference<K extends UnifiedPreferenceKeyType>(
+  key: K,
+  fallback: UnifiedPreferenceType[K]
+): UnifiedPreferenceType[K] {
+  const value = preferenceService.getCachedValue(key)
+  return value === undefined ? fallback : value
+}
+
+function getWebdavBackupSettings() {
+  const settings = store.getState().settings
+  return {
+    webdavAutoSync: getCachedPreference('data.backup.webdav.auto_sync', settings.webdavAutoSync),
+    webdavDisableStream: getCachedPreference('data.backup.webdav.disable_stream', settings.webdavDisableStream),
+    webdavHost: getCachedPreference('data.backup.webdav.host', settings.webdavHost),
+    webdavMaxBackups: getCachedPreference('data.backup.webdav.max_backups', settings.webdavMaxBackups),
+    webdavPass: getCachedPreference('data.backup.webdav.pass', settings.webdavPass),
+    webdavPath: getCachedPreference('data.backup.webdav.path', settings.webdavPath),
+    webdavSkipBackupFile: getCachedPreference('data.backup.webdav.skip_backup_file', settings.webdavSkipBackupFile),
+    webdavSyncInterval: getCachedPreference('data.backup.webdav.sync_interval', settings.webdavSyncInterval),
+    webdavUser: getCachedPreference('data.backup.webdav.user', settings.webdavUser)
+  }
+}
+
+function getS3BackupSettings(): S3Config {
+  const s3Settings = store.getState().settings.s3
+  return {
+    endpoint: getCachedPreference('data.backup.s3.endpoint', s3Settings?.endpoint ?? ''),
+    region: getCachedPreference('data.backup.s3.region', s3Settings?.region ?? ''),
+    bucket: getCachedPreference('data.backup.s3.bucket', s3Settings?.bucket ?? ''),
+    accessKeyId: getCachedPreference('data.backup.s3.access_key_id', s3Settings?.accessKeyId ?? ''),
+    secretAccessKey: getCachedPreference('data.backup.s3.secret_access_key', s3Settings?.secretAccessKey ?? ''),
+    root: getCachedPreference('data.backup.s3.root', s3Settings?.root ?? ''),
+    autoSync: getCachedPreference('data.backup.s3.auto_sync', s3Settings?.autoSync ?? false),
+    syncInterval: getCachedPreference('data.backup.s3.sync_interval', s3Settings?.syncInterval ?? 0),
+    maxBackups: getCachedPreference('data.backup.s3.max_backups', s3Settings?.maxBackups ?? 0),
+    skipBackupFile: getCachedPreference('data.backup.s3.skip_backup_file', s3Settings?.skipBackupFile ?? false)
+  }
+}
+
+function getLocalBackupSettings() {
+  const settings = store.getState().settings
+  return {
+    localBackupAutoSync: getCachedPreference('data.backup.local.auto_sync', settings.localBackupAutoSync),
+    localBackupDir: getCachedPreference('data.backup.local.dir', settings.localBackupDir),
+    localBackupMaxBackups: getCachedPreference('data.backup.local.max_backups', settings.localBackupMaxBackups),
+    localBackupSkipBackupFile: getCachedPreference(
+      'data.backup.local.skip_backup_file',
+      settings.localBackupSkipBackupFile
+    ),
+    localBackupSyncInterval: getCachedPreference('data.backup.local.sync_interval', settings.localBackupSyncInterval)
+  }
 }
 
 async function disableStorageV2AutoHydrateAfterLegacyRestore() {
@@ -260,7 +315,7 @@ export async function backupToWebdav({
     webdavMaxBackups,
     webdavSkipBackupFile,
     webdavDisableStream
-  } = store.getState().settings
+  } = getWebdavBackupSettings()
   let deviceType = 'unknown'
   let hostname = 'unknown'
   try {
@@ -390,7 +445,7 @@ export async function backupToWebdav({
 
 // 从 webdav 恢复
 export async function restoreFromWebdav(fileName?: string) {
-  const { webdavHost, webdavUser, webdavPass, webdavPath } = store.getState().settings
+  const { webdavHost, webdavUser, webdavPass, webdavPath } = getWebdavBackupSettings()
   let data = ''
 
   try {
@@ -441,7 +496,7 @@ export async function backupToS3({
 
   store.dispatch(setS3SyncState({ syncing: true, lastSyncError: null }))
 
-  const s3Config = store.getState().settings.s3
+  const s3Config = getS3BackupSettings()
   let deviceType = 'unknown'
   let hostname = 'unknown'
   try {
@@ -554,7 +609,7 @@ export async function backupToS3({
 
 // 从 S3 恢复
 export async function restoreFromS3(fileName?: string) {
-  const s3Config = store.getState().settings.s3
+  const s3Config = getS3BackupSettings()
 
   if (!fileName) {
     const files = await window.api.backup.listS3Files(s3Config)
@@ -641,17 +696,17 @@ function setAutoBackupRunning(backupType: BackupType, running: boolean) {
 export function startAutoSync(immediate = false, type?: BackupType) {
   // 如果没有指定类型，启动所有配置的自动同步
   if (!type) {
-    const settings = store.getState().settings
-    const { webdavAutoSync, webdavHost, localBackupAutoSync, localBackupDir } = settings
-    const s3Settings = settings.s3
+    const webdavSettings = getWebdavBackupSettings()
+    const s3Settings = getS3BackupSettings()
+    const localSettings = getLocalBackupSettings()
 
-    if (webdavAutoSync && webdavHost) {
+    if (webdavSettings.webdavAutoSync && webdavSettings.webdavHost) {
       startAutoSync(immediate, 'webdav')
     }
-    if (s3Settings?.autoSync && s3Settings?.endpoint) {
+    if (s3Settings.autoSync && s3Settings.endpoint) {
       startAutoSync(immediate, 's3')
     }
-    if (localBackupAutoSync && localBackupDir) {
+    if (localSettings.localBackupAutoSync && localSettings.localBackupDir) {
       startAutoSync(immediate, 'local')
     }
     return
@@ -659,15 +714,18 @@ export function startAutoSync(immediate = false, type?: BackupType) {
 
   // 根据类型启动特定的自动同步
   if (type === 'webdav') {
-    if (webdavAutoSyncStarted) {
-      return
+    const wasStarted = webdavAutoSyncStarted
+    if (wasStarted) {
+      logger.verbose('[WebdavAutoSync] Restarting auto sync')
     }
 
-    const settings = store.getState().settings
-    const { webdavAutoSync, webdavHost } = settings
+    const { webdavAutoSync, webdavHost } = getWebdavBackupSettings()
 
     if (!webdavAutoSync || !webdavHost) {
       logger.info('[WebdavAutoSync] Invalid sync settings, auto sync disabled')
+      if (wasStarted) {
+        stopAutoSync('webdav')
+      }
       return
     }
 
@@ -675,15 +733,18 @@ export function startAutoSync(immediate = false, type?: BackupType) {
     webdavAutoSyncStarted = true
     scheduleNextBackup(immediate ? 'immediate' : 'fromLastSyncTime', 'webdav')
   } else if (type === 's3') {
-    if (s3AutoSyncStarted) {
-      return
+    const wasStarted = s3AutoSyncStarted
+    if (wasStarted) {
+      logger.verbose('[S3AutoSync] Restarting auto sync')
     }
 
-    const settings = store.getState().settings
-    const s3Settings = settings.s3
+    const s3Settings = getS3BackupSettings()
 
-    if (!s3Settings?.autoSync || !s3Settings?.endpoint) {
+    if (!s3Settings.autoSync || !s3Settings.endpoint) {
       logger.verbose('Invalid sync settings, auto sync disabled')
+      if (wasStarted) {
+        stopAutoSync('s3')
+      }
       return
     }
 
@@ -691,15 +752,18 @@ export function startAutoSync(immediate = false, type?: BackupType) {
     s3AutoSyncStarted = true
     scheduleNextBackup(immediate ? 'immediate' : 'fromLastSyncTime', 's3')
   } else if (type === 'local') {
-    if (localAutoSyncStarted) {
-      return
+    const wasStarted = localAutoSyncStarted
+    if (wasStarted) {
+      logger.verbose('[LocalAutoSync] Restarting auto sync')
     }
 
-    const settings = store.getState().settings
-    const { localBackupAutoSync, localBackupDir } = settings
+    const { localBackupAutoSync, localBackupDir } = getLocalBackupSettings()
 
     if (!localBackupAutoSync || !localBackupDir) {
       logger.verbose('Invalid sync settings, auto sync disabled')
+      if (wasStarted) {
+        stopAutoSync('local')
+      }
       return
     }
 
@@ -714,7 +778,6 @@ export function startAutoSync(immediate = false, type?: BackupType) {
     let logPrefix: string
 
     // 根据备份类型获取相应的配置和状态
-    const settings = store.getState().settings
     const backup = store.getState().backup
 
     if (backupType === 'webdav') {
@@ -722,7 +785,7 @@ export function startAutoSync(immediate = false, type?: BackupType) {
         clearTimeout(webdavSyncTimeout)
         webdavSyncTimeout = null
       }
-      syncInterval = settings.webdavSyncInterval
+      syncInterval = getWebdavBackupSettings().webdavSyncInterval
       lastSyncTime = backup.webdavSync?.lastSyncTime || undefined
       logPrefix = '[WebdavAutoSync]'
     } else if (backupType === 's3') {
@@ -730,7 +793,7 @@ export function startAutoSync(immediate = false, type?: BackupType) {
         clearTimeout(s3SyncTimeout)
         s3SyncTimeout = null
       }
-      syncInterval = settings.s3?.syncInterval || 0
+      syncInterval = getS3BackupSettings().syncInterval
       lastSyncTime = backup.s3Sync?.lastSyncTime || undefined
       logPrefix = '[S3AutoSync]'
     } else if (backupType === 'local') {
@@ -738,7 +801,7 @@ export function startAutoSync(immediate = false, type?: BackupType) {
         clearTimeout(localSyncTimeout)
         localSyncTimeout = null
       }
-      syncInterval = settings.localBackupSyncInterval
+      syncInterval = getLocalBackupSettings().localBackupSyncInterval
       lastSyncTime = backup.localBackupSync?.lastSyncTime || undefined
       logPrefix = '[LocalAutoSync]'
     } else {
@@ -1087,7 +1150,7 @@ export async function backupToLocal({
     localBackupDir: localBackupDirSetting,
     localBackupMaxBackups,
     localBackupSkipBackupFile
-  } = store.getState().settings
+  } = getLocalBackupSettings()
   const localBackupDir = await window.api.resolvePath(localBackupDirSetting)
   let deviceType = 'unknown'
   let hostname = 'unknown'
@@ -1210,7 +1273,7 @@ export async function backupToLocal({
 
 export async function restoreFromLocal(fileName: string) {
   try {
-    const { localBackupDir: localBackupDirSetting } = store.getState().settings
+    const { localBackupDir: localBackupDirSetting } = getLocalBackupSettings()
     const localBackupDir = await window.api.resolvePath(localBackupDirSetting)
     const restoreData = await window.api.backup.restoreFromLocalBackup(fileName, localBackupDir)
 

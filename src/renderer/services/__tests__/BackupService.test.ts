@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
     verbose: vi.fn(),
     warn: vi.fn()
   },
+  preferenceCache: new Map<string, unknown>(),
   storeState: {
     backup: {},
     messages: {
@@ -26,6 +27,12 @@ const mocks = vi.hoisted(() => ({
   importLegacyDexieToStorageV2: vi.fn(),
   notificationSend: vi.fn(),
   suspendStorageV2RuntimeMirrorsUntilReload: vi.fn()
+}))
+
+vi.mock('@data/PreferenceService', () => ({
+  preferenceService: {
+    getCachedValue: vi.fn((key: string) => mocks.preferenceCache.get(key))
+  }
 }))
 
 vi.mock('@logger', () => ({
@@ -101,6 +108,7 @@ describe('BackupService legacy restore', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
+    mocks.preferenceCache.clear()
     mocks.db.tables = []
     mocks.db.table.mockReset()
     mocks.handleSaveData.mockResolvedValue(undefined)
@@ -405,7 +413,7 @@ describe('BackupService legacy restore', () => {
     expect(window.api.backup.deleteS3File).toHaveBeenCalledTimes(1)
     expect(window.api.backup.deleteS3File).toHaveBeenCalledWith(
       'cherry-studio-pi.20260601000000.host-a.mac.zip',
-      s3Config
+      expect.objectContaining(s3Config)
     )
   })
 
@@ -449,6 +457,101 @@ describe('BackupService legacy restore', () => {
     )
   })
 
+  it('uses cached WebDAV preferences when legacy Redux settings are stale', async () => {
+    mocks.storeState.settings = {
+      s3: {},
+      webdavHost: '',
+      webdavUser: '',
+      webdavPass: '',
+      webdavPath: '',
+      webdavMaxBackups: 0,
+      webdavSkipBackupFile: false,
+      webdavDisableStream: false
+    }
+    mocks.preferenceCache.set('data.backup.webdav.host', 'https://cached-webdav.example')
+    mocks.preferenceCache.set('data.backup.webdav.user', 'cached-user')
+    mocks.preferenceCache.set('data.backup.webdav.pass', 'cached-pass')
+    mocks.preferenceCache.set('data.backup.webdav.path', '/cached-backups')
+    mocks.preferenceCache.set('data.backup.webdav.max_backups', 0)
+    mocks.preferenceCache.set('data.backup.webdav.skip_backup_file', true)
+    mocks.preferenceCache.set('data.backup.webdav.disable_stream', true)
+
+    await backupToWebdav()
+
+    expect(window.api.backup.backupToWebdav).toHaveBeenCalledWith(
+      expect.objectContaining({
+        webdavHost: 'https://cached-webdav.example',
+        webdavUser: 'cached-user',
+        webdavPass: 'cached-pass',
+        webdavPath: '/cached-backups',
+        skipBackupFile: true,
+        disableStream: true
+      })
+    )
+  })
+
+  it('uses cached S3 preferences when legacy Redux settings are stale', async () => {
+    mocks.storeState.settings = {
+      s3: {
+        endpoint: '',
+        region: '',
+        bucket: '',
+        accessKeyId: '',
+        secretAccessKey: '',
+        root: '',
+        autoSync: false,
+        syncInterval: 0,
+        maxBackups: 0,
+        skipBackupFile: false
+      }
+    }
+    mocks.preferenceCache.set('data.backup.s3.endpoint', 'https://s3.cached.example')
+    mocks.preferenceCache.set('data.backup.s3.region', 'cached-region')
+    mocks.preferenceCache.set('data.backup.s3.bucket', 'cached-bucket')
+    mocks.preferenceCache.set('data.backup.s3.access_key_id', 'cached-access-key')
+    mocks.preferenceCache.set('data.backup.s3.secret_access_key', 'cached-secret-key')
+    mocks.preferenceCache.set('data.backup.s3.root', 'cached-root')
+    mocks.preferenceCache.set('data.backup.s3.max_backups', 0)
+    mocks.preferenceCache.set('data.backup.s3.skip_backup_file', true)
+
+    await backupToS3()
+
+    expect(window.api.backup.backupToS3).toHaveBeenCalledWith(
+      expect.objectContaining({
+        endpoint: 'https://s3.cached.example',
+        region: 'cached-region',
+        bucket: 'cached-bucket',
+        accessKeyId: 'cached-access-key',
+        secretAccessKey: 'cached-secret-key',
+        root: 'cached-root',
+        skipBackupFile: true
+      })
+    )
+  })
+
+  it('uses cached local backup preferences when legacy Redux settings are stale', async () => {
+    mocks.storeState.settings = {
+      s3: {},
+      localBackupDir: '',
+      localBackupMaxBackups: 0,
+      localBackupSkipBackupFile: false
+    }
+    mocks.preferenceCache.set('data.backup.local.dir', '/cached-local-backups')
+    mocks.preferenceCache.set('data.backup.local.max_backups', 0)
+    mocks.preferenceCache.set('data.backup.local.skip_backup_file', true)
+
+    await backupToLocal()
+
+    expect(window.api.resolvePath).toHaveBeenCalledWith('/cached-local-backups')
+    expect(window.api.backup.backupToLocalDir).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        localBackupDir: '/cached-local-backups',
+        skipBackupFile: true
+      })
+    )
+  })
+
   it('runs WebDAV auto sync after starting immediate auto sync', async () => {
     mocks.storeState = {
       backup: {
@@ -478,6 +581,49 @@ describe('BackupService legacy restore', () => {
 
     await vi.advanceTimersByTimeAsync(1)
 
+    expect(window.api.backup.backupToWebdav).toHaveBeenCalledTimes(1)
+    stopAutoSync('webdav')
+  })
+
+  it('reschedules WebDAV auto sync when start is called again with updated preferences', async () => {
+    vi.setSystemTime(new Date('2026-06-06T00:00:00.000Z'))
+    mocks.storeState = {
+      backup: {
+        webdavSync: {
+          lastSyncTime: Date.now()
+        }
+      },
+      messages: {
+        loadingByTopic: {}
+      },
+      settings: {
+        s3: {},
+        webdavAutoSync: false,
+        webdavHost: '',
+        webdavSyncInterval: 0,
+        webdavMaxBackups: 0,
+        webdavSkipBackupFile: false,
+        webdavDisableStream: false
+      }
+    }
+    mocks.preferenceCache.set('data.backup.webdav.auto_sync', true)
+    mocks.preferenceCache.set('data.backup.webdav.host', 'https://webdav.example')
+    mocks.preferenceCache.set('data.backup.webdav.user', 'user')
+    mocks.preferenceCache.set('data.backup.webdav.pass', 'pass')
+    mocks.preferenceCache.set('data.backup.webdav.path', '/backup')
+    mocks.preferenceCache.set('data.backup.webdav.sync_interval', 10)
+    mocks.preferenceCache.set('data.backup.webdav.max_backups', 0)
+    mocks.preferenceCache.set('data.backup.webdav.skip_backup_file', false)
+    mocks.preferenceCache.set('data.backup.webdav.disable_stream', false)
+
+    startAutoSync(false, 'webdav')
+    mocks.preferenceCache.set('data.backup.webdav.sync_interval', 30)
+    startAutoSync(false, 'webdav')
+
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000 + 999)
+    expect(window.api.backup.backupToWebdav).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(20 * 60 * 1000)
     expect(window.api.backup.backupToWebdav).toHaveBeenCalledTimes(1)
     stopAutoSync('webdav')
   })

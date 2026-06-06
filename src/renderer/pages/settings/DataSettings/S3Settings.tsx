@@ -38,13 +38,13 @@ const S3Settings: FC = () => {
   const { s3Sync } = useAppSelector((state) => state.backup)
 
   const onSyncIntervalChange = async (value: number) => {
-    void setS3SyncInterval(value)
+    await setS3SyncInterval(value)
     if (value === 0) {
       await setS3AutoSync(false)
       stopAutoSync('s3')
     } else {
       await setS3AutoSync(true)
-      void startAutoSync(false, 's3')
+      startAutoSync(false, 's3')
     }
   }
 
