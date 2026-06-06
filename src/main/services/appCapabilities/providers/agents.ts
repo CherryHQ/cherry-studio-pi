@@ -9,6 +9,33 @@ import { sessionService, taskService } from '@main/services/agents/services'
 import type { AppCapabilityDefinition } from '../types'
 import { okResult, sanitizeForAgent } from '../utils'
 
+const DEFAULT_AGENT_CAPABILITY_LIST_LIMIT = 50
+const MAX_AGENT_CAPABILITY_LIST_LIMIT = 200
+
+function normalizeListLimit(value: unknown) {
+  const parsed =
+    typeof value === 'string' && !value.trim()
+      ? DEFAULT_AGENT_CAPABILITY_LIST_LIMIT
+      : Number(value ?? DEFAULT_AGENT_CAPABILITY_LIST_LIMIT)
+  const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_AGENT_CAPABILITY_LIST_LIMIT
+  return Math.max(1, Math.min(safeLimit, MAX_AGENT_CAPABILITY_LIST_LIMIT))
+}
+
+function normalizeOffset(value: unknown) {
+  const parsed = typeof value === 'string' && !value.trim() ? undefined : Number(value)
+  if (parsed === undefined || !Number.isFinite(parsed)) return undefined
+  return Math.max(0, Math.trunc(parsed))
+}
+
+function agentListOptions(input: any = {}) {
+  const { limit, offset, ...rest } = input ?? {}
+  return {
+    ...rest,
+    limit: normalizeListLimit(limit),
+    offset: normalizeOffset(offset)
+  }
+}
+
 export function createAgentCapabilities(): AppCapabilityDefinition[] {
   return [
     {
@@ -20,14 +47,15 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       inputSchema: {
         type: 'object',
         properties: {
-          limit: { type: 'number' },
-          offset: { type: 'number' },
+          limit: { type: 'number', description: 'Maximum models to return; defaults to 50 and is capped at 200' },
+          offset: { type: 'number', description: 'Pagination offset' },
           providerType: { type: 'string' }
         }
       },
       risk: 'read',
       tags: ['agents', 'models', 'llm'],
-      execute: async (input: any) => okResult('Agent models listed', await modelsService.getModels(input ?? {}))
+      execute: async (input: any) =>
+        okResult('Agent models listed', await modelsService.getModels(agentListOptions(input)))
     },
     {
       id: 'agents.list',
@@ -38,8 +66,8 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       inputSchema: {
         type: 'object',
         properties: {
-          limit: { type: 'number' },
-          offset: { type: 'number' },
+          limit: { type: 'number', description: 'Maximum agents to return; defaults to 50 and is capped at 200' },
+          offset: { type: 'number', description: 'Pagination offset' },
           sortBy: { type: 'string' },
           orderBy: { type: 'string', enum: ['asc', 'desc'] }
         }
@@ -47,7 +75,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['agents', 'list'],
       execute: async (input: any) =>
-        okResult('Agents listed', sanitizeForAgent(await listAgentsWithStorageV2Recovery(input ?? {})))
+        okResult('Agents listed', sanitizeForAgent(await listAgentsWithStorageV2Recovery(agentListOptions(input))))
     },
     {
       id: 'agents.get',
@@ -118,8 +146,8 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
         type: 'object',
         properties: {
           agentId: { type: 'string' },
-          limit: { type: 'number' },
-          offset: { type: 'number' }
+          limit: { type: 'number', description: 'Maximum sessions to return; defaults to 50 and is capped at 200' },
+          offset: { type: 'number', description: 'Pagination offset' }
         }
       },
       risk: 'read',
@@ -127,7 +155,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any) =>
         okResult(
           'Agent sessions listed',
-          sanitizeForAgent(await sessionService.listSessions(input?.agentId, input ?? {}))
+          sanitizeForAgent(await sessionService.listSessions(input?.agentId, agentListOptions(input)))
         )
     },
     {
@@ -166,14 +194,14 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       inputSchema: {
         type: 'object',
         properties: {
-          limit: { type: 'number' },
-          offset: { type: 'number' }
+          limit: { type: 'number', description: 'Maximum tasks to return; defaults to 50 and is capped at 200' },
+          offset: { type: 'number', description: 'Pagination offset' }
         }
       },
       risk: 'read',
       tags: ['agents', 'tasks', 'schedule'],
       execute: async (input: any) =>
-        okResult('Agent tasks listed', sanitizeForAgent(await taskService.listAllTasks(input ?? {})))
+        okResult('Agent tasks listed', sanitizeForAgent(await taskService.listAllTasks(agentListOptions(input))))
     },
     {
       id: 'agents.task.create',
