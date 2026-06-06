@@ -35,14 +35,29 @@ async function getStoredWebDavConfig(): Promise<WebDavConfig> {
   }
 }
 
+function hasOwnInput(input: any, key: string) {
+  return Object.prototype.hasOwnProperty.call(input ?? {}, key)
+}
+
+function normalizeInputText(value: unknown, fallback = '') {
+  if (value === null || typeof value === 'undefined') return fallback
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return String(value).trim()
+  return ''
+}
+
+function resolveInputText(input: any, key: keyof WebDavConfig, fallback = '') {
+  return hasOwnInput(input, key) ? normalizeInputText(input?.[key]) : fallback
+}
+
 async function resolveWebDavConfig(input: any): Promise<WebDavConfig> {
   const stored = await getStoredWebDavConfig()
   return normalizeWebDavConfig(
     {
-      webdavHost: input?.webdavHost ?? stored.webdavHost,
-      webdavUser: input?.webdavUser ?? stored.webdavUser,
-      webdavPass: input?.webdavPass ?? stored.webdavPass,
-      webdavPath: input?.webdavPath ?? stored.webdavPath
+      webdavHost: resolveInputText(input, 'webdavHost', stored.webdavHost),
+      webdavUser: resolveInputText(input, 'webdavUser', stored.webdavUser),
+      webdavPass: resolveInputText(input, 'webdavPass', stored.webdavPass),
+      webdavPath: resolveInputText(input, 'webdavPath', stored.webdavPath)
     },
     { defaultPath: DEFAULT_DATA_SYNC_PATH }
   )
@@ -60,6 +75,14 @@ function normalizeRemotePath(value?: string) {
   return normalized === DATA_SYNC_SUFFIX || normalized.endsWith(DATA_SYNC_SUFFIX)
     ? normalized
     : `${normalized === '/' ? '' : normalized}${DATA_SYNC_SUFFIX}`
+}
+
+function normalizeDirectoryPath(value: unknown, fallback = '/') {
+  const trimmed = normalizeInputText(value, fallback) || fallback
+  let normalized = trimmed.replace(/\\/g, '/').replace(/\/+/g, '/')
+  if (!normalized.startsWith('/')) normalized = `/${normalized}`
+  if (normalized.length > 1) normalized = normalized.replace(/\/+$/g, '')
+  return normalized || '/'
 }
 
 async function runWebDavCapability<T>(action: string, fn: () => Promise<T>) {
@@ -198,11 +221,12 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any) => {
         const config = await resolveWebDavConfig(input)
         if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
+        const remotePath = normalizeDirectoryPath(input?.remotePath)
         return okResult(
           'WebDAV directories listed',
           sanitizeForAgent(
             await runWebDavCapability('读取远程目录', () =>
-              appDataSyncService.listRemoteDirectories(config, input?.remotePath || '/')
+              appDataSyncService.listRemoteDirectories(config, remotePath)
             )
           )
         )
@@ -232,11 +256,12 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any, context) => {
         const config = await resolveWebDavConfig(input)
         if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
+        const remotePath = normalizeDirectoryPath(input?.remotePath, config.webdavPath || '/')
 
         const [status, directories, writeAccess] = await runWebDavCapability('诊断 WebDAV 同步', async () => {
           const [nextStatus, nextDirectories] = await Promise.all([
             appDataSyncService.getStatus(),
-            appDataSyncService.listRemoteDirectories(config, input?.remotePath || config.webdavPath || '/')
+            appDataSyncService.listRemoteDirectories(config, remotePath)
           ])
           const nextWriteAccess = context.dryRun ? null : await appDataSyncService.checkWriteAccess(config)
           return [nextStatus, nextDirectories, nextWriteAccess] as const

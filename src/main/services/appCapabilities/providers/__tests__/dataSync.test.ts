@@ -120,6 +120,31 @@ describe('data sync app capabilities', () => {
     )
   })
 
+  it('normalizes WebDAV config fields and directory paths before listing', async () => {
+    mocks.appDataSyncService.listRemoteDirectories.mockResolvedValueOnce({ path: '/folder/child', directories: [] })
+
+    await capability('dataSync.webdav.directories.list').execute(
+      {
+        webdavHost: ' dav.example.com ',
+        webdavUser: ' user ',
+        webdavPass: ' secret ',
+        webdavPath: ' Team//Sync/ ',
+        remotePath: ' folder\\\\child// '
+      },
+      { source: 'agent' }
+    )
+
+    expect(mocks.appDataSyncService.listRemoteDirectories).toHaveBeenCalledWith(
+      {
+        webdavHost: 'https://dav.example.com',
+        webdavUser: 'user',
+        webdavPass: 'secret',
+        webdavPath: '/Team/Sync'
+      },
+      '/folder/child'
+    )
+  })
+
   it('diagnoses WebDAV write access outside dry runs', async () => {
     mocks.appDataSyncService.getStatus.mockResolvedValueOnce({ deviceId: 'device-1', conflicts: [] })
     mocks.appDataSyncService.listRemoteDirectories.mockResolvedValueOnce({ path: '/sync-root', directories: [] })
@@ -137,6 +162,19 @@ describe('data sync app capabilities', () => {
     expect(result.data).toMatchObject({
       writeAccess: { ok: true, basePath: '/sync-root/sync/v1' }
     })
+  })
+
+  it('falls back to the configured sync path for blank diagnosis paths', async () => {
+    mocks.appDataSyncService.getStatus.mockResolvedValueOnce({ deviceId: 'device-1', conflicts: [] })
+    mocks.appDataSyncService.listRemoteDirectories.mockResolvedValueOnce({ path: '/sync-root', directories: [] })
+    mocks.appDataSyncService.checkWriteAccess.mockResolvedValueOnce({ ok: true, basePath: '/sync-root/sync/v1' })
+
+    await capability('dataSync.webdav.diagnose').execute({ remotePath: '   ' }, { source: 'agent' })
+
+    expect(mocks.appDataSyncService.listRemoteDirectories).toHaveBeenCalledWith(
+      expect.objectContaining({ webdavPath: '/sync-root' }),
+      '/sync-root'
+    )
   })
 
   it('keeps WebDAV diagnosis dry runs read-only', async () => {
