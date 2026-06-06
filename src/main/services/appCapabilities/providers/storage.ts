@@ -134,6 +134,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       risk: 'destructive',
       permissions: ['storage.backup.restore'],
       sideEffects: ['database.write', 'filesystem.write'],
+      supportsDryRun: true,
       tags: ['storage', 'backup', 'restore'],
       execute: async (input: any, context) => {
         if (context.dryRun) {

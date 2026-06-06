@@ -34,7 +34,8 @@ vi.mock('@logger', () => ({
 }))
 
 vi.mock('@main/services/KnowledgeService', () => ({
-  default: mocks.knowledgeService
+  default: mocks.knowledgeService,
+  knowledgeService: mocks.knowledgeService
 }))
 
 vi.mock('@main/services/ReduxService', () => ({

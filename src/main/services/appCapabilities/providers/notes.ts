@@ -411,6 +411,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       risk: 'destructive',
       permissions: ['notes.delete'],
       sideEffects: ['filesystem.delete'],
+      supportsDryRun: true,
       tags: ['notes', 'delete'],
       execute: async (input: any, context) => {
         const root = await getNotesRoot()

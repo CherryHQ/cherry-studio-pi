@@ -159,6 +159,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       risk: 'write',
       permissions: ['dataSync.settings.write'],
       sideEffects: ['settings.write'],
+      supportsDryRun: true,
       tags: ['dataSync', 'sync', 'webdav', 'configure', 'settings'],
       execute: async (input: any, context) => {
         const config = await resolveWebDavConfig(input)
@@ -271,6 +272,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       risk: 'write',
       permissions: ['dataSync.write', 'network.webdav.write'],
       sideEffects: ['database.write', 'network.webdav.write', 'filesystem.write'],
+      supportsDryRun: true,
       tags: ['dataSync', 'sync', 'webdav', 'run'],
       examples: ['Sync my data now', 'Run WebDAV data sync'],
       execute: async (input: any, context) => {

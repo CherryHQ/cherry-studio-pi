@@ -410,6 +410,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       risk: 'destructive',
       permissions: ['knowledge.reset'],
       sideEffects: ['database.write'],
+      supportsDryRun: true,
       tags: ['knowledge', 'rag', 'reset'],
       execute: async (input: any, context) => {
         const base = (await listKnowledgeBases()).find((item) => item.id === input?.baseId)

@@ -74,8 +74,12 @@ function needsApproval(risk: AppCapabilityRisk) {
   return risk !== 'read'
 }
 
+function canDryRunWithoutApproval(capability: AppCapabilityDescriptor) {
+  return capability.supportsDryRun === true
+}
+
 function canAutoRunWithoutApproval(capability: AppCapabilityDescriptor) {
-  return capability.risk === 'read' || capability.supportsDryRun === true
+  return capability.risk === 'read' || (capability.kind === 'query' && canDryRunWithoutApproval(capability))
 }
 
 function makeIntentQuery(input: SystemAgentPlanIntentInput) {
@@ -119,12 +123,12 @@ export class SystemAgentRuntimeService {
     }
   }
 
-  planEvent(input: SystemAgentEventInput): SystemAgentEventPlan {
+  planEvent(input: SystemAgentEventInput, options: { includeSchemas?: boolean } = {}): SystemAgentEventPlan {
     const query = makeEventQuery(input)
     const capabilities = appCapabilityService.search({
       query,
       domain: input.domain,
-      includeSchemas: true,
+      includeSchemas: options.includeSchemas ?? true,
       limit: input.limit ?? 6
     })
     const recommended = capabilities[0] ?? null
@@ -138,7 +142,7 @@ export class SystemAgentRuntimeService {
   }
 
   async handleEvent(input: SystemAgentEventInput): Promise<SystemAgentHandledEvent> {
-    const plan = this.planEvent(input)
+    const plan = this.planEvent(input, { includeSchemas: false })
     const autoRuns: SystemAgentAutoRun[] = []
 
     if (input.autoRunReadOnly !== false) {
@@ -201,7 +205,8 @@ export class SystemAgentRuntimeService {
       }
     }
 
-    if (needsApproval(capability.risk) && options.approved !== true && options.dryRun !== true) {
+    const dryRunAllowed = options.dryRun === true && canDryRunWithoutApproval(capability)
+    if (needsApproval(capability.risk) && options.approved !== true && !dryRunAllowed) {
       return {
         ok: false,
         isError: true,

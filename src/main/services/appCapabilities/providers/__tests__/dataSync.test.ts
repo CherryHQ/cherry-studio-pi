@@ -97,6 +97,13 @@ describe('data sync app capabilities', () => {
     })
   })
 
+  it('declares dry-run support for write capabilities that implement dry-run branches', () => {
+    expect(capability('dataSync.webdav.config.set').supportsDryRun).toBe(true)
+    expect(capability('dataSync.webdav.diagnose').supportsDryRun).toBe(true)
+    expect(capability('dataSync.sync.now').supportsDryRun).toBe(true)
+    expect(capability('dataSync.snapshot.restoreLatest').supportsDryRun).toBe(true)
+  })
+
   it('lists WebDAV directories using stored config by default', async () => {
     mocks.appDataSyncService.listRemoteDirectories.mockResolvedValueOnce({ path: '/', directories: [] })
 

@@ -55,7 +55,35 @@ describe('SystemAgentRuntimeService', () => {
     expect(plan.guidance).toContain('需要用户确认')
   })
 
+  it('keeps public event planning schema-aware by default', () => {
+    mocks.appCapabilityService.search.mockReturnValueOnce([writeCapability])
+
+    const plan = new SystemAgentRuntimeService().planEvent({
+      type: 'error',
+      source: 'settings.data_sync.sync_now',
+      domain: 'dataSync',
+      message: '503 Service Unavailable'
+    })
+
+    expect(mocks.appCapabilityService.search).toHaveBeenCalledWith({
+      query: 'error failed diagnose troubleshoot repair dataSync settings.data_sync.sync_now 503 Service Unavailable',
+      domain: 'dataSync',
+      includeSchemas: true,
+      limit: 6
+    })
+    expect(plan.recommended?.id).toBe('dataSync.sync.now')
+  })
+
   it('auto-runs the best safe capability for error events', async () => {
+    const dryRunCommandCapability = {
+      id: 'storage.backup.restore',
+      domain: 'storage',
+      kind: 'command',
+      title: 'Restore backup',
+      description: 'Restore a backup',
+      risk: 'destructive',
+      supportsDryRun: true
+    }
     const dryRunWriteCapability = {
       id: 'dataSync.webdav.diagnose',
       domain: 'dataSync',
@@ -73,7 +101,12 @@ describe('SystemAgentRuntimeService', () => {
       description: 'Read sync status',
       risk: 'read'
     }
-    mocks.appCapabilityService.search.mockReturnValueOnce([writeCapability, dryRunWriteCapability, readCapability])
+    mocks.appCapabilityService.search.mockReturnValueOnce([
+      writeCapability,
+      dryRunCommandCapability,
+      dryRunWriteCapability,
+      readCapability
+    ])
     mocks.appCapabilityService.call.mockResolvedValueOnce({ ok: true, summary: 'diagnosed' })
 
     const result = await new SystemAgentRuntimeService().handleEvent({
@@ -86,7 +119,7 @@ describe('SystemAgentRuntimeService', () => {
     expect(mocks.appCapabilityService.search).toHaveBeenCalledWith({
       query: 'error failed diagnose troubleshoot repair dataSync settings.data_sync.sync_now 503 Service Unavailable',
       domain: 'dataSync',
-      includeSchemas: true,
+      includeSchemas: false,
       limit: 6
     })
     expect(mocks.appCapabilityService.call).toHaveBeenCalledWith(
@@ -113,6 +146,30 @@ describe('SystemAgentRuntimeService', () => {
       includeSchemas: false
     })
     expect(mocks.appCapabilityService.call).not.toHaveBeenCalled()
+  })
+
+  it('does not let dry-run bypass approval unless the capability declares dry-run support', async () => {
+    mocks.appCapabilityService.get.mockReturnValueOnce(writeCapability)
+
+    const result = await new SystemAgentRuntimeService().callCapability('dataSync.sync.now', {}, { dryRun: true })
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('需要用户确认')
+    expect(mocks.appCapabilityService.call).not.toHaveBeenCalled()
+  })
+
+  it('allows dry-run without approval only for capabilities that declare dry-run support', async () => {
+    mocks.appCapabilityService.get.mockReturnValueOnce({ ...writeCapability, supportsDryRun: true })
+    mocks.appCapabilityService.call.mockResolvedValueOnce({ ok: true, summary: 'dry run done' })
+
+    const result = await new SystemAgentRuntimeService().callCapability('dataSync.sync.now', {}, { dryRun: true })
+
+    expect(result).toEqual({ ok: true, summary: 'dry run done' })
+    expect(mocks.appCapabilityService.call).toHaveBeenCalledWith(
+      'dataSync.sync.now',
+      {},
+      expect.objectContaining({ dryRun: true })
+    )
   })
 
   it('calls approved capabilities through the shared app capability service', async () => {
