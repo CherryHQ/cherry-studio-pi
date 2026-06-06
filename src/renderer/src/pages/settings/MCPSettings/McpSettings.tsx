@@ -66,10 +66,19 @@ const PipRegistry: Registry[] = [
 
 type TabKey = 'settings' | 'description' | 'tools' | 'prompts' | 'resources'
 
+function safeDecodeRouteParam(value?: string) {
+  if (!value) return ''
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 const McpSettings: React.FC = () => {
   const { t } = useTranslation()
   const { serverId } = useParams<{ serverId: string }>()
-  const decodedServerId = serverId ? decodeURIComponent(serverId) : ''
+  const decodedServerId = safeDecodeRouteParam(serverId)
   const server = useMCPServer(decodedServerId).server as MCPServer
   const { deleteMCPServer, updateMCPServer } = useMCPServers()
   const { ensureServerTrusted } = useMCPServerTrust()

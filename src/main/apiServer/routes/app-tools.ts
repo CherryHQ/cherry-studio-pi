@@ -62,10 +62,15 @@ const PAINTING_NAMESPACES = [
   'ppio_edit'
 ]
 
+const NAVIGATION_ROUTE_PREFIXES = ['/', '/settings', '/knowledge', '/paintings', '/notes', '/agents']
+
 const sanitize = (value: unknown) => {
   const text = JSON.stringify(value, (key, item) => {
     if (/api[-_]?key|token|secret|pass|password/i.test(key) && typeof item === 'string') {
       return item ? '[redacted]' : item
+    }
+    if (typeof item === 'bigint') {
+      return item.toString()
     }
     return item
   })
@@ -79,8 +84,7 @@ const pickPath = (value: any, keyPath = '') => {
 
 async function navigate(route: string) {
   if (!route.startsWith('/')) route = `/${route}`
-  const allowed = ['/', '/settings/', '/knowledge', '/paintings', '/notes']
-  if (!allowed.some((prefix) => route === prefix || route.startsWith(prefix))) {
+  if (!NAVIGATION_ROUTE_PREFIXES.some((prefix) => route === prefix || route.startsWith(`${prefix}/`))) {
     throw new Error(`Navigation route is not allowed: ${route}`)
   }
 

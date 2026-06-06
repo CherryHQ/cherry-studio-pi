@@ -4,7 +4,7 @@ import { loggerService } from '@logger'
 import { NUTSTORE_HOST } from '@shared/config/nutstore'
 import { net } from 'electron'
 import { XMLParser } from 'fast-xml-parser'
-import { isNil, partial } from 'lodash'
+import { isNil } from 'lodash'
 import { type FileStat } from 'webdav'
 
 import { createOAuthUrl, decryptSecret } from '../integration/nutstore/sso/lib/index.mjs'
@@ -17,21 +17,25 @@ interface OAuthResponse {
   access_token: string
 }
 
+interface WebDAVPropStat {
+  prop?: {
+    displayname?: string
+    resourcetype?: { collection?: any }
+    getlastmodified?: string
+    getcontentlength?: string
+    getcontenttype?: string
+  }
+  status?: string
+}
+
+interface WebDAVResponseItem {
+  href?: string
+  propstat?: WebDAVPropStat | WebDAVPropStat[]
+}
+
 interface WebDAVResponse {
   multistatus: {
-    response: Array<{
-      href: string
-      propstat: {
-        prop: {
-          displayname: string
-          resourcetype: { collection?: any }
-          getlastmodified?: string
-          getcontentlength?: string
-          getcontenttype?: string
-        }
-        status: string
-      }
-    }>
+    response?: WebDAVResponseItem | WebDAVResponseItem[]
   }
 }
 
@@ -60,7 +64,7 @@ export async function getDirectoryContents(token: string, target: string): Promi
     target = '/' + target
   }
 
-  let currentUrl = `${NUTSTORE_HOST}${target}`
+  let currentUrl = encodeURI(`${NUTSTORE_HOST}${target}`)
 
   while (true) {
     const response = await net.fetch(currentUrl, {
@@ -83,16 +87,25 @@ export async function getDirectoryContents(token: string, target: string): Promi
     })
 
     const text = await response.text()
+    const status = response.status ?? 200
+    if (status < 200 || status >= 300) {
+      const statusText = response.statusText ? ` ${response.statusText}` : ''
+      const bodyPreview = text.trim().slice(0, 160)
+      throw new Error(`Nutstore request failed: ${status}${statusText}${bodyPreview ? `: ${bodyPreview}` : ''}`)
+    }
 
     const result = parseXml<WebDAVResponse>(text)
-    const items = Array.isArray(result.multistatus.response)
-      ? result.multistatus.response
-      : [result.multistatus.response]
+    const items = toArray(result.multistatus?.response)
 
     // 跳过第一个条目（当前目录）
-    contents.push(...items.slice(1).map(partial(convertToFileStat, '/dav')))
+    contents.push(
+      ...items
+        .slice(1)
+        .map((item) => convertToFileStat('/dav', item))
+        .filter(isFileStat)
+    )
 
-    const linkHeader = response.headers['link'] || response.headers['Link']
+    const linkHeader = response.headers.get('link')
     if (!linkHeader) {
       break
     }
@@ -102,10 +115,15 @@ export async function getDirectoryContents(token: string, target: string): Promi
       break
     }
 
-    currentUrl = decodeURI(nextLink)
+    currentUrl = resolveNextUrl(nextLink, currentUrl)
   }
 
   return contents
+}
+
+function toArray<T>(value: T | T[] | null | undefined): T[] {
+  if (value == null) return []
+  return Array.isArray(value) ? value : [value]
 }
 
 function extractNextLink(linkHeader: string): string | null {
@@ -113,17 +131,55 @@ function extractNextLink(linkHeader: string): string | null {
   return matches ? matches[1] : null
 }
 
-function convertToFileStat(serverBase: string, item: WebDAVResponse['multistatus']['response'][number]): FileStat {
-  const props = item.propstat.prop
+function safeDecodeUri(value: string) {
+  try {
+    return decodeURI(value)
+  } catch {
+    return value
+  }
+}
+
+function safeDecodeURIComponent(value: string) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+function resolveNextUrl(nextLink: string, currentUrl: string) {
+  const decoded = safeDecodeUri(nextLink)
+  try {
+    return new URL(decoded, currentUrl).toString()
+  } catch {
+    return decoded
+  }
+}
+
+function selectPropStat(propstat: WebDAVResponseItem['propstat']) {
+  const propstats = toArray(propstat)
+  return propstats.find((item) => item.status?.includes(' 200 ')) ?? propstats[0]
+}
+
+function isFileStat(value: FileStat | null): value is FileStat {
+  return value !== null
+}
+
+function convertToFileStat(serverBase: string, item: WebDAVResponseItem): FileStat | null {
+  if (!item.href) return null
+
+  const props = selectPropStat(item.propstat)?.prop ?? {}
   const isDir = !isNil(props.resourcetype?.collection)
-  const href = decodeURIComponent(item.href)
-  const filename = serverBase === '/' ? href : path.posix.join('/', href.replace(serverBase, ''))
+  const href = safeDecodeURIComponent(item.href)
+  const relativeHref = serverBase === '/' || !href.startsWith(serverBase) ? href : href.slice(serverBase.length)
+  const filename = serverBase === '/' ? href : path.posix.join('/', relativeHref)
+  const size = props.getcontentlength ? parseInt(props.getcontentlength, 10) : 0
 
   return {
     filename: filename.endsWith('/') ? filename.slice(0, -1) : filename,
     basename: path.basename(filename),
     lastmod: props.getlastmodified || '',
-    size: props.getcontentlength ? parseInt(props.getcontentlength, 10) : 0,
+    size: Number.isFinite(size) ? size : 0,
     type: isDir ? 'directory' : 'file',
     etag: null,
     mime: props.getcontenttype

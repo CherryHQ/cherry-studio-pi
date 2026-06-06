@@ -63,6 +63,11 @@ describe('StorageV2SecretVaultService', () => {
     await expect(secretVaultService.getSecret(secretRef)).resolves.toBeNull()
   })
 
+  it('treats malformed secret references as unavailable instead of throwing', async () => {
+    await expect(secretVaultService.getSecret('not-a-storage-v2-secret-ref')).resolves.toBeNull()
+    await expect(secretVaultService.getSecret('storage-v2://secret/provider/%E0%A4%A/apiKey')).resolves.toBeNull()
+  })
+
   it('treats legacy electron safeStorage records as unavailable instead of prompting the OS keychain', async () => {
     await fs.mkdir(path.join(dataRoot, 'secrets'), { recursive: true })
     await fs.writeFile(

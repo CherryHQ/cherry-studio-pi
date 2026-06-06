@@ -93,7 +93,9 @@ export class StorageV2SecretVaultService {
   async getSecret(secretRef: string): Promise<string | null> {
     await this.waitForIdle()
 
-    const secretId = decodeSecretRef(secretRef)
+    const secretId = safeDecodeSecretRef(secretRef)
+    if (!secretId) return null
+
     const vault = await this.readVault().catch(() => null)
     if (!vault) return null
 
@@ -319,6 +321,14 @@ export class StorageV2SecretVaultService {
     const result = this.writeQueue.then(operation, operation)
     this.writeQueue = result.catch(() => undefined)
     return result
+  }
+}
+
+function safeDecodeSecretRef(secretRef: string) {
+  try {
+    return decodeSecretRef(secretRef)
+  } catch {
+    return null
   }
 }
 
