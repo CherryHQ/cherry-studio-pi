@@ -43,6 +43,7 @@ import type {
 } from '@shared/data/api/apiTypes'
 
 const logger = loggerService.withContext('DataApiService')
+const DEFAULT_REQUEST_TIMEOUT_MS = 3000
 
 /**
  * Retry options interface.
@@ -113,6 +114,29 @@ export class DataApiService implements ApiClient {
     return { ...this.defaultRetryOptions }
   }
 
+  private async withRequestTimeout<T>(
+    promise: Promise<T>,
+    request: DataRequest,
+    requestContext: RequestContext
+  ): Promise<T> {
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<never>((_, reject) => {
+          timeoutHandle = setTimeout(() => {
+            reject(DataApiErrorFactory.timeout(request.path, DEFAULT_REQUEST_TIMEOUT_MS, requestContext))
+          }, DEFAULT_REQUEST_TIMEOUT_MS)
+        })
+      ])
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle)
+      }
+    }
+  }
+
   /**
    * Send request via IPC with direct return and retry logic.
    * Uses DataApiError.isRetryable to determine if retry is appropriate.
@@ -134,12 +158,7 @@ export class DataApiService implements ApiClient {
       logger.debug(`Making ${request.method} request to ${request.path}`, { request })
 
       // Direct IPC call with timeout
-      const response = await Promise.race([
-        window.api.dataApi.request(request),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(DataApiErrorFactory.timeout(request.path, 3000, requestContext)), 3000)
-        )
-      ])
+      const response = await this.withRequestTimeout(window.api.dataApi.request(request), request, requestContext)
 
       if (response.error) {
         // Reconstruct DataApiError from serialized response
