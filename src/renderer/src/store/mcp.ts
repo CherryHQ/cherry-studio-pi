@@ -21,6 +21,34 @@ import { type BuiltinMCPServer, BuiltinMCPServerNames, type MCPConfig, type MCPS
 const logger = loggerService.withContext('Store:MCP')
 const filesystemManualApprovalTools = ['write', 'edit', 'delete'] as const
 
+export type MCPServerLogSummary = Pick<
+  MCPServer,
+  'id' | 'name' | 'type' | 'provider' | 'installSource' | 'isActive' | 'isTrusted'
+> & {
+  argsCount: number
+  envKeys: string[]
+  headerKeys: string[]
+  hasBaseUrl: boolean
+  hasCommand: boolean
+}
+
+export function summarizeMCPServerForLog(server: MCPServer): MCPServerLogSummary {
+  return {
+    id: server.id,
+    name: server.name,
+    type: server.type,
+    provider: server.provider,
+    installSource: server.installSource,
+    isActive: server.isActive,
+    isTrusted: server.isTrusted,
+    argsCount: server.args?.length ?? 0,
+    envKeys: Object.keys(server.env ?? {}),
+    headerKeys: Object.keys(server.headers ?? {}),
+    hasBaseUrl: Boolean(server.baseUrl),
+    hasCommand: Boolean(server.command)
+  }
+}
+
 export const initialState: MCPConfig = {
   servers: [],
   isUvInstalled: true,
@@ -265,7 +293,7 @@ export const initializeMCPServers = (existingServers: MCPServer[], dispatch: (ac
   // Filter out any built-in servers that are already present
   const newServers = builtinMCPServers.filter((server) => !serverIds.has(server.name))
 
-  logger.info('Adding new servers:', newServers)
+  logger.info('Adding new servers', newServers.map(summarizeMCPServerForLog))
   // Add the new built-in servers to the existing servers
   newServers.forEach((server) => {
     dispatch(addMCPServer(server))

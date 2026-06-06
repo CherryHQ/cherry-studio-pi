@@ -2,13 +2,57 @@ import { BuiltinMCPServerNames } from '@renderer/types'
 import { createMigrate } from 'redux-persist'
 import { describe, expect, it } from 'vitest'
 
-import { builtinMCPServers } from '../mcp'
+import { builtinMCPServers, summarizeMCPServerForLog } from '../mcp'
 
 describe('MCP filesystem defaults', () => {
   it('disables auto-approve for sensitive filesystem tools by default', () => {
     const filesystemServer = builtinMCPServers.find((server) => server.name === BuiltinMCPServerNames.filesystem)
 
     expect(filesystemServer?.disabledAutoApproveTools).toEqual(['write', 'edit', 'delete'])
+  })
+
+  it('summarizes MCP servers for logs without credential values or full args', () => {
+    const summary = summarizeMCPServerForLog({
+      id: 'server-1',
+      name: 'secret-server',
+      type: 'stdio',
+      command: 'node',
+      args: ['--api-key', 'raw-arg-secret'],
+      env: {
+        API_KEY: 'raw-env-secret',
+        SAFE_PATH: '/tmp/workspace'
+      },
+      headers: {
+        Authorization: 'Bearer raw-header-secret',
+        'X-Debug': 'enabled'
+      },
+      provider: 'Manual',
+      installSource: 'manual',
+      isActive: true,
+      isTrusted: true,
+      baseUrl: 'https://example.com?token=raw-url-secret'
+    })
+
+    expect(summary).toEqual({
+      id: 'server-1',
+      name: 'secret-server',
+      type: 'stdio',
+      provider: 'Manual',
+      installSource: 'manual',
+      isActive: true,
+      isTrusted: true,
+      argsCount: 2,
+      envKeys: ['API_KEY', 'SAFE_PATH'],
+      headerKeys: ['Authorization', 'X-Debug'],
+      hasBaseUrl: true,
+      hasCommand: true
+    })
+
+    const logged = JSON.stringify(summary)
+    expect(logged).not.toContain('raw-arg-secret')
+    expect(logged).not.toContain('raw-env-secret')
+    expect(logged).not.toContain('raw-header-secret')
+    expect(logged).not.toContain('raw-url-secret')
   })
 
   describe('migration 202: filesystem approval backfill', () => {
