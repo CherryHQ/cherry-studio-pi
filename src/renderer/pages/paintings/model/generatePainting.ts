@@ -42,9 +42,21 @@ export interface GeneratePaintingOptions {
   readonly providerBag?: Record<string, unknown>
 }
 
+function createImageAbortError(): DOMException {
+  return new DOMException('Image generation aborted', 'AbortError')
+}
+
 export function generatePainting(opts: GeneratePaintingOptions): Promise<FileMetadata[]> {
+  if (opts.signal.aborted) {
+    return Promise.reject(createImageAbortError())
+  }
+
   return runPainting(async () => {
     const { aiSdkParams, providerBag } = opts
+
+    if (opts.signal.aborted) {
+      throw createImageAbortError()
+    }
 
     const seedRaw = typeof aiSdkParams.seed === 'string' ? aiSdkParams.seed.trim() : ''
     const seed = /^-?\d+$/.test(seedRaw) ? Number(seedRaw) : undefined
@@ -54,8 +66,8 @@ export function generatePainting(opts: GeneratePaintingOptions): Promise<FileMet
     const requestId = crypto.randomUUID()
     const onAbort = () => window.api.ai.abortImage(requestId)
     opts.signal.addEventListener('abort', onAbort, { once: true })
-    const result = await window.api.ai
-      .generateImage(
+    try {
+      const result = await window.api.ai.generateImage(
         {
           uniqueModelId: `${opts.provider.id}::${opts.modelId}`,
           prompt: opts.prompt,
@@ -77,19 +89,21 @@ export function generatePainting(opts: GeneratePaintingOptions): Promise<FileMet
         },
         requestId
       )
-      .finally(() => opts.signal.removeEventListener('abort', onAbort))
 
-    if (opts.signal.aborted) {
-      throw new DOMException('Image generation aborted', 'AbortError')
-    }
-    if (result.files.length === 0) {
-      return undefined
-    }
+      if (opts.signal.aborted) {
+        throw createImageAbortError()
+      }
+      if (result.files.length === 0) {
+        return undefined
+      }
 
-    // main already persisted the images (`createInternalEntry`); just adapt the
-    // returned v2 `FileEntry` rows to the v1 `FileMetadata` the painting state
-    // still consumes. No base64 round-trip.
-    const files = await Promise.all(result.files.map(fileEntryToMetadata))
-    return files.length > 0 ? { files } : undefined
+      // main already persisted the images (`createInternalEntry`); just adapt the
+      // returned v2 `FileEntry` rows to the v1 `FileMetadata` the painting state
+      // still consumes. No base64 round-trip.
+      const files = await Promise.all(result.files.map(fileEntryToMetadata))
+      return files.length > 0 ? { files } : undefined
+    } finally {
+      opts.signal.removeEventListener('abort', onAbort)
+    }
   })
 }
