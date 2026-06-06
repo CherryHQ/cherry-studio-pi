@@ -18,6 +18,8 @@ type ProviderRuntimeConfig = { apiKey: string; baseURL: string }
 type ProviderConfigResolver = (providerId: string) => Promise<ProviderRuntimeConfig | null>
 
 const KNOWLEDGE_SEARCH_CONCURRENCY = 3
+const DEFAULT_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT = 20
+const MAX_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT = 100
 
 function firstApiKey(value: unknown): string {
   return typeof value === 'string' ? (value.split(',')[0]?.trim() ?? '') : ''
@@ -26,6 +28,33 @@ function firstApiKey(value: unknown): string {
 function normalizeBaseURL(value: unknown): string {
   if (typeof value !== 'string') return ''
   return value.trim().replace(/#$/, '').replace(/\/+$/, '')
+}
+
+function normalizeKnowledgeBaseItemPreviewLimit(value: unknown): number {
+  const parsed =
+    typeof value === 'string' && !value.trim()
+      ? DEFAULT_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT
+      : Number(value ?? DEFAULT_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT)
+  const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT
+  return Math.max(0, Math.min(safeLimit, MAX_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT))
+}
+
+function summarizeKnowledgeBaseForAgent(base: KnowledgeBase, input: any = {}) {
+  const includeItems = input?.includeItems === true
+  const itemLimit = normalizeKnowledgeBaseItemPreviewLimit(input?.itemLimit)
+  const items = Array.isArray(base.items) ? base.items : []
+  const { items: _items, ...summary } = base
+
+  return {
+    ...summary,
+    itemCount: items.length,
+    ...(includeItems
+      ? {
+          items: items.slice(0, itemLimit),
+          ...(items.length > itemLimit ? { itemsTruncated: items.length - itemLimit } : {})
+        }
+      : {})
+  }
 }
 
 function isReduxUnavailableError(error: unknown): boolean {
@@ -177,13 +206,28 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       domain: 'knowledge',
       kind: 'query',
       title: 'List knowledge bases',
-      description: 'List configured knowledge bases and their items with secrets redacted.',
-      inputSchema: { type: 'object', properties: {} },
+      description: 'List configured knowledge bases with lightweight metadata by default.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          includeItems: {
+            type: 'boolean',
+            description: 'Include a bounded preview of knowledge items; defaults to false'
+          },
+          itemLimit: {
+            type: 'number',
+            description: 'Maximum items per base when includeItems is true; defaults to 20 and is capped at 100'
+          }
+        }
+      },
       risk: 'read',
       tags: ['knowledge', 'rag', 'list'],
-      execute: async () => {
+      execute: async (input: any) => {
         const bases = await listKnowledgeBases()
-        return okResult('Knowledge bases listed', { total: bases.length, knowledge_bases: sanitizeForAgent(bases) })
+        return okResult('Knowledge bases listed', {
+          total: bases.length,
+          knowledge_bases: sanitizeForAgent(bases.map((base) => summarizeKnowledgeBaseForAgent(base, input)))
+        })
       }
     },
     {

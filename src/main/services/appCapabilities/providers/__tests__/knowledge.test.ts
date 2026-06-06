@@ -78,6 +78,75 @@ describe('knowledge app capabilities', () => {
     mocks.storageV2SecretVaultService.getSecret.mockResolvedValue('')
   })
 
+  it('lists knowledge bases with lightweight item summaries by default', async () => {
+    const bases = [
+      {
+        id: 'kb-large',
+        name: 'Large Knowledge',
+        model: { id: 'embed-model', provider: 'shared-provider' },
+        dimensions: 1024,
+        chunkSize: 500,
+        chunkOverlap: 50,
+        documentCount: 150,
+        created_at: 1,
+        updated_at: 2,
+        version: 1,
+        items: Array.from({ length: 150 }, (_, index) => ({
+          id: `item-${index}`,
+          type: 'file',
+          content: `content-${index}`
+        }))
+      }
+    ]
+    mocks.reduxService.select.mockResolvedValue(bases)
+
+    const result = await capability('knowledge.bases.list').execute({}, { source: 'agent' })
+
+    expect(result.ok).toBe(true)
+    expect((result.data as any).knowledge_bases).toEqual([
+      expect.objectContaining({
+        id: 'kb-large',
+        name: 'Large Knowledge',
+        itemCount: 150
+      })
+    ])
+    expect((result.data as any).knowledge_bases[0].items).toBeUndefined()
+  })
+
+  it('bounds knowledge base item previews when explicitly requested', async () => {
+    const bases = [
+      {
+        id: 'kb-preview',
+        name: 'Preview Knowledge',
+        model: { id: 'embed-model', provider: 'shared-provider' },
+        created_at: 1,
+        updated_at: 2,
+        version: 1,
+        items: Array.from({ length: 5 }, (_, index) => ({
+          id: `item-${index}`,
+          type: 'file',
+          content: `content-${index}`
+        }))
+      }
+    ]
+    mocks.reduxService.select.mockResolvedValue(bases)
+
+    const result = await capability('knowledge.bases.list').execute(
+      { includeItems: true, itemLimit: 2 },
+      { source: 'agent' }
+    )
+
+    expect((result.data as any).knowledge_bases[0]).toMatchObject({
+      id: 'kb-preview',
+      itemCount: 5,
+      itemsTruncated: 3,
+      items: [
+        { id: 'item-0', type: 'file', content: 'content-0' },
+        { id: 'item-1', type: 'file', content: 'content-1' }
+      ]
+    })
+  })
+
   it('bounds concurrent knowledge searches and reuses provider config during one query', async () => {
     const bases = Array.from({ length: 8 }, (_, index) => ({
       id: `kb-${index}`,
