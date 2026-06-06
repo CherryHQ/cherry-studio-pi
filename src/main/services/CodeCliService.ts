@@ -614,6 +614,24 @@ export class CodeCliService extends BaseService {
     this.terminalsCache = null
   }
 
+  private async withTerminalCheckTimeout<T>(promise: Promise<T>, timeoutMs = 5000): Promise<T> {
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<never>((_, reject) => {
+          timeoutHandle = setTimeout(() => reject(new Error('timeout')), timeoutMs)
+          timeoutHandle.unref?.()
+        })
+      ])
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle)
+      }
+    }
+  }
+
   /**
    * Get available terminals (with caching and parallel checking)
    */
@@ -638,17 +656,15 @@ export class CodeCliService extends BaseService {
     try {
       // Wait for all checks to complete with a global timeout
       const results = await Promise.allSettled(
-        terminalPromises.map((p) =>
-          Promise.race([p, new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))])
-        )
+        terminalPromises.map((promise) => this.withTerminalCheckTimeout(promise))
       )
 
       const availableTerminals: TerminalConfig[] = []
       results.forEach((result, index) => {
         if (result.status === 'fulfilled' && result.value) {
-          availableTerminals.push(result.value as TerminalConfig)
+          availableTerminals.push(result.value)
         } else if (result.status === 'rejected') {
-          logger.debug(`Terminal check failed for ${MACOS_TERMINALS[index].id}:`, result.reason)
+          logger.debug(`Terminal check failed for ${terminalList[index]?.id ?? `#${index}`}:`, result.reason)
         }
       })
 

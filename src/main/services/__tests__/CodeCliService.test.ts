@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@logger', () => ({
   loggerService: {
@@ -71,6 +71,10 @@ describe('CodeCliService', () => {
     vi.clearAllMocks()
   })
 
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('should extend BaseService', async () => {
     const { BaseService, codeCliService } = await loadModules()
     expect(codeCliService).toBeInstanceOf(BaseService)
@@ -87,6 +91,22 @@ describe('CodeCliService', () => {
     await codeCliService._doInit()
     await expect(codeCliService._doStop()).resolves.toBeUndefined()
     expect(codeCliService.isStopped).toBe(true)
+  })
+
+  it('clears terminal check timeout timers after fast terminal checks', async () => {
+    vi.useFakeTimers()
+    const { codeCliService } = await loadModules()
+    const service = codeCliService as unknown as {
+      checkTerminalAvailability: ReturnType<typeof vi.fn>
+      getAvailableTerminals: () => Promise<unknown[]>
+    }
+    service.checkTerminalAvailability = vi.fn(async (terminal) => terminal)
+
+    const terminals = await service.getAvailableTerminals()
+
+    expect(terminals.length).toBeGreaterThan(0)
+    expect(service.checkTerminalAvailability).toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('should prevent double instantiation', async () => {
