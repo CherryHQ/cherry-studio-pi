@@ -96,4 +96,40 @@ describe('MCPService.listAllActiveServerTools', () => {
 
     expect(listToolsSpy).toHaveBeenCalledTimes(1)
   })
+
+  it('lists tools only for selected active servers', async () => {
+    const servers: MCPServer[] = [
+      {
+        id: 'alpha',
+        name: 'Alpha',
+        isActive: true
+      },
+      {
+        id: 'beta',
+        name: 'Beta',
+        isActive: true
+      },
+      {
+        id: 'gamma',
+        name: 'Gamma',
+        isActive: false
+      }
+    ]
+
+    vi.mocked(getMCPServersFromRedux).mockResolvedValue(servers)
+
+    const listToolsSpy = vi.spyOn(mcpService as any, 'listToolsImpl').mockImplementation(async (server: any) => [
+      createTool({
+        name: `${server.id}_tool`,
+        serverId: server.id,
+        serverName: server.name
+      })
+    ])
+
+    const tools = await mcpService.listActiveServerToolsByIds(['beta', 'gamma'])
+
+    expect(listToolsSpy).toHaveBeenCalledTimes(1)
+    expect(listToolsSpy).toHaveBeenCalledWith(expect.objectContaining({ id: 'beta' }))
+    expect(tools.map((tool) => tool.name)).toEqual(['beta_tool'])
+  })
 })

@@ -13,9 +13,19 @@ type PathStats = {
   sizeBytes: number
   fileCount: number
   directoryCount: number
+  statsTruncated?: boolean
 }
 
 type AuditPathOptions = Pick<StorageV2AuditItem, 'actionRequired' | 'category' | 'coverage' | 'notes' | 'risk'>
+
+const MAX_AUDIT_STAT_VISITS = 5000
+const MAX_AUDIT_DIRECTORY_ENTRIES = 1000
+const MAX_AUDIT_DEPTH = 8
+
+type AuditStatsBudget = {
+  visited: number
+  truncated: boolean
+}
 
 const KNOWN_DATA_ROOT_ENTRIES = new Set([
   'main.db',
@@ -81,14 +91,34 @@ function getObsidianConfigPath(homePath: string) {
   return path.join(xdgConfigHome, 'obsidian', 'obsidian.json')
 }
 
-async function collectStats(targetPath: string): Promise<PathStats> {
+function markStatsTruncated(budget: AuditStatsBudget) {
+  budget.truncated = true
+}
+
+async function collectStats(
+  targetPath: string,
+  budget: AuditStatsBudget = { visited: 0, truncated: false },
+  depth = 0
+): Promise<PathStats> {
+  if (budget.visited >= MAX_AUDIT_STAT_VISITS) {
+    markStatsTruncated(budget)
+    return {
+      sizeBytes: 0,
+      fileCount: 0,
+      directoryCount: 0,
+      statsTruncated: true
+    }
+  }
+
+  budget.visited += 1
   const stats = await fs.stat(targetPath)
 
   if (stats.isFile()) {
     return {
       sizeBytes: stats.size,
       fileCount: 1,
-      directoryCount: 0
+      directoryCount: 0,
+      statsTruncated: budget.truncated
     }
   }
 
@@ -96,7 +126,8 @@ async function collectStats(targetPath: string): Promise<PathStats> {
     return {
       sizeBytes: 0,
       fileCount: 0,
-      directoryCount: 0
+      directoryCount: 0,
+      statsTruncated: budget.truncated
     }
   }
 
@@ -104,11 +135,25 @@ async function collectStats(targetPath: string): Promise<PathStats> {
   let fileCount = 0
   let directoryCount = 1
   const entries = await fs.readdir(targetPath, { withFileTypes: true })
+  const visibleEntries = entries.slice(0, MAX_AUDIT_DIRECTORY_ENTRIES)
 
-  for (const entry of entries) {
+  if (entries.length > visibleEntries.length || depth >= MAX_AUDIT_DEPTH) {
+    markStatsTruncated(budget)
+  }
+
+  if (depth >= MAX_AUDIT_DEPTH) {
+    return {
+      sizeBytes,
+      fileCount,
+      directoryCount,
+      statsTruncated: true
+    }
+  }
+
+  for (const entry of visibleEntries) {
     const childPath = path.join(targetPath, entry.name)
     try {
-      const childStats = await collectStats(childPath)
+      const childStats = await collectStats(childPath, budget, depth + 1)
       sizeBytes += childStats.sizeBytes
       fileCount += childStats.fileCount
       directoryCount += childStats.directoryCount
@@ -120,7 +165,8 @@ async function collectStats(targetPath: string): Promise<PathStats> {
   return {
     sizeBytes,
     fileCount,
-    directoryCount
+    directoryCount,
+    statsTruncated: budget.truncated
   }
 }
 

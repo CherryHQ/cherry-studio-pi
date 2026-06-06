@@ -958,7 +958,7 @@ export async function createPiMcpTools(mcpIds: string[] | undefined): Promise<Ag
   if (!mcpIds?.length) return []
 
   const allowedServerIds = new Set(mcpIds)
-  const tools = await mcpService.listAllActiveServerTools()
+  const tools = await mcpService.listActiveServerToolsByIds(mcpIds)
   return tools.filter((tool) => allowedServerIds.has(tool.serverId)).map((tool) => createPiMcpTool(tool))
 }
 

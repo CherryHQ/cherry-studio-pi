@@ -4682,6 +4682,7 @@
           "exists": "已找到",
           "files": "{{value}} 個檔案",
           "missing": "未找到",
+          "partial_stats": "部分統計",
           "title": "舊資料稽核"
         },
         "audit_items": {

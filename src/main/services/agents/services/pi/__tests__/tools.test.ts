@@ -21,6 +21,7 @@ vi.mock('@main/services/WindowService', () => ({
 vi.mock('@main/services/MCPService', () => ({
   default: {
     listAllActiveServerTools: vi.fn(),
+    listActiveServerToolsByIds: vi.fn(),
     callToolById: vi.fn()
   }
 }))
@@ -64,6 +65,9 @@ describe('Pi tools', () => {
     vi.mocked(appCapabilityService.list).mockReturnValue([])
     vi.mocked(appCapabilityService.search).mockReset()
     vi.mocked(appCapabilityService.call).mockReset()
+    vi.mocked(mcpService.listAllActiveServerTools).mockReset()
+    vi.mocked(mcpService.listActiveServerToolsByIds).mockReset()
+    vi.mocked(mcpService.callToolById).mockReset()
   })
 
   afterEach(async () => {
@@ -547,7 +551,7 @@ exit 1
   })
 
   it('creates executable Pi tools for selected MCP servers', async () => {
-    vi.mocked(mcpService.listAllActiveServerTools).mockResolvedValueOnce([
+    vi.mocked(mcpService.listActiveServerToolsByIds).mockResolvedValueOnce([
       {
         id: 'mcp__github__searchRepos',
         serverId: 'github-id',
@@ -575,6 +579,8 @@ exit 1
     } as any)
 
     const tools = await createPiMcpTools(['github-id'])
+    expect(mcpService.listActiveServerToolsByIds).toHaveBeenCalledWith(['github-id'])
+    expect(mcpService.listAllActiveServerTools).not.toHaveBeenCalled()
     expect(tools.map((tool) => tool.name)).toEqual(['mcp__github__searchRepos'])
 
     const result = await tools[0].execute('call-1', { query: 'pi' })

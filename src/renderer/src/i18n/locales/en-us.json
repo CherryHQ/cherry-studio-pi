@@ -4682,6 +4682,7 @@
           "exists": "Found",
           "files": "{{value}} files",
           "missing": "Missing",
+          "partial_stats": "Partial stats",
           "title": "Legacy data audit"
         },
         "audit_items": {

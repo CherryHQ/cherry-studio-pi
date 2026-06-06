@@ -85,6 +85,7 @@ type StorageV2MigrationAudit = {
     sizeBytes: number
     fileCount?: number
     directoryCount?: number
+    statsTruncated?: boolean
     category?: 'bootstrap' | 'external-projection' | 'runtime-cache' | 'user-asset'
     coverage?: 'cache' | 'covered' | 'legacy-only' | 'storage-v2-authoritative'
     risk?: 'high' | 'low' | 'medium'
@@ -388,6 +389,10 @@ function formatBytes(value: number) {
   }
 
   return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
+}
+
+function formatAuditApproximateValue(value: string | number, approximate?: boolean) {
+  return approximate ? `>= ${value}` : String(value)
 }
 
 const StorageV2Settings: FC = () => {
@@ -1059,10 +1064,15 @@ const StorageV2Settings: FC = () => {
                     ? t('settings.data.storage_v2.audit.exists')
                     : t('settings.data.storage_v2.audit.missing')}
                 </Tag>
-                <span>{formatBytes(item.sizeBytes)}</span>
+                <span>{formatAuditApproximateValue(formatBytes(item.sizeBytes), item.statsTruncated)}</span>
                 {typeof item.fileCount === 'number' && (
-                  <span>{t('settings.data.storage_v2.audit.files', { value: item.fileCount })}</span>
+                  <span>
+                    {t('settings.data.storage_v2.audit.files', {
+                      value: formatAuditApproximateValue(item.fileCount, item.statsTruncated)
+                    })}
+                  </span>
                 )}
+                {item.statsTruncated && <Tag color="warning">{t('settings.data.storage_v2.audit.partial_stats')}</Tag>}
               </AuditMeta>
             </AuditItem>
           ))}

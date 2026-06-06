@@ -181,9 +181,25 @@ class McpService {
   public async listAllActiveServerTools(): Promise<MCPTool[]> {
     const servers = await getMCPServersFromRedux()
     const activeServers = servers.filter((server) => server.isActive)
+    return this.listToolsForServers(activeServers, 'listAllActiveServerTools')
+  }
 
+  /**
+   * List tools only from selected active MCP servers.
+   * Used by Pi agents so unrelated MCP servers are not initialized just to build a session.
+   */
+  public async listActiveServerToolsByIds(serverIds: readonly string[]): Promise<MCPTool[]> {
+    const allowedServerIds = new Set(serverIds.filter(Boolean))
+    if (allowedServerIds.size === 0) return []
+
+    const servers = await getMCPServersFromRedux()
+    const selectedServers = servers.filter((server) => server.isActive && allowedServerIds.has(server.id))
+    return this.listToolsForServers(selectedServers, 'listActiveServerToolsByIds')
+  }
+
+  private async listToolsForServers(servers: MCPServer[], source: string): Promise<MCPTool[]> {
     const results = await Promise.allSettled(
-      activeServers.map(async (server) => {
+      servers.map(async (server) => {
         const tools = await this.listToolsWithCache(server)
         const disabledTools = new Set(server.disabledTools ?? [])
         return disabledTools.size > 0 ? tools.filter((tool) => !disabledTools.has(tool.name)) : tools
@@ -195,10 +211,7 @@ class McpService {
       if (result.status === 'fulfilled') {
         allTools.push(...result.value)
       } else {
-        logger.error(
-          `[listAllActiveServerTools] Failed to list tools from ${activeServers[index].name}:`,
-          result.reason as Error
-        )
+        logger.error(`[${source}] Failed to list tools from ${servers[index].name}:`, result.reason as Error)
       }
     })
 

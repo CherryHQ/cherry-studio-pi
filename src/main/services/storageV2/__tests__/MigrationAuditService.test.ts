@@ -291,4 +291,50 @@ describe('StorageV2MigrationAuditService', () => {
     expect(audit.warnings.some((warning) => warning.includes('Legacy-only data paths were detected'))).toBe(true)
     expect(audit.warnings.some((warning) => warning.includes('/mock/current-user-data/agents.db'))).toBe(true)
   })
+
+  it('bounds recursive directory stats so migration audit cannot scan huge data roots indefinitely', async () => {
+    const filesPath = '/mock/stable-data-root/Files'
+    const largeEntries = Array.from({ length: 1001 }, (_, index) => ({
+      name: `file-${index}.txt`,
+      isDirectory: () => false,
+      isFile: () => true
+    }))
+
+    vi.mocked(fs.stat).mockImplementation(async (targetPath) => {
+      const normalizedPath = String(targetPath)
+      if (normalizedPath === filesPath) {
+        return {
+          isDirectory: () => true,
+          isFile: () => false,
+          size: 0
+        } as any
+      }
+      if (normalizedPath.startsWith(`${filesPath}/file-`)) {
+        return {
+          isDirectory: () => false,
+          isFile: () => true,
+          size: 1
+        } as any
+      }
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+    })
+    vi.mocked(fs.readdir).mockImplementation(async (targetPath) => {
+      if (String(targetPath) === filesPath) {
+        return largeEntries as any
+      }
+      return [] as any
+    })
+
+    const { StorageV2MigrationAuditService } = await import('../MigrationAuditService')
+    const audit = await new StorageV2MigrationAuditService().runAudit()
+    const files = audit.items.find((item) => item.id === 'files')
+
+    expect(files).toMatchObject({
+      exists: true,
+      fileCount: 1000,
+      directoryCount: 1,
+      sizeBytes: 1000,
+      statsTruncated: true
+    })
+  })
 })

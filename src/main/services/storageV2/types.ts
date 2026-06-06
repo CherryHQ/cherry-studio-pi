@@ -93,6 +93,7 @@ export type StorageV2AuditItem = {
   sizeBytes: number
   fileCount?: number
   directoryCount?: number
+  statsTruncated?: boolean
   category?: 'bootstrap' | 'external-projection' | 'runtime-cache' | 'user-asset'
   coverage?: 'cache' | 'covered' | 'legacy-only' | 'storage-v2-authoritative'
   risk?: 'high' | 'low' | 'medium'
