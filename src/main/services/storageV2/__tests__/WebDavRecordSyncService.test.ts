@@ -1435,6 +1435,7 @@ describe('StorageV2WebDavRecordSyncService', () => {
     ).rejects.toThrow('远端附件文件过大')
 
     expect(mocks.webdav.getFileContents).not.toHaveBeenCalledWith(blobPath, expect.anything())
+    expect(db.state.blobs).toEqual([])
   })
 
   it('fails safe when the remote manifest contains records from a newer Storage v2 entity', async () => {
