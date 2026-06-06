@@ -6,10 +6,8 @@ import { NOT_SUPPORTED_RERANK_PROVIDERS } from '@renderer/config/providers'
 import { useProviders } from '@renderer/hooks/useProvider'
 import { useWebSearchSettings } from '@renderer/hooks/useWebSearchProviders'
 import { SettingDivider, SettingRow, SettingRowTitle } from '@renderer/pages/settings'
-import { getModelUniqId } from '@renderer/services/ModelService'
-import type { Model } from '@renderer/types'
+import { findModelByUniqId, getModelUniqId } from '@renderer/services/ModelService'
 import { Slider, Tooltip } from 'antd'
-import { find } from 'lodash'
 import { Info } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -34,12 +32,12 @@ const RagSettings = () => {
   }, [providers])
 
   const handleEmbeddingModelChange = (modelValue: string) => {
-    const selectedModel = find(embeddingModels, JSON.parse(modelValue)) as Model
-    updateCompressionConfig({ embeddingModel: selectedModel })
+    const selectedModel = findModelByUniqId(embeddingModels, modelValue)
+    if (selectedModel) updateCompressionConfig({ embeddingModel: selectedModel })
   }
 
   const handleRerankModelChange = (modelValue?: string) => {
-    const selectedModel = modelValue ? (find(rerankModels, JSON.parse(modelValue)) as Model) : undefined
+    const selectedModel = modelValue ? findModelByUniqId(rerankModels, modelValue) : undefined
     updateCompressionConfig({ rerankModel: selectedModel })
   }
 

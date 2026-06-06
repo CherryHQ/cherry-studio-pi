@@ -5,6 +5,7 @@ import { windowService } from '@main/services/WindowService'
 import { isPathInside } from '@main/utils/file'
 
 const SENSITIVE_KEY_PATTERN = /api[-_]?key|token|secret|pass|password|authorization|cookie/i
+const CIRCULAR_REFERENCE_PLACEHOLDER = '[Circular]'
 
 export const okResult = <T>(summary: string, data?: T): { ok: true; summary: string; data?: T } => ({
   ok: true,
@@ -13,9 +14,19 @@ export const okResult = <T>(summary: string, data?: T): { ok: true; summary: str
 })
 
 export const sanitizeForAgent = (value: unknown): unknown => {
+  const seen = new WeakSet<object>()
   const text = JSON.stringify(value, (key, item) => {
     if (SENSITIVE_KEY_PATTERN.test(key) && typeof item === 'string') {
       return item ? '[redacted]' : item
+    }
+    if (typeof item === 'bigint') {
+      return item.toString()
+    }
+    if (item && typeof item === 'object') {
+      if (seen.has(item)) {
+        return CIRCULAR_REFERENCE_PLACEHOLDER
+      }
+      seen.add(item)
     }
     return item
   })

@@ -8,12 +8,11 @@ import { useTheme } from '@renderer/context/ThemeProvider'
 import { useDefaultModel } from '@renderer/hooks/useAssistant'
 import { useProviders } from '@renderer/hooks/useProvider'
 import { useSettings } from '@renderer/hooks/useSettings'
-import { getModelUniqId, hasModel } from '@renderer/services/ModelService'
+import { findModelByUniqId, getModelUniqId, hasModel } from '@renderer/services/ModelService'
 import { useAppDispatch } from '@renderer/store'
 import { setTranslateModelPrompt } from '@renderer/store/settings'
 import type { Model } from '@renderer/types'
 import { Button, Tooltip } from 'antd'
-import { find } from 'lodash'
 import { Languages, MessageSquareMore, Rocket, Settings2 } from 'lucide-react'
 import type { FC } from 'react'
 import { useCallback, useMemo } from 'react'
@@ -86,7 +85,10 @@ const ModelSettings: FC<ModelSettingsProps> = ({
             defaultValue={defaultModelValue}
             style={{ width: compact ? '100%' : 360 }}
             size={compact ? 'large' : 'middle'}
-            onChange={(value) => setDefaultModel(find(allModels, JSON.parse(value)) as Model)}
+            onChange={(value) => {
+              const model = findModelByUniqId(allModels, value)
+              if (model) setDefaultModel(model)
+            }}
             placeholder={t('settings.models.empty')}
           />
           {showSettingsButton && (
@@ -113,7 +115,10 @@ const ModelSettings: FC<ModelSettingsProps> = ({
             defaultValue={defaultQuickModel}
             style={{ width: compact ? '100%' : 360 }}
             size={compact ? 'large' : 'middle'}
-            onChange={(value) => setQuickModel(find(allModels, JSON.parse(value)) as Model)}
+            onChange={(value) => {
+              const model = findModelByUniqId(allModels, value)
+              if (model) setQuickModel(model)
+            }}
             placeholder={t('settings.models.empty')}
           />
           {showSettingsButton && (
@@ -137,7 +142,10 @@ const ModelSettings: FC<ModelSettingsProps> = ({
             defaultValue={defaultTranslateModel}
             style={{ width: compact ? '100%' : 360 }}
             size={compact ? 'large' : 'middle'}
-            onChange={(value) => setTranslateModel(find(allModels, JSON.parse(value)) as Model)}
+            onChange={(value) => {
+              const model = findModelByUniqId(allModels, value)
+              if (model) setTranslateModel(model)
+            }}
             placeholder={t('settings.models.empty')}
           />
           {showSettingsButton && (

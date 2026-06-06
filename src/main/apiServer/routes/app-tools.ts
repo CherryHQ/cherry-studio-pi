@@ -4,6 +4,7 @@ import path from 'node:path'
 import { loggerService } from '@logger'
 import { isMac } from '@main/constant'
 import { appCapabilityService } from '@main/services/appCapabilities'
+import { pickPath, sanitizeForAgent } from '@main/services/appCapabilities/utils'
 import { reduxService } from '@main/services/ReduxService'
 import { windowService } from '@main/services/WindowService'
 import { getName, getNotesDir, isPathInside, scanDir } from '@main/utils/file'
@@ -63,24 +64,6 @@ const PAINTING_NAMESPACES = [
 ]
 
 const NAVIGATION_ROUTE_PREFIXES = ['/', '/settings', '/knowledge', '/paintings', '/notes', '/agents']
-
-const sanitize = (value: unknown) => {
-  const text = JSON.stringify(value, (key, item) => {
-    if (/api[-_]?key|token|secret|pass|password/i.test(key) && typeof item === 'string') {
-      return item ? '[redacted]' : item
-    }
-    if (typeof item === 'bigint') {
-      return item.toString()
-    }
-    return item
-  })
-  return text === undefined ? undefined : JSON.parse(text)
-}
-
-const pickPath = (value: any, keyPath = '') => {
-  if (!keyPath) return value
-  return keyPath.split('.').reduce((current, key) => current?.[key], value)
-}
 
 async function navigate(route: string) {
   if (!route.startsWith('/')) route = `/${route}`
@@ -166,7 +149,7 @@ appToolsRouter.post('/capabilities/:id/call', async (req, res, next) => {
 
 appToolsRouter.get('/settings', async (_req, res, next) => {
   try {
-    res.json({ settings: sanitize(await reduxService.select('state.settings')) })
+    res.json({ settings: sanitizeForAgent(await reduxService.select('state.settings')) })
   } catch (error) {
     next(error)
   }
@@ -175,7 +158,7 @@ appToolsRouter.get('/settings', async (_req, res, next) => {
 appToolsRouter.get('/settings/value', async (req, res, next) => {
   try {
     const settings = await reduxService.select('state.settings')
-    res.json({ path: req.query.path || '', value: sanitize(pickPath(settings, String(req.query.path || ''))) })
+    res.json({ path: req.query.path || '', value: sanitizeForAgent(pickPath(settings, String(req.query.path || ''))) })
   } catch (error) {
     next(error)
   }
@@ -190,7 +173,7 @@ appToolsRouter.patch('/settings/value', async (req, res, next) => {
       return
     }
     await reduxService.dispatch({ type: action, payload: value })
-    res.json({ ok: true, path: keyPath, value: sanitize(value) })
+    res.json({ ok: true, path: keyPath, value: sanitizeForAgent(value) })
   } catch (error) {
     next(error)
   }
