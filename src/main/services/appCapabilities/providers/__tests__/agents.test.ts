@@ -7,12 +7,12 @@ const mocks = vi.hoisted(() => ({
   listAgentsWithStorageV2Recovery: vi.fn(),
   createAgentWithStorageV2Recovery: vi.fn(),
   getAgentWithStorageV2Recovery: vi.fn(),
-  sessionService: {
-    listSessions: vi.fn(),
+  agentSessionService: {
+    listByCursor: vi.fn(),
     createSession: vi.fn()
   },
-  taskService: {
-    listAllTasks: vi.fn(),
+  agentTaskService: {
+    listTasks: vi.fn(),
     createTask: vi.fn()
   }
 }))
@@ -27,9 +27,12 @@ vi.mock('@main/services/agents/AgentStorageV2ReadThrough', () => ({
   getAgentWithStorageV2Recovery: mocks.getAgentWithStorageV2Recovery
 }))
 
-vi.mock('@main/services/agents/services', () => ({
-  sessionService: mocks.sessionService,
-  taskService: mocks.taskService
+vi.mock('@data/services/AgentSessionService', () => ({
+  agentSessionService: mocks.agentSessionService
+}))
+
+vi.mock('@data/services/AgentTaskService', () => ({
+  agentTaskService: mocks.agentTaskService
 }))
 
 vi.mock('../../utils', () => ({
@@ -54,11 +57,15 @@ describe('agent app capabilities', () => {
     vi.clearAllMocks()
     mocks.modelsService.getModels.mockResolvedValue({ models: [], total: 0 })
     mocks.listAgentsWithStorageV2Recovery.mockResolvedValue({ agents: [], total: 0 })
-    mocks.sessionService.listSessions.mockResolvedValue({ sessions: [], total: 0 })
-    mocks.taskService.listAllTasks.mockResolvedValue({ tasks: [], total: 0 })
+    mocks.agentSessionService.listByCursor.mockResolvedValue({ items: [], nextCursor: undefined })
+    mocks.agentTaskService.listTasks.mockResolvedValue({ tasks: [], total: 0 })
   })
 
   it('defaults agent list capabilities to bounded pages', async () => {
+    mocks.listAgentsWithStorageV2Recovery
+      .mockResolvedValueOnce({ agents: [], total: 0 })
+      .mockResolvedValueOnce({ agents: [{ id: 'agent-1' }], total: 1 })
+
     await capability('agents.models.list').execute({}, { source: 'agent' })
     await capability('agents.list').execute({}, { source: 'agent' })
     await capability('agents.sessions.list').execute({ agentId: 'agent-1' }, { source: 'agent' })
@@ -66,12 +73,13 @@ describe('agent app capabilities', () => {
 
     expect(mocks.modelsService.getModels).toHaveBeenCalledWith({ limit: 50, offset: undefined })
     expect(mocks.listAgentsWithStorageV2Recovery).toHaveBeenCalledWith({ limit: 50, offset: undefined })
-    expect(mocks.sessionService.listSessions).toHaveBeenCalledWith('agent-1', {
+    expect(mocks.agentSessionService.listByCursor).toHaveBeenCalledWith({
       agentId: 'agent-1',
       limit: 50,
-      offset: undefined
+      cursor: undefined
     })
-    expect(mocks.taskService.listAllTasks).toHaveBeenCalledWith({ limit: 50, offset: undefined })
+    expect(mocks.listAgentsWithStorageV2Recovery).toHaveBeenCalledWith({ limit: 200 })
+    expect(mocks.agentTaskService.listTasks).toHaveBeenCalledWith('agent-1', { includeHeartbeat: undefined })
   })
 
   it('clamps unsafe agent list pagination while preserving filters', async () => {
@@ -83,7 +91,14 @@ describe('agent app capabilities', () => {
       { sortBy: 'created_at', orderBy: 'desc', limit: 'bad', offset: '8.9' },
       { source: 'agent' }
     )
-    await capability('agents.tasks.list').execute({ limit: 0, offset: Number.NaN }, { source: 'agent' })
+    await capability('agents.sessions.list').execute(
+      { agentId: 'agent-1', cursor: 'cursor:one', limit: 5000 },
+      { source: 'agent' }
+    )
+    await capability('agents.tasks.list').execute(
+      { agentId: 'agent-1', limit: 0, offset: Number.NaN },
+      { source: 'agent' }
+    )
 
     expect(mocks.modelsService.getModels).toHaveBeenCalledWith({
       providerType: 'openai',
@@ -96,6 +111,43 @@ describe('agent app capabilities', () => {
       limit: 50,
       offset: 8
     })
-    expect(mocks.taskService.listAllTasks).toHaveBeenCalledWith({ limit: 1, offset: undefined })
+    expect(mocks.agentSessionService.listByCursor).toHaveBeenCalledWith({
+      agentId: 'agent-1',
+      limit: 200,
+      cursor: 'cursor:one'
+    })
+    expect(mocks.agentTaskService.listTasks).toHaveBeenCalledWith('agent-1', {
+      limit: 1,
+      offset: undefined,
+      includeHeartbeat: undefined
+    })
+  })
+
+  it('paginates all agent tasks after merging tasks from each agent', async () => {
+    mocks.listAgentsWithStorageV2Recovery.mockResolvedValueOnce({
+      agents: [{ id: 'agent-a' }, { id: 'agent-b' }],
+      total: 2
+    })
+    mocks.agentTaskService.listTasks
+      .mockResolvedValueOnce({
+        total: 2,
+        tasks: [
+          { id: 'old-a', createdAt: '2026-06-01T00:00:00.000Z' },
+          { id: 'new-a', createdAt: '2026-06-03T00:00:00.000Z' }
+        ]
+      })
+      .mockResolvedValueOnce({
+        total: 1,
+        tasks: [{ id: 'mid-b', createdAt: '2026-06-02T00:00:00.000Z' }]
+      })
+
+    const result = await capability('agents.tasks.list').execute({ limit: 1, offset: 1 }, { source: 'agent' })
+
+    expect(mocks.agentTaskService.listTasks).toHaveBeenCalledWith('agent-a', { includeHeartbeat: undefined })
+    expect(mocks.agentTaskService.listTasks).toHaveBeenCalledWith('agent-b', { includeHeartbeat: undefined })
+    expect(result.data).toEqual({
+      tasks: [{ id: 'mid-b', createdAt: '2026-06-02T00:00:00.000Z' }],
+      total: 3
+    })
   })
 })

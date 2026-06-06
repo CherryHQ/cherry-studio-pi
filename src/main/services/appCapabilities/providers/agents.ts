@@ -42,12 +42,24 @@ async function listAgentTasks(input: any = {}) {
   const agentId = typeof input?.agentId === 'string' && input.agentId ? input.agentId : undefined
 
   if (agentId) {
-    return agentTaskService.listTasks(agentId, options)
+    return agentTaskService.listTasks(agentId, {
+      limit: options.limit,
+      offset: options.offset,
+      includeHeartbeat: options.includeHeartbeat
+    })
   }
 
   const { agents } = await listAgentsWithStorageV2Recovery({ limit: MAX_AGENT_CAPABILITY_LIST_LIMIT })
-  const taskGroups = await Promise.all(agents.map((agent) => agentTaskService.listTasks(agent.id, options)))
-  const tasks = taskGroups.flatMap((group) => group.tasks)
+  const taskGroups = await Promise.all(
+    agents.map((agent) =>
+      agentTaskService.listTasks(agent.id, {
+        includeHeartbeat: options.includeHeartbeat
+      })
+    )
+  )
+  const tasks = taskGroups
+    .flatMap((group) => group.tasks)
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
   const offset = options.offset ?? 0
   const limit = options.limit ?? DEFAULT_AGENT_CAPABILITY_LIST_LIMIT
 
@@ -170,7 +182,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
         properties: {
           agentId: { type: 'string' },
           limit: { type: 'number', description: 'Maximum sessions to return; defaults to 50 and is capped at 200' },
-          offset: { type: 'number', description: 'Pagination offset' }
+          cursor: { type: 'string', description: 'Opaque cursor returned by the previous page' }
         }
       },
       risk: 'read',
@@ -181,7 +193,8 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
           sanitizeForAgent(
             await agentSessionService.listByCursor({
               agentId: input?.agentId,
-              limit: normalizeListLimit(input?.limit)
+              limit: normalizeListLimit(input?.limit),
+              cursor: typeof input?.cursor === 'string' ? input.cursor : undefined
             })
           )
         )
@@ -226,8 +239,10 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       inputSchema: {
         type: 'object',
         properties: {
+          agentId: { type: 'string', description: 'Optional agent id; omit to list tasks across all agents' },
           limit: { type: 'number', description: 'Maximum tasks to return; defaults to 50 and is capped at 200' },
-          offset: { type: 'number', description: 'Pagination offset' }
+          offset: { type: 'number', description: 'Pagination offset' },
+          includeHeartbeat: { type: 'boolean', description: 'Include internal heartbeat tasks; defaults to false' }
         }
       },
       risk: 'read',
