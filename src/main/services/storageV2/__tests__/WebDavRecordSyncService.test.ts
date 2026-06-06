@@ -1468,6 +1468,32 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
   })
 
+  it('fails safe when the remote Storage v2 records manifest key does not match the entity ID', async () => {
+    const remote = makeSharedWebDavStore()
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([settingsTable]).sync(remote.client as any, '/remote-root/sync/v1', {
+        version: 1,
+        records: {
+          'settings:wrong-key': {
+            entityType: 'settings',
+            table: 'settings',
+            idValues: ['theme'],
+            valueHash: 'theme-hash',
+            updatedAt: 1760000000000,
+            deletedAt: null,
+            version: 1,
+            path: 'storage-v2/records/settings/theme.json'
+          }
+        },
+        blobs: {},
+        bundle: null
+      })
+    ).rejects.toThrow('远端 Storage v2 records manifest 中的记录 settings:wrong-key 与实体 ID 不一致')
+
+    expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
+  })
+
   it('fails safe when the remote Storage v2 blobs manifest is not an object', async () => {
     const remote = makeSharedWebDavStore()
     const db = makeBlobDb()
@@ -1483,6 +1509,30 @@ describe('StorageV2WebDavRecordSyncService', () => {
     ).rejects.toThrow('远端 Storage v2 blobs manifest 格式损坏')
 
     expect(db.state.blobs).toEqual([])
+    expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
+  })
+
+  it('fails safe when the remote Storage v2 blobs manifest key does not match the blob ID', async () => {
+    const remote = makeSharedWebDavStore()
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([blobTable]).sync(remote.client as any, '/remote-root/sync/v1', {
+        version: 1,
+        records: {},
+        blobs: {
+          'blob-wrong-key': {
+            id: 'blob-1',
+            checksum: 'blob-checksum',
+            byteSize: 16,
+            storagePath: 'blobs/blob-1.bin',
+            path: 'storage-v2/blobs/blob-1',
+            updatedAt: 1760000000000
+          }
+        },
+        bundle: null
+      })
+    ).rejects.toThrow('远端 Storage v2 blobs manifest 中的附件 blob-wrong-key 与附件 ID 不一致')
+
     expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
   })
 

@@ -1610,6 +1610,42 @@ describe('AppDataSyncService', () => {
     ).toBe(false)
   })
 
+  it('rejects runtime directory empty-state manifests with a mismatched content hash', async () => {
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 3,
+        updatedAt: 1760000000000,
+        records: {},
+        runtimeDirectories: {
+          version: 1,
+          updatedAt: 1760000000000,
+          directories: {
+            Skills: {
+              version: 1,
+              name: 'Skills',
+              valueHash: 'a'.repeat(64),
+              byteSize: 0,
+              compressedByteSize: 128,
+              fileCount: 0,
+              updatedAt: 1760000000000,
+              deviceId: 'remote-device',
+              path: `runtime-directories/bundles/Skills/${'a'.repeat(64)}.json.gz`
+            }
+          }
+        }
+      })
+    )
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端运行时目录空状态校验信息损坏：Skills')
+
+    expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/manifest.json'))
+    ).toBe(false)
+  })
+
   it('rejects oversized remote notes files before downloading their contents', async () => {
     const notePath = '/remote-root/sync/v1/notes/files/big-note.bin'
     mocks.remoteFiles.set(notePath, Buffer.from('oversized placeholder'))
@@ -2096,6 +2132,62 @@ describe('AppDataSyncService', () => {
     const summary = await new AppDataSyncService().syncNow(config)
 
     await expect(fsp.readFile(localSkillPath, 'utf8')).resolves.toBe('# Remote User Skill')
+    expect(summary.downloaded).toBeGreaterThanOrEqual(1)
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) =>
+        String(filePath).includes('/runtime-directories/bundles/')
+      )
+    ).toBe(false)
+    expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith(syncKey, `content:${remoteBundle.valueHash}`)
+  })
+
+  it('downloads remote runtime directories when the local directory is missing after a previous sync', async () => {
+    const relativePath = 'sync-fixture/SKILL.md'
+    const localSkillPath = path.join(mocks.runtimeDataRoot, 'Skills', relativePath)
+    const remoteBundle = createRuntimeDirectoryBundle({
+      name: 'Skills',
+      relativePath,
+      content: '# Remote Recovery Skill',
+      updatedAt: Date.parse('2026-06-01T12:00:00.000Z')
+    })
+    mocks.remoteFiles.set(
+      `/remote-root/sync/v1/runtime-directories/bundles/Skills/${remoteBundle.valueHash}.json.gz`,
+      remoteBundle.compressed
+    )
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 9,
+        updatedAt: 1760000000000,
+        records: {},
+        runtimeDirectories: {
+          version: 1,
+          updatedAt: 1760000000000,
+          directories: {
+            Skills: {
+              version: 1,
+              name: 'Skills',
+              valueHash: remoteBundle.valueHash,
+              byteSize: remoteBundle.byteSize,
+              compressedByteSize: remoteBundle.compressed.byteLength,
+              fileCount: remoteBundle.fileCount,
+              updatedAt: Date.parse('2026-06-01T12:00:00.000Z'),
+              deviceId: 'remote-device',
+              path: `runtime-directories/bundles/Skills/${remoteBundle.valueHash}.json.gz`
+            }
+          }
+        }
+      })
+    )
+    const syncKey = runtimeDirectorySyncStateKey('local-device', 'Skills')
+    mocks.db.getSyncState.mockImplementation(async (id: string) =>
+      id === syncKey ? `content:${remoteBundle.valueHash}` : null
+    )
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    await expect(fsp.readFile(localSkillPath, 'utf8')).resolves.toBe('# Remote Recovery Skill')
     expect(summary.downloaded).toBeGreaterThanOrEqual(1)
     expect(
       mocks.webdav.putFileContents.mock.calls.some(([filePath]) =>

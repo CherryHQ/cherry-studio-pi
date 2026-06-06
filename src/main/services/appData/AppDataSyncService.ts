@@ -36,6 +36,7 @@ import { mergeAppDataRecords } from './AppDataRecordMerge'
 const logger = loggerService.withContext('AppDataSyncService')
 const DATA_SYNC_ALREADY_RUNNING_ERROR = 'Data sync is already running'
 const LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS = 10 * 60 * 1000
+const EMPTY_RUNTIME_DIRECTORY_VALUE_HASH = hashJsonValue([])
 
 type RemoteRecordMeta = {
   scope: string
@@ -2225,6 +2226,12 @@ export class AppDataSyncService {
       if (!/^[a-f0-9]{64}$/i.test(valueHash)) {
         throw new Error(`远端运行时目录校验信息损坏：${name}`)
       }
+      const normalizedValueHash = valueHash.toLowerCase()
+      const byteSize = Math.max(0, Number(meta.byteSize) || 0)
+      const fileCount = Math.max(0, Number(meta.fileCount) || 0)
+      if (byteSize === 0 && fileCount === 0 && normalizedValueHash !== EMPTY_RUNTIME_DIRECTORY_VALUE_HASH) {
+        throw new Error(`远端运行时目录空状态校验信息损坏：${name}`)
+      }
 
       const remotePath = normalizeRemoteRelativePath(meta.path, 'Remote runtime directory bundle path')
       if (!remotePath.startsWith(`${RUNTIME_DIRECTORIES_REMOTE_ROOT}/`)) {
@@ -2234,10 +2241,10 @@ export class AppDataSyncService {
       directories[name] = {
         version: 1,
         name,
-        valueHash: valueHash.toLowerCase(),
-        byteSize: Math.max(0, Number(meta.byteSize) || 0),
+        valueHash: normalizedValueHash,
+        byteSize,
         compressedByteSize: Math.max(0, Number(meta.compressedByteSize) || 0),
-        fileCount: Math.max(0, Number(meta.fileCount) || 0),
+        fileCount,
         updatedAt: Math.max(0, Number(meta.updatedAt) || 0),
         deviceId: typeof meta.deviceId === 'string' && meta.deviceId ? meta.deviceId : 'unknown',
         path: remotePath
@@ -2899,6 +2906,38 @@ export class AppDataSyncService {
     }
   }
 
+  private createEmptyRuntimeDirectorySnapshot(
+    policy: RuntimeDirectoryPolicy,
+    updatedAt: number
+  ): LocalRuntimeDirectorySnapshot {
+    const bundle: RuntimeDirectoryBundle = {
+      version: 1,
+      name: policy.name,
+      updatedAt,
+      files: {}
+    }
+    const bundleBuffer = gzipSync(Buffer.from(JSON.stringify(bundle), 'utf8'), { level: 9 })
+    return {
+      name: policy.name,
+      rootDir: this.getRuntimeDirectoryRoot(policy.name),
+      fileCount: 0,
+      byteSize: 0,
+      compressedByteSize: bundleBuffer.byteLength,
+      updatedAt,
+      valueHash: EMPTY_RUNTIME_DIRECTORY_VALUE_HASH,
+      bundle: bundleBuffer
+    }
+  }
+
+  private async runtimeDirectoryExists(name: RuntimeDirectoryName) {
+    const stat = await fsp.stat(this.getRuntimeDirectoryRoot(name)).catch(() => null)
+    return Boolean(stat?.isDirectory())
+  }
+
+  private isEmptyRuntimeDirectoryMeta(meta: RemoteRuntimeDirectoryMeta) {
+    return meta.fileCount === 0 && meta.byteSize === 0 && meta.valueHash === EMPTY_RUNTIME_DIRECTORY_VALUE_HASH
+  }
+
   private async pushRuntimeDirectoryBundle(
     client: WebDAVClient,
     basePath: string,
@@ -3170,6 +3209,22 @@ export class AppDataSyncService {
       }
 
       if (!localSnapshot && remoteMeta) {
+        const remoteCursor = runtimeDirectoryContentCursor(remoteMeta.valueHash)
+        if (this.isEmptyRuntimeDirectoryMeta(remoteMeta)) {
+          stageSyncState(syncKey, remoteCursor)
+          summary.skipped += 1
+          continue
+        }
+
+        if (
+          !options.preferRemoteOnFirstJoin &&
+          lastCursor === remoteCursor &&
+          (await this.runtimeDirectoryExists(policy.name))
+        ) {
+          await uploadSnapshot(this.createEmptyRuntimeDirectorySnapshot(policy, summary.lastSyncAt))
+          continue
+        }
+
         await downloadRemote(remoteMeta, null)
         continue
       }

@@ -1417,6 +1417,50 @@ describe('AppDataSyncService local WebDAV integration', () => {
     await expect(readInstanceMemoryDatabase(instanceB)).resolves.toBe('用户记忆应该跟随多端同步。')
   })
 
+  it('syncs cleared runtime directories after the same remote bundle was previously applied', async () => {
+    const homePath = path.join(tempRoot, 'home')
+    const instanceA = makeInstance(tempRoot, 'device-a')
+    const instanceB = makeInstance(tempRoot, 'device-b')
+    const webdavPath = '/cherry-studio-pi-runtime-directories-cleared'
+    const config = makeConfig(server!, webdavPath)
+    const backupManager = makeBackupManager(tempRoot)
+    const skillPath = path.join(instanceB.dataRoot, 'Skills', 'sync-fixture', 'SKILL.md')
+
+    await switchInstance(instanceA, homePath)
+    await writeInstanceRuntimeFile(
+      instanceA,
+      'Skills',
+      'sync-fixture/SKILL.md',
+      '# Sync Fixture\n\nThis skill should be removed on the next sync.',
+      '2026-05-29T12:00:00.000Z'
+    )
+    await new AppDataSyncService(backupManager as never).syncNow(config)
+
+    await switchInstance(instanceB, homePath)
+    await new AppDataSyncService(backupManager as never).syncNow(config)
+    await expect(readInstanceRuntimeFile(instanceB, 'Skills', 'sync-fixture/SKILL.md')).resolves.toContain(
+      'Sync Fixture'
+    )
+
+    await switchInstance(instanceA, homePath)
+    await fsp.rm(path.join(instanceA.dataRoot, 'Skills', 'sync-fixture'), { recursive: true, force: true })
+    await fsp.mkdir(path.join(instanceA.dataRoot, 'Skills'), { recursive: true })
+    const clearSummary = await new AppDataSyncService(backupManager as never).syncNow(config)
+    const clearedManifest = await readRemoteManifest(server!, webdavPath)
+
+    expect(clearSummary.uploaded).toBeGreaterThanOrEqual(1)
+    expect(clearedManifest.runtimeDirectories?.directories.Skills).toMatchObject({
+      fileCount: 0,
+      byteSize: 0
+    })
+
+    await switchInstance(instanceB, homePath)
+    const pullClearSummary = await new AppDataSyncService(backupManager as never).syncNow(config)
+
+    expect(pullClearSummary.downloaded).toBeGreaterThanOrEqual(1)
+    await expect(pathExists(skillPath)).resolves.toBe(false)
+  })
+
   it('syncs comprehensive Storage v2 data across models, assistants, agents, knowledge, files, chats and settings', async () => {
     const homePath = path.join(tempRoot, 'home')
     const instanceA = makeInstance(tempRoot, 'device-a')

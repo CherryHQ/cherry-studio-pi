@@ -293,6 +293,13 @@ function normalizeRemoteRecordMetaMap(value: unknown) {
       )
     }
 
+    const expectedId = recordId(entry.entityType, entry.idValues)
+    if (expectedId !== id) {
+      throw new Error(
+        `远端 Storage v2 records manifest 中的记录 ${id} 与实体 ID 不一致。为避免导入或发布错位数据，本次同步已停止。`
+      )
+    }
+
     const version = Number(entry.version ?? 1)
     return {
       entityType: entry.entityType,
@@ -322,6 +329,12 @@ function normalizeRemoteBlobMetaMap(value: unknown) {
     ) {
       throw new Error(
         `远端 Storage v2 blobs manifest 中的附件 ${id} 格式损坏。为避免导入或发布不完整附件，本次同步已停止。`
+      )
+    }
+
+    if (entry.id !== id) {
+      throw new Error(
+        `远端 Storage v2 blobs manifest 中的附件 ${id} 与附件 ID 不一致。为避免导入或发布错位附件，本次同步已停止。`
       )
     }
 
