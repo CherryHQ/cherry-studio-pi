@@ -1,4 +1,5 @@
 import mcpService from '@main/services/MCPService'
+import { summarizeObjectShapeForLog } from '@main/utils/logging'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp'
 import type { JSONRPCMessage, MessageExtraInfo } from '@modelcontextprotocol/sdk/types'
 import { isJSONRPCRequest, JSONRPCMessageSchema } from '@modelcontextprotocol/sdk/types'
@@ -175,7 +176,10 @@ class MCPApiService extends EventEmitter {
   }
 
   private onMessage(message: JSONRPCMessage, extra?: MessageExtraInfo) {
-    logger.debug('Received MCP message', { message, extra })
+    logger.debug('Received MCP message', {
+      message: summarizeObjectShapeForLog(message, 1),
+      extra: summarizeObjectShapeForLog(extra, 1)
+    })
     // Handle message here
   }
 }

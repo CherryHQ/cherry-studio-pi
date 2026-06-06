@@ -4,6 +4,7 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 
 import { loggerService } from '@logger'
+import { summarizeProcessOutputForLog } from '@main/utils/logging'
 import { app } from 'electron'
 
 import { handleProvidersProtocolUrl } from './urlschema/handle-providers'
@@ -110,9 +111,9 @@ NoDisplay=true
     try {
       const { stdout, stderr } = await execAsync(`update-desktop-database ${escapePathForExec(applicationsDir)}`)
       if (stderr) {
-        logger.warn(`update-desktop-database stderr: ${stderr}`)
+        logger.warn('update-desktop-database stderr', { stderr: summarizeProcessOutputForLog(stderr) })
       }
-      logger.debug(`update-desktop-database stdout: ${stdout}`)
+      logger.debug('update-desktop-database stdout', { stdout: summarizeProcessOutputForLog(stdout) })
       logger.debug('Desktop database updated successfully.')
     } catch (updateError) {
       logger.error('Failed to update desktop database:', updateError as Error)

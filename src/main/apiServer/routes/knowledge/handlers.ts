@@ -11,6 +11,7 @@ import {
   storageV2KnowledgeRepository,
   storageV2ProviderRepository
 } from '@main/services/storageV2/StorageV2Repositories'
+import { summarizeTextForLog } from '@main/utils/logging'
 import type { KnowledgeBase, KnowledgeBaseParams, Provider } from '@types'
 import type { Response } from 'express'
 import type * as z from 'zod'
@@ -312,7 +313,11 @@ export const searchKnowledge = async (req: ValidationRequest, res: Response): Pr
     // Use Zod-validated body (defaults already applied by validator)
     const { query, knowledge_base_ids, document_count = 5 } = (req.validatedBody ?? {}) as ValidatedSearchBody
 
-    logger.debug(`Searching knowledge bases: "${query}"`, { knowledge_base_ids, document_count })
+    logger.debug('Searching knowledge bases', {
+      query: summarizeTextForLog(query),
+      knowledge_base_ids,
+      document_count
+    })
 
     // Prefer Redux runtime cache, but fall back to Storage v2 when the renderer
     // is unavailable or the runtime cache has not been hydrated yet.
@@ -398,7 +403,10 @@ export const searchKnowledge = async (req: ValidationRequest, res: Response): Pr
     const allResults = resultsPerBase.flatMap((r) => r.results)
     const sortedResults = allResults.sort((a, b) => b.score - a.score).slice(0, document_count)
 
-    logger.debug(`Found ${sortedResults.length} results for query: "${query}"`)
+    logger.debug('Found knowledge search results', {
+      query: summarizeTextForLog(query),
+      resultCount: sortedResults.length
+    })
 
     return res.json({
       query,

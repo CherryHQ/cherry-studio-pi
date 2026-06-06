@@ -164,7 +164,7 @@ describe('prompt', () => {
 
     it('should handle non-string input gracefully', async () => {
       const result = await replacePromptVariables(null as any)
-      expect(result).toBe(null)
+      expect(result).toBe('')
     })
   })
 

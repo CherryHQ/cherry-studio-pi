@@ -1,5 +1,6 @@
 import { DEFAULT_SYSTEM_PROMPT } from '@cherrystudio/ai-core/built-in/plugins'
 import { loggerService } from '@logger'
+import { summarizeObjectShapeForLog } from '@renderer/aiCore/utils/logging'
 import store from '@renderer/store'
 import type { MCPTool } from '@renderer/types'
 
@@ -118,8 +119,8 @@ export const containsSupportedVariables = (userSystemPrompt: string): boolean =>
 
 export const replacePromptVariables = async (userSystemPrompt: string, modelName?: string): Promise<string> => {
   if (typeof userSystemPrompt !== 'string') {
-    logger.warn('User system prompt is not a string:', userSystemPrompt)
-    return userSystemPrompt
+    logger.warn('User system prompt is not a string', { value: summarizeObjectShapeForLog(userSystemPrompt) })
+    return userSystemPrompt == null ? '' : String(userSystemPrompt)
   }
 
   const now = new Date()

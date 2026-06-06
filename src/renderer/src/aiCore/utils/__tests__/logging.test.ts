@@ -129,4 +129,15 @@ describe('aiCore logging summaries', () => {
     expect(serialized).not.toContain('secret search question')
     expect(serialized).not.toContain('another private value')
   })
+
+  it('summarizes circular object shapes without recursing forever', () => {
+    const circular: Record<string, unknown> = { id: 'secret-id' }
+    circular.self = circular
+
+    const summary = summarizeObjectShapeForLog(circular)
+    const serialized = JSON.stringify(summary)
+
+    expect(serialized).toContain('"circular":true')
+    expect(serialized).not.toContain('secret-id')
+  })
 })

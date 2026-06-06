@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeTextForLog } from '@main/utils/logging'
 import { CHERRYIN_CONFIG } from '@shared/config/constant'
 import { createHash, randomBytes } from 'crypto'
 import { net } from 'electron'
@@ -398,7 +399,7 @@ class CherryINOAuthService {
 
       if (!response.ok) {
         const errorText = await response.text()
-        logger.error(`Token refresh failed: ${response.status} ${errorText}`)
+        logger.error('Token refresh failed', { status: response.status, error: summarizeTextForLog(errorText) })
         return null
       }
 

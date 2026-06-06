@@ -2,7 +2,7 @@ import type { Assistant, Model, Provider } from '@renderer/types'
 
 import type { ProviderConfig } from '../types'
 
-export function summarizeObjectShapeForLog(input: unknown, depth = 2): unknown {
+function summarizeObjectShape(input: unknown, depth: number, seen: WeakSet<object>): unknown {
   if (input == null) return input
 
   if (Array.isArray(input)) {
@@ -13,6 +13,11 @@ export function summarizeObjectShapeForLog(input: unknown, depth = 2): unknown {
     return { type: typeof input }
   }
 
+  if (seen.has(input)) {
+    return { type: 'object', circular: true }
+  }
+
+  seen.add(input)
   const record = input as Record<string, unknown>
   const keys = Object.keys(record)
 
@@ -23,8 +28,12 @@ export function summarizeObjectShapeForLog(input: unknown, depth = 2): unknown {
   return {
     type: 'object',
     keys,
-    fields: Object.fromEntries(keys.map((key) => [key, summarizeObjectShapeForLog(record[key], depth - 1)]))
+    fields: Object.fromEntries(keys.map((key) => [key, summarizeObjectShape(record[key], depth - 1, seen)]))
   }
+}
+
+export function summarizeObjectShapeForLog(input: unknown, depth = 2): unknown {
+  return summarizeObjectShape(input, depth, new WeakSet<object>())
 }
 
 export function summarizeTextForLog(input: unknown): Record<string, unknown> {

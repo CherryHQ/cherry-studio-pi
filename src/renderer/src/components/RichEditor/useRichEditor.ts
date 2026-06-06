@@ -523,7 +523,13 @@ export const useRichEditor = (options: UseRichEditorOptions = {}): UseRichEditor
           editor.chain().focus().setImage({ src: imageUrl, alt: fileMetadata.origin_name }).run()
         }
 
-        logger.info('Image pasted and saved:', fileMetadata)
+        logger.info('Image pasted and saved', {
+          id: fileMetadata.id,
+          ext: fileMetadata.ext,
+          type: fileMetadata.type,
+          size: fileMetadata.size,
+          hasPath: Boolean(fileMetadata.path)
+        })
       } catch (error) {
         logger.error('Failed to handle image paste:', error as Error)
       }

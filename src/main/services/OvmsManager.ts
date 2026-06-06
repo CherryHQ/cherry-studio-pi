@@ -4,6 +4,7 @@ import { promisify } from 'node:util'
 
 import { loggerService } from '@logger'
 import { isWin } from '@main/constant'
+import { summarizeProcessOutputForLog } from '@main/utils/logging'
 import { getCpuName } from '@main/utils/system'
 import { HOME_CHERRY_DIR } from '@shared/config/constant'
 import * as fs from 'fs-extra'
@@ -381,7 +382,7 @@ class OvmsManager {
       logger.error('Command to find OVMS process returned no output')
       return false
     }
-    logger.debug(`OVMS process output: ${stdout}`)
+    logger.debug('OVMS process output received', { stdout: summarizeProcessOutputForLog(stdout) })
 
     const processes = JSON.parse(stdout)
     const processList = Array.isArray(processes) ? processes : [processes]
@@ -531,7 +532,7 @@ class OvmsManager {
       const { stdout } = await execAsync(command, { env: env, cwd: ovdndDir })
 
       logger.info('Model download completed')
-      logger.debug(`Command output: ${stdout}`)
+      logger.debug('Model download command output received', { stdout: summarizeProcessOutputForLog(stdout) })
     } catch (error) {
       // remove ovdnDir+'models'+modelId if it exists
       if (await fs.pathExists(pathModel)) {

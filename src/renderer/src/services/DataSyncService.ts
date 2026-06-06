@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeObjectShapeForLog } from '@renderer/aiCore/utils/logging'
 import store, { persistor } from '@renderer/store'
 import type { WebDavConfig } from '@renderer/types'
 
@@ -354,7 +355,9 @@ function ensureMainProcessStorageV2ChangeSubscription() {
 
   storageV2LocalChangeUnsubscribe = subscribe((payload: unknown) => {
     if (syncing) {
-      logger.debug('Ignored main-process Storage v2 local change while data sync is running', { payload })
+      logger.debug('Ignored main-process Storage v2 local change while data sync is running', {
+        payload: summarizeObjectShapeForLog(payload, 1)
+      })
       return
     }
 

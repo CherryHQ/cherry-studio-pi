@@ -315,7 +315,13 @@ class FileStorage {
       await this.importStorageV2FileBlob(fileMetadata, stagingPath)
       await fs.promises.copyFile(stagingPath, destPath)
 
-      logger.debug(`File uploaded: ${fileMetadata}`)
+      logger.debug('File uploaded', {
+        id: fileMetadata.id,
+        ext: fileMetadata.ext,
+        type: fileMetadata.type,
+        size: fileMetadata.size,
+        hasPath: Boolean(fileMetadata.path)
+      })
 
       return fileMetadata
     } finally {

@@ -330,67 +330,6 @@ const stringifyToolValue = (value: unknown, space?: number) => {
   )
 }
 
-const exceedsToolValueCharBudget = (value: unknown, maxChars: number) => {
-  const seen = new WeakSet<object>()
-  let estimatedChars = 0
-
-  const add = (chars: number) => {
-    estimatedChars += chars
-    return estimatedChars > maxChars
-  }
-
-  const visit = (currentValue: unknown): boolean => {
-    if (typeof currentValue === 'string') {
-      return add(JSON.stringify(currentValue).length)
-    }
-    if (typeof currentValue === 'number' || typeof currentValue === 'boolean' || typeof currentValue === 'bigint') {
-      return add(String(currentValue).length)
-    }
-    if (currentValue === null || typeof currentValue === 'undefined') {
-      return add(4)
-    }
-    if (typeof currentValue === 'function' || typeof currentValue === 'symbol') {
-      return add(4)
-    }
-    if (typeof currentValue !== 'object') {
-      return add(String(currentValue).length)
-    }
-    if (seen.has(currentValue)) {
-      return add('"[Circular]"'.length)
-    }
-
-    seen.add(currentValue)
-    try {
-      if (Array.isArray(currentValue)) {
-        if (add(2)) return true
-        for (const item of currentValue) {
-          if (visit(item) || add(1)) return true
-        }
-        return false
-      }
-
-      if (add(2)) return true
-      const objectValue = currentValue as Record<string, unknown>
-      for (const key in objectValue) {
-        if (!Object.prototype.hasOwnProperty.call(objectValue, key)) continue
-        let childValue: unknown
-        try {
-          childValue = objectValue[key]
-        } catch {
-          if (add(JSON.stringify(key).length + '"[Unreadable property]"'.length + 2)) return true
-          continue
-        }
-        if (add(JSON.stringify(key).length + 1) || visit(childValue) || add(1)) return true
-      }
-      return false
-    } finally {
-      seen.delete(currentValue)
-    }
-  }
-
-  return visit(value)
-}
-
 const stringifyToolValuePreview = (value: unknown, maxChars: number, space?: number) => {
   const seen = new WeakSet<object>()
   const indentSize =
@@ -524,9 +463,11 @@ const previewToolValue = (value: unknown, maxChars: number, space?: number) => {
 
 const compactAppCapabilityResult = (result: any, maxChars: number) => {
   try {
-    if (!exceedsToolValueCharBudget(result, maxChars) && stringifyToolValue(result).length <= maxChars) {
+    const preview = previewToolValue(result, maxChars, 2)
+    if (!preview.truncated) {
       return {
         result,
+        text: preview.text,
         truncated: false
       }
     }
@@ -551,9 +492,19 @@ const compactAppCapabilityResult = (result: any, maxChars: number) => {
     resultTruncated: true
   }
 
-  return {
-    result: compacted,
-    truncated: true
+  try {
+    const preview = previewToolValue(compacted, maxChars, 2)
+    return {
+      result: compacted,
+      text: preview.text,
+      truncated: true
+    }
+  } catch {
+    return {
+      result: compacted,
+      text: stringifyToolValue(compacted, 2),
+      truncated: true
+    }
   }
 }
 
@@ -1185,10 +1136,7 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
           dryRun: input.dryRun === true
         })
         const compacted = compactAppCapabilityResult(result, MAX_APP_CAPABILITY_STRUCTURED_CHARS)
-        const text = truncateOutput(
-          stringifyToolValue(compacted.result, 2),
-          result.ok ? MAX_SUCCESS_OUTPUT_CHARS : MAX_ERROR_OUTPUT_CHARS
-        )
+        const text = truncateOutput(compacted.text, result.ok ? MAX_SUCCESS_OUTPUT_CHARS : MAX_ERROR_OUTPUT_CHARS)
         return result.ok
           ? textResult(text.text, {
               capabilityId: input.id,

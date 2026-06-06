@@ -12,6 +12,7 @@ import {
   getSessionWithStorageV2Recovery
 } from '@main/services/agents/AgentStorageV2ReadThrough'
 import { storageV2AgentDbMirrorService } from '@main/services/storageV2/AgentDbMirrorService'
+import { summarizeObjectShapeForLog } from '@main/utils/logging'
 import type { Request, Response } from 'express'
 
 const logger = loggerService.withContext('ApiServerMessagesHandlers')
@@ -46,7 +47,7 @@ export const createMessage = async (req: Request, res: Response): Promise<void> 
     const messageData = req.body
 
     logger.info('Creating streaming message', { agentId, sessionId })
-    logger.debug('Streaming message payload', { messageData })
+    logger.debug('Streaming message payload', { messageData: summarizeObjectShapeForLog(messageData, 1) })
 
     // Set SSE headers
     res.setHeader('Content-Type', 'text/event-stream')

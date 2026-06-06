@@ -4,6 +4,7 @@ import { loggerService } from '@logger'
 import { fileStorage } from '@main/services/FileStorage'
 import { MistralClientManager } from '@main/services/MistralClientManager'
 import { MistralService } from '@main/services/remotefile/MistralService'
+import { summarizeObjectShapeForLog, summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
 import type { Mistral } from '@mistralai/mistralai'
 import type { DocumentURLChunk } from '@mistralai/mistralai/models/components/documenturlchunk'
 import type { ImageURLChunk } from '@mistralai/mistralai/models/components/imageurlchunk'
@@ -41,20 +42,29 @@ export default class MistralPreprocessProvider extends BasePreprocessProvider {
   private async preupload(file: FileMetadata): Promise<PreuploadResponse> {
     let document: PreuploadResponse
     const filePath = fileStorage.getFilePathById(file)
-    logger.info(`preprocess preupload started for local file: ${filePath}`)
+    logger.info('preprocess preupload started', {
+      fileId: file.id,
+      fileExt: file.ext,
+      fileType: file.type,
+      fileSize: file.size,
+      localPath: summarizeTextForLog(filePath)
+    })
 
     if (file.ext.toLowerCase() === '.pdf') {
       const uploadResponse = await this.fileService.uploadFile(file)
 
       if (uploadResponse.status === 'failed') {
-        logger.error('File upload failed:', uploadResponse)
+        logger.error('File upload failed', { response: summarizeObjectShapeForLog(uploadResponse, 1) })
         throw new Error('Failed to upload file: ' + uploadResponse.displayName)
       }
       await this.sendPreprocessProgress(file.id, 15)
       const fileUrl = await this.sdk.files.getSignedUrl({
         fileId: uploadResponse.fileId
       })
-      logger.info('Got signed URL:', fileUrl)
+      logger.info('Got signed URL', {
+        response: summarizeObjectShapeForLog(fileUrl, 1),
+        url: summarizeUrlForLog(fileUrl.url)
+      })
       await this.sendPreprocessProgress(file.id, 20)
       document = {
         type: 'document_url',

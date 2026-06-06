@@ -14,6 +14,11 @@ import {
   type StreamTextResult
 } from '@cherrystudio/ai-core'
 import { loggerService } from '@logger'
+import {
+  summarizeObjectShapeForLog,
+  summarizeTextForLog,
+  summarizeTextListForLog
+} from '@renderer/aiCore/utils/logging'
 // import { generateObject } from '@cherrystudio/ai-core'
 import {
   SEARCH_SUMMARY_PROMPT,
@@ -46,6 +51,24 @@ export const getMessageContent = (message: ModelMessage) => {
     return acc
   }, '')
 }
+
+const summarizeQuestionListForLog = (value: unknown) =>
+  Array.isArray(value) ? summarizeTextListForLog(value) : summarizeObjectShapeForLog(value)
+
+const summarizeIntentAnalysisResultForLog = (result: ExtractResults | null | undefined) => ({
+  websearch: result?.websearch
+    ? {
+        question: summarizeQuestionListForLog(result.websearch.question),
+        links: result.websearch.links ? summarizeTextListForLog(result.websearch.links) : undefined
+      }
+    : undefined,
+  knowledge: result?.knowledge
+    ? {
+        question: summarizeQuestionListForLog(result.knowledge.question),
+        rewrite: summarizeTextForLog(result.knowledge.rewrite)
+      }
+    : undefined
+})
 
 // === Schema Definitions ===
 
@@ -157,7 +180,7 @@ async function analyzeSearchIntent(
     }
 
     const parsedResult = extractInfoFromXML(result)
-    logger.debug('Intent analysis result', { parsedResult })
+    logger.debug('Intent analysis result', { parsedResult: summarizeIntentAnalysisResultForLog(parsedResult) })
 
     // 根据需求过滤结果
     return {

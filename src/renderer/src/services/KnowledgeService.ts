@@ -101,7 +101,11 @@ export const getKnowledgeBaseParams = (base: KnowledgeBase): KnowledgeBaseParams
 }
 
 export const getFileFromUrl = async (url: string): Promise<FileMetadata | null> => {
-  logger.debug(`getFileFromUrl: ${url}`)
+  logger.debug('Resolving file from URL', {
+    url: summarizeTextForLog(url),
+    hasCherryStudioSegment: url.includes('CherryStudio'),
+    hasDataFilesSegment: url.includes('/Data/Files') || url.includes('\\Data\\Files')
+  })
   let fileName = ''
 
   if (url && url.includes('CherryStudio')) {
@@ -113,11 +117,14 @@ export const getFileFromUrl = async (url: string): Promise<FileMetadata | null> 
       fileName = url.split('\\Data\\Files\\')[1]
     }
   }
-  logger.debug(`fileName: ${fileName}`)
   if (fileName) {
     const actualFileName = fileName.split(/[/\\]/).pop() || fileName
-    logger.debug(`actualFileName: ${actualFileName}`)
     const fileId = actualFileName.split('.')[0]
+    logger.debug('Resolved file candidate from URL', {
+      fileName: summarizeTextForLog(fileName),
+      actualFileName: summarizeTextForLog(actualFileName),
+      hasFileId: Boolean(fileId)
+    })
     const file = await FileManager.getFile(fileId)
     if (file) {
       return file

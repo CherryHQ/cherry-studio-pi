@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeUrlForLog } from '@main/utils/logging'
 import type { ChannelLogEntry, ChannelLogLevel, ChannelStatusEvent } from '@shared/config/types'
 import { net } from 'electron'
 import { EventEmitter } from 'events'
@@ -30,7 +31,7 @@ export async function downloadImageAsBase64(url: string): Promise<ImageAttachmen
   try {
     const response = await net.fetch(url)
     if (!response.ok) {
-      logger.warn('Failed to download image', { url, status: response.status })
+      logger.warn('Failed to download image', { url: summarizeUrlForLog(url), status: response.status })
       return null
     }
     const contentType = response.headers.get('content-type') || 'image/png'
@@ -39,7 +40,7 @@ export async function downloadImageAsBase64(url: string): Promise<ImageAttachmen
     return { data: buffer.toString('base64'), media_type: mediaType }
   } catch (error) {
     logger.warn('Failed to fetch image', {
-      url,
+      url: summarizeUrlForLog(url),
       error: error instanceof Error ? error.message : String(error)
     })
     return null
@@ -54,7 +55,7 @@ export async function downloadFileAsBase64(url: string, filename: string): Promi
   try {
     const response = await net.fetch(url)
     if (!response.ok) {
-      logger.warn('Failed to download file', { url, filename, status: response.status })
+      logger.warn('Failed to download file', { url: summarizeUrlForLog(url), filename, status: response.status })
       return null
     }
 
@@ -81,7 +82,7 @@ export async function downloadFileAsBase64(url: string, filename: string): Promi
     }
   } catch (error) {
     logger.warn('Failed to fetch file', {
-      url,
+      url: summarizeUrlForLog(url),
       filename,
       error: error instanceof Error ? error.message : String(error)
     })

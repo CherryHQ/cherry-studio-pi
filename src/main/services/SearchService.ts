@@ -1,5 +1,6 @@
 import { is } from '@electron-toolkit/utils'
 import { loggerService } from '@logger'
+import { summarizeUrlForLog } from '@main/utils/logging'
 import { BrowserWindow } from 'electron'
 
 const logger = loggerService.withContext('SearchService')
@@ -56,7 +57,7 @@ export class SearchService {
 
   public async openUrlInSearchWindow(uid: string, url: string): Promise<any> {
     let window = this.searchWindows[uid]
-    logger.debug(`Searching with URL: ${url}`)
+    logger.debug('Searching with URL', { url: summarizeUrlForLog(url) })
     if (window) {
       await window.loadURL(url)
     } else {

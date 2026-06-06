@@ -11,6 +11,7 @@ import path from 'path'
 import { isWin } from '../constant'
 import { ConfigKeys, configManager } from '../services/ConfigManager'
 import { getResourcePath } from '.'
+import { summarizeProcessOutputForLog } from './logging'
 import getShellEnv, { refreshShellEnv } from './shell-env'
 
 const logger = loggerService.withContext('Utils:Process')
@@ -25,11 +26,11 @@ export function runInstallScript(scriptPath: string, extraEnv?: Record<string, s
     })
 
     nodeProcess.stdout.on('data', (data) => {
-      logger.debug(`Script output: ${data}`)
+      logger.debug('Script output received', { output: summarizeProcessOutputForLog(data.toString()) })
     })
 
     nodeProcess.stderr.on('data', (data) => {
-      logger.error(`Script error: ${data}`)
+      logger.error('Script error received', { output: summarizeProcessOutputForLog(data.toString()) })
     })
 
     nodeProcess.on('close', (code) => {

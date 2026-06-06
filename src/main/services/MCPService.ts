@@ -7,6 +7,7 @@ import { getMCPServersFromRedux } from '@main/apiServer/utils/mcp'
 import { createInMemoryMCPServer } from '@main/mcpServers/factory'
 import { makeSureDirExists, removeEnvProxy } from '@main/utils'
 import { getConfigDir } from '@main/utils/file'
+import { summarizeTextForLog } from '@main/utils/logging'
 import { findCommandInShellEnv, getBinaryName, getBinaryPath, isBinaryExists } from '@main/utils/process'
 import getLoginShellEnvironment from '@main/utils/shell-env'
 import { TraceMethod, withSpanFunc } from '@mcp-trace/trace-core'
@@ -747,7 +748,7 @@ class McpService {
         const data = notification.params?.data
         const redactedData = redactSensitiveMCPLogData(data)
         const message = safeSerialize(redactedData) ?? 'No data'
-        logger.debug(`Message from server ${server.name}: ${message}`)
+        logger.debug('Message from MCP server', { server: server.name, message: summarizeTextForLog(message) })
         if (data) {
           this.emitServerLog(server, {
             timestamp: Date.now(),

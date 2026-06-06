@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { isMac } from '@main/constant'
+import { summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
 
 import { windowService } from '../WindowService'
 const logger = loggerService.withContext('URLSchema:handleProvidersProtocolUrl')
@@ -44,7 +45,7 @@ export async function handleProvidersProtocolUrl(url: URL) {
       const version = params.get('v')
       if (version == '1') {
         // TODO: handle different version
-        logger.debug('handleProvidersProtocolUrl', { data, version })
+        logger.debug('handleProvidersProtocolUrl', { data: summarizeTextForLog(data), version })
       }
 
       // add check there is window.navigate function in mainWindow
@@ -62,14 +63,14 @@ export async function handleProvidersProtocolUrl(url: URL) {
         }
       } else {
         setTimeout(() => {
-          logger.debug('handleProvidersProtocolUrl timeout', { data, version })
+          logger.debug('handleProvidersProtocolUrl timeout', { data: summarizeTextForLog(data), version })
           void handleProvidersProtocolUrl(url)
         }, 1000)
       }
       break
     }
     default:
-      logger.error(`Unknown MCP protocol URL: ${url}`)
+      logger.error('Unknown MCP protocol URL', { url: summarizeUrlForLog(url.toString()) })
       break
   }
 }

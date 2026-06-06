@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 
 import { loggerService } from '@logger'
 import { storageV2AgentDbMirrorService } from '@main/services/storageV2/AgentDbMirrorService'
+import { summarizeObjectShapeForLog } from '@main/utils/logging'
 import type {
   AgentPersistedMessage,
   AgentSessionMessageEntity,
@@ -189,7 +190,10 @@ export class SessionMessageService extends BaseService {
   ): Promise<SessionStreamResult> {
     const agentSessionId = await this.getLastAgentSessionId(session.id)
     const runtimeSession = await this.withCurrentAgentIdentity(session)
-    logger.debug('Session Message stream message data:', { message: req, session_id: agentSessionId })
+    logger.debug('Session Message stream message data', {
+      message: summarizeObjectShapeForLog(req, 1),
+      session_id: agentSessionId
+    })
 
     const agentStream = await agentRuntimeService.invoke(
       req.content,

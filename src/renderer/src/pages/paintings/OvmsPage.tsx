@@ -1,5 +1,6 @@
 import { PlusOutlined, RedoOutlined } from '@ant-design/icons'
 import { loggerService } from '@logger'
+import { summarizeObjectShapeForLog, summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import { Navbar, NavbarCenter, NavbarRight } from '@renderer/components/app/Navbar'
 import { HStack } from '@renderer/components/Layout'
 import Scrollbar from '@renderer/components/Scrollbar'
@@ -41,6 +42,32 @@ import {
 import { cleanupReplacedPaintingFiles } from './utils'
 
 const logger = loggerService.withContext('OvmsPage')
+
+const summarizeOvmsGenerationRequestForLog = (requestBody: {
+  model: string
+  prompt: string
+  size: string
+  num_inference_steps: number
+  rng_seed: number
+}) => ({
+  model: requestBody.model,
+  size: requestBody.size,
+  num_inference_steps: requestBody.num_inference_steps,
+  rng_seed: requestBody.rng_seed,
+  prompt: summarizeTextForLog(requestBody.prompt)
+})
+
+const summarizeOvmsGenerationResponseForLog = (data: unknown) => {
+  const record = data && typeof data === 'object' ? (data as Record<string, unknown>) : null
+  const items = Array.isArray(record?.data) ? record.data : []
+
+  return {
+    shape: summarizeObjectShapeForLog(data, 1),
+    dataCount: items.length,
+    base64ImageCount: items.filter((item) => Boolean((item as { b64_json?: unknown })?.b64_json)).length,
+    urlImageCount: items.filter((item) => Boolean((item as { url?: unknown })?.url)).length
+  }
+}
 
 const OvmsPage: FC<{ Options: string[] }> = ({ Options }) => {
   const { addPainting, removePainting, updatePainting, ovms_paintings } = usePaintings()
@@ -199,7 +226,7 @@ const OvmsPage: FC<{ Options: string[] }> = ({ Options }) => {
         rng_seed: painting.rng_seed || 0
       }
 
-      logger.info('OVMS API request:', requestBody)
+      logger.info('OVMS API request', summarizeOvmsGenerationRequestForLog(requestBody))
 
       const response = await fetch(`${ovmsProvider.apiHost}images/generations`, {
         method: 'POST',
@@ -212,12 +239,15 @@ const OvmsPage: FC<{ Options: string[] }> = ({ Options }) => {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: { message: `HTTP ${response.status}` } }))
-        logger.error('OVMS API error:', errorData)
+        logger.error('OVMS API error', {
+          status: response.status,
+          data: summarizeOvmsGenerationResponseForLog(errorData)
+        })
         throw new Error(errorData.error?.message || 'Image generation failed')
       }
 
       const data = await response.json()
-      logger.info('OVMS API response:', data)
+      logger.info('OVMS API response', summarizeOvmsGenerationResponseForLog(data))
 
       // Handle base64 encoded images
       if (data.data && data.data.length > 0) {

@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeObjectShapeForLog } from '@renderer/aiCore/utils/logging'
 import { Navbar, NavbarCenter } from '@renderer/components/app/Navbar'
 import type { CodeEditorHandles } from '@renderer/components/CodeEditor'
 import type { RichEditorRef } from '@renderer/components/RichEditor/types'
@@ -684,7 +685,7 @@ const NotesPage: FC = () => {
 
         // Validate result object
         if (!result || typeof result !== 'object') {
-          logger.error('Invalid upload result:', { result })
+          logger.error('Invalid upload result', { result: summarizeObjectShapeForLog(result) })
           window.toast.error(t('notes.upload_failed'))
           return
         }

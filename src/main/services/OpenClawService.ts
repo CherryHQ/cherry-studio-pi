@@ -8,6 +8,7 @@ import path from 'node:path'
 import { loggerService } from '@logger'
 import { isWin } from '@main/constant'
 import { isUserInChina } from '@main/utils/ipService'
+import { summarizeProcessOutputForLog } from '@main/utils/logging'
 import { crossPlatformSpawn, findExecutableInEnv, getBinaryPath, runInstallScript } from '@main/utils/process'
 import getShellEnv, { refreshShellEnv } from '@main/utils/shell-env'
 import type { OperationResult } from '@shared/config/types'
@@ -597,20 +598,32 @@ class OpenClawService {
       })
 
       const timeout = setTimeout(() => {
-        logger.warn(`Gateway command timed out: ${args.join(' ')}`)
+        logger.warn('Gateway command timed out', {
+          command: args[0],
+          argCount: args.length,
+          timeoutMs,
+          stdout: summarizeProcessOutputForLog(stdout),
+          stderr: summarizeProcessOutputForLog(stderr)
+        })
         proc.kill('SIGKILL')
         resolve({ code: null, stdout, stderr })
       }, timeoutMs)
 
       proc.on('exit', (code) => {
         clearTimeout(timeout)
-        logger.info(`Gateway command [${args.join(' ')}]:`, { code, stdout: stdout.trim(), stderr: stderr.trim() })
+        logger.info('Gateway command completed', {
+          command: args[0],
+          argCount: args.length,
+          code,
+          stdout: summarizeProcessOutputForLog(stdout),
+          stderr: summarizeProcessOutputForLog(stderr)
+        })
         resolve({ code, stdout, stderr })
       })
 
       proc.on('error', (err) => {
         clearTimeout(timeout)
-        logger.error(`Gateway command error [${args.join(' ')}]:`, err)
+        logger.error('Gateway command error', { command: args[0], argCount: args.length, error: err.message })
         resolve({ code: null, stdout, stderr: err.message })
       })
     })
@@ -1006,12 +1019,12 @@ class OpenClawService {
 
       if (code !== 0) {
         const errMsg = stderr.trim() || `Update failed with code ${code}`
-        logger.error('OpenClaw update failed:', { error: errMsg })
+        logger.error('OpenClaw update failed', { error: summarizeProcessOutputForLog(errMsg) })
         this.sendInstallProgress(errMsg, 'error')
         return { success: false, message: errMsg }
       }
 
-      logger.info('OpenClaw updated successfully', { output: stdout.trim() })
+      logger.info('OpenClaw updated successfully', { output: summarizeProcessOutputForLog(stdout) })
       this.sendInstallProgress('OpenClaw updated successfully!')
       return { success: true }
     } catch (error) {
