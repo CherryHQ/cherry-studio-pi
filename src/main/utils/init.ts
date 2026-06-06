@@ -39,6 +39,14 @@ function getCurrentExecutablePath() {
   return app.getPath('exe')
 }
 
+function joinPath(...parts: string[]) {
+  return isWin ? path.win32.join(...parts) : path.join(...parts)
+}
+
+function dirnameOf(filePath: string) {
+  return isWin ? path.win32.dirname(filePath) : path.dirname(filePath)
+}
+
 function getCompatibleExecutablePaths(executablePath: string) {
   const executablePaths = [executablePath]
 
@@ -47,10 +55,20 @@ function getCompatibleExecutablePaths(executablePath: string) {
   }
 
   if (isWin && isPortable && process.env.PORTABLE_EXECUTABLE_DIR) {
-    executablePaths.push(path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'cherry-studio-portable.exe'))
+    executablePaths.push(joinPath(process.env.PORTABLE_EXECUTABLE_DIR, 'cherry-studio-portable.exe'))
   }
 
   return Array.from(new Set(executablePaths))
+}
+
+function getPortableUserDataPath() {
+  const portableFile = process.env.PORTABLE_EXECUTABLE_FILE
+  const portableDir = process.env.PORTABLE_EXECUTABLE_DIR || (portableFile ? dirnameOf(portableFile) : '')
+  if (portableDir) {
+    return joinPath(portableDir, 'data')
+  }
+
+  return joinPath(dirnameOf(app.getPath('exe')), 'data')
 }
 
 export function initAppDataDir() {
@@ -61,8 +79,7 @@ export function initAppDataDir() {
   }
 
   if (isPortable) {
-    const portableDir = process.env.PORTABLE_EXECUTABLE_DIR
-    app.setPath('userData', path.join(portableDir || app.getPath('exe'), 'data'))
+    app.setPath('userData', getPortableUserDataPath())
     return
   }
 }

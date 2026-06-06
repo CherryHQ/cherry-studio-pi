@@ -201,12 +201,19 @@ async function handleDownload(env, filename) {
  * 根据文件扩展名获取对应的 Content-Type
  */
 function getContentType(filename) {
-  const ext = filename.split('.').pop().toLowerCase()
+  const lowerName = filename.toLowerCase()
+  if (lowerName.endsWith('.tar.gz') || lowerName.endsWith('.tgz')) {
+    return 'application/gzip'
+  }
+
+  const ext = lowerName.split('.').pop()
   const types = {
     exe: 'application/x-msdownload', // Windows 可执行文件
     dmg: 'application/x-apple-diskimage', // macOS 安装包
     zip: 'application/zip', // 压缩包
     appimage: 'application/x-executable', // Linux 可执行文件
+    yml: 'application/x-yaml',
+    yaml: 'application/x-yaml',
     blockmap: 'application/octet-stream' // 更新文件
   }
   return types[ext] || 'application/octet-stream'
@@ -481,7 +488,7 @@ async function checkNewRelease(env) {
           const oldFiles = versions.versions[oldVersion].files
           for (const file of oldFiles) {
             try {
-              if (file.uploaded) {
+              if (file.uploaded && !keepFiles.has(file.name)) {
                 await env.R2_BUCKET.delete(file.name)
                 await addLog(env, 'INFO', `删除旧文件: ${file.name}`)
               }

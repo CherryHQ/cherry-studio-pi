@@ -206,4 +206,45 @@ describe('updateAppDataConfig', () => {
       }
     ])
   })
+
+  it('stores portable user data beside the executable directory when no config exists', async () => {
+    mocks.platform.isWin = true
+    mocks.platform.isPortable = true
+    process.env.PORTABLE_EXECUTABLE_DIR = 'C:\\Portable'
+
+    const { initAppDataDir } = await import('../init')
+
+    initAppDataDir()
+
+    expect(mocks.setPath).toHaveBeenCalledWith('userData', 'C:\\Portable\\data')
+  })
+
+  it('derives the portable user data directory from PORTABLE_EXECUTABLE_FILE when directory is empty', async () => {
+    mocks.platform.isWin = true
+    mocks.platform.isPortable = true
+    process.env.PORTABLE_EXECUTABLE_DIR = ''
+    process.env.PORTABLE_EXECUTABLE_FILE = 'C:\\Portable\\Cherry Studio Pi.exe'
+
+    const { initAppDataDir } = await import('../init')
+
+    initAppDataDir()
+
+    expect(mocks.setPath).toHaveBeenCalledWith('userData', 'C:\\Portable\\data')
+  })
+
+  it('does not append portable data to the executable filename when portable env vars are incomplete', async () => {
+    mocks.platform.isWin = true
+    mocks.platform.isPortable = true
+    process.env.PORTABLE_EXECUTABLE_DIR = ''
+    mocks.getPath.mockImplementation((key: string) => {
+      if (key === 'exe') return 'C:\\Portable\\Cherry Studio Pi.exe'
+      return '/mock/unknown'
+    })
+
+    const { initAppDataDir } = await import('../init')
+
+    initAppDataDir()
+
+    expect(mocks.setPath).toHaveBeenCalledWith('userData', 'C:\\Portable\\data')
+  })
 })

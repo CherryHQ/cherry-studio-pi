@@ -85,6 +85,8 @@ describe('cloudflare-worker', () => {
 
   it('refreshes the release cache without deleting worker metadata', async () => {
     const releaseAssetName = 'CherryStudioPi-1.0.2-x86_64.AppImage'
+    const yamlAssetName = 'latest.yml'
+    const tarGzAssetName = 'CherryStudioPi-1.0.2-x64.tar.gz'
     const releaseAsset = new Uint8Array([1, 2, 3, 4]).buffer
     const bucket = new FakeR2Bucket({
       'versions.json': JSON.stringify({
@@ -122,6 +124,16 @@ describe('cloudflare-worker', () => {
                 name: releaseAssetName,
                 size: releaseAsset.byteLength,
                 browser_download_url: 'https://downloads.example.com/CherryStudioPi.AppImage'
+              },
+              {
+                name: yamlAssetName,
+                size: releaseAsset.byteLength,
+                browser_download_url: 'https://downloads.example.com/latest.yml'
+              },
+              {
+                name: tarGzAssetName,
+                size: releaseAsset.byteLength,
+                browser_download_url: 'https://downloads.example.com/CherryStudioPi.tar.gz'
               }
             ]
           }),
@@ -142,5 +154,67 @@ describe('cloudflare-worker', () => {
     expect(bucket.objects.has('cherry-studio-pi-latest-release')).toBe(true)
     expect(bucket.objects.has('orphan.tmp')).toBe(false)
     expect(bucket.objects.get(releaseAssetName)?.httpMetadata?.contentType).toBe('application/x-executable')
+    expect(bucket.objects.get(yamlAssetName)?.httpMetadata?.contentType).toBe('application/x-yaml')
+    expect(bucket.objects.get(tarGzAssetName)?.httpMetadata?.contentType).toBe('application/gzip')
+  })
+
+  it('keeps shared updater metadata files when pruning old releases', async () => {
+    const bucket = new FakeR2Bucket({
+      'versions.json': JSON.stringify({
+        versions: {
+          'v1.0.0': {
+            version: 'v1.0.0',
+            files: [
+              { name: 'old-release.dmg', uploaded: true },
+              { name: 'latest.yml', uploaded: true }
+            ]
+          },
+          'v1.0.1': {
+            version: 'v1.0.1',
+            files: [{ name: 'kept-release.dmg', uploaded: true }]
+          }
+        },
+        latestVersion: 'v1.0.1',
+        lastChecked: new Date(0).toISOString()
+      }),
+      'logs.json': JSON.stringify({ logs: [] }),
+      'cherry-studio-pi-latest-release': JSON.stringify({ version: 'v1.0.1' }),
+      'old-release.dmg': { body: 'old', size: 3 },
+      'kept-release.dmg': { body: 'kept', size: 4 },
+      'latest.yml': { body: 'latest', size: 6 }
+    })
+
+    globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+
+      if (url.includes('api.github.com')) {
+        return new Response(
+          JSON.stringify({
+            tag_name: 'v1.0.2',
+            published_at: '2026-06-06T00:00:00.000Z',
+            body: 'Release notes',
+            assets: [
+              {
+                name: 'latest.yml',
+                size: 6,
+                browser_download_url: 'https://downloads.example.com/latest.yml'
+              }
+            ]
+          }),
+          { status: 200 }
+        )
+      }
+
+      return new Response('latest', { status: 200 })
+    }) as typeof fetch
+
+    const { default: worker } = await import('../cloudflare-worker.js')
+
+    await worker.scheduled({}, { R2_BUCKET: bucket }, {})
+
+    expect(consoleErrorSpy).not.toHaveBeenCalled()
+    expect(bucket.deleted).toContain('old-release.dmg')
+    expect(bucket.deleted).not.toContain('latest.yml')
+    expect(bucket.objects.has('latest.yml')).toBe(true)
   })
 })
