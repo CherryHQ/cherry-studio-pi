@@ -46,16 +46,30 @@ export const translateText = async (
     if (signal && abortListener) signal.removeEventListener('abort', abortListener)
   }
 
-  if (signal) {
-    abortListener = () => {
-      void window.api.ai.streamAbort({ topicId: streamId }).catch(() => {
-        // Already aborted / stream gone — main drives the final reject via onStreamError.
-      })
-    }
-    signal.addEventListener('abort', abortListener, { once: true })
+  const getAbortError = () => {
+    const reason = signal?.reason
+    if (reason instanceof Error) return reason
+    const error = new Error(typeof reason === 'string' ? reason : 'Translation aborted')
+    error.name = 'AbortError'
+    return error
   }
 
   return new Promise<string>((resolve, reject) => {
+    if (signal) {
+      abortListener = () => {
+        void window.api.ai.streamAbort({ topicId: streamId }).catch(() => {
+          // Already aborted / stream gone — the renderer still resolves the user cancel immediately.
+        })
+        cleanup()
+        reject(getAbortError())
+      }
+      signal.addEventListener('abort', abortListener, { once: true })
+      if (signal.aborted) {
+        abortListener()
+        return
+      }
+    }
+
     // Subscribe **before** calling main. Main starts the stream synchronously
     // inside `translate.open`, so the first chunk can land between `open()`'s
     // resolve and any post-await subscriber registration.

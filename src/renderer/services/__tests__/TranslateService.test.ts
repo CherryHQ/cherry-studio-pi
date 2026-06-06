@@ -287,7 +287,7 @@ describe('translateText (main-driven streaming)', () => {
   })
 
   describe('abort signal', () => {
-    it('calls streamAbort with the streamId when the signal fires mid-stream', async () => {
+    it('rejects immediately and calls streamAbort when the signal fires mid-stream', async () => {
       const controller = new AbortController()
       const promise = translateText('source', TARGET, undefined, controller.signal)
       await waitForOpen(mockTranslate)
@@ -295,13 +295,26 @@ describe('translateText (main-driven streaming)', () => {
 
       emitChunk(mockListeners, 'partial', streamId)
       controller.abort()
-      // Main would emit an abort-shaped error in response; simulate it here so
-      // the function's reject path completes.
-      emitError(mockListeners, { name: 'AbortError', message: 'aborted' }, streamId)
 
-      await promise.catch(() => undefined)
+      const err = await promise.catch((e) => e)
 
+      expect(err).toBeInstanceOf(Error)
+      expect((err as Error).name).toBe('AbortError')
       expect(mockAi.streamAbort).toHaveBeenCalledWith({ topicId: streamId })
+      expect(mockListeners.chunk).toHaveLength(0)
+      expect(mockListeners.done).toHaveLength(0)
+      expect(mockListeners.error).toHaveLength(0)
+    })
+
+    it('does not wait for main to acknowledge abort when streamAbort fails', async () => {
+      mockAi.streamAbort.mockRejectedValueOnce(new Error('already gone'))
+      const controller = new AbortController()
+      const promise = translateText('source', TARGET, undefined, controller.signal)
+      await waitForOpen(mockTranslate)
+
+      controller.abort('user stopped')
+
+      await expect(promise).rejects.toMatchObject({ name: 'AbortError', message: 'user stopped' })
     })
 
     it('rejects synchronously when the supplied signal is already aborted', async () => {
