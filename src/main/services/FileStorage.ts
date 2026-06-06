@@ -155,17 +155,19 @@ class FileStorage {
     const stats = fs.statSync(filePath)
     logger.debug('Checking duplicate file', { size: stats.size, filePath: summarizeTextForLog(filePath) })
     const fileSize = stats.size
+    let originalHashPromise: Promise<string> | undefined
 
     const files = await fs.promises.readdir(this.storageDir)
     for (const file of files) {
       const storedFilePath = path.join(this.storageDir, file)
       const storedStats = fs.statSync(storedFilePath)
+      if (!storedStats.isFile()) {
+        continue
+      }
 
       if (storedStats.size === fileSize) {
-        const [originalHash, storedHash] = await Promise.all([
-          this.getFileHash(filePath),
-          this.getFileHash(storedFilePath)
-        ])
+        originalHashPromise ??= this.getFileHash(filePath)
+        const [originalHash, storedHash] = await Promise.all([originalHashPromise, this.getFileHash(storedFilePath)])
 
         if (originalHash === storedHash) {
           const ext = path.extname(file)
@@ -175,7 +177,7 @@ class FileStorage {
           return {
             id,
             origin_name: file,
-            name: file + ext,
+            name: file,
             path: storedFilePath,
             created_at: storedStats.birthtime.toISOString(),
             size: storedStats.size,

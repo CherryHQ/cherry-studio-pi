@@ -23,7 +23,7 @@ vi.mock('fs', async () => {
   return {
     default: actual,
     promises: actual.promises,
-    createReadStream: actual.createReadStream,
+    createReadStream: vi.fn(actual.createReadStream),
     existsSync: actual.existsSync,
     mkdirSync: actual.mkdirSync,
     mkdtempSync: actual.mkdtempSync,
@@ -130,5 +130,42 @@ describe('FileStorage Storage v2 upload flow', () => {
     ).rejects.toThrow('storage locked')
 
     expect(fs.readdirSync(mocks.dirs.files)).toEqual([])
+  })
+
+  it('reuses the uploaded file hash while scanning same-size duplicate candidates', async () => {
+    const sourcePath = path.join(mocks.dirs.root, 'source.txt')
+    fs.writeFileSync(sourcePath, 'same content')
+
+    const { fileStorage } = await import('../FileStorage')
+    fs.writeFileSync(path.join(mocks.dirs.files, 'a.txt'), 'other bytes!')
+    fs.writeFileSync(path.join(mocks.dirs.files, 'b.txt'), 'same content')
+
+    const mockedFs = await import('fs')
+    vi.mocked(mockedFs.createReadStream).mockClear()
+
+    const result = await fileStorage.uploadFile(undefined as never, {
+      id: 'source',
+      name: 'source.txt',
+      origin_name: 'source.txt',
+      path: sourcePath,
+      size: 0,
+      ext: '.txt',
+      type: 'text',
+      created_at: new Date().toISOString(),
+      count: 1
+    })
+
+    const sourceHashReads = vi
+      .mocked(mockedFs.createReadStream)
+      .mock.calls.filter(([candidatePath]) => String(candidatePath) === sourcePath)
+
+    expect(sourceHashReads).toHaveLength(1)
+    expect(result).toMatchObject({
+      id: 'b',
+      name: 'b.txt',
+      path: path.join(mocks.dirs.files, 'b.txt'),
+      count: 2
+    })
+    expect(mocks.storageV2FileRepository.importFile).toHaveBeenCalledTimes(1)
   })
 })
