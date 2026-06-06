@@ -1628,6 +1628,33 @@ describe('AppDataSyncService', () => {
     expect(mocks.runtimeProjection.projectAppData).not.toHaveBeenCalled()
   })
 
+  it('fails before publishing the manifest when an existing runtime directory bundle cannot be verified', async () => {
+    const skillPath = path.join(mocks.runtimeDataRoot, 'Skills', 'sync-fixture', 'SKILL.md')
+    await fsp.mkdir(path.dirname(skillPath), { recursive: true })
+    await fsp.writeFile(skillPath, '# Broken Remote Bundle Guard')
+    const mtime = new Date('2026-06-01T12:00:00.000Z')
+    await fsp.utimes(skillPath, mtime, mtime)
+
+    mocks.webdav.exists.mockImplementation(async (filePath: string) => {
+      if (String(filePath).endsWith('/.sync.lock.json')) {
+        return mocks.remoteFiles.has(filePath)
+      }
+      if (String(filePath).includes('/runtime-directories/bundles/Skills/')) {
+        mocks.remoteFiles.set(filePath, Buffer.from('not a valid runtime bundle'))
+        return true
+      }
+      if (mocks.remoteFiles.has(filePath)) return true
+      return true
+    })
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端 Skills 目录数据包')
+
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/manifest.json'))
+    ).toBe(false)
+    expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith('last-sync-summary', expect.anything())
+  })
+
   it('projects previously synced Storage v2 remote records even when the current record sync only skips them', async () => {
     const existingStorageManifest = {
       version: 1,

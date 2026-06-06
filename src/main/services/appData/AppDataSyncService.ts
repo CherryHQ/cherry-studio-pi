@@ -2755,6 +2755,17 @@ export class AppDataSyncService {
   ) {
     const relativePath = runtimeDirectoryBundlePath(snapshot.name, snapshot.valueHash)
     const remotePath = path.posix.join(basePath, relativePath)
+    const meta: RemoteRuntimeDirectoryMeta = {
+      version: 1,
+      name: snapshot.name,
+      valueHash: snapshot.valueHash,
+      byteSize: snapshot.byteSize,
+      compressedByteSize: snapshot.compressedByteSize,
+      fileCount: snapshot.fileCount,
+      updatedAt: snapshot.updatedAt,
+      deviceId,
+      path: relativePath
+    }
 
     await this.ensureDirectory(client, path.posix.dirname(remotePath))
     const exists = await runWebDavOperation(
@@ -2775,18 +2786,9 @@ export class AppDataSyncService {
         { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
       )
     }
+    await this.assertRemoteRuntimeDirectoryBundleIntegrity(client, remotePath, meta)
 
-    manifest.directories[snapshot.name] = {
-      version: 1,
-      name: snapshot.name,
-      valueHash: snapshot.valueHash,
-      byteSize: snapshot.byteSize,
-      compressedByteSize: snapshot.compressedByteSize,
-      fileCount: snapshot.fileCount,
-      updatedAt: snapshot.updatedAt,
-      deviceId,
-      path: relativePath
-    }
+    manifest.directories[snapshot.name] = meta
   }
 
   private parseRuntimeDirectoryBundle(buffer: Buffer, meta: RemoteRuntimeDirectoryMeta): RuntimeDirectoryBundle {
@@ -2878,6 +2880,33 @@ export class AppDataSyncService {
     }
 
     return this.parseRuntimeDirectoryBundle(buffer, meta)
+  }
+
+  private assertRuntimeDirectoryBundleBufferIntegrity(buffer: Buffer, meta: RemoteRuntimeDirectoryMeta) {
+    if (meta.compressedByteSize > 0 && buffer.byteLength !== meta.compressedByteSize) {
+      throw new Error(`远端 ${meta.name} 目录数据包大小不匹配。为避免发布损坏数据，本次同步已停止。`)
+    }
+
+    this.parseRuntimeDirectoryBundle(buffer, meta)
+  }
+
+  private async assertRemoteRuntimeDirectoryBundleIntegrity(
+    client: WebDAVClient,
+    remotePath: string,
+    meta: RemoteRuntimeDirectoryMeta
+  ) {
+    await this.assertRemoteFileWithinByteLimit(
+      client,
+      remotePath,
+      `远端 ${meta.name} 目录数据包`,
+      runtimeDirectoryCompressedByteLimit(getRuntimeDirectoryPolicy(meta.name))
+    )
+    const contents = await runWebDavOperation(
+      `verifying runtime directory bundle ${remotePath}`,
+      () => client.getFileContents(remotePath, { format: 'binary' }),
+      { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
+    )
+    this.assertRuntimeDirectoryBundleBufferIntegrity(bufferFromRemote(contents), meta)
   }
 
   private async applyRuntimeDirectoryBundle(meta: RemoteRuntimeDirectoryMeta, bundle: RuntimeDirectoryBundle) {
