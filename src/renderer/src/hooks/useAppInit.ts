@@ -76,7 +76,7 @@ export function useAppInit() {
   }, [])
 
   useEffect(() => {
-    window.electron.ipcRenderer.on(IpcChannel.App_SaveData, async (_, requestId?: string) => {
+    const removeListener = window.electron.ipcRenderer.on(IpcChannel.App_SaveData, async (_, requestId?: string) => {
       try {
         await handleSaveData()
         if (requestId) {
@@ -93,6 +93,8 @@ export function useAppInit() {
         }
       }
     })
+
+    return () => removeListener()
   }, [])
 
   useUpdateHandler()

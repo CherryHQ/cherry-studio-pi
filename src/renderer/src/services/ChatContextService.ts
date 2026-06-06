@@ -85,7 +85,7 @@ async function selectRecentMessageEntries(messages: Message[], budget: number) {
       break
     }
 
-    entries.unshift({ message, tokens })
+    entries.push({ message, tokens })
     totalTokens += tokens
 
     if (totalTokens >= budget) {
@@ -94,7 +94,7 @@ async function selectRecentMessageEntries(messages: Message[], budget: number) {
   }
 
   return {
-    entries,
+    entries: entries.reverse(),
     totalTokens,
     removed: messages.length - entries.length
   }

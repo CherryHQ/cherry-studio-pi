@@ -63,14 +63,15 @@ const SpanDetail: FC<SpanDetailProps> = ({ node, clickShowModal }) => {
 
   useEffect(() => {
     const updateCopyButtonTitles = () => {
-      const copyButtons = document.querySelectorAll('.copy-to-clipboard-container > span')
+      const root = document.querySelector('.trace-span-detail') ?? document
+      const copyButtons = root.querySelectorAll('.copy-to-clipboard-container > span')
       copyButtons.forEach((btn) => {
         btn.setAttribute('title', t('code_block.copy.label'))
       })
     }
 
     updateCopyButtonTitles()
-    const timer = setInterval(updateCopyButtonTitles, 100) // 每秒检查一次
+    const timer = setInterval(updateCopyButtonTitles, 1000)
 
     return () => clearInterval(timer)
   }, [t])
@@ -81,11 +82,12 @@ const SpanDetail: FC<SpanDetailProps> = ({ node, clickShowModal }) => {
     }
     const date = new Date(timestamp)
     const pad = (n: number) => n.toString().padStart(2, '0')
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds())}`
+    const milliseconds = date.getMilliseconds().toString().padStart(3, '0')
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${milliseconds}`
   }
 
   return (
-    <Box padding={5}>
+    <Box padding={5} className="trace-span-detail">
       <Box padding={0} style={{ marginBottom: 16 }}>
         <a
           onClick={(e) => {

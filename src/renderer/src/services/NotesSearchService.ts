@@ -175,19 +175,23 @@ export function matchFileName(node: NotesTreeNode, keyword: string, caseSensitiv
  */
 export function flattenTreeToFiles(nodes: NotesTreeNode[]): NotesTreeNode[] {
   const result: NotesTreeNode[] = []
+  const stack = [...nodes].reverse()
 
-  function traverse(nodes: NotesTreeNode[]) {
-    for (const node of nodes) {
-      if (node.type === 'file') {
-        result.push(node)
-      }
-      if (node.children && node.children.length > 0) {
-        traverse(node.children)
+  while (stack.length > 0) {
+    const node = stack.pop()
+    if (!node) continue
+
+    if (node.type === 'file') {
+      result.push(node)
+    }
+
+    if (node.children && node.children.length > 0) {
+      for (let index = node.children.length - 1; index >= 0; index -= 1) {
+        stack.push(node.children[index])
       }
     }
   }
 
-  traverse(nodes)
   return result
 }
 
@@ -210,15 +214,15 @@ export async function searchAllFiles(
     `Starting full-text search: keyword="${keyword}", totalFiles=${fileNodes.length}, options=${JSON.stringify(options)}`
   )
 
-  const queue = [...fileNodes]
+  let nextFileIndex = 0
 
   const worker = async () => {
-    while (queue.length > 0) {
+    while (nextFileIndex < fileNodes.length) {
       if (signal?.aborted) {
         break
       }
 
-      const node = queue.shift()
+      const node = fileNodes[nextFileIndex++]
       if (!node) break
 
       const nameMatch = matchFileName(node, keyword, options.caseSensitive)
@@ -249,13 +253,20 @@ export async function searchAllFiles(
 
   const endTime = performance.now()
   const duration = (endTime - startTime).toFixed(2)
+  const matchCounts = sortedResults.reduce(
+    (counts, result) => {
+      counts[result.matchType] += 1
+      return counts
+    },
+    { filename: 0, content: 0, both: 0 }
+  )
 
   logger.debug(
     `Full-text search completed: keyword="${keyword}", duration=${duration}ms, ` +
       `totalFiles=${fileNodes.length}, resultsFound=${sortedResults.length}, ` +
-      `filenameMatches=${sortedResults.filter((r) => r.matchType === 'filename').length}, ` +
-      `contentMatches=${sortedResults.filter((r) => r.matchType === 'content').length}, ` +
-      `bothMatches=${sortedResults.filter((r) => r.matchType === 'both').length}`
+      `filenameMatches=${matchCounts.filename}, ` +
+      `contentMatches=${matchCounts.content}, ` +
+      `bothMatches=${matchCounts.both}`
   )
 
   return sortedResults
