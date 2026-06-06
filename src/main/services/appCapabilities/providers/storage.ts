@@ -4,11 +4,25 @@ import type { AppCapabilityDefinition } from '../types'
 import { okResult, sanitizeForAgent } from '../utils'
 
 const DEFAULT_AGENT_LIST_LIMIT = 50
+const MAX_AGENT_LIST_LIMIT = 200
 
-function agentListOptions(input: any) {
+function normalizeListLimit(value: unknown) {
+  const parsed =
+    typeof value === 'string' && !value.trim() ? DEFAULT_AGENT_LIST_LIMIT : Number(value ?? DEFAULT_AGENT_LIST_LIMIT)
+  const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_AGENT_LIST_LIMIT
+  return Math.max(1, Math.min(safeLimit, MAX_AGENT_LIST_LIMIT))
+}
+
+function normalizeOffset(value: unknown) {
+  const parsed = typeof value === 'string' && !value.trim() ? undefined : Number(value)
+  if (parsed === undefined || !Number.isFinite(parsed)) return undefined
+  return Math.max(0, Math.trunc(parsed))
+}
+
+function agentListOptions(input: any = {}) {
   return {
-    limit: input?.limit ?? DEFAULT_AGENT_LIST_LIMIT,
-    offset: input?.offset
+    limit: normalizeListLimit(input?.limit),
+    offset: normalizeOffset(input?.offset)
   }
 }
 
@@ -173,7 +187,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       inputSchema: {
         type: 'object',
         properties: {
-          limit: { type: 'number', description: 'Maximum assistants to return; defaults to 50' },
+          limit: { type: 'number', description: 'Maximum assistants to return; defaults to 50 and is capped at 200' },
           offset: { type: 'number', description: 'Pagination offset' }
         }
       },
@@ -191,7 +205,10 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
         properties: {
           ownerType: { type: 'string' },
           ownerId: { type: 'string' },
-          limit: { type: 'number', description: 'Maximum conversations to return; defaults to 50' },
+          limit: {
+            type: 'number',
+            description: 'Maximum conversations to return; defaults to 50 and is capped at 200'
+          },
           offset: { type: 'number', description: 'Pagination offset' }
         }
       },
@@ -219,7 +236,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
         type: 'object',
         properties: {
           conversationId: { type: 'string' },
-          limit: { type: 'number' },
+          limit: { type: 'number', description: 'Maximum messages to return; defaults to 50 and is capped at 200' },
           offset: { type: 'number' }
         },
         required: ['conversationId']
@@ -229,12 +246,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any) =>
         okResult(
           'Conversation messages listed',
-          sanitizeForAgent(
-            await storageV2Service.listMessages(String(input?.conversationId), {
-              limit: input?.limit,
-              offset: input?.offset
-            })
-          )
+          sanitizeForAgent(await storageV2Service.listMessages(String(input?.conversationId), agentListOptions(input)))
         )
     },
     {
@@ -246,7 +258,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       inputSchema: {
         type: 'object',
         properties: {
-          limit: { type: 'number', description: 'Maximum files to return; defaults to 50' },
+          limit: { type: 'number', description: 'Maximum files to return; defaults to 50 and is capped at 200' },
           offset: { type: 'number', description: 'Pagination offset' }
         }
       },

@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   storageV2Service: {
     listAssistants: vi.fn(),
     listConversations: vi.fn(),
+    listMessages: vi.fn(),
     listFiles: vi.fn()
   }
 }))
@@ -34,18 +35,24 @@ describe('storage app capabilities', () => {
     vi.clearAllMocks()
     mocks.storageV2Service.listAssistants.mockResolvedValue([])
     mocks.storageV2Service.listConversations.mockResolvedValue([])
+    mocks.storageV2Service.listMessages.mockResolvedValue([])
     mocks.storageV2Service.listFiles.mockResolvedValue([])
   })
 
   it('defaults large Storage v2 lists to bounded pages for agents', async () => {
     await capability('storage.assistants.list').execute({}, { source: 'agent' })
     await capability('storage.conversations.list').execute({ ownerType: 'assistant' }, { source: 'agent' })
+    await capability('storage.messages.list').execute({ conversationId: 'conversation-1' }, { source: 'agent' })
     await capability('storage.files.list').execute({}, { source: 'agent' })
 
     expect(mocks.storageV2Service.listAssistants).toHaveBeenCalledWith({ limit: 50, offset: undefined })
     expect(mocks.storageV2Service.listConversations).toHaveBeenCalledWith({
       ownerType: 'assistant',
       ownerId: undefined,
+      limit: 50,
+      offset: undefined
+    })
+    expect(mocks.storageV2Service.listMessages).toHaveBeenCalledWith('conversation-1', {
       limit: 50,
       offset: undefined
     })
@@ -66,5 +73,19 @@ describe('storage app capabilities', () => {
       offset: 24
     })
     expect(mocks.storageV2Service.listFiles).toHaveBeenCalledWith({ limit: 5, offset: 10 })
+  })
+
+  it('clamps unsafe Storage v2 list pagination from agent input', async () => {
+    await capability('storage.assistants.list').execute({ limit: 5000, offset: -8 }, { source: 'agent' })
+    await capability('storage.messages.list').execute(
+      { conversationId: 'conversation-1', limit: 'bad', offset: '12.8' },
+      { source: 'agent' }
+    )
+
+    expect(mocks.storageV2Service.listAssistants).toHaveBeenCalledWith({ limit: 200, offset: 0 })
+    expect(mocks.storageV2Service.listMessages).toHaveBeenCalledWith('conversation-1', {
+      limit: 50,
+      offset: 12
+    })
   })
 })
