@@ -137,6 +137,7 @@ type RuntimeDirectoryPolicy = {
   name: RuntimeDirectoryName
   maxTotalBytes: number
   maxFileBytes: number
+  maxFileCount: number
   snapshot?: 'memory'
 }
 
@@ -320,27 +321,32 @@ const RUNTIME_DIRECTORIES_REMOTE_ROOT = 'runtime-directories'
 const RUNTIME_DIRECTORY_SYNC_STATE_PREFIX = 'runtime-directory'
 const RUNTIME_DIRECTORY_DEFAULT_MAX_FILE_BYTES = 8 * 1024 * 1024
 const RUNTIME_DIRECTORY_DEFAULT_MAX_TOTAL_BYTES = 32 * 1024 * 1024
+const RUNTIME_DIRECTORY_DEFAULT_MAX_FILE_COUNT = 10_000
 const RUNTIME_DIRECTORY_POLICIES: readonly RuntimeDirectoryPolicy[] = [
   {
     name: 'Memory',
     maxFileBytes: 16 * 1024 * 1024,
     maxTotalBytes: 64 * 1024 * 1024,
+    maxFileCount: RUNTIME_DIRECTORY_DEFAULT_MAX_FILE_COUNT,
     snapshot: 'memory'
   },
   {
     name: 'Skills',
     maxFileBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_FILE_BYTES,
-    maxTotalBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_TOTAL_BYTES
+    maxTotalBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_TOTAL_BYTES,
+    maxFileCount: RUNTIME_DIRECTORY_DEFAULT_MAX_FILE_COUNT
   },
   {
     name: 'MCP',
     maxFileBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_FILE_BYTES,
-    maxTotalBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_TOTAL_BYTES
+    maxTotalBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_TOTAL_BYTES,
+    maxFileCount: RUNTIME_DIRECTORY_DEFAULT_MAX_FILE_COUNT
   },
   {
     name: 'Channels',
     maxFileBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_FILE_BYTES,
-    maxTotalBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_TOTAL_BYTES
+    maxTotalBytes: RUNTIME_DIRECTORY_DEFAULT_MAX_TOTAL_BYTES,
+    maxFileCount: RUNTIME_DIRECTORY_DEFAULT_MAX_FILE_COUNT
   }
 ] as const
 const LEGACY_REMOTE_SYNC_LOCK_FILE = '.sync.lock.json'
@@ -654,6 +660,18 @@ function getRuntimeDirectoryPolicy(value: string): RuntimeDirectoryPolicy {
 
 function runtimeDirectoryCompressedByteLimit(policy: RuntimeDirectoryPolicy) {
   return Math.max(policy.maxTotalBytes * 2, policy.maxTotalBytes + 1024 * 1024)
+}
+
+function runtimeDirectoryBundleJsonByteLimit(
+  policy: RuntimeDirectoryPolicy,
+  meta: Pick<RemoteRuntimeDirectoryMeta, 'byteSize' | 'fileCount'>
+) {
+  const expectedPayloadBytes =
+    meta.byteSize > 0 && Number.isFinite(meta.byteSize) ? Math.min(meta.byteSize, policy.maxTotalBytes) : 0
+  const expectedBase64Bytes = Math.ceil((expectedPayloadBytes * 4) / 3)
+  const declaredFileCount = Math.min(Math.max(Number(meta.fileCount) || 1, 1), policy.maxFileCount)
+  const metadataBudget = declaredFileCount * 512 + 1024 * 1024
+  return Math.max(2 * 1024 * 1024, Math.min(policy.maxTotalBytes * 4, expectedBase64Bytes + metadataBudget))
 }
 
 function shouldAttemptRemoteFullSnapshotUpload() {
@@ -2503,6 +2521,11 @@ export class AppDataSyncService {
           mode: stat.mode & 0o777,
           contentBase64: contents.toString('base64')
         })
+        if (files.length > policy.maxFileCount) {
+          throw new Error(
+            `${policy.name} 目录文件数量过多（超过 ${policy.maxFileCount} 个）。为避免 WebDAV 流量或频率限制，本次同步已停止；请清理该目录或改用完整备份。`
+          )
+        }
       }
     }
 
@@ -2595,7 +2618,9 @@ export class AppDataSyncService {
     const policy = getRuntimeDirectoryPolicy(meta.name)
     let bundle: RuntimeDirectoryBundle
     try {
-      bundle = JSON.parse(gunzipSync(buffer).toString('utf8')) as RuntimeDirectoryBundle
+      bundle = JSON.parse(
+        gunzipSync(buffer, { maxOutputLength: runtimeDirectoryBundleJsonByteLimit(policy, meta) }).toString('utf8')
+      ) as RuntimeDirectoryBundle
     } catch (error) {
       throw new Error(
         `远端 ${meta.name} 目录数据包无法解压或解析。为避免写入损坏数据，本次同步已停止：${errorMessage(error)}`
@@ -2607,6 +2632,11 @@ export class AppDataSyncService {
     }
 
     const files = Object.values(bundle.files).sort((left, right) => left.relativePath.localeCompare(right.relativePath))
+    if (files.length > policy.maxFileCount) {
+      throw new Error(
+        `远端 ${meta.name} 目录文件数量过多（${files.length} 个，限制 ${policy.maxFileCount} 个）。为避免 WebDAV 流量或频率限制，本次同步已停止。`
+      )
+    }
     let totalBytes = 0
     for (const file of files) {
       normalizeNotesRelativePath(file.relativePath, `Remote ${meta.name} directory file path`)
@@ -2645,6 +2675,11 @@ export class AppDataSyncService {
 
   private async pullRuntimeDirectoryBundle(client: WebDAVClient, basePath: string, meta: RemoteRuntimeDirectoryMeta) {
     const policy = getRuntimeDirectoryPolicy(meta.name)
+    if (meta.fileCount > policy.maxFileCount) {
+      throw new Error(
+        `远端 ${meta.name} 目录文件数量过多（${meta.fileCount} 个，限制 ${policy.maxFileCount} 个）。为避免 WebDAV 流量或频率限制，本次同步已停止。`
+      )
+    }
     if (meta.byteSize > policy.maxTotalBytes) {
       throw new Error(
         `远端 ${meta.name} 目录过大（${meta.byteSize} 字节，限制 ${policy.maxTotalBytes} 字节）。为避免 WebDAV 流量或频率限制，本次同步已停止。`

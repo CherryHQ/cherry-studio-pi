@@ -1,6 +1,7 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { Readable } from 'node:stream'
+import { gzipSync } from 'node:zlib'
 
 import type { WebDavConfig } from '@types'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -1456,6 +1457,52 @@ describe('AppDataSyncService', () => {
         String(filePath).includes('/runtime-directories/bundles/Skills/')
       )
     ).toBe(false)
+    expect(mocks.runtimeProjection.projectAgents).not.toHaveBeenCalled()
+    expect(mocks.runtimeProjection.projectFiles).not.toHaveBeenCalled()
+    expect(mocks.runtimeProjection.projectAppData).not.toHaveBeenCalled()
+  })
+
+  it('rejects remote runtime directory bundles that expand beyond the JSON budget', async () => {
+    const bundleHash = 'b'.repeat(64)
+    const remoteBundlePath = `/remote-root/sync/v1/runtime-directories/bundles/Skills/${bundleHash}.json.gz`
+    const compressedBomb = gzipSync(Buffer.alloc(3 * 1024 * 1024, 0x20), { level: 9 })
+    mocks.remoteFiles.set(remoteBundlePath, compressedBomb)
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
+      if (mocks.remoteFiles.has(filePath)) {
+        return mocks.remoteFiles.get(filePath)
+      }
+
+      if (filePath.endsWith('/manifest.json')) {
+        return JSON.stringify({
+          version: 1,
+          updatedAt: 1760000000000,
+          records: {},
+          runtimeDirectories: {
+            version: 1,
+            updatedAt: 1760000000000,
+            directories: {
+              Skills: {
+                version: 1,
+                name: 'Skills',
+                valueHash: bundleHash,
+                byteSize: 1,
+                compressedByteSize: compressedBomb.byteLength,
+                fileCount: 1,
+                updatedAt: 1760000000000,
+                deviceId: 'device-b',
+                path: `runtime-directories/bundles/Skills/${bundleHash}.json.gz`
+              }
+            }
+          }
+        })
+      }
+
+      throw new Error(`Unexpected WebDAV read: ${filePath}`)
+    })
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端 Skills 目录数据包无法解压或解析')
+
+    expect(mocks.webdav.getFileContents).toHaveBeenCalledWith(remoteBundlePath, { format: 'binary' })
     expect(mocks.runtimeProjection.projectAgents).not.toHaveBeenCalled()
     expect(mocks.runtimeProjection.projectFiles).not.toHaveBeenCalled()
     expect(mocks.runtimeProjection.projectAppData).not.toHaveBeenCalled()
