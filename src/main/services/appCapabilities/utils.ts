@@ -4,7 +4,7 @@ import { isMac } from '@main/constant'
 import { windowService } from '@main/services/WindowService'
 import { isPathInside } from '@main/utils/file'
 
-const SENSITIVE_KEY_PATTERN = /api[-_]?key|token|secret|pass|password|authorization|cookie/i
+const SENSITIVE_KEY_PATTERN = /api[-_]?key|private[-_]?key|token|secret|pass|password|authorization|cookie/i
 const CIRCULAR_REFERENCE_PLACEHOLDER = '[Circular]'
 const NAVIGATION_ROUTE_PREFIXES = ['/', '/settings', '/knowledge', '/paintings', '/notes', '/agents']
 const MAX_AGENT_STRING_CHARS = 8_000

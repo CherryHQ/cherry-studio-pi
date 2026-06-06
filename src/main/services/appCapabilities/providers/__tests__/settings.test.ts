@@ -41,6 +41,9 @@ describe('settings app capabilities', () => {
         port: 23333,
         apiKey: 'server-secret'
       },
+      serviceAccount: {
+        privateKey: '-----BEGIN PRIVATE KEY-----'
+      },
       webdavPass: 'dav-secret'
     })
     mocks.reduxService.dispatch.mockResolvedValue(undefined)
@@ -63,6 +66,10 @@ describe('settings app capabilities', () => {
   it('redacts sensitive single setting values by path', async () => {
     const apiKey = await capability('settings.value.get').execute({ path: 'apiServer.apiKey' }, { source: 'agent' })
     const webdavPass = await capability('settings.value.get').execute({ path: 'webdavPass' }, { source: 'agent' })
+    const privateKey = await capability('settings.value.get').execute(
+      { path: 'serviceAccount.privateKey' },
+      { source: 'agent' }
+    )
 
     expect(apiKey.data).toEqual({
       path: 'apiServer.apiKey',
@@ -70,6 +77,10 @@ describe('settings app capabilities', () => {
     })
     expect(webdavPass.data).toEqual({
       path: 'webdavPass',
+      value: '[redacted]'
+    })
+    expect(privateKey.data).toEqual({
+      path: 'serviceAccount.privateKey',
       value: '[redacted]'
     })
   })

@@ -18,6 +18,8 @@ describe('app capability utils', () => {
           value: 'nested secret should not be traversed'
         },
         cookieJar: ['session-secret'],
+        privateKey: '-----BEGIN PRIVATE KEY-----',
+        private_key: '-----BEGIN PRIVATE KEY-----',
         hasPassword: true,
         nested: {
           name: 'visible',
@@ -29,6 +31,8 @@ describe('app capability utils', () => {
       authorization: '[redacted]',
       authToken: '[redacted]',
       cookieJar: '[redacted]',
+      privateKey: '[redacted]',
+      private_key: '[redacted]',
       hasPassword: true,
       nested: {
         name: 'visible',

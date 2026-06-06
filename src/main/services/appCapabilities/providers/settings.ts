@@ -82,7 +82,7 @@ export const SETTINGS_SETTERS: Record<string, string> = {
 }
 
 const pathEnum = Object.keys(SETTINGS_SETTERS).sort()
-const SENSITIVE_SETTING_PATH_PATTERN = /api[-_]?key|token|secret|pass|password|authorization|cookie/i
+const SENSITIVE_SETTING_PATH_PATTERN = /api[-_]?key|private[-_]?key|token|secret|pass|password|authorization|cookie/i
 
 function sanitizeSettingValueForAgent(keyPath: string, value: unknown) {
   if (SENSITIVE_SETTING_PATH_PATTERN.test(keyPath)) {
