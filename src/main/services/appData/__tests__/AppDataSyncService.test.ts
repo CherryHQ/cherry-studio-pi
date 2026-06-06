@@ -604,6 +604,16 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('rejects oversized remote lock files before downloading their contents', async () => {
+    const lockPath = '/remote-root/sync/v1/.sync.lock.json'
+    mocks.remoteFiles.set(lockPath, Buffer.alloc(65 * 1024))
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端同步锁读取失败')
+
+    expect(mocks.webdav.getFileContents).not.toHaveBeenCalledWith(lockPath, { format: 'binary' })
+    expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
+  })
+
   it('rejects active remote lock claims from another device before mutating records', async () => {
     mockDirectoryContentsFromRemoteFiles()
     const now = Date.now()
@@ -635,6 +645,31 @@ describe('AppDataSyncService', () => {
       'ok',
       expect.anything()
     )
+  })
+
+  it('rejects oversized remote lock claim directories before reading every lock file', async () => {
+    mockDirectoryContentsFromRemoteFiles()
+    for (let index = 0; index < 257; index += 1) {
+      mocks.remoteFiles.set(
+        `/remote-root/sync/v1/.sync.locks/device-${index}.token-${index}.json`,
+        JSON.stringify({
+          version: 1,
+          ownerId: `device-${index}`,
+          token: `token-${index}`,
+          runtimeId: `runtime-${index}`,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          expiresAt: Date.now() + 2 * 60 * 1000,
+          leaseMs: 2 * 60 * 1000,
+          app: 'cherry-studio-pi',
+          reason: 'data-sync'
+        })
+      )
+    }
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端同步锁目录异常')
+
+    expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
   })
 
   it('reclaims a previous lock left by the same device before syncing', async () => {
@@ -2219,7 +2254,7 @@ describe('AppDataSyncService', () => {
     )
   })
 
-  it('times out a hung sync, stops reporting syncing, and does not publish the manifest later', async () => {
+  it('keeps reporting syncing while a timed-out background sync is still exiting', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-05T08:00:00.000Z'))
     process.env.CHERRY_STUDIO_DATA_SYNC_MAX_RUNTIME_MS = '1000'
@@ -2265,8 +2300,8 @@ describe('AppDataSyncService', () => {
     await timeoutExpectation
     await expect(service.getStatus()).resolves.toEqual(
       expect.objectContaining({
-        syncing: false,
-        syncStartedAt: null
+        syncing: true,
+        syncStartedAt: expect.any(Number)
       })
     )
 
@@ -2296,6 +2331,12 @@ describe('AppDataSyncService', () => {
     expect(
       mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/manifest.json'))
     ).toBe(false)
+    await expect(service.getStatus()).resolves.toEqual(
+      expect.objectContaining({
+        syncing: false,
+        syncStartedAt: null
+      })
+    )
   })
 
   it('does not start another sync while a timed-out background sync is still exiting', async () => {
@@ -2329,8 +2370,8 @@ describe('AppDataSyncService', () => {
     await timeoutExpectation
     await expect(service.getStatus()).resolves.toEqual(
       expect.objectContaining({
-        syncing: false,
-        syncStartedAt: null
+        syncing: true,
+        syncStartedAt: expect.any(Number)
       })
     )
 

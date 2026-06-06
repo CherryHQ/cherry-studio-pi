@@ -356,6 +356,8 @@ const RUNTIME_DIRECTORY_POLICIES: readonly RuntimeDirectoryPolicy[] = [
 ] as const
 const LEGACY_REMOTE_SYNC_LOCK_FILE = '.sync.lock.json'
 const REMOTE_SYNC_LOCK_DIR = '.sync.locks'
+const REMOTE_SYNC_LOCK_MAX_BYTES = 64 * 1024
+const REMOTE_SYNC_LOCK_CLAIM_MAX_COUNT = 256
 const REMOTE_SYNC_LOCK_TTL_MS = 2 * 60 * 1000
 const REMOTE_SYNC_LOCK_RENEW_INTERVAL_MS = 30 * 1000
 const REMOTE_SYNC_LOCK_STALE_HEARTBEAT_MS = 3 * 60 * 1000
@@ -905,6 +907,12 @@ export class AppDataSyncService {
     })
   }
 
+  private clearSyncStartedAtIfIdle() {
+    if (!this.syncInFlight && !this.syncBackgroundInFlight) {
+      this.syncStartedAt = null
+    }
+  }
+
   private createWebDavClient(config: WebDavConfig) {
     const normalizedConfig = this.normalizeSyncWebDavConfig(config)
     const webdavHost = normalizeWebDavHost(normalizedConfig.webdavHost)
@@ -1403,7 +1411,9 @@ export class AppDataSyncService {
     try {
       return this.normalizeRemoteLock(
         await this.readJson<RemoteSyncLock>(client, lockPath, {
-          throwOnInvalidJson: true
+          throwOnInvalidJson: true,
+          maxBytes: REMOTE_SYNC_LOCK_MAX_BYTES,
+          label: '远端同步锁'
         })
       )
     } catch (error) {
@@ -1598,11 +1608,16 @@ export class AppDataSyncService {
       { logger }
     )
     const entries = normalizeDirectoryContents(contents)
+    const fileEntries = entries.filter((entry) => entry.type !== 'directory')
+    if (fileEntries.length > REMOTE_SYNC_LOCK_CLAIM_MAX_COUNT) {
+      throw new Error(
+        `远端同步锁目录异常：发现 ${fileEntries.length} 个锁文件，限制 ${REMOTE_SYNC_LOCK_CLAIM_MAX_COUNT} 个。为避免同步在锁检查阶段长时间卡住，本次同步已停止；如果确认没有其他设备正在同步，请清理远端 ${REMOTE_SYNC_LOCK_DIR} 目录后重试。`
+      )
+    }
     const claims: RemoteSyncLockEntry[] = []
     const normalizedLockDir = path.posix.normalize(lockDir).replace(/\/+$/g, '')
 
-    for (const entry of entries) {
-      if (entry.type === 'directory') continue
+    for (const entry of fileEntries) {
       const filename = entry.filename || path.posix.join(lockDir, entry.basename || '')
       if (!filename || !filename.endsWith('.json')) continue
       const lockPath = path.posix.normalize(filename)
@@ -3439,6 +3454,7 @@ export class AppDataSyncService {
       .finally(() => {
         if (this.syncBackgroundInFlight === backgroundSync) {
           this.syncBackgroundInFlight = null
+          this.clearSyncStartedAtIfIdle()
         }
       })
       .catch(() => undefined)
@@ -3453,7 +3469,7 @@ export class AppDataSyncService {
     } finally {
       if (this.syncInFlight === sync) {
         this.syncInFlight = null
-        this.syncStartedAt = null
+        this.clearSyncStartedAtIfIdle()
       }
     }
   }
@@ -3814,7 +3830,7 @@ export class AppDataSyncService {
       deviceId: storageDeviceId ?? db.getDeviceId(),
       lastSummary,
       conflicts: conflicts.length > 0 ? conflicts : await storageV2AppDataKvMirrorService.listSyncConflicts(true),
-      syncing: Boolean(this.syncInFlight),
+      syncing: Boolean(this.syncInFlight || this.syncBackgroundInFlight),
       syncStartedAt: this.syncStartedAt
     }
   }
