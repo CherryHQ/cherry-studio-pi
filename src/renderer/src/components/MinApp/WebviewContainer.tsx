@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import { useSettings } from '@renderer/hooks/useSettings'
 import type { WebviewTag } from 'electron'
 import { memo, useEffect, useRef } from 'react'
@@ -129,7 +130,7 @@ const WebviewContainer = memo(
             const filePath = await window.api.webview.printToPDF(webviewId)
             if (filePath) {
               window.toast?.success?.(`PDF saved to: ${filePath}`)
-              logger.info(`PDF saved to: ${filePath}`)
+              logger.info('PDF saved from webview', { filePath: summarizeTextForLog(filePath) })
             }
           } else if (key === 's') {
             // Save as HTML
@@ -137,7 +138,7 @@ const WebviewContainer = memo(
             const filePath = await window.api.webview.saveAsHTML(webviewId)
             if (filePath) {
               window.toast?.success?.(`HTML saved to: ${filePath}`)
-              logger.info(`HTML saved to: ${filePath}`)
+              logger.info('HTML saved from webview', { filePath: summarizeTextForLog(filePath) })
             }
           }
         } catch (error) {

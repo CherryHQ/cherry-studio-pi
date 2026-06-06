@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeTextForLog, summarizeUrlForLog } from '@renderer/aiCore/utils/logging'
 import type { WebSearchState } from '@renderer/store/websearch'
 import type { WebSearchProviderResponse } from '@renderer/types'
 
@@ -189,7 +190,7 @@ export async function parseSubscribeContent(url: string): Promise<string[]> {
     // 获取订阅源内容
     const response = await fetch(url)
     logger.debug('Fetched blacklist subscribe content', {
-      url,
+      url: summarizeUrlForLog(url),
       status: response.status,
       ok: response.ok
     })
@@ -291,14 +292,14 @@ export async function filterResultWithBlacklist(
         const regexPattern = pattern.slice(1, -1)
         regexPatterns.push(new RegExp(regexPattern, 'i'))
       } catch (error) {
-        logger.error(`Invalid regex pattern: ${pattern}`, error as Error)
+        logger.error('Invalid regex pattern', { pattern: summarizeTextForLog(pattern), error })
       }
     } else {
       // 处理匹配模式格式
       try {
         patternMap.set(pattern, pattern)
       } catch (error) {
-        logger.error(`Invalid match pattern: ${pattern}`, error as Error)
+        logger.error('Invalid match pattern', { pattern: summarizeTextForLog(pattern), error })
       }
     }
   })
@@ -318,7 +319,7 @@ export async function filterResultWithBlacklist(
       const matchesPattern = patternMap.get(result.url).length > 0
       return !matchesPattern
     } catch (error) {
-      logger.error(`Error processing URL: ${result.url}`, error as Error)
+      logger.error('Error processing blacklist result URL', { url: summarizeUrlForLog(result.url), error })
       return true // 如果URL解析失败，保留该结果
     }
   })

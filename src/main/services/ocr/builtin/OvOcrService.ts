@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { isWin } from '@main/constant'
+import { summarizeTextForLog } from '@main/utils/logging'
 import { HOME_CHERRY_DIR } from '@shared/config/constant'
 import type { OcrOvConfig, OcrResult, SupportedOcrFile } from '@types'
 import { isImageFileMetadata } from '@types'
@@ -94,7 +95,10 @@ export class OvOcrService extends OcrBaseService {
   }
 
   private async ocrImage(filePath: string, options?: OcrOvConfig): Promise<OcrResult> {
-    logger.info('OV OCR called', { filePath, options: summarizeOvOcrOptionsForLog(options) })
+    logger.info('OV OCR called', {
+      filePath: summarizeTextForLog(filePath),
+      options: summarizeOvOcrOptionsForLog(options)
+    })
 
     try {
       // 1. Clear img directory and output directory

@@ -49,6 +49,33 @@ export function summarizeTextForLog(input: unknown): Record<string, unknown> {
   }
 }
 
+export function summarizeUrlForLog(input: unknown): Record<string, unknown> {
+  if (typeof input !== 'string') {
+    return { value: summarizeObjectShapeForLog(input) }
+  }
+
+  try {
+    const url = new URL(input)
+    return {
+      type: 'url',
+      protocol: url.protocol,
+      host: url.host,
+      pathnameLength: url.pathname.length,
+      searchLength: url.search.length,
+      hashLength: url.hash.length,
+      hasSearch: url.search.length > 0,
+      hasHash: url.hash.length > 0
+    }
+  } catch {
+    return {
+      type: 'url',
+      valid: false,
+      length: input.length,
+      trimmedLength: input.trim().length
+    }
+  }
+}
+
 export function summarizeMessagesForLog(messages: unknown[]) {
   const roleSampleLimit = 50
   const sampledMessages = messages.slice(0, roleSampleLimit)

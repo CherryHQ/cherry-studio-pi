@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { t } from '@main/utils/locales'
+import { summarizeUrlForLog } from '@main/utils/logging'
 import { IpcChannel } from '@shared/IpcChannel'
 import { app, dialog, session, shell, webContents } from 'electron'
 import { promises as fs } from 'fs'
@@ -43,7 +44,7 @@ export function setOpenLinkExternal(webviewId: number, isExternal: boolean) {
       if (isSafeExternalUrl(url)) {
         void shell.openExternal(url)
       } else {
-        logger.warn(`Blocked shell.openExternal for untrusted URL scheme: ${url}`)
+        logger.warn('Blocked shell.openExternal for untrusted URL scheme', { url: summarizeUrlForLog(url) })
       }
       return { action: 'deny' }
     } else {

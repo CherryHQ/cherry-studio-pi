@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeUrlForLog } from '@renderer/aiCore/utils/logging'
 import WebviewContainer from '@renderer/components/MinApp/WebviewContainer'
 import { useRuntime } from '@renderer/hooks/useRuntime'
 import { useNavbarPosition } from '@renderer/hooks/useSettings'
@@ -58,7 +59,7 @@ const MinAppTabsPool: React.FC = () => {
 
   /** 记录导航（暂未外曝 URL 状态，后续可接入全局 URL Map） */
   const handleNavigate = (appid: string, url: string) => {
-    logger.debug(`TabPool webview navigate: ${appid} -> ${url}`)
+    logger.debug('TabPool webview navigate', { appid, url: summarizeUrlForLog(url) })
   }
 
   /** 切换显示状态：仅当前 active 的显示，其余隐藏 */

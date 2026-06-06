@@ -2,6 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk'
 import type { MessageCreateParams, MessageStreamEvent } from '@anthropic-ai/sdk/resources'
 import { loggerService } from '@logger'
 import anthropicService from '@main/services/AnthropicService'
+import { summarizeUrlForLog } from '@main/utils/logging'
 import { getSdkClient } from '@shared/anthropic'
 import type { Provider } from '@types'
 import type { Response } from 'express'
@@ -206,8 +207,8 @@ export class MessagesService {
         error: streamError,
         provider: provider.id,
         model: request.model,
-        apiHost: provider.apiHost,
-        anthropicApiHost: provider.anthropicApiHost
+        apiHost: summarizeUrlForLog(provider.apiHost),
+        anthropicApiHost: summarizeUrlForLog(provider.anthropicApiHost)
       })
       writeSse(undefined, {
         type: 'error',

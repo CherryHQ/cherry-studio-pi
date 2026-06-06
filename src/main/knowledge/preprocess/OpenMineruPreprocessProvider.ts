@@ -3,6 +3,7 @@ import path from 'node:path'
 
 import { loggerService } from '@logger'
 import { fileStorage } from '@main/services/FileStorage'
+import { summarizeTextForLog } from '@main/utils/logging'
 import type { FileMetadata, PreprocessProvider } from '@types'
 import AdmZip from 'adm-zip'
 import { net } from 'electron'
@@ -10,7 +11,7 @@ import FormData from 'form-data'
 
 import BasePreprocessProvider from './BasePreprocessProvider'
 
-const logger = loggerService.withContext('MineruPreprocessProvider')
+const logger = loggerService.withContext('OpenMineruPreprocessProvider')
 
 export default class OpenMineruPreprocessProvider extends BasePreprocessProvider {
   constructor(provider: PreprocessProvider, userId?: string) {
@@ -20,7 +21,7 @@ export default class OpenMineruPreprocessProvider extends BasePreprocessProvider
   public async parseFile(sourceId: string, file: FileMetadata): Promise<{ processedFile: FileMetadata }> {
     try {
       const filePath = fileStorage.getFilePathById(file)
-      logger.info(`Open MinerU preprocess processing started: ${filePath}`)
+      logger.info('Open MinerU preprocess processing started', { filePath: summarizeTextForLog(filePath) })
       await this.validateFile(filePath)
 
       // 1. Update progress
@@ -42,7 +43,7 @@ export default class OpenMineruPreprocessProvider extends BasePreprocessProvider
 
   private async validateFile(filePath: string): Promise<void> {
     // 第一阶段:检查文件大小(无需读取文件到内存)
-    logger.info(`Validating PDF file: ${filePath}`)
+    logger.info('Validating PDF file', { filePath: summarizeTextForLog(filePath) })
     const stats = await fs.promises.stat(filePath)
     const fileSizeBytes = stats.size
 
@@ -106,7 +107,7 @@ export default class OpenMineruPreprocessProvider extends BasePreprocessProvider
         }
       }
     } catch (error) {
-      logger.warn(`Failed to read output directory ${outputPath}:`, error as Error)
+      logger.warn('Failed to read output directory', { outputPath: summarizeTextForLog(outputPath), error })
       finalPath = path.join(outputPath, `${file.id}.md`)
     }
 
@@ -188,7 +189,7 @@ export default class OpenMineruPreprocessProvider extends BasePreprocessProvider
 
         const arrayBuffer = await response.arrayBuffer()
         fs.writeFileSync(zipPath, Buffer.from(arrayBuffer))
-        logger.info(`Downloaded ZIP file: ${zipPath}`)
+        logger.info('Downloaded Open MinerU ZIP file', { zipPath: summarizeTextForLog(zipPath) })
 
         // Ensure extraction directory exists
         if (!fs.existsSync(extractPath)) {
@@ -198,7 +199,7 @@ export default class OpenMineruPreprocessProvider extends BasePreprocessProvider
         // Extract files
         const zip = new AdmZip(zipPath)
         zip.extractAllTo(extractPath, true)
-        logger.info(`Extracted files to: ${extractPath}`)
+        logger.info('Extracted Open MinerU files', { extractPath: summarizeTextForLog(extractPath) })
 
         return { path: extractPath }
       } catch (error) {
@@ -213,9 +214,12 @@ export default class OpenMineruPreprocessProvider extends BasePreprocessProvider
         if (zipPath && fs.existsSync(zipPath)) {
           try {
             fs.unlinkSync(zipPath)
-            logger.info(`Deleted temporary ZIP file: ${zipPath}`)
+            logger.info('Deleted temporary Open MinerU ZIP file', { zipPath: summarizeTextForLog(zipPath) })
           } catch (deleteError) {
-            logger.warn(`Failed to delete temporary ZIP file ${zipPath}:`, deleteError as Error)
+            logger.warn('Failed to delete temporary Open MinerU ZIP file', {
+              zipPath: summarizeTextForLog(zipPath),
+              error: deleteError
+            })
           }
         }
       }

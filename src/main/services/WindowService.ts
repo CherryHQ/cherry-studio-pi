@@ -5,6 +5,7 @@ import { is } from '@electron-toolkit/utils'
 import { loggerService } from '@logger'
 import { isDev, isLinux, isMac, isWin } from '@main/constant'
 import { getFilesDir } from '@main/utils/file'
+import { summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
 import { getWindowsBackgroundMaterial } from '@main/utils/windowUtil'
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH } from '@shared/config/constant'
 import { IpcChannel } from '@shared/IpcChannel'
@@ -286,7 +287,7 @@ export class WindowService {
       if (isSafeExternalUrl(url)) {
         void shell.openExternal(url)
       } else {
-        logger.warn(`Blocked navigation to untrusted URL scheme: ${url}`)
+        logger.warn('Blocked navigation to untrusted URL scheme', { url: summarizeUrlForLog(url) })
       }
     })
 
@@ -326,14 +327,14 @@ export class WindowService {
         const filePath = path.resolve(storageDir, fileName)
         // Prevent path traversal: ensure resolved path is within storageDir
         if (!filePath.startsWith(path.resolve(storageDir) + path.sep)) {
-          logger.warn(`Blocked path traversal attempt: ${fileName}`)
+          logger.warn('Blocked path traversal attempt', { fileName: summarizeTextForLog(fileName) })
         } else {
           shell.openPath(filePath).catch((err) => logger.error('Failed to open file:', err))
         }
       } else if (isSafeExternalUrl(details.url)) {
         void shell.openExternal(details.url)
       } else {
-        logger.warn(`Blocked shell.openExternal for untrusted URL scheme: ${details.url}`)
+        logger.warn('Blocked shell.openExternal for untrusted URL scheme', { url: summarizeUrlForLog(details.url) })
       }
 
       return { action: 'deny' }

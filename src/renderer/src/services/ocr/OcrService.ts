@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import type { OcrProvider, OcrResult, SupportedOcrFile } from '@renderer/types'
 import { isOcrApiProvider } from '@renderer/types'
 
@@ -14,7 +15,7 @@ const logger = loggerService.withContext('renderer:OcrService')
  * @throws {Error}
  */
 export const ocr = async (file: SupportedOcrFile, provider: OcrProvider): Promise<OcrResult> => {
-  logger.info(`ocr file ${file.path}`)
+  logger.info('OCR file requested', { path: summarizeTextForLog(file.path) })
   if (isOcrApiProvider(provider)) {
     const client = OcrApiClientFactory.create(provider)
     return client.ocr(file, provider.config)

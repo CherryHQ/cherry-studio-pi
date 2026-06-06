@@ -122,7 +122,7 @@ export default class PaddleocrPreprocessProvider extends BasePreprocessProvider 
   public async parseFile(sourceId: string, file: FileMetadata): Promise<{ processedFile: FileMetadata }> {
     try {
       const filePath = fileStorage.getFilePathById(file)
-      logger.info(`PaddleOCR preprocess processing started: ${filePath}`)
+      logger.info('PaddleOCR preprocess processing started', { filePath: summarizeTextForLog(filePath) })
 
       const fileBuffer = await this.validateFile(filePath)
 
@@ -171,7 +171,7 @@ export default class PaddleocrPreprocessProvider extends BasePreprocessProvider 
 
   private async validateFile(filePath: string): Promise<Buffer> {
     // 阶段1：校验文件类型
-    logger.info(`Validating PDF file: ${filePath}`)
+    logger.info('Validating PDF file', { filePath: summarizeTextForLog(filePath) })
     const ext = path.extname(filePath).toLowerCase()
     if (ext !== '.pdf') {
       throw new Error(`File ${filePath} is not a PDF (extension: ${ext.slice(1)})`)

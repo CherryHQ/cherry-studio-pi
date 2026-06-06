@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeUrlForLog } from '@main/utils/logging'
 import { nanoid } from '@reduxjs/toolkit'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { MCPServer } from '@types'
@@ -124,7 +125,7 @@ export function handleMcpProtocolUrl(url: URL) {
       break
     }
     default:
-      logger.error(`Unknown MCP protocol URL: ${url}`)
+      logger.error('Unknown MCP protocol URL', { url: summarizeUrlForLog(url.toString()) })
       break
   }
 }

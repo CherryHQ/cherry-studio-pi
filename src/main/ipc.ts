@@ -8,6 +8,7 @@ import { isLinux, isMac, isPortable, isWin } from '@main/constant'
 import { generateSignature } from '@main/integration/cherryai'
 import anthropicService from '@main/services/AnthropicService'
 import { getIpCountry } from '@main/utils/ipService'
+import { summarizeUrlForLog } from '@main/utils/logging'
 import {
   autoDiscoverGitBash,
   getBinaryPath,
@@ -186,7 +187,7 @@ export async function registerIpc(mainWindow: BrowserWindow, app: Electron.App) 
   ipcMain.handle(IpcChannel.App_Quit, () => app.quit())
   ipcMain.handle(IpcChannel.Open_Website, (_, url: string) => {
     if (!isSafeExternalUrl(url)) {
-      logger.warn(`Blocked shell.openExternal for untrusted URL scheme: ${url}`)
+      logger.warn('Blocked shell.openExternal for untrusted URL scheme', { url: summarizeUrlForLog(url) })
       return
     }
     return shell.openExternal(url)

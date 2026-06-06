@@ -3,6 +3,7 @@ import path from 'node:path'
 
 import { loggerService } from '@logger'
 import { fileStorage } from '@main/services/FileStorage'
+import { summarizeTextForLog } from '@main/utils/logging'
 import type { FileMetadata, PreprocessProvider } from '@types'
 import AdmZip from 'adm-zip'
 import { net } from 'electron'
@@ -61,7 +62,7 @@ export default class Doc2xPreprocessProvider extends BasePreprocessProvider {
   public async parseFile(sourceId: string, file: FileMetadata): Promise<{ processedFile: FileMetadata }> {
     try {
       const filePath = fileStorage.getFilePathById(file)
-      logger.info(`Preprocess processing started: ${filePath}`)
+      logger.info('Doc2x preprocess processing started', { filePath: summarizeTextForLog(filePath) })
 
       // 步骤1: 准备上传
       const { uid, url } = await this.preupload()
@@ -74,7 +75,7 @@ export default class Doc2xPreprocessProvider extends BasePreprocessProvider {
 
       // 步骤3: 等待处理完成
       await this.waitForProcessing(sourceId, uid)
-      logger.info(`Preprocess parsing completed successfully for: ${filePath}`)
+      logger.info('Doc2x preprocess parsing completed successfully', { filePath: summarizeTextForLog(filePath) })
 
       // 步骤4: 导出文件
       const { path: outputPath } = await this.exportFile(file, uid)
@@ -108,11 +109,11 @@ export default class Doc2xPreprocessProvider extends BasePreprocessProvider {
    */
   public async exportFile(file: FileMetadata, uid: string): Promise<{ path: string }> {
     const filePath = fileStorage.getFilePathById(file)
-    logger.info(`Exporting file: ${filePath}`)
+    logger.info('Exporting Doc2x file', { filePath: summarizeTextForLog(filePath) })
 
     // 步骤1: 转换文件
     await this.convertFile(uid, filePath)
-    logger.info(`File conversion completed for: ${filePath}`)
+    logger.info('Doc2x file conversion completed', { filePath: summarizeTextForLog(filePath) })
 
     // 步骤2: 等待导出并获取URL
     const exportUrl = await this.waitForExport(uid)
@@ -214,7 +215,7 @@ export default class Doc2xPreprocessProvider extends BasePreprocessProvider {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
     } catch (error) {
-      logger.error(`Failed to upload file ${filePath}: ${error instanceof Error ? error.message : String(error)}`)
+      logger.error('Failed to upload Doc2x file', { filePath: summarizeTextForLog(filePath), error })
       throw new Error('Failed to upload file')
     }
   }
@@ -282,7 +283,7 @@ export default class Doc2xPreprocessProvider extends BasePreprocessProvider {
         throw new Error(`API returned error: ${data.message || JSON.stringify(data)}`)
       }
     } catch (error) {
-      logger.error(`Failed to convert file ${filePath}: ${error instanceof Error ? error.message : String(error)}`)
+      logger.error('Failed to convert Doc2x file', { filePath: summarizeTextForLog(filePath), error })
       throw new Error('Failed to convert file')
     }
   }
@@ -337,7 +338,7 @@ export default class Doc2xPreprocessProvider extends BasePreprocessProvider {
     fs.mkdirSync(dirPath, { recursive: true })
     fs.mkdirSync(extractPath, { recursive: true })
 
-    logger.info(`Downloading to export path: ${zipPath}`)
+    logger.info('Downloading Doc2x export', { zipPath: summarizeTextForLog(zipPath) })
 
     try {
       // 下载文件
@@ -356,7 +357,7 @@ export default class Doc2xPreprocessProvider extends BasePreprocessProvider {
       // 解压文件
       const zip = new AdmZip(zipPath)
       zip.extractAllTo(extractPath, true)
-      logger.info(`Extracted files to: ${extractPath}`)
+      logger.info('Extracted Doc2x files', { extractPath: summarizeTextForLog(extractPath) })
 
       // 删除临时ZIP文件
       fs.unlinkSync(zipPath)

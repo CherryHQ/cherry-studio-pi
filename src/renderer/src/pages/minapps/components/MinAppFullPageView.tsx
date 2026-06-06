@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeUrlForLog } from '@renderer/aiCore/utils/logging'
 import WebviewContainer from '@renderer/components/MinApp/WebviewContainer'
 import { useSettings } from '@renderer/hooks/useSettings'
 import type { MinAppType } from '@renderer/types'
@@ -77,7 +78,7 @@ const MinAppFullPageView: FC<Props> = ({ app }) => {
   )
 
   const handleWebviewNavigate = useCallback((_appId: string, url: string) => {
-    logger.debug(`URL changed: ${url}`)
+    logger.debug('Minapp full page URL changed', { url: summarizeUrlForLog(url) })
     setCurrentUrl(url)
   }, [])
 

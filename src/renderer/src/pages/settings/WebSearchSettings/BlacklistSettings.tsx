@@ -1,5 +1,6 @@
 import { CheckOutlined, InfoCircleOutlined, LoadingOutlined } from '@ant-design/icons'
 import { loggerService } from '@logger'
+import { summarizeUrlForLog } from '@renderer/aiCore/utils/logging'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useTimer } from '@renderer/hooks/useTimer'
 import { useBlacklist } from '@renderer/hooks/useWebSearchProviders'
@@ -145,7 +146,7 @@ const BlacklistSettings: FC = () => {
             })
           }
         } catch (error) {
-          logger.error(`Error updating subscribe source ${source.url}:`, error as Error)
+          logger.error('Error updating subscribe source', { url: summarizeUrlForLog(source.url), error })
           // 显示具体源更新失败的消息
           window.toast.warning({
             title: t('settings.tool.websearch.subscribe_update_failed', { url: source.url }),

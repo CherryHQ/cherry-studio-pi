@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import type { NotesTreeNode } from '@renderer/types/note'
 
 const logger = loggerService.withContext('NotesSearchService')
@@ -97,7 +98,11 @@ export async function searchFileContent(
     }
 
     if (content.length > maxFileSize) {
-      logger.warn(`File too large to search: ${node.externalPath} (${content.length} bytes)`)
+      logger.warn('File too large to search', {
+        externalPath: summarizeTextForLog(node.externalPath),
+        size: content.length,
+        maxFileSize
+      })
       return null
     }
 
@@ -156,7 +161,7 @@ export async function searchFileContent(
       score
     }
   } catch (error) {
-    logger.error(`Failed to search file content for ${node.externalPath}:`, error as Error)
+    logger.error('Failed to search file content', { externalPath: summarizeTextForLog(node.externalPath), error })
     return null
   }
 }
@@ -210,9 +215,11 @@ export async function searchAllFiles(
 
   const fileNodes = flattenTreeToFiles(nodes)
 
-  logger.debug(
-    `Starting full-text search: keyword="${keyword}", totalFiles=${fileNodes.length}, options=${JSON.stringify(options)}`
-  )
+  logger.debug('Starting full-text search', {
+    keyword: summarizeTextForLog(keyword),
+    totalFiles: fileNodes.length,
+    options
+  })
 
   let nextFileIndex = 0
 
@@ -261,13 +268,15 @@ export async function searchAllFiles(
     { filename: 0, content: 0, both: 0 }
   )
 
-  logger.debug(
-    `Full-text search completed: keyword="${keyword}", duration=${duration}ms, ` +
-      `totalFiles=${fileNodes.length}, resultsFound=${sortedResults.length}, ` +
-      `filenameMatches=${matchCounts.filename}, ` +
-      `contentMatches=${matchCounts.content}, ` +
-      `bothMatches=${matchCounts.both}`
-  )
+  logger.debug('Full-text search completed', {
+    keyword: summarizeTextForLog(keyword),
+    durationMs: Number(duration),
+    totalFiles: fileNodes.length,
+    resultsFound: sortedResults.length,
+    filenameMatches: matchCounts.filename,
+    contentMatches: matchCounts.content,
+    bothMatches: matchCounts.both
+  })
 
   return sortedResults
 }

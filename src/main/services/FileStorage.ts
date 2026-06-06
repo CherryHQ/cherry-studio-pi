@@ -10,6 +10,7 @@ import {
   scanDir
 } from '@main/utils/file'
 import { t } from '@main/utils/locales'
+import { summarizeTextForLog } from '@main/utils/logging'
 import { getRipgrepBinaryPath, runRipgrep } from '@main/utils/ripgrep'
 import { documentExts, imageExts, KB, MB } from '@shared/config/constant'
 import { parseDataUrl } from '@shared/utils'
@@ -152,7 +153,7 @@ class FileStorage {
 
   private findDuplicateFile = async (filePath: string): Promise<FileMetadata | null> => {
     const stats = fs.statSync(filePath)
-    logger.debug(`stats: ${stats}, filePath: ${filePath}`)
+    logger.debug('Checking duplicate file', { size: stats.size, filePath: summarizeTextForLog(filePath) })
     const fileSize = stats.size
 
     const files = await fs.promises.readdir(this.storageDir)
@@ -285,7 +286,7 @@ class FileStorage {
     const stagingDir = path.join(this.tempDir, 'file-uploads')
     const stagingPath = path.join(stagingDir, uuid + ext)
 
-    logger.info(`[FileStorage] Uploading file: ${filePath}`)
+    logger.info('[FileStorage] Uploading file', { filePath: summarizeTextForLog(filePath) })
 
     await fs.promises.mkdir(stagingDir, { recursive: true })
 
@@ -372,7 +373,7 @@ class FileStorage {
       }
 
       await fs.promises.rm(filePath, { force: true })
-      logger.debug(`External file deleted successfully: ${filePath}`)
+      logger.debug('External file deleted successfully', { filePath: summarizeTextForLog(filePath) })
     } catch (error) {
       logger.error('Failed to delete external file:', error as Error)
       throw error
@@ -386,7 +387,7 @@ class FileStorage {
       }
 
       await fs.promises.rm(dirPath, { recursive: true, force: true })
-      logger.debug(`External directory deleted successfully: ${dirPath}`)
+      logger.debug('External directory deleted successfully', { dirPath: summarizeTextForLog(dirPath) })
     } catch (error) {
       logger.error('Failed to delete external directory:', error as Error)
       throw error
@@ -407,7 +408,10 @@ class FileStorage {
 
       // 移动文件
       await fs.promises.rename(filePath, newPath)
-      logger.debug(`File moved successfully: ${filePath} to ${newPath}`)
+      logger.debug('File moved successfully', {
+        filePath: summarizeTextForLog(filePath),
+        newPath: summarizeTextForLog(newPath)
+      })
     } catch (error) {
       logger.error('Move file failed:', error as Error)
       throw error
@@ -428,7 +432,10 @@ class FileStorage {
 
       // 移动目录
       await fs.promises.rename(dirPath, newDirPath)
-      logger.debug(`Directory moved successfully: ${dirPath} to ${newDirPath}`)
+      logger.debug('Directory moved successfully', {
+        dirPath: summarizeTextForLog(dirPath),
+        newDirPath: summarizeTextForLog(newDirPath)
+      })
     } catch (error) {
       logger.error('Move directory failed:', error as Error)
       throw error
@@ -451,7 +458,10 @@ class FileStorage {
 
       // 重命名文件
       await fs.promises.rename(filePath, newFilePath)
-      logger.debug(`File renamed successfully: ${filePath} to ${newFilePath}`)
+      logger.debug('File renamed successfully', {
+        filePath: summarizeTextForLog(filePath),
+        newFilePath: summarizeTextForLog(newFilePath)
+      })
     } catch (error) {
       logger.error('Rename file failed:', error as Error)
       throw error
@@ -887,7 +897,7 @@ class FileStorage {
     if (fs.existsSync(filePath)) {
       shell.openPath(filePath).catch((err) => logger.error('[IPC - Error] Failed to open file:', err))
     } else {
-      logger.warn(`[IPC - Warning] File does not exist: ${filePath}`)
+      logger.warn('[IPC - Warning] File does not exist', { filePath: summarizeTextForLog(filePath) })
     }
   }
 
@@ -1622,7 +1632,7 @@ class FileStorage {
   public writeFileWithId = async (_: Electron.IpcMainInvokeEvent, id: string, content: string): Promise<void> => {
     try {
       const filePath = path.join(this.storageDir, id)
-      logger.debug(`Writing file: ${filePath}`)
+      logger.debug('Writing file', { filePath: summarizeTextForLog(filePath) })
 
       // 确保目录存在
       if (!fs.existsSync(this.storageDir)) {
@@ -1638,7 +1648,7 @@ class FileStorage {
           })
         })
       }
-      logger.debug(`File written successfully: ${filePath}`)
+      logger.debug('File written successfully', { filePath: summarizeTextForLog(filePath) })
     } catch (error) {
       logger.error('Failed to write file:', error as Error)
       throw error
@@ -1733,7 +1743,7 @@ class FileStorage {
     return (eventType: string, filePath: string) => {
       // Skip processing if watcher is paused
       if (this.isPaused) {
-        logger.debug('File change ignored (watcher paused)', { eventType, filePath })
+        logger.debug('File change ignored (watcher paused)', { eventType, filePath: summarizeTextForLog(filePath) })
         return
       }
 
@@ -1741,11 +1751,18 @@ class FileStorage {
         return
       }
 
-      logger.debug('File change detected', { eventType, filePath, path: this.currentWatchPath })
+      logger.debug('File change detected', {
+        eventType,
+        filePath: summarizeTextForLog(filePath),
+        watchPath: summarizeTextForLog(this.currentWatchPath)
+      })
 
       // 对于目录操作，立即触发同步，不使用防抖
       if (eventType === 'addDir' || eventType === 'unlinkDir') {
-        logger.debug('Directory operation detected, triggering immediate sync', { eventType, filePath })
+        logger.debug('Directory operation detected, triggering immediate sync', {
+          eventType,
+          filePath: summarizeTextForLog(filePath)
+        })
         this.notifyChange(eventType, filePath)
         return
       }
@@ -1829,7 +1846,7 @@ class FileStorage {
   public stopFileWatcher = async (): Promise<void> => {
     try {
       if (this.watcher) {
-        logger.info('Stopping file watcher', { path: this.currentWatchPath })
+        logger.info('Stopping file watcher', { watchPath: summarizeTextForLog(this.currentWatchPath) })
         await this.watcher.close()
         this.watcher = undefined
         logger.debug('File watcher stopped')
@@ -1922,7 +1939,10 @@ class FileStorage {
     skippedFiles: number
   }> => {
     try {
-      logger.info('Starting batch upload', { fileCount: filePaths.length, targetPath })
+      logger.info('Starting batch upload', {
+        fileCount: filePaths.length,
+        targetPath: summarizeTextForLog(targetPath)
+      })
 
       const basePath = path.resolve(targetPath)
       const MARKDOWN_EXTS = ['.md', '.markdown']
@@ -1980,7 +2000,9 @@ class FileStorage {
 
           fileOperations.push({ sourcePath: filePath, targetPath: finalPath })
         } catch (error) {
-          logger.error('Failed to prepare file operation:', error as Error, { filePath })
+          logger.error('Failed to prepare file operation:', error as Error, {
+            filePath: summarizeTextForLog(filePath)
+          })
         }
       }
 

@@ -1,6 +1,7 @@
 import { loggerService } from '@logger'
 import { Readability } from '@mozilla/readability'
 import { nanoid } from '@reduxjs/toolkit'
+import { summarizeUrlForLog } from '@renderer/aiCore/utils/logging'
 import type { WebSearchProviderResult } from '@renderer/types'
 import { createAbortPromise } from '@renderer/utils/abortController'
 import { isAbortError } from '@renderer/utils/error'
@@ -55,7 +56,7 @@ export async function fetchWebContent(
   try {
     // Validate URL before attempting to fetch
     if (!isValidUrl(url)) {
-      throw new Error(`Invalid URL format: ${url}`)
+      throw new Error('Invalid URL format')
     }
 
     let html: string
@@ -121,7 +122,7 @@ export async function fetchWebContent(
       throw e
     }
 
-    logger.error(`Failed to fetch ${url}`, e as Error)
+    logger.error('Failed to fetch web content', { url: summarizeUrlForLog(url), error: e })
     return {
       title: url,
       url: url,

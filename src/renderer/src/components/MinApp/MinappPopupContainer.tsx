@@ -11,6 +11,7 @@ import {
   ReloadOutlined
 } from '@ant-design/icons'
 import { loggerService } from '@logger'
+import { summarizeUrlForLog } from '@renderer/aiCore/utils/logging'
 import WindowControls from '@renderer/components/WindowControls'
 import { isDev, isLinux, isMac, isWin } from '@renderer/config/constant'
 import { allMinApps } from '@renderer/config/minapps'
@@ -311,7 +312,7 @@ const MinappPopupContainer: React.FC = () => {
   const handleWebviewNavigate = (appid: string, url: string) => {
     // 记录当前URL，用于GoogleLoginTip判断
     if (appid === currentMinappId) {
-      logger.debug(`URL changed: ${url}`)
+      logger.debug('Minapp URL changed', { url: summarizeUrlForLog(url) })
       setCurrentUrl(url)
     }
   }

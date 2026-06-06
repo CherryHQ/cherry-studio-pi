@@ -2,6 +2,7 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
 
 import { loggerService } from '@logger'
+import { summarizeTextForLog } from '@main/utils/logging'
 import type { CherryClawConfiguration } from '@types'
 
 import { BOOTSTRAP_INSTRUCTIONS, SOUL_CONTENT_THRESHOLD } from './seedWorkspace'
@@ -296,10 +297,10 @@ ${content}
       const content = await readFile(filePath, 'utf-8')
       const trimmed = content.trim()
       this.cache.set(filePath, { mtimeMs: fileStat.mtimeMs, content: trimmed })
-      logger.debug(`Loaded ${path.basename(filePath)}`, { path: filePath, length: trimmed.length })
+      logger.debug(`Loaded ${path.basename(filePath)}`, { path: summarizeTextForLog(filePath), length: trimmed.length })
       return trimmed
     } catch (error) {
-      logger.error(`Failed to read ${filePath}`, error as Error)
+      logger.error('Failed to read prompt file', { filePath: summarizeTextForLog(filePath), error })
       return undefined
     }
   }

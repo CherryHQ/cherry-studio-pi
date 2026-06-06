@@ -4,6 +4,7 @@ import type { AddLoaderReturn } from '@cherrystudio/embedjs-interfaces'
 import { WebLoader } from '@cherrystudio/embedjs-loader-web'
 import { loggerService } from '@logger'
 import { readTextFileWithAutoEncoding } from '@main/utils/file'
+import { summarizeTextForLog } from '@main/utils/logging'
 import type { LoaderReturn } from '@shared/config/types'
 import type { FileMetadata, KnowledgeBaseParams } from '@types'
 
@@ -80,7 +81,7 @@ export async function addFileLoader(
   // JSON类型处理
   let jsonObject = {}
   let jsonParsed = true
-  logger.info(`[KnowledgeBase] processing file ${filePath} as ${loaderType} type`)
+  logger.info('[KnowledgeBase] processing file', { filePath: summarizeTextForLog(filePath), loaderType })
   switch (loaderType) {
     case 'common':
       // 内置类型处理
@@ -132,10 +133,10 @@ export async function addFileLoader(
         jsonObject = JSON.parse(await readTextFileWithAutoEncoding(filePath))
       } catch (error) {
         jsonParsed = false
-        logger.warn(
-          `[KnowledgeBase] failed parsing json file, falling back to text processing: ${filePath}`,
-          error as Error
-        )
+        logger.warn('[KnowledgeBase] failed parsing json file, falling back to text processing', {
+          filePath: summarizeTextForLog(filePath),
+          error
+        })
       }
 
       if (jsonParsed) {

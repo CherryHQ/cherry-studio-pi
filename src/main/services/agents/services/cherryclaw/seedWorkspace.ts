@@ -2,6 +2,7 @@ import { mkdir, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import { loggerService } from '@logger'
+import { summarizeTextForLog } from '@main/utils/logging'
 
 const logger = loggerService.withContext('SeedWorkspace')
 
@@ -97,7 +98,7 @@ export async function seedWorkspaceTemplates(workspacePath: string): Promise<voi
       const exists = await fileExists(filePath)
       if (!exists) {
         await writeFile(filePath, content, 'utf-8')
-        logger.info(`Seeded template: ${path.basename(filePath)}`, { path: filePath })
+        logger.info(`Seeded template: ${path.basename(filePath)}`, { path: summarizeTextForLog(filePath) })
       }
     }
   } catch (error) {

@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeUrlForLog } from '@renderer/aiCore/utils/logging'
 import Ellipsis from '@renderer/components/Ellipsis'
 import { DeleteIcon } from '@renderer/components/Icons'
 import PromptPopup from '@renderer/components/Popups/PromptPopup'
@@ -79,7 +80,7 @@ const KnowledgeSitemaps: FC<KnowledgeContentProps> = ({ selectedBase }) => {
         }
         await addSitemap(url)
       } catch (e) {
-        logger.error(`Invalid Sitemap URL: ${url}`)
+        logger.error('Invalid Sitemap URL', { url: summarizeUrlForLog(url) })
       }
     }
   }

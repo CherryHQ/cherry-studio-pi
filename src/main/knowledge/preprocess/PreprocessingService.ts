@@ -1,6 +1,7 @@
 import PreprocessProvider from '@main/knowledge/preprocess/PreprocessProvider'
 import { loggerService } from '@main/services/LoggerService'
 import { windowService } from '@main/services/WindowService'
+import { summarizeTextForLog } from '@main/utils/logging'
 import type { FileMetadata, KnowledgeBaseParams, KnowledgeItem } from '@types'
 
 const logger = loggerService.withContext('PreprocessingService')
@@ -21,12 +22,12 @@ class PreprocessingService {
         // Check if file has already been preprocessed
         const alreadyProcessed = await provider.checkIfAlreadyProcessed(file)
         if (alreadyProcessed) {
-          logger.debug(`File already preprocessed, using cached result: ${file.path}`)
+          logger.debug('File already preprocessed, using cached result', { filePath: summarizeTextForLog(file.path) })
           return alreadyProcessed
         }
 
         // Execute preprocessing
-        logger.debug(`Starting preprocess for scanned PDF: ${file.path}`)
+        logger.debug('Starting preprocess for scanned PDF', { filePath: summarizeTextForLog(file.path) })
         const { processedFile } = await provider.parseFile(item.id, file)
         fileToProcess = processedFile
 

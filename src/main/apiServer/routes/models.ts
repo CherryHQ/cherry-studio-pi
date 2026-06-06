@@ -4,6 +4,7 @@ import type { Request, Response } from 'express'
 import express from 'express'
 
 import { loggerService } from '../../services/LoggerService'
+import { summarizeObjectShapeForLog } from '../../utils/logging'
 import { modelsService } from '../services/models'
 
 const logger = loggerService.withContext('ApiServerModelsRoutes')
@@ -77,13 +78,16 @@ const router = express
    */
   .get('/', async (req: Request, res: Response) => {
     try {
-      logger.debug('Models list request received', { query: req.query })
+      logger.debug('Models list request received', { query: summarizeObjectShapeForLog(req.query) })
 
       // Validate query parameters using Zod schema
       const filterResult = ApiModelsFilterSchema.safeParse(req.query)
 
       if (!filterResult.success) {
-        logger.warn('Invalid model query parameters', { issues: filterResult.error.issues })
+        logger.warn('Invalid model query parameters', {
+          issueCount: filterResult.error.issues.length,
+          fields: filterResult.error.issues.map((issue) => issue.path.join('.'))
+        })
         return res.status(400).json({
           error: {
             message: 'Invalid query parameters',

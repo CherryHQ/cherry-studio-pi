@@ -14,6 +14,7 @@ import iconv from 'iconv-lite'
 import { v4 as uuidv4 } from 'uuid'
 
 import { getDataPath } from './index'
+import { summarizeTextForLog } from './logging'
 
 const logger = loggerService.withContext('Utils:File')
 
@@ -208,7 +209,7 @@ export function getLegacyMcpDir() {
  */
 export async function readTextFileWithAutoEncoding(filePath: string): Promise<string> {
   const encoding = (await chardet.detectFile(filePath, { sampleSize: MB })) || 'UTF-8'
-  logger.debug(`File ${filePath} detected encoding: ${encoding}`)
+  logger.debug('File encoding detected', { filePath: summarizeTextForLog(filePath), encoding })
 
   const encodings = [encoding, 'UTF-8']
   const data = await readFile(filePath)
@@ -219,16 +220,19 @@ export async function readTextFileWithAutoEncoding(filePath: string): Promise<st
       if (!content.includes('\uFFFD')) {
         return content
       } else {
-        logger.warn(
-          `File ${filePath} was auto-detected as ${encoding} encoding, but contains invalid characters. Trying other encodings`
-        )
+        logger.warn('File contains invalid characters for detected encoding, trying other encodings', {
+          filePath: summarizeTextForLog(filePath),
+          encoding
+        })
       }
     } catch (error) {
-      logger.error(`Failed to decode file ${filePath} with encoding ${encoding}: ${error}`)
+      logger.error('Failed to decode file with encoding', { filePath: summarizeTextForLog(filePath), encoding, error })
     }
   }
 
-  logger.error(`File ${filePath} failed to decode with all possible encodings, trying UTF-8 encoding`)
+  logger.error('File failed to decode with all possible encodings, trying UTF-8 encoding', {
+    filePath: summarizeTextForLog(filePath)
+  })
   return iconv.decode(data, 'UTF-8')
 }
 

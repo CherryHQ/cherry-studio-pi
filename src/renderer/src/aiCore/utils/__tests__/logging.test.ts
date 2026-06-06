@@ -8,7 +8,8 @@ import {
   summarizeProviderConfigForLog,
   summarizeProviderForLog,
   summarizeTextForLog,
-  summarizeTextListForLog
+  summarizeTextListForLog,
+  summarizeUrlForLog
 } from '../logging'
 
 describe('aiCore logging summaries', () => {
@@ -139,5 +140,21 @@ describe('aiCore logging summaries', () => {
 
     expect(serialized).toContain('"circular":true')
     expect(serialized).not.toContain('secret-id')
+  })
+
+  it('summarizes URLs without leaking path, query, or hash values', () => {
+    const summary = summarizeUrlForLog('https://example.com/private/path?token=secret-token#raw-hash')
+    const serialized = JSON.stringify(summary)
+
+    expect(summary).toMatchObject({
+      type: 'url',
+      protocol: 'https:',
+      host: 'example.com',
+      hasSearch: true,
+      hasHash: true
+    })
+    expect(serialized).not.toContain('private')
+    expect(serialized).not.toContain('secret-token')
+    expect(serialized).not.toContain('raw-hash')
   })
 })

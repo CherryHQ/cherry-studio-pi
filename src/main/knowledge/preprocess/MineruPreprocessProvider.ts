@@ -3,6 +3,12 @@ import path from 'node:path'
 
 import { loggerService } from '@logger'
 import { fileStorage } from '@main/services/FileStorage'
+import {
+  summarizeObjectShapeForLog,
+  summarizeTextForLog,
+  summarizeTextListForLog,
+  summarizeUrlForLog
+} from '@main/utils/logging'
 import type { FileMetadata, PreprocessProvider } from '@types'
 import AdmZip from 'adm-zip'
 import { net } from 'electron'
@@ -55,7 +61,7 @@ export default class MineruPreprocessProvider extends BasePreprocessProvider {
       }
 
       const filePath = fileStorage.getFilePathById(file)
-      logger.info(`MinerU preprocess processing started: ${filePath}`)
+      logger.info('MinerU preprocess processing started', { filePath: summarizeTextForLog(filePath) })
       await this.validateFile(filePath)
 
       // 1. Get upload URL and upload file
@@ -81,7 +87,7 @@ export default class MineruPreprocessProvider extends BasePreprocessProvider {
 
   private async validateFile(filePath: string): Promise<void> {
     // Phase 1: check file size (without loading into memory)
-    logger.info(`Validating PDF file: ${filePath}`)
+    logger.info('Validating PDF file', { filePath: summarizeTextForLog(filePath) })
     const stats = await fs.promises.stat(filePath)
     const fileSizeBytes = stats.size
 
@@ -146,7 +152,7 @@ export default class MineruPreprocessProvider extends BasePreprocessProvider {
         }
       }
     } catch (error) {
-      logger.warn(`Failed to read output directory ${outputPath}: ${error}`)
+      logger.warn('Failed to read output directory', { outputPath: summarizeTextForLog(outputPath), error })
       finalPath = path.join(outputPath, `${file.id}.md`)
     }
 
@@ -165,7 +171,7 @@ export default class MineruPreprocessProvider extends BasePreprocessProvider {
     const zipPath = path.join(dirPath, `${file.id}.zip`)
     const extractPath = path.join(dirPath, `${file.id}`)
 
-    logger.info(`Downloading MinerU result to: ${zipPath}`)
+    logger.info('Downloading MinerU result', { zipPath: summarizeTextForLog(zipPath) })
 
     try {
       // Download the ZIP file
@@ -175,7 +181,7 @@ export default class MineruPreprocessProvider extends BasePreprocessProvider {
       }
       const arrayBuffer = await response.arrayBuffer()
       fs.writeFileSync(zipPath, Buffer.from(arrayBuffer))
-      logger.info(`Downloaded ZIP file: ${zipPath}`)
+      logger.info('Downloaded MinerU ZIP file', { zipPath: summarizeTextForLog(zipPath) })
 
       // Ensure the extraction directory exists
       if (!fs.existsSync(extractPath)) {
@@ -185,7 +191,7 @@ export default class MineruPreprocessProvider extends BasePreprocessProvider {
       // Extract the ZIP contents
       const zip = new AdmZip(zipPath)
       zip.extractAllTo(extractPath, true)
-      logger.info(`Extracted files to: ${extractPath}`)
+      logger.info('Extracted MinerU files', { extractPath: summarizeTextForLog(extractPath) })
 
       // Remove the temporary ZIP file
       fs.unlinkSync(zipPath)
@@ -204,7 +210,11 @@ export default class MineruPreprocessProvider extends BasePreprocessProvider {
       // Step 2: upload the file to the obtained URL
       const filePath = fileStorage.getFilePathById(file)
       await this.putFileToUrl(filePath, fileUrls[0], file.origin_name, uploadHeaders?.[0])
-      logger.info(`File uploaded successfully: ${filePath}`, { batchId, fileUrls })
+      logger.info('MinerU file uploaded successfully', {
+        filePath: summarizeTextForLog(filePath),
+        batchId,
+        fileUrls: summarizeTextListForLog(fileUrls)
+      })
 
       return batchId
     } catch (error: any) {
@@ -293,23 +303,23 @@ export default class MineruPreprocessProvider extends BasePreprocessProvider {
           const errorInfo = {
             status: response.status,
             statusText: response.statusText,
-            url: response.url,
+            url: summarizeUrlForLog(response.url),
             type: response.type,
             redirected: response.redirected,
-            headers: Object.fromEntries(response.headers.entries()),
-            body: responseBody
+            headers: summarizeObjectShapeForLog(Object.fromEntries(response.headers.entries())),
+            body: summarizeTextForLog(responseBody)
           }
 
-          logger.error('Response details:', errorInfo)
-          throw new Error(`Upload failed with status ${response.status}: ${responseBody}`)
+          logger.error('MinerU upload response details', errorInfo)
+          throw new Error(`Upload failed with status ${response.status}`)
         } catch (parseError) {
           throw new Error(`Upload failed with status ${response.status}. Could not parse response body.`)
         }
       }
 
-      logger.info(`File uploaded successfully to: ${uploadUrl}`)
+      logger.info('File uploaded successfully to MinerU OSS', { uploadUrl: summarizeUrlForLog(uploadUrl) })
     } catch (error: any) {
-      logger.error(`Failed to upload file to URL ${uploadUrl}: ${error}`)
+      logger.error('Failed to upload file to MinerU URL', { uploadUrl: summarizeUrlForLog(uploadUrl), error })
       throw new Error(error.message)
     }
   }
