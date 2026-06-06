@@ -7,6 +7,10 @@ import { isPathInside } from '@main/utils/file'
 const SENSITIVE_KEY_PATTERN = /api[-_]?key|token|secret|pass|password|authorization|cookie/i
 const CIRCULAR_REFERENCE_PLACEHOLDER = '[Circular]'
 const NAVIGATION_ROUTE_PREFIXES = ['/', '/settings', '/knowledge', '/paintings', '/notes', '/agents']
+const MAX_AGENT_STRING_CHARS = 8_000
+const MAX_AGENT_ARRAY_ITEMS = 200
+const MAX_AGENT_OBJECT_KEYS = 200
+const MAX_AGENT_OBJECT_DEPTH = 8
 
 export const okResult = <T>(summary: string, data?: T): { ok: true; summary: string; data?: T } => ({
   ok: true,
@@ -16,15 +20,20 @@ export const okResult = <T>(summary: string, data?: T): { ok: true; summary: str
 
 export const sanitizeForAgent = (value: unknown): unknown => {
   const seen = new WeakSet<object>()
-  return sanitizeJsonValue(value, '', seen)
+  return sanitizeJsonValue(value, '', seen, 0)
 }
 
-function sanitizeJsonValue(value: unknown, key: string, seen: WeakSet<object>): unknown {
+function sanitizeJsonValue(value: unknown, key: string, seen: WeakSet<object>, depth: number): unknown {
   if (SENSITIVE_KEY_PATTERN.test(key) && typeof value === 'string') {
     return value ? '[redacted]' : value
   }
 
-  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+  if (typeof value === 'string') {
+    if (value.length <= MAX_AGENT_STRING_CHARS) return value
+    return `${value.slice(0, MAX_AGENT_STRING_CHARS)}...[truncated ${value.length - MAX_AGENT_STRING_CHARS} chars]`
+  }
+
+  if (value === null || typeof value === 'number' || typeof value === 'boolean') {
     return value
   }
   if (typeof value === 'bigint') return value.toString()
@@ -36,19 +45,30 @@ function sanitizeJsonValue(value: unknown, key: string, seen: WeakSet<object>): 
 
   if (typeof value !== 'object') return undefined
   if (seen.has(value)) return CIRCULAR_REFERENCE_PLACEHOLDER
+  if (depth >= MAX_AGENT_OBJECT_DEPTH) return '[Object truncated]'
 
   seen.add(value)
   try {
     if (Array.isArray(value)) {
-      return value.map((item) => sanitizeJsonValue(item, '', seen) ?? null)
+      const items = value
+        .slice(0, MAX_AGENT_ARRAY_ITEMS)
+        .map((item) => sanitizeJsonValue(item, '', seen, depth + 1) ?? null)
+      if (value.length > MAX_AGENT_ARRAY_ITEMS) {
+        items.push(`[...truncated ${value.length - MAX_AGENT_ARRAY_ITEMS} items...]`)
+      }
+      return items
     }
 
     const output: Record<string, unknown> = {}
-    for (const [childKey, childValue] of Object.entries(value as Record<string, unknown>)) {
-      const sanitized = sanitizeJsonValue(childValue, childKey, seen)
+    const entries = Object.entries(value as Record<string, unknown>)
+    for (const [childKey, childValue] of entries.slice(0, MAX_AGENT_OBJECT_KEYS)) {
+      const sanitized = sanitizeJsonValue(childValue, childKey, seen, depth + 1)
       if (sanitized !== undefined) {
         output[childKey] = sanitized
       }
+    }
+    if (entries.length > MAX_AGENT_OBJECT_KEYS) {
+      output.__truncatedKeys = entries.length - MAX_AGENT_OBJECT_KEYS
     }
     return output
   } finally {
