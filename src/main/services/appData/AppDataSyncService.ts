@@ -612,6 +612,15 @@ function deferredLocalSyncCursor(cursor: string) {
   return `deferred-local:${cursor}`
 }
 
+function isDeferredLocalSyncCursor(lastCursor: string | null | undefined, cursor: string | null | undefined) {
+  return Boolean(cursor && lastCursor === deferredLocalSyncCursor(cursor))
+}
+
+function hasLocalCursorChangedSinceSync(lastCursor: string | null | undefined, localCursor: string | null | undefined) {
+  if (!localCursor) return false
+  return localCursor !== lastCursor && !isDeferredLocalSyncCursor(lastCursor, localCursor)
+}
+
 function notesRemoteCursor(meta: RemoteNotesFileMeta) {
   return meta.deletedAt ? `deleted:${meta.valueHash}:${meta.deletedAt}` : notesContentCursor(meta.valueHash)
 }
@@ -2548,7 +2557,7 @@ export class AppDataSyncService {
       }
 
       if (remoteMeta.deletedAt) {
-        const localChanged = localCursor !== lastCursor
+        const localChanged = hasLocalCursorChangedSinceSync(lastCursor, localCursor)
         const remoteDeletedAt = remoteMeta.deletedAt || remoteMeta.updatedAt
         if (localChanged && localFile.updatedAt > remoteDeletedAt) {
           summary.resolvedConflicts += 1
@@ -2566,7 +2575,7 @@ export class AppDataSyncService {
         continue
       }
 
-      const localChanged = localCursor !== lastCursor
+      const localChanged = hasLocalCursorChangedSinceSync(lastCursor, localCursor)
       const remoteChanged = remoteCursor !== lastCursor
 
       if (!lastCursor) {
@@ -3061,7 +3070,7 @@ export class AppDataSyncService {
         continue
       }
 
-      const localChanged = localCursor !== lastCursor
+      const localChanged = hasLocalCursorChangedSinceSync(lastCursor, localCursor)
       const remoteChanged = remoteCursor !== lastCursor
       if (!lastCursor) {
         if (options.preferRemoteOnFirstJoin) {
@@ -3688,7 +3697,7 @@ export class AppDataSyncService {
             continue
           }
 
-          const localChanged = localRecord.valueHash !== lastHash
+          const localChanged = hasLocalCursorChangedSinceSync(lastHash, localRecord.valueHash)
           const remoteChanged = remoteMeta.valueHash !== lastHash
 
           if (!lastHash) {

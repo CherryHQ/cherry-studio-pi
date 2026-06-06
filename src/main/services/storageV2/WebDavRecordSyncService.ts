@@ -508,6 +508,15 @@ function deferredLocalRecordHash(valueHash: string) {
   return `deferred-local:${valueHash}`
 }
 
+function isDeferredLocalRecordHash(lastHash: string | null | undefined, valueHash: string | null | undefined) {
+  return Boolean(valueHash && lastHash === deferredLocalRecordHash(valueHash))
+}
+
+function hasLocalRecordChangedSinceSync(lastHash: string | null | undefined, valueHash: string | null | undefined) {
+  if (!valueHash) return false
+  return valueHash !== lastHash && !isDeferredLocalRecordHash(lastHash, valueHash)
+}
+
 function shouldDeferLocalOnlyFirstJoinRecord(record: LocalRecord) {
   return FIRST_JOIN_DEFER_LOCAL_ONLY_ENTITY_TYPES.has(record.table.entityType)
 }
@@ -2395,7 +2404,7 @@ export class StorageV2WebDavRecordSyncService {
         continue
       }
 
-      const localChanged = localRecord.valueHash !== lastHash
+      const localChanged = hasLocalRecordChangedSinceSync(lastHash, localRecord.valueHash)
       options.assertActive?.()
       const remoteRecord = await this.pullRecord(client, basePath, remoteMeta, bundledRecord)
       if (!remoteRecord) {

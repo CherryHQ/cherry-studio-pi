@@ -263,6 +263,14 @@ function notesRemotePath(relativePath: string, valueHash: string) {
   return `notes/files/${pathHash.slice(0, 2)}/${pathHash}/${valueHash}.bin`
 }
 
+function notesSyncStateKey(deviceId: string, relativePath: string) {
+  return `notes-file:${createHash('sha256').update(`${deviceId}\0${relativePath}`).digest('hex')}`
+}
+
+function runtimeDirectorySyncStateKey(deviceId: string, name: string) {
+  return `runtime-directory:${createHash('sha256').update(`${deviceId}\0${name}`).digest('hex')}`
+}
+
 function createRuntimeDirectoryBundle(input: {
   name: 'Memory' | 'Skills' | 'MCP' | 'Channels'
   relativePath: string
@@ -1765,6 +1773,32 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('downloads remote app data records that appear after a local first-join defer', async () => {
+    const localRecord = {
+      ...remoteRecord,
+      value: { mode: 'local-default' },
+      valueHash: 'local-default-hash',
+      updatedAt: remoteRecord.updatedAt + 60_000,
+      deviceId: 'local-device'
+    }
+    mocks.db.listRecords.mockResolvedValue([localRecord])
+    mocks.db.getSyncState.mockImplementation(async (id: string) =>
+      id === 'record:settings:theme:hash' ? 'deferred-local:local-default-hash' : null
+    )
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.downloaded).toBe(1)
+    expect(summary.uploaded).toBe(0)
+    expect(summary.resolvedConflicts).toBe(0)
+    expect(mocks.db.applyRemoteRecord).toHaveBeenCalledWith(remoteRecord, { storageV2Mirrored: true })
+    expect(mocks.db.createConflict).not.toHaveBeenCalled()
+    expect(mocks.webdav.putFileContents.mock.calls.some((call) => String(call[1]).includes('local-default-hash'))).toBe(
+      false
+    )
+    expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith('record:settings:theme:hash', 'remote-hash')
+  })
+
   it('prefers remote notes when first joining an existing sync space', async () => {
     const localNotePath = path.join(mocks.notesDir, 'daily.md')
     const localOnlyNotePath = path.join(mocks.notesDir, 'local-only.md')
@@ -1821,6 +1855,59 @@ describe('AppDataSyncService', () => {
     expect(
       mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).includes('/notes/files/'))
     ).toBe(false)
+  })
+
+  it('downloads remote notes that appear after a local first-join defer', async () => {
+    const relativePath = 'daily.md'
+    const localContent = Buffer.from('# Local Default Note', 'utf8')
+    const localHash = sha256Buffer(localContent)
+    const localNotePath = path.join(mocks.notesDir, relativePath)
+    await fsp.mkdir(path.dirname(localNotePath), { recursive: true })
+    await fsp.writeFile(localNotePath, localContent)
+    await fsp.utimes(localNotePath, new Date('2026-06-06T12:00:00.000Z'), new Date('2026-06-06T12:00:00.000Z'))
+
+    const remoteContent = Buffer.from('# Remote User Note', 'utf8')
+    const remoteHash = sha256Buffer(remoteContent)
+    const remoteRelativePath = notesRemotePath(relativePath, remoteHash)
+    mocks.remoteFiles.set(`/remote-root/sync/v1/${remoteRelativePath}`, remoteContent)
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 4,
+        updatedAt: 1760000000000,
+        records: {},
+        notes: {
+          version: 1,
+          updatedAt: 1760000000000,
+          files: {
+            [relativePath]: {
+              version: 1,
+              relativePath,
+              valueHash: remoteHash,
+              byteSize: remoteContent.byteLength,
+              updatedAt: Date.parse('2026-06-01T12:00:00.000Z'),
+              deletedAt: null,
+              deviceId: 'remote-device',
+              path: remoteRelativePath
+            }
+          }
+        }
+      })
+    )
+    const syncKey = notesSyncStateKey('local-device', relativePath)
+    mocks.db.getSyncState.mockImplementation(async (id: string) =>
+      id === syncKey ? `deferred-local:content:${localHash}` : null
+    )
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    await expect(fsp.readFile(localNotePath, 'utf8')).resolves.toBe('# Remote User Note')
+    expect(summary.downloaded).toBeGreaterThanOrEqual(1)
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).includes('/notes/files/'))
+    ).toBe(false)
+    expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith(syncKey, `content:${remoteHash}`)
   })
 
   it('prefers remote runtime directories when first joining an existing sync space', async () => {
@@ -1886,6 +1973,73 @@ describe('AppDataSyncService', () => {
         String(filePath).includes('/runtime-directories/bundles/')
       )
     ).toBe(false)
+  })
+
+  it('downloads remote runtime directories that appear after a local first-join defer', async () => {
+    const relativePath = 'sync-fixture/SKILL.md'
+    const localContent = '# Local Default Skill'
+    const localSkillPath = path.join(mocks.runtimeDataRoot, 'Skills', relativePath)
+    await fsp.mkdir(path.dirname(localSkillPath), { recursive: true })
+    await fsp.writeFile(localSkillPath, localContent)
+    await fsp.utimes(localSkillPath, new Date('2026-06-06T12:00:00.000Z'), new Date('2026-06-06T12:00:00.000Z'))
+    const localBundle = createRuntimeDirectoryBundle({
+      name: 'Skills',
+      relativePath,
+      content: localContent,
+      updatedAt: Date.parse('2026-06-06T12:00:00.000Z')
+    })
+
+    const remoteBundle = createRuntimeDirectoryBundle({
+      name: 'Skills',
+      relativePath,
+      content: '# Remote User Skill',
+      updatedAt: Date.parse('2026-06-01T12:00:00.000Z')
+    })
+    mocks.remoteFiles.set(
+      `/remote-root/sync/v1/runtime-directories/bundles/Skills/${remoteBundle.valueHash}.json.gz`,
+      remoteBundle.compressed
+    )
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 8,
+        updatedAt: 1760000000000,
+        records: {},
+        runtimeDirectories: {
+          version: 1,
+          updatedAt: 1760000000000,
+          directories: {
+            Skills: {
+              version: 1,
+              name: 'Skills',
+              valueHash: remoteBundle.valueHash,
+              byteSize: remoteBundle.byteSize,
+              compressedByteSize: remoteBundle.compressed.byteLength,
+              fileCount: remoteBundle.fileCount,
+              updatedAt: Date.parse('2026-06-01T12:00:00.000Z'),
+              deviceId: 'remote-device',
+              path: `runtime-directories/bundles/Skills/${remoteBundle.valueHash}.json.gz`
+            }
+          }
+        }
+      })
+    )
+    const syncKey = runtimeDirectorySyncStateKey('local-device', 'Skills')
+    mocks.db.getSyncState.mockImplementation(async (id: string) =>
+      id === syncKey ? `deferred-local:content:${localBundle.valueHash}` : null
+    )
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    await expect(fsp.readFile(localSkillPath, 'utf8')).resolves.toBe('# Remote User Skill')
+    expect(summary.downloaded).toBeGreaterThanOrEqual(1)
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) =>
+        String(filePath).includes('/runtime-directories/bundles/')
+      )
+    ).toBe(false)
+    expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith(syncKey, `content:${remoteBundle.valueHash}`)
   })
 
   it('projects previously synced Storage v2 remote records even when the current record sync only skips them', async () => {
