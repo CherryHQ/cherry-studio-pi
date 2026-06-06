@@ -240,23 +240,42 @@ jobs:
     needs: [basic-checks, general-test, render-test]
     if: always() && (needs.basic-checks.result == 'failure' || needs.general-test.result == 'failure' || needs.render-test.result == 'failure') && github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
+      - name: Check Feishu credentials
+        id: feishu-credentials
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          FEISHU_WEBHOOK_SECRET: ${{ secrets.FEISHU_WEBHOOK_SECRET }}
+        run: |
+          if [ -z "$FEISHU_WEBHOOK_URL" ] || [ -z "$FEISHU_WEBHOOK_SECRET" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "Feishu webhook is not configured; skipping failure notification."
+            exit 0
+          fi
+
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
       - name: Check out Git repository
+        if: steps.feishu-credentials.outputs.configured == 'true'
         uses: actions/checkout@v6
 
       - name: Install Node.js
+        if: steps.feishu-credentials.outputs.configured == 'true'
         uses: actions/setup-node@v6
         with:
           node-version-file: ".node-version"
 
       - name: Install pnpm
+        if: steps.feishu-credentials.outputs.configured == 'true'
         uses: pnpm/action-setup@v5
 
       - name: Get pnpm store directory
+        if: steps.feishu-credentials.outputs.configured == 'true'
         id: pnpm-cache
         shell: bash
         run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
 
       - name: Cache pnpm dependencies
+        if: steps.feishu-credentials.outputs.configured == 'true'
         uses: actions/cache@v5
         with:
           path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
@@ -265,9 +284,11 @@ jobs:
             ${{ runner.os }}-pnpm-
 
       - name: Install Dependencies
+        if: steps.feishu-credentials.outputs.configured == 'true'
         run: pnpm install
 
       - name: Send failure notification to Feishu
+        if: steps.feishu-credentials.outputs.configured == 'true'
         env:
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
           FEISHU_WEBHOOK_SECRET: ${{ secrets.FEISHU_WEBHOOK_SECRET }}

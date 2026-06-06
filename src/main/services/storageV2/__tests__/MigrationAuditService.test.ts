@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 
 import { app } from 'electron'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   dataRootService: {
@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
     get: vi.fn()
   }
 }))
+
+const originalXdgConfigHome = process.env.XDG_CONFIG_HOME
 
 vi.mock('node:fs/promises', () => ({
   ...mocks.fs,
@@ -32,6 +34,7 @@ vi.mock('../StorageV2Repositories', () => ({
 describe('StorageV2MigrationAuditService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    delete process.env.XDG_CONFIG_HOME
     vi.mocked(app.getPath).mockImplementation((key: string) => {
       if (key === 'userData') return '/mock/current-user-data'
       if (key === 'home') return '/mock/home'
@@ -44,6 +47,15 @@ describe('StorageV2MigrationAuditService', () => {
     })
     vi.mocked(fs.stat).mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }))
     mocks.settingsRepository.get.mockResolvedValue(null)
+  })
+
+  afterEach(() => {
+    if (originalXdgConfigHome === undefined) {
+      delete process.env.XDG_CONFIG_HOME
+      return
+    }
+
+    process.env.XDG_CONFIG_HOME = originalXdgConfigHome
   })
 
   it('audits legacy runtime directories under the active Storage v2 data root', async () => {
