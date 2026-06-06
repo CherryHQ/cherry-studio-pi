@@ -575,6 +575,36 @@ exit 1
     expect(resultText(result).length).toBeLessThan(20_000)
   })
 
+  it('does not read AppCallCapability data properties after the preview budget is exceeded', async () => {
+    const data: Record<string, unknown> = { huge: 'x'.repeat(80_000) }
+    Object.defineProperty(data, 'danger', {
+      enumerable: true,
+      get: () => {
+        throw new Error('danger getter should not be read')
+      }
+    })
+
+    vi.mocked(appCapabilityService.call).mockResolvedValueOnce({
+      ok: true,
+      summary: 'Large unsafe data read',
+      data
+    })
+
+    const call = getTool('AppCallCapability', tmpDir, [tmpDir])
+    const result = await call.execute('app-call-large-unsafe', {
+      id: 'settings.read',
+      input: {}
+    })
+
+    expect(result.details).toMatchObject({ truncated: true })
+    expect(result.details?.isError).toBeUndefined()
+    expect(result.details?.structuredContent).toMatchObject({
+      summary: 'Large unsafe data read',
+      resultTruncated: true
+    })
+    expect(resultText(result)).not.toContain('danger getter should not be read')
+  })
+
   it('limits Grep glob candidates before scanning matched files', async () => {
     for (let index = 0; index < 4100; index += 1) {
       await fs.writeFile(path.join(tmpDir, `file-${String(index).padStart(4, '0')}.txt`), 'miss\n', 'utf8')

@@ -24,6 +24,9 @@ const MAX_ERROR_OUTPUT_CHARS = 8_000
 const MAX_SEARCH_RESULTS = 200
 const MAX_SEARCH_FILE_CANDIDATES = MAX_SEARCH_RESULTS * 20
 const MAX_APP_CAPABILITY_STRUCTURED_CHARS = 12_000
+const MAX_TOOL_PREVIEW_DEPTH = 8
+const MAX_TOOL_PREVIEW_ARRAY_ITEMS = 100
+const MAX_TOOL_PREVIEW_OBJECT_KEYS = 100
 const BASH_TIMEOUT_MS = 120_000
 const BASH_MAX_BUFFER = 1024 * 1024
 
@@ -261,7 +264,16 @@ const exceedsToolValueCharBudget = (value: unknown, maxChars: number) => {
       }
 
       if (add(2)) return true
-      for (const [key, childValue] of Object.entries(currentValue as Record<string, unknown>)) {
+      const objectValue = currentValue as Record<string, unknown>
+      for (const key in objectValue) {
+        if (!Object.prototype.hasOwnProperty.call(objectValue, key)) continue
+        let childValue: unknown
+        try {
+          childValue = objectValue[key]
+        } catch {
+          if (add(JSON.stringify(key).length + '"[Unreadable property]"'.length + 2)) return true
+          continue
+        }
         if (add(JSON.stringify(key).length + 1) || visit(childValue) || add(1)) return true
       }
       return false
@@ -273,17 +285,147 @@ const exceedsToolValueCharBudget = (value: unknown, maxChars: number) => {
   return visit(value)
 }
 
+const stringifyToolValuePreview = (value: unknown, maxChars: number, space?: number) => {
+  const seen = new WeakSet<object>()
+  const indentSize =
+    typeof space === 'number' && Number.isFinite(space) ? Math.max(Math.min(Math.floor(space), 10), 0) : 0
+  const indentUnit = indentSize > 0 ? ' '.repeat(indentSize) : ''
+  let output = ''
+  let truncated = false
+
+  const stop = new Error('tool preview budget exceeded')
+  const append = (text: string) => {
+    output += text
+    if (output.length > maxChars) {
+      truncated = true
+      throw stop
+    }
+  }
+  const separator = () => (indentUnit ? ': ' : ':')
+  const line = (depth: number) => {
+    if (indentUnit) append(`\n${indentUnit.repeat(depth)}`)
+  }
+
+  const write = (currentValue: unknown, depth: number): void => {
+    if (typeof currentValue === 'bigint') {
+      append(JSON.stringify(currentValue.toString()))
+      return
+    }
+    if (
+      currentValue === null ||
+      typeof currentValue === 'string' ||
+      typeof currentValue === 'number' ||
+      typeof currentValue === 'boolean'
+    ) {
+      append(JSON.stringify(currentValue))
+      return
+    }
+    if (typeof currentValue === 'undefined' || typeof currentValue === 'function' || typeof currentValue === 'symbol') {
+      append('null')
+      return
+    }
+    if (typeof currentValue !== 'object') {
+      append(JSON.stringify(String(currentValue)))
+      return
+    }
+    if (seen.has(currentValue)) {
+      append(JSON.stringify('[Circular]'))
+      return
+    }
+    if (depth >= MAX_TOOL_PREVIEW_DEPTH) {
+      truncated = true
+      append(JSON.stringify('[Object truncated]'))
+      return
+    }
+
+    seen.add(currentValue)
+    try {
+      if (Array.isArray(currentValue)) {
+        append('[')
+        const limit = Math.min(currentValue.length, MAX_TOOL_PREVIEW_ARRAY_ITEMS)
+        for (let index = 0; index < limit; index += 1) {
+          if (index > 0) append(',')
+          line(depth + 1)
+          write(currentValue[index], depth + 1)
+        }
+        if (currentValue.length > limit) {
+          truncated = true
+          if (limit > 0) append(',')
+          line(depth + 1)
+          append(JSON.stringify(`[...truncated ${currentValue.length - limit} items...]`))
+        }
+        if (limit > 0 || currentValue.length > limit) line(depth)
+        append(']')
+        return
+      }
+
+      append('{')
+      const objectValue = currentValue as Record<string, unknown>
+      let writtenKeys = 0
+      let truncatedKeys = 0
+      for (const key in objectValue) {
+        if (!Object.prototype.hasOwnProperty.call(objectValue, key)) continue
+        if (writtenKeys >= MAX_TOOL_PREVIEW_OBJECT_KEYS) {
+          truncatedKeys += 1
+          continue
+        }
+
+        if (writtenKeys > 0) append(',')
+        line(depth + 1)
+        append(`${JSON.stringify(key)}${separator()}`)
+        let childValue: unknown
+        try {
+          childValue = objectValue[key]
+        } catch {
+          childValue = '[Unreadable property]'
+        }
+        write(childValue, depth + 1)
+        writtenKeys += 1
+      }
+      if (truncatedKeys > 0) {
+        truncated = true
+        if (writtenKeys > 0) append(',')
+        line(depth + 1)
+        append(`${JSON.stringify('__truncatedKeys')}${separator()}${truncatedKeys}`)
+      }
+      if (writtenKeys > 0 || truncatedKeys > 0) line(depth)
+      append('}')
+    } finally {
+      seen.delete(currentValue)
+    }
+  }
+
+  try {
+    write(value, 0)
+  } catch (error) {
+    if (error !== stop) {
+      output = JSON.stringify(`[Unserializable value: ${error instanceof Error ? error.message : String(error)}]`)
+      truncated = true
+    }
+  }
+
+  const preview = truncateOutput(output || 'null', maxChars)
+  return {
+    text: preview.text,
+    truncated: truncated || preview.truncated
+  }
+}
+
 const previewToolValue = (value: unknown, maxChars: number, space?: number) => {
   if (typeof value === 'string') return truncateOutput(value, maxChars)
-  return truncateOutput(stringifyToolValue(value, space), maxChars)
+  return stringifyToolValuePreview(value, maxChars, space)
 }
 
 const compactAppCapabilityResult = (result: any, maxChars: number) => {
-  if (!exceedsToolValueCharBudget(result, maxChars) && stringifyToolValue(result).length <= maxChars) {
-    return {
-      result,
-      truncated: false
+  try {
+    if (!exceedsToolValueCharBudget(result, maxChars) && stringifyToolValue(result).length <= maxChars) {
+      return {
+        result,
+        truncated: false
+      }
     }
+  } catch {
+    // Fall through to the compacted path for exotic values with throwing getters.
   }
 
   const dataPreview = result?.data === undefined ? undefined : previewToolValue(result.data, maxChars, 2)
