@@ -12,6 +12,7 @@ vi.mock('@main/services/WindowService', () => ({
 }))
 
 import { getMCPServersFromRedux } from '@main/apiServer/utils/mcp'
+import { CacheService } from '@main/services/CacheService'
 import mcpService from '@main/services/MCPService'
 
 const baseInputSchema: { type: 'object'; properties: Record<string, unknown>; required: string[] } = {
@@ -33,10 +34,12 @@ const createTool = (overrides: Partial<MCPTool>): MCPTool => ({
 
 describe('MCPService.listAllActiveServerTools', () => {
   beforeEach(() => {
+    CacheService.clear()
     vi.clearAllMocks()
   })
 
   afterEach(() => {
+    CacheService.clear()
     vi.restoreAllMocks()
   })
 
@@ -71,5 +74,26 @@ describe('MCPService.listAllActiveServerTools', () => {
 
     expect(listToolsSpy).toHaveBeenCalledTimes(2)
     expect(tools.map((tool) => tool.name)).toEqual(['enabled_tool', 'beta_tool'])
+  })
+
+  it('reuses cached server tool lists across repeated aggregate calls', async () => {
+    const servers: MCPServer[] = [
+      {
+        id: 'alpha',
+        name: 'Alpha',
+        isActive: true
+      }
+    ]
+
+    vi.mocked(getMCPServersFromRedux).mockResolvedValue(servers)
+
+    const listToolsSpy = vi
+      .spyOn(mcpService as any, 'listToolsImpl')
+      .mockResolvedValue([createTool({ name: 'alpha_tool', serverId: 'alpha', serverName: 'Alpha' })])
+
+    await expect(mcpService.listAllActiveServerTools()).resolves.toHaveLength(1)
+    await expect(mcpService.listAllActiveServerTools()).resolves.toHaveLength(1)
+
+    expect(listToolsSpy).toHaveBeenCalledTimes(1)
   })
 })

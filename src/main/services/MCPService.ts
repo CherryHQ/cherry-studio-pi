@@ -184,7 +184,7 @@ class McpService {
 
     const results = await Promise.allSettled(
       activeServers.map(async (server) => {
-        const tools = await this.listToolsImpl(server)
+        const tools = await this.listToolsWithCache(server)
         const disabledTools = new Set(server.disabledTools ?? [])
         return disabledTools.size > 0 ? tools.filter((tool) => !disabledTools.has(tool.name)) : tools
       })
@@ -911,20 +911,23 @@ class McpService {
     }
   }
 
+  private listToolsWithCache(server: MCPServer) {
+    const cachedListTools = withCache<[MCPServer], MCPTool[]>(
+      this.listToolsImpl.bind(this),
+      (server) => {
+        const serverKey = this.getServerKey(server)
+        return `mcp:list_tool:${serverKey}`
+      },
+      5 * 60 * 1000,
+      `[MCP] Tools from ${server.name}`
+    )
+
+    return cachedListTools(server)
+  }
+
   async listTools(_: Electron.IpcMainInvokeEvent, server: MCPServer) {
     const listFunc = (server: MCPServer) => {
-      const cachedListTools = withCache<[MCPServer], MCPTool[]>(
-        this.listToolsImpl.bind(this),
-        (server) => {
-          const serverKey = this.getServerKey(server)
-          return `mcp:list_tool:${serverKey}`
-        },
-        5 * 60 * 1000, // 5 minutes TTL
-        `[MCP] Tools from ${server.name}`
-      )
-
-      const result = cachedListTools(server)
-      return result
+      return this.listToolsWithCache(server)
     }
 
     return withSpanFunc(`${server.name}.ListTool`, 'MCP', listFunc, [server])

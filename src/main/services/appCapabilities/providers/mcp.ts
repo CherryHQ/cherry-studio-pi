@@ -4,6 +4,42 @@ import { reduxService } from '@main/services/ReduxService'
 import type { AppCapabilityDefinition } from '../types'
 import { okResult, sanitizeForAgent } from '../utils'
 
+const DEFAULT_MCP_TOOL_LIST_LIMIT = 50
+const MAX_MCP_TOOL_LIST_LIMIT = 200
+
+function normalizeListLimit(value: unknown) {
+  const parsed =
+    typeof value === 'string' && !value.trim()
+      ? DEFAULT_MCP_TOOL_LIST_LIMIT
+      : Number(value ?? DEFAULT_MCP_TOOL_LIST_LIMIT)
+  const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_MCP_TOOL_LIST_LIMIT
+  return Math.max(1, Math.min(safeLimit, MAX_MCP_TOOL_LIST_LIMIT))
+}
+
+function normalizeOffset(value: unknown) {
+  const parsed = typeof value === 'string' && !value.trim() ? 0 : Number(value ?? 0)
+  const safeOffset = Number.isFinite(parsed) ? Math.trunc(parsed) : 0
+  return Math.max(0, safeOffset)
+}
+
+function compactMcpTool(tool: any, includeSchemas: boolean) {
+  return {
+    id: tool.id,
+    name: tool.name,
+    description: tool.description,
+    serverId: tool.serverId,
+    serverName: tool.serverName,
+    type: tool.type,
+    isBuiltIn: tool.isBuiltIn,
+    ...(includeSchemas
+      ? {
+          inputSchema: tool.inputSchema,
+          outputSchema: tool.outputSchema
+        }
+      : {})
+  }
+}
+
 export function createMcpCapabilities(): AppCapabilityDefinition[] {
   return [
     {
@@ -26,10 +62,30 @@ export function createMcpCapabilities(): AppCapabilityDefinition[] {
       kind: 'query',
       title: 'List active MCP tools',
       description: 'List tools from active MCP servers.',
-      inputSchema: { type: 'object', properties: {} },
+      inputSchema: {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', default: DEFAULT_MCP_TOOL_LIST_LIMIT },
+          offset: { type: 'number', default: 0 },
+          includeSchemas: { type: 'boolean', default: false }
+        }
+      },
       risk: 'read',
       tags: ['mcp', 'tools', 'list'],
-      execute: async () => okResult('MCP tools listed', sanitizeForAgent(await mcpService.listAllActiveServerTools()))
+      execute: async (input: any) => {
+        const limit = normalizeListLimit(input?.limit)
+        const offset = normalizeOffset(input?.offset)
+        const includeSchemas = input?.includeSchemas === true
+        const tools = await mcpService.listAllActiveServerTools()
+        const page = tools.slice(offset, offset + limit)
+        return okResult('MCP tools listed', {
+          total: tools.length,
+          limit,
+          offset,
+          nextOffset: offset + limit < tools.length ? offset + limit : null,
+          tools: sanitizeForAgent(page.map((tool) => compactMcpTool(tool, includeSchemas)))
+        })
+      }
     },
     {
       id: 'mcp.tool.call',
