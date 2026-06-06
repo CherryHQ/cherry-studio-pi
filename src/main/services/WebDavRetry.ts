@@ -34,7 +34,7 @@ type WebDavRetryOptions = {
 }
 
 const RETRIABLE_WEB_DAV_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504])
-const DEFAULT_WEB_DAV_OPERATION_TIMEOUT_MS = 90_000
+const DEFAULT_WEB_DAV_OPERATION_TIMEOUT_MS = 45_000
 
 function asObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
@@ -124,7 +124,12 @@ function toError(error: unknown) {
 }
 
 function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  return new Promise((resolve) => {
+    const timeout = setTimeout(resolve, ms)
+    if (typeof timeout === 'object' && timeout && 'unref' in timeout && typeof timeout.unref === 'function') {
+      timeout.unref()
+    }
+  })
 }
 
 function isTimeoutError(error: unknown) {
@@ -145,6 +150,9 @@ function withTimeout<T>(promise: Promise<T>, operation: string, timeoutMs: numbe
       error.code = 'ETIMEDOUT'
       reject(error)
     }, timeoutMs)
+    if (typeof timeoutId === 'object' && timeoutId && 'unref' in timeoutId && typeof timeoutId.unref === 'function') {
+      timeoutId.unref()
+    }
   })
 
   return Promise.race([promise, timeout]).finally(() => {

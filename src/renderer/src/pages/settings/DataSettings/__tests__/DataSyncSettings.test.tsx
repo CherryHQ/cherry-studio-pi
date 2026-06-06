@@ -69,6 +69,17 @@ function syncButton() {
   return button!
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}
+
 function successSummary() {
   return {
     status: 'success',
@@ -206,6 +217,21 @@ describe('DataSyncSettings', () => {
     await waitFor(() => expect(syncButton()).toHaveClass('ant-btn-loading'))
 
     fireEvent.click(screen.getByText('settings.data.data_sync.refresh_status'))
+
+    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+  })
+
+  it('ignores stale status refresh responses that arrive after a newer status request', async () => {
+    const staleRefresh = deferred<ReturnType<typeof runningStatus>>()
+    mocks.getStatus.mockImplementationOnce(() => staleRefresh.promise).mockResolvedValueOnce(idleStatus())
+
+    render(<DataSyncSettings />)
+    fireEvent.click(screen.getByText('settings.data.data_sync.refresh_status'))
+
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+
+    staleRefresh.resolve(runningStatus())
 
     await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
   })

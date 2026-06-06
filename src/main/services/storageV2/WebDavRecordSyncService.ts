@@ -524,11 +524,6 @@ function normalizePathForManifestEntry(value: string | undefined | null) {
   return safeRemoteRelativePath(value)
 }
 
-function tableWeight(tables: readonly StorageV2SyncTable[], entityType: string) {
-  const index = tables.findIndex((table) => table.entityType === entityType)
-  return index === -1 ? Number.MAX_SAFE_INTEGER : index
-}
-
 function toSqlValue(value: unknown): InValue {
   if (value == null) return null
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint') {
@@ -740,11 +735,20 @@ function isPreconditionCreateDirectoryError(error: unknown) {
 export class StorageV2WebDavRecordSyncService {
   private columnsByTable = new Map<string, string[]>()
   private skillIdRemaps = new Map<string, string>()
+  private readonly tablesByEntity: ReadonlyMap<string, StorageV2SyncTable>
+  private readonly tableWeightsByEntity: ReadonlyMap<string, number>
 
-  constructor(private readonly tables: readonly StorageV2SyncTable[] = STORAGE_V2_SYNC_TABLES) {}
+  constructor(private readonly tables: readonly StorageV2SyncTable[] = STORAGE_V2_SYNC_TABLES) {
+    this.tablesByEntity = new Map(tables.map((table) => [table.entityType, table]))
+    this.tableWeightsByEntity = new Map(tables.map((table, index) => [table.entityType, index]))
+  }
 
   private tableByEntity(entityType: string) {
-    return this.tables.find((table) => table.entityType === entityType) ?? null
+    return this.tablesByEntity.get(entityType) ?? null
+  }
+
+  private tableWeight(entityType: string) {
+    return this.tableWeightsByEntity.get(entityType) ?? Number.MAX_SAFE_INTEGER
   }
 
   private async ensureDirectory(client: WebDAVClient, dirPath: string) {
@@ -2433,7 +2437,7 @@ export class StorageV2WebDavRecordSyncService {
     return Array.from(ids).sort((left, right) => {
       const leftEntity = left.slice(0, left.indexOf(':'))
       const rightEntity = right.slice(0, right.indexOf(':'))
-      const weightDiff = tableWeight(this.tables, leftEntity) - tableWeight(this.tables, rightEntity)
+      const weightDiff = this.tableWeight(leftEntity) - this.tableWeight(rightEntity)
       return weightDiff !== 0 ? weightDiff : left.localeCompare(right)
     })
   }

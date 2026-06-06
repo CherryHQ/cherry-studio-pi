@@ -24,7 +24,7 @@ import { normalizeWebDavConfig, normalizeWebDavHost, parseWebDavInput } from '@s
 import { Alert, Breadcrumb, Button, Empty, Input, List, Modal, Space, Spin, Tooltip, Typography } from 'antd'
 import dayjs from 'dayjs'
 import type { CSSProperties, FC } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -257,6 +257,8 @@ const DataSyncSettings: FC = () => {
   const [directoryLoading, setDirectoryLoading] = useState(false)
   const [directoryError, setDirectoryError] = useState<string | null>(null)
   const [remoteDirectoryList, setRemoteDirectoryList] = useState<RemoteDirectoryList | null>(null)
+  const statusRefreshSeqRef = useRef(0)
+  const statusRefreshLoadingSeqRef = useRef(0)
 
   const applyStructuredWebDavInput = (value: string) => {
     const parsed = parseWebDavInput(value)
@@ -316,26 +318,34 @@ const DataSyncSettings: FC = () => {
   }
 
   const refreshStatus = async (showLoading = false) => {
+    const requestSeq = ++statusRefreshSeqRef.current
+    const isLatestRequest = () => requestSeq === statusRefreshSeqRef.current
+    let loadingSeq: number | null = null
     if (showLoading) {
+      loadingSeq = ++statusRefreshLoadingSeqRef.current
       setStatusRefreshing(true)
     }
     try {
       const nextStatus = await window.api.dataSync.getStatus()
+      if (!isLatestRequest()) return null
+
       setStatus(nextStatus)
       setSyncing(Boolean(nextStatus.syncing))
       if (!nextStatus.syncing) {
         const runtimeState = await refreshDataSyncRuntimeStateFromMain().catch(() => null)
-        if (runtimeState) {
+        if (runtimeState && isLatestRequest()) {
           setRuntimeSyncing(runtimeState.syncing)
         }
       }
       return nextStatus
     } catch (error) {
+      if (!isLatestRequest()) return null
+
       setSyncing(false)
       setStatus((prev) => (prev ? { ...prev, syncing: false, syncStartedAt: null } : prev))
       return null
     } finally {
-      if (showLoading) {
+      if (loadingSeq !== null && loadingSeq === statusRefreshLoadingSeqRef.current) {
         setStatusRefreshing(false)
       }
     }
@@ -405,7 +415,7 @@ const DataSyncSettings: FC = () => {
           conflicts: prev?.conflicts || [],
           lastSummary: summary,
           syncing: false,
-          syncStartedAt: prev?.syncStartedAt ?? null
+          syncStartedAt: null
         }))
       }
       latestStatus = await refreshStatus().catch(() => null)

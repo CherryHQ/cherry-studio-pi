@@ -137,15 +137,16 @@ export async function verifyRemoteJsonHash(
   }
 }
 
-async function deleteRemoteFile(client: WebDAVClient, filePath: string, logger: WebDavAtomicLogger) {
+async function deleteRemoteFile(client: WebDAVClient, filePath: string, options: WriteJsonOptions) {
   const deleteFile = (client as WebDAVClient & { deleteFile?: (targetPath: string) => Promise<void> }).deleteFile
   if (typeof deleteFile !== 'function') return
 
   await runWebDavOperation(`deleting temporary remote file ${filePath}`, () => deleteFile.call(client, filePath), {
-    logger
+    logger: options.logger,
+    timeoutMs: options.timeoutMs
   }).catch((error) => {
     if (error instanceof WebDavOperationError && error.status === 404) return
-    logger.warn(`Failed to delete temporary remote file ${filePath}`, error as Error)
+    options.logger.warn(`Failed to delete temporary remote file ${filePath}`, error as Error)
   })
 }
 
@@ -231,6 +232,6 @@ export async function writeWebDavJsonAtomically(
       throw new Error(`Remote ${options.operation} final write verification failed: ${filePath}`)
     }
   } finally {
-    await deleteRemoteFile(client, temporaryPath, options.logger)
+    await deleteRemoteFile(client, temporaryPath, options)
   }
 }
