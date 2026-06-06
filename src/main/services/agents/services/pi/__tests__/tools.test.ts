@@ -597,6 +597,41 @@ exit 1
     expect(resultText(result)).toContain('line breaks')
   })
 
+  it('normalizes HTTPRequest body before fetching', async () => {
+    vi.mocked(net.fetch).mockResolvedValueOnce({
+      headers: { get: vi.fn(() => 'text/plain') },
+      status: 200,
+      statusText: 'OK',
+      ok: true,
+      url: 'https://example.test/post',
+      text: vi.fn(async () => 'ok')
+    } as any)
+
+    const request = getTool('HTTPRequest', tmpDir, [tmpDir])
+    await request.execute('http-normalized-body', {
+      url: 'https://example.test/post',
+      method: 'post',
+      body: 42
+    })
+
+    expect(net.fetch).toHaveBeenCalled()
+    const init = vi.mocked(net.fetch).mock.calls[0][1] as RequestInit
+    expect(init).toMatchObject({ method: 'POST', body: '42' })
+  })
+
+  it('rejects object HTTPRequest bodies before fetching', async () => {
+    const request = getTool('HTTPRequest', tmpDir, [tmpDir])
+    const result = await request.execute('http-object-body', {
+      url: 'https://example.test/post',
+      method: 'POST',
+      body: { ok: true }
+    })
+
+    expect(net.fetch).not.toHaveBeenCalled()
+    expect(result.details).toMatchObject({ isError: true })
+    expect(resultText(result)).toContain('body must be a string-compatible scalar value')
+  })
+
   it('marks AppCallCapability as a direct app bridge that does not require tool permission', () => {
     expect(builtinTools.find((tool) => tool.id === 'AppCallCapability')).toMatchObject({
       requirePermissions: false

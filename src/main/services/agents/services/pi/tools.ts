@@ -111,6 +111,15 @@ const normalizeHttpRequestHeaders = (value: unknown) => {
   return Object.keys(headers).length ? headers : undefined
 }
 
+const normalizeHttpRequestBody = (method: string, value: unknown) => {
+  if (method === 'GET' || method === 'HEAD') return undefined
+  if (typeof value === 'undefined' || value === null) return undefined
+  if (typeof value === 'object' || typeof value === 'function' || typeof value === 'symbol') {
+    throw new Error('HTTPRequest body must be a string-compatible scalar value')
+  }
+  return String(value)
+}
+
 const truncateOutput = (text: string, maxChars: number) => {
   const normalizedMaxChars = Number.isFinite(maxChars) ? Math.max(Math.floor(maxChars), 0) : 0
   if (text.length <= normalizedMaxChars) return { text, truncated: false }
@@ -1047,10 +1056,11 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
         const url = normalizeHttpRequestUrl(input.url)
         const method = normalizeHttpRequestMethod(input.method)
         const headers = normalizeHttpRequestHeaders(input.headers)
+        const body = normalizeHttpRequestBody(method, input.body)
         const response = await net.fetch(url, {
           method,
           headers,
-          body: method === 'GET' || method === 'HEAD' ? undefined : input.body,
+          body,
           signal
         })
         const contentType = response.headers.get('content-type') ?? ''
