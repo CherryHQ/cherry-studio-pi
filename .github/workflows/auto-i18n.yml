@@ -64,7 +64,7 @@ jobs:
         run: |
           # Check if there are any uncommitted changes
           git reset -- package.json pnpm-lock.yaml  # 不提交 package.json 和 pnpm-lock.yaml 的更改
-          git diff --exit-code --quiet || echo "::set-output name=has_changes::true"
+          git diff --exit-code --quiet || echo "has_changes=true" >> "$GITHUB_OUTPUT"
           git status --porcelain
 
       - name: 📅 Set current date for PR title

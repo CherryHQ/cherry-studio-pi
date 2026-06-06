@@ -27,6 +27,32 @@ function writeJsonAtomic(filePath: string, value: unknown) {
   fs.renameSync(tempPath, filePath)
 }
 
+function getCurrentExecutablePath() {
+  if (isLinux && process.env.APPIMAGE) {
+    return process.env.APPIMAGE
+  }
+
+  if (isWin && isPortable && process.env.PORTABLE_EXECUTABLE_FILE) {
+    return process.env.PORTABLE_EXECUTABLE_FILE
+  }
+
+  return app.getPath('exe')
+}
+
+function getCompatibleExecutablePaths(executablePath: string) {
+  const executablePaths = [executablePath]
+
+  if (isLinux && process.env.APPIMAGE) {
+    executablePaths.push(path.join(path.dirname(process.env.APPIMAGE), 'cherry-studio.appimage'))
+  }
+
+  if (isWin && isPortable && process.env.PORTABLE_EXECUTABLE_DIR) {
+    executablePaths.push(path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'cherry-studio-portable.exe'))
+  }
+
+  return Array.from(new Set(executablePaths))
+}
+
 export function initAppDataDir() {
   const appDataPath = getAppDataPathFromConfig()
   if (appDataPath) {
@@ -54,16 +80,8 @@ function getAppDataPathFromConfig() {
       return null
     }
 
-    let executablePath = app.getPath('exe')
-    if (isLinux && process.env.APPIMAGE) {
-      // 如果是 AppImage 打包的应用，直接使用 APPIMAGE 环境变量
-      // 这样可以确保获取到正确的可执行文件路径
-      executablePath = path.join(path.dirname(process.env.APPIMAGE), 'cherry-studio.appimage')
-    }
-
-    if (isWin && isPortable) {
-      executablePath = path.join(process.env.PORTABLE_EXECUTABLE_DIR || '', 'cherry-studio-portable.exe')
-    }
+    const executablePath = getCurrentExecutablePath()
+    const compatibleExecutablePaths = new Set(getCompatibleExecutablePaths(executablePath))
 
     let appDataPath = null
     // 兼容旧版本
@@ -73,7 +91,7 @@ function getAppDataPathFromConfig() {
       appDataPath && updateAppDataConfig(appDataPath)
     } else {
       appDataPath = config.appDataPath.find(
-        (item: { executablePath: string }) => item.executablePath === executablePath
+        (item: { executablePath: string }) => item.executablePath && compatibleExecutablePaths.has(item.executablePath)
       )?.dataPath
     }
 
@@ -96,15 +114,7 @@ export function updateAppDataConfig(appDataPath: string) {
   // config.json
   // appDataPath: [{ executablePath: string, dataPath: string }]
   const configPath = path.join(configDir, 'config.json')
-  let executablePath = app.getPath('exe')
-  if (isLinux && process.env.APPIMAGE) {
-    executablePath = path.join(path.dirname(process.env.APPIMAGE), 'cherry-studio.appimage')
-  }
-
-  // 如果是 Windows 可移植版本，则使用 PORTABLE_EXECUTABLE_FILE 环境变量
-  if (isWin && isPortable) {
-    executablePath = path.join(process.env.PORTABLE_EXECUTABLE_DIR || '', 'cherry-studio-portable.exe')
-  }
+  const executablePath = getCurrentExecutablePath()
 
   if (!fs.existsSync(configPath)) {
     writeJsonAtomic(configPath, { appDataPath: [{ executablePath, dataPath: appDataPath }] })

@@ -3,11 +3,13 @@ const config = {
   R2_CUSTOM_DOMAIN: 'cherrystudio.ocool.online',
   R2_BUCKET_NAME: 'cherrystudio',
   // 缓存键名
-  CACHE_KEY: 'cherry-studio-latest-release',
+  CACHE_KEY: 'cherry-studio-pi-latest-release',
   VERSION_DB: 'versions.json',
   LOG_FILE: 'logs.json',
   MAX_LOGS: 1000 // 最多保存多少条日志
 }
+
+const RESERVED_R2_KEYS = new Set([config.CACHE_KEY, config.VERSION_DB, config.LOG_FILE])
 
 // Worker 入口函数
 const worker = {
@@ -158,7 +160,7 @@ async function getLatestRelease(env) {
     return new Response(
       JSON.stringify({
         error: '获取版本信息失败: ' + error.message,
-        detail: '请稍���再试'
+        detail: '请稍后再试'
       }),
       {
         status: 500,
@@ -204,7 +206,7 @@ function getContentType(filename) {
     exe: 'application/x-msdownload', // Windows 可执行文件
     dmg: 'application/x-apple-diskimage', // macOS 安装包
     zip: 'application/zip', // 压缩包
-    AppImage: 'application/x-executable', // Linux 可执行文件
+    appimage: 'application/x-executable', // Linux 可执行文件
     blockmap: 'application/octet-stream' // 更新文件
   }
   return types[ext] || 'application/octet-stream'
@@ -348,6 +350,8 @@ async function getCachedRelease(env) {
 // 新增：只检查新版本并更新
 async function checkNewRelease(env) {
   try {
+    let cacheData = null
+
     // 获取 GitHub 最新版本
     const githubResponse = await fetch('https://api.github.com/repos/CherryHQ/cherry-studio-pi/releases/latest', {
       headers: { 'User-Agent': 'CloudflareWorker' }
@@ -438,7 +442,7 @@ async function checkNewRelease(env) {
       await env.R2_BUCKET.put(config.VERSION_DB, JSON.stringify(versions, null, 2))
 
       // 更新缓存
-      const cacheData = {
+      cacheData = {
         version,
         publishedAt: releaseData.published_at,
         changelog: releaseData.body,
@@ -490,6 +494,10 @@ async function checkNewRelease(env) {
 
         // 清理可能遗留的旧文件
         for (const file of allFiles) {
+          if (RESERVED_R2_KEYS.has(file.name)) {
+            continue
+          }
+
           if (!keepFiles.has(file.name)) {
             try {
               await env.R2_BUCKET.delete(file.name)
@@ -507,7 +515,7 @@ async function checkNewRelease(env) {
       await addLog(env, 'INFO', '所有文件完整性检查通过，无需更新')
     }
 
-    return hasUpdates ? cacheData : null
+    return cacheData
   } catch (error) {
     await addLog(env, 'ERROR', '检查新版本失败', error.message)
     throw error
