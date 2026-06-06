@@ -22,6 +22,17 @@ function normalizeOffset(value: unknown) {
   return Math.max(0, safeOffset)
 }
 
+function normalizeRequiredText(value: unknown, label: string) {
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (!text) throw new Error(`${label} is required`)
+  return text
+}
+
+function normalizeToolParams(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return value as Record<string, unknown>
+}
+
 function compactMcpTool(tool: any, includeSchemas: boolean) {
   return {
     id: tool.id,
@@ -109,7 +120,11 @@ export function createMcpCapabilities(): AppCapabilityDefinition[] {
         okResult(
           'MCP tool called',
           sanitizeForAgent(
-            await mcpService.callToolById(String(input?.toolId), input?.params ?? {}, context.toolCallId)
+            await mcpService.callToolById(
+              normalizeRequiredText(input?.toolId, 'MCP tool id'),
+              normalizeToolParams(input?.params),
+              context.toolCallId
+            )
           )
         )
     }

@@ -191,4 +191,103 @@ describe('knowledge app capabilities', () => {
       mocks.reduxService.select.mock.calls.filter(([selector]) => selector === 'state.llm.providers')
     ).toHaveLength(1)
   })
+
+  it('normalizes knowledge search ids and falls back for invalid document counts', async () => {
+    const bases = [
+      {
+        id: 'kb-1',
+        name: 'Knowledge One',
+        model: { id: 'embed-model', provider: 'shared-provider' },
+        items: []
+      },
+      {
+        id: 'kb-2',
+        name: 'Knowledge Two',
+        model: { id: 'embed-model', provider: 'shared-provider' },
+        items: []
+      }
+    ]
+    const providers = [
+      {
+        id: 'shared-provider',
+        apiKey: 'sk-shared',
+        apiHost: 'https://example.com/'
+      }
+    ]
+    mocks.reduxService.select.mockImplementation(async (selector: string) => {
+      if (selector === 'state.knowledge.bases') return bases
+      if (selector === 'state.llm.providers') return providers
+      return null
+    })
+    mocks.knowledgeService.search.mockResolvedValue(
+      Array.from({ length: 10 }, (_, index) => ({ id: `result-${index}`, content: 'matched' }))
+    )
+
+    const result = await capability('knowledge.search').execute(
+      {
+        query: ' matched ',
+        knowledge_base_ids: [' kb-1 ', '', 'kb-1'],
+        document_count: 'bad'
+      },
+      { source: 'agent' }
+    )
+
+    expect(mocks.knowledgeService.search).toHaveBeenCalledTimes(1)
+    expect((result.data as any).searched_bases).toEqual([{ id: 'kb-1', name: 'Knowledge One' }])
+    expect((result.data as any).total).toBe(5)
+  })
+
+  it('normalizes knowledge add and reset base ids before calling services', async () => {
+    const base = {
+      id: 'kb-1',
+      name: 'Knowledge One',
+      model: { id: 'embed-model', provider: 'shared-provider' },
+      items: []
+    }
+    const providers = [
+      {
+        id: 'shared-provider',
+        apiKey: 'sk-shared',
+        apiHost: 'https://example.com/'
+      }
+    ]
+    mocks.reduxService.select.mockImplementation(async (selector: string) => {
+      if (selector === 'state.knowledge.bases') return [base]
+      if (selector === 'state.llm.providers') return providers
+      return null
+    })
+    mocks.knowledgeService.add.mockResolvedValue({ ok: true })
+
+    await capability('knowledge.item.add').execute(
+      { baseId: ' kb-1 ', item: { id: 'item-1', type: 'note', content: 'hello' } },
+      { source: 'agent' }
+    )
+    const dryRun = await capability('knowledge.base.reset').execute(
+      { baseId: ' kb-1 ' },
+      { source: 'agent', dryRun: true }
+    )
+
+    expect(mocks.knowledgeService.add).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({
+        item: { id: 'item-1', type: 'note', content: 'hello' }
+      })
+    )
+    expect(dryRun.data).toEqual({ baseId: 'kb-1' })
+    expect(mocks.knowledgeService.reset).not.toHaveBeenCalled()
+  })
+
+  it('rejects empty knowledge base ids and invalid knowledge items before calling services', async () => {
+    mocks.reduxService.select.mockResolvedValue([{ id: 'kb-1', name: 'Knowledge One', items: [] }])
+
+    await expect(capability('knowledge.base.reset').execute({ baseId: '   ' }, { source: 'agent' })).rejects.toThrow(
+      'Knowledge base id is required'
+    )
+    await expect(
+      capability('knowledge.item.add').execute({ baseId: 'kb-1', item: [] }, { source: 'agent' })
+    ).rejects.toThrow('Knowledge item is required')
+
+    expect(mocks.knowledgeService.add).not.toHaveBeenCalled()
+    expect(mocks.knowledgeService.reset).not.toHaveBeenCalled()
+  })
 })

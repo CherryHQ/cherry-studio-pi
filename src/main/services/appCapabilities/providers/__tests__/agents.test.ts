@@ -57,8 +57,12 @@ describe('agent app capabilities', () => {
     vi.clearAllMocks()
     mocks.modelsService.getModels.mockResolvedValue({ models: [], total: 0 })
     mocks.listAgentsWithStorageV2Recovery.mockResolvedValue({ agents: [], total: 0 })
+    mocks.createAgentWithStorageV2Recovery.mockResolvedValue({ id: 'agent-1', name: 'Agent One' })
+    mocks.getAgentWithStorageV2Recovery.mockResolvedValue({ id: 'agent-1', name: 'Agent One' })
     mocks.agentSessionService.listByCursor.mockResolvedValue({ items: [], nextCursor: undefined })
+    mocks.agentSessionService.createSession.mockResolvedValue({ id: 'session-1' })
     mocks.agentTaskService.listTasks.mockResolvedValue({ tasks: [], total: 0 })
+    mocks.agentTaskService.createTask.mockResolvedValue({ id: 'task-1' })
   })
 
   it('defaults agent list capabilities to bounded pages', async () => {
@@ -149,5 +153,84 @@ describe('agent app capabilities', () => {
       tasks: [{ id: 'mid-b', createdAt: '2026-06-02T00:00:00.000Z' }],
       total: 3
     })
+  })
+
+  it('normalizes agent identifiers and session inputs before dispatching service calls', async () => {
+    await capability('agents.get').execute({ agentId: ' agent-1 ' }, { source: 'agent' })
+    await capability('agents.sessions.list').execute(
+      { agentId: ' agent-1 ', cursor: ' cursor:one ' },
+      { source: 'agent' }
+    )
+    await capability('agents.session.create').execute(
+      { agentId: ' agent-1 ', name: ' Research ', description: ' Explore docs ' },
+      { source: 'agent' }
+    )
+    await capability('agents.tasks.list').execute({ agentId: ' agent-1 ' }, { source: 'agent' })
+    await capability('agents.task.create').execute(
+      { agentId: ' agent-1 ', task: { title: 'Check sync' } },
+      { source: 'agent' }
+    )
+
+    expect(mocks.getAgentWithStorageV2Recovery).toHaveBeenCalledWith('agent-1')
+    expect(mocks.agentSessionService.listByCursor).toHaveBeenCalledWith({
+      agentId: 'agent-1',
+      limit: 50,
+      cursor: 'cursor:one'
+    })
+    expect(mocks.agentSessionService.createSession).toHaveBeenCalledWith({
+      agentId: 'agent-1',
+      name: 'Research',
+      description: 'Explore docs'
+    })
+    expect(mocks.agentTaskService.listTasks).toHaveBeenCalledWith('agent-1', {
+      limit: 50,
+      offset: undefined,
+      includeHeartbeat: undefined
+    })
+    expect(mocks.agentTaskService.createTask).toHaveBeenCalledWith('agent-1', { title: 'Check sync' })
+  })
+
+  it('treats blank optional agent filters as omitted', async () => {
+    await capability('agents.sessions.list').execute({ agentId: '   ', cursor: '   ' }, { source: 'agent' })
+    await capability('agents.tasks.list').execute({ agentId: '   ' }, { source: 'agent' })
+
+    expect(mocks.agentSessionService.listByCursor).toHaveBeenCalledWith({
+      agentId: undefined,
+      limit: 50,
+      cursor: undefined
+    })
+    expect(mocks.listAgentsWithStorageV2Recovery).toHaveBeenCalledWith({ limit: 200 })
+  })
+
+  it('normalizes agent creation defaults without changing the caller payload shape', async () => {
+    await capability('agents.create').execute(
+      { name: 'Agent One', model: 'model-1', type: ' claude-code ', sessionName: ' First task ' },
+      { source: 'agent' }
+    )
+
+    expect(mocks.createAgentWithStorageV2Recovery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Agent One',
+        model: 'model-1',
+        type: 'claude-code',
+        sessionName: ' First task '
+      })
+    )
+    expect(mocks.agentSessionService.createSession).toHaveBeenCalledWith({ agentId: 'agent-1', name: 'First task' })
+  })
+
+  it('rejects empty required agent inputs before calling services', async () => {
+    await expect(capability('agents.get').execute({ agentId: '   ' }, { source: 'agent' })).rejects.toThrow(
+      'Agent id is required'
+    )
+    await expect(capability('agents.session.create').execute({ agentId: '   ' }, { source: 'agent' })).rejects.toThrow(
+      'Agent id is required'
+    )
+    await expect(
+      capability('agents.task.create').execute({ agentId: 'agent-1', task: [] }, { source: 'agent' })
+    ).rejects.toThrow('Agent task is required')
+
+    expect(mocks.getAgentWithStorageV2Recovery).not.toHaveBeenCalled()
+    expect(mocks.agentTaskService.createTask).not.toHaveBeenCalled()
   })
 })

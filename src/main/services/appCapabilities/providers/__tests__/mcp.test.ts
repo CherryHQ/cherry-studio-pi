@@ -57,6 +57,7 @@ describe('mcp app capabilities', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.mcpService.listAllActiveServerTools.mockResolvedValue([makeTool(1), makeTool(2), makeTool(3)])
+    mocks.mcpService.callToolById.mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] })
   })
 
   it('lists MCP tools as bounded descriptors without schemas by default', async () => {
@@ -97,5 +98,26 @@ describe('mcp app capabilities', () => {
         inputSchema: expect.objectContaining({ type: 'object' })
       })
     ])
+  })
+
+  it('normalizes MCP tool ids and params before calling tools', async () => {
+    const result = await capability('mcp.tool.call').execute(
+      { toolId: ' server__tool_1 ', params: { value: 'hello' } },
+      { source: 'agent', toolCallId: 'tool-call-1' }
+    )
+
+    expect(result.ok).toBe(true)
+    expect(mocks.mcpService.callToolById).toHaveBeenCalledWith('server__tool_1', { value: 'hello' }, 'tool-call-1')
+  })
+
+  it('rejects empty MCP tool ids and ignores non-object params', async () => {
+    await expect(
+      capability('mcp.tool.call').execute({ toolId: '   ', params: { value: 'hello' } }, { source: 'agent' })
+    ).rejects.toThrow('MCP tool id is required')
+
+    await capability('mcp.tool.call').execute({ toolId: 'server__tool_1', params: 'bad' }, { source: 'agent' })
+
+    expect(mocks.mcpService.callToolById).toHaveBeenCalledTimes(1)
+    expect(mocks.mcpService.callToolById).toHaveBeenCalledWith('server__tool_1', {}, undefined)
   })
 })

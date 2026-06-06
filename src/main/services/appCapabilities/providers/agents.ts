@@ -28,6 +28,25 @@ function normalizeOffset(value: unknown) {
   return Math.max(0, Math.trunc(parsed))
 }
 
+function normalizeOptionalText(value: unknown) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed || undefined
+  }
+  if (value === null || typeof value === 'undefined') return undefined
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    const trimmed = String(value).trim()
+    return trimmed || undefined
+  }
+  return undefined
+}
+
+function normalizeRequiredText(value: unknown, label: string) {
+  const text = normalizeOptionalText(value)
+  if (!text) throw new Error(`${label} is required`)
+  return text
+}
+
 function agentListOptions(input: any = {}) {
   const { limit, offset, ...rest } = input ?? {}
   return {
@@ -39,7 +58,7 @@ function agentListOptions(input: any = {}) {
 
 async function listAgentTasks(input: any = {}) {
   const options = agentListOptions(input)
-  const agentId = typeof input?.agentId === 'string' && input.agentId ? input.agentId : undefined
+  const agentId = normalizeOptionalText(input?.agentId)
 
   if (agentId) {
     return agentTaskService.listTasks(agentId, {
@@ -88,7 +107,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['agents', 'models', 'llm'],
       execute: async (input: any) =>
-        okResult('Agent models listed', await modelsService.getModels(agentListOptions(input)))
+        okResult('Agent models listed', sanitizeForAgent(await modelsService.getModels(agentListOptions(input))))
     },
     {
       id: 'agents.list',
@@ -126,8 +145,9 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['agents', 'read'],
       execute: async (input: any) => {
-        const agent = await getAgentWithStorageV2Recovery(String(input?.agentId))
-        if (!agent) throw new Error(`Agent not found: ${input?.agentId}`)
+        const agentId = normalizeRequiredText(input?.agentId, 'Agent id')
+        const agent = await getAgentWithStorageV2Recovery(agentId)
+        if (!agent) throw new Error(`Agent not found: ${agentId}`)
         return okResult('Agent read', sanitizeForAgent(agent))
       }
     },
@@ -157,12 +177,13 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['database.write', 'filesystem.write'],
       tags: ['agents', 'create'],
       execute: async (input: any) => {
+        const sessionName = normalizeOptionalText(input?.sessionName) || 'Default session'
         const agent = await createAgentWithStorageV2Recovery({
           ...input,
-          type: input?.type || 'claude-code'
+          type: normalizeOptionalText(input?.type) || 'claude-code'
         })
         const session = await agentSessionService
-          .createSession({ agentId: agent.id, name: input?.sessionName || 'Default session' })
+          .createSession({ agentId: agent.id, name: sessionName })
           .catch(() => null)
         return {
           ok: true,
@@ -192,9 +213,9 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
           'Agent sessions listed',
           sanitizeForAgent(
             await agentSessionService.listByCursor({
-              agentId: input?.agentId,
+              agentId: normalizeOptionalText(input?.agentId),
               limit: normalizeListLimit(input?.limit),
-              cursor: typeof input?.cursor === 'string' ? input.cursor : undefined
+              cursor: normalizeOptionalText(input?.cursor)
             })
           )
         )
@@ -223,9 +244,9 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any) => {
         const { agentId, ...sessionInput } = input ?? {}
         const session = await agentSessionService.createSession({
-          agentId: String(agentId),
-          name: sessionInput.name || 'New session',
-          description: sessionInput.description
+          agentId: normalizeRequiredText(agentId, 'Agent id'),
+          name: normalizeOptionalText(sessionInput.name) || 'New session',
+          description: normalizeOptionalText(sessionInput.description)
         })
         return okResult('Agent session created', sanitizeForAgent(session))
       }
@@ -268,7 +289,11 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['database.write'],
       tags: ['agents', 'tasks', 'schedule', 'create'],
       execute: async (input: any) => {
-        const task = await agentTaskService.createTask(String(input?.agentId), input?.task)
+        const taskInput = input?.task
+        if (!taskInput || typeof taskInput !== 'object' || Array.isArray(taskInput)) {
+          throw new Error('Agent task is required')
+        }
+        const task = await agentTaskService.createTask(normalizeRequiredText(input?.agentId, 'Agent id'), taskInput)
         return okResult('Agent task created', sanitizeForAgent(task))
       }
     }

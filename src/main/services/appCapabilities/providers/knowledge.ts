@@ -39,6 +39,47 @@ function normalizeKnowledgeBaseItemPreviewLimit(value: unknown): number {
   return Math.max(0, Math.min(safeLimit, MAX_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT))
 }
 
+function normalizeKnowledgeSearchDocumentCount(value: unknown): number {
+  const parsed = typeof value === 'string' && !value.trim() ? 5 : Number(value ?? 5)
+  const safeCount = Number.isFinite(parsed) ? Math.trunc(parsed) : 5
+  return Math.max(1, Math.min(safeCount, 20))
+}
+
+function normalizeOptionalText(value: unknown) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed || undefined
+  }
+  if (value === null || typeof value === 'undefined') return undefined
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    const trimmed = String(value).trim()
+    return trimmed || undefined
+  }
+  return undefined
+}
+
+function normalizeRequiredText(value: unknown, label: string) {
+  const text = normalizeOptionalText(value)
+  if (!text) throw new Error(`${label} is required`)
+  return text
+}
+
+function normalizeKnowledgeBaseIds(value: unknown) {
+  if (!Array.isArray(value)) return undefined
+  const ids = value.flatMap((item) => {
+    const id = normalizeOptionalText(item)
+    return id ? [id] : []
+  })
+  return [...new Set(ids)]
+}
+
+function normalizeKnowledgeItem(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Knowledge item is required')
+  }
+  return value as KnowledgeItem
+}
+
 function summarizeKnowledgeBaseForAgent(base: KnowledgeBase, input: any = {}) {
   const includeItems = input?.includeItems === true
   const itemLimit = normalizeKnowledgeBaseItemPreviewLimit(input?.itemLimit)
@@ -262,9 +303,12 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       tags: ['knowledge', 'rag', 'create'],
       execute: async (input: any) => {
         const now = Date.now()
+        const id = normalizeOptionalText(input?.id) || `kb_${uuidv4()}`
+        const name = normalizeRequiredText(input?.name, 'Knowledge base name')
         const base = {
           ...input,
-          id: input?.id || `kb_${uuidv4()}`,
+          id,
+          name,
           items: Array.isArray(input?.items) ? input.items : [],
           created_at: input?.created_at || now,
           updated_at: now
@@ -314,8 +358,8 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         const query = String(input?.query || '').trim()
         if (!query) throw new Error('Missing search query')
 
-        const ids = Array.isArray(input?.knowledge_base_ids) ? input.knowledge_base_ids : undefined
-        const documentCount = Math.max(1, Math.min(Number(input?.document_count || 5), 20))
+        const ids = normalizeKnowledgeBaseIds(input?.knowledge_base_ids)
+        const documentCount = normalizeKnowledgeSearchDocumentCount(input?.document_count)
         const bases = await listKnowledgeBases()
         const targetBases = ids?.length ? bases.filter((base) => ids.includes(base.id)) : bases
         const resolveProviderConfig = createCachedProviderConfigResolver()
@@ -380,9 +424,10 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['database.write', 'model.call'],
       tags: ['knowledge', 'rag', 'add', 'ingest'],
       execute: async (input: any) => {
-        const base = (await listKnowledgeBases()).find((item) => item.id === input?.baseId)
-        if (!base) throw new Error(`Knowledge base not found: ${input?.baseId}`)
-        const knowledgeItem = input?.item as KnowledgeItem
+        const baseId = normalizeRequiredText(input?.baseId, 'Knowledge base id')
+        const base = (await listKnowledgeBases()).find((item) => item.id === baseId)
+        if (!base) throw new Error(`Knowledge base not found: ${baseId}`)
+        const knowledgeItem = normalizeKnowledgeItem(input?.item)
         const result = await knowledgeService.add({} as Electron.IpcMainInvokeEvent, {
           base: await toKnowledgeBaseParams(base),
           item: knowledgeItem,
@@ -413,8 +458,9 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       supportsDryRun: true,
       tags: ['knowledge', 'rag', 'reset'],
       execute: async (input: any, context) => {
-        const base = (await listKnowledgeBases()).find((item) => item.id === input?.baseId)
-        if (!base) throw new Error(`Knowledge base not found: ${input?.baseId}`)
+        const baseId = normalizeRequiredText(input?.baseId, 'Knowledge base id')
+        const base = (await listKnowledgeBases()).find((item) => item.id === baseId)
+        if (!base) throw new Error(`Knowledge base not found: ${baseId}`)
         if (context.dryRun) return okResult('Knowledge base reset dry run completed', { baseId: base.id })
         await knowledgeService.reset({} as Electron.IpcMainInvokeEvent, await toKnowledgeBaseParams(base))
         return okResult('Knowledge base reset', { baseId: base.id, name: base.name })
