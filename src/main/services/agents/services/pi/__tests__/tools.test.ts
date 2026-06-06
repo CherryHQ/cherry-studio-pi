@@ -489,6 +489,38 @@ exit 1
     expect(resultText(result).length).toBeLessThan(25_000)
   })
 
+  it('stops streaming HTTPRequest responses after the response budget', async () => {
+    const cancel = vi.fn()
+    const text = vi.fn(async () => 'should-not-read-full-response')
+    vi.mocked(net.fetch).mockResolvedValueOnce({
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(Buffer.from('hello'))
+          controller.enqueue(Buffer.from(' world'))
+        },
+        cancel
+      }),
+      headers: { get: vi.fn(() => 'text/plain') },
+      status: 200,
+      statusText: 'OK',
+      ok: true,
+      url: 'https://example.test/stream',
+      text
+    } as any)
+
+    const request = getTool('HTTPRequest', tmpDir, [tmpDir])
+    const result = await request.execute('http-stream-budget', {
+      url: 'https://example.test/stream',
+      max_chars: 5
+    })
+
+    expect(text).not.toHaveBeenCalled()
+    expect(cancel).toHaveBeenCalled()
+    expect(result.details).toMatchObject({ truncated: true })
+    expect(resultText(result)).toContain('hello')
+    expect(resultText(result)).toContain('truncated response after 5 chars')
+  })
+
   it('normalizes HTTPRequest URLs before fetching', async () => {
     vi.mocked(net.fetch).mockResolvedValueOnce({
       headers: { get: vi.fn(() => 'text/plain') },

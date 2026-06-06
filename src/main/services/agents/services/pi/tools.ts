@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { promisify } from 'node:util'
+import { promisify, TextDecoder } from 'node:util'
 
 import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core'
 import { Type } from '@earendil-works/pi-ai'
@@ -136,6 +136,45 @@ const truncateOutput = (text: string, maxChars: number) => {
     text: `${text.slice(0, headLength)}\n\n[...truncated ${
       text.length - normalizedMaxChars
     } chars...]\n\n${tailLength > 0 ? text.slice(-tailLength) : ''}`,
+    truncated: true
+  }
+}
+
+const readLimitedHttpResponseText = async (response: Pick<Response, 'body' | 'text'>, maxChars: number) => {
+  if (!response.body || typeof response.body.getReader !== 'function') {
+    return truncateOutput((await response.text()) || '(empty response)', maxChars)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let text = ''
+  let truncated = false
+
+  try {
+    while (text.length <= maxChars) {
+      const { done, value } = await reader.read()
+      if (done) break
+      text += decoder.decode(value, { stream: true })
+      if (text.length > maxChars) {
+        truncated = true
+        await reader.cancel().catch(() => undefined)
+        break
+      }
+    }
+    text += decoder.decode()
+  } finally {
+    try {
+      reader.releaseLock()
+    } catch {
+      // The stream may already be canceled or closed.
+    }
+  }
+
+  if (!text) text = '(empty response)'
+  if (!truncated) return truncateOutput(text, maxChars)
+
+  return {
+    text: `${text.slice(0, maxChars)}\n\n[...truncated response after ${maxChars} chars...]`,
     truncated: true
   }
 }
@@ -1064,9 +1103,8 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
           signal
         })
         const contentType = response.headers.get('content-type') ?? ''
-        const rawText = await response.text()
         const maxChars = normalizeOutputCharLimit(input.max_chars)
-        const truncated = truncateOutput(rawText || '(empty response)', maxChars)
+        const truncated = await readLimitedHttpResponseText(response, maxChars)
         return textResult(truncated.text, {
           status: response.status,
           statusText: response.statusText,
