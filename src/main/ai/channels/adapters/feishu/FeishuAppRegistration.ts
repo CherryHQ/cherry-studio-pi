@@ -32,6 +32,35 @@ export type RegistrationResult = {
 
 type PollStatus = 'authorization_pending' | 'slow_down' | 'access_denied' | 'expired_token'
 
+function createRegistrationAbortError(): Error {
+  return new Error('Registration polling aborted')
+}
+
+function waitForPollInterval(intervalMs: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(createRegistrationAbortError())
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
+    }
+    const onAbort = () => {
+      cleanup()
+      reject(createRegistrationAbortError())
+    }
+    const timer = setTimeout(() => {
+      cleanup()
+      resolve()
+    }, intervalMs)
+    if (typeof timer === 'object' && timer && 'unref' in timer && typeof timer.unref === 'function') {
+      timer.unref()
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
 async function postRegistration(baseUrl: string, params: Record<string, string>): Promise<Record<string, unknown>> {
   const url = `${baseUrl}/oauth/v1/app/registration`
   // The Feishu registration API requires application/x-www-form-urlencoded,
@@ -92,20 +121,14 @@ export async function registrationPoll(
 
   while (Date.now() < deadline) {
     if (options.signal?.aborted) {
-      throw new Error('Registration polling aborted')
+      throw createRegistrationAbortError()
     }
 
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(resolve, interval)
-      options.signal?.addEventListener(
-        'abort',
-        () => {
-          clearTimeout(timer)
-          reject(new Error('Registration polling aborted'))
-        },
-        { once: true }
-      )
-    })
+    await waitForPollInterval(interval, options.signal)
+
+    if (options.signal?.aborted) {
+      throw createRegistrationAbortError()
+    }
 
     const res = await postRegistration(baseUrl, {
       action: 'poll',
