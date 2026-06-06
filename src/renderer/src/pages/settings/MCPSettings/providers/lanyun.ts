@@ -147,7 +147,7 @@ export const syncTokenLanYunServers = async (
     const addedServers: MCPServer[] = []
     const updatedServers: MCPServer[] = []
     const allServers: MCPServer[] = []
-    logger.debug('TokenLanYun servers:', servers)
+    logger.debug('TokenLanYun servers fetched', { count: servers.length })
 
     for (const server of servers) {
       try {

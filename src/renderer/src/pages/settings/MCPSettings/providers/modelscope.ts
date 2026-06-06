@@ -109,7 +109,7 @@ export const syncModelScopeServers = async (
     const addedServers: MCPServer[] = []
     const updatedServers: MCPServer[] = []
     const allServers: MCPServer[] = []
-    logger.debug('ModelScope servers:', servers)
+    logger.debug('ModelScope servers fetched', { count: servers.length })
     for (const server of servers) {
       try {
         if (!server.operational_urls?.[0]?.url) continue

@@ -115,7 +115,7 @@ export const syncTokenFluxServers = async (
     const addedServers: MCPServer[] = []
     const updatedServers: MCPServer[] = []
     const allServers: MCPServer[] = []
-    logger.debug('TokenFlux servers:', servers)
+    logger.debug('TokenFlux servers fetched', { count: servers.length })
     for (const server of servers) {
       try {
         // Check if server already exists

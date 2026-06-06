@@ -81,7 +81,7 @@ export const syncAi302Servers = async (token: string, existingServers: MCPServer
     // Process successful response
     const data = await response.json()
     const servers: MCPServer[] = data.mcps || []
-    logger.debug('servers', servers)
+    logger.debug('302ai servers fetched', { count: servers.length })
 
     if (servers.length === 0) {
       return {
@@ -123,6 +123,7 @@ export const syncAi302Servers = async (token: string, existingServers: MCPServer
           // Add new server
           addedServers.push(mcpServer)
         }
+        allServers.push(mcpServer)
       } catch (err) {
         logger.error('Error processing 302ai server:', err as Error)
       }
