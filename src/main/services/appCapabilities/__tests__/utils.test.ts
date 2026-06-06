@@ -65,6 +65,40 @@ describe('app capability utils', () => {
     })
   })
 
+  it('serializes Error objects into useful agent-safe diagnostics', () => {
+    const cause = new Error('socket timeout')
+    const error = Object.assign(new Error('sync failed', { cause }), {
+      code: 'ETIMEDOUT',
+      stack: '/local/path/should/not/leak'
+    })
+
+    const sanitized = sanitizeForAgent({ error }) as any
+
+    expect(sanitized.error).toEqual({
+      name: 'Error',
+      message: 'sync failed',
+      cause: {
+        name: 'Error',
+        message: 'socket timeout'
+      },
+      code: 'ETIMEDOUT'
+    })
+    expect(JSON.stringify(sanitized)).not.toContain('should/not/leak')
+  })
+
+  it('handles circular Error causes instead of throwing', () => {
+    const error = new Error('loop') as Error & { cause?: unknown }
+    error.cause = error
+
+    expect(sanitizeForAgent({ error })).toEqual({
+      error: {
+        name: 'Error',
+        message: 'loop',
+        cause: '[Circular]'
+      }
+    })
+  })
+
   it('bounds large values before returning them to agents', () => {
     const sanitized = sanitizeForAgent({
       text: 'x'.repeat(10_000),

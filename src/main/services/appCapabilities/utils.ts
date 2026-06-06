@@ -43,6 +43,32 @@ function sanitizeJsonValue(value: unknown, key: string, seen: WeakSet<object>, d
     return Number.isNaN(value.getTime()) ? null : value.toISOString()
   }
 
+  if (value instanceof Error) {
+    if (seen.has(value)) return CIRCULAR_REFERENCE_PLACEHOLDER
+    if (depth >= MAX_AGENT_OBJECT_DEPTH) return '[Error truncated]'
+
+    seen.add(value)
+    try {
+      const output: Record<string, unknown> = {
+        name: value.name || 'Error',
+        message: value.message
+      }
+      const errorWithCause = value as Error & { cause?: unknown }
+      if ('cause' in errorWithCause) {
+        output.cause = sanitizeJsonValue(errorWithCause.cause, 'cause', seen, depth + 1) ?? null
+      }
+
+      for (const [childKey, childValue] of Object.entries(value as unknown as Record<string, unknown>)) {
+        if (childKey === 'name' || childKey === 'message' || childKey === 'stack' || childKey === 'cause') continue
+        const sanitized = sanitizeJsonValue(childValue, childKey, seen, depth + 1)
+        if (sanitized !== undefined) output[childKey] = sanitized
+      }
+      return output
+    } finally {
+      seen.delete(value)
+    }
+  }
+
   if (typeof value !== 'object') return undefined
   if (seen.has(value)) return CIRCULAR_REFERENCE_PLACEHOLDER
   if (depth >= MAX_AGENT_OBJECT_DEPTH) return '[Object truncated]'
