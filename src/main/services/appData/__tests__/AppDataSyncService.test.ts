@@ -2655,7 +2655,14 @@ describe('AppDataSyncService', () => {
     const summary = await new AppDataSyncService().syncNow(config)
 
     expect(summary.status).toBe('success')
+    expect(summary.remoteGeneration).toBe(3)
     expect(mocks.storageRecordSync.pruneRemoteArtifacts).not.toHaveBeenCalled()
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/manifest.json'))
+    ).toBe(false)
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).includes('/.tmp-manifest.json'))
+    ).toBe(false)
     expect(mocks.webdav.getDirectoryContents).toHaveBeenCalledWith('/remote-root/sync/v1')
     expect(mocks.webdav.getDirectoryContents).not.toHaveBeenCalledWith('/remote-root/sync/v1/records')
     expect(mocks.webdav.getDirectoryContents).not.toHaveBeenCalledWith('/remote-root/sync/v1/storage-v2/bundle')
@@ -2752,6 +2759,16 @@ describe('AppDataSyncService', () => {
 
     await new AppDataSyncService().syncNow(config)
 
+    const manifestWrite = mocks.webdav.putFileContents.mock.calls.find(([filePath]) =>
+      String(filePath).endsWith('/manifest.json')
+    )
+    expect(manifestWrite).toBeTruthy()
+    expect(JSON.parse(String(manifestWrite?.[1]))).toEqual(
+      expect.objectContaining({
+        generation: 4,
+        storageV2: nextStorageManifest
+      })
+    )
     expect(mocks.storageRecordSync.pruneRemoteArtifacts).toHaveBeenCalledWith(
       mocks.webdav,
       '/remote-root/sync/v1',

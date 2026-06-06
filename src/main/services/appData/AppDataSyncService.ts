@@ -984,6 +984,14 @@ function appDataArtifactFingerprint(manifest?: RemoteManifest | null) {
   })
 }
 
+function remoteManifestPublishFingerprint(manifest: RemoteManifest) {
+  return hashJsonValue({
+    ...manifest,
+    generation: 0,
+    updatedAt: 0
+  })
+}
+
 function isRemoteArtifactCleanupDue(lastCleanupAt: unknown, now: number) {
   const timestamp = Number(lastCleanupAt ?? 0)
   if (!Number.isFinite(timestamp) || timestamp <= 0) return true
@@ -3844,6 +3852,7 @@ export class AppDataSyncService {
       this.assertSyncRunActive(context, '合并远端同步状态')
       const manifest = this.normalizeManifest(rawManifest)
       const manifestBaseline = this.captureManifestBaseline(rawManifest, manifest)
+      const manifestPublishFingerprintBeforeSync = remoteManifestPublishFingerprint(manifest)
       const appDataArtifactFingerprintBeforeSync = appDataArtifactFingerprint(manifest)
       const storageV2ArtifactFingerprintBeforeSync = storageV2ManifestFingerprint(manifest.storageV2)
       if (!shouldAttemptRemoteFullSnapshotUpload()) {
@@ -4092,8 +4101,12 @@ export class AppDataSyncService {
       }
 
       this.assertSyncRunActive(context, '发布远端同步状态')
-      manifest.updatedAt = summary.lastSyncAt
-      manifest.generation = manifestBaseline.generation + 1
+      const manifestPublishFingerprintAfterSync = remoteManifestPublishFingerprint(manifest)
+      const shouldPublishManifest = manifestPublishFingerprintAfterSync !== manifestPublishFingerprintBeforeSync
+      if (shouldPublishManifest) {
+        manifest.updatedAt = summary.lastSyncAt
+        manifest.generation = manifestBaseline.generation + 1
+      }
       this.updateSummaryRemoteState(summary, manifest)
       const renewalError = lockRenewal.getError()
       if (renewalError) {
@@ -4105,14 +4118,18 @@ export class AppDataSyncService {
       await this.assertRemoteLockStillOwned(client, remoteLock)
       this.assertSyncRunActive(context, '确认远端同步状态未被修改')
       await this.assertRemoteManifestUnchanged(client, manifestPath, manifestBaseline)
-      this.assertSyncRunActive(context, '写入远端同步状态')
-      const manifestByteSize = jsonByteLength(manifest)
-      if (manifestByteSize > REMOTE_MANIFEST_MAX_BYTES) {
-        throw new Error(
-          `远端同步状态 manifest.json 过大（${manifestByteSize} 字节，限制 ${REMOTE_MANIFEST_MAX_BYTES} 字节）。为避免 WebDAV 同步状态膨胀，本次同步已停止；请减少同步的笔记、运行时目录或旧数据记录后重试。`
-        )
+      if (shouldPublishManifest) {
+        this.assertSyncRunActive(context, '写入远端同步状态')
+        const manifestByteSize = jsonByteLength(manifest)
+        if (manifestByteSize > REMOTE_MANIFEST_MAX_BYTES) {
+          throw new Error(
+            `远端同步状态 manifest.json 过大（${manifestByteSize} 字节，限制 ${REMOTE_MANIFEST_MAX_BYTES} 字节）。为避免 WebDAV 同步状态膨胀，本次同步已停止；请减少同步的笔记、运行时目录或旧数据记录后重试。`
+          )
+        }
+        await this.writeJson(client, manifestPath, manifest)
+      } else {
+        logger.info('Skipped WebDAV manifest publish because remote sync state did not change')
       }
-      await this.writeJson(client, manifestPath, manifest)
       this.assertSyncRunActive(context, '提交本地同步游标')
       stageSyncState(DATA_SYNC_SYNC_SPACE_ID_STATE_KEY, syncSpace.id)
       await storageV2WebDavRecordSyncService.commitRecordSyncStates(storageSyncStates)
