@@ -122,7 +122,7 @@ const NutstoreSettings: FC = () => {
       stopNutstoreAutoSync()
     } else {
       await setNutstoreAutoSync(true)
-      void startNutstoreAutoSync()
+      await startNutstoreAutoSync()
     }
   }
 

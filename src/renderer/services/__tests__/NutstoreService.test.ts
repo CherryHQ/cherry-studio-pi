@@ -9,8 +9,16 @@ const mocks = vi.hoisted(() => ({
   getDeviceType: vi.fn(),
   listWebdavFiles: vi.fn(),
   backupToWebdav: vi.fn(),
+  restoreFromWebdav: vi.fn(),
+  preferenceCache: new Map<string, unknown>(),
   toastError: vi.fn(),
   toastSuccess: vi.fn()
+}))
+
+vi.mock('@data/PreferenceService', () => ({
+  preferenceService: {
+    getCachedValue: vi.fn((key: string) => mocks.preferenceCache.get(key))
+  }
 }))
 
 vi.mock('@logger', () => ({
@@ -47,7 +55,7 @@ vi.mock('../BackupService', () => ({
   handleData: mocks.handleData
 }))
 
-import { startNutstoreAutoSync, stopNutstoreAutoSync } from '../NutstoreService'
+import { backupToNutstore, restoreFromNutstore, startNutstoreAutoSync, stopNutstoreAutoSync } from '../NutstoreService'
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -63,6 +71,7 @@ function deferred<T>() {
 function nutstoreState(overrides: Record<string, unknown> = {}) {
   return {
     nutstore: {
+      nutstoreAutoSync: false,
       nutstoreMaxBackups: 5,
       nutstorePath: '/Cherry Studio Pi',
       nutstoreSkipBackupFile: false,
@@ -81,6 +90,7 @@ describe('NutstoreService', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
+    mocks.preferenceCache.clear()
     stopNutstoreAutoSync()
     mocks.getState.mockReturnValue(nutstoreState())
     mocks.handleSaveData.mockResolvedValue(undefined)
@@ -88,6 +98,7 @@ describe('NutstoreService', () => {
     mocks.getDeviceType.mockResolvedValue('mac')
     mocks.listWebdavFiles.mockResolvedValue([])
     mocks.backupToWebdav.mockResolvedValue(true)
+    mocks.restoreFromWebdav.mockResolvedValue(undefined)
 
     originalApi = window.api
     originalToast = window.toast
@@ -96,7 +107,8 @@ describe('NutstoreService', () => {
       value: {
         backup: {
           backupToWebdav: mocks.backupToWebdav,
-          listWebdavFiles: mocks.listWebdavFiles
+          listWebdavFiles: mocks.listWebdavFiles,
+          restoreFromWebdav: mocks.restoreFromWebdav
         },
         nutstore: {
           decryptToken: mocks.decryptToken
@@ -128,12 +140,69 @@ describe('NutstoreService', () => {
     })
   })
 
-  it('ignores repeated auto-sync starts while already scheduled', async () => {
+  it('reschedules auto-sync when start is called again with updated preferences', async () => {
+    vi.setSystemTime(new Date('2026-06-06T00:00:00.000Z'))
+    mocks.getState.mockReturnValue(
+      nutstoreState({
+        nutstoreSyncState: {
+          lastSyncTime: Date.now()
+        },
+        nutstoreToken: ''
+      })
+    )
+    mocks.preferenceCache.set('data.backup.nutstore.token', 'cached-token')
+    mocks.preferenceCache.set('data.backup.nutstore.path', '/cached-path')
+    mocks.preferenceCache.set('data.backup.nutstore.sync_interval', 1)
+
     await startNutstoreAutoSync()
+    mocks.preferenceCache.set('data.backup.nutstore.sync_interval', 2)
     await startNutstoreAutoSync()
 
-    expect(mocks.getState).toHaveBeenCalledTimes(2)
-    expect(vi.getTimerCount()).toBe(1)
+    await vi.advanceTimersByTimeAsync(60_999)
+    expect(mocks.backupToWebdav).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(mocks.backupToWebdav).toHaveBeenCalledTimes(1)
+    expect(mocks.backupToWebdav).toHaveBeenCalledWith(
+      expect.objectContaining({
+        webdavPath: '/cached-path'
+      })
+    )
+  })
+
+  it('uses cached Nutstore preferences when legacy Redux settings are stale', async () => {
+    mocks.getState.mockReturnValue(
+      nutstoreState({
+        nutstoreMaxBackups: 0,
+        nutstorePath: '/stale-path',
+        nutstoreSkipBackupFile: false,
+        nutstoreToken: ''
+      })
+    )
+    mocks.preferenceCache.set('data.backup.nutstore.token', 'cached-token')
+    mocks.preferenceCache.set('data.backup.nutstore.path', '/cached-nutstore')
+    mocks.preferenceCache.set('data.backup.nutstore.skip_backup_file', true)
+    mocks.preferenceCache.set('data.backup.nutstore.max_backups', 0)
+
+    await backupToNutstore()
+
+    expect(mocks.decryptToken).toHaveBeenCalledWith('cached-token')
+    expect(mocks.backupToWebdav).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skipBackupFile: true,
+        webdavPath: '/cached-nutstore'
+      })
+    )
+  })
+
+  it('does not parse empty direct-restore responses from Nutstore backups', async () => {
+    mocks.restoreFromWebdav.mockResolvedValueOnce('')
+
+    await restoreFromNutstore('direct.zip')
+
+    expect(mocks.restoreFromWebdav).toHaveBeenCalledWith(expect.objectContaining({ fileName: 'direct.zip' }))
+    expect(mocks.handleData).not.toHaveBeenCalled()
+    expect(mocks.toastError).not.toHaveBeenCalled()
   })
 
   it('does not reschedule after auto sync is stopped during an in-flight backup', async () => {

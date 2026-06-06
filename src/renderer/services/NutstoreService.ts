@@ -1,9 +1,11 @@
+import { preferenceService } from '@data/PreferenceService'
 import { loggerService } from '@logger'
 import i18n from '@renderer/i18n'
 import store, { handleSaveData } from '@renderer/store'
 import { setNutstoreSyncState } from '@renderer/store/nutstore'
 import type { WebDavConfig } from '@renderer/types'
 import { NUTSTORE_HOST } from '@shared/config/nutstore'
+import type { UnifiedPreferenceKeyType, UnifiedPreferenceType } from '@shared/data/preference/preferenceTypes'
 import dayjs from 'dayjs'
 import { type CreateDirectoryOptions } from 'webdav'
 
@@ -21,8 +23,32 @@ function backupModifiedTime(file: { modifiedTime?: string | null }) {
   return Number.isFinite(modifiedTime) ? modifiedTime : 0
 }
 
+function getCachedPreference<K extends UnifiedPreferenceKeyType>(
+  key: K,
+  fallback: UnifiedPreferenceType[K]
+): UnifiedPreferenceType[K] {
+  const value = preferenceService.getCachedValue(key)
+  return value === undefined ? fallback : value
+}
+
+function getNutstoreSettings() {
+  const nutstore = store.getState().nutstore
+  return {
+    nutstoreAutoSync: getCachedPreference('data.backup.nutstore.auto_sync', nutstore.nutstoreAutoSync),
+    nutstoreMaxBackups: getCachedPreference('data.backup.nutstore.max_backups', nutstore.nutstoreMaxBackups),
+    nutstorePath: getCachedPreference('data.backup.nutstore.path', nutstore.nutstorePath),
+    nutstoreSkipBackupFile: getCachedPreference(
+      'data.backup.nutstore.skip_backup_file',
+      nutstore.nutstoreSkipBackupFile
+    ),
+    nutstoreSyncInterval: getCachedPreference('data.backup.nutstore.sync_interval', nutstore.nutstoreSyncInterval),
+    nutstoreSyncState: nutstore.nutstoreSyncState,
+    nutstoreToken: getCachedPreference('data.backup.nutstore.token', nutstore.nutstoreToken ?? '')
+  }
+}
+
 function getNutstoreToken() {
-  const nutstoreToken = store.getState().nutstore.nutstoreToken
+  const { nutstoreToken } = getNutstoreSettings()
 
   if (!nutstoreToken) {
     window.toast.error(i18n.t('message.error.invalid.nutstore_token'))
@@ -38,7 +64,7 @@ async function createNutstoreConfig(nutstoreToken: string): Promise<WebDavConfig
     return null
   }
 
-  const nutstorePath = store.getState().nutstore.nutstorePath
+  const { nutstorePath } = getNutstoreSettings()
 
   const { username, access_token } = result
   return {
@@ -153,19 +179,18 @@ export async function backupToNutstore({
 
   store.dispatch(setNutstoreSyncState({ syncing: true, lastSyncError: null }))
 
-  const skipBackupFile = store.getState().nutstore.nutstoreSkipBackupFile
-  const maxBackups = store.getState().nutstore.nutstoreMaxBackups
+  const { nutstoreMaxBackups, nutstoreSkipBackupFile } = getNutstoreSettings()
 
   try {
     await handleSaveData()
 
     // 先清理旧备份
-    await cleanupOldBackups(config, maxBackups)
+    await cleanupOldBackups(config, nutstoreMaxBackups)
 
     const isSuccess = await window.api.backup.backupToWebdav({
       ...config,
       fileName: finalFileName,
-      skipBackupFile: skipBackupFile
+      skipBackupFile: nutstoreSkipBackupFile
     })
 
     if (isSuccess) {
@@ -206,6 +231,12 @@ export async function restoreFromNutstore(fileName?: string) {
       title: i18n.t('message.restore.failed'),
       content: error.message
     })
+    return
+  }
+
+  if (!data) {
+    logger.info('[Nutstore] Direct backup restored, app will restart')
+    return
   }
 
   try {
@@ -217,14 +248,18 @@ export async function restoreFromNutstore(fileName?: string) {
 }
 
 export async function startNutstoreAutoSync() {
+  const wasStarted = autoSyncStarted
   if (autoSyncStarted) {
-    return
+    logger.verbose('[Nutstore AutoSync] Restarting nutstore auto sync')
   }
 
   const nutstoreToken = getNutstoreToken()
 
   if (!nutstoreToken) {
     logger.warn('[startNutstoreAutoSync] Invalid nutstore token, nutstore auto sync disabled')
+    if (wasStarted) {
+      stopNutstoreAutoSync()
+    }
     return
   }
 
@@ -243,7 +278,7 @@ export async function startNutstoreAutoSync() {
       syncTimeout = null
     }
 
-    const { nutstoreSyncInterval, nutstoreSyncState } = store.getState().nutstore
+    const { nutstoreSyncInterval, nutstoreSyncState } = getNutstoreSettings()
 
     if (nutstoreSyncInterval <= 0) {
       logger.warn('[Nutstore AutoSync] Invalid sync interval, nutstore auto sync disabled')
