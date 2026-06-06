@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   remoteFiles: new Map<string, unknown>(),
   webdav: {
     exists: vi.fn(),
+    stat: vi.fn(),
     createDirectory: vi.fn(),
     getFileContents: vi.fn(),
     putFileContents: vi.fn(),
@@ -101,6 +102,17 @@ const taskRunLogTable = {
   omitColumnsFromSync: ['id']
 } as const
 
+const blobTable = {
+  entityType: 'blob',
+  table: 'blobs',
+  idColumns: ['id'],
+  updatedAtColumn: 'updated_at',
+  deletedAtColumn: 'deleted_at',
+  versionColumn: 'version',
+  blobStoragePathColumn: 'storage_path',
+  blobChecksumColumn: 'checksum'
+} as const
+
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize)
   if (!value || typeof value !== 'object') return value
@@ -166,6 +178,18 @@ type TombstoneRow = {
   entity_id: string
   deleted_at: string
   device_id: string
+  version: number
+}
+
+type BlobRow = {
+  id: string
+  storage_path: string
+  checksum: string
+  byte_size: number
+  mime_type: string | null
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
   version: number
 }
 
@@ -639,8 +663,85 @@ function makeSkillAliasDb(input: { skills?: SkillRow[]; agentSkills?: AgentSkill
   }
 }
 
+function makeBlobDb(input: { blobs?: BlobRow[] } = {}) {
+  const state = {
+    blobs: [...(input.blobs ?? [])],
+    syncState: new Map<string, string>()
+  }
+
+  return {
+    state,
+    client: {
+      execute: vi.fn(async (input: string | { sql: string; args?: unknown[] }) => {
+        const sql = typeof input === 'string' ? input : input.sql
+        const args = typeof input === 'string' ? [] : (input.args ?? [])
+
+        if (sql.includes('SELECT * FROM blobs')) {
+          return { rows: state.blobs.map((row) => ({ ...row })) }
+        }
+
+        if (sql.includes('SELECT value_json FROM sync_state')) {
+          const value = state.syncState.get(String(args[0]))
+          return { rows: value ? [{ value_json: JSON.stringify(value) }] : [] }
+        }
+
+        if (sql.includes('INSERT INTO sync_state')) {
+          state.syncState.set(String(args[0]), JSON.parse(String(args[1])))
+          return { rows: [] }
+        }
+
+        if (sql.includes('PRAGMA table_info(blobs)')) {
+          return {
+            rows: [
+              { name: 'id' },
+              { name: 'storage_path' },
+              { name: 'checksum' },
+              { name: 'byte_size' },
+              { name: 'mime_type' },
+              { name: 'created_at' },
+              { name: 'updated_at' },
+              { name: 'deleted_at' },
+              { name: 'version' }
+            ]
+          }
+        }
+
+        if (sql.includes('INSERT INTO blobs')) {
+          const nextRow: BlobRow = {
+            id: String(args[0]),
+            storage_path: String(args[1]),
+            checksum: String(args[2]),
+            byte_size: Number(args[3]),
+            mime_type: args[4] == null ? null : String(args[4]),
+            created_at: String(args[5]),
+            updated_at: String(args[6]),
+            deleted_at: args[7] == null ? null : String(args[7]),
+            version: Number(args[8])
+          }
+          const index = state.blobs.findIndex((row) => row.id === nextRow.id)
+          if (index === -1) {
+            state.blobs.push(nextRow)
+          } else {
+            state.blobs[index] = nextRow
+          }
+          return { rows: [] }
+        }
+
+        return { rows: [] }
+      })
+    }
+  }
+}
+
 function makeSharedWebDavStore() {
   const files = new Map<string, unknown>()
+  const fileSize = (filePath: string) => {
+    const value = files.get(filePath)
+    if (Buffer.isBuffer(value)) return value.byteLength
+    if (typeof value === 'string') return Buffer.byteLength(value, 'utf8')
+    if (value instanceof ArrayBuffer) return value.byteLength
+    return value == null ? 0 : Buffer.byteLength(String(value), 'utf8')
+  }
   return {
     files,
     client: {
@@ -651,6 +752,7 @@ function makeSharedWebDavStore() {
           return value === normalized || value.startsWith(`${normalized}/`)
         })
       }),
+      stat: vi.fn(async (filePath: string) => ({ size: fileSize(filePath) })),
       createDirectory: vi.fn(async () => undefined),
       getFileContents: vi.fn(async (filePath: string) => {
         if (!files.has(filePath)) {
@@ -731,6 +833,7 @@ describe('StorageV2WebDavRecordSyncService', () => {
   beforeEach(() => {
     mocks.dbClient.execute.mockReset()
     mocks.webdav.exists.mockReset()
+    mocks.webdav.stat.mockReset()
     mocks.webdav.createDirectory.mockReset()
     mocks.webdav.getFileContents.mockReset()
     mocks.webdav.putFileContents.mockReset()
@@ -744,6 +847,13 @@ describe('StorageV2WebDavRecordSyncService', () => {
     mocks.webdav.exists.mockImplementation(async (filePath: string) => {
       if (mocks.remoteFiles.has(filePath)) return true
       return true
+    })
+    mocks.webdav.stat.mockImplementation(async (filePath: string) => {
+      const value = mocks.remoteFiles.get(filePath)
+      if (Buffer.isBuffer(value)) return { size: value.byteLength }
+      if (typeof value === 'string') return { size: Buffer.byteLength(value, 'utf8') }
+      if (value instanceof ArrayBuffer) return { size: value.byteLength }
+      return { size: value == null ? 0 : Buffer.byteLength(String(value), 'utf8') }
     })
     mocks.webdav.createDirectory.mockResolvedValue(undefined)
     mocks.webdav.putFileContents.mockImplementation(async (filePath: string, contents: unknown, options?: any) => {
@@ -1130,6 +1240,34 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(recordFiles).toHaveLength(0)
   })
 
+  it('rejects oversized remote Storage v2 bundles before downloading them', async () => {
+    const bundlePath = '/remote-root/sync/v1/storage-v2/bundle/oversized.json'
+    mocks.remoteFiles.set(bundlePath, JSON.stringify({ version: 1, updatedAt: 0, records: {}, blobs: {} }))
+    mocks.webdav.stat.mockImplementation(async (filePath: string) => {
+      if (filePath === bundlePath) return { size: 129 * 1024 * 1024 }
+      const value = mocks.remoteFiles.get(filePath)
+      return { size: typeof value === 'string' ? Buffer.byteLength(value, 'utf8') : 0 }
+    })
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([settingsTable]).sync(mocks.webdav as any, '/remote-root/sync/v1', {
+        version: 1,
+        records: {},
+        blobs: {},
+        bundle: {
+          version: 1,
+          path: 'storage-v2/bundle/oversized.json',
+          valueHash: 'expected-bundle-hash',
+          recordCount: 0,
+          blobCount: 0,
+          updatedAt: 0
+        }
+      })
+    ).rejects.toThrow('远端 Storage v2 记录包过大')
+
+    expect(mocks.webdav.getFileContents).not.toHaveBeenCalledWith(bundlePath, expect.anything())
+  })
+
   it('fails safe when the remote Storage v2 bundle hash does not match the manifest', async () => {
     const remote = makeSharedWebDavStore()
     const corruptBundlePath = '/remote-root/sync/v1/storage-v2/bundle/corrupt.json'
@@ -1162,6 +1300,132 @@ describe('StorageV2WebDavRecordSyncService', () => {
     ).rejects.toThrow('远端 Storage v2 数据包校验失败')
 
     expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
+  })
+
+  it('rejects oversized remote Storage v2 secret bundles before downloading them', async () => {
+    const credentialRow: ProviderCredentialRow = {
+      provider_id: 'provider-1',
+      credential_kind: 'apiKey',
+      secret_ref: 'storage-v2://secret/provider/provider-1/apiKey',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      updated_by_device_id: 'device-a'
+    }
+    const remoteRecord = {
+      id: 'provider_credential:provider-1:apiKey',
+      table: providerCredentialTable,
+      idValues: ['provider-1', 'apiKey'],
+      row: credentialRow,
+      valueHash: hashJson(credentialRow),
+      updatedAt: Date.parse(credentialRow.updated_at),
+      deletedAt: null,
+      version: 1
+    }
+    const recordPath = '/remote-root/sync/v1/storage-v2/records/provider_credential/api-key.json'
+    const secretPath = '/remote-root/sync/v1/storage-v2/secrets/oversized.json'
+    const db = makeProviderCredentialDb({})
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+    mocks.remoteFiles.set(recordPath, JSON.stringify(remoteRecord))
+    mocks.remoteFiles.set(secretPath, JSON.stringify({ version: 1, updatedAt: 0, secrets: {} }))
+    mocks.webdav.stat.mockImplementation(async (filePath: string) => {
+      if (filePath === secretPath) return { size: 9 * 1024 * 1024 }
+      const value = mocks.remoteFiles.get(filePath)
+      return { size: typeof value === 'string' ? Buffer.byteLength(value, 'utf8') : 0 }
+    })
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([providerCredentialTable]).sync(
+        mocks.webdav as any,
+        '/remote-root/sync/v1',
+        {
+          version: 1,
+          blobs: {},
+          records: {
+            [remoteRecord.id]: {
+              entityType: 'provider_credential',
+              table: 'provider_credentials',
+              idValues: remoteRecord.idValues,
+              valueHash: remoteRecord.valueHash,
+              updatedAt: remoteRecord.updatedAt,
+              deletedAt: null,
+              version: 1,
+              path: 'storage-v2/records/provider_credential/api-key.json'
+            }
+          },
+          secrets: {
+            version: 1,
+            path: 'storage-v2/secrets/oversized.json',
+            valueHash: 'expected-secret-hash',
+            secretCount: 1,
+            updatedAt: 0,
+            encryption: 'cherry-webdav-secret-sync-aes-256-gcm'
+          }
+        },
+        { secretKeyMaterial: 'dav-user:dav-password' }
+      )
+    ).rejects.toThrow('远端敏感配置数据包过大')
+
+    expect(mocks.webdav.getFileContents).not.toHaveBeenCalledWith(secretPath, expect.anything())
+    expect(db.state.credentials).toEqual([])
+  })
+
+  it('rejects oversized remote Storage v2 blobs before downloading file contents', async () => {
+    const blobRow: BlobRow = {
+      id: 'blob-1',
+      storage_path: 'blobs/blob-1.bin',
+      checksum: 'a'.repeat(64),
+      byte_size: 64 * 1024 * 1024 + 1,
+      mime_type: 'application/octet-stream',
+      created_at: '2026-06-01T08:00:00.000Z',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      deleted_at: null,
+      version: 1
+    }
+    const remoteRecord = {
+      id: 'blob:blob-1',
+      table: blobTable,
+      idValues: ['blob-1'],
+      row: blobRow,
+      valueHash: hashJson(blobRow),
+      updatedAt: Date.parse(blobRow.updated_at),
+      deletedAt: null,
+      version: 1
+    }
+    const recordPath = '/remote-root/sync/v1/storage-v2/records/blob/blob-1.json'
+    const blobPath = '/remote-root/sync/v1/storage-v2/blobs/blob-1.bin'
+    const db = makeBlobDb()
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+    mocks.remoteFiles.set(recordPath, JSON.stringify(remoteRecord))
+    mocks.remoteFiles.set(blobPath, Buffer.from('oversized blob placeholder'))
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([blobTable]).sync(mocks.webdav as any, '/remote-root/sync/v1', {
+        version: 1,
+        records: {
+          [remoteRecord.id]: {
+            entityType: 'blob',
+            table: 'blobs',
+            idValues: remoteRecord.idValues,
+            valueHash: remoteRecord.valueHash,
+            updatedAt: remoteRecord.updatedAt,
+            deletedAt: null,
+            version: 1,
+            path: 'storage-v2/records/blob/blob-1.json'
+          }
+        },
+        blobs: {
+          'blob-1': {
+            id: 'blob-1',
+            checksum: blobRow.checksum,
+            byteSize: blobRow.byte_size,
+            storagePath: blobRow.storage_path,
+            path: 'storage-v2/blobs/blob-1.bin',
+            updatedAt: remoteRecord.updatedAt
+          }
+        }
+      })
+    ).rejects.toThrow('远端附件文件过大')
+
+    expect(mocks.webdav.getFileContents).not.toHaveBeenCalledWith(blobPath, expect.anything())
   })
 
   it('fails safe when the remote manifest contains records from a newer Storage v2 entity', async () => {

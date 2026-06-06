@@ -24,7 +24,11 @@ const logger = loggerService.withContext('StorageV2WebDavRecordSyncService')
 const LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS = 10 * 60 * 1000
 const MAX_SYNC_RECORD_JSON_BYTES = 2 * 1024 * 1024
 const MAX_SYNC_RECORD_BUNDLE_JSON_BYTES = 64 * 1024 * 1024
+const MAX_SYNC_RECORD_REMOTE_JSON_BYTES = MAX_SYNC_RECORD_JSON_BYTES * 2
+const MAX_SYNC_RECORD_BUNDLE_REMOTE_JSON_BYTES = MAX_SYNC_RECORD_BUNDLE_JSON_BYTES * 2
 const MAX_SYNC_BLOB_BYTES = 64 * 1024 * 1024
+const MAX_SYNC_SECRET_BUNDLE_JSON_BYTES = 8 * 1024 * 1024
+const MAX_SYNC_SECRET_COUNT = 10_000
 
 type StorageV2SyncTable = {
   entityType: StorageV2SyncEntityType
@@ -188,6 +192,13 @@ const TOMBSTONE_PHYSICAL_DELETE_TARGETS = {
     idColumns: ['channel_id', 'task_id']
   }
 } as const
+
+class RemoteSyncSizeLimitError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'RemoteSyncSizeLimitError'
+  }
+}
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -425,13 +436,6 @@ function sameIdValues(left: readonly string[], right: readonly string[]) {
   return left.length === right.length && left.every((value, index) => value === right[index])
 }
 
-function bufferToString(value: string | Buffer | ArrayBuffer | unknown) {
-  if (typeof value === 'string') return value
-  if (Buffer.isBuffer(value)) return value.toString('utf8')
-  if (value instanceof ArrayBuffer) return Buffer.from(value).toString('utf8')
-  return String(value)
-}
-
 function bufferFromRemoteContents(value: string | Buffer | ArrayBuffer | unknown) {
   if (Buffer.isBuffer(value)) return value
   if (typeof value === 'string') return Buffer.from(value)
@@ -622,7 +626,54 @@ export class StorageV2WebDavRecordSyncService {
     )
   }
 
-  private async readJson<T>(client: WebDAVClient, filePath: string): Promise<T | null> {
+  private async getRemoteFileByteSize(client: WebDAVClient, filePath: string): Promise<number | null> {
+    const stat = (client as WebDAVClient & { stat?: (targetPath: string) => Promise<unknown> }).stat
+    if (typeof stat !== 'function') return null
+
+    try {
+      const result = await runWebDavOperation(
+        `checking remote file size ${filePath}`,
+        () => stat.call(client, filePath),
+        {
+          logger
+        }
+      )
+      const size = Number((result as { size?: unknown } | null)?.size)
+      return Number.isFinite(size) && size >= 0 ? size : null
+    } catch (error) {
+      if (error instanceof WebDavOperationError && error.transient) throw error
+      logger.warn(`Failed to check remote file size ${filePath}; falling back to bounded download`, error as Error)
+      return null
+    }
+  }
+
+  private async assertRemoteFileWithinByteLimit(
+    client: WebDAVClient,
+    filePath: string,
+    label: string,
+    maxBytes: number
+  ) {
+    const byteSize = await this.getRemoteFileByteSize(client, filePath)
+    if (byteSize == null || byteSize <= maxBytes) return
+
+    throw new RemoteSyncSizeLimitError(
+      `${label}过大（${byteSize} 字节，限制 ${maxBytes} 字节）。为避免长时间下载或占用过多内存，本次同步已停止。`
+    )
+  }
+
+  private assertRemoteBufferWithinByteLimit(buffer: Buffer, label: string, maxBytes: number) {
+    if (buffer.byteLength <= maxBytes) return
+
+    throw new RemoteSyncSizeLimitError(
+      `${label}过大（${buffer.byteLength} 字节，限制 ${maxBytes} 字节）。为避免长时间解析或占用过多内存，本次同步已停止。`
+    )
+  }
+
+  private async readJson<T>(
+    client: WebDAVClient,
+    filePath: string,
+    options: { maxBytes?: number; label?: string } = {}
+  ): Promise<T | null> {
     try {
       if (
         !(await runWebDavOperation(`checking Storage v2 sync record ${filePath}`, () => client.exists(filePath), {
@@ -631,13 +682,24 @@ export class StorageV2WebDavRecordSyncService {
       ) {
         return null
       }
+      const label = options.label ?? '远端 Storage v2 JSON'
+      if (options.maxBytes) {
+        await this.assertRemoteFileWithinByteLimit(client, filePath, label, options.maxBytes)
+      }
       const contents = await runWebDavOperation(
         `reading Storage v2 sync record ${filePath}`,
         () => client.getFileContents(filePath, { format: 'binary' }),
         { logger }
       )
-      return JSON.parse(bufferToString(contents)) as T
+      const buffer = bufferFromRemoteContents(contents)
+      if (options.maxBytes) {
+        this.assertRemoteBufferWithinByteLimit(buffer, label, options.maxBytes)
+      }
+      return JSON.parse(buffer.toString('utf8')) as T
     } catch (error) {
+      if (error instanceof RemoteSyncSizeLimitError) {
+        throw error
+      }
       if (error instanceof WebDavOperationError && error.transient) {
         throw error
       }
@@ -867,7 +929,11 @@ export class StorageV2WebDavRecordSyncService {
 
     const bundle = await this.readJson<StorageV2WebDavRecordSyncBundle>(
       client,
-      path.posix.join(basePath, safeRemoteRelativePath(manifest.bundle.path))
+      path.posix.join(basePath, safeRemoteRelativePath(manifest.bundle.path)),
+      {
+        maxBytes: MAX_SYNC_RECORD_BUNDLE_REMOTE_JSON_BYTES,
+        label: '远端 Storage v2 记录包'
+      }
     )
     if (!bundle?.records || typeof bundle.records !== 'object') {
       throw new Error(
@@ -924,6 +990,12 @@ export class StorageV2WebDavRecordSyncService {
       updatedAt: parseTime(bundle.updatedAt) || Date.now(),
       records,
       blobs: bundle.blobs ?? {}
+    }
+    const normalizedBundleByteSize = jsonByteLength(normalizedBundle)
+    if (normalizedBundleByteSize > MAX_SYNC_RECORD_BUNDLE_JSON_BYTES) {
+      throw new Error(
+        `远端 Storage v2 记录包过大（${normalizedBundleByteSize} 字节，限制 ${MAX_SYNC_RECORD_BUNDLE_JSON_BYTES} 字节）。为避免导入异常大的同步状态，本次同步已停止。`
+      )
     }
 
     return normalizedBundle
@@ -1079,13 +1151,27 @@ export class StorageV2WebDavRecordSyncService {
     if (manifest.secrets.encryption !== SECRET_SYNC_ENCRYPTION) {
       throw new Error('远端敏感配置使用了当前版本不支持的加密格式。为避免模型配置残缺，本次同步已停止。')
     }
+    if (manifest.secrets.secretCount > MAX_SYNC_SECRET_COUNT) {
+      throw new Error(
+        `远端敏感配置数量过多（${manifest.secrets.secretCount} 项，限制 ${MAX_SYNC_SECRET_COUNT} 项）。为避免导入异常同步状态，本次同步已停止。`
+      )
+    }
 
     const bundle = await this.readJson<RemoteSecretVaultBundle>(
       client,
-      path.posix.join(basePath, safeRemoteRelativePath(manifest.secrets.path))
+      path.posix.join(basePath, safeRemoteRelativePath(manifest.secrets.path)),
+      {
+        maxBytes: MAX_SYNC_SECRET_BUNDLE_JSON_BYTES,
+        label: '远端敏感配置数据包'
+      }
     )
     if (!bundle?.secrets || typeof bundle.secrets !== 'object') {
       throw new Error('远端敏感配置数据包缺失或格式损坏。为避免模型配置残缺，本次同步已停止。')
+    }
+    if (Object.keys(bundle.secrets).length > MAX_SYNC_SECRET_COUNT) {
+      throw new Error(
+        `远端敏感配置数量过多（${Object.keys(bundle.secrets).length} 项，限制 ${MAX_SYNC_SECRET_COUNT} 项）。为避免导入异常同步状态，本次同步已停止。`
+      )
     }
 
     const keyMaterials = uniqueSecretKeyMaterials(options)
@@ -1145,6 +1231,18 @@ export class StorageV2WebDavRecordSyncService {
         Object.entries(secrets)
           .sort(([left], [right]) => left.localeCompare(right))
           .map(([secretId, entry]) => [secretId, encryptRemoteSecret(secretId, entry, key)])
+      )
+    }
+    const secretCount = Object.keys(bundle.secrets).length
+    if (secretCount > MAX_SYNC_SECRET_COUNT) {
+      throw new Error(
+        `同步数据失败：敏感配置数量过多（${secretCount} 项，限制 ${MAX_SYNC_SECRET_COUNT} 项）。请清理不再使用的模型服务配置后重试。`
+      )
+    }
+    const bundleByteSize = jsonByteLength(bundle)
+    if (bundleByteSize > MAX_SYNC_SECRET_BUNDLE_JSON_BYTES) {
+      throw new Error(
+        `同步数据失败：敏感配置数据包过大（${bundleByteSize} 字节，限制 ${MAX_SYNC_SECRET_BUNDLE_JSON_BYTES} 字节）。请清理异常大的密钥或服务配置后重试。`
       )
     }
 
@@ -1467,7 +1565,10 @@ export class StorageV2WebDavRecordSyncService {
 
     const record =
       bundledRecord ??
-      (await this.readJson<LocalRecord>(client, path.posix.join(basePath, safeRemoteRelativePath(meta.path))))
+      (await this.readJson<LocalRecord>(client, path.posix.join(basePath, safeRemoteRelativePath(meta.path)), {
+        maxBytes: MAX_SYNC_RECORD_REMOTE_JSON_BYTES,
+        label: `远端 Storage v2 记录 ${meta.entityType}:${meta.idValues.join(':')}`
+      }))
     if (!record?.row || !record?.table) {
       throw new Error(
         `远端 Storage v2 记录 ${meta.entityType}:${meta.idValues.join(':')} 缺失或格式损坏。为避免导入不完整数据，本次同步已停止。`
@@ -1969,6 +2070,14 @@ export class StorageV2WebDavRecordSyncService {
         `远端 Storage v2 manifest 缺少 blob ${blobId} 的文件元数据。为避免导入不完整数据，本次同步已停止。`
       )
     }
+    if (!Number.isFinite(blob.byteSize) || blob.byteSize < 0) {
+      throw new Error(`远端附件文件大小无效，blob ${blobId} 已停止同步。`)
+    }
+    if (blob.byteSize > MAX_SYNC_BLOB_BYTES) {
+      throw new Error(
+        `远端附件文件过大，blob ${blobId}（${blob.byteSize} 字节，限制 ${MAX_SYNC_BLOB_BYTES} 字节）。WebDAV 多端同步不适合搬运超大附件，本次同步已停止。`
+      )
+    }
 
     const localPath = this.blobLocalPath(blob.storagePath)
     if (fs.existsSync(localPath)) {
@@ -1980,6 +2089,7 @@ export class StorageV2WebDavRecordSyncService {
     }
 
     const remotePath = path.posix.join(basePath, safeRemoteRelativePath(blob.path))
+    await this.assertRemoteFileWithinByteLimit(client, remotePath, `远端附件文件 blob ${blobId}`, MAX_SYNC_BLOB_BYTES)
     const contents = await runWebDavOperation(
       `downloading Storage v2 blob ${remotePath}`,
       () => client.getFileContents(remotePath, { format: 'binary' }),
