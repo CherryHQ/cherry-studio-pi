@@ -27,12 +27,12 @@ export const findModelByUniqId = (models: Model[], value: unknown) => {
 }
 
 export const hasModel = (m?: Model) => {
-  const allModels = getStoreProviders()
-    .filter((p) => p.enabled)
-    .map((p) => p.models)
-    .flat()
+  if (!m?.id || !m.provider) return false
 
-  return allModels.find((model) => model.id === m?.id)
+  return getStoreProviders().some((provider) => {
+    if (!provider.enabled || provider.id !== m.provider) return false
+    return provider.models.some((model) => model.id === m.id && (model.provider ?? provider.id) === m.provider)
+  })
 }
 
 export function getModelName(model?: Model) {
@@ -48,9 +48,11 @@ export function getModelName(model?: Model) {
 }
 
 export function getModelById(modelId: string) {
-  const allModels = getStoreProviders()
-    .filter((p) => p.enabled)
-    .map((p) => p.models)
-    .flat()
-  return allModels.find((m) => m.id === modelId)
+  for (const provider of getStoreProviders()) {
+    if (!provider.enabled) continue
+    const model = provider.models.find((m) => m.id === modelId)
+    if (model) return model.provider ? model : { ...model, provider: provider.id }
+  }
+
+  return undefined
 }

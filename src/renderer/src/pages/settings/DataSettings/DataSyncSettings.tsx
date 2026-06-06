@@ -259,6 +259,7 @@ const DataSyncSettings: FC = () => {
   const [remoteDirectoryList, setRemoteDirectoryList] = useState<RemoteDirectoryList | null>(null)
   const statusRefreshSeqRef = useRef(0)
   const statusRefreshLoadingSeqRef = useRef(0)
+  const directoryLoadSeqRef = useRef(0)
 
   const applyStructuredWebDavInput = (value: string) => {
     const parsed = parseWebDavInput(value)
@@ -565,6 +566,8 @@ const DataSyncSettings: FC = () => {
   const effectiveSyncPath = getEffectiveSyncPath(webdavPath)
 
   const loadRemoteDirectories = async (path: string, configOverride?: ReturnType<typeof normalizeWebDavConfig>) => {
+    const requestSeq = ++directoryLoadSeqRef.current
+    const isLatestRequest = () => requestSeq === directoryLoadSeqRef.current
     let normalizedConfig: ReturnType<typeof normalizeWebDavConfig>
     try {
       normalizedConfig =
@@ -600,8 +603,12 @@ const DataSyncSettings: FC = () => {
         },
         path
       )
+      if (!isLatestRequest()) return
+
       setRemoteDirectoryList(result)
     } catch (error) {
+      if (!isLatestRequest()) return
+
       setDirectoryError(getErrorMessage(error))
       void reportErrorToSystemAgent(
         error,
@@ -617,7 +624,9 @@ const DataSyncSettings: FC = () => {
         { showToast: true }
       )
     } finally {
-      setDirectoryLoading(false)
+      if (isLatestRequest()) {
+        setDirectoryLoading(false)
+      }
     }
   }
 

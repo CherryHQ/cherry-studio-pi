@@ -223,7 +223,8 @@ export function getProviderByModel(model?: Model): Provider {
 // FIXME: This function may return undefined but as Provider
 export function getProviderByModelId(modelId?: string) {
   const providers = getStoreProviders()
-  const _modelId = modelId || getDefaultModel().id
+  const _modelId = modelId || getDefaultModel()?.id
+  if (!_modelId) return undefined
   return providers.find((p) => p.models.find((m) => m.id === _modelId)) as Provider
 }
 
