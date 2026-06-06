@@ -104,13 +104,13 @@ const MessageErrorInfo: React.FC<{
   const errorModelId = (error as Record<string, unknown> | undefined)?.modelId as string | undefined
 
   const providerId = message.model?.provider ?? errorProviderId
-  const classification = useMemo(
-    () => classifyError(error, providerId),
-
-    // primitives instead of the `error` object reference; `classifyError`
-    // only inspects fields covered by these scalars.
-    [errorMessage, errorStatus, errorProviderId, providerId]
-  )
+  const classification = useMemo(() => {
+    const classificationError =
+      errorMessage === undefined && errorStatus === undefined
+        ? undefined
+        : ({ message: errorMessage ?? '', status: errorStatus, statusCode: errorStatus } as unknown as SerializedError)
+    return classifyError(classificationError, providerId)
+  }, [errorMessage, errorStatus, providerId])
 
   useEffect(() => {
     if (classification.category !== 'unknown' || !errorMessage || !error) return

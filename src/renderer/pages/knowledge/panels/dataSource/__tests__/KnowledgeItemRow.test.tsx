@@ -36,7 +36,9 @@ vi.mock('@cherrystudio/ui', async () => {
       <span {...props}>{children}</span>
     ),
     Button: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) => (
-      <button {...props}>{children}</button>
+      <button type="button" {...props}>
+        {children}
+      </button>
     ),
     Checkbox: ({
       checked,
@@ -81,7 +83,7 @@ vi.mock('@cherrystudio/ui', async () => {
       </td>
     ),
     MenuItem: ({ icon, label, ...props }: { icon?: ReactNode; label: string; [key: string]: unknown }) => (
-      <button {...props}>
+      <button type="button" {...props}>
         {icon}
         {label}
       </button>

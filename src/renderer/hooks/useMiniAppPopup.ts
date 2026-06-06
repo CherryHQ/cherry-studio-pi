@@ -147,7 +147,7 @@ export const useMiniAppPopup = () => {
   // Detached settings windows can open mini-app content without AppShell tabs;
   // in that case skip eviction because pin state is not observable there.
   const tabsContext = useOptionalTabsContext()
-  const tabs = tabsContext?.tabs ?? []
+  const tabs = useMemo(() => tabsContext?.tabs ?? [], [tabsContext?.tabs])
   const openTab = tabsContext?.openTab
   const pinnedMiniAppIds = useMemo(() => {
     if (!tabsContext) return null

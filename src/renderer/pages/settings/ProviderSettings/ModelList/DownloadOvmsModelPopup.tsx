@@ -35,6 +35,13 @@ interface PresetModel {
   task: string
 }
 
+const OVMS_TASK_LABEL_KEYS = {
+  text_generation: 'ovms.download.task.text_generation',
+  embeddings: 'ovms.download.task.embeddings',
+  rerank: 'ovms.download.task.rerank',
+  image_generation: 'ovms.download.task.image_generation'
+} as const
+
 const PRESET_MODELS: PresetModel[] = [
   {
     modelId: 'OpenVINO/Qwen3-4B-int4-ov',
@@ -95,7 +102,11 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
   const { t } = useTranslation()
   const { setIntervalTimer, clearIntervalTimer, setTimeoutTimer } = useTimer()
 
-  const getPresetTooltipLabel = (model: PresetModel) => `${model.modelName} (${t(`ovms.download.task.${model.task}`)})`
+  const getPresetTooltipLabel = (model: PresetModel) => {
+    const labelKey =
+      OVMS_TASK_LABEL_KEYS[model.task as keyof typeof OVMS_TASK_LABEL_KEYS] ?? OVMS_TASK_LABEL_KEYS.text_generation
+    return `${model.modelName} (${t(labelKey)})`
+  }
 
   const updateField = <K extends keyof FieldType>(field: K, value: FieldType[K]) => {
     setFormValues((current) => ({ ...current, [field]: value }))

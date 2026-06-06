@@ -172,7 +172,7 @@ export const KnowledgePageProvider = ({ children }: PropsWithChildren) => {
       setSelectedBaseId(bases[0].id)
       setSelectedItemId(null)
     }
-  }, [bases, selectedBaseId])
+  }, [bases, pendingSelectedBaseId, selectedBaseId])
 
   const selectBase = useCallback((baseId: string) => {
     setPendingSelectedBaseId(null)

@@ -162,7 +162,7 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
       window.toast.error(t('chat.topics.manage.delete.error'))
     }
     exitManageMode()
-  }, [selectedIds, topics, activeTopic.id, setActiveTopic, t, exitManageMode, updateTopics])
+  }, [selectedIds, topics, activeTopic.id, setActiveTopic, t, exitManageMode, updateTopics, deleteTopic])
 
   // Enter search mode
   const enterSearchMode = useCallback(() => {

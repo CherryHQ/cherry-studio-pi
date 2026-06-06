@@ -79,7 +79,7 @@ export function ProcessorPanel({
     setApiKeysInput(processor.apiKeys?.join(', ') ?? '')
     setApiHostInput(entry.capability.apiHost ?? '')
     setModelIdInput(entry.capability.modelId ?? '')
-  }, [entry.key])
+  }, [entry.key, entry.capability.apiHost, entry.capability.modelId, processor.apiKeys])
 
   const languageOptions = useMemo(() => {
     if (!languages) {

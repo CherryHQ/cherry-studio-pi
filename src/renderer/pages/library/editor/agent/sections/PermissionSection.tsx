@@ -11,6 +11,12 @@ interface Props {
 }
 
 const PERMISSION_MODES = ['default', 'plan', 'acceptEdits', 'bypassPermissions'] as const
+const PERMISSION_MODE_LABEL_KEYS = {
+  default: 'library.config.agent.field.permission_mode.option.default',
+  plan: 'library.config.agent.field.permission_mode.option.plan',
+  acceptEdits: 'library.config.agent.field.permission_mode.option.acceptEdits',
+  bypassPermissions: 'library.config.agent.field.permission_mode.option.bypassPermissions'
+} as const satisfies Record<(typeof PERMISSION_MODES)[number], string>
 
 /**
  * Covers configuration.permission_mode only — no other fields mixed in.
@@ -37,7 +43,7 @@ const PermissionSection: FC<Props> = ({ form, onChange }) => {
           <SelectContent>
             {PERMISSION_MODES.map((mode) => (
               <SelectItem key={mode} value={mode}>
-                {t(`library.config.agent.field.permission_mode.option.${mode}`)}
+                {t(PERMISSION_MODE_LABEL_KEYS[mode])}
               </SelectItem>
             ))}
           </SelectContent>

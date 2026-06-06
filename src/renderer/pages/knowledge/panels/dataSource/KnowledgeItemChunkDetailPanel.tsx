@@ -4,7 +4,7 @@ import { useQuery } from '@data/hooks/useDataApi'
 import { loggerService } from '@logger'
 import { normalizeKnowledgeError } from '@renderer/pages/knowledge/utils'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
-import type { KnowledgeItem, KnowledgeItemChunk } from '@shared/data/types/knowledge'
+import type { KnowledgeItem, KnowledgeItemChunk, KnowledgeItemType } from '@shared/data/types/knowledge'
 import { ArrowLeft, Trash2 } from 'lucide-react'
 import type { MouseEvent } from 'react'
 import type { ReactNode } from 'react'
@@ -14,6 +14,13 @@ import { useTranslation } from 'react-i18next'
 import { toKnowledgeItemRowViewModel } from './utils/selectors'
 
 const logger = loggerService.withContext('KnowledgeItemChunkDetailPanel')
+
+const KNOWLEDGE_ITEM_FILTER_LABEL_KEYS = {
+  file: 'knowledge.data_source.filters.file',
+  note: 'knowledge.data_source.filters.note',
+  directory: 'knowledge.data_source.filters.directory',
+  url: 'knowledge.data_source.filters.url'
+} as const satisfies Record<KnowledgeItemType, string>
 
 interface KnowledgeItemChunkDetailPanelProps {
   baseId: string
@@ -130,7 +137,7 @@ const KnowledgeItemChunkDetailPanel = ({
   })
   const viewModel = item ? toKnowledgeItemRowViewModel(item, language, fileEntry) : null
   const Icon = viewModel?.icon.icon
-  const typeMeta = item && viewModel ? viewModel.suffix || t(`knowledge.data_source.filters.${item.type}`) : ''
+  const typeMeta = item && viewModel ? viewModel.suffix || t(KNOWLEDGE_ITEM_FILTER_LABEL_KEYS[item.type]) : ''
   const chunksCountMeta = t('knowledge.data_source.chunks_count', { count: chunks.length })
   const metaParts = [typeMeta, chunksCountMeta].filter((part): part is string => Boolean(part))
 

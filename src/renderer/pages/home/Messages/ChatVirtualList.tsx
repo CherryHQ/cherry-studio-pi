@@ -223,13 +223,13 @@ export function ChatVirtualList<T>({
   // already-present.
   useLayoutEffect(() => {
     if (typeof ResizeObserver === 'undefined') return
-    stickyObserverRef.current = new ResizeObserver(() => {
+    const observedItems = observedItemsRef.current
+    const observer = new ResizeObserver(() => {
       if (!wasAtBottomRef.current) return
       const node = scrollerRef.current
       if (!node) return
-      const observed = observedItemsRef.current
       let lastBottom = -Infinity
-      for (const el of observed) {
+      for (const el of observedItems) {
         if (!el.isConnected) continue
         const rect = el.getBoundingClientRect()
         if (rect.bottom > lastBottom) lastBottom = rect.bottom
@@ -242,10 +242,11 @@ export function ChatVirtualList<T>({
       const target = lastBottom - scrollerRect.top + node.scrollTop - node.clientHeight
       node.scrollTop = Math.max(0, target)
     })
+    stickyObserverRef.current = observer
     return () => {
-      stickyObserverRef.current?.disconnect()
+      observer.disconnect()
       stickyObserverRef.current = null
-      observedItemsRef.current.clear()
+      observedItems.clear()
     }
   }, [])
 

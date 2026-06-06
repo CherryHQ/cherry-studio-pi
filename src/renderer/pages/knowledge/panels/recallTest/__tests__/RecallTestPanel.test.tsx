@@ -64,7 +64,9 @@ vi.mock('@logger', () => ({
 vi.mock('@cherrystudio/ui', async () => {
   return {
     Button: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) => (
-      <button {...props}>{children}</button>
+      <button type="button" {...props}>
+        {children}
+      </button>
     ),
     EmptyState: ({
       title,

@@ -465,6 +465,7 @@ const MessageMenubar: FC<Props> = (props) => {
     exportMenuOptions.yuque,
     isEditable,
     isProcessing,
+    isUserMessage,
     mainTextContent,
     message,
     messageContainerRef,

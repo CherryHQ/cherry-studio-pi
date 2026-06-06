@@ -88,7 +88,7 @@ function mcpDescriptors(server: McpServer, tools: readonly McpTool[]): ClaudeToo
 
 export const useAgentTools = (source: AgentToolSource | null | undefined) => {
   const { mcpServers, isLoading } = useMcpServers()
-  const mcpIds = source?.mcps ?? []
+  const mcpIds = useMemo(() => source?.mcps ?? [], [source?.mcps])
   const toolsByServer = useMcpToolsCache(mcpIds)
   const requestedRefreshes = useRef(new Set<string>())
 
