@@ -41,6 +41,7 @@ vi.mock('@main/services/agents/services/ToolPermissionService', () => ({
 import { promptForToolApproval } from '@main/services/agents/services/ToolPermissionService'
 import { appCapabilityService } from '@main/services/appCapabilities'
 import mcpService from '@main/services/MCPService'
+import { net } from 'electron'
 
 import { builtinTools } from '../builtin'
 import { createPiMcpTools, createPiTools } from '../tools'
@@ -68,6 +69,7 @@ describe('Pi tools', () => {
     vi.mocked(mcpService.listAllActiveServerTools).mockReset()
     vi.mocked(mcpService.listActiveServerToolsByIds).mockReset()
     vi.mocked(mcpService.callToolById).mockReset()
+    vi.mocked(net.fetch).mockReset()
   })
 
   afterEach(async () => {
@@ -444,6 +446,47 @@ exit 1
         'BrowserReset'
       ])
     )
+  })
+
+  it('safely truncates HTTPRequest output when max_chars is invalid', async () => {
+    vi.mocked(net.fetch).mockResolvedValueOnce({
+      headers: { get: vi.fn(() => 'text/plain') },
+      status: 200,
+      statusText: 'OK',
+      ok: true,
+      url: 'https://example.test/large',
+      text: vi.fn(async () => 'x'.repeat(10_000))
+    } as any)
+
+    const request = getTool('HTTPRequest', tmpDir, [tmpDir])
+    const result = await request.execute('http-invalid-max', {
+      url: 'https://example.test/large',
+      max_chars: 0
+    })
+
+    expect(result.details).toMatchObject({ truncated: true })
+    expect(resultText(result)).toContain('truncated 9999 chars')
+    expect(resultText(result)).not.toContain('x'.repeat(1000))
+  })
+
+  it('caps HTTPRequest output to the tool response budget', async () => {
+    vi.mocked(net.fetch).mockResolvedValueOnce({
+      headers: { get: vi.fn(() => 'text/plain') },
+      status: 200,
+      statusText: 'OK',
+      ok: true,
+      url: 'https://example.test/large',
+      text: vi.fn(async () => 'x'.repeat(80_000))
+    } as any)
+
+    const request = getTool('HTTPRequest', tmpDir, [tmpDir])
+    const result = await request.execute('http-large-max', {
+      url: 'https://example.test/large',
+      max_chars: 1_000_000
+    })
+
+    expect(result.details).toMatchObject({ truncated: true })
+    expect(resultText(result).length).toBeLessThan(25_000)
   })
 
   it('marks AppCallCapability as a direct app bridge that does not require tool permission', () => {

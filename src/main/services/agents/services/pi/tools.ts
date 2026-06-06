@@ -43,12 +43,29 @@ const errorTextResult = (text: string, details: ToolResultDetails = {}): AgentTo
   details: { ...details, isError: true }
 })
 
+const normalizeOutputCharLimit = (value: unknown, fallback = MAX_SUCCESS_OUTPUT_CHARS) => {
+  if (typeof value === 'undefined' || value === null) return fallback
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return fallback
+  return Math.min(Math.max(Math.floor(numeric), 1), MAX_SUCCESS_OUTPUT_CHARS)
+}
+
 const truncateOutput = (text: string, maxChars: number) => {
-  if (text.length <= maxChars) return { text, truncated: false }
-  const headLength = Math.floor(maxChars * 0.35)
-  const tailLength = maxChars - headLength
+  const normalizedMaxChars = Number.isFinite(maxChars) ? Math.max(Math.floor(maxChars), 0) : 0
+  if (text.length <= normalizedMaxChars) return { text, truncated: false }
+  if (normalizedMaxChars === 0) {
+    return {
+      text: `[...truncated ${text.length} chars...]`,
+      truncated: true
+    }
+  }
+
+  const headLength = Math.floor(normalizedMaxChars * 0.35)
+  const tailLength = normalizedMaxChars - headLength
   return {
-    text: `${text.slice(0, headLength)}\n\n[...truncated ${text.length - maxChars} chars...]\n\n${text.slice(-tailLength)}`,
+    text: `${text.slice(0, headLength)}\n\n[...truncated ${
+      text.length - normalizedMaxChars
+    } chars...]\n\n${tailLength > 0 ? text.slice(-tailLength) : ''}`,
     truncated: true
   }
 }
@@ -836,7 +853,7 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
         })
         const contentType = response.headers.get('content-type') ?? ''
         const rawText = await response.text()
-        const maxChars = typeof input.max_chars === 'number' ? input.max_chars : MAX_SUCCESS_OUTPUT_CHARS
+        const maxChars = normalizeOutputCharLimit(input.max_chars)
         const truncated = truncateOutput(rawText || '(empty response)', maxChars)
         return textResult(truncated.text, {
           status: response.status,
