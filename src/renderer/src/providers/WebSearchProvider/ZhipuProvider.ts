@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import type { WebSearchState } from '@renderer/store/websearch'
 import type { WebSearchProvider, WebSearchProviderResponse } from '@renderer/types'
 
@@ -67,7 +68,7 @@ export default class ZhipuProvider extends BaseWebSearchProvider {
 
       if (!response.ok) {
         const errorText = await response.text()
-        logger.error('Zhipu search failed:', { status: response.status, error: errorText })
+        logger.error('Zhipu search failed', { status: response.status, error: summarizeTextForLog(errorText) })
         throw new Error(`HTTP ${response.status}: ${errorText}`)
       }
 

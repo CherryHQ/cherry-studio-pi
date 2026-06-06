@@ -1,5 +1,5 @@
 import { loggerService } from '@logger'
-import { summarizeMessagesForLog, summarizeTextForLog } from '@renderer/aiCore/utils/logging'
+import { summarizeMessagesForLog, summarizeTextForLog, summarizeTextListForLog } from '@renderer/aiCore/utils/logging'
 import { getModel } from '@renderer/hooks/useModel'
 import type { AssistantMessage } from '@renderer/types'
 import {
@@ -283,7 +283,7 @@ export class MemoryProcessor {
     return {
       factCount: result.facts?.length ?? 0,
       operationCount: result.operations?.length ?? 0,
-      facts: summarizeMessagesForLog(result.facts ?? []),
+      facts: summarizeTextListForLog(result.facts ?? []),
       operations: summarizeMessagesForLog(result.operations ?? [])
     }
   }

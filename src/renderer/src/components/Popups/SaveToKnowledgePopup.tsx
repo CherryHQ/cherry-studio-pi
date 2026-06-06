@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import CustomTag from '@renderer/components/Tags/CustomTag'
 import { TopView } from '@renderer/components/TopView'
 import { useKnowledge, useKnowledgeBases } from '@renderer/hooks/useKnowledge'
@@ -290,7 +291,10 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
           ? await processTopicContent(source?.data, selectedTypes)
           : processMessageContent(source?.data, selectedTypes)
 
-        logger.debug('Processed content:', result)
+        logger.debug('Processed content for knowledge save', {
+          text: summarizeTextForLog(result.text),
+          fileCount: result.files.length
+        })
         if (result.text.trim() && selectedTypes.some((type) => type !== CONTENT_TYPES.FILE)) {
           await addNote(result.text)
           savedCount++

@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import db from '@renderer/databases'
 import { getStoreSetting } from '@renderer/hooks/useSettings'
 import { getKnowledgeBaseParams } from '@renderer/services/KnowledgeService'
@@ -179,7 +180,12 @@ class KnowledgeQueue {
       let result: LoaderReturn | null = null
       let note, content
 
-      logger.info(`Processing item: ${sourceItem.content}`)
+      logger.info('Processing knowledge item', {
+        baseId,
+        itemId: sourceItem.id,
+        type: sourceItem.type,
+        content: summarizeTextForLog(sourceItem.content)
+      })
 
       switch (item.type) {
         case 'note':
@@ -196,7 +202,11 @@ class KnowledgeQueue {
           }
           if (note) {
             content = note.content
-            logger.info('{ ...sourceItem, content }', { ...sourceItem, content })
+            logger.info('Processing recovered knowledge note content', {
+              baseId,
+              itemId: sourceItem.id,
+              content: summarizeTextForLog(content)
+            })
             result = await window.api.knowledgeBase.add({ base: baseParams, item: { ...sourceItem, content } })
           }
           break

@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeObjectShapeForLog, summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import { MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
 import { createVideoBlock } from '@renderer/utils/messageUtils/create'
 
@@ -24,7 +25,11 @@ export const createVideoCallbacks = (deps: VideoCallbacksDependencies) => {
         return
       }
 
-      logger.debug(`onVideoSearched video: ${JSON.stringify(video)}, metadata: ${JSON.stringify(metadata)}`)
+      logger.debug('Video search result received', {
+        videoType: video.type,
+        content: summarizeTextForLog(video.content),
+        metadata: summarizeObjectShapeForLog(metadata)
+      })
       if (!videoBlockId) {
         const videoBlock = createVideoBlock(assistantMsgId, {
           status: MessageBlockStatus.SUCCESS,

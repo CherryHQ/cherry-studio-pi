@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import type { WebSearchState } from '@renderer/store/websearch'
 import type { WebSearchProvider, WebSearchProviderResponse } from '@renderer/types'
 
@@ -186,7 +187,7 @@ export default class ExaMcpProvider extends BaseWebSearchProvider {
           }
         } catch {
           // Continue to next line if parsing fails
-          logger.warn('Failed to parse SSE line:', { line })
+          logger.warn('Failed to parse SSE line', { line: summarizeTextForLog(line) })
         }
       }
     }
@@ -199,7 +200,7 @@ export default class ExaMcpProvider extends BaseWebSearchProvider {
       }
     } catch {
       // Ignore parsing errors
-      logger.warn('Failed to parse direct JSON response:', { responseText })
+      logger.warn('Failed to parse direct JSON response', { responseText: summarizeTextForLog(responseText) })
     }
 
     return { results: [] }

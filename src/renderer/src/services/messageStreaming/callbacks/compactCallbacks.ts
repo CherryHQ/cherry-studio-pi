@@ -94,7 +94,9 @@ export const createCompactCallbacks = (deps: CompactCallbacksDeps) => {
 
     // First block after compact_boundary: This is the summary
     if (compactState.isFirstBlockAfterCompact) {
-      logger.info('Detected first block after compact boundary (summary)', { fullContent })
+      logger.info('Detected first block after compact boundary (summary)', {
+        fullContent: summarizeTextForLog(fullContent)
+      })
 
       // Store the summary text and block ID
       compactState.summaryText = fullContent
@@ -117,14 +119,16 @@ export const createCompactCallbacks = (deps: CompactCallbacksDeps) => {
 
     // Second block after compact_boundary: Should contain the XML tags
     if (compactState.summaryBlockId && hasCompactedContent(fullContent)) {
-      logger.info('Detected second block with compacted content', { fullContent })
+      logger.info('Detected second block with compacted content', {
+        fullContent: summarizeTextForLog(fullContent)
+      })
 
       const compactedContent = extractCompactedContent(fullContent)
       const summaryBlockId = compactState.summaryBlockId
 
       logger.info('Converting summary block to compact block', {
-        summaryText: compactState.summaryText,
-        compactedContent,
+        summaryText: summarizeTextForLog(compactState.summaryText),
+        compactedContent: summarizeTextForLog(compactedContent),
         summaryBlockId
       })
 

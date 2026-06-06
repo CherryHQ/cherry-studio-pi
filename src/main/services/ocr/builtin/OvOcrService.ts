@@ -14,6 +14,17 @@ import { OcrBaseService } from './OcrBaseService'
 const logger = loggerService.withContext('OvOcrService')
 const execAsync = promisify(exec)
 
+function summarizeOvOcrOptionsForLog(options?: OcrOvConfig) {
+  if (!options) {
+    return { hasOptions: false }
+  }
+
+  return {
+    hasOptions: true,
+    keys: Object.keys(options)
+  }
+}
+
 const PATH_BAT_FILE = path.join(os.homedir(), HOME_CHERRY_DIR, 'ovms', 'ovocr', 'run.npu.bat')
 
 export class OvOcrService extends OcrBaseService {
@@ -83,7 +94,7 @@ export class OvOcrService extends OcrBaseService {
   }
 
   private async ocrImage(filePath: string, options?: OcrOvConfig): Promise<OcrResult> {
-    logger.info(`OV OCR called on ${filePath} with options ${JSON.stringify(options)}`)
+    logger.info('OV OCR called', { filePath, options: summarizeOvOcrOptionsForLog(options) })
 
     try {
       // 1. Clear img directory and output directory

@@ -4,6 +4,12 @@ import type { WebSearchProviderResponse } from '@renderer/types'
 
 const logger = loggerService.withContext('BlacklistMatchPattern')
 
+function summarizeWebSearchResponseForLog(response: WebSearchProviderResponse) {
+  return {
+    resultCount: response.results?.length ?? 0
+  }
+}
+
 /*
  * MIT License
  *
@@ -182,7 +188,11 @@ export async function parseSubscribeContent(url: string): Promise<string[]> {
   try {
     // 获取订阅源内容
     const response = await fetch(url)
-    logger.debug('[parseSubscribeContent] response', response)
+    logger.debug('Fetched blacklist subscribe content', {
+      url,
+      status: response.status,
+      ok: response.ok
+    })
     if (!response.ok) {
       throw new Error('Failed to fetch subscribe content')
     }
@@ -243,7 +253,11 @@ export async function filterResultWithBlacklist(
   response: WebSearchProviderResponse,
   websearch: WebSearchState
 ): Promise<WebSearchProviderResponse> {
-  logger.debug('[filterResultWithBlacklist]', response)
+  logger.debug('Filtering web search results with blacklist', {
+    response: summarizeWebSearchResponseForLog(response),
+    excludeDomainCount: websearch?.excludeDomains?.length ?? 0,
+    subscribeSourceCount: websearch?.subscribeSources?.length ?? 0
+  })
 
   // 没有结果或者没有黑名单规则时，直接返回原始结果
   if (
@@ -309,7 +323,13 @@ export async function filterResultWithBlacklist(
     }
   })
 
-  logger.debug('filterResultWithBlacklist filtered results:', filteredResults)
+  logger.debug('Filtered web search results with blacklist', {
+    beforeCount: response.results.length,
+    afterCount: filteredResults.length,
+    removedCount: response.results.length - filteredResults.length,
+    blacklistPatternCount: blacklistPatterns.length,
+    regexPatternCount: regexPatterns.length
+  })
 
   return {
     ...response,

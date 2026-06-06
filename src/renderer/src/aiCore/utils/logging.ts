@@ -57,6 +57,19 @@ export function summarizeMessagesForLog(messages: unknown[]) {
   }
 }
 
+export function summarizeTextListForLog(values: unknown[]) {
+  const sampleLimit = 50
+  const sampledValues = values.slice(0, sampleLimit)
+
+  return {
+    type: 'array',
+    length: values.length,
+    items: sampledValues.map((value) => summarizeTextForLog(value)),
+    truncated: values.length > sampleLimit,
+    truncatedCount: Math.max(0, values.length - sampleLimit)
+  }
+}
+
 export function summarizeAssistantForLog(assistant: Assistant) {
   return {
     id: assistant.id,

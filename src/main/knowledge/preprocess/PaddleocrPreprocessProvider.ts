@@ -13,6 +13,27 @@ import BasePreprocessProvider from './BasePreprocessProvider'
 
 const logger = loggerService.withContext('PaddleocrPreprocessProvider')
 
+function summarizeTextForLog(text: string) {
+  return {
+    type: 'string',
+    length: text.length,
+    trimmedLength: text.trim().length,
+    isEmpty: text.trim().length === 0
+  }
+}
+
+function summarizeJsonForLog(value: unknown) {
+  if (!value || typeof value !== 'object') {
+    return { shape: typeof value }
+  }
+
+  return {
+    shape: Array.isArray(value) ? 'array' : 'object',
+    keys: Array.isArray(value) ? undefined : Object.keys(value as Record<string, unknown>),
+    itemCount: Array.isArray(value) ? value.length : undefined
+  }
+}
+
 /**
  * 单个文件大小不超过50MB，为避免处理超时，建议每个文件不超过100页。若超过100页，API只解析前100页，后续页将被忽略。
  * 来源：PaddleOCR 官方 API 调用说明 https://aistudio.baidu.com/paddleocr
@@ -238,12 +259,12 @@ export default class PaddleocrPreprocessProvider extends BasePreprocessProvider 
 
       if (!response.ok) {
         const errorText = await response.text()
-        logger.error(`PaddleOCR API error: HTTP ${response.status} - ${errorText}`)
+        logger.error('PaddleOCR API error', { status: response.status, error: summarizeTextForLog(errorText) })
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
       const rawData = await response.json()
-      logger.debug('PaddleOCR API response', { data: rawData })
+      logger.debug('PaddleOCR API response received', { data: summarizeJsonForLog(rawData) })
 
       // Zod 校验响应结构（不合法则直接抛错）
       const validatedData = ApiResponseSchema.parse(rawData)

@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeObjectShapeForLog, summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import type { PpioPainting } from '@renderer/types'
 
 import { getModelConfig } from '../config/ppioConfig'
@@ -90,12 +91,15 @@ class PpioService {
 
       if (!response.ok) {
         const errorText = await response.text()
-        logger.error('PPIO API error', { status: response.status, error: errorText })
+        logger.error('PPIO API error', { status: response.status, error: summarizeTextForLog(errorText) })
         throw new PpioApiError(`PPIO API error: ${response.status} - ${errorText}`, response.status)
       }
 
       const data = await response.json()
-      logger.debug('PPIO API response', data)
+      logger.debug('PPIO API response received', {
+        endpoint,
+        response: summarizeObjectShapeForLog(data)
+      })
       return data as T
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {

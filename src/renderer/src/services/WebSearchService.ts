@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeTextListForLog } from '@renderer/aiCore/utils/logging'
 import { DEFAULT_WEBSEARCH_RAG_DOCUMENT_COUNT } from '@renderer/config/constant'
 import i18n from '@renderer/i18n'
 import WebSearchEngineProvider from '@renderer/providers/WebSearchProvider'
@@ -262,7 +263,10 @@ class WebSearchService {
     // 2. 合并所有结果并按分数排序
     const flatResults = allResults.flat().sort((a, b) => b.score - a.score)
 
-    logger.debug(`Found ${flatResults.length} result(s) in search base related to question(s): `, questions)
+    logger.debug('Found search-base results for web search compression questions', {
+      resultCount: flatResults.length,
+      questions: summarizeTextListForLog(questions)
+    })
 
     // 3. 去重，保留最高分的重复内容
     const seen = new Set<string>()

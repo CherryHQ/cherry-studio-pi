@@ -7,7 +7,8 @@ import {
   summarizeObjectShapeForLog,
   summarizeProviderConfigForLog,
   summarizeProviderForLog,
-  summarizeTextForLog
+  summarizeTextForLog,
+  summarizeTextListForLog
 } from '../logging'
 
 describe('aiCore logging summaries', () => {
@@ -116,5 +117,16 @@ describe('aiCore logging summaries', () => {
     expect(serialized).not.toContain('private user message')
     expect(serialized).not.toContain('raw user content')
     expect(serialized).not.toContain('raw assistant content')
+  })
+
+  it('summarizes text lists without raw values', () => {
+    const summary = summarizeTextListForLog(['secret search question', 'another private value'])
+    const serialized = JSON.stringify(summary)
+
+    expect(summary.length).toBe(2)
+    expect(summary.truncated).toBe(false)
+    expect(serialized).toContain('"length":22')
+    expect(serialized).not.toContain('secret search question')
+    expect(serialized).not.toContain('another private value')
   })
 })

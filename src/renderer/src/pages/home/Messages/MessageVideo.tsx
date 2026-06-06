@@ -1,3 +1,4 @@
+import { summarizeObjectShapeForLog } from '@renderer/aiCore/utils/logging'
 import { loggerService } from '@renderer/services/LoggerService'
 import type { VideoMessageBlock } from '@renderer/types/newMessage'
 import type { FC } from 'react'
@@ -15,7 +16,13 @@ const MessageVideo: FC<Props> = ({ block }) => {
   const playerRef = useRef<HTMLVideoElement | null>(null)
   const { t } = useTranslation()
 
-  logger.debug(`MessageVideo: ${JSON.stringify(block)}`)
+  logger.debug('Rendering video message block', {
+    blockId: block.id,
+    messageId: block.messageId,
+    hasUrl: Boolean(block.url),
+    hasFilePath: Boolean(block.filePath),
+    metadata: summarizeObjectShapeForLog(block.metadata)
+  })
 
   if (!block.url && !block.filePath) {
     return null

@@ -2,6 +2,7 @@ import { loggerService } from '@logger'
 import type { Span } from '@opentelemetry/api'
 import { AiProvider } from '@renderer/aiCore'
 import { getMessageContent } from '@renderer/aiCore/plugins/searchOrchestrationPlugin'
+import { summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import { DEFAULT_KNOWLEDGE_DOCUMENT_COUNT, DEFAULT_KNOWLEDGE_THRESHOLD } from '@renderer/config/constant'
 import { getEmbeddingMaxContext } from '@renderer/config/embedings'
 import { REFERENCE_PROMPT } from '@renderer/config/prompts'
@@ -208,7 +209,14 @@ export const searchKnowledgeBase = async (
     const result = await Promise.all(
       limitedResults.map(async (item) => {
         const file = await getFileFromUrl(item.metadata.source)
-        logger.debug(`Knowledge search item: ${JSON.stringify(item)} File: ${JSON.stringify(file)}`)
+        logger.debug('Knowledge search item resolved', {
+          source: item.metadata.source,
+          score: item.score,
+          content: summarizeTextForLog(item.pageContent),
+          hasFile: Boolean(file),
+          fileId: file?.id,
+          fileName: file?.origin_name
+        })
         return { ...item, file }
       })
     )
