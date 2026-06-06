@@ -73,6 +73,17 @@ const normalizeHttpRequestUrl = (value: unknown) => {
   return parsedUrl.toString()
 }
 
+const normalizeHttpRequestMethod = (value: unknown) => {
+  const method = String(value ?? 'GET')
+    .trim()
+    .toUpperCase()
+  if (!method) return 'GET'
+  if (!/^[!#$%&'*+\-.^_`|~0-9A-Z]+$/.test(method)) {
+    throw new Error('HTTPRequest method is invalid; provide a valid HTTP method token')
+  }
+  return method
+}
+
 const truncateOutput = (text: string, maxChars: number) => {
   const normalizedMaxChars = Number.isFinite(maxChars) ? Math.max(Math.floor(maxChars), 0) : 0
   if (text.length <= normalizedMaxChars) return { text, truncated: false }
@@ -1007,7 +1018,7 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
         const input = params as ToolParams
         const { net } = await import('electron')
         const url = normalizeHttpRequestUrl(input.url)
-        const method = String(input.method ?? 'GET').toUpperCase()
+        const method = normalizeHttpRequestMethod(input.method)
         const response = await net.fetch(url, {
           method,
           headers: input.headers,

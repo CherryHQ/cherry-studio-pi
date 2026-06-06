@@ -520,6 +520,41 @@ exit 1
     expect(resultText(result)).toContain('only supports http:// and https://')
   })
 
+  it('normalizes HTTPRequest methods before deciding request body', async () => {
+    vi.mocked(net.fetch).mockResolvedValueOnce({
+      headers: { get: vi.fn(() => 'text/plain') },
+      status: 200,
+      statusText: 'OK',
+      ok: true,
+      url: 'https://example.test/head',
+      text: vi.fn(async () => 'ok')
+    } as any)
+
+    const request = getTool('HTTPRequest', tmpDir, [tmpDir])
+    await request.execute('http-normalized-method', {
+      url: 'https://example.test/head',
+      method: ' head ',
+      body: 'should-not-send'
+    })
+
+    expect(net.fetch).toHaveBeenCalled()
+    const init = vi.mocked(net.fetch).mock.calls[0][1] as RequestInit
+    expect(init).toMatchObject({ method: 'HEAD' })
+    expect(init.body).toBeUndefined()
+  })
+
+  it('rejects invalid HTTPRequest methods before fetching', async () => {
+    const request = getTool('HTTPRequest', tmpDir, [tmpDir])
+    const result = await request.execute('http-invalid-method', {
+      url: 'https://example.test/ok',
+      method: 'GET /admin'
+    })
+
+    expect(net.fetch).not.toHaveBeenCalled()
+    expect(result.details).toMatchObject({ isError: true })
+    expect(resultText(result)).toContain('method is invalid')
+  })
+
   it('marks AppCallCapability as a direct app bridge that does not require tool permission', () => {
     expect(builtinTools.find((tool) => tool.id === 'AppCallCapability')).toMatchObject({
       requirePermissions: false
