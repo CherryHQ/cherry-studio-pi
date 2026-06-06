@@ -211,6 +211,54 @@ describe('StorageV2MigrationAuditService', () => {
     expect(audit.warnings.some((warning) => warning.includes('Unclassified Data entry'))).toBe(true)
   })
 
+  it('limits unclassified top-level Data entry auditing and reports truncation', async () => {
+    const dataRoot = '/mock/stable-data-root'
+    const largeUnknownEntries = Array.from({ length: 60 }, (_, index) => ({
+      name: `MysteryStore${index}`,
+      isDirectory: () => false,
+      isFile: () => true
+    }))
+
+    vi.mocked(fs.readdir).mockImplementation(async (targetPath) => {
+      if (String(targetPath) === dataRoot) {
+        return largeUnknownEntries as any
+      }
+      return [] as any
+    })
+    vi.mocked(fs.stat).mockImplementation(async (targetPath) => {
+      const normalizedPath = String(targetPath)
+      if (normalizedPath === dataRoot) {
+        return {
+          isDirectory: () => true,
+          isFile: () => false,
+          size: 0
+        } as any
+      }
+      if (normalizedPath.startsWith(`${dataRoot}/MysteryStore`)) {
+        return {
+          isDirectory: () => false,
+          isFile: () => true,
+          size: 1
+        } as any
+      }
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+    })
+
+    const { StorageV2MigrationAuditService } = await import('../MigrationAuditService')
+    const audit = await new StorageV2MigrationAuditService().runAudit()
+    const unclassifiedItems = audit.items.filter((entry) => entry.id.startsWith('data-root-unclassified-mysterystore'))
+    const truncatedItem = audit.items.find((entry) => entry.id === 'data-root-unclassified-truncated')
+
+    expect(unclassifiedItems).toHaveLength(50)
+    expect(truncatedItem).toMatchObject({
+      actionRequired: true,
+      exists: true,
+      path: dataRoot,
+      statsTruncated: true
+    })
+    expect(audit.warnings.some((warning) => warning.includes('Unclassified Data entries truncated'))).toBe(true)
+  })
+
   it('warns when a configured notes directory lives outside the Storage v2 data root', async () => {
     mocks.settingsRepository.get.mockResolvedValue({
       notesPath: '/mock/external-notes'

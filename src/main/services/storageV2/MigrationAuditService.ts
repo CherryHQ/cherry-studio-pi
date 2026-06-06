@@ -21,6 +21,7 @@ type AuditPathOptions = Pick<StorageV2AuditItem, 'actionRequired' | 'category' |
 
 const MAX_AUDIT_STAT_VISITS = 5000
 const MAX_AUDIT_DIRECTORY_ENTRIES = 1000
+const MAX_UNCLASSIFIED_DATA_ROOT_ENTRIES = 50
 const MAX_AUDIT_DEPTH = 8
 
 type AuditStatsBudget = {
@@ -231,12 +232,19 @@ async function auditPath(
 
 async function auditUnclassifiedDataRootEntries(dataRoot: string): Promise<StorageV2AuditItem[]> {
   try {
-    const entries = await fs.readdir(dataRoot, { withFileTypes: true })
+    const budget: AuditStatsBudget = { visited: 0, truncated: false }
+    const entries = await readDirectoryEntriesBounded(dataRoot, MAX_AUDIT_DIRECTORY_ENTRIES, budget)
     const unknownEntries = entries.filter((entry) => !KNOWN_DATA_ROOT_ENTRIES.has(entry.name))
+    const visibleUnknownEntries = unknownEntries.slice(0, MAX_UNCLASSIFIED_DATA_ROOT_ENTRIES)
 
-    return Promise.all(
-      unknownEntries.map((entry, index) =>
-        auditPath(
+    if (unknownEntries.length > visibleUnknownEntries.length) {
+      markStatsTruncated(budget)
+    }
+
+    const items: StorageV2AuditItem[] = []
+    for (const [index, entry] of visibleUnknownEntries.entries()) {
+      items.push(
+        await auditPath(
           `data-root-unclassified-${safeAuditIdSegment(entry.name)}-${index + 1}`,
           `Unclassified Data entry: ${entry.name}`,
           path.join(dataRoot, entry.name),
@@ -250,7 +258,28 @@ async function auditUnclassifiedDataRootEntries(dataRoot: string): Promise<Stora
           }
         )
       )
-    )
+    }
+
+    if (budget.truncated) {
+      items.push({
+        id: 'data-root-unclassified-truncated',
+        label: 'Unclassified Data entries truncated',
+        path: dataRoot,
+        exists: true,
+        actionRequired: true,
+        category: 'user-asset',
+        coverage: 'legacy-only',
+        risk: 'medium',
+        notes:
+          'Only the first unclassified Data entries were audited to keep migration diagnostics responsive. Review the Data directory manually if you need a full inventory.',
+        sizeBytes: 0,
+        fileCount: 0,
+        directoryCount: 0,
+        statsTruncated: true
+      })
+    }
+
+    return items
   } catch {
     return []
   }

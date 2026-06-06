@@ -12,6 +12,18 @@ import { configManager } from './ConfigManager'
 
 const logger = loggerService.withContext('SpanCacheService')
 
+function parseJsonAttributeValue(value: unknown) {
+  if (typeof value !== 'string' || !value.trimStart().startsWith('{')) {
+    return value
+  }
+
+  try {
+    return JSON.parse(value)
+  } catch {
+    return value
+  }
+}
+
 class SpanCacheService implements TraceCache {
   private topicMap: Map<string, string> = new Map<string, string>()
   private fileDir: string
@@ -239,14 +251,13 @@ class SpanCacheService implements TraceCache {
         if (key === 'attributes') {
           const savedAttrs = savedEntity.attributes || {}
           Object.keys(value).forEach((attrKey) => {
-            const jsonData =
-              typeof value[attrKey] === 'string' && value[attrKey].startsWith('{')
-                ? JSON.parse(value[attrKey])
-                : value[attrKey]
+            const jsonData = parseJsonAttributeValue(value[attrKey])
             if (
               savedAttrs[attrKey] !== undefined &&
               typeof jsonData === 'object' &&
-              typeof savedAttrs[attrKey] === 'object'
+              jsonData !== null &&
+              typeof savedAttrs[attrKey] === 'object' &&
+              savedAttrs[attrKey] !== null
             ) {
               savedAttrs[attrKey] = { ...savedAttrs[attrKey], ...jsonData }
             } else {
@@ -318,14 +329,12 @@ class SpanCacheService implements TraceCache {
     await this._checkFolder(dirPath)
 
     const filePath = path.join(dirPath, traceId)
+    const serializedSpans = spans.filter((span) => span.topicId).map((span) => JSON.stringify(span))
+    if (serializedSpans.length === 0) {
+      return
+    }
 
-    const writeOperations = spans
-      .filter((span) => span.topicId)
-      .map(async (span) => {
-        await fs.appendFile(filePath, JSON.stringify(span) + '\n')
-      })
-
-    await Promise.all(writeOperations)
+    await fs.appendFile(filePath, `${serializedSpans.join('\n')}\n`)
   }
 
   private async _getHisData(topicId: string, traceId: string, modelName?: string) {

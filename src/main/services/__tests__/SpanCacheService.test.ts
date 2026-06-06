@@ -100,6 +100,34 @@ describe('SpanCacheService', () => {
     expect(getEntity('span-save')).toBeUndefined()
   })
 
+  it('persists active trace spans with one batched append', async () => {
+    bindTopic('trace-batch', 'topic-batch')
+    saveEntity(makeSpan({ id: 'span-batch-a', traceId: 'trace-batch' }))
+    saveEntity(makeSpan({ id: 'span-batch-b', traceId: 'trace-batch' }))
+
+    await saveSpans('topic-batch')
+
+    expect(mocks.fs.appendFile).toHaveBeenCalledTimes(1)
+    const appendCalls = mocks.fs.appendFile.mock.calls as unknown as Array<[unknown, string]>
+    const payloadLines = appendCalls[0]?.[1].split('\n').filter(Boolean) ?? []
+    expect(payloadLines).toHaveLength(2)
+    expect(payloadLines[0]).toContain('"id":"span-batch-a"')
+    expect(payloadLines[1]).toContain('"id":"span-batch-b"')
+  })
+
+  it('keeps malformed JSON-looking attributes as strings when updating spans', () => {
+    saveEntity(makeSpan({ id: 'span-attr', attributes: { metadata: { existing: true }, payload: { ok: true } } }))
+
+    expect(() =>
+      saveEntity(makeSpan({ id: 'span-attr', attributes: { metadata: '{"value":1}', payload: '{broken-json' } }))
+    ).not.toThrow()
+
+    expect(getEntity('span-attr')?.attributes).toMatchObject({
+      metadata: { existing: true, value: 1 },
+      payload: '{broken-json'
+    })
+  })
+
   it('cleans cached spans by topic before clearing persisted trace files', async () => {
     bindTopic('trace-clean-a', 'topic-clean-a')
     bindTopic('trace-clean-b', 'topic-clean-b')
