@@ -311,12 +311,19 @@ vi.mock('../windowRegistry', () => {
 // ─── Import after mocks ────────────────────────────────────
 
 const { WindowManager } = await import('../WindowManager')
+const { shell } = await import('electron')
 
 // ─── Helpers ───────────────────────────────────────────────
 
 function simulateWindowClosed(wm: InstanceType<typeof WindowManager>, windowId: string): void {
   const win = wm.getWindow(windowId) as unknown as MockBrowserWindow | undefined
   win?.emit('closed')
+}
+
+function getWillNavigateHandler(win: MockBrowserWindow) {
+  const call = win.webContents.on.mock.calls.find(([event]) => event === 'will-navigate')
+  if (!call) throw new Error('will-navigate handler not registered')
+  return call[1] as (event: { preventDefault: () => void }, url: string) => void
 }
 
 // ─── Test Suite ────────────────────────────────────────────
@@ -366,6 +373,32 @@ describe('WindowManager', () => {
       wm.close(id)
 
       expect(win.destroy).toHaveBeenCalled()
+    })
+
+    it('allows same-origin http navigation inside the window', () => {
+      wm.open('default' as never)
+      const win = createdWindows[0]
+      const handler = getWillNavigateHandler(win)
+      const event = { preventDefault: vi.fn() }
+      win.webContents.getURL.mockReturnValue('https://app.example.com/current')
+
+      handler(event, 'https://app.example.com/next')
+
+      expect(event.preventDefault).not.toHaveBeenCalled()
+      expect(shell.openExternal).not.toHaveBeenCalledWith('https://app.example.com/next')
+    })
+
+    it('opens external http navigation when the current URL has no safe http origin', () => {
+      wm.open('default' as never)
+      const win = createdWindows[0]
+      const handler = getWillNavigateHandler(win)
+      const event = { preventDefault: vi.fn() }
+      win.webContents.getURL.mockReturnValue('app://perry/home')
+
+      expect(() => handler(event, 'https://external.example.com/page')).not.toThrow()
+
+      expect(event.preventDefault).toHaveBeenCalled()
+      expect(shell.openExternal).toHaveBeenCalledWith('https://external.example.com/page')
     })
   })
 

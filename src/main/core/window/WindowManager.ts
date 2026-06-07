@@ -38,6 +38,15 @@ const logger = loggerService.withContext('WindowManager')
 /** GC tick interval in ms — minute-grained precision is sufficient for decay/inactivity. */
 const WARMUP_GC_INTERVAL = 60_000
 
+function safeHttpOrigin(url: string): string | null {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.origin : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Structured warmup operation tags. Every warmup state mutation logs exactly one
  * `warmup[type] <op>` line carrying the full `{idle, managed, inflight}` snapshot,
@@ -1387,7 +1396,10 @@ export class WindowManager extends BaseService {
     window.webContents.on('will-navigate', (event, url) => {
       if (url.startsWith('http:') || url.startsWith('https:')) {
         const currentURL = window.webContents.getURL()
-        if (currentURL && new URL(url).origin !== new URL(currentURL).origin) {
+        const nextOrigin = safeHttpOrigin(url)
+        const currentOrigin = currentURL ? safeHttpOrigin(currentURL) : null
+
+        if (!nextOrigin || !currentOrigin || nextOrigin !== currentOrigin) {
           event.preventDefault()
           void shell.openExternal(url)
         }
