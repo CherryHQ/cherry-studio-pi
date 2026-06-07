@@ -1,14 +1,46 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@main/services/WindowService', () => ({
-  windowService: {
-    getMainWindow: vi.fn()
+const mocks = vi.hoisted(() => ({
+  executeJavaScript: vi.fn(),
+  getWindowsByType: vi.fn(),
+  showMainWindow: vi.fn()
+}))
+
+vi.mock('@application', () => ({
+  application: {
+    get: vi.fn((name: string) => {
+      if (name === 'WindowManager') {
+        return { getWindowsByType: mocks.getWindowsByType }
+      }
+      if (name === 'MainWindowService') {
+        return { showMainWindow: mocks.showMainWindow }
+      }
+      throw new Error(`Unexpected service: ${name}`)
+    })
   }
 }))
 
-import { isAllowedAppRoute, normalizeAppRoute, sanitizeForAgent } from '../utils'
+vi.mock('@main/core/platform', () => ({
+  isMac: true
+}))
+
+import { isAllowedAppRoute, navigateApp, normalizeAppRoute, sanitizeForAgent } from '../utils'
 
 describe('app capability utils', () => {
+  beforeEach(() => {
+    mocks.executeJavaScript.mockReset()
+    mocks.getWindowsByType.mockReset()
+    mocks.showMainWindow.mockReset()
+    mocks.getWindowsByType.mockReturnValue([
+      {
+        isDestroyed: () => false,
+        webContents: {
+          executeJavaScript: mocks.executeJavaScript
+        }
+      }
+    ])
+  })
+
   it('redacts sensitive fields while preserving ordinary values', () => {
     expect(
       sanitizeForAgent({
@@ -183,5 +215,30 @@ describe('app capability utils', () => {
     expect(isAllowedAppRoute('/agents/session-1')).toBe(true)
     expect(isAllowedAppRoute('/settings-malicious')).toBe(false)
     expect(isAllowedAppRoute('https://example.com')).toBe(false)
+  })
+
+  it('navigates the main window and foregrounds it on macOS', async () => {
+    mocks.executeJavaScript.mockResolvedValue(undefined)
+
+    await navigateApp('settings/data')
+
+    expect(mocks.executeJavaScript).toHaveBeenCalledWith('window.navigate("/settings/data")')
+    expect(mocks.showMainWindow).toHaveBeenCalledTimes(1)
+  })
+
+  it('times out when the renderer navigation bridge does not settle', async () => {
+    vi.useFakeTimers()
+    try {
+      mocks.executeJavaScript.mockReturnValue(new Promise(() => undefined))
+
+      const promise = navigateApp('/settings/data')
+      const assertion = expect(promise).rejects.toThrow('Timed out navigating app route /settings/data after 5000ms')
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      await assertion
+      expect(mocks.showMainWindow).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

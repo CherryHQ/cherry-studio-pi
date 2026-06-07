@@ -12,6 +12,7 @@ const MAX_AGENT_STRING_CHARS = 8_000
 const MAX_AGENT_ARRAY_ITEMS = 200
 const MAX_AGENT_OBJECT_KEYS = 200
 const MAX_AGENT_OBJECT_DEPTH = 8
+const NAVIGATION_TIMEOUT_MS = 5_000
 
 export const okResult = <T>(summary: string, data?: T): { ok: true; summary: string; data?: T } => ({
   ok: true,
@@ -154,6 +155,20 @@ export const navigateApp = async (route: string) => {
   const win = application.get('WindowManager').getWindowsByType(WindowType.Main)[0]
   if (!win || win.isDestroyed()) throw new Error('Main window is not available')
 
-  await win.webContents.executeJavaScript(`window.navigate(${JSON.stringify(nextRoute)})`)
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      win.webContents.executeJavaScript(`window.navigate(${JSON.stringify(nextRoute)})`),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`Timed out navigating app route ${nextRoute} after ${NAVIGATION_TIMEOUT_MS}ms`)),
+          NAVIGATION_TIMEOUT_MS
+        )
+        timeout.unref?.()
+      })
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
   if (isMac) application.get('MainWindowService').showMainWindow()
 }
