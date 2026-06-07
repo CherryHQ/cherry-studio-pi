@@ -1,5 +1,6 @@
 import { parseJSON } from '@renderer/utils/json'
 import { findCitationInChildren } from '@renderer/utils/markdown'
+import { isSafeExternalUrl } from '@shared/utils/externalUrlSafety'
 import { isEmpty, omit } from 'lodash'
 import React, { useMemo } from 'react'
 import type { Node } from 'unist'
@@ -12,6 +13,10 @@ interface LinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
 }
 
 const Link: React.FC<LinkProps> = (props) => {
+  const href = typeof props.href === 'string' ? props.href.trim() : ''
+  const isInternalAnchor = href.startsWith('#')
+  const isUnsafeExternalHref = href !== '' && !isInternalAnchor && !isSafeExternalUrl(href)
+
   const citationData = useMemo(() => {
     const raw = parseJSON(findCitationInChildren(props.children))
     const parsed = CitationSchema.safeParse(raw)
@@ -19,7 +24,7 @@ const Link: React.FC<LinkProps> = (props) => {
   }, [props.children])
 
   // 处理内部链接
-  if (props.href?.startsWith('#')) {
+  if (isInternalAnchor || isUnsafeExternalHref) {
     return <span className="link">{props.children}</span>
   }
 
@@ -36,8 +41,8 @@ const Link: React.FC<LinkProps> = (props) => {
     return (
       <CitationTooltip citation={citationData}>
         <a
-          {...omit(props, ['node', 'citationData'])}
-          href={isEmpty(props.href) ? undefined : props.href}
+          {...omit(props, ['node', 'citationData', 'href'])}
+          href={isEmpty(href) ? undefined : href}
           target="_blank"
           rel="noreferrer"
           onClick={(e) => e.stopPropagation()}
@@ -48,9 +53,10 @@ const Link: React.FC<LinkProps> = (props) => {
 
   // 普通链接
   return (
-    <Hyperlink href={props.href || ''}>
+    <Hyperlink href={href}>
       <a
-        {...omit(props, ['node', 'citationData'])}
+        {...omit(props, ['node', 'citationData', 'href'])}
+        href={isEmpty(href) ? undefined : href}
         target="_blank"
         rel="noreferrer"
         onClick={(e) => e.stopPropagation()}

@@ -28,6 +28,10 @@ vi.mock('@renderer/utils/markdown', () => ({
   findCitationInChildren: mocks.findCitationInChildren
 }))
 
+vi.mock('@shared/utils/externalUrlSafety', () => ({
+  isSafeExternalUrl: (href: string) => href.startsWith('https://') || href.startsWith('mailto:')
+}))
+
 vi.mock('../CitationTooltip', () => ({
   default: mocks.CitationTooltip,
   CitationSchema: mocks.CitationSchema
@@ -108,6 +112,14 @@ describe('Link', () => {
     expect(anchor.getAttribute('href')).toBe('https://domain.com/path')
     expect(anchor.getAttribute('target')).toBe('_blank')
     expect(anchor.getAttribute('rel')).toBe('noreferrer')
+  })
+
+  it('should render unsafe external links as inert text', () => {
+    const { container } = render(<Link href="file:///tmp/secret.txt">Do not open</Link>)
+
+    expect(container.querySelector('a')).toBeNull()
+    expect(container.querySelector('span.link')).not.toBeNull()
+    expect(screen.queryByTestId('hyperlink')).toBeNull()
   })
 
   it('should omit empty href for citation link (no href attribute when href="")', () => {
