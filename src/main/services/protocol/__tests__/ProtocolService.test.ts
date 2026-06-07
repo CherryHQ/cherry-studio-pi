@@ -144,6 +144,17 @@ describe('ProtocolService', () => {
     })
   })
 
+  it('handles cold-start protocol argv case-insensitively', async () => {
+    setDefaultApp(false)
+    process.argv = ['Cherry Studio.exe', 'CherryStudio://oauth/callback?code=abc']
+
+    await (service as any).onInit()
+
+    expect(cherryInOauthServiceMock.handleOAuthCallback).toHaveBeenCalledTimes(1)
+    const url = cherryInOauthServiceMock.handleOAuthCallback.mock.calls[0][0] as URL
+    expect(url.href).toBe('cherrystudio://oauth/callback?code=abc')
+  })
+
   it('broadcasts unknown protocol hosts to all windows', () => {
     ;(service as any).handleProtocolUrl('cherrystudio://unknown/path?foo=bar')
 
@@ -171,6 +182,18 @@ describe('ProtocolService', () => {
       const url = cherryInOauthServiceMock.handleOAuthCallback.mock.calls[0][0] as URL
       expect(url.href).toBe('cherrystudio://oauth/callback?code=abc')
       expect(windowManagerMock.broadcast).not.toHaveBeenCalled()
+    })
+
+    it('dispatches second-instance protocol URLs case-insensitively', async () => {
+      await (service as any).onInit()
+      const handler = getSecondInstanceHandler()
+
+      handler({}, ['/path/to/electron', '.', 'CherryStudio://oauth/callback?code=abc'])
+
+      expect(mainWindowServiceMock.showMainWindow).not.toHaveBeenCalled()
+      expect(cherryInOauthServiceMock.handleOAuthCallback).toHaveBeenCalledTimes(1)
+      const url = cherryInOauthServiceMock.handleOAuthCallback.mock.calls[0][0] as URL
+      expect(url.href).toBe('cherrystudio://oauth/callback?code=abc')
     })
 
     it('surfaces the main window when argv has no protocol URL', async () => {

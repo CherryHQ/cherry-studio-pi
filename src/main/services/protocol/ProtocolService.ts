@@ -14,10 +14,15 @@ import { handleNavigateProtocolUrl } from './handlers/navigate'
 import { handleProvidersProtocolUrl } from './handlers/providersImport'
 
 export const CHERRY_STUDIO_PROTOCOL = 'cherrystudio'
+const CHERRY_STUDIO_PROTOCOL_PREFIX = `${CHERRY_STUDIO_PROTOCOL}://`
 
 const DESKTOP_FILE_NAME = 'cherrystudio-url-handler.desktop'
 const execAsync = promisify(exec)
 const logger = loggerService.withContext('ProtocolService')
+
+function isCherryStudioProtocolUrlArg(arg: string): boolean {
+  return arg.toLowerCase().startsWith(CHERRY_STUDIO_PROTOCOL_PREFIX)
+}
 
 @Injectable('ProtocolService')
 @ServicePhase(Phase.Background)
@@ -50,7 +55,7 @@ export class ProtocolService extends BaseService {
     //      the app is running); surface the main window. MainWindowService is
     //      WhenReady, fully alive by the time any 'second-instance' can fire.
     const secondInstanceHandler = (_event: Electron.Event, argv: string[]) => {
-      const url = argv.find((arg) => arg.startsWith(`${CHERRY_STUDIO_PROTOCOL}://`))
+      const url = argv.find(isCherryStudioProtocolUrlArg)
       if (url) {
         this.handleProtocolUrl(url)
       } else {
@@ -141,7 +146,7 @@ export class ProtocolService extends BaseService {
   }
 
   private handleArgvForUrl(args: string[]) {
-    const url = args.find((arg) => arg.startsWith(CHERRY_STUDIO_PROTOCOL + '://'))
+    const url = args.find(isCherryStudioProtocolUrlArg)
     if (url) this.handleProtocolUrl(url)
   }
 
