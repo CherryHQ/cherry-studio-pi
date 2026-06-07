@@ -1,6 +1,7 @@
 import { LoadingOutlined, WifiOutlined } from '@ant-design/icons'
 import { Button, RowFlex, Switch, Tooltip } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
+import { loggerService } from '@logger'
 import BackupPopup from '@renderer/components/Popups/BackupPopup'
 import LanTransferPopup from '@renderer/components/Popups/LanTransferPopup'
 import RestorePopup from '@renderer/components/Popups/RestorePopup'
@@ -17,6 +18,8 @@ import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
 
+const logger = loggerService.withContext('BasicDataSettings')
+
 const BasicDataSettings: React.FC = () => {
   const { t } = useTranslation()
   const [appInfo, setAppInfo] = useState<AppInfo>()
@@ -26,8 +29,26 @@ const BasicDataSettings: React.FC = () => {
   const [skipBackupFile, setSkipBackupFile] = usePreference('data.backup.general.skip_backup_file')
 
   useEffect(() => {
-    void window.api.getAppInfo().then(setAppInfo)
-    void window.api.getCacheSize().then(setCacheSize)
+    let cancelled = false
+    void window.api
+      .getAppInfo()
+      .then((info) => {
+        if (!cancelled) setAppInfo(info)
+      })
+      .catch((error) => {
+        logger.warn('Failed to read app info for data settings', error as Error)
+      })
+    void window.api
+      .getCacheSize()
+      .then((size) => {
+        if (!cancelled) setCacheSize(size)
+      })
+      .catch((error) => {
+        logger.warn('Failed to read cache size', error as Error)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const handleSelectAppDataPath = async () => {

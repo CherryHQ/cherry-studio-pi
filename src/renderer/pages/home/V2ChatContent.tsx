@@ -211,7 +211,14 @@ const V2ChatContentInner: FC<InnerProps> = ({
     (_executionId: string, { message, isError }: ExecutionFinishEvent) => {
       if (isError || !message.parts?.length) {
         // Error / no content: force a clean revalidate, then drop overlay.
-        void cache.rollbackBranch().then(() => disposeOverlay(message.id))
+        void cache
+          .rollbackBranch()
+          .finally(() => disposeOverlay(message.id))
+          .catch((error) => {
+            logger.warn('Failed to rollback message cache after execution error', error as Error, {
+              messageId: message.id
+            })
+          })
         return
       }
       // Success / aborted-with-content: do NOT write streamed parts to the
@@ -219,7 +226,11 @@ const V2ChatContentInner: FC<InnerProps> = ({
       // dispose the overlay so there is no gap between overlay and authoritative
       // parts. `.finally` ensures the overlay is released even if the refresh
       // rejects (otherwise it would linger).
-      void refresh().finally(() => disposeOverlay(message.id))
+      void refresh()
+        .finally(() => disposeOverlay(message.id))
+        .catch((error) => {
+          logger.warn('Failed to refresh messages after execution finish', error as Error, { messageId: message.id })
+        })
     },
     [cache, disposeOverlay, refresh]
   )

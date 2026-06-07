@@ -1,5 +1,6 @@
 import { cacheService } from '@data/CacheService'
 import { usePreference } from '@data/hooks/usePreference'
+import { loggerService } from '@logger'
 import { isMac } from '@renderer/config/constant'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import db from '@renderer/databases'
@@ -15,6 +16,8 @@ import useFullScreenNotice from './useFullScreenNotice'
 import { useMiniApps } from './useMiniApps'
 import useNavBackgroundColor from './useNavBackgroundColor'
 import { useNavbarPosition } from './useNavbar'
+
+const logger = loggerService.withContext('useAppInit')
 
 export function useAppInit() {
   const [language] = usePreference('app.language')
@@ -41,11 +44,16 @@ export function useAppInit() {
   }, [])
 
   useEffect(() => {
-    void window.api.getDataPathFromArgs().then((dataPath) => {
-      if (dataPath) {
-        void window.navigate({ to: '/settings/data', replace: true })
-      }
-    })
+    void window.api
+      .getDataPathFromArgs()
+      .then((dataPath) => {
+        if (dataPath) {
+          void window.navigate({ to: '/settings/data', replace: true })
+        }
+      })
+      .catch((error) => {
+        logger.warn('Failed to read data path from launch args', error as Error)
+      })
   }, [])
 
   // [v2] Removed: Redux persistor flush is no longer needed after v2 data refactoring
@@ -65,28 +73,31 @@ export function useAppInit() {
 
   useEffect(() => {
     const checkForUpdates = async () => {
-      const { isPackaged } = await window.api.getAppInfo()
+      try {
+        const { isPackaged } = await window.api.getAppInfo()
 
-      if (!isPackaged || !autoCheckUpdate) {
-        return
+        if (!isPackaged || !autoCheckUpdate) {
+          return
+        }
+
+        const { updateInfo } = await window.api.checkForUpdate()
+        updateAppUpdateState({ info: updateInfo })
+      } catch (error) {
+        logger.warn('Failed to check for updates', error as Error)
       }
-
-      const { updateInfo } = await window.api.checkForUpdate()
-      updateAppUpdateState({ info: updateInfo })
     }
 
     // Initial check with delay
     void runAsyncFunction(async () => {
-      const { isPackaged } = await window.api.getAppInfo()
-      if (isPackaged && autoCheckUpdate) {
-        await delay(2)
-        await checkForUpdates()
-      }
+      await delay(2)
+      await checkForUpdates()
     })
 
     // Set up 4-hour interval check
     const FOUR_HOURS = 4 * 60 * 60 * 1000
-    const intervalId = setInterval(checkForUpdates, FOUR_HOURS)
+    const intervalId = setInterval(() => {
+      void checkForUpdates()
+    }, FOUR_HOURS)
 
     return () => clearInterval(intervalId)
   }, [autoCheckUpdate, updateAppUpdateState])
@@ -110,10 +121,15 @@ export function useAppInit() {
 
   useEffect(() => {
     // set files path
-    void window.api.getAppInfo().then((info) => {
-      cacheService.set('app.path.files', info.filesPath)
-      cacheService.set('app.path.resources', info.resourcesPath)
-    })
+    void window.api
+      .getAppInfo()
+      .then((info) => {
+        cacheService.set('app.path.files', info.filesPath)
+        cacheService.set('app.path.resources', info.resourcesPath)
+      })
+      .catch((error) => {
+        logger.warn('Failed to cache application paths', error as Error)
+      })
   }, [])
 
   useEffect(() => {

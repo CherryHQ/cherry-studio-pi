@@ -29,12 +29,37 @@ const LocalBackupSettings: React.FC = () => {
   const [appInfo, setAppInfo] = useState<AppInfo>()
 
   useEffect(() => {
-    void window.api.getAppInfo().then(setAppInfo)
+    let cancelled = false
+    void window.api
+      .getAppInfo()
+      .then((info) => {
+        if (!cancelled) setAppInfo(info)
+      })
+      .catch((error) => {
+        logger.warn('Failed to read app info for local backup settings', error as Error)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
-    if (localBackupDir) {
-      void window.api.resolvePath(localBackupDir).then(setResolvedLocalBackupDir)
+    let cancelled = false
+    if (!localBackupDir) {
+      setResolvedLocalBackupDir(undefined)
+      return
+    }
+    void window.api
+      .resolvePath(localBackupDir)
+      .then((resolvedDir) => {
+        if (!cancelled) setResolvedLocalBackupDir(resolvedDir)
+      })
+      .catch((error) => {
+        logger.warn('Failed to resolve local backup directory', error as Error, { localBackupDir })
+        if (!cancelled) setResolvedLocalBackupDir(undefined)
+      })
+    return () => {
+      cancelled = true
     }
   }, [localBackupDir])
 
@@ -60,18 +85,23 @@ const LocalBackupSettings: React.FC = () => {
       return false
     }
 
+    const info = appInfo ?? (await window.api.getAppInfo())
+    if (!appInfo) {
+      setAppInfo(info)
+    }
+
     const resolvedDir = await window.api.resolvePath(dir)
 
     // check new local backup dir is not in app data path
     // if is in app data path, show error
-    if (await window.api.isPathInside(resolvedDir, appInfo!.appDataPath)) {
+    if (await window.api.isPathInside(resolvedDir, info.appDataPath)) {
       window.toast.error(t('settings.data.local.directory.select_error_app_data_path'))
       return false
     }
 
     // check new local backup dir is not in app install path
     // if is in app install path, show error
-    if (await window.api.isPathInside(resolvedDir, appInfo!.installPath)) {
+    if (await window.api.isPathInside(resolvedDir, info.installPath)) {
       window.toast.error(t('settings.data.local.directory.select_error_in_app_install_path'))
       return false
     }
@@ -87,27 +117,32 @@ const LocalBackupSettings: React.FC = () => {
   }
 
   const handleLocalBackupDirChange = async (value: string) => {
-    if (value === localBackupDir) {
-      return
-    }
+    try {
+      if (value === localBackupDir) {
+        return
+      }
 
-    if (value === '') {
-      void handleClearDirectory()
-      return
-    }
+      if (value === '') {
+        await handleClearDirectory()
+        return
+      }
 
-    if (await checkLocalBackupDirValid(value)) {
-      await setLocalBackupDir(value)
-      setResolvedLocalBackupDir(await window.api.resolvePath(value))
+      if (await checkLocalBackupDirValid(value)) {
+        await setLocalBackupDir(value)
+        setResolvedLocalBackupDir(await window.api.resolvePath(value))
 
-      await setLocalBackupAutoSync(true)
-      startAutoSync(true, 'local')
-      return
-    }
+        await setLocalBackupAutoSync(true)
+        startAutoSync(true, 'local')
+        return
+      }
 
-    if (localBackupDir) {
-      await setLocalBackupDir(localBackupDir)
-      return
+      if (localBackupDir) {
+        await setLocalBackupDir(localBackupDir)
+        return
+      }
+    } catch (error) {
+      logger.error('Failed to change local backup directory:', error as Error)
+      window.toast.error(t('settings.data.app_data.select_error'))
     }
   }
 

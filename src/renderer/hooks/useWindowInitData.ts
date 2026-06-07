@@ -1,5 +1,8 @@
+import { loggerService } from '@logger'
 import { IpcChannel } from '@shared/IpcChannel'
 import { useEffect, useState } from 'react'
+
+const logger = loggerService.withContext('useWindowInitData')
 
 /**
  * Unified entry point for any managed window to consume its init data.
@@ -38,11 +41,16 @@ export function useWindowInitData<T>(): T | null {
   useEffect(() => {
     let cancelled = false
 
-    void window.api.windowManager.getInitData<T>().then((initial) => {
-      if (!cancelled && initial !== null && initial !== undefined) {
-        setData(initial as T)
-      }
-    })
+    void window.api.windowManager
+      .getInitData<T>()
+      .then((initial) => {
+        if (!cancelled && initial !== null && initial !== undefined) {
+          setData(initial as T)
+        }
+      })
+      .catch((error) => {
+        logger.warn('Failed to read window init data', error as Error)
+      })
 
     const remover = window.electron?.ipcRenderer.on(IpcChannel.WindowManager_Reused, (_event, payload: unknown) => {
       if (!cancelled && payload !== undefined && payload !== null) {
