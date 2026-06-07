@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { normalizeWebDavConfig, parseWebDavInput } from '../webdavConfig'
+import { normalizeWebDavConfig, normalizeWebDavHost, parseWebDavInput } from '../webdavConfig'
 
 describe('webdavConfig', () => {
   it('splits a pasted WebDAV account block into separate fields', () => {
@@ -74,6 +74,24 @@ describe('webdavConfig', () => {
     expect(config.webdavHost).toBe('https://nas:8080/dav')
     expect(config.webdavUser).toBe('webdav')
     expect(config.webdavPass).toBe('test-webdav-password')
+  })
+
+  it('maps WebDAV URL schemes to HTTP schemes supported by the transport client', () => {
+    expect(normalizeWebDavHost('webdav://nas.local:8080/dav')).toBe('http://nas.local:8080/dav')
+    expect(normalizeWebDavHost('webdavs://dav.example.com/remote.php/dav')).toBe(
+      'https://dav.example.com/remote.php/dav'
+    )
+
+    const config = normalizeWebDavConfig(
+      {
+        webdavHost: 'webdavs://dav.example.com/remote.php/dav',
+        webdavUser: 'webdav',
+        webdavPass: 'test-webdav-password'
+      },
+      { requireCredentials: true }
+    )
+
+    expect(config.webdavHost).toBe('https://dav.example.com/remote.php/dav')
   })
 
   it('preserves explicit password bytes while still trimming usernames', () => {

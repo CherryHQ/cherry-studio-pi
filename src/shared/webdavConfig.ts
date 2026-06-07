@@ -64,11 +64,15 @@ function decodeUrlCredential(value: string) {
   }
 }
 
+function normalizeWebDavUrlScheme(value: string) {
+  return value.replace(/^webdavs:\/\//i, 'https://').replace(/^webdav:\/\//i, 'http://')
+}
+
 export function normalizeWebDavHost(webdavHost?: string) {
   const parsed = parseWebDavInput(webdavHost ?? '')
   const trimmed = stripStructuredTailFromHost(parsed.webdavHost)
   if (!trimmed) return ''
-  return /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+  return normalizeWebDavUrlScheme(/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`)
 }
 
 export function normalizeWebDavPath(value?: string, defaultPath = DEFAULT_WEBDAV_SYNC_PATH) {
@@ -144,7 +148,9 @@ export function normalizeWebDavConfig<T extends WebDavLikeConfig>(
     throw new Error('WebDAV URL 不能为空。请只在 URL 字段填写服务器地址，把用户名和密码分别填到对应字段。')
   }
 
-  const normalizedHost = /^[a-z][a-z\d+.-]*:\/\//i.test(rawHost) ? rawHost : `https://${rawHost}`
+  const normalizedHost = normalizeWebDavUrlScheme(
+    /^[a-z][a-z\d+.-]*:\/\//i.test(rawHost) ? rawHost : `https://${rawHost}`
+  )
   let url: URL
   try {
     url = new URL(normalizedHost)
