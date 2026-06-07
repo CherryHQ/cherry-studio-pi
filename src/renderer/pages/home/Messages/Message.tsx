@@ -138,25 +138,33 @@ const MessageItem: FC<Props> = ({
 
   const messageHighlightHandler = useCallback(
     (highlight: boolean = true) => {
-      if (messageContainerRef.current) {
-        scrollIntoView(messageContainerRef.current, { behavior: 'smooth', block: 'center', container: 'nearest' })
-        if (highlight) {
-          setTimeoutTimer(
-            'messageHighlightHandler',
-            () => {
-              const classList = messageContainerRef.current?.classList
-              classList?.add('animation-locate-highlight')
+      const messageElement = messageContainerRef.current
+      if (!messageElement) {
+        return
+      }
 
-              const handleAnimationEnd = () => {
-                classList?.remove('animation-locate-highlight')
-                messageContainerRef.current?.removeEventListener('animationend', handleAnimationEnd)
-              }
+      scrollIntoView(messageElement, { behavior: 'smooth', block: 'center', container: 'nearest' })
+      if (highlight) {
+        setTimeoutTimer(
+          'messageHighlightHandler',
+          () => {
+            const highlightElement = messageContainerRef.current
+            if (!highlightElement) {
+              return
+            }
 
-              messageContainerRef.current?.addEventListener('animationend', handleAnimationEnd)
-            },
-            500
-          )
-        }
+            const { classList } = highlightElement
+            classList.add('animation-locate-highlight')
+
+            const handleAnimationEnd = () => {
+              classList.remove('animation-locate-highlight')
+              highlightElement.removeEventListener('animationend', handleAnimationEnd)
+            }
+
+            highlightElement.addEventListener('animationend', handleAnimationEnd)
+          },
+          500
+        )
       }
     },
     [setTimeoutTimer]
