@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   appCapabilityService: {
@@ -36,6 +36,10 @@ const writeCapability = {
 describe('SystemAgentRuntimeService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('plans an intent through app capabilities', () => {
@@ -125,13 +129,46 @@ describe('SystemAgentRuntimeService', () => {
     expect(mocks.appCapabilityService.call).toHaveBeenCalledWith(
       'dataSync.webdav.diagnose',
       {},
-      {
+      expect.objectContaining({
         source: 'system',
-        dryRun: true
-      }
+        dryRun: true,
+        signal: expect.any(AbortSignal)
+      })
     )
     expect(result.handled).toBe(true)
     expect(result.summary).toContain('dataSync.webdav.diagnose')
+  })
+
+  it('times out automatic safe capability runs for system events', async () => {
+    vi.useFakeTimers()
+    const readCapability = {
+      id: 'dataSync.status.get',
+      domain: 'dataSync',
+      kind: 'query',
+      title: 'Get data sync status',
+      description: 'Read sync status',
+      risk: 'read'
+    }
+    mocks.appCapabilityService.search.mockReturnValueOnce([readCapability])
+    mocks.appCapabilityService.call.mockReturnValueOnce(new Promise(() => undefined))
+
+    const resultPromise = new SystemAgentRuntimeService().handleEvent({
+      type: 'error',
+      source: 'settings.data_sync.sync_now',
+      domain: 'dataSync',
+      message: 'sync stuck'
+    })
+
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    const result = await resultPromise
+    expect(result.handled).toBe(false)
+    expect(result.autoRuns[0].result).toMatchObject({
+      ok: false,
+      isError: true,
+      error: 'System agent auto-run timed out after 10s'
+    })
+    expect(result.summary).toContain('dataSync.status.get')
   })
 
   it('blocks write capabilities until the caller confirms approval', async () => {

@@ -17,6 +17,7 @@ import {
 } from '@main/services/appCapabilities'
 
 const logger = loggerService.withContext('SystemAgentRuntimeService')
+const SYSTEM_AGENT_AUTO_RUN_TIMEOUT_MS = 10_000
 
 export type SystemAgentPlanIntentInput = AppCapabilitySearchOptions & {
   intent?: string
@@ -99,6 +100,39 @@ function makeGuidance(recommended: AppCapabilityDescriptor | null) {
   return formatSystemAgentGuidance(recommended.id, recommended.risk, needsApproval(recommended.risk))
 }
 
+async function callAutoRunCapability(
+  capability: AppCapabilityDescriptor,
+  input: unknown
+): Promise<AppCapabilityResult> {
+  const controller = new AbortController()
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  const timeoutResult = new Promise<AppCapabilityResult>((resolve) => {
+    timeout = setTimeout(() => {
+      controller.abort()
+      resolve({
+        ok: false,
+        isError: true,
+        summary: `${capability.id} timed out`,
+        error: `System agent auto-run timed out after ${Math.round(SYSTEM_AGENT_AUTO_RUN_TIMEOUT_MS / 1000)}s`
+      })
+    }, SYSTEM_AGENT_AUTO_RUN_TIMEOUT_MS)
+    timeout.unref?.()
+  })
+
+  try {
+    return await Promise.race([
+      appCapabilityService.call(capability.id, input, {
+        source: 'system',
+        dryRun: true,
+        signal: controller.signal
+      }),
+      timeoutResult
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
+
 export class SystemAgentRuntimeService {
   listCapabilities(options: AppCapabilityListOptions = {}) {
     return appCapabilityService.list(options)
@@ -148,10 +182,7 @@ export class SystemAgentRuntimeService {
     if (input.autoRunReadOnly !== false) {
       const safeCapability = plan.capabilities.find(canAutoRunWithoutApproval)
       if (safeCapability) {
-        const result = await appCapabilityService.call(safeCapability.id, input.capabilityInput ?? {}, {
-          source: 'system',
-          dryRun: true
-        })
+        const result = await callAutoRunCapability(safeCapability, input.capabilityInput ?? {})
         autoRuns.push({ capability: safeCapability, result })
       }
     }
