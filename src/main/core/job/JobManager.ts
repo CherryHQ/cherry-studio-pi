@@ -313,9 +313,7 @@ export class JobManager extends BaseService {
     if (inFlight.length === 0) {
       logger.info('JobManager.onStop: no in-flight jobs')
     } else {
-      const pendingPromises = inFlight
-        .map((id) => this.finishedResolvers.get(id)?.promise)
-        .filter((p): p is Promise<JobSnapshot> => p !== undefined)
+      const pendingPromises = Array.from(this.inFlightExecuted.values())
 
       const timeout = new Promise<'timeout'>((resolve) =>
         setTimeout(() => resolve('timeout'), Application.SHUTDOWN_TIMEOUT_MS)

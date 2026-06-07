@@ -52,6 +52,16 @@ interface SlowOutput {
   echoed: string
 }
 
+function createDeferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
 function makeSlowHandler(recovery: 'abandon' | 'retry' | 'singleton'): JobHandler<SlowInput> {
   return {
     recovery,
@@ -428,6 +438,68 @@ describe('JobManager integration', () => {
 
       await stopPromise
       await teardownManager(scheduler, jobManager)
+    })
+
+    it('waits for recovered in-flight jobs even when no JobHandle resolver exists', async () => {
+      const dbh = MockMainDbServiceExport.dbService.getDb() as DbType
+      const started = createDeferred()
+
+      const [inserted] = await dbh
+        .insert(jobTable)
+        .values({
+          type: 'shutdown.recovered',
+          status: 'pending',
+          queue: 'shutdown.recovered',
+          scheduledAt: Date.now() - 1000,
+          attempt: 0,
+          maxAttempts: 1,
+          input: { message: 'recovered' },
+          cancelRequested: false,
+          metadata: {}
+        })
+        .returning()
+
+      const handler: JobHandler = {
+        recovery: 'retry',
+        cancelTimeoutMs: 1000,
+        defaultConcurrency: 1,
+        async execute(ctx) {
+          started.resolve()
+          await new Promise<void>((resolve) => {
+            ctx.signal.addEventListener(
+              'abort',
+              () => {
+                setTimeout(resolve, 80)
+              },
+              { once: true }
+            )
+          })
+          throw new Error('AbortError after recovered shutdown')
+        }
+      }
+
+      const { scheduler, jobManager } = await bootstrapManager({
+        handlers: [['shutdown.recovered', handler]]
+      })
+
+      await started.promise
+      expect(
+        (jobManager as unknown as { finishedResolvers: Map<string, unknown> }).finishedResolvers.has(inserted.id)
+      ).toBe(false)
+
+      const stopPromise = jobManager._doStop()
+      const early = await Promise.race([
+        stopPromise.then(() => 'stopped' as const),
+        new Promise<'waiting'>((resolve) => setTimeout(() => resolve('waiting'), 20))
+      ])
+
+      expect(early).toBe('waiting')
+      await stopPromise
+
+      const final = await jobService.getById(inserted.id)
+      expect(final?.status).toBe('cancelled')
+
+      await scheduler._doStop()
     })
   })
 
