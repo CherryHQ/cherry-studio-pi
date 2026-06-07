@@ -8,6 +8,7 @@ import { getRerankAdapter } from './adapters'
 import type { ResolvedRerankRuntime } from './types'
 
 const logger = loggerService.withContext('KnowledgeRerank')
+const RERANK_REQUEST_TIMEOUT_MS = 60_000
 
 function mergeRerankResults(
   searchResults: KnowledgeSearchResult[],
@@ -65,7 +66,8 @@ export async function executeRerankRequest(
     const response = await net.fetch(url, {
       method: 'POST',
       headers: adapter.buildHeaders(runtime.apiKey),
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(RERANK_REQUEST_TIMEOUT_MS)
     })
 
     if (!response.ok) {

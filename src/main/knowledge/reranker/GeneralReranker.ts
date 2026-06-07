@@ -3,6 +3,8 @@ import { net } from 'electron'
 
 import BaseReranker from './BaseReranker'
 
+const RERANK_REQUEST_TIMEOUT_MS = 60_000
+
 interface RerankError extends Error {
   response?: {
     status: number
@@ -22,7 +24,8 @@ export default class GeneralReranker extends BaseReranker {
       const response = await net.fetch(url, {
         method: 'POST',
         headers: this.defaultHeaders(),
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(RERANK_REQUEST_TIMEOUT_MS)
       })
 
       if (!response.ok) {

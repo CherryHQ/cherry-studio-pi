@@ -190,7 +190,8 @@ describe('knowledge rerank runtime', () => {
         headers: {
           Authorization: 'Bearer secret',
           'Content-Type': 'application/json'
-        }
+        },
+        signal: expect.any(AbortSignal)
       })
     )
     expect(

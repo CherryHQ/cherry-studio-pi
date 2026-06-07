@@ -54,7 +54,7 @@ export default abstract class BaseReranker {
     rerankResults: Array<{ index: number; relevance_score: number }>
   ) {
     const resultMap = new Map(
-      rerankResults.map((result) => [result.index, result.relevance_score || DEFAULT_RELEVANT_SCORE])
+      rerankResults.map((result) => [result.index, result.relevance_score ?? DEFAULT_RELEVANT_SCORE])
     )
 
     const returenResults = searchResults
