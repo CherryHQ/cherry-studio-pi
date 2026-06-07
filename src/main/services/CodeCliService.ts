@@ -1,18 +1,19 @@
 /**
- * TODO(v2): Performance — run() blocks up to ~100s before opening terminal
+ * TODO(v2): Performance — run() can still block before opening terminal
  *
  * Problem:
- * - isUserInChina() makes HTTP request (5s timeout) with no caching, called 2-3x per run()
  * - getVersionInfo() blocks on npm registry fetch (15s) + local --version (10s)
  * - updatePackage() blocks on bun install (60s) when autoUpdateToLatest is enabled
- * - All above run serially BEFORE spawn(terminal)
+ * - The remaining checks run serially BEFORE spawn(terminal)
  *
- * Fix:
+ * Done:
+ * - Cache getNpmRegistryUrl() at instance level, including concurrent callers
+ *
+ * Remaining:
  * 1. Cache isUserInChina() promise at module level in ipService.ts (process-lifetime)
  * 2. Extract local-only getInstalledVersion() for qwen-code --auth-type check
  * 3. Move getVersionInfo() + updatePackage() to fire-and-forget background task
- * 4. Cache getNpmRegistryUrl() at instance level
- * 5. Track background update promise in lifecycle (registerDisposable / onStop)
+ * 4. Track background update promise in lifecycle (registerDisposable / onStop)
  */
 import fs from 'node:fs'
 import os from 'node:os'
