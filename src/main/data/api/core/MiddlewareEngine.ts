@@ -21,14 +21,18 @@ export class MiddlewareEngine {
    */
   use(middleware: Middleware): void {
     this.middlewares.set(middleware.name, middleware)
+    const existingIndex = this.middlewareOrder.indexOf(middleware.name)
+    if (existingIndex > -1) {
+      this.middlewareOrder.splice(existingIndex, 1)
+    }
 
     // Insert based on priority
-    const priority = middleware.priority || 50
+    const priority = middleware.priority ?? 50
     let insertIndex = 0
 
     for (let i = 0; i < this.middlewareOrder.length; i++) {
       const existingMiddleware = this.middlewares.get(this.middlewareOrder[i])
-      const existingPriority = existingMiddleware?.priority || 50
+      const existingPriority = existingMiddleware?.priority ?? 50
 
       if (priority < existingPriority) {
         insertIndex = i
