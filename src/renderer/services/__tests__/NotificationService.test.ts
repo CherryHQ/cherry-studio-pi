@@ -31,10 +31,13 @@ const updateNotification: Notification = {
   source: 'update'
 }
 
+const listenerKey = '__CHERRY_STUDIO_PI_NOTIFICATION_CLICK_HANDLER__'
+
 describe('NotificationService', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
+    delete (globalThis as Record<string, unknown>)[listenerKey]
     Object.defineProperty(window, 'electron', {
       configurable: true,
       value: {
@@ -77,5 +80,13 @@ describe('NotificationService', () => {
     await notificationService.send(updateNotification)
 
     expect(mocks.queueAdd).not.toHaveBeenCalled()
+  })
+
+  it('registers the notification click listener only once', async () => {
+    await import('../NotificationService')
+    await import('../NotificationService')
+
+    expect(mocks.ipcOn).toHaveBeenCalledTimes(1)
+    expect(mocks.ipcOn).toHaveBeenCalledWith('notification-click', expect.any(Function))
   })
 })

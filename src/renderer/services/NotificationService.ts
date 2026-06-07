@@ -3,6 +3,8 @@ import type { Notification } from '@renderer/types/notification'
 
 import { notificationQueue } from '../queue/NotificationQueue'
 
+const NOTIFICATION_CLICK_HANDLER_KEY = '__CHERRY_STUDIO_PI_NOTIFICATION_CLICK_HANDLER__'
+
 export class NotificationService {
   private queue = notificationQueue
 
@@ -31,8 +33,15 @@ export class NotificationService {
    * 设置通知点击事件处理
    */
   private setupNotificationClickHandler(): void {
+    const ipcRenderer = typeof window !== 'undefined' ? window.electron?.ipcRenderer : undefined
+    if (!ipcRenderer) return
+
+    const globalState = globalThis as Record<string, unknown>
+    if (globalState[NOTIFICATION_CLICK_HANDLER_KEY]) return
+    globalState[NOTIFICATION_CLICK_HANDLER_KEY] = true
+
     // Register an event listener for notification clicks
-    window.electron.ipcRenderer.on('notification-click', (_event, notification: Notification) => {
+    ipcRenderer.on('notification-click', (_event, notification: Notification) => {
       // 根据通知类型处理点击事件
       if (notification.type === 'action') {
         notification.onClick?.()

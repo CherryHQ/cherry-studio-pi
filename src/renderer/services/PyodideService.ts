@@ -3,6 +3,7 @@ import { uuid } from '@renderer/utils'
 import { IpcChannel } from '@shared/IpcChannel'
 
 const logger = loggerService.withContext('PyodideService')
+const PYODIDE_IPC_HANDLER_KEY = '__CHERRY_STUDIO_PI_PYODIDE_IPC_HANDLER__'
 
 const SERVICE_CONFIG = {
   WORKER: {
@@ -284,35 +285,44 @@ class PyodideService {
 // 创建并导出单例实例
 export const pyodideService = new PyodideService()
 
-// Set up IPC handler for main process requests
-if (typeof window !== 'undefined' && window.electron?.ipcRenderer) {
-  interface PythonExecutionRequest {
-    id: string
-    script: string
-    context: Record<string, any>
-    timeout: number
-  }
+interface PythonExecutionRequest {
+  id: string
+  script: string
+  context: Record<string, any>
+  timeout: number
+}
 
-  interface PythonExecutionResponse {
-    id: string
-    result?: string
-    error?: string
-  }
+interface PythonExecutionResponse {
+  id: string
+  result?: string
+  error?: string
+}
 
-  window.electron.ipcRenderer.on(IpcChannel.Python_ExecutionRequest, async (_, request: PythonExecutionRequest) => {
+export function registerPyodideIpcHandler(): void {
+  const ipcRenderer = typeof window !== 'undefined' ? window.electron?.ipcRenderer : undefined
+  if (!ipcRenderer) return
+
+  const globalState = globalThis as Record<string, unknown>
+  if (globalState[PYODIDE_IPC_HANDLER_KEY]) return
+  globalState[PYODIDE_IPC_HANDLER_KEY] = true
+
+  ipcRenderer.on(IpcChannel.Python_ExecutionRequest, async (_, request: PythonExecutionRequest) => {
     try {
       const { text } = await pyodideService.runScript(request.script, request.context, request.timeout)
       const response: PythonExecutionResponse = {
         id: request.id,
         result: text
       }
-      window.electron.ipcRenderer.send(IpcChannel.Python_ExecutionResponse, response)
+      ipcRenderer.send(IpcChannel.Python_ExecutionResponse, response)
     } catch (error: unknown) {
       const response: PythonExecutionResponse = {
         id: request.id,
         error: error instanceof Error ? error.message : String(error)
       }
-      window.electron.ipcRenderer.send(IpcChannel.Python_ExecutionResponse, response)
+      ipcRenderer.send(IpcChannel.Python_ExecutionResponse, response)
     }
   })
 }
+
+// Set up IPC handler for main process requests
+registerPyodideIpcHandler()
