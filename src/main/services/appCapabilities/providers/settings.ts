@@ -101,7 +101,7 @@ function sanitizeSettingValueForAgent(keyPath: string, value: unknown) {
   return sanitizeForAgent(value)
 }
 
-async function readSettingsForAgent() {
+export async function readSettingsForAgent() {
   const settings = (await reduxService.select('state.settings')) ?? {}
   try {
     const preferenceService = application.get('PreferenceService')

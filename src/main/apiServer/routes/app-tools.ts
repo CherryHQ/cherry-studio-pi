@@ -7,6 +7,7 @@ import { isMac } from '@main/core/platform'
 import { WindowType } from '@main/core/window/types'
 import { appCapabilityService } from '@main/services/appCapabilities'
 import { listPaintingHistory, PAINTING_NAMESPACES } from '@main/services/appCapabilities/providers/paintings'
+import { readSettingsForAgent } from '@main/services/appCapabilities/providers/settings'
 import { isAllowedAppRoute, normalizeAppRoute, pickPath, sanitizeForAgent } from '@main/services/appCapabilities/utils'
 import { reduxService } from '@main/services/ReduxService'
 import { getName, getNotesDir, isPathInside, scanDir } from '@main/utils/file'
@@ -133,7 +134,7 @@ appToolsRouter.post('/capabilities/:id/call', async (req, res, next) => {
 
 appToolsRouter.get('/settings', async (_req, res, next) => {
   try {
-    res.json({ settings: sanitizeForAgent(await reduxService.select('state.settings')) })
+    res.json({ settings: sanitizeForAgent(await readSettingsForAgent()) })
   } catch (error) {
     next(error)
   }
@@ -141,7 +142,7 @@ appToolsRouter.get('/settings', async (_req, res, next) => {
 
 appToolsRouter.get('/settings/value', async (req, res, next) => {
   try {
-    const settings = await reduxService.select('state.settings')
+    const settings = await readSettingsForAgent()
     res.json({ path: req.query.path || '', value: sanitizeForAgent(pickPath(settings, String(req.query.path || ''))) })
   } catch (error) {
     next(error)
