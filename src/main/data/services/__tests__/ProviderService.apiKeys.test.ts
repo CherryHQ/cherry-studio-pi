@@ -272,6 +272,35 @@ describe('ProviderService API keys', () => {
     expect(() => ReplaceProviderApiKeysSchema.parse({ keys: [{ id: 'k', key: '   ', isEnabled: true }] })).toThrow()
   })
 
+  it('normalizes and validates API keys when creating providers directly through the service layer', async () => {
+    const created = await providerService.create({
+      providerId: 'created-with-key',
+      name: 'Created With Key',
+      apiKeys: [{ id: 'created-key', key: '  sk-created  ', label: '', isEnabled: true }]
+    })
+
+    expect(created.apiKeys).toEqual([{ id: 'created-key', isEnabled: true }])
+
+    const [row] = await dbh.db
+      .select()
+      .from(userProviderTable)
+      .where(eq(userProviderTable.providerId, 'created-with-key'))
+    expect(row.apiKeys).toEqual([{ id: 'created-key', key: 'sk-created', isEnabled: true }])
+
+    await expect(
+      providerService.create({
+        providerId: 'created-with-duplicate-keys',
+        name: 'Created With Duplicate Keys',
+        apiKeys: [
+          { id: 'key-a', key: 'sk-duplicate', isEnabled: true },
+          { id: 'key-b', key: '  sk-duplicate  ', isEnabled: true }
+        ]
+      })
+    ).rejects.toMatchObject({
+      code: ErrorCode.CONFLICT
+    })
+  })
+
   it('returns authConfig for an existing provider, null when absent, and NOT_FOUND when missing', async () => {
     await dbh.db.insert(userProviderTable).values({
       providerId: 'azure',

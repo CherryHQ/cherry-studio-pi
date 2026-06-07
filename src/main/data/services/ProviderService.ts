@@ -208,7 +208,7 @@ class ProviderService {
       name: dto.name,
       endpointConfigs: dto.endpointConfigs ?? null,
       defaultChatEndpoint: dto.defaultChatEndpoint ?? null,
-      apiKeys: dto.apiKeys ?? [],
+      apiKeys: normalizeApiKeyEntries(dto.apiKeys ?? []),
       authConfig: dto.authConfig ?? null,
       apiFeatures: dto.apiFeatures ?? null,
       providerSettings: dto.providerSettings ?? null
