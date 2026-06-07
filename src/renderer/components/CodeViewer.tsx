@@ -371,6 +371,12 @@ const CodeViewer = ({
     }
   }, [virtualItems, debouncedHighlightLines])
 
+  useEffect(() => {
+    return () => {
+      debouncedHighlightLines.cancel()
+    }
+  }, [debouncedHighlightLines])
+
   // Monitor selection changes, clear stale selection state, and auto-expand in collapsed state
   const handleSelectionChange = useMemo(
     () =>
