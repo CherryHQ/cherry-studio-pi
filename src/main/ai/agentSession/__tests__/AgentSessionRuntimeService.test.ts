@@ -75,12 +75,22 @@ function getEntry(service: InstanceType<typeof AgentSessionRuntimeService>) {
 function createAsyncQueue<T>() {
   const items: T[] = []
   const waiters: Array<(value: IteratorResult<T>) => void> = []
+  let closed = false
 
   return {
     push(item: T) {
+      if (closed) throw new Error('queue closed')
       const waiter = waiters.shift()
       if (waiter) waiter({ value: item, done: false })
       else items.push(item)
+    },
+    close() {
+      closed = true
+      let waiter = waiters.shift()
+      while (waiter) {
+        waiter({ value: undefined, done: true } as IteratorResult<T>)
+        waiter = waiters.shift()
+      }
     },
     iterable: {
       [Symbol.asyncIterator](): AsyncIterator<T> {
@@ -88,6 +98,7 @@ function createAsyncQueue<T>() {
           next: () => {
             const item = items.shift()
             if (item) return Promise.resolve({ value: item, done: false })
+            if (closed) return Promise.resolve({ value: undefined, done: true } as IteratorResult<T>)
             return new Promise<IteratorResult<T>>((resolve) => waiters.push(resolve))
           }
         }
@@ -458,6 +469,39 @@ describe('AgentSessionRuntimeService', () => {
 
     events.push({ type: 'turn-complete' })
     await expect(reader.read()).resolves.toMatchObject({ done: true })
+  })
+
+  it('surfaces an unexpected runtime event stream close instead of leaving the turn hanging (REGRESSION agent-session-6)', async () => {
+    const events = createAsyncQueue<any>()
+    const connection = {
+      events: events.iterable,
+      send: vi.fn(),
+      interrupt: vi.fn(),
+      close: vi.fn()
+    }
+    runtimeDriverRegistry.register({
+      type: 'test-runtime',
+      capabilities: ['agent-session'],
+      connect: vi.fn().mockResolvedValue(connection),
+      validateSession: vi.fn(),
+      listAvailableTools: vi.fn().mockResolvedValue([])
+    })
+    const service = new AgentSessionRuntimeService()
+    const handle = service.beginTurn({ ...baseTurnInput, userMessage: userMessage('user-1') })
+    const stream = service.openTurnStream({
+      sessionId: 'session-1',
+      turnId: handle.turnId,
+      signal: new AbortController().signal
+    })
+    const reader = stream.getReader()
+
+    await expect(reader.read()).resolves.toMatchObject({ value: { type: 'start' }, done: false })
+    await vi.waitFor(() => expect(connection.send).toHaveBeenCalledWith({ message: userMessage('user-1') }))
+
+    events.close()
+
+    await expect(reader.read()).rejects.toThrow('Agent runtime connection ended before the active turn completed')
+    await vi.waitFor(() => expect(getEntry(service).currentTurn?.terminalStatus).toBe('error'))
   })
 
   it('surfaces a runtime error event via controller.error and drops trailing chunks (REGRESSION agent-session-3)', async () => {

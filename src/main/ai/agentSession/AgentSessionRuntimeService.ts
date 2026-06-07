@@ -485,6 +485,14 @@ export class AgentSessionRuntimeService extends BaseService {
       }
     } catch (error) {
       this.handleRuntimeError(entry, error)
+      return
+    }
+
+    if (!this.isCurrentEntry(entry) || entry.connection !== connection) return
+
+    const turn = entry.currentTurn
+    if (turn && !turn.terminalStatus) {
+      this.handleRuntimeError(entry, new Error('Agent runtime connection ended before the active turn completed'))
     }
   }
 
