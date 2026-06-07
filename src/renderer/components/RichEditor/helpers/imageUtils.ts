@@ -28,7 +28,10 @@ export async function compressImage(file: File, options: ImageCompressionOptions
       return
     }
 
+    const imageUrl = URL.createObjectURL(file)
+
     img.onload = () => {
+      URL.revokeObjectURL(imageUrl)
       // 计算压缩后的尺寸
       let { width, height } = img
       const aspectRatio = width / height
@@ -65,11 +68,12 @@ export async function compressImage(file: File, options: ImageCompressionOptions
     }
 
     img.onerror = () => {
+      URL.revokeObjectURL(imageUrl)
       reject(new Error('图片加载失败'))
     }
 
     // 加载图片
-    img.src = URL.createObjectURL(file)
+    img.src = imageUrl
   })
 }
 
@@ -96,8 +100,10 @@ export async function getImageInfo(file: File): Promise<{
 }> {
   return new Promise((resolve, reject) => {
     const img = new Image()
+    const imageUrl = URL.createObjectURL(file)
 
     img.onload = () => {
+      URL.revokeObjectURL(imageUrl)
       resolve({
         width: img.width,
         height: img.height,
@@ -107,10 +113,11 @@ export async function getImageInfo(file: File): Promise<{
     }
 
     img.onerror = () => {
+      URL.revokeObjectURL(imageUrl)
       reject(new Error('无法加载图片'))
     }
 
-    img.src = URL.createObjectURL(file)
+    img.src = imageUrl
   })
 }
 
