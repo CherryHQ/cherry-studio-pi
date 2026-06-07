@@ -10,6 +10,8 @@ import { type FileStat } from 'webdav'
 import { createOAuthUrl, decryptSecret } from './sso/lib/index.mjs'
 
 const logger = loggerService.withContext('NutstoreService')
+const NUTSTORE_REQUEST_TIMEOUT_MS = 30_000
+const MAX_DIRECTORY_PAGES = 100
 
 interface OAuthResponse {
   username: string
@@ -65,8 +67,18 @@ export async function getDirectoryContents(token: string, target: string): Promi
   }
 
   let currentUrl = encodeURI(`${NUTSTORE_HOST}${target}`)
+  const visitedUrls = new Set<string>()
 
   while (true) {
+    if (visitedUrls.has(currentUrl)) {
+      logger.warn('Nutstore directory listing stopped due to cyclic pagination link', { url: currentUrl })
+      break
+    }
+    if (visitedUrls.size >= MAX_DIRECTORY_PAGES) {
+      throw new Error(`Nutstore directory listing exceeded ${MAX_DIRECTORY_PAGES} pages`)
+    }
+    visitedUrls.add(currentUrl)
+
     const response = await net.fetch(currentUrl, {
       method: 'PROPFIND',
       headers: {
@@ -83,7 +95,8 @@ export async function getDirectoryContents(token: string, target: string): Promi
             <getcontentlength/>
             <getcontenttype/>
           </prop>
-        </propfind>`
+        </propfind>`,
+      signal: AbortSignal.timeout(NUTSTORE_REQUEST_TIMEOUT_MS)
     })
 
     const text = await response.text()
