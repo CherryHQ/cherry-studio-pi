@@ -29,11 +29,8 @@ export const YamlFrontMatter = Node.create({
         default: '',
         parseHTML: (element) => {
           const dataContent = element.getAttribute('data-content')
-          if (dataContent) {
-            // Decode HTML entities that might be in the data-content attribute
-            const textarea = document.createElement('textarea')
-            textarea.innerHTML = dataContent
-            return textarea.value
+          if (dataContent !== null) {
+            return dataContent
           }
           return element.textContent || ''
         },

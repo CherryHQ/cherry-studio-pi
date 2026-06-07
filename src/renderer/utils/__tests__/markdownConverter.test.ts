@@ -515,6 +515,17 @@ cssclasses:
       const backToMarkdown = htmlToMarkdown(result)
       expect(backToMarkdown).toBe(markdown)
     })
+
+    it('should preserve YAML front matter special characters as text', () => {
+      const markdown = `---
+title: "<script>alert(1)</script>"
+literal: "&amp; & < >"
+---`
+      const html = stripLineNumbers(markdownToHtml(markdown))
+      expect(html).not.toContain('<script>')
+      expect(html).toContain('&#x3C;script&#x3E;alert(1)&#x3C;/script&#x3E;')
+      expect(htmlToMarkdown(html)).toBe(markdown)
+    })
   })
 
   describe('should keep []', () => {

@@ -355,7 +355,8 @@ function yamlFrontMatterPlugin(md: MarkdownIt) {
   md.renderer.rules.yaml_front_matter = (tokens: Array<{ content?: string }>, idx: number): string => {
     const token = tokens[idx]
     const content = token?.content ?? ''
-    let html = `<div data-type="yamlFrontMatter" data-content="${he.encode(content)}">${content}</div>`
+    const escapedContent = he.encode(content, { useNamedReferences: false })
+    let html = `<div data-type="yamlFrontMatter" data-content="${escapedContent}">${escapedContent}</div>`
     html = injectLineNumber(token, html)
     return html
   }
@@ -581,18 +582,11 @@ turndownService.addRule('yamlFrontMatter', {
   },
   replacement: (_content: string, node: Node) => {
     const element = node as Element
-    const yamlContent = element.getAttribute?.('data-content') || ''
-    const decodedContent = he.decode(yamlContent, {
-      isAttributeValue: false,
-      strict: false
-    })
-    // The decodedContent already includes the complete YAML with closing ---
-    // We just need to add the opening --- if it's not there
-    if (decodedContent.startsWith('---')) {
-      return decodedContent
-    } else {
-      return `---\n${decodedContent}`
-    }
+    const content = element.getAttribute?.('data-content') ?? ''
+    // `htmlToMarkdown()` decodes the whole Turndown result after this rule,
+    // so encode the YAML payload here to preserve literal entity text.
+    const yamlContent = content.startsWith('---') ? content : `---\n${content}`
+    return he.encode(yamlContent, { useNamedReferences: false })
   }
 })
 
