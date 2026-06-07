@@ -45,6 +45,7 @@ import { calculateDirectorySize } from './utils'
 import { decrypt, encrypt } from './utils/aes'
 import { isSafeExternalUrl } from './utils/externalUrlSafety'
 import { hasWritePermission, isPathInside, untildify } from './utils/file'
+import { openPathInShell } from './utils/openPath'
 import { getCpuName, getDeviceType, getHostname } from './utils/system'
 import { compress, decompress } from './utils/zip'
 
@@ -449,7 +450,7 @@ export async function registerIpc() {
 
   // open path
   ipcMain.handle(IpcChannel.Open_Path, async (_, path: string) => {
-    await shell.openPath(path)
+    await openPathInShell(path)
   })
 
   // v1 renderer knowledge IPC retired (T4.2); only base deletion remains,

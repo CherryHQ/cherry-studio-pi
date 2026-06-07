@@ -32,6 +32,7 @@ import { PDFDocument } from 'pdf-lib'
 import { v4 as uuidv4 } from 'uuid'
 import WordExtractor from 'word-extractor'
 
+import { openPathInShell, openPathInShellAndLog } from '../utils/openPath'
 import {
   CUSTOM_MIN_APPS_FILE_NAME,
   hydrateCustomMiniAppsFileFromStorageV2,
@@ -883,10 +884,7 @@ class FileStorage {
   }
 
   public openPath = async (_: Electron.IpcMainInvokeEvent, path: string): Promise<void> => {
-    const resolved = await shell.openPath(path)
-    if (resolved !== '') {
-      throw new Error(resolved)
-    }
+    await openPathInShell(path)
   }
 
   /**
@@ -897,7 +895,7 @@ class FileStorage {
   public openFileWithRelativePath = async (_: Electron.IpcMainInvokeEvent, file: FileMetadata): Promise<void> => {
     const filePath = path.join(this.storageDir, file.name)
     if (fs.existsSync(filePath)) {
-      shell.openPath(filePath).catch((err) => logger.error('[IPC - Error] Failed to open file:', err))
+      openPathInShellAndLog(filePath, 'stored file')
     } else {
       logger.warn('[IPC - Warning] File does not exist', { filePath: summarizeTextForLog(filePath) })
     }

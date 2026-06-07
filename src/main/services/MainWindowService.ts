@@ -8,7 +8,7 @@ import { getWindowsBackgroundMaterial, replaceDevtoolsFont } from '@main/utils/w
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH } from '@shared/config/constant'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { BrowserWindow } from 'electron'
-import { app, nativeImage, nativeTheme, shell } from 'electron'
+import { app, nativeImage, nativeTheme } from 'electron'
 import installExtension, { REACT_DEVELOPER_TOOLS } from 'electron-devtools-installer'
 import windowStateKeeper from 'electron-window-state'
 import path, { join } from 'path'
@@ -17,6 +17,7 @@ import iconPath from '../../../build/icon.png?asset'
 import { isSafeExternalUrl } from '../utils/externalUrlSafety'
 import { isLocalViteDevServerUrl } from '../utils/localDevServerUrl'
 import { openExternalUrl } from '../utils/openExternal'
+import { openPathInShellAndLog } from '../utils/openPath'
 import { contextMenu } from './ContextMenu'
 
 const logger = loggerService.withContext('MainWindowService')
@@ -414,7 +415,7 @@ export class MainWindowService extends BaseService {
         if (!filePath.startsWith(path.resolve(storageDir) + path.sep)) {
           logger.warn(`Blocked path traversal attempt: ${fileName}`)
         } else {
-          shell.openPath(filePath).catch((err) => logger.error('Failed to open file:', err))
+          openPathInShellAndLog(filePath, 'main window file URL')
         }
       } else if (isSafeExternalUrl(details.url)) {
         openExternalUrl(details.url, 'main window popup')
