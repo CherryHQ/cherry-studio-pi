@@ -1,5 +1,6 @@
 import { Tooltip } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
+import { loggerService } from '@logger'
 import { isLinux, isWin } from '@renderer/config/constant'
 import { Minus, Square, X } from 'lucide-react'
 import type { SVGProps } from 'react'
@@ -13,6 +14,7 @@ interface WindowRestoreIconProps extends SVGProps<SVGSVGElement> {
 }
 
 const DEFAULT_DELAY = 1000
+const logger = loggerService.withContext('WindowControls')
 
 export const WindowRestoreIcon = ({ size = '1.1em', ...props }: WindowRestoreIconProps) => (
   <svg
@@ -54,12 +56,21 @@ const WindowControls: React.FC = () => {
 
   useEffect(() => {
     // Check initial maximized state
-    void window.api.windowManager.isMaximized().then(setIsMaximized)
+    let cancelled = false
+    void window.api.windowManager
+      .isMaximized()
+      .then((value) => {
+        if (!cancelled) setIsMaximized(value)
+      })
+      .catch((error) => {
+        logger.warn('Failed to read maximized state', error as Error)
+      })
 
     // Listen for maximized state changes
     const unsubscribe = window.api.windowManager.onMaximizedChange(setIsMaximized)
 
     return () => {
+      cancelled = true
       unsubscribe()
     }
   }, [])
@@ -75,19 +86,27 @@ const WindowControls: React.FC = () => {
   }
 
   const handleMinimize = () => {
-    void window.api.windowManager.minimize()
+    void window.api.windowManager.minimize().catch((error) => {
+      logger.warn('Failed to minimize window', error as Error)
+    })
   }
 
   const handleMaximize = () => {
     if (isMaximized) {
-      void window.api.windowManager.unmaximize()
+      void window.api.windowManager.unmaximize().catch((error) => {
+        logger.warn('Failed to restore window', error as Error)
+      })
     } else {
-      void window.api.windowManager.maximize()
+      void window.api.windowManager.maximize().catch((error) => {
+        logger.warn('Failed to maximize window', error as Error)
+      })
     }
   }
 
   const handleClose = () => {
-    void window.api.windowManager.close()
+    void window.api.windowManager.close().catch((error) => {
+      logger.warn('Failed to close window', error as Error)
+    })
   }
 
   const tooltipTriggerWrap = { placeholder: 'relative z-10 flex h-full min-h-0' } as const
