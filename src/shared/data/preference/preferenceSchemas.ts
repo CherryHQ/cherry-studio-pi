@@ -588,7 +588,7 @@ export const DefaultPreferences: PreferenceSchemas = {
     'data.backup.local.sync_interval': 0,
     'data.backup.nutstore.auto_sync': false,
     'data.backup.nutstore.max_backups': 0,
-    'data.backup.nutstore.path': '/cherry-studio',
+    'data.backup.nutstore.path': '/cherry-studio-pi',
     'data.backup.nutstore.skip_backup_file': false,
     'data.backup.nutstore.sync_interval': 0,
     'data.backup.nutstore.token': '',

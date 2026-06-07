@@ -46,7 +46,7 @@ export class AnalyticsService extends BaseService implements Activatable {
 
     this.client = new AnalyticsClient({
       clientId,
-      channel: 'cherry-studio',
+      channel: 'cherry-studio-pi',
       onError: (error) => logger.error('Analytics error:', error),
       headers: {
         'User-Agent': generateUserAgent(),

@@ -422,8 +422,8 @@ class DiscordAdapter extends ChannelAdapter {
         intents,
         properties: {
           os: process.platform,
-          browser: 'cherry-studio',
-          device: 'cherry-studio'
+          browser: 'cherry-studio-pi',
+          device: 'cherry-studio-pi'
         }
       }
     })
