@@ -8,11 +8,30 @@ import type { McpServer } from '@shared/data/types/mcpServer'
 import { IpcChannel } from '@shared/IpcChannel'
 import { useCallback, useMemo } from 'react'
 
-// Navigate to MCP server settings when a server is installed via URL scheme
-window.electron.ipcRenderer.on(IpcChannel.Mcp_AddServer, (_event, server: { id: string }) => {
-  void NavigationService.navigate?.({ to: '/settings/mcp' })
-  void NavigationService.navigate?.({ to: `/settings/mcp/settings/${server.id}` })
-})
+const MCP_ADD_SERVER_LISTENER_KEY = '__CHERRY_STUDIO_PI_MCP_ADD_SERVER_LISTENER__'
+
+type McpAddServerListenerGlobal = typeof globalThis & {
+  [MCP_ADD_SERVER_LISTENER_KEY]?: boolean
+}
+
+/**
+ * Navigate to MCP server settings when a server is installed via URL scheme.
+ * The listener is module-scoped, so guard it for renderer tests and Vite HMR.
+ */
+export function registerMcpAddServerNavigationListener() {
+  const ipcRenderer = window.electron?.ipcRenderer
+  if (!ipcRenderer) return
+
+  const globalState = globalThis as McpAddServerListenerGlobal
+  if (globalState[MCP_ADD_SERVER_LISTENER_KEY]) return
+
+  globalState[MCP_ADD_SERVER_LISTENER_KEY] = true
+  ipcRenderer.on(IpcChannel.Mcp_AddServer, (_event, server: { id: string }) => {
+    void NavigationService.navigate?.({ to: `/settings/mcp/settings/${server.id}` })
+  })
+}
+
+registerMcpAddServerNavigationListener()
 
 /**
  * MCP servers list hook — data fetching with optional filters and create mutation.
