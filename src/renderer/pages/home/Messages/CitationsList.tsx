@@ -135,6 +135,7 @@ const handleLinkClick = (url: string, event: React.MouseEvent) => {
       window.open(url, '_blank', 'noopener,noreferrer')
       return
     }
+    return
   } catch {
     // Non-URL citations are treated as local file paths below.
   }

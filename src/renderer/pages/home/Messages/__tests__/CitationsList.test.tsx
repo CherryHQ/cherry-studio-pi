@@ -133,6 +133,25 @@ describe('CitationsList', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Unsupported citation' }))
 
     expect(window.open).not.toHaveBeenCalled()
-    expect(window.api.file.openPath).toHaveBeenCalledWith('httpx://example.com/source')
+    expect(window.api.file.openPath).not.toHaveBeenCalled()
+  })
+
+  it('opens non-url citation paths with the local file handler', () => {
+    const citations: Citation[] = [
+      {
+        number: 1,
+        url: '/Users/cherry/Documents/source.md',
+        title: 'Local citation',
+        content: 'Reference text',
+        showFavicon: true,
+        type: 'knowledge'
+      }
+    ]
+
+    render(<CitationsList citations={citations} />)
+    fireEvent.click(screen.getByRole('link', { name: 'Local citation' }))
+
+    expect(window.open).not.toHaveBeenCalled()
+    expect(window.api.file.openPath).toHaveBeenCalledWith('/Users/cherry/Documents/source.md')
   })
 })
