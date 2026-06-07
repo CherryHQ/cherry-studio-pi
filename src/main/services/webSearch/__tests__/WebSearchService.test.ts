@@ -201,8 +201,18 @@ describe('WebSearchService', () => {
       expect.objectContaining({ id: 'tavily' }),
       expect.any(Object)
     )
-    expect(searchKeywords).toHaveBeenNthCalledWith(1, 'first', expect.objectContaining({ maxResults: 4 }), undefined)
-    expect(searchKeywords).toHaveBeenNthCalledWith(2, 'second', expect.objectContaining({ maxResults: 4 }), undefined)
+    expect(searchKeywords).toHaveBeenNthCalledWith(
+      1,
+      'first',
+      expect.objectContaining({ maxResults: 4 }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+    expect(searchKeywords).toHaveBeenNthCalledWith(
+      2,
+      'second',
+      expect.objectContaining({ maxResults: 4 }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
     expect(result).toEqual({
       query: 'first | second',
       providerId: 'tavily',
@@ -438,7 +448,11 @@ describe('WebSearchService', () => {
       expect.objectContaining({ id: 'fetch' }),
       expect.any(Object)
     )
-    expect(fetchUrls).toHaveBeenCalledWith('https://example.com/first', expect.any(Object), undefined)
+    expect(fetchUrls).toHaveBeenCalledWith(
+      'https://example.com/first',
+      expect.any(Object),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
     expect(result).toEqual({
       query: 'https://example.com/first',
       providerId: 'fetch',
@@ -531,7 +545,11 @@ describe('WebSearchService', () => {
 
       expect(result).toEqual({ valid: true })
       expect(createWebSearchProviderMock).toHaveBeenCalledWith(tentativeProvider, expect.any(Object))
-      expect(searchKeywords).toHaveBeenCalledWith('test query', expect.any(Object))
+      expect(searchKeywords).toHaveBeenCalledWith(
+        'test query',
+        expect.any(Object),
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
     })
 
     it('uses fetchUrls capability with a probe URL when requested', async () => {
@@ -550,7 +568,11 @@ describe('WebSearchService', () => {
       })
 
       expect(result).toEqual({ valid: true })
-      expect(fetchUrls).toHaveBeenCalledWith('https://example.com', expect.any(Object))
+      expect(fetchUrls).toHaveBeenCalledWith(
+        'https://example.com',
+        expect.any(Object),
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      )
     })
 
     it('returns { valid: false, error } when the driver throws', async () => {

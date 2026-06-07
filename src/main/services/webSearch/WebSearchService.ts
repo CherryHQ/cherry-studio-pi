@@ -23,6 +23,8 @@ import { normalizeWebSearchKeywords, normalizeWebSearchUrls } from './utils/inpu
 import { ApiKeyRotationState } from './utils/provider'
 
 const logger = loggerService.withContext('MainWebSearchService')
+const WEB_SEARCH_REQUEST_TIMEOUT_MS = 30_000
+const WEB_SEARCH_PROVIDER_CHECK_TIMEOUT_MS = 15_000
 
 type RunCapabilityRequest = {
   providerId?: WebSearchProvider['id']
@@ -94,6 +96,14 @@ export class WebSearchService extends BaseService {
     )
   }
 
+  private withRequestTimeout(httpOptions?: RequestInit, timeoutMs = WEB_SEARCH_REQUEST_TIMEOUT_MS): RequestInit {
+    const timeoutSignal = AbortSignal.timeout(timeoutMs)
+    return {
+      ...httpOptions,
+      signal: httpOptions?.signal ? AbortSignal.any([httpOptions.signal, timeoutSignal]) : timeoutSignal
+    }
+  }
+
   private async buildFinalResponse(
     context: PreparedWebSearchContext,
     searchResults: PromiseSettledResult<WebSearchResponse>[],
@@ -145,13 +155,14 @@ export class WebSearchService extends BaseService {
   @TraceMethod({ spanName: 'WebSearch', tag: 'WebSearch' })
   private async runCapability(request: RunCapabilityRequest, httpOptions?: RequestInit): Promise<WebSearchResponse> {
     let context: PreparedWebSearchContext | undefined
+    const boundedHttpOptions = this.withRequestTimeout(httpOptions)
 
     try {
       context = await this.prepareContext(request)
-      const searchResults = await this.executeCapability(context, httpOptions)
-      return await this.buildFinalResponse(context, searchResults, httpOptions)
+      const searchResults = await this.executeCapability(context, boundedHttpOptions)
+      return await this.buildFinalResponse(context, searchResults, boundedHttpOptions)
     } catch (error) {
-      if (!isAbortError(error) || !httpOptions?.signal?.aborted) {
+      if (!isAbortError(error) || !boundedHttpOptions.signal?.aborted) {
         const normalizedError = error instanceof Error ? error : new Error(String(error))
         logger.error('Web search failed', normalizedError, {
           providerId: context?.provider.id ?? request.providerId,
@@ -202,7 +213,12 @@ export class WebSearchService extends BaseService {
       }
       const probe = capability === 'searchKeywords' ? 'test query' : 'https://example.com'
       const runtimeConfig = await getRuntimeConfig(application.get('PreferenceService'))
-      await runner.call(driver, probe, runtimeConfig)
+      await runner.call(
+        driver,
+        probe,
+        runtimeConfig,
+        this.withRequestTimeout(undefined, WEB_SEARCH_PROVIDER_CHECK_TIMEOUT_MS)
+      )
       return { valid: true }
     } catch (error) {
       return { valid: false, error: error instanceof Error ? error.message : String(error) }
