@@ -36,6 +36,19 @@ interface OvmsConfig {
   mediapipe_config_list: ModelConfig[]
 }
 
+function parsePowerShellJsonList<T extends Record<string, unknown>>(stdout: string, context: string): T[] {
+  if (!stdout.trim()) return []
+
+  try {
+    const parsed = JSON.parse(stdout) as unknown
+    const list = Array.isArray(parsed) ? parsed : [parsed]
+    return list.filter((item): item is T => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+  } catch (error) {
+    logger.warn(`Failed to parse ${context} PowerShell JSON`, error as Error)
+    return []
+  }
+}
+
 @Injectable('OvmsManager')
 @ServicePhase(Phase.WhenReady)
 @Conditional(onPlatform('win32'), onCpuVendor('intel'))
@@ -86,14 +99,17 @@ export class OvmsManager extends BaseService {
 
       // If there are child processes, terminate them first
       if (childStdout.trim()) {
-        const childProcesses = JSON.parse(childStdout)
-        const childList = Array.isArray(childProcesses) ? childProcesses : [childProcesses]
+        const childList = parsePowerShellJsonList<{ ProcessId?: unknown }>(childStdout, 'OVMS child process')
 
         logger.info(`Found ${childList.length} child processes for PID ${pid}`)
 
         // Recursively terminate each child process
         for (const childProcess of childList) {
-          const childPid = childProcess.ProcessId
+          const childPid = Number(childProcess.ProcessId)
+          if (!Number.isInteger(childPid) || childPid <= 0) {
+            logger.warn('Skipping OVMS child process with invalid PID', { childProcess })
+            continue
+          }
           logger.info(`Terminating child process PID: ${childPid}`)
           await this.terminalProcess(childPid)
         }
@@ -227,8 +243,7 @@ export class OvmsManager extends BaseService {
         return 'not-running'
       }
 
-      const processes = JSON.parse(stdout)
-      const processList = Array.isArray(processes) ? processes : [processes]
+      const processList = parsePowerShellJsonList<{ Id?: unknown; Path?: unknown }>(stdout, 'OVMS status')
 
       if (processList.length > 0) {
         logger.info('OVMS process is running')
@@ -247,30 +262,38 @@ export class OvmsManager extends BaseService {
    * Initialize OVMS by finding the executable path and working directory
    */
   public async initializeOvms(): Promise<boolean> {
-    // Use PowerShell to find ovms.exe processes with their paths
-    const psCommand = `Get-Process -Name "ovms" -ErrorAction SilentlyContinue | Select-Object Id, Path | ConvertTo-Json`
-    const { stdout } = await execAsync(`powershell -Command "${psCommand}"`)
+    try {
+      // Use PowerShell to find ovms.exe processes with their paths
+      const psCommand = `Get-Process -Name "ovms" -ErrorAction SilentlyContinue | Select-Object Id, Path | ConvertTo-Json`
+      const { stdout } = await execAsync(`powershell -Command "${psCommand}"`)
 
-    if (!stdout.trim()) {
-      logger.error('Command to find OVMS process returned no output')
+      if (!stdout.trim()) {
+        logger.error('Command to find OVMS process returned no output')
+        return false
+      }
+      logger.debug(`OVMS process output: ${stdout}`)
+
+      const processList = parsePowerShellJsonList<{ Id?: unknown; Path?: unknown }>(stdout, 'OVMS process')
+
+      // Find the first process with a valid path
+      for (const process of processList) {
+        const processPath = typeof process.Path === 'string' ? process.Path : ''
+        const processId = Number(process.Id)
+        if (!processPath || !Number.isInteger(processId) || processId <= 0) continue
+
+        this.ovms = {
+          pid: processId,
+          path: processPath,
+          workingDirectory: path.dirname(processPath)
+        }
+        return true
+      }
+
+      return this.ovms !== null
+    } catch (error) {
+      logger.error('Failed to initialize OVMS:', error as Error)
       return false
     }
-    logger.debug(`OVMS process output: ${stdout}`)
-
-    const processes = JSON.parse(stdout)
-    const processList = Array.isArray(processes) ? processes : [processes]
-
-    // Find the first process with a valid path
-    for (const process of processList) {
-      this.ovms = {
-        pid: process.Id,
-        path: process.Path,
-        workingDirectory: path.dirname(process.Path)
-      }
-      return true
-    }
-
-    return this.ovms !== null
   }
 
   /**
@@ -453,8 +476,7 @@ export class OvmsManager extends BaseService {
         return { success: true, message: 'Model download process is not running' }
       }
 
-      const processes = JSON.parse(stdout)
-      const processList = Array.isArray(processes) ? processes : [processes]
+      const processList = parsePowerShellJsonList<{ Id?: unknown }>(stdout, 'ovdnd process')
 
       if (processList.length === 0) {
         logger.info('ovdnd process is not running')
@@ -463,7 +485,10 @@ export class OvmsManager extends BaseService {
 
       // Terminate all ovdnd processes
       for (const process of processList) {
-        void this.terminalProcess(process.Id)
+        const processId = Number(process.Id)
+        if (Number.isInteger(processId) && processId > 0) {
+          void this.terminalProcess(processId)
+        }
       }
 
       logger.info('Model download process stopped successfully')
