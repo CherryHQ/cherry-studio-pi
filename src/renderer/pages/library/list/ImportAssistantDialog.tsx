@@ -147,6 +147,8 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
     autoCloseTimerRef.current = null
   }, [])
 
+  useEffect(() => clearAutoCloseTimer, [clearAutoCloseTimer])
+
   useEffect(() => {
     if (!open) {
       clearAutoCloseTimer()
@@ -213,7 +215,7 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
       }
     }
 
-    await onImported?.()
+    await Promise.resolve(onImported?.()).catch(() => undefined)
 
     const nextStatus = summarizeAssistantImportOutcomes(outcomes, t, fileName)
     setStatus(nextStatus)

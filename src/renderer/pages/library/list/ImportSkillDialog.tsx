@@ -43,6 +43,8 @@ export function ImportSkillDialog({ open, onOpenChange, onInstalled }: Props) {
     autoCloseTimerRef.current = null
   }, [])
 
+  useEffect(() => clearAutoCloseTimer, [clearAutoCloseTimer])
+
   // Reset transient state on open / close.
   useEffect(() => {
     if (!open) {
