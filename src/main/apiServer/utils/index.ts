@@ -1,5 +1,5 @@
 import { loggerService } from '@logger'
-import { reduxService } from '@main/services/ReduxService'
+import { storageV2ProviderRepository } from '@main/services/storageV2/StorageV2Repositories'
 import type { Model, Provider } from '@types'
 
 const logger = loggerService.withContext('ApiServerUtils')
@@ -16,10 +16,10 @@ function getRealProviderModel(model: string): string {
 
 async function getProviders(): Promise<Provider[]> {
   try {
-    const providers = await reduxService.select<Provider[]>('state.llm.providers')
+    const providers = (await storageV2ProviderRepository.list()) as unknown as Provider[]
     return Array.isArray(providers) ? providers : []
   } catch (error) {
-    logger.warn('Failed to read providers from Redux state', error as Error)
+    logger.warn('Failed to read providers from Storage v2', error as Error)
     return []
   }
 }

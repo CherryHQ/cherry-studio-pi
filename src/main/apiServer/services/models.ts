@@ -1,5 +1,5 @@
 import { loggerService } from '@logger'
-import { reduxService } from '@main/services/ReduxService'
+import { storageV2ProviderRepository } from '@main/services/storageV2/StorageV2Repositories'
 import type { Model, Provider } from '@types'
 
 const logger = loggerService.withContext('ModelsServiceCompat')
@@ -47,7 +47,7 @@ function toApiModel(model: Model, provider: Provider): ApiModel {
 export const modelsService = {
   async getModels(filter: ModelsFilter = {}): Promise<ApiModelsResponse> {
     try {
-      const providers = await reduxService.select<Provider[]>('state.llm.providers').catch(() => [])
+      const providers = (await storageV2ProviderRepository.list()) as unknown as Provider[]
       const enabledProviders = (Array.isArray(providers) ? providers : []).filter(
         (provider) => provider.enabled !== false && (!filter.providerType || provider.type === filter.providerType)
       )
