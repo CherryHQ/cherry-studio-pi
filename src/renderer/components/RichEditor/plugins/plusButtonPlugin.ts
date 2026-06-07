@@ -79,13 +79,17 @@ export const PlusButtonPlugin = ({
       getBoundingClientRect: () => dom.getBoundingClientRect()
     }
 
-    void computePosition(virtualElement, element, computePositionConfig).then((val) => {
-      Object.assign(element.style, {
-        position: val.strategy,
-        left: `${val.x}px`,
-        top: `${val.y}px`
+    void computePosition(virtualElement, element, computePositionConfig)
+      .then((val) => {
+        Object.assign(element.style, {
+          position: val.strategy,
+          left: `${val.x}px`,
+          top: `${val.y}px`
+        })
       })
-    })
+      .catch(() => {
+        hideButton()
+      })
   }
 
   function onClick(e: MouseEvent) {

@@ -1,6 +1,7 @@
 import type { CodeMirrorTheme } from '@cherrystudio/ui'
 import { getCmThemeByName, getCmThemeNames } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
+import { loggerService } from '@logger'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useMermaid } from '@renderer/hooks/useMermaid'
 import type { HighlightChunkResult, ShikiPreProperties } from '@renderer/services/ShikiStreamService'
@@ -10,6 +11,9 @@ import { ThemeMode } from '@shared/data/preference/preferenceTypes'
 import type React from 'react'
 import { createContext, type PropsWithChildren, use, useCallback, useEffect, useMemo, useState } from 'react'
 import type { BundledThemeInfo } from 'shiki/types'
+
+const logger = loggerService.withContext('CodeStyleProvider')
+
 interface CodeStyleContextType {
   highlightCodeChunk: (trunk: string, language: string, callerId: string) => Promise<HighlightChunkResult>
   highlightStreamingCode: (code: string, language: string, callerId: string) => Promise<HighlightChunkResult>
@@ -51,10 +55,20 @@ export const CodeStyleProvider: React.FC<PropsWithChildren> = ({ children }) => 
 
   useEffect(() => {
     if (!codeEditorEnabled) {
-      void getShiki().then(({ bundledThemesInfo }) => {
-        setShikiThemesInfo(bundledThemesInfo)
-      })
+      let cancelled = false
+      void getShiki()
+        .then(({ bundledThemesInfo }) => {
+          if (!cancelled) setShikiThemesInfo(bundledThemesInfo)
+        })
+        .catch((error) => {
+          logger.warn('Failed to load Shiki theme metadata', error as Error)
+        })
+      return () => {
+        cancelled = true
+      }
     }
+
+    return undefined
   }, [codeEditorEnabled])
 
   // 获取支持的主题名称列表

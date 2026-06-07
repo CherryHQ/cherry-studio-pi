@@ -1,5 +1,6 @@
 import { Button, RadioGroup, RadioGroupItem, Slider, Switch, Tooltip } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
+import { loggerService } from '@logger'
 import { isLinux, isMac, isWin } from '@renderer/config/constant'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { getSelectionDescriptionLabel } from '@renderer/i18n/label'
@@ -25,6 +26,8 @@ import {
 import MacProcessTrustHintModal from './components/MacProcessTrustHintModal'
 import SelectionActionsList from './components/SelectionActionsList'
 import SelectionFilterListModal from './components/SelectionFilterListModal'
+
+const logger = loggerService.withContext('SelectionAssistantSettings')
 
 const SelectionAssistantSettings: FC = () => {
   const { theme } = useTheme()
@@ -73,8 +76,21 @@ const SelectionAssistantSettings: FC = () => {
 
   useEffect(() => {
     if (isLinux) {
-      void window.api.selection.getLinuxEnvInfo().then(setLinuxEnvInfo)
+      let cancelled = false
+      void window.api.selection
+        .getLinuxEnvInfo()
+        .then((info) => {
+          if (!cancelled) setLinuxEnvInfo(info)
+        })
+        .catch((error) => {
+          logger.warn('Failed to read Linux selection environment info', error as Error)
+        })
+      return () => {
+        cancelled = true
+      }
     }
+
+    return undefined
   }, [])
 
   const handleEnableCheckboxChange = async (checked: boolean) => {

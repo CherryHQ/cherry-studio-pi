@@ -13,11 +13,14 @@
  * lookup that can lag behind `useChat.state.messages` during streaming.
  */
 
+import { loggerService } from '@logger'
 import { useInfiniteFlatItems, useInfiniteQuery } from '@renderer/data/hooks/useDataApi'
 import type { CherryUIMessage } from '@shared/data/types/message'
 import type { BranchMessage, BranchMessagesResponse, Message as SharedMessage } from '@shared/data/types/message'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { SWRInfiniteKeyedMutator } from 'swr/infinite'
+
+const logger = loggerService.withContext('useTopicMessagesV2')
 
 const PAGE_SIZE = 50
 
@@ -189,7 +192,17 @@ export function useTopicMessagesV2(topicId: string, options?: { enabled?: boolea
       return
     }
     setIsReady(false)
-    void mutate().then(() => setIsReady(true))
+    let cancelled = false
+    void mutate()
+      .catch((error) => {
+        logger.warn('Failed to revalidate topic messages before rendering', error as Error, { topicId })
+      })
+      .finally(() => {
+        if (!cancelled) setIsReady(true)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [topicId, mutate, enabled])
 
   const projectionCacheRef = useRef<WeakMap<SharedMessage, CherryUIMessage>>(new WeakMap())

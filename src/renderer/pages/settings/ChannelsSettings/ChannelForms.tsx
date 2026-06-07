@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@cherrystudio/ui'
+import { loggerService } from '@logger'
 import type { FeishuChannelConfig, FeishuDomain, PermissionMode } from '@renderer/types'
 import { QRCodeSVG } from 'qrcode.react'
 import type { ReactNode } from 'react'
@@ -17,6 +18,8 @@ import { type FC, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { ChannelData } from './channelTypes'
+
+const logger = loggerService.withContext('ChannelForms')
 
 // --------------- Permission mode ---------------
 
@@ -406,12 +409,22 @@ export const WeChatForm: FC<ChannelFormProps & { onRemove?: () => void }> = ({ c
   const [qrUrl, setQrUrl] = useState<string | null>(null)
 
   useEffect(() => {
-    void window.api.wechat.hasCredentials(channel.id).then((result) => {
-      if (result.exists) {
-        setStatus('confirmed')
-        if (result.userId) setLoginUserId(result.userId)
-      }
-    })
+    let cancelled = false
+    void window.api.wechat
+      .hasCredentials(channel.id)
+      .then((result) => {
+        if (cancelled) return
+        if (result.exists) {
+          setStatus('confirmed')
+          if (result.userId) setLoginUserId(result.userId)
+        }
+      })
+      .catch((error) => {
+        logger.warn('Failed to read WeChat channel credential state', error as Error, { channelId: channel.id })
+      })
+    return () => {
+      cancelled = true
+    }
   }, [channel.id])
 
   useEffect(() => {
