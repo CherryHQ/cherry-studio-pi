@@ -5,6 +5,7 @@ import https from 'node:https'
 import path from 'node:path'
 import { gunzipSync, gzipSync } from 'node:zlib'
 
+import { application } from '@application'
 import { createClient as createLibsqlClient } from '@libsql/client'
 import { loggerService } from '@logger'
 import BackupManager from '@main/services/BackupManager'
@@ -2748,7 +2749,7 @@ export class AppDataSyncService {
   ) {
     const notesManifest = this.normalizeNotesManifest(inputManifest)
     const deviceId = db.getDeviceId()
-    const rootDir = getNotesDir()
+    const rootDir = this.getNotesDirectoryRoot()
     const localFiles = await this.listLocalNotesFiles(rootDir, context)
     const localByPath = new Map(localFiles.map((file) => [file.relativePath, file]))
     const remoteActiveCount = Object.values(notesManifest.files).filter((meta) => !meta.deletedAt).length
@@ -2899,6 +2900,19 @@ export class AppDataSyncService {
 
   private getRuntimeDirectoryRoot(name: RuntimeDirectoryName) {
     return getDataPath(name)
+  }
+
+  private getNotesDirectoryRoot() {
+    try {
+      const configuredPath = application.get('PreferenceService').get('feature.notes.path')
+      if (typeof configuredPath === 'string' && configuredPath.trim()) {
+        return path.resolve(configuredPath.trim())
+      }
+    } catch {
+      // PreferenceService can be unavailable in early boot or isolated tests; fall back to the stable default.
+    }
+
+    return getNotesDir()
   }
 
   private async createRuntimeDirectorySource(policy: RuntimeDirectoryPolicy, context: SyncRunContext) {

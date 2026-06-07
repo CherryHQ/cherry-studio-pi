@@ -50,7 +50,11 @@ const mocks = vi.hoisted(() => ({
     backup: vi.fn(),
     restore: vi.fn()
   },
+  preferenceService: {
+    get: vi.fn()
+  },
   notesDir: '/tmp/cherry-studio-pi-app-data-sync-service-notes',
+  configuredNotesDir: '/tmp/cherry-studio-pi-app-data-sync-service-configured-notes',
   runtimeDataRoot: '/tmp/cherry-studio-pi-app-data-sync-service-runtime',
   memory: {
     close: vi.fn()
@@ -78,6 +82,15 @@ vi.mock('@logger', () => ({
       warn: vi.fn(),
       info: vi.fn()
     })
+  }
+}))
+
+vi.mock('@application', () => ({
+  application: {
+    get: (serviceName: string) => {
+      if (serviceName === 'PreferenceService') return mocks.preferenceService
+      throw new Error(`Unexpected service: ${serviceName}`)
+    }
   }
 }))
 
@@ -373,6 +386,7 @@ describe('AppDataSyncService', () => {
     delete process.env.CHERRY_STUDIO_DATA_SYNC_MAX_RUNTIME_MS
     delete process.env.CHERRY_STUDIO_DATA_SYNC_CLEANUP_MAX_FILES
     await fsp.rm(mocks.notesDir, { recursive: true, force: true })
+    await fsp.rm(mocks.configuredNotesDir, { recursive: true, force: true })
     await fsp.rm(mocks.runtimeDataRoot, { recursive: true, force: true })
     mocks.remoteFiles.clear()
     mocks.memory.close.mockResolvedValue(undefined)
@@ -421,6 +435,7 @@ describe('AppDataSyncService', () => {
       return filePath
     })
     mocks.backupManager.restore.mockResolvedValue(undefined)
+    mocks.preferenceService.get.mockReturnValue('')
     mocks.webdav.exists.mockImplementation(async (filePath: string) => {
       if (String(filePath).endsWith('/.sync.lock.json')) {
         return mocks.remoteFiles.has(filePath)
@@ -1749,6 +1764,28 @@ describe('AppDataSyncService', () => {
     expect(
       mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).includes('/notes/files/'))
     ).toBe(false)
+  })
+
+  it('syncs notes from the configured notes directory instead of only the default directory', async () => {
+    mocks.preferenceService.get.mockImplementation((key: string) =>
+      key === 'feature.notes.path' ? mocks.configuredNotesDir : ''
+    )
+    const configuredNotePath = path.join(mocks.configuredNotesDir, 'configured.md')
+    const defaultNotePath = path.join(mocks.notesDir, 'default.md')
+    await fsp.mkdir(path.dirname(configuredNotePath), { recursive: true })
+    await fsp.mkdir(path.dirname(defaultNotePath), { recursive: true })
+    await fsp.writeFile(configuredNotePath, '# Configured Notes Root')
+    await fsp.writeFile(defaultNotePath, '# Default Notes Root')
+
+    const summary = await new AppDataSyncService().syncNow(config)
+    const publishedManifest = JSON.parse(String(mocks.remoteFiles.get('/remote-root/sync/v1/manifest.json')))
+
+    expect(summary.uploaded).toBe(1)
+    expect(publishedManifest.notes.files['configured.md']).toMatchObject({
+      relativePath: 'configured.md',
+      deletedAt: null
+    })
+    expect(publishedManifest.notes.files['default.md']).toBeUndefined()
   })
 
   it('rejects oversized remote runtime directory manifests before downloading bundles', async () => {
