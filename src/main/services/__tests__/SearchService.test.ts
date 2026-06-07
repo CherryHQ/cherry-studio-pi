@@ -59,6 +59,22 @@ describe('SearchService', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  it('creates isolated search windows for remote URLs', async () => {
+    const service = new SearchService()
+
+    await service.openSearchWindow('search-1')
+
+    expect(BrowserWindow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        webPreferences: expect.objectContaining({
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true
+        })
+      })
+    )
+  })
+
   it('removes the load listener when the search window load wait times out', async () => {
     const service = new SearchService()
     const resultPromise = service.openUrlInSearchWindow('search-1', 'https://example.com')
