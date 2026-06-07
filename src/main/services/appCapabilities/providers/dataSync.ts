@@ -13,12 +13,12 @@ import { normalizeWebDavConfig } from '@shared/webdavConfig'
 import type { WebDavConfig } from '@types'
 import { BrowserWindow } from 'electron'
 
+import { callRendererBridge, getBridgeErrorMessage } from '../rendererBridge'
 import type { AppCapabilityDefinition } from '../types'
 import { okResult, sanitizeForAgent } from '../utils'
 
 const DEFAULT_DATA_SYNC_PATH = '/cherry-studio-pi'
 const DATA_SYNC_SUFFIX = '/sync/v1'
-const RENDERER_BRIDGE_CHECK_TIMEOUT_MS = 5_000
 const RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS = 5 * 60_000
 
 type DataSyncSettingsState = {
@@ -32,16 +32,13 @@ type DataSyncSettingsState = {
 
 async function getDataSyncSettings(): Promise<DataSyncSettingsState> {
   try {
-    return await callRendererBridge<DataSyncBridgeSettings>(
-      RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE,
-      undefined,
-      RENDERER_BRIDGE_CHECK_TIMEOUT_MS,
-      '读取同步设置超时'
-    )
+    return await callRendererBridge<DataSyncBridgeSettings>(RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE, undefined, {
+      timeoutMessage: '读取同步设置超时'
+    })
   } catch (error) {
     const legacySettings = await reduxService.select<DataSyncSettingsState>('state.settings').catch(() => undefined)
     if (legacySettings) return legacySettings
-    throw new Error(`无法读取同步设置：${getErrorMessage(error)}`)
+    throw new Error(`无法读取同步设置：${getBridgeErrorMessage(error)}`)
   }
 }
 
@@ -135,76 +132,14 @@ async function runWebDavCapability<T>(
   }
 }
 
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error)
-}
-
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
-  let timeout: ReturnType<typeof setTimeout> | undefined
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
-        timeout.unref?.()
-      })
-    ])
-  } finally {
-    if (timeout) clearTimeout(timeout)
-  }
-}
-
-async function callRendererBridge<T>(
-  bridgeKey: string,
-  payload: unknown,
-  timeoutMs: number,
-  timeoutMessage: string
-): Promise<T> {
-  const bridgeName = JSON.stringify(bridgeKey)
-  const callScript =
-    typeof payload === 'undefined' ? `window[${bridgeName}]()` : `window[${bridgeName}](${JSON.stringify(payload)})`
-  let lastProbeError: unknown
-
-  for (const browserWindow of BrowserWindow.getAllWindows()) {
-    if (browserWindow.isDestroyed()) continue
-
-    let hasBridge = false
-    try {
-      hasBridge = await withTimeout(
-        browserWindow.webContents.executeJavaScript(`typeof window[${bridgeName}] === 'function'`) as Promise<boolean>,
-        RENDERER_BRIDGE_CHECK_TIMEOUT_MS,
-        '等待主窗口响应超时'
-      )
-    } catch (error) {
-      lastProbeError = error
-      continue
-    }
-
-    if (!hasBridge) continue
-
-    try {
-      return await withTimeout(browserWindow.webContents.executeJavaScript(callScript), timeoutMs, timeoutMessage)
-    } catch (error) {
-      throw new Error(getErrorMessage(error))
-    }
-  }
-
-  if (lastProbeError) {
-    throw new Error(getErrorMessage(lastProbeError))
-  }
-  throw new Error('主窗口尚未就绪，请打开主窗口后重试。')
-}
-
 async function prepareRendererStorageV2ForDataSync() {
   try {
-    await callRendererBridge<void>(
-      RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE,
-      undefined,
-      RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS,
-      '同步前准备本机数据超时'
-    )
+    await callRendererBridge<void>(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE, undefined, {
+      timeoutMs: RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS,
+      timeoutMessage: '同步前准备本机数据超时'
+    })
   } catch (error) {
-    throw new Error(`同步前无法准备本机数据：${getErrorMessage(error)}`)
+    throw new Error(`同步前无法准备本机数据：${getBridgeErrorMessage(error)}`)
   }
 }
 
@@ -223,14 +158,11 @@ async function persistWebDavConfig(config: WebDavConfig, options: { autoSync?: b
   }
 
   try {
-    await callRendererBridge<DataSyncBridgeSettings>(
-      RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE,
-      settings,
-      RENDERER_BRIDGE_CHECK_TIMEOUT_MS,
-      '保存同步设置超时'
-    )
+    await callRendererBridge<DataSyncBridgeSettings>(RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE, settings, {
+      timeoutMessage: '保存同步设置超时'
+    })
   } catch (error) {
-    throw new Error(`无法保存同步设置：${getErrorMessage(error)}`)
+    throw new Error(`无法保存同步设置：${getBridgeErrorMessage(error)}`)
   }
 }
 

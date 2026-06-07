@@ -1,6 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  browserWindows: [
+    {
+      isDestroyed: vi.fn(() => false),
+      webContents: {
+        executeJavaScript: vi.fn()
+      }
+    }
+  ],
+  getAllWindows: vi.fn(),
   reduxService: {
     select: vi.fn(),
     dispatch: vi.fn()
@@ -10,6 +19,12 @@ const mocks = vi.hoisted(() => ({
     set: vi.fn()
   },
   navigateApp: vi.fn()
+}))
+
+vi.mock('electron', () => ({
+  BrowserWindow: {
+    getAllWindows: mocks.getAllWindows
+  }
 }))
 
 vi.mock('@application', () => ({
@@ -37,6 +52,8 @@ vi.mock('../../utils', () => ({
   sanitizeForAgent: (value: unknown) => value
 }))
 
+import { RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE, RENDERER_GET_SETTINGS_BRIDGE } from '@shared/settingsBridge'
+
 import { createSettingsCapabilities } from '../settings'
 
 function capability(id: string) {
@@ -48,6 +65,7 @@ function capability(id: string) {
 describe('settings app capabilities', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.getAllWindows.mockReturnValue(mocks.browserWindows)
     mocks.reduxService.select.mockResolvedValue({
       defaultPaintingProvider: 'silicon',
       theme: 'dark',
@@ -63,6 +81,27 @@ describe('settings app capabilities', () => {
       webdavPass: 'dav-secret'
     })
     mocks.reduxService.dispatch.mockResolvedValue(undefined)
+    mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation(async (script: string) => {
+      if (script.includes('typeof')) return true
+      if (script.includes(RENDERER_GET_SETTINGS_BRIDGE)) {
+        return {
+          defaultPaintingProvider: 'silicon',
+          theme: 'dark',
+          apiServer: {
+            host: '127.0.0.1',
+            port: 23333,
+            enabled: false,
+            apiKey: 'server-secret'
+          },
+          serviceAccount: {
+            privateKey: '-----BEGIN PRIVATE KEY-----'
+          },
+          webdavPass: 'dav-secret'
+        }
+      }
+      if (script.includes(RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE)) return {}
+      return undefined
+    })
     mocks.preferenceService.get.mockImplementation((key: string) => {
       if (key === 'feature.csaas.enabled') return true
       if (key === 'feature.csaas.host') return '0.0.0.0'
@@ -73,6 +112,12 @@ describe('settings app capabilities', () => {
     })
     mocks.preferenceService.set.mockResolvedValue(undefined)
   })
+
+  function findSettingsDispatchScript() {
+    return mocks.browserWindows[0].webContents.executeJavaScript.mock.calls.find(([script]) =>
+      String(script).startsWith(`window[${JSON.stringify(RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE)}](`)
+    )?.[0]
+  }
 
   it('reads a single setting value by path', async () => {
     const result = await capability('settings.value.get').execute({ path: 'apiServer.port' }, { source: 'agent' })
@@ -85,7 +130,9 @@ describe('settings app capabilities', () => {
         value: 24444
       }
     })
-    expect(mocks.reduxService.select).toHaveBeenCalledWith('state.settings')
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).toHaveBeenCalledWith(
+      `window[${JSON.stringify(RENDERER_GET_SETTINGS_BRIDGE)}]()`
+    )
     expect(mocks.preferenceService.get).toHaveBeenCalledWith('feature.csaas.port')
   })
 
@@ -130,10 +177,8 @@ describe('settings app capabilities', () => {
       { source: 'agent' }
     )
 
-    expect(mocks.reduxService.dispatch).toHaveBeenCalledWith({
-      type: 'settings/setApiServerApiKey',
-      payload: 'new-server-secret'
-    })
+    expect(findSettingsDispatchScript()).toContain('"type":"settings/setApiServerApiKey"')
+    expect(findSettingsDispatchScript()).toContain('"payload":"new-server-secret"')
     expect(mocks.preferenceService.set).toHaveBeenCalledWith('feature.csaas.api_key', 'new-server-secret')
     expect(result.data).toEqual({
       path: 'apiServer.apiKey',
@@ -147,10 +192,8 @@ describe('settings app capabilities', () => {
       { source: 'agent' }
     )
 
-    expect(mocks.reduxService.dispatch).toHaveBeenCalledWith({
-      type: 'settings/setApiServerPort',
-      payload: 23334
-    })
+    expect(findSettingsDispatchScript()).toContain('"type":"settings/setApiServerPort"')
+    expect(findSettingsDispatchScript()).toContain('"payload":23334')
     expect(mocks.preferenceService.set).toHaveBeenCalledWith('feature.csaas.port', 23334)
     expect(result.data).toEqual({
       path: 'apiServer.port',
@@ -165,7 +208,7 @@ describe('settings app capabilities', () => {
     )
 
     expect(mocks.preferenceService.set).toHaveBeenCalledWith('feature.csaas.host', '0.0.0.0')
-    expect(mocks.reduxService.dispatch).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
     expect(result.data).toEqual({
       path: 'apiServer.host',
       value: '0.0.0.0'
@@ -179,10 +222,8 @@ describe('settings app capabilities', () => {
     )
 
     expect(mocks.preferenceService.set).toHaveBeenCalledWith('feature.paintings.default_provider', 'ppio')
-    expect(mocks.reduxService.dispatch).toHaveBeenCalledWith({
-      type: 'settings/setDefaultPaintingProvider',
-      payload: 'ppio'
-    })
+    expect(findSettingsDispatchScript()).toContain('"type":"settings/setDefaultPaintingProvider"')
+    expect(findSettingsDispatchScript()).toContain('"payload":"ppio"')
     expect(result.data).toEqual({
       path: 'defaultPaintingProvider',
       value: 'ppio'
@@ -194,7 +235,7 @@ describe('settings app capabilities', () => {
       'Setting path is required'
     )
 
-    expect(mocks.reduxService.select).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
 
   it('rejects empty setting update paths without dispatching', async () => {
@@ -202,7 +243,7 @@ describe('settings app capabilities', () => {
       capability('settings.value.set').execute({ path: '   ', value: 'dark' }, { source: 'agent' })
     ).rejects.toThrow('Setting path is required')
 
-    expect(mocks.reduxService.dispatch).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
 
   it('normalizes settings section and route inputs before opening', async () => {

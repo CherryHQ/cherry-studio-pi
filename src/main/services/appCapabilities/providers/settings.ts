@@ -1,7 +1,8 @@
 import { application } from '@application'
-import { reduxService } from '@main/services/ReduxService'
 import type { UnifiedPreferenceKeyType } from '@shared/data/preference/preferenceTypes'
+import { RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE, RENDERER_GET_SETTINGS_BRIDGE } from '@shared/settingsBridge'
 
+import { callRendererBridge, getBridgeErrorMessage } from '../rendererBridge'
 import type { AppCapabilityDefinition } from '../types'
 import { navigateApp, okResult, pickPath, sanitizeForAgent } from '../utils'
 
@@ -106,7 +107,15 @@ function sanitizeSettingValueForAgent(keyPath: string, value: unknown) {
 }
 
 export async function readSettingsForAgent() {
-  const settings = (await reduxService.select('state.settings')) ?? {}
+  let settings: Record<string, any> = {}
+  try {
+    settings = await callRendererBridge<Record<string, any>>(RENDERER_GET_SETTINGS_BRIDGE, undefined, {
+      timeoutMessage: '读取设置超时'
+    })
+  } catch {
+    settings = {}
+  }
+
   try {
     const preferenceService = application.get('PreferenceService')
     const defaultPaintingProvider = preferenceService.get('feature.paintings.default_provider')
@@ -140,7 +149,17 @@ export async function persistSettingValue(keyPath: string, value: unknown) {
   }
 
   if (action) {
-    await reduxService.dispatch({ type: action, payload: value })
+    try {
+      await callRendererBridge(
+        RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE,
+        { type: action, payload: value },
+        {
+          timeoutMessage: '写入设置超时'
+        }
+      )
+    } catch (error) {
+      throw new Error(`无法写入运行时设置：${getBridgeErrorMessage(error)}`)
+    }
   }
 }
 
