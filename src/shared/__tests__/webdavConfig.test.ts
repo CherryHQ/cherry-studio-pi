@@ -61,6 +61,21 @@ describe('webdavConfig', () => {
     expect(config.webdavPath).toBe('/Cherry Studio Pi')
   })
 
+  it('normalizes a local single-label host with port when scheme is omitted', () => {
+    const config = normalizeWebDavConfig(
+      {
+        webdavHost: 'nas:8080/dav',
+        webdavUser: 'webdav',
+        webdavPass: 'test-webdav-password'
+      },
+      { requireCredentials: true }
+    )
+
+    expect(config.webdavHost).toBe('https://nas:8080/dav')
+    expect(config.webdavUser).toBe('webdav')
+    expect(config.webdavPass).toBe('test-webdav-password')
+  })
+
   it('strips encoded line-break credential tails from the URL before requests are built', () => {
     const config = normalizeWebDavConfig(
       {

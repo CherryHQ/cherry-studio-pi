@@ -18,6 +18,7 @@ const DEFAULT_WEBDAV_SYNC_PATH = '/cherry-studio-pi'
 const URL_PATTERN = /\b(?:https?|webdav|webdavs):\/\/[^\s"'<>，。；]+/i
 const HOST_PATTERN =
   /\b(?:localhost|(?:\d{1,3}\.){3}\d{1,3}|[a-z\d](?:[a-z\d-]*[a-z\d])?(?:\.[a-z\d](?:[a-z\d-]*[a-z\d])?)+)(?::\d{1,5})?(?:\/[^\s"'<>，。；]*)?/i
+const SINGLE_LABEL_HOST_WITH_PORT_PATTERN = /\b[a-z\d](?:[a-z\d-]*[a-z\d])?:\d{1,5}(?:\/[^\s"'<>，。；]*)?/i
 const FIELD_LABEL_PATTERN =
   'webdav\\s*url|webdav\\s*host|server(?:\\s*address)?|sync(?:\\s*directory)?|sync(?:\\s*path)?|username|password|protocol|account|token|host|pass|path|port|user|服务器地址|同步目录|同步路径|服务地址|用户名|服务器|协议|账户|账号|密码|口令|路径|地址|端口|用户'
 const ENCODED_LINE_BREAK_PATTERN = /%(?:0d|0a)/i
@@ -115,7 +116,7 @@ export function parseWebDavInput(input?: string): ParsedWebDavInput {
   }
 
   if (!webdavHost) {
-    webdavHost = text.match(HOST_PATTERN)?.[0] ?? ''
+    webdavHost = text.match(HOST_PATTERN)?.[0] ?? text.match(SINGLE_LABEL_HOST_WITH_PORT_PATTERN)?.[0] ?? ''
   }
 
   return {
