@@ -8,6 +8,7 @@ import { useMcpServerMutations } from '@renderer/hooks/useMcpServer'
 import { useMcpServerTrust } from '@renderer/hooks/useMcpServerTrust'
 import { formatMcpError } from '@renderer/utils/error'
 import { formatErrorMessage } from '@renderer/utils/error'
+import { openHttpExternalUrl } from '@renderer/utils/openExternal'
 import { cn } from '@renderer/utils/style'
 import type { UpdateMcpServerDto } from '@shared/data/api/schemas/mcpServers'
 import type { McpServer } from '@shared/data/types/mcpServer'
@@ -121,7 +122,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
       event.stopPropagation()
 
       if (server.providerUrl) {
-        window.open(server.providerUrl, '_blank')
+        openHttpExternalUrl(server.providerUrl)
       }
     },
     [server.providerUrl]

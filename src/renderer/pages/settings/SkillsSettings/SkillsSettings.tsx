@@ -19,6 +19,7 @@ import RichEditor from '@renderer/components/RichEditor'
 import Scrollbar from '@renderer/components/Scrollbar'
 import { useInstalledSkills, useSkillInstall, useSkillSearch } from '@renderer/hooks/useSkills'
 import { getFileIconName } from '@renderer/utils/fileIconName'
+import { openHttpExternalUrl } from '@renderer/utils/openExternal'
 import { cn } from '@renderer/utils/style'
 import type { InstalledSkill, SkillFileNode, SkillSearchResult, SkillSearchSource } from '@types'
 import { Button, Input, message, Modal, Typography, Upload } from 'antd'
@@ -188,7 +189,7 @@ const SearchResultRow: FC<{
           <ExternalLinkButton
             onClick={(e) => {
               e.stopPropagation()
-              window.open(result.sourceUrl!)
+              openHttpExternalUrl(result.sourceUrl)
             }}>
             <ExternalLink size={12} />
           </ExternalLinkButton>
@@ -803,7 +804,7 @@ const SkillsSettings: FC = () => {
                     type="link"
                     size="small"
                     icon={<ExternalLink size={14} />}
-                    onClick={() => window.open(previewResult.sourceUrl!)}
+                    onClick={() => openHttpExternalUrl(previewResult.sourceUrl)}
                     style={NO_PADDING_STYLE}>
                     {t('settings.skills.viewSource')}
                   </Button>
