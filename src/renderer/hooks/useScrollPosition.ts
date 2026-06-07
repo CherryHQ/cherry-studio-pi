@@ -21,12 +21,16 @@ export default function useScrollPosition(key: string, throttleWait?: number) {
     scrollKeyRef.current = scrollKey
   }, [scrollKey])
 
-  const handleScroll = throttle(() => {
-    const position = containerRef.current?.scrollTop ?? 0
-    window.requestAnimationFrame(() => {
-      cacheService.setCasual(scrollKeyRef.current, position)
-    })
-  }, throttleWait ?? 100)
+  const handleScroll = useMemo(
+    () =>
+      throttle(() => {
+        const position = containerRef.current?.scrollTop ?? 0
+        window.requestAnimationFrame(() => {
+          cacheService.setCasual(scrollKeyRef.current, position)
+        })
+      }, throttleWait ?? 100),
+    [throttleWait]
+  )
 
   useEffect(() => {
     const scroll = () => containerRef.current?.scrollTo({ top: cacheService.getCasual<number>(scrollKey) || 0 })
