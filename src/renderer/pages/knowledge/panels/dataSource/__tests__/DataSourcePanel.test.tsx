@@ -302,6 +302,25 @@ describe('DataSourcePanel', () => {
     expect(screen.getByText('已就绪 2/2')).toBeInTheDocument()
   })
 
+  it('trims and lowercases the data source search query', () => {
+    render(
+      <DataSourcePanel
+        items={[
+          createFileItem({ id: 'file-1', originName: 'Quarterly Report.pdf' }),
+          createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })
+        ]}
+        isLoading={false}
+        searchQuery="  quarterly  "
+        onAdd={vi.fn()}
+        onDelete={vi.fn()}
+        onReindex={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText('Quarterly Report.pdf')).toBeInTheDocument()
+    expect(screen.queryByText('https://example.com/product-docs')).not.toBeInTheDocument()
+  })
+
   it('renders processing directory rows as processing when no phase is available', () => {
     render(
       <DataSourcePanel

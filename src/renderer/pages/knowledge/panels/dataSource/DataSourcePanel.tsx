@@ -24,10 +24,11 @@ export interface DataSourcePanelProps {
 }
 
 const matchesSearch = (item: KnowledgeItem, query: string) => {
-  if (!query) {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) {
     return true
   }
-  return getItemTitle(item).toLowerCase().includes(query.toLowerCase())
+  return getItemTitle(item).toLowerCase().includes(normalizedQuery)
 }
 
 const DataSourceEmptyState = ({ onAddSource }: { onAddSource: (source: KnowledgeItemType) => void }) => {

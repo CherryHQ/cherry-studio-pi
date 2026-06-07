@@ -163,6 +163,15 @@ describe('MiniAppsPage', () => {
     expect(screen.queryByText('1')).not.toBeInTheDocument()
   })
 
+  it('trims and lowercases mini app search terms', () => {
+    render(<MiniAppsPage />)
+
+    fireEvent.change(screen.getByPlaceholderText('common.search'), { target: { value: '  GOOGLE  ' } })
+
+    expect(screen.getByText('Gemini')).toBeInTheDocument()
+    expect(screen.queryByText('ChatGPT')).not.toBeInTheDocument()
+  })
+
   it('opens the selected mini app without changing the tab contract', () => {
     render(<MiniAppsPage />)
 

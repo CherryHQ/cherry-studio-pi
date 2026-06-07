@@ -23,10 +23,11 @@ const MiniAppsPage: FC = () => {
   const [newAppOpen, setNewAppOpen] = useState(false)
   const { miniApps, isLoading, error } = useMiniApps()
   const visibility = useMiniAppVisibility()
+  const normalizedSearch = search.trim().toLowerCase()
 
-  const filteredApps = search
+  const filteredApps = normalizedSearch
     ? miniApps.filter(
-        (app) => app.name.toLowerCase().includes(search.toLowerCase()) || app.url.includes(search.toLowerCase())
+        (app) => app.name.toLowerCase().includes(normalizedSearch) || app.url.toLowerCase().includes(normalizedSearch)
       )
     : miniApps
 

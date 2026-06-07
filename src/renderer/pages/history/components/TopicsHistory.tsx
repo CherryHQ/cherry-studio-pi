@@ -26,9 +26,10 @@ const TopicsHistory: React.FC<Props> = ({ keywords, onClick, onSearch, ...props 
 
   const { topics: apiTopics } = useAllTopics({ loadAll: true })
   const topics = useMemo(() => apiTopics.map(mapApiTopicToRendererTopic), [apiTopics])
+  const normalizedKeywords = keywords.trim().toLowerCase()
 
   const filteredTopics = topics.filter((topic) => {
-    return topic.name.toLowerCase().includes(keywords.toLowerCase())
+    return topic.name.toLowerCase().includes(normalizedKeywords)
   })
 
   const groupedTopics = groupBy(orderBy(filteredTopics, sortType, 'desc'), (topic) => {
@@ -74,7 +75,7 @@ const TopicsHistory: React.FC<Props> = ({ keywords, onClick, onSearch, ...props 
             ))}
           </ListItem>
         ))}
-        {keywords && (
+        {normalizedKeywords && (
           <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
             <Button className="mt-5 w-[200px]" onClick={onSearch}>
               <SearchOutlined />
