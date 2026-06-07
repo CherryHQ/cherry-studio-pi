@@ -14,6 +14,7 @@ import {
 } from '@main/services/appCapabilities/providers/settings'
 import { readRendererStoreValue } from '@main/services/appCapabilities/rendererBridge'
 import { isAllowedAppRoute, normalizeAppRoute, pickPath, sanitizeForAgent } from '@main/services/appCapabilities/utils'
+import { notifyMainProcessDataSyncLocalChange } from '@main/services/appData/DataSyncLocalChangeNotifier'
 import { getName, getNotesDir, isPathInside, scanDir } from '@main/utils/file'
 import express from 'express'
 
@@ -76,6 +77,17 @@ function resolveNotePath(root: string, input?: string, defaultExt = false) {
   const withExt = defaultExt && path.extname(candidate) === '' ? `${candidate}.md` : candidate
   if (withExt !== root && !isPathInside(withExt, root)) throw new Error('Path is outside the notes directory')
   return withExt
+}
+
+async function resolveNoteDeletePath(root: string, input?: string) {
+  const target = resolveNotePath(root, input)
+  if (path.extname(target) || (await fs.stat(target).catch(() => null))) {
+    return target
+  }
+
+  const markdownTarget = `${target}.md`
+  const markdownStat = await fs.stat(markdownTarget).catch(() => null)
+  return markdownStat?.isFile() ? markdownTarget : target
 }
 
 function flattenNotes(nodes: any[], result: any[] = []) {
@@ -275,6 +287,7 @@ appToolsRouter.post('/notes', async (req, res, next) => {
     const safeName = getName(parent, req.body?.name || 'Untitled', true)
     const filePath = path.join(parent, `${safeName}.md`)
     await fs.writeFile(filePath, req.body?.content || '', 'utf8')
+    notifyMainProcessDataSyncLocalChange('file', { source: 'api.app-tools.notes.create', path: filePath })
     res.json({ ok: true, path: filePath, name: safeName })
   } catch (error) {
     next(error)
@@ -286,6 +299,7 @@ appToolsRouter.put('/notes', async (req, res, next) => {
     const root = await getNotesRoot()
     const filePath = resolveNotePath(root, req.body?.path, true)
     await fs.writeFile(filePath, req.body?.content || '', 'utf8')
+    notifyMainProcessDataSyncLocalChange('file', { source: 'api.app-tools.notes.write', path: filePath })
     res.json({ ok: true, path: filePath })
   } catch (error) {
     next(error)
@@ -295,8 +309,9 @@ appToolsRouter.put('/notes', async (req, res, next) => {
 appToolsRouter.delete('/notes', async (req, res, next) => {
   try {
     const root = await getNotesRoot()
-    const target = resolveNotePath(root, String(req.query.path || req.body?.path || ''))
+    const target = await resolveNoteDeletePath(root, String(req.query.path || req.body?.path || ''))
     await fs.rm(target, { force: true, recursive: true })
+    notifyMainProcessDataSyncLocalChange('file', { source: 'api.app-tools.notes.delete', path: target })
     res.json({ ok: true, path: target })
   } catch (error) {
     next(error)

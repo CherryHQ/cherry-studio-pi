@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 
 import { application } from '@application'
+import { notifyMainProcessDataSyncLocalChange } from '@main/services/appData/DataSyncLocalChangeNotifier'
 import { getName, getNotesDir } from '@main/utils/file'
 
 import { readRendererStoreValue } from '../rendererBridge'
@@ -59,6 +60,17 @@ function assertNotNotesRoot(root: string, target: string) {
   if (path.resolve(root) === path.resolve(target)) {
     throw new Error('Cannot delete the notes root directory')
   }
+}
+
+async function resolveNoteDeleteTarget(root: string, input: string) {
+  const target = resolveInsideRoot(root, input)
+  if (path.extname(target) || (await fs.stat(target).catch(() => null))) {
+    return target
+  }
+
+  const markdownTarget = `${target}.md`
+  const markdownStat = await fs.stat(markdownTarget).catch(() => null)
+  return markdownStat?.isFile() ? markdownTarget : target
 }
 
 function normalizeSearchLimit(value: unknown) {
@@ -400,6 +412,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
         const safeName = getName(parent, normalizeOptionalText(input?.name, 'Untitled') || 'Untitled', true)
         const filePath = path.join(parent, `${safeName}.md`)
         await fs.writeFile(filePath, normalizeNoteContent(input?.content), 'utf8')
+        notifyMainProcessDataSyncLocalChange('file', { source: 'app-capability.notes.create', path: filePath })
         return {
           ok: true,
           summary: `Note created: ${safeName}`,
@@ -430,6 +443,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
         const root = await getNotesRoot()
         const filePath = resolveInsideRoot(root, normalizeRequiredText(input?.path, 'Note path'), '.md')
         await fs.writeFile(filePath, normalizeNoteContent(input?.content), 'utf8')
+        notifyMainProcessDataSyncLocalChange('file', { source: 'app-capability.notes.write', path: filePath })
         return okResult('Note written', { path: filePath })
       }
     },
@@ -453,10 +467,11 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       tags: ['notes', 'delete'],
       execute: async (input: any, context) => {
         const root = await getNotesRoot()
-        const target = resolveInsideRoot(root, normalizeRequiredText(input?.path, 'Note path'))
+        const target = await resolveNoteDeleteTarget(root, normalizeRequiredText(input?.path, 'Note path'))
         assertNotNotesRoot(root, target)
         if (context.dryRun) return okResult('Note delete dry run completed', { path: target })
         await fs.rm(target, { force: true, recursive: true })
+        notifyMainProcessDataSyncLocalChange('file', { source: 'app-capability.notes.delete', path: target })
         return okResult('Note deleted', { path: target })
       }
     }

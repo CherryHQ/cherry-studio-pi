@@ -10,7 +10,8 @@ const mocks = vi.hoisted(() => ({
     get: vi.fn()
   },
   scanDir: vi.fn(),
-  getName: vi.fn()
+  getName: vi.fn(),
+  notifyDataSyncLocalChange: vi.fn()
 }))
 
 vi.mock('@application', () => ({
@@ -32,6 +33,10 @@ vi.mock('@main/services/WindowService', () => ({
   windowService: {
     getMainWindow: vi.fn()
   }
+}))
+
+vi.mock('@main/services/appData/DataSyncLocalChangeNotifier', () => ({
+  notifyMainProcessDataSyncLocalChange: mocks.notifyDataSyncLocalChange
 }))
 
 vi.mock('@main/utils/file', () => ({
@@ -69,6 +74,7 @@ describe('notes app capabilities', () => {
     mocks.scanDir.mockReset()
     mocks.getName.mockReset()
     mocks.getName.mockReturnValue('Untitled')
+    mocks.notifyDataSyncLocalChange.mockReset()
   })
 
   afterEach(async () => {
@@ -233,6 +239,10 @@ describe('notes app capabilities', () => {
     const filePath = path.join(tmpDir, 'folder', 'Daily.md')
     expect(created.data).toEqual({ path: filePath, name: 'Daily' })
     expect(await fs.readFile(filePath, 'utf8')).toBe('{\n  "title": "Morning",\n  "done": false\n}')
+    expect(mocks.notifyDataSyncLocalChange).toHaveBeenCalledWith('file', {
+      source: 'app-capability.notes.create',
+      path: filePath
+    })
 
     const written = await getCapability('notes.write').execute(
       {
@@ -244,6 +254,23 @@ describe('notes app capabilities', () => {
 
     expect(written.data).toEqual({ path: filePath })
     expect(await fs.readFile(filePath, 'utf8')).toBe('123')
+    expect(mocks.notifyDataSyncLocalChange).toHaveBeenLastCalledWith('file', {
+      source: 'app-capability.notes.write',
+      path: filePath
+    })
+  })
+
+  it('notifies data sync after deleting a note', async () => {
+    const notePath = path.join(tmpDir, 'daily.md')
+    await fs.writeFile(notePath, 'today\n', 'utf8')
+
+    const result = await getCapability('notes.delete').execute({ path: 'daily' }, { source: 'agent' })
+
+    expect(result.ok).toBe(true)
+    expect(mocks.notifyDataSyncLocalChange).toHaveBeenCalledWith('file', {
+      source: 'app-capability.notes.delete',
+      path: notePath
+    })
   })
 
   it('rejects empty note paths with clear errors', async () => {

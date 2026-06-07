@@ -665,6 +665,35 @@ describe('DataSyncService', () => {
     expect(mocks.prepareStorageV2ForDataSync).toHaveBeenCalledTimes(1)
   })
 
+  it('runs a debounced auto sync after main-process file data changes', async () => {
+    vi.useFakeTimers()
+    mocks.getState.mockReturnValue({
+      settings: {
+        dataSyncWebdavHost: 'https://dav.example.test',
+        dataSyncWebdavUser: 'user',
+        dataSyncWebdavPass: 'pass',
+        dataSyncWebdavPath: '/cherry-studio-pi',
+        dataSyncAutoSync: true,
+        dataSyncSyncInterval: 15
+      }
+    })
+
+    startDataSyncAutoSync(false)
+    expect(mocks.onLocalStorageV2Changed).toHaveBeenCalledTimes(1)
+
+    mocks.localStorageV2ChangeListener?.({
+      reason: 'file',
+      path: '/notes/daily.md'
+    })
+
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    await vi.waitFor(() => {
+      expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+    })
+    expect(mocks.prepareStorageV2ForDataSync).toHaveBeenCalledTimes(1)
+  })
+
   it('does not schedule a redundant auto sync for mirror signals emitted while preparing sync data', async () => {
     vi.useFakeTimers()
     mocks.getState.mockReturnValue({

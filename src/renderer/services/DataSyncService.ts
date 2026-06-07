@@ -5,6 +5,7 @@ import type { WebDavConfig } from '@renderer/types'
 
 import {
   beginDataSyncLocalChangeNotificationSuppression,
+  type DataSyncLocalChangeReason,
   notifyDataSyncLocalChange,
   subscribeDataSyncLocalChanges
 } from './DataSyncLocalChangeSignal'
@@ -195,6 +196,11 @@ async function prepareStorageV2ForDataSyncWithSuppressedNotifications() {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function getMainProcessLocalChangeReason(payload: unknown): DataSyncLocalChangeReason {
+  if (isRecord(payload) && payload.reason === 'file') return 'file'
+  return 'storage-v2'
 }
 
 function getExternalDataSyncSummary(payload: unknown): Partial<DataSyncSummary> | null {
@@ -399,7 +405,7 @@ function ensureMainProcessStorageV2ChangeSubscription() {
       return
     }
 
-    notifyDataSyncLocalChange('storage-v2')
+    notifyDataSyncLocalChange(getMainProcessLocalChangeReason(payload))
   })
 }
 
