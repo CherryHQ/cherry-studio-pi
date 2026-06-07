@@ -159,6 +159,7 @@ export const ContentSearch = React.forwardRef<ContentSearchRef, Props>(
     const resetSearch = useCallback(() => {
       CSS.highlights.clear()
       setAllRanges([])
+      setCurrentIndex(-1)
       setSearchCompleted(SearchCompletedState.NotSearched)
     }, [])
 
@@ -193,22 +194,25 @@ export const ContentSearch = React.forwardRef<ContentSearchRef, Props>(
 
     const search = useCallback(
       (jump = false) => {
-        const searchText = searchInputRef.current?.value.trim() ?? null
-        setSearchCompleted(SearchCompletedState.Searched)
-        if (target && searchText !== null && searchText !== '') {
-          const ranges = findRangesInTarget(target, filter, searchText, isCaseSensitive, isWholeWord)
-          setAllRanges(ranges)
-          setCurrentIndex(jump && ranges.length > 0 ? 0 : -1)
+        const searchText = searchInputRef.current?.value.trim() ?? ''
+        if (!target || !searchText) {
+          resetSearch()
+          return
         }
+
+        setSearchCompleted(SearchCompletedState.Searched)
+        const ranges = findRangesInTarget(target, filter, searchText, isCaseSensitive, isWholeWord)
+        setAllRanges(ranges)
+        setCurrentIndex(jump && ranges.length > 0 ? 0 : -1)
       },
-      [target, filter, isCaseSensitive, isWholeWord]
+      [target, filter, isCaseSensitive, isWholeWord, resetSearch]
     )
 
     const implementation = useMemo(
       () => ({
         disable: () => {
           setEnableContentSearch(false)
-          CSS.highlights.clear()
+          resetSearch()
         },
         enable: (initialText?: string) => {
           setEnableContentSearch(true)
@@ -254,10 +258,16 @@ export const ContentSearch = React.forwardRef<ContentSearchRef, Props>(
           searchInputRef.current?.focus()
         }
       }),
-      [allRanges.length, locateByIndex, search]
+      [allRanges.length, locateByIndex, resetSearch, search]
     )
 
     const _searchHandlerDebounce = useMemo(() => debounce(implementation.search, 300), [implementation.search])
+
+    useEffect(() => {
+      return () => {
+        _searchHandlerDebounce.cancel()
+      }
+    }, [_searchHandlerDebounce])
 
     const searchHandler = useCallback(() => {
       _searchHandlerDebounce()
