@@ -103,13 +103,23 @@ describe('settings app capabilities', () => {
       return undefined
     })
     mocks.preferenceService.get.mockImplementation((key: string) => {
-      if (key === 'feature.csaas.enabled') return true
-      if (key === 'feature.csaas.host') return '0.0.0.0'
-      if (key === 'feature.csaas.port') return 24444
-      if (key === 'feature.csaas.api_key') return 'preference-server-secret'
-      if (key === 'feature.paintings.default_provider') return 'openai'
-      if (key === 'assistant.click_to_show_topic') return false
-      return undefined
+      const preferences: Record<string, unknown> = {
+        'app.language': 'zh-CN',
+        'app.tray.enabled': true,
+        'app.tray.on_close': false,
+        'assistant.click_to_show_topic': false,
+        'chat.message.confirm_delete': false,
+        'data.backup.webdav.host': 'https://dav.example.com',
+        'data.backup.webdav.pass': 'preference-dav-secret',
+        'feature.csaas.enabled': true,
+        'feature.csaas.host': '0.0.0.0',
+        'feature.csaas.port': 24444,
+        'feature.csaas.api_key': 'preference-server-secret',
+        'feature.paintings.default_provider': 'openai',
+        'topic.tab.show': false,
+        'ui.theme_mode': 'system'
+      }
+      return preferences[key]
     })
     mocks.preferenceService.set.mockResolvedValue(undefined)
   })
@@ -161,6 +171,28 @@ describe('settings app capabilities', () => {
       value: false
     })
     expect(mocks.preferenceService.get).toHaveBeenCalledWith('assistant.click_to_show_topic')
+  })
+
+  it('reads migrated preference-backed settings instead of stale redux snapshot values', async () => {
+    const theme = await capability('settings.value.get').execute({ path: 'theme' }, { source: 'agent' })
+    const showTopics = await capability('settings.value.get').execute({ path: 'showTopics' }, { source: 'agent' })
+    const webdavHost = await capability('settings.value.get').execute({ path: 'webdavHost' }, { source: 'agent' })
+
+    expect(theme.data).toEqual({
+      path: 'theme',
+      value: 'system'
+    })
+    expect(showTopics.data).toEqual({
+      path: 'showTopics',
+      value: false
+    })
+    expect(webdavHost.data).toEqual({
+      path: 'webdavHost',
+      value: 'https://dav.example.com'
+    })
+    expect(mocks.preferenceService.get).toHaveBeenCalledWith('ui.theme_mode')
+    expect(mocks.preferenceService.get).toHaveBeenCalledWith('topic.tab.show')
+    expect(mocks.preferenceService.get).toHaveBeenCalledWith('data.backup.webdav.host')
   })
 
   it('redacts sensitive single setting values by path', async () => {
@@ -256,6 +288,36 @@ describe('settings app capabilities', () => {
     expect(result.data).toEqual({
       path: 'clickAssistantToShowTopic',
       value: true
+    })
+  })
+
+  it('persists migrated settings through the preference service before dispatching legacy actions', async () => {
+    const result = await capability('settings.value.set').execute(
+      { path: 'theme', value: 'light' },
+      { source: 'agent' }
+    )
+
+    expect(mocks.preferenceService.set).toHaveBeenCalledWith('ui.theme_mode', 'light')
+    expect(findSettingsDispatchScript()).toContain('"type":"settings/setTheme"')
+    expect(findSettingsDispatchScript()).toContain('"payload":"light"')
+    expect(result.data).toEqual({
+      path: 'theme',
+      value: 'light'
+    })
+  })
+
+  it('persists migrated sensitive settings while redacting the returned value', async () => {
+    const result = await capability('settings.value.set').execute(
+      { path: 'webdavPass', value: 'new-dav-secret' },
+      { source: 'agent' }
+    )
+
+    expect(mocks.preferenceService.set).toHaveBeenCalledWith('data.backup.webdav.pass', 'new-dav-secret')
+    expect(findSettingsDispatchScript()).toContain('"type":"settings/setWebdavPass"')
+    expect(findSettingsDispatchScript()).toContain('"payload":"new-dav-secret"')
+    expect(result.data).toEqual({
+      path: 'webdavPass',
+      value: '[redacted]'
     })
   })
 
