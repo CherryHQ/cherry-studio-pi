@@ -6292,7 +6292,8 @@
       "assistant": "Μήνυμα βοηθού",
       "backup": "Δημιουργία αντιγράφου ασφαλείας",
       "knowledge_embed": "Βάση γνώσης",
-      "title": "Ρυθμίσεις ειδοποιήσεων"
+      "title": "Ρυθμίσεις ειδοποιήσεων",
+      "update": "Update notifications"
     },
     "openai": {
       "service_tier": {

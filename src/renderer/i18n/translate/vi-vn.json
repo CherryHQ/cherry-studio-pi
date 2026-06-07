@@ -6292,7 +6292,8 @@
       "assistant": "Tin nhắn Trợ lý",
       "backup": "Tin nhắn sao lưu",
       "knowledge_embed": "Thông báo từ KnowledgeBase",
-      "title": "Cài đặt Thông báo"
+      "title": "Cài đặt Thông báo",
+      "update": "Update notifications"
     },
     "openai": {
       "service_tier": {

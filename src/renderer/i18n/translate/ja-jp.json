@@ -6292,7 +6292,8 @@
       "assistant": "アシスタントメッセージ",
       "backup": "バックアップメッセージ",
       "knowledge_embed": "ナレッジベースメッセージ",
-      "title": "通知設定"
+      "title": "通知設定",
+      "update": "Update notifications"
     },
     "openai": {
       "service_tier": {

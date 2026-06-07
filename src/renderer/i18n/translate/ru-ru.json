@@ -6769,7 +6769,8 @@
       "assistant": "Сообщение ассистента",
       "backup": "Резервное сообщение",
       "knowledge_embed": "Сообщение базы знаний",
-      "title": "Настройки уведомлений"
+      "title": "Настройки уведомлений",
+      "update": "Update notifications"
     },
     "openai": {
       "service_tier": {

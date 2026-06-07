@@ -6292,7 +6292,8 @@
       "assistant": "Mensaje del asistente",
       "backup": "Copia de seguridad",
       "knowledge_embed": "Base de conocimiento",
-      "title": "Configuración de notificaciones"
+      "title": "Configuración de notificaciones",
+      "update": "Update notifications"
     },
     "openai": {
       "service_tier": {

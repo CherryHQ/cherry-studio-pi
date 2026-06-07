@@ -6292,7 +6292,8 @@
       "assistant": "Mesaj asistent",
       "backup": "Mesaj backup",
       "knowledge_embed": "Mesaj bază de cunoștințe",
-      "title": "Setări notificări"
+      "title": "Setări notificări",
+      "update": "Update notifications"
     },
     "openai": {
       "service_tier": {

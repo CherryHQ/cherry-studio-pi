@@ -6292,7 +6292,8 @@
       "assistant": "Assistenten-Nachrichten",
       "backup": "Backup",
       "knowledge_embed": "Wissensdatenbank",
-      "title": "Benachrichtigungseinstellungen"
+      "title": "Benachrichtigungseinstellungen",
+      "update": "Update notifications"
     },
     "openai": {
       "service_tier": {

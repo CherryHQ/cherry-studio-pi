@@ -109,7 +109,8 @@ const CommonSettings: FC = () => {
   const [notificationSettings, setNotificationSettings] = useMultiplePreferences({
     assistant: 'app.notification.assistant.enabled',
     backup: 'app.notification.backup.enabled',
-    knowledge: 'app.notification.knowledge.enabled'
+    knowledge: 'app.notification.knowledge.enabled',
+    update: 'app.notification.update.enabled'
   })
 
   const [proxyUrl, setProxyUrl] = useState<string>(storeProxyUrl)
@@ -743,6 +744,14 @@ const CommonSettings: FC = () => {
           <Switch
             checked={notificationSettings.knowledge}
             onCheckedChange={(v) => handleNotificationChange('knowledge', v)}
+          />
+        </SettingRow>
+        <SettingDivider />
+        <SettingRow>
+          <SettingRowTitle>{t('settings.notification.update')}</SettingRowTitle>
+          <Switch
+            checked={notificationSettings.update}
+            onCheckedChange={(v) => handleNotificationChange('update', v)}
           />
         </SettingRow>
       </SettingGroup>

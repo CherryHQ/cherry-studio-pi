@@ -6292,7 +6292,8 @@
       "assistant": "助手消息",
       "backup": "备份",
       "knowledge_embed": "知识库",
-      "title": "通知设置"
+      "title": "通知设置",
+      "update": "软件更新通知"
     },
     "openai": {
       "service_tier": {

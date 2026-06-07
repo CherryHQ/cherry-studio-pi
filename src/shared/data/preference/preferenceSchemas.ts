@@ -54,6 +54,8 @@ export interface PreferenceSchemas {
     'app.notification.backup.enabled': boolean
     // redux/settings/notification.knowledge
     'app.notification.knowledge.enabled': boolean
+    // app/update notifications
+    'app.notification.update.enabled': boolean
     // redux/settings/enableDataCollection
     'app.privacy.data_collection.enabled': boolean
     // redux/settings/proxyBypassRules
@@ -509,6 +511,7 @@ export const DefaultPreferences: PreferenceSchemas = {
     'app.notification.assistant.enabled': false,
     'app.notification.backup.enabled': false,
     'app.notification.knowledge.enabled': false,
+    'app.notification.update.enabled': true,
     'app.privacy.data_collection.enabled': false,
     'app.proxy.bypass_rules': '',
     'app.proxy.mode': 'system',
