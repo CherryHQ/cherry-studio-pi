@@ -83,13 +83,16 @@ export const SETTINGS_SETTERS: Record<string, string> = {
   'apiServer.apiKey': 'settings/setApiServerApiKey'
 }
 
-const pathEnum = Object.keys(SETTINGS_SETTERS).sort()
 const SENSITIVE_SETTING_PATH_PATTERN = /api[-_]?key|private[-_]?key|token|secret|pass|password|authorization|cookie/i
 const API_SERVER_PREFERENCE_PATHS: Record<string, UnifiedPreferenceKeyType> = {
   'apiServer.enabled': 'feature.csaas.enabled',
+  'apiServer.host': 'feature.csaas.host',
   'apiServer.port': 'feature.csaas.port',
   'apiServer.apiKey': 'feature.csaas.api_key'
 }
+const pathEnum = Array.from(
+  new Set([...Object.keys(SETTINGS_SETTERS), ...Object.keys(API_SERVER_PREFERENCE_PATHS)])
+).sort()
 
 function sanitizeSettingValueForAgent(keyPath: string, value: unknown) {
   if (SENSITIVE_SETTING_PATH_PATTERN.test(keyPath)) {
@@ -119,13 +122,15 @@ export async function readSettingsForAgent() {
   }
 }
 
-async function persistSettingValue(keyPath: string, action: string, value: unknown) {
+async function persistSettingValue(keyPath: string, action: string | undefined, value: unknown) {
   const preferenceKey = API_SERVER_PREFERENCE_PATHS[keyPath]
   if (preferenceKey) {
     await application.get('PreferenceService').set(preferenceKey, value as never)
   }
 
-  await reduxService.dispatch({ type: action, payload: value })
+  if (action) {
+    await reduxService.dispatch({ type: action, payload: value })
+  }
 }
 
 export function createSettingsCapabilities(): AppCapabilityDefinition[] {
@@ -202,7 +207,7 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
         const keyPath = String(input?.path ?? '').trim()
         if (!keyPath) throw new Error('Setting path is required')
         const action = SETTINGS_SETTERS[keyPath]
-        if (!action) throw new Error(`Unsupported setting path: ${keyPath}`)
+        if (!action && !API_SERVER_PREFERENCE_PATHS[keyPath]) throw new Error(`Unsupported setting path: ${keyPath}`)
         await persistSettingValue(keyPath, action, input?.value)
         return okResult('Setting updated', {
           path: keyPath,

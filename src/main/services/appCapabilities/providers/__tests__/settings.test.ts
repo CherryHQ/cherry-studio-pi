@@ -63,6 +63,7 @@ describe('settings app capabilities', () => {
     mocks.reduxService.dispatch.mockResolvedValue(undefined)
     mocks.preferenceService.get.mockImplementation((key: string) => {
       if (key === 'feature.csaas.enabled') return true
+      if (key === 'feature.csaas.host') return '0.0.0.0'
       if (key === 'feature.csaas.port') return 24444
       if (key === 'feature.csaas.api_key') return 'preference-server-secret'
       return undefined
@@ -138,6 +139,20 @@ describe('settings app capabilities', () => {
     expect(result.data).toEqual({
       path: 'apiServer.port',
       value: 23334
+    })
+  })
+
+  it('updates preference-only api server settings', async () => {
+    const result = await capability('settings.value.set').execute(
+      { path: 'apiServer.host', value: '0.0.0.0' },
+      { source: 'agent' }
+    )
+
+    expect(mocks.preferenceService.set).toHaveBeenCalledWith('feature.csaas.host', '0.0.0.0')
+    expect(mocks.reduxService.dispatch).not.toHaveBeenCalled()
+    expect(result.data).toEqual({
+      path: 'apiServer.host',
+      value: '0.0.0.0'
     })
   })
 
