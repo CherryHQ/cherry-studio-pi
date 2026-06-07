@@ -69,4 +69,22 @@ describe('WebDav', () => {
 
     await expect(webdav.putFileContents('backup.zip', 'data')).rejects.toThrow('WebDAV client not initialized')
   })
+
+  it('checks and creates the configured WebDAV directory instead of probing the server root', async () => {
+    mocks.client.exists.mockResolvedValueOnce(false)
+    mocks.client.createDirectory.mockResolvedValueOnce(true)
+
+    const webdav = new WebDav({
+      webdavHost: 'http://192.168.1.100:8080',
+      webdavUser: 'webdav',
+      webdavPass: 'test-webdav-password',
+      webdavPath: '/Cherry Studio Pi'
+    })
+
+    await expect(webdav.checkConnection()).resolves.toBe(true)
+
+    expect(mocks.client.exists).toHaveBeenCalledWith('/Cherry Studio Pi')
+    expect(mocks.client.exists).not.toHaveBeenCalledWith('/')
+    expect(mocks.client.createDirectory).toHaveBeenCalledWith('/Cherry Studio Pi', { recursive: true })
+  })
 })

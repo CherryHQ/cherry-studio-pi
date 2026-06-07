@@ -126,7 +126,14 @@ export default class WebDav {
     }
 
     try {
-      return await this.instance.exists('/')
+      if (await this.instance.exists(this.webdavPath)) {
+        return true
+      }
+
+      await this.instance.createDirectory(this.webdavPath, {
+        recursive: true
+      })
+      return true
     } catch (error) {
       logger.error('Error checking connection:', error as Error)
       throw error
