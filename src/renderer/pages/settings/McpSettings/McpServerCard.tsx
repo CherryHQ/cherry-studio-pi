@@ -15,7 +15,7 @@ import type { McpServer } from '@shared/data/types/mcpServer'
 import { CircleXIcon, SquareArrowOutUpRight } from 'lucide-react'
 import type React from 'react'
 import type { FC } from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FallbackProps } from 'react-error-boundary'
 import { useTranslation } from 'react-i18next'
 
@@ -31,6 +31,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
   const { updateMcpServer, deleteMcpServer } = useMcpServerMutations(server.id)
   const [loading, setLoading] = useState(false)
   const [version, setVersion] = useState<string | null>(null)
+  const versionRequestSeqRef = useRef(0)
   const runtimeStatus = useMcpRuntimeStatus(server.id, server.isActive)
 
   const updateServerBody = useCallback((body: UpdateMcpServerDto) => updateMcpServer({ body }), [updateMcpServer])
@@ -39,24 +40,35 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
   const { t } = useTranslation()
 
   // Fetch version for active servers
-  const fetchServerVersion = useCallback(async (s: McpServer) => {
-    if (!s.isActive) return
-    try {
-      const v = await window.api.mcp.getServerVersion(s.id)
-      setVersion(v)
-    } catch {
-      setVersion(null)
-    }
+  const getServerVersion = useCallback(async (s: Pick<McpServer, 'id' | 'isActive'>) => {
+    if (!s.isActive) return null
+    return window.api.mcp.getServerVersion(s.id)
   }, [])
 
   useEffect(() => {
+    let cancelled = false
+    const requestSeq = ++versionRequestSeqRef.current
+
     if (server.isActive) {
-      void fetchServerVersion(server)
+      void getServerVersion({ id: server.id, isActive: server.isActive })
+        .then((nextVersion) => {
+          if (!cancelled && requestSeq === versionRequestSeqRef.current) {
+            setVersion(nextVersion)
+          }
+        })
+        .catch(() => {
+          if (!cancelled && requestSeq === versionRequestSeqRef.current) {
+            setVersion(null)
+          }
+        })
     } else {
       setVersion(null)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [server.isActive, server.id, fetchServerVersion])
+
+    return () => {
+      cancelled = true
+    }
+  }, [server.id, server.isActive, getServerVersion])
 
   const handleToggleActive = useCallback(
     async (active: boolean) => {
@@ -73,7 +85,11 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
         if (active) {
           await updateMcpServer({ body: { isActive: true } })
           try {
-            await fetchServerVersion({ ...serverForUpdate, isActive: true })
+            const requestSeq = ++versionRequestSeqRef.current
+            const nextVersion = await getServerVersion({ ...serverForUpdate, isActive: true })
+            if (requestSeq === versionRequestSeqRef.current) {
+              setVersion(nextVersion)
+            }
             await window.api.mcp.refreshTools(serverForUpdate.id)
           } catch (error: any) {
             window.modal.error({
@@ -85,6 +101,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
         } else {
           await updateMcpServer({ body: { isActive: false } })
           await window.api.mcp.stopServer(serverForUpdate.id)
+          versionRequestSeqRef.current++
           setVersion(null)
         }
       } catch (error: any) {
@@ -97,7 +114,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
         setLoading(false)
       }
     },
-    [server, ensureServerTrusted, fetchServerVersion, updateMcpServer, t]
+    [server, ensureServerTrusted, getServerVersion, updateMcpServer, t]
   )
 
   const handleDelete = useCallback(() => {
