@@ -33,6 +33,8 @@ import { IpcChannel } from '@shared/IpcChannel'
 import { app, BrowserWindow, screen, shell } from 'electron'
 import { v4 as uuidv4 } from 'uuid'
 
+import { isSafeExternalUrl } from '../../utils/externalUrlSafety'
+
 const logger = loggerService.withContext('WindowManager')
 
 /** GC tick interval in ms — minute-grained precision is sufficient for decay/inactivity. */
@@ -1387,19 +1389,19 @@ export class WindowManager extends BaseService {
 
     // Intercept external links: open in system browser
     window.webContents.setWindowOpenHandler(({ url }) => {
-      if (url.startsWith('http:') || url.startsWith('https:')) {
+      if (safeHttpOrigin(url) && isSafeExternalUrl(url)) {
         void shell.openExternal(url)
       }
       return { action: 'deny' }
     })
 
     window.webContents.on('will-navigate', (event, url) => {
-      if (url.startsWith('http:') || url.startsWith('https:')) {
+      const nextOrigin = safeHttpOrigin(url)
+      if (nextOrigin) {
         const currentURL = window.webContents.getURL()
-        const nextOrigin = safeHttpOrigin(url)
         const currentOrigin = currentURL ? safeHttpOrigin(currentURL) : null
 
-        if (!nextOrigin || !currentOrigin || nextOrigin !== currentOrigin) {
+        if (!currentOrigin || nextOrigin !== currentOrigin) {
           event.preventDefault()
           void shell.openExternal(url)
         }

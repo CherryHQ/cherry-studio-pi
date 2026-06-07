@@ -326,6 +326,12 @@ function getWillNavigateHandler(win: MockBrowserWindow) {
   return call[1] as (event: { preventDefault: () => void }, url: string) => void
 }
 
+function getWindowOpenHandler(win: MockBrowserWindow) {
+  const call = win.webContents.setWindowOpenHandler.mock.calls[0]
+  if (!call) throw new Error('window open handler not registered')
+  return call[0] as (details: { url: string }) => { action: string }
+}
+
 // ─── Test Suite ────────────────────────────────────────────
 
 describe('WindowManager', () => {
@@ -399,6 +405,28 @@ describe('WindowManager', () => {
 
       expect(event.preventDefault).toHaveBeenCalled()
       expect(shell.openExternal).toHaveBeenCalledWith('https://external.example.com/page')
+    })
+
+    it('opens safe http popup URLs externally and denies the popup', () => {
+      wm.open('default' as never)
+      const win = createdWindows[0]
+      const handler = getWindowOpenHandler(win)
+
+      const result = handler({ url: 'https://external.example.com/page' })
+
+      expect(result).toEqual({ action: 'deny' })
+      expect(shell.openExternal).toHaveBeenCalledWith('https://external.example.com/page')
+    })
+
+    it('denies unsafe popup URL schemes without opening them externally', () => {
+      wm.open('default' as never)
+      const win = createdWindows[0]
+      const handler = getWindowOpenHandler(win)
+
+      const result = handler({ url: 'javascript:alert(1)' })
+
+      expect(result).toEqual({ action: 'deny' })
+      expect(shell.openExternal).not.toHaveBeenCalledWith('javascript:alert(1)')
     })
   })
 
