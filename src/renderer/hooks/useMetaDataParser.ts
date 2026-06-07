@@ -12,20 +12,29 @@ export function useMetaDataParser<T extends string>(
   const { timeout = 5000 } = options || {}
 
   const [metadata, setMetadata] = useState<Record<T, string>>({} as Record<T, string>)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(Boolean(link))
   const [error, setError] = useState<Error | null>(null)
 
   const abortControllerRef = useRef<AbortController | null>(null)
+  const isFetchingRef = useRef(false)
+
+  useEffect(() => {
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+    isFetchingRef.current = false
+    setMetadata({} as Record<T, string>)
+    setError(null)
+    setIsLoading(Boolean(link))
+  }, [link])
 
   const parseMetadata = useCallback(async () => {
-    if (!link || !isLoading) return
+    if (!link || isFetchingRef.current) return
 
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-    }
+    abortControllerRef.current?.abort()
 
     const controller = new AbortController()
     abortControllerRef.current = controller
+    isFetchingRef.current = true
 
     setIsLoading(true)
     setError(null)
@@ -57,15 +66,19 @@ export function useMetaDataParser<T extends string>(
       }
       setError(err instanceof Error ? err : new Error('Failed to fetch HTML'))
     } finally {
-      setIsLoading(false)
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null
+        isFetchingRef.current = false
+        setIsLoading(false)
+      }
     }
-  }, [isLoading, link, properties, timeout])
+  }, [link, properties, timeout])
 
   useEffect(() => {
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
+      abortControllerRef.current?.abort()
+      abortControllerRef.current = null
+      isFetchingRef.current = false
     }
   }, [])
 
