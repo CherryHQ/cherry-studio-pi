@@ -22,58 +22,21 @@ export class OvOcrService extends OcrBaseService {
   }
 
   public isAvailable(): boolean {
-    return (
-      isWin &&
-      os.cpus()[0].model.toLowerCase().includes('intel') &&
-      os.cpus()[0].model.toLowerCase().includes('ultra') &&
-      fs.existsSync(PATH_BAT_FILE)
-    )
+    const cpuModel = os.cpus()[0]?.model.toLowerCase() ?? ''
+    return isWin && cpuModel.includes('intel') && cpuModel.includes('ultra') && fs.existsSync(PATH_BAT_FILE)
   }
 
-  private getOvOcrPath(): string {
-    return path.join(os.homedir(), HOME_CHERRY_DIR, 'ovms', 'ovocr')
-  }
-
-  private getImgDir(): string {
-    return path.join(this.getOvOcrPath(), 'img')
-  }
-
-  private getOutputDir(): string {
-    return path.join(this.getOvOcrPath(), 'output')
-  }
-
-  private async clearDirectory(dirPath: string): Promise<void> {
-    if (fs.existsSync(dirPath)) {
-      const files = await fs.promises.readdir(dirPath)
-      for (const file of files) {
-        const filePath = path.join(dirPath, file)
-        const stats = await fs.promises.stat(filePath)
-        if (stats.isDirectory()) {
-          await this.clearDirectory(filePath)
-          await fs.promises.rmdir(filePath)
-        } else {
-          await fs.promises.unlink(filePath)
-        }
-      }
-    } else {
-      // If the directory does not exist, create it
-      await fs.promises.mkdir(dirPath, { recursive: true })
-    }
-  }
-
-  private async copyFileToImgDir(sourceFilePath: string, targetFileName: string): Promise<void> {
-    const imgDir = this.getImgDir()
+  private async copyFileToImgDir(imgDir: string, sourceFilePath: string, targetFileName: string): Promise<void> {
     const targetFilePath = path.join(imgDir, targetFileName)
     await fs.promises.copyFile(sourceFilePath, targetFilePath)
   }
 
-  private async runOcrBatch(): Promise<void> {
-    const ovOcrPath = this.getOvOcrPath()
-
+  private async runOcrBatch(workingDirectory: string): Promise<void> {
     try {
-      // Execute run.bat in the ov-ocr directory
+      // The batch reads ./img and writes ./output relative to cwd, so each OCR
+      // request gets an isolated temporary working directory.
       await execAsync(`"${PATH_BAT_FILE}"`, {
-        cwd: ovOcrPath,
+        cwd: workingDirectory,
         timeout: 60000 // 60 second timeout
       })
     } catch (error) {
@@ -85,23 +48,29 @@ export class OvOcrService extends OcrBaseService {
   private async ocrImage(filePath: string, options?: OcrOvConfig): Promise<OcrResult> {
     logger.info(`OV OCR called on ${filePath} with options ${JSON.stringify(options)}`)
 
+    let workingDirectory: string | null = null
+
     try {
-      // 1. Clear img directory and output directory
-      await this.clearDirectory(this.getImgDir())
-      await this.clearDirectory(this.getOutputDir())
+      workingDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'cherry-ovocr-'))
+      const imgDir = path.join(workingDirectory, 'img')
+      const outputDir = path.join(workingDirectory, 'output')
+
+      // 1. Create isolated img and output directories for this request
+      await fs.promises.mkdir(imgDir, { recursive: true })
+      await fs.promises.mkdir(outputDir, { recursive: true })
 
       // 2. Copy file to img directory
       const fileName = path.basename(filePath)
-      await this.copyFileToImgDir(filePath, fileName)
+      await this.copyFileToImgDir(imgDir, filePath, fileName)
       logger.info(`File copied to img directory: ${fileName}`)
 
       // 3. Run run.bat
       logger.info('Running OV OCR batch process...')
-      await this.runOcrBatch()
+      await this.runOcrBatch(workingDirectory)
 
       // 4. Check that output/[basename].txt file exists
       const baseNameWithoutExt = path.basename(fileName, path.extname(fileName))
-      const outputFilePath = path.join(this.getOutputDir(), `${baseNameWithoutExt}.txt`)
+      const outputFilePath = path.join(outputDir, `${baseNameWithoutExt}.txt`)
       if (!fs.existsSync(outputFilePath)) {
         throw new Error(`OV OCR output file not found at: ${outputFilePath}`)
       }
@@ -115,6 +84,10 @@ export class OvOcrService extends OcrBaseService {
     } catch (error) {
       logger.error(`Error during OV OCR process: ${error}`)
       throw error
+    } finally {
+      if (workingDirectory) {
+        await fs.promises.rm(workingDirectory, { recursive: true, force: true })
+      }
     }
   }
 
