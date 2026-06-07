@@ -320,7 +320,7 @@ export class AppUpdaterService extends BaseService {
 
     logger.info('Failed to fetch update config, falling back to default feed URL')
     // Fallback: use default feed URL based on mirror
-    const defaultFeedUrl = mirror === UpdateMirror.GITCODE ? FeedUrl.PRODUCTION : FeedUrl.GITHUB_LATEST
+    const defaultFeedUrl = FeedUrl.GITHUB_LATEST
 
     logger.info(`Using fallback feed URL: ${defaultFeedUrl}`)
     this._setChannel(UpgradeChannel.LATEST, defaultFeedUrl)

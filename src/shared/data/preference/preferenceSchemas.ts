@@ -607,7 +607,7 @@ export const DefaultPreferences: PreferenceSchemas = {
     'data.backup.webdav.host': '',
     'data.backup.webdav.max_backups': 0,
     'data.backup.webdav.pass': '',
-    'data.backup.webdav.path': '/cherry-studio',
+    'data.backup.webdav.path': '/cherry-studio-pi',
     'data.backup.webdav.skip_backup_file': false,
     'data.backup.webdav.sync_interval': 0,
     'data.backup.webdav.user': '',

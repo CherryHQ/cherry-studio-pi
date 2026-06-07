@@ -184,7 +184,7 @@ const AboutSettings: FC = () => {
           <span className="font-semibold text-[15px]">{t('settings.about.title')}</span>
           <button
             type="button"
-            onClick={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio')}
+            onClick={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio-pi')}
             className="inline-flex items-center justify-center rounded-md p-1 text-(--color-foreground) transition-colors hover:bg-(--color-muted)">
             <Github className="size-5" />
           </button>
@@ -196,7 +196,7 @@ const AboutSettings: FC = () => {
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <button
               type="button"
-              onClick={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio')}
+              onClick={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio-pi')}
               className="relative cursor-pointer">
               {appUpdateState.downloadProgress > 0 && (
                 <div className="-top-0.5 -left-0.5 pointer-events-none absolute">
@@ -218,7 +218,7 @@ const AboutSettings: FC = () => {
               <div className="text-(--color-foreground-secondary) text-sm">{t('settings.about.description')}</div>
               <button
                 type="button"
-                onClick={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio/releases')}
+                onClick={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio-pi/releases')}
                 className="mt-1.5">
                 <Badge className="cursor-pointer rounded-md border-primary/20 bg-primary/10 px-1.5 py-0 font-medium text-[11px] text-primary leading-4 transition-colors hover:bg-primary/15">
                   v{version}
@@ -331,7 +331,7 @@ const AboutSettings: FC = () => {
           icon={<Github className="size-4.5" />}
           title={t('settings.about.feedback.title')}
           actionLabel={t('settings.about.feedback.button')}
-          onAction={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio/issues/new/choose')}
+          onAction={() => onOpenWebsite('https://github.com/CherryHQ/cherry-studio-pi/issues/new/choose')}
         />
         <Divider className="my-3" />
         <AboutActionRow
