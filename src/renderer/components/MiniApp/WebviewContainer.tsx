@@ -42,7 +42,8 @@ const WebviewContainer = memo(
     )
 
     useEffect(() => {
-      if (!webviewRef.current) return
+      const webview = webviewRef.current
+      if (!webview) return
 
       let loadCallbackFired = false
 
@@ -74,7 +75,7 @@ const WebviewContainer = memo(
       }
 
       const handleDomReady = () => {
-        const webviewId = webviewRef.current?.getWebContentsId()
+        const webviewId = webview.getWebContentsId()
         if (webviewId) {
           void window.api?.webview?.setSpellCheckEnabled?.(webviewId, enableSpellCheck)
           // Set link opening behavior for this webview
@@ -87,21 +88,21 @@ const WebviewContainer = memo(
         loadCallbackFired = false
       }
 
-      webviewRef.current.addEventListener('did-start-loading', handleStartLoading)
-      webviewRef.current.addEventListener('dom-ready', handleDomReady)
-      webviewRef.current.addEventListener('did-finish-load', handleLoaded)
-      webviewRef.current.addEventListener('ready-to-show', handleReadyToShow)
-      webviewRef.current.addEventListener('did-navigate-in-page', handleNavigate)
+      webview.addEventListener('did-start-loading', handleStartLoading)
+      webview.addEventListener('dom-ready', handleDomReady)
+      webview.addEventListener('did-finish-load', handleLoaded)
+      webview.addEventListener('ready-to-show', handleReadyToShow)
+      webview.addEventListener('did-navigate-in-page', handleNavigate)
 
       // we set the url when the webview is ready
-      webviewRef.current.src = url
+      webview.src = url
 
       return () => {
-        webviewRef.current?.removeEventListener('did-start-loading', handleStartLoading)
-        webviewRef.current?.removeEventListener('dom-ready', handleDomReady)
-        webviewRef.current?.removeEventListener('did-finish-load', handleLoaded)
-        webviewRef.current?.removeEventListener('ready-to-show', handleReadyToShow)
-        webviewRef.current?.removeEventListener('did-navigate-in-page', handleNavigate)
+        webview.removeEventListener('did-start-loading', handleStartLoading)
+        webview.removeEventListener('dom-ready', handleDomReady)
+        webview.removeEventListener('did-finish-load', handleLoaded)
+        webview.removeEventListener('ready-to-show', handleReadyToShow)
+        webview.removeEventListener('did-navigate-in-page', handleNavigate)
       }
       // because the appid and url are enough, no need to add onLoadedCallback
       // eslint-disable-next-line react-hooks/exhaustive-deps
