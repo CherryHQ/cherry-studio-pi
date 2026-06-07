@@ -12,8 +12,8 @@ import {
   persistSettingValue,
   readSettingsForAgent
 } from '@main/services/appCapabilities/providers/settings'
+import { readRendererStoreValue } from '@main/services/appCapabilities/rendererBridge'
 import { isAllowedAppRoute, normalizeAppRoute, pickPath, sanitizeForAgent } from '@main/services/appCapabilities/utils'
-import { reduxService } from '@main/services/ReduxService'
 import { getName, getNotesDir, isPathInside, scanDir } from '@main/utils/file'
 import express from 'express'
 
@@ -56,7 +56,12 @@ async function navigate(route: string) {
 }
 
 async function getNotesRoot() {
-  const noteState = await reduxService.select<any>('state.note').catch(() => null)
+  const preferredPath = await Promise.resolve()
+    .then(() => application.get('PreferenceService').get('feature.notes.path'))
+    .catch(() => '')
+  if (typeof preferredPath === 'string' && preferredPath.trim()) return path.resolve(preferredPath.trim())
+
+  const noteState = await readRendererStoreValue<any>('state.note').catch(() => null)
   return path.resolve(noteState?.notesPath || getNotesDir())
 }
 
@@ -266,7 +271,7 @@ appToolsRouter.get('/paintings/providers', async (_req, res, next) => {
 
 appToolsRouter.get('/paintings', async (req, res, next) => {
   try {
-    const paintings = await reduxService.select<any>('state.paintings')
+    const paintings = await readRendererStoreValue<any>('state.paintings').catch(() => ({}))
     res.json(listPaintingHistory(paintings, req.query))
   } catch (error) {
     next(error)
