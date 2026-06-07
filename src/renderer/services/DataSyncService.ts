@@ -106,9 +106,14 @@ export function subscribeDataSyncRuntimeState(listener: (state: DataSyncRuntimeS
 }
 
 function setDataSyncRunning(nextSyncing: boolean, nextStartedAt?: number | null) {
+  const previousState = getDataSyncRuntimeState()
   syncing = nextSyncing
   syncStartedAt = nextSyncing ? (nextStartedAt ?? syncStartedAt ?? Date.now()) : null
   const nextState = getDataSyncRuntimeState()
+  if (previousState.syncing === nextState.syncing && previousState.syncStartedAt === nextState.syncStartedAt) {
+    return
+  }
+
   for (const listener of syncStateListeners) {
     listener(nextState)
   }
@@ -448,6 +453,7 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
   setDataSyncRunning(true)
   clearLocalChangeSyncTimeout()
   let mainSyncPromise: Promise<DataSyncSummary> | null = null
+  let keepRendererSyncingAfterReturn = false
   try {
     await withDataSyncStageTimeout('恢复上次远端数据', () => hydratePreviouslyDownloadedRemoteData())
     await prepareStorageV2ForDataSyncWithSuppressedNotifications()
@@ -476,6 +482,7 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
         if (mainSyncPromise) {
           continueMainSyncAfterRendererTimeout(mainSyncPromise)
         }
+        keepRendererSyncingAfterReturn = true
         return null
       }
     }
@@ -483,7 +490,9 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
     await rememberDataSyncFailure(message)
     throw error
   } finally {
-    setDataSyncRunning(false)
+    if (!keepRendererSyncingAfterReturn) {
+      setDataSyncRunning(false)
+    }
     await reconcileRendererSyncStateWithMainProcess().catch((error) => {
       logger.warn('Failed to reconcile data sync runtime state after sync completion', error as Error)
     })

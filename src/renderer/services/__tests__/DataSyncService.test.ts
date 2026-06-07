@@ -518,6 +518,10 @@ describe('DataSyncService', () => {
     const mainStartedAt = Date.parse('2026-06-06T10:00:00.000Z')
     vi.setSystemTime(new Date(mainStartedAt))
     const pendingSync = deferred<typeof successSummary>()
+    const states: boolean[] = []
+    const unsubscribe = subscribeDataSyncRuntimeState((state) => {
+      states.push(state.syncing)
+    })
     mocks.syncNow.mockReturnValueOnce(pendingSync.promise)
     mocks.getStatus
       .mockResolvedValueOnce({ syncing: false, lastSummary: null, conflicts: [], syncStartedAt: null })
@@ -571,6 +575,8 @@ describe('DataSyncService', () => {
       syncing: true,
       syncStartedAt: mainStartedAt
     })
+    expect(states[0]).toBe(false)
+    expect(states.slice(1).every(Boolean)).toBe(true)
 
     pendingSync.resolve({
       ...successSummary,
@@ -596,6 +602,7 @@ describe('DataSyncService', () => {
       syncing: false,
       syncStartedAt: null
     })
+    unsubscribe()
   })
 
   it('runs a debounced auto sync after local Storage v2 data changes', async () => {
