@@ -41,6 +41,7 @@ vi.mock('path', async () => {
 const { mockLogger } = vi.hoisted(() => ({
   mockLogger: {
     info: vi.fn(),
+    debug: vi.fn(),
     warn: vi.fn(),
     error: vi.fn()
   }
@@ -65,6 +66,11 @@ vi.mock('electron', () => ({
 
 vi.mock('fs-extra', () => ({
   default: {
+    promises: {
+      mkdtemp: vi.fn(),
+      mkdir: vi.fn(),
+      readFile: vi.fn()
+    },
     pathExists: vi.fn(),
     remove: vi.fn(),
     ensureDir: vi.fn(),
@@ -76,7 +82,14 @@ vi.mock('fs-extra', () => ({
     readFile: vi.fn(),
     writeFile: vi.fn(),
     createWriteStream: vi.fn(),
-    createReadStream: vi.fn()
+    createReadStream: vi.fn(),
+    existsSync: vi.fn(),
+    mkdirSync: vi.fn()
+  },
+  promises: {
+    mkdtemp: vi.fn(),
+    mkdir: vi.fn(),
+    readFile: vi.fn()
   },
   pathExists: vi.fn(),
   remove: vi.fn(),
@@ -89,7 +102,9 @@ vi.mock('fs-extra', () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
   createWriteStream: vi.fn(),
-  createReadStream: vi.fn()
+  createReadStream: vi.fn(),
+  existsSync: vi.fn(),
+  mkdirSync: vi.fn()
 }))
 
 vi.mock('@application', () => ({
@@ -131,6 +146,8 @@ import * as fs from 'fs-extra'
 import * as path from 'path'
 
 import BackupManager from '../LegacyBackupManager'
+import S3Storage from '../S3Storage'
+import WebDav from '../WebDav'
 
 // Helper to construct platform-independent paths for assertions
 // The implementation uses path.normalize() which converts to platform separators
@@ -145,6 +162,20 @@ const createStats = (type: 'directory' | 'file' | 'symlink', size = 0) => ({
   isSymbolicLink: () => type === 'symlink'
 })
 
+function mockWriteStream() {
+  const stream = {
+    write: vi.fn(),
+    end: vi.fn(),
+    on: vi.fn((event: string, callback: () => void) => {
+      if (event === 'finish') {
+        queueMicrotask(callback)
+      }
+      return stream
+    })
+  }
+  return stream
+}
+
 describe('BackupManager direct backup metadata', () => {
   it('should identify new direct backups as Cherry Studio Pi', () => {
     const backupManager = new BackupManager()
@@ -156,6 +187,25 @@ describe('BackupManager direct backup metadata', () => {
         version: 6
       })
     )
+  })
+})
+
+describe('BackupManager temp workspace isolation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('creates an isolated temp workspace under the backup root for each operation', async () => {
+    const backupManager = new BackupManager()
+    vi.mocked(fs.ensureDir).mockResolvedValue(undefined as never)
+    vi.mocked((fs as any).promises.mkdtemp).mockResolvedValue('/tmp/cherry-studio-pi/backup/backup-random')
+
+    await expect((backupManager as any).createTempWorkspace('backup-')).resolves.toBe(
+      '/tmp/cherry-studio-pi/backup/backup-random'
+    )
+
+    expect(fs.ensureDir).toHaveBeenCalledWith('/tmp/cherry-studio-pi/backup')
+    expect((fs as any).promises.mkdtemp).toHaveBeenCalledWith('/tmp/cherry-studio-pi/backup/backup-')
   })
 })
 
@@ -369,6 +419,80 @@ describe('BackupManager.copyDirWithProgress - Symlink Handling', () => {
       expect.stringContaining('Skipping circular symlink directory'),
       expect.objectContaining({ path: '/src/self-link', realPath: '/src' })
     )
+  })
+})
+
+describe('BackupManager remote restore cleanup', () => {
+  let backupManager: BackupManager
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    backupManager = new BackupManager()
+    vi.mocked(fs.existsSync).mockReturnValue(true)
+    vi.mocked(fs.createWriteStream).mockReturnValue(mockWriteStream() as never)
+    vi.mocked(fs.remove).mockResolvedValue(undefined as never)
+  })
+
+  it('removes the downloaded WebDAV restore zip after a successful restore', async () => {
+    const getFileContents = vi.fn().mockResolvedValue(Buffer.from('zip-data'))
+    vi.mocked(WebDav).mockImplementation(() => ({ getFileContents }) as never)
+    const restore = vi.spyOn(backupManager, 'restore').mockResolvedValue(undefined)
+
+    await backupManager.restoreFromWebdav(
+      {} as Electron.IpcMainInvokeEvent,
+      {
+        webdavHost: 'https://dav.example.com',
+        webdavUser: 'user',
+        webdavPass: 'pass',
+        fileName: 'remote.zip'
+      } as any
+    )
+
+    expect(getFileContents).toHaveBeenCalledWith('remote.zip')
+    expect(restore).toHaveBeenCalledWith(expect.anything(), '/tmp/cherry-studio-pi/backup/remote.zip')
+    expect(fs.remove).toHaveBeenCalledWith('/tmp/cherry-studio-pi/backup/remote.zip')
+  })
+
+  it('removes the downloaded WebDAV restore zip when restore fails', async () => {
+    const getFileContents = vi.fn().mockResolvedValue(Buffer.from('zip-data'))
+    vi.mocked(WebDav).mockImplementation(() => ({ getFileContents }) as never)
+    vi.spyOn(backupManager, 'restore').mockRejectedValue(new Error('restore failed'))
+
+    await expect(
+      backupManager.restoreFromWebdav(
+        {} as Electron.IpcMainInvokeEvent,
+        {
+          webdavHost: 'https://dav.example.com',
+          webdavUser: 'user',
+          webdavPass: 'pass',
+          fileName: 'remote.zip'
+        } as any
+      )
+    ).rejects.toThrow('restore failed')
+
+    expect(fs.remove).toHaveBeenCalledWith('/tmp/cherry-studio-pi/backup/remote.zip')
+  })
+
+  it('removes the downloaded S3 restore zip after restore finishes', async () => {
+    const getFileContents = vi.fn().mockResolvedValue(Buffer.from('zip-data'))
+    vi.mocked(S3Storage).mockImplementation(() => ({ getFileContents }) as never)
+    const restore = vi.spyOn(backupManager, 'restore').mockResolvedValue(undefined)
+
+    await backupManager.restoreFromS3(
+      {} as Electron.IpcMainInvokeEvent,
+      {
+        endpoint: 'https://s3.example.com',
+        region: 'us-east-1',
+        bucket: 'backups',
+        accessKeyId: 'id',
+        secretAccessKey: 'secret',
+        fileName: 'remote-s3.zip'
+      } as any
+    )
+
+    expect(getFileContents).toHaveBeenCalledWith('remote-s3.zip')
+    expect(restore).toHaveBeenCalledWith(expect.anything(), '/tmp/cherry-studio-pi/backup/remote-s3.zip')
+    expect(fs.remove).toHaveBeenCalledWith('/tmp/cherry-studio-pi/backup/remote-s3.zip')
   })
 })
 
