@@ -53,6 +53,14 @@ async function executeRipgrep(args: string[]): Promise<{ exitCode: number; outpu
     throw new Error(result.output || 'Ripgrep binary not available')
   }
 
+  if (result.timedOut) {
+    throw new Error(`Ripgrep timed out: ${result.output || ''}`)
+  }
+
+  if (result.truncated) {
+    logger.warn('Ripgrep output truncated while listing files', { args: args.slice(0, 6) })
+  }
+
   return {
     exitCode: result.exitCode ?? 0,
     output: result.output || result.stderr || result.stdout
