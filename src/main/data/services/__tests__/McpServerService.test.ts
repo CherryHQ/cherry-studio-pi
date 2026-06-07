@@ -108,6 +108,16 @@ describe('McpServerService', () => {
       expect(row.name).toBe('updated-name')
     })
 
+    it('should clear a custom timeout when timeout is set to null', async () => {
+      await seedServer({ timeout: 120 })
+
+      const result = await mcpServerService.update('srv-1', { timeout: null })
+      expect(result.timeout).toBeUndefined()
+
+      const [row] = await dbh.db.select().from(mcpServerTable).where(eq(mcpServerTable.id, 'srv-1'))
+      expect(row.timeout).toBeNull()
+    })
+
     it('should throw NOT_FOUND when updating non-existent server', async () => {
       await expect(mcpServerService.update('non-existent', { name: 'x' })).rejects.toMatchObject({
         code: ErrorCode.NOT_FOUND

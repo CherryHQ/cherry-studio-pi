@@ -372,7 +372,7 @@ const McpSettings: React.FC = () => {
       const values = form.getValues()
 
       // set basic fields
-      const mcpServer: McpServer = {
+      const mcpServer: Omit<Partial<McpServer>, 'timeout'> & { id: string; timeout?: number | null } = {
         ...server,
         id: server.id,
         name: values.name,
@@ -381,7 +381,7 @@ const McpSettings: React.FC = () => {
         isActive: values.isActive ?? server.isActive,
         registryUrl: values.registryUrl,
         searchKey: server.searchKey,
-        timeout: values.timeout || server.timeout,
+        timeout: values.timeout ?? null,
         longRunning: values.longRunning,
         // Use nullish coalescing to allow empty strings (for deletion)
         provider: values.provider ?? server.provider,

@@ -47,13 +47,19 @@ const MCP_SERVER_MUTABLE_FIELDS = {
   installedAt: true
 } as const
 
+const McpServerWriteSchema = McpServerSchema.pick(MCP_SERVER_MUTABLE_FIELDS).extend({
+  // Nullable DB columns are exposed as undefined on reads, but write DTOs need
+  // a distinct value that can clear an existing custom timeout.
+  timeout: z.number().nullable().optional()
+})
+
 /**
  * DTO for creating a new MCP server.
  * - `name` is required (non-empty)
  * - `id` is excluded (auto-generated UUID by database)
  * - All other fields are optional
  */
-export const CreateMcpServerSchema = McpServerSchema.pick(MCP_SERVER_MUTABLE_FIELDS).partial().required({ name: true })
+export const CreateMcpServerSchema = McpServerWriteSchema.partial().required({ name: true })
 export type CreateMcpServerDto = z.infer<typeof CreateMcpServerSchema>
 
 /**
