@@ -26,9 +26,11 @@ export const ClickableFilePath = memo(function ClickableFilePath({ path, display
 
   const openInEditor = useCallback(
     (app: ExternalAppInfo) => {
-      window.open(buildEditorUrl(app, path))
+      window.api.shell.openExternal(buildEditorUrl(app, path)).catch(() => {
+        window.toast.error(t('chat.input.tools.open_file_error', { path }))
+      })
     },
-    [path]
+    [path, t]
   )
 
   const handleOpen = useCallback(

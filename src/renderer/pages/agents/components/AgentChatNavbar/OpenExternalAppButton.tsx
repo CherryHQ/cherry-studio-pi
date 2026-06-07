@@ -30,14 +30,17 @@ const OpenExternalAppButton = ({ workdir, className }: OpenExternalAppButtonProp
         case 'vscode':
         case 'cursor':
         case 'zed':
-          window.open(buildEditorUrl(app, workdir))
+          window.api.shell.openExternal(buildEditorUrl(app, workdir)).catch((error) => {
+            logger.warn(`Failed to open external app: ${app.id}`, error as Error)
+            window.toast.error(t('chat.input.tools.open_file_error', { path: workdir }))
+          })
           break
         default:
           logger.error(`Unexpected Error: External app not found: ${app.id}`)
           window.toast.error(`Unexpected Error: External app not found: ${app.id}`)
       }
     },
-    [workdir]
+    [t, workdir]
   )
 
   // TODO: migrate it to preferences in v2

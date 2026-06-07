@@ -815,7 +815,7 @@ export const exportMarkdownToObsidian = async (attributes: any): Promise<void> =
       obsidianUrl += '&append=true'
     }
 
-    window.open(obsidianUrl)
+    await window.api.shell.openExternal(obsidianUrl)
     window.toast.success(i18n.t('chat.topics.export.obsidian_export_success'))
   } catch (error) {
     logger.error('Failed to export to Obsidian:', error as Error)
