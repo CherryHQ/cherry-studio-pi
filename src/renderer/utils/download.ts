@@ -2,6 +2,13 @@ import { loggerService } from '@logger'
 import i18n from '@renderer/i18n'
 
 const logger = loggerService.withContext('Utils:download')
+const OBJECT_URL_REVOKE_DELAY_MS = 1000
+
+export const revokeObjectUrlLater = (url: string) => {
+  const timer = setTimeout(() => URL.revokeObjectURL(url), OBJECT_URL_REVOKE_DELAY_MS)
+  const maybeNodeTimer = timer as { unref?: () => void }
+  maybeNodeTimer.unref?.()
+}
 
 const showDownloadError = (error: unknown) => {
   logger.error('Download failed:', error as Error)
@@ -69,14 +76,17 @@ export const download = (url: string, filename?: string) => {
       return response.blob().then((blob) => ({ blob, finalFilename }))
     })
     .then(({ blob, finalFilename }) => {
-      const blobUrl = URL.createObjectURL(new Blob([blob]))
+      const blobUrl = URL.createObjectURL(blob)
       const link = document.createElement('a')
-      link.href = blobUrl
-      link.download = finalFilename
-      document.body.appendChild(link)
-      link.click()
-      URL.revokeObjectURL(blobUrl)
-      link.remove()
+      try {
+        link.href = blobUrl
+        link.download = finalFilename
+        document.body.appendChild(link)
+        link.click()
+      } finally {
+        revokeObjectUrlLater(blobUrl)
+        link.remove()
+      }
     })
     .catch((error) => {
       showDownloadError(error)

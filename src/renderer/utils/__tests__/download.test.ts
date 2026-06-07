@@ -12,7 +12,7 @@ vi.mock('@renderer/i18n', () => ({
   }
 }))
 
-import { download } from '../download'
+import { download, revokeObjectUrlLater } from '../download'
 
 // Mock DOM 方法
 const mockCreateElement = vi.fn()
@@ -70,6 +70,7 @@ describe('download', () => {
     })
 
     afterEach(() => {
+      vi.useRealTimers()
       vi.restoreAllMocks()
     })
 
@@ -141,6 +142,18 @@ describe('download', () => {
 
         const element = mockCreateElement.mock.results[0].value
         expect(element.download).toBe(`${now}_diagram.svg`)
+      })
+
+      it('should revoke owned object URLs after the click has settled', () => {
+        vi.useFakeTimers()
+
+        revokeObjectUrlLater('blob:mock-url')
+
+        expect(mockRevokeObjectURL).not.toHaveBeenCalled()
+        vi.advanceTimersByTime(999)
+        expect(mockRevokeObjectURL).not.toHaveBeenCalled()
+        vi.advanceTimersByTime(1)
+        expect(mockRevokeObjectURL).toHaveBeenCalledWith('blob:mock-url')
       })
     })
 

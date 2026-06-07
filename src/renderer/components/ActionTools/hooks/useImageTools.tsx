@@ -1,7 +1,7 @@
 import { loggerService } from '@logger'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { ImagePreviewService } from '@renderer/services/ImagePreviewService'
-import { download as downloadFile } from '@renderer/utils/download'
+import { download as downloadFile, revokeObjectUrlLater } from '@renderer/utils/download'
 import { svgToPngBlob, svgToSvgBlob } from '@renderer/utils/image'
 import type { RefObject } from 'react'
 import { useCallback, useEffect, useRef } from 'react'
@@ -234,13 +234,19 @@ export const useImageTools = (
         if (format === 'svg') {
           const blob = svgToSvgBlob(imgElement)
           const url = URL.createObjectURL(blob)
-          downloadFile(url, `${prefix}-${timestamp}.svg`)
-          URL.revokeObjectURL(url)
+          try {
+            downloadFile(url, `${prefix}-${timestamp}.svg`)
+          } finally {
+            revokeObjectUrlLater(url)
+          }
         } else {
           const blob = await svgToPngBlob(imgElement)
           const pngUrl = URL.createObjectURL(blob)
-          downloadFile(pngUrl, `${prefix}-${timestamp}.png`)
-          URL.revokeObjectURL(pngUrl)
+          try {
+            downloadFile(pngUrl, `${prefix}-${timestamp}.png`)
+          } finally {
+            revokeObjectUrlLater(pngUrl)
+          }
         }
       } catch (error) {
         logger.error('Download failed:', error as Error)
