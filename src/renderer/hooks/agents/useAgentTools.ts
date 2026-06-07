@@ -13,7 +13,7 @@ import type { AgentConfiguration, AgentPermissionMode } from '@shared/data/api/s
 import type { SharedCacheKey } from '@shared/data/cache/cacheSchemas'
 import type { McpServer } from '@shared/data/types/mcpServer'
 import type { McpTool } from '@types'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 type McpToolsCacheKey = `mcp.tools.${string}`
 
@@ -28,13 +28,17 @@ export type AgentToolSource = {
 }
 
 function useMcpToolsCache(serverIds: readonly string[]): Record<string, McpTool[]> {
-  const uniqueIds = useMemo(() => Array.from(new Set(serverIds)).sort(), [serverIds])
+  const serverIdsSignature = JSON.stringify(Array.from(new Set(serverIds)).sort())
+  const uniqueIds = useMemo(() => JSON.parse(serverIdsSignature) as string[], [serverIdsSignature])
   const cacheKeys = useMemo(() => uniqueIds.map((id) => mcpToolsCacheKey(id)), [uniqueIds])
 
-  const readSnapshot = () =>
-    Object.fromEntries(
-      uniqueIds.map((id) => [id, cacheService.getShared(mcpToolsCacheKey(id) as SharedCacheKey) ?? []])
-    ) as Record<string, McpTool[]>
+  const readSnapshot = useCallback(
+    () =>
+      Object.fromEntries(
+        uniqueIds.map((id) => [id, cacheService.getShared(mcpToolsCacheKey(id) as SharedCacheKey) ?? []])
+      ) as Record<string, McpTool[]>,
+    [uniqueIds]
+  )
 
   const [snapshot, setSnapshot] = useState<Record<string, McpTool[]>>(readSnapshot)
 
@@ -44,8 +48,7 @@ function useMcpToolsCache(serverIds: readonly string[]): Record<string, McpTool[
     return () => {
       disposers.forEach((dispose) => dispose())
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cacheKeys.join('|')])
+  }, [cacheKeys, readSnapshot])
 
   return snapshot
 }
