@@ -51,9 +51,12 @@ interface ProgressData {
   total: number
 }
 
+const TEMP_APP_DIR = 'cherry-studio-pi'
+const LEGACY_TEMP_APP_DIR = 'cherry-studio'
+
 class BackupManager {
-  private tempDir = path.join(app.getPath('temp'), 'cherry-studio', 'backup', 'temp')
-  private backupDir = path.join(app.getPath('temp'), 'cherry-studio', 'backup')
+  private tempDir = path.join(app.getPath('temp'), TEMP_APP_DIR, 'backup', 'temp')
+  private backupDir = path.join(app.getPath('temp'), TEMP_APP_DIR, 'backup')
 
   // Cached instance to avoid recreating
   private s3Storage: S3Storage | null = null
@@ -1254,8 +1257,8 @@ class BackupManager {
       .replace(/[-:T.Z]/g, '')
       .slice(0, 14)
 
-    const fileName = `cherry-studio.${timestamp}.zip`
-    const tempPath = path.join(app.getPath('temp'), 'cherry-studio', 'lan-transfer')
+    const fileName = `cherry-studio-pi.${timestamp}.zip`
+    const tempPath = path.join(app.getPath('temp'), TEMP_APP_DIR, 'lan-transfer')
     const targetPath = destinationPath || tempPath
 
     // Ensure temp directory exists
@@ -1275,11 +1278,17 @@ class BackupManager {
   async deleteLanTransferBackup(_: Electron.IpcMainInvokeEvent, filePath: string): Promise<boolean> {
     try {
       // Security check: only allow deletion within temp directory
-      const tempBase = path.normalize(path.join(app.getPath('temp'), 'cherry-studio', 'lan-transfer'))
+      const tempBases = [
+        path.normalize(path.join(app.getPath('temp'), TEMP_APP_DIR, 'lan-transfer')),
+        path.normalize(path.join(app.getPath('temp'), LEGACY_TEMP_APP_DIR, 'lan-transfer'))
+      ]
       const resolvedPath = path.normalize(path.resolve(filePath))
 
       // Use normalized paths with trailing separator to prevent prefix attacks (e.g., /temp-evil)
-      if (!resolvedPath.startsWith(tempBase + path.sep) && resolvedPath !== tempBase) {
+      const isAllowedTempPath = tempBases.some(
+        (tempBase) => resolvedPath.startsWith(tempBase + path.sep) || resolvedPath === tempBase
+      )
+      if (!isAllowedTempPath) {
         logger.warn(`[BackupManager] Attempted to delete file outside temp directory: ${filePath}`)
         return false
       }
