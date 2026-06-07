@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
@@ -15,14 +16,17 @@ import {
 import { readRendererStoreValue } from '@main/services/appCapabilities/rendererBridge'
 import { isAllowedAppRoute, normalizeAppRoute, pickPath, sanitizeForAgent } from '@main/services/appCapabilities/utils'
 import { notifyMainProcessDataSyncLocalChange } from '@main/services/appData/DataSyncLocalChangeNotifier'
-import { getName, getNotesDir, isPathInside, scanDir } from '@main/utils/file'
+import { getName, getNotesDir, isPathInside } from '@main/utils/file'
 import express from 'express'
 
 const logger = loggerService.withContext('ApiServer:AppTools')
 const appToolsRouter = express.Router()
 const DEFAULT_NOTES_SEARCH_LIMIT = 50
 const MAX_NOTES_SEARCH_LIMIT = 200
-const NOTES_SEARCH_CANDIDATE_MULTIPLIER = 5
+const MAX_NOTES_SEARCH_FILES = 5_000
+const MAX_NOTE_SEARCH_FILE_BYTES = 512 * 1024
+const MAX_NOTES_LIST_SCAN_ENTRIES = 5_000
+const MAX_NOTES_LIST_DEPTH = 10
 const DEFAULT_NOTE_READ_MAX_BYTES = 512 * 1024
 const MAX_NOTE_READ_MAX_BYTES = 2 * 1024 * 1024
 
@@ -90,18 +94,151 @@ async function resolveNoteDeletePath(root: string, input?: string) {
   return markdownStat?.isFile() ? markdownTarget : target
 }
 
-function flattenNotes(nodes: any[], result: any[] = []) {
-  for (const node of nodes) {
-    if (node.type === 'file') result.push(node)
-    if (node.children) flattenNotes(node.children, result)
-  }
-  return result
-}
-
 function normalizePositiveInteger(value: unknown, fallback: number, max: number) {
   const parsed = typeof value === 'string' && !value.trim() ? fallback : Number(value ?? fallback)
   const normalized = Number.isFinite(parsed) ? Math.trunc(parsed) : fallback
   return Math.max(1, Math.min(normalized, max))
+}
+
+function noteNodeId(externalPath: string) {
+  return createHash('sha1').update(externalPath.replace(/\\/g, '/')).digest('hex')
+}
+
+function toNoteTreePath(root: string, entryPath: string, stripMarkdownExt = false) {
+  let relativePath = path.relative(root, entryPath).replace(/\\/g, '/')
+  if (stripMarkdownExt) relativePath = relativePath.replace(/\.md$/i, '')
+  return `/${relativePath}`
+}
+
+async function scanNotesTreeBounded(root: string) {
+  let scannedEntries = 0
+  let scanTruncated = false
+
+  const scanDirectory = async (dirPath: string, depth: number): Promise<any[]> => {
+    if (depth > MAX_NOTES_LIST_DEPTH || scanTruncated) {
+      scanTruncated = true
+      return []
+    }
+
+    const entries = await fs.readdir(dirPath, { withFileTypes: true }).catch(() => [])
+    const nodes: any[] = []
+
+    entries.sort((left, right) => {
+      if (left.isDirectory() !== right.isDirectory()) return left.isDirectory() ? -1 : 1
+      return left.name.localeCompare(right.name)
+    })
+
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue
+      scannedEntries += 1
+      if (scannedEntries > MAX_NOTES_LIST_SCAN_ENTRIES) {
+        scanTruncated = true
+        break
+      }
+
+      const entryPath = path.join(dirPath, entry.name)
+      const externalPath = entryPath.replace(/\\/g, '/')
+      if (entry.isDirectory()) {
+        const stats = await fs.stat(entryPath).catch(() => null)
+        nodes.push({
+          id: noteNodeId(externalPath),
+          name: entry.name,
+          treePath: toNoteTreePath(root, entryPath),
+          externalPath,
+          createdAt: stats?.birthtime.toISOString() ?? null,
+          updatedAt: stats?.mtime.toISOString() ?? null,
+          type: 'folder',
+          children: await scanDirectory(entryPath, depth + 1)
+        })
+        continue
+      }
+
+      if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== '.md') continue
+
+      const stats = await fs.stat(entryPath).catch(() => null)
+      const name = path.basename(entry.name, path.extname(entry.name))
+      nodes.push({
+        id: noteNodeId(externalPath),
+        name,
+        treePath: toNoteTreePath(root, entryPath, true),
+        externalPath,
+        createdAt: stats?.birthtime.toISOString() ?? null,
+        updatedAt: stats?.mtime.toISOString() ?? null,
+        type: 'file',
+        children: []
+      })
+    }
+
+    return nodes
+  }
+
+  return {
+    notes: await scanDirectory(root, 0),
+    scannedEntries,
+    scanLimit: MAX_NOTES_LIST_SCAN_ENTRIES,
+    scanTruncated
+  }
+}
+
+async function collectNoteFilesForSearch(root: string) {
+  const files: any[] = []
+  const stack = [{ dirPath: root, depth: 0 }]
+  let scannedEntries = 0
+  let scanTruncated = false
+
+  while (stack.length > 0 && files.length < MAX_NOTES_SEARCH_FILES && !scanTruncated) {
+    const current = stack.pop()!
+    const entries = await fs.readdir(current.dirPath, { withFileTypes: true }).catch(() => [])
+    const childDirectories: Array<{ dirPath: string; depth: number }> = []
+
+    entries.sort((left, right) => {
+      if (left.isDirectory() !== right.isDirectory()) return left.isDirectory() ? -1 : 1
+      return left.name.localeCompare(right.name)
+    })
+
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue
+      scannedEntries += 1
+      if (scannedEntries > MAX_NOTES_LIST_SCAN_ENTRIES) {
+        scanTruncated = true
+        break
+      }
+
+      const entryPath = path.join(current.dirPath, entry.name)
+      if (entry.isDirectory()) {
+        if (current.depth < MAX_NOTES_LIST_DEPTH) {
+          childDirectories.push({ dirPath: entryPath, depth: current.depth + 1 })
+        }
+        continue
+      }
+
+      if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== '.md') continue
+
+      const externalPath = entryPath.replace(/\\/g, '/')
+      files.push({
+        id: noteNodeId(externalPath),
+        type: 'file',
+        name: path.basename(entry.name, path.extname(entry.name)),
+        treePath: toNoteTreePath(root, entryPath, true),
+        externalPath
+      })
+
+      if (files.length >= MAX_NOTES_SEARCH_FILES) {
+        scanTruncated = true
+        break
+      }
+    }
+
+    for (const child of childDirectories.reverse()) {
+      stack.push(child)
+    }
+  }
+
+  return {
+    files,
+    scannedEntries,
+    scanTruncated: scanTruncated || stack.length > 0
+  }
 }
 
 async function readTextFilePreview(filePath: string, maxBytes: number) {
@@ -232,7 +369,7 @@ appToolsRouter.post('/navigate', async (req, res, next) => {
 appToolsRouter.get('/notes', async (_req, res, next) => {
   try {
     const root = await getNotesRoot()
-    res.json({ root, notes: await scanDir(root) })
+    res.json({ root, ...(await scanNotesTreeBounded(root)) })
   } catch (error) {
     next(error)
   }
@@ -260,20 +397,48 @@ appToolsRouter.get('/notes/search', async (req, res, next) => {
     }
     const root = await getNotesRoot()
     const limit = normalizePositiveInteger(req.query.limit, DEFAULT_NOTES_SEARCH_LIMIT, MAX_NOTES_SEARCH_LIMIT)
-    const maxCandidates = limit * NOTES_SEARCH_CANDIDATE_MULTIPLIER
-    const files = flattenNotes(await scanDir(root)).slice(0, maxCandidates)
+    const { files, scannedEntries, scanTruncated } = await collectNoteFilesForSearch(root)
     const matches: any[] = []
+    let skippedLargeFiles = 0
     let searched = 0
     for (const file of files) {
+      if (matches.length >= limit) break
       searched += 1
+      const nameMatches = file.name.toLowerCase().includes(query)
+      const stat = await fs.stat(file.externalPath).catch(() => null)
+      if (!stat?.isFile()) continue
+
+      if (nameMatches) {
+        matches.push({ ...file, byteSize: stat.size, match: 'name', snippet: '' })
+        continue
+      }
+
+      if (stat.size > MAX_NOTE_SEARCH_FILE_BYTES) {
+        skippedLargeFiles += 1
+        continue
+      }
+
       const content = await fs.readFile(file.externalPath, 'utf8').catch(() => '')
       const index = content.toLowerCase().indexOf(query)
-      if (index >= 0 || file.name.toLowerCase().includes(query)) {
-        matches.push({ ...file, snippet: content.slice(Math.max(index - 80, 0), index + 180) })
-        if (matches.length >= limit) break
+      if (index >= 0) {
+        matches.push({
+          ...file,
+          byteSize: stat.size,
+          match: 'content',
+          snippet: content.slice(Math.max(index - 80, 0), index + 180)
+        })
       }
     }
-    res.json({ query, matches, limit, searched })
+    res.json({
+      query,
+      matches,
+      limit,
+      searched,
+      scannedEntries,
+      scanTruncated,
+      skippedLargeFiles,
+      maxFileBytes: MAX_NOTE_SEARCH_FILE_BYTES
+    })
   } catch (error) {
     next(error)
   }
