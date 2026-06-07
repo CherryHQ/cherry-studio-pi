@@ -112,6 +112,8 @@ vi.mock('@main/core/lifecycle', async () => {
   return { ...actual, BaseService: StubBase }
 })
 
+import { shell } from 'electron'
+
 import { MainWindowService } from '../MainWindowService'
 
 interface MockBrowserWindow extends EventEmitter {
@@ -126,7 +128,17 @@ interface MockBrowserWindow extends EventEmitter {
   restore: ReturnType<typeof vi.fn>
   setVisibleOnAllWorkspaces: ReturnType<typeof vi.fn>
   setFullScreen: ReturnType<typeof vi.fn>
-  webContents: { reload: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn> }
+  webContents: {
+    reload: ReturnType<typeof vi.fn>
+    on: ReturnType<typeof vi.fn>
+    setWindowOpenHandler: ReturnType<typeof vi.fn>
+    setZoomFactor: ReturnType<typeof vi.fn>
+    session: {
+      webRequest: {
+        onHeadersReceived: ReturnType<typeof vi.fn>
+      }
+    }
+  }
 }
 
 function createMockWindow(): MockBrowserWindow {
@@ -145,7 +157,14 @@ function createMockWindow(): MockBrowserWindow {
   win.webContents = {
     reload: vi.fn(),
     // capture render-process-gone listener for crash-recovery tests
-    on: vi.fn()
+    on: vi.fn(),
+    setWindowOpenHandler: vi.fn(),
+    setZoomFactor: vi.fn(),
+    session: {
+      webRequest: {
+        onHeadersReceived: vi.fn()
+      }
+    }
   }
   return win
 }
@@ -161,9 +180,21 @@ function attachCrashMonitor(svc: MainWindowService, win: MockBrowserWindow) {
   ;(svc as any).setupMainWindowMonitor(win)
 }
 
+function attachWebContentsHandlers(svc: MainWindowService, win: MockBrowserWindow) {
+  ;(svc as any).setupWebContentsHandlers(win)
+}
+
 function getCrashListener(win: MockBrowserWindow): (event: unknown, details: unknown) => void {
   const call = win.webContents.on.mock.calls.find(([event]) => event === 'render-process-gone')
   if (!call) throw new Error('render-process-gone listener not registered')
+  return call[1]
+}
+
+function getWillNavigateListener(
+  win: MockBrowserWindow
+): (event: { preventDefault: ReturnType<typeof vi.fn> }, url: string) => void {
+  const call = win.webContents.on.mock.calls.find(([event]) => event === 'will-navigate')
+  if (!call) throw new Error('will-navigate listener not registered')
   return call[1]
 }
 
@@ -216,6 +247,30 @@ describe('MainWindowService', () => {
 
     expect(listener).toHaveBeenCalledWith(win)
     expect(loggerMock.error).toHaveBeenCalledWith('Failed to replay main window listener', error)
+  })
+
+  describe('webContents navigation guard', () => {
+    it('allows real local Vite dev-server navigation', () => {
+      attachWebContentsHandlers(svc, win)
+      const listener = getWillNavigateListener(win)
+      const event = { preventDefault: vi.fn() }
+
+      listener(event, 'http://localhost:5173/src/main.tsx')
+
+      expect(event.preventDefault).not.toHaveBeenCalled()
+      expect(shell.openExternal).not.toHaveBeenCalled()
+    })
+
+    it('does not trust arbitrary URLs that only contain the dev-server text', () => {
+      attachWebContentsHandlers(svc, win)
+      const listener = getWillNavigateListener(win)
+      const event = { preventDefault: vi.fn() }
+
+      listener(event, 'https://example.com/?next=http://localhost:5173')
+
+      expect(event.preventDefault).toHaveBeenCalledTimes(1)
+      expect(shell.openExternal).not.toHaveBeenCalled()
+    })
   })
 
   describe('close handler', () => {
