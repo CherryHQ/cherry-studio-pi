@@ -22,6 +22,8 @@ const appToolsRouter = express.Router()
 const DEFAULT_NOTES_SEARCH_LIMIT = 50
 const MAX_NOTES_SEARCH_LIMIT = 200
 const NOTES_SEARCH_CANDIDATE_MULTIPLIER = 5
+const DEFAULT_NOTE_READ_MAX_BYTES = 512 * 1024
+const MAX_NOTE_READ_MAX_BYTES = 2 * 1024 * 1024
 
 const SETTINGS_SECTIONS = [
   ['provider', 'Provider', '/settings/provider'],
@@ -88,6 +90,32 @@ function normalizePositiveInteger(value: unknown, fallback: number, max: number)
   const parsed = typeof value === 'string' && !value.trim() ? fallback : Number(value ?? fallback)
   const normalized = Number.isFinite(parsed) ? Math.trunc(parsed) : fallback
   return Math.max(1, Math.min(normalized, max))
+}
+
+async function readTextFilePreview(filePath: string, maxBytes: number) {
+  const stat = await fs.stat(filePath)
+  if (stat.size <= maxBytes) {
+    return {
+      content: await fs.readFile(filePath, 'utf8'),
+      byteSize: stat.size,
+      truncated: false,
+      maxBytes
+    }
+  }
+
+  const handle = await fs.open(filePath, 'r')
+  try {
+    const buffer = Buffer.alloc(maxBytes)
+    const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0)
+    return {
+      content: buffer.subarray(0, bytesRead).toString('utf8'),
+      byteSize: stat.size,
+      truncated: true,
+      maxBytes
+    }
+  } finally {
+    await handle.close()
+  }
 }
 
 appToolsRouter.get('/settings/sections', (_req, res) => {
@@ -202,7 +230,8 @@ appToolsRouter.get('/notes/read', async (req, res, next) => {
   try {
     const root = await getNotesRoot()
     const filePath = resolveNotePath(root, String(req.query.path || ''), true)
-    res.json({ path: filePath, content: await fs.readFile(filePath, 'utf8') })
+    const maxBytes = normalizePositiveInteger(req.query.maxBytes, DEFAULT_NOTE_READ_MAX_BYTES, MAX_NOTE_READ_MAX_BYTES)
+    res.json({ path: filePath, ...(await readTextFilePreview(filePath, maxBytes)) })
   } catch (error) {
     next(error)
   }
