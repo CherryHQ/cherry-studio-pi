@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { getProviderLabel } from '@renderer/i18n/label'
+import { notifyStorageV2MirroredLocalStorageKeyChanged } from '@renderer/services/StorageV2LocalStorageSnapshot'
 import type { McpServer } from '@renderer/types'
 import i18next from 'i18next'
 
@@ -13,6 +14,7 @@ export const LANYUN_KEY_HOST = TOKENLANYUN_HOST + '/#/manage/apiKey'
 
 export const saveTokenLanYunToken = (token: string): void => {
   localStorage.setItem(TOKEN_STORAGE_KEY, token)
+  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY)
 }
 
 export const getTokenLanYunToken = (): string | null => {
@@ -21,6 +23,7 @@ export const getTokenLanYunToken = (): string | null => {
 
 export const clearTokenLanYunToken = (): void => {
   localStorage.removeItem(TOKEN_STORAGE_KEY)
+  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY)
 }
 
 export const hasTokenLanYunToken = (): boolean => {

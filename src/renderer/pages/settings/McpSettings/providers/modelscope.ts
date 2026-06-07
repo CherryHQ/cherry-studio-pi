@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { nanoid } from '@reduxjs/toolkit'
+import { notifyStorageV2MirroredLocalStorageKeyChanged } from '@renderer/services/StorageV2LocalStorageSnapshot'
 import { getMcpServerType, type McpServer } from '@renderer/types'
 import i18next from 'i18next'
 
@@ -11,6 +12,7 @@ export const MODELSCOPE_HOST = 'https://www.modelscope.cn'
 
 export const saveModelScopeToken = (token: string): void => {
   localStorage.setItem(TOKEN_STORAGE_KEY, token)
+  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY)
 }
 
 export const getModelScopeToken = (): string | null => {
@@ -19,6 +21,7 @@ export const getModelScopeToken = (): string | null => {
 
 export const clearModelScopeToken = (): void => {
   localStorage.removeItem(TOKEN_STORAGE_KEY)
+  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY)
 }
 
 export const hasModelScopeToken = (): boolean => {

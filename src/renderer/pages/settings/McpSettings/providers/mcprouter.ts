@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { nanoid } from '@reduxjs/toolkit'
+import { notifyStorageV2MirroredLocalStorageKeyChanged } from '@renderer/services/StorageV2LocalStorageSnapshot'
 import type { McpServer } from '@renderer/types'
 import i18next from 'i18next'
 
@@ -11,6 +12,7 @@ export const McpROUTER_HOST = 'https://mcprouter.co'
 
 export const saveMcpRouterToken = (token: string): void => {
   localStorage.setItem(TOKEN_STORAGE_KEY, token)
+  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY)
 }
 
 export const getMcpRouterToken = (): string | null => {
@@ -19,6 +21,7 @@ export const getMcpRouterToken = (): string | null => {
 
 export const clearMcpRouterToken = (): void => {
   localStorage.removeItem(TOKEN_STORAGE_KEY)
+  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY)
 }
 
 export const hasMcpRouterToken = (): boolean => {

@@ -15,6 +15,7 @@
  * --------------------------------------------------------------------------
  */
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
+import { notifyStorageV2MirroredLocalStorageKeyChanged } from '@renderer/services/StorageV2LocalStorageSnapshot'
 import type { MemoryConfig } from '@types'
 
 /**
@@ -85,6 +86,7 @@ const memorySlice = createSlice({
     setCurrentUserId: (state, action: PayloadAction<string>) => {
       state.currentUserId = action.payload
       localStorage.setItem('memory_currentUserId', action.payload)
+      notifyStorageV2MirroredLocalStorageKeyChanged('memory_currentUserId')
     },
     /**
      * Sets the global memory enabled state and persists it to localStorage

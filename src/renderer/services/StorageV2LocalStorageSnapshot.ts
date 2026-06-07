@@ -110,6 +110,19 @@ export function applyStorageV2LocalStorageSnapshot(snapshot: Partial<StorageV2Lo
   }
 }
 
+export function isStorageV2MirroredLocalStorageKey(key: string) {
+  return DURABLE_LOCAL_STORAGE_KEY_SET.has(key) || MCP_PROVIDER_TOKEN_KEY_SET.has(key)
+}
+
+export function notifyStorageV2MirroredLocalStorageKeyChanged(
+  key: string,
+  debounceMs = DEFAULT_LOCAL_STORAGE_MIRROR_DEBOUNCE_MS
+) {
+  if (!isStorageV2MirroredLocalStorageKey(key)) return
+
+  scheduleStorageV2LocalStorageMirror(debounceMs)
+}
+
 export function scheduleStorageV2LocalStorageMirror(debounceMs = DEFAULT_LOCAL_STORAGE_MIRROR_DEBOUNCE_MS) {
   if (localStorageMirrorSuspended) return
   localStorageMirrorPending = true

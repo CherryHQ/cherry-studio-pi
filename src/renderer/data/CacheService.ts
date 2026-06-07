@@ -41,6 +41,8 @@ import type {
 } from '@shared/data/cache/cacheTypes'
 import { isEqual } from 'lodash'
 
+import { notifyStorageV2MirroredLocalStorageKeyChanged } from '../services/StorageV2LocalStorageSnapshot'
+
 const logger = loggerService.withContext('CacheService')
 
 /**
@@ -1004,6 +1006,7 @@ export class CacheService {
     } catch (error) {
       logger.error('Failed to load persist cache:', error as Error)
       localStorage.removeItem(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY)
+      notifyStorageV2MirroredLocalStorageKeyChanged(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY)
       // Fallback to defaults only
       logger.debug('Fallback to default persist cache values')
     }
@@ -1030,6 +1033,7 @@ export class CacheService {
       }
 
       localStorage.setItem(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY, jsonData)
+      notifyStorageV2MirroredLocalStorageKeyChanged(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY)
       logger.verbose(`Saved persist cache to localStorage, size: ${(size / (1024 * 1024)).toFixed(2)} MB`)
     } catch (error) {
       logger.error('Failed to save persist cache:', error as Error)

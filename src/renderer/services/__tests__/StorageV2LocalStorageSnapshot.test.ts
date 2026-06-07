@@ -6,6 +6,7 @@ import {
   flushStorageV2LocalStorageMirror,
   flushStorageV2LocalStorageMirrorStrict,
   getStorageV2LocalStorageSnapshot,
+  notifyStorageV2MirroredLocalStorageKeyChanged,
   scheduleStorageV2LocalStorageMirror,
   suspendStorageV2LocalStorageMirrorUntilReload
 } from '../StorageV2LocalStorageSnapshot'
@@ -207,6 +208,31 @@ describe('StorageV2LocalStorageSnapshot', () => {
     localStorage.setItem('privacy-popup-accepted', 'true')
 
     scheduleStorageV2LocalStorageMirror()
+
+    await vi.waitFor(() => {
+      expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('schedules a mirror only for Storage v2 mirrored localStorage keys', async () => {
+    const importLegacyReduxSnapshot = vi.fn().mockResolvedValue({ dryRun: false })
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          importLegacyReduxSnapshot
+        }
+      }
+    })
+
+    localStorage.setItem('transient-ui-cache', 'ignore')
+    notifyStorageV2MirroredLocalStorageKeyChanged('transient-ui-cache')
+    await Promise.resolve()
+
+    expect(importLegacyReduxSnapshot).not.toHaveBeenCalled()
+
+    localStorage.setItem('mcprouter_token', 'secret')
+    notifyStorageV2MirroredLocalStorageKeyChanged('mcprouter_token')
 
     await vi.waitFor(() => {
       expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
