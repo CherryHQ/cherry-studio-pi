@@ -113,7 +113,12 @@ export function removeSpecialCharacters(str: string): string {
  * @returns {boolean} 是否有效
  */
 export const isValidProxyUrl = (url: string): boolean => {
-  return url.includes('://')
+  try {
+    const parsed = new URL(url.trim())
+    return ['http:', 'https:', 'socks:', 'socks4:', 'socks5:'].includes(parsed.protocol) && Boolean(parsed.hostname)
+  } catch {
+    return false
+  }
 }
 
 /**

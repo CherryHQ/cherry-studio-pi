@@ -69,22 +69,28 @@ describe('Unclassified Utils', () => {
   })
 
   describe('isValidProxyUrl', () => {
-    it('should return true for string containing "://"', () => {
+    it('should return true for supported proxy URLs', () => {
       expect(isValidProxyUrl('http://localhost')).toBe(true)
+      expect(isValidProxyUrl('https://proxy.example.com:8443')).toBe(true)
+      expect(isValidProxyUrl('socks://127.0.0.1:1080')).toBe(true)
+      expect(isValidProxyUrl('socks4://127.0.0.1:1080')).toBe(true)
       expect(isValidProxyUrl('socks5://127.0.0.1:1080')).toBe(true)
     })
 
-    it('should return false for string not containing "://"', () => {
+    it('should return false for invalid or unsupported proxy URLs', () => {
       expect(isValidProxyUrl('localhost')).toBe(false)
       expect(isValidProxyUrl('127.0.0.1:1080')).toBe(false)
+      expect(isValidProxyUrl('ftp://proxy.example.com:21')).toBe(false)
+      expect(isValidProxyUrl('abc://127.0.0.1:1080')).toBe(false)
     })
 
     it('should handle empty string', () => {
       expect(isValidProxyUrl('')).toBe(false)
     })
 
-    it('should return true for only "://"', () => {
-      expect(isValidProxyUrl('://')).toBe(true)
+    it('should reject malformed URLs', () => {
+      expect(isValidProxyUrl('://')).toBe(false)
+      expect(isValidProxyUrl('http://')).toBe(false)
     })
   })
 
