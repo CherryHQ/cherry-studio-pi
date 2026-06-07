@@ -182,4 +182,16 @@ describe('FileStorage Storage v2 upload flow', () => {
 
     compressImageSpy.mockRestore()
   })
+
+  it.each(['../../outside.txt', '..\\..\\outside.txt', '/tmp/outside.txt', 'C:\\Users\\me\\outside.txt'])(
+    'keeps temp files inside the app temp directory for unsafe name %s',
+    async (fileName) => {
+      const { fileStorage } = await import('../FileStorage')
+
+      const tempPath = await fileStorage.createTempFile(undefined as never, fileName)
+
+      expect(path.dirname(tempPath)).toBe(mocks.dirs.temp)
+      expect(path.basename(tempPath)).toMatch(/^temp_file_[\w-]+_outside\.txt$/)
+    }
+  )
 })

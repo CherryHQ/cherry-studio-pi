@@ -43,6 +43,20 @@ import { storageV2FileRepository } from './storageV2/StorageV2Repositories'
 
 const logger = loggerService.withContext('FileStorage')
 
+function sanitizeTempFileName(fileName: string): string {
+  const rawName = String(fileName ?? '')
+    .replace(/\0/g, '')
+    .trim()
+  const baseName = path.win32.basename(path.posix.basename(rawName))
+  const sanitized = baseName.replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_').trim()
+
+  if (!sanitized || sanitized === '.' || sanitized === '..') {
+    return 'file'
+  }
+
+  return sanitized.slice(0, 180)
+}
+
 /**
  * Execute ripgrep with captured output
  */
@@ -654,7 +668,15 @@ class FileStorage {
   }
 
   public createTempFile = async (_: Electron.IpcMainInvokeEvent, fileName: string): Promise<string> => {
-    return path.join(this.tempDir, `temp_file_${uuidv4()}_${fileName}`)
+    const safeName = sanitizeTempFileName(fileName)
+    const tempPath = path.resolve(this.tempDir, `temp_file_${uuidv4()}_${safeName}`)
+    const tempRoot = path.resolve(this.tempDir)
+
+    if (tempPath !== tempRoot && !tempPath.startsWith(tempRoot + path.sep)) {
+      throw new Error('Unsafe temporary file path')
+    }
+
+    return tempPath
   }
 
   public writeFile = async (
