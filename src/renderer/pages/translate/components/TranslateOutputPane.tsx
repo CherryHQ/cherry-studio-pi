@@ -1,5 +1,7 @@
+import DOMPurify from 'dompurify'
 import { Check, Copy } from 'lucide-react'
 import type { Ref, UIEvent } from 'react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import IconButton from './IconButton'
@@ -26,6 +28,10 @@ const TranslateOutputPane = ({
   onScroll
 }: Props) => {
   const { t } = useTranslation()
+  const sanitizedMarkdown = useMemo(
+    () => (enableMarkdown ? DOMPurify.sanitize(renderedMarkdown) : ''),
+    [enableMarkdown, renderedMarkdown]
+  )
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
@@ -41,7 +47,7 @@ const TranslateOutputPane = ({
             </div>
           ) : translatedContent ? (
             enableMarkdown ? (
-              <div className="markdown" dangerouslySetInnerHTML={{ __html: renderedMarkdown }} />
+              <div className="markdown" dangerouslySetInnerHTML={{ __html: sanitizedMarkdown }} />
             ) : (
               <div className="wrap-break-word whitespace-pre-wrap text-foreground">{translatedContent}</div>
             )

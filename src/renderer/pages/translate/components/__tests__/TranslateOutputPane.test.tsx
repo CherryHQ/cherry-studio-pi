@@ -49,4 +49,17 @@ describe('TranslateOutputPane', () => {
 
     expect(screen.getByText('5')).toBeInTheDocument()
   })
+
+  it('sanitizes rendered markdown HTML', () => {
+    const props = baseProps()
+    props.translatedContent = 'hello'
+    props.enableMarkdown = true
+    props.renderedMarkdown = '<img src="x" onerror="alert(1)"><script>alert(2)</script><p>safe</p>'
+
+    const { container } = render(<TranslateOutputPane {...props} />)
+
+    expect(container.querySelector('script')).toBeNull()
+    expect(container.querySelector('img')?.hasAttribute('onerror')).toBe(false)
+    expect(screen.getByText('safe')).toBeInTheDocument()
+  })
 })
