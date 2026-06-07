@@ -3,8 +3,12 @@ import { summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import { PPIO_APP_SECRET, PPIO_CLIENT_ID, SILICON_CLIENT_ID, TOKENFLUX_HOST } from '@renderer/config/constant'
 import i18n, { getLanguageCode } from '@renderer/i18n'
 
+import { isHttpExternalUrl } from './openExternal'
+
 const logger = loggerService.withContext('Utils:oauth')
 const oauthMessageCleanups = new Map<string, () => void>()
+const OAUTH_POPUP_FEATURES =
+  'width=720,height=720,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes'
 
 function replaceOAuthMessageHandler(provider: string, handler: (event: MessageEvent) => void) {
   oauthMessageCleanups.get(provider)?.()
@@ -21,17 +25,36 @@ function replaceOAuthMessageHandler(provider: string, handler: (event: MessageEv
   return cleanup
 }
 
+function openOAuthPopup(url: string, target = 'oauth', features = OAUTH_POPUP_FEATURES) {
+  if (!isHttpExternalUrl(url)) {
+    logger.warn('Blocked unsafe OAuth URL', { url: summarizeTextForLog(url) })
+    window.toast.error(i18n.t('settings.provider.oauth.error'))
+    return null
+  }
+
+  const popup = window.open(url, target, features)
+  if (!popup) {
+    logger.warn('OAuth popup did not open')
+    window.toast.error(i18n.t('settings.provider.oauth.error'))
+  }
+
+  return popup
+}
+
+function isTrustedOAuthMessage(event: MessageEvent, allowedOrigins: readonly string[]) {
+  return allowedOrigins.includes(event.origin)
+}
+
 export const oauthWithSiliconFlow = async (setKey) => {
   const authUrl = `https://account.siliconflow.cn/oauth?client_id=${SILICON_CLIENT_ID}`
 
-  const popup = window.open(
-    authUrl,
-    'oauth',
-    'width=720,height=720,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes'
-  )
+  const popup = openOAuthPopup(authUrl)
+  if (!popup) return
 
   let cleanup: () => void = () => undefined
   const messageHandler = (event) => {
+    if (!isTrustedOAuthMessage(event, ['https://account.siliconflow.cn'])) return
+
     const payload = event.data
     if (Array.isArray(payload) && payload[0]?.secretKey !== undefined) {
       setKey(payload[0].secretKey)
@@ -46,14 +69,13 @@ export const oauthWithSiliconFlow = async (setKey) => {
 export const oauthWithAihubmix = async (setKey) => {
   const authUrl = `https://console.aihubmix.com/token?client_id=cherry_studio_oauth&lang=${getLanguageCode()}&aff=SJyh`
 
-  const popup = window.open(
-    authUrl,
-    'oauth',
-    'width=720,height=720,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes'
-  )
+  const popup = openOAuthPopup(authUrl)
+  if (!popup) return
 
   let cleanup: () => void = () => undefined
   const messageHandler = async (event) => {
+    if (!isTrustedOAuthMessage(event, ['https://console.aihubmix.com'])) return
+
     const data = event.data
 
     if (data?.key === 'cherry_studio_oauth_callback' && data.data) {
@@ -84,11 +106,10 @@ export const oauthWithPPIO = async (setKey) => {
   const redirectUri = 'cherrystudiopi://'
   const authUrl = `https://ppio.com/oauth/authorize?invited_by=JYT9GD&client_id=${PPIO_CLIENT_ID}&scope=api%20openid&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}`
 
-  window.open(
-    authUrl,
-    'oauth',
-    'width=720,height=720,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes'
-  )
+  const popup = openOAuthPopup(authUrl)
+  if (!popup) {
+    throw new Error('OAuth popup did not open')
+  }
 
   if (!setKey) {
     logger.debug('[PPIO OAuth] No setKey callback provided, returning early')
@@ -185,23 +206,18 @@ export const oauthWithTokenFlux = async () => {
   }
   const data = await resp.json()
   const authUrl = data.data.url
-  window.open(
-    authUrl,
-    'oauth',
-    'width=720,height=720,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes'
-  )
+  openOAuthPopup(authUrl)
 }
 export const oauthWith302AI = async (setKey) => {
   const authUrl = 'https://dash.302.ai/sso/login?app=cherry-ai.com&name=Cherry%20Studio'
 
-  const popup = window.open(
-    authUrl,
-    'oauth',
-    'width=720,height=720,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes'
-  )
+  const popup = openOAuthPopup(authUrl)
+  if (!popup) return
 
   let cleanup: () => void = () => undefined
   const messageHandler = (event) => {
+    if (!isTrustedOAuthMessage(event, ['https://dash.302.ai'])) return
+
     const apiKey = event.data?.data?.apikey
     if (apiKey !== undefined) {
       setKey(apiKey)
@@ -216,14 +232,13 @@ export const oauthWith302AI = async (setKey) => {
 export const oauthWithAiOnly = async (setKey) => {
   const authUrl = `https://maas.aiionly.com/login?inviteCode=1755481173663DrZBBOC0&cherryCode=01`
 
-  const popup = window.open(
-    authUrl,
-    'login',
-    'width=720,height=720,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes'
-  )
+  const popup = openOAuthPopup(authUrl, 'login')
+  if (!popup) return
 
   let cleanup: () => void = () => undefined
   const messageHandler = (event) => {
+    if (!isTrustedOAuthMessage(event, ['https://maas.aiionly.com'])) return
+
     const payload = event.data
     if (Array.isArray(payload) && payload[0]?.secretKey !== undefined) {
       setKey(payload[0].secretKey)
@@ -258,11 +273,10 @@ export const oauthWithCherryIn = async (
 
   logger.debug('Opening authorization URL')
 
-  window.open(
-    authUrl,
-    'oauth',
-    'width=720,height=720,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes'
-  )
+  const popup = openOAuthPopup(authUrl)
+  if (!popup) {
+    throw new Error('OAuth popup did not open')
+  }
 
   return new Promise<string>((resolve, reject) => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null
@@ -351,7 +365,7 @@ export const providerCharge = async (provider: string) => {
 
   const { url, width, height } = chargeUrlMap[provider]
 
-  window.open(
+  openOAuthPopup(
     url,
     'oauth',
     `width=${width},height=${height},toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes`
@@ -394,7 +408,7 @@ export const providerBills = async (provider: string) => {
 
   const { url, width, height } = billsUrlMap[provider]
 
-  window.open(
+  openOAuthPopup(
     url,
     'oauth',
     `width=${width},height=${height},toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes`

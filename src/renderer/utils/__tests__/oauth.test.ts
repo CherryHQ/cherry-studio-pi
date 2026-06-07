@@ -57,14 +57,33 @@ describe('oauth utilities', () => {
 
     expect(removeEventListenerSpy).toHaveBeenCalledWith('message', firstHandler)
     expect(() => {
-      ;(secondHandler as EventListener)(new MessageEvent('message', { data: { ignored: true } }))
+      ;(secondHandler as EventListener)(
+        new MessageEvent('message', { data: { ignored: true }, origin: 'https://account.siliconflow.cn' })
+      )
     }).not.toThrow()
 
-    ;(secondHandler as EventListener)(new MessageEvent('message', { data: [{ secretKey: 'sk-test' }] }))
+    ;(secondHandler as EventListener)(
+      new MessageEvent('message', { data: [{ secretKey: 'sk-test' }], origin: 'https://account.siliconflow.cn' })
+    )
 
     expect(firstSetKey).not.toHaveBeenCalled()
     expect(secondSetKey).toHaveBeenCalledWith('sk-test')
     expect(close).toHaveBeenCalled()
+  })
+
+  it('ignores SiliconFlow OAuth messages from untrusted origins', async () => {
+    const { oauthWithSiliconFlow } = await import('../oauth')
+    const setKey = vi.fn()
+
+    await oauthWithSiliconFlow(setKey)
+    const handler = addEventListenerSpy.mock.calls.find(([event]) => event === 'message')?.[1]
+
+    ;(handler as EventListener)(
+      new MessageEvent('message', { data: [{ secretKey: 'sk-evil' }], origin: 'https://evil.example' })
+    )
+
+    expect(setKey).not.toHaveBeenCalled()
+    expect(close).not.toHaveBeenCalled()
   })
 
   it('opens Aihubmix OAuth URL without a leading space', async () => {
@@ -82,7 +101,22 @@ describe('oauth utilities', () => {
     const handler = addEventListenerSpy.mock.calls.find(([event]) => event === 'message')?.[1]
 
     expect(() => {
-      ;(handler as EventListener)(new MessageEvent('message', { data: {} }))
+      ;(handler as EventListener)(new MessageEvent('message', { data: {}, origin: 'https://dash.302.ai' }))
     }).not.toThrow()
+  })
+
+  it('ignores 302.AI OAuth messages from untrusted origins', async () => {
+    const { oauthWith302AI } = await import('../oauth')
+    const setKey = vi.fn()
+
+    await oauthWith302AI(setKey)
+    const handler = addEventListenerSpy.mock.calls.find(([event]) => event === 'message')?.[1]
+
+    ;(handler as EventListener)(
+      new MessageEvent('message', { data: { data: { apikey: 'sk-evil' } }, origin: 'https://evil.example' })
+    )
+
+    expect(setKey).not.toHaveBeenCalled()
+    expect(close).not.toHaveBeenCalled()
   })
 })
