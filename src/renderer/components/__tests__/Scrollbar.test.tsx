@@ -133,6 +133,16 @@ describe('Scrollbar', () => {
       // 验证 throttle 调用时使用了 100ms 延迟和正确的选项
       expect(throttle).toHaveBeenCalledWith(expect.any(Function), 100, { leading: true, trailing: true })
     })
+
+    it('should keep the throttled handler stable across unchanged rerenders', async () => {
+      const { throttle } = await import('lodash')
+
+      const { rerender } = render(<Scrollbar data-testid="scrollbar">内容</Scrollbar>)
+      expect(throttle).toHaveBeenCalledTimes(1)
+
+      rerender(<Scrollbar data-testid="scrollbar">新内容</Scrollbar>)
+      expect(throttle).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('cleanup', () => {
