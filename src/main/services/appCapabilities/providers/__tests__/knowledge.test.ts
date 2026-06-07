@@ -1,8 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  browserWindows: [
+    {
+      isDestroyed: vi.fn(() => false),
+      webContents: {
+        executeJavaScript: vi.fn()
+      }
+    }
+  ],
+  getAllWindows: vi.fn(),
   logger: {
     withContext: vi.fn(() => ({
+      debug: vi.fn(),
       warn: vi.fn()
     }))
   },
@@ -26,6 +36,12 @@ const mocks = vi.hoisted(() => ({
   },
   storageV2SecretVaultService: {
     getSecret: vi.fn()
+  }
+}))
+
+vi.mock('electron', () => ({
+  BrowserWindow: {
+    getAllWindows: mocks.getAllWindows
   }
 }))
 
@@ -60,6 +76,8 @@ vi.mock('../../utils', () => ({
   sanitizeForAgent: (value: unknown) => value
 }))
 
+import { RENDERER_GET_STORE_VALUE_BRIDGE } from '@shared/storeBridge'
+
 import { createKnowledgeCapabilities } from '../knowledge'
 
 function capability(id: string) {
@@ -69,8 +87,24 @@ function capability(id: string) {
 }
 
 describe('knowledge app capabilities', () => {
+  let runtimeBases: any[]
+  let runtimeProviders: any[]
+
   beforeEach(() => {
     vi.clearAllMocks()
+    runtimeBases = []
+    runtimeProviders = []
+    mocks.getAllWindows.mockReturnValue(mocks.browserWindows)
+    mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation(async (script: string) => {
+      if (script.includes('typeof')) return true
+      if (script.includes(RENDERER_GET_STORE_VALUE_BRIDGE) && script.includes('state.knowledge.bases')) {
+        return runtimeBases
+      }
+      if (script.includes(RENDERER_GET_STORE_VALUE_BRIDGE) && script.includes('state.llm.providers')) {
+        return runtimeProviders
+      }
+      return undefined
+    })
     mocks.reduxService.dispatch.mockResolvedValue(undefined)
     mocks.storageV2KnowledgeRepository.listBases.mockResolvedValue([])
     mocks.storageV2KnowledgeRepository.importBases.mockResolvedValue(undefined)
@@ -99,7 +133,7 @@ describe('knowledge app capabilities', () => {
         }))
       }
     ]
-    mocks.reduxService.select.mockResolvedValue(bases)
+    runtimeBases = bases
 
     const result = await capability('knowledge.bases.list').execute({}, { source: 'agent' })
 
@@ -130,7 +164,7 @@ describe('knowledge app capabilities', () => {
         }))
       }
     ]
-    mocks.reduxService.select.mockResolvedValue(bases)
+    runtimeBases = bases
 
     const result = await capability('knowledge.bases.list').execute(
       { includeItems: true, itemLimit: 2 },
@@ -168,11 +202,8 @@ describe('knowledge app capabilities', () => {
     ]
     let activeSearches = 0
     let maxActiveSearches = 0
-    mocks.reduxService.select.mockImplementation(async (selector: string) => {
-      if (selector === 'state.knowledge.bases') return bases
-      if (selector === 'state.llm.providers') return providers
-      return null
-    })
+    runtimeBases = bases
+    runtimeProviders = providers
     mocks.knowledgeService.search.mockImplementation(async (_event, input) => {
       activeSearches += 1
       maxActiveSearches = Math.max(maxActiveSearches, activeSearches)
@@ -188,7 +219,9 @@ describe('knowledge app capabilities', () => {
     expect(mocks.knowledgeService.search).toHaveBeenCalledTimes(8)
     expect(maxActiveSearches).toBeLessThanOrEqual(3)
     expect(
-      mocks.reduxService.select.mock.calls.filter(([selector]) => selector === 'state.llm.providers')
+      mocks.browserWindows[0].webContents.executeJavaScript.mock.calls.filter(([script]) =>
+        String(script).includes('"path":"state.llm.providers"')
+      )
     ).toHaveLength(1)
   })
 
@@ -214,11 +247,8 @@ describe('knowledge app capabilities', () => {
         apiHost: 'https://example.com/'
       }
     ]
-    mocks.reduxService.select.mockImplementation(async (selector: string) => {
-      if (selector === 'state.knowledge.bases') return bases
-      if (selector === 'state.llm.providers') return providers
-      return null
-    })
+    runtimeBases = bases
+    runtimeProviders = providers
     mocks.knowledgeService.search.mockResolvedValue(
       Array.from({ length: 10 }, (_, index) => ({ id: `result-${index}`, content: 'matched' }))
     )
@@ -251,11 +281,8 @@ describe('knowledge app capabilities', () => {
         apiHost: 'https://example.com/'
       }
     ]
-    mocks.reduxService.select.mockImplementation(async (selector: string) => {
-      if (selector === 'state.knowledge.bases') return bases
-      if (selector === 'state.llm.providers') return providers
-      return null
-    })
+    runtimeBases = bases
+    runtimeProviders = providers
     mocks.knowledgeService.search.mockImplementation(async (_event, input) =>
       Array.from({ length: 3 }, (_, index) => ({
         id: `${input.base.id}-result-${index}`,
@@ -299,11 +326,8 @@ describe('knowledge app capabilities', () => {
         apiHost: 'https://example.com/'
       }
     ]
-    mocks.reduxService.select.mockImplementation(async (selector: string) => {
-      if (selector === 'state.knowledge.bases') return [base]
-      if (selector === 'state.llm.providers') return providers
-      return null
-    })
+    runtimeBases = [base]
+    runtimeProviders = providers
     mocks.knowledgeService.add.mockResolvedValue({ ok: true })
 
     await capability('knowledge.item.add').execute(
@@ -326,7 +350,7 @@ describe('knowledge app capabilities', () => {
   })
 
   it('rejects empty knowledge base ids and invalid knowledge items before calling services', async () => {
-    mocks.reduxService.select.mockResolvedValue([{ id: 'kb-1', name: 'Knowledge One', items: [] }])
+    runtimeBases = [{ id: 'kb-1', name: 'Knowledge One', items: [] }]
 
     await expect(capability('knowledge.base.reset').execute({ baseId: '   ' }, { source: 'agent' })).rejects.toThrow(
       'Knowledge base id is required'

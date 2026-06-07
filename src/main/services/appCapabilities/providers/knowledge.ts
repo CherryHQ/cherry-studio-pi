@@ -1,6 +1,5 @@
 import { loggerService } from '@logger'
 import { knowledgeService } from '@main/services/KnowledgeService'
-import { reduxService } from '@main/services/ReduxService'
 import { storageV2SecretVaultService } from '@main/services/storageV2/SecretVaultService'
 import {
   storageV2KnowledgeRepository,
@@ -9,6 +8,7 @@ import {
 import type { KnowledgeBase, KnowledgeBaseParams, KnowledgeItem, Provider } from '@types'
 import { v4 as uuidv4 } from 'uuid'
 
+import { readRendererStoreValue } from '../rendererBridge'
 import type { AppCapabilityDefinition } from '../types'
 import { okResult, sanitizeForAgent } from '../utils'
 
@@ -110,24 +110,19 @@ function summarizeKnowledgeBaseForAgent(base: KnowledgeBase, input: any = {}) {
   }
 }
 
-function isReduxUnavailableError(error: unknown): boolean {
-  const message = (error as Error)?.message || ''
-  return message.includes('Main window is not available') || message.includes('Timeout waiting for Redux store')
-}
-
 async function listKnowledgeBases(): Promise<KnowledgeBase[]> {
   try {
-    const bases = (await reduxService.select<KnowledgeBase[]>('state.knowledge.bases')) ?? []
+    const bases = (await readRendererStoreValue<KnowledgeBase[]>('state.knowledge.bases')) ?? []
     if (bases.length > 0) return bases
   } catch (error) {
-    if (!isReduxUnavailableError(error)) throw error
+    logger.debug('Knowledge runtime store bridge unavailable, falling back to Storage v2', error as Error)
   }
 
   return (await storageV2KnowledgeRepository.listBases()) as KnowledgeBase[]
 }
 
-async function getProviderConfigFromRedux(providerId: string): Promise<ProviderRuntimeConfig | null> {
-  const providers = await reduxService.select<Provider[]>('state.llm.providers')
+async function getProviderConfigFromRuntime(providerId: string): Promise<ProviderRuntimeConfig | null> {
+  const providers = await readRendererStoreValue<Provider[]>('state.llm.providers')
   const provider = providers?.find((item) => item.id === providerId)
   if (!provider) return null
   return {
@@ -155,10 +150,10 @@ async function getProviderConfigFromStorageV2(providerId: string): Promise<Provi
 
 async function getProviderConfig(providerId: string): Promise<ProviderRuntimeConfig | null> {
   try {
-    const config = await getProviderConfigFromRedux(providerId)
+    const config = await getProviderConfigFromRuntime(providerId)
     if (config) return config
   } catch (error) {
-    if (!isReduxUnavailableError(error)) throw error
+    logger.debug('Provider runtime store bridge unavailable, falling back to Storage v2', error as Error)
   }
 
   return getProviderConfigFromStorageV2(providerId)
@@ -240,16 +235,7 @@ async function toKnowledgeBaseParams(
 }
 
 async function upsertKnowledgeBaseMetadata(base: KnowledgeBase) {
-  const bases = await listKnowledgeBases().catch(() => [])
-  const exists = bases.some((item) => item.id === base.id)
   await storageV2KnowledgeRepository.importBases([base as any], { pruneMissing: false })
-  await reduxService
-    .dispatch({ type: exists ? 'knowledge/updateBase' : 'knowledge/addBase', payload: base })
-    .catch((error) => {
-      if (!isReduxUnavailableError(error)) {
-        logger.warn('Failed to mirror knowledge base to Redux', error as Error)
-      }
-    })
 }
 
 export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
