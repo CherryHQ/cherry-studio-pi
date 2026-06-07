@@ -10,6 +10,7 @@ import type { ToolQuickPanelApi } from '@renderer/pages/home/Inputbar/types'
 import { EventEmitter } from '@renderer/services/EventService'
 import type { AssistantSettings, McpMode, McpPrompt, McpResource } from '@renderer/types'
 import { getEffectiveMcpMode } from '@renderer/types'
+import { createDataImageUri, escapeMarkdownImageAlt } from '@renderer/utils/dataImage'
 import type { McpServer } from '@shared/data/types/mcpServer'
 import { isGemini3Model, isGeminiModel } from '@shared/utils/model'
 import { isGeminiWebSearchProvider } from '@shared/utils/provider'
@@ -65,10 +66,12 @@ const extractPromptContent = (response: any): string | null => {
 
         case 'image':
           if (message.content.data && message.content.mimeType) {
+            const imageUri = createDataImageUri(message.content.data, message.content.mimeType)
+            if (!imageUri) break
             if (rolePrefix) {
               formattedContent += `${rolePrefix}\n`
             }
-            formattedContent += `![Image](data:${message.content.mimeType};base64,${message.content.data})\n\n`
+            formattedContent += `![Image](${imageUri})\n\n`
           }
           break
 
@@ -437,8 +440,9 @@ const McpToolsButton: FC<Props> = ({ quickPanel, setInputValue, resizeTextArea, 
 
       const processResourceContent = (resourceData: ResourceData) => {
         if (resourceData.blob) {
-          if (resourceData.mimeType?.startsWith('image/')) {
-            const imageMarkdown = `![${resourceData.name || 'Image'}](data:${resourceData.mimeType};base64,${resourceData.blob})`
+          const imageUri = createDataImageUri(resourceData.blob, resourceData.mimeType)
+          if (imageUri) {
+            const imageMarkdown = `![${escapeMarkdownImageAlt(resourceData.name || resource.name)}](${imageUri})`
             insertPromptIntoTextArea(imageMarkdown)
           } else {
             const resourceInfo = `[${resourceData.name || resource.name} - ${resourceData.mimeType || t('settings.mcp.resources.blobInvisible')}]`

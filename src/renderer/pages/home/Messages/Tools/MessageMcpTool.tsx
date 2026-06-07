@@ -8,6 +8,7 @@ import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
 import { useIsToolAutoApproved } from '@renderer/hooks/useMcpServer'
 import { useTimer } from '@renderer/hooks/useTimer'
 import type { McpToolResponse } from '@renderer/types'
+import { createDataImageUri } from '@renderer/utils/dataImage'
 import { renderPlainTextCodeHtml, sanitizeHtml } from '@renderer/utils/html'
 import type { McpProgressEvent } from '@shared/config/types'
 import { IpcChannel } from '@shared/IpcChannel'
@@ -228,7 +229,7 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
 
 type ExtractedContent = {
   text: string
-  images: Array<{ data: string; mimeType: string }>
+  images: Array<{ src: string }>
 }
 
 /**
@@ -243,7 +244,7 @@ const extractPreviewContent = (response: unknown): ExtractedContent => {
     if (contents.length === 0) return { text: '', images: [] }
 
     const textParts: string[] = []
-    const images: Array<{ data: string; mimeType: string }> = []
+    const images: Array<{ src: string }> = []
     for (const content of contents) {
       switch (content.type) {
         case 'text':
@@ -258,7 +259,10 @@ const extractPreviewContent = (response: unknown): ExtractedContent => {
           break
         case 'image':
           if (content.data) {
-            images.push({ data: content.data, mimeType: content.mimeType ?? 'image/png' })
+            const src = createDataImageUri(content.data, content.mimeType ?? 'image/png')
+            if (src) {
+              images.push({ src })
+            }
           }
           break
         case 'resource':
@@ -282,7 +286,7 @@ const ToolResponseContent: FC<{
 }> = ({ isExpanded, args, isStreaming, response }) => {
   const { highlightCode } = useCodeStyle()
   const [highlightedResponse, setHighlightedResponse] = useState<string>('')
-  const [responseImages, setResponseImages] = useState<Array<{ data: string; mimeType: string }>>([])
+  const [responseImages, setResponseImages] = useState<Array<{ src: string }>>([])
   const [isTruncated, setIsTruncated] = useState(false)
   const [originalLength, setOriginalLength] = useState(0)
 
@@ -386,12 +390,7 @@ const ToolResponseContent: FC<{
           )}
           {isTruncated && <TruncatedIndicator originalLength={originalLength} />}
           {responseImages.map((img, idx) => (
-            <img
-              key={idx}
-              src={`data:${img.mimeType};base64,${img.data}`}
-              alt="Tool output"
-              style={{ maxWidth: 300, borderRadius: 4, marginTop: 8 }}
-            />
+            <img key={idx} src={img.src} alt="Tool output" style={{ maxWidth: 300, borderRadius: 4, marginTop: 8 }} />
           ))}
         </ResponseSection>
       )}
