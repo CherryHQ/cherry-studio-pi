@@ -194,4 +194,17 @@ describe('FileStorage Storage v2 upload flow', () => {
       expect(path.basename(tempPath)).toMatch(/^temp_file_[\w-]+_outside\.txt$/)
     }
   )
+
+  it('rejects stored file names that would escape the Files directory', async () => {
+    const outsidePath = path.join(mocks.dirs.root, 'outside.txt')
+    fs.writeFileSync(outsidePath, 'outside')
+
+    const { fileStorage } = await import('../FileStorage')
+
+    await expect(fileStorage.readFile(undefined as never, '../outside.txt')).rejects.toThrow('Unsafe stored file name')
+    await expect(fileStorage.writeFileWithId(undefined as never, '../outside.txt', 'changed')).rejects.toThrow(
+      'Unsafe stored file name'
+    )
+    expect(fs.readFileSync(outsidePath, 'utf8')).toBe('outside')
+  })
 })
