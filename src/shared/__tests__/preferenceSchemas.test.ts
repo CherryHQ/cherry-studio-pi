@@ -21,4 +21,11 @@ describe('DefaultPreferences', () => {
     expect(fetchUrlsDefault).toBeNull()
     expect(DefaultPreferences.default['chat.web_search.default_fetch_urls_provider']).toBeNull()
   })
+
+  it('keeps assistant list clicks on the assistant list by default', () => {
+    const clickAssistantDefault: PreferenceSchemas['default']['assistant.click_to_show_topic'] = false
+
+    expect(clickAssistantDefault).toBe(false)
+    expect(DefaultPreferences.default['assistant.click_to_show_topic']).toBe(false)
+  })
 })

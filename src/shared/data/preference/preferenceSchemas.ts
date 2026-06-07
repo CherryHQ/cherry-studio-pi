@@ -525,7 +525,7 @@ export const DefaultPreferences: PreferenceSchemas = {
     'app.user.id': 'uuid()',
     'app.user.name': '',
     'app.zoom_factor': 1,
-    'assistant.click_to_show_topic': true,
+    'assistant.click_to_show_topic': false,
     'assistant.icon_type': 'emoji',
     'assistant.tab.sort_type': 'list',
     'chat.code.collapsible': false,

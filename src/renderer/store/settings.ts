@@ -286,7 +286,7 @@ export const initialState: SettingsState = {
   assistantIconType: 'emoji',
   pasteLongTextAsFile: false,
   pasteLongTextThreshold: 1500,
-  clickAssistantToShowTopic: true,
+  clickAssistantToShowTopic: false,
   autoCheckUpdate: true,
   testPlan: false,
   testChannel: UpgradeChannel.LATEST,

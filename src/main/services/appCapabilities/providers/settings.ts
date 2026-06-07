@@ -86,6 +86,7 @@ export const SETTINGS_SETTERS: Record<string, string> = {
 
 const SENSITIVE_SETTING_PATH_PATTERN = /api[-_]?key|private[-_]?key|token|secret|pass|password|authorization|cookie/i
 const PREFERENCE_SETTING_PATHS: Record<string, UnifiedPreferenceKeyType> = {
+  clickAssistantToShowTopic: 'assistant.click_to_show_topic',
   defaultPaintingProvider: 'feature.paintings.default_provider',
   'apiServer.enabled': 'feature.csaas.enabled',
   'apiServer.host': 'feature.csaas.host',
@@ -95,6 +96,24 @@ const PREFERENCE_SETTING_PATHS: Record<string, UnifiedPreferenceKeyType> = {
 const pathEnum = Array.from(
   new Set([...Object.keys(SETTINGS_SETTERS), ...Object.keys(PREFERENCE_SETTING_PATHS)])
 ).sort()
+
+function assignPath(target: Record<string, any>, keyPath: string, value: unknown) {
+  const parts = keyPath.split('.').filter(Boolean)
+  if (parts.length === 0) return
+
+  let cursor = target
+  for (const part of parts.slice(0, -1)) {
+    const existing = cursor[part]
+    const next =
+      existing && typeof existing === 'object' && !Array.isArray(existing)
+        ? { ...(existing as Record<string, unknown>) }
+        : {}
+    cursor[part] = next
+    cursor = next
+  }
+
+  cursor[parts[parts.length - 1]] = value
+}
 
 function sanitizeSettingValueForAgent(keyPath: string, value: unknown) {
   if (SENSITIVE_SETTING_PATH_PATTERN.test(keyPath)) {
@@ -118,18 +137,12 @@ export async function readSettingsForAgent() {
 
   try {
     const preferenceService = application.get('PreferenceService')
-    const defaultPaintingProvider = preferenceService.get('feature.paintings.default_provider')
-    return {
-      ...settings,
-      defaultPaintingProvider: defaultPaintingProvider ?? settings.defaultPaintingProvider,
-      apiServer: {
-        ...settings.apiServer,
-        enabled: preferenceService.get('feature.csaas.enabled') ?? settings.apiServer?.enabled,
-        host: preferenceService.get('feature.csaas.host') ?? settings.apiServer?.host,
-        port: preferenceService.get('feature.csaas.port') ?? settings.apiServer?.port,
-        apiKey: preferenceService.get('feature.csaas.api_key') ?? settings.apiServer?.apiKey
-      }
+    const merged = { ...settings }
+    for (const [keyPath, preferenceKey] of Object.entries(PREFERENCE_SETTING_PATHS)) {
+      const value = preferenceService.get(preferenceKey)
+      if (typeof value !== 'undefined') assignPath(merged, keyPath, value)
     }
+    return merged
   } catch {
     return settings
   }

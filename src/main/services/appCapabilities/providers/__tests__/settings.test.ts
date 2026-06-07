@@ -108,6 +108,7 @@ describe('settings app capabilities', () => {
       if (key === 'feature.csaas.port') return 24444
       if (key === 'feature.csaas.api_key') return 'preference-server-secret'
       if (key === 'feature.paintings.default_provider') return 'openai'
+      if (key === 'assistant.click_to_show_topic') return false
       return undefined
     })
     mocks.preferenceService.set.mockResolvedValue(undefined)
@@ -147,6 +148,19 @@ describe('settings app capabilities', () => {
       value: 'openai'
     })
     expect(mocks.preferenceService.get).toHaveBeenCalledWith('feature.paintings.default_provider')
+  })
+
+  it('reads preference-backed assistant list click behavior by path', async () => {
+    const result = await capability('settings.value.get').execute(
+      { path: 'clickAssistantToShowTopic' },
+      { source: 'agent' }
+    )
+
+    expect(result.data).toEqual({
+      path: 'clickAssistantToShowTopic',
+      value: false
+    })
+    expect(mocks.preferenceService.get).toHaveBeenCalledWith('assistant.click_to_show_topic')
   })
 
   it('redacts sensitive single setting values by path', async () => {
@@ -227,6 +241,21 @@ describe('settings app capabilities', () => {
     expect(result.data).toEqual({
       path: 'defaultPaintingProvider',
       value: 'ppio'
+    })
+  })
+
+  it('updates preference-backed assistant list click behavior', async () => {
+    const result = await capability('settings.value.set').execute(
+      { path: 'clickAssistantToShowTopic', value: true },
+      { source: 'agent' }
+    )
+
+    expect(mocks.preferenceService.set).toHaveBeenCalledWith('assistant.click_to_show_topic', true)
+    expect(findSettingsDispatchScript()).toContain('"type":"settings/setClickAssistantToShowTopic"')
+    expect(findSettingsDispatchScript()).toContain('"payload":true')
+    expect(result.data).toEqual({
+      path: 'clickAssistantToShowTopic',
+      value: true
     })
   })
 
