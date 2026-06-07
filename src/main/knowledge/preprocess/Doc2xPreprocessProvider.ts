@@ -359,13 +359,22 @@ export default class Doc2xPreprocessProvider extends BasePreprocessProvider {
       zip.extractAllTo(extractPath, true)
       logger.info('Extracted Doc2x files', { extractPath: summarizeTextForLog(extractPath) })
 
-      // 删除临时ZIP文件
-      fs.unlinkSync(zipPath)
-
       return { path: extractPath }
     } catch (error) {
       logger.error(`Failed to download and extract file: ${error instanceof Error ? error.message : String(error)}`)
       throw new Error('Failed to download and extract file')
+    } finally {
+      if (fs.existsSync(zipPath)) {
+        try {
+          fs.unlinkSync(zipPath)
+          logger.info('Deleted temporary Doc2x ZIP file', { zipPath: summarizeTextForLog(zipPath) })
+        } catch (deleteError) {
+          logger.warn('Failed to delete temporary Doc2x ZIP file', {
+            zipPath: summarizeTextForLog(zipPath),
+            error: deleteError
+          })
+        }
+      }
     }
   }
 }

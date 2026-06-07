@@ -193,13 +193,22 @@ export default class MineruPreprocessProvider extends BasePreprocessProvider {
       zip.extractAllTo(extractPath, true)
       logger.info('Extracted MinerU files', { extractPath: summarizeTextForLog(extractPath) })
 
-      // Remove the temporary ZIP file
-      fs.unlinkSync(zipPath)
-
       return { path: extractPath }
     } catch (error: any) {
       logger.error(`Failed to download and extract file: ${error.message}`)
       throw new Error(error.message)
+    } finally {
+      if (fs.existsSync(zipPath)) {
+        try {
+          fs.unlinkSync(zipPath)
+          logger.info('Deleted temporary MinerU ZIP file', { zipPath: summarizeTextForLog(zipPath) })
+        } catch (deleteError) {
+          logger.warn('Failed to delete temporary MinerU ZIP file', {
+            zipPath: summarizeTextForLog(zipPath),
+            error: deleteError
+          })
+        }
+      }
     }
   }
 
