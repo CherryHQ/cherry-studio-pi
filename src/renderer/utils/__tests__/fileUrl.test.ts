@@ -22,4 +22,12 @@ describe('fileUrlToPath', () => {
   it('passes plain local paths through unchanged', () => {
     expect(fileUrlToPath('/Users/me/My File.pdf')).toBe('/Users/me/My File.pdf')
   })
+
+  it('passes malformed file URLs through unchanged', () => {
+    expect(fileUrlToPath('file:///%E0%A4%A')).toBe('file:///%E0%A4%A')
+  })
+
+  it('passes invalid URL-like file strings through unchanged', () => {
+    expect(fileUrlToPath('file://[broken')).toBe('file://[broken')
+  })
 })
