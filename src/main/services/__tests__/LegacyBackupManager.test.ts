@@ -54,6 +54,7 @@ vi.mock('@logger', () => ({
 
 vi.mock('electron', () => ({
   app: {
+    getVersion: vi.fn(() => '1.9.99'),
     getPath: vi.fn((key: string) => {
       if (key === 'temp') return '/tmp'
       if (key === 'userData') return '/mock/userData'
@@ -142,6 +143,20 @@ const createStats = (type: 'directory' | 'file' | 'symlink', size = 0) => ({
   isDirectory: () => type === 'directory',
   isFile: () => type === 'file',
   isSymbolicLink: () => type === 'symlink'
+})
+
+describe('BackupManager direct backup metadata', () => {
+  it('should identify new direct backups as Cherry Studio Pi', () => {
+    const backupManager = new BackupManager()
+
+    expect((backupManager as any).createDirectBackupMetadata()).toEqual(
+      expect.objectContaining({
+        appName: 'Cherry Studio Pi',
+        appVersion: '1.9.99',
+        version: 6
+      })
+    )
+  })
 })
 
 describe('BackupManager.copyDirWithProgress - Symlink Handling', () => {

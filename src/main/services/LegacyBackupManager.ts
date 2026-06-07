@@ -34,6 +34,9 @@ import S3Storage from './S3Storage'
 import WebDav from './WebDav'
 
 const logger = loggerService.withContext('BackupManager')
+const DIRECT_BACKUP_APP_NAME = 'Cherry Studio Pi'
+const LEGACY_DIRECT_BACKUP_APP_NAMES = new Set([DIRECT_BACKUP_APP_NAME, 'Cherry Studio'])
+const DEFAULT_DIRECT_BACKUP_FILE_NAME = 'cherry-studio-pi.backup.zip'
 
 interface CopyDirOptions {
   dereferenceSymlinks: boolean
@@ -166,7 +169,7 @@ class BackupManager {
     return {
       version: 6,
       timestamp: Date.now(),
-      appName: 'Cherry Studio',
+      appName: DIRECT_BACKUP_APP_NAME,
       appVersion: app.getVersion(),
       platform: process.platform,
       arch: process.arch
@@ -472,7 +475,7 @@ class BackupManager {
    * @returns Result from WebDAV upload operation
    */
   async backupToWebdav(_: Electron.IpcMainInvokeEvent, webdavConfig: WebDavConfig) {
-    const filename = webdavConfig.fileName || 'cherry-studio.backup.zip'
+    const filename = webdavConfig.fileName || DEFAULT_DIRECT_BACKUP_FILE_NAME
     const backupedFilePath = await this.backup(_, filename, undefined, webdavConfig.skipBackupFile)
     const webdavClient = this.getWebDavInstance(webdavConfig)
     try {
@@ -509,7 +512,7 @@ class BackupManager {
       .toISOString()
       .replace(/[-:T.Z]/g, '')
       .slice(0, 14)
-    const filename = s3Config.fileName || `cherry-studio.backup.${deviceName}.${timestamp}.zip`
+    const filename = s3Config.fileName || `cherry-studio-pi.backup.${deviceName}.${timestamp}.zip`
 
     logger.debug(`[backupToS3] Starting S3 backup to ${filename}`)
 
@@ -597,9 +600,10 @@ class BackupManager {
       const metadataPath = path.join(this.tempDir, 'metadata.json')
       const metadata = await fs.readJson(metadataPath)
 
-      // Validate appName to ensure backup is from Cherry Studio
-      if (metadata.appName !== 'Cherry Studio') {
-        throw new Error('This backup file is not from Cherry Studio and cannot be restored')
+      // Validate appName to ensure backup is from Cherry Studio Pi while keeping
+      // old Cherry Studio direct backups restorable.
+      if (!LEGACY_DIRECT_BACKUP_APP_NAMES.has(metadata.appName)) {
+        throw new Error('This backup file is not from Cherry Studio Pi and cannot be restored')
       }
 
       // Warn about cross-platform restore
@@ -761,7 +765,7 @@ class BackupManager {
    * @returns Result from restore operation
    */
   async restoreFromWebdav(_: Electron.IpcMainInvokeEvent, webdavConfig: WebDavConfig) {
-    const filename = webdavConfig.fileName || 'cherry-studio.backup.zip'
+    const filename = webdavConfig.fileName || DEFAULT_DIRECT_BACKUP_FILE_NAME
     const webdavClient = this.getWebDavInstance(webdavConfig)
     try {
       const retrievedFile = await webdavClient.getFileContents(filename)
@@ -796,7 +800,7 @@ class BackupManager {
    * @returns Result from restore operation
    */
   async restoreFromS3(_: Electron.IpcMainInvokeEvent, s3Config: S3Config) {
-    const filename = s3Config.fileName || 'cherry-studio.backup.zip'
+    const filename = s3Config.fileName || DEFAULT_DIRECT_BACKUP_FILE_NAME
 
     logger.debug(`Starting restore from S3: ${filename}`)
 
