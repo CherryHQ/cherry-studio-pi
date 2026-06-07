@@ -357,11 +357,15 @@ class AssistantServer {
         const testUrl = apiHost.startsWith('http') ? apiHost : `https://${apiHost}`
         const controller = new AbortController()
         const timeout = setTimeout(() => controller.abort(), 10000)
-        const response = await fetch(testUrl, {
-          method: 'HEAD',
-          signal: controller.signal
-        })
-        clearTimeout(timeout)
+        let response: Response
+        try {
+          response = await fetch(testUrl, {
+            method: 'HEAD',
+            signal: controller.signal
+          })
+        } finally {
+          clearTimeout(timeout)
+        }
         const latency = Date.now() - startTime
 
         const result = {
@@ -629,12 +633,16 @@ class AssistantServer {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 5000)
 
-      const response = await fetch('https://api.github.com/repos/CherryHQ/cherry-studio-pi/releases/latest', {
-        method: 'GET',
-        headers: { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'CherryStudioPi' },
-        signal: controller.signal
-      })
-      clearTimeout(timeout)
+      let response: Response
+      try {
+        response = await fetch('https://api.github.com/repos/CherryHQ/cherry-studio-pi/releases/latest', {
+          method: 'GET',
+          headers: { Accept: 'application/vnd.github.v3+json', 'User-Agent': 'CherryStudioPi' },
+          signal: controller.signal
+        })
+      } finally {
+        clearTimeout(timeout)
+      }
 
       if (!response.ok) {
         return {
