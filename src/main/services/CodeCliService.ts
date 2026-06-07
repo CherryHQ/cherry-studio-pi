@@ -1003,12 +1003,13 @@ export class CodeCliService extends BaseService {
     // Check if package is already installed
     const isInstalled = await this.isPackageInstalled(cliTool)
 
-    // Check for updates and auto-update if requested
+    // Check for updates only when the result is needed before launch.
     let updateMessage = ''
     let installedVersion: string | null = null
 
-    // Get installed version if package is installed (needed for qwen-code auth-type check)
-    if (isInstalled) {
+    // qwen-code needs the local version for --auth-type; other tools only need version checks when auto-update is enabled.
+    const shouldCheckVersionBeforeLaunch = isInstalled && (cliTool === codeCLI.qwenCode || options.autoUpdateToLatest)
+    if (shouldCheckVersionBeforeLaunch) {
       try {
         const versionInfo = await this.getVersionInfo(cliTool)
         installedVersion = versionInfo.installed
@@ -1033,6 +1034,8 @@ export class CodeCliService extends BaseService {
       } catch (error) {
         logger.warn(`Failed to check version for ${cliTool}:`, error as Error)
       }
+    } else if (isInstalled) {
+      logger.info(`Skipping pre-launch version check for ${cliTool}`)
     }
 
     // Select different terminal based on operating system

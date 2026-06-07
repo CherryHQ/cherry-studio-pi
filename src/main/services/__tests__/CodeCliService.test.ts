@@ -122,6 +122,51 @@ describe('CodeCliService', () => {
     expect(isUserInChina).toHaveBeenCalledTimes(1)
   })
 
+  it('skips pre-launch version checks for installed tools when auto update is disabled', async () => {
+    const { codeCliService } = await loadModules()
+    const { codeCLI } = await import('@shared/config/constant')
+    const fs = await import('node:fs')
+    const { spawn } = await import('child_process')
+    const service = codeCliService as unknown as {
+      run: (
+        event: Electron.IpcMainInvokeEvent,
+        cliTool: string,
+        model: string,
+        directory: string,
+        env: Record<string, string>,
+        options?: { autoUpdateToLatest?: boolean; terminal?: string }
+      ) => Promise<unknown>
+      getVersionInfo: ReturnType<typeof vi.fn>
+      getTerminalConfig: ReturnType<typeof vi.fn>
+    }
+
+    vi.mocked(fs.default.existsSync).mockReturnValue(true)
+    service.getVersionInfo = vi.fn()
+    service.getTerminalConfig = vi.fn(async () => ({
+      id: 'Terminal',
+      name: 'Terminal',
+      command: (_directory: string, fullCommand: string) => ({
+        command: 'terminal',
+        args: [fullCommand]
+      })
+    }))
+
+    await expect(
+      service.run({} as Electron.IpcMainInvokeEvent, codeCLI.openaiCodex, 'gpt-5', '/workspace', {}, {})
+    ).resolves.toMatchObject({
+      success: true
+    })
+
+    expect(service.getVersionInfo).not.toHaveBeenCalled()
+    expect(spawn).toHaveBeenCalledWith(
+      'terminal',
+      expect.any(Array),
+      expect.objectContaining({
+        cwd: '/workspace'
+      })
+    )
+  })
+
   it('should prevent double instantiation', async () => {
     const { CodeCliService } = await loadModules()
     // loadModules() already created one instance,
