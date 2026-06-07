@@ -795,24 +795,23 @@ class FileStorage {
   }
 
   private async compressImageBuffer(imageBuffer: Buffer, destPath: string, ext: string): Promise<void> {
+    const tempPath = path.join(this.tempDir, `temp_${uuidv4()}${ext}`)
     try {
       // 创建临时文件
-      const tempPath = path.join(this.tempDir, `temp_${uuidv4()}${ext}`)
       await fs.promises.writeFile(tempPath, imageBuffer)
 
       // 使用现有的压缩方法
       await this.compressImage(tempPath, destPath)
-
-      // 清理临时文件
-      try {
-        await fs.promises.unlink(tempPath)
-      } catch (error) {
-        logger.warn('Failed to cleanup temp file:', error as Error)
-      }
     } catch (error) {
       logger.error('Image buffer compression failed, saving original:', error as Error)
       // 压缩失败时保存原始文件
       await fs.promises.writeFile(destPath, imageBuffer)
+    } finally {
+      try {
+        await fs.promises.rm(tempPath, { force: true })
+      } catch (error) {
+        logger.warn('Failed to cleanup temp file:', error as Error)
+      }
     }
   }
 

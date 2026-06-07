@@ -168,4 +168,18 @@ describe('FileStorage Storage v2 upload flow', () => {
     })
     expect(mocks.storageV2FileRepository.importFile).toHaveBeenCalledTimes(1)
   })
+
+  it('cleans pasted image temp files when compression falls back to the original buffer', async () => {
+    const { fileStorage } = await import('../FileStorage')
+    const compressImageSpy = vi
+      .spyOn(fileStorage as unknown as { compressImage: () => Promise<void> }, 'compressImage')
+      .mockRejectedValueOnce(new Error('compress failed'))
+
+    const result = await fileStorage.savePastedImage(undefined as never, Buffer.alloc(1024 * 1024 + 1), '.png')
+
+    expect(fs.existsSync(result.path)).toBe(true)
+    expect(fs.readdirSync(mocks.dirs.temp)).toEqual([])
+
+    compressImageSpy.mockRestore()
+  })
 })
