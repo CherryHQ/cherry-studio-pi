@@ -98,6 +98,25 @@ describe('CitationsList', () => {
     expect(screen.getByText('Recovered citation')).toBeInTheDocument()
   })
 
+  it('does not treat malformed web citation urls as local file paths', () => {
+    const citations: Citation[] = [
+      {
+        number: 1,
+        url: '/Users/cherry/Documents/not-a-web-citation.md',
+        title: 'Malformed web citation',
+        content: 'Reference text',
+        showFavicon: true,
+        type: 'websearch'
+      }
+    ]
+
+    render(<CitationsList citations={citations} />)
+    fireEvent.click(screen.getByRole('link', { name: 'Malformed web citation' }))
+
+    expect(window.open).not.toHaveBeenCalled()
+    expect(window.api.file.openPath).not.toHaveBeenCalled()
+  })
+
   it('opens http citation urls in the browser', () => {
     const citations: Citation[] = [
       {

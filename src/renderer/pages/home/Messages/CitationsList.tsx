@@ -125,7 +125,7 @@ const CitationsList: React.FC<CitationsListProps> = ({ citations }) => {
   )
 }
 
-const handleLinkClick = (url: string, event: React.MouseEvent) => {
+const handleLinkClick = (url: string, event: React.MouseEvent, options: { allowLocalPath?: boolean } = {}) => {
   event.preventDefault()
   if (!url) return
 
@@ -137,8 +137,11 @@ const handleLinkClick = (url: string, event: React.MouseEvent) => {
     }
     return
   } catch {
-    // Non-URL citations are treated as local file paths below.
+    // Knowledge and memory citations can point to local source files. Web
+    // citations must not turn arbitrary malformed URLs into local file opens.
   }
+
+  if (!options.allowLocalPath) return
 
   void window.api.file.openPath(url)
 }
@@ -234,7 +237,10 @@ const KnowledgeCitation: React.FC<{ citation: Citation }> = ({ citation }) => {
       <WebSearchCard>
         <WebSearchCardHeader>
           {citation.showFavicon && <FileSearch width={16} />}
-          <CitationLink className="text-nowrap" href={citation.url} onClick={(e) => handleLinkClick(citation.url, e)}>
+          <CitationLink
+            className="text-nowrap"
+            href={citation.url}
+            onClick={(e) => handleLinkClick(citation.url, e, { allowLocalPath: true })}>
             {/* example title: User/path/example.pdf */}
             {citation.title?.split('/').pop()}
           </CitationLink>
