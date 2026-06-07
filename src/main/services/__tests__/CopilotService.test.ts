@@ -17,6 +17,16 @@ const mocks = vi.hoisted(() => ({
   net: {
     fetch: vi.fn()
   },
+  safeStorage: {
+    decryptString: vi.fn((buffer: Buffer) => {
+      const value = buffer.toString('utf-8')
+      if (value.startsWith('encrypted:')) {
+        return value.slice('encrypted:'.length)
+      }
+      throw new Error('not encrypted')
+    }),
+    encryptString: vi.fn((value: string) => Buffer.from(`encrypted:${value}`))
+  },
   secretVault: {
     getSecret: vi.fn(),
     setSecret: vi.fn()
@@ -34,7 +44,8 @@ vi.mock('fs', () => ({
 
 vi.mock('electron', () => ({
   app: mocks.app,
-  net: mocks.net
+  net: mocks.net,
+  safeStorage: mocks.safeStorage
 }))
 
 vi.mock('../../utils/file', () => ({
@@ -104,7 +115,7 @@ describe('CopilotService Storage v2 token persistence', () => {
       'copilot'
     )
     expect(mocks.fs.promises.writeFile).not.toHaveBeenCalled()
-    expect(mocks.fs.promises.unlink).toHaveBeenCalledWith('/mock/userData/.copilot_token')
+    expect(mocks.fs.promises.unlink).toHaveBeenCalledWith('/mock/app.userdata/.copilot_token')
     expect(mocks.fs.promises.unlink).toHaveBeenCalledWith('/mock/config/.copilot_token')
   })
 
@@ -181,7 +192,7 @@ describe('CopilotService Storage v2 token persistence', () => {
       },
       'copilot'
     )
-    expect(mocks.fs.promises.unlink).toHaveBeenCalledWith('/mock/userData/.copilot_token')
+    expect(mocks.fs.promises.unlink).toHaveBeenCalledWith('/mock/app.userdata/.copilot_token')
     expect(mocks.fs.promises.unlink).toHaveBeenCalledWith('/mock/config/.copilot_token')
   })
 
