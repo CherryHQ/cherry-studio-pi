@@ -349,6 +349,18 @@ describe('knowledge app capabilities', () => {
     expect(mocks.knowledgeService.reset).not.toHaveBeenCalled()
   })
 
+  it('rejects invalid knowledge base creation input before writing metadata', async () => {
+    await expect(
+      capability('knowledge.base.create').execute({ name: 'Knowledge One' }, { source: 'agent' })
+    ).rejects.toThrow('Knowledge base model is required')
+    await expect(
+      capability('knowledge.base.create').execute({ name: 'Knowledge One', model: [] }, { source: 'agent' })
+    ).rejects.toThrow('Knowledge base model is required')
+
+    expect(mocks.storageV2KnowledgeRepository.importBases).not.toHaveBeenCalled()
+    expect(mocks.knowledgeService.create).not.toHaveBeenCalled()
+  })
+
   it('rejects empty knowledge base ids and invalid knowledge items before calling services', async () => {
     runtimeBases = [{ id: 'kb-1', name: 'Knowledge One', items: [] }]
 

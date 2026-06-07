@@ -91,6 +91,13 @@ function normalizeKnowledgeItem(value: unknown) {
   return value as KnowledgeItem
 }
 
+function normalizeKnowledgeModel(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Knowledge base model is required')
+  }
+  return value
+}
+
 function summarizeKnowledgeBaseForAgent(base: KnowledgeBase, input: any = {}) {
   const includeItems = input?.includeItems === true
   const itemLimit = normalizeKnowledgeBaseItemPreviewLimit(input?.itemLimit)
@@ -302,10 +309,12 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         const now = Date.now()
         const id = normalizeOptionalText(input?.id) || `kb_${uuidv4()}`
         const name = normalizeRequiredText(input?.name, 'Knowledge base name')
+        const model = normalizeKnowledgeModel(input?.model)
         const base = {
           ...input,
           id,
           name,
+          model,
           items: Array.isArray(input?.items) ? input.items : [],
           created_at: input?.created_at || now,
           updated_at: now
