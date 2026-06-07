@@ -42,6 +42,7 @@ const NutstoreSettings: FC = () => {
   const [nutstoreUsername, setNutstoreUsername] = useState<string | undefined>(undefined)
   const [nutstorePass, setNutstorePass] = useState<string | undefined>(undefined)
   // const [storagePath, setStoragePath] = useState<string | undefined>(nutstorePath)
+  const [nutstoreLoginLoading, setNutstoreLoginLoading] = useState(false)
   const [checkConnectionLoading, setCheckConnectionLoading] = useState(false)
   const [nsConnected, setNsConnected] = useState<boolean>(false)
 
@@ -54,12 +55,23 @@ const NutstoreSettings: FC = () => {
   const { setTimeoutTimer } = useTimer()
 
   const handleClickNutstoreSSO = useCallback(async () => {
-    const ssoUrl = await window.api.nutstore.getSSOUrl()
-    window.open(ssoUrl, '_blank')
-    const nutstoreToken = await nutstoreSsoHandler()
+    setNutstoreLoginLoading(true)
+    try {
+      const ssoUrl = await window.api.nutstore.getSSOUrl()
+      window.open(ssoUrl, '_blank')
+      const nutstoreToken = await nutstoreSsoHandler()
 
-    void setNutstoreToken(nutstoreToken)
-  }, [nutstoreSsoHandler, setNutstoreToken])
+      void setNutstoreToken(nutstoreToken)
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.includes('timed out')
+          ? t('error.request_timeout')
+          : t('settings.provider.oauth.error')
+      window.toast.error(message)
+    } finally {
+      setNutstoreLoginLoading(false)
+    }
+  }, [nutstoreSsoHandler, setNutstoreToken, t])
 
   useEffect(() => {
     async function decryptTokenEffect() {
@@ -226,8 +238,8 @@ const NutstoreSettings: FC = () => {
             </Button>
           </RowFlex>
         ) : (
-          <Button onClick={handleClickNutstoreSSO} variant="outline">
-            {t('settings.data.nutstore.login.button')}
+          <Button onClick={handleClickNutstoreSSO} variant="outline" disabled={nutstoreLoginLoading}>
+            {nutstoreLoginLoading ? <LoadingOutlined spin /> : t('settings.data.nutstore.login.button')}
           </Button>
         )}
       </SettingRow>
