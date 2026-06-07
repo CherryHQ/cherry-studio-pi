@@ -24,8 +24,10 @@ export class ImagePreviewService {
    * @param options 预览选项
    */
   static async show(input: ImageInput, options: ImagePreviewOptions = {}): Promise<void> {
+    let imageUrl: string | undefined
     try {
-      const imageUrl = await this.processInput(input, options)
+      const processedImageUrl = await this.processInput(input, options)
+      imageUrl = processedImageUrl
 
       // 动态导入 ImageViewer 避免循环依赖
       const { default: ImageViewer } = await import('@renderer/components/ImageViewer')
@@ -33,8 +35,8 @@ export class ImagePreviewService {
       const handleVisibilityChange = (visible: boolean) => {
         if (!visible) {
           // 清理创建的 URL
-          if (imageUrl.startsWith('blob:')) {
-            URL.revokeObjectURL(imageUrl)
+          if (processedImageUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(processedImageUrl)
           }
           TopView.hide('image-preview')
         }
@@ -43,7 +45,7 @@ export class ImagePreviewService {
       TopView.show(
         () =>
           React.createElement(ImageViewer, {
-            src: imageUrl,
+            src: processedImageUrl,
             style: { display: 'none' }, // 隐藏图片本身，只显示预览对话框
             preview: {
               visible: true,
@@ -53,6 +55,9 @@ export class ImagePreviewService {
         'image-preview'
       )
     } catch (error) {
+      if (imageUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(imageUrl)
+      }
       logger.error('Failed to show image preview:', error as Error)
       throw error
     }

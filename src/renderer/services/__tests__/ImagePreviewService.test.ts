@@ -89,6 +89,18 @@ describe('ImagePreviewService', () => {
       expect(mocks.TopView.show).toHaveBeenCalled()
     })
 
+    it('should revoke created blob URLs when preview setup fails', async () => {
+      const mockBlob = new Blob(['mock'], { type: 'image/png' })
+      const error = new Error('preview failed')
+      mocks.TopView.show.mockImplementationOnce(() => {
+        throw error
+      })
+
+      await expect(ImagePreviewService.show(mockBlob)).rejects.toThrow(error)
+
+      expect(mocks.revokeObjectURL).toHaveBeenCalledWith('blob:mock-url')
+    })
+
     it('should handle HTMLImageElement input', async () => {
       const mockImg = document.createElement('img')
       mockImg.src = 'https://example.com/image.png'
