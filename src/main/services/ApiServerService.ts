@@ -21,12 +21,11 @@ const logger = loggerService.withContext('ApiServerService')
 @DependsOn(['MainWindowService'])
 export class ApiServerService extends BaseService implements Activatable {
   private apiServer: ApiServer | null = null
+  private configChangeQueue: Promise<void> = Promise.resolve()
 
   protected async onInit(): Promise<void> {
     this.registerIpcHandlers()
-    // FIXME: Original code does not subscribe to feature.csaas.enabled runtime changes.
-    // Start/stop is driven entirely by the renderer UI via IPC.
-    // Consider adding a preference subscription for automatic runtime toggle in the future.
+    this.registerPreferenceListeners()
   }
 
   protected async onReady(): Promise<void> {
@@ -168,6 +167,49 @@ export class ApiServerService extends BaseService implements Activatable {
         return null
       }
     })
+  }
+
+  private registerPreferenceListeners(): void {
+    const preferenceService = application.get('PreferenceService')
+
+    this.registerDisposable(
+      preferenceService.subscribeChange('feature.csaas.enabled', (enabled) => {
+        this.queueConfigChange('enabled toggled', async () => {
+          if (enabled) {
+            if (!this.isRunning()) {
+              await this.start()
+            }
+            return
+          }
+
+          if (this.isRunning()) {
+            await this.stop()
+          }
+        })
+      })
+    )
+
+    this.registerDisposable(
+      preferenceService.subscribeMultipleChanges(['feature.csaas.host', 'feature.csaas.port'], () => {
+        this.queueConfigChange('host or port changed', async () => {
+          if (this.isRunning()) {
+            await this.restart()
+          }
+        })
+      })
+    )
+  }
+
+  private queueConfigChange(reason: string, task: () => Promise<void>): void {
+    this.configChangeQueue = this.configChangeQueue
+      .catch(() => undefined)
+      .then(async () => {
+        logger.info('Applying API server preference change', { reason })
+        await task()
+      })
+      .catch((error) => {
+        logger.error('Failed to apply API server preference change:', error as Error, { reason })
+      })
   }
 
   private async shouldAutoStart(): Promise<boolean> {
