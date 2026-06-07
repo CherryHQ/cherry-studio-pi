@@ -5,15 +5,25 @@ import { uuid } from '@renderer/utils'
 import type { CacheAppUpdateState } from '@shared/data/cache/cacheValueTypes'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { ProgressInfo, UpdateInfo } from 'builder-util-runtime'
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 export const useAppUpdateState = () => {
   const [appUpdateState, setAppUpdateState] = useCache('app.dist.update_state')
+  const appUpdateStateRef = useRef(appUpdateState)
 
-  const updateAppUpdateState = (state: Partial<CacheAppUpdateState>) => {
-    setAppUpdateState({ ...appUpdateState, ...state })
-  }
+  useEffect(() => {
+    appUpdateStateRef.current = appUpdateState
+  }, [appUpdateState])
+
+  const updateAppUpdateState = useCallback(
+    (state: Partial<CacheAppUpdateState>) => {
+      const nextState = { ...appUpdateStateRef.current, ...state }
+      appUpdateStateRef.current = nextState
+      setAppUpdateState(nextState)
+    },
+    [setAppUpdateState]
+  )
 
   return {
     appUpdateState,
@@ -24,9 +34,8 @@ export const useAppUpdateState = () => {
 //TODO: 这个函数是从useUpdateHandler中复制过来的，是v2数据重构时调整的，但这个函数本身需要重构和优化（并不需要用在use中）。by fullex
 export function useAppUpdateHandler() {
   const { t } = useTranslation()
-  const { updateAppUpdateState } = useAppUpdateState()
+  const { appUpdateState, updateAppUpdateState } = useAppUpdateState()
   // notificationService is imported as a module-level singleton
-  const { appUpdateState } = useAppUpdateState()
   const manualCheckRef = useRef(appUpdateState.manualCheck)
 
   // Keep ref in sync with current state
