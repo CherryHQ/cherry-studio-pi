@@ -189,6 +189,8 @@ const DEFAULT_BASE_URL = 'https://ilinkai.weixin.qq.com'
 const CDN_BASE_URL = 'https://novac2c.cdn.weixin.qq.com/c2c'
 const CHANNEL_VERSION = '1.0.0'
 const QR_POLL_INTERVAL_MS = 2_000
+const CDN_TRANSFER_TIMEOUT_MS = 120_000
+const API_GET_TIMEOUT_MS = 40_000
 const MAX_CONTEXT_TOKENS = 1000
 const STORAGE_V2_WECHAT_CREDENTIALS_SCOPE = 'wechat'
 const STORAGE_V2_WECHAT_CREDENTIALS_SETTING_PREFIX = 'wechat.credentials.'
@@ -233,7 +235,10 @@ async function cdnDownloadImage(item: ImageItem): Promise<Buffer | null> {
   }
 
   const url = `${CDN_BASE_URL}/download?encrypted_query_param=${encodeURIComponent(encryptQueryParam)}`
-  const response = await net.fetch(url, { method: 'GET' })
+  const response = await net.fetch(url, {
+    method: 'GET',
+    signal: AbortSignal.timeout(CDN_TRANSFER_TIMEOUT_MS)
+  })
 
   if (!response.ok) {
     return null
@@ -300,7 +305,10 @@ async function cdnDownloadFile(item: FileItem): Promise<Buffer | null> {
   }
 
   const url = `${CDN_BASE_URL}/download?encrypted_query_param=${encodeURIComponent(encryptQueryParam)}`
-  const response = await net.fetch(url, { method: 'GET' })
+  const response = await net.fetch(url, {
+    method: 'GET',
+    signal: AbortSignal.timeout(CDN_TRANSFER_TIMEOUT_MS)
+  })
 
   if (!response.ok) {
     return null
@@ -364,7 +372,8 @@ async function cdnUploadImage(
   const uploadResp = await net.fetch(uploadUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream' },
-    body: new Uint8Array(ciphertext)
+    body: new Uint8Array(ciphertext),
+    signal: AbortSignal.timeout(CDN_TRANSFER_TIMEOUT_MS)
   })
 
   if (!uploadResp.ok) {
@@ -468,7 +477,11 @@ async function apiFetch(
 
 async function apiGet(baseUrlOrigin: string, urlPath: string, headers: Record<string, string> = {}): Promise<unknown> {
   const url = `${baseUrlOrigin}${urlPath}`
-  const response = await net.fetch(url, { method: 'GET', headers })
+  const response = await net.fetch(url, {
+    method: 'GET',
+    headers,
+    signal: AbortSignal.timeout(API_GET_TIMEOUT_MS)
+  })
   return parseJsonResponse(response, urlPath)
 }
 
