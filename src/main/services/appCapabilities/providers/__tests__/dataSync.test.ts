@@ -11,10 +11,6 @@ const mocks = vi.hoisted(() => ({
     }
   ],
   getAllWindows: vi.fn(),
-  reduxService: {
-    select: vi.fn(),
-    dispatch: vi.fn()
-  },
   appDataSyncService: {
     getStatus: vi.fn(),
     listRemoteDirectories: vi.fn(),
@@ -29,10 +25,6 @@ vi.mock('electron', () => ({
   BrowserWindow: {
     getAllWindows: mocks.getAllWindows
   }
-}))
-
-vi.mock('@main/services/ReduxService', () => ({
-  reduxService: mocks.reduxService
 }))
 
 vi.mock('@main/services/appData/AppDataSyncService', () => ({
@@ -84,8 +76,6 @@ describe('data sync app capabilities', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.getAllWindows.mockReturnValue(mocks.browserWindows)
-    mocks.reduxService.select.mockResolvedValue(settings)
-    mocks.reduxService.dispatch.mockResolvedValue(undefined)
     mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation(async (script: string) => {
       if (script.includes('typeof')) return true
       if (script.includes(RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE)) return settings
@@ -135,7 +125,6 @@ describe('data sync app capabilities', () => {
     expect(setCall?.[0]).toContain('"dataSyncWebdavPath":"/Team/Sync"')
     expect(setCall?.[0]).toContain('"dataSyncAutoSync":false')
     expect(setCall?.[0]).toContain('"dataSyncSyncInterval":30')
-    expect(mocks.reduxService.dispatch).not.toHaveBeenCalled()
   })
 
   it('declares dry-run support for write capabilities that implement dry-run branches', () => {

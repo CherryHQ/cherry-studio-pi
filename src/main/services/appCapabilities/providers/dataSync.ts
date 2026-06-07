@@ -1,5 +1,4 @@
 import { appDataSyncService } from '@main/services/appData/AppDataSyncService'
-import { reduxService } from '@main/services/ReduxService'
 import { describeWebDavUserFacingError } from '@main/services/WebDavRetry'
 import {
   type DataSyncBridgeSettings,
@@ -36,8 +35,6 @@ async function getDataSyncSettings(): Promise<DataSyncSettingsState> {
       timeoutMessage: '读取同步设置超时'
     })
   } catch (error) {
-    const legacySettings = await reduxService.select<DataSyncSettingsState>('state.settings').catch(() => undefined)
-    if (legacySettings) return legacySettings
     throw new Error(`无法读取同步设置：${getBridgeErrorMessage(error)}`)
   }
 }
