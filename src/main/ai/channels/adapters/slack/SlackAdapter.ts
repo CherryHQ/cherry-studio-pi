@@ -11,6 +11,8 @@ import { toSlackMarkdown } from './slackMarkdown'
 
 const SLACK_API_BASE = 'https://slack.com/api'
 const SLACK_MAX_LENGTH = 4000
+const SLACK_API_TIMEOUT_MS = 30_000
+const SLACK_FILE_DOWNLOAD_TIMEOUT_MS = 120_000
 
 /**
  * Slack rate limit for chat.update: ~1 per second per channel.
@@ -258,7 +260,8 @@ class SlackAdapter extends ChannelAdapter {
       headers: {
         Authorization: `Bearer ${this.appToken}`,
         'Content-Type': 'application/x-www-form-urlencoded'
-      }
+      },
+      signal: AbortSignal.timeout(SLACK_API_TIMEOUT_MS)
     })
 
     if (!response.ok) {
@@ -473,7 +476,8 @@ class SlackAdapter extends ChannelAdapter {
   private async downloadSlackFile(url: string): Promise<ImageAttachment | null> {
     try {
       const response = await net.fetch(url, {
-        headers: { Authorization: `Bearer ${this.botToken}` }
+        headers: { Authorization: `Bearer ${this.botToken}` },
+        signal: AbortSignal.timeout(SLACK_FILE_DOWNLOAD_TIMEOUT_MS)
       })
       if (!response.ok) return null
       const contentLength = response.headers.get('content-length')
@@ -491,7 +495,8 @@ class SlackAdapter extends ChannelAdapter {
   private async downloadSlackFileAsAttachment(url: string, filename: string): Promise<FileAttachment | null> {
     try {
       const response = await net.fetch(url, {
-        headers: { Authorization: `Bearer ${this.botToken}` }
+        headers: { Authorization: `Bearer ${this.botToken}` },
+        signal: AbortSignal.timeout(SLACK_FILE_DOWNLOAD_TIMEOUT_MS)
       })
       if (!response.ok) return null
       const buffer = Buffer.from(await response.arrayBuffer())
@@ -619,7 +624,8 @@ class SlackAdapter extends ChannelAdapter {
         Authorization: `Bearer ${this.botToken}`,
         'Content-Type': 'application/json; charset=utf-8'
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(SLACK_API_TIMEOUT_MS)
     })
 
     if (!response.ok) {

@@ -229,6 +229,7 @@ describe('SlackAdapter', () => {
     const lastPostCall = postCalls[postCalls.length - 1]
     const body = JSON.parse(lastPostCall[1].body)
     expect(body).toEqual({ channel: 'C0ALLOWED', text: 'Hello Slack' })
+    expect(lastPostCall[1].signal).toBeInstanceOf(AbortSignal)
   })
 
   it('sendMessage() chunks long messages', async () => {
@@ -583,7 +584,10 @@ describe('SlackAdapter', () => {
 
     // Verify the download used Bearer auth
     const fileFetchCall = mockNetFetch.mock.calls.find((c: unknown[]) => (c[0] as string).includes('files.slack.com'))
-    expect(fileFetchCall![1]).toEqual({ headers: { Authorization: 'Bearer xoxb-test-token' } })
+    expect(fileFetchCall![1]).toEqual({
+      headers: { Authorization: 'Bearer xoxb-test-token' },
+      signal: expect.any(AbortSignal)
+    })
   })
 
   // ─── Streaming ────────────────────────────────────────────

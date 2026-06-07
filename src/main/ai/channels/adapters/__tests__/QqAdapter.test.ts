@@ -75,5 +75,6 @@ describe('QqAdapter.downloadAttachments', () => {
 
     expect(result.images).toHaveLength(1)
     expect(mockNetFetch).toHaveBeenCalled()
+    expect(mockNetFetch.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal)
   })
 })

@@ -10,6 +10,8 @@ import { splitMessage } from '../../utils'
 
 const QQ_MAX_LENGTH = 2000
 const QQ_API_BASE = 'https://api.sgroup.qq.com'
+const QQ_API_TIMEOUT_MS = 30_000
+const QQ_ATTACHMENT_DOWNLOAD_TIMEOUT_MS = 120_000
 
 // QQ Bot WebSocket opcodes
 const OP_DISPATCH = 0
@@ -125,7 +127,8 @@ class QqAdapter extends ChannelAdapter {
       body: JSON.stringify({
         appId: this.appId,
         clientSecret: this.clientSecret
-      })
+      }),
+      signal: AbortSignal.timeout(QQ_API_TIMEOUT_MS)
     })
 
     if (!response.ok) {
@@ -158,7 +161,8 @@ class QqAdapter extends ChannelAdapter {
         'Content-Type': 'application/json',
         'X-Union-Appid': this.appId
       },
-      ...(options?.body ? { body: JSON.stringify(options.body) } : {})
+      ...(options?.body ? { body: JSON.stringify(options.body) } : {}),
+      signal: AbortSignal.timeout(QQ_API_TIMEOUT_MS)
     })
 
     if (!response.ok) {
@@ -425,11 +429,14 @@ class QqAdapter extends ChannelAdapter {
             // inbound payload before we fetch with the bot token (and before the retry).
             const safeUrl = sanitizeRemoteUrl(url)
             const response = await net.fetch(safeUrl, {
-              headers: { Authorization: `QQBot ${token}`, 'X-Union-Appid': this.appId }
+              headers: { Authorization: `QQBot ${token}`, 'X-Union-Appid': this.appId },
+              signal: AbortSignal.timeout(QQ_ATTACHMENT_DOWNLOAD_TIMEOUT_MS)
             })
             if (!response.ok) {
               // Retry without auth header (some CDN URLs are public)
-              const retry = await net.fetch(safeUrl)
+              const retry = await net.fetch(safeUrl, {
+                signal: AbortSignal.timeout(QQ_ATTACHMENT_DOWNLOAD_TIMEOUT_MS)
+              })
               if (!retry.ok) return
               const buffer = Buffer.from(await retry.arrayBuffer())
               // `att.size` is attacker-supplied metadata; cap on the real downloaded bytes.
