@@ -128,14 +128,16 @@ export const formatCitationsFromBlock = (block: CitationMessageBlock | undefined
       case WEB_SEARCH_SOURCE.GEMINI: {
         const groundingMetadata = block.response.results as GroundingMetadata
         formattedCitations =
-          groundingMetadata?.groundingChunks?.map((chunk, index) => ({
-            number: index + 1,
-            url: chunk?.web?.uri || '',
-            title: chunk?.web?.title,
-            showFavicon: true,
-            metadata: groundingMetadata.groundingSupports,
-            type: 'websearch'
-          })) || []
+          asArray<NonNullable<GroundingMetadata['groundingChunks']>[number]>(groundingMetadata?.groundingChunks).map(
+            (chunk, index) => ({
+              number: index + 1,
+              url: chunk?.web?.uri || '',
+              title: chunk?.web?.title,
+              showFavicon: true,
+              metadata: groundingMetadata.groundingSupports,
+              type: 'websearch'
+            })
+          ) || []
         break
       }
       case WEB_SEARCH_SOURCE.OPENAI_RESPONSE:

@@ -4,6 +4,18 @@ import { describe, expect, it } from 'vitest'
 import { formatCitationsFromBlock } from '../messageBlock'
 
 describe('formatCitationsFromBlock', () => {
+  it('keeps malformed Gemini grounding chunks from throwing', () => {
+    const block = {
+      response: {
+        source: WEB_SEARCH_SOURCE.GEMINI,
+        results: { groundingChunks: { unexpected: true } }
+      }
+    } as any
+
+    expect(() => formatCitationsFromBlock(block)).not.toThrow()
+    expect(formatCitationsFromBlock(block)).toEqual([])
+  })
+
   it('keeps non-array provider citation payloads from throwing', () => {
     const arrayBackedSources = [
       WEB_SEARCH_SOURCE.OPENAI_RESPONSE,
