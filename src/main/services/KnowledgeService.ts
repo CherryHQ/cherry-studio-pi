@@ -86,7 +86,6 @@ interface LoaderTaskOfSet {
 
 interface QueueTaskItem {
   taskPromise: () => Promise<unknown>
-  resolve: () => void
   evaluateTaskWorkload: EvaluateTaskWorkload
 }
 
@@ -587,18 +586,30 @@ class KnowledgeService {
           this.processingItemCount += 1
           item.state = LoaderTaskItemState.PROCESSING
           queueTaskList.push({
-            taskPromise: () =>
-              taskPromise().then(() => {
-                this.workload -= workload
-                this.processingItemCount -= 1
+            taskPromise: async () => {
+              try {
+                await taskPromise()
+              } catch (error) {
+                logger.error('Unhandled knowledge loader task failure:', error as Error)
+                if (!task.loaderDoneReturn) {
+                  task.loaderDoneReturn = {
+                    ...KnowledgeService.ERROR_LOADER_RETURN,
+                    message: error instanceof Error ? error.message : String(error),
+                    messageSource: 'embedding'
+                  }
+                }
+              } finally {
+                this.workload = Math.max(0, this.workload - workload)
+                this.processingItemCount = Math.max(0, this.processingItemCount - 1)
+                item.state = LoaderTaskItemState.DONE
                 task.loaderTasks.delete(item)
                 if (task.loaderTasks.size === 0) {
                   this.knowledgeItemProcessingQueueMappingPromise.delete(task)
                   resolve()
                 }
                 this.processingQueueHandle()
-              }),
-            resolve: () => {},
+              }
+            },
             evaluateTaskWorkload
           })
         }
@@ -608,8 +619,8 @@ class KnowledgeService {
     const subTasks = getSubtasksUntilMaximumLoad()
     if (subTasks.length > 0) {
       const subTaskPromises = subTasks.map(({ taskPromise }) => taskPromise())
-      void Promise.all(subTaskPromises).then(() => {
-        subTasks.forEach(({ resolve }) => resolve())
+      void Promise.all(subTaskPromises).catch((error) => {
+        logger.error('Knowledge processing queue batch failed unexpectedly:', error as Error)
       })
     }
   }
@@ -646,9 +657,18 @@ class KnowledgeService {
           })()
 
           if (task) {
-            void this.appendProcessingQueue(task).then(() => {
-              resolve(task.loaderDoneReturn!)
-            })
+            void this.appendProcessingQueue(task)
+              .then(() => {
+                resolve(task.loaderDoneReturn!)
+              })
+              .catch((err) => {
+                logger.error('Failed to resolve knowledge processing queue task:', err as Error)
+                resolve({
+                  ...KnowledgeService.ERROR_LOADER_RETURN,
+                  message: `Failed to resolve knowledge processing queue task: ${err instanceof Error ? err.message : String(err)}`,
+                  messageSource: 'embedding'
+                })
+              })
             this.processingQueueHandle()
           } else {
             resolve({

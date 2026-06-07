@@ -278,7 +278,11 @@ class DirectoryTreeBuilderImpl implements DirectoryTreeBuilder {
           // Defer watcher events until the initial scan completes so we
           // don't apply a mutation for a path the scan is about to insert.
           if (this.initialScanPromise) {
-            void this.initialScanPromise.then(() => this.handleWatcherEvent(ev))
+            void this.initialScanPromise
+              .then(() => this.handleWatcherEvent(ev))
+              .catch((error) => {
+                logger.warn(`Dropping watcher event after initial scan failed on ${this.rootPath}`, error as Error)
+              })
           } else {
             void this.handleWatcherEvent(ev)
           }

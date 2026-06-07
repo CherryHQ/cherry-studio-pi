@@ -1694,9 +1694,16 @@ export class WindowManager extends BaseService {
 
     if (shouldShow && !this.dockShouldBeVisible) {
       this.dockShouldBeVisible = true
-      void app.dock?.show().then(() => {
-        if (!this.dockShouldBeVisible) app.dock?.hide()
-      })
+      const showDockPromise = app.dock?.show()
+      if (showDockPromise) {
+        void showDockPromise
+          .then(() => {
+            if (!this.dockShouldBeVisible) app.dock?.hide()
+          })
+          .catch((error) => {
+            logger.warn('Failed to show macOS Dock icon', error as Error)
+          })
+      }
     } else if (!shouldShow && this.dockShouldBeVisible) {
       this.dockShouldBeVisible = false
       app.dock?.hide()
