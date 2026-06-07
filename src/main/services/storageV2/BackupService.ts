@@ -501,9 +501,10 @@ export class StorageV2BackupService {
     await storageV2Database.healthCheck()
     await storageV2Database.waitForIdle()
     await storageV2SecretVaultService.waitForIdle()
-    const secretVaultPrune = await storageV2Database.pruneUnreferencedSecretVaultEntries().catch((error) => ({
-      error: errorMessage(error)
-    }))
+    const secretVaultPrune = {
+      skipped: true,
+      reason: 'source-vault-preserved'
+    }
 
     const createdAt = new Date().toISOString()
     const backupDir = path.join(rootInfo.dataRoot, 'backups', `${timestampForFilename()}-${safeName(reason)}`)

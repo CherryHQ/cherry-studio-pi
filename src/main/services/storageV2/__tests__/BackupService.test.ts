@@ -77,7 +77,8 @@ vi.mock('../../ConfigManager', () => ({
 }))
 
 vi.mock('../../KnowledgeService', () => ({
-  default: mocks.knowledgeService
+  default: mocks.knowledgeService,
+  knowledgeService: mocks.knowledgeService
 }))
 
 vi.mock('../../memory/MemoryService', () => ({
@@ -656,18 +657,15 @@ describe('StorageV2BackupService.createBackup', () => {
     vi.restoreAllMocks()
   })
 
-  it('prunes unreferenced secrets before copying the vault into the backup', async () => {
+  it('does not prune the source secret vault while creating a backup', async () => {
     const result = await new StorageV2BackupService().createBackup('manual')
 
-    expect(mocks.database.pruneUnreferencedSecretVaultEntries).toHaveBeenCalledTimes(1)
-    expect(mocks.database.pruneUnreferencedSecretVaultEntries.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.database.createSnapshot.mock.invocationCallOrder[0]
-    )
+    expect(mocks.database.pruneUnreferencedSecretVaultEntries).not.toHaveBeenCalled()
 
     const metadata = JSON.parse(fs.readFileSync(result.manifestPath, 'utf-8'))
     expect(metadata.secretVaultPrune).toMatchObject({
-      prunedCount: 1,
-      prunedSecretIds: ['provider:stale:apiKey']
+      skipped: true,
+      reason: 'source-vault-preserved'
     })
     expect(metadata.copiedDirectories).toContain('Workbench')
     expect(metadata.copiedDirectories).toContain('Channels')
