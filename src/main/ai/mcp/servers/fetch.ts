@@ -15,8 +15,15 @@ export const RequestPayloadSchema = z.object({
 
 export type RequestPayload = z.infer<typeof RequestPayloadSchema>
 
+export const MCP_FETCH_TIMEOUT_MS = 30_000
+
 export class Fetcher {
   private static async _fetch({ url, headers }: RequestPayload): Promise<Response> {
+    const controller = new AbortController()
+    const timeoutError = new Error(`Request timed out after ${Math.round(MCP_FETCH_TIMEOUT_MS / 1000)}s`)
+    const timeoutId = setTimeout(() => controller.abort(timeoutError), MCP_FETCH_TIMEOUT_MS)
+    timeoutId.unref?.()
+
     try {
       // SSRF guard: the URL is model-supplied and `z.url()` accepts file://, localhost,
       // RFC1918, and link-local (e.g. the 169.254.169.254 metadata endpoint). Reject
@@ -28,7 +35,8 @@ export class Fetcher {
           'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           ...headers
-        }
+        },
+        signal: controller.signal
       })
 
       if (!response.ok) {
@@ -41,6 +49,8 @@ export class Fetcher {
       } else {
         throw new Error(`Failed to fetch ${url}: Unknown error`)
       }
+    } finally {
+      clearTimeout(timeoutId)
     }
   }
 
