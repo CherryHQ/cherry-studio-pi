@@ -14,7 +14,7 @@ import { isSystemProvider } from '@renderer/types'
  */
 export function includeKeywords(target: string, keywords: string | string[]): boolean {
   const keywordArray = Array.isArray(keywords) ? keywords : (keywords || '').split(/\s+/)
-  const nonEmptyKeywords = keywordArray.filter(Boolean)
+  const nonEmptyKeywords = keywordArray.map((keyword) => keyword.trim()).filter(Boolean)
 
   // 如果没有有效关键词，则视为匹配
   if (nonEmptyKeywords.length === 0) return true

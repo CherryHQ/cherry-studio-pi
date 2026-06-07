@@ -70,6 +70,8 @@ describe('match', () => {
       expect(includeKeywords('Hello World', ['Hello', 'World'])).toBe(true)
       expect(includeKeywords('Hello World', ['hello', 'foo'])).toBe(false)
       expect(includeKeywords('Hello World', ['hello', ''])).toBe(true)
+      expect(includeKeywords('Hello World', ['  hello  ', '  world  '])).toBe(true)
+      expect(includeKeywords('Hello World', ['   '])).toBe(true)
     })
   })
 
