@@ -75,57 +75,22 @@ export class SearchService extends BaseService {
     }
   }
 
-  private async waitForSearchWindowLoad(window: BrowserWindow): Promise<void> {
+  private async waitForSearchWindowSettle(): Promise<void> {
     await new Promise<void>((resolve) => {
-      let settled = false
-      let settleDelay: ReturnType<typeof setTimeout> | null = null
-
-      const loadTimeout = setTimeout(() => {
-        finish()
-      }, 10000)
-      loadTimeout.unref?.()
-
-      const cleanup = () => {
-        clearTimeout(loadTimeout)
-        if (settleDelay) {
-          clearTimeout(settleDelay)
-          settleDelay = null
-        }
-        window.webContents.removeListener('did-finish-load', onLoaded)
-      }
-
-      const finish = () => {
-        if (settled) return
-        settled = true
-        cleanup()
-        resolve()
-      }
-
-      const onLoaded = () => {
-        if (settled) return
-        clearTimeout(loadTimeout)
-        // Small delay to ensure JavaScript has executed
-        settleDelay = setTimeout(finish, 500)
-        settleDelay.unref?.()
-      }
-
-      window.webContents.once('did-finish-load', onLoaded)
+      const settleDelay = setTimeout(resolve, 500)
+      settleDelay.unref?.()
     })
   }
 
   public async openUrlInSearchWindow(uid: string, url: string): Promise<any> {
     let window = this.searchWindows[uid]
     logger.debug(`Searching with URL: ${url}`)
-    if (window) {
-      await window.loadURL(url)
-    } else {
+    if (!window) {
       window = await this.createNewSearchWindow(uid)
-      await window.loadURL(url)
     }
 
-    // Get the page content after loading the URL
-    // Wait for the page to fully load before getting the content
-    await this.waitForSearchWindowLoad(window)
+    await window.loadURL(url)
+    await this.waitForSearchWindowSettle()
 
     // Get the page content after ensuring it's fully loaded
     return await window.webContents.executeJavaScript('document.documentElement.outerHTML')

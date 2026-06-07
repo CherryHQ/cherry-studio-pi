@@ -43,19 +43,19 @@ describe('SearchService', () => {
     BaseService.resetInstances()
   })
 
-  it('clears the load timeout after the search window finishes loading', async () => {
+  it('waits only for a short settle delay after loadURL resolves', async () => {
     const service = new SearchService()
     const resultPromise = service.openUrlInSearchWindow('search-1', 'https://example.com')
 
-    await vi.waitFor(() => expect(window.webContents.listenerCount('did-finish-load')).toBe(1))
+    await vi.waitFor(() => expect(window.loadURL).toHaveBeenCalledWith('https://example.com'))
+    await vi.waitFor(() => expect(vi.getTimerCount()).toBe(1))
 
-    window.webContents.emit('did-finish-load')
-
-    expect(vi.getTimerCount()).toBe(1)
+    expect(window.webContents.listenerCount('did-finish-load')).toBe(0)
+    expect(window.webContents.executeJavaScript).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(500)
 
     await expect(resultPromise).resolves.toBe('<html></html>')
-    expect(window.webContents.listenerCount('did-finish-load')).toBe(0)
+    expect(window.webContents.executeJavaScript).toHaveBeenCalledWith('document.documentElement.outerHTML')
     expect(vi.getTimerCount()).toBe(0)
   })
 
@@ -75,18 +75,13 @@ describe('SearchService', () => {
     )
   })
 
-  it('removes the load listener when the search window load wait times out', async () => {
+  it('does not leave timers or listeners when loadURL fails', async () => {
+    window.loadURL.mockRejectedValueOnce(new Error('navigation failed'))
+
     const service = new SearchService()
-    const resultPromise = service.openUrlInSearchWindow('search-1', 'https://example.com')
 
-    await vi.waitFor(() => expect(window.webContents.listenerCount('did-finish-load')).toBe(1))
-    await vi.advanceTimersByTimeAsync(10_000)
-
-    await expect(resultPromise).resolves.toBe('<html></html>')
+    await expect(service.openUrlInSearchWindow('search-1', 'https://example.com')).rejects.toThrow('navigation failed')
     expect(window.webContents.listenerCount('did-finish-load')).toBe(0)
-    expect(vi.getTimerCount()).toBe(0)
-
-    window.webContents.emit('did-finish-load')
     expect(vi.getTimerCount()).toBe(0)
   })
 })
