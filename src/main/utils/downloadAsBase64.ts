@@ -21,6 +21,13 @@ export type FileAttachment = {
 
 /** Maximum file size we'll download (100 MB). */
 export const MAX_FILE_SIZE_BYTES = 100 * MB
+export const ATTACHMENT_DOWNLOAD_TIMEOUT_MS = 120_000
+
+function fetchRemoteAttachment(url: string): Promise<Response> {
+  return net.fetch(sanitizeRemoteUrl(url), {
+    signal: AbortSignal.timeout(ATTACHMENT_DOWNLOAD_TIMEOUT_MS)
+  })
+}
 
 /**
  * Download an image URL via Electron's net.fetch (respects system proxy) and
@@ -29,7 +36,7 @@ export const MAX_FILE_SIZE_BYTES = 100 * MB
 export async function downloadImageAsBase64(url: string): Promise<ImageAttachment | null> {
   try {
     // Reject non-http(s) schemes and local/private hosts before fetching (SSRF guard).
-    const response = await net.fetch(sanitizeRemoteUrl(url))
+    const response = await fetchRemoteAttachment(url)
     if (!response.ok) {
       logger.warn('Failed to download image', { url, status: response.status })
       return null
@@ -66,7 +73,7 @@ export async function downloadImageAsBase64(url: string): Promise<ImageAttachmen
 export async function downloadFileAsBase64(url: string, filename: string): Promise<FileAttachment | null> {
   try {
     // Reject non-http(s) schemes and local/private hosts before fetching (SSRF guard).
-    const response = await net.fetch(sanitizeRemoteUrl(url))
+    const response = await fetchRemoteAttachment(url)
     if (!response.ok) {
       logger.warn('Failed to download file', { url, filename, status: response.status })
       return null
