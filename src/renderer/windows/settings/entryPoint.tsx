@@ -7,8 +7,8 @@ import { preferenceService } from '@data/PreferenceService'
 import { loggerService } from '@logger'
 import type { UnifiedPreferenceKeyType } from '@shared/data/preference/preferenceTypes'
 import { DEFAULT_SETTINGS_PATH, normalizeSettingsPath } from '@shared/data/types/settingsPath'
-import { createRoot } from 'react-dom/client'
 
+import { createRendererRoot } from '../root'
 import SettingsApp, { SettingsWindowFatalError } from './SettingsApp'
 
 loggerService.initWindowSource('SettingsWindow')
@@ -46,7 +46,7 @@ async function getInitialSettingsPath() {
   }
 }
 
-const root = createRoot(document.getElementById('root') as HTMLElement)
+const root = createRendererRoot('SettingsWindow')
 const preloadError = await preloadSettingsPreferences()
 const initialSettingsPath = preloadError ? DEFAULT_SETTINGS_PATH : await getInitialSettingsPath()
 

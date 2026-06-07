@@ -7,8 +7,8 @@ import '@renderer/assets/styles/tailwind.css'
 import '@ant-design/v5-patch-for-react-19'
 
 import { loggerService } from '@logger'
-import { createRoot } from 'react-dom/client'
 
+import { createRendererRoot } from '../root'
 import { initI18n } from './i18n'
 import MigrationApp from './MigrationApp'
 
@@ -16,7 +16,7 @@ import MigrationApp from './MigrationApp'
 loggerService.initWindowSource('MigrationV2')
 const logger = loggerService.withContext('MigrationV2')
 
-const root = createRoot(document.getElementById('root') as HTMLElement)
+const root = createRendererRoot('MigrationV2')
 
 // Wait for i18n to be fully initialized before rendering
 void initI18n()

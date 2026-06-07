@@ -2,19 +2,25 @@ import '@ant-design/v5-patch-for-react-19'
 
 import { preferenceService } from '@data/PreferenceService'
 import { loggerService } from '@logger'
-import { createRoot } from 'react-dom/client'
 
+import { createRendererRoot } from '../../root'
 import SelectionToolbarApp from './SelectionToolbarApp'
 
 loggerService.initWindowSource('SelectionToolbar')
-await preferenceService.preload([
-  'app.language',
-  'ui.custom_css',
-  'ui.theme_mode',
-  'ui.theme_user.color_primary',
-  'feature.selection.compact',
-  'feature.selection.action_items'
-])
+const logger = loggerService.withContext('SelectionToolbarEntry')
 
-const root = createRoot(document.getElementById('root') as HTMLElement)
+await preferenceService
+  .preload([
+    'app.language',
+    'ui.custom_css',
+    'ui.theme_mode',
+    'ui.theme_user.color_primary',
+    'feature.selection.compact',
+    'feature.selection.action_items'
+  ])
+  .catch((error) => {
+    logger.error('Failed to preload selection toolbar preferences', error as Error)
+  })
+
+const root = createRendererRoot('SelectionToolbar')
 root.render(<SelectionToolbarApp />)

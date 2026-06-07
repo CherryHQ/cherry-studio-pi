@@ -3,11 +3,11 @@ import '@renderer/assets/styles/tailwind.css'
 import '@ant-design/v5-patch-for-react-19'
 
 import { loggerService } from '@logger'
-import { createRoot } from 'react-dom/client'
 
+import { createRendererRoot } from '../root'
 import QuickAssistantApp from './QuickAssistantApp'
 
 loggerService.initWindowSource('QuickAssistant')
 
-const root = createRoot(document.getElementById('root') as HTMLElement)
+const root = createRendererRoot('QuickAssistant')
 root.render(<QuickAssistantApp />)

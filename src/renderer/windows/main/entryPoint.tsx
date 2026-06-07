@@ -3,12 +3,12 @@ import '@renderer/assets/styles/tailwind.css'
 import '@ant-design/v5-patch-for-react-19'
 
 import { loggerService } from '@logger'
-import { createRoot } from 'react-dom/client'
 
+import { createRendererRoot } from '../root'
 import MainApp from './MainApp'
 
 // Initialize logger for this window
 loggerService.initWindowSource('mainWindow')
 
-const root = createRoot(document.getElementById('root') as HTMLElement)
+const root = createRendererRoot('mainWindow')
 root.render(<MainApp />)
