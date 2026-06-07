@@ -26,7 +26,7 @@ const SelectionBox: React.FC<SelectionBoxProps> = ({
   const DRAG_THRESHOLD = 5
 
   useEffect(() => {
-    let handleMouseMoveTimer: NodeJS.Timeout
+    const highlightTimers = new Set<ReturnType<typeof setTimeout>>()
     if (!isMultiSelectMode) return
 
     const updateDragPos = (e: MouseEvent) => {
@@ -107,7 +107,11 @@ const SelectionBox: React.FC<SelectionBoxProps> = ({
           dragSelectedIds.current.add(id)
           newSelectedIds.add(id)
           el.classList.add('selection-highlight')
-          handleMouseMoveTimer = setTimeout(() => el.classList.remove('selection-highlight'), 300)
+          const highlightTimer = setTimeout(() => {
+            el.classList.remove('selection-highlight')
+            highlightTimers.delete(highlightTimer)
+          }, 300)
+          highlightTimers.add(highlightTimer)
         }
       })
     }
@@ -130,7 +134,10 @@ const SelectionBox: React.FC<SelectionBoxProps> = ({
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
       document.body.classList.remove('no-select')
-      clearTimeout(handleMouseMoveTimer)
+      for (const highlightTimer of highlightTimers) {
+        clearTimeout(highlightTimer)
+      }
+      highlightTimers.clear()
     }
   }, [isMultiSelectMode, isDragging, isMouseDown, dragStart, scrollContainerRef, messageElements, handleSelectMessage])
 
