@@ -19,6 +19,9 @@ import express from 'express'
 
 const logger = loggerService.withContext('ApiServer:AppTools')
 const appToolsRouter = express.Router()
+const DEFAULT_NOTES_SEARCH_LIMIT = 50
+const MAX_NOTES_SEARCH_LIMIT = 200
+const NOTES_SEARCH_CANDIDATE_MULTIPLIER = 5
 
 const SETTINGS_SECTIONS = [
   ['provider', 'Provider', '/settings/provider'],
@@ -79,6 +82,12 @@ function flattenNotes(nodes: any[], result: any[] = []) {
     if (node.children) flattenNotes(node.children, result)
   }
   return result
+}
+
+function normalizePositiveInteger(value: unknown, fallback: number, max: number) {
+  const parsed = typeof value === 'string' && !value.trim() ? fallback : Number(value ?? fallback)
+  const normalized = Number.isFinite(parsed) ? Math.trunc(parsed) : fallback
+  return Math.max(1, Math.min(normalized, max))
 }
 
 appToolsRouter.get('/settings/sections', (_req, res) => {
@@ -209,16 +218,21 @@ appToolsRouter.get('/notes/search', async (req, res, next) => {
       return
     }
     const root = await getNotesRoot()
-    const files = flattenNotes(await scanDir(root)).slice(0, Number(req.query.limit || 100))
+    const limit = normalizePositiveInteger(req.query.limit, DEFAULT_NOTES_SEARCH_LIMIT, MAX_NOTES_SEARCH_LIMIT)
+    const maxCandidates = limit * NOTES_SEARCH_CANDIDATE_MULTIPLIER
+    const files = flattenNotes(await scanDir(root)).slice(0, maxCandidates)
     const matches: any[] = []
+    let searched = 0
     for (const file of files) {
+      searched += 1
       const content = await fs.readFile(file.externalPath, 'utf8').catch(() => '')
       const index = content.toLowerCase().indexOf(query)
       if (index >= 0 || file.name.toLowerCase().includes(query)) {
         matches.push({ ...file, snippet: content.slice(Math.max(index - 80, 0), index + 180) })
+        if (matches.length >= limit) break
       }
     }
-    res.json({ query, matches })
+    res.json({ query, matches, limit, searched })
   } catch (error) {
     next(error)
   }
