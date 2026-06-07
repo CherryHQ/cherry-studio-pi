@@ -4,13 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ValidationRequest } from '../validators/zodValidator'
 
-// Mock dependencies BEFORE importing handlers - no top-level variables
-vi.mock('@main/services/ReduxService', () => ({
-  reduxService: {
-    select: vi.fn()
-  }
-}))
-
 vi.mock('@main/services/KnowledgeService', () => ({
   knowledgeService: {
     search: vi.fn()
@@ -115,9 +108,7 @@ describe('Knowledge Handlers', () => {
         createMockKnowledgeBase({ id: 'kb-3', name: 'KB 3' })
       ]
 
-      const { reduxService } = await import('@main/services/ReduxService')
-      ;(reduxService.select as ReturnType<typeof vi.fn>).mockResolvedValue(mockBases)
-      await mockStorageV2KnowledgeBases()
+      await mockStorageV2KnowledgeBases(mockBases)
 
       req.validatedQuery = { limit: 2, offset: 0 }
 
@@ -129,10 +120,8 @@ describe('Knowledge Handlers', () => {
       })
     })
 
-    it('should list knowledge bases from Storage v2 when Redux is unavailable', async () => {
+    it('should list knowledge bases from Storage v2', async () => {
       const mockBases = [createMockKnowledgeBase({ id: 'kb-storage-v2', name: 'Storage v2 KB' })]
-      const { reduxService } = await import('@main/services/ReduxService')
-      ;(reduxService.select as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Main window is not available'))
       await mockStorageV2KnowledgeBases(mockBases)
 
       req.validatedQuery = { limit: 20, offset: 0 }
@@ -146,48 +135,38 @@ describe('Knowledge Handlers', () => {
       expect(statusMock).not.toHaveBeenCalled()
     })
 
-    it('should list knowledge bases from Storage v2 when Redux cache is empty', async () => {
-      const mockBases = [createMockKnowledgeBase({ id: 'kb-storage-v2', name: 'Storage v2 KB' })]
-      const { reduxService } = await import('@main/services/ReduxService')
-      ;(reduxService.select as ReturnType<typeof vi.fn>).mockResolvedValue([])
-      await mockStorageV2KnowledgeBases(mockBases)
+    it('should return an empty list when Storage v2 has no knowledge bases', async () => {
+      await mockStorageV2KnowledgeBases([])
 
       req.validatedQuery = { limit: 20, offset: 0 }
 
       await listKnowledgeBases(req, res as Response)
 
       expect(jsonMock).toHaveBeenCalledWith({
-        knowledge_bases: mockBases,
-        total: 1
+        knowledge_bases: [],
+        total: 0
       })
     })
 
-    it('should return 503 when Redux is unavailable', async () => {
-      const { reduxService } = await import('@main/services/ReduxService')
-      ;(reduxService.select as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Main window is not available'))
+    it('should not require the renderer window to list empty Storage v2 knowledge bases', async () => {
       await mockStorageV2KnowledgeBases()
 
       req.validatedQuery = { limit: 20, offset: 0 }
 
       await listKnowledgeBases(req, res as Response)
 
-      expect(statusMock).toHaveBeenCalledWith(503)
       expect(jsonMock).toHaveBeenCalledWith({
-        error: {
-          message: 'Knowledge bases are only available when Cherry Studio Pi window is open',
-          type: 'service_unavailable',
-          code: 'REDUX_UNAVAILABLE'
-        }
+        knowledge_bases: [],
+        total: 0
       })
+      expect(statusMock).not.toHaveBeenCalled()
     })
   })
 
   describe('getKnowledgeBase', () => {
     it('should return a single knowledge base', async () => {
       const mockBase = createMockKnowledgeBase({ id: 'kb-1' })
-      const { reduxService } = await import('@main/services/ReduxService')
-      ;(reduxService.select as ReturnType<typeof vi.fn>).mockResolvedValue([mockBase])
-      await mockStorageV2KnowledgeBases()
+      await mockStorageV2KnowledgeBases([mockBase])
 
       req.validatedParams = { id: 'kb-1' }
 
@@ -196,10 +175,8 @@ describe('Knowledge Handlers', () => {
       expect(jsonMock).toHaveBeenCalledWith(mockBase)
     })
 
-    it('should return a knowledge base from Storage v2 when Redux is unavailable', async () => {
+    it('should return a knowledge base from Storage v2', async () => {
       const mockBase = createMockKnowledgeBase({ id: 'kb-storage-v2' })
-      const { reduxService } = await import('@main/services/ReduxService')
-      ;(reduxService.select as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Main window is not available'))
       await mockStorageV2KnowledgeBases([mockBase])
 
       req.validatedParams = { id: 'kb-storage-v2' }
@@ -211,8 +188,6 @@ describe('Knowledge Handlers', () => {
     })
 
     it('should return 404 when knowledge base not found', async () => {
-      const { reduxService } = await import('@main/services/ReduxService')
-      ;(reduxService.select as ReturnType<typeof vi.fn>).mockResolvedValue([])
       await mockStorageV2KnowledgeBases()
 
       req.validatedParams = { id: 'non-existent' }
@@ -229,24 +204,19 @@ describe('Knowledge Handlers', () => {
       })
     })
 
-    it('should return 503 when Redux is unavailable', async () => {
-      const { reduxService } = await import('@main/services/ReduxService')
-      ;(reduxService.select as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Main window is not available'))
+    it('should return 404 instead of requiring the renderer window when Storage v2 is empty', async () => {
       await mockStorageV2KnowledgeBases()
 
       req.validatedParams = { id: 'kb-1' }
 
       await getKnowledgeBase(req, res as Response)
 
-      expect(statusMock).toHaveBeenCalledWith(503)
+      expect(statusMock).toHaveBeenCalledWith(404)
     })
   })
 
   describe('searchKnowledge', () => {
     it('should return warnings when no knowledge bases configured', async () => {
-      const { reduxService } = await import('@main/services/ReduxService')
-      ;(reduxService.select as ReturnType<typeof vi.fn>).mockResolvedValue([])
-
       req.validatedBody = { query: 'test query', document_count: 5 }
 
       await searchKnowledge(req, res as Response)
@@ -261,8 +231,7 @@ describe('Knowledge Handlers', () => {
     })
 
     it('should return 404 when specified knowledge bases not found', async () => {
-      const { reduxService } = await import('@main/services/ReduxService')
-      ;(reduxService.select as ReturnType<typeof vi.fn>).mockResolvedValue([createMockKnowledgeBase({ id: 'kb-1' })])
+      await mockStorageV2KnowledgeBases([createMockKnowledgeBase({ id: 'kb-1' })])
 
       req.validatedBody = {
         query: 'test query',
@@ -282,25 +251,27 @@ describe('Knowledge Handlers', () => {
       })
     })
 
-    it('should return 503 when Redux is unavailable', async () => {
-      const { reduxService } = await import('@main/services/ReduxService')
-      ;(reduxService.select as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Main window is not available'))
-
+    it('should return warnings instead of requiring the renderer window when Storage v2 is empty', async () => {
       req.validatedBody = { query: 'test query', document_count: 5 }
 
       await searchKnowledge(req, res as Response)
 
-      expect(statusMock).toHaveBeenCalledWith(503)
+      expect(statusMock).not.toHaveBeenCalled()
+      expect(jsonMock).toHaveBeenCalledWith({
+        query: 'test query',
+        results: [],
+        total: 0,
+        searched_bases: [],
+        warnings: ['No knowledge bases configured. Please add knowledge bases in Cherry Studio Pi.']
+      })
     })
 
-    it('should search using Storage v2 knowledge bases and provider secrets when Redux is unavailable', async () => {
+    it('should search using Storage v2 knowledge bases and provider secrets', async () => {
       const mockBase = createMockKnowledgeBase({
         id: 'kb-storage-v2',
         name: 'Storage v2 KB'
       })
-      const { reduxService } = await import('@main/services/ReduxService')
       const { knowledgeService: KnowledgeService } = await import('@main/services/KnowledgeService')
-      ;(reduxService.select as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Main window is not available'))
       ;(KnowledgeService.search as ReturnType<typeof vi.fn>).mockResolvedValue([
         { content: 'matched chunk', score: 0.87 }
       ])

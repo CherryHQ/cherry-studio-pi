@@ -1,17 +1,12 @@
-// TODO(v2): All Redux store reads in this file (state.knowledge.bases, state.llm.providers)
-//           should migrate to the V2 SQLite/Drizzle data layer.
-//           Redux is blocked for new data-model features until v2.0.0.
-
 import { loggerService } from '@logger'
 import { knowledgeService } from '@main/services/KnowledgeService'
-import { reduxService } from '@main/services/ReduxService'
 import { storageV2SecretVaultService } from '@main/services/storageV2/SecretVaultService'
 import {
   storageV2KnowledgeRepository,
   storageV2ProviderRepository
 } from '@main/services/storageV2/StorageV2Repositories'
 import { summarizeTextForLog } from '@main/utils/logging'
-import type { KnowledgeBase, KnowledgeBaseParams, Provider } from '@types'
+import type { KnowledgeBase, KnowledgeBaseParams } from '@types'
 import type { Response } from 'express'
 import type * as z from 'zod'
 
@@ -24,14 +19,6 @@ const logger = loggerService.withContext('KnowledgeHandlers')
 type ValidatedSearchBody = z.infer<typeof KnowledgeSearchSchema>
 type ProviderRuntimeConfig = { apiKey: string; baseURL: string }
 
-/**
- * Helper to detect Redux unavailability errors
- */
-function isReduxUnavailableError(error: unknown): boolean {
-  const message = (error as Error)?.message || ''
-  return message.includes('Main window is not available') || message.includes('Timeout waiting for Redux store')
-}
-
 async function listKnowledgeBasesFromStorageV2(reason: string): Promise<KnowledgeBase[]> {
   try {
     const bases = (await storageV2KnowledgeRepository.listBases()) as KnowledgeBase[]
@@ -42,27 +29,6 @@ async function listKnowledgeBasesFromStorageV2(reason: string): Promise<Knowledg
   } catch (error) {
     logger.warn('Failed to load knowledge bases from Storage v2', error as Error)
     return []
-  }
-}
-
-async function selectKnowledgeBasesWithStorageV2Fallback(): Promise<KnowledgeBase[]> {
-  try {
-    const bases = (await reduxService.select<KnowledgeBase[]>('state.knowledge.bases')) ?? []
-    if (bases.length > 0) {
-      return bases
-    }
-
-    const storageV2Bases = await listKnowledgeBasesFromStorageV2('redux-empty')
-    return storageV2Bases.length > 0 ? storageV2Bases : bases
-  } catch (error) {
-    if (isReduxUnavailableError(error)) {
-      const storageV2Bases = await listKnowledgeBasesFromStorageV2('redux-unavailable')
-      if (storageV2Bases.length > 0) {
-        return storageV2Bases
-      }
-    }
-
-    throw error
   }
 }
 
@@ -88,24 +54,7 @@ export const listKnowledgeBases = async (req: ValidationRequest, res: Response):
 
     logger.debug('Listing knowledge bases', { limit, offset })
 
-    // Prefer Redux runtime cache, but fall back to Storage v2 when the renderer
-    // is unavailable or the runtime cache has not been hydrated yet.
-    let bases: KnowledgeBase[]
-    try {
-      bases = await selectKnowledgeBasesWithStorageV2Fallback()
-    } catch (error) {
-      if (isReduxUnavailableError(error)) {
-        logger.warn('Redux store not available, returning 503')
-        return res.status(503).json({
-          error: {
-            message: 'Knowledge bases are only available when Cherry Studio Pi window is open',
-            type: 'service_unavailable',
-            code: 'REDUX_UNAVAILABLE'
-          }
-        })
-      }
-      throw error // Re-throw non-Redux errors to outer catch
-    }
+    const bases = await listKnowledgeBasesFromStorageV2('api-list')
 
     const total = bases?.length || 0
     const paginatedBases = (bases || []).slice(offset, offset + limit)
@@ -135,7 +84,7 @@ export const getKnowledgeBase = async (req: ValidationRequest, res: Response): P
 
     logger.debug(`Getting knowledge base: ${id}`)
 
-    const bases = await selectKnowledgeBasesWithStorageV2Fallback()
+    const bases = await listKnowledgeBasesFromStorageV2('api-get')
     const base = bases?.find((b) => b.id === id)
 
     if (!base) {
@@ -150,15 +99,6 @@ export const getKnowledgeBase = async (req: ValidationRequest, res: Response): P
 
     return res.json(base)
   } catch (error) {
-    if (isReduxUnavailableError(error)) {
-      return res.status(503).json({
-        error: {
-          message: 'Knowledge bases are only available when Cherry Studio Pi window is open',
-          type: 'service_unavailable',
-          code: 'REDUX_UNAVAILABLE'
-        }
-      })
-    }
     logger.error('Failed to get knowledge base', error as Error)
     return res.status(500).json({
       error: {
@@ -167,24 +107,6 @@ export const getKnowledgeBase = async (req: ValidationRequest, res: Response): P
         code: 'GET_KB_ERROR'
       }
     })
-  }
-}
-
-/**
- * Get provider configuration from Redux or Storage v2 by provider ID.
- */
-async function getProviderConfigFromRedux(providerId: string): Promise<ProviderRuntimeConfig | null> {
-  const providers = await reduxService.select<Provider[]>('state.llm.providers')
-  const provider = providers?.find((p) => p.id === providerId)
-  if (!provider) {
-    return null
-  }
-
-  // If multiple API keys are configured (comma-separated), use the first one.
-  // Matches the main-process convention in OpenClawService.
-  return {
-    apiKey: firstApiKey(provider.apiKey),
-    baseURL: normalizeBaseURL(provider.apiHost)
   }
 }
 
@@ -226,26 +148,8 @@ async function getProviderConfigFromStorageV2(
 }
 
 async function getProviderConfig(providerId: string): Promise<ProviderRuntimeConfig | null> {
-  try {
-    const config = await getProviderConfigFromRedux(providerId)
-    if (config) {
-      return config
-    }
-
-    const storageV2Config = await getProviderConfigFromStorageV2(providerId, 'redux-provider-missing')
-    if (storageV2Config) {
-      return storageV2Config
-    }
-  } catch (error) {
-    if (!isReduxUnavailableError(error)) {
-      throw error
-    }
-
-    const storageV2Config = await getProviderConfigFromStorageV2(providerId, 'redux-unavailable')
-    if (storageV2Config) {
-      return storageV2Config
-    }
-  }
+  const storageV2Config = await getProviderConfigFromStorageV2(providerId, 'api-provider-config')
+  if (storageV2Config) return storageV2Config
 
   logger.warn(`Provider not found: ${providerId}`)
   return null
@@ -318,9 +222,7 @@ export const searchKnowledge = async (req: ValidationRequest, res: Response): Pr
       document_count
     })
 
-    // Prefer Redux runtime cache, but fall back to Storage v2 when the renderer
-    // is unavailable or the runtime cache has not been hydrated yet.
-    const bases = await selectKnowledgeBasesWithStorageV2Fallback()
+    const bases = await listKnowledgeBasesFromStorageV2('api-search')
 
     if (!bases || bases.length === 0) {
       return res.json({
@@ -415,15 +317,6 @@ export const searchKnowledge = async (req: ValidationRequest, res: Response): Pr
       ...(warnings.length > 0 && { warnings })
     })
   } catch (error) {
-    if (isReduxUnavailableError(error)) {
-      return res.status(503).json({
-        error: {
-          message: 'Knowledge bases are only available when Cherry Studio Pi window is open',
-          type: 'service_unavailable',
-          code: 'REDUX_UNAVAILABLE'
-        }
-      })
-    }
     logger.error('Failed to search knowledge bases', error as Error)
     return res.status(500).json({
       error: {
