@@ -151,11 +151,9 @@ export function useProviderEndpointActions({
     }
 
     debouncedPersistApiHost(apiHost)
-
-    return () => debouncedPersistApiHost.cancel()
   }, [apiHost, debouncedPersistApiHost, provider])
 
-  useEffect(() => () => debouncedPersistApiHost.cancel(), [debouncedPersistApiHost])
+  useEffect(() => () => debouncedPersistApiHost.flush(), [debouncedPersistApiHost])
 
   const commitApiHost = useCallback(
     async (explicitNext?: string): Promise<boolean> => {

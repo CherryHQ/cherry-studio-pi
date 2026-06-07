@@ -86,6 +86,35 @@ describe('useProviderEndpointActions', () => {
     expect(syncProviderModelsMock).not.toHaveBeenCalled()
   })
 
+  it('flushes pending api host persistence on unmount', async () => {
+    const { unmount } = renderHook(() =>
+      useProviderEndpointActions({
+        provider,
+        primaryEndpoint: ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS,
+        apiHost: 'https://proxy.example.com',
+        setApiHost: setApiHostMock,
+        providerApiHost: 'https://api.openai.com',
+        anthropicApiHost: '',
+        setAnthropicApiHost: setAnthropicApiHostMock,
+        apiVersion: '',
+        patchProvider: patchProviderMock,
+        syncProviderModels: syncProviderModelsMock
+      })
+    )
+
+    unmount()
+    await flushEndpointAction()
+
+    expect(patchProviderMock).toHaveBeenCalledWith({
+      endpointConfigs: {
+        [ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS]: {
+          baseUrl: 'https://proxy.example.com'
+        }
+      }
+    })
+    expect(syncProviderModelsMock).not.toHaveBeenCalled()
+  })
+
   it('flushes host persistence on blur and silently syncs models with the latest endpoint config', async () => {
     const { result } = renderHook(() =>
       useProviderEndpointActions({
