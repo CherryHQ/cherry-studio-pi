@@ -1,9 +1,10 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-import { reduxService } from '@main/services/ReduxService'
+import { application } from '@application'
 import { getName, getNotesDir } from '@main/utils/file'
 
+import { readRendererStoreValue } from '../rendererBridge'
 import type { AppCapabilityDefinition } from '../types'
 import { okResult, resolveInsideRoot } from '../utils'
 
@@ -19,7 +20,12 @@ const MAX_NOTE_LIST_SCAN_ENTRIES = 5_000
 const MAX_NOTE_LIST_DEPTH = 10
 
 async function getNotesRoot() {
-  const noteState = await reduxService.select<any>('state.note').catch(() => null)
+  const preferredPath = await Promise.resolve()
+    .then(() => application.get('PreferenceService').get('feature.notes.path'))
+    .catch(() => '')
+  if (typeof preferredPath === 'string' && preferredPath.trim()) return path.resolve(preferredPath.trim())
+
+  const noteState = await readRendererStoreValue<any>('state.note').catch(() => null)
   return path.resolve(noteState?.notesPath || getNotesDir())
 }
 

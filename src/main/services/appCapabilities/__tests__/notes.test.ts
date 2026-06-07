@@ -6,8 +6,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   notesRoot: '',
   reduxSelect: vi.fn(),
+  preferenceService: {
+    get: vi.fn()
+  },
   scanDir: vi.fn(),
   getName: vi.fn()
+}))
+
+vi.mock('@application', () => ({
+  application: {
+    get: vi.fn((name: string) => {
+      if (name === 'PreferenceService') return mocks.preferenceService
+      throw new Error(`Unknown service: ${name}`)
+    })
+  }
 }))
 
 vi.mock('@main/services/ReduxService', () => ({
@@ -49,6 +61,11 @@ describe('notes app capabilities', () => {
     mocks.notesRoot = tmpDir
     mocks.reduxSelect.mockReset()
     mocks.reduxSelect.mockResolvedValue({ notesPath: tmpDir })
+    mocks.preferenceService.get.mockReset()
+    mocks.preferenceService.get.mockImplementation((key: string) => {
+      if (key === 'feature.notes.path') return tmpDir
+      return undefined
+    })
     mocks.scanDir.mockReset()
     mocks.getName.mockReset()
     mocks.getName.mockReturnValue('Untitled')
