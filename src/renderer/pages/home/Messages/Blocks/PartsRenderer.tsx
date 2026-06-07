@@ -17,6 +17,7 @@ import { useIsActiveTurnTarget } from '@renderer/hooks/useIsActiveTurnTarget'
 import { useTopicStreamStatus } from '@renderer/hooks/useTopicStreamStatus'
 import { FILE_TYPE } from '@renderer/types/file'
 import type { Message } from '@renderer/types/newMessage'
+import { fileUrlToPath } from '@renderer/utils/fileUrl'
 import { convertReferencesToCitations, convertReferencesToLegacyCitations } from '@renderer/utils/partsToBlocks'
 import type { CherryMessagePart, ContentReference } from '@shared/data/types/message'
 import type { ErrorPartData } from '@shared/data/types/uiParts'
@@ -319,7 +320,7 @@ function renderPart(
             id: partId,
             name: filePart.filename || '',
             origin_name: filePart.filename || '',
-            path: filePart.url.replace('file://', ''),
+            path: fileUrlToPath(filePart.url),
             size: 0,
             ext: '',
             type: FILE_TYPE.OTHER,

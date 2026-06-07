@@ -2,6 +2,7 @@ import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { useOptionalTabsContext } from '@renderer/context/TabsContext'
 import { useMiniApps } from '@renderer/hooks/useMiniApps'
+import { fileUrlToPath } from '@renderer/utils/fileUrl'
 import { clearWebviewState } from '@renderer/utils/webviewStateManager'
 import { DataApiErrorFactory } from '@shared/data/api'
 import type { MiniApp, MiniAppId } from '@shared/data/types/miniApp'
@@ -83,13 +84,6 @@ function miniAppIdFromTabUrl(url: string): string | null {
   if (!url.startsWith(MINI_APP_ROUTE_PREFIX)) return null
   const id = url.slice(MINI_APP_ROUTE_PREFIX.length).split('/')[0]
   return id ? id : null
-}
-
-function fileUrlToPath(url: URL): string {
-  const pathname = decodeURIComponent(url.pathname)
-  if (url.hostname) return `//${url.hostname}${pathname}`
-  if (/^\/[A-Za-z]:\//.test(pathname)) return pathname.slice(1)
-  return pathname
 }
 
 function openExternalMiniAppUrl(url: string) {
