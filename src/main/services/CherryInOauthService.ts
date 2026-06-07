@@ -11,6 +11,7 @@ import * as z from 'zod'
 
 const logger = loggerService.withContext('CherryInOauthService')
 const CHERRYIN_PROVIDER_ID = 'cherryin'
+const CHERRYIN_REQUEST_TIMEOUT_MS = 30_000
 
 // Zod schemas for API response validation
 const BalanceDataSchema = z.object({
@@ -195,6 +196,18 @@ export class CherryInOauthService extends BaseService implements Activatable {
     return authConfig?.type === 'oauth' ? authConfig : null
   }
 
+  private withRequestTimeout(options: RequestInit = {}): RequestInit {
+    const timeoutSignal = AbortSignal.timeout(CHERRYIN_REQUEST_TIMEOUT_MS)
+    return {
+      ...options,
+      signal: options.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal
+    }
+  }
+
+  private fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
+    return net.fetch(url, this.withRequestTimeout(options))
+  }
+
   /**
    * Validate API host against allowlist to prevent SSRF attacks
    */
@@ -365,7 +378,7 @@ export class CherryInOauthService extends BaseService implements Activatable {
     logger.debug('Exchanging code for token')
 
     try {
-      const tokenResponse = await net.fetch(`${oauthServer}/oauth2/token`, {
+      const tokenResponse = await this.fetchWithTimeout(`${oauthServer}/oauth2/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
@@ -398,7 +411,7 @@ export class CherryInOauthService extends BaseService implements Activatable {
       // Otherwise a downstream failure leaves the token in SQLite (hasToken()
       // returns true) while the user-visible flow throws — the UI then thinks
       // it is logged in but every subsequent call fails.
-      const apiKeysResponse = await net.fetch(`${apiHost}/api/v1/oauth/tokens`, {
+      const apiKeysResponse = await this.fetchWithTimeout(`${apiHost}/api/v1/oauth/tokens`, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${accessToken}`
@@ -515,7 +528,7 @@ export class CherryInOauthService extends BaseService implements Activatable {
 
       logger.info('Attempting to refresh access token')
 
-      const response = await net.fetch(`${apiHost}/oauth2/token`, {
+      const response = await this.fetchWithTimeout(`${apiHost}/oauth2/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
@@ -661,7 +674,7 @@ export class CherryInOauthService extends BaseService implements Activatable {
         }
       }
 
-      return net.fetch(`${apiHost}${endpoint}`, requestOptions)
+      return this.fetchWithTimeout(`${apiHost}${endpoint}`, requestOptions)
     }
 
     let response = await makeRequest(token)
@@ -793,7 +806,7 @@ export class CherryInOauthService extends BaseService implements Activatable {
       // Try to revoke token on server (best effort, RFC 7009)
       if (token) {
         try {
-          await net.fetch(`${apiHost}/oauth2/revoke`, {
+          await this.fetchWithTimeout(`${apiHost}/oauth2/revoke`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded'
