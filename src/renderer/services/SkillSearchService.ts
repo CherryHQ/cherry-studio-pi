@@ -140,18 +140,19 @@ async function searchClawhub(query: string): Promise<SkillSearchResult[]> {
  * then merges remaining sources as they complete.
  */
 export async function searchSkills(query: string): Promise<SkillSearchResult[]> {
-  if (!query.trim()) return []
+  const normalizedQuery = query.trim()
+  if (!normalizedQuery) return []
 
   const sources = [
-    searchSkillsSh(query).catch((err) => {
+    searchSkillsSh(normalizedQuery).catch((err) => {
       logger.warn('skills.sh search failed', { error: err instanceof Error ? err.message : String(err) })
       return [] as SkillSearchResult[]
     }),
-    searchClaudePlugins(query).catch((err) => {
+    searchClaudePlugins(normalizedQuery).catch((err) => {
       logger.warn('claude-plugins search failed', { error: err instanceof Error ? err.message : String(err) })
       return [] as SkillSearchResult[]
     }),
-    searchClawhub(query).catch((err) => {
+    searchClawhub(normalizedQuery).catch((err) => {
       logger.warn('clawhub search failed', { error: err instanceof Error ? err.message : String(err) })
       return [] as SkillSearchResult[]
     })
@@ -169,7 +170,7 @@ export async function searchSkills(query: string): Promise<SkillSearchResult[]> 
   // Deduplicate by name (keep first occurrence = fastest source)
   const seen = new Set<string>()
   return allResults.filter((r) => {
-    const key = r.name.toLowerCase()
+    const key = r.name.trim().toLowerCase()
     if (seen.has(key)) return false
     seen.add(key)
     return true

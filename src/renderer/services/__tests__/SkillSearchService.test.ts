@@ -296,13 +296,13 @@ describe('Skill search deduplication', () => {
     const allResults = [
       { name: 'Code-Review', slug: 'a', sourceRegistry: 'claude-plugins.dev' as const },
       { name: 'code-review', slug: 'b', sourceRegistry: 'skills.sh' as const },
-      { name: 'Code-review', slug: 'c', sourceRegistry: 'clawhub.ai' as const },
+      { name: ' Code-review ', slug: 'c', sourceRegistry: 'clawhub.ai' as const },
       { name: 'Unique-Skill', slug: 'd', sourceRegistry: 'skills.sh' as const }
     ]
 
     const seen = new Set<string>()
     const deduped = allResults.filter((r) => {
-      const key = r.name.toLowerCase()
+      const key = r.name.trim().toLowerCase()
       if (seen.has(key)) return false
       seen.add(key)
       return true
@@ -333,5 +333,32 @@ describe('searchSkills', () => {
 
     await expect(searchPromise).resolves.toEqual([])
     expect(fetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('trims the query before requesting registries', async () => {
+    vi.mocked(fetch).mockImplementation(async (url) => {
+      const href = url.toString()
+      if (href.startsWith('https://skills.sh/')) {
+        return {
+          ok: true,
+          json: async () => ({ query: 'code-review', skills: [], count: 0 })
+        } as Response
+      }
+      if (href.startsWith('https://claude-plugins.dev/')) {
+        return {
+          ok: true,
+          json: async () => ({ skills: [] })
+        } as Response
+      }
+      return {
+        ok: true,
+        json: async () => ({ results: [] })
+      } as Response
+    })
+
+    await expect(searchSkills('  code-review  ')).resolves.toEqual([])
+
+    const requestedQueries = vi.mocked(fetch).mock.calls.map(([url]) => new URL(url.toString()).searchParams.get('q'))
+    expect(requestedQueries).toEqual(['code-review', 'code-review', 'code-review'])
   })
 })
