@@ -29,16 +29,20 @@ describe('oauth utilities', () => {
   let addEventListenerSpy: MockInstance<typeof window.addEventListener>
   let removeEventListenerSpy: MockInstance<typeof window.removeEventListener>
   let openSpy: MockInstance<typeof window.open>
+  let toastError: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
+    toastError = vi.fn()
+    ;(window as any).toast = { error: toastError }
     addEventListenerSpy = vi.spyOn(window, 'addEventListener')
     removeEventListenerSpy = vi.spyOn(window, 'removeEventListener')
     openSpy = vi.spyOn(window, 'open').mockReturnValue({ close } as any)
   })
 
   afterEach(() => {
+    vi.unstubAllGlobals()
     addEventListenerSpy.mockRestore()
     removeEventListenerSpy.mockRestore()
     openSpy.mockRestore()
@@ -118,5 +122,41 @@ describe('oauth utilities', () => {
 
     expect(setKey).not.toHaveBeenCalled()
     expect(close).not.toHaveBeenCalled()
+  })
+
+  it('opens TokenFlux OAuth URL with a bounded auth-url request', async () => {
+    const timeoutSignal = new AbortController().signal
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeoutSignal)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ data: { url: 'https://tokenflux.example/login' } })
+      })
+    )
+
+    const { oauthWithTokenFlux } = await import('../oauth')
+    await oauthWithTokenFlux()
+
+    expect(timeoutSpy).toHaveBeenCalledWith(10000)
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/auth/auth-url'),
+      expect.objectContaining({ signal: timeoutSignal })
+    )
+    expect(openSpy).toHaveBeenCalledWith('https://tokenflux.example/login', 'oauth', expect.any(String))
+
+    timeoutSpy.mockRestore()
+  })
+
+  it('handles TokenFlux OAuth auth-url request failures without throwing', async () => {
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(new AbortController().signal)
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
+
+    const { oauthWithTokenFlux } = await import('../oauth')
+    await expect(oauthWithTokenFlux()).resolves.toBeUndefined()
+
+    expect(toastError).toHaveBeenCalledWith('settings.provider.oauth.error')
+
+    timeoutSpy.mockRestore()
   })
 })
