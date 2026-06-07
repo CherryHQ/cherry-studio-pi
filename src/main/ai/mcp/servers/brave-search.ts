@@ -67,6 +67,7 @@ const RATE_LIMIT = {
   perSecond: 1,
   perMonth: 15000
 }
+const BRAVE_REQUEST_TIMEOUT_MS = 30_000
 
 const requestCount = {
   second: 0,
@@ -85,6 +86,17 @@ function checkRateLimit() {
   }
   requestCount.second++
   requestCount.month++
+}
+
+function braveFetch(url: string, apiKey: string): Promise<Response> {
+  return net.fetch(url, {
+    headers: {
+      Accept: 'application/json',
+      'Accept-Encoding': 'gzip',
+      'X-Subscription-Token': apiKey
+    },
+    signal: AbortSignal.timeout(BRAVE_REQUEST_TIMEOUT_MS)
+  })
 }
 
 interface BraveWeb {
@@ -161,13 +173,7 @@ async function performWebSearch(apiKey: string, query: string, count: number = 1
   url.searchParams.set('count', Math.min(count, 20).toString()) // API limit
   url.searchParams.set('offset', offset.toString())
 
-  const response = await net.fetch(url.toString(), {
-    headers: {
-      Accept: 'application/json',
-      'Accept-Encoding': 'gzip',
-      'X-Subscription-Token': apiKey
-    }
-  })
+  const response = await braveFetch(url.toString(), apiKey)
 
   if (!response.ok) {
     throw new Error(`Brave API error: ${response.status} ${response.statusText}\n${await response.text()}`)
@@ -194,13 +200,7 @@ async function performLocalSearch(apiKey: string, query: string, count: number =
   webUrl.searchParams.set('result_filter', 'locations')
   webUrl.searchParams.set('count', Math.min(count, 20).toString())
 
-  const webResponse = await net.fetch(webUrl.toString(), {
-    headers: {
-      Accept: 'application/json',
-      'Accept-Encoding': 'gzip',
-      'X-Subscription-Token': apiKey
-    }
-  })
+  const webResponse = await braveFetch(webUrl.toString(), apiKey)
 
   if (!webResponse.ok) {
     throw new Error(`Brave API error: ${webResponse.status} ${webResponse.statusText}\n${await webResponse.text()}`)
@@ -227,13 +227,7 @@ async function getPoisData(apiKey: string, ids: string[]): Promise<BravePoiRespo
   checkRateLimit()
   const url = new URL('https://api.search.brave.com/res/v1/local/pois')
   ids.filter(Boolean).forEach((id) => url.searchParams.append('ids', id))
-  const response = await net.fetch(url.toString(), {
-    headers: {
-      Accept: 'application/json',
-      'Accept-Encoding': 'gzip',
-      'X-Subscription-Token': apiKey
-    }
-  })
+  const response = await braveFetch(url.toString(), apiKey)
 
   if (!response.ok) {
     throw new Error(`Brave API error: ${response.status} ${response.statusText}\n${await response.text()}`)
@@ -246,13 +240,7 @@ async function getDescriptionsData(apiKey: string, ids: string[]): Promise<Brave
   checkRateLimit()
   const url = new URL('https://api.search.brave.com/res/v1/local/descriptions')
   ids.filter(Boolean).forEach((id) => url.searchParams.append('ids', id))
-  const response = await net.fetch(url.toString(), {
-    headers: {
-      Accept: 'application/json',
-      'Accept-Encoding': 'gzip',
-      'X-Subscription-Token': apiKey
-    }
-  })
+  const response = await braveFetch(url.toString(), apiKey)
 
   if (!response.ok) {
     throw new Error(`Brave API error: ${response.status} ${response.statusText}\n${await response.text()}`)

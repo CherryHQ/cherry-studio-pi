@@ -6,6 +6,7 @@ import { net } from 'electron'
 import * as z from 'zod'
 
 const logger = loggerService.withContext('DifyKnowledgeServer')
+const DIFY_REQUEST_TIMEOUT_MS = 30_000
 
 interface DifyKnowledgeServerConfig {
   difyKey: string
@@ -132,10 +133,18 @@ class DifyKnowledgeServer {
     })
   }
 
+  private fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
+    const timeoutSignal = AbortSignal.timeout(DIFY_REQUEST_TIMEOUT_MS)
+    return net.fetch(url, {
+      ...options,
+      signal: options.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal
+    })
+  }
+
   private async performListKnowledges(difyKey: string, apiHost: string): Promise<McpResponse> {
     try {
       const url = `${apiHost.replace(/\/$/, '')}/datasets`
-      const response = await net.fetch(url, {
+      const response = await this.fetchWithTimeout(url, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${difyKey}`
@@ -187,7 +196,7 @@ class DifyKnowledgeServer {
     try {
       const url = `${apiHost.replace(/\/$/, '')}/datasets/${id}/retrieve`
 
-      const response = await net.fetch(url, {
+      const response = await this.fetchWithTimeout(url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${difyKey}`,
