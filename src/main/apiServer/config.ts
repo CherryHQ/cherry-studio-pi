@@ -1,4 +1,6 @@
+import { application } from '@application'
 import { reduxService } from '@main/services/ReduxService'
+import { API_SERVER_DEFAULTS } from '@shared/config/constant'
 
 type ApiServerRuntimeConfig = {
   host: string
@@ -6,15 +8,44 @@ type ApiServerRuntimeConfig = {
   apiKey?: string
 }
 
+function getPreferenceConfig(): ApiServerRuntimeConfig | null | undefined {
+  try {
+    const preferenceService = application.get('PreferenceService')
+    const apiServer = preferenceService.getMultiple({
+      enabled: 'feature.csaas.enabled',
+      host: 'feature.csaas.host',
+      port: 'feature.csaas.port',
+      apiKey: 'feature.csaas.api_key'
+    })
+
+    if (!apiServer.enabled || !apiServer.port) {
+      return null
+    }
+
+    return {
+      host: apiServer.host || API_SERVER_DEFAULTS.HOST,
+      port: Number(apiServer.port || API_SERVER_DEFAULTS.PORT),
+      apiKey: typeof apiServer.apiKey === 'string' ? apiServer.apiKey : undefined
+    }
+  } catch {
+    return undefined
+  }
+}
+
 export const config = {
   async get(): Promise<ApiServerRuntimeConfig | null> {
+    const preferenceConfig = getPreferenceConfig()
+    if (preferenceConfig !== undefined) {
+      return preferenceConfig
+    }
+
     const apiServer = await reduxService.select<any>('state.settings.apiServer').catch(() => null)
     if (!apiServer?.enabled || !apiServer?.port) {
       return null
     }
 
     return {
-      host: apiServer.host || '127.0.0.1',
+      host: apiServer.host || API_SERVER_DEFAULTS.HOST,
       port: Number(apiServer.port),
       apiKey: typeof apiServer.apiKey === 'string' ? apiServer.apiKey : undefined
     }
