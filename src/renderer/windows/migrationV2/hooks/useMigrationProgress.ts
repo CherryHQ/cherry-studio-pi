@@ -34,7 +34,7 @@ export function useMigrationProgress() {
       }
     }
 
-    window.electron.ipcRenderer.on(MigrationIpcChannels.Progress, handleProgress)
+    const removeProgressListener = window.electron.ipcRenderer.on(MigrationIpcChannels.Progress, handleProgress)
 
     // Request initial progress
     window.electron.ipcRenderer
@@ -56,9 +56,7 @@ export function useMigrationProgress() {
       })
       .catch(console.error)
 
-    return () => {
-      window.electron.ipcRenderer.removeAllListeners(MigrationIpcChannels.Progress)
-    }
+    return removeProgressListener
   }, [])
 
   // Local state transition for confirming migration completion (frontend only)

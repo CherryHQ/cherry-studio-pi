@@ -267,11 +267,7 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
   }, [readClipboard, focusInput])
 
   useEffect(() => {
-    window.electron.ipcRenderer.on(IpcChannel.QuickAssistant_Shown, onWindowShow)
-
-    return () => {
-      window.electron.ipcRenderer.removeAllListeners(IpcChannel.QuickAssistant_Shown)
-    }
+    return window.electron.ipcRenderer.on(IpcChannel.QuickAssistant_Shown, onWindowShow)
   }, [onWindowShow])
 
   useEffect(() => {
