@@ -48,13 +48,22 @@ describe('ProviderService API keys', () => {
   it('adds a new API key as enabled and skips duplicate values', async () => {
     await seedProvider()
 
-    const updated = await providerService.addApiKey('openai', 'sk-new', 'New key')
+    const updated = await providerService.addApiKey('openai', ' sk-new ', 'New key')
     expect(updated.apiKeys.map((entry) => entry.label)).toEqual(['A', 'B', 'C', 'New key'])
     expect(updated.apiKeys.at(-1)).toMatchObject({ label: 'New key', isEnabled: true })
 
     await providerService.addApiKey('openai', 'sk-new', 'Duplicate')
     const keys = await readApiKeys()
     expect(keys.filter((entry) => entry.key === 'sk-new')).toHaveLength(1)
+    expect(keys.some((entry) => entry.key === ' sk-new ')).toBe(false)
+  })
+
+  it('rejects empty API keys added directly through the service layer', async () => {
+    await seedProvider()
+
+    await expect(providerService.addApiKey('openai', '   ', 'Empty')).rejects.toMatchObject({
+      code: ErrorCode.VALIDATION_ERROR
+    })
   })
 
   it('preserves all API keys added by concurrent calls', async () => {
@@ -110,7 +119,7 @@ describe('ProviderService API keys', () => {
     await expect(providerService.updateApiKey('openai', 'key-a', { key: '   ' })).rejects.toMatchObject({
       code: ErrorCode.VALIDATION_ERROR
     })
-    await expect(providerService.updateApiKey('openai', 'key-a', { key: 'sk-b' })).rejects.toMatchObject({
+    await expect(providerService.updateApiKey('openai', 'key-a', { key: ' sk-b ' })).rejects.toMatchObject({
       code: ErrorCode.CONFLICT
     })
   })

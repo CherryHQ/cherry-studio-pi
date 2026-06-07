@@ -368,6 +368,11 @@ class ProviderService {
    * Returns the updated Provider.
    */
   async addApiKey(providerId: string, key: string, label?: string): Promise<Provider> {
+    const normalizedKey = key.trim()
+    if (!normalizedKey) {
+      throw DataApiErrorFactory.validation({ key: ['API key cannot be empty'] })
+    }
+
     const { provider, added } = await this.runApiKeyMutation(providerId, async () => {
       const db = application.get('DbService').getDb()
       return await db.transaction(async (tx) => {
@@ -384,13 +389,13 @@ class ProviderService {
         const existingKeys = row.apiKeys ?? []
 
         // Skip if key value already exists
-        if (existingKeys.some((k) => k.key === key)) {
+        if (existingKeys.some((k) => k.key.trim() === normalizedKey)) {
           return { provider: rowToRuntimeProvider(row), added: false }
         }
 
         const newEntry = {
           id: uuidv4(),
-          key,
+          key: normalizedKey,
           ...(label ? { label } : {}),
           isEnabled: true
         }
@@ -480,7 +485,10 @@ class ProviderService {
           throw DataApiErrorFactory.validation({ key: ['API key cannot be empty'] })
         }
 
-        if (nextKeyValue && existingKeys.some((entry, index) => index !== keyIndex && entry.key === nextKeyValue)) {
+        if (
+          nextKeyValue &&
+          existingKeys.some((entry, index) => index !== keyIndex && entry.key.trim() === nextKeyValue)
+        ) {
           throw DataApiErrorFactory.conflict('API key already exists', 'API key')
         }
 
