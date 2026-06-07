@@ -1,6 +1,6 @@
 import type { Citation } from '@renderer/types'
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import CitationsList from '../CitationsList'
 
@@ -53,6 +53,15 @@ vi.mock('react-i18next', () => ({
 }))
 
 describe('CitationsList', () => {
+  beforeEach(() => {
+    vi.stubGlobal('open', vi.fn())
+    vi.stubGlobal('api', {
+      file: {
+        openPath: vi.fn()
+      }
+    })
+  })
+
   it('renders web citations without urls as non-links', () => {
     const citations: Citation[] = [
       {
@@ -87,5 +96,43 @@ describe('CitationsList', () => {
     render(<CitationsList citations={citations} />)
 
     expect(screen.getByText('Recovered citation')).toBeInTheDocument()
+  })
+
+  it('opens http citation urls in the browser', () => {
+    const citations: Citation[] = [
+      {
+        number: 1,
+        url: 'https://example.com/source',
+        title: 'External citation',
+        content: 'Reference text',
+        showFavicon: true,
+        type: 'websearch'
+      }
+    ]
+
+    render(<CitationsList citations={citations} />)
+    fireEvent.click(screen.getByRole('link', { name: 'External citation' }))
+
+    expect(window.open).toHaveBeenCalledWith('https://example.com/source', '_blank', 'noopener,noreferrer')
+    expect(window.api.file.openPath).not.toHaveBeenCalled()
+  })
+
+  it('does not open unsupported http-like schemes in the browser', () => {
+    const citations: Citation[] = [
+      {
+        number: 1,
+        url: 'httpx://example.com/source',
+        title: 'Unsupported citation',
+        content: 'Reference text',
+        showFavicon: true,
+        type: 'websearch'
+      }
+    ]
+
+    render(<CitationsList citations={citations} />)
+    fireEvent.click(screen.getByRole('link', { name: 'Unsupported citation' }))
+
+    expect(window.open).not.toHaveBeenCalled()
+    expect(window.api.file.openPath).toHaveBeenCalledWith('httpx://example.com/source')
   })
 })

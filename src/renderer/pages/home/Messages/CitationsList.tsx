@@ -128,8 +128,18 @@ const CitationsList: React.FC<CitationsListProps> = ({ citations }) => {
 const handleLinkClick = (url: string, event: React.MouseEvent) => {
   event.preventDefault()
   if (!url) return
-  if (url.startsWith('http')) window.open(url, '_blank', 'noopener,noreferrer')
-  else void window.api.file.openPath(url)
+
+  try {
+    const parsedUrl = new URL(url)
+    if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
+      window.open(url, '_blank', 'noopener,noreferrer')
+      return
+    }
+  } catch {
+    // Non-URL citations are treated as local file paths below.
+  }
+
+  void window.api.file.openPath(url)
 }
 
 const CopyButton: React.FC<{ content: string }> = ({ content }) => {
