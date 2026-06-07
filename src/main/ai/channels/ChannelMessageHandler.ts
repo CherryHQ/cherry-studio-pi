@@ -21,6 +21,7 @@ import { wrapExternalContent } from './security'
 const logger = loggerService.withContext('ChannelMessageHandler')
 
 const TYPING_INTERVAL_MS = 4000
+const CHANNEL_WORKSPACE_DIR = '.cherry-studio-pi'
 
 /** Max number of entries in the session tracker before evicting oldest entries. */
 const SESSION_TRACKER_MAX_SIZE = 500
@@ -214,7 +215,7 @@ export class ChannelMessageHandler {
           logger.info('Persisted channel images to workspace', {
             agentId,
             count: imagePaths.length,
-            dir: path.join(workDir, '.cherry-studio', 'channel-images')
+            dir: path.join(workDir, CHANNEL_WORKSPACE_DIR, 'channel-images')
           })
         } catch (error) {
           logger.warn('Failed to persist channel images', {
@@ -232,7 +233,7 @@ export class ChannelMessageHandler {
           logger.info('Persisted channel files to workspace', {
             agentId,
             count: filePaths.length,
-            dir: path.join(workDir, '.cherry-studio', 'channel-files')
+            dir: path.join(workDir, CHANNEL_WORKSPACE_DIR, 'channel-files')
           })
         } catch (error) {
           logger.warn('Failed to persist channel files', {
@@ -575,7 +576,7 @@ export class ChannelMessageHandler {
    * Returns the list of absolute file paths written.
    */
   private async persistImages(workDir: string, images: ImageAttachment[]): Promise<string[]> {
-    const dir = path.join(workDir, '.cherry-studio', 'channel-images')
+    const dir = path.join(workDir, CHANNEL_WORKSPACE_DIR, 'channel-images')
     await fs.mkdir(dir, { recursive: true })
 
     const paths: string[] = []
@@ -595,7 +596,7 @@ export class ChannelMessageHandler {
    * Returns the list of absolute file paths written.
    */
   private async persistFiles(workDir: string, files: FileAttachment[]): Promise<string[]> {
-    const dir = path.join(workDir, '.cherry-studio', 'channel-files')
+    const dir = path.join(workDir, CHANNEL_WORKSPACE_DIR, 'channel-files')
     await fs.mkdir(dir, { recursive: true })
 
     const paths: string[] = []

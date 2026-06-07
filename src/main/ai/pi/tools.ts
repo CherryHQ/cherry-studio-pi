@@ -568,7 +568,7 @@ const outputLooksLikeForcedShellFailure = (output: string) => {
 
 const agentToolPrefixForCwd = (cwd: string) => {
   const key = Buffer.from(path.resolve(cwd)).toString('base64url').slice(0, 48)
-  return path.join(process.env.TMPDIR || '/tmp', 'cherry-studio-agent-tools', key)
+  return path.join(process.env.TMPDIR || '/tmp', 'cherry-studio-pi-agent-tools', key)
 }
 
 const buildBashEnv = async (cwd: string, extraEnv: NodeJS.ProcessEnv = {}) => {

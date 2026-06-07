@@ -322,7 +322,7 @@ describe('Pi tools', () => {
 
     expect(result.details).toMatchObject({ exitCode: 0 })
     expect(result.details).not.toMatchObject({ isError: true })
-    expect(resultText(result)).toContain('cherry-studio-agent-tools')
+    expect(resultText(result)).toContain('cherry-studio-pi-agent-tools')
   })
 
   it('still allows local package manager installs in the workspace', async () => {
