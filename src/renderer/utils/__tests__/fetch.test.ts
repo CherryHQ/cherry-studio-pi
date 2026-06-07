@@ -206,7 +206,13 @@ describe('fetch', () => {
       const result = await fetchRedirectUrl('https://example.com')
 
       expect(result).toBe('https://redirected.com/final')
-      expect(global.fetch).toHaveBeenCalledWith('https://example.com', expect.any(Object))
+      expect(global.AbortSignal.timeout).toHaveBeenCalledWith(10000)
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://example.com',
+        expect.objectContaining({
+          signal: expect.any(Object)
+        })
+      )
     })
 
     it('should return original URL on error', async () => {

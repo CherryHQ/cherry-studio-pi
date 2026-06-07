@@ -5,6 +5,8 @@ import * as htmlToImage from 'html-to-image'
 
 const logger = loggerService.withContext('Utils:image')
 
+const CAPTURE_ASSET_FETCH_TIMEOUT_MS = 5_000
+
 /**
  * 将文件转换为 Base64 编码的字符串或 ArrayBuffer。
  * @param {File} file 要转换的文件
@@ -217,7 +219,11 @@ export async function captureScrollableIframe(
 
     const fetchAsDataUrl = async (url: string): Promise<string> => {
       try {
-        const res = await fetch(url, { mode: 'cors', credentials: 'omit' })
+        const res = await fetch(url, {
+          mode: 'cors',
+          credentials: 'omit',
+          signal: AbortSignal.timeout(CAPTURE_ASSET_FETCH_TIMEOUT_MS)
+        })
         if (!res.ok) return url
         const blob = await res.blob()
         return new Promise((resolve) => {
@@ -279,7 +285,11 @@ export async function captureScrollableIframe(
       Array.from(externalSheets).map(async (link) => {
         if (!link.href) return
         try {
-          const res = await fetch(link.href, { mode: 'cors', credentials: 'omit' })
+          const res = await fetch(link.href, {
+            mode: 'cors',
+            credentials: 'omit',
+            signal: AbortSignal.timeout(CAPTURE_ASSET_FETCH_TIMEOUT_MS)
+          })
           if (res.ok) {
             const cssText = await res.text()
             const blocks = await processCss(cssText, link.href)
