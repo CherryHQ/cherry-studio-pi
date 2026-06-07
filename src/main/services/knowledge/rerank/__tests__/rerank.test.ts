@@ -7,6 +7,11 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const fetchMock = vi.hoisted(() => vi.fn())
+const storageMocks = vi.hoisted(() => ({
+  providerList: vi.fn(),
+  credentialRefs: vi.fn(),
+  getSecret: vi.fn()
+}))
 
 vi.mock('@logger', () => ({
   loggerService: {
@@ -22,6 +27,19 @@ vi.mock('@logger', () => ({
 vi.mock('electron', () => ({
   net: {
     fetch: fetchMock
+  }
+}))
+
+vi.mock('@main/services/storageV2/StorageV2Repositories', () => ({
+  storageV2ProviderRepository: {
+    list: storageMocks.providerList,
+    listCredentialRefs: storageMocks.credentialRefs
+  }
+}))
+
+vi.mock('@main/services/storageV2/SecretVaultService', () => ({
+  storageV2SecretVaultService: {
+    getSecret: storageMocks.getSecret
   }
 }))
 
@@ -141,12 +159,72 @@ describe('knowledge rerank adapters', () => {
 describe('knowledge rerank runtime', () => {
   beforeEach(() => {
     fetchMock.mockReset()
+    storageMocks.providerList.mockReset()
+    storageMocks.credentialRefs.mockReset()
+    storageMocks.getSecret.mockReset()
   })
 
-  it('returns null runtime config until provider runtime integration lands', async () => {
+  it('resolves runtime config from Storage v2 providers and provider secrets', async () => {
+    storageMocks.providerList.mockResolvedValue([
+      {
+        id: 'jina',
+        apiHost: ' https://api.jina.ai/ ',
+        config: null
+      }
+    ])
+    storageMocks.credentialRefs.mockResolvedValue(new Map([['jina', { apiKey: 'storage-v2://secret/jina/apiKey' }]]))
+    storageMocks.getSecret.mockResolvedValue(' first-key,second-key ')
+
+    await expect(
+      resolveRerankRuntime(createKnowledgeBase({ rerankModelId: 'jina::jina-reranker-v2-base-multilingual' }))
+    ).resolves.toEqual({
+      providerId: 'jina',
+      modelId: 'jina-reranker-v2-base-multilingual',
+      baseUrl: 'https://api.jina.ai',
+      apiKey: 'first-key'
+    })
+  })
+
+  it('returns null runtime config when provider config is missing', async () => {
+    storageMocks.providerList.mockResolvedValue([])
+
     await expect(
       resolveRerankRuntime(createKnowledgeBase({ rerankModelId: 'jina::jina-reranker-v2-base-multilingual' }))
     ).resolves.toBeNull()
+    expect(storageMocks.credentialRefs).not.toHaveBeenCalled()
+  })
+
+  it('returns null runtime config when provider secret is missing', async () => {
+    storageMocks.providerList.mockResolvedValue([
+      {
+        id: 'jina',
+        apiHost: 'https://api.jina.ai',
+        config: null
+      }
+    ])
+    storageMocks.credentialRefs.mockResolvedValue(new Map())
+
+    await expect(
+      resolveRerankRuntime(createKnowledgeBase({ rerankModelId: 'jina::jina-reranker-v2-base-multilingual' }))
+    ).resolves.toBeNull()
+  })
+
+  it('supports passwordless local TEI rerank providers', async () => {
+    storageMocks.providerList.mockResolvedValue([
+      {
+        id: 'tei-local',
+        apiHost: 'http://localhost:8080',
+        config: null
+      }
+    ])
+    storageMocks.credentialRefs.mockResolvedValue(new Map())
+
+    await expect(resolveRerankRuntime(createKnowledgeBase({ rerankModelId: 'tei-local::ignored' }))).resolves.toEqual({
+      providerId: 'tei-local',
+      modelId: 'ignored',
+      baseUrl: 'http://localhost:8080',
+      apiKey: ''
+    })
   })
 
   it('skips rerank when the base has no rerank model id', async () => {
@@ -205,6 +283,35 @@ describe('knowledge rerank runtime', () => {
       { chunkId: 'chunk-2', score: 0.9, scoreKind: 'relevance', rank: 1 },
       { chunkId: 'chunk-1', score: 0.2, scoreKind: 'relevance', rank: 2 }
     ])
+  })
+
+  it('does not send an empty bearer token for TEI rerank requests', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify([{ index: 0, score: 0.9 }]), {
+        status: 200
+      })
+    )
+
+    await executeRerankRequest(
+      {
+        providerId: 'tei-local',
+        modelId: 'ignored',
+        baseUrl: 'http://localhost:8080',
+        apiKey: ''
+      },
+      'hello',
+      createSearchResults().slice(0, 1),
+      1
+    )
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8080/v1/rerank',
+      expect.objectContaining({
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+    )
   })
 
   it('preserves an explicit rerank relevance score of zero', async () => {

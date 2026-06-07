@@ -1,4 +1,6 @@
 import { loggerService } from '@logger'
+import { storageV2SecretVaultService } from '@main/services/storageV2/SecretVaultService'
+import { storageV2ProviderRepository } from '@main/services/storageV2/StorageV2Repositories'
 import { DEFAULT_DOCUMENT_COUNT, DEFAULT_RELEVANT_SCORE } from '@main/utils/knowledge'
 import type { KnowledgeBase, KnowledgeSearchResult } from '@shared/data/types/knowledge'
 import { net } from 'electron'
@@ -9,6 +11,19 @@ import type { ResolvedRerankRuntime } from './types'
 
 const logger = loggerService.withContext('KnowledgeRerank')
 const RERANK_REQUEST_TIMEOUT_MS = 60_000
+
+function firstApiKey(value: unknown): string {
+  return typeof value === 'string' ? (value.split(',')[0]?.trim() ?? '') : ''
+}
+
+function normalizeBaseUrl(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  return value.trim().replace(/\/+$/g, '')
+}
+
+function canUsePasswordlessRerankProvider(providerId: string) {
+  return providerId.includes('tei')
+}
 
 function mergeRerankResults(
   searchResults: KnowledgeSearchResult[],
@@ -38,13 +53,44 @@ export async function resolveRerankRuntime(base: KnowledgeBase): Promise<Resolve
   }
 
   const { providerId, modelId } = parseCompositeModelId(base.rerankModelId)
+  const providers = await storageV2ProviderRepository.list()
+  const provider = providers.find((item) => item.id === providerId)
 
-  // TODO(v2): Read provider runtime config from the model/provider domain after the
-  // pending provider/model PR lands.
-  // const { baseUrl, apiKey } = modelProviderService.getRuntimeConfig(providerId)
-  void providerId
-  void modelId
-  return null
+  if (!provider) {
+    logger.warn('Skipping knowledge rerank because provider is not configured', {
+      providerId,
+      rerankModelId: base.rerankModelId
+    })
+    return null
+  }
+
+  const baseUrl = normalizeBaseUrl(provider.apiHost ?? provider.config?.apiHost)
+  if (!baseUrl) {
+    logger.warn('Skipping knowledge rerank because provider API host is empty', {
+      providerId,
+      rerankModelId: base.rerankModelId
+    })
+    return null
+  }
+
+  const credentialRefs = await storageV2ProviderRepository.listCredentialRefs()
+  const apiKeySecretRef = credentialRefs.get(providerId)?.apiKey
+  const apiKey = firstApiKey(apiKeySecretRef ? await storageV2SecretVaultService.getSecret(apiKeySecretRef) : '')
+
+  if (!apiKey && !canUsePasswordlessRerankProvider(providerId)) {
+    logger.warn('Skipping knowledge rerank because provider API key is missing', {
+      providerId,
+      rerankModelId: base.rerankModelId
+    })
+    return null
+  }
+
+  return {
+    providerId,
+    modelId,
+    baseUrl,
+    apiKey
+  }
 }
 
 export async function executeRerankRequest(
@@ -97,7 +143,7 @@ export async function rerankKnowledgeSearchResults(
 
   const runtime = await resolveRerankRuntime(base)
   if (!runtime) {
-    logger.debug('Skipping knowledge rerank until provider runtime config is available', {
+    logger.debug('Skipping knowledge rerank because provider runtime config is unavailable', {
       baseId: base.id,
       rerankModelId: base.rerankModelId
     })

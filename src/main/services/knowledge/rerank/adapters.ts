@@ -99,6 +99,11 @@ const voyageAdapter: RerankAdapter = {
 
 const teiAdapter: RerankAdapter = {
   ...defaultAdapter,
+  buildHeaders() {
+    return {
+      'Content-Type': 'application/json'
+    }
+  },
   buildBody({ query, documents }: RerankRequestInput) {
     return {
       query,
