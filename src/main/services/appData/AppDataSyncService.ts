@@ -858,6 +858,11 @@ function isWebDavLockedError(error: unknown) {
   return error instanceof WebDavOperationError && error.status === 423
 }
 
+function isCausedByTransientWebDavError(error: unknown) {
+  const cause = error instanceof Error ? error.cause : undefined
+  return cause instanceof WebDavOperationError && cause.transient
+}
+
 function isIgnorableCreateDirectoryError(error: unknown) {
   return error instanceof WebDavOperationError && (error.status === 405 || error.status === 409)
 }
@@ -1670,7 +1675,9 @@ export class AppDataSyncService {
         })
       )
     } catch (error) {
-      throw new Error(`远端同步锁读取失败。为避免破坏远端数据，本次同步已停止：${errorMessage(error)}`)
+      throw new Error(`远端同步锁读取失败。为避免破坏远端数据，本次同步已停止：${errorMessage(error)}`, {
+        cause: error
+      })
     }
   }
 
@@ -1845,7 +1852,7 @@ export class AppDataSyncService {
     }
   }
 
-  private async listRemoteLockClaims(client: WebDAVClient, basePath: string) {
+  private async listRemoteLockClaims(client: WebDAVClient, basePath: string, ownerId: string) {
     const lockDir = this.getRemoteLockDir(basePath)
     const exists = await runWebDavOperation(`checking remote data sync lock directory ${lockDir}`, () =>
       client.exists(lockDir)
@@ -1875,7 +1882,20 @@ export class AppDataSyncService {
       if (!filename || !filename.endsWith('.json')) continue
       const lockPath = path.posix.normalize(filename)
       if (!lockPath.startsWith(`${normalizedLockDir}/`)) continue
-      const lock = await this.readRemoteLock(client, lockPath)
+      let lock: RemoteSyncLock | null
+      try {
+        lock = await this.readRemoteLock(client, lockPath)
+      } catch (error) {
+        if (isCausedByTransientWebDavError(error)) {
+          throw error
+        }
+        logger.warn('Removing unreadable remote data sync lock claim', {
+          lockPath,
+          error: errorMessage(error)
+        })
+        await this.removeReclaimableRemoteLock(client, lockPath, null, ownerId, { bestEffort: true })
+        continue
+      }
       if (lock) {
         claims.push({ path: lockPath, lock })
       } else {
@@ -1906,7 +1926,7 @@ export class AppDataSyncService {
       }
     }
 
-    for (const claim of await this.listRemoteLockClaims(client, basePath)) {
+    for (const claim of await this.listRemoteLockClaims(client, basePath, ownerId)) {
       if (options.currentToken && claim.lock.ownerId === ownerId && claim.lock.token === options.currentToken) {
         continue
       }

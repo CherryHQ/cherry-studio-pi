@@ -741,6 +741,19 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('reclaims unreadable remote lock claims instead of blocking sync forever', async () => {
+    mockDirectoryContentsFromRemoteFiles()
+    const lockPath = '/remote-root/sync/v1/.sync.locks/device-b.partial-token.json'
+    mocks.remoteFiles.set(lockPath, '{ partially-written-lock')
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.status).toBe('success')
+    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(lockPath)
+    expect(mocks.remoteFiles.has(lockPath)).toBe(false)
+    expect(mocks.storageRecordSync.sync).toHaveBeenCalled()
+  })
+
   it('rejects oversized remote lock claim directories before reading every lock file', async () => {
     mockDirectoryContentsFromRemoteFiles()
     for (let index = 0; index < 257; index += 1) {
