@@ -171,8 +171,14 @@ function broadcastExternalDataSyncCompleted(summary: unknown, source: string) {
   }
 
   for (const browserWindow of BrowserWindow.getAllWindows()) {
-    if (!browserWindow.isDestroyed()) {
+    if (browserWindow.isDestroyed() || browserWindow.webContents.isDestroyed?.()) {
+      continue
+    }
+    try {
       browserWindow.webContents.send(IpcChannel.DataSync_ExternalSyncCompleted, payload)
+    } catch {
+      // UI refresh notification is best-effort; the completed sync result must
+      // not be turned into a failure by a closing renderer window.
     }
   }
 }

@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
     {
       isDestroyed: vi.fn(() => false),
       webContents: {
+        isDestroyed: vi.fn(() => false),
         send: vi.fn(),
         executeJavaScript: vi.fn()
       }
@@ -76,6 +77,8 @@ describe('data sync app capabilities', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.getAllWindows.mockReturnValue(mocks.browserWindows)
+    mocks.browserWindows[0].isDestroyed.mockReturnValue(false)
+    mocks.browserWindows[0].webContents.isDestroyed.mockReturnValue(false)
     mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation(async (script: string) => {
       if (script.includes('typeof')) return true
       if (script.includes(RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE)) return settings
@@ -277,6 +280,18 @@ describe('data sync app capabilities', () => {
       'WebDAV 服务暂时不可用'
     )
     expect(mocks.browserWindows[0].webContents.send).not.toHaveBeenCalled()
+  })
+
+  it('keeps sync successful when broadcasting completion to a closing renderer fails', async () => {
+    mocks.appDataSyncService.syncNow.mockResolvedValueOnce({ status: 'success' })
+    mocks.browserWindows[0].webContents.send.mockImplementationOnce(() => {
+      throw new Error('window is closing')
+    })
+
+    const result = await capability('dataSync.sync.now').execute({}, { source: 'agent' })
+
+    expect(result.ok).toBe(true)
+    expect(result.summary).toBe('Data sync completed')
   })
 
   it('fails agent-triggered data sync when the renderer preparation bridge is unavailable', async () => {
