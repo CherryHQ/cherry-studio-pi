@@ -100,6 +100,7 @@ export interface McpToolListChangedEvent {
 // so a generous floor avoids false positives on slow SSE/streamableHttp handshakes while
 // still letting users raise it further via `server.timeout`.
 const MCP_CONNECT_TIMEOUT_FLOOR_MS = 180_000
+const MCP_PENDING_CLIENT_SHUTDOWN_WAIT_MS = 5_000
 
 // Redact potentially sensitive fields in objects (headers, tokens, api keys)
 export function redactSensitive(input: any): any {
@@ -866,7 +867,22 @@ export class McpRuntimeService extends BaseService {
   private async waitForPendingClients(): Promise<void> {
     const pending = [...this.pendingClients.values()]
     if (pending.length === 0) return
-    await Promise.allSettled(pending)
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<'timeout'>((resolve) => {
+      timeoutId = setTimeout(() => resolve('timeout'), MCP_PENDING_CLIENT_SHUTDOWN_WAIT_MS)
+      timeoutId.unref?.()
+    })
+    const settled = Promise.allSettled(pending).then(() => 'settled' as const)
+    const result = await Promise.race([settled, timeout])
+
+    if (timeoutId) clearTimeout(timeoutId)
+    if (result === 'timeout') {
+      logger.warn('Timed out waiting for pending MCP clients during shutdown', {
+        pendingCount: pending.length,
+        timeoutMs: MCP_PENDING_CLIENT_SHUTDOWN_WAIT_MS
+      })
+    }
   }
 
   private async closeAllClients(): Promise<void> {

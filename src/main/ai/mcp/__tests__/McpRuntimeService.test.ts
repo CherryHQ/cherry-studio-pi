@@ -155,6 +155,28 @@ describe('McpRuntimeService.closeClientsForServer', () => {
   })
 })
 
+describe('McpRuntimeService.waitForPendingClients', () => {
+  beforeEach(() => {
+    BaseService.resetInstances()
+    MockMainCacheServiceUtils.resetMocks()
+  })
+
+  it('does not block shutdown indefinitely when a pending client never settles', async () => {
+    vi.useFakeTimers()
+    try {
+      const service = new McpRuntimeService()
+      ;(service as any).pendingClients.set('server-key', new Promise(() => undefined))
+
+      const waitPromise = (service as any).waitForPendingClients()
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      await expect(waitPromise).resolves.toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
 describe('MCP IPC payload validation (mcp-services-5)', () => {
   it('rejects a malformed callTool payload (missing serverId/name)', () => {
     expect(McpCallToolPayloadSchema.safeParse({}).success).toBe(false)
