@@ -68,6 +68,10 @@ describe('FeishuAppRegistration', () => {
     })
     expect(addListenerSpy).toHaveBeenCalledTimes(2)
     expect(removeListenerSpy).toHaveBeenCalledTimes(2)
+    expect(net.fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
   })
 
   it('aborts a pending delay without sending a poll request', async () => {

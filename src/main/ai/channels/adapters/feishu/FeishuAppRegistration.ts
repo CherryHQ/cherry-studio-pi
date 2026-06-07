@@ -16,6 +16,7 @@ const BASE_URLS: Record<FeishuDomain, string> = {
   feishu: 'https://accounts.feishu.cn',
   lark: 'https://accounts.larksuite.com'
 }
+const REGISTRATION_REQUEST_TIMEOUT_MS = 30_000
 
 type RegistrationBeginResult = {
   deviceCode: string
@@ -61,15 +62,21 @@ function waitForPollInterval(intervalMs: number, signal?: AbortSignal): Promise<
   })
 }
 
-async function postRegistration(baseUrl: string, params: Record<string, string>): Promise<Record<string, unknown>> {
+async function postRegistration(
+  baseUrl: string,
+  params: Record<string, string>,
+  signal?: AbortSignal
+): Promise<Record<string, unknown>> {
   const url = `${baseUrl}/oauth/v1/app/registration`
   // The Feishu registration API requires application/x-www-form-urlencoded,
   // matching the format used by @larksuiteoapi/openclaw-lark-tools.
   const body = new URLSearchParams(params).toString()
+  const timeoutSignal = AbortSignal.timeout(REGISTRATION_REQUEST_TIMEOUT_MS)
   const res = await net.fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body
+    body,
+    signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
   })
 
   const text = await res.text()
@@ -130,10 +137,14 @@ export async function registrationPoll(
       throw createRegistrationAbortError()
     }
 
-    const res = await postRegistration(baseUrl, {
-      action: 'poll',
-      device_code: deviceCode
-    })
+    const res = await postRegistration(
+      baseUrl,
+      {
+        action: 'poll',
+        device_code: deviceCode
+      },
+      options.signal
+    )
 
     // Success: got credentials
     if (res.client_id && res.client_secret) {
