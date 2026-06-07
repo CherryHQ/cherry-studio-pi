@@ -85,14 +85,17 @@ const MinimalToolbar: FC<Props> = ({ app, webviewRef, currentUrl, onReload, onOp
 
   // Monitor webviewRef changes and update navigation state
   useEffect(() => {
-    let checkTimeout: NodeJS.Timeout | null = null
+    let checkTimeout: ReturnType<typeof setTimeout> | null = null
+    let animationFrame: number | null = null
     let navigationListener: (() => void) | null = null
     let listenersAttached = false
     let currentInterval = WEBVIEW_CHECK_INITIAL_MS
     let attemptCount = 0
+    let disposed = false
 
     const attachListeners = () => {
-      if (webviewRef.current && !listenersAttached) {
+      const webview = webviewRef.current
+      if (webview && !listenersAttached) {
         // Update state immediately
         updateNavigationState()
 
@@ -101,15 +104,13 @@ const MinimalToolbar: FC<Props> = ({ app, webviewRef, currentUrl, onReload, onOp
           scheduleNavigationUpdate(NAVIGATION_UPDATE_DELAY_MS)
         }
 
-        webviewRef.current.addEventListener('did-navigate', handleNavigation)
-        webviewRef.current.addEventListener('did-navigate-in-page', handleNavigation)
+        webview.addEventListener('did-navigate', handleNavigation)
+        webview.addEventListener('did-navigate-in-page', handleNavigation)
         listenersAttached = true
 
         navigationListener = () => {
-          if (webviewRef.current) {
-            webviewRef.current.removeEventListener('did-navigate', handleNavigation)
-            webviewRef.current.removeEventListener('did-navigate-in-page', handleNavigation)
-          }
+          webview.removeEventListener('did-navigate', handleNavigation)
+          webview.removeEventListener('did-navigate-in-page', handleNavigation)
           listenersAttached = false
         }
 
@@ -125,9 +126,14 @@ const MinimalToolbar: FC<Props> = ({ app, webviewRef, currentUrl, onReload, onOp
     }
 
     const scheduleCheck = () => {
+      if (disposed) return
       checkTimeout = setTimeout(() => {
+        checkTimeout = null
         // Use requestAnimationFrame to avoid blocking the main thread
-        requestAnimationFrame(() => {
+        animationFrame = requestAnimationFrame(() => {
+          animationFrame = null
+          if (disposed) return
+
           attemptCount++
           if (!attachListeners()) {
             // Stop checking after max attempts to prevent infinite loops
@@ -167,7 +173,9 @@ const MinimalToolbar: FC<Props> = ({ app, webviewRef, currentUrl, onReload, onOp
 
     // Cleanup
     return () => {
+      disposed = true
       if (checkTimeout) clearTimeout(checkTimeout)
+      if (animationFrame !== null) cancelAnimationFrame(animationFrame)
       if (navigationListener) navigationListener()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
