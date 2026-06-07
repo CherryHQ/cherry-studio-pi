@@ -30,6 +30,9 @@ const CLAUDE_PLUGINS_API = 'https://api.claude-plugins.dev'
 const MAX_EXTRACTED_SIZE = 100 * 1024 * 1024 // 100MB
 const MAX_FILES_COUNT = 1000
 const MAX_FOLDER_NAME_LENGTH = 80
+const MARKETPLACE_DETAIL_TIMEOUT_MS = 30_000
+const MARKETPLACE_DOWNLOAD_TIMEOUT_MS = 120_000
+const MARKETPLACE_REPORT_TIMEOUT_MS = 15_000
 
 /**
  * Skill management service.
@@ -47,6 +50,14 @@ export class SkillService {
 
   constructor() {
     this.installer = new SkillInstaller()
+  }
+
+  private fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = MARKETPLACE_DETAIL_TIMEOUT_MS) {
+    const timeoutSignal = AbortSignal.timeout(timeoutMs)
+    return net.fetch(url, {
+      ...options,
+      signal: options.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal
+    })
   }
 
   // ===========================================================================
@@ -556,7 +567,7 @@ export class SkillService {
 
   private async installFromClawhub(slug: string): Promise<InstalledSkill> {
     const detailUrl = `https://api.clawhub.ai/api/v1/skills/${slug}`
-    const detailResp = await net.fetch(detailUrl, {
+    const detailResp = await this.fetchWithTimeout(detailUrl, {
       headers: { 'User-Agent': 'CherryStudio' }
     })
 
@@ -565,9 +576,13 @@ export class SkillService {
     }
 
     const downloadUrl = `https://api.clawhub.ai/api/v1/skills/${slug}/download`
-    const downloadResp = await net.fetch(downloadUrl, {
-      headers: { 'User-Agent': 'CherryStudio' }
-    })
+    const downloadResp = await this.fetchWithTimeout(
+      downloadUrl,
+      {
+        headers: { 'User-Agent': 'CherryStudio' }
+      },
+      MARKETPLACE_DOWNLOAD_TIMEOUT_MS
+    )
 
     if (!downloadResp.ok) {
       throw new Error(`clawhub download failed: HTTP ${downloadResp.status}`)
@@ -916,7 +931,7 @@ export class SkillService {
 
   private async reportInstall(owner: string, repo: string, skillName: string): Promise<void> {
     const url = `${CLAUDE_PLUGINS_API}/api/skills/${owner}/${repo}/${skillName}/install`
-    await net.fetch(url, { method: 'POST' })
+    await this.fetchWithTimeout(url, { method: 'POST' }, MARKETPLACE_REPORT_TIMEOUT_MS)
   }
 }
 
