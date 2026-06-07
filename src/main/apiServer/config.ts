@@ -1,5 +1,4 @@
 import { application } from '@application'
-import { reduxService } from '@main/services/ReduxService'
 import { API_SERVER_DEFAULTS } from '@shared/config/constant'
 
 type ApiServerRuntimeConfig = {
@@ -39,15 +38,6 @@ export const config = {
       return preferenceConfig
     }
 
-    const apiServer = await reduxService.select<any>('state.settings.apiServer').catch(() => null)
-    if (!apiServer?.enabled || !apiServer?.port) {
-      return null
-    }
-
-    return {
-      host: apiServer.host || API_SERVER_DEFAULTS.HOST,
-      port: Number(apiServer.port),
-      apiKey: typeof apiServer.apiKey === 'string' ? apiServer.apiKey : undefined
-    }
+    return null
   }
 }
