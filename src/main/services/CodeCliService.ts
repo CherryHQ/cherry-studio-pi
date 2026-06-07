@@ -11,9 +11,8 @@
  * - Avoid permanently caching transient IP lookup failures while keeping concurrent calls deduped
  *
  * Remaining:
- * 1. Extract local-only getInstalledVersion() for qwen-code --auth-type check
- * 2. Move getVersionInfo() + updatePackage() to fire-and-forget background task
- * 3. Track background update promise in lifecycle (registerDisposable / onStop)
+ * 1. Move getVersionInfo() + updatePackage() to fire-and-forget background task
+ * 2. Track background update promise in lifecycle (registerDisposable / onStop)
  */
 import fs from 'node:fs'
 import os from 'node:os'
@@ -765,6 +764,50 @@ export class CodeCliService extends BaseService {
     return fs.existsSync(executablePath)
   }
 
+  private async getCliVersionCommand(cliTool: string): Promise<string> {
+    // claude-code ships a native binary that cannot be executed via Bun.
+    // Use cli-wrapper.cjs (via Bun) to run --version reliably on all platforms.
+    if (cliTool === codeCLI.claudeCode) {
+      const bunPath = await this.getBunPath()
+      return this.getClaudeCodeCommand(bunPath)
+    }
+
+    if (cliTool === codeCLI.openCode) {
+      return this.getOpenCodeCommand()
+    }
+
+    const executableName = await this.getCliExecutableName(cliTool)
+    const binDir = path.join(os.homedir(), HOME_CHERRY_DIR, 'bin')
+    const executablePath = path.join(binDir, executableName + (isWin ? '.exe' : ''))
+    return `"${executablePath}"`
+  }
+
+  public async getInstalledVersion(
+    cliTool: string,
+    options: { skipInstalledCheck?: boolean } = {}
+  ): Promise<string | null> {
+    if (!options.skipInstalledCheck && !(await this.isPackageInstalled(cliTool))) {
+      logger.info(`${cliTool} is not installed`)
+      return null
+    }
+
+    logger.info(`${cliTool} is installed, getting current version`)
+    try {
+      const versionCommand = await this.getCliVersionCommand(cliTool)
+      const { stdout } = await execAsync(`${versionCommand} --version`, {
+        timeout: 10000
+      })
+      // Extract version number from output (format may vary by tool)
+      const versionMatch = stdout.trim().match(/\d+\.\d+\.\d+/)
+      const installedVersion = versionMatch ? versionMatch[0] : stdout.trim().split(' ')[0]
+      logger.info(`${cliTool} current installed version: ${installedVersion}`)
+      return installedVersion
+    } catch (error) {
+      logger.warn(`Failed to get installed version for ${cliTool}:`, error as Error)
+      return null
+    }
+  }
+
   /**
    * Get version information for a CLI tool
    */
@@ -773,42 +816,8 @@ export class CodeCliService extends BaseService {
     const packageName = await this.getPackageName(cliTool)
     const isInstalled = await this.isPackageInstalled(cliTool)
 
-    let installedVersion: string | null = null
+    const installedVersion = isInstalled ? await this.getInstalledVersion(cliTool, { skipInstalledCheck: true }) : null
     let latestVersion: string | null = null
-
-    // Get installed version if package is installed
-    if (isInstalled) {
-      logger.info(`${cliTool} is installed, getting current version`)
-      try {
-        let versionCommand: string
-
-        // claude-code ships a native binary that cannot be executed via Bun.
-        // Use cli-wrapper.cjs (via Bun) to run --version reliably on all platforms.
-        if (cliTool === codeCLI.claudeCode) {
-          const bunPath = await this.getBunPath()
-          versionCommand = await this.getClaudeCodeCommand(bunPath)
-        } else if (cliTool === codeCLI.openCode) {
-          versionCommand = await this.getOpenCodeCommand()
-        } else {
-          const executableName = await this.getCliExecutableName(cliTool)
-          const binDir = path.join(os.homedir(), HOME_CHERRY_DIR, 'bin')
-          const executablePath = path.join(binDir, executableName + (isWin ? '.exe' : ''))
-          versionCommand = `"${executablePath}"`
-        }
-
-        const { stdout } = await execAsync(`${versionCommand} --version`, {
-          timeout: 10000
-        })
-        // Extract version number from output (format may vary by tool)
-        const versionMatch = stdout.trim().match(/\d+\.\d+\.\d+/)
-        installedVersion = versionMatch ? versionMatch[0] : stdout.trim().split(' ')[0]
-        logger.info(`${cliTool} current installed version: ${installedVersion}`)
-      } catch (error) {
-        logger.warn(`Failed to get installed version for ${cliTool}:`, error as Error)
-      }
-    } else {
-      logger.info(`${cliTool} is not installed`)
-    }
 
     // Get latest version from npm (with cache)
     const cacheKey = `${packageName}-latest`
@@ -1007,8 +1016,12 @@ export class CodeCliService extends BaseService {
     let updateMessage = ''
     let installedVersion: string | null = null
 
-    // qwen-code needs the local version for --auth-type; other tools only need version checks when auto-update is enabled.
-    const shouldCheckVersionBeforeLaunch = isInstalled && (cliTool === codeCLI.qwenCode || options.autoUpdateToLatest)
+    if (isInstalled && cliTool === codeCLI.qwenCode && !options.autoUpdateToLatest) {
+      installedVersion = await this.getInstalledVersion(cliTool, { skipInstalledCheck: true })
+    }
+
+    // Other tools only need version checks when auto-update is enabled. qwen-code reuses the full check when updating.
+    const shouldCheckVersionBeforeLaunch = isInstalled && options.autoUpdateToLatest
     if (shouldCheckVersionBeforeLaunch) {
       try {
         const versionInfo = await this.getVersionInfo(cliTool)
