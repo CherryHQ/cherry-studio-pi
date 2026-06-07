@@ -8,7 +8,7 @@ import { DataApiError } from '@shared/data/api'
 import type { MessageData } from '@shared/data/types/message'
 import { createUniqueModelId } from '@shared/data/types/model'
 import { setupTestDatabase } from '@test-helpers/db'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 function mainText(content: string): MessageData {
@@ -303,6 +303,23 @@ describe('MessageService', () => {
       // Regression: preview is derived from data.parts text (was always '' when it read data.blocks).
       expect(rootNode?.preview).toBe('hi')
       expect(followNode?.preview).toBe('follow up')
+    })
+  })
+
+  describe('row JSON recovery', () => {
+    it('falls back when optional JSON columns are malformed', async () => {
+      await seedMultiModelTree()
+      await dbh.db.run(sql`
+        UPDATE message
+        SET model_snapshot = '{bad-json', stats = '{bad-json'
+        WHERE id = 'm-root'
+      `)
+
+      const message = await messageService.getById('m-root')
+
+      expect(message.data).toEqual(mainText('hi'))
+      expect(message.modelSnapshot).toBeNull()
+      expect(message.stats).toBeNull()
     })
   })
 

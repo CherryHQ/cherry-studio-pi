@@ -9,7 +9,7 @@ import type { FileEntryId } from '@shared/data/types/file'
 import type { CreateKnowledgeItemDto } from '@shared/data/types/knowledge'
 import { createUniqueModelId } from '@shared/data/types/model'
 import { setupTestDatabase } from '@test-helpers/db'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const KNOWLEDGE_BASE_ID = '11111111-1111-4111-8111-111111111111'
@@ -603,6 +603,22 @@ describe('KnowledgeItemService', () => {
       expect(result).toMatchObject({
         id: seeded.id,
         data: { content: 'stored note' }
+      })
+    })
+
+    it('falls back when stored knowledge item data is malformed', async () => {
+      const seeded = await seedItem({ data: { source: 'stored note', content: 'stored note' } })
+      await dbh.db.run(sql`
+        UPDATE knowledge_item
+        SET data = '{bad-json'
+        WHERE id = ${seeded.id}
+      `)
+
+      const result = await service.getById(seeded.id)
+
+      expect(result.data).toEqual({
+        source: `invalid:${seeded.id}`,
+        content: ''
       })
     })
 

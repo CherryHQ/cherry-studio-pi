@@ -78,40 +78,76 @@ const PREVIEW_LENGTH = 50
  */
 const DEFAULT_LIMIT = 20
 
+type MessageRowLike = Omit<typeof messageTable.$inferSelect, 'data' | 'modelSnapshot' | 'stats'> & {
+  data: MessageData | string
+  modelSnapshot: Message['modelSnapshot'] | string | null
+  stats: Message['stats'] | string | null
+}
+
+const messageEntitySelection = {
+  id: messageTable.id,
+  parentId: messageTable.parentId,
+  topicId: messageTable.topicId,
+  role: messageTable.role,
+  data: sql<string>`${messageTable.data}`,
+  searchableText: messageTable.searchableText,
+  status: messageTable.status,
+  siblingsGroupId: messageTable.siblingsGroupId,
+  modelId: messageTable.modelId,
+  modelSnapshot: sql<string | null>`${messageTable.modelSnapshot}`,
+  traceId: messageTable.traceId,
+  stats: sql<string | null>`${messageTable.stats}`,
+  createdAt: messageTable.createdAt,
+  updatedAt: messageTable.updatedAt,
+  deletedAt: messageTable.deletedAt
+}
+
+function emptyMessageData(): MessageData {
+  return { parts: [] }
+}
+
+function parseMessageJsonColumn<T>(
+  rowId: string,
+  columnName: string,
+  value: T | string | null | undefined,
+  fallback: T
+): T {
+  if (value == null) return fallback
+  if (typeof value !== 'string') return value as T
+  if (!value.trim()) return fallback
+
+  try {
+    return JSON.parse(value) as T
+  } catch (error) {
+    logger.warn(`Malformed message ${columnName} JSON for ${rowId}; using fallback`, error as Error)
+    return fallback
+  }
+}
+
 /**
  * Convert database row to Message entity.
  *
- * Expects camelCase keys — only ORM-channel results match.
- * Raw SQL via `db.all(sql\`...\`)` returns snake_case columns and CANNOT be
- * passed here directly. See docs/references/data/database-patterns.md →
- * "Raw SQL Queries & Recursive CTEs" for the recommended CTE-for-IDs +
- * ORM-for-rows pattern used by getTree, getBranchMessages, getPathToNode.
+ * Expects camelCase keys from `messageEntitySelection`. JSON columns are
+ * selected as raw SQL expressions so malformed persisted JSON reaches the
+ * fallback parser instead of being thrown by Drizzle's column mapper first.
  *
  * Also handles JSON columns: ORM returns parsed objects; the parseJson
  * helper covers any legacy code path that still hands in JSON strings.
  */
-function rowToMessage(row: typeof messageTable.$inferSelect): Message {
-  // Handle JSON strings from raw SQL queries (db.all with sql``)
-  // ORM queries (.select().from()) return already-parsed objects
-  const parseJson = <T>(value: T | string | null | undefined): T | null => {
-    if (value == null) return null
-    if (typeof value === 'string') return JSON.parse(value)
-    return value as T
-  }
-
+function rowToMessage(row: MessageRowLike): Message {
   return {
     id: row.id,
     topicId: row.topicId,
     parentId: row.parentId,
     role: row.role as Message['role'],
-    data: parseJson(row.data)!,
+    data: parseMessageJsonColumn(row.id, 'data', row.data, emptyMessageData()),
     searchableText: row.searchableText,
     status: row.status as Message['status'],
     siblingsGroupId: row.siblingsGroupId,
     modelId: (row.modelId ?? null) as UniqueModelId | null,
-    modelSnapshot: parseJson(row.modelSnapshot),
+    modelSnapshot: parseMessageJsonColumn(row.id, 'modelSnapshot', row.modelSnapshot, null),
     traceId: row.traceId,
-    stats: parseJson(row.stats),
+    stats: parseMessageJsonColumn(row.id, 'stats', row.stats, null),
     createdAt: timestampToISO(row.createdAt),
     updatedAt: timestampToISO(row.updatedAt)
   }
@@ -228,7 +264,7 @@ export class MessageService {
       treeDepthRows.length === 0
         ? []
         : await db
-            .select()
+            .select(messageEntitySelection)
             .from(messageTable)
             .where(
               inArray(
@@ -237,7 +273,7 @@ export class MessageService {
               )
             )
 
-    const treeRows: Array<typeof messageTable.$inferSelect & { treeDepth: number }> = baseTreeRows.map((r) => ({
+    const treeRows: Array<MessageRowLike & { treeDepth: number }> = baseTreeRows.map((r) => ({
       ...r,
       treeDepth: depthByCteId.get(r.id)!
     }))
@@ -248,7 +284,7 @@ export class MessageService {
 
     if (missingActivePathIds.length > 0) {
       const additionalRows = await db
-        .select()
+        .select(messageEntitySelection)
         .from(messageTable)
         .where(and(inArray(messageTable.id, missingActivePathIds), isNull(messageTable.deletedAt)))
       treeRows.push(...additionalRows.map((r) => ({ ...r, treeDepth: maxDepth + 1 })))
@@ -259,7 +295,7 @@ export class MessageService {
     const activePathArray = [...activePath]
     if (activePathArray.length > 0 && treeNodeIds.size > 0) {
       const childrenRows = await db
-        .select()
+        .select(messageEntitySelection)
         .from(messageTable)
         .where(
           and(
@@ -280,7 +316,7 @@ export class MessageService {
     } else if (activePathArray.length > 0) {
       // No tree nodes loaded yet, just get all children of active path
       const childrenRows = await db
-        .select()
+        .select(messageEntitySelection)
         .from(messageTable)
         .where(and(inArray(messageTable.parentId, activePathArray), isNull(messageTable.deletedAt)))
 
@@ -435,7 +471,7 @@ export class MessageService {
     }
 
     const pathIds = pathIdRows.map((r) => r.id)
-    const pathRows = await db.select().from(messageTable).where(inArray(messageTable.id, pathIds))
+    const pathRows = await db.select(messageEntitySelection).from(messageTable).where(inArray(messageTable.id, pathIds))
 
     // Preserve CTE order (nodeId → root); ORM IN-list does not guarantee order.
     const pathOrder = new Map(pathIds.map((id, i) => [id, i]))
@@ -499,7 +535,7 @@ export class MessageService {
         )
 
         const siblingsRows = await db
-          .select()
+          .select(messageEntitySelection)
           .from(messageTable)
           .where(and(isNull(messageTable.deletedAt), or(...orConditions)))
 
@@ -547,7 +583,7 @@ export class MessageService {
     const db = application.get('DbService').getDb()
 
     const [row] = await db
-      .select()
+      .select(messageEntitySelection)
       .from(messageTable)
       .where(and(eq(messageTable.id, id), isNull(messageTable.deletedAt)))
       .limit(1)
@@ -591,7 +627,7 @@ export class MessageService {
   async getChildrenByParentId(parentId: string): Promise<Message[]> {
     const db = application.get('DbService').getDb()
     const rows = await db
-      .select()
+      .select(messageEntitySelection)
       .from(messageTable)
       .where(and(eq(messageTable.parentId, parentId), isNull(messageTable.deletedAt)))
     return rows.map(rowToMessage)
@@ -624,7 +660,17 @@ export class MessageService {
    */
   async createSibling(sourceId: string, data: MessageData): Promise<Message> {
     return await application.get('DbService').withWriteTx(async (tx) => {
-      const [source] = await tx.select().from(messageTable).where(eq(messageTable.id, sourceId)).limit(1)
+      const [source] = await tx
+        .select({
+          id: messageTable.id,
+          parentId: messageTable.parentId,
+          topicId: messageTable.topicId,
+          role: messageTable.role,
+          siblingsGroupId: messageTable.siblingsGroupId
+        })
+        .from(messageTable)
+        .where(eq(messageTable.id, sourceId))
+        .limit(1)
       if (!source) {
         throw DataApiErrorFactory.notFound('Message', sourceId)
       }
@@ -728,7 +774,11 @@ export class MessageService {
         // Explicit parent ID: verify existence and topic membership. Each
         // topic's message tree is self-contained — cross-topic parent refs
         // aren't a supported shape.
-        const [parent] = await tx.select().from(messageTable).where(eq(messageTable.id, dto.parentId)).limit(1)
+        const [parent] = await tx
+          .select({ id: messageTable.id, topicId: messageTable.topicId })
+          .from(messageTable)
+          .where(eq(messageTable.id, dto.parentId))
+          .limit(1)
 
         if (!parent) {
           throw DataApiErrorFactory.notFound('Message', dto.parentId)
@@ -817,7 +867,11 @@ export class MessageService {
           }
           resolvedParentId = null
         } else {
-          const [parent] = await tx.select().from(messageTable).where(eq(messageTable.id, dto.parentId)).limit(1)
+          const [parent] = await tx
+            .select({ id: messageTable.id, topicId: messageTable.topicId })
+            .from(messageTable)
+            .where(eq(messageTable.id, dto.parentId))
+            .limit(1)
           if (!parent) {
             throw DataApiErrorFactory.notFound('Message', dto.parentId)
           }
@@ -844,7 +898,11 @@ export class MessageService {
           .returning()
         userMessage = rowToMessage(row)
       } else {
-        const [row] = await tx.select().from(messageTable).where(eq(messageTable.id, input.userMessage.id)).limit(1)
+        const [row] = await tx
+          .select(messageEntitySelection)
+          .from(messageTable)
+          .where(eq(messageTable.id, input.userMessage.id))
+          .limit(1)
         if (!row) {
           throw DataApiErrorFactory.notFound('Message', input.userMessage.id)
         }
@@ -921,7 +979,11 @@ export class MessageService {
 
     return await application.get('DbService').withWriteTx(async (tx) => {
       // Get existing message within transaction
-      const [existingRow] = await tx.select().from(messageTable).where(eq(messageTable.id, id)).limit(1)
+      const [existingRow] = await tx
+        .select(messageEntitySelection)
+        .from(messageTable)
+        .where(eq(messageTable.id, id))
+        .limit(1)
 
       if (!existingRow) {
         throw DataApiErrorFactory.notFound('Message', id)
@@ -931,7 +993,11 @@ export class MessageService {
 
       // Verify new parent exists if changing parent
       if (dto.parentId !== undefined && dto.parentId !== existing.parentId && dto.parentId !== null) {
-        const [parent] = await tx.select().from(messageTable).where(eq(messageTable.id, dto.parentId)).limit(1)
+        const [parent] = await tx
+          .select({ id: messageTable.id })
+          .from(messageTable)
+          .where(eq(messageTable.id, dto.parentId))
+          .limit(1)
 
         if (!parent) {
           throw DataApiErrorFactory.notFound('Message', dto.parentId)
@@ -948,7 +1014,11 @@ export class MessageService {
       if (dto.traceId !== undefined) updates.traceId = dto.traceId
       if (dto.stats !== undefined) updates.stats = dto.stats
 
-      const [row] = await tx.update(messageTable).set(updates).where(eq(messageTable.id, id)).returning()
+      await tx.update(messageTable).set(updates).where(eq(messageTable.id, id))
+      const [row] = await tx.select(messageEntitySelection).from(messageTable).where(eq(messageTable.id, id)).limit(1)
+      if (!row) {
+        throw DataApiErrorFactory.dataInconsistent('Message', `Message update result missing for id '${id}'`)
+      }
 
       logger.info('Updated message', { id, changes: Object.keys(dto) })
 
@@ -1125,7 +1195,10 @@ export class MessageService {
     }
 
     const ancestorIds = ancestorIdRows.map((r) => r.id)
-    const ancestorRows = await db.select().from(messageTable).where(inArray(messageTable.id, ancestorIds))
+    const ancestorRows = await db
+      .select(messageEntitySelection)
+      .from(messageTable)
+      .where(inArray(messageTable.id, ancestorIds))
 
     // Preserve CTE order (nodeId → root) before reversing to root → nodeId.
     const ancestorOrder = new Map(ancestorIds.map((id, i) => [id, i]))
@@ -1149,7 +1222,7 @@ export class MessageService {
     const db = application.get('DbService').getDb()
 
     const [node] = await db
-      .select()
+      .select({ id: messageTable.id })
       .from(messageTable)
       .where(and(eq(messageTable.id, nodeId), eq(messageTable.topicId, topicId), isNull(messageTable.deletedAt)))
       .limit(1)

@@ -18,10 +18,14 @@ import type { KnowledgeItemFileRefRole } from '@shared/data/types/file/ref'
 import { knowledgeItemSourceType } from '@shared/data/types/file/ref'
 import {
   type CreateKnowledgeItemDto,
+  DirectoryItemDataSchema,
+  FileItemDataSchema,
   type KnowledgeItem,
   type KnowledgeItemData,
   KnowledgeItemSchema,
-  type KnowledgeItemStatus
+  type KnowledgeItemStatus,
+  NoteItemDataSchema,
+  UrlItemDataSchema
 } from '@shared/data/types/knowledge'
 import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
@@ -31,10 +35,23 @@ import { timestampToISO } from './utils/rowMappers'
 
 const logger = loggerService.withContext('DataApi:KnowledgeItemService')
 const CONTAINER_CHILD_FAILURE_ERROR = 'One or more child items failed'
+const FALLBACK_FILE_ENTRY_ID = '00000000-0000-4000-8000-000000000000' as FileEntryId
 
 type KnowledgeItemRow = typeof knowledgeItemTable.$inferSelect
 type KnowledgeItemRowLike = Omit<KnowledgeItemRow, 'data'> & {
   data: KnowledgeItemData | string
+}
+
+const knowledgeItemEntitySelection = {
+  id: knowledgeItemTable.id,
+  baseId: knowledgeItemTable.baseId,
+  groupId: knowledgeItemTable.groupId,
+  type: knowledgeItemTable.type,
+  data: sql<string>`${knowledgeItemTable.data}`,
+  status: knowledgeItemTable.status,
+  error: knowledgeItemTable.error,
+  createdAt: knowledgeItemTable.createdAt,
+  updatedAt: knowledgeItemTable.updatedAt
 }
 
 type FailedKnowledgeItemStatusUpdate = {
@@ -55,15 +72,56 @@ export type DeletingKnowledgeItemRootGroup = {
   rootItemIds: string[]
 }
 
-function rowToKnowledgeItem(row: KnowledgeItemRowLike): KnowledgeItem {
-  const data = typeof row.data === 'string' ? (JSON.parse(row.data) as KnowledgeItemData) : row.data
+function fallbackKnowledgeItemData(row: KnowledgeItemRowLike): KnowledgeItemData {
+  const source = `invalid:${row.id}`
+  switch (row.type) {
+    case 'file':
+      return { source, fileEntryId: FALLBACK_FILE_ENTRY_ID }
+    case 'url':
+      return { source, url: source }
+    case 'directory':
+      return { source, path: source }
+    case 'note':
+    default:
+      return { source, content: '' }
+  }
+}
 
+function parseKnowledgeItemData(row: KnowledgeItemRowLike): KnowledgeItemData {
+  let data: unknown = row.data
+  if (typeof row.data === 'string') {
+    try {
+      data = JSON.parse(row.data) as unknown
+    } catch (error) {
+      logger.warn(`Malformed knowledge item data JSON for ${row.id}; using fallback`, error as Error)
+      return fallbackKnowledgeItemData(row)
+    }
+  }
+
+  const dataSchema =
+    row.type === 'file'
+      ? FileItemDataSchema
+      : row.type === 'url'
+        ? UrlItemDataSchema
+        : row.type === 'directory'
+          ? DirectoryItemDataSchema
+          : NoteItemDataSchema
+  const parsed = dataSchema.safeParse(data)
+  if (!parsed.success) {
+    logger.warn(`Invalid knowledge item data shape for ${row.id}; using fallback`, parsed.error)
+    return fallbackKnowledgeItemData(row)
+  }
+
+  return parsed.data
+}
+
+function rowToKnowledgeItem(row: KnowledgeItemRowLike): KnowledgeItem {
   return KnowledgeItemSchema.parse({
     id: row.id,
     baseId: row.baseId,
     groupId: row.groupId,
     type: row.type,
-    data,
+    data: parseKnowledgeItemData(row),
     status: row.status,
     error: row.error,
     createdAt: timestampToISO(row.createdAt),
@@ -93,7 +151,7 @@ export class KnowledgeItemService {
     const where = and(...conditions)
     const [rows, [{ count }]] = await Promise.all([
       this.db
-        .select()
+        .select(knowledgeItemEntitySelection)
         .from(knowledgeItemTable)
         .where(where)
         .orderBy(desc(knowledgeItemTable.createdAt), desc(knowledgeItemTable.id))
@@ -122,7 +180,7 @@ export class KnowledgeItemService {
 
     const where = and(...conditions)
     const rows = await this.db
-      .select()
+      .select(knowledgeItemEntitySelection)
       .from(knowledgeItemTable)
       .where(where)
       .orderBy(knowledgeItemTable.createdAt, knowledgeItemTable.id)
@@ -299,7 +357,11 @@ export class KnowledgeItemService {
   }
 
   async getById(id: string): Promise<KnowledgeItem> {
-    const [row] = await this.db.select().from(knowledgeItemTable).where(eq(knowledgeItemTable.id, id)).limit(1)
+    const [row] = await this.db
+      .select(knowledgeItemEntitySelection)
+      .from(knowledgeItemTable)
+      .where(eq(knowledgeItemTable.id, id))
+      .limit(1)
 
     if (!row) {
       throw DataApiErrorFactory.notFound('KnowledgeItem', id)
@@ -487,7 +549,10 @@ export class KnowledgeItemService {
 
     const dbService = application.get('DbService')
     const result = await dbService.withWriteTx(async (tx) => {
-      const targetRows = await tx.select().from(knowledgeItemTable).where(inArray(knowledgeItemTable.id, uniqueItemIds))
+      const targetRows = await tx
+        .select(knowledgeItemEntitySelection)
+        .from(knowledgeItemTable)
+        .where(inArray(knowledgeItemTable.id, uniqueItemIds))
       const targetItems = targetRows.map((row) => rowToKnowledgeItem(row))
 
       await tx
@@ -613,7 +678,11 @@ export class KnowledgeItemService {
 
     const dbService = application.get('DbService')
     const { item, startContainerIds } = await dbService.withWriteTx(async (tx) => {
-      const [existingRow] = await tx.select().from(knowledgeItemTable).where(eq(knowledgeItemTable.id, id)).limit(1)
+      const [existingRow] = await tx
+        .select(knowledgeItemEntitySelection)
+        .from(knowledgeItemTable)
+        .where(eq(knowledgeItemTable.id, id))
+        .limit(1)
 
       if (!existingRow) {
         throw DataApiErrorFactory.notFound('KnowledgeItem', id)
@@ -626,11 +695,12 @@ export class KnowledgeItemService {
         }
       }
 
+      await tx.update(knowledgeItemTable).set({ status, error }).where(eq(knowledgeItemTable.id, id))
       const [updatedRow] = await tx
-        .update(knowledgeItemTable)
-        .set({ status, error })
+        .select(knowledgeItemEntitySelection)
+        .from(knowledgeItemTable)
         .where(eq(knowledgeItemTable.id, id))
-        .returning()
+        .limit(1)
 
       if (!updatedRow) {
         throw DataApiErrorFactory.dataInconsistent(
@@ -670,7 +740,7 @@ export class KnowledgeItemService {
         visited.add(containerId)
 
         const [containerRow] = await tx
-          .select()
+          .select(knowledgeItemEntitySelection)
           .from(knowledgeItemTable)
           .where(and(eq(knowledgeItemTable.baseId, baseId), eq(knowledgeItemTable.id, containerId)))
           .limit(1)
@@ -726,7 +796,11 @@ export class KnowledgeItemService {
   async delete(id: string): Promise<void> {
     const dbService = application.get('DbService')
     const deleted = await dbService.withWriteTx(async (tx) => {
-      const [existingRow] = await tx.select().from(knowledgeItemTable).where(eq(knowledgeItemTable.id, id)).limit(1)
+      const [existingRow] = await tx
+        .select(knowledgeItemEntitySelection)
+        .from(knowledgeItemTable)
+        .where(eq(knowledgeItemTable.id, id))
+        .limit(1)
 
       if (!existingRow) {
         throw DataApiErrorFactory.notFound('KnowledgeItem', id)
