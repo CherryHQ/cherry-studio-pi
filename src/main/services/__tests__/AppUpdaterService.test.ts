@@ -8,6 +8,10 @@ const mocks = vi.hoisted(() => ({
   },
   powerSaveBlockerService: {
     acquire: vi.fn()
+  },
+  applicationOnWillQuit: vi.fn(),
+  willQuitDisposable: {
+    dispose: vi.fn()
   }
 }))
 
@@ -35,6 +39,7 @@ vi.mock('@application', async () => {
   const originalGet = result.application.get.getMockImplementation()!
   ;(result.application as any).markQuitting = vi.fn()
   ;(result.application as any).unmarkQuitting = vi.fn()
+  ;(result.application as any).onWillQuit = mocks.applicationOnWillQuit
   result.application.get.mockImplementation((name: string) => {
     if (name === 'MainWindowService') {
       return { getMainWindow: vi.fn() }
@@ -139,6 +144,7 @@ describe('AppUpdaterService', () => {
     vi.clearAllMocks()
     MockMainPreferenceServiceUtils.resetMocks()
     mocks.powerSaveBlockerService.acquire.mockReturnValue(mocks.updateInstallBlocker)
+    mocks.applicationOnWillQuit.mockReturnValue(mocks.willQuitDisposable)
     appUpdater = new AppUpdaterService()
   })
 
@@ -325,7 +331,7 @@ describe('AppUpdaterService', () => {
   })
 
   describe('quitAndInstall', () => {
-    it('uses visible installer flow and ignores duplicate install requests', async () => {
+    it('uses visible installer flow, ignores duplicate requests, and holds the power blocker until quit', async () => {
       appUpdater.quitAndInstall()
       appUpdater.quitAndInstall()
 
@@ -338,7 +344,15 @@ describe('AppUpdaterService', () => {
       })
       expect(autoUpdater.quitAndInstall).toHaveBeenCalledTimes(1)
       expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true)
+      expect(mocks.updateInstallBlocker.release).not.toHaveBeenCalled()
+
+      const willQuitHandler = mocks.applicationOnWillQuit.mock.calls[0]?.[0] as (() => void) | undefined
+
+      expect(willQuitHandler).toBeTypeOf('function')
+      willQuitHandler?.()
+
       expect(mocks.updateInstallBlocker.release).toHaveBeenCalledTimes(1)
+      expect(mocks.willQuitDisposable.dispose).toHaveBeenCalledTimes(1)
     })
 
     it('clears the speculative quitting state if launching the installer fails', async () => {

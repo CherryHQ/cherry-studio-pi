@@ -18,6 +18,7 @@ import semver from 'semver'
 
 const logger = loggerService.withContext('AppUpdaterService')
 const UPDATE_CONFIG_FETCH_TIMEOUT_MS = 10_000
+const INSTALL_BLOCKER_FALLBACK_RELEASE_MS = 5 * 60 * 1000
 
 function getCommonHeaders() {
   return {
@@ -382,6 +383,28 @@ export class AppUpdaterService extends BaseService {
     const blocker = powerSaveBlockerService.acquire('app-update.install', {
       type: 'prevent-display-sleep'
     })
+    let blockerReleased = false
+    let fallbackReleaseTimer: ReturnType<typeof setTimeout> | undefined
+    let willQuitDisposable: { dispose: () => void } | undefined
+    const releaseInstallBlocker = (reason: string) => {
+      if (blockerReleased) return
+      blockerReleased = true
+      if (fallbackReleaseTimer) {
+        clearTimeout(fallbackReleaseTimer)
+        fallbackReleaseTimer = undefined
+      }
+      willQuitDisposable?.dispose()
+      willQuitDisposable = undefined
+      blocker.release()
+      logger.info('Update install power save blocker released', { reason })
+    }
+    const onWillQuit = () => releaseInstallBlocker('app-will-quit')
+
+    willQuitDisposable = application.onWillQuit(onWillQuit)
+    fallbackReleaseTimer = setTimeout(() => {
+      releaseInstallBlocker('fallback-timeout')
+    }, INSTALL_BLOCKER_FALLBACK_RELEASE_MS)
+    fallbackReleaseTimer.unref?.()
 
     setImmediate(() => {
       try {
@@ -393,8 +416,7 @@ export class AppUpdaterService extends BaseService {
         application.unmarkQuitting()
         logger.error('Failed to quit and install update', error as Error)
         application.get('WindowManager').broadcastToType(WindowType.Main, IpcChannel.UpdateError, error)
-      } finally {
-        blocker.release()
+        releaseInstallBlocker('quit-and-install-error')
       }
     })
   }

@@ -39,6 +39,7 @@ export class Application {
   private _isQuitting = false
   private quitPreventionHolds = new Map<string, string>()
   private ipcQuitHolds = new Map<string, QuitPreventionHold>()
+  private willQuitHandlers = new Set<() => void>()
 
   /**
    * Frozen path registry. `null` until `bootstrap()` is invoked, after
@@ -436,6 +437,8 @@ export class Application {
 
     // will-quit: all windows closed, perform actual cleanup
     app.on('will-quit', (event) => {
+      this.runWillQuitHandlers()
+
       if (this.isShuttingDown) return // Already shutting down (SIGINT/SIGTERM path), let it exit
 
       event.preventDefault()
@@ -542,6 +545,34 @@ export class Application {
    */
   public unmarkQuitting(): void {
     this._isQuitting = false
+  }
+
+  /**
+   * Register a lightweight hook that runs when Electron reaches will-quit.
+   * Services use this for synchronous finalizers while Application remains
+   * the only owner of Electron's quit events.
+   */
+  public onWillQuit(handler: () => void): Disposable {
+    this.willQuitHandlers.add(handler)
+    return {
+      dispose: () => {
+        this.willQuitHandlers.delete(handler)
+      }
+    }
+  }
+
+  private runWillQuitHandlers(): void {
+    if (this.willQuitHandlers.size === 0) return
+
+    const handlers = [...this.willQuitHandlers]
+    this.willQuitHandlers.clear()
+    for (const handler of handlers) {
+      try {
+        handler()
+      } catch (error) {
+        logger.warn('Error in will-quit handler', error as Error)
+      }
+    }
   }
 
   /**

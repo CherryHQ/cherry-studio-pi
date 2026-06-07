@@ -228,3 +228,31 @@ describe('Application.getPath', () => {
   // enforce type-only directives like @ts-expect-error reliably, so we do
   // not assert them here.
 })
+
+describe('Application quit lifecycle hooks', () => {
+  const app = Application.getInstance()
+
+  beforeEach(() => {
+    ;(app as any).runWillQuitHandlers()
+  })
+
+  it('runs will-quit hooks once', () => {
+    const handler = vi.fn()
+
+    app.onWillQuit(handler)
+    ;(app as any).runWillQuitHandlers()
+    ;(app as any).runWillQuitHandlers()
+
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not run disposed will-quit hooks', () => {
+    const handler = vi.fn()
+    const disposable = app.onWillQuit(handler)
+
+    disposable.dispose()
+    ;(app as any).runWillQuitHandlers()
+
+    expect(handler).not.toHaveBeenCalled()
+  })
+})
