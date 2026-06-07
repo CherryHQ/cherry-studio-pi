@@ -33,8 +33,16 @@ class AppDataMigrationService {
     const activeDataRoot = path.resolve(storageV2DataRootService.resolveDataRoot().dataRoot)
     const targetDataRoot = path.join(resolvedNewPath, 'Data')
 
-    if (isSameOrInside(targetDataRoot, activeDataRoot)) {
+    if (resolvedNewPath === resolvedOldPath) {
+      throw new Error('New app data path cannot be the same as or nested with the current app data path')
+    }
+
+    if (isSameOrInside(resolvedNewPath, activeDataRoot) || isSameOrInside(targetDataRoot, activeDataRoot)) {
       throw new Error('New app data path cannot be inside the active Storage v2 data root')
+    }
+
+    if (isSameOrInside(resolvedNewPath, resolvedOldPath) || isSameOrInside(resolvedOldPath, resolvedNewPath)) {
+      throw new Error('New app data path cannot be the same as or nested with the current app data path')
     }
 
     const excludedRoots = [

@@ -148,4 +148,36 @@ describe('AppDataMigrationService', () => {
     expect(fs.existsSync(nestedAppDataPath)).toBe(false)
     expect(mocks.storageV2Database.createSnapshot).not.toHaveBeenCalled()
   })
+
+  it('rejects migration when the new app data path is the same as the current one', async () => {
+    const activeDataRoot = path.join(oldPath, 'Data')
+    fs.mkdirSync(activeDataRoot, { recursive: true })
+    fs.writeFileSync(path.join(activeDataRoot, 'main.db'), 'live-main-db')
+    mocks.storageV2DataRootService.resolveDataRoot.mockReturnValue({ dataRoot: activeDataRoot })
+
+    await expect(service.copyUserData(oldPath, oldPath)).rejects.toThrow(
+      'New app data path cannot be the same as or nested with the current app data path'
+    )
+
+    expect(mocks.storageV2Database.createSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('rejects migration when the new app data path is nested with the current one', async () => {
+    const activeDataRoot = path.join(oldPath, 'Data')
+    const nestedNewPath = path.join(oldPath, 'nested-new-user-data')
+    const parentNewPath = path.dirname(oldPath)
+    fs.mkdirSync(activeDataRoot, { recursive: true })
+    fs.writeFileSync(path.join(activeDataRoot, 'main.db'), 'live-main-db')
+    mocks.storageV2DataRootService.resolveDataRoot.mockReturnValue({ dataRoot: activeDataRoot })
+
+    await expect(service.copyUserData(oldPath, nestedNewPath)).rejects.toThrow(
+      'New app data path cannot be the same as or nested with the current app data path'
+    )
+    await expect(service.copyUserData(oldPath, parentNewPath)).rejects.toThrow(
+      'New app data path cannot be the same as or nested with the current app data path'
+    )
+
+    expect(fs.existsSync(nestedNewPath)).toBe(false)
+    expect(mocks.storageV2Database.createSnapshot).not.toHaveBeenCalled()
+  })
 })
