@@ -139,7 +139,7 @@ describe('data sync app capabilities', () => {
       {
         webdavHost: 'https://dav.example.com',
         webdavUser: 'user',
-        webdavPass: 'secret',
+        webdavPass: ' secret ',
         webdavPath: '/Team/Sync'
       },
       '/folder/child'

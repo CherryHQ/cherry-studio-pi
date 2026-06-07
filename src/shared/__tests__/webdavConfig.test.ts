@@ -76,6 +76,21 @@ describe('webdavConfig', () => {
     expect(config.webdavPass).toBe('test-webdav-password')
   })
 
+  it('preserves explicit password bytes while still trimming usernames', () => {
+    const config = normalizeWebDavConfig(
+      {
+        webdavHost: ' https://dav.example.com ',
+        webdavUser: ' webdav ',
+        webdavPass: ' secret-with-significant-spaces '
+      },
+      { requireCredentials: true }
+    )
+
+    expect(config.webdavHost).toBe('https://dav.example.com')
+    expect(config.webdavUser).toBe('webdav')
+    expect(config.webdavPass).toBe(' secret-with-significant-spaces ')
+  })
+
   it('strips encoded line-break credential tails from the URL before requests are built', () => {
     const config = normalizeWebDavConfig(
       {

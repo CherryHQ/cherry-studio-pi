@@ -136,7 +136,7 @@ export function normalizeWebDavConfig<T extends WebDavLikeConfig>(
   const parsedFromHost = parseWebDavInput(config.webdavHost)
   const rawHost = stripStructuredTailFromHost(parsedFromHost.webdavHost || config.webdavHost || '')
   const userFromConfig = config.webdavUser?.trim() ?? ''
-  const passFromConfig = config.webdavPass?.trim() ?? ''
+  const passFromConfig = config.webdavPass ?? ''
   let webdavUser = userFromConfig || parsedFromHost.webdavUser
   let webdavPass = passFromConfig || parsedFromHost.webdavPass
 

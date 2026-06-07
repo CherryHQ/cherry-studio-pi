@@ -39,15 +39,19 @@ function hasOwnInput(input: any, key: string) {
   return Object.prototype.hasOwnProperty.call(input ?? {}, key)
 }
 
-function normalizeInputText(value: unknown, fallback = '') {
+function normalizeInputText(value: unknown, fallback = '', options: { trim?: boolean } = {}) {
+  const trim = options.trim ?? true
   if (value === null || typeof value === 'undefined') return fallback
-  if (typeof value === 'string') return value.trim()
-  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return String(value).trim()
+  if (typeof value === 'string') return trim ? value.trim() : value
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    const text = String(value)
+    return trim ? text.trim() : text
+  }
   return ''
 }
 
 function resolveInputText(input: any, key: keyof WebDavConfig, fallback = '') {
-  return hasOwnInput(input, key) ? normalizeInputText(input?.[key]) : fallback
+  return hasOwnInput(input, key) ? normalizeInputText(input?.[key], fallback, { trim: key !== 'webdavPass' }) : fallback
 }
 
 async function resolveWebDavConfig(input: any): Promise<WebDavConfig> {
