@@ -21,6 +21,11 @@ import { openPathInShellAndLog } from '../utils/openPath'
 import { contextMenu } from './ContextMenu'
 
 const logger = loggerService.withContext('MainWindowService')
+const CHERRY_STUDIO_PROTOCOL_PREFIX = 'cherrystudio://'
+
+function hasCherryStudioProtocolArg(argv: string[]): boolean {
+  return argv.some((arg) => arg.toLowerCase().startsWith(CHERRY_STUDIO_PROTOCOL_PREFIX))
+}
 
 // Create nativeImage for Linux window icon (required for Wayland)
 const linuxIcon = isLinux ? nativeImage.createFromPath(iconPath) : undefined
@@ -128,8 +133,12 @@ export class MainWindowService extends BaseService {
   private registerSecondInstanceHandler() {
     // Protocol URL dispatch is handled by ProtocolService on the same event.
     // Multiple listeners on 'second-instance' are intentional: ProtocolService
-    // dispatches the URL, MainWindowService restores the window.
-    const handler = () => this.showMainWindow()
+    // dispatches the URL, MainWindowService restores the window only for
+    // normal app launches that do not carry a cherrystudio:// URL.
+    const handler = (_event: Electron.Event, argv: string[] = []) => {
+      if (hasCherryStudioProtocolArg(argv)) return
+      this.showMainWindow()
+    }
     app.on('second-instance', handler)
     this.registerDisposable(() => app.removeListener('second-instance', handler))
   }

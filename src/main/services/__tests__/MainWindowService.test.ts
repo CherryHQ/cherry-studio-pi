@@ -112,7 +112,7 @@ vi.mock('@main/core/lifecycle', async () => {
   return { ...actual, BaseService: StubBase }
 })
 
-import { shell } from 'electron'
+import { app, shell } from 'electron'
 
 import { MainWindowService } from '../MainWindowService'
 
@@ -180,6 +180,10 @@ function attachCrashMonitor(svc: MainWindowService, win: MockBrowserWindow) {
   ;(svc as any).setupMainWindowMonitor(win)
 }
 
+function attachSecondInstanceHandler(svc: MainWindowService) {
+  ;(svc as any).registerSecondInstanceHandler()
+}
+
 function attachWebContentsHandlers(svc: MainWindowService, win: MockBrowserWindow) {
   ;(svc as any).setupWebContentsHandlers(win)
 }
@@ -188,6 +192,13 @@ function getCrashListener(win: MockBrowserWindow): (event: unknown, details: unk
   const call = win.webContents.on.mock.calls.find(([event]) => event === 'render-process-gone')
   if (!call) throw new Error('render-process-gone listener not registered')
   return call[1]
+}
+
+function getSecondInstanceListener(): (event: unknown, argv: string[]) => void {
+  const appOnMock = app.on as unknown as ReturnType<typeof vi.fn>
+  const call = appOnMock.mock.calls.find(([event]) => event === 'second-instance')
+  if (!call) throw new Error('second-instance listener not registered')
+  return call[1] as (event: unknown, argv: string[]) => void
 }
 
 function getWillNavigateListener(
@@ -217,6 +228,7 @@ describe('MainWindowService', () => {
     applicationMock.quit.mockReset()
     applicationMock.forceExit.mockReset()
     windowManagerMock.behavior.setMacShowInDockByType.mockReset()
+    windowManagerMock.open.mockReset()
     loggerMock.error.mockReset()
 
     svc = new MainWindowService()
@@ -419,6 +431,27 @@ describe('MainWindowService', () => {
 
       expect(windowManagerMock.behavior.setMacShowInDockByType).toHaveBeenCalledWith('main', false)
       expect(win.hide).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('second-instance handler', () => {
+    it('shows the main window for a regular second launch', () => {
+      attachSecondInstanceHandler(svc)
+      const listener = getSecondInstanceListener()
+
+      listener({}, ['/path/to/Cherry Studio Pi.exe'])
+
+      expect(windowManagerMock.open).toHaveBeenCalledTimes(1)
+    })
+
+    it('leaves protocol deep links to ProtocolService without surfacing Main', () => {
+      attachSecondInstanceHandler(svc)
+      const listener = getSecondInstanceListener()
+
+      listener({}, ['/path/to/Cherry Studio Pi.exe', 'cherrystudio://oauth/callback?code=abc'])
+
+      expect(windowManagerMock.open).not.toHaveBeenCalled()
+      expect(windowManagerMock.behavior.setMacShowInDockByType).not.toHaveBeenCalled()
     })
   })
 
