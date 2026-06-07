@@ -4,6 +4,44 @@ import { describe, expect, it } from 'vitest'
 import { formatCitationsFromBlock } from '../messageBlock'
 
 describe('formatCitationsFromBlock', () => {
+  it('keeps non-array provider citation payloads from throwing', () => {
+    const arrayBackedSources = [
+      WEB_SEARCH_SOURCE.OPENAI_RESPONSE,
+      WEB_SEARCH_SOURCE.OPENAI,
+      WEB_SEARCH_SOURCE.ANTHROPIC,
+      WEB_SEARCH_SOURCE.PERPLEXITY,
+      WEB_SEARCH_SOURCE.GROK,
+      WEB_SEARCH_SOURCE.OPENROUTER,
+      WEB_SEARCH_SOURCE.ZHIPU,
+      WEB_SEARCH_SOURCE.HUNYUAN,
+      WEB_SEARCH_SOURCE.AISDK
+    ]
+
+    for (const source of arrayBackedSources) {
+      const block = {
+        response: {
+          source,
+          results: { unexpected: true }
+        }
+      } as any
+
+      expect(() => formatCitationsFromBlock(block)).not.toThrow()
+      expect(formatCitationsFromBlock(block)).toEqual([])
+    }
+  })
+
+  it('keeps non-array WebSearch citation result lists from throwing', () => {
+    const block = {
+      response: {
+        source: WEB_SEARCH_SOURCE.WEBSEARCH,
+        results: { results: { unexpected: true } }
+      }
+    } as any
+
+    expect(() => formatCitationsFromBlock(block)).not.toThrow()
+    expect(formatCitationsFromBlock(block)).toEqual([])
+  })
+
   it('keeps malformed Perplexity citation URLs from throwing', () => {
     const block = {
       response: {
