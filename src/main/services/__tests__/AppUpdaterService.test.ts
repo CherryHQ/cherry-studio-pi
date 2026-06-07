@@ -387,7 +387,12 @@ describe('AppUpdaterService', () => {
       const result = await (appUpdater as any)._fetchUpdateConfig(UpdateMirror.GITHUB)
 
       expect(result).toEqual(mockConfig)
-      expect(net.fetch).toHaveBeenCalledWith(expect.stringContaining('github'), expect.any(Object))
+      expect(net.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('github'),
+        expect.objectContaining({
+          signal: expect.any(AbortSignal)
+        })
+      )
     })
 
     it('should fetch config from GitCode mirror', async () => {

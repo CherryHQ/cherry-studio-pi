@@ -17,6 +17,7 @@ import { autoUpdater } from 'electron-updater'
 import semver from 'semver'
 
 const logger = loggerService.withContext('AppUpdaterService')
+const UPDATE_CONFIG_FETCH_TIMEOUT_MS = 10_000
 
 function getCommonHeaders() {
   return {
@@ -196,6 +197,7 @@ export class AppUpdaterService extends BaseService {
     try {
       logger.info(`Fetching update config from ${configUrl} (mirror: ${mirror})`)
       const response = await net.fetch(configUrl, {
+        signal: AbortSignal.timeout(UPDATE_CONFIG_FETCH_TIMEOUT_MS),
         headers: {
           ...getCommonHeaders(),
           Accept: 'application/json'
