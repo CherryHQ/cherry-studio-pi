@@ -144,6 +144,10 @@ function hasRemoteRuntimeData(summary?: Partial<DataSyncSummary> | null) {
   )
 }
 
+function isSyncSummaryFromCurrentRun(summary: Partial<DataSyncSummary> | null | undefined, startedAt: number | null) {
+  return Boolean(startedAt && summary?.lastSyncAt && summary.lastSyncAt >= startedAt)
+}
+
 function formatDurationZh(durationMs: number) {
   const totalSeconds = Math.max(Math.ceil(durationMs / 1000), 1)
   if (totalSeconds < 60) return `${totalSeconds} 秒`
@@ -456,7 +460,8 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
     return null
   }
 
-  setDataSyncRunning(true)
+  const rendererSyncStartedAt = Date.now()
+  setDataSyncRunning(true, rendererSyncStartedAt)
   clearLocalChangeSyncTimeout()
   let mainSyncPromise: Promise<DataSyncSummary> | null = null
   let keepRendererSyncingAfterReturn = false
@@ -482,14 +487,30 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
     }
 
     if (error instanceof DataSyncStageTimeoutError && error.stageName === '执行 WebDAV 同步') {
-      const mainProcessRunning = await reconcileRendererSyncStateWithMainProcess().catch(() => false)
+      const status = await getMainProcessDataSyncStatus()
+      const mainProcessRunning = Boolean(status?.syncing)
       if (mainProcessRunning) {
+        setDataSyncRunning(true, typeof status?.syncStartedAt === 'number' ? status.syncStartedAt : null)
         logger.info('Main-process data sync is still running after renderer IPC timeout')
         if (mainSyncPromise) {
           continueMainSyncAfterRendererTimeout(mainSyncPromise)
         }
         keepRendererSyncingAfterReturn = true
         return null
+      }
+
+      const completedSummary = status?.lastSummary as Partial<DataSyncSummary> | null | undefined
+      if (isSyncSummaryFromCurrentRun(completedSummary, rendererSyncStartedAt)) {
+        if (completedSummary?.status === 'success') {
+          await hydrateRuntimeCacheAfterDataSync('after timed-out data sync status recovery', {
+            strict: hasRemoteRuntimeData(completedSummary)
+          })
+          return completedSummary as DataSyncSummary
+        }
+
+        if (completedSummary?.status === 'failed' && completedSummary.error) {
+          throw new Error(completedSummary.error)
+        }
       }
     }
 

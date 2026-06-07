@@ -513,6 +513,53 @@ describe('DataSyncService', () => {
     expect(getDataSyncRuntimeState().syncing).toBe(false)
   })
 
+  it('recovers a completed main-process summary when the sync IPC times out after success', async () => {
+    vi.useFakeTimers()
+    const startedAt = Date.parse('2026-06-06T10:00:00.000Z')
+    vi.setSystemTime(new Date(startedAt))
+    const pendingSync = deferred<typeof successSummary>()
+    const recoveredSummary = {
+      ...successSummary,
+      storageDownloaded: 2,
+      storageRecordCount: 3,
+      storageBundleHash: 'remote-bundle-hash',
+      lastSyncAt: startedAt + 1_000
+    }
+    mocks.syncNow.mockReturnValueOnce(pendingSync.promise)
+    mocks.getStatus
+      .mockResolvedValueOnce({ syncing: false, lastSummary: null, conflicts: [], syncStartedAt: null })
+      .mockResolvedValueOnce({ syncing: false, lastSummary: null, conflicts: [], syncStartedAt: null })
+      .mockResolvedValueOnce({
+        syncing: false,
+        lastSummary: recoveredSummary,
+        conflicts: [],
+        syncStartedAt: null
+      })
+      .mockResolvedValueOnce({
+        syncing: false,
+        lastSummary: recoveredSummary,
+        conflicts: [],
+        syncStartedAt: null
+      })
+
+    const sync = syncAppDataNow()
+    await vi.waitFor(() => expect(getDataSyncRuntimeState().syncing).toBe(true))
+
+    await vi.advanceTimersByTimeAsync(15 * 60_000)
+
+    await expect(sync).resolves.toEqual(recoveredSummary)
+    expect(mocks.recordFailure).not.toHaveBeenCalled()
+    expect(mocks.hydrateRuntimeCacheFromStorageV2).toHaveBeenCalledTimes(1)
+    expect(mocks.hydrateStorageV2ConversationsIfDexieEmpty).toHaveBeenCalledWith(
+      'data-sync:after timed-out data sync status recovery',
+      { strict: true }
+    )
+    expect(getDataSyncRuntimeState()).toEqual({
+      syncing: false,
+      syncStartedAt: null
+    })
+  })
+
   it('keeps renderer runtime busy when a main sync timeout leaves the main process running', async () => {
     vi.useFakeTimers()
     const mainStartedAt = Date.parse('2026-06-06T10:00:00.000Z')
