@@ -13,7 +13,7 @@ import { ThemeMode, UpgradeChannel } from '@shared/data/preference/preferenceTyp
 import { debounce } from 'lodash'
 import { BadgeQuestionMark, Briefcase, Bug, Building2, Github, Globe, Mail, Rss } from 'lucide-react'
 import type { FC, ReactNode } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Markdown from 'react-markdown'
 
@@ -32,31 +32,44 @@ const AboutSettings: FC = () => {
 
   const { appUpdateState, updateAppUpdateState } = useAppUpdateState()
 
-  const onCheckUpdate = debounce(
-    async () => {
-      if (appUpdateState.checking || appUpdateState.downloading) {
-        return
-      }
+  const onCheckUpdate = useMemo(
+    () =>
+      debounce(
+        async () => {
+          if (appUpdateState.checking || appUpdateState.downloading) {
+            return
+          }
 
-      if (appUpdateState.downloaded) {
-        void UpdateDialogPopup.show({ releaseInfo: appUpdateState.info || null })
-        return
-      }
+          if (appUpdateState.downloaded) {
+            void UpdateDialogPopup.show({ releaseInfo: appUpdateState.info || null })
+            return
+          }
 
-      updateAppUpdateState({ checking: true, manualCheck: true })
+          updateAppUpdateState({ checking: true, manualCheck: true })
 
-      try {
-        await window.api.checkForUpdate()
-      } catch {
-        updateAppUpdateState({ manualCheck: false })
-        window.toast.error(t('settings.about.updateError'))
-      }
+          try {
+            await window.api.checkForUpdate()
+          } catch {
+            updateAppUpdateState({ manualCheck: false })
+            window.toast.error(t('settings.about.updateError'))
+          }
 
-      updateAppUpdateState({ checking: false })
-    },
-    2000,
-    { leading: true, trailing: false }
+          updateAppUpdateState({ checking: false })
+        },
+        2000,
+        { leading: true, trailing: false }
+      ),
+    [
+      appUpdateState.checking,
+      appUpdateState.downloading,
+      appUpdateState.downloaded,
+      appUpdateState.info,
+      t,
+      updateAppUpdateState
+    ]
   )
+
+  useEffect(() => () => onCheckUpdate.cancel(), [onCheckUpdate])
 
   const onOpenWebsite = (url: string) => {
     void window.api.openWebsite(url)
