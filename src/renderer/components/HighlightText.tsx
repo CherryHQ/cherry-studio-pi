@@ -13,14 +13,16 @@ interface HighlightTextProps {
  */
 const HighlightText: FC<HighlightTextProps> = ({ text, keyword, caseSensitive = false, className }) => {
   const highlightedText = useMemo(() => {
-    if (!keyword || !text) {
+    const normalizedKeyword = keyword.trim()
+    if (!normalizedKeyword || !text) {
       return <span>{text}</span>
     }
 
     // Escape regex special characters
-    const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const escapedKeyword = normalizedKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const flags = caseSensitive ? 'g' : 'gi'
     const regex = new RegExp(`(${escapedKeyword})`, flags)
+    const exactMatchRegex = new RegExp(`^${escapedKeyword}$`, caseSensitive ? '' : 'i')
 
     // Split text by keyword matches
     const parts = text.split(regex)
@@ -29,8 +31,7 @@ const HighlightText: FC<HighlightTextProps> = ({ text, keyword, caseSensitive = 
       <>
         {parts.map((part, index) => {
           // Check if part matches keyword
-          const isMatch = regex.test(part)
-          regex.lastIndex = 0 // Reset regex state
+          const isMatch = exactMatchRegex.test(part)
 
           if (isMatch) {
             return <mark key={index}>{part}</mark>
