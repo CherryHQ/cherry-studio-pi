@@ -4,6 +4,7 @@ import { loggerService } from '@logger'
 import { application } from '@main/core/application'
 import { BaseService, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
 import { messageService } from '@main/data/services/MessageService'
+import { type PowerSaveBlockerLease, powerSaveBlockerService } from '@main/services/PowerSaveBlockerService'
 import { withIdleTimeout } from '@main/utils/withIdleTimeout'
 import { context as otelContext, type Span, SpanStatusCode, trace } from '@opentelemetry/api'
 import type {
@@ -179,6 +180,7 @@ function ensureTerminalFinalMessage(exec: StreamExecution): CherryUIMessage {
 @ServicePhase(Phase.WhenReady)
 export class AiStreamManager extends BaseService {
   private readonly activeStreams = new Map<string, ActiveStream>()
+  private readonly powerSaveBlockers = new Map<string, PowerSaveBlockerLease>()
   /** Serialises `prepareDispatch → send` per topic so concurrent `Ai_Stream_Open` can't race
    *  the `hasLiveStream` snapshot and orphan a PENDING placeholder row. */
   private readonly dispatchLock = new KeyedMutex()
@@ -337,12 +339,18 @@ export class AiStreamManager extends BaseService {
     const isMultiModel = input.models.length > 1
     const executions = new Map<UniqueModelId, StreamExecution>()
 
-    for (const { modelId, request, rootSpan } of input.models) {
-      if (executions.has(modelId)) {
-        throw new Error(`send() got duplicate modelId ${modelId} for topic ${input.topicId}`)
+    this.acquirePowerSaveBlocker(input.topicId)
+    try {
+      for (const { modelId, request, rootSpan } of input.models) {
+        if (executions.has(modelId)) {
+          throw new Error(`send() got duplicate modelId ${modelId} for topic ${input.topicId}`)
+        }
+        const exec = this.createAndLaunchExecution(input.topicId, modelId, request, input.siblingsGroupId, rootSpan)
+        executions.set(modelId, exec)
       }
-      const exec = this.createAndLaunchExecution(input.topicId, modelId, request, input.siblingsGroupId, rootSpan)
-      executions.set(modelId, exec)
+    } catch (error) {
+      this.releasePowerSaveBlocker(input.topicId)
+      throw error
     }
 
     const stream: ActiveStream = {
@@ -637,6 +645,7 @@ export class AiStreamManager extends BaseService {
 
   /** Chat defers 30 s, prompt evicts immediately. */
   private runTerminalLifecycle(stream: ActiveStream): void {
+    this.releasePowerSaveBlocker(stream.topicId)
     stream.lifecycle.onTerminal(stream)
     stream.lifecycle.cleanup(stream, () => {
       if (this.activeStreams.get(stream.topicId) === stream) {
@@ -954,11 +963,29 @@ export class AiStreamManager extends BaseService {
   private evictStream(topicId: string): void {
     const stream = this.activeStreams.get(topicId)
     if (!stream) return
+    this.releasePowerSaveBlocker(topicId)
     if (stream.cleanupTimer) clearTimeout(stream.cleanupTimer)
     // Leak guard for executions whose terminal handler never fired; `endRootSpan` is idempotent.
     for (const exec of stream.executions.values()) {
       endRootSpan(exec, 'aborted')
     }
     this.activeStreams.delete(topicId)
+  }
+
+  private acquirePowerSaveBlocker(topicId: string): void {
+    if (this.powerSaveBlockers.has(topicId)) return
+    this.powerSaveBlockers.set(
+      topicId,
+      powerSaveBlockerService.acquire('ai-stream', {
+        detail: topicId
+      })
+    )
+  }
+
+  private releasePowerSaveBlocker(topicId: string): void {
+    const lease = this.powerSaveBlockers.get(topicId)
+    if (!lease) return
+    this.powerSaveBlockers.delete(topicId)
+    lease.release()
   }
 }

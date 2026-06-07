@@ -100,6 +100,10 @@ function controlledStream(): {
 const mockStreamText = vi.fn<(request: AiStreamRequest) => Promise<ReadableStream<UIMessageChunk>>>(async () =>
   pendingStream()
 )
+const powerSaveMocks = vi.hoisted(() => ({
+  acquire: vi.fn(),
+  release: vi.fn()
+}))
 
 /**
  * In-memory stand-in for Main's `CacheService`. `AiStreamManager` writes
@@ -115,6 +119,12 @@ const fakeCacheService = {
   })
 }
 const mockSaveSpans = vi.fn<(topicId: string) => Promise<void>>(async () => undefined)
+
+vi.mock('@main/services/PowerSaveBlockerService', () => ({
+  powerSaveBlockerService: {
+    acquire: powerSaveMocks.acquire
+  }
+}))
 
 vi.mock('@application', async () => {
   const { mockApplicationFactory } = await import('@test-mocks/main/application')
@@ -198,6 +208,7 @@ describe('AiStreamManager', () => {
       pendingStream((request.requestOptions as { signal?: AbortSignal } | undefined)?.signal)
     )
     mockSaveSpans.mockResolvedValue(undefined)
+    powerSaveMocks.acquire.mockReturnValue({ key: 'test-lease', release: powerSaveMocks.release })
     sharedCacheStore.clear()
   })
 
@@ -228,6 +239,22 @@ describe('AiStreamManager', () => {
       // Passing signal propagation is verified indirectly by abort-path tests
       // (e.g. `abort > sets status and triggers AbortController signal`).
       expect(mockStreamText).toHaveBeenCalledOnce()
+    })
+
+    it('holds a power-save blocker only while the topic is actively running', async () => {
+      startSingle(mgr, {
+        topicId: 'a',
+        modelId: 'provider-a::model-a',
+        request: req('a'),
+        listeners: [new FakeListener('l:a')]
+      })
+
+      expect(powerSaveMocks.acquire).toHaveBeenCalledWith('ai-stream', { detail: 'a' })
+      expect(powerSaveMocks.release).not.toHaveBeenCalled()
+
+      await mgr.onExecutionDone('a', 'provider-a::model-a')
+
+      expect(powerSaveMocks.release).toHaveBeenCalledTimes(1)
     })
 
     it('throws on duplicate modelId within a single send call', () => {
