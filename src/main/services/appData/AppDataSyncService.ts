@@ -9,6 +9,7 @@ import { createClient as createLibsqlClient } from '@libsql/client'
 import { loggerService } from '@logger'
 import BackupManager from '@main/services/BackupManager'
 import MemoryService from '@main/services/memory/MemoryService'
+import { powerSaveBlockerService } from '@main/services/PowerSaveBlockerService'
 import { storageV2AgentLegacyProjectionService } from '@main/services/storageV2/AgentLegacyProjectionService'
 import { storageV2AppDataKvMirrorService } from '@main/services/storageV2/AppDataKvMirrorService'
 import { storageV2AppDataLegacyProjectionService } from '@main/services/storageV2/AppDataLegacyProjectionService'
@@ -3830,12 +3831,18 @@ export class AppDataSyncService {
     this.syncStartedAt = context.startedAt
     this.syncRunContext = context
     this.pendingFailureSafetySnapshot = null
-    const backgroundSync = (async () => {
-      await this.pruneLocalDataSyncTempBackups({
-        keepLatestJoinSafety: shouldCreateLocalJoinSafetySnapshot() ? DATA_SYNC_JOIN_SAFETY_LOCAL_RETENTION : 0
-      })
-      return this.performSyncNow(normalizedConfig, context)
-    })()
+    const backgroundSync = powerSaveBlockerService.runWithBlocker(
+      'data-sync.webdav',
+      async () => {
+        await this.pruneLocalDataSyncTempBackups({
+          keepLatestJoinSafety: shouldCreateLocalJoinSafetySnapshot() ? DATA_SYNC_JOIN_SAFETY_LOCAL_RETENTION : 0
+        })
+        return this.performSyncNow(normalizedConfig, context)
+      },
+      {
+        detail: normalizedConfig.webdavPath
+      }
+    )
     this.syncBackgroundInFlight = backgroundSync
     backgroundSync
       .finally(() => {

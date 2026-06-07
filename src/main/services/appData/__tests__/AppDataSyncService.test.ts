@@ -43,6 +43,9 @@ const mocks = vi.hoisted(() => ({
     commitRecordSyncStates: vi.fn(),
     pruneRemoteArtifacts: vi.fn()
   },
+  powerSaveBlocker: {
+    runWithBlocker: vi.fn(async (_reason: string, task: () => Promise<unknown>) => task())
+  },
   backupManager: {
     backup: vi.fn(),
     restore: vi.fn()
@@ -128,6 +131,11 @@ vi.mock('@main/services/storageV2/DataRootService', () => ({
 
 vi.mock('@main/services/storageV2/WebDavRecordSyncService', () => ({
   storageV2WebDavRecordSyncService: mocks.storageRecordSync
+}))
+
+vi.mock('@main/services/PowerSaveBlockerService', () => ({
+  default: mocks.powerSaveBlocker,
+  powerSaveBlockerService: mocks.powerSaveBlocker
 }))
 
 vi.mock('@main/utils', () => ({
@@ -404,6 +412,9 @@ describe('AppDataSyncService', () => {
     })
     mocks.storageRecordSync.commitRecordSyncStates.mockResolvedValue(undefined)
     mocks.storageRecordSync.pruneRemoteArtifacts.mockResolvedValue(undefined)
+    mocks.powerSaveBlocker.runWithBlocker.mockImplementation(async (_reason: string, task: () => Promise<unknown>) =>
+      task()
+    )
     mocks.backupManager.backup.mockImplementation(async (_event, fileName: string) => {
       const filePath = path.join('/tmp', fileName)
       await fsp.writeFile(filePath, 'backup')
@@ -649,6 +660,16 @@ describe('AppDataSyncService', () => {
     expect(lockPayload.expiresAt).toBeLessThanOrEqual(lockPayload.deadlineAt)
     expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(
       expect.stringMatching(/^\/remote-root\/sync\/v1\/\.sync\.locks\/local-device\.[a-f0-9-]+\.json$/)
+    )
+  })
+
+  it('holds a power-save blocker for the full WebDAV sync run', async () => {
+    await new AppDataSyncService().syncNow(config)
+
+    expect(mocks.powerSaveBlocker.runWithBlocker).toHaveBeenCalledWith(
+      'data-sync.webdav',
+      expect.any(Function),
+      expect.objectContaining({ detail: '/remote-root' })
     )
   })
 
