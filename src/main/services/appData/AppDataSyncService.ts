@@ -16,6 +16,7 @@ import { storageV2AppDataLegacyProjectionService } from '@main/services/storageV
 import { storageV2AppDataRuntimeRecoveryService } from '@main/services/storageV2/AppDataRuntimeRecoveryService'
 import { storageV2DataRootService } from '@main/services/storageV2/DataRootService'
 import { storageV2FileLegacyProjectionService } from '@main/services/storageV2/FileLegacyProjectionService'
+import { pruneManagedLegacyProjectionArchives } from '@main/services/storageV2/LegacyProjectionArchiveCleanup'
 import {
   type StorageV2WebDavRecordSyncManifest,
   storageV2WebDavRecordSyncService,
@@ -317,6 +318,8 @@ const SYNC_SPACE_SECRET_ENCRYPTION = 'cherry-webdav-secret-sync-aes-256-gcm' as 
 const DATA_SYNC_TEMP_BACKUP_FILE_PATTERN = /^cherry-studio-pi\.data-sync\..+\.zip$/
 const DATA_SYNC_JOIN_SAFETY_FILE_PATTERN = /^cherry-studio-pi\.data-sync\.join-safety\..+\.zip$/
 const DATA_SYNC_JOIN_SAFETY_LOCAL_RETENTION = 1
+const DATA_SYNC_RUNTIME_PROJECTION_ARCHIVE_PREFIX = 'data-sync-runtime-projection-'
+const DATA_SYNC_RUNTIME_PROJECTION_ARCHIVE_RETENTION = 5
 const DATA_SYNC_SYNC_SPACE_ID_STATE_KEY = 'data-sync-sync-space-id'
 const STORAGE_V2_RUNTIME_PROJECTION_HASH_KEY = 'storage-v2-runtime-projection-hash'
 const NOTES_REMOTE_ARTIFACT_ROOT = 'notes'
@@ -3455,11 +3458,15 @@ export class AppDataSyncService {
       summary.storageConflicts > 0 ||
       summary.blobDownloaded > 0
     const canProjectAppDataStrongly = storageRecordsChanged && summary.skipped === 0
-    const archiveRoot = path.join(
-      storageV2DataRootService.ensureDataRoot().dataRoot,
-      'legacy',
-      `data-sync-runtime-projection-${Date.now()}`
-    )
+    const dataRoot = storageV2DataRootService.ensureDataRoot().dataRoot
+    await pruneManagedLegacyProjectionArchives(dataRoot, {
+      prefixes: [DATA_SYNC_RUNTIME_PROJECTION_ARCHIVE_PREFIX],
+      keepLatest: DATA_SYNC_RUNTIME_PROJECTION_ARCHIVE_RETENTION
+    }).catch((error) => {
+      logger.warn('Failed to prune stale data sync runtime projection archives', error as Error)
+    })
+
+    const archiveRoot = path.join(dataRoot, 'legacy', `${DATA_SYNC_RUNTIME_PROJECTION_ARCHIVE_PREFIX}${Date.now()}`)
     let projected = false
 
     if ([...entityTypes].some((entityType) => AGENT_RUNTIME_ENTITY_TYPES.has(entityType))) {

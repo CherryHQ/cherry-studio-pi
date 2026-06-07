@@ -7,6 +7,7 @@ import { DatabaseManager } from '@main/services/agents/database/DatabaseManager'
 import { getDataPath } from '@main/utils'
 
 import { storageV2DataRootService } from './DataRootService'
+import { pruneManagedLegacyProjectionArchives } from './LegacyProjectionArchiveCleanup'
 import { getAvailablePathSync, movePathSync } from './SafeFileMove'
 import { storageV2SecretVaultService } from './SecretVaultService'
 import { storageV2Database } from './StorageV2Database'
@@ -60,6 +61,8 @@ const CHANNEL_SECRET_KEYS = [
 
 const SUPPORTED_CHANNEL_TYPES = new Set(['telegram', 'feishu', 'qq', 'wechat', 'discord', 'slack'])
 const SUPPORTED_PERMISSION_MODES = new Set(['default', 'acceptEdits', 'bypassPermissions', 'plan'])
+const AGENT_PROJECTION_ARCHIVE_PREFIX = 'agent-projection-'
+const AGENT_PROJECTION_ARCHIVE_RETENTION = 10
 
 function timestampForFilename() {
   return new Date().toISOString().replace(/[:.]/g, '-')
@@ -354,8 +357,17 @@ export class StorageV2AgentLegacyProjectionService {
   async projectToLegacyRuntime(options: { archiveRoot?: string } = {}): Promise<StorageV2AgentLegacyProjectionReport> {
     const { userDataPath, currentPath, oldPath } = getLegacyAgentDbPaths()
     const rootInfo = storageV2DataRootService.ensureDataRoot()
+    if (!options.archiveRoot) {
+      await pruneManagedLegacyProjectionArchives(rootInfo.dataRoot, {
+        prefixes: [AGENT_PROJECTION_ARCHIVE_PREFIX],
+        keepLatest: AGENT_PROJECTION_ARCHIVE_RETENTION
+      }).catch((error) => {
+        this.logger.warn('Failed to prune stale agent legacy projection archives', error as Error)
+      })
+    }
     const archiveRoot =
-      options.archiveRoot ?? path.join(rootInfo.dataRoot, 'legacy', `agent-projection-${timestampForFilename()}`)
+      options.archiveRoot ??
+      path.join(rootInfo.dataRoot, 'legacy', `${AGENT_PROJECTION_ARCHIVE_PREFIX}${timestampForFilename()}`)
     const report = emptyReport(currentPath)
 
     await DatabaseManager.close()
