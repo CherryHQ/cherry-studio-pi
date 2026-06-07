@@ -24,10 +24,10 @@ describe('modelSearch', () => {
     expect(score).not.toBeNull()
   })
 
-  it('should return null for punctuation-only keyword', () => {
-    expect(getSearchMatchScore(':', fields)).toBeNull()
-    expect(getSearchMatchScore('---', fields)).toBeNull()
-    expect(getSearchMatchScore('   :   ', fields)).toBeNull()
+  it('should ignore punctuation-only keywords', () => {
+    expect(getSearchMatchScore(':', fields)).toBe(0)
+    expect(getSearchMatchScore('---', fields)).toBe(0)
+    expect(getSearchMatchScore('   :   ', fields)).toBe(0)
   })
 
   it('should return null if any keyword does not match', () => {
@@ -42,11 +42,9 @@ describe('modelSearch', () => {
     expect(scoreExact).toBeLessThan(scoreAbbr!)
   })
 
-  it('should return null for queries with mixed punctuation tokens (where some normalize to empty)', () => {
-    // Current behavior: 'gpt :' splits into ['gpt', ':']. Since ':' normalizes to empty,
-    // getKeywordMatchScore(':', fields) returns null, which makes the whole search return null.
-    expect(getSearchMatchScore('gpt :', fields)).toBeNull()
-    expect(getSearchMatchScore('gpt ---', fields)).toBeNull()
+  it('should ignore mixed punctuation tokens that normalize to empty', () => {
+    expect(getSearchMatchScore('gpt :', fields)).toBe(getSearchMatchScore('gpt', fields))
+    expect(getSearchMatchScore('gpt ---', fields)).toBe(getSearchMatchScore('gpt', fields))
   })
 
   describe('ranking and abbreviations contract tests', () => {
