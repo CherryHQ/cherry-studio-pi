@@ -32,6 +32,7 @@ import {
 } from '@renderer/types/error'
 import { formatAiSdkError, formatError, safeToString } from '@renderer/utils/error'
 import { parseDataUrl } from '@shared/utils'
+import DOMPurify from 'dompurify'
 import { CheckCircle, Copy, Loader2, Stethoscope } from 'lucide-react'
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -71,6 +72,24 @@ const truncateLargeData = (
     isLikelyBase64: false
   }
 }
+
+const escapeHtmlText = (value: string): string =>
+  value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case '&':
+        return '&amp;'
+      case '<':
+        return '&lt;'
+      case '>':
+        return '&gt;'
+      case '"':
+        return '&quot;'
+      case "'":
+        return '&#39;'
+      default:
+        return char
+    }
+  })
 
 const ErrorDetailContainer = ({ className, ...props }: React.ComponentProps<typeof Scrollbar>) => (
   <Scrollbar className={cn('max-h-[60vh] pr-[5px]', className)} {...props} />
@@ -168,7 +187,7 @@ const AiSdkErrorBase = memo(({ error }: { error: SerializedAiSdkError }) => {
         setIsTruncated(truncated)
 
         if (isLikelyBase64) {
-          setHighlightedString(truncatedCause)
+          setHighlightedString(escapeHtmlText(truncatedCause))
           return
         }
 
@@ -176,12 +195,12 @@ const AiSdkErrorBase = memo(({ error }: { error: SerializedAiSdkError }) => {
           const parsed = JSON.parse(truncatedCause || '{}')
           const formatted = JSON.stringify(parsed, null, 2)
           const result = await highlightCode(formatted, 'json')
-          setHighlightedString(result)
+          setHighlightedString(DOMPurify.sanitize(result))
         } catch {
-          setHighlightedString(truncatedCause || '')
+          setHighlightedString(escapeHtmlText(truncatedCause || ''))
         }
       } catch {
-        setHighlightedString(cause || '')
+        setHighlightedString(escapeHtmlText(cause || ''))
       }
     }
     const timer = setTimeout(highlight, 0)
