@@ -250,7 +250,7 @@ describe('CitationTooltip', () => {
       expect(mockWindowOpen).not.toHaveBeenCalled()
     })
 
-    it('should handle invalid URLs gracefully', async () => {
+    it('should not open invalid URLs', async () => {
       const user = userEvent.setup()
       const citation = createCitationData({ url: 'invalid-url' })
       renderCitationTooltip(citation)
@@ -258,7 +258,18 @@ describe('CitationTooltip', () => {
       const footer = getCitationFooterButton()
       await user.click(footer)
 
-      expectWindowOpenCalled('invalid-url')
+      expect(mockWindowOpen).not.toHaveBeenCalled()
+    })
+
+    it('should not open unsupported URL protocols', async () => {
+      const user = userEvent.setup()
+      const citation = createCitationData({ url: 'javascript:alert(1)' })
+      renderCitationTooltip(citation)
+
+      const footer = getCitationFooterButton()
+      await user.click(footer)
+
+      expect(mockWindowOpen).not.toHaveBeenCalled()
     })
   })
 

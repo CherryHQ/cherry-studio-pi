@@ -45,6 +45,13 @@ const CitationTooltip: React.FC<CitationTooltipProps> = ({ children, citation })
   }, [citation.content, isXPost, oembedData])
 
   const handleClick = useCallback(() => {
+    try {
+      const url = new URL(citation.url)
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') return
+    } catch {
+      return
+    }
+
     window.open(citation.url, '_blank', 'noopener,noreferrer')
   }, [citation.url])
 
