@@ -1,6 +1,7 @@
 import { appDataSyncService } from '@main/services/appData/AppDataSyncService'
 import { reduxService } from '@main/services/ReduxService'
 import { describeWebDavUserFacingError } from '@main/services/WebDavRetry'
+import { RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE } from '@shared/dataSyncBridge'
 import { IpcChannel } from '@shared/IpcChannel'
 import { normalizeWebDavConfig } from '@shared/webdavConfig'
 import type { WebDavConfig } from '@types'
@@ -11,6 +12,8 @@ import { okResult, sanitizeForAgent } from '../utils'
 
 const DEFAULT_DATA_SYNC_PATH = '/cherry-studio-pi'
 const DATA_SYNC_SUFFIX = '/sync/v1'
+const RENDERER_BRIDGE_CHECK_TIMEOUT_MS = 5_000
+const RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS = 5 * 60_000
 
 type DataSyncSettingsState = {
   dataSyncWebdavHost?: string
@@ -103,6 +106,64 @@ async function runWebDavCapability<T>(
     }
     throw new Error(message)
   }
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+        timeout.unref?.()
+      })
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
+
+async function prepareRendererStorageV2ForDataSync() {
+  const bridgeName = JSON.stringify(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE)
+  let lastProbeError: unknown
+
+  for (const browserWindow of BrowserWindow.getAllWindows()) {
+    if (browserWindow.isDestroyed()) continue
+
+    let hasBridge = false
+    try {
+      hasBridge = await withTimeout(
+        browserWindow.webContents.executeJavaScript(`typeof window[${bridgeName}] === 'function'`) as Promise<boolean>,
+        RENDERER_BRIDGE_CHECK_TIMEOUT_MS,
+        '等待主窗口响应超时'
+      )
+    } catch (error) {
+      lastProbeError = error
+      continue
+    }
+
+    if (!hasBridge) continue
+
+    try {
+      await withTimeout(
+        browserWindow.webContents.executeJavaScript(`window[${bridgeName}]()`),
+        RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS,
+        '同步前准备本机数据超时'
+      )
+      return
+    } catch (error) {
+      throw new Error(`同步前准备本机数据失败：${getErrorMessage(error)}`)
+    }
+  }
+
+  if (lastProbeError) {
+    throw new Error(`同步前无法准备本机数据：${getErrorMessage(lastProbeError)}`)
+  }
+  throw new Error('同步前无法准备本机数据：主窗口尚未就绪，请打开主窗口后重试。')
 }
 
 async function persistWebDavConfig(config: WebDavConfig, options: { autoSync?: boolean; syncInterval?: number } = {}) {
@@ -322,14 +383,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
         if (input?.saveConfig === true) {
           await persistWebDavConfig(config)
         }
-        const prepareStorageV2ForDataSync = (
-          reduxService as unknown as {
-            prepareStorageV2ForDataSync?: () => Promise<void>
-          }
-        ).prepareStorageV2ForDataSync
-        if (prepareStorageV2ForDataSync) {
-          await prepareStorageV2ForDataSync.call(reduxService)
-        }
+        await prepareRendererStorageV2ForDataSync()
         const summary = await runWebDavCapability('同步数据', () => appDataSyncService.syncNow(config), {
           recordDataSyncFailure: true
         })

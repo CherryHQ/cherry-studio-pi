@@ -11,6 +11,7 @@ import StyleSheetManager from '@renderer/context/StyleSheetManager'
 import { TabsProvider } from '@renderer/context/TabsContext'
 import { ThemeProvider } from '@renderer/context/ThemeProvider'
 import { CommandProvider, ContextKeyProvider } from '@renderer/features/command'
+import { registerStorageV2DataSyncBridge } from '@renderer/services/StorageV2DataSyncBridge'
 import store from '@renderer/store'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Provider } from 'react-redux'
@@ -18,6 +19,7 @@ import { Provider } from 'react-redux'
 const logger = loggerService.withContext('MainApp')
 
 void preferenceService.preloadAll()
+registerStorageV2DataSyncBridge()
 
 // 创建 React Query 客户端
 const queryClient = new QueryClient({
