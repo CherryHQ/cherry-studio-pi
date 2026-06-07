@@ -33,6 +33,7 @@ import { app, BrowserWindow, screen, shell } from 'electron'
 import windowStateKeeper from 'electron-window-state'
 
 import { isSafeExternalUrl } from '../utils/externalUrlSafety'
+import { isLocalViteDevServerUrl } from '../utils/localDevServerUrl'
 
 const DEFAULT_QUICK_ASSISTANT_WIDTH = 550
 const DEFAULT_QUICK_ASSISTANT_HEIGHT = 400
@@ -273,7 +274,7 @@ export class QuickAssistantService extends BaseService implements Activatable {
    */
   private setupQuickAssistantWebContents(window: BrowserWindow) {
     window.webContents.on('will-navigate', (event, url) => {
-      if (url.includes('localhost:517')) {
+      if (isLocalViteDevServerUrl(url)) {
         return
       }
 

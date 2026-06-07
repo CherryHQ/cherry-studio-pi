@@ -15,23 +15,10 @@ import path, { join } from 'path'
 
 import iconPath from '../../../build/icon.png?asset'
 import { isSafeExternalUrl } from '../utils/externalUrlSafety'
+import { isLocalViteDevServerUrl } from '../utils/localDevServerUrl'
 import { contextMenu } from './ContextMenu'
 
 const logger = loggerService.withContext('MainWindowService')
-
-function isLocalViteDevServerUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url)
-    const hostname = parsed.hostname.toLowerCase()
-    const isLoopbackHost =
-      hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]'
-    return (
-      (parsed.protocol === 'http:' || parsed.protocol === 'https:') && isLoopbackHost && parsed.port.startsWith('517')
-    )
-  } catch {
-    return false
-  }
-}
 
 // Create nativeImage for Linux window icon (required for Wayland)
 const linuxIcon = isLinux ? nativeImage.createFromPath(iconPath) : undefined
