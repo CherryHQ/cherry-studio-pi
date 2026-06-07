@@ -4,6 +4,17 @@ import { WEB_SEARCH_SOURCE } from '@renderer/types'
 
 import { cleanMarkdownContent, encodeHTML } from './formats'
 
+function isHttpCitationUrl(url?: string) {
+  if (!url) return false
+
+  try {
+    const parsedUrl = new URL(url)
+    return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 /**
  * 从多个 citationReference 中获取第一个有效的 source
  * @returns WebSearchSource
@@ -239,7 +250,7 @@ export function generateCitationTag(citation: Citation): string {
   const citationJson = encodeHTML(JSON.stringify(supData)).replace(/\|/g, '&#124;')
 
   // 判断是否为有效链接
-  const isLink = citation.url && citation.url.startsWith('http')
+  const isLink = isHttpCitationUrl(citation.url)
 
   // Escape | in URL to avoid breaking GFM table cell parsing
   const safeUrl = isLink ? citation.url.replace(/\|/g, '%7C') : ''
