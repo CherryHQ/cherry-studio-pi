@@ -3,6 +3,7 @@ import { loggerService } from '@logger'
 import { BaseService, DependsOn, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
 import { isWin } from '@main/core/platform'
 import { WindowType } from '@main/core/window/types'
+import { powerSaveBlockerService } from '@main/services/PowerSaveBlockerService'
 import { getIpCountry } from '@main/utils/ipService'
 import { generateUserAgent, getClientId } from '@main/utils/systemInfo'
 import { APP_NAME, FeedUrl, UpdateConfigUrl, UpdateMirror } from '@shared/config/constant'
@@ -63,6 +64,7 @@ interface ChannelConfig {
 export class AppUpdaterService extends BaseService {
   private cancellationToken: CancellationToken = new CancellationToken()
   private updateCheckResult: UpdateCheckResult | null = null
+  private quitAndInstallStarted = false
 
   protected async onInit(): Promise<void> {
     autoUpdater.logger = logger as Logger
@@ -95,6 +97,7 @@ export class AppUpdaterService extends BaseService {
   private registerAutoUpdaterListeners(): void {
     const wm = () => application.get('WindowManager')
     const onError = (error: Error) => {
+      this.quitAndInstallStarted = false
       logger.error('update error', error)
       wm().broadcastToType(WindowType.Main, IpcChannel.UpdateError, error)
     }
@@ -363,8 +366,30 @@ export class AppUpdaterService extends BaseService {
   }
 
   public quitAndInstall() {
+    if (this.quitAndInstallStarted) {
+      logger.warn('Update installation already requested, ignoring duplicate quitAndInstall call')
+      return
+    }
+
+    this.quitAndInstallStarted = true
     application.markQuitting()
-    setImmediate(() => autoUpdater.quitAndInstall(true, true))
+    const blocker = powerSaveBlockerService.acquire('app-update.install', {
+      type: 'prevent-display-sleep'
+    })
+
+    setImmediate(() => {
+      try {
+        // User clicked "Install Now", so use the visible installer flow.
+        // Silent install hides close/elevation failures on Windows and can look like the app disappeared.
+        autoUpdater.quitAndInstall(false, true)
+      } catch (error) {
+        this.quitAndInstallStarted = false
+        logger.error('Failed to quit and install update', error as Error)
+        application.get('WindowManager').broadcastToType(WindowType.Main, IpcChannel.UpdateError, error)
+      } finally {
+        blocker.release()
+      }
+    })
   }
 
   /**

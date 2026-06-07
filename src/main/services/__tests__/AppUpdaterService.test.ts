@@ -1,6 +1,16 @@
 import type { UpdateInfo } from 'builder-util-runtime'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+const mocks = vi.hoisted(() => ({
+  updateInstallBlocker: {
+    key: 'update-install-blocker',
+    release: vi.fn()
+  },
+  powerSaveBlockerService: {
+    acquire: vi.fn()
+  }
+}))
+
 // Mock dependencies
 vi.mock('@logger', () => ({
   loggerService: {
@@ -23,6 +33,7 @@ vi.mock('@application', async () => {
   const { mockApplicationFactory } = await import('@test-mocks/main/application')
   const result = mockApplicationFactory()
   const originalGet = result.application.get.getMockImplementation()!
+  ;(result.application as any).markQuitting = vi.fn()
   result.application.get.mockImplementation((name: string) => {
     if (name === 'MainWindowService') {
       return { getMainWindow: vi.fn() }
@@ -31,6 +42,10 @@ vi.mock('@application', async () => {
   })
   return result
 })
+
+vi.mock('@main/services/PowerSaveBlockerService', () => ({
+  powerSaveBlockerService: mocks.powerSaveBlockerService
+}))
 
 vi.mock('@main/core/lifecycle', () => {
   class MockBaseService {}
@@ -105,6 +120,7 @@ import { application } from '@application'
 import { UpdateMirror } from '@shared/config/constant'
 import { MockMainPreferenceServiceUtils } from '@test-mocks/main/PreferenceService'
 import { app, net } from 'electron'
+import { autoUpdater } from 'electron-updater'
 
 import { AppUpdaterService } from '../AppUpdaterService'
 
@@ -121,6 +137,7 @@ describe('AppUpdaterService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     MockMainPreferenceServiceUtils.resetMocks()
+    mocks.powerSaveBlockerService.acquire.mockReturnValue(mocks.updateInstallBlocker)
     appUpdater = new AppUpdaterService()
   })
 
@@ -303,6 +320,24 @@ describe('AppUpdaterService', () => {
       const result = (appUpdater as any).processReleaseInfo(releaseInfo)
 
       expect(result.releaseNotes).toBeNull()
+    })
+  })
+
+  describe('quitAndInstall', () => {
+    it('uses visible installer flow and ignores duplicate install requests', async () => {
+      appUpdater.quitAndInstall()
+      appUpdater.quitAndInstall()
+
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(application.markQuitting).toHaveBeenCalledTimes(1)
+      expect(mocks.powerSaveBlockerService.acquire).toHaveBeenCalledTimes(1)
+      expect(mocks.powerSaveBlockerService.acquire).toHaveBeenCalledWith('app-update.install', {
+        type: 'prevent-display-sleep'
+      })
+      expect(autoUpdater.quitAndInstall).toHaveBeenCalledTimes(1)
+      expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true)
+      expect(mocks.updateInstallBlocker.release).toHaveBeenCalledTimes(1)
     })
   })
 
