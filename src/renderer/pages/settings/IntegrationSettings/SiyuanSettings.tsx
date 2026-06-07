@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next'
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingTitle } from '..'
 
 const logger = loggerService.withContext('SiyuanSettings')
+const INTEGRATION_CHECK_TIMEOUT_MS = 10_000
 
 const SiyuanSettings: FC = () => {
   const [siyuanApiUrl, setSiyuanApiUrl] = usePreference('data.integration.siyuan.api_url')
@@ -47,6 +48,7 @@ const SiyuanSettings: FC = () => {
 
       const response = await fetch(`${siyuanApiUrl}/api/notebook/lsNotebooks`, {
         method: 'POST',
+        signal: AbortSignal.timeout(INTEGRATION_CHECK_TIMEOUT_MS),
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Token ${siyuanToken}`

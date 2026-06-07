@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingTitle } from '..'
 
 const logger = loggerService.withContext('YuqueSettings')
+const INTEGRATION_CHECK_TIMEOUT_MS = 10_000
 
 const isYuqueRepoResponse = (value: unknown): value is { data: { id: string | number } } => {
   if (!value || typeof value !== 'object') return false
@@ -44,6 +45,7 @@ const YuqueSettings: FC = () => {
 
     try {
       const response = await fetch('https://www.yuque.com/api/v2/hello', {
+        signal: AbortSignal.timeout(INTEGRATION_CHECK_TIMEOUT_MS),
         headers: {
           'X-Auth-Token': yuqueToken
         }
@@ -55,6 +57,7 @@ const YuqueSettings: FC = () => {
       }
       const yuqueSlug = yuqueUrl.replace('https://www.yuque.com/', '')
       const repoIDResponse = await fetch(`https://www.yuque.com/api/v2/repos/${yuqueSlug}`, {
+        signal: AbortSignal.timeout(INTEGRATION_CHECK_TIMEOUT_MS),
         headers: {
           'X-Auth-Token': yuqueToken
         }

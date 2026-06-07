@@ -9,6 +9,15 @@ import { useTranslation } from 'react-i18next'
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
 
 const logger = loggerService.withContext('JoplinSettings')
+const INTEGRATION_CHECK_TIMEOUT_MS = 10_000
+
+function buildJoplinNotesCheckUrl(baseUrl: string, token: string): string {
+  const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
+  const url = new URL('notes', normalizedBaseUrl)
+  url.searchParams.set('limit', '1')
+  url.searchParams.set('token', token)
+  return url.toString()
+}
 
 const JoplinSettings: FC = () => {
   const [joplinToken, setJoplinToken] = usePreference('data.integration.joplin.token')
@@ -45,7 +54,9 @@ const JoplinSettings: FC = () => {
         return
       }
 
-      const response = await fetch(`${joplinUrl}notes?limit=1&token=${joplinToken}`)
+      const response = await fetch(buildJoplinNotesCheckUrl(joplinUrl, joplinToken), {
+        signal: AbortSignal.timeout(INTEGRATION_CHECK_TIMEOUT_MS)
+      })
 
       const data = await response.json()
 
