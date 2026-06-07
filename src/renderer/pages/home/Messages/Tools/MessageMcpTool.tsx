@@ -8,6 +8,7 @@ import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
 import { useIsToolAutoApproved } from '@renderer/hooks/useMcpServer'
 import { useTimer } from '@renderer/hooks/useTimer'
 import type { McpToolResponse } from '@renderer/types'
+import { renderPlainTextCodeHtml, sanitizeHtml } from '@renderer/utils/html'
 import type { McpProgressEvent } from '@shared/config/types'
 import { IpcChannel } from '@shared/IpcChannel'
 import { Collapse, ConfigProvider, Progress } from 'antd'
@@ -301,9 +302,12 @@ const ToolResponseContent: FC<{
   // Extract and highlight response when available
   useEffect(() => {
     if (!isExpanded || !response) return
+    let cancelled = false
 
     const highlight = async () => {
       const { text: previewContent, images } = extractPreviewContent(response)
+      if (cancelled) return
+
       setResponseImages(images)
       const {
         data: truncatedContent,
@@ -312,12 +316,19 @@ const ToolResponseContent: FC<{
       } = truncateOutput(previewContent)
       setIsTruncated(wasTruncated)
       setOriginalLength(origLen)
-      const result = await highlightCode(truncatedContent, 'json')
-      setHighlightedResponse(result)
+      try {
+        const result = await highlightCode(truncatedContent, 'json')
+        if (!cancelled) setHighlightedResponse(sanitizeHtml(result))
+      } catch {
+        if (!cancelled) setHighlightedResponse(renderPlainTextCodeHtml(truncatedContent))
+      }
     }
 
     const timer = setTimeout(highlight, 0)
-    return () => clearTimeout(timer)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   }, [isExpanded, response, highlightCode])
 
   if (!isExpanded) return null
