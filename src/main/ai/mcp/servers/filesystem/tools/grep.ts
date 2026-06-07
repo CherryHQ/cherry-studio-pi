@@ -195,7 +195,13 @@ export async function handleGrepTool(args: unknown, baseDir: string) {
   let usedRipgrep = false
   try {
     const rgResult = await runRipgrep(rgArgs)
-    if (rgResult.ok && rgResult.exitCode !== null && rgResult.exitCode !== 2) {
+    if (rgResult.truncated || rgResult.timedOut) {
+      truncated = true
+    }
+    if (
+      rgResult.ok &&
+      (rgResult.truncated || rgResult.timedOut || (rgResult.exitCode !== null && rgResult.exitCode !== 2))
+    ) {
       usedRipgrep = true
       const lines = rgResult.stdout.split('\n').filter(Boolean)
       for (const line of lines) {

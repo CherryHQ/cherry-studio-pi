@@ -39,8 +39,13 @@ describe('filesystem MCP security', () => {
     const dataRoot = await createTempDir('filesystem-stable-data-')
     const mkdirSpy = vi.spyOn(fs, 'mkdir').mockResolvedValue(undefined)
 
-    vi.doMock('@main/utils', () => ({
-      getDataPath: vi.fn((subPath?: string) => (subPath ? path.join(dataRoot, subPath) : dataRoot))
+    vi.doMock('@application', () => ({
+      application: {
+        getPath: vi.fn((key: string, filename?: string) => {
+          const base = key === 'feature.mcp.workspace' ? path.join(dataRoot, 'Workspace') : path.join(dataRoot, key)
+          return filename ? path.join(base, filename) : base
+        })
+      }
     }))
 
     try {
@@ -50,7 +55,7 @@ describe('filesystem MCP security', () => {
       expect((server as any).baseDir).toBe(path.join(dataRoot, 'Workspace'))
       expect(mkdirSpy).toHaveBeenCalledWith(path.join(dataRoot, 'Workspace'), { recursive: true })
     } finally {
-      vi.doUnmock('@main/utils')
+      vi.doUnmock('@application')
     }
   })
 

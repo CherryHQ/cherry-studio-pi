@@ -13,6 +13,8 @@ export const MAX_LINE_LENGTH = 2000
 export const DEFAULT_READ_LIMIT = 2000
 export const MAX_FILES_LIMIT = 100
 export const MAX_GREP_MATCHES = 100
+export const RIPGREP_DEFAULT_TIMEOUT_MS = 30_000
+export const RIPGREP_MAX_STDOUT_BYTES = 1024 * 1024
 
 // Common types
 export interface FileInfo {
@@ -619,6 +621,13 @@ export interface RipgrepResult {
   ok: boolean
   stdout: string
   exitCode: number | null
+  truncated?: boolean
+  timedOut?: boolean
+}
+
+export interface RipgrepRunOptions {
+  timeoutMs?: number
+  maxStdoutBytes?: number
 }
 
 export function getRipgrepBinaryPath(): string {
@@ -630,8 +639,10 @@ export function getRipgrepBinaryPath(): string {
   return toAsarUnpackedPath(path.join(pkgRoot, 'vendor', 'ripgrep', `${arch}-${platform}`, executable))
 }
 
-export async function runRipgrep(args: string[]): Promise<RipgrepResult> {
+export async function runRipgrep(args: string[], options: RipgrepRunOptions = {}): Promise<RipgrepResult> {
   const ripgrepBinaryPath = getRipgrepBinaryPath()
+  const timeoutMs = Math.max(1, Math.trunc(options.timeoutMs ?? RIPGREP_DEFAULT_TIMEOUT_MS))
+  const maxStdoutBytes = Math.max(1, Math.trunc(options.maxStdoutBytes ?? RIPGREP_MAX_STDOUT_BYTES))
 
   return new Promise((resolve) => {
     const child = spawn(ripgrepBinaryPath, args, {
@@ -640,17 +651,59 @@ export async function runRipgrep(args: string[]): Promise<RipgrepResult> {
     })
 
     let stdout = ''
+    let stdoutBytes = 0
+    let settled = false
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null
+
+    const settle = (result: RipgrepResult) => {
+      if (settled) return
+      settled = true
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle)
+        timeoutHandle = null
+      }
+      resolve(result)
+    }
+
+    const killChild = () => {
+      try {
+        child.kill('SIGKILL')
+      } catch {
+        // The process may already have exited.
+      }
+    }
+
+    timeoutHandle = setTimeout(() => {
+      killChild()
+      settle({ ok: true, stdout, exitCode: null, truncated: true, timedOut: true })
+    }, timeoutMs)
+    timeoutHandle.unref?.()
 
     child.stdout?.on('data', (chunk) => {
-      stdout += chunk.toString('utf-8')
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      const remainingBytes = maxStdoutBytes - stdoutBytes
+      if (remainingBytes <= 0) {
+        killChild()
+        settle({ ok: true, stdout, exitCode: 0, truncated: true })
+        return
+      }
+
+      const accepted = buffer.byteLength > remainingBytes ? buffer.subarray(0, remainingBytes) : buffer
+      stdout += accepted.toString('utf-8')
+      stdoutBytes += accepted.byteLength
+
+      if (buffer.byteLength > remainingBytes || stdoutBytes >= maxStdoutBytes) {
+        killChild()
+        settle({ ok: true, stdout, exitCode: 0, truncated: true })
+      }
     })
 
     child.on('error', () => {
-      resolve({ ok: false, stdout: '', exitCode: null })
+      settle({ ok: false, stdout, exitCode: null })
     })
 
     child.on('close', (code) => {
-      resolve({ ok: true, stdout, exitCode: code })
+      settle({ ok: true, stdout, exitCode: code })
     })
   })
 }

@@ -67,7 +67,6 @@ export async function handleGlobTool(args: unknown, baseDir: string) {
   // Build ripgrep arguments for file listing using --glob=pattern format
   const rgArgs: string[] = [
     '--files',
-    '--follow',
     '--hidden',
     `--glob=${pattern}`,
     '--glob=!.git/*',
@@ -84,15 +83,21 @@ export async function handleGlobTool(args: unknown, baseDir: string) {
   logger.debug('Ripgrep result', {
     ok: rgResult.ok,
     exitCode: rgResult.exitCode,
+    truncated: rgResult.truncated,
+    timedOut: rgResult.timedOut,
     stdoutLength: rgResult.stdout.length,
     stdoutPreview: rgResult.stdout.slice(0, 500)
   })
+
+  if (rgResult.truncated || rgResult.timedOut) {
+    truncated = true
+  }
 
   // Process results if we have stdout content
   // Exit code 2 can indicate partial errors (e.g., permission denied on some dirs) but still have valid results
   if (rgResult.ok && rgResult.stdout.length > 0) {
     const lines = rgResult.stdout.split('\n').filter(Boolean)
-    logger.debug('Parsed lines from ripgrep', { lineCount: lines.length, lines })
+    logger.debug('Parsed lines from ripgrep', { lineCount: lines.length, preview: lines.slice(0, 5) })
 
     for (const line of lines) {
       if (files.length >= MAX_FILES_LIMIT) {
@@ -106,7 +111,7 @@ export async function handleGlobTool(args: unknown, baseDir: string) {
       const absolutePath = path.isAbsolute(filePath) ? filePath : path.resolve(validPath, filePath)
 
       try {
-        // Re-validate each result to filter out symlink escapes (--follow traverses symlinks)
+        // Re-validate each result as a defense-in-depth check for unusual path output.
         await validatePath(absolutePath, baseDir)
         const stats = await fs.stat(absolutePath)
         files.push({
