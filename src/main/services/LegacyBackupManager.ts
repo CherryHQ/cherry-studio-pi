@@ -57,6 +57,17 @@ interface ProgressData {
 const TEMP_APP_DIR = 'cherry-studio-pi'
 const LEGACY_TEMP_APP_DIR = 'cherry-studio'
 
+function assertZipEntriesWithin(entryNames: string[], baseDir: string): void {
+  const root = path.resolve(baseDir)
+
+  for (const name of entryNames) {
+    const target = path.resolve(baseDir, name)
+    if (target !== root && !target.startsWith(root + path.sep)) {
+      throw new Error(`Unsafe backup entry path: ${name}`)
+    }
+  }
+}
+
 class BackupManager {
   private backupDir = path.join(app.getPath('temp'), TEMP_APP_DIR, 'backup')
 
@@ -556,6 +567,7 @@ class BackupManager {
       const zip = new StreamZip.async({ file: backupPath })
       onProgress({ stage: 'extracting', progress: 15, total: 100 })
       try {
+        assertZipEntriesWithin(Object.keys(await zip.entries()), tempDir)
         await zip.extract(null, tempDir)
       } finally {
         await zip.close().catch((error: unknown) => {

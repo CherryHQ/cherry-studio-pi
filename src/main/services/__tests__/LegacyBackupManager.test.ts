@@ -138,11 +138,14 @@ vi.mock('archiver', () => ({
 }))
 
 vi.mock('node-stream-zip', () => ({
-  default: vi.fn()
+  default: {
+    async: vi.fn()
+  }
 }))
 
 // Import after mocks
 import * as fs from 'fs-extra'
+import StreamZip from 'node-stream-zip'
 import * as path from 'path'
 
 import BackupManager from '../LegacyBackupManager'
@@ -493,6 +496,39 @@ describe('BackupManager remote restore cleanup', () => {
     expect(getFileContents).toHaveBeenCalledWith('remote-s3.zip')
     expect(restore).toHaveBeenCalledWith(expect.anything(), '/tmp/cherry-studio-pi/backup/remote-s3.zip')
     expect(fs.remove).toHaveBeenCalledWith('/tmp/cherry-studio-pi/backup/remote-s3.zip')
+  })
+})
+
+describe('BackupManager restore zip safety', () => {
+  let backupManager: BackupManager
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    backupManager = new BackupManager()
+    vi.mocked(fs.ensureDir).mockResolvedValue(undefined as never)
+    vi.mocked((fs as any).promises.mkdtemp).mockResolvedValue('/tmp/cherry-studio-pi/backup/restore-random')
+    vi.mocked(fs.remove).mockResolvedValue(undefined as never)
+  })
+
+  it('rejects zip entries that escape the restore temp directory before extraction', async () => {
+    const extract = vi.fn()
+    const close = vi.fn().mockResolvedValue(undefined)
+    vi.mocked(StreamZip.async).mockImplementation(
+      () =>
+        ({
+          entries: vi.fn().mockResolvedValue({ '../evil.txt': { name: '../evil.txt' } }),
+          extract,
+          close
+        }) as never
+    )
+
+    await expect(backupManager.restore({} as Electron.IpcMainInvokeEvent, '/tmp/backup.zip')).rejects.toThrow(
+      'Unsafe backup entry path'
+    )
+
+    expect(extract).not.toHaveBeenCalled()
+    expect(close).toHaveBeenCalled()
+    expect(fs.remove).toHaveBeenCalledWith('/tmp/cherry-studio-pi/backup/restore-random')
   })
 })
 
