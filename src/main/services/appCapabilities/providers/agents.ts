@@ -156,6 +156,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
           model: { type: 'string' },
           plan_model: { type: 'string' },
           small_model: { type: 'string' },
+          sessionName: { type: 'string', description: 'Optional default session name created with the agent' },
           accessible_paths: { type: 'array', items: { type: 'string' } },
           configuration: { type: 'object', additionalProperties: true }
         },
@@ -166,9 +167,13 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['database.write', 'filesystem.write'],
       tags: ['agents', 'create'],
       execute: async (input: any) => {
+        const name = normalizeRequiredText(input?.name, 'Agent name')
+        const model = normalizeRequiredText(input?.model, 'Agent model')
         const sessionName = normalizeOptionalText(input?.sessionName) || 'Default session'
         const agent = await createAgentWithStorageV2Recovery({
           ...input,
+          name,
+          model,
           type: normalizeOptionalText(input?.type) || 'claude-code'
         })
         const session = await agentSessionService

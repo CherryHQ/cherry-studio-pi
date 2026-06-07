@@ -207,7 +207,7 @@ describe('agent app capabilities', () => {
 
   it('normalizes agent creation defaults without changing the caller payload shape', async () => {
     await capability('agents.create').execute(
-      { name: 'Agent One', model: 'model-1', type: ' claude-code ', sessionName: ' First task ' },
+      { name: ' Agent One ', model: ' model-1 ', type: ' claude-code ', sessionName: ' First task ' },
       { source: 'agent' }
     )
 
@@ -223,6 +223,12 @@ describe('agent app capabilities', () => {
   })
 
   it('rejects empty required agent inputs before calling services', async () => {
+    await expect(
+      capability('agents.create').execute({ name: '   ', model: 'model-1' }, { source: 'agent' })
+    ).rejects.toThrow('Agent name is required')
+    await expect(
+      capability('agents.create').execute({ name: 'Agent One', model: '   ' }, { source: 'agent' })
+    ).rejects.toThrow('Agent model is required')
     await expect(capability('agents.get').execute({ agentId: '   ' }, { source: 'agent' })).rejects.toThrow(
       'Agent id is required'
     )
@@ -233,6 +239,7 @@ describe('agent app capabilities', () => {
       capability('agents.task.create').execute({ agentId: 'agent-1', task: [] }, { source: 'agent' })
     ).rejects.toThrow('Agent task is required')
 
+    expect(mocks.createAgentWithStorageV2Recovery).not.toHaveBeenCalled()
     expect(mocks.getAgentWithStorageV2Recovery).not.toHaveBeenCalled()
     expect(mocks.agentTaskService.createTask).not.toHaveBeenCalled()
   })
