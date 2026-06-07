@@ -5,7 +5,20 @@ const mocks = vi.hoisted(() => ({
     select: vi.fn(),
     dispatch: vi.fn()
   },
+  preferenceService: {
+    get: vi.fn(),
+    set: vi.fn()
+  },
   navigateApp: vi.fn()
+}))
+
+vi.mock('@application', () => ({
+  application: {
+    get: vi.fn((name: string) => {
+      if (name === 'PreferenceService') return mocks.preferenceService
+      throw new Error(`Unknown service: ${name}`)
+    })
+  }
 }))
 
 vi.mock('@main/services/ReduxService', () => ({
@@ -39,6 +52,7 @@ describe('settings app capabilities', () => {
       theme: 'dark',
       apiServer: {
         port: 23333,
+        enabled: false,
         apiKey: 'server-secret'
       },
       serviceAccount: {
@@ -47,6 +61,13 @@ describe('settings app capabilities', () => {
       webdavPass: 'dav-secret'
     })
     mocks.reduxService.dispatch.mockResolvedValue(undefined)
+    mocks.preferenceService.get.mockImplementation((key: string) => {
+      if (key === 'feature.csaas.enabled') return true
+      if (key === 'feature.csaas.port') return 24444
+      if (key === 'feature.csaas.api_key') return 'preference-server-secret'
+      return undefined
+    })
+    mocks.preferenceService.set.mockResolvedValue(undefined)
   })
 
   it('reads a single setting value by path', async () => {
@@ -57,10 +78,11 @@ describe('settings app capabilities', () => {
       summary: 'Setting value read',
       data: {
         path: 'apiServer.port',
-        value: 23333
+        value: 24444
       }
     })
     expect(mocks.reduxService.select).toHaveBeenCalledWith('state.settings')
+    expect(mocks.preferenceService.get).toHaveBeenCalledWith('feature.csaas.port')
   })
 
   it('redacts sensitive single setting values by path', async () => {
@@ -95,6 +117,7 @@ describe('settings app capabilities', () => {
       type: 'settings/setApiServerApiKey',
       payload: 'new-server-secret'
     })
+    expect(mocks.preferenceService.set).toHaveBeenCalledWith('feature.csaas.api_key', 'new-server-secret')
     expect(result.data).toEqual({
       path: 'apiServer.apiKey',
       value: '[redacted]'
@@ -111,6 +134,7 @@ describe('settings app capabilities', () => {
       type: 'settings/setApiServerPort',
       payload: 23334
     })
+    expect(mocks.preferenceService.set).toHaveBeenCalledWith('feature.csaas.port', 23334)
     expect(result.data).toEqual({
       path: 'apiServer.port',
       value: 23334

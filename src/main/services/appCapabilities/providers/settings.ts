@@ -1,4 +1,6 @@
+import { application } from '@application'
 import { reduxService } from '@main/services/ReduxService'
+import type { UnifiedPreferenceKeyType } from '@shared/data/preference/preferenceTypes'
 
 import type { AppCapabilityDefinition } from '../types'
 import { navigateApp, okResult, pickPath, sanitizeForAgent } from '../utils'
@@ -83,6 +85,11 @@ export const SETTINGS_SETTERS: Record<string, string> = {
 
 const pathEnum = Object.keys(SETTINGS_SETTERS).sort()
 const SENSITIVE_SETTING_PATH_PATTERN = /api[-_]?key|private[-_]?key|token|secret|pass|password|authorization|cookie/i
+const API_SERVER_PREFERENCE_PATHS: Record<string, UnifiedPreferenceKeyType> = {
+  'apiServer.enabled': 'feature.csaas.enabled',
+  'apiServer.port': 'feature.csaas.port',
+  'apiServer.apiKey': 'feature.csaas.api_key'
+}
 
 function sanitizeSettingValueForAgent(keyPath: string, value: unknown) {
   if (SENSITIVE_SETTING_PATH_PATTERN.test(keyPath)) {
@@ -92,6 +99,33 @@ function sanitizeSettingValueForAgent(keyPath: string, value: unknown) {
   }
 
   return sanitizeForAgent(value)
+}
+
+async function readSettingsForAgent() {
+  const settings = (await reduxService.select('state.settings')) ?? {}
+  try {
+    const preferenceService = application.get('PreferenceService')
+    return {
+      ...settings,
+      apiServer: {
+        ...settings.apiServer,
+        enabled: preferenceService.get('feature.csaas.enabled'),
+        port: preferenceService.get('feature.csaas.port'),
+        apiKey: preferenceService.get('feature.csaas.api_key')
+      }
+    }
+  } catch {
+    return settings
+  }
+}
+
+async function persistSettingValue(keyPath: string, action: string, value: unknown) {
+  const preferenceKey = API_SERVER_PREFERENCE_PATHS[keyPath]
+  if (preferenceKey) {
+    await application.get('PreferenceService').set(preferenceKey, value as never)
+  }
+
+  await reduxService.dispatch({ type: action, payload: value })
 }
 
 export function createSettingsCapabilities(): AppCapabilityDefinition[] {
@@ -117,7 +151,7 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['settings', 'preferences', 'read'],
       execute: async () => {
-        const settings = await reduxService.select('state.settings')
+        const settings = await readSettingsForAgent()
         return okResult('Settings read', { settings: sanitizeForAgent(settings) })
       }
     },
@@ -139,7 +173,7 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any) => {
         const keyPath = String(input?.path ?? '').trim()
         if (!keyPath) throw new Error('Setting path is required')
-        const settings = await reduxService.select('state.settings')
+        const settings = await readSettingsForAgent()
         return okResult('Setting value read', {
           path: keyPath,
           value: sanitizeSettingValueForAgent(keyPath, pickPath(settings, keyPath))
@@ -169,7 +203,7 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
         if (!keyPath) throw new Error('Setting path is required')
         const action = SETTINGS_SETTERS[keyPath]
         if (!action) throw new Error(`Unsupported setting path: ${keyPath}`)
-        await reduxService.dispatch({ type: action, payload: input?.value })
+        await persistSettingValue(keyPath, action, input?.value)
         return okResult('Setting updated', {
           path: keyPath,
           value: sanitizeSettingValueForAgent(keyPath, input?.value)
