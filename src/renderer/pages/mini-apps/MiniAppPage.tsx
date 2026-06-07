@@ -68,11 +68,20 @@ const MiniAppPage: FC = () => {
 
     if (webviewRef.current === el) return true // Already attached
 
+    webviewCleanupRef.current?.()
+    webviewCleanupRef.current = null
+
     webviewRef.current = el
     const handleInPageNav = (e: any) => setCurrentUrl(e.url)
     el.addEventListener('did-navigate-in-page', handleInPageNav)
+    let cleaned = false
     webviewCleanupRef.current = () => {
+      if (cleaned) return
+      cleaned = true
       el.removeEventListener('did-navigate-in-page', handleInPageNav)
+      if (webviewRef.current === el) {
+        webviewRef.current = null
+      }
     }
     return true
   }, [app])
