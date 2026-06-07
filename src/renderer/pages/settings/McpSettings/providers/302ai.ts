@@ -4,6 +4,8 @@ import { notifyStorageV2MirroredLocalStorageKeyChanged } from '@renderer/service
 import type { McpServer } from '@renderer/types'
 import i18next from 'i18next'
 
+import { fetchWithProviderTimeout, getProviderSyncErrorDetails, getProviderSyncErrorMessage } from './request'
+
 const logger = loggerService.withContext('302ai')
 
 // Token storage constants and utilities
@@ -40,13 +42,16 @@ export const syncAi302Servers = async (token: string): Promise<Ai302SyncResult> 
   const t = i18next.t
 
   try {
-    const response = await fetch(`${AI302_HOST}/v1/mcps/list?baseUrl=https://api.302.ai/custom-mcp/mcp`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': token
+    const response = await fetchWithProviderTimeout(
+      `${AI302_HOST}/v1/mcps/list?baseUrl=https://api.302.ai/custom-mcp/mcp`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': token
+        }
       }
-    })
+    )
 
     // Handle authentication errors
     if (response.status === 401 || response.status === 403) {
@@ -113,9 +118,9 @@ export const syncAi302Servers = async (token: string): Promise<Ai302SyncResult> 
     logger.error('302ai sync error:', error as Error)
     return {
       success: false,
-      message: t('settings.mcp.sync.error'),
+      message: getProviderSyncErrorMessage(t, error),
       allServers: [],
-      errorDetails: String(error)
+      errorDetails: getProviderSyncErrorDetails(error)
     }
   }
 }

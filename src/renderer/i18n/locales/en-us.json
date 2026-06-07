@@ -5866,6 +5866,7 @@
         "selectProvider": "Select Provider:",
         "setToken": "Enter Your Token",
         "success": "Sync MCP Servers successful",
+        "timeout": "Sync timed out after {{seconds}}s. Please check your network connection and try again.",
         "title": "Sync Servers",
         "tokenPlaceholder": "Enter API token here",
         "tokenRequired": "API Token is required",

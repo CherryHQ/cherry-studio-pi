@@ -4,6 +4,8 @@ import { notifyStorageV2MirroredLocalStorageKeyChanged } from '@renderer/service
 import { getMcpServerType, type McpServer } from '@renderer/types'
 import i18next from 'i18next'
 
+import { fetchWithProviderTimeout, getProviderSyncErrorDetails, getProviderSyncErrorMessage } from './request'
+
 const logger = loggerService.withContext('ModelScopeSyncUtils')
 
 // Token storage constants and utilities
@@ -50,7 +52,7 @@ export const syncModelScopeServers = async (token: string): Promise<ModelScopeSy
   const t = i18next.t
 
   try {
-    const response = await fetch(`${MODELSCOPE_HOST}/api/v1/mcp/services/operational`, {
+    const response = await fetchWithProviderTimeout(`${MODELSCOPE_HOST}/api/v1/mcp/services/operational`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -128,9 +130,9 @@ export const syncModelScopeServers = async (token: string): Promise<ModelScopeSy
     logger.error('ModelScope sync error:', error as Error)
     return {
       success: false,
-      message: t('settings.mcp.sync.error'),
+      message: getProviderSyncErrorMessage(t, error),
       allServers: [],
-      errorDetails: String(error)
+      errorDetails: getProviderSyncErrorDetails(error)
     }
   }
 }

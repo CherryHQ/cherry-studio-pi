@@ -4,6 +4,8 @@ import { notifyStorageV2MirroredLocalStorageKeyChanged } from '@renderer/service
 import type { McpServer } from '@renderer/types'
 import i18next from 'i18next'
 
+import { fetchWithProviderTimeout, getProviderSyncErrorDetails, getProviderSyncErrorMessage } from './request'
+
 const logger = loggerService.withContext('TokenFluxSyncUtils')
 
 // Token storage constants and utilities
@@ -56,7 +58,7 @@ export const syncTokenFluxServers = async (token: string): Promise<TokenFluxSync
   const t = i18next.t
 
   try {
-    const response = await fetch(`${TOKENFLUX_HOST}/v1/mcps?enabled=true`, {
+    const response = await fetchWithProviderTimeout(`${TOKENFLUX_HOST}/v1/mcps?enabled=true`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -137,9 +139,9 @@ export const syncTokenFluxServers = async (token: string): Promise<TokenFluxSync
     logger.error('TokenFlux sync error:', error as Error)
     return {
       success: false,
-      message: t('settings.mcp.sync.error'),
+      message: getProviderSyncErrorMessage(t, error),
       allServers: [],
-      errorDetails: String(error)
+      errorDetails: getProviderSyncErrorDetails(error)
     }
   }
 }

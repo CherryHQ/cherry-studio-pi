@@ -4,6 +4,8 @@ import { notifyStorageV2MirroredLocalStorageKeyChanged } from '@renderer/service
 import type { McpServer } from '@renderer/types'
 import i18next from 'i18next'
 
+import { fetchWithProviderTimeout, getProviderSyncErrorDetails, getProviderSyncErrorMessage } from './request'
+
 const logger = loggerService.withContext('McpRouterSyncUtils')
 
 // Token storage constants and utilities
@@ -53,7 +55,7 @@ export const syncMcpRouterServers = async (token: string): Promise<McpRouterSync
   const t = i18next.t
 
   try {
-    const response = await fetch('https://api.mcprouter.to/v1/list-servers', {
+    const response = await fetchWithProviderTimeout('https://api.mcprouter.to/v1/list-servers', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -130,9 +132,9 @@ export const syncMcpRouterServers = async (token: string): Promise<McpRouterSync
     logger.error('McpRouter sync error:', error as Error)
     return {
       success: false,
-      message: t('settings.mcp.sync.error'),
+      message: getProviderSyncErrorMessage(t, error),
       allServers: [],
-      errorDetails: String(error)
+      errorDetails: getProviderSyncErrorDetails(error)
     }
   }
 }

@@ -4,6 +4,8 @@ import { notifyStorageV2MirroredLocalStorageKeyChanged } from '@renderer/service
 import type { McpServer } from '@renderer/types'
 import i18next from 'i18next'
 
+import { fetchWithProviderTimeout, getProviderSyncErrorDetails, getProviderSyncErrorMessage } from './request'
+
 const logger = loggerService.withContext('BailianSyncUtils')
 
 // 常量定义
@@ -76,7 +78,7 @@ async function fetchAllMcpServers(token: string): Promise<BailianServer[]> {
   do {
     const url = `${BAILIAN_HOST}/api/v1/mcps/user/list?pageNo=${pageNum}&pageSize=${PAGE_SIZE}`
 
-    const response = await fetch(url, {
+    const response = await fetchWithProviderTimeout(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -183,8 +185,8 @@ export const syncBailianServers = async (token: string): Promise<BailianSyncResu
 
     // 其他情况
     logger.error('Bailian sync error:', error as Error)
-    message = t('settings.mcp.sync.error')
-    errorDetails = String(error)
+    message = getProviderSyncErrorMessage(t, error)
+    errorDetails = getProviderSyncErrorDetails(error)
     return {
       success: false,
       message,

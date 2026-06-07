@@ -5866,6 +5866,7 @@
         "selectProvider": "選擇提供者：",
         "setToken": "輸入權杖",
         "success": "同步 MCP 伺服器成功",
+        "timeout": "同步超過 {{seconds}} 秒仍未完成。請檢查網路連線後重試。",
         "title": "同步伺服器",
         "tokenPlaceholder": "在此輸入 API 權杖",
         "tokenRequired": "需要 API 權杖",

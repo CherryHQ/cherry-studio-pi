@@ -5866,6 +5866,7 @@
         "selectProvider": "选择提供商：",
         "setToken": "输入您的令牌",
         "success": "同步 MCP 服务器成功",
+        "timeout": "同步超过 {{seconds}} 秒仍未完成。请检查网络连接后重试。",
         "title": "同步服务器",
         "tokenPlaceholder": "在此输入 API 令牌",
         "tokenRequired": "需要 API 令牌",
