@@ -237,6 +237,54 @@ describe('knowledge app capabilities', () => {
     expect((result.data as any).total).toBe(5)
   })
 
+  it('bounds total knowledge search results returned to agents', async () => {
+    const bases = Array.from({ length: 4 }, (_, index) => ({
+      id: `kb-${index}`,
+      name: `Knowledge ${index}`,
+      model: { id: 'embed-model', provider: 'shared-provider' },
+      items: []
+    }))
+    const providers = [
+      {
+        id: 'shared-provider',
+        apiKey: 'sk-shared',
+        apiHost: 'https://example.com/'
+      }
+    ]
+    mocks.reduxService.select.mockImplementation(async (selector: string) => {
+      if (selector === 'state.knowledge.bases') return bases
+      if (selector === 'state.llm.providers') return providers
+      return null
+    })
+    mocks.knowledgeService.search.mockImplementation(async (_event, input) =>
+      Array.from({ length: 3 }, (_, index) => ({
+        id: `${input.base.id}-result-${index}`,
+        content: 'matched'
+      }))
+    )
+
+    const result = await capability('knowledge.search').execute(
+      {
+        query: 'matched',
+        document_count: 3,
+        result_limit: 5
+      },
+      { source: 'agent' }
+    )
+
+    expect(result.data as any).toMatchObject({
+      total: 5,
+      total_before_limit: 12,
+      result_limit: 5,
+      truncated: true,
+      truncated_count: 7
+    })
+    expect((result.data as any).results).toHaveLength(5)
+    expect(result.warnings).toEqual([
+      'Returned 5 of 12 knowledge search results; narrow knowledge_base_ids or raise result_limit.'
+    ])
+  })
+
   it('normalizes knowledge add and reset base ids before calling services', async () => {
     const base = {
       id: 'kb-1',

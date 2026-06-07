@@ -20,6 +20,8 @@ type ProviderConfigResolver = (providerId: string) => Promise<ProviderRuntimeCon
 const KNOWLEDGE_SEARCH_CONCURRENCY = 3
 const DEFAULT_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT = 20
 const MAX_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT = 100
+const DEFAULT_KNOWLEDGE_SEARCH_RESULT_LIMIT = 50
+const MAX_KNOWLEDGE_SEARCH_RESULT_LIMIT = 100
 
 function firstApiKey(value: unknown): string {
   return typeof value === 'string' ? (value.split(',')[0]?.trim() ?? '') : ''
@@ -43,6 +45,15 @@ function normalizeKnowledgeSearchDocumentCount(value: unknown): number {
   const parsed = typeof value === 'string' && !value.trim() ? 5 : Number(value ?? 5)
   const safeCount = Number.isFinite(parsed) ? Math.trunc(parsed) : 5
   return Math.max(1, Math.min(safeCount, 20))
+}
+
+function normalizeKnowledgeSearchResultLimit(value: unknown): number {
+  const parsed =
+    typeof value === 'string' && !value.trim()
+      ? DEFAULT_KNOWLEDGE_SEARCH_RESULT_LIMIT
+      : Number(value ?? DEFAULT_KNOWLEDGE_SEARCH_RESULT_LIMIT)
+  const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_KNOWLEDGE_SEARCH_RESULT_LIMIT
+  return Math.max(1, Math.min(safeLimit, MAX_KNOWLEDGE_SEARCH_RESULT_LIMIT))
 }
 
 function normalizeOptionalText(value: unknown) {
@@ -348,7 +359,12 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
             items: { type: 'string' },
             description: 'Optional knowledge base ids to search'
           },
-          document_count: { type: 'number', default: 5 }
+          document_count: { type: 'number', default: 5 },
+          result_limit: {
+            type: 'number',
+            default: DEFAULT_KNOWLEDGE_SEARCH_RESULT_LIMIT,
+            description: 'Maximum total results returned to the agent; defaults to 50 and is capped at 100'
+          }
         },
         required: ['query']
       },
@@ -360,6 +376,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
 
         const ids = normalizeKnowledgeBaseIds(input?.knowledge_base_ids)
         const documentCount = normalizeKnowledgeSearchDocumentCount(input?.document_count)
+        const resultLimit = normalizeKnowledgeSearchResultLimit(input?.result_limit)
         const bases = await listKnowledgeBases()
         const targetBases = ids?.length ? bases.filter((base) => ids.includes(base.id)) : bases
         const resolveProviderConfig = createCachedProviderConfigResolver()
@@ -389,15 +406,26 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
           }
         })
         const results = resultsPerBase.flatMap((item) => item.results)
+        const limitedResults = results.slice(0, resultLimit)
+        const truncatedCount = Math.max(0, results.length - limitedResults.length)
         const warnings = resultsPerBase.flatMap((item) => (item.error ? [`${item.baseName}: ${item.error}`] : []))
+        if (truncatedCount > 0) {
+          warnings.push(
+            `Returned ${limitedResults.length} of ${results.length} knowledge search results; narrow knowledge_base_ids or raise result_limit.`
+          )
+        }
         return {
           ok: true,
-          summary: `Knowledge search returned ${results.length} result(s)`,
+          summary: `Knowledge search returned ${limitedResults.length} result(s)`,
           data: {
             query,
-            total: results.length,
+            total: limitedResults.length,
+            total_before_limit: results.length,
+            result_limit: resultLimit,
+            truncated: truncatedCount > 0,
+            truncated_count: truncatedCount,
             searched_bases: targetBases.map((base) => ({ id: base.id, name: base.name })),
-            results: sanitizeForAgent(results)
+            results: sanitizeForAgent(limitedResults)
           },
           warnings
         }
