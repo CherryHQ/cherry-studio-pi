@@ -33,6 +33,14 @@ type AgentTaskJobInputTemplate = {
   timeoutMinutes: number
 }
 
+type ListAgentTasksOptions = ListOptions & {
+  includeHeartbeat?: boolean
+}
+
+type ListTasksAcrossAgentsOptions = ListAgentTasksOptions & {
+  agentIds?: readonly string[]
+}
+
 function isAgentTaskTemplate(value: unknown): value is AgentTaskJobInputTemplate {
   return (
     typeof value === 'object' &&
@@ -129,29 +137,15 @@ export class AgentTaskService {
 
   async listTasks(
     agentId: string,
-    options: ListOptions & { includeHeartbeat?: boolean } = {}
+    options: ListAgentTasksOptions = {}
   ): Promise<{ tasks: ScheduledTaskEntity[]; total: number }> {
-    const { includeHeartbeat = false, limit, offset } = options
-    const all = await jobScheduleService.listAll({ type: AGENT_TASK_TYPE })
+    return await this.listTaskSnapshots({ ...options, agentId })
+  }
 
-    const filtered = all.filter((s) => {
-      if (!isAgentTaskTemplate(s.jobInputTemplate) || s.jobInputTemplate.agentId !== agentId) return false
-      if (!includeHeartbeat && s.name === HEARTBEAT_TASK_NAME) return false
-      return true
-    })
-
-    const sorted = [...filtered].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-    const sliced =
-      limit !== undefined
-        ? offset !== undefined
-          ? sorted.slice(offset, offset + limit)
-          : sorted.slice(0, limit)
-        : sorted
-
-    return {
-      tasks: await Promise.all(sliced.map((s) => this.toScheduledTaskEntity(s))),
-      total: filtered.length
-    }
+  async listTasksAcrossAgents(
+    options: ListTasksAcrossAgentsOptions = {}
+  ): Promise<{ tasks: ScheduledTaskEntity[]; total: number }> {
+    return await this.listTaskSnapshots(options)
   }
 
   async updateTask(agentId: string, taskId: string, patch: UpdateTaskDto): Promise<ScheduledTaskEntity | null> {
@@ -246,6 +240,39 @@ export class AgentTaskService {
       status: deriveStatus(snapshot),
       createdAt: snapshot.createdAt,
       updatedAt: snapshot.updatedAt
+    }
+  }
+
+  private async listTaskSnapshots(
+    options: ListAgentTasksOptions & { agentId?: string; agentIds?: readonly string[] }
+  ): Promise<{ tasks: ScheduledTaskEntity[]; total: number }> {
+    const { agentId, agentIds, includeHeartbeat = false, limit, offset } = options
+    const agentIdSet = agentIds ? new Set(agentIds.filter((id) => typeof id === 'string' && id.trim())) : undefined
+    if (agentIdSet && agentIdSet.size === 0) {
+      return { tasks: [], total: 0 }
+    }
+
+    const all = await jobScheduleService.listAll({ type: AGENT_TASK_TYPE })
+    const filtered = all.filter((snapshot) => {
+      if (!isAgentTaskTemplate(snapshot.jobInputTemplate)) return false
+      const snapshotAgentId = snapshot.jobInputTemplate.agentId
+      if (agentId !== undefined && snapshotAgentId !== agentId) return false
+      if (agentIdSet && !agentIdSet.has(snapshotAgentId)) return false
+      if (!includeHeartbeat && snapshot.name === HEARTBEAT_TASK_NAME) return false
+      return true
+    })
+
+    const sorted = [...filtered].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    const sliced =
+      limit !== undefined
+        ? offset !== undefined
+          ? sorted.slice(offset, offset + limit)
+          : sorted.slice(0, limit)
+        : sorted
+
+    return {
+      tasks: await Promise.all(sliced.map((s) => this.toScheduledTaskEntity(s))),
+      total: filtered.length
     }
   }
 

@@ -69,23 +69,12 @@ async function listAgentTasks(input: any = {}) {
   }
 
   const { agents } = await listAgentsWithStorageV2Recovery({ limit: MAX_AGENT_CAPABILITY_LIST_LIMIT })
-  const taskGroups = await Promise.all(
-    agents.map((agent) =>
-      agentTaskService.listTasks(agent.id, {
-        includeHeartbeat: options.includeHeartbeat
-      })
-    )
-  )
-  const tasks = taskGroups
-    .flatMap((group) => group.tasks)
-    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
-  const offset = options.offset ?? 0
-  const limit = options.limit ?? DEFAULT_AGENT_CAPABILITY_LIST_LIMIT
-
-  return {
-    tasks: tasks.slice(offset, offset + limit),
-    total: tasks.length
-  }
+  return await agentTaskService.listTasksAcrossAgents({
+    agentIds: agents.map((agent) => agent.id),
+    includeHeartbeat: options.includeHeartbeat,
+    limit: options.limit ?? DEFAULT_AGENT_CAPABILITY_LIST_LIMIT,
+    offset: options.offset
+  })
 }
 
 export function createAgentCapabilities(): AppCapabilityDefinition[] {

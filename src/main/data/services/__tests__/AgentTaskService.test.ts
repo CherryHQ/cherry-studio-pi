@@ -309,6 +309,34 @@ describe('AgentTaskService (thin facade)', () => {
 
       expect(result.tasks).toHaveLength(2)
     })
+
+    it('lists tasks across selected agents with a single schedule scan', async () => {
+      setupApplicationMocks()
+      vi.mocked(jobScheduleService.listAll).mockResolvedValueOnce([
+        makeSnapshot({ id: 'old-a', createdAt: '2026-06-01T00:00:00.000Z' }),
+        makeSnapshot({
+          id: 'new-b',
+          createdAt: '2026-06-03T00:00:00.000Z',
+          jobInputTemplate: { agentId: 'agent-b', prompt: 'x', timeoutMinutes: 2 }
+        }),
+        makeSnapshot({
+          id: 'skip-c',
+          createdAt: '2026-06-04T00:00:00.000Z',
+          jobInputTemplate: { agentId: 'agent-c', prompt: 'x', timeoutMinutes: 2 }
+        }),
+        makeSnapshot({ id: 'heartbeat-a', name: 'heartbeat', createdAt: '2026-06-05T00:00:00.000Z' })
+      ])
+
+      const result = await agentTaskService.listTasksAcrossAgents({
+        agentIds: [AGENT_ID, 'agent-b'],
+        limit: 1,
+        offset: 0
+      })
+
+      expect(jobScheduleService.listAll).toHaveBeenCalledTimes(1)
+      expect(result.total).toBe(2)
+      expect(result.tasks.map((task) => task.id)).toEqual(['new-b'])
+    })
   })
 
   describe('updateTask', () => {

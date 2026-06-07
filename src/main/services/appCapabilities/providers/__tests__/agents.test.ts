@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   },
   agentTaskService: {
     listTasks: vi.fn(),
+    listTasksAcrossAgents: vi.fn(),
     createTask: vi.fn()
   }
 }))
@@ -62,6 +63,7 @@ describe('agent app capabilities', () => {
     mocks.agentSessionService.listByCursor.mockResolvedValue({ items: [], nextCursor: undefined })
     mocks.agentSessionService.createSession.mockResolvedValue({ id: 'session-1' })
     mocks.agentTaskService.listTasks.mockResolvedValue({ tasks: [], total: 0 })
+    mocks.agentTaskService.listTasksAcrossAgents.mockResolvedValue({ tasks: [], total: 0 })
     mocks.agentTaskService.createTask.mockResolvedValue({ id: 'task-1' })
   })
 
@@ -83,7 +85,12 @@ describe('agent app capabilities', () => {
       cursor: undefined
     })
     expect(mocks.listAgentsWithStorageV2Recovery).toHaveBeenCalledWith({ limit: 200 })
-    expect(mocks.agentTaskService.listTasks).toHaveBeenCalledWith('agent-1', { includeHeartbeat: undefined })
+    expect(mocks.agentTaskService.listTasksAcrossAgents).toHaveBeenCalledWith({
+      agentIds: ['agent-1'],
+      includeHeartbeat: undefined,
+      limit: 50,
+      offset: undefined
+    })
   })
 
   it('clamps unsafe agent list pagination while preserving filters', async () => {
@@ -132,23 +139,19 @@ describe('agent app capabilities', () => {
       agents: [{ id: 'agent-a' }, { id: 'agent-b' }],
       total: 2
     })
-    mocks.agentTaskService.listTasks
-      .mockResolvedValueOnce({
-        total: 2,
-        tasks: [
-          { id: 'old-a', createdAt: '2026-06-01T00:00:00.000Z' },
-          { id: 'new-a', createdAt: '2026-06-03T00:00:00.000Z' }
-        ]
-      })
-      .mockResolvedValueOnce({
-        total: 1,
-        tasks: [{ id: 'mid-b', createdAt: '2026-06-02T00:00:00.000Z' }]
-      })
+    mocks.agentTaskService.listTasksAcrossAgents.mockResolvedValueOnce({
+      total: 3,
+      tasks: [{ id: 'mid-b', createdAt: '2026-06-02T00:00:00.000Z' }]
+    })
 
     const result = await capability('agents.tasks.list').execute({ limit: 1, offset: 1 }, { source: 'agent' })
 
-    expect(mocks.agentTaskService.listTasks).toHaveBeenCalledWith('agent-a', { includeHeartbeat: undefined })
-    expect(mocks.agentTaskService.listTasks).toHaveBeenCalledWith('agent-b', { includeHeartbeat: undefined })
+    expect(mocks.agentTaskService.listTasksAcrossAgents).toHaveBeenCalledWith({
+      agentIds: ['agent-a', 'agent-b'],
+      includeHeartbeat: undefined,
+      limit: 1,
+      offset: 1
+    })
     expect(result.data).toEqual({
       tasks: [{ id: 'mid-b', createdAt: '2026-06-02T00:00:00.000Z' }],
       total: 3
