@@ -107,9 +107,12 @@ const EnvironmentDependencies: FC<EnvironmentDependenciesProps> = ({ mini = fals
   const navigate = useNavigate()
   const checkBinariesTimerRef = useRef<NodeJS.Timeout>(undefined)
   const hasShownCheckBinariesErrorRef = useRef(false)
+  const isMountedRef = useRef(true)
 
   useEffect(() => {
+    isMountedRef.current = true
     return () => {
+      isMountedRef.current = false
       clearTimeout(checkBinariesTimerRef.current)
     }
   }, [])
@@ -120,6 +123,8 @@ const EnvironmentDependencies: FC<EnvironmentDependenciesProps> = ({ mini = fals
       const bunExists = await window.api.isBinaryExist('bun')
       const { uvPath, bunPath, dir } = await window.api.mcp.getInstallInfo()
 
+      if (!isMountedRef.current) return
+
       setIsUvInstalled(uvExists)
       setIsBunInstalled(bunExists)
       setUvPath(uvPath)
@@ -127,6 +132,8 @@ const EnvironmentDependencies: FC<EnvironmentDependenciesProps> = ({ mini = fals
       setBinariesDir(dir)
       hasShownCheckBinariesErrorRef.current = false
     } catch (error) {
+      if (!isMountedRef.current) return
+
       logger.error('Failed to check MCP environment dependencies', error as Error)
       if (!hasShownCheckBinariesErrorRef.current) {
         hasShownCheckBinariesErrorRef.current = true
@@ -139,12 +146,19 @@ const EnvironmentDependencies: FC<EnvironmentDependenciesProps> = ({ mini = fals
     try {
       setIsInstallingUv(true)
       await window.api.installUVBinary()
-      setIsInstallingUv(false)
-      setIsUvInstalled(true)
+      if (isMountedRef.current) {
+        setIsInstallingUv(false)
+        setIsUvInstalled(true)
+      }
     } catch (error) {
       logger.error('Failed to install UV binary', error as Error)
-      window.toast.error(`${t('settings.mcp.installError')}: ${formatErrorMessage(error)}`)
-      setIsInstallingUv(false)
+      if (isMountedRef.current) {
+        window.toast.error(`${t('settings.mcp.installError')}: ${formatErrorMessage(error)}`)
+        setIsInstallingUv(false)
+      }
+    }
+    if (!isMountedRef.current) {
+      return
     }
     clearTimeout(checkBinariesTimerRef.current)
     checkBinariesTimerRef.current = setTimeout(checkBinaries, 1000)
@@ -154,12 +168,19 @@ const EnvironmentDependencies: FC<EnvironmentDependenciesProps> = ({ mini = fals
     try {
       setIsInstallingBun(true)
       await window.api.installBunBinary()
-      setIsInstallingBun(false)
-      setIsBunInstalled(true)
+      if (isMountedRef.current) {
+        setIsInstallingBun(false)
+        setIsBunInstalled(true)
+      }
     } catch (error) {
       logger.error('Failed to install Bun binary', error as Error)
-      window.toast.error(`${t('settings.mcp.installError')}: ${formatErrorMessage(error)}`)
-      setIsInstallingBun(false)
+      if (isMountedRef.current) {
+        window.toast.error(`${t('settings.mcp.installError')}: ${formatErrorMessage(error)}`)
+        setIsInstallingBun(false)
+      }
+    }
+    if (!isMountedRef.current) {
+      return
     }
     clearTimeout(checkBinariesTimerRef.current)
     checkBinariesTimerRef.current = setTimeout(checkBinaries, 1000)
