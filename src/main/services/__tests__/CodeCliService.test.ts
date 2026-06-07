@@ -109,6 +109,19 @@ describe('CodeCliService', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  it('caches npm registry location detection during the service lifetime', async () => {
+    const { codeCliService } = await loadModules()
+    const { isUserInChina } = await import('@main/utils/ipService')
+    const service = codeCliService as unknown as {
+      getNpmRegistryUrl: () => Promise<string>
+    }
+
+    await expect(service.getNpmRegistryUrl()).resolves.toBe('https://registry.npmjs.org')
+    await expect(service.getNpmRegistryUrl()).resolves.toBe('https://registry.npmjs.org')
+
+    expect(isUserInChina).toHaveBeenCalledTimes(1)
+  })
+
   it('should prevent double instantiation', async () => {
     const { CodeCliService } = await loadModules()
     // loadModules() already created one instance,

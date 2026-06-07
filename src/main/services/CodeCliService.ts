@@ -63,6 +63,8 @@ export class CodeCliService extends BaseService {
     terminals: TerminalConfig[]
     timestamp: number
   } | null = null
+  private npmRegistryUrlCache: { url: string; timestamp: number } | null = null
+  private npmRegistryUrlPromise: Promise<string> | null = null
   private customTerminalPaths: Map<string, string> = new Map() // Store user-configured terminal paths
   private readonly CACHE_DURATION = 1000 * 60 * 30 // 30 minutes cache
   private readonly TERMINALS_CACHE_DURATION = 1000 * 60 * 5 // 5 minutes cache for terminals
@@ -109,6 +111,8 @@ export class CodeCliService extends BaseService {
     this.openCodeConfigBackups.clear()
     this.versionCache.clear()
     this.terminalsCache = null
+    this.npmRegistryUrlCache = null
+    this.npmRegistryUrlPromise = null
     this.customTerminalPaths.clear()
   }
 
@@ -865,6 +869,28 @@ export class CodeCliService extends BaseService {
    * Get npm registry URL based on user location
    */
   private async getNpmRegistryUrl(): Promise<string> {
+    const now = Date.now()
+    if (this.npmRegistryUrlCache && now - this.npmRegistryUrlCache.timestamp < this.CACHE_DURATION) {
+      return this.npmRegistryUrlCache.url
+    }
+
+    if (this.npmRegistryUrlPromise) {
+      return this.npmRegistryUrlPromise
+    }
+
+    this.npmRegistryUrlPromise = this.resolveNpmRegistryUrl()
+      .then((url) => {
+        this.npmRegistryUrlCache = { url, timestamp: Date.now() }
+        return url
+      })
+      .finally(() => {
+        this.npmRegistryUrlPromise = null
+      })
+
+    return this.npmRegistryUrlPromise
+  }
+
+  private async resolveNpmRegistryUrl(): Promise<string> {
     try {
       const inChina = await isUserInChina()
       if (inChina) {
