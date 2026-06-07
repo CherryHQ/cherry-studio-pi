@@ -71,4 +71,21 @@ describe('CitationsList', () => {
     expect(title).toBeInTheDocument()
     expect(title.closest('a')).toBeNull()
   })
+
+  it('renders malformed web citation urls without crashing', () => {
+    const citations: Citation[] = [
+      {
+        number: 1,
+        url: 'not a valid url',
+        title: 'Recovered citation',
+        content: 'Reference text',
+        showFavicon: true,
+        type: 'websearch'
+      }
+    ]
+
+    render(<CitationsList citations={citations} />)
+
+    expect(screen.getByText('Recovered citation')).toBeInTheDocument()
+  })
 })

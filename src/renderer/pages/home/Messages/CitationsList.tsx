@@ -38,6 +38,17 @@ const truncateText = (text: string, maxLength = 100) => {
   return text.length > maxLength ? text.slice(0, maxLength) + '...' : text
 }
 
+const getCitationHostname = (citation: Pick<Citation, 'url' | 'hostname'>) => {
+  if (citation.hostname) return citation.hostname
+  if (!citation.url) return ''
+
+  try {
+    return new URL(citation.url).hostname
+  } catch {
+    return ''
+  }
+}
+
 const CitationsList: React.FC<CitationsListProps> = ({ citations }) => {
   const { t } = useTranslation()
 
@@ -94,15 +105,18 @@ const CitationsList: React.FC<CitationsListProps> = ({ citations }) => {
         }}>
         <OpenButton variant="ghost">
           <PreviewIcons>
-            {previewItems.map((c, i) => (
-              <PreviewIcon key={i} style={{ zIndex: previewItems.length - i }}>
-                {c.type === 'websearch' && c.url ? (
-                  <Favicon hostname={new URL(c.url).hostname} alt={c.title || ''} />
-                ) : (
-                  <FileSearch width={16} />
-                )}
-              </PreviewIcon>
-            ))}
+            {previewItems.map((c, i) => {
+              const hostname = getCitationHostname(c)
+              return (
+                <PreviewIcon key={i} style={{ zIndex: previewItems.length - i }}>
+                  {c.type === 'websearch' && hostname ? (
+                    <Favicon hostname={hostname} alt={c.title || ''} />
+                  ) : (
+                    <FileSearch width={16} />
+                  )}
+                </PreviewIcon>
+              )
+            })}
           </PreviewIcons>
           {t('message.citation', { count })}
         </OpenButton>
@@ -168,14 +182,18 @@ const WebSearchCitation: React.FC<{ citation: Citation }> = ({ citation }) => {
 
   const displayTitle = isXPost && oembedData?.author ? `@${oembedData.author}` : citation.title
   const titleContent = displayTitle || citation.hostname || citation.content || citation.url
+  const hostname = getCitationHostname(citation)
 
   return (
     <SelectionContextMenu>
       <WebSearchCard>
         <WebSearchCardHeader>
-          {citation.showFavicon && citation.url && (
-            <Favicon hostname={new URL(citation.url).hostname} alt={citation.title || citation.hostname || ''} />
-          )}
+          {citation.showFavicon &&
+            (hostname ? (
+              <Favicon hostname={hostname} alt={citation.title || citation.hostname || ''} />
+            ) : (
+              <FileSearch width={16} />
+            ))}
           {citation.url ? (
             <CitationLink className="text-nowrap" href={citation.url} onClick={(e) => handleLinkClick(citation.url, e)}>
               {displayTitle || <span className="hostname">{citation.hostname}</span>}
