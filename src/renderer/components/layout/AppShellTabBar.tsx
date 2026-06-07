@@ -282,12 +282,14 @@ const NormalTabButton = ({
 
 const TabRightClickMenu = ({
   isPinned,
+  canClose,
   onMoveToFirst,
   onPin,
   onClose,
   children
 }: {
   isPinned: boolean
+  canClose: boolean
   onMoveToFirst: () => void
   onPin: () => void
   onClose: () => void
@@ -306,9 +308,11 @@ const TabRightClickMenu = ({
             {isPinned ? t('tab.unpin') : t('tab.pin')}
           </ContextMenuItemContent>
         </ContextMenuItem>
-        <ContextMenuItem onSelect={onClose}>
-          <ContextMenuItemContent icon={<X size={14} />}>{t('tab.close')}</ContextMenuItemContent>
-        </ContextMenuItem>
+        {canClose && (
+          <ContextMenuItem onSelect={onClose}>
+            <ContextMenuItemContent icon={<X size={14} />}>{t('tab.close')}</ContextMenuItemContent>
+          </ContextMenuItem>
+        )}
       </ContextMenuContent>
     </ContextMenu>
   )
@@ -361,6 +365,7 @@ export const AppShellTabBar = ({
     }
     return { homeTab: home, pinnedTabs: pinned, normalTabs: normal }
   }, [tabs])
+  const canCloseBusinessTab = !isDetached && pinnedTabs.length + normalTabs.length > 1
 
   // ─── Context menu actions ───────────────────────────────────────────────────
 
@@ -451,6 +456,7 @@ export const AppShellTabBar = ({
                 <TabRightClickMenu
                   key={tab.id}
                   isPinned={!!tab.isPinned}
+                  canClose={canCloseBusinessTab}
                   onMoveToFirst={() => handleMoveToFirst(tab.id)}
                   onPin={() => handlePinToggle(tab.id)}
                   onClose={() => closeTab(tab.id)}>
@@ -487,6 +493,7 @@ export const AppShellTabBar = ({
             <TabRightClickMenu
               key={tab.id}
               isPinned={!!tab.isPinned}
+              canClose={canCloseBusinessTab}
               onMoveToFirst={() => handleMoveToFirst(tab.id)}
               onPin={() => handlePinToggle(tab.id)}
               onClose={() => closeTab(tab.id)}>
@@ -495,7 +502,7 @@ export const AppShellTabBar = ({
                 isActive={tab.id === activeTabId}
                 onSelect={() => handleTabClick(tab.id)}
                 onClose={() => closeTab(tab.id)}
-                showClose={!isDetached}
+                showClose={canCloseBusinessTab}
                 tone={tabTone}
                 drag={{
                   isDragging: isDragging(tab.id),
