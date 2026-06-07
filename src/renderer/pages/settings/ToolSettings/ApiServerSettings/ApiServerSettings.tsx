@@ -2,6 +2,7 @@ import { Button, ButtonGroup, IndicatorLight, Input, Tooltip } from '@cherrystud
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useApiServer } from '@renderer/hooks/useApiServer'
 import { formatErrorMessage } from '@renderer/utils/error'
+import { openHttpExternalUrl } from '@renderer/utils/openExternal'
 import { cn } from '@renderer/utils/style'
 import { API_SERVER_DEFAULTS } from '@shared/config/constant'
 import { Copy, ExternalLink, Play, RotateCcw, Server, Square, TriangleAlert } from 'lucide-react'
@@ -76,7 +77,7 @@ const ApiServerSettings: FC = () => {
 
   const openApiDocs = () => {
     if (apiServerRunning) {
-      window.open(`${serverUrl}/api-docs`, '_blank')
+      openHttpExternalUrl(`${serverUrl}/api-docs`)
     }
   }
 

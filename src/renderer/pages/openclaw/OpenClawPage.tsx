@@ -10,6 +10,7 @@ import { useMiniAppPopup } from '@renderer/hooks/useMiniAppPopup'
 import { useModelById } from '@renderer/hooks/useModel'
 import { useProviders } from '@renderer/hooks/useProvider'
 import { loggerService } from '@renderer/services/LoggerService'
+import { openHttpExternalUrl } from '@renderer/utils/openExternal'
 import type { Model as SharedModel } from '@shared/data/types/model'
 import { isUniqueModelId, type UniqueModelId } from '@shared/data/types/model'
 import { IpcChannel } from '@shared/IpcChannel'
@@ -37,13 +38,13 @@ const TitleSection: FC<TitleSectionProps> = ({ title, description, clickable = f
   <div className="-mt-20 mb-8 flex flex-col items-center text-center">
     <div
       className={clickable ? 'cursor-pointer' : undefined}
-      onClick={clickable ? () => window.open(docsUrl ?? DEFAULT_DOCS_URL, '_blank') : undefined}>
+      onClick={clickable ? () => openHttpExternalUrl(docsUrl ?? DEFAULT_DOCS_URL) : undefined}>
       <Openclaw.Avatar size={64} shape="rounded" />
     </div>
     <h1
       className={`mt-3 font-semibold text-2xl ${clickable ? 'cursor-pointer hover:text-(--color-primary)' : ''}`}
       style={{ color: 'var(--color-text-1)' }}
-      onClick={clickable ? () => window.open(docsUrl ?? DEFAULT_DOCS_URL, '_blank') : undefined}>
+      onClick={clickable ? () => openHttpExternalUrl(docsUrl ?? DEFAULT_DOCS_URL) : undefined}>
       {title}
     </h1>
     <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--color-text-2)' }}>
@@ -349,7 +350,7 @@ const OpenClawPage: FC = () => {
               {!isInstalling && <Download size={16} />}
               {t(needsMigration ? 'openclaw.migration.install_button' : 'openclaw.not_installed.install_button')}
             </Button>
-            <Button variant="outline" disabled={isInstalling} onClick={() => window.open(docsUrl, '_blank')}>
+            <Button variant="outline" disabled={isInstalling} onClick={() => openHttpExternalUrl(docsUrl)}>
               <ExternalLink size={16} />
               {t('openclaw.quick_actions.view_docs')}
             </Button>

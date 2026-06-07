@@ -7,6 +7,7 @@ import {
   sectionHeadingClasses
 } from '@renderer/pages/settings/ProviderSettings/primitives/ProviderSettingsPrimitives'
 import { oauthWithCherryIn } from '@renderer/utils/oauth'
+import { openHttpExternalUrl } from '@renderer/utils/openExternal'
 import { hasApiKeys } from '@shared/utils/provider'
 import type { FC } from 'react'
 import { useCallback, useEffect, useState } from 'react'
@@ -162,7 +163,7 @@ const CherryInOauth: FC<CherryInOauthProps> = ({ providerId }) => {
   }, [deleteApiKey, provider?.apiKeys, refetchAuthConfig, t])
 
   const handleTopup = useCallback(() => {
-    window.open(CHERRYIN_TOPUP_URL, '_blank')
+    openHttpExternalUrl(CHERRYIN_TOPUP_URL)
   }, [])
 
   if (!provider) {

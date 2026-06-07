@@ -3,6 +3,7 @@ import { loggerService } from '@logger'
 import { useCopilot } from '@renderer/hooks/useCopilot'
 import { useProvider } from '@renderer/hooks/useProvider'
 import { cn } from '@renderer/utils'
+import { openHttpExternalUrl } from '@renderer/utils/openExternal'
 import { CheckCircle2, CircleAlert, Copy } from 'lucide-react'
 import type { FC } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -172,11 +173,14 @@ const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) =
 
   const handleOpenVerificationPage = useCallback(() => {
     if (verificationUri) {
-      window.open(verificationUri, '_blank')
-      setVerificationPageOpened(true)
-      setCurrentStep(2)
+      if (openHttpExternalUrl(verificationUri)) {
+        setVerificationPageOpened(true)
+        setCurrentStep(2)
+      } else {
+        window.toast.error(t('settings.provider.oauth.error'))
+      }
     }
-  }, [verificationUri])
+  }, [t, verificationUri])
 
   const getSteps = () => [
     {

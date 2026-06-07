@@ -18,6 +18,7 @@ import {
 } from '@renderer/services/NutstoreService'
 import { useAppSelector } from '@renderer/store'
 import { modalConfirm } from '@renderer/utils'
+import { openHttpExternalUrl } from '@renderer/utils/openExternal'
 import { NUTSTORE_HOST } from '@shared/config/nutstore'
 import dayjs from 'dayjs'
 import type { FC } from 'react'
@@ -58,7 +59,9 @@ const NutstoreSettings: FC = () => {
     setNutstoreLoginLoading(true)
     try {
       const ssoUrl = await window.api.nutstore.getSSOUrl()
-      window.open(ssoUrl, '_blank')
+      if (!openHttpExternalUrl(ssoUrl)) {
+        throw new Error('Invalid Nutstore SSO URL')
+      }
       const nutstoreToken = await nutstoreSsoHandler()
 
       void setNutstoreToken(nutstoreToken)
