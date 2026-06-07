@@ -18,6 +18,30 @@ export interface ImagePreviewOptions {
  * 提供统一的图像预览功能，支持多种输入类型
  */
 export class ImagePreviewService {
+  private static currentObjectUrl: string | undefined
+
+  private static rememberObjectUrl(url: string) {
+    if (url.startsWith('blob:')) {
+      this.currentObjectUrl = url
+    } else {
+      this.currentObjectUrl = undefined
+    }
+  }
+
+  private static revokeObjectUrl(url: string | undefined) {
+    if (url?.startsWith('blob:')) {
+      URL.revokeObjectURL(url)
+      if (this.currentObjectUrl === url) {
+        this.currentObjectUrl = undefined
+      }
+    }
+  }
+
+  private static closeCurrentPreview() {
+    this.revokeObjectUrl(this.currentObjectUrl)
+    TopView.hide('image-preview')
+  }
+
   /**
    * 显示图像预览
    * @param input 图像输入源
@@ -34,13 +58,13 @@ export class ImagePreviewService {
 
       const handleVisibilityChange = (visible: boolean) => {
         if (!visible) {
-          // 清理创建的 URL
-          if (processedImageUrl.startsWith('blob:')) {
-            URL.revokeObjectURL(processedImageUrl)
-          }
+          this.revokeObjectUrl(processedImageUrl)
           TopView.hide('image-preview')
         }
       }
+
+      this.closeCurrentPreview()
+      this.rememberObjectUrl(processedImageUrl)
 
       TopView.show(
         () =>
@@ -55,9 +79,7 @@ export class ImagePreviewService {
         'image-preview'
       )
     } catch (error) {
-      if (imageUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(imageUrl)
-      }
+      this.revokeObjectUrl(imageUrl)
       logger.error('Failed to show image preview:', error as Error)
       throw error
     }
