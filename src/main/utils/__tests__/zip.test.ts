@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { gzipSync } from 'zlib'
 
 import { compress, decompress } from '../zip'
 
@@ -38,6 +39,11 @@ describe('zip', () => {
     it('should throw error when decompressing invalid buffer', async () => {
       const invalidBuffer = Buffer.from('not a valid gzip', 'utf-8')
       await expect(decompress(invalidBuffer)).rejects.toThrow()
+    })
+
+    it('should reject payloads that decompress beyond the configured size cap', async () => {
+      const compressed = gzipSync(Buffer.alloc(1024, 0x20))
+      await expect(decompress(compressed, 128)).rejects.toThrow()
     })
 
     it('should throw error when compress input is not string', async () => {

@@ -7,7 +7,12 @@ const logger = loggerService.withContext('Utils:Zip')
 
 // 将 zlib 的 gzip 和 gunzip 方法转换为 Promise 版本
 const gzipPromise = util.promisify(zlib.gzip)
-const gunzipPromise = util.promisify(zlib.gunzip)
+const gunzipPromise = util.promisify(zlib.gunzip) as (
+  buffer: zlib.InputType,
+  options?: zlib.ZlibOptions
+) => Promise<Buffer>
+
+export const DEFAULT_MAX_DECOMPRESSED_BYTES = 256 * 1024 * 1024
 
 /**
  * 压缩字符串
@@ -27,11 +32,15 @@ export async function compress(str: string): Promise<Buffer> {
 /**
  * 解压缩 Buffer 到 JSON 字符串
  * @param {Buffer} compressedBuffer - 压缩的 Buffer
+ * @param {number} maxOutputLength - Maximum decompressed bytes allowed
  * @returns {Promise<string>} 解压缩后的 JSON 字符串
  */
-export async function decompress(compressedBuffer: Buffer): Promise<string> {
+export async function decompress(
+  compressedBuffer: Buffer,
+  maxOutputLength = DEFAULT_MAX_DECOMPRESSED_BYTES
+): Promise<string> {
   try {
-    const buffer = await gunzipPromise(compressedBuffer)
+    const buffer = await gunzipPromise(compressedBuffer, { maxOutputLength })
     return buffer.toString('utf-8')
   } catch (error) {
     logger.error('Decompression failed:', error as Error)
