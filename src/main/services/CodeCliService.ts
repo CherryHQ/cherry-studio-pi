@@ -8,12 +8,12 @@
  *
  * Done:
  * - Cache getNpmRegistryUrl() at instance level, including concurrent callers
+ * - Avoid permanently caching transient IP lookup failures while keeping concurrent calls deduped
  *
  * Remaining:
- * 1. Cache isUserInChina() promise at module level in ipService.ts (process-lifetime)
- * 2. Extract local-only getInstalledVersion() for qwen-code --auth-type check
- * 3. Move getVersionInfo() + updatePackage() to fire-and-forget background task
- * 4. Track background update promise in lifecycle (registerDisposable / onStop)
+ * 1. Extract local-only getInstalledVersion() for qwen-code --auth-type check
+ * 2. Move getVersionInfo() + updatePackage() to fire-and-forget background task
+ * 3. Track background update promise in lifecycle (registerDisposable / onStop)
  */
 import fs from 'node:fs'
 import os from 'node:os'
