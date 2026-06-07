@@ -160,9 +160,21 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
   const borderRadius = showTopicTime ? 12 : 'var(--list-item-border-radius)'
 
   const [deletingTopicId, setDeletingTopicId] = useState<string | null>(null)
-  const deleteTimerRef = useRef<NodeJS.Timeout>(null)
+  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pinScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [editingTopicId, setEditingTopicId] = useState<string | null>(null)
   const listRef = useRef<DraggableVirtualListRef>(null)
+
+  useEffect(() => {
+    return () => {
+      if (deleteTimerRef.current) {
+        clearTimeout(deleteTimerRef.current)
+      }
+      if (pinScrollTimerRef.current) {
+        clearTimeout(pinScrollTimerRef.current)
+      }
+    }
+  }, [])
 
   // 管理模式状态
   const manageState = useTopicManageMode()
@@ -211,7 +223,10 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
 
     setDeletingTopicId(topicId)
 
-    deleteTimerRef.current = setTimeout(() => setDeletingTopicId(null), 2000)
+    deleteTimerRef.current = setTimeout(() => {
+      setDeletingTopicId(null)
+      deleteTimerRef.current = null
+    }, 2000)
   }, [])
 
   const onClearMessages = useCallback((topic: Topic) => {
@@ -221,6 +236,10 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
   const handleConfirmDelete = useCallback(
     async (topic: Topic, e: React.MouseEvent) => {
       e.stopPropagation()
+      if (deleteTimerRef.current) {
+        clearTimeout(deleteTimerRef.current)
+        deleteTimerRef.current = null
+      }
       try {
         await removeTopic(topic)
       } catch (err) {
@@ -262,7 +281,13 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
         if (pinTopicsToTop) {
           // After revalidation, the just-toggled topic lands at the head of
           // its new section — scroll there so the user sees the move.
-          setTimeout(() => listRef.current?.scrollToIndex(0, { align: 'auto' }), 50)
+          if (pinScrollTimerRef.current) {
+            clearTimeout(pinScrollTimerRef.current)
+          }
+          pinScrollTimerRef.current = setTimeout(() => {
+            listRef.current?.scrollToIndex(0, { align: 'auto' })
+            pinScrollTimerRef.current = null
+          }, 50)
         }
       } catch (err) {
         logger.error('Failed to toggle topic pin', { topicId: topic.id, err })
