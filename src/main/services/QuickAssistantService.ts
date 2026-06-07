@@ -29,11 +29,12 @@ import { type Activatable, BaseService, DependsOn, Injectable, Phase, ServicePha
 import { isMac, isWin } from '@main/core/platform'
 import { WindowType } from '@main/core/window/types'
 import { IpcChannel } from '@shared/IpcChannel'
-import { app, BrowserWindow, screen, shell } from 'electron'
+import { app, BrowserWindow, screen } from 'electron'
 import windowStateKeeper from 'electron-window-state'
 
 import { isSafeExternalUrl } from '../utils/externalUrlSafety'
 import { isLocalViteDevServerUrl } from '../utils/localDevServerUrl'
+import { openExternalUrl } from '../utils/openExternal'
 
 const DEFAULT_QUICK_ASSISTANT_WIDTH = 550
 const DEFAULT_QUICK_ASSISTANT_HEIGHT = 400
@@ -280,7 +281,7 @@ export class QuickAssistantService extends BaseService implements Activatable {
 
       event.preventDefault()
       if (isSafeExternalUrl(url)) {
-        void shell.openExternal(url)
+        openExternalUrl(url, 'quick assistant navigation')
       } else {
         logger.warn(`Blocked navigation to untrusted URL scheme: ${url}`)
       }
@@ -288,7 +289,7 @@ export class QuickAssistantService extends BaseService implements Activatable {
 
     window.webContents.setWindowOpenHandler((details) => {
       if (isSafeExternalUrl(details.url)) {
-        void shell.openExternal(details.url)
+        openExternalUrl(details.url, 'quick assistant popup')
       } else {
         logger.warn(`Blocked shell.openExternal for untrusted URL scheme: ${details.url}`)
       }

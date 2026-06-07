@@ -30,10 +30,11 @@ import {
 } from '@main/core/window/types'
 import { getWindowTypeMetadata, mergeWindowOptions, WINDOW_TYPE_REGISTRY } from '@main/core/window/windowRegistry'
 import { IpcChannel } from '@shared/IpcChannel'
-import { app, BrowserWindow, screen, shell } from 'electron'
+import { app, BrowserWindow, screen } from 'electron'
 import { v4 as uuidv4 } from 'uuid'
 
 import { isSafeExternalUrl } from '../../utils/externalUrlSafety'
+import { openExternalUrl } from '../../utils/openExternal'
 
 const logger = loggerService.withContext('WindowManager')
 
@@ -1390,7 +1391,7 @@ export class WindowManager extends BaseService {
     // Intercept external links: open in system browser
     window.webContents.setWindowOpenHandler(({ url }) => {
       if (safeHttpOrigin(url) && isSafeExternalUrl(url)) {
-        void shell.openExternal(url)
+        openExternalUrl(url, 'managed window popup')
       }
       return { action: 'deny' }
     })
@@ -1403,7 +1404,7 @@ export class WindowManager extends BaseService {
 
         if (!currentOrigin || nextOrigin !== currentOrigin) {
           event.preventDefault()
-          void shell.openExternal(url)
+          openExternalUrl(url, 'managed window navigation')
         }
       }
     })

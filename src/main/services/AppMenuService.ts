@@ -14,7 +14,9 @@ import {
 } from '@shared/command'
 import type { PreferenceShortcutType } from '@shared/data/preference/preferenceTypes'
 import type { BrowserWindow } from 'electron'
-import { app, Menu, shell } from 'electron'
+import { app, Menu } from 'electron'
+
+import { openExternalUrl } from '../utils/openExternal'
 
 const appMenuCommands: CommandId[] = ['app.settings.open', 'app.zoom.in', 'app.zoom.out', 'app.zoom.reset']
 
@@ -152,28 +154,28 @@ export class AppMenuService extends BaseService {
             type: 'custom',
             label: appMenu.website,
             click: () => {
-              void shell.openExternal('https://github.com/CherryHQ/cherry-studio-pi')
+              openExternalUrl('https://github.com/CherryHQ/cherry-studio-pi', 'app menu website')
             }
           },
           {
             type: 'custom',
             label: appMenu.documentation,
             click: () => {
-              void shell.openExternal('https://github.com/CherryHQ/cherry-studio-pi#readme')
+              openExternalUrl('https://github.com/CherryHQ/cherry-studio-pi#readme', 'app menu documentation')
             }
           },
           {
             type: 'custom',
             label: appMenu.feedback,
             click: () => {
-              void shell.openExternal('https://github.com/CherryHQ/cherry-studio-pi/issues/new/choose')
+              openExternalUrl('https://github.com/CherryHQ/cherry-studio-pi/issues/new/choose', 'app menu feedback')
             }
           },
           {
             type: 'custom',
             label: appMenu.releases,
             click: () => {
-              void shell.openExternal('https://github.com/CherryHQ/cherry-studio-pi/releases')
+              openExternalUrl('https://github.com/CherryHQ/cherry-studio-pi/releases', 'app menu releases')
             }
           }
         ]
