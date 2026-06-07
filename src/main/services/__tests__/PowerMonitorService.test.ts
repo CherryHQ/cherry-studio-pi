@@ -187,6 +187,27 @@ describe('PowerMonitorService', () => {
       expect(failingHandler).toHaveBeenCalled()
       expect(successHandler).toHaveBeenCalled()
     })
+
+    it('should continue executing handlers when one times out', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      try {
+        const service = createService()
+        const hangingHandler = vi.fn().mockImplementation(() => new Promise(() => {}))
+        const successHandler = vi.fn()
+
+        service.registerShutdownHandler(hangingHandler)
+        service.registerShutdownHandler(successHandler)
+
+        const promise = (service as any).executeShutdownHandlers()
+        await vi.advanceTimersByTimeAsync(5000)
+        await promise
+
+        expect(hangingHandler).toHaveBeenCalled()
+        expect(successHandler).toHaveBeenCalled()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
   })
 
   describe('onStop / disposable cleanup', () => {

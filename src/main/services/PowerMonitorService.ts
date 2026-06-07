@@ -5,6 +5,7 @@ import ElectronShutdownHandler from '@paymoapp/electron-shutdown-handler'
 import { app, BrowserWindow, powerMonitor } from 'electron'
 
 const logger = loggerService.withContext('PowerMonitorService')
+const SHUTDOWN_HANDLER_TIMEOUT_MS = 5000
 
 type ShutdownHandler = () => void | Promise<void>
 
@@ -46,12 +47,43 @@ export class PowerMonitorService extends BaseService {
 
   private async executeShutdownHandlers(): Promise<void> {
     logger.info('Executing shutdown handlers', { count: this.shutdownHandlers.length })
-    for (const handler of this.shutdownHandlers) {
-      try {
-        await handler()
-      } catch (error) {
-        logger.error('Error executing shutdown handler', error as Error)
+    for (const [index, handler] of this.shutdownHandlers.entries()) {
+      await this.executeShutdownHandlerWithTimeout(handler, index)
+    }
+  }
+
+  private async executeShutdownHandlerWithTimeout(handler: ShutdownHandler, index: number): Promise<void> {
+    let timedOut = false
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+
+    const handlerPromise = Promise.resolve()
+      .then(handler)
+      .catch((error) => {
+        if (timedOut) {
+          logger.error('Error executing shutdown handler after timeout', error as Error, { index })
+          return
+        }
+        throw error
+      })
+
+    const timeoutPromise = new Promise<'timeout'>((resolve) => {
+      timeoutHandle = setTimeout(() => resolve('timeout'), SHUTDOWN_HANDLER_TIMEOUT_MS)
+      timeoutHandle.unref?.()
+    })
+
+    try {
+      const result = await Promise.race([handlerPromise.then(() => 'done' as const), timeoutPromise])
+      if (result === 'timeout') {
+        timedOut = true
+        logger.warn('Shutdown handler timed out; continuing shutdown', {
+          index,
+          timeoutMs: SHUTDOWN_HANDLER_TIMEOUT_MS
+        })
       }
+    } catch (error) {
+      logger.error('Error executing shutdown handler', error as Error, { index })
+    } finally {
+      if (timeoutHandle) clearTimeout(timeoutHandle)
     }
   }
 
