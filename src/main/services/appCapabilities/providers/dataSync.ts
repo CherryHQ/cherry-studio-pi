@@ -85,11 +85,19 @@ function normalizeDirectoryPath(value: unknown, fallback = '/') {
   return normalized || '/'
 }
 
-async function runWebDavCapability<T>(action: string, fn: () => Promise<T>) {
+async function runWebDavCapability<T>(
+  action: string,
+  fn: () => Promise<T>,
+  options: { recordDataSyncFailure?: boolean } = {}
+) {
   try {
     return await fn()
   } catch (error) {
-    throw new Error(describeWebDavUserFacingError(error, action))
+    const message = describeWebDavUserFacingError(error, action)
+    if (options.recordDataSyncFailure) {
+      await Promise.resolve(appDataSyncService.recordSyncFailure(new Error(message))).catch(() => undefined)
+    }
+    throw new Error(message)
   }
 }
 
@@ -318,7 +326,9 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
         if (prepareStorageV2ForDataSync) {
           await prepareStorageV2ForDataSync.call(reduxService)
         }
-        const summary = await runWebDavCapability('同步数据', () => appDataSyncService.syncNow(config))
+        const summary = await runWebDavCapability('同步数据', () => appDataSyncService.syncNow(config), {
+          recordDataSyncFailure: true
+        })
         broadcastExternalDataSyncCompleted(summary, context.source)
         return okResult('Data sync completed', sanitizeForAgent(summary))
       }

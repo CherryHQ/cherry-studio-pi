@@ -62,14 +62,21 @@ export function getWebDavErrorStatus(error: unknown): number | null {
   const responseStatus = parseStatus(response?.status) ?? parseStatus(response?.statusCode)
   if (responseStatus) return responseStatus
 
-  const match = errorMessage(error).match(/\b(?:Invalid response:|status(?: code)?[:=]?)\s*(\d{3})\b/i)
-  return match ? Number(match[1]) : null
+  const message = errorMessage(error)
+  const match = message.match(/\b(?:Invalid response:|status(?: code)?[:=]?)\s*(\d{3})\b/i)
+  if (match) return Number(match[1])
+
+  const bareHttpStatus = message.match(/\b(4\d{2}|5\d{2})\s+[A-Za-z][^\n]*/i)
+  return bareHttpStatus ? Number(bareHttpStatus[1]) : null
 }
 
 function getWebDavErrorStatusText(error: unknown) {
   const message = errorMessage(error)
   const match = message.match(/\b(?:Invalid response:|status(?: code)?[:=]?)\s*\d{3}\s+([^\n]+)$/i)
-  return match?.[1]?.trim() || null
+  if (match?.[1]?.trim()) return match[1].trim()
+
+  const bareHttpStatus = message.match(/\b(?:4\d{2}|5\d{2})\s+([A-Za-z][^\n]*)/i)
+  return bareHttpStatus?.[1]?.trim() || null
 }
 
 function getOriginalError(error: unknown) {

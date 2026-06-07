@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
     listRemoteDirectories: vi.fn(),
     checkWriteAccess: vi.fn(),
     syncNow: vi.fn(),
+    recordSyncFailure: vi.fn(),
     restoreLatestSnapshot: vi.fn()
   }
 }))
@@ -223,5 +224,19 @@ describe('data sync app capabilities', () => {
       source: 'agent',
       summary
     })
+  })
+
+  it('records a failure summary when agent-triggered data sync fails', async () => {
+    mocks.appDataSyncService.syncNow.mockRejectedValueOnce(new Error('503 Service Unavailable'))
+
+    await expect(capability('dataSync.sync.now').execute({}, { source: 'agent' })).rejects.toThrow(
+      /WebDAV 服务暂时不可用/
+    )
+
+    expect(mocks.appDataSyncService.recordSyncFailure).toHaveBeenCalledWith(expect.any(Error))
+    expect((mocks.appDataSyncService.recordSyncFailure.mock.calls[0][0] as Error).message).toContain(
+      'WebDAV 服务暂时不可用'
+    )
+    expect(mocks.browserWindows[0].webContents.send).not.toHaveBeenCalled()
   })
 })

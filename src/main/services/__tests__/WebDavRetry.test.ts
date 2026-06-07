@@ -23,6 +23,13 @@ describe('WebDavRetry', () => {
     expect(describeWebDavUserFacingError(error, '读取远程目录')).toContain('软件已经自动重试')
   })
 
+  it('recognizes bare HTTP status errors from WebDAV clients', () => {
+    const message = describeWebDavUserFacingError(new Error('503 Service Unavailable'), '同步数据')
+
+    expect(message).toContain('WebDAV 服务暂时不可用')
+    expect(message).not.toContain('发生未知错误')
+  })
+
   it('describes write permission failures as read-only WebDAV endpoints', () => {
     const error = new WebDavOperationError(
       'writing remote sync probe /remote-root/sync/v1/.cherry-studio-pi-write-test.tmp',
