@@ -29,7 +29,8 @@ global.DOMParser = vi.fn().mockImplementation(() => ({
 global.window = {
   api: {
     searchService: {
-      openUrlInSearchWindow: vi.fn()
+      openUrlInSearchWindow: vi.fn(),
+      closeSearchWindow: vi.fn()
     }
   }
 } as any
@@ -78,7 +79,20 @@ describe('fetch', () => {
       const result = await fetchWebContent('https://example.com', 'markdown', true)
 
       expect(result.content).toBe('# Test content')
-      expect(window.api.searchService.openUrlInSearchWindow).toHaveBeenCalled()
+      expect(window.api.searchService.openUrlInSearchWindow).toHaveBeenCalledWith(
+        'search-window-test-id',
+        'https://example.com'
+      )
+      expect(window.api.searchService.closeSearchWindow).toHaveBeenCalledWith('search-window-test-id')
+    })
+
+    it('should close the browser search window when browser fetch fails', async () => {
+      vi.mocked(window.api.searchService.openUrlInSearchWindow).mockRejectedValueOnce(new Error('browser failed'))
+
+      const result = await fetchWebContent('https://example.com', 'markdown', true)
+
+      expect(result.content).toBe('No content found')
+      expect(window.api.searchService.closeSearchWindow).toHaveBeenCalledWith('search-window-test-id')
     })
 
     it('should handle errors gracefully', async () => {

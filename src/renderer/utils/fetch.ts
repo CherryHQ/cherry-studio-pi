@@ -61,7 +61,8 @@ export async function fetchWebContent(
 
     let html: string
     if (usingBrowser) {
-      const windowApiPromise = window.api.searchService.openUrlInSearchWindow(`search-window-${nanoid()}`, url)
+      const searchWindowUid = `search-window-${nanoid()}`
+      const windowApiPromise = window.api.searchService.openUrlInSearchWindow(searchWindowUid, url)
 
       const promisesToRace: [Promise<string>] = [windowApiPromise]
 
@@ -71,7 +72,18 @@ export async function fetchWebContent(
         promisesToRace.push(abortPromise)
       }
 
-      html = await Promise.race(promisesToRace)
+      try {
+        html = await Promise.race(promisesToRace)
+      } finally {
+        try {
+          await window.api.searchService.closeSearchWindow(searchWindowUid)
+        } catch (closeError) {
+          logger.warn('Failed to close search window after browser fetch', {
+            uid: searchWindowUid,
+            error: closeError
+          })
+        }
+      }
     } else {
       const response = await fetch(url, {
         headers: {
