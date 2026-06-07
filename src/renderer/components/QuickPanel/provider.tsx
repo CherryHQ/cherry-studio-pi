@@ -32,6 +32,7 @@ export const QuickPanelProvider: React.FC<React.PropsWithChildren> = ({ children
   const [lastCloseAction, setLastCloseAction] = useState<QuickPanelCloseAction | undefined>(undefined)
 
   const clearTimer = useRef<NodeJS.Timeout | null>(null)
+  const contextRef = useRef<QuickPanelContextType | null>(null)
 
   // 添加更新item选中状态的方法
   const updateItemSelection = useCallback((targetItem: QuickPanelListItem, isSelected: boolean) => {
@@ -90,7 +91,10 @@ export const QuickPanelProvider: React.FC<React.PropsWithChildren> = ({ children
       setIsVisible(false)
       setManageListExternally(false)
       setLastCloseAction(action)
-      onClose?.({ action, searchText, item: {} as QuickPanelListItem, context: this })
+      const context = contextRef.current
+      if (context) {
+        onClose?.({ action, searchText, item: {} as QuickPanelListItem, context })
+      }
 
       clearTimer.current = setTimeout(() => {
         setList([])
@@ -166,6 +170,8 @@ export const QuickPanelProvider: React.FC<React.PropsWithChildren> = ({ children
       onSearchChange
     ]
   )
+
+  contextRef.current = value
 
   return <QuickPanelContext value={value}>{children}</QuickPanelContext>
 }

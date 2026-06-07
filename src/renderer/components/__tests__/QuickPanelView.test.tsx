@@ -1,5 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import React, { useEffect } from 'react'
 import { Provider } from 'react-redux'
@@ -72,6 +72,30 @@ function OpenPanelOnMount({ list }: { list: QuickPanelListItem[] }) {
   return null
 }
 
+function OpenAndClosePanelOnMount({ onClose }: { onClose: ReturnType<typeof vi.fn> }) {
+  const quickPanel = useQuickPanel()
+  const didOpenRef = React.useRef(false)
+  const didCloseRef = React.useRef(false)
+
+  useEffect(() => {
+    if (didOpenRef.current) return
+    didOpenRef.current = true
+    quickPanel.open({
+      list: [],
+      onClose,
+      symbol: 'test'
+    })
+  }, [onClose, quickPanel])
+
+  useEffect(() => {
+    if (!quickPanel.onClose || didCloseRef.current) return
+    didCloseRef.current = true
+    quickPanel.close('esc', 'query')
+  }, [quickPanel])
+
+  return null
+}
+
 function wrapWithProviders(children: React.ReactNode) {
   return (
     <Provider store={mockStore}>
@@ -121,6 +145,26 @@ describe('QuickPanelView', () => {
       expect(panel.classList.contains('visible')).toBe(true)
       // 检查第一个 item 是否渲染
       expect(screen.getByText('Item 1')).toBeInTheDocument()
+    })
+
+    it('passes the quick panel context to onClose callbacks', async () => {
+      const onClose = vi.fn()
+
+      render(wrapWithProviders(<OpenAndClosePanelOnMount onClose={onClose} />))
+
+      await waitFor(() =>
+        expect(onClose).toHaveBeenCalledWith(
+          expect.objectContaining({
+            action: 'esc',
+            context: expect.objectContaining({
+              close: expect.any(Function),
+              open: expect.any(Function),
+              updateItemSelection: expect.any(Function)
+            }),
+            searchText: 'query'
+          })
+        )
+      )
     })
   })
 
