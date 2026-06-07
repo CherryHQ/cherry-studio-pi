@@ -16,6 +16,7 @@ import { splitMessage } from '../../utils'
 
 const DISCORD_API_BASE = 'https://discord.com/api/v10'
 const DISCORD_MAX_LENGTH = 2000
+const DISCORD_API_TIMEOUT_MS = 30_000
 const USER_AGENT = 'DiscordBot (https://github.com/CherryHQ/cherry-studio-pi, 1.0.0)'
 
 // Discord Gateway Opcodes
@@ -268,7 +269,8 @@ class DiscordAdapter extends ChannelAdapter {
       headers: {
         Authorization: `Bot ${this.botToken}`,
         'User-Agent': USER_AGENT
-      }
+      },
+      signal: AbortSignal.timeout(DISCORD_API_TIMEOUT_MS)
     })
     if (!response.ok) {
       const errorText = await response.text().catch(() => '')
@@ -661,7 +663,8 @@ class DiscordAdapter extends ChannelAdapter {
       body: JSON.stringify({
         type: INTERACTION_CALLBACK_CHANNEL_MESSAGE,
         data: { content, ...(ephemeral ? { flags: DISCORD_FLAG_EPHEMERAL } : {}) }
-      })
+      }),
+      signal: AbortSignal.timeout(DISCORD_API_TIMEOUT_MS)
     })
   }
 
@@ -669,7 +672,8 @@ class DiscordAdapter extends ChannelAdapter {
     await net.fetch(`${DISCORD_API_BASE}/interactions/${interaction.id}/${interaction.token}/callback`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: INTERACTION_CALLBACK_DEFERRED_CHANNEL_MESSAGE })
+      body: JSON.stringify({ type: INTERACTION_CALLBACK_DEFERRED_CHANNEL_MESSAGE }),
+      signal: AbortSignal.timeout(DISCORD_API_TIMEOUT_MS)
     })
   }
 
@@ -748,7 +752,8 @@ class DiscordAdapter extends ChannelAdapter {
         'Content-Type': 'application/json',
         'User-Agent': USER_AGENT
       },
-      ...(options?.body ? { body: JSON.stringify(options.body) } : {})
+      ...(options?.body ? { body: JSON.stringify(options.body) } : {}),
+      signal: AbortSignal.timeout(DISCORD_API_TIMEOUT_MS)
     })
 
     if (!response.ok) {
