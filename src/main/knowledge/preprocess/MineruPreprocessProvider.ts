@@ -10,10 +10,10 @@ import {
   summarizeUrlForLog
 } from '@main/utils/logging'
 import type { FileMetadata, PreprocessProvider } from '@types'
-import AdmZip from 'adm-zip'
 import { net } from 'electron'
 
 import BasePreprocessProvider from './BasePreprocessProvider'
+import { extractAdmZipSafely } from './safeZipExtract'
 
 const logger = loggerService.withContext('MineruPreprocessProvider')
 
@@ -189,8 +189,7 @@ export default class MineruPreprocessProvider extends BasePreprocessProvider {
       }
 
       // Extract the ZIP contents
-      const zip = new AdmZip(zipPath)
-      zip.extractAllTo(extractPath, true)
+      extractAdmZipSafely(zipPath, extractPath, true)
       logger.info('Extracted MinerU files', { extractPath: summarizeTextForLog(extractPath) })
 
       return { path: extractPath }

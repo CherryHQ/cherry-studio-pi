@@ -5,10 +5,10 @@ import { loggerService } from '@logger'
 import { fileStorage } from '@main/services/FileStorage'
 import { summarizeTextForLog } from '@main/utils/logging'
 import type { FileMetadata, PreprocessProvider } from '@types'
-import AdmZip from 'adm-zip'
 import { net } from 'electron'
 
 import BasePreprocessProvider from './BasePreprocessProvider'
+import { extractAdmZipSafely } from './safeZipExtract'
 
 const logger = loggerService.withContext('Doc2xPreprocessProvider')
 
@@ -355,8 +355,7 @@ export default class Doc2xPreprocessProvider extends BasePreprocessProvider {
       }
 
       // 解压文件
-      const zip = new AdmZip(zipPath)
-      zip.extractAllTo(extractPath, true)
+      extractAdmZipSafely(zipPath, extractPath, true)
       logger.info('Extracted Doc2x files', { extractPath: summarizeTextForLog(extractPath) })
 
       return { path: extractPath }
