@@ -2,6 +2,7 @@ import { reduxService } from '@main/services/ReduxService'
 
 import type { AppCapabilityDefinition } from '../types'
 import { navigateApp, okResult, sanitizeForAgent } from '../utils'
+import { persistSettingValue, readSettingsForAgent } from './settings'
 
 export const PAINTING_NAMESPACES = [
   'siliconflow_paintings',
@@ -148,6 +149,11 @@ export function listPaintingHistory(paintings: any, input: any) {
   }
 }
 
+async function readDefaultPaintingProvider() {
+  const settings = await readSettingsForAgent()
+  return typeof settings?.defaultPaintingProvider === 'string' ? settings.defaultPaintingProvider.trim() : ''
+}
+
 export function createPaintingCapabilities(): AppCapabilityDefinition[] {
   return [
     {
@@ -160,9 +166,8 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['paintings', 'image', 'providers', 'drawing'],
       execute: async () => {
-        const settings = await reduxService.select<any>('state.settings')
         return okResult('Painting providers listed', {
-          defaultProvider: settings?.defaultPaintingProvider,
+          defaultProvider: await readDefaultPaintingProvider(),
           namespaces: PAINTING_NAMESPACES
         })
       }
@@ -213,7 +218,7 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any) => {
         const provider = String(input?.provider ?? '').trim()
         if (!provider) throw new Error('Painting provider is required')
-        await reduxService.dispatch({ type: 'settings/setDefaultPaintingProvider', payload: provider })
+        await persistSettingValue('defaultPaintingProvider', provider)
         return okResult('Default painting provider updated', { defaultProvider: provider })
       }
     },
@@ -233,10 +238,7 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       tags: ['paintings', 'image', 'drawing', 'open'],
       execute: async (input: any) => {
         const inputProvider = typeof input?.provider === 'string' ? input.provider.trim() : ''
-        const settings = inputProvider ? null : await reduxService.select<any>('state.settings')
-        const provider =
-          inputProvider ||
-          (typeof settings?.defaultPaintingProvider === 'string' ? settings.defaultPaintingProvider.trim() : '')
+        const provider = inputProvider || (await readDefaultPaintingProvider())
         const route = provider ? `/paintings/${provider}` : '/paintings'
         await navigateApp(route)
         return okResult('Painting workspace opened', { route })
@@ -265,10 +267,7 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       tags: ['paintings', 'image', 'generate', 'drawing'],
       execute: async (input: any) => {
         const inputProvider = typeof input?.provider === 'string' ? input.provider.trim() : ''
-        const settings = inputProvider ? null : await reduxService.select<any>('state.settings')
-        const provider =
-          inputProvider ||
-          (typeof settings?.defaultPaintingProvider === 'string' ? settings.defaultPaintingProvider.trim() : '')
+        const provider = inputProvider || (await readDefaultPaintingProvider())
         const route = provider ? `/paintings/${provider}` : '/paintings'
         await navigateApp(route)
         return {

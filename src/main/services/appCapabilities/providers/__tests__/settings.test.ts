@@ -49,8 +49,10 @@ describe('settings app capabilities', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.reduxService.select.mockResolvedValue({
+      defaultPaintingProvider: 'silicon',
       theme: 'dark',
       apiServer: {
+        host: '127.0.0.1',
         port: 23333,
         enabled: false,
         apiKey: 'server-secret'
@@ -66,6 +68,7 @@ describe('settings app capabilities', () => {
       if (key === 'feature.csaas.host') return '0.0.0.0'
       if (key === 'feature.csaas.port') return 24444
       if (key === 'feature.csaas.api_key') return 'preference-server-secret'
+      if (key === 'feature.paintings.default_provider') return 'openai'
       return undefined
     })
     mocks.preferenceService.set.mockResolvedValue(undefined)
@@ -84,6 +87,19 @@ describe('settings app capabilities', () => {
     })
     expect(mocks.reduxService.select).toHaveBeenCalledWith('state.settings')
     expect(mocks.preferenceService.get).toHaveBeenCalledWith('feature.csaas.port')
+  })
+
+  it('reads preference-backed default painting provider by path', async () => {
+    const result = await capability('settings.value.get').execute(
+      { path: 'defaultPaintingProvider' },
+      { source: 'agent' }
+    )
+
+    expect(result.data).toEqual({
+      path: 'defaultPaintingProvider',
+      value: 'openai'
+    })
+    expect(mocks.preferenceService.get).toHaveBeenCalledWith('feature.paintings.default_provider')
   })
 
   it('redacts sensitive single setting values by path', async () => {
@@ -153,6 +169,23 @@ describe('settings app capabilities', () => {
     expect(result.data).toEqual({
       path: 'apiServer.host',
       value: '0.0.0.0'
+    })
+  })
+
+  it('updates preference-backed default painting provider settings', async () => {
+    const result = await capability('settings.value.set').execute(
+      { path: 'defaultPaintingProvider', value: 'ppio' },
+      { source: 'agent' }
+    )
+
+    expect(mocks.preferenceService.set).toHaveBeenCalledWith('feature.paintings.default_provider', 'ppio')
+    expect(mocks.reduxService.dispatch).toHaveBeenCalledWith({
+      type: 'settings/setDefaultPaintingProvider',
+      payload: 'ppio'
+    })
+    expect(result.data).toEqual({
+      path: 'defaultPaintingProvider',
+      value: 'ppio'
     })
   })
 

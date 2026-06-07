@@ -7,7 +7,11 @@ import { isMac } from '@main/core/platform'
 import { WindowType } from '@main/core/window/types'
 import { appCapabilityService } from '@main/services/appCapabilities'
 import { listPaintingHistory, PAINTING_NAMESPACES } from '@main/services/appCapabilities/providers/paintings'
-import { readSettingsForAgent } from '@main/services/appCapabilities/providers/settings'
+import {
+  isSupportedSettingPath,
+  persistSettingValue,
+  readSettingsForAgent
+} from '@main/services/appCapabilities/providers/settings'
 import { isAllowedAppRoute, normalizeAppRoute, pickPath, sanitizeForAgent } from '@main/services/appCapabilities/utils'
 import { reduxService } from '@main/services/ReduxService'
 import { getName, getNotesDir, isPathInside, scanDir } from '@main/utils/file'
@@ -37,18 +41,6 @@ const SETTINGS_SECTIONS = [
   ['selectionAssistant', 'Selection Assistant', '/settings/selectionAssistant'],
   ['about', 'About', '/settings/about']
 ].map(([id, label, route]) => ({ id, label, route }))
-
-const SETTINGS_SETTERS: Record<string, string> = {
-  language: 'settings/setLanguage',
-  targetLanguage: 'settings/setTargetLanguage',
-  theme: 'settings/setTheme',
-  fontSize: 'settings/setFontSize',
-  navbarPosition: 'settings/setNavbarPosition',
-  assistantIconType: 'settings/setAssistantIconType',
-  messageStyle: 'settings/setMessageStyle',
-  defaultPaintingProvider: 'settings/setDefaultPaintingProvider',
-  enableDeveloperMode: 'settings/setEnableDeveloperMode'
-}
 
 async function navigate(route: string) {
   const nextRoute = normalizeAppRoute(route)
@@ -152,13 +144,13 @@ appToolsRouter.get('/settings/value', async (req, res, next) => {
 appToolsRouter.patch('/settings/value', async (req, res, next) => {
   try {
     const { path: keyPath, value } = req.body ?? {}
-    const action = SETTINGS_SETTERS[keyPath]
-    if (!action) {
+    const normalizedPath = String(keyPath || '').trim()
+    if (!normalizedPath || !isSupportedSettingPath(normalizedPath)) {
       res.status(400).json({ error: `Unsupported setting path: ${keyPath}` })
       return
     }
-    await reduxService.dispatch({ type: action, payload: value })
-    res.json({ ok: true, path: keyPath, value: sanitizeForAgent(value) })
+    await persistSettingValue(normalizedPath, value)
+    res.json({ ok: true, path: normalizedPath, value: sanitizeForAgent(value) })
   } catch (error) {
     next(error)
   }
@@ -265,7 +257,7 @@ appToolsRouter.delete('/notes', async (req, res, next) => {
 
 appToolsRouter.get('/paintings/providers', async (_req, res, next) => {
   try {
-    const settings = await reduxService.select<any>('state.settings')
+    const settings = await readSettingsForAgent()
     res.json({ defaultProvider: settings?.defaultPaintingProvider, namespaces: PAINTING_NAMESPACES })
   } catch (error) {
     next(error)
@@ -283,8 +275,13 @@ appToolsRouter.get('/paintings', async (req, res, next) => {
 
 appToolsRouter.patch('/paintings/default-provider', async (req, res, next) => {
   try {
-    await reduxService.dispatch({ type: 'settings/setDefaultPaintingProvider', payload: req.body?.provider })
-    res.json({ ok: true, defaultProvider: req.body?.provider })
+    const provider = String(req.body?.provider ?? '').trim()
+    if (!provider) {
+      res.status(400).json({ error: 'Painting provider is required' })
+      return
+    }
+    await persistSettingValue('defaultPaintingProvider', provider)
+    res.json({ ok: true, defaultProvider: provider })
   } catch (error) {
     next(error)
   }

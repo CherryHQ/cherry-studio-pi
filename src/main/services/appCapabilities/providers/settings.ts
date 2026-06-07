@@ -84,14 +84,15 @@ export const SETTINGS_SETTERS: Record<string, string> = {
 }
 
 const SENSITIVE_SETTING_PATH_PATTERN = /api[-_]?key|private[-_]?key|token|secret|pass|password|authorization|cookie/i
-const API_SERVER_PREFERENCE_PATHS: Record<string, UnifiedPreferenceKeyType> = {
+const PREFERENCE_SETTING_PATHS: Record<string, UnifiedPreferenceKeyType> = {
+  defaultPaintingProvider: 'feature.paintings.default_provider',
   'apiServer.enabled': 'feature.csaas.enabled',
   'apiServer.host': 'feature.csaas.host',
   'apiServer.port': 'feature.csaas.port',
   'apiServer.apiKey': 'feature.csaas.api_key'
 }
 const pathEnum = Array.from(
-  new Set([...Object.keys(SETTINGS_SETTERS), ...Object.keys(API_SERVER_PREFERENCE_PATHS)])
+  new Set([...Object.keys(SETTINGS_SETTERS), ...Object.keys(PREFERENCE_SETTING_PATHS)])
 ).sort()
 
 function sanitizeSettingValueForAgent(keyPath: string, value: unknown) {
@@ -108,13 +109,16 @@ export async function readSettingsForAgent() {
   const settings = (await reduxService.select('state.settings')) ?? {}
   try {
     const preferenceService = application.get('PreferenceService')
+    const defaultPaintingProvider = preferenceService.get('feature.paintings.default_provider')
     return {
       ...settings,
+      defaultPaintingProvider: defaultPaintingProvider ?? settings.defaultPaintingProvider,
       apiServer: {
         ...settings.apiServer,
-        enabled: preferenceService.get('feature.csaas.enabled'),
-        port: preferenceService.get('feature.csaas.port'),
-        apiKey: preferenceService.get('feature.csaas.api_key')
+        enabled: preferenceService.get('feature.csaas.enabled') ?? settings.apiServer?.enabled,
+        host: preferenceService.get('feature.csaas.host') ?? settings.apiServer?.host,
+        port: preferenceService.get('feature.csaas.port') ?? settings.apiServer?.port,
+        apiKey: preferenceService.get('feature.csaas.api_key') ?? settings.apiServer?.apiKey
       }
     }
   } catch {
@@ -122,8 +126,15 @@ export async function readSettingsForAgent() {
   }
 }
 
-async function persistSettingValue(keyPath: string, action: string | undefined, value: unknown) {
-  const preferenceKey = API_SERVER_PREFERENCE_PATHS[keyPath]
+export function isSupportedSettingPath(keyPath: string) {
+  return Boolean(SETTINGS_SETTERS[keyPath] || PREFERENCE_SETTING_PATHS[keyPath])
+}
+
+export async function persistSettingValue(keyPath: string, value: unknown) {
+  const action = SETTINGS_SETTERS[keyPath]
+  const preferenceKey = PREFERENCE_SETTING_PATHS[keyPath]
+  if (!action && !preferenceKey) throw new Error(`Unsupported setting path: ${keyPath}`)
+
   if (preferenceKey) {
     await application.get('PreferenceService').set(preferenceKey, value as never)
   }
@@ -206,9 +217,8 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any) => {
         const keyPath = String(input?.path ?? '').trim()
         if (!keyPath) throw new Error('Setting path is required')
-        const action = SETTINGS_SETTERS[keyPath]
-        if (!action && !API_SERVER_PREFERENCE_PATHS[keyPath]) throw new Error(`Unsupported setting path: ${keyPath}`)
-        await persistSettingValue(keyPath, action, input?.value)
+        if (!isSupportedSettingPath(keyPath)) throw new Error(`Unsupported setting path: ${keyPath}`)
+        await persistSettingValue(keyPath, input?.value)
         return okResult('Setting updated', {
           path: keyPath,
           value: sanitizeSettingValueForAgent(keyPath, input?.value)

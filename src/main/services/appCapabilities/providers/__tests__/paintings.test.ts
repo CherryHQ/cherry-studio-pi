@@ -5,7 +5,20 @@ const mocks = vi.hoisted(() => ({
     select: vi.fn(),
     dispatch: vi.fn()
   },
+  preferenceService: {
+    get: vi.fn(),
+    set: vi.fn()
+  },
   navigateApp: vi.fn()
+}))
+
+vi.mock('@application', () => ({
+  application: {
+    get: vi.fn((name: string) => {
+      if (name === 'PreferenceService') return mocks.preferenceService
+      throw new Error(`Unknown service: ${name}`)
+    })
+  }
 }))
 
 vi.mock('@main/services/ReduxService', () => ({
@@ -19,6 +32,8 @@ vi.mock('../../utils', () => ({
     summary,
     ...(data === undefined ? {} : { data })
   }),
+  pickPath: (value: any, keyPath = '') =>
+    keyPath ? keyPath.split('.').reduce((current, key) => current?.[key], value) : value,
   sanitizeForAgent: (value: unknown) => value
 }))
 
@@ -68,6 +83,21 @@ describe('painting app capabilities', () => {
       if (path === 'state.settings') return { defaultPaintingProvider: 'silicon' }
       return null
     })
+    mocks.preferenceService.get.mockImplementation((key: string) => {
+      if (key === 'feature.paintings.default_provider') return 'openai'
+      return undefined
+    })
+    mocks.preferenceService.set.mockResolvedValue(undefined)
+  })
+
+  it('lists the v2 preference-backed default painting provider', async () => {
+    const result = await capability('paintings.providers.list').execute({}, { source: 'agent' })
+
+    expect(result.data).toEqual({
+      defaultProvider: 'openai',
+      namespaces: expect.arrayContaining(['openai_image_generate'])
+    })
+    expect(mocks.preferenceService.get).toHaveBeenCalledWith('feature.paintings.default_provider')
   })
 
   it('lists painting history as compact paged summaries by default', async () => {
@@ -184,6 +214,7 @@ describe('painting app capabilities', () => {
       type: 'settings/setDefaultPaintingProvider',
       payload: 'openai'
     })
+    expect(mocks.preferenceService.set).toHaveBeenCalledWith('feature.paintings.default_provider', 'openai')
     expect(result.data).toEqual({ defaultProvider: 'openai' })
   })
 
@@ -197,6 +228,13 @@ describe('painting app capabilities', () => {
 
   it('normalizes painting provider routes before opening', async () => {
     const result = await capability('paintings.open').execute({ provider: ' openai ' }, { source: 'agent' })
+
+    expect(mocks.navigateApp).toHaveBeenCalledWith('/paintings/openai')
+    expect(result.data).toEqual({ route: '/paintings/openai' })
+  })
+
+  it('opens the preference-backed default provider when no provider is given', async () => {
+    const result = await capability('paintings.open').execute({}, { source: 'agent' })
 
     expect(mocks.navigateApp).toHaveBeenCalledWith('/paintings/openai')
     expect(result.data).toEqual({ route: '/paintings/openai' })
