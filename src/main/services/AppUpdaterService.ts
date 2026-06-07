@@ -97,7 +97,11 @@ export class AppUpdaterService extends BaseService {
   private registerAutoUpdaterListeners(): void {
     const wm = () => application.get('WindowManager')
     const onError = (error: Error) => {
+      const wasInstalling = this.quitAndInstallStarted
       this.quitAndInstallStarted = false
+      if (wasInstalling) {
+        application.unmarkQuitting()
+      }
       logger.error('update error', error)
       wm().broadcastToType(WindowType.Main, IpcChannel.UpdateError, error)
     }
@@ -384,6 +388,7 @@ export class AppUpdaterService extends BaseService {
         autoUpdater.quitAndInstall(false, true)
       } catch (error) {
         this.quitAndInstallStarted = false
+        application.unmarkQuitting()
         logger.error('Failed to quit and install update', error as Error)
         application.get('WindowManager').broadcastToType(WindowType.Main, IpcChannel.UpdateError, error)
       } finally {

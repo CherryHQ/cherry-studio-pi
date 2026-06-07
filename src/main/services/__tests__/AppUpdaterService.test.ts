@@ -34,6 +34,7 @@ vi.mock('@application', async () => {
   const result = mockApplicationFactory()
   const originalGet = result.application.get.getMockImplementation()!
   ;(result.application as any).markQuitting = vi.fn()
+  ;(result.application as any).unmarkQuitting = vi.fn()
   result.application.get.mockImplementation((name: string) => {
     if (name === 'MainWindowService') {
       return { getMainWindow: vi.fn() }
@@ -337,6 +338,20 @@ describe('AppUpdaterService', () => {
       })
       expect(autoUpdater.quitAndInstall).toHaveBeenCalledTimes(1)
       expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true)
+      expect(mocks.updateInstallBlocker.release).toHaveBeenCalledTimes(1)
+    })
+
+    it('clears the speculative quitting state if launching the installer fails', async () => {
+      vi.mocked(autoUpdater.quitAndInstall).mockImplementationOnce(() => {
+        throw new Error('installer launch failed')
+      })
+
+      appUpdater.quitAndInstall()
+
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(application.markQuitting).toHaveBeenCalledTimes(1)
+      expect(application.unmarkQuitting).toHaveBeenCalledTimes(1)
       expect(mocks.updateInstallBlocker.release).toHaveBeenCalledTimes(1)
     })
   })

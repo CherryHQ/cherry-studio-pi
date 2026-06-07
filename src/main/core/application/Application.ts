@@ -537,6 +537,14 @@ export class Application {
   }
 
   /**
+   * Clear a speculative quitting mark when a delegated quit flow fails before
+   * Electron actually enters before-quit.
+   */
+  public unmarkQuitting(): void {
+    this._isQuitting = false
+  }
+
+  /**
    * Register a quit prevention hold. Returns a hold with opaque UUID id and dispose().
    * While any hold is active, app.quit() will be blocked in before-quit.
    * Used for critical operations (e.g. data migration) where quitting would cause corruption.
