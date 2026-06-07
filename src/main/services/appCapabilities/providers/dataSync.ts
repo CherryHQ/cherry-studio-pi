@@ -1,7 +1,13 @@
 import { appDataSyncService } from '@main/services/appData/AppDataSyncService'
 import { reduxService } from '@main/services/ReduxService'
 import { describeWebDavUserFacingError } from '@main/services/WebDavRetry'
-import { RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE } from '@shared/dataSyncBridge'
+import {
+  type DataSyncBridgeSettings,
+  type DataSyncBridgeSettingsUpdate,
+  RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE,
+  RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE,
+  RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE
+} from '@shared/dataSyncBridge'
 import { IpcChannel } from '@shared/IpcChannel'
 import { normalizeWebDavConfig } from '@shared/webdavConfig'
 import type { WebDavConfig } from '@types'
@@ -25,7 +31,18 @@ type DataSyncSettingsState = {
 }
 
 async function getDataSyncSettings(): Promise<DataSyncSettingsState> {
-  return (await reduxService.select('state.settings')) ?? {}
+  try {
+    return await callRendererBridge<DataSyncBridgeSettings>(
+      RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE,
+      undefined,
+      RENDERER_BRIDGE_CHECK_TIMEOUT_MS,
+      '读取同步设置超时'
+    )
+  } catch (error) {
+    const legacySettings = await reduxService.select<DataSyncSettingsState>('state.settings').catch(() => undefined)
+    if (legacySettings) return legacySettings
+    throw new Error(`无法读取同步设置：${getErrorMessage(error)}`)
+  }
 }
 
 async function getStoredWebDavConfig(): Promise<WebDavConfig> {
@@ -58,7 +75,17 @@ function resolveInputText(input: any, key: keyof WebDavConfig, fallback = '') {
 }
 
 async function resolveWebDavConfig(input: any): Promise<WebDavConfig> {
-  const stored = await getStoredWebDavConfig()
+  const needsStoredConfig = (['webdavHost', 'webdavUser', 'webdavPass', 'webdavPath'] as const).some(
+    (key) => !hasOwnInput(input, key)
+  )
+  const stored = needsStoredConfig
+    ? await getStoredWebDavConfig()
+    : {
+        webdavHost: '',
+        webdavUser: '',
+        webdavPass: '',
+        webdavPath: DEFAULT_DATA_SYNC_PATH
+      }
   return normalizeWebDavConfig(
     {
       webdavHost: resolveInputText(input, 'webdavHost', stored.webdavHost),
@@ -127,8 +154,15 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessa
   }
 }
 
-async function prepareRendererStorageV2ForDataSync() {
-  const bridgeName = JSON.stringify(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE)
+async function callRendererBridge<T>(
+  bridgeKey: string,
+  payload: unknown,
+  timeoutMs: number,
+  timeoutMessage: string
+): Promise<T> {
+  const bridgeName = JSON.stringify(bridgeKey)
+  const callScript =
+    typeof payload === 'undefined' ? `window[${bridgeName}]()` : `window[${bridgeName}](${JSON.stringify(payload)})`
   let lastProbeError: unknown
 
   for (const browserWindow of BrowserWindow.getAllWindows()) {
@@ -149,37 +183,54 @@ async function prepareRendererStorageV2ForDataSync() {
     if (!hasBridge) continue
 
     try {
-      await withTimeout(
-        browserWindow.webContents.executeJavaScript(`window[${bridgeName}]()`),
-        RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS,
-        '同步前准备本机数据超时'
-      )
-      return
+      return await withTimeout(browserWindow.webContents.executeJavaScript(callScript), timeoutMs, timeoutMessage)
     } catch (error) {
-      throw new Error(`同步前准备本机数据失败：${getErrorMessage(error)}`)
+      throw new Error(getErrorMessage(error))
     }
   }
 
   if (lastProbeError) {
-    throw new Error(`同步前无法准备本机数据：${getErrorMessage(lastProbeError)}`)
+    throw new Error(getErrorMessage(lastProbeError))
   }
-  throw new Error('同步前无法准备本机数据：主窗口尚未就绪，请打开主窗口后重试。')
+  throw new Error('主窗口尚未就绪，请打开主窗口后重试。')
+}
+
+async function prepareRendererStorageV2ForDataSync() {
+  try {
+    await callRendererBridge<void>(
+      RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE,
+      undefined,
+      RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS,
+      '同步前准备本机数据超时'
+    )
+  } catch (error) {
+    throw new Error(`同步前无法准备本机数据：${getErrorMessage(error)}`)
+  }
 }
 
 async function persistWebDavConfig(config: WebDavConfig, options: { autoSync?: boolean; syncInterval?: number } = {}) {
-  await reduxService.dispatch({ type: 'settings/setDataSyncWebdavHost', payload: config.webdavHost || '' })
-  await reduxService.dispatch({ type: 'settings/setDataSyncWebdavUser', payload: config.webdavUser || '' })
-  await reduxService.dispatch({ type: 'settings/setDataSyncWebdavPass', payload: config.webdavPass || '' })
-  await reduxService.dispatch({
-    type: 'settings/setDataSyncWebdavPath',
-    payload: config.webdavPath || DEFAULT_DATA_SYNC_PATH
-  })
-
+  const settings: DataSyncBridgeSettingsUpdate = {
+    dataSyncWebdavHost: config.webdavHost || '',
+    dataSyncWebdavUser: config.webdavUser || '',
+    dataSyncWebdavPass: config.webdavPass || '',
+    dataSyncWebdavPath: config.webdavPath || DEFAULT_DATA_SYNC_PATH
+  }
   if (typeof options.syncInterval === 'number') {
-    await reduxService.dispatch({ type: 'settings/setDataSyncSyncInterval', payload: options.syncInterval })
+    settings.dataSyncSyncInterval = options.syncInterval
   }
   if (typeof options.autoSync === 'boolean') {
-    await reduxService.dispatch({ type: 'settings/setDataSyncAutoSync', payload: options.autoSync })
+    settings.dataSyncAutoSync = options.autoSync
+  }
+
+  try {
+    await callRendererBridge<DataSyncBridgeSettings>(
+      RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE,
+      settings,
+      RENDERER_BRIDGE_CHECK_TIMEOUT_MS,
+      '保存同步设置超时'
+    )
+  } catch (error) {
+    throw new Error(`无法保存同步设置：${getErrorMessage(error)}`)
   }
 }
 

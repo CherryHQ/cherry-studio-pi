@@ -56,7 +56,11 @@ vi.mock('../../utils', () => ({
     )
 }))
 
-import { RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE } from '@shared/dataSyncBridge'
+import {
+  RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE,
+  RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE,
+  RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE
+} from '@shared/dataSyncBridge'
 import { IpcChannel } from '@shared/IpcChannel'
 
 import { createDataSyncCapabilities } from '../dataSync'
@@ -84,6 +88,8 @@ describe('data sync app capabilities', () => {
     mocks.reduxService.dispatch.mockResolvedValue(undefined)
     mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation(async (script: string) => {
       if (script.includes('typeof')) return true
+      if (script.includes(RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE)) return settings
+      if (script.includes(RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE)) return settings
       if (script.includes(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE)) return undefined
       return undefined
     })
@@ -101,6 +107,35 @@ describe('data sync app capabilities', () => {
       autoSync: true,
       syncInterval: 15
     })
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).toHaveBeenCalledWith(
+      `window[${JSON.stringify(RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE)}]()`
+    )
+  })
+
+  it('saves WebDAV config through the renderer settings bridge', async () => {
+    const result = await capability('dataSync.webdav.config.set').execute(
+      {
+        webdavHost: ' dav.example.com ',
+        webdavUser: ' user ',
+        webdavPass: ' secret ',
+        webdavPath: ' Team//Sync/ ',
+        autoSync: false,
+        syncInterval: 30
+      },
+      { source: 'agent' }
+    )
+
+    const setCall = mocks.browserWindows[0].webContents.executeJavaScript.mock.calls.find(([script]) =>
+      String(script).startsWith(`window[${JSON.stringify(RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE)}](`)
+    )
+    expect(result.ok).toBe(true)
+    expect(setCall?.[0]).toContain('"dataSyncWebdavHost":"https://dav.example.com"')
+    expect(setCall?.[0]).toContain('"dataSyncWebdavUser":"user"')
+    expect(setCall?.[0]).toContain('"dataSyncWebdavPass":" secret "')
+    expect(setCall?.[0]).toContain('"dataSyncWebdavPath":"/Team/Sync"')
+    expect(setCall?.[0]).toContain('"dataSyncAutoSync":false')
+    expect(setCall?.[0]).toContain('"dataSyncSyncInterval":30')
+    expect(mocks.reduxService.dispatch).not.toHaveBeenCalled()
   })
 
   it('declares dry-run support for write capabilities that implement dry-run branches', () => {
@@ -196,7 +231,9 @@ describe('data sync app capabilities', () => {
     const result = await capability('dataSync.sync.now').execute({}, { source: 'agent', dryRun: true })
 
     expect(result.ok).toBe(true)
-    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).toHaveBeenCalledWith(
+      `window[${JSON.stringify(RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE)}]()`
+    )
     expect(result.summary).toContain('dry run')
     expect(mocks.appDataSyncService.syncNow).not.toHaveBeenCalled()
   })
@@ -226,9 +263,12 @@ describe('data sync app capabilities', () => {
       webdavPass: 'secret',
       webdavPath: '/sync-root'
     })
-    expect(mocks.browserWindows[0].webContents.executeJavaScript.mock.invocationCallOrder[1]).toBeLessThan(
-      mocks.appDataSyncService.syncNow.mock.invocationCallOrder[0]
+    const prepareCallIndex = mocks.browserWindows[0].webContents.executeJavaScript.mock.calls.findIndex(([script]) =>
+      String(script).includes(`window[${JSON.stringify(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE)}]()`)
     )
+    expect(
+      mocks.browserWindows[0].webContents.executeJavaScript.mock.invocationCallOrder[prepareCallIndex]
+    ).toBeLessThan(mocks.appDataSyncService.syncNow.mock.invocationCallOrder[0])
     expect(mocks.browserWindows[0].webContents.send).toHaveBeenCalledWith(IpcChannel.DataSync_ExternalSyncCompleted, {
       completedAt: expect.any(Number),
       source: 'agent',
@@ -253,7 +293,17 @@ describe('data sync app capabilities', () => {
   it('fails agent-triggered data sync when the renderer preparation bridge is unavailable', async () => {
     mocks.browserWindows[0].webContents.executeJavaScript.mockResolvedValueOnce(false)
 
-    await expect(capability('dataSync.sync.now').execute({}, { source: 'agent' })).rejects.toThrow(/主窗口尚未就绪/)
+    await expect(
+      capability('dataSync.sync.now').execute(
+        {
+          webdavHost: 'https://dav.example.com',
+          webdavUser: 'user',
+          webdavPass: 'secret',
+          webdavPath: '/sync-root'
+        },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow(/主窗口尚未就绪/)
 
     expect(mocks.appDataSyncService.syncNow).not.toHaveBeenCalled()
     expect(mocks.browserWindows[0].webContents.send).not.toHaveBeenCalled()
