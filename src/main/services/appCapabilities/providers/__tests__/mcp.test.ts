@@ -1,12 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  browserWindows: [
+    {
+      isDestroyed: vi.fn(() => false),
+      webContents: {
+        executeJavaScript: vi.fn()
+      }
+    }
+  ],
+  getAllWindows: vi.fn(),
   mcpService: {
     listAllActiveServerTools: vi.fn(),
     callToolById: vi.fn()
   },
   reduxService: {
     select: vi.fn()
+  }
+}))
+
+vi.mock('electron', () => ({
+  BrowserWindow: {
+    getAllWindows: mocks.getAllWindows
   }
 }))
 
@@ -26,6 +41,8 @@ vi.mock('../../utils', () => ({
   }),
   sanitizeForAgent: (value: unknown) => value
 }))
+
+import { RENDERER_GET_STORE_VALUE_BRIDGE } from '@shared/storeBridge'
 
 import { createMcpCapabilities } from '../mcp'
 
@@ -56,8 +73,34 @@ function makeTool(index: number) {
 describe('mcp app capabilities', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.getAllWindows.mockReturnValue(mocks.browserWindows)
+    mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation(async (script: string) => {
+      if (script.includes('typeof')) return true
+      if (script.includes(RENDERER_GET_STORE_VALUE_BRIDGE)) {
+        return {
+          servers: [
+            { id: 'server-1', name: 'Server 1', command: 'npx', env: { TOKEN: 'secret' } },
+            { id: 'server-2', name: 'Server 2', command: 'uvx' }
+          ]
+        }
+      }
+      return undefined
+    })
     mocks.mcpService.listAllActiveServerTools.mockResolvedValue([makeTool(1), makeTool(2), makeTool(3)])
     mocks.mcpService.callToolById.mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] })
+  })
+
+  it('lists configured MCP servers through the renderer store bridge', async () => {
+    const result = await capability('mcp.servers.list').execute({}, { source: 'agent' })
+
+    expect(result.ok).toBe(true)
+    expect(result.data).toEqual([
+      { id: 'server-1', name: 'Server 1', command: 'npx', env: { TOKEN: 'secret' } },
+      { id: 'server-2', name: 'Server 2', command: 'uvx' }
+    ])
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).toHaveBeenCalledWith(
+      `window[${JSON.stringify(RENDERER_GET_STORE_VALUE_BRIDGE)}]({"path":"state.mcp"})`
+    )
   })
 
   it('lists MCP tools as bounded descriptors without schemas by default', async () => {

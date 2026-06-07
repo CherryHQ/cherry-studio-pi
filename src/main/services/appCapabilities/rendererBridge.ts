@@ -1,3 +1,4 @@
+import { RENDERER_GET_STORE_VALUE_BRIDGE } from '@shared/storeBridge'
 import { BrowserWindow } from 'electron'
 
 const DEFAULT_RENDERER_BRIDGE_CHECK_TIMEOUT_MS = 5_000
@@ -72,4 +73,14 @@ export async function callRendererBridge<T>(
     throw new Error(getBridgeErrorMessage(lastProbeError))
   }
   throw new Error('主窗口尚未就绪，请打开主窗口后重试。')
+}
+
+export async function readRendererStoreValue<T>(path: string): Promise<T> {
+  return callRendererBridge<T>(
+    RENDERER_GET_STORE_VALUE_BRIDGE,
+    { path },
+    {
+      timeoutMessage: `读取运行时状态超时：${path}`
+    }
+  )
 }

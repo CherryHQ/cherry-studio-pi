@@ -1,6 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  browserWindows: [
+    {
+      isDestroyed: vi.fn(() => false),
+      webContents: {
+        executeJavaScript: vi.fn()
+      }
+    }
+  ],
+  getAllWindows: vi.fn(),
   reduxService: {
     select: vi.fn(),
     dispatch: vi.fn()
@@ -10,6 +19,12 @@ const mocks = vi.hoisted(() => ({
     set: vi.fn()
   },
   navigateApp: vi.fn()
+}))
+
+vi.mock('electron', () => ({
+  BrowserWindow: {
+    getAllWindows: mocks.getAllWindows
+  }
 }))
 
 vi.mock('@application', () => ({
@@ -36,6 +51,9 @@ vi.mock('../../utils', () => ({
     keyPath ? keyPath.split('.').reduce((current, key) => current?.[key], value) : value,
   sanitizeForAgent: (value: unknown) => value
 }))
+
+import { RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE, RENDERER_GET_SETTINGS_BRIDGE } from '@shared/settingsBridge'
+import { RENDERER_GET_STORE_VALUE_BRIDGE } from '@shared/storeBridge'
 
 import { createPaintingCapabilities } from '../paintings'
 
@@ -78,10 +96,18 @@ const paintingState = {
 describe('painting app capabilities', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.getAllWindows.mockReturnValue(mocks.browserWindows)
     mocks.reduxService.select.mockImplementation(async (path: string) => {
       if (path === 'state.paintings') return paintingState
       if (path === 'state.settings') return { defaultPaintingProvider: 'silicon' }
       return null
+    })
+    mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation(async (script: string) => {
+      if (script.includes('typeof')) return true
+      if (script.includes(RENDERER_GET_STORE_VALUE_BRIDGE)) return paintingState
+      if (script.includes(RENDERER_GET_SETTINGS_BRIDGE)) return { defaultPaintingProvider: 'silicon' }
+      if (script.includes(RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE)) return {}
+      return undefined
     })
     mocks.preferenceService.get.mockImplementation((key: string) => {
       if (key === 'feature.paintings.default_provider') return 'openai'
@@ -125,6 +151,9 @@ describe('painting app capabilities', () => {
       })
     ])
     expect((result.data as any).paintings[0]).not.toHaveProperty('imageFile')
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).toHaveBeenCalledWith(
+      `window[${JSON.stringify(RENDERER_GET_STORE_VALUE_BRIDGE)}]({"path":"state.paintings"})`
+    )
   })
 
   it('supports namespace and offset pagination for painting history', async () => {
@@ -180,8 +209,9 @@ describe('painting app capabilities', () => {
   })
 
   it('bounds raw painting arrays before returning them to agents', async () => {
-    mocks.reduxService.select.mockImplementation(async (path: string) => {
-      if (path === 'state.paintings') {
+    mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation(async (script: string) => {
+      if (script.includes('typeof')) return true
+      if (script.includes(RENDERER_GET_STORE_VALUE_BRIDGE)) {
         return {
           siliconflow_paintings: [
             {
@@ -191,8 +221,9 @@ describe('painting app capabilities', () => {
           ]
         }
       }
-      if (path === 'state.settings') return { defaultPaintingProvider: 'silicon' }
-      return null
+      if (script.includes(RENDERER_GET_SETTINGS_BRIDGE)) return { defaultPaintingProvider: 'silicon' }
+      if (script.includes(RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE)) return {}
+      return undefined
     })
 
     const result = await capability('paintings.history.list').execute(
@@ -210,10 +241,11 @@ describe('painting app capabilities', () => {
       { source: 'agent' }
     )
 
-    expect(mocks.reduxService.dispatch).toHaveBeenCalledWith({
-      type: 'settings/setDefaultPaintingProvider',
-      payload: 'openai'
-    })
+    const dispatchScript = mocks.browserWindows[0].webContents.executeJavaScript.mock.calls.find(([script]) =>
+      String(script).startsWith(`window[${JSON.stringify(RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE)}](`)
+    )?.[0]
+    expect(dispatchScript).toContain('"type":"settings/setDefaultPaintingProvider"')
+    expect(dispatchScript).toContain('"payload":"openai"')
     expect(mocks.preferenceService.set).toHaveBeenCalledWith('feature.paintings.default_provider', 'openai')
     expect(result.data).toEqual({ defaultProvider: 'openai' })
   })
@@ -223,7 +255,7 @@ describe('painting app capabilities', () => {
       capability('paintings.defaultProvider.set').execute({ provider: '   ' }, { source: 'agent' })
     ).rejects.toThrow('Painting provider is required')
 
-    expect(mocks.reduxService.dispatch).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
 
   it('normalizes painting provider routes before opening', async () => {

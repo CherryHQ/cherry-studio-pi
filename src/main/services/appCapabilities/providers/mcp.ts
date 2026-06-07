@@ -1,6 +1,6 @@
 import mcpService from '@main/services/MCPService'
-import { reduxService } from '@main/services/ReduxService'
 
+import { readRendererStoreValue } from '../rendererBridge'
 import type { AppCapabilityDefinition } from '../types'
 import { okResult, sanitizeForAgent } from '../utils'
 
@@ -63,7 +63,7 @@ export function createMcpCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['mcp', 'servers', 'tools'],
       execute: async () => {
-        const mcpState = await reduxService.select<any>('state.mcp').catch(() => null)
+        const mcpState = await readRendererStoreValue<any>('state.mcp').catch(() => null)
         return okResult('MCP servers listed', sanitizeForAgent(mcpState?.servers ?? []))
       }
     },

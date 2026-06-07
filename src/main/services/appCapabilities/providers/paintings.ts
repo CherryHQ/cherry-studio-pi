@@ -1,5 +1,4 @@
-import { reduxService } from '@main/services/ReduxService'
-
+import { readRendererStoreValue } from '../rendererBridge'
 import type { AppCapabilityDefinition } from '../types'
 import { navigateApp, okResult, sanitizeForAgent } from '../utils'
 import { persistSettingValue, readSettingsForAgent } from './settings'
@@ -195,7 +194,7 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['paintings', 'image', 'history'],
       execute: async (input: any) => {
-        const paintings = await reduxService.select<any>('state.paintings')
+        const paintings = await readRendererStoreValue<any>('state.paintings').catch(() => ({}))
         return okResult('Painting history listed', listPaintingHistory(paintings, input))
       }
     },
