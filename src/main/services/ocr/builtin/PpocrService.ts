@@ -39,6 +39,8 @@ const OcrResponseSchema = z.object({
   })
 })
 
+export const PPOCR_REQUEST_TIMEOUT_MS = 120_000
+
 export class PpocrService extends OcrBaseService {
   public ocr = async (file: SupportedOcrFile, options?: OcrPpocrConfig): Promise<OcrResult> => {
     if (!isImageFileMetadata(file)) {
@@ -79,7 +81,8 @@ export class PpocrService extends OcrBaseService {
       const response = await net.fetch(apiUrl, {
         method: 'POST',
         headers,
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(PPOCR_REQUEST_TIMEOUT_MS)
       })
 
       if (!response.ok) {
