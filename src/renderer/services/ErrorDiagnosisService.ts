@@ -127,11 +127,24 @@ function parseResponse(raw: string): DiagnosisResult {
     throw new Error('Invalid diagnosis response format')
   }
 
+  const rawSteps = parsed.steps as unknown[]
+  const steps = rawSteps
+    .map((step) => {
+      if (typeof step === 'string') return step
+      if (step && typeof step === 'object') {
+        const text = (step as Partial<DiagnosisStep>).text
+        return typeof text === 'string' ? text : ''
+      }
+      return ''
+    })
+    .map((text) => text.trim())
+    .filter(Boolean)
+
   return {
     summary: parsed.summary,
     category: parsed.category || 'unknown',
     explanation: parsed.explanation || parsed.summary,
-    steps: parsed.steps.map((s) => ({ text: typeof s === 'string' ? s : s.text }))
+    steps: steps.map((text) => ({ text }))
   }
 }
 

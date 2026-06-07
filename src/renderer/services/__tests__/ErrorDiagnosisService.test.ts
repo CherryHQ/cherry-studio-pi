@@ -211,5 +211,20 @@ describe('ErrorDiagnosisService', () => {
       const result = await diagnoseError(makeError(), 'en')
       expect(result.category).toBe('unknown')
     })
+
+    it('drops malformed diagnosis steps instead of passing undefined text to the UI', async () => {
+      mockFetchGenerate.mockResolvedValue(
+        JSON.stringify({
+          summary: 'Error',
+          category: 'unknown',
+          explanation: 'Something went wrong.',
+          steps: ['Check settings', { text: 'Retry sync' }, { text: '   ' }, {}, null]
+        })
+      )
+
+      const result = await diagnoseError(makeError(), 'en')
+
+      expect(result.steps).toEqual([{ text: 'Check settings' }, { text: 'Retry sync' }])
+    })
   })
 })
