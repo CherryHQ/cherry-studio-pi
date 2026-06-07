@@ -167,7 +167,7 @@ export class StorageV2SecretVaultService {
         const existingUpdatedAt = parseUpdatedAt(existing?.updatedAt)
         const nextUpdatedAt = parseUpdatedAt(entry.updatedAt)
 
-        if (existing && existingUpdatedAt > nextUpdatedAt) {
+        if (existing && existingUpdatedAt >= nextUpdatedAt) {
           skippedCount += 1
           continue
         }
