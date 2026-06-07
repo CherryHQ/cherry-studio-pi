@@ -178,6 +178,25 @@ describe('ErrorDiagnosisService', () => {
       )
     })
 
+    it('still diagnoses with CherryAI when reading the default model fails', async () => {
+      mockReadDefaultModel.mockRejectedValueOnce(new Error('default model unavailable'))
+      mockFetchGenerate.mockResolvedValue(
+        JSON.stringify({
+          summary: 'Error',
+          category: 'unknown',
+          explanation: 'Something went wrong.',
+          steps: []
+        })
+      )
+
+      const result = await diagnoseError(makeError(), 'en')
+
+      expect(result.summary).toBe('Error')
+      expect(mockFetchGenerate.mock.calls[0][0]).toEqual(
+        expect.objectContaining({ model: expect.objectContaining({ id: 'qwen' }) })
+      )
+    })
+
     it('includes context in error info', async () => {
       const mockResult = {
         summary: 'Error',

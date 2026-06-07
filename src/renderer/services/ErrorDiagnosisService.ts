@@ -37,8 +37,17 @@ async function getCherryAiFreeModel(): Promise<Model | undefined> {
   }
 }
 
+async function getDefaultDiagnosisModel(): Promise<Model | undefined> {
+  try {
+    return await readDefaultModel()
+  } catch (error) {
+    logger.warn('Failed to read default diagnosis model', error as Error)
+    return undefined
+  }
+}
+
 async function buildModelsToTry(context?: DiagnosisContext): Promise<Model[]> {
-  const defaultModel = await readDefaultModel()
+  const defaultModel = await getDefaultDiagnosisModel()
   const models: Model[] = []
 
   // CherryAI free model as primary diagnosis model
