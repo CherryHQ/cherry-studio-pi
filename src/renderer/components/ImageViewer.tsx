@@ -52,6 +52,9 @@ export async function getImageBlobFromSource(src: string): Promise<Blob> {
   }
 
   const response = await fetch(src)
+  if (!response.ok) {
+    throw new Error(`Failed to fetch image: HTTP ${response.status}`)
+  }
   return response.blob()
 }
 

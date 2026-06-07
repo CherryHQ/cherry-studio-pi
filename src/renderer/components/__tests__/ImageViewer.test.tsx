@@ -48,6 +48,8 @@ describe('ImageViewer', () => {
 
     mocks.convertImageToPng.mockImplementation(async (blob: Blob) => blob)
     mocks.fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
       blob: async () => new Blob(['remote'], { type: 'image/webp' })
     })
     mocks.fsRead.mockResolvedValue(new Uint8Array([1, 2, 3]))
@@ -129,5 +131,17 @@ describe('ImageViewer', () => {
 
     expect(mocks.fetch).toHaveBeenCalledWith('https://example.com/image.webp')
     expect(blob.type).toBe('image/webp')
+  })
+
+  it('rejects failed remote image responses before copying/downloading blobs', async () => {
+    mocks.fetch.mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      blob: async () => new Blob(['not found'], { type: 'text/html' })
+    })
+
+    await expect(getImageBlobFromSource('https://example.com/missing.png')).rejects.toThrow(
+      'Failed to fetch image: HTTP 404'
+    )
   })
 })
