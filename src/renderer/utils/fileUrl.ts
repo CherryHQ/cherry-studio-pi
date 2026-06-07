@@ -1,4 +1,8 @@
 export function fileUrlToPath(value: string | URL): string {
+  if (typeof value === 'string' && !value.startsWith('file://')) {
+    return value
+  }
+
   const url = typeof value === 'string' ? new URL(value) : value
   if (url.protocol !== 'file:') return typeof value === 'string' ? value : url.toString()
 

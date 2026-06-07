@@ -18,4 +18,8 @@ describe('fileUrlToPath', () => {
   it('passes non-file URLs through unchanged', () => {
     expect(fileUrlToPath('https://example.com/file.pdf')).toBe('https://example.com/file.pdf')
   })
+
+  it('passes plain local paths through unchanged', () => {
+    expect(fileUrlToPath('/Users/me/My File.pdf')).toBe('/Users/me/My File.pdf')
+  })
 })
