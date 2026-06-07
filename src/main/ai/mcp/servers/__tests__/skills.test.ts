@@ -95,7 +95,13 @@ describe('SkillsServer', () => {
       const server = createServer('agent_1')
       const result = await callTool(server, { action: 'search', query: 'github pr' })
 
-      expect(mockNetFetch).toHaveBeenCalledWith(expect.stringContaining('/api/skills'), { method: 'GET' })
+      expect(mockNetFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/skills'),
+        expect.objectContaining({
+          method: 'GET',
+          signal: expect.any(AbortSignal)
+        })
+      )
       expect(result.content[0].text).toContain('gh-create-pr')
       expect(result.content[0].text).toContain('test-owner/test-repo/gh-create-pr')
     })

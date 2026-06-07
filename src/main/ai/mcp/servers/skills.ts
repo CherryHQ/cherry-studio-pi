@@ -10,6 +10,7 @@ import { net } from 'electron'
 const logger = loggerService.withContext('MCPServer:Skills')
 
 const MARKETPLACE_BASE_URL = 'https://claude-plugins.dev'
+const SKILLS_MARKETPLACE_TIMEOUT_MS = 10_000
 
 type SkillSearchResult = {
   name: string
@@ -155,7 +156,10 @@ class SkillsServer {
     url.searchParams.set('limit', '20')
     url.searchParams.set('offset', '0')
 
-    const response = await net.fetch(url.toString(), { method: 'GET' })
+    const response = await net.fetch(url.toString(), {
+      method: 'GET',
+      signal: AbortSignal.timeout(SKILLS_MARKETPLACE_TIMEOUT_MS)
+    })
     if (!response.ok) {
       throw new Error(`Marketplace API returned ${response.status}: ${response.statusText}`)
     }
