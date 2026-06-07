@@ -120,6 +120,7 @@ describe('ContentSearch', () => {
       expect(screen.getByText('0/0')).toBeInTheDocument()
     })
     expect(screen.queryByText('/')).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText('chat.assistant.search.placeholder')).toHaveValue('')
 
     target.remove()
   })

@@ -4,7 +4,7 @@ import NarrowLayout from '@renderer/pages/home/Messages/NarrowLayout'
 import { classNames, scrollElementIntoView } from '@renderer/utils'
 import { debounce } from 'lodash'
 import { CaseSensitive, ChevronDown, ChevronUp, User, WholeWord, X } from 'lucide-react'
-import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface Props {
@@ -153,7 +153,6 @@ export const ContentSearch = React.forwardRef<ContentSearchRef, Props>(
     const [isWholeWord, setIsWholeWord] = useState(false)
     const [allRanges, setAllRanges] = useState<Range[]>([])
     const [currentIndex, setCurrentIndex] = useState(-1)
-    const prevSearchText = useRef('')
     const { t } = useTranslation()
 
     const resetSearch = useCallback(() => {
@@ -161,6 +160,12 @@ export const ContentSearch = React.forwardRef<ContentSearchRef, Props>(
       setAllRanges([])
       setCurrentIndex(-1)
       setSearchCompleted(SearchCompletedState.NotSearched)
+    }, [])
+
+    const clearSearchInput = useCallback(() => {
+      if (searchInputRef.current) {
+        searchInputRef.current.value = ''
+      }
     }, [])
 
     const locateByIndex = useCallback(
@@ -212,6 +217,7 @@ export const ContentSearch = React.forwardRef<ContentSearchRef, Props>(
       () => ({
         disable: () => {
           setEnableContentSearch(false)
+          clearSearchInput()
           resetSearch()
         },
         enable: (initialText?: string) => {
@@ -258,7 +264,7 @@ export const ContentSearch = React.forwardRef<ContentSearchRef, Props>(
           searchInputRef.current?.focus()
         }
       }),
-      [allRanges.length, locateByIndex, resetSearch, search]
+      [allRanges.length, clearSearchInput, locateByIndex, resetSearch, search]
     )
 
     const _searchHandlerDebounce = useMemo(() => debounce(implementation.search, 300), [implementation.search])
@@ -281,7 +287,6 @@ export const ContentSearch = React.forwardRef<ContentSearchRef, Props>(
         } else {
           searchHandler()
         }
-        prevSearchText.current = value
       },
       [searchHandler, resetSearch]
     )
