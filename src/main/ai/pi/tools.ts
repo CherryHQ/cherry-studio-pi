@@ -912,6 +912,9 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
         const input = params as ToolParams
         const filePath = resolveAllowedPath(input.file_path ?? input.path, cwd)
         await ensurePathAccess('Edit', toolCallId, input, [filePath], 'write', signal)
+        if (!input.old_string) {
+          return errorTextResult('Edit failed: old_string must be a non-empty string', { path: filePath })
+        }
         const current = await fs.readFile(filePath, 'utf8')
         if (!current.includes(input.old_string)) {
           return errorTextResult(

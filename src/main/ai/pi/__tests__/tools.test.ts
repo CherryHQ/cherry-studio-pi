@@ -93,6 +93,23 @@ describe('Pi tools', () => {
     expect(await fs.readFile(filePath, 'utf8')).toBe('same\nsame\n')
   })
 
+  it('rejects empty Edit search strings before rewriting files', async () => {
+    const filePath = path.join(tmpDir, 'sample.txt')
+    await fs.writeFile(filePath, 'abc', 'utf8')
+
+    const edit = getTool('Edit', tmpDir, [tmpDir])
+    const result = await edit.execute('edit-empty', {
+      file_path: filePath,
+      old_string: '',
+      new_string: '-',
+      replace_all: true
+    })
+
+    expect(result.details).toMatchObject({ isError: true })
+    expect(resultText(result)).toContain('old_string must be a non-empty string')
+    expect(await fs.readFile(filePath, 'utf8')).toBe('abc')
+  })
+
   it('matches root files with globstar patterns', async () => {
     await fs.writeFile(path.join(tmpDir, 'root.ts'), 'root', 'utf8')
     await fs.mkdir(path.join(tmpDir, 'nested'))
