@@ -1111,6 +1111,54 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('prefers a newer latestSnapshot fallback even when snapshots is stale', async () => {
+    const listedSnapshot = {
+      id: 'listed-old',
+      fileName: 'listed-old.zip',
+      path: 'backups/listed-old.zip',
+      byteSize: 3,
+      createdAt: new Date(1760000000000).toISOString(),
+      uploadedAt: 1760000000000,
+      deviceId: 'remote-device',
+      format: 'cherry-studio-direct-backup-zip'
+    }
+    const latestSnapshot = {
+      id: 'latest-only',
+      fileName: 'latest-only.zip',
+      path: 'backups/latest-only.zip',
+      byteSize: 6,
+      createdAt: new Date(1760000002000).toISOString(),
+      uploadedAt: 1760000002000,
+      deviceId: 'remote-device',
+      format: 'cherry-studio-direct-backup-zip'
+    }
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 2,
+        updatedAt: 1760000002000,
+        records: {},
+        latestSnapshot,
+        snapshots: {
+          [listedSnapshot.id]: listedSnapshot
+        }
+      })
+    )
+    mocks.remoteFiles.set('/remote-root/sync/v1/backups/listed-old.zip', Buffer.from('old'))
+    mocks.remoteFiles.set('/remote-root/sync/v1/backups/latest-only.zip', Buffer.from('latest'))
+
+    await new AppDataSyncService().restoreLatestSnapshot(config)
+
+    expect(mocks.webdav.getFileContents).toHaveBeenCalledWith('/remote-root/sync/v1/backups/latest-only.zip', {
+      format: 'binary'
+    })
+    expect(mocks.backupManager.restore).toHaveBeenCalledWith(
+      undefined,
+      expect.stringContaining('latest-only.latest-only.zip')
+    )
+  })
+
   it('sanitizes remote safety snapshot file names before restoring', async () => {
     const snapshot = {
       id: 'remote snapshot',

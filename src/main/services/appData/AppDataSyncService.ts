@@ -622,6 +622,18 @@ function normalizeLatestSnapshotMeta(value: unknown): RemoteSnapshotMeta | null 
   return normalizeRemoteSnapshotMeta(value, 'latestSnapshot')
 }
 
+function selectLatestRemoteSnapshot(manifest: RemoteManifest): RemoteSnapshotMeta | null {
+  const snapshots = Object.values(manifest.snapshots ?? {}).filter((snapshot): snapshot is RemoteSnapshotMeta =>
+    Boolean(snapshot?.path && snapshot.fileName)
+  )
+
+  if (manifest.latestSnapshot?.path && manifest.latestSnapshot.fileName) {
+    snapshots.push(manifest.latestSnapshot)
+  }
+
+  return snapshots.sort((left, right) => right.uploadedAt - left.uploadedAt)[0] ?? null
+}
+
 function bufferFromRemote(value: string | Buffer | ArrayBuffer | unknown) {
   if (Buffer.isBuffer(value)) {
     return value
@@ -3870,10 +3882,7 @@ export class AppDataSyncService {
         label: '远端同步状态 manifest.json'
       })
     )
-    const snapshots = Object.values(manifest.snapshots ?? {})
-      .filter((snapshot): snapshot is RemoteSnapshotMeta => Boolean(snapshot?.path && snapshot.fileName))
-      .sort((left, right) => right.uploadedAt - left.uploadedAt)
-    const snapshot = snapshots[0] ?? manifest.latestSnapshot ?? null
+    const snapshot = selectLatestRemoteSnapshot(manifest)
 
     if (!snapshot) {
       throw new Error('No remote data snapshot is available')
