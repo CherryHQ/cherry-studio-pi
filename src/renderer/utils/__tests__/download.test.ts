@@ -188,7 +188,9 @@ describe('download', () => {
         download('https://example.com/file.pdf', 'custom.pdf')
         await waitForAsync()
 
-        expect(mockFetch).toHaveBeenCalledWith('https://example.com/file.pdf')
+        expect(mockFetch).toHaveBeenCalledWith('https://example.com/file.pdf', {
+          signal: expect.any(AbortSignal)
+        })
         expect(mockCreateObjectURL).toHaveBeenCalledWith(expect.any(Blob))
         expect(mockClick).toHaveBeenCalled()
       })

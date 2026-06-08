@@ -3,6 +3,7 @@ import i18n from '@renderer/i18n'
 
 const logger = loggerService.withContext('Utils:download')
 const OBJECT_URL_REVOKE_DELAY_MS = 1000
+const REMOTE_DOWNLOAD_TIMEOUT_MS = 30_000
 
 export const revokeObjectUrlLater = (url: string) => {
   const timer = setTimeout(() => URL.revokeObjectURL(url), OBJECT_URL_REVOKE_DELAY_MS)
@@ -44,7 +45,7 @@ export const download = (url: string, filename?: string) => {
   }
 
   // 处理普通 URL
-  fetch(url)
+  fetch(url, { signal: AbortSignal.timeout(REMOTE_DOWNLOAD_TIMEOUT_MS) })
     .then((response) => {
       if (!response.ok) {
         throw new Error(`HTTP error: ${response.status}`)
