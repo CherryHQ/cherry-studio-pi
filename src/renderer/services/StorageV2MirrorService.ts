@@ -21,6 +21,14 @@ type MirrorScheduleOptions = {
   protectExistingFromDefaults?: boolean
 }
 
+function getStorageV2Api() {
+  if (typeof window === 'undefined') {
+    return { hasWindow: false, api: null }
+  }
+
+  return { hasWindow: true, api: window.api?.storageV2 ?? null }
+}
+
 const MIRRORED_ACTION_PREFIXES = [
   'backup/',
   'codeTools/',
@@ -253,7 +261,8 @@ class StorageV2MirrorService {
 
     if (!this.hasStrictPendingWork()) return
 
-    if (!window.api?.storageV2) {
+    const { api } = getStorageV2Api()
+    if (!api) {
       throw new Error('Storage v2 API unavailable while Redux settings mirror work is pending')
     }
 
@@ -269,8 +278,11 @@ class StorageV2MirrorService {
   private async mirrorNow() {
     if (!this.latestGetState) return
 
-    if (!window.api?.storageV2) {
-      this.scheduleRetry()
+    const { hasWindow, api } = getStorageV2Api()
+    if (!api) {
+      if (hasWindow) {
+        this.scheduleRetry()
+      }
       return
     }
 
@@ -288,7 +300,7 @@ class StorageV2MirrorService {
     }
 
     try {
-      await window.api.storageV2.importLegacyReduxSnapshot(snapshot, {
+      await api.importLegacyReduxSnapshot(snapshot, {
         dryRun: false,
         pruneMissing,
         protectExistingFromDefaults

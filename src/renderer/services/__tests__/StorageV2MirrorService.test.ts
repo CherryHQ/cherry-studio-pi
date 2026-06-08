@@ -251,6 +251,23 @@ describe('StorageV2MirrorService', () => {
     })
   })
 
+  it('does not keep retrying after the renderer window has been torn down', async () => {
+    const { storageV2MirrorService } = await import('../StorageV2MirrorService')
+    storageV2MirrorService.scheduleStartupMirror(createState)
+
+    const originalWindow = globalThis.window
+    vi.stubGlobal('window', undefined)
+    try {
+      await storageV2MirrorService.flush()
+      await vi.advanceTimersByTimeAsync(1500)
+    } finally {
+      vi.stubGlobal('window', originalWindow)
+    }
+
+    expect(importLegacyReduxSnapshot).not.toHaveBeenCalled()
+    expect(storageV2MirrorService.getStatus().pendingCount).toBe(1)
+  })
+
   it('flushes high-value settings actions without waiting for debounce', async () => {
     const { storageV2MirrorService } = await import('../StorageV2MirrorService')
     const middleware = storageV2MirrorService.createMiddleware()({
