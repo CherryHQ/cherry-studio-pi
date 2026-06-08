@@ -3,8 +3,9 @@ import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { Client } from '@notionhq/client'
 import { useTheme } from '@renderer/context/ThemeProvider'
-import { formatErrorMessage } from '@renderer/utils/error'
+import { formatErrorMessage, formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { FC } from 'react'
+import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -20,16 +21,23 @@ const NotionSettings: FC = () => {
   const { t } = useTranslation()
   const { theme } = useTheme()
 
+  const showSaveFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    },
+    [t]
+  )
+
   const handleNotionTokenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setNotionApiKey(e.target.value)
+    void setNotionApiKey(e.target.value).catch(showSaveFailed)
   }
 
   const handleNotionDatabaseIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setNotionDatabaseID(e.target.value)
+    void setNotionDatabaseID(e.target.value).catch(showSaveFailed)
   }
 
   const handleNotionPageNameKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setNotionPageNameKey(e.target.value)
+    void setNotionPageNameKey(e.target.value).catch(showSaveFailed)
   }
 
   const handleNotionConnectionCheck = async () => {
@@ -60,7 +68,7 @@ const NotionSettings: FC = () => {
   }
 
   const handleNotionExportReasoningChange = (checked: boolean) => {
-    void setNotionExportReasoning(checked)
+    void setNotionExportReasoning(checked).catch(showSaveFailed)
   }
 
   const handleNotionTitleClick = () => {

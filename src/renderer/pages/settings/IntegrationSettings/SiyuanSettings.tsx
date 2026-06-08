@@ -2,7 +2,9 @@ import { Button, InfoTooltip, Input, RowFlex } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { useTheme } from '@renderer/context/ThemeProvider'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { FC } from 'react'
+import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -19,20 +21,27 @@ const SiyuanSettings: FC = () => {
   const { t } = useTranslation()
   const { theme } = useTheme()
 
+  const showSaveFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    },
+    [t]
+  )
+
   const handleApiUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setSiyuanApiUrl(e.target.value)
+    void setSiyuanApiUrl(e.target.value).catch(showSaveFailed)
   }
 
   const handleTokenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setSiyuanToken(e.target.value)
+    void setSiyuanToken(e.target.value).catch(showSaveFailed)
   }
 
   const handleBoxIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setSiyuanBoxId(e.target.value)
+    void setSiyuanBoxId(e.target.value).catch(showSaveFailed)
   }
 
   const handleRootPathChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setSiyuanRootPath(e.target.value)
+    void setSiyuanRootPath(e.target.value).catch(showSaveFailed)
   }
 
   const handleSiyuanHelpClick = () => {

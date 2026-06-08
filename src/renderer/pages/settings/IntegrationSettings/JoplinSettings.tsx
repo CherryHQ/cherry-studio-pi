@@ -2,8 +2,9 @@ import { Button, InfoTooltip, Input, RowFlex, Switch } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { useTheme } from '@renderer/context/ThemeProvider'
-import { formatErrorMessage } from '@renderer/utils/error'
+import { formatErrorMessage, formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { FC } from 'react'
+import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -27,19 +28,26 @@ const JoplinSettings: FC = () => {
   const { t } = useTranslation()
   const { theme } = useTheme()
 
+  const showSaveFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    },
+    [t]
+  )
+
   const handleJoplinTokenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setJoplinToken(e.target.value)
+    void setJoplinToken(e.target.value).catch(showSaveFailed)
   }
 
   const handleJoplinUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setJoplinUrl(e.target.value)
+    void setJoplinUrl(e.target.value).catch(showSaveFailed)
   }
 
   const handleJoplinUrlBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     let url = e.target.value
     if (url && !url.endsWith('/')) {
       url = `${url}/`
-      void setJoplinUrl(url)
+      void setJoplinUrl(url).catch(showSaveFailed)
     }
   }
 
@@ -73,7 +81,7 @@ const JoplinSettings: FC = () => {
   }
 
   const handleToggleJoplinExportReasoning = (checked: boolean) => {
-    void setJoplinExportReasoning(checked)
+    void setJoplinExportReasoning(checked).catch(showSaveFailed)
   }
 
   const handleJoplinHelpClick = () => {

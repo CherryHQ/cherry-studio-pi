@@ -2,8 +2,9 @@ import { Button, InfoTooltip, Input, RowFlex } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { useTheme } from '@renderer/context/ThemeProvider'
-import { formatErrorMessage } from '@renderer/utils/error'
+import { formatErrorMessage, formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { FC } from 'react'
+import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -25,12 +26,19 @@ const YuqueSettings: FC = () => {
   const [yuqueUrl, setYuqueUrl] = usePreference('data.integration.yuque.url')
   const [, setYuqueRepoId] = usePreference('data.integration.yuque.repo_id')
 
+  const showSaveFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    },
+    [t]
+  )
+
   const handleYuqueTokenChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setYuqueToken(e.target.value)
+    void setYuqueToken(e.target.value).catch(showSaveFailed)
   }
 
   const handleYuqueRepoUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    void setYuqueUrl(e.target.value)
+    void setYuqueUrl(e.target.value).catch(showSaveFailed)
   }
 
   const handleYuqueConnectionCheck = async () => {
