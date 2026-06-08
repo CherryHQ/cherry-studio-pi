@@ -251,7 +251,9 @@ export class JsonFileStorage implements IOAuthStorage {
   }
 
   async clear(): Promise<void> {
-    await this.clearStorageV2()
+    await this.clearStorageV2().catch((error) => {
+      logger.warn('Failed to mark OAuth storage as cleared in Storage v2:', error as Error)
+    })
 
     try {
       await fs.unlink(this.filePath)
