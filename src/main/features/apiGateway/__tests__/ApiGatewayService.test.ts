@@ -10,10 +10,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * preference-change handler is captured so the toggle can be driven directly.
  */
 
-const { mockStart, mockStop, captured } = vi.hoisted(() => ({
+const { mockLogger, mockStart, mockStop, captured } = vi.hoisted(() => ({
+  mockLogger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
   mockStart: vi.fn(),
   mockStop: vi.fn(),
   captured: { prefHandler: undefined as ((enabled: boolean) => void) | undefined }
+}))
+
+vi.mock('@logger', () => ({
+  loggerService: {
+    withContext: () => mockLogger
+  }
 }))
 
 vi.mock('../server', () => ({
@@ -50,6 +57,7 @@ beforeEach(() => {
   captured.prefHandler = undefined
   startResolvers = []
   rejectStart = false
+  vi.clearAllMocks()
   mockStart.mockReset()
   mockStop.mockReset()
   mockStart.mockImplementation(() =>
@@ -104,6 +112,20 @@ describe('ApiGatewayService reconcile', () => {
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(mockStart).toHaveBeenCalledTimes(1)
     expect(service.isActivated).toBe(false)
+  })
+
+  it('logs cleanup failures without masking the original activation error', async () => {
+    rejectStart = true
+    mockStop.mockRejectedValueOnce(new Error('cleanup failed'))
+    const service = new ApiGatewayService()
+    await service._doInit()
+
+    await expect(service.onActivate()).rejects.toThrow('port in use')
+
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Failed to stop partially activated API gateway',
+      expect.objectContaining({ message: 'cleanup failed' })
+    )
   })
 
   it('converges when a pref change opposes an in-flight direct IPC start (single owner)', async () => {

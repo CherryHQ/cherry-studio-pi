@@ -83,8 +83,13 @@ export class ApiGatewayService extends BaseService implements Activatable {
     } catch (error) {
       // Activatable failure contract: clean up partial state before throwing
       if (this.apiGateway) {
-        await this.apiGateway.stop().catch(() => {})
-        this.apiGateway = null
+        try {
+          await this.apiGateway.stop()
+        } catch (cleanupError) {
+          logger.warn('Failed to stop partially activated API gateway', cleanupError as Error)
+        } finally {
+          this.apiGateway = null
+        }
       }
       this.publishRunningState(false)
       throw error
