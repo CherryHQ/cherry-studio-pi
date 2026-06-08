@@ -1111,6 +1111,79 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('rejects oversized remote safety snapshots before downloading them', async () => {
+    const oversizedSnapshot = {
+      id: 'remote-big',
+      fileName: 'big-device.zip',
+      path: 'backups/big-device.zip',
+      byteSize: 2 * 1024 * 1024 * 1024 + 1,
+      createdAt: new Date(1760000000000).toISOString(),
+      uploadedAt: 1760000000000,
+      deviceId: 'remote-device',
+      format: 'cherry-studio-direct-backup-zip'
+    }
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 2,
+        updatedAt: 1760000000000,
+        records: {},
+        snapshots: {
+          [oversizedSnapshot.id]: oversizedSnapshot
+        }
+      })
+    )
+
+    await expect(new AppDataSyncService().restoreLatestSnapshot(config)).rejects.toThrow('远端安全快照过大')
+
+    expect(
+      mocks.webdav.getFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/backups/big-device.zip'))
+    ).toBe(false)
+    expect(mocks.backupManager.restore).not.toHaveBeenCalled()
+  })
+
+  it('checks the remote safety snapshot size before restoring it', async () => {
+    const snapshot = {
+      id: 'remote-stat-big',
+      fileName: 'stat-big-device.zip',
+      path: 'backups/stat-big-device.zip',
+      byteSize: 6,
+      createdAt: new Date(1760000000000).toISOString(),
+      uploadedAt: 1760000000000,
+      deviceId: 'remote-device',
+      format: 'cherry-studio-direct-backup-zip'
+    }
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 2,
+        updatedAt: 1760000000000,
+        records: {},
+        snapshots: {
+          [snapshot.id]: snapshot
+        }
+      })
+    )
+    const defaultStat = mocks.webdav.stat.getMockImplementation()
+    mocks.webdav.stat.mockImplementation(async (filePath: string) => {
+      if (filePath.endsWith('/backups/stat-big-device.zip')) {
+        return { size: 2 * 1024 * 1024 * 1024 + 1 }
+      }
+      return defaultStat?.(filePath)
+    })
+
+    await expect(new AppDataSyncService().restoreLatestSnapshot(config)).rejects.toThrow('远端安全快照过大')
+
+    expect(
+      mocks.webdav.getFileContents.mock.calls.some(([filePath]) =>
+        String(filePath).endsWith('/backups/stat-big-device.zip')
+      )
+    ).toBe(false)
+    expect(mocks.backupManager.restore).not.toHaveBeenCalled()
+  })
+
   it('applies downloaded remote app records to Storage v2 before legacy app.db', async () => {
     const events: string[] = []
     mocks.storageV2.upsertRecordSnapshot.mockImplementation(async () => {

@@ -314,6 +314,7 @@ const DATA_SYNC_REMOTE_ROOT = '/cherry-studio-pi'
 const DATA_SYNC_SUFFIX = '/sync/v1'
 const REMOTE_MANIFEST_MAX_BYTES = 16 * 1024 * 1024
 const REMOTE_APP_DATA_RECORD_MAX_BYTES = 2 * 1024 * 1024
+const REMOTE_SNAPSHOT_MAX_BYTES = 2 * 1024 * 1024 * 1024
 const SYNC_SPACE_KEY_FORMAT = 'cherry-sync-space-key-v1' as const
 const SYNC_SPACE_SECRET_ENCRYPTION = 'cherry-webdav-secret-sync-aes-256-gcm' as const
 const DATA_SYNC_TEMP_BACKUP_FILE_PATTERN = /^cherry-studio-pi\.data-sync\..+\.zip$/
@@ -587,11 +588,16 @@ function normalizeRemoteSnapshotMeta(value: unknown, id: string): RemoteSnapshot
     throw new Error(`远端安全快照 manifest 中的记录 ${id} 格式损坏。为避免清理或恢复错误快照，本次同步已停止。`)
   }
 
+  const byteSize = Number(value.byteSize)
+  if (!Number.isFinite(byteSize) || byteSize < 0) {
+    throw new Error(`远端安全快照 manifest 中的记录 ${id} 大小字段损坏。为避免恢复错误快照，本次同步已停止。`)
+  }
+
   return {
     id: value.id,
     fileName: value.fileName,
     path: normalizeRemoteSnapshotPath(value.path),
-    byteSize: Math.max(0, Number(value.byteSize) || 0),
+    byteSize,
     checksum: typeof value.checksum === 'string' && value.checksum ? value.checksum : undefined,
     createdAt: typeof value.createdAt === 'string' && value.createdAt ? value.createdAt : new Date(0).toISOString(),
     uploadedAt: Math.max(0, Number(value.uploadedAt) || 0),
@@ -3839,6 +3845,13 @@ export class AppDataSyncService {
     }
 
     const remotePath = path.posix.join(basePath, normalizeRemoteSnapshotPath(snapshot.path))
+    if (snapshot.byteSize > REMOTE_SNAPSHOT_MAX_BYTES) {
+      throw new RemoteSyncSizeLimitError(
+        `远端安全快照过大（${snapshot.byteSize} 字节，限制 ${REMOTE_SNAPSHOT_MAX_BYTES} 字节）。为避免长时间下载或占用过多内存，本次恢复已停止。`
+      )
+    }
+    await this.assertRemoteFileWithinByteLimit(client, remotePath, '远端安全快照', REMOTE_SNAPSHOT_MAX_BYTES)
+
     const backupContents = await runWebDavOperation(
       `downloading data sync snapshot ${remotePath}`,
       () => client.getFileContents(remotePath, { format: 'binary' }),
