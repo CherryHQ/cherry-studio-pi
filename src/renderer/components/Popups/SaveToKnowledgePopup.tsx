@@ -4,6 +4,7 @@ import {
   Combobox,
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -523,6 +524,15 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
                     : 'chat.save.knowledge.title'
               )}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            {t(
+              isNoteMode
+                ? 'notes.export_knowledge'
+                : isTopicMode
+                  ? 'chat.save.topic.knowledge.select.content.label'
+                  : 'chat.save.knowledge.select.content.title'
+            )}
+          </DialogDescription>
         </DialogHeader>
         {uiState.type === 'form' ? renderFormContent() : renderEmptyState()}
         <DialogFooter>
