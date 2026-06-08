@@ -63,9 +63,13 @@ const ApiGatewaySettings: FC = () => {
     return `cs-sk-${uuidv4()}`
   }
 
-  const regenerateApiKey = () => {
-    void setApiGatewayConfig({ apiKey: generateApiKey() })
-    window.toast.success(t('apiGateway.messages.apiKeyRegenerated'))
+  const regenerateApiKey = async () => {
+    try {
+      await setApiGatewayConfig({ apiKey: generateApiKey() })
+      window.toast.success(t('apiGateway.messages.apiKeyRegenerated'))
+    } catch {
+      window.toast.error(t('apiGateway.messages.operationFailed'))
+    }
   }
 
   const handlePortChange = (value: string) => {
@@ -189,7 +193,7 @@ const ApiGatewaySettings: FC = () => {
             />
             <ButtonGroup attached={false}>
               {!apiGatewayRunning && (
-                <Button variant="outline" onClick={regenerateApiKey}>
+                <Button variant="outline" onClick={() => void regenerateApiKey()}>
                   {t('apiGateway.actions.regenerate')}
                 </Button>
               )}
