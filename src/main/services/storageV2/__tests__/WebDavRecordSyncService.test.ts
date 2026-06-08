@@ -1417,6 +1417,39 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
   })
 
+  it('fails safe when the remote Storage v2 bundle counts are invalid', async () => {
+    const remote = makeSharedWebDavStore()
+    const bundlePath = '/remote-root/sync/v1/storage-v2/bundle/bad-count.json'
+    remote.files.set(
+      bundlePath,
+      JSON.stringify({
+        version: 1,
+        updatedAt: Date.parse('2026-05-29T12:00:00.000Z'),
+        records: {},
+        blobs: {}
+      })
+    )
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([settingsTable]).sync(remote.client as any, '/remote-root/sync/v1', {
+        version: 1,
+        blobs: {},
+        records: {},
+        bundle: {
+          version: 1,
+          path: 'storage-v2/bundle/bad-count.json',
+          valueHash: 'expected-bundle-hash',
+          recordCount: 'many',
+          blobCount: 0,
+          updatedAt: Date.parse('2026-05-29T12:00:00.000Z')
+        } as any
+      })
+    ).rejects.toThrow('远端 Storage v2 bundle manifest 记录 数量字段损坏')
+
+    expect(remote.client.getFileContents).not.toHaveBeenCalledWith(bundlePath, expect.anything())
+    expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
+  })
+
   it('fails safe when the remote Storage v2 bundle counts do not match the manifest', async () => {
     const remote = makeSharedWebDavStore()
     const remoteRow = {
@@ -3660,6 +3693,52 @@ describe('StorageV2WebDavRecordSyncService', () => {
         updatedAt: '2026-06-01T08:00:00.000Z'
       }
     })
+  })
+
+  it('fails safe when the remote secret vault count does not match the bundle', async () => {
+    const credentialRow: ProviderCredentialRow = {
+      provider_id: 'provider-1',
+      credential_kind: 'apiKey',
+      secret_ref: 'storage-v2://secret/provider/provider-1/apiKey',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      updated_by_device_id: 'device-a'
+    }
+    const deviceA = makeProviderCredentialDb({ credentials: [credentialRow] })
+    const deviceB = makeProviderCredentialDb({})
+    const service = new StorageV2WebDavRecordSyncService([providerCredentialTable])
+
+    mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({
+      'provider:provider-1:apiKey': {
+        value: 'sk-local-provider',
+        updatedAt: '2026-06-01T08:00:00.000Z'
+      }
+    })
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(deviceA.client as any)
+    const firstResult = await service.sync(
+      mocks.webdav as any,
+      '/remote-root/sync/v1',
+      { version: 1, blobs: {}, records: {} },
+      { secretKeyMaterial: 'dav-user:dav-password' }
+    )
+
+    mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({})
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(deviceB.client as any)
+    await expect(
+      service.sync(
+        mocks.webdav as any,
+        '/remote-root/sync/v1',
+        {
+          ...firstResult.manifest,
+          secrets: {
+            ...firstResult.manifest.secrets!,
+            secretCount: 2
+          }
+        },
+        { secretKeyMaterial: 'dav-user:dav-password' }
+      )
+    ).rejects.toThrow('远端敏感配置数量与 manifest 不一致')
+
+    expect(mocks.secretVault.importPlaintextSecrets).not.toHaveBeenCalled()
   })
 
   it('drops remote secret vault metadata when no current Storage v2 records reference secrets', async () => {

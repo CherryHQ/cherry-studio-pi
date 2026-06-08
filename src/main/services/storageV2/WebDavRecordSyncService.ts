@@ -276,6 +276,15 @@ function normalizeManifestObjectMap<T>(
   return Object.fromEntries(Object.entries(value).map(([id, entry]) => [id, normalizeEntry(id, entry)]))
 }
 
+function normalizeRemoteManifestCount(value: unknown, label: string) {
+  if (value == null) return 0
+  const count = Number(value)
+  if (!Number.isSafeInteger(count) || count < 0) {
+    throw new Error(`${label} 数量字段损坏。为避免导入或发布不完整数据，本次同步已停止。`)
+  }
+  return count
+}
+
 function normalizeRemoteRecordMetaMap(value: unknown) {
   return normalizeManifestObjectMap<RemoteRecordMeta>(value, '远端 Storage v2 records manifest', (id, entry) => {
     if (
@@ -369,14 +378,12 @@ function normalizeRemoteBundleMeta(value: unknown) {
     throw new Error('远端 Storage v2 bundle manifest 格式损坏。为避免导入不完整数据，本次同步已停止。')
   }
 
-  const recordCount = Number(value.recordCount ?? 0)
-  const blobCount = Number(value.blobCount ?? 0)
   return {
     version: 1,
     path: value.path,
     valueHash: value.valueHash,
-    recordCount: Number.isFinite(recordCount) && recordCount >= 0 ? recordCount : 0,
-    blobCount: Number.isFinite(blobCount) && blobCount >= 0 ? blobCount : 0,
+    recordCount: normalizeRemoteManifestCount(value.recordCount, '远端 Storage v2 bundle manifest 记录'),
+    blobCount: normalizeRemoteManifestCount(value.blobCount, '远端 Storage v2 bundle manifest 附件'),
     updatedAt: parseTime(value.updatedAt)
   } satisfies RemoteRecordBundleMeta
 }
@@ -394,12 +401,11 @@ function normalizeRemoteSecretMeta(value: unknown) {
     throw new Error('远端 Storage v2 敏感配置 manifest 格式损坏。为避免导入不完整模型密钥，本次同步已停止。')
   }
 
-  const secretCount = Number(value.secretCount ?? 0)
   return {
     version: 1,
     path: value.path,
     valueHash: value.valueHash,
-    secretCount: Number.isFinite(secretCount) && secretCount >= 0 ? secretCount : 0,
+    secretCount: normalizeRemoteManifestCount(value.secretCount, '远端 Storage v2 敏感配置 manifest'),
     updatedAt: parseTime(value.updatedAt),
     encryption: SECRET_SYNC_ENCRYPTION
   } satisfies RemoteSecretVaultMeta
@@ -1414,6 +1420,12 @@ export class StorageV2WebDavRecordSyncService {
     if (Object.keys(bundle.secrets).length > MAX_SYNC_SECRET_COUNT) {
       throw new Error(
         `远端敏感配置数量过多（${Object.keys(bundle.secrets).length} 项，限制 ${MAX_SYNC_SECRET_COUNT} 项）。为避免导入异常同步状态，本次同步已停止。`
+      )
+    }
+    const actualSecretCount = Object.keys(bundle.secrets).length
+    if (manifest.secrets.secretCount !== actualSecretCount) {
+      throw new Error(
+        `远端敏感配置数量与 manifest 不一致（${actualSecretCount}/${manifest.secrets.secretCount}）。为避免导入不完整模型密钥，本次同步已停止。`
       )
     }
 
