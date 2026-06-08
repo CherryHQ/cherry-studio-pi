@@ -190,10 +190,11 @@ describe('CodeCliService', () => {
 
     expect(service.getVersionInfo).not.toHaveBeenCalled()
     expect(spawn).toHaveBeenCalledWith(
-      'terminal',
+      expect.any(String),
       expect.any(Array),
       expect.objectContaining({
-        cwd: '/workspace'
+        cwd: '/workspace',
+        detached: true
       })
     )
   })

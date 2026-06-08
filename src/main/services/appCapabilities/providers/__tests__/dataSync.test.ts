@@ -326,7 +326,7 @@ describe('data sync app capabilities', () => {
         },
         { source: 'agent' }
       )
-    ).rejects.toThrow(/主窗口尚未就绪/)
+    ).rejects.toThrow(/main window is not ready/i)
 
     expect(mocks.appDataSyncService.syncNow).not.toHaveBeenCalled()
     expect(mocks.browserWindows[0].webContents.send).not.toHaveBeenCalled()

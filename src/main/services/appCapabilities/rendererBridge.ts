@@ -54,7 +54,7 @@ export async function callRendererBridge<T>(
     promise: withRendererBridgeTimeout(
       browserWindow.webContents.executeJavaScript(`typeof window[${bridgeName}] === 'function'`) as Promise<boolean>,
       options.checkTimeoutMs ?? DEFAULT_RENDERER_BRIDGE_CHECK_TIMEOUT_MS,
-      '等待主窗口响应超时'
+      'Timed out waiting for the main window to respond'
     )
       .then<RendererBridgeProbeResult>((hasBridge) => ({ hasBridge }))
       .catch<RendererBridgeProbeResult>((error) => ({ hasBridge: false, error }))
@@ -77,7 +77,7 @@ export async function callRendererBridge<T>(
       return await withRendererBridgeTimeout(
         probe.browserWindow.webContents.executeJavaScript(callScript),
         options.timeoutMs ?? DEFAULT_RENDERER_BRIDGE_CALL_TIMEOUT_MS,
-        options.timeoutMessage ?? '调用主窗口桥接能力超时'
+        options.timeoutMessage ?? 'Timed out calling the main window bridge'
       )
     } catch (error) {
       lastCallError = error
@@ -90,7 +90,7 @@ export async function callRendererBridge<T>(
   if (lastProbeError) {
     throw new Error(getBridgeErrorMessage(lastProbeError))
   }
-  throw new Error('主窗口尚未就绪，请打开主窗口后重试。')
+  throw new Error('The main window is not ready. Open the main window and try again.')
 }
 
 export async function readRendererStoreValue<T>(path: string): Promise<T> {
@@ -98,7 +98,7 @@ export async function readRendererStoreValue<T>(path: string): Promise<T> {
     RENDERER_GET_STORE_VALUE_BRIDGE,
     { path },
     {
-      timeoutMessage: `读取运行时状态超时：${path}`
+      timeoutMessage: `Timed out reading runtime state: ${path}`
     }
   )
 }

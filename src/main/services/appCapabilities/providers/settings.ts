@@ -195,7 +195,7 @@ export async function readSettingsForAgent() {
   let settings: Record<string, any> = {}
   try {
     settings = await callRendererBridge<Record<string, any>>(RENDERER_GET_SETTINGS_BRIDGE, undefined, {
-      timeoutMessage: '读取设置超时'
+      timeoutMessage: 'Timed out reading settings'
     })
   } catch {
     settings = {}
@@ -237,7 +237,7 @@ export async function persistSettingValue(keyPath: string, value: unknown) {
         }
       )
     } catch (error) {
-      throw new Error(`无法写入运行时设置：${getBridgeErrorMessage(error)}`)
+      throw new Error(`Failed to write runtime setting: ${getBridgeErrorMessage(error)}`)
     }
   }
 }

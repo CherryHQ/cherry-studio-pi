@@ -32,10 +32,10 @@ type DataSyncSettingsState = {
 async function getDataSyncSettings(): Promise<DataSyncSettingsState> {
   try {
     return await callRendererBridge<DataSyncBridgeSettings>(RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE, undefined, {
-      timeoutMessage: '读取同步设置超时'
+      timeoutMessage: 'Timed out reading data sync settings'
     })
   } catch (error) {
-    throw new Error(`无法读取同步设置：${getBridgeErrorMessage(error)}`)
+    throw new Error(`Failed to read data sync settings: ${getBridgeErrorMessage(error)}`)
   }
 }
 
@@ -138,10 +138,10 @@ async function prepareRendererStorageV2ForDataSync() {
   try {
     await callRendererBridge<void>(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE, undefined, {
       timeoutMs: RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS,
-      timeoutMessage: '同步前准备本机数据超时'
+      timeoutMessage: 'Timed out preparing local data before sync'
     })
   } catch (error) {
-    throw new Error(`同步前无法准备本机数据：${getBridgeErrorMessage(error)}`)
+    throw new Error(`Failed to prepare local data before sync: ${getBridgeErrorMessage(error)}`)
   }
 }
 
@@ -161,10 +161,10 @@ async function persistWebDavConfig(config: WebDavConfig, options: { autoSync?: b
 
   try {
     await callRendererBridge<DataSyncBridgeSettings>(RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE, settings, {
-      timeoutMessage: '保存同步设置超时'
+      timeoutMessage: 'Timed out saving data sync settings'
     })
   } catch (error) {
-    throw new Error(`无法保存同步设置：${getBridgeErrorMessage(error)}`)
+    throw new Error(`Failed to save data sync settings: ${getBridgeErrorMessage(error)}`)
   }
 }
 
