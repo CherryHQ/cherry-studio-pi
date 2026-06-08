@@ -18,6 +18,7 @@ import {
 import { usePreference } from '@data/hooks/usePreference'
 import { ResetIcon } from '@renderer/components/Icons'
 import { TopView } from '@renderer/components/TopView'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { CircleHelp } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -33,9 +34,16 @@ export const TopicNamingSettings = () => {
   const [topicNamingPrompt, setTopicNamingPrompt] = usePreference('topic.naming_prompt')
   const { t } = useTranslation()
 
+  const showSaveFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    },
+    [t]
+  )
+
   const handleReset = useCallback(() => {
-    void setTopicNamingPrompt('')
-  }, [setTopicNamingPrompt])
+    void setTopicNamingPrompt('').catch(showSaveFailed)
+  }, [setTopicNamingPrompt, showSaveFailed])
 
   return (
     <section>
@@ -44,7 +52,10 @@ export const TopicNamingSettings = () => {
       <ColFlex className="items-stretch rounded-md border border-border-muted">
         <RowFlex className="min-h-11 items-center justify-between gap-4 px-3 py-2.5">
           <div className="font-medium text-foreground text-sm">{t('settings.models.topic_naming.auto')}</div>
-          <Switch checked={enableTopicNaming} onCheckedChange={setEnableTopicNaming} />
+          <Switch
+            checked={enableTopicNaming}
+            onCheckedChange={(checked) => void setEnableTopicNaming(checked).catch(showSaveFailed)}
+          />
         </RowFlex>
 
         <Divider className="m-0" />
@@ -82,7 +93,7 @@ export const TopicNamingSettings = () => {
             rows={3}
             className="max-h-60 min-h-28 w-full resize-y text-sm leading-5"
             value={topicNamingPrompt || t('prompts.title')}
-            onChange={(e) => void setTopicNamingPrompt(e.target.value)}
+            onChange={(e) => void setTopicNamingPrompt(e.target.value).catch(showSaveFailed)}
             placeholder={t('prompts.title')}
           />
         </div>

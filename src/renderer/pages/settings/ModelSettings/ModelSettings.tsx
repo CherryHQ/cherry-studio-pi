@@ -8,6 +8,7 @@ import { useDefaultModel } from '@renderer/hooks/useModel'
 import { useProviders } from '@renderer/hooks/useProvider'
 import { TranslateSettingsPanelContent } from '@renderer/pages/translate/TranslateSettings'
 import { cn } from '@renderer/utils'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { TRANSLATE_PROMPT } from '@shared/config/prompts'
 import { type Model, parseUniqueModelId } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
@@ -143,32 +144,39 @@ const ModelSettings: FC<ModelSettingsProps> = ({
 
   const modelFilter = useCallback((model: Model) => !isNonChatModel(model), [])
 
+  const showSaveFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    },
+    [t]
+  )
+
   const onSelectDefault = useCallback(
     (selected: Model | undefined) => {
       if (!selected) return
-      void setDefaultModel(selected)
+      void setDefaultModel(selected).catch(showSaveFailed)
     },
-    [setDefaultModel]
+    [setDefaultModel, showSaveFailed]
   )
 
   const onSelectQuick = useCallback(
     (selected: Model | undefined) => {
       if (!selected) return
-      void setQuickModel(selected)
+      void setQuickModel(selected).catch(showSaveFailed)
     },
-    [setQuickModel]
+    [setQuickModel, showSaveFailed]
   )
 
   const onSelectTranslate = useCallback(
     (selected: Model | undefined) => {
       if (!selected) return
-      void setTranslateModel(selected)
+      void setTranslateModel(selected).catch(showSaveFailed)
     },
-    [setTranslateModel]
+    [setTranslateModel, showSaveFailed]
   )
 
   const onResetTranslatePrompt = () => {
-    void setTranslateModelPrompt(TRANSLATE_PROMPT)
+    void setTranslateModelPrompt(TRANSLATE_PROMPT).catch(showSaveFailed)
   }
 
   const closePanel = useCallback(() => {
