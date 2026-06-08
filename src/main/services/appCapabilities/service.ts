@@ -12,6 +12,13 @@ import type {
 
 const logger = loggerService.withContext('AppCapabilityService')
 
+function abortReasonMessage(signal: AbortSignal) {
+  const reason = signal.reason
+  if (reason instanceof Error && reason.message) return reason.message
+  if (typeof reason === 'string' && reason.trim()) return reason.trim()
+  return 'Capability call aborted'
+}
+
 export class AppCapabilityService {
   private readonly registry = new AppCapabilityRegistry()
   private initialized = false
@@ -52,6 +59,16 @@ export class AppCapabilityService {
         isError: true,
         summary: `Capability not found: ${displayCapabilityId}`,
         error: `Capability not found: ${displayCapabilityId}`
+      }
+    }
+
+    if (context.signal?.aborted) {
+      const message = abortReasonMessage(context.signal)
+      return {
+        ok: false,
+        isError: true,
+        summary: `${capabilityId} aborted: ${message}`,
+        error: message
       }
     }
 

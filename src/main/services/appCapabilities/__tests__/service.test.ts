@@ -56,4 +56,20 @@ describe('AppCapabilityService', () => {
       error: 'Capability not found: (empty)'
     })
   })
+
+  it('short-circuits calls when the signal is already aborted', async () => {
+    executeCapability.mockClear()
+    const service = new AppCapabilityService()
+    const controller = new AbortController()
+    controller.abort(new Error('user stopped task'))
+
+    await expect(service.call('settings.read', {}, { source: 'agent', signal: controller.signal })).resolves.toEqual({
+      ok: false,
+      isError: true,
+      summary: 'settings.read aborted: user stopped task',
+      error: 'user stopped task'
+    })
+
+    expect(executeCapability).not.toHaveBeenCalled()
+  })
 })
