@@ -287,7 +287,6 @@ export function isCreatePayloadValid(form: AgentFormState): boolean {
   return validateAgentCreateForm(form).isValid
 }
 
-/**
 /** Result of {@link diffAgentUpdate}. */
 export interface AgentDiffResult {
   dto: UpdateAgentDto
