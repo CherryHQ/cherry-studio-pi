@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { parseCurrentVersion, parseUpdateStatus } from '../OpenClawService'
+import { parseCurrentVersion, parseUpdateStatus, parseWindowsNetstatListeningPids } from '../OpenClawService'
 
 // --- Mocks for OpenClawService dependencies ---
 
@@ -511,5 +511,20 @@ describe('parseUpdateStatus', () => {
         "unrelated output": null,
       }
     `)
+  })
+})
+
+describe('parseWindowsNetstatListeningPids', () => {
+  it('returns unique listening PIDs for the requested port', () => {
+    const output = [
+      '  Proto  Local Address          Foreign Address        State           PID',
+      '  TCP    0.0.0.0:18790          0.0.0.0:0              LISTENING       1234',
+      '  TCP    [::]:18790             [::]:0                 LISTENING       1234',
+      '  TCP    127.0.0.1:18791        0.0.0.0:0              LISTENING       9876',
+      '  TCP    127.0.0.1:18790        127.0.0.1:51230        ESTABLISHED     5678',
+      '  UDP    0.0.0.0:18790          *:*                                    4321'
+    ].join('\r\n')
+
+    expect(parseWindowsNetstatListeningPids(output, 18790)).toEqual(['1234'])
   })
 })

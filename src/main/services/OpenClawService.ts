@@ -1,4 +1,4 @@
-import { execSync, spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import { Socket } from 'node:net'
@@ -18,6 +18,8 @@ import { IpcChannel } from '@shared/IpcChannel'
 import { formatApiHost, hasAPIVersion, withoutTrailingSlash } from '@shared/utils'
 import type { Model, Provider, ProviderType, VertexProvider } from '@types'
 
+import { storageV2SecretVaultService } from './storageV2/SecretVaultService'
+import { storageV2SettingsRepository } from './storageV2/StorageV2Repositories'
 import { vertexAiService } from './VertexAiService'
 
 const logger = loggerService.withContext('OpenClawService')
@@ -56,12 +58,62 @@ export function parseUpdateStatus(statusOutput: string): string | null {
   return null
 }
 
+export function parseWindowsNetstatListeningPids(output: string, port: number): string[] {
+  const pids = new Set<string>()
+
+  for (const line of output.split(/\r?\n/)) {
+    const match = line.trim().match(/^TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)$/i)
+    if (match?.[1] === String(port)) {
+      pids.add(match[2])
+    }
+  }
+
+  return [...pids]
+}
+
 const OPENCLAW_CONFIG_DIR = path.join(os.homedir(), '.openclaw')
 const OPENCLAW_CONFIG_PATH = path.join(OPENCLAW_CONFIG_DIR, 'openclaw.json')
 const OPENCLAW_CONFIG_BAK_PATH = path.join(OPENCLAW_CONFIG_DIR, 'openclaw.json.bak')
 const OPENCLAW_LEGACY_CONFIG_PATH = path.join(OPENCLAW_CONFIG_DIR, 'openclaw.cherry.json')
 const SYMLINK_PATH = '/usr/local/bin/openclaw'
 const DEFAULT_GATEWAY_PORT = 18790
+const STORAGE_V2_OPENCLAW_SCOPE = 'openclaw'
+const STORAGE_V2_OPENCLAW_OWNER = 'default'
+const STORAGE_V2_OPENCLAW_CONFIG_KIND = 'config'
+const STORAGE_V2_OPENCLAW_CONFIG_SETTING_KEY = 'openclaw.config'
+
+type OpenClawConfigStorageV2Setting = {
+  configSecretRef?: string
+  updatedAt?: string
+}
+
+function queryWindowsUserPath(): string {
+  const regQuery = execFileSync('reg', ['query', 'HKCU\\Environment', '/v', 'Path'], { encoding: 'utf-8' })
+  return regQuery.match(/Path\s+REG_\w+\s+(.*)/)?.[1]?.trim() || ''
+}
+
+function setWindowsUserPath(value: string): void {
+  execFileSync('reg', ['add', 'HKCU\\Environment', '/v', 'Path', '/t', 'REG_EXPAND_SZ', '/d', value, '/f'], {
+    stdio: 'ignore'
+  })
+}
+
+function deleteWindowsUserPath(): void {
+  execFileSync('reg', ['delete', 'HKCU\\Environment', '/v', 'Path', '/f'], { stdio: 'ignore' })
+}
+
+function refreshWindowsPathEnvironment(): void {
+  execFileSync('setx', ['OPENCLAW_PATH_REFRESH', ''], { stdio: 'ignore' })
+}
+
+function getWindowsListeningPids(port: number): string[] {
+  const output = execFileSync('netstat', ['-ano'], { encoding: 'utf-8' })
+  return parseWindowsNetstatListeningPids(output, port)
+}
+
+function killWindowsProcess(pid: string): void {
+  execFileSync('taskkill', ['/PID', pid, '/F'], { stdio: 'ignore' })
+}
 
 export type GatewayStatus = 'stopped' | 'starting' | 'running' | 'error'
 
@@ -243,18 +295,17 @@ export class OpenClawService extends BaseService {
     if (isWin) {
       const binDir = await getBinaryPath()
       try {
-        const regQuery = execSync('reg query "HKCU\\Environment" /v Path', { encoding: 'utf-8' })
-        const currentPath = regQuery.match(/Path\s+REG_\w+\s+(.*)/)?.[1]?.trim() || ''
+        const currentPath = queryWindowsUserPath()
         if (!currentPath.split(';').some((p) => p.toLowerCase() === binDir.toLowerCase())) {
           const newPath = currentPath ? `${currentPath};${binDir}` : binDir
-          execSync(`reg add "HKCU\\Environment" /v Path /t REG_EXPAND_SZ /d "${newPath}" /f`)
+          setWindowsUserPath(newPath)
           // Broadcast WM_SETTINGCHANGE so new shells pick up the change
-          execSync('setx OPENCLAW_PATH_REFRESH ""')
+          refreshWindowsPathEnvironment()
           logger.info(`Added ${binDir} to user PATH`)
         }
       } catch {
         // User PATH key may not exist yet
-        execSync(`reg add "HKCU\\Environment" /v Path /t REG_EXPAND_SZ /d "${binDir}" /f`)
+        setWindowsUserPath(binDir)
         logger.info(`Created user PATH with ${binDir}`)
       }
     } else {
@@ -278,14 +329,13 @@ export class OpenClawService extends BaseService {
     if (isWin) {
       const binDir = await getBinaryPath()
       try {
-        const regQuery = execSync('reg query "HKCU\\Environment" /v Path', { encoding: 'utf-8' })
-        const currentPath = regQuery.match(/Path\s+REG_\w+\s+(.*)/)?.[1]?.trim() || ''
+        const currentPath = queryWindowsUserPath()
         const parts = currentPath.split(';').filter((p) => p.toLowerCase() !== binDir.toLowerCase())
         const newPath = parts.join(';')
         if (newPath) {
-          execSync(`reg add "HKCU\\Environment" /v Path /t REG_EXPAND_SZ /d "${newPath}" /f`)
+          setWindowsUserPath(newPath)
         } else {
-          execSync('reg delete "HKCU\\Environment" /v Path /f')
+          deleteWindowsUserPath()
         }
         logger.info(`Removed ${binDir} from user PATH`)
       } catch {
@@ -563,24 +613,18 @@ export class OpenClawService extends BaseService {
     const currentPid = process.pid
     try {
       if (isWin) {
-        const output = execSync(`netstat -ano | findstr ":${this.gatewayPort}"`, { encoding: 'utf-8' })
-        const pids = new Set<string>()
-        for (const line of output.split('\n')) {
-          const match = line.trim().match(/LISTENING\s+(\d+)/)
-          if (match && Number(match[1]) !== currentPid) {
-            pids.add(match[1])
-          }
-        }
-        for (const pid of pids) {
+        for (const pid of getWindowsListeningPids(this.gatewayPort)) {
+          if (Number(pid) === currentPid) continue
+
           try {
-            execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' })
+            killWindowsProcess(pid)
             logger.info(`Killed process ${pid} on port ${this.gatewayPort}`)
           } catch {
             // ignore
           }
         }
       } else {
-        execSync('pkill -9 openclaw', { stdio: 'ignore' })
+        execFileSync('pkill', ['-9', 'openclaw'], { stdio: 'ignore' })
         logger.info('Killed all openclaw processes')
       }
     } catch {
@@ -784,6 +828,54 @@ export class OpenClawService extends BaseService {
     return crypto.randomBytes(24).toString('base64url')
   }
 
+  private getStorageV2ConfigSecretRef(setting: unknown): string | null {
+    if (!setting || typeof setting !== 'object' || Array.isArray(setting)) {
+      return null
+    }
+
+    const secretRef = (setting as OpenClawConfigStorageV2Setting).configSecretRef
+    return typeof secretRef === 'string' && secretRef ? secretRef : null
+  }
+
+  private async readConfigSnapshotFromStorageV2(): Promise<OpenClawConfig | null> {
+    const setting = await storageV2SettingsRepository.get(STORAGE_V2_OPENCLAW_CONFIG_SETTING_KEY)
+    const secretRef = this.getStorageV2ConfigSecretRef(setting)
+    if (!secretRef) {
+      return null
+    }
+
+    const content = await storageV2SecretVaultService.getSecret(secretRef)
+    if (!content) {
+      return null
+    }
+
+    try {
+      const config = JSON.parse(content)
+      return config && typeof config === 'object' && !Array.isArray(config) ? (config as OpenClawConfig) : null
+    } catch (error) {
+      logger.warn('Failed to parse OpenClaw config snapshot from Storage v2', error as Error)
+      return null
+    }
+  }
+
+  private async saveConfigSnapshotToStorageV2(config: OpenClawConfig): Promise<void> {
+    const secretRef = await storageV2SecretVaultService.setSecret(
+      STORAGE_V2_OPENCLAW_SCOPE,
+      STORAGE_V2_OPENCLAW_OWNER,
+      STORAGE_V2_OPENCLAW_CONFIG_KIND,
+      JSON.stringify(config, null, 2)
+    )
+
+    await storageV2SettingsRepository.set(
+      STORAGE_V2_OPENCLAW_CONFIG_SETTING_KEY,
+      {
+        configSecretRef: secretRef,
+        updatedAt: new Date().toISOString()
+      } satisfies OpenClawConfigStorageV2Setting,
+      STORAGE_V2_OPENCLAW_SCOPE
+    )
+  }
+
   /**
    * Sync Cherry Studio Provider configuration to OpenClaw
    */
@@ -813,6 +905,8 @@ export class OpenClawService extends BaseService {
         } catch {
           logger.warn('Failed to parse existing OpenClaw config, creating new one')
         }
+      } else {
+        config = (await this.readConfigSnapshotFromStorageV2()) ?? {}
       }
 
       // Build provider key
@@ -877,7 +971,7 @@ export class OpenClawService extends BaseService {
       config.gateway.mode = 'local'
       config.gateway.port = this.gatewayPort
       // Auto-generate auth token if not already set, and store it for API calls
-      const token = this.gatewayAuthToken || this.generateAuthToken()
+      const token = this.gatewayAuthToken || config.gateway.auth?.token || this.generateAuthToken()
       config.gateway.auth = { token }
       this.gatewayAuthToken = token
 
@@ -890,6 +984,8 @@ export class OpenClawService extends BaseService {
       config.agents.defaults.model = {
         primary: `${providerKey}/${primaryModel.id}`
       }
+
+      await this.saveConfigSnapshotToStorageV2(config)
 
       // Write config file
       fs.writeFileSync(OPENCLAW_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
