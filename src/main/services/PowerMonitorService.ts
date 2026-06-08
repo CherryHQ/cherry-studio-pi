@@ -94,8 +94,13 @@ export class PowerMonitorService extends BaseService {
 
       ElectronShutdownHandler.on('shutdown', async () => {
         logger.info('System shutdown event detected (Windows)')
-        await this.executeShutdownHandlers()
-        ElectronShutdownHandler.releaseShutdown()
+        try {
+          await this.executeShutdownHandlers()
+        } catch (error) {
+          logger.error('Unexpected error while executing Windows shutdown handlers', error as Error)
+        } finally {
+          ElectronShutdownHandler.releaseShutdown()
+        }
       })
 
       this.registerDisposable(() => {

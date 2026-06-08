@@ -131,6 +131,18 @@ describe('PowerMonitorService', () => {
       expect(mockShutdownHandlerOn).toHaveBeenCalledWith('shutdown', expect.any(Function))
       expect((service as any)._disposables.length).toBeGreaterThan(0)
     })
+
+    it('should release Windows shutdown even if handler execution unexpectedly fails', async () => {
+      const service = createService()
+      await (service as any).onInit()
+
+      vi.spyOn(service as any, 'executeShutdownHandlers').mockRejectedValueOnce(new Error('unexpected failure'))
+      const shutdownCallback = mockShutdownHandlerOn.mock.calls[0][1]
+
+      await shutdownCallback()
+
+      expect(mockReleaseShutdown).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('registerShutdownHandler', () => {
