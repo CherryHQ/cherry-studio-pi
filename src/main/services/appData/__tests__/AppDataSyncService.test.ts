@@ -1111,6 +1111,38 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('sanitizes remote safety snapshot file names before restoring', async () => {
+    const snapshot = {
+      id: 'remote snapshot',
+      fileName: '../../bad:name?.zip',
+      path: 'backups/remote-device.zip',
+      byteSize: 6,
+      createdAt: new Date(1760000000000).toISOString(),
+      uploadedAt: 1760000000000,
+      deviceId: 'remote-device',
+      format: 'cherry-studio-direct-backup-zip'
+    }
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 2,
+        updatedAt: 1760000000000,
+        records: {},
+        snapshots: {
+          [snapshot.id]: snapshot
+        }
+      })
+    )
+    mocks.remoteFiles.set('/remote-root/sync/v1/backups/remote-device.zip', Buffer.from('latest'))
+
+    await new AppDataSyncService().restoreLatestSnapshot(config)
+
+    expect(path.basename(mocks.backupManager.restore.mock.calls[0]?.[1] as string)).toBe(
+      'remote-snapshot.bad-name-.zip'
+    )
+  })
+
   it('rejects oversized remote safety snapshots before downloading them', async () => {
     const oversizedSnapshot = {
       id: 'remote-big',

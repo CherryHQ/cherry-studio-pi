@@ -650,6 +650,19 @@ function snapshotFileName(deviceId: string, uploadedAt: number) {
   return `cherry-studio-pi.data-sync.${safeFileSegment(deviceId)}.${uploadedAt}.zip`
 }
 
+function safeSnapshotRestoreFileName(snapshot: RemoteSnapshotMeta) {
+  const idSegment = safeFileSegment(snapshot.id).slice(0, 80) || 'snapshot'
+  const rawBaseName = path.win32.basename(path.posix.basename(String(snapshot.fileName ?? '').replace(/\0/g, '')))
+  const sanitizedBaseName = rawBaseName.replace(/[<>:"/\\|?*\u0000-\u001F]/g, '-').trim()
+  const clippedBaseName =
+    sanitizedBaseName && sanitizedBaseName !== '.' && sanitizedBaseName !== '..'
+      ? sanitizedBaseName.slice(0, 160)
+      : 'snapshot.zip'
+  const zipBaseName = clippedBaseName.toLowerCase().endsWith('.zip') ? clippedBaseName : `${clippedBaseName}.zip`
+
+  return `${idSegment}.${zipBaseName}`
+}
+
 function joinSafetySnapshotFileName(deviceId: string, createdAt: number) {
   return `cherry-studio-pi.data-sync.join-safety.${safeFileSegment(deviceId)}.${createdAt}.zip`
 }
@@ -3872,7 +3885,7 @@ export class AppDataSyncService {
     const localBackupPath = path.join(
       process.env.TMPDIR || '/tmp',
       'cherry-studio-pi-data-sync',
-      `${safeFileSegment(snapshot.id)}.${path.basename(snapshot.fileName)}`
+      safeSnapshotRestoreFileName(snapshot)
     )
     await fsp.mkdir(path.dirname(localBackupPath), { recursive: true })
     await fsp.writeFile(localBackupPath, backupBuffer)
