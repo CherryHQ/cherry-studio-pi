@@ -50,6 +50,7 @@ describe('providersImport protocol handler', () => {
     expect(settingsWindowServiceMock.open).toHaveBeenCalledWith(
       `/settings/provider?addProviderData=${encodeURIComponent(JSON.stringify(config))}`
     )
+    expect(JSON.stringify(loggerMock.debug.mock.calls)).not.toContain('sk-test')
   })
 
   it('does not open settings when provider import data is invalid', async () => {
@@ -77,5 +78,14 @@ describe('providersImport protocol handler', () => {
     const payload = Buffer.from("({'id':'tokenflux'})", 'utf-8').toString('base64')
 
     expect(parseProvidersImportData(payload)).toBe(JSON.stringify({ id: 'tokenflux' }))
+  })
+
+  it('logs unknown provider protocol URLs without raw query payloads', async () => {
+    await handleProvidersProtocolUrl(new URL('cherrystudio://providers/unknown?data=sk-secret-token#raw-secret'))
+
+    const logs = JSON.stringify(loggerMock.error.mock.calls)
+    expect(logs).toContain('Unknown providers protocol URL')
+    expect(logs).not.toContain('sk-secret-token')
+    expect(logs).not.toContain('raw-secret')
   })
 })

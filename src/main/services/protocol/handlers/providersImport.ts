@@ -1,5 +1,6 @@
 import { application } from '@application'
 import { loggerService } from '@logger'
+import { summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
 
 const logger = loggerService.withContext('ProtocolService:providersImport')
 
@@ -42,14 +43,14 @@ export async function handleProvidersProtocolUrl(url: URL) {
       const version = params.get('v')
       if (version == '1') {
         // TODO: handle different version
-        logger.debug('handleProvidersProtocolUrl', { data, version })
+        logger.debug('handleProvidersProtocolUrl', { data: summarizeTextForLog(data), version })
       }
 
       application.get('SettingsWindowService').open(`/settings/provider?addProviderData=${encodeURIComponent(data)}`)
       break
     }
     default:
-      logger.error(`Unknown MCP protocol URL: ${url}`)
+      logger.error('Unknown providers protocol URL', { url: summarizeUrlForLog(url.toString()) })
       break
   }
 }

@@ -1,6 +1,7 @@
 import { application } from '@application'
 import { loggerService } from '@logger'
 import { WindowType } from '@main/core/window/types'
+import { summarizeObjectShapeForLog, summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
 import { nanoid } from '@reduxjs/toolkit'
 import type { McpServer } from '@shared/data/types/mcpServer'
 import { IpcChannel } from '@shared/IpcChannel'
@@ -55,9 +56,11 @@ export function handleMcpProtocolUrl(url: URL) {
 
       if (data) {
         const stringify = Buffer.from(data, 'base64').toString('utf8')
-        logger.debug(`install MCP servers from protocol: ${stringify}`)
+        logger.debug('install MCP servers from protocol', { payload: summarizeTextForLog(stringify) })
         const jsonConfig = JSON.parse(stringify)
-        logger.debug(`install MCP servers from protocol: ${JSON.stringify(jsonConfig)}`)
+        logger.debug('install MCP servers from protocol parsed config', {
+          payload: summarizeObjectShapeForLog(jsonConfig)
+        })
 
         // support both {mcpServers: [servers]}, [servers] and {server}
         if (jsonConfig.mcpServers) {
@@ -76,7 +79,7 @@ export function handleMcpProtocolUrl(url: URL) {
       break
     }
     default:
-      logger.error(`Unknown MCP protocol URL: ${url}`)
+      logger.error('Unknown MCP protocol URL', { url: summarizeUrlForLog(url.toString()) })
       break
   }
 }
