@@ -23,6 +23,7 @@ vi.mock('@cherrystudio/ui', () => {
     DialogContent: ({ children, ...props }) => {
       delete props.showCloseButton
       delete props.onInteractOutside
+      delete props.overlayClassName
 
       return React.createElement('div', { role: 'dialog', ...props }, children)
     },

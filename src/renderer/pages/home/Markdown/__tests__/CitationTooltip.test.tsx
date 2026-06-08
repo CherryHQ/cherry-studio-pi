@@ -20,12 +20,16 @@ vi.mock('@renderer/components/Icons/FallbackFavicon', () => ({
 }))
 
 const uiMocks = vi.hoisted(() => ({
-  Tooltip: vi.fn(({ children, title, content, placement, ...props }: any) => (
-    <div data-testid="tooltip-wrapper" data-placement={placement} {...props}>
-      {children}
-      <div data-testid="tooltip-content">{content || title}</div>
-    </div>
-  ))
+  Tooltip: vi.fn(({ children, title, content, placement, showArrow, ...props }: any) => {
+    void showArrow
+
+    return (
+      <div data-testid="tooltip-wrapper" data-placement={placement} {...props}>
+        {children}
+        <div data-testid="tooltip-content">{content || title}</div>
+      </div>
+    )
+  })
 }))
 
 vi.mock('@cherrystudio/ui', () => uiMocks)

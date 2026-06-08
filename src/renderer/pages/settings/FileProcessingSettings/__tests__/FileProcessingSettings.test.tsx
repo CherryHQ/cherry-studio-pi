@@ -149,15 +149,18 @@ vi.mock('@cherrystudio/ui', async (importOriginal) => {
       active,
       icon,
       label,
+      labelClassName,
       suffix,
       ...props
     }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
       active?: boolean
       icon?: React.ReactNode
       label: string
+      labelClassName?: string
       suffix?: React.ReactNode
     }) => {
       void icon
+      void labelClassName
 
       return (
         <button type="button" aria-pressed={active} {...props}>

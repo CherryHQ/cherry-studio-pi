@@ -145,7 +145,16 @@ vi.mock('react-markdown', () => ({
       )}
       {components?.table && (
         <div data-testid="has-table-component">
-          {components.table({ children: 'test table', node: { position: { start: { line: 1 } } } })}
+          {components.table({
+            children: (
+              <tbody>
+                <tr>
+                  <td>test table</td>
+                </tr>
+              </tbody>
+            ),
+            node: { position: { start: { line: 1 } } }
+          })}
         </div>
       )}
       {components?.img && <span data-testid="has-img-component">img</span>}

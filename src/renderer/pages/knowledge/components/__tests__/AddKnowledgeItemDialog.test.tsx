@@ -48,6 +48,7 @@ vi.mock('@cherrystudio/ui', async () => {
   return {
     Button: ({
       children,
+      loading,
       type = 'button',
       ...props
     }: {
@@ -55,27 +56,36 @@ vi.mock('@cherrystudio/ui', async () => {
       loading?: boolean
       type?: 'button' | 'submit' | 'reset'
       [key: string]: unknown
-    }) => (
-      <button type={type} {...props}>
-        {children}
-      </button>
-    ),
+    }) => {
+      void loading
+
+      return (
+        <button type={type} {...props}>
+          {children}
+        </button>
+      )
+    },
     Dropzone: ({
       children,
+      maxFiles,
       onDrop,
       ...props
     }: {
       children: React.ReactNode
       maxFiles?: number
       onDrop?: (files: File[]) => void
-    }) => (
-      <div data-testid="file-dropzone" {...props}>
-        <button type="button" data-testid="mock-file-dropzone-trigger" onClick={() => onDrop?.(mockAcceptedFiles)}>
-          触发选择
-        </button>
-        {children}
-      </div>
-    ),
+    }) => {
+      void maxFiles
+
+      return (
+        <div data-testid="file-dropzone" {...props}>
+          <button type="button" data-testid="mock-file-dropzone-trigger" onClick={() => onDrop?.(mockAcceptedFiles)}>
+            触发选择
+          </button>
+          {children}
+        </div>
+      )
+    },
     DropzoneEmptyState: ({ children, ...props }: { children: React.ReactNode; [key: string]: unknown }) => (
       <div {...props}>{children}</div>
     ),

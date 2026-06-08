@@ -29,15 +29,21 @@ vi.mock('@cherrystudio/ui', async (importOriginal) => ({
   MenuItem: ({
     label,
     active,
+    labelClassName,
     ...props
   }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
     label: string
     active?: boolean
-  }) => (
-    <button type="button" data-active={active || undefined} {...props}>
-      {label}
-    </button>
-  ),
+    labelClassName?: string
+  }) => {
+    void labelClassName
+
+    return (
+      <button type="button" data-active={active || undefined} {...props}>
+        {label}
+      </button>
+    )
+  },
   MenuList: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>
 }))
 
