@@ -194,6 +194,24 @@ export class ChannelManager extends BaseService {
     this.sendToRenderer(IpcChannel.Channel_StatusChange, errorStatus)
   }
 
+  private async sendBestEffortNotification(
+    adapter: ChannelAdapter,
+    chatId: string,
+    text: string,
+    reason: string
+  ): Promise<void> {
+    try {
+      await adapter.sendMessage(chatId, text)
+    } catch (err) {
+      logger.warn('Failed to send channel notification', {
+        channelId: adapter.channelId,
+        chatId,
+        reason,
+        error: err instanceof Error ? err.message : String(err)
+      })
+    }
+  }
+
   /** Disconnect the adapter for a single channel without reconnecting. */
   async disconnectChannel(channelId: string, options: { suppressErrors?: boolean } = {}): Promise<void> {
     const { suppressErrors = true } = options
@@ -327,9 +345,12 @@ export class ChannelManager extends BaseService {
             channelId: row.id,
             error: err instanceof Error ? err.message : String(err)
           })
-          adapter
-            .sendMessage(msg.chatId, '⚠️ An error occurred while processing your message. Please try again later.')
-            .catch(() => {})
+          void this.sendBestEffortNotification(
+            adapter,
+            msg.chatId,
+            '⚠️ An error occurred while processing your message. Please try again later.',
+            'message-handler-error'
+          )
         })
       })
 
@@ -341,9 +362,12 @@ export class ChannelManager extends BaseService {
             channelId: row.id,
             error: err instanceof Error ? err.message : String(err)
           })
-          adapter
-            .sendMessage(cmd.chatId, '⚠️ An error occurred while processing the command. Please try again later.')
-            .catch(() => {})
+          void this.sendBestEffortNotification(
+            adapter,
+            cmd.chatId,
+            '⚠️ An error occurred while processing the command. Please try again later.',
+            'command-handler-error'
+          )
         })
       })
 

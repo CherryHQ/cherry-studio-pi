@@ -7,8 +7,15 @@ import { ChannelAdapter, type ChannelAdapterConfig } from '../ChannelAdapter'
 import { ChannelManager, registerAdapterFactory } from '../ChannelManager'
 import { channelMessageHandler } from '../ChannelMessageHandler'
 
-const { mockBroadcastToType } = vi.hoisted(() => ({
-  mockBroadcastToType: vi.fn()
+const { mockBroadcastToType, mockLogger } = vi.hoisted(() => ({
+  mockBroadcastToType: vi.fn(),
+  mockLogger: {
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+    silly: vi.fn()
+  }
 }))
 
 const channelManager = new ChannelManager()
@@ -26,7 +33,7 @@ vi.mock('@application', () => ({
 
 vi.mock('@logger', () => ({
   loggerService: {
-    withContext: () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn(), silly: vi.fn() })
+    withContext: () => mockLogger
   }
 }))
 
@@ -40,7 +47,8 @@ vi.mock('@data/services/AgentChannelService', () => ({
   agentChannelService: {
     listChannels: vi.fn().mockResolvedValue([]),
     getChannel: vi.fn(),
-    updateChannel: vi.fn()
+    updateChannel: vi.fn(),
+    addActiveChatId: vi.fn().mockResolvedValue(null)
   }
 }))
 
@@ -124,6 +132,37 @@ describe('ChannelManager', () => {
 
     expect(createdAdapters).toHaveLength(1)
     expect(createdAdapters[0].connect).toHaveBeenCalledTimes(1)
+  })
+
+  it('logs when fallback message delivery fails after an unhandled message error', async () => {
+    vi.mocked(channelService.listChannels).mockResolvedValueOnce([makeChannelRow()])
+
+    await channelManager.start()
+    const adapter = createdAdapters[0]
+    vi.mocked(channelMessageHandler.handleIncoming).mockRejectedValueOnce(new Error('handler crashed'))
+    adapter.sendMessage.mockRejectedValueOnce(new Error('platform unavailable'))
+
+    adapter.emit('message', {
+      chatId: 'chat-1',
+      userId: 'user-1',
+      userName: 'User',
+      text: 'hello'
+    })
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    expect(adapter.sendMessage).toHaveBeenCalledWith(
+      'chat-1',
+      '⚠️ An error occurred while processing your message. Please try again later.'
+    )
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Failed to send channel notification',
+      expect.objectContaining({
+        channelId: 'ch-1',
+        chatId: 'chat-1',
+        reason: 'message-handler-error',
+        error: 'platform unavailable'
+      })
+    )
   })
 
   it('stop() disconnects all adapters', async () => {
