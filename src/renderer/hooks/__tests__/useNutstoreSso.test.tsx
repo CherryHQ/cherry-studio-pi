@@ -65,6 +65,7 @@ describe('useNutstoreSso', () => {
     const rejection = expect(promise).rejects.toThrow('Nutstore SSO flow timed out')
 
     await protocolListener?.({ url: 'cherrystudiopi://providers?x=1' })
+    await protocolListener?.({ url: 'cherrystudiopi://providers?s=not-a-nutstore-token' })
     vi.advanceTimersByTime(NUTSTORE_SSO_TIMEOUT_MS)
 
     await rejection

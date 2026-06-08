@@ -3,6 +3,7 @@ import { useCallback } from 'react'
 
 const logger = loggerService.withContext('useNutstoreSso')
 export const NUTSTORE_SSO_TIMEOUT_MS = 10 * 60 * 1000
+const NUTSTORE_PROTOCOL_HOST = 'nutstore'
 
 export function useNutstoreSso() {
   const nutstoreSsoHandler = useCallback(() => {
@@ -37,6 +38,8 @@ export function useNutstoreSso() {
       removeListener = window.api.protocol.onReceiveData(async (data) => {
         try {
           const url = new URL(data.url)
+          if (url.hostname.toLowerCase() !== NUTSTORE_PROTOCOL_HOST) return
+
           const params = new URLSearchParams(url.search)
           const encryptedToken = params.get('s')
           if (!encryptedToken) return
