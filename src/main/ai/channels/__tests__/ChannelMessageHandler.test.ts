@@ -9,9 +9,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { channelMessageHandler } from '../ChannelMessageHandler'
 import { sanitizeChannelOutput } from '../security'
 
+const { mockLogger } = vi.hoisted(() => ({
+  mockLogger: {
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+    silly: vi.fn()
+  }
+}))
+
 vi.mock('@logger', () => ({
   loggerService: {
-    withContext: () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn(), silly: vi.fn() })
+    withContext: () => mockLogger
   }
 }))
 
@@ -237,6 +247,40 @@ describe('ChannelMessageHandler', () => {
 
     expect(adapter.sendMessage).toHaveBeenCalledWith('chat-1', 'workspace is missing')
     expect(adapter.onStreamError).not.toHaveBeenCalled()
+  })
+
+  it('logs when a pre-stream workspace error notification cannot be delivered', async () => {
+    const adapter = createMockAdapter()
+    const session = {
+      id: 'session-1',
+      agentId: 'agent-1',
+      agentType: 'claude-code',
+      model: 'openai::gpt-4',
+      workspace: { path: '/tmp/test-workspace' },
+      configuration: {}
+    }
+
+    vi.mocked(agentSessionService.createSession).mockResolvedValueOnce(session as any)
+    adapter.sendMessage.mockRejectedValueOnce(new Error('platform unavailable'))
+    mockStartAgentSessionRun.mockRejectedValueOnce(new AgentSessionWorkspaceError('workspace is missing'))
+
+    await handleIncomingAndFlush(adapter, {
+      chatId: 'chat-1',
+      userId: 'user-1',
+      userName: 'User',
+      text: 'Hi'
+    })
+
+    expect(adapter.sendMessage).toHaveBeenCalledWith('chat-1', 'workspace is missing')
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Failed to send channel notification',
+      expect.objectContaining({
+        channelId: 'channel-1',
+        chatId: 'chat-1',
+        reason: 'workspace-error',
+        error: 'platform unavailable'
+      })
+    )
   })
 
   it('skips final send when adapter handles stream completion', async () => {

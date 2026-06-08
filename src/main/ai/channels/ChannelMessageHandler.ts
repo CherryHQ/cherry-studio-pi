@@ -128,22 +128,15 @@ export class ChannelMessageHandler {
       const errMsg = err instanceof Error ? err.message : String(err)
       logger.error('Channel message processing failed', { batchKey, error: errMsg })
 
-      // Best-effort: notify the user with a generic message (no internal details)
-      try {
-        const adapter = batch.adapter
-        const chatId = merged.chatId
-        if (adapter && chatId) {
-          adapter
-            .sendMessage(chatId, '⚠️ An error occurred while processing your message. Please try again later.')
-            .catch((sendErr) => {
-              logger.debug('Failed to send error notification to channel', {
-                chatId,
-                error: sendErr instanceof Error ? sendErr.message : String(sendErr)
-              })
-            })
-        }
-      } catch {
-        // Do not let error notification break the queue
+      const adapter = batch.adapter
+      const chatId = merged.chatId
+      if (adapter && chatId) {
+        void this.sendBestEffortNotification(
+          adapter,
+          chatId,
+          '⚠️ An error occurred while processing your message. Please try again later.',
+          'processing-error'
+        )
       }
     })
     this.chatQueues.set(batchKey, settled)
@@ -177,14 +170,12 @@ export class ChannelMessageHandler {
       const session = await this.resolveSession(agentId, adapter.channelId, adapter.channelType, message.chatId)
       if (!session) {
         logger.error('Failed to resolve session', { agentId })
-        await adapter
-          .sendMessage(message.chatId, '⚠️ Failed to resolve a session for this agent. Please try again later.')
-          .catch((err) => {
-            logger.debug('Failed to send session-error notification to channel', {
-              chatId: message.chatId,
-              error: err instanceof Error ? err.message : String(err)
-            })
-          })
+        await this.sendBestEffortNotification(
+          adapter,
+          message.chatId,
+          '⚠️ Failed to resolve a session for this agent. Please try again later.',
+          'session-resolution-error'
+        )
         return
       }
 
@@ -282,10 +273,10 @@ export class ChannelMessageHandler {
           // Thrown before streaming starts (validateSession), so no controller exists yet and
           // onStreamError is a no-op on most adapters — send a plain message so the inbound
           // message isn't silently dropped on Telegram/WeChat/QQ/Discord/Slack.
-          adapter.sendMessage(message.chatId, streamErrorMessage).catch(() => {})
+          await this.sendBestEffortNotification(adapter, message.chatId, streamErrorMessage, 'workspace-error')
         } else {
           // Mid-stream error: let the adapter update its streaming UI.
-          adapter.onStreamError(message.chatId, streamErrorMessage).catch(() => {})
+          await this.sendBestEffortStreamError(adapter, message.chatId, streamErrorMessage)
         }
         throw streamError
       } finally {
@@ -381,14 +372,42 @@ export class ChannelMessageHandler {
         command: command.command,
         error: error instanceof Error ? error.message : String(error)
       })
-      adapter
-        .sendMessage(command.chatId, '⚠️ An error occurred while processing the command. Please try again later.')
-        .catch((sendErr) => {
-          logger.debug('Failed to send error notification to channel', {
-            chatId: command.chatId,
-            error: sendErr instanceof Error ? sendErr.message : String(sendErr)
-          })
-        })
+      void this.sendBestEffortNotification(
+        adapter,
+        command.chatId,
+        '⚠️ An error occurred while processing the command. Please try again later.',
+        'command-error'
+      )
+    }
+  }
+
+  private async sendBestEffortNotification(
+    adapter: ChannelAdapter,
+    chatId: string,
+    text: string,
+    reason: string
+  ): Promise<void> {
+    try {
+      await adapter.sendMessage(chatId, text)
+    } catch (err) {
+      logger.warn('Failed to send channel notification', {
+        channelId: adapter.channelId,
+        chatId,
+        reason,
+        error: err instanceof Error ? err.message : String(err)
+      })
+    }
+  }
+
+  private async sendBestEffortStreamError(adapter: ChannelAdapter, chatId: string, errorText: string): Promise<void> {
+    try {
+      await adapter.onStreamError(chatId, errorText)
+    } catch (err) {
+      logger.warn('Failed to deliver channel stream error', {
+        channelId: adapter.channelId,
+        chatId,
+        error: err instanceof Error ? err.message : String(err)
+      })
     }
   }
 
