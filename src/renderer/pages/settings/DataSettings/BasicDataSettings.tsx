@@ -9,11 +9,12 @@ import { useTheme } from '@renderer/context/ThemeProvider'
 import { useTimer } from '@renderer/hooks/useTimer'
 import { reset } from '@renderer/services/BackupService'
 import type { AppInfo } from '@renderer/types'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { cn } from '@renderer/utils/style'
 import { occupiedDirs } from '@shared/config/constant'
 import { FolderInput, FolderOpen, FolderOutput, SaveIcon } from 'lucide-react'
 import type React from 'react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -27,6 +28,20 @@ const BasicDataSettings: React.FC = () => {
   const { theme } = useTheme()
   const { setTimeoutTimer } = useTimer()
   const [skipBackupFile, setSkipBackupFile] = usePreference('data.backup.general.skip_backup_file')
+
+  const showOperationFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+    },
+    [t]
+  )
+
+  const showSaveFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    },
+    [t]
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -52,52 +67,57 @@ const BasicDataSettings: React.FC = () => {
   }, [])
 
   const handleSelectAppDataPath = async () => {
-    if (!appInfo || !appInfo.appDataPath) {
-      return
+    try {
+      if (!appInfo || !appInfo.appDataPath) {
+        return
+      }
+
+      const newAppDataPath = await window.api.select({
+        properties: ['openDirectory', 'createDirectory'],
+        title: t('settings.data.app_data.select_title')
+      })
+
+      if (!newAppDataPath) {
+        return
+      }
+
+      // check new app data path is root path
+      const pathParts = newAppDataPath.split(/[/\\]/).filter((part: string) => part !== '')
+      if (pathParts.length <= 1) {
+        window.toast.error(t('settings.data.app_data.select_error_root_path'))
+        return
+      }
+
+      // check new app data path is not in old app data path
+      const isInOldPath = await window.api.isPathInside(newAppDataPath, appInfo.appDataPath)
+      if (isInOldPath) {
+        window.toast.error(t('settings.data.app_data.select_error_same_path'))
+        return
+      }
+
+      // check new app data path is not in app install path
+      const isInInstallPath = await window.api.isPathInside(newAppDataPath, appInfo.installPath)
+      if (isInInstallPath) {
+        window.toast.error(t('settings.data.app_data.select_error_in_app_path'))
+        return
+      }
+
+      // check new app data path has write permission
+      const hasWritePermission = await window.api.hasWritePermission(newAppDataPath)
+      if (!hasWritePermission) {
+        window.toast.error(t('settings.data.app_data.select_error_write_permission'))
+        return
+      }
+
+      const migrationTitle = (
+        <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{t('settings.data.app_data.migration_title')}</div>
+      )
+      const migrationClassName = 'migration-modal'
+      void showMigrationConfirmModal(appInfo.appDataPath, newAppDataPath, migrationTitle, migrationClassName)
+    } catch (error) {
+      logger.error('Failed to select app data path', error as Error)
+      window.toast.error(formatErrorMessageWithPrefix(error, t('settings.data.app_data.path_change_failed')))
     }
-
-    const newAppDataPath = await window.api.select({
-      properties: ['openDirectory', 'createDirectory'],
-      title: t('settings.data.app_data.select_title')
-    })
-
-    if (!newAppDataPath) {
-      return
-    }
-
-    // check new app data path is root path
-    const pathParts = newAppDataPath.split(/[/\\]/).filter((part: string) => part !== '')
-    if (pathParts.length <= 1) {
-      window.toast.error(t('settings.data.app_data.select_error_root_path'))
-      return
-    }
-
-    // check new app data path is not in old app data path
-    const isInOldPath = await window.api.isPathInside(newAppDataPath, appInfo.appDataPath)
-    if (isInOldPath) {
-      window.toast.error(t('settings.data.app_data.select_error_same_path'))
-      return
-    }
-
-    // check new app data path is not in app install path
-    const isInInstallPath = await window.api.isPathInside(newAppDataPath, appInfo.installPath)
-    if (isInInstallPath) {
-      window.toast.error(t('settings.data.app_data.select_error_in_app_path'))
-      return
-    }
-
-    // check new app data path has write permission
-    const hasWritePermission = await window.api.hasWritePermission(newAppDataPath)
-    if (!hasWritePermission) {
-      window.toast.error(t('settings.data.app_data.select_error_write_permission'))
-      return
-    }
-
-    const migrationTitle = (
-      <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{t('settings.data.app_data.migration_title')}</div>
-    )
-    const migrationClassName = 'migration-modal'
-    void showMigrationConfirmModal(appInfo.appDataPath, newAppDataPath, migrationTitle, migrationClassName)
   }
 
   const doubleConfirmModalBeforeCopyData = (newPath: string) => {
@@ -414,9 +434,9 @@ const BasicDataSettings: React.FC = () => {
     if (!path) return
     if (path?.endsWith('log')) {
       const dirPath = path.split(/[/\\]/).slice(0, -1).join('/')
-      void window.api.openPath(dirPath)
+      void window.api.openPath(dirPath).catch(showOperationFailed)
     } else {
-      void window.api.openPath(path)
+      void window.api.openPath(path).catch(showOperationFailed)
     }
   }
 
@@ -443,7 +463,7 @@ const BasicDataSettings: React.FC = () => {
   }
 
   const onSkipBackupFilesChange = (value: boolean) => {
-    void setSkipBackupFile(value)
+    void setSkipBackupFile(value).catch(showSaveFailed)
   }
 
   return (
