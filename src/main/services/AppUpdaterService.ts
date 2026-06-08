@@ -20,6 +20,14 @@ const logger = loggerService.withContext('AppUpdaterService')
 const UPDATE_CONFIG_FETCH_TIMEOUT_MS = 10_000
 const INSTALL_BLOCKER_FALLBACK_RELEASE_MS = 5 * 60 * 1000
 
+function toError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error
+  }
+
+  return new Error(typeof error === 'string' ? error : String(error))
+}
+
 function getCommonHeaders() {
   return {
     'User-Agent': generateUserAgent(),
@@ -336,8 +344,41 @@ export class AppUpdaterService extends BaseService {
     }
   }
 
+  private startManualDownloadUpdate(): void {
+    const token = this.cancellationToken
+
+    logger.info('downloadUpdate manual by check for updates', token)
+
+    try {
+      void autoUpdater.downloadUpdate(token).catch((error: unknown) => {
+        if (token.cancelled) {
+          logger.info('Update download cancelled')
+          return
+        }
+
+        const updateError = toError(error)
+        logger.error('Failed to download update:', updateError)
+        application.get('WindowManager').broadcastToType(WindowType.Main, IpcChannel.UpdateError, updateError)
+      })
+    } catch (error) {
+      const updateError = toError(error)
+      logger.error('Failed to start update download:', updateError)
+      application.get('WindowManager').broadcastToType(WindowType.Main, IpcChannel.UpdateError, updateError)
+    }
+  }
+
+  private trackUpdateCheck(): void {
+    try {
+      void Promise.resolve(application.get('AnalyticsService').trackAppUpdate()).catch((error: unknown) => {
+        logger.warn('Failed to track app update check:', toError(error))
+      })
+    } catch (error) {
+      logger.warn('Failed to track app update check:', toError(error))
+    }
+  }
+
   public async checkForUpdates() {
-    void application.get('AnalyticsService').trackAppUpdate()
+    this.trackUpdateCheck()
 
     if (isWin && 'PORTABLE_EXECUTABLE_DIR' in process.env) {
       return {
@@ -357,8 +398,7 @@ export class AppUpdaterService extends BaseService {
       if (this.updateCheckResult?.isUpdateAvailable && !autoUpdater.autoDownload) {
         // 如果 autoDownload 为 false，则需要再调用下面的函数触发下
         // do not use await, because it will block the return of this function
-        logger.info('downloadUpdate manual by check for updates', this.cancellationToken)
-        void autoUpdater.downloadUpdate(this.cancellationToken)
+        this.startManualDownloadUpdate()
       }
 
       return {

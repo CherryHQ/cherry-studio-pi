@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => ({
   applicationOnWillQuit: vi.fn(),
   willQuitDisposable: {
     dispose: vi.fn()
+  },
+  windowManager: {
+    broadcastToType: vi.fn()
   }
 }))
 
@@ -45,7 +48,7 @@ vi.mock('@application', async () => {
       return { getMainWindow: vi.fn() }
     }
     if (name === 'WindowManager') {
-      return { broadcastToType: vi.fn() }
+      return mocks.windowManager
     }
     return originalGet(name)
   })
@@ -134,7 +137,9 @@ vi.mock('electron-updater', () => ({
 
 // Import after mocks
 import { application } from '@application'
+import { WindowType } from '@main/core/window/types'
 import { UpdateMirror } from '@shared/config/constant'
+import { IpcChannel } from '@shared/IpcChannel'
 import { MockMainPreferenceServiceUtils } from '@test-mocks/main/PreferenceService'
 import { app, net } from 'electron'
 import { autoUpdater } from 'electron-updater'
@@ -421,6 +426,65 @@ describe('AppUpdaterService', () => {
       expect(application.unmarkQuitting).toHaveBeenCalledTimes(1)
       expect(mocks.updateInstallBlocker.release).toHaveBeenCalledTimes(1)
       expect(mocks.willQuitDisposable.dispose).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('checkForUpdates', () => {
+    const updateInfo = {
+      version: '1.0.1',
+      files: [],
+      path: '',
+      sha512: '',
+      releaseDate: new Date().toISOString()
+    } as UpdateInfo
+
+    beforeEach(() => {
+      ;(appUpdater as any)._setFeedUrl = vi.fn().mockResolvedValue(undefined)
+      vi.mocked(autoUpdater.checkForUpdates).mockResolvedValue({
+        isUpdateAvailable: true,
+        updateInfo,
+        cancellationToken: { cancel: vi.fn() }
+      } as any)
+    })
+
+    it('reports manual background download failures to the renderer', async () => {
+      const downloadError = new Error('download failed')
+      autoUpdater.autoDownload = false
+      vi.mocked(autoUpdater.downloadUpdate).mockRejectedValueOnce(downloadError)
+
+      const result = await appUpdater.checkForUpdates()
+      await Promise.resolve()
+
+      expect(result.updateInfo).toBe(updateInfo)
+      expect(autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1)
+      expect(mocks.windowManager.broadcastToType).toHaveBeenCalledWith(
+        WindowType.Main,
+        IpcChannel.UpdateError,
+        downloadError
+      )
+    })
+
+    it('does not report an update error when the manual download is cancelled', async () => {
+      let rejectDownload: ((error: Error) => void) | undefined
+      autoUpdater.autoDownload = false
+      vi.mocked(autoUpdater.downloadUpdate).mockImplementationOnce(
+        () =>
+          new Promise<string[]>((_resolve, reject) => {
+            rejectDownload = reject
+          })
+      )
+
+      await appUpdater.checkForUpdates()
+      appUpdater.cancelDownload()
+      rejectDownload?.(new Error('cancelled'))
+      await Promise.resolve()
+
+      expect(autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1)
+      expect(mocks.windowManager.broadcastToType).not.toHaveBeenCalledWith(
+        WindowType.Main,
+        IpcChannel.UpdateError,
+        expect.any(Error)
+      )
     })
   })
 
