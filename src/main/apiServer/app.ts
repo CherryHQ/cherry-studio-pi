@@ -58,8 +58,8 @@ export function createApp(): express.Application {
   app.use(
     cors({
       origin: '*',
-      allowedHeaders: ['Content-Type', 'Authorization'],
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
     })
   )
 
