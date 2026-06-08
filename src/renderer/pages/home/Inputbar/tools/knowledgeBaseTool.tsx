@@ -2,6 +2,7 @@ import { useAssistantMutations } from '@renderer/hooks/useAssistant'
 import { defineTool, registerTool, TopicType } from '@renderer/pages/home/Inputbar/types'
 import type { KnowledgeBase } from '@renderer/types'
 import { isSupportedToolUse } from '@renderer/utils/assistant'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { useCallback } from 'react'
 
 import KnowledgeBaseButton from './components/KnowledgeBaseButton'
@@ -24,15 +25,20 @@ const knowledgeBaseTool = defineTool({
   },
 
   render: function KnowledgeBaseToolRender(context) {
-    const { assistant, state, actions, quickPanel } = context
+    const { assistant, state, actions, quickPanel, t } = context
     const { updateAssistant } = useAssistantMutations()
 
     const handleSelect = useCallback(
       (bases: KnowledgeBase[]) => {
         void updateAssistant(assistant.id, { knowledgeBaseIds: bases.map((b) => b.id) })
-        actions.setSelectedKnowledgeBases?.(bases)
+          .then(() => {
+            actions.setSelectedKnowledgeBases?.(bases)
+          })
+          .catch((error) => {
+            window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+          })
       },
-      [updateAssistant, assistant.id, actions]
+      [updateAssistant, assistant.id, actions, t]
     )
 
     return (

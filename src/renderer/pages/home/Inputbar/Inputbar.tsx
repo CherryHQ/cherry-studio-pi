@@ -21,6 +21,7 @@ import {
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import { type FileMetadata, type KnowledgeBase, type Topic, TopicType } from '@renderer/types'
 import { delay } from '@renderer/utils'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { getSendMessageShortcutLabel } from '@renderer/utils/input'
 import { documentExts, imageExts, textExts } from '@shared/config/constant'
 import type { Model } from '@shared/data/types/model'
@@ -309,9 +310,16 @@ const InputbarInner: FC<InputbarInnerProps> = ({ setActiveTopic, topic, actionsR
     (knowledgeBase: KnowledgeBase) => {
       const nextIds = (assistant?.knowledgeBaseIds ?? []).filter((id) => id !== knowledgeBase.id)
       void updateAssistant({ knowledgeBaseIds: nextIds })
-      setSelectedKnowledgeBases(allKnowledgeBases.filter((kb) => nextIds.includes(kb.id)) as unknown as KnowledgeBase[])
+        .then(() => {
+          setSelectedKnowledgeBases(
+            allKnowledgeBases.filter((kb) => nextIds.includes(kb.id)) as unknown as KnowledgeBase[]
+          )
+        })
+        .catch((error) => {
+          window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+        })
     },
-    [assistant?.knowledgeBaseIds, allKnowledgeBases, setSelectedKnowledgeBases, updateAssistant]
+    [assistant?.knowledgeBaseIds, allKnowledgeBases, setSelectedKnowledgeBases, t, updateAssistant]
   )
 
   const handleToggleExpanded = useCallback(

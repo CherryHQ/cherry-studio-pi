@@ -5,6 +5,7 @@ import { useTimer } from '@renderer/hooks/useTimer'
 import { useWebSearchProviders } from '@renderer/hooks/useWebSearch'
 import { getWebSearchProviderLogo } from '@renderer/pages/settings/WebSearchSettings/utils/webSearchProviderMeta'
 import { getEffectiveMcpMode } from '@renderer/types'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { WebSearchProviderId } from '@shared/data/preference/preferenceTypes'
 import {
   isGemini3Model,
@@ -55,13 +56,20 @@ const WebSearchButton: FC<Props> = ({ assistantId }) => {
   // assistant flag — no external provider is invoked, so don't show its logo.
   const providerLogo = !hasBuiltinWebSearch && activeProviderId ? getWebSearchProviderLogo(activeProviderId) : undefined
 
+  const showSaveFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    },
+    [t]
+  )
+
   const onClick = useCallback(() => {
     if (!assistant || !model) {
       window.toast.error(t('error.model.not_exists'))
       return
     }
     if (enableWebSearch) {
-      void updateAssistant({ settings: { enableWebSearch: false } })
+      void updateAssistant({ settings: { enableWebSearch: false } }).catch(showSaveFailed)
       return
     }
 
@@ -99,7 +107,11 @@ const WebSearchButton: FC<Props> = ({ assistantId }) => {
       return
     }
 
-    setTimeoutTimer('enableWebSearch', () => updateAssistant({ settings: { enableWebSearch: true } }), 0)
+    setTimeoutTimer(
+      'enableWebSearch',
+      () => updateAssistant({ settings: { enableWebSearch: true } }).catch(showSaveFailed),
+      0
+    )
   }, [
     activeProviderId,
     assistant,
@@ -107,6 +119,7 @@ const WebSearchButton: FC<Props> = ({ assistantId }) => {
     hasBuiltinWebSearch,
     navigate,
     setTimeoutTimer,
+    showSaveFailed,
     t,
     updateAssistant,
     model,

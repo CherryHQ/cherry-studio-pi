@@ -11,6 +11,7 @@ import { EventEmitter } from '@renderer/services/EventService'
 import type { AssistantSettings, McpMode, McpPrompt, McpResource } from '@renderer/types'
 import { getEffectiveMcpMode } from '@renderer/types'
 import { createDataImageUri, escapeMarkdownImageAlt } from '@renderer/utils/dataImage'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { McpServer } from '@shared/data/types/mcpServer'
 import { isGemini3Model, isGeminiModel } from '@shared/utils/model'
 import { isGeminiWebSearchProvider } from '@shared/utils/provider'
@@ -146,6 +147,13 @@ const McpToolsButton: FC<Props> = ({ quickPanel, setInputValue, resizeTextArea, 
     [assistant?.settings]
   )
 
+  const showSaveFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    },
+    [t]
+  )
+
   const handleModeChange = useCallback(
     (mode: McpMode) => {
       setTimeoutTimer(
@@ -185,9 +193,9 @@ const McpToolsButton: FC<Props> = ({ quickPanel, setInputValue, resizeTextArea, 
       void updateAssistant({
         mcpServerIds: nextServerIds,
         settings: nextSettings
-      })
+      }).catch(showSaveFailed)
     },
-    [assistant, mcpServerIds, model, modelProvider, mergeSettings, t, updateAssistant]
+    [assistant, mcpServerIds, model, modelProvider, mergeSettings, showSaveFailed, t, updateAssistant]
   )
 
   const handleMcpServerSelectRef = useRef(handleMcpServerSelect)
