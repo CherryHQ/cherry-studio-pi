@@ -8,6 +8,10 @@ import path from 'path'
 
 const logger = loggerService.withContext('AppService')
 
+function escapeDesktopExecPath(filePath: string): string {
+  return `'${filePath.replace(/'/g, "'\\''")}'`
+}
+
 export class AppService {
   public async setAppLaunchOnBoot(isLaunchOnBoot: boolean): Promise<void> {
     // Set login item settings for windows and mac
@@ -36,16 +40,16 @@ export class AppService {
 
           // Create desktop file content
           const desktopContent = `[Desktop Entry]
-  Type=Application
-  Name=Cherry Studio Pi
-  Comment=A powerful AI desktop client with the pi agent runtime.
-  Exec=${executablePath}
-  Icon=CherryStudioPi
-  Terminal=false
-  StartupNotify=false
-  Categories=Development;Utility;
-  X-GNOME-Autostart-enabled=true
-  Hidden=false`
+Type=Application
+Name=Cherry Studio Pi
+Comment=A powerful AI desktop client with the pi agent runtime.
+Exec=${escapeDesktopExecPath(executablePath)}
+Icon=CherryStudioPi
+Terminal=false
+StartupNotify=false
+Categories=Development;Utility;
+X-GNOME-Autostart-enabled=true
+Hidden=false`
 
           // Write desktop file
           await fs.promises.writeFile(desktopFile, desktopContent)
