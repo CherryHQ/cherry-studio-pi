@@ -28,7 +28,7 @@ import useUserTheme from '@renderer/hooks/useUserTheme'
 import i18n from '@renderer/i18n'
 import type { NotificationSource } from '@renderer/types/notification'
 import { isValidProxyUrl } from '@renderer/utils'
-import { formatErrorMessage } from '@renderer/utils/error'
+import { formatErrorMessage, formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { cn } from '@renderer/utils/style'
 import { defaultByPassRules, defaultLanguage } from '@shared/config/constant'
 import type { LanguageVarious } from '@shared/data/preference/preferenceTypes'
@@ -117,6 +117,24 @@ const CommonSettings: FC = () => {
   const [proxyBypassRules, setProxyBypassRules] = useState<string>(storeProxyBypassRules)
   const [currentZoom, setCurrentZoom] = useState(1.0)
   const [fontList, setFontList] = useState<string[]>([])
+
+  const showSaveFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    },
+    [t]
+  )
+
+  const persistPreference = useCallback(
+    (operation: () => Promise<unknown>) => {
+      try {
+        void operation().catch(showSaveFailed)
+      } catch (error) {
+        showSaveFailed(error)
+      }
+    },
+    [showSaveFailed]
+  )
 
   const sectionItems = useMemo(
     () => [
@@ -231,29 +249,37 @@ const CommonSettings: FC = () => {
     }
   }, [])
 
-  const onSelectLanguage = (value: LanguageVarious) => {
-    void i18n.changeLanguage(value)
-    void setLanguage(value)
+  const onSelectLanguage = async (value: LanguageVarious) => {
+    try {
+      await setLanguage(value)
+      await i18n.changeLanguage(value)
+    } catch (error) {
+      showSaveFailed(error)
+    }
   }
 
   const handleNotificationChange = (type: NotificationSource, value: boolean) => {
-    void setNotificationSettings({ [type]: value })
+    persistPreference(() => setNotificationSettings({ [type]: value }))
   }
 
-  const handleSpellCheckChange = (checked: boolean) => {
-    void setEnableSpellCheck(checked)
-    void window.api.setEnableSpellCheck(checked)
+  const handleSpellCheckChange = async (checked: boolean) => {
+    try {
+      await setEnableSpellCheck(checked)
+      await window.api.setEnableSpellCheck(checked)
+    } catch (error) {
+      showSaveFailed(error)
+    }
   }
 
   const handleSpellCheckLanguagesChange = (selectedLanguages: string[]) => {
-    void setSpellCheckLanguages(selectedLanguages)
+    persistPreference(() => setSpellCheckLanguages(selectedLanguages))
   }
 
   const handleWindowStyleChange = useCallback(
     (checked: boolean) => {
-      void setWindowStyle(checked ? 'transparent' : 'opaque')
+      persistPreference(() => setWindowStyle(checked ? 'transparent' : 'opaque'))
     },
-    [setWindowStyle]
+    [persistPreference, setWindowStyle]
   )
 
   const handleUseSystemTitleBarChange = (checked: boolean) => {
@@ -309,7 +335,7 @@ const CommonSettings: FC = () => {
   }
 
   const updateTray = (isShowTray: boolean) => {
-    void setTray(isShowTray)
+    persistPreference(() => setTray(isShowTray))
     if (!isShowTray) {
       updateTrayOnClose(false)
       updateLaunchToTray(false)
@@ -317,14 +343,14 @@ const CommonSettings: FC = () => {
   }
 
   const updateTrayOnClose = (isTrayOnClose: boolean) => {
-    void setTrayOnClose(isTrayOnClose)
+    persistPreference(() => setTrayOnClose(isTrayOnClose))
     if (isTrayOnClose && !tray) {
       updateTray(true)
     }
   }
 
   const updateLaunchToTray = (isLaunchToTray: boolean) => {
-    void setLaunchToTray(isLaunchToTray)
+    persistPreference(() => setLaunchToTray(isLaunchToTray))
     if (isLaunchToTray && !tray) {
       updateTray(true)
     }
@@ -336,11 +362,11 @@ const CommonSettings: FC = () => {
       return
     }
 
-    void _setProxyUrl(proxyUrl)
+    persistPreference(() => _setProxyUrl(proxyUrl))
   }
 
   const onSetProxyBypassRules = () => {
-    void _setProxyBypassRules(proxyBypassRules)
+    persistPreference(() => _setProxyBypassRules(proxyBypassRules))
   }
 
   const handleZoomFactor = async (delta: number, reset: boolean = false) => {
@@ -566,7 +592,7 @@ const CommonSettings: FC = () => {
           <SelectorRow>
             <SegmentedControl
               value={topicPosition || 'right'}
-              onValueChange={setTopicPosition}
+              onValueChange={(value) => persistPreference(() => setTopicPosition(value))}
               options={[
                 { value: 'left', label: t('settings.topic.position.left') },
                 { value: 'right', label: t('settings.topic.position.right') }
@@ -583,7 +609,7 @@ const CommonSettings: FC = () => {
               <SettingRowTitle>{t('settings.advanced.auto_switch_to_topics')}</SettingRowTitle>
               <Switch
                 checked={clickAssistantToShowTopic}
-                onCheckedChange={(checked) => setClickAssistantToShowTopic(checked)}
+                onCheckedChange={(checked) => persistPreference(() => setClickAssistantToShowTopic(checked))}
               />
             </SettingRow>
           </>
@@ -591,12 +617,18 @@ const CommonSettings: FC = () => {
         <SettingDivider />
         <SettingRow>
           <SettingRowTitle>{t('settings.topic.show.time')}</SettingRowTitle>
-          <Switch checked={showTopicTime} onCheckedChange={(checked) => setShowTopicTime(checked)} />
+          <Switch
+            checked={showTopicTime}
+            onCheckedChange={(checked) => persistPreference(() => setShowTopicTime(checked))}
+          />
         </SettingRow>
         <SettingDivider />
         <SettingRow>
           <SettingRowTitle>{t('settings.topic.pin_to_top')}</SettingRowTitle>
-          <Switch checked={pinTopicsToTop} onCheckedChange={(checked) => setPinTopicsToTop(checked)} />
+          <Switch
+            checked={pinTopicsToTop}
+            onCheckedChange={(checked) => persistPreference(() => setPinTopicsToTop(checked))}
+          />
         </SettingRow>
       </SettingGroup>
     </>
@@ -609,7 +641,10 @@ const CommonSettings: FC = () => {
         <SettingDivider />
         <SettingRow>
           <SettingRowTitle>{t('settings.launch.onboot')}</SettingRowTitle>
-          <Switch checked={launchOnBoot} onCheckedChange={(checked) => void setLaunchOnBoot(checked)} />
+          <Switch
+            checked={launchOnBoot}
+            onCheckedChange={(checked) => persistPreference(() => setLaunchOnBoot(checked))}
+          />
         </SettingRow>
         <SettingDivider />
         <SettingRow>
@@ -633,7 +668,11 @@ const CommonSettings: FC = () => {
         <SettingDivider />
         <SettingRow>
           <SettingRowTitle>{t('settings.proxy.mode.title')}</SettingRowTitle>
-          <Selector value={storeProxyMode} onChange={(mode) => void setProxyMode(mode)} options={proxyModeOptions} />
+          <Selector
+            value={storeProxyMode}
+            onChange={(mode) => persistPreference(() => setProxyMode(mode))}
+            options={proxyModeOptions}
+          />
         </SettingRow>
         {storeProxyMode === 'custom' && (
           <>
@@ -763,9 +802,13 @@ const CommonSettings: FC = () => {
           <SettingRowTitle>{t('settings.privacy.enable_privacy_mode')}</SettingRowTitle>
           <Switch
             checked={enableDataCollection}
-            onCheckedChange={(v) => {
-              void setEnableDataCollection(v)
-              void window.api.config.set('enableDataCollection', v)
+            onCheckedChange={async (v) => {
+              try {
+                await setEnableDataCollection(v)
+                await window.api.config.set('enableDataCollection', v)
+              } catch (error) {
+                showSaveFailed(error)
+              }
             }}
           />
         </SettingRow>
@@ -779,7 +822,10 @@ const CommonSettings: FC = () => {
             <SettingRowTitle>{t('settings.developer.enable_developer_mode')}</SettingRowTitle>
             <InfoTooltip content={t('settings.developer.help')} />
           </Flex>
-          <Switch checked={enableDeveloperMode} onCheckedChange={setEnableDeveloperMode} />
+          <Switch
+            checked={enableDeveloperMode}
+            onCheckedChange={(checked) => persistPreference(() => setEnableDeveloperMode(checked))}
+          />
         </SettingRow>
       </SettingGroup>
     </>
