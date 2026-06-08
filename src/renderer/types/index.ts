@@ -34,7 +34,7 @@ export type { MessageBlock } from './newMessage'
 import type { BaseTool, McpTool } from './tool'
 
 export * from './agent'
-export * from './apiServer'
+export * from './apiGateway'
 export * from './knowledge'
 export * from './mcp'
 export * from './notification'

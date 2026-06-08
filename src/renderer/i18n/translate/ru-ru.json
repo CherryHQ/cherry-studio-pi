@@ -854,7 +854,7 @@
       "webui_url": "[to be translated]:WebUI URL"
     }
   },
-  "apiServer": {
+  "apiGateway": {
     "actions": {
       "copy": "Копировать",
       "regenerate": "Перегенерировать",

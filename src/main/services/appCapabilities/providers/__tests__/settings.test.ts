@@ -111,10 +111,10 @@ describe('settings app capabilities', () => {
         'chat.message.confirm_delete': false,
         'data.backup.webdav.host': 'https://dav.example.com',
         'data.backup.webdav.pass': 'preference-dav-secret',
-        'feature.csaas.enabled': true,
-        'feature.csaas.host': '0.0.0.0',
-        'feature.csaas.port': 24444,
-        'feature.csaas.api_key': 'preference-server-secret',
+        'feature.api_gateway.enabled': true,
+        'feature.api_gateway.host': '0.0.0.0',
+        'feature.api_gateway.port': 24444,
+        'feature.api_gateway.api_key': 'preference-server-secret',
         'feature.paintings.default_provider': 'openai',
         'topic.tab.show': false,
         'ui.theme_mode': 'system'
@@ -144,7 +144,7 @@ describe('settings app capabilities', () => {
     expect(mocks.browserWindows[0].webContents.executeJavaScript).toHaveBeenCalledWith(
       `window[${JSON.stringify(RENDERER_GET_SETTINGS_BRIDGE)}]()`
     )
-    expect(mocks.preferenceService.get).toHaveBeenCalledWith('feature.csaas.port')
+    expect(mocks.preferenceService.get).toHaveBeenCalledWith('feature.api_gateway.port')
   })
 
   it('reads preference-backed default painting provider by path', async () => {
@@ -245,7 +245,7 @@ describe('settings app capabilities', () => {
 
     expect(findSettingsDispatchScript()).toContain('"type":"settings/setApiServerApiKey"')
     expect(findSettingsDispatchScript()).toContain('"payload":"new-server-secret"')
-    expect(mocks.preferenceService.set).toHaveBeenCalledWith('feature.csaas.api_key', 'new-server-secret')
+    expect(mocks.preferenceService.set).toHaveBeenCalledWith('feature.api_gateway.api_key', 'new-server-secret')
     expect(result.data).toEqual({
       path: 'apiServer.apiKey',
       value: '[redacted]'
@@ -260,7 +260,7 @@ describe('settings app capabilities', () => {
 
     expect(findSettingsDispatchScript()).toContain('"type":"settings/setApiServerPort"')
     expect(findSettingsDispatchScript()).toContain('"payload":23334')
-    expect(mocks.preferenceService.set).toHaveBeenCalledWith('feature.csaas.port', 23334)
+    expect(mocks.preferenceService.set).toHaveBeenCalledWith('feature.api_gateway.port', 23334)
     expect(result.data).toEqual({
       path: 'apiServer.port',
       value: 23334
@@ -273,7 +273,7 @@ describe('settings app capabilities', () => {
       { source: 'agent' }
     )
 
-    expect(mocks.preferenceService.set).toHaveBeenCalledWith('feature.csaas.host', '0.0.0.0')
+    expect(mocks.preferenceService.set).toHaveBeenCalledWith('feature.api_gateway.host', '0.0.0.0')
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
     expect(result.data).toEqual({
       path: 'apiServer.host',

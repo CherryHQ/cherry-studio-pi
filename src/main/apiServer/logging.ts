@@ -1,6 +1,6 @@
-import type { ApiServerConfig } from '@types'
+import type { ApiGatewayConfig } from '@types'
 
-export function summarizeApiServerConfigForLog(config: ApiServerConfig) {
+export function summarizeApiServerConfigForLog(config: ApiGatewayConfig) {
   return {
     enabled: config.enabled,
     host: config.host,

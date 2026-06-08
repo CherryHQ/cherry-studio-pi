@@ -1,3 +1,4 @@
+import { application } from '@application'
 import { loggerService } from '@logger'
 import {
   checkName,
@@ -5,7 +6,6 @@ import {
   getFileType as getFileTypeByExt,
   getName,
   getNotesDir,
-  getTempDir,
   readTextFileWithAutoEncoding,
   scanDir
 } from '@main/utils/file'
@@ -164,25 +164,41 @@ const DEFAULT_DIRECTORY_LIST_OPTIONS: Required<DirectoryListOptions> = {
 }
 
 class FileStorage {
-  private storageDir = getFilesDir()
-  private notesDir = getNotesDir()
-  private _tempDir = getTempDir()
   private watcher?: FSWatcher
   private watcherSender?: Electron.WebContents
   private currentWatchPath?: string
   private debounceTimer?: NodeJS.Timeout
   private watcherConfig: Required<FileWatcherConfig> = DEFAULT_WATCHER_CONFIG
   private isPaused = false
+  private ensuredDirectories = new Set<string>()
 
-  private get tempDir(): string {
-    if (!fs.existsSync(this._tempDir)) {
-      fs.mkdirSync(this._tempDir, { recursive: true })
-    }
-    return this._tempDir
+  // TODO(v2): Lazy getters defer path lookup until application bootstrap
+  // initializes the path registry. Do not convert these back to field
+  // initializers while FileStorage is still exported as a top-level singleton.
+  private get storageDir(): string {
+    return this.ensureDirectory(application.getPath('feature.files.data'), 'storage')
   }
 
-  constructor() {
-    this.initStorageDir()
+  private get notesDir(): string {
+    return this.ensureDirectory(application.getPath('feature.notes.data'), 'notes')
+  }
+
+  private get tempDir(): string {
+    return this.ensureDirectory(application.getPath('app.temp'), 'temp')
+  }
+
+  private ensureDirectory(dirPath: string, label: string): string {
+    if (!this.ensuredDirectories.has(dirPath) || !fs.existsSync(dirPath)) {
+      try {
+        fs.mkdirSync(dirPath, { recursive: true })
+        this.ensuredDirectories.add(dirPath)
+      } catch (error) {
+        logger.error(`Failed to initialize ${label} directory:`, error as Error)
+        throw error
+      }
+    }
+
+    return dirPath
   }
 
   private initStorageDir = (): void => {

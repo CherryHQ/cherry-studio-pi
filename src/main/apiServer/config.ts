@@ -11,10 +11,10 @@ function getPreferenceConfig(): ApiServerRuntimeConfig | null | undefined {
   try {
     const preferenceService = application.get('PreferenceService')
     const apiServer = preferenceService.getMultiple({
-      enabled: 'feature.csaas.enabled',
-      host: 'feature.csaas.host',
-      port: 'feature.csaas.port',
-      apiKey: 'feature.csaas.api_key'
+      enabled: 'feature.api_gateway.enabled',
+      host: 'feature.api_gateway.host',
+      port: 'feature.api_gateway.port',
+      apiKey: 'feature.api_gateway.api_key'
     })
 
     if (!apiServer.enabled || !apiServer.port) {

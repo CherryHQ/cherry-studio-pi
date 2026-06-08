@@ -41,7 +41,7 @@ const SETTINGS_SECTIONS = [
   ['skills', 'Skills', '/settings/skills'],
   ['websearch', 'Web Search', '/settings/websearch'],
   ['memory', 'Memory', '/settings/memory'],
-  ['api-server', 'API Server', '/settings/api-server'],
+  ['api-gateway', 'API Gateway', '/settings/api-gateway'],
   ['channels', 'Channels', '/settings/channels'],
   ['scheduled-tasks', 'Scheduled tasks', '/settings/scheduled-tasks'],
   ['docprocess', 'Document processing', '/settings/docprocess'],

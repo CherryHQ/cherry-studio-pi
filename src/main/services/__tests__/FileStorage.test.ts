@@ -49,6 +49,17 @@ vi.mock('electron', () => ({
   }
 }))
 
+vi.mock('@application', () => ({
+  application: {
+    getPath: vi.fn((name: string) => {
+      if (name === 'feature.files.data') return mocks.dirs.files
+      if (name === 'feature.notes.data') return mocks.dirs.notes
+      if (name === 'app.temp') return mocks.dirs.temp
+      return path.join(mocks.dirs.root, name)
+    })
+  }
+}))
+
 vi.mock('@main/utils/file', () => ({
   checkName: vi.fn((name: string) => name),
   getFilesDir: () => mocks.dirs.files,
@@ -103,6 +114,9 @@ describe('FileStorage Storage v2 upload flow', () => {
     mocks.dirs.files = path.join(root, 'Files')
     mocks.dirs.notes = path.join(root, 'Notes')
     mocks.dirs.temp = path.join(root, 'Temp')
+    fs.mkdirSync(mocks.dirs.files, { recursive: true })
+    fs.mkdirSync(mocks.dirs.notes, { recursive: true })
+    fs.mkdirSync(mocks.dirs.temp, { recursive: true })
     mocks.storageV2FileRepository.importFile.mockResolvedValue({ imported: true })
     mocks.netFetch.mockReset()
   })

@@ -17,7 +17,7 @@ export const SETTINGS_SECTIONS = [
   ['skills', 'Skills', '/settings/skills'],
   ['websearch', 'Web Search', '/settings/websearch'],
   ['memory', 'Memory', '/settings/memory'],
-  ['api-server', 'API Server', '/settings/api-server'],
+  ['api-gateway', 'API Gateway', '/settings/api-gateway'],
   ['channels', 'Channels', '/settings/channels'],
   ['scheduled-tasks', 'Scheduled tasks', '/settings/scheduled-tasks'],
   ['docprocess', 'Document processing', '/settings/docprocess'],
@@ -133,10 +133,10 @@ const PREFERENCE_SETTING_PATHS: Record<string, UnifiedPreferenceKeyType> = {
   webdavSkipBackupFile: 'data.backup.webdav.skip_backup_file',
   webdavSyncInterval: 'data.backup.webdav.sync_interval',
   webdavUser: 'data.backup.webdav.user',
-  'apiServer.enabled': 'feature.csaas.enabled',
-  'apiServer.host': 'feature.csaas.host',
-  'apiServer.port': 'feature.csaas.port',
-  'apiServer.apiKey': 'feature.csaas.api_key'
+  'apiServer.enabled': 'feature.api_gateway.enabled',
+  'apiServer.host': 'feature.api_gateway.host',
+  'apiServer.port': 'feature.api_gateway.port',
+  'apiServer.apiKey': 'feature.api_gateway.api_key'
 }
 const pathEnum = Array.from(
   new Set([...Object.keys(SETTINGS_SETTERS), ...Object.keys(PREFERENCE_SETTING_PATHS)])
