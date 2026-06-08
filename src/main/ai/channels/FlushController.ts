@@ -26,7 +26,10 @@ export class FlushController {
   private lastUpdateTime = 0
   private _completed = false
 
-  constructor(private readonly doFlush: () => Promise<void>) {}
+  constructor(
+    private readonly doFlush: () => Promise<void>,
+    private readonly onScheduledFlushError: (error: unknown) => void = () => {}
+  ) {}
 
   /** Mark the controller as completed — no more flushes after current one. */
   complete(): void {
@@ -82,10 +85,16 @@ export class FlushController {
         this.needsReflush = false
         this.pendingFlushTimer = setTimeout(() => {
           this.pendingFlushTimer = null
-          void this.flush()
+          this.flushScheduled()
         }, 0)
       }
     }
+  }
+
+  private flushScheduled(): void {
+    void this.flush().catch((error: unknown) => {
+      this.onScheduledFlushError(error)
+    })
   }
 
   /**
@@ -105,7 +114,7 @@ export class FlushController {
         this.lastUpdateTime = now
         this.pendingFlushTimer = setTimeout(() => {
           this.pendingFlushTimer = null
-          void this.flush()
+          this.flushScheduled()
         }, BATCH_AFTER_GAP_MS)
       } else {
         await this.flush()
@@ -115,7 +124,7 @@ export class FlushController {
       const delay = throttleMs - elapsed
       this.pendingFlushTimer = setTimeout(() => {
         this.pendingFlushTimer = null
-        void this.flush()
+        this.flushScheduled()
       }, delay)
     }
   }
