@@ -140,6 +140,16 @@ jobs:
           path: main
           fetch-depth: 0
 
+      - name: Ensure app upgrade config branch exists
+        if: steps.check.outputs.should_run == 'true'
+        working-directory: main
+        run: |
+          if git ls-remote --exit-code --heads origin x-files/app-upgrade-config >/dev/null 2>&1; then
+            echo "x-files/app-upgrade-config already exists."
+          else
+            git push origin "HEAD:refs/heads/x-files/app-upgrade-config"
+          fi
+
       - name: Checkout x-files/app-upgrade-config branch
         if: steps.check.outputs.should_run == 'true'
         uses: actions/checkout@v6

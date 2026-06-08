@@ -33,7 +33,7 @@ on:
         type: boolean
 
 permissions:
-  actions: read
+  actions: write
   contents: write
 
 concurrency:
@@ -265,3 +265,17 @@ jobs:
           overwrite_files: true
           fail_on_unmatched_files: true
           files: release-artifacts/*
+
+      - name: Dispatch app upgrade config sync
+        if: needs.prepare.outputs.draft != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+        run: |
+          gh workflow run update-app-upgrade-config.yml \
+            --repo "${{ github.repository }}" \
+            --ref "${{ github.event.repository.default_branch }}" \
+            -f tag="$RELEASE_TAG" \
+            -f is_prerelease="$RELEASE_PRERELEASE"
