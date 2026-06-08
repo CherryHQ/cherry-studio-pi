@@ -533,9 +533,25 @@ const compactAppCapabilityResult = (result: any, maxChars: number) => {
   }
 }
 
+const TOOL_ERROR_SECRET_PATTERNS: Array<[RegExp, string]> = [
+  [/((?:Authorization)\s*:\s*(?:Bearer|Basic)\s+)([^\s'",;]+)/gi, '$1[redacted]'],
+  [
+    /((?:api[-_]?key|apiKeys|private[-_]?key|token|secret|pass(?:word|phrase)?|passwd|cookie)\s*[=:]\s*['"]?)([^\s'",;]+)/gi,
+    '$1[redacted]'
+  ],
+  [/\b(https?:\/\/)([^/\s:@]+):([^/\s@]+)@/gi, '$1[redacted]@']
+]
+
+const redactToolErrorText = (text: string) => {
+  return TOOL_ERROR_SECRET_PATTERNS.reduce(
+    (current, [pattern, replacement]) => current.replace(pattern, replacement),
+    text
+  )
+}
+
 const compactError = (error: unknown) => {
-  if (error instanceof Error) return error.message
-  return String(error)
+  const text = error instanceof Error ? error.message : String(error)
+  return redactToolErrorText(text)
 }
 
 const RECOVERABLE_BASH_DESCRIPTION_PATTERN =

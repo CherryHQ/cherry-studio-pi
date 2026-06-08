@@ -774,6 +774,29 @@ exit 1
     expect(resultText(result)).toContain('Backup created')
   })
 
+  it('redacts secrets from thrown app capability errors', async () => {
+    vi.mocked(appCapabilityService.call).mockRejectedValueOnce(
+      new Error(
+        'Failed with apiKey=sk-secret-token and Authorization: Bearer bearer-secret at https://user:pass@example.test'
+      )
+    )
+
+    const call = getTool('AppCallCapability', tmpDir, [tmpDir])
+    const result = await call.execute('app-call-secret-error', {
+      id: 'settings.read',
+      input: {}
+    })
+    const serialized = JSON.stringify(result)
+
+    expect(result.details).toMatchObject({ isError: true })
+    expect(serialized).not.toContain('sk-secret-token')
+    expect(serialized).not.toContain('bearer-secret')
+    expect(serialized).not.toContain('user:pass')
+    expect(resultText(result)).toContain('apiKey=[redacted]')
+    expect(resultText(result)).toContain('Authorization: Bearer [redacted]')
+    expect(resultText(result)).toContain('https://[redacted]@example.test')
+  })
+
   it('compacts large AppCallCapability results before returning them to the agent', async () => {
     vi.mocked(appCapabilityService.call).mockResolvedValueOnce({
       ok: true,
