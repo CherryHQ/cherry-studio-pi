@@ -70,7 +70,7 @@ jobs:
 
       - name: Install Dependencies
         shell: bash
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build Windows with code signing
         shell: bash
