@@ -20,13 +20,14 @@ import { useTheme } from '@renderer/context/ThemeProvider'
 import { useAssistants, useDefaultAssistant } from '@renderer/hooks/useAssistant'
 import { useDefaultModel } from '@renderer/hooks/useModel'
 import type { Assistant } from '@renderer/types'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { cn } from '@renderer/utils/style'
 import HomeWindow from '@renderer/windows/quickAssistant/home/HomeWindow'
 import type { Model } from '@shared/data/types/model'
 import { Check, ChevronDown, Info } from 'lucide-react'
 import type React from 'react'
 import type { FC } from 'react'
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingsContentColumn, SettingTitle } from '.'
@@ -49,6 +50,13 @@ const QuickAssistantSettings: FC = () => {
   const { defaultModel } = useDefaultModel()
   const [assistantSelectOpen, setAssistantSelectOpen] = useState(false)
 
+  const showSaveFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    },
+    [t]
+  )
+
   // Take the "default assistant" from the assistant list first.
   const defaultAssistant = useMemo(
     () => assistants.find((a) => a.id === _defaultAssistant.id) || _defaultAssistant,
@@ -60,35 +68,49 @@ const QuickAssistantSettings: FC = () => {
   )
   const selectedAssistant = assistantOptions.find((assistant) => assistant.id === quickAssistantId) || defaultAssistant
   const handleAssistantSelect = (assistantId: string) => {
-    void setQuickAssistantId(assistantId)
+    void setQuickAssistantId(assistantId).catch(showSaveFailed)
   }
 
   const handleEnableQuickAssistant = async (enable: boolean) => {
-    await setEnableQuickAssistant(enable)
+    try {
+      await setEnableQuickAssistant(enable)
 
-    void (!enable && window.api.quickAssistant.close())
+      if (!enable) {
+        await window.api.quickAssistant.close()
+      }
 
-    if (enable && !clickTrayToShowQuickAssistant) {
-      window.toast.info({
-        title: t('settings.quickAssistant.use_shortcut_to_show'),
-        timeout: 4000,
-        icon: <Info size={16} />
-      })
-    }
+      if (enable && !clickTrayToShowQuickAssistant) {
+        window.toast.info({
+          title: t('settings.quickAssistant.use_shortcut_to_show'),
+          timeout: 4000,
+          icon: <Info size={16} />
+        })
+      }
 
-    if (enable && clickTrayToShowQuickAssistant) {
-      void setTray(true)
+      if (enable && clickTrayToShowQuickAssistant) {
+        await setTray(true)
+      }
+    } catch (error) {
+      showSaveFailed(error)
     }
   }
 
   const handleClickTrayToShowQuickAssistant = async (checked: boolean) => {
-    await setClickTrayToShowQuickAssistant(checked)
-    if (checked) void setTray(true)
+    try {
+      await setClickTrayToShowQuickAssistant(checked)
+      if (checked) await setTray(true)
+    } catch (error) {
+      showSaveFailed(error)
+    }
   }
 
   const handleClickReadClipboardAtStartup = async (checked: boolean) => {
-    await setReadClipboardAtStartup(checked)
-    void window.api.quickAssistant.close()
+    try {
+      await setReadClipboardAtStartup(checked)
+      await window.api.quickAssistant.close()
+    } catch (error) {
+      showSaveFailed(error)
+    }
   }
 
   return (
@@ -197,14 +219,14 @@ const QuickAssistantSettings: FC = () => {
                   className="min-w-20"
                   variant={quickAssistantId ? 'default' : 'outline'}
                   onClick={() => {
-                    void setQuickAssistantId(defaultAssistant.id)
+                    void setQuickAssistantId(defaultAssistant.id).catch(showSaveFailed)
                   }}>
                   {t('settings.models.use_assistant')}
                 </Button>
                 <Button
                   className="min-w-20"
                   variant={!quickAssistantId ? 'default' : 'outline'}
-                  onClick={() => void setQuickAssistantId('')}>
+                  onClick={() => void setQuickAssistantId('').catch(showSaveFailed)}>
                   {t('settings.models.use_model')}
                 </Button>
               </ButtonGroup>
