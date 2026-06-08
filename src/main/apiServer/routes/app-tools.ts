@@ -87,6 +87,19 @@ function isNotesRoot(root: string, target: string) {
   return path.resolve(root) === path.resolve(target)
 }
 
+function normalizeNoteContent(value: unknown) {
+  if (typeof value === 'string') return value
+  if (value === null || typeof value === 'undefined') return ''
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value, null, 2) ?? ''
+    } catch {
+      return String(value)
+    }
+  }
+  return String(value)
+}
+
 async function resolveNoteDeletePath(root: string, input?: string) {
   const target = resolveNotePath(root, input)
   if (path.extname(target) || (await fs.stat(target).catch(() => null))) {
@@ -455,7 +468,7 @@ appToolsRouter.post('/notes', async (req, res, next) => {
     await fs.mkdir(parent, { recursive: true })
     const safeName = getName(parent, req.body?.name || 'Untitled', true)
     const filePath = path.join(parent, `${safeName}.md`)
-    await fs.writeFile(filePath, req.body?.content || '', 'utf8')
+    await fs.writeFile(filePath, normalizeNoteContent(req.body?.content), 'utf8')
     notifyMainProcessDataSyncLocalChange('file', { source: 'api.app-tools.notes.create', path: filePath })
     res.json({ ok: true, path: filePath, name: safeName })
   } catch (error) {
@@ -467,7 +480,7 @@ appToolsRouter.put('/notes', async (req, res, next) => {
   try {
     const root = await getNotesRoot()
     const filePath = resolveNotePath(root, req.body?.path, true)
-    await fs.writeFile(filePath, req.body?.content || '', 'utf8')
+    await fs.writeFile(filePath, normalizeNoteContent(req.body?.content), 'utf8')
     notifyMainProcessDataSyncLocalChange('file', { source: 'api.app-tools.notes.write', path: filePath })
     res.json({ ok: true, path: filePath })
   } catch (error) {

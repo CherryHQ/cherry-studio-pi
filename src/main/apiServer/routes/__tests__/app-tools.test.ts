@@ -156,4 +156,30 @@ describe('app tools notes routes', () => {
       path: notePath
     })
   })
+
+  it('preserves non-string note content instead of silently blanking it', async () => {
+    const notePath = path.join(tmpDir, 'structured.md')
+
+    const created = await requestAppTools('POST', '/notes', {
+      name: 'structured',
+      content: { title: 'Morning', done: false }
+    })
+
+    expect(created).toEqual({
+      status: 200,
+      json: { ok: true, path: notePath, name: 'structured' }
+    })
+    expect(await fs.readFile(notePath, 'utf8')).toBe('{\n  "title": "Morning",\n  "done": false\n}')
+
+    const written = await requestAppTools('PUT', '/notes', {
+      path: 'structured',
+      content: false
+    })
+
+    expect(written).toEqual({
+      status: 200,
+      json: { ok: true, path: notePath }
+    })
+    expect(await fs.readFile(notePath, 'utf8')).toBe('false')
+  })
 })
