@@ -40,9 +40,7 @@ export const useApiGateway = () => {
   }, [])
 
   const setApiGatewayEnabled = useCallback(
-    (enabled: boolean) => {
-      void setApiGatewayConfig({ enabled })
-    },
+    (enabled: boolean) => setApiGatewayConfig({ enabled }),
     [setApiGatewayConfig]
   )
 
@@ -52,7 +50,7 @@ export const useApiGateway = () => {
     try {
       const result = await window.api.apiGateway.start()
       if (result.success) {
-        setApiGatewayEnabled(true)
+        await setApiGatewayEnabled(true)
         window.toast.success(t('apiGateway.messages.startSuccess'))
       } else {
         window.toast.error(t('apiGateway.messages.startError') + result.error)
@@ -70,7 +68,7 @@ export const useApiGateway = () => {
     try {
       const result = await window.api.apiGateway.stop()
       if (result.success) {
-        setApiGatewayEnabled(false)
+        await setApiGatewayEnabled(false)
         window.toast.success(t('apiGateway.messages.stopSuccess'))
       } else {
         window.toast.error(t('apiGateway.messages.stopError') + result.error)
@@ -88,7 +86,7 @@ export const useApiGateway = () => {
     try {
       const result = await window.api.apiGateway.restart()
       if (result.success) {
-        setApiGatewayEnabled(result.success)
+        await setApiGatewayEnabled(true)
         window.toast.success(t('apiGateway.messages.restartSuccess'))
       } else {
         window.toast.error(t('apiGateway.messages.restartError') + result.error)
@@ -104,9 +102,11 @@ export const useApiGateway = () => {
   // agents exist) while the persisted `enabled` flag is still false.
   useEffect(() => {
     if (apiGatewayRunning && !apiGatewayConfig.enabled) {
-      setApiGatewayEnabled(true)
+      void setApiGatewayEnabled(true).catch((error) => {
+        window.toast.error(t('apiGateway.messages.operationFailed') + (error instanceof Error ? error.message : error))
+      })
     }
-  }, [apiGatewayRunning, apiGatewayConfig.enabled, setApiGatewayEnabled])
+  }, [apiGatewayRunning, apiGatewayConfig.enabled, setApiGatewayEnabled, t])
 
   return {
     apiGatewayConfig,
