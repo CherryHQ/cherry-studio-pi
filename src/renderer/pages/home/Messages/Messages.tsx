@@ -226,7 +226,8 @@ const Messages: React.FC<MessagesProps> = ({
   })
 
   useEffect(() => {
-    requestAnimationFrame(() => onComponentUpdate?.())
+    const frameId = requestAnimationFrame(() => onComponentUpdate?.())
+    return () => cancelAnimationFrame(frameId)
   }, [onComponentUpdate])
 
   // Chronological grouping. The legacy code reversed twice (outer + inner)

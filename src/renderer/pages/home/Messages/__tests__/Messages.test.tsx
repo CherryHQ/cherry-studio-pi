@@ -1,0 +1,181 @@
+import type { Topic } from '@renderer/types'
+import { render } from '@testing-library/react'
+import type { ReactNode } from 'react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const mocks = vi.hoisted(() => ({
+  cancelAnimationFrame: vi.fn(),
+  getGroupedMessages: vi.fn(() => ({})),
+  requestAnimationFrame: vi.fn(() => 42),
+  usePreference: vi.fn((key: string) => [key === 'chat.message.navigation_mode' ? 'none' : false]),
+  eventUnsubscribe: vi.fn(),
+  eventOn: vi.fn(() => vi.fn()),
+  useCommandHandler: vi.fn()
+}))
+
+vi.mock('@data/DataApiService', () => ({
+  dataApiService: {
+    patch: vi.fn()
+  }
+}))
+
+vi.mock('@data/hooks/usePreference', () => ({
+  usePreference: mocks.usePreference
+}))
+
+vi.mock('@logger', () => ({
+  loggerService: {
+    withContext: () => ({
+      error: vi.fn(),
+      info: vi.fn()
+    })
+  }
+}))
+
+vi.mock('@renderer/components/Icons', () => ({
+  LoadingIcon: () => <div data-testid="loading-icon" />
+}))
+
+vi.mock('@renderer/components/SelectionContextMenu', () => ({
+  default: ({ children }: { children: ReactNode }) => <>{children}</>
+}))
+
+vi.mock('@renderer/features/command', () => ({
+  useCommandHandler: mocks.useCommandHandler
+}))
+
+vi.mock('@renderer/hooks/useAssistant', () => ({
+  useAssistant: () => ({ assistant: null })
+}))
+
+vi.mock('@renderer/hooks/useChatContext', () => ({
+  useChatContext: () => ({
+    handleSelectMessage: vi.fn(),
+    isMultiSelectMode: false
+  })
+}))
+
+vi.mock('@renderer/hooks/useTimer', () => ({
+  useTimer: () => ({
+    setTimeoutTimer: vi.fn()
+  })
+}))
+
+vi.mock('@renderer/hooks/V2ChatContext', () => ({
+  useV2Chat: () => ({
+    clearTopicMessages: vi.fn()
+  })
+}))
+
+vi.mock('@renderer/services/EventService', () => ({
+  EVENT_NAMES: {
+    CLEAR_MESSAGES: 'clear-messages',
+    COPY_TOPIC_IMAGE: 'copy-topic-image',
+    EDIT_CODE_BLOCK: 'edit-code-block',
+    EDIT_MESSAGE: 'edit-message',
+    EXPORT_TOPIC_IMAGE: 'export-topic-image',
+    NEW_CONTEXT: 'new-context',
+    SEND_MESSAGE: 'send-message'
+  },
+  EventEmitter: {
+    emit: vi.fn(),
+    on: mocks.eventOn
+  }
+}))
+
+vi.mock('@renderer/services/MessagesService', () => ({
+  getGroupedMessages: mocks.getGroupedMessages
+}))
+
+vi.mock('@renderer/utils', () => ({
+  captureScrollableAsBlob: vi.fn(),
+  captureScrollableAsDataURL: vi.fn(),
+  removeSpecialCharactersForFileName: (value: string) => value
+}))
+
+vi.mock('@renderer/utils/markdown', () => ({
+  updateCodeBlock: vi.fn()
+}))
+
+vi.mock('@renderer/utils/messageUtils/find', () => ({
+  getMainTextContent: vi.fn(() => '')
+}))
+
+vi.mock('@renderer/utils/messageUtils/partsHelpers', () => ({
+  getTextFromParts: vi.fn(() => '')
+}))
+
+vi.mock('../Blocks', () => ({
+  resolvePartFromParts: vi.fn(),
+  usePartsMap: () => ({})
+}))
+
+vi.mock('../ChatVirtualList', () => ({
+  ChatVirtualList: ({ handleRef }: { handleRef: React.MutableRefObject<any> }) => {
+    handleRef.current = {
+      getScrollElement: () => document.createElement('div'),
+      scrollToBottom: vi.fn(),
+      scrollToKey: vi.fn()
+    }
+    return <div data-testid="chat-virtual-list" />
+  }
+}))
+
+vi.mock('../MessageAnchorLine', () => ({
+  default: () => <div data-testid="message-anchor-line" />
+}))
+
+vi.mock('../MessageGroup', () => ({
+  default: () => <div data-testid="message-group" />
+}))
+
+vi.mock('../NarrowLayout', () => ({
+  default: ({ children }: { children: ReactNode }) => <div>{children}</div>
+}))
+
+vi.mock('../Prompt', () => ({
+  default: () => <div data-testid="prompt" />
+}))
+
+vi.mock('../SelectionBox', () => ({
+  default: () => <div data-testid="selection-box" />
+}))
+
+vi.mock('../shared', () => ({
+  MessagesContainer: ({ children }: { children: ReactNode }) => <div>{children}</div>
+}))
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string) => key
+  })
+}))
+
+const { default: Messages } = await import('../Messages')
+
+describe('Messages', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubGlobal('requestAnimationFrame', mocks.requestAnimationFrame)
+    vi.stubGlobal('cancelAnimationFrame', mocks.cancelAnimationFrame)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('cancels the component update frame on unmount', () => {
+    const onComponentUpdate = vi.fn()
+    const topic = { id: 'topic-1', assistantId: 'assistant-1', name: 'Topic' } as Topic
+
+    const { unmount } = render(<Messages topic={topic} messages={[]} onComponentUpdate={onComponentUpdate} />)
+
+    expect(mocks.requestAnimationFrame).toHaveBeenCalledTimes(1)
+    expect(onComponentUpdate).not.toHaveBeenCalled()
+
+    unmount()
+
+    expect(mocks.cancelAnimationFrame).toHaveBeenCalledWith(42)
+    expect(onComponentUpdate).not.toHaveBeenCalled()
+  })
+})
