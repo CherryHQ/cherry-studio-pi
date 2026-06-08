@@ -1,4 +1,5 @@
-import { Button, Popover, PopoverContent, PopoverTrigger } from '@cherrystudio/ui'
+import { buttonVariants } from '@cherrystudio/ui/components/primitives/button'
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@cherrystudio/ui/components/primitives/popover'
 import { cn } from '@cherrystudio/ui/lib/utils'
 import { Check, ChevronDown } from 'lucide-react'
 import type { CSSProperties, KeyboardEvent, ReactNode } from 'react'
@@ -189,27 +190,32 @@ const Selector = <V extends string | number>({
 
   return (
     <Popover open={open && !disabled} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="secondary"
-          size="sm"
+      <PopoverAnchor asChild>
+        <PopoverTrigger
+          type="button"
+          className={cn(
+            buttonVariants({
+              variant: 'secondary',
+              size: 'sm',
+              className: cn(
+                'min-w-0 text-left leading-none',
+                open && !disabled && 'bg-secondary-active',
+                disabled && 'cursor-not-allowed opacity-60',
+                isPlaceholder && 'text-muted-foreground'
+              )
+            })
+          )}
           role="combobox"
           aria-label={accessibleLabel || undefined}
           aria-expanded={open && !disabled}
           aria-disabled={disabled || undefined}
           tabIndex={disabled ? -1 : 0}
-          className={cn(
-            'min-w-0 text-left leading-none',
-            open && !disabled && 'bg-secondary-active',
-            disabled && 'cursor-not-allowed opacity-60',
-            isPlaceholder && 'text-muted-foreground'
-          )}
           onKeyDown={handleTriggerKeyDown}
           style={{ fontSize: size, ...style }}>
           <span className="min-w-0 truncate">{label}</span>
           <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-        </Button>
-      </PopoverTrigger>
+        </PopoverTrigger>
+      </PopoverAnchor>
       <PopoverContent
         align={popoverPlacement.align}
         side={popoverPlacement.side}
