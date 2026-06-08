@@ -1,6 +1,57 @@
 {
-  "lastUpdated": "2025-11-10T08:14:28Z",
+  "lastUpdated": "2026-06-08T15:18:06.604Z",
   "versions": {
+    "2.0.0": {
+      "metadata": {
+        "segmentId": "gateway-v2",
+        "segmentType": "breaking"
+      },
+      "minCompatibleVersion": "1.7.0",
+      "description": "Major release v2.0 - required intermediate version for v2.x upgrades",
+      "channels": {
+        "latest": null,
+        "rc": null,
+        "beta": null
+      }
+    },
+    "1.9.31": {
+      "minCompatibleVersion": "1.8.1",
+      "description": "Current latest v1.x release for users on v1.8.1+",
+      "channels": {
+        "latest": {
+          "version": "1.9.31",
+          "feedUrls": {
+            "github": "https://github.com/CherryHQ/cherry-studio-pi/releases/download/v1.9.31",
+            "gitcode": "https://github.com/CherryHQ/cherry-studio-pi/releases/latest/download"
+          }
+        },
+        "rc": null,
+        "beta": null
+      },
+      "metadata": {
+        "segmentId": "current-v1",
+        "segmentType": "latest"
+      }
+    },
+    "1.9.6": {
+      "metadata": {
+        "segmentId": "cherry-studio-pi-v1",
+        "segmentType": "stable"
+      },
+      "minCompatibleVersion": "1.7.0",
+      "description": "Cherry Studio Pi stable release channel",
+      "channels": {
+        "latest": {
+          "version": "1.9.6",
+          "feedUrls": {
+            "github": "https://github.com/CherryHQ/cherry-studio-pi/releases/latest/download",
+            "gitcode": "https://github.com/CherryHQ/cherry-studio-pi/releases/latest/download"
+          }
+        },
+        "rc": null,
+        "beta": null
+      }
+    },
     "1.6.7": {
       "metadata": {
         "segmentId": "legacy-v1",
@@ -30,38 +81,6 @@
             "gitcode": "https://github.com/CherryHQ/cherry-studio/releases/download/v1.7.0-beta.3"
           }
         }
-      }
-    },
-    "1.9.6": {
-      "metadata": {
-        "segmentId": "cherry-studio-pi-v1",
-        "segmentType": "stable"
-      },
-      "minCompatibleVersion": "1.7.0",
-      "description": "Cherry Studio Pi stable release channel",
-      "channels": {
-        "latest": {
-          "version": "1.9.6",
-          "feedUrls": {
-            "github": "https://github.com/CherryHQ/cherry-studio-pi/releases/latest/download",
-            "gitcode": "https://github.com/CherryHQ/cherry-studio-pi/releases/latest/download"
-          }
-        },
-        "rc": null,
-        "beta": null
-      }
-    },
-    "2.0.0": {
-      "metadata": {
-        "segmentId": "gateway-v2",
-        "segmentType": "breaking"
-      },
-      "minCompatibleVersion": "1.7.0",
-      "description": "Major release v2.0 - required intermediate version for v2.x upgrades",
-      "channels": {
-        "latest": null,
-        "rc": null,
-        "beta": null
       }
     }
   }
