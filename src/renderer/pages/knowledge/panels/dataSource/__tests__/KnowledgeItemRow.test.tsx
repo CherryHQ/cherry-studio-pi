@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import KnowledgeItemRow from '../KnowledgeItemRow'
@@ -186,6 +186,14 @@ const defaultHandlers = {
   onViewChunks: () => undefined
 }
 
+function renderKnowledgeItemRow(row: ReactElement) {
+  return render(
+    <table>
+      <tbody>{row}</tbody>
+    </table>
+  )
+}
+
 describe('KnowledgeItemRow', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -216,7 +224,9 @@ describe('KnowledgeItemRow', () => {
       error: undefined
     })
 
-    render(<KnowledgeItemRow item={createFileItem({ id: 'file-1', originName: 'old-name.md' })} {...defaultHandlers} />)
+    renderKnowledgeItemRow(
+      <KnowledgeItemRow item={createFileItem({ id: 'file-1', originName: 'old-name.md' })} {...defaultHandlers} />
+    )
 
     expect(screen.getByText('季度报告.pdf')).toBeInTheDocument()
     expect(screen.getByText('pdf')).toBeInTheDocument()
@@ -229,7 +239,7 @@ describe('KnowledgeItemRow', () => {
   })
 
   it('falls back to the file source when the file entry is not loaded', () => {
-    render(
+    renderKnowledgeItemRow(
       <KnowledgeItemRow item={createFileItem({ id: 'file-1', source: '/tmp/fallback.md' })} {...defaultHandlers} />
     )
 
@@ -239,20 +249,26 @@ describe('KnowledgeItemRow', () => {
   })
 
   it('renders the completed status label for ready items', () => {
-    render(<KnowledgeItemRow item={createFileItem({ id: 'file-1', status: 'completed' })} {...defaultHandlers} />)
+    renderKnowledgeItemRow(
+      <KnowledgeItemRow item={createFileItem({ id: 'file-1', status: 'completed' })} {...defaultHandlers} />
+    )
 
     expect(screen.getByText('就绪')).toBeInTheDocument()
   })
 
   it('renders the failed status label for failed items', () => {
-    render(<KnowledgeItemRow item={createFileItem({ id: 'file-1', status: 'failed' })} {...defaultHandlers} />)
+    renderKnowledgeItemRow(
+      <KnowledgeItemRow item={createFileItem({ id: 'file-1', status: 'failed' })} {...defaultHandlers} />
+    )
 
     expect(screen.getByText('失败')).toBeInTheDocument()
     expect(screen.getByRole('tooltip')).toHaveTextContent('Indexing failed')
   })
 
   it('renders the processing status label for in-flight items', () => {
-    render(<KnowledgeItemRow item={createFileItem({ id: 'file-1', status: 'reading' })} {...defaultHandlers} />)
+    renderKnowledgeItemRow(
+      <KnowledgeItemRow item={createFileItem({ id: 'file-1', status: 'reading' })} {...defaultHandlers} />
+    )
 
     expect(screen.getByText('文件处理')).toBeInTheDocument()
   })
@@ -260,7 +276,7 @@ describe('KnowledgeItemRow', () => {
   it('calls onClick when the row is clicked', () => {
     const handleClick = vi.fn()
 
-    render(
+    renderKnowledgeItemRow(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -276,7 +292,7 @@ describe('KnowledgeItemRow', () => {
   it('does not call onClick for non-completed items', () => {
     const handleClick = vi.fn()
 
-    render(
+    renderKnowledgeItemRow(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs', status: 'processing' })}
         {...defaultHandlers}
@@ -290,7 +306,7 @@ describe('KnowledgeItemRow', () => {
   })
 
   it('renders the more button', () => {
-    render(
+    renderKnowledgeItemRow(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -303,7 +319,7 @@ describe('KnowledgeItemRow', () => {
   it('does not call onClick when the more button is clicked', () => {
     const handleClick = vi.fn()
 
-    render(
+    renderKnowledgeItemRow(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -317,7 +333,7 @@ describe('KnowledgeItemRow', () => {
   })
 
   it('opens the more menu with placeholder actions', () => {
-    render(
+    renderKnowledgeItemRow(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -335,7 +351,7 @@ describe('KnowledgeItemRow', () => {
   it('does not call onClick when a more menu action is clicked', () => {
     const handleClick = vi.fn()
 
-    render(
+    renderKnowledgeItemRow(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -353,7 +369,7 @@ describe('KnowledgeItemRow', () => {
     const handleClick = vi.fn()
     const handlePreviewSource = vi.fn()
 
-    render(
+    renderKnowledgeItemRow(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -374,7 +390,7 @@ describe('KnowledgeItemRow', () => {
   it('shows a failure toast when preview source rejects', async () => {
     const handlePreviewSource = vi.fn().mockRejectedValue(new Error('preview failed'))
 
-    render(
+    renderKnowledgeItemRow(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -394,7 +410,7 @@ describe('KnowledgeItemRow', () => {
     const handleClick = vi.fn()
     const handleViewChunks = vi.fn()
 
-    render(
+    renderKnowledgeItemRow(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -413,7 +429,9 @@ describe('KnowledgeItemRow', () => {
   it.each(['idle', 'processing', 'reading', 'embedding', 'failed', 'deleting'] as const)(
     'hides view chunks for %s leaf items',
     (status) => {
-      render(<KnowledgeItemRow item={createUrlItem({ id: `url-${status}`, status })} {...defaultHandlers} />)
+      renderKnowledgeItemRow(
+        <KnowledgeItemRow item={createUrlItem({ id: `url-${status}`, status })} {...defaultHandlers} />
+      )
 
       fireEvent.click(screen.getByRole('button', { name: '更多' }))
 
@@ -426,7 +444,7 @@ describe('KnowledgeItemRow', () => {
     const handleClick = vi.fn()
     const handleDelete = vi.fn()
 
-    render(
+    renderKnowledgeItemRow(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -447,7 +465,7 @@ describe('KnowledgeItemRow', () => {
   it('shows a failure toast when delete rejects', async () => {
     const handleDelete = vi.fn().mockRejectedValue(new Error('delete failed'))
 
-    render(
+    renderKnowledgeItemRow(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -467,7 +485,7 @@ describe('KnowledgeItemRow', () => {
     const handleClick = vi.fn()
     const handleReindex = vi.fn()
 
-    render(
+    renderKnowledgeItemRow(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -488,7 +506,7 @@ describe('KnowledgeItemRow', () => {
   it('shows a failure toast when reindex rejects', async () => {
     const handleReindex = vi.fn().mockRejectedValue(new Error('reindex failed'))
 
-    render(
+    renderKnowledgeItemRow(
       <KnowledgeItemRow
         item={createUrlItem({ id: 'url-1', source: 'https://example.com/product-docs' })}
         {...defaultHandlers}
@@ -505,7 +523,9 @@ describe('KnowledgeItemRow', () => {
   })
 
   it.each(['completed', 'failed'] as const)('shows reindex for %s items', (status) => {
-    render(<KnowledgeItemRow item={createUrlItem({ id: `url-${status}`, status })} {...defaultHandlers} />)
+    renderKnowledgeItemRow(
+      <KnowledgeItemRow item={createUrlItem({ id: `url-${status}`, status })} {...defaultHandlers} />
+    )
 
     fireEvent.click(screen.getByRole('button', { name: '更多' }))
 
@@ -515,7 +535,9 @@ describe('KnowledgeItemRow', () => {
   it.each(['idle', 'processing', 'reading', 'embedding', 'deleting'] as const)(
     'hides reindex for %s leaf items',
     (status) => {
-      render(<KnowledgeItemRow item={createUrlItem({ id: `url-${status}`, status })} {...defaultHandlers} />)
+      renderKnowledgeItemRow(
+        <KnowledgeItemRow item={createUrlItem({ id: `url-${status}`, status })} {...defaultHandlers} />
+      )
 
       fireEvent.click(screen.getByRole('button', { name: '更多' }))
 
