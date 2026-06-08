@@ -347,13 +347,23 @@ describe('StorageV2DataRootService', () => {
     const configPath = '/mock/home/.cherrystudio/config/config.json'
     const restoredRoot = '/mock/appData/Cherry Studio Pi/Data'
     const configuredRoot = '/mock/configured-root'
+    const cherryStudioRoot = '/mock/cherry-studio-root'
     vi.mocked(fs.existsSync).mockImplementation((candidate) =>
-      [configPath, restoredRoot, `${restoredRoot}/manifest.json`, configuredRoot].includes(String(candidate))
+      [configPath, restoredRoot, `${restoredRoot}/manifest.json`, configuredRoot, cherryStudioRoot].includes(
+        String(candidate)
+      )
     )
     vi.mocked(fs.readFileSync).mockImplementation((candidate) => {
       if (String(candidate) === configPath) {
         return JSON.stringify({
           dataRoots: [
+            {
+              app: 'cherry-studio',
+              profileId: 'default',
+              path: cherryStudioRoot,
+              active: true,
+              createdAt: '2024-01-01T00:00:00.000Z'
+            },
             {
               app: 'perry-studio',
               profileId: 'default',
@@ -384,6 +394,10 @@ describe('StorageV2DataRootService', () => {
         expect.objectContaining({
           path: configuredRoot,
           active: false
+        }),
+        expect.objectContaining({
+          path: cherryStudioRoot,
+          active: true
         }),
         expect.objectContaining({
           path: restoredRoot,

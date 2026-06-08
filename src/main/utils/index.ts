@@ -8,15 +8,8 @@ import { app } from 'electron'
 const STORAGE_FORMAT = 'cherry-studio-pi-storage'
 const STORAGE_VERSION = 2
 const STORAGE_APP_ID = 'cherry-studio-pi'
-const COMPATIBLE_STORAGE_APP_IDS = new Set([STORAGE_APP_ID, 'perry-studio', 'cherry-studio'])
-const KNOWN_DATA_ROOT_NAMES = [
-  'Cherry Studio Pi',
-  'CherryStudioPi',
-  'Perry Studio',
-  'PerryStudio',
-  'Cherry Studio',
-  'CherryStudio'
-]
+const COMPATIBLE_STORAGE_APP_IDS = new Set([STORAGE_APP_ID, 'perry-studio'])
+const KNOWN_DATA_ROOT_NAMES = ['Cherry Studio Pi', 'CherryStudioPi', 'Perry Studio', 'PerryStudio']
 
 type DataRootConfigEntry = {
   app?: string

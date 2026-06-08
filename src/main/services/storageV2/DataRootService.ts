@@ -15,7 +15,7 @@ const STORAGE_FORMAT = 'cherry-studio-pi-storage'
 const STORAGE_VERSION = 2
 const STORAGE_APP_ID = 'cherry-studio-pi'
 const STORAGE_PRODUCT_NAME = 'Cherry Studio Pi'
-const MANAGED_STORAGE_APP_IDS = new Set([STORAGE_APP_ID, 'perry-studio', 'cherry-studio'])
+const MANAGED_STORAGE_APP_IDS = new Set([STORAGE_APP_ID, 'perry-studio'])
 
 type DataRootConfigEntry = {
   app?: string

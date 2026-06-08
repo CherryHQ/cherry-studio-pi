@@ -115,6 +115,34 @@ describe('getDataPath', () => {
     expect(getDataPath()).toBe(configuredRoot)
   })
 
+  it('ignores active configured roots owned by the main Cherry Studio app', async () => {
+    const configPath = '/mock/home/.cherrystudio/config/config.json'
+    const cherryStudioRoot = '/mock/cherry-studio/Data'
+    const currentRoot = '/mock/appData/Cherry Studio Pi/Data'
+    mocks.fs.existsSync.mockImplementation((candidate) =>
+      [configPath, cherryStudioRoot, `${cherryStudioRoot}/main.db`].includes(String(candidate))
+    )
+    mocks.fs.readFileSync.mockImplementation((candidate) => {
+      if (String(candidate) === configPath) {
+        return JSON.stringify({
+          dataRoots: [
+            {
+              app: 'cherry-studio',
+              path: cherryStudioRoot,
+              active: true
+            }
+          ]
+        })
+      }
+
+      return '{}'
+    })
+
+    const { getDataPath } = await import('../index')
+
+    expect(getDataPath()).toBe(currentRoot)
+  })
+
   it('does not let an empty configured data root shadow the current root with real data', async () => {
     const configPath = '/mock/home/.cherrystudio/config/config.json'
     const configuredRoot = '/mock/stable/Data'
@@ -213,6 +241,18 @@ describe('getDataPath', () => {
     const { getDataPath } = await import('../index')
 
     expect(getDataPath()).toBe(legacyRoot)
+  })
+
+  it('does not discover the main Cherry Studio default data root as a Pi legacy root', async () => {
+    const cherryStudioRoot = '/mock/appData/Cherry Studio/Data'
+    const currentRoot = '/mock/appData/Cherry Studio Pi/Data'
+    mocks.fs.existsSync.mockImplementation((candidate) =>
+      [cherryStudioRoot, `${cherryStudioRoot}/agents.db`].includes(String(candidate))
+    )
+
+    const { getDataPath } = await import('../index')
+
+    expect(getDataPath()).toBe(currentRoot)
   })
 
   it('keeps getDefaultDataPath pinned to the Electron userData root', async () => {
