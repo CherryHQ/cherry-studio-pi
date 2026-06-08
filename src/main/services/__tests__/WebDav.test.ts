@@ -70,6 +70,31 @@ describe('WebDav', () => {
     await expect(webdav.putFileContents('backup.zip', 'data')).rejects.toThrow('WebDAV client not initialized')
   })
 
+  it('rejects remote file paths outside the configured WebDAV directory', async () => {
+    const webdav = new WebDav({
+      webdavHost: 'http://192.168.1.100:8080',
+      webdavUser: 'webdav',
+      webdavPass: 'test-webdav-password',
+      webdavPath: '/Cherry Studio Pi'
+    })
+
+    await expect(webdav.putFileContents('../backup.zip', 'data')).rejects.toThrow(
+      'WebDAV file path is outside the configured directory'
+    )
+    await expect(webdav.getFileContents('../backup.zip')).rejects.toThrow(
+      'WebDAV file path is outside the configured directory'
+    )
+    await expect(webdav.deleteFile('../backup.zip')).rejects.toThrow(
+      'WebDAV file path is outside the configured directory'
+    )
+
+    expect(mocks.client.exists).not.toHaveBeenCalled()
+    expect(mocks.client.createDirectory).not.toHaveBeenCalled()
+    expect(mocks.client.putFileContents).not.toHaveBeenCalled()
+    expect(mocks.client.getFileContents).not.toHaveBeenCalled()
+    expect(mocks.client.deleteFile).not.toHaveBeenCalled()
+  })
+
   it('checks and creates the configured WebDAV directory instead of probing the server root', async () => {
     mocks.client.exists.mockResolvedValueOnce(false)
     mocks.client.createDirectory.mockResolvedValueOnce(true)

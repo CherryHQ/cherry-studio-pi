@@ -27,6 +27,11 @@ function redactWebDavHostForLog(webdavHost: string) {
   }
 }
 
+function isRemotePathInside(targetPath: string, rootPath: string) {
+  const relativePath = path.posix.relative(rootPath, targetPath)
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.posix.isAbsolute(relativePath))
+}
+
 export default class WebDav {
   public instance: WebDAVClient | undefined
   private webdavPath: string
@@ -62,6 +67,21 @@ export default class WebDav {
     this.deleteFile = this.deleteFile.bind(this)
   }
 
+  private resolveRemoteFilePath(filename: string) {
+    const normalizedFileName = String(filename || '')
+      .trim()
+      .replace(/\\/g, '/')
+    if (!normalizedFileName || normalizedFileName.includes('\0')) {
+      throw new Error('Invalid WebDAV file name')
+    }
+
+    const remoteFilePath = path.posix.normalize(path.posix.join(this.webdavPath, normalizedFileName))
+    if (remoteFilePath === this.webdavPath || !isRemotePathInside(remoteFilePath, this.webdavPath)) {
+      throw new Error('WebDAV file path is outside the configured directory')
+    }
+    return remoteFilePath
+  }
+
   public putFileContents = async (
     filename: string,
     data: string | BufferLike | Stream.Readable,
@@ -70,6 +90,8 @@ export default class WebDav {
     if (!this.instance) {
       throw new Error('WebDAV client not initialized')
     }
+
+    const remoteFilePath = this.resolveRemoteFilePath(filename)
 
     try {
       if (!(await this.instance.exists(this.webdavPath))) {
@@ -81,8 +103,6 @@ export default class WebDav {
       logger.error('Error creating directory on WebDAV:', error as Error)
       throw error
     }
-
-    const remoteFilePath = path.posix.join(this.webdavPath, filename)
 
     try {
       return await this.instance.putFileContents(remoteFilePath, data, options)
@@ -97,7 +117,7 @@ export default class WebDav {
       throw new Error('WebDAV client not initialized')
     }
 
-    const remoteFilePath = path.posix.join(this.webdavPath, filename)
+    const remoteFilePath = this.resolveRemoteFilePath(filename)
 
     try {
       return await this.instance.getFileContents(remoteFilePath, options)
@@ -158,7 +178,7 @@ export default class WebDav {
       throw new Error('WebDAV client not initialized')
     }
 
-    const remoteFilePath = path.posix.join(this.webdavPath, filename)
+    const remoteFilePath = this.resolveRemoteFilePath(filename)
 
     try {
       return await this.instance.deleteFile(remoteFilePath)
