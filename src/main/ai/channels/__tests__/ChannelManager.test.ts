@@ -1,11 +1,28 @@
 import { agentChannelService as channelService } from '@data/services/AgentChannelService'
+import { WindowType } from '@main/core/window/types'
+import { IpcChannel } from '@shared/IpcChannel'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ChannelAdapter, type ChannelAdapterConfig } from '../ChannelAdapter'
 import { ChannelManager, registerAdapterFactory } from '../ChannelManager'
 import { channelMessageHandler } from '../ChannelMessageHandler'
 
+const { mockBroadcastToType } = vi.hoisted(() => ({
+  mockBroadcastToType: vi.fn()
+}))
+
 const channelManager = new ChannelManager()
+
+vi.mock('@application', () => ({
+  application: {
+    get: vi.fn((serviceName: string) => {
+      if (serviceName === 'WindowManager') {
+        return { broadcastToType: mockBroadcastToType }
+      }
+      throw new Error(`Unexpected service: ${serviceName}`)
+    })
+  }
+}))
 
 vi.mock('@logger', () => ({
   loggerService: {
@@ -66,6 +83,10 @@ describe('ChannelManager', () => {
         agentId,
         channelConfig: channel.config
       })
+      const connectError = (channel.config as { connectError?: string }).connectError
+      if (connectError) {
+        adapter.connect.mockRejectedValueOnce(new Error(connectError))
+      }
       createdAdapters.push(adapter)
       return adapter
     })
@@ -206,6 +227,34 @@ describe('ChannelManager', () => {
     // New adapter created for ch-1
     expect(createdAdapters).toHaveLength(3)
     expect(createdAdapters[2].connect).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps background connect failures visible in status APIs and broadcasts', async () => {
+    vi.mocked(channelService.getChannel).mockResolvedValueOnce(
+      makeChannelRow({ id: 'ch-fail', config: { bot_token: 'bad', connectError: 'invalid token' } })
+    )
+
+    await channelManager.syncChannel('ch-fail')
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    expect(createdAdapters).toHaveLength(1)
+    expect(channelManager.getAdapter('ch-fail')).toBeUndefined()
+    expect(channelManager.getAllStatuses()).toEqual([
+      expect.objectContaining({
+        channelId: 'ch-fail',
+        connected: false,
+        error: 'invalid token'
+      })
+    ])
+    expect(mockBroadcastToType).toHaveBeenCalledWith(
+      WindowType.Main,
+      IpcChannel.Channel_StatusChange,
+      expect.objectContaining({
+        channelId: 'ch-fail',
+        connected: false,
+        error: 'invalid token'
+      })
+    )
   })
 
   it('inactive channels are skipped', async () => {

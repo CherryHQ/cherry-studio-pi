@@ -106,6 +106,7 @@ export class ChannelManager extends BaseService {
     )
     await Promise.all(disconnects)
     this.adapters.clear()
+    this.channelStatuses.clear()
     logger.info('Channel manager stopped')
   }
 
@@ -161,19 +162,36 @@ export class ChannelManager extends BaseService {
   /** Get live connection status for all active adapters. */
   getAllStatuses(): ChannelStatusEvent[] {
     const result: ChannelStatusEvent[] = []
+    const seen = new Set<string>()
     for (const [, adapter] of this.adapters) {
       const cached = this.channelStatuses.get(adapter.channelId)
+      seen.add(adapter.channelId)
       result.push({
         channelId: adapter.channelId,
         connected: adapter.connected,
         ...(cached?.error && !adapter.connected ? { error: cached.error } : {})
       })
     }
+    for (const [channelId, status] of this.channelStatuses) {
+      if (!seen.has(channelId)) {
+        result.push(status)
+      }
+    }
     return result
   }
 
   private sendToRenderer(channel: string, data: unknown): void {
     application.get('WindowManager').broadcastToType(WindowType.Main, channel, data)
+  }
+
+  private reportConnectionFailure(row: ChannelRow, error: unknown): void {
+    const errorStatus: ChannelStatusEvent = {
+      channelId: row.id,
+      connected: false,
+      error: error instanceof Error ? error.message : String(error)
+    }
+    this.channelStatuses.set(row.id, errorStatus)
+    this.sendToRenderer(IpcChannel.Channel_StatusChange, errorStatus)
   }
 
   /** Disconnect the adapter for a single channel without reconnecting. */
@@ -184,6 +202,7 @@ export class ChannelManager extends BaseService {
 
       try {
         await adapter.disconnect()
+        this.channelStatuses.delete(adapter.channelId)
         this.adapters.delete(key)
       } catch (err) {
         if (suppressErrors) {
@@ -191,6 +210,7 @@ export class ChannelManager extends BaseService {
             key,
             error: err instanceof Error ? err.message : String(err)
           })
+          this.channelStatuses.delete(adapter.channelId)
           this.adapters.delete(key)
           continue
         }
@@ -235,6 +255,7 @@ export class ChannelManager extends BaseService {
             })
           })
           .finally(() => {
+            this.channelStatuses.delete(adapter.channelId)
             this.adapters.delete(key)
           })
       )
@@ -383,7 +404,9 @@ export class ChannelManager extends BaseService {
       if (options.awaitConnect) {
         await connect()
       } else {
-        void connect().catch(() => {})
+        void connect().catch((error) => {
+          this.reportConnectionFailure(row, error)
+        })
       }
     } catch (error) {
       logger.error('Failed to create channel adapter', {
@@ -392,13 +415,7 @@ export class ChannelManager extends BaseService {
         type: row.type,
         error: error instanceof Error ? error.message : String(error)
       })
-      const errorStatus: ChannelStatusEvent = {
-        channelId: row.id,
-        connected: false,
-        error: error instanceof Error ? error.message : String(error)
-      }
-      this.channelStatuses.set(row.id, errorStatus)
-      this.sendToRenderer(IpcChannel.Channel_StatusChange, errorStatus)
+      this.reportConnectionFailure(row, error)
       if (options.awaitConnect) {
         throw error
       }
