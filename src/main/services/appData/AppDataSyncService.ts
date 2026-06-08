@@ -703,11 +703,11 @@ function normalizeRemoteSnapshotPath(value: string) {
 
 function normalizeNotesRelativePath(value: string, label = 'Notes file path') {
   const rawPath = String(value ?? '').replace(/\\/g, '/')
-  if (!rawPath || !rawPath.trim() || /^[a-z]:\//i.test(rawPath)) {
+  if (!rawPath || !rawPath.trim() || rawPath.startsWith('/') || /^[a-z]:/i.test(rawPath)) {
     throw new Error(`${label} is invalid`)
   }
 
-  const normalized = path.posix.normalize(rawPath.replace(/^\/+/g, ''))
+  const normalized = path.posix.normalize(rawPath)
   if (!normalized || normalized === '.' || normalized === '..' || normalized.startsWith('../')) {
     throw new Error(`${label} is invalid`)
   }

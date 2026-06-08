@@ -1804,6 +1804,44 @@ describe('AppDataSyncService', () => {
     ).toBe(false)
   })
 
+  it('rejects remote notes paths that are absolute before downloading contents', async () => {
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 3,
+        updatedAt: 1760000000000,
+        records: {},
+        notes: {
+          version: 1,
+          updatedAt: 1760000000000,
+          files: {
+            '/outside.md': {
+              version: 1,
+              relativePath: '/outside.md',
+              valueHash: 'a'.repeat(64),
+              byteSize: 4,
+              updatedAt: 1760000000000,
+              deletedAt: null,
+              deviceId: 'remote-device',
+              path: 'notes/files/outside.bin'
+            }
+          }
+        }
+      })
+    )
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('Remote notes file path is invalid')
+
+    expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
+    expect(
+      mocks.webdav.getFileContents.mock.calls.some(([filePath]) => String(filePath).includes('/notes/files/'))
+    ).toBe(false)
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/manifest.json'))
+    ).toBe(false)
+  })
+
   it('rejects runtime directory empty-state manifests with a mismatched content hash', async () => {
     mocks.remoteFiles.set(
       '/remote-root/sync/v1/manifest.json',
