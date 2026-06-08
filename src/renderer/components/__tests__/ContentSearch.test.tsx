@@ -40,11 +40,12 @@ vi.mock('react-i18next', () => ({
 }))
 
 const originalRAF = window.requestAnimationFrame
+const originalCancelRAF = window.cancelAnimationFrame
 const originalCSS = globalThis.CSS
 const originalHighlight = globalThis.Highlight
 const originalScrollIntoView = HTMLElement.prototype.scrollIntoView
 
-beforeAll(() => {
+const installImmediateAnimationFrame = () => {
   Object.defineProperty(window, 'requestAnimationFrame', {
     value: (callback: FrameRequestCallback) => {
       callback(0)
@@ -52,6 +53,14 @@ beforeAll(() => {
     },
     configurable: true
   })
+  Object.defineProperty(window, 'cancelAnimationFrame', {
+    value: vi.fn(),
+    configurable: true
+  })
+}
+
+beforeAll(() => {
+  installImmediateAnimationFrame()
   Object.defineProperty(globalThis, 'CSS', {
     value: {
       ...originalCSS,
@@ -74,6 +83,10 @@ afterAll(() => {
     value: originalRAF,
     configurable: true
   })
+  Object.defineProperty(window, 'cancelAnimationFrame', {
+    value: originalCancelRAF,
+    configurable: true
+  })
   Object.defineProperty(globalThis, 'CSS', {
     value: originalCSS,
     configurable: true
@@ -85,6 +98,7 @@ afterAll(() => {
 describe('ContentSearch', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    installImmediateAnimationFrame()
   })
 
   it('clears stale result counts when disabled and reopened without a query', async () => {
@@ -121,6 +135,44 @@ describe('ContentSearch', () => {
     })
     expect(screen.queryByText('/')).not.toBeInTheDocument()
     expect(screen.getByPlaceholderText('chat.assistant.search.placeholder')).toHaveValue('')
+
+    target.remove()
+  })
+
+  it('cancels a pending focus frame when disabled', () => {
+    const requestAnimationFrame = vi.fn(() => 77)
+    const cancelAnimationFrame = vi.fn()
+    Object.defineProperty(window, 'requestAnimationFrame', {
+      value: requestAnimationFrame,
+      configurable: true
+    })
+    Object.defineProperty(window, 'cancelAnimationFrame', {
+      value: cancelAnimationFrame,
+      configurable: true
+    })
+
+    const target = document.createElement('div')
+    target.textContent = 'hello world'
+    document.body.append(target)
+    let searchRef: ContentSearchRef | null = null
+
+    render(
+      <ContentSearch
+        ref={(instance) => {
+          searchRef = instance
+        }}
+        searchTarget={target}
+        filter={() => NodeFilter.FILTER_ACCEPT}
+      />
+    )
+
+    act(() => {
+      searchRef?.enable('hello')
+      searchRef?.disable()
+    })
+
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(1)
+    expect(cancelAnimationFrame).toHaveBeenCalledWith(77)
 
     target.remove()
   })

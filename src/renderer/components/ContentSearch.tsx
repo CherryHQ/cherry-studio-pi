@@ -147,6 +147,7 @@ export const ContentSearch = React.forwardRef<ContentSearchRef, Props>(
     })()
     const containerRef = React.useRef<HTMLDivElement>(null)
     const searchInputRef = React.useRef<HTMLInputElement>(null)
+    const focusFrameRef = React.useRef<number | null>(null)
     const [enableContentSearch, setEnableContentSearch] = useState(false)
     const [searchCompleted, setSearchCompleted] = useState(SearchCompletedState.NotSearched)
     const [isCaseSensitive, setIsCaseSensitive] = useState(false)
@@ -167,6 +168,33 @@ export const ContentSearch = React.forwardRef<ContentSearchRef, Props>(
         searchInputRef.current.value = ''
       }
     }, [])
+
+    const cancelFocusFrame = useCallback(() => {
+      if (focusFrameRef.current !== null) {
+        cancelAnimationFrame(focusFrameRef.current)
+        focusFrameRef.current = null
+      }
+    }, [])
+
+    const scheduleFocusFrame = useCallback(
+      (callback: () => void) => {
+        cancelFocusFrame()
+
+        // Some tests install a synchronous requestAnimationFrame mock. Track
+        // that case so we do not keep an already-fired frame id around.
+        let didRun = false
+        let frameId = 0
+        frameId = requestAnimationFrame(() => {
+          didRun = true
+          if (focusFrameRef.current === frameId) {
+            focusFrameRef.current = null
+          }
+          callback()
+        })
+        focusFrameRef.current = didRun ? null : frameId
+      },
+      [cancelFocusFrame]
+    )
 
     const locateByIndex = useCallback(
       (shouldScroll = true) => {
@@ -216,6 +244,7 @@ export const ContentSearch = React.forwardRef<ContentSearchRef, Props>(
     const implementation = useMemo(
       () => ({
         disable: () => {
+          cancelFocusFrame()
           setEnableContentSearch(false)
           clearSearchInput()
           resetSearch()
@@ -226,13 +255,13 @@ export const ContentSearch = React.forwardRef<ContentSearchRef, Props>(
             const inputEl = searchInputRef.current
             if (initialText && initialText.trim().length > 0) {
               inputEl.value = initialText
-              requestAnimationFrame(() => {
+              scheduleFocusFrame(() => {
                 inputEl.focus()
                 inputEl.select()
                 search(false)
               })
             } else {
-              requestAnimationFrame(() => {
+              scheduleFocusFrame(() => {
                 inputEl.focus()
                 inputEl.select()
               })
@@ -264,7 +293,7 @@ export const ContentSearch = React.forwardRef<ContentSearchRef, Props>(
           searchInputRef.current?.focus()
         }
       }),
-      [allRanges.length, clearSearchInput, locateByIndex, resetSearch, search]
+      [allRanges.length, cancelFocusFrame, clearSearchInput, locateByIndex, resetSearch, scheduleFocusFrame, search]
     )
 
     const _searchHandlerDebounce = useMemo(() => debounce(implementation.search, 300), [implementation.search])
@@ -314,8 +343,12 @@ export const ContentSearch = React.forwardRef<ContentSearchRef, Props>(
     )
 
     const searchInputFocus = useCallback(() => {
-      requestAnimationFrame(() => searchInputRef.current?.focus())
-    }, [])
+      scheduleFocusFrame(() => searchInputRef.current?.focus())
+    }, [scheduleFocusFrame])
+
+    useEffect(() => {
+      return () => cancelFocusFrame()
+    }, [cancelFocusFrame])
 
     const userOutlinedButtonOnClick = useCallback(() => {
       onIncludeUserChange?.(!includeUser)
