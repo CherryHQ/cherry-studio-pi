@@ -16,6 +16,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('ImageViewer')
+const REMOTE_IMAGE_FETCH_TIMEOUT_MS = 15_000
 
 export interface ImageViewerPreviewConfig {
   activeIndex?: number
@@ -51,7 +52,7 @@ export async function getImageBlobFromSource(src: string): Promise<Blob> {
     return new Blob([bytes], { type: mimeType })
   }
 
-  const response = await fetch(src)
+  const response = await fetch(src, { signal: AbortSignal.timeout(REMOTE_IMAGE_FETCH_TIMEOUT_MS) })
   if (!response.ok) {
     throw new Error(`Failed to fetch image: HTTP ${response.status}`)
   }

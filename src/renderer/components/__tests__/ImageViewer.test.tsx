@@ -129,7 +129,9 @@ describe('ImageViewer', () => {
   it('reads image blobs from remote URLs', async () => {
     const blob = await getImageBlobFromSource('https://example.com/image.webp')
 
-    expect(mocks.fetch).toHaveBeenCalledWith('https://example.com/image.webp')
+    expect(mocks.fetch).toHaveBeenCalledWith('https://example.com/image.webp', {
+      signal: expect.any(AbortSignal)
+    })
     expect(blob.type).toBe('image/webp')
   })
 
