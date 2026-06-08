@@ -1632,9 +1632,20 @@ export class AppDataSyncService {
       context && this.assertSyncRunActive(context, '清理远端临时文件')
       if (entry.type === 'directory') continue
 
-      const filename = entry.filename || path.posix.join(basePath, entry.basename || '')
-      const basename = entry.basename || path.posix.basename(filename)
-      if (!filename || !basename) continue
+      const rawFilename = entry.filename || entry.basename || ''
+      const basename = entry.basename || path.posix.basename(rawFilename)
+      if (!rawFilename || !basename) continue
+
+      const filename = path.posix.normalize(
+        path.posix.isAbsolute(rawFilename) ? rawFilename : path.posix.join(basePath, rawFilename)
+      )
+      if (filename === path.posix.normalize(basePath) || !this.isRemotePathUnderRoot(filename, basePath)) {
+        logger.warn('Skipped stale WebDAV root temp artifact outside the sync root', {
+          filename,
+          basePath
+        })
+        continue
+      }
 
       const isTemporaryJson = basename.startsWith('.tmp-') && basename.endsWith('.json')
       const isLegacyWriteProbe =

@@ -2889,6 +2889,50 @@ describe('AppDataSyncService', () => {
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/backups/old-device-snapshot.zip')).toBe(false)
   })
 
+  it('does not delete root temp cleanup entries outside the sync root', async () => {
+    const insideTempPath = '/remote-root/sync/v1/.tmp-inside.json'
+    const outsideTempPath = '/remote-root/other/.tmp-outside.json'
+    mocks.remoteFiles.set(insideTempPath, JSON.stringify({ stale: true }))
+    mocks.remoteFiles.set(outsideTempPath, JSON.stringify({ shouldStay: true }))
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
+      if (mocks.remoteFiles.has(filePath)) {
+        return mocks.remoteFiles.get(filePath)
+      }
+
+      if (filePath.endsWith('/manifest.json')) {
+        return JSON.stringify({ version: 1, generation: 0, updatedAt: 0, records: {} })
+      }
+
+      throw new Error(`Unexpected WebDAV read: ${filePath}`)
+    })
+    mocks.webdav.getDirectoryContents.mockImplementation(async (dirPath: string) => {
+      if (dirPath !== '/remote-root/sync/v1') return []
+
+      return [
+        {
+          type: 'file',
+          basename: '.tmp-inside.json',
+          filename: '.tmp-inside.json',
+          lastmod: '2026-06-01T00:00:00.000Z'
+        },
+        {
+          type: 'file',
+          basename: '.tmp-outside.json',
+          filename: outsideTempPath,
+          lastmod: '2026-06-01T00:00:00.000Z'
+        }
+      ]
+    })
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.status).toBe('success')
+    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(insideTempPath)
+    expect(mocks.webdav.deleteFile).not.toHaveBeenCalledWith(outsideTempPath)
+    expect(mocks.remoteFiles.has(insideTempPath)).toBe(false)
+    expect(mocks.remoteFiles.has(outsideTempPath)).toBe(true)
+  })
+
   it('fails visibly when stale app-data cleanup exceeds the remote file budget after publishing', async () => {
     process.env.CHERRY_STUDIO_DATA_SYNC_CLEANUP_MAX_FILES = '1'
     mockDirectoryContentsFromRemoteFiles()
