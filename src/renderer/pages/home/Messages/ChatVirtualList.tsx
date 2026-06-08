@@ -112,6 +112,20 @@ export function ChatVirtualList<T>({
     return el.scrollHeight - el.scrollTop - el.clientHeight < AT_BOTTOM_THRESHOLD_PX
   }, [])
 
+  const scheduleScrollFrame = useCallback((callback: () => void) => {
+    let frameId: number | null = requestAnimationFrame(() => {
+      frameId = null
+      callback()
+    })
+
+    return () => {
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId)
+        frameId = null
+      }
+    }
+  }, [])
+
   useEffect(() => {
     const el = scrollerRef.current
     if (!el) return
@@ -135,7 +149,7 @@ export function ChatVirtualList<T>({
     if (didInitialScrollRef.current) return
     if (items.length === 0) return
     didInitialScrollRef.current = true
-    requestAnimationFrame(() => {
+    const cancelInitialScrollFrame = scheduleScrollFrame(() => {
       const el = scrollerRef.current
       if (!el) return
       el.scrollTop = el.scrollHeight
@@ -150,8 +164,11 @@ export function ChatVirtualList<T>({
       if (!wasAtBottomRef.current) return
       el.scrollTop = el.scrollHeight
     }, 120)
-    return () => clearTimeout(settleTimer)
-  }, [items.length])
+    return () => {
+      cancelInitialScrollFrame()
+      clearTimeout(settleTimer)
+    }
+  }, [items.length, scheduleScrollFrame])
 
   // ── Prepend anchor + append/streaming follow ──────────────────
   // Detects three cases on every layout-effect run:
@@ -167,6 +184,7 @@ export function ChatVirtualList<T>({
   useLayoutEffect(() => {
     const el = scrollerRef.current
     if (!el) return
+    let cancelScrollFrame: (() => void) | undefined
 
     const newFirstKey = items.length > 0 ? getItemKey(items[0], 0) : undefined
     const prevFirstKey = prevFirstKeyRef.current
@@ -195,12 +213,12 @@ export function ChatVirtualList<T>({
     // pushes the mutation past the commit phase, so the resulting
     // virtualizer update is just a normal setState.
     if (countDelta > 0 && firstKeyChanged && sizeDelta > 0) {
-      requestAnimationFrame(() => {
+      cancelScrollFrame = scheduleScrollFrame(() => {
         const node = scrollerRef.current
         if (node) node.scrollTop = node.scrollTop + sizeDelta
       })
     } else if (sizeDelta !== 0 && wasAtBottomRef.current) {
-      requestAnimationFrame(() => {
+      cancelScrollFrame = scheduleScrollFrame(() => {
         const node = scrollerRef.current
         if (!node) return
         node.scrollTop = node.scrollHeight
@@ -211,7 +229,11 @@ export function ChatVirtualList<T>({
     prevFirstKeyRef.current = newFirstKey
     prevTotalSizeRef.current = totalSize
     prevItemCountRef.current = items.length
-  }, [items, getItemKey, totalSize])
+
+    return () => {
+      cancelScrollFrame?.()
+    }
+  }, [items, getItemKey, totalSize, scheduleScrollFrame])
 
   const stickyObserverRef = useRef<ResizeObserver | null>(null)
   const observedItemsRef = useRef<Set<HTMLElement>>(new Set())
