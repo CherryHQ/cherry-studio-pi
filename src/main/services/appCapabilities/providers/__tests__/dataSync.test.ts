@@ -130,6 +130,25 @@ describe('data sync app capabilities', () => {
     expect(setCall?.[0]).toContain('"dataSyncSyncInterval":30')
   })
 
+  it('rejects saving WebDAV config without credentials', async () => {
+    await expect(
+      capability('dataSync.webdav.config.set').execute(
+        {
+          webdavHost: 'http://192.168.1.100:8080',
+          webdavUser: '',
+          webdavPass: ''
+        },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('WebDAV 用户名和密码不能为空')
+
+    expect(
+      mocks.browserWindows[0].webContents.executeJavaScript.mock.calls.some(([script]) =>
+        String(script).startsWith(`window[${JSON.stringify(RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE)}](`)
+      )
+    ).toBe(false)
+  })
+
   it('declares dry-run support for write capabilities that implement dry-run branches', () => {
     expect(capability('dataSync.webdav.config.set').supportsDryRun).toBe(true)
     expect(capability('dataSync.webdav.diagnose').supportsDryRun).toBe(true)
