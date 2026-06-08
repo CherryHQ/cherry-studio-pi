@@ -1,7 +1,9 @@
 import { Switch } from '@cherrystudio/ui'
 import { useMultiplePreferences } from '@data/hooks/usePreference'
 import { useTheme } from '@renderer/context/ThemeProvider'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { FC } from 'react'
+import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -22,10 +24,17 @@ const ExportMenuOptions: FC = () => {
     plain_text: 'data.export.menus.plain_text'
   })
 
+  const showSaveFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    },
+    [t]
+  )
+
   const handleToggleOption = (option: string, checked: boolean) => {
     void setExportMenuOptions({
       [option]: checked
-    })
+    }).catch(showSaveFailed)
   }
 
   return (

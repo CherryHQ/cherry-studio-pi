@@ -10,7 +10,9 @@ import {
 } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
 import { useTheme } from '@renderer/context/ThemeProvider'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { FC } from 'react'
+import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -37,39 +39,50 @@ const MarkdownExportSettings: FC = () => {
     'data.export.markdown.standardize_citations'
   )
 
+  const showSaveFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    },
+    [t]
+  )
+
   const handleSelectFolder = async () => {
-    const path = await window.api.file.selectFolder()
-    if (path) {
-      void setmarkdownExportPath(path)
+    try {
+      const path = await window.api.file.selectFolder()
+      if (path) {
+        await setmarkdownExportPath(path)
+      }
+    } catch (error) {
+      showSaveFailed(error)
     }
   }
 
   const handleClearPath = () => {
-    void setmarkdownExportPath(null)
+    void setmarkdownExportPath(null).catch(showSaveFailed)
   }
 
   const handleToggleForceDollarMath = (checked: boolean) => {
-    void setForceDollarMathInMarkdown(checked)
+    void setForceDollarMathInMarkdown(checked).catch(showSaveFailed)
   }
 
   const handleToggleTopicNaming = (checked: boolean) => {
-    void setUseTopicNamingForMessageTitle(checked)
+    void setUseTopicNamingForMessageTitle(checked).catch(showSaveFailed)
   }
 
   const handleToggleShowModelName = (checked: boolean) => {
-    void setShowModelNameInMarkdown(checked)
+    void setShowModelNameInMarkdown(checked).catch(showSaveFailed)
   }
 
   const handleToggleShowModelProvider = (checked: boolean) => {
-    void setShowModelProviderInMarkdown(checked)
+    void setShowModelProviderInMarkdown(checked).catch(showSaveFailed)
   }
 
   const handleToggleExcludeCitations = (checked: boolean) => {
-    void setExcludeCitationsInExport(checked)
+    void setExcludeCitationsInExport(checked).catch(showSaveFailed)
   }
 
   const handleToggleStandardizeCitations = (checked: boolean) => {
-    void setStandardizeCitationsInExport(checked)
+    void setStandardizeCitationsInExport(checked).catch(showSaveFailed)
   }
 
   return (
