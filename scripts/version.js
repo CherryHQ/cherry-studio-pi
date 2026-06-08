@@ -88,8 +88,16 @@ function resolveNextVersion(packageVersion, versionType, knownVersions = collect
   return { baseVersion, nextVersion }
 }
 
+function assertCleanGitWorktree(statusOutput = exec('git', ['status', '--porcelain'])) {
+  if (statusOutput.trim()) {
+    throw new Error('Working tree must be clean before bumping a release version.')
+  }
+}
+
 function runVersion(args = process.argv.slice(2)) {
   const { shouldPush, versionType } = parseVersionArgs(args)
+  assertCleanGitWorktree()
+
   const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'))
   const { baseVersion, nextVersion } = resolveNextVersion(packageJson.version, versionType)
 
@@ -101,7 +109,7 @@ function runVersion(args = process.argv.slice(2)) {
   const newVersion = updatedPackageJson.version
 
   // Git 操作
-  exec('git', ['add', '.'])
+  exec('git', ['add', 'package.json'])
   exec('git', ['commit', '-m', `chore(version): ${newVersion}`])
   exec('git', ['tag', '-a', `v${newVersion}`, '-m', `Version ${newVersion}`])
 
@@ -132,5 +140,6 @@ exports._internal = {
   extractVersionsFromGitRefs,
   getHighestVersion,
   resolveNextVersion,
+  assertCleanGitWorktree,
   runVersion
 }

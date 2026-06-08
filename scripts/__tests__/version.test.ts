@@ -60,4 +60,13 @@ describe('version script', () => {
 
     expect(getHighestVersion(['1.9.33', '1.10.0-beta.1', '1.10.0'])).toBe('1.10.0')
   })
+
+  it('rejects release bumps from a dirty working tree', () => {
+    const { assertCleanGitWorktree } = loadInternal()
+
+    expect(() => assertCleanGitWorktree('')).not.toThrow()
+    expect(() => assertCleanGitWorktree(' M src/main/index.ts\n?? scratch.txt')).toThrow(
+      'Working tree must be clean before bumping a release version'
+    )
+  })
 })
