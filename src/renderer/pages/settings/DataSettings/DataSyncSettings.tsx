@@ -567,6 +567,7 @@ const DataSyncSettings: FC = () => {
 
   const summary = status?.lastSummary
   const effectiveSyncPath = getEffectiveSyncPath(webdavPath)
+  const webDavConfigComplete = Boolean(webdavHost.trim() && webdavUser.trim() && webdavPass)
 
   const loadRemoteDirectories = async (path: string, configOverride?: ReturnType<typeof normalizeWebDavConfig>) => {
     const requestSeq = ++directoryLoadSeqRef.current
@@ -786,7 +787,7 @@ const DataSyncSettings: FC = () => {
           size={14}
           value={syncInterval}
           onChange={onSyncIntervalChange}
-          disabled={!webdavHost}
+          disabled={!webDavConfigComplete}
           options={[
             { label: t('settings.data.data_sync.interval.off'), value: 0 },
             { label: t('settings.data.data_sync.interval.minute_one'), value: 1 },
