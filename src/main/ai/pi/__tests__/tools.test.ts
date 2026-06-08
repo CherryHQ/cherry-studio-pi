@@ -598,6 +598,29 @@ exit 1
     expect(resultText(result)).toContain('only supports http:// and https://')
   })
 
+  it.each(['http://127.0.0.1:3000/admin', 'http://localhost:3000/admin', 'http://192.168.1.10/admin'])(
+    'rejects private HTTPRequest URLs before fetching: %s',
+    async (url) => {
+      const request = getTool('HTTPRequest', tmpDir, [tmpDir])
+      const result = await request.execute('http-private-url', { url })
+
+      expect(net.fetch).not.toHaveBeenCalled()
+      expect(result.details).toMatchObject({ isError: true })
+      expect(resultText(result)).toContain('local or private addresses are not allowed')
+    }
+  )
+
+  it('rejects credential-bearing HTTPRequest URLs before fetching', async () => {
+    const request = getTool('HTTPRequest', tmpDir, [tmpDir])
+    const result = await request.execute('http-credentials-url', {
+      url: 'https://user:secret@example.test/private'
+    })
+
+    expect(net.fetch).not.toHaveBeenCalled()
+    expect(result.details).toMatchObject({ isError: true })
+    expect(resultText(result)).toContain('credentials are not allowed')
+  })
+
   it('normalizes HTTPRequest methods before deciding request body', async () => {
     vi.mocked(net.fetch).mockResolvedValueOnce({
       headers: { get: vi.fn(() => 'text/plain') },

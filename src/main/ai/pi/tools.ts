@@ -10,6 +10,7 @@ import { config as apiServerConfig } from '@main/apiServer/config'
 import { promptForToolApproval } from '@main/services/agents/services/ToolPermissionService'
 import { appCapabilityService } from '@main/services/appCapabilities'
 import mcpService from '@main/services/MCPService'
+import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
 import getShellEnv from '@main/utils/shell-env'
 import { HOME_CHERRY_DIR } from '@shared/config/constant'
 import type { McpCallToolResponse, McpTool, McpToolResultContent } from '@types'
@@ -70,7 +71,7 @@ const normalizeHttpRequestUrl = (value: unknown) => {
     throw new Error(`HTTPRequest only supports http:// and https:// URLs, got ${parsedUrl.protocol || 'unknown'}`)
   }
 
-  return parsedUrl.toString()
+  return sanitizeRemoteUrl(parsedUrl.toString())
 }
 
 const normalizeHttpRequestMethod = (value: unknown) => {
