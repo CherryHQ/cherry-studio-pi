@@ -197,6 +197,28 @@ describe('Pi tools', () => {
     expect(resultText(result)).toBe('第 9999 行 🍒\n第 10000 行 🍒')
   })
 
+  it('bounds line-window reads for very long single-line files', async () => {
+    const filePath = path.join(tmpDir, 'long-line.txt')
+    await fs.writeFile(filePath, 'x'.repeat(160 * 1024), 'utf8')
+    const readFileSpy = vi.spyOn(fs, 'readFile')
+
+    try {
+      const read = getTool('Read', tmpDir, [tmpDir])
+      const result = await read.execute('read-long-line-window', {
+        file_path: filePath,
+        offset: 1,
+        limit: 1
+      })
+
+      expect(result.details).toMatchObject({ truncated: true, bytes: 160 * 1024 })
+      expect(readFileSpy).not.toHaveBeenCalled()
+      expect(resultText(result).length).toBeLessThan(100_000)
+      expect(resultText(result)).toContain('Read truncated')
+    } finally {
+      readFileSpy.mockRestore()
+    }
+  })
+
   it('prompts before reading outside accessible roots', async () => {
     const outsideFile = `/tmp/cherry-pi-outside-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`
     await fs.writeFile(outsideFile, 'outside ok', 'utf8')

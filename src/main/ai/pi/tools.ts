@@ -221,7 +221,8 @@ const readFileLineWindow = async (filePath: string, offset: unknown, limit: unkn
   if (maxLines === 0) {
     return {
       text: '',
-      bytes: stat.size
+      bytes: stat.size,
+      truncated: false
     }
   }
 
@@ -233,13 +234,36 @@ const readFileLineWindow = async (filePath: string, offset: unknown, limit: unkn
   let pending = ''
   let lineIndex = 0
   let endedWithNewline = false
+  let outputChars = 0
+  let truncated = false
   const decoder = new TextDecoder()
   const buffer = Buffer.alloc(READ_LINE_WINDOW_CHUNK_BYTES)
+
+  const result = () => ({
+    text: lines.join('\n'),
+    bytes: stat.size,
+    truncated
+  })
 
   const collectLine = (rawLine: string) => {
     const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
     if (lineIndex >= startIndex) {
+      const separatorChars = lines.length > 0 ? 1 : 0
+      const remainingChars = MAX_READ_BYTES - outputChars - separatorChars
+      if (remainingChars <= 0) {
+        truncated = true
+        return true
+      }
+      if (line.length > remainingChars) {
+        if (remainingChars > 0) {
+          lines.push(line.slice(0, remainingChars))
+          outputChars += separatorChars + remainingChars
+        }
+        truncated = true
+        return true
+      }
       lines.push(line)
+      outputChars += separatorChars + line.length
       if (typeof maxLines === 'number' && lines.length >= maxLines) {
         return true
       }
@@ -264,6 +288,19 @@ const readFileLineWindow = async (filePath: string, offset: unknown, limit: unkn
       newlineIndex = pending.indexOf('\n')
     }
 
+    if (lineIndex < startIndex && pending.length > READ_LINE_WINDOW_CHUNK_BYTES) {
+      pending = ''
+      return false
+    }
+
+    if (lineIndex >= startIndex && pending.length >= MAX_READ_BYTES - outputChars) {
+      const partialLine = pending
+      pending = ''
+      collectLine(partialLine)
+      truncated = true
+      return true
+    }
+
     return false
   }
 
@@ -280,34 +317,22 @@ const readFileLineWindow = async (filePath: string, offset: unknown, limit: unkn
 
       position += bytesRead
       if (consumeText(decoder.decode(buffer.subarray(0, bytesRead), { stream: position < stat.size }))) {
-        return {
-          text: lines.join('\n'),
-          bytes: stat.size
-        }
+        return result()
       }
     }
 
     const tail = decoder.decode()
     if (tail && consumeText(tail)) {
-      return {
-        text: lines.join('\n'),
-        bytes: stat.size
-      }
+      return result()
     }
 
     if (pending.length > 0 || endedWithNewline) {
       if (collectLine(pending)) {
-        return {
-          text: lines.join('\n'),
-          bytes: stat.size
-        }
+        return result()
       }
     }
 
-    return {
-      text: lines.join('\n'),
-      bytes: stat.size
-    }
+    return result()
   } finally {
     await handle.close()
   }
@@ -860,6 +885,7 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
           const lineWindow = await readFileLineWindow(filePath, input.offset, input.limit, signal)
           text = lineWindow.text
           bytes = lineWindow.bytes
+          truncated = lineWindow.truncated
         } else {
           const result = await readFileHead(filePath, MAX_READ_BYTES)
           bytes = result.bytes
