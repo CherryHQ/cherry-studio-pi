@@ -32,6 +32,20 @@ describe('loadEmojiData', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  it('sets a timeout abort signal when loading bundled data', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const loadEmojiData = await loadFreshEmojiData()
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: vi.fn().mockResolvedValue([{ emoji: '🙂', annotation: 'smile', group: 0, order: 1 }])
+    })
+
+    await expect(loadEmojiData('en-US')).resolves.toEqual([{ emoji: '🙂', annotation: 'smile', group: 0, order: 1 }])
+    expect(fetchMock).toHaveBeenCalledWith(expect.any(String), { signal: expect.any(AbortSignal) })
+  })
+
   it('retries after json parsing failures instead of keeping the rejected cache entry', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
