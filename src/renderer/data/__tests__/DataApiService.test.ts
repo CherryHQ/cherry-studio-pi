@@ -2,12 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.unmock('@data/DataApiService')
 
+const { debugMock, errorMock, warnMock } = vi.hoisted(() => ({
+  debugMock: vi.fn(),
+  errorMock: vi.fn(),
+  warnMock: vi.fn()
+}))
+
 vi.mock('@logger', () => ({
   loggerService: {
     withContext: () => ({
-      debug: vi.fn(),
-      error: vi.fn(),
-      warn: vi.fn()
+      debug: debugMock,
+      error: errorMock,
+      warn: warnMock
     })
   }
 }))
@@ -106,5 +112,28 @@ describe('DataApiService', () => {
 
     expect(requestMock).toHaveBeenCalledTimes(1)
     expect(requestMock.mock.calls[0]?.[0]).toMatchObject({ method: 'POST', path: '/providers' })
+  })
+
+  it('does not write request bodies or headers to debug logs', async () => {
+    requestMock.mockResolvedValueOnce({
+      status: 200,
+      data: { ok: true }
+    })
+
+    const service = new DataApiService()
+    await service.post(
+      '/providers/openai/api-keys' as never,
+      {
+        body: { key: 'sk-secret-value', label: 'Primary' },
+        headers: { Authorization: 'Bearer secret-token' }
+      } as never
+    )
+
+    const serializedLogs = debugMock.mock.calls.map((call) => JSON.stringify(call)).join('\n')
+    expect(serializedLogs).toContain('"hasBody":true')
+    expect(serializedLogs).toContain('"hasHeaders":true')
+    expect(serializedLogs).not.toContain('sk-secret-value')
+    expect(serializedLogs).not.toContain('secret-token')
+    expect(serializedLogs).not.toContain('Authorization')
   })
 })

@@ -45,6 +45,17 @@ import type {
 const logger = loggerService.withContext('DataApiService')
 const DEFAULT_REQUEST_TIMEOUT_MS = 3000
 
+function toSafeRequestLog(request: DataRequest) {
+  return {
+    id: request.id,
+    method: request.method,
+    path: request.path,
+    params: request.params,
+    hasBody: request.body !== undefined,
+    hasHeaders: request.headers !== undefined && Object.keys(request.headers).length > 0
+  }
+}
+
 /**
  * Retry options interface.
  * Retryability is now determined by DataApiError.isRetryable getter.
@@ -155,7 +166,7 @@ export class DataApiService implements ApiClient {
     }
 
     try {
-      logger.debug(`Making ${request.method} request to ${request.path}`, { request })
+      logger.debug(`Making ${request.method} request to ${request.path}`, { request: toSafeRequestLog(request) })
 
       // Direct IPC call with timeout
       const response = await this.withRequestTimeout(window.api.dataApi.request(request), request, requestContext)
@@ -231,7 +242,7 @@ export class DataApiService implements ApiClient {
       }
     }
 
-    logger.debug(`Making ${method} request to ${path}`, { request })
+    logger.debug(`Making ${method} request to ${path}`, { request: toSafeRequestLog(request) })
 
     return this.sendRequest<T>(request).catch((error) => {
       logger.error(`Request failed: ${method} ${path}`, error)
