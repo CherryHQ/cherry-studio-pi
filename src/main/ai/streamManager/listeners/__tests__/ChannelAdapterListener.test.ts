@@ -57,6 +57,21 @@ describe('ChannelAdapterListener', () => {
     expect(vi.mocked(adapter.sendMessage).mock.calls[0][1]).toContain('[REDACTED]')
   })
 
+  it('keeps final delivery working when a live update fails', async () => {
+    const adapter = makeAdapter({
+      onTextUpdate: vi.fn().mockRejectedValue(new Error('platform throttled')),
+      onStreamComplete: vi.fn().mockResolvedValue(false)
+    })
+    const listener = new ChannelAdapterListener(adapter, 'chat-1')
+
+    listener.onChunk(delta('partial answer'))
+    await Promise.resolve()
+    await listener.onDone({ status: 'success' } as StreamDoneResult)
+
+    expect(adapter.onStreamComplete).toHaveBeenCalledWith('chat-1', 'partial answer')
+    expect(adapter.sendMessage).toHaveBeenCalledWith('chat-1', 'partial answer')
+  })
+
   it('does not deliver when the accumulated text is empty', async () => {
     const adapter = makeAdapter()
     const listener = new ChannelAdapterListener(adapter, 'chat-1')

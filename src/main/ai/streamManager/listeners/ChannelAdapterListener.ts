@@ -34,7 +34,13 @@ export class ChannelAdapterListener implements StreamListener {
       // the live delivery path that reaches the IM platform, so secrets (keys/tokens) must
       // be redacted before they leave.
       const { text } = sanitizeChannelOutput(this.accumulatedText)
-      void this.adapter.onTextUpdate(this.platformChatId, text).catch(() => {})
+      void this.adapter.onTextUpdate(this.platformChatId, text).catch((err) => {
+        logger.warn('Failed to deliver streaming channel update', {
+          channelId: this.adapter.channelId,
+          chatId: this.platformChatId,
+          error: err instanceof Error ? err.message : String(err)
+        })
+      })
     }
   }
 
