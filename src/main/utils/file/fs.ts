@@ -47,6 +47,7 @@ import mime from 'mime'
 import xxhashLoader from 'xxhash-wasm'
 
 const logger = loggerService.withContext('utils/file/fs')
+const REMOTE_DOWNLOAD_TIMEOUT_MS = 120_000
 
 const notImplemented = (op: string): never => {
   throw new Error(`@main/utils/file/fs.${op}: not implemented (deferred to Phase 2)`)
@@ -501,7 +502,7 @@ export async function compressImage(_input: FilePath | Uint8Array, _output: File
  * dest file. Throws on non-2xx responses.
  */
 export async function download(url: string, dest: FilePath): Promise<void> {
-  const response = await fetch(url)
+  const response = await fetch(url, { signal: AbortSignal.timeout(REMOTE_DOWNLOAD_TIMEOUT_MS) })
   if (!response.ok) {
     throw new Error(`download(${url}): HTTP ${response.status} ${response.statusText}`)
   }
@@ -533,6 +534,7 @@ export async function download(url: string, dest: FilePath): Promise<void> {
         }
       } catch (err) {
         writer.destroy(err as Error)
+        reject(err)
       }
     }
     void pump()

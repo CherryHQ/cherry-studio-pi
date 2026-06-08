@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import type { FilePath } from '@shared/file/types'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   atomicWriteFile,
@@ -590,6 +590,18 @@ describe('download', () => {
     await fsDownload(`${baseUrl}/file.bin`, dest)
     const buf = await readFile(dest)
     expect(Array.from(buf)).toEqual([0x01, 0x02, 0x03])
+  })
+
+  it('sets a timeout abort signal on remote requests', async () => {
+    routes.set('/file.bin', { status: 200, body: Buffer.from([0x01]), type: 'application/octet-stream' })
+    const dest = path.join(tmp, 'out.bin') as FilePath
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    try {
+      await fsDownload(`${baseUrl}/file.bin`, dest)
+      expect(fetchSpy).toHaveBeenCalledWith(`${baseUrl}/file.bin`, { signal: expect.any(AbortSignal) })
+    } finally {
+      fetchSpy.mockRestore()
+    }
   })
 
   it('throws and leaves no dest file on a non-2xx response', async () => {
