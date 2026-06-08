@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
 /** Nearest actually-scrollable ancestor (overflow-y auto/scroll + scrollable content). */
 function findScrollParent(el: HTMLElement | null): HTMLElement | null {
@@ -28,35 +28,51 @@ function findScrollParent(el: HTMLElement | null): HTMLElement | null {
  */
 export function useScrollAnchor<T extends HTMLElement = HTMLElement>() {
   const anchorRef = useRef<T>(null)
+  const restoreFrameRef = useRef<number | null>(null)
 
-  const withScrollAnchor = useCallback((update: () => void) => {
-    const anchor = anchorRef.current
-    if (!anchor) {
-      update()
-      return
+  const cancelRestoreFrame = useCallback(() => {
+    if (restoreFrameRef.current !== null) {
+      cancelAnimationFrame(restoreFrameRef.current)
+      restoreFrameRef.current = null
     }
-
-    const scrollContainer = findScrollParent(anchor)
-    if (!scrollContainer) {
-      update()
-      return
-    }
-
-    // Record position of the anchor relative to viewport before DOM change
-    const rectBefore = anchor.getBoundingClientRect()
-    const scrollBefore = scrollContainer.scrollTop
-
-    // Apply the state change
-    update()
-
-    // After React commits the state change, restore scroll position
-    // Use requestAnimationFrame to run after the paint
-    requestAnimationFrame(() => {
-      const rectAfter = anchor.getBoundingClientRect()
-      const drift = rectAfter.top - rectBefore.top
-      scrollContainer.scrollTop = scrollBefore + drift
-    })
   }, [])
+
+  const withScrollAnchor = useCallback(
+    (update: () => void) => {
+      cancelRestoreFrame()
+
+      const anchor = anchorRef.current
+      if (!anchor) {
+        update()
+        return
+      }
+
+      const scrollContainer = findScrollParent(anchor)
+      if (!scrollContainer) {
+        update()
+        return
+      }
+
+      // Record position of the anchor relative to viewport before DOM change
+      const rectBefore = anchor.getBoundingClientRect()
+      const scrollBefore = scrollContainer.scrollTop
+
+      // Apply the state change
+      update()
+
+      // After React commits the state change, restore scroll position
+      // Use requestAnimationFrame to run after the paint
+      restoreFrameRef.current = requestAnimationFrame(() => {
+        restoreFrameRef.current = null
+        const rectAfter = anchor.getBoundingClientRect()
+        const drift = rectAfter.top - rectBefore.top
+        scrollContainer.scrollTop = scrollBefore + drift
+      })
+    },
+    [cancelRestoreFrame]
+  )
+
+  useEffect(() => cancelRestoreFrame, [cancelRestoreFrame])
 
   return { anchorRef, withScrollAnchor }
 }
