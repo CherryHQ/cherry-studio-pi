@@ -1,10 +1,14 @@
-import { exec } from 'child_process'
+import { execFile } from 'child_process'
 import * as fs from 'fs/promises'
 import * as linguistLanguages from 'linguist-languages'
 import * as path from 'path'
 import { promisify } from 'util'
 
-const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
+
+function getPnpmExecutable(platform = process.platform) {
+  return platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+}
 
 type LanguageData = {
   type: string
@@ -81,7 +85,7 @@ export const languages: Record<string, LanguageData> = ${languagesObjectString};
 async function format(filePath: string): Promise<void> {
   console.log('🎨 Formatting file with Biome...')
   try {
-    await execAsync(`pnpm biome format --write ${filePath}`)
+    await execFileAsync(getPnpmExecutable(), ['biome', 'format', '--write', filePath])
     console.log('✅ Biome formatting complete.')
   } catch (e: any) {
     console.error('❌ Biome formatting failed:', e.stdout || e.stderr)
@@ -96,7 +100,7 @@ async function format(filePath: string): Promise<void> {
 async function checkTypeScript(filePath: string): Promise<void> {
   console.log('🧐 Checking file with TypeScript compiler...')
   try {
-    await execAsync(`pnpm tsc --noEmit --skipLibCheck ${filePath}`)
+    await execFileAsync(getPnpmExecutable(), ['tsc', '--noEmit', '--skipLibCheck', filePath])
     console.log('✅ TypeScript check passed.')
   } catch (e: any) {
     console.error('❌ TypeScript check failed:', e.stdout || e.stderr)

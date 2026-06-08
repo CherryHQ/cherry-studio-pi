@@ -1,4 +1,4 @@
-import { execSync } from 'child_process'
+import { execFileSync } from 'child_process'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -71,7 +71,7 @@ function checkTrackedFilesAgainstWhitelist(skillNames: string[], errors: string[
 
   let trackedFiles: string[]
   try {
-    const output = execSync('git ls-files -- .agents/skills .claude/skills', {
+    const output = execFileSync('git', ['ls-files', '--', '.agents/skills', '.claude/skills'], {
       cwd: ROOT_DIR,
       encoding: 'utf-8'
     })
