@@ -1,4 +1,4 @@
-import { exec } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
@@ -17,7 +17,7 @@ export const CHERRY_STUDIO_PROTOCOL = 'cherrystudio'
 const CHERRY_STUDIO_PROTOCOL_PREFIX = `${CHERRY_STUDIO_PROTOCOL}://`
 
 const DESKTOP_FILE_NAME = 'cherrystudio-url-handler.desktop'
-const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 const logger = loggerService.withContext('ProtocolService')
 
 function isCherryStudioProtocolUrlArg(arg: string): boolean {
@@ -184,9 +184,9 @@ NoDisplay=true
       logger.debug(`Created/Updated desktop file: ${desktopFilePath}`)
 
       try {
-        const { stdout, stderr } = await execAsync(
-          `update-desktop-database ${escapePathForExec(application.getPath('feature.protocol.desktop_entries'))}`
-        )
+        const { stdout, stderr } = await execFileAsync('update-desktop-database', [
+          application.getPath('feature.protocol.desktop_entries')
+        ])
         if (stderr) {
           logger.warn(`update-desktop-database stderr: ${stderr}`)
         }

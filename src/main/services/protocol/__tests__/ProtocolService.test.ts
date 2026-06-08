@@ -2,36 +2,68 @@ import path from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { appMock, loggerMock, handlersMock, windowManagerMock, mainWindowServiceMock, cherryInOauthServiceMock } =
-  vi.hoisted(() => {
-    const appMock = {
-      on: vi.fn(),
-      removeListener: vi.fn(),
-      setAsDefaultProtocolClient: vi.fn()
-    }
-    const loggerMock = {
-      debug: vi.fn(),
-      error: vi.fn(),
-      warn: vi.fn()
-    }
-    const handlersMock = {
-      handleMcpProtocolUrl: vi.fn(),
-      handleNavigateProtocolUrl: vi.fn(),
-      handleProvidersProtocolUrl: vi.fn()
-    }
-    const windowManagerMock = {
-      broadcast: vi.fn()
-    }
-    const mainWindowServiceMock = {
-      showMainWindow: vi.fn()
-    }
-    const cherryInOauthServiceMock = {
-      handleOAuthCallback: vi.fn()
-    }
-    return { appMock, loggerMock, handlersMock, windowManagerMock, mainWindowServiceMock, cherryInOauthServiceMock }
-  })
+const {
+  appMock,
+  cherryInOauthServiceMock,
+  execFileMock,
+  fsPromisesMock,
+  handlersMock,
+  loggerMock,
+  mainWindowServiceMock,
+  platformMock,
+  windowManagerMock
+} = vi.hoisted(() => {
+  const appMock = {
+    on: vi.fn(),
+    removeListener: vi.fn(),
+    setAsDefaultProtocolClient: vi.fn()
+  }
+  const loggerMock = {
+    debug: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn()
+  }
+  const handlersMock = {
+    handleMcpProtocolUrl: vi.fn(),
+    handleNavigateProtocolUrl: vi.fn(),
+    handleProvidersProtocolUrl: vi.fn()
+  }
+  const windowManagerMock = {
+    broadcast: vi.fn()
+  }
+  const mainWindowServiceMock = {
+    showMainWindow: vi.fn()
+  }
+  const cherryInOauthServiceMock = {
+    handleOAuthCallback: vi.fn()
+  }
+  return {
+    appMock,
+    cherryInOauthServiceMock,
+    execFileMock: vi.fn(),
+    fsPromisesMock: {
+      writeFile: vi.fn()
+    },
+    handlersMock,
+    loggerMock,
+    mainWindowServiceMock,
+    platformMock: {
+      isLinux: false
+    },
+    windowManagerMock
+  }
+})
 
 vi.mock('electron', () => ({ app: appMock }))
+
+vi.mock('node:child_process', () => ({
+  execFile: execFileMock
+}))
+
+vi.mock('node:fs/promises', () => ({
+  default: fsPromisesMock,
+  ...fsPromisesMock
+}))
 
 vi.mock('@logger', () => ({
   loggerService: {
@@ -48,6 +80,12 @@ vi.mock('@application', () => ({
       throw new Error(`unexpected service: ${name}`)
     },
     getPath: (key: string, filename?: string) => (filename ? `/mock/${key}/${filename}` : `/mock/${key}`)
+  }
+}))
+
+vi.mock('@main/core/platform', () => ({
+  get isLinux() {
+    return platformMock.isLinux
   }
 }))
 
@@ -82,6 +120,7 @@ import { ProtocolService } from '../ProtocolService'
 describe('ProtocolService', () => {
   let service: ProtocolService
   let originalArgv: string[]
+  let originalAppImage: string | undefined
   let originalDefaultApp: boolean | undefined
 
   function setDefaultApp(value: boolean | undefined) {
@@ -94,14 +133,23 @@ describe('ProtocolService', () => {
 
   beforeEach(() => {
     originalArgv = process.argv
+    originalAppImage = process.env.APPIMAGE
     originalDefaultApp = (process as NodeJS.Process & { defaultApp?: boolean }).defaultApp
     vi.clearAllMocks()
+    platformMock.isLinux = false
+    fsPromisesMock.writeFile.mockResolvedValue(undefined)
+    execFileMock.mockImplementation((_file, _args, callback) => callback(null, '', ''))
     cherryInOauthServiceMock.handleOAuthCallback.mockResolvedValue(undefined)
     service = new ProtocolService()
   })
 
   afterEach(() => {
     process.argv = originalArgv
+    if (originalAppImage === undefined) {
+      Reflect.deleteProperty(process.env, 'APPIMAGE')
+    } else {
+      process.env.APPIMAGE = originalAppImage
+    }
     setDefaultApp(originalDefaultApp)
   })
 
@@ -162,6 +210,24 @@ describe('ProtocolService', () => {
       url: 'cherrystudio://unknown/path?foo=bar',
       params: { foo: 'bar' }
     })
+  })
+
+  it('updates the AppImage desktop database without shell command construction', async () => {
+    platformMock.isLinux = true
+    process.env.APPIMAGE = '/mock/Cherry Studio Pi.AppImage'
+
+    await (service as any).onAllReady()
+
+    expect(fsPromisesMock.writeFile).toHaveBeenCalledWith(
+      '/mock/feature.protocol.desktop_entries/cherrystudio-url-handler.desktop',
+      expect.stringContaining("Exec='/mock/app.exe_file' %U"),
+      'utf-8'
+    )
+    expect(execFileMock).toHaveBeenCalledWith(
+      'update-desktop-database',
+      ['/mock/feature.protocol.desktop_entries'],
+      expect.any(Function)
+    )
   })
 
   describe('second-instance handler', () => {
