@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   fs: {
     access: vi.fn(),
+    chmod: vi.fn(),
     mkdir: vi.fn(),
     readFile: vi.fn(),
     writeFile: vi.fn()
@@ -94,7 +95,11 @@ describe('MemoryServer Storage v2 graph persistence', () => {
 
     expect(JSON.parse(result.content[0].text)).toEqual(storageGraph)
     expect(mocks.fs.readFile).not.toHaveBeenCalled()
-    expect(mocks.fs.writeFile).toHaveBeenCalledWith(memoryPath, JSON.stringify(storageGraph, null, 2))
+    expect(mocks.fs.writeFile).toHaveBeenCalledWith(memoryPath, JSON.stringify(storageGraph, null, 2), {
+      encoding: 'utf-8',
+      mode: 0o600
+    })
+    expect(mocks.fs.chmod).toHaveBeenCalledWith(memoryPath, 0o600)
   })
 
   it('mirrors memory graph mutations to Storage v2 before writing memory.json', async () => {
@@ -120,6 +125,12 @@ describe('MemoryServer Storage v2 graph persistence', () => {
     expect(mocks.secretVault.setSecret.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.fs.writeFile.mock.invocationCallOrder[0]
     )
+    expect(mocks.fs.writeFile).toHaveBeenCalledWith(
+      memoryPath,
+      expect.stringContaining('New fact'),
+      expect.objectContaining({ mode: 0o600 })
+    )
+    expect(mocks.fs.chmod).toHaveBeenCalledWith(memoryPath, 0o600)
   })
 
   it('falls back to legacy memory.json and mirrors it into Storage v2', async () => {

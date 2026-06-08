@@ -95,7 +95,7 @@ class KnowledgeGraphManager {
         await fs.access(this.memoryPath)
       } catch (error) {
         // File doesn't exist, create an empty file with initial structure
-        await fs.writeFile(this.memoryPath, JSON.stringify({ entities: [], relations: [] }, null, 2))
+        await this._writeGraphToDisk({ entities: [], relations: [] })
       }
     } catch (error) {
       logger.error('Failed to ensure memory path exists:', error as Error)
@@ -210,7 +210,11 @@ class KnowledgeGraphManager {
   }
 
   private async _writeGraphToDisk(graphData: KnowledgeGraph): Promise<void> {
-    await fs.writeFile(this.memoryPath, JSON.stringify(graphData, null, 2))
+    await fs.writeFile(this.memoryPath, JSON.stringify(graphData, null, 2), {
+      encoding: 'utf-8',
+      mode: 0o600
+    })
+    await fs.chmod(this.memoryPath, 0o600)
   }
 
   // Persist the current in-memory graph to disk using a mutex
