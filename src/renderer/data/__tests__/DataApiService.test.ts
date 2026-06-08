@@ -13,7 +13,7 @@ vi.mock('@logger', () => ({
 }))
 
 import { DataApiService } from '@data/DataApiService'
-import { ErrorCode } from '@shared/data/api/apiErrors'
+import { DataApiErrorFactory, ErrorCode } from '@shared/data/api/apiErrors'
 
 describe('DataApiService', () => {
   const requestMock = vi.fn()
@@ -62,5 +62,49 @@ describe('DataApiService', () => {
 
     await expectation
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('retries retryable GET failures', async () => {
+    requestMock
+      .mockResolvedValueOnce({
+        status: 503,
+        error: DataApiErrorFactory.create(ErrorCode.SERVICE_UNAVAILABLE, 'Service is warming up').toJSON()
+      })
+      .mockResolvedValueOnce({
+        status: 200,
+        data: { ok: true }
+      })
+
+    const service = new DataApiService()
+    service.configureRetry({ retryDelay: 1 })
+    const request = service.get('/providers' as never)
+
+    await vi.runAllTimersAsync()
+
+    await expect(request).resolves.toEqual({ ok: true })
+    expect(requestMock).toHaveBeenCalledTimes(2)
+    expect(requestMock.mock.calls[0]?.[0]).toMatchObject({ method: 'GET', path: '/providers' })
+    expect(requestMock.mock.calls[1]?.[0]).toMatchObject({ method: 'GET', path: '/providers' })
+  })
+
+  it('does not automatically retry retryable mutation failures', async () => {
+    requestMock.mockResolvedValueOnce({
+      status: 503,
+      error: DataApiErrorFactory.create(ErrorCode.SERVICE_UNAVAILABLE, 'Service is warming up').toJSON()
+    })
+
+    const service = new DataApiService()
+
+    await expect(
+      service.post(
+        '/providers' as never,
+        {
+          body: { providerId: 'openai', name: 'OpenAI', defaultChatEndpoint: 'openai-chat-completions' }
+        } as never
+      )
+    ).rejects.toMatchObject({ code: ErrorCode.SERVICE_UNAVAILABLE })
+
+    expect(requestMock).toHaveBeenCalledTimes(1)
+    expect(requestMock.mock.calls[0]?.[0]).toMatchObject({ method: 'POST', path: '/providers' })
   })
 })

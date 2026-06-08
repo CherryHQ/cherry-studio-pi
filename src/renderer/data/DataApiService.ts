@@ -13,7 +13,7 @@
  *
  * Key Features:
  * - Type-safe requests with full TypeScript inference
- * - Automatic retry with exponential backoff (network, timeout, 500/503 errors)
+ * - Automatic retry with exponential backoff for read-only requests (network, timeout, 500/503 errors)
  * - Request timeout management (3s default)
  * - Subscription management (real-time updates)
  *
@@ -178,8 +178,10 @@ export class DataApiService implements ApiClient {
 
       logger.debug(`Request failed: ${request.method} ${request.path}`, apiError)
 
-      // Check if should retry using the error's built-in isRetryable getter
-      if (retryCount < this.defaultRetryOptions.maxRetries && apiError.isRetryable) {
+      // Automatic retries are limited to GET. Retrying mutations after a timeout
+      // can duplicate writes because IPC cannot cancel the already-running main
+      // process handler.
+      if (request.method === 'GET' && retryCount < this.defaultRetryOptions.maxRetries && apiError.isRetryable) {
         logger.debug(
           `Retrying request attempt ${retryCount + 1}/${this.defaultRetryOptions.maxRetries}: ${request.path}`,
           { error: apiError.message, code: apiError.code }
