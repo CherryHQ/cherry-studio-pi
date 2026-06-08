@@ -75,6 +75,8 @@ export class CacheService {
   // Persist cache debounce
   private persistSaveTimer?: NodeJS.Timeout
   private persistDirty = false
+  private cacheSyncUnsubscribe?: () => void
+  private beforeUnloadHandler?: () => void
 
   // Shared cache ready state for initialization sync
   private sharedCacheReady = false
@@ -1070,13 +1072,17 @@ export class CacheService {
    * Setup IPC listeners for receiving cache sync messages from other windows
    */
   private setupIpcListeners(): void {
+    if (this.cacheSyncUnsubscribe) {
+      return
+    }
+
     if (!window.api?.cache?.onSync) {
       logger.warn('Cache sync API not available')
       return
     }
 
     // Listen for cache sync messages from other windows
-    window.api.cache.onSync((message: CacheSyncMessage) => {
+    const cleanup = window.api.cache.onSync((message: CacheSyncMessage) => {
       if (message.type === 'shared') {
         if (message.value === undefined) {
           // Handle deletion
@@ -1096,17 +1102,24 @@ export class CacheService {
         this.notifySubscribers(message.key)
       }
     })
+    this.cacheSyncUnsubscribe = typeof cleanup === 'function' ? cleanup : () => {}
   }
 
   /**
    * Setup window unload handler to ensure persist cache is saved before exit
    */
   private setupWindowUnloadHandler(): void {
-    window.addEventListener('beforeunload', () => {
+    if (this.beforeUnloadHandler) {
+      return
+    }
+
+    this.beforeUnloadHandler = () => {
       if (this.persistDirty) {
         this.savePersistCache()
       }
-    })
+    }
+
+    window.addEventListener('beforeunload', this.beforeUnloadHandler)
   }
 
   /**
@@ -1121,6 +1134,17 @@ export class CacheService {
     // Clear timers
     if (this.persistSaveTimer) {
       clearTimeout(this.persistSaveTimer)
+      this.persistSaveTimer = undefined
+    }
+
+    if (this.cacheSyncUnsubscribe) {
+      this.cacheSyncUnsubscribe()
+      this.cacheSyncUnsubscribe = undefined
+    }
+
+    if (this.beforeUnloadHandler) {
+      window.removeEventListener('beforeunload', this.beforeUnloadHandler)
+      this.beforeUnloadHandler = undefined
     }
 
     // Clear caches
@@ -1131,6 +1155,7 @@ export class CacheService {
     // Clear tracking
     this.activeHookCounts.clear()
     this.subscribers.clear()
+    this.sharedCacheReadyCallbacks = []
 
     logger.debug('CacheService cleanup completed')
   }
