@@ -1,5 +1,21 @@
-import type { Middleware } from '@shared/data/api/apiTypes'
-import { describe, expect, it } from 'vitest'
+import type { Middleware, RequestContext } from '@shared/data/api/apiTypes'
+import { describe, expect, it, vi } from 'vitest'
+
+const { debugMock, errorMock, warnMock } = vi.hoisted(() => ({
+  debugMock: vi.fn(),
+  errorMock: vi.fn(),
+  warnMock: vi.fn()
+}))
+
+vi.mock('@logger', () => ({
+  loggerService: {
+    withContext: () => ({
+      debug: debugMock,
+      error: errorMock,
+      warn: warnMock
+    })
+  }
+}))
 
 import { MiddlewareEngine } from '../MiddlewareEngine'
 
@@ -33,5 +49,32 @@ describe('MiddlewareEngine', () => {
     engine.use({ name: 'shared', priority: 5, execute: noop })
 
     expect(engine.getMiddlewares()).toEqual(['shared', 'early'])
+  })
+
+  it('does not write request bodies or headers to request logs', async () => {
+    const engine = new MiddlewareEngine()
+    const context: RequestContext = {
+      request: {
+        id: 'req-secret',
+        method: 'POST',
+        path: '/providers/openai/api-keys',
+        params: { enabled: true },
+        body: { key: 'sk-secret-value', label: 'Primary' },
+        headers: { Authorization: 'Bearer secret-token' }
+      },
+      response: { id: 'req-secret', status: 200 },
+      path: '/providers/openai/api-keys',
+      method: 'POST',
+      data: new Map()
+    }
+
+    await engine.executeMiddlewares(context)
+
+    const serializedLogs = debugMock.mock.calls.map((call) => JSON.stringify(call)).join('\n')
+    expect(serializedLogs).toContain('"hasBody":true')
+    expect(serializedLogs).toContain('"hasHeaders":true')
+    expect(serializedLogs).not.toContain('sk-secret-value')
+    expect(serializedLogs).not.toContain('secret-token')
+    expect(serializedLogs).not.toContain('Authorization')
   })
 })

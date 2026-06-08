@@ -4,6 +4,15 @@ import type { DataRequest, DataResponse, Middleware, RequestContext } from '@sha
 
 const logger = loggerService.withContext('DataApi:MiddlewareEngine')
 
+function toSafeRequestLog(req: DataRequest) {
+  return {
+    id: req.id,
+    params: req.params,
+    hasBody: req.body !== undefined,
+    hasHeaders: req.headers !== undefined && Object.keys(req.headers).length > 0
+  }
+}
+
 /**
  * Middleware engine for executing middleware chains
  * Extracted from ResponseService to support reusability
@@ -97,11 +106,7 @@ export class MiddlewareEngine {
       name: 'request-logger',
       priority: 10,
       execute: async (req: DataRequest, res: DataResponse, next: () => Promise<void>) => {
-        logger.debug(`Incoming request: ${req.method} ${req.path}`, {
-          id: req.id,
-          params: req.params,
-          body: req.body
-        })
+        logger.debug(`Incoming request: ${req.method} ${req.path}`, toSafeRequestLog(req))
 
         await next()
 
