@@ -75,7 +75,9 @@ const ApiGatewaySettings: FC = () => {
   const handlePortChange = (value: string) => {
     const port = Number.parseInt(value, 10) || API_SERVER_DEFAULTS.PORT
     if (port >= 1000 && port <= 65535) {
-      void setApiGatewayConfig({ port })
+      void setApiGatewayConfig({ port }).catch(() => {
+        window.toast.error(t('apiGateway.messages.operationFailed'))
+      })
     }
   }
 
