@@ -13,6 +13,7 @@ import { useTimer } from './useTimer'
  */
 export default function useScrollPosition(key: string, throttleWait?: number) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const scrollFrameRef = useRef<number | null>(null)
   const scrollKey = useMemo(() => `scroll:${key}`, [key])
   const scrollKeyRef = useRef(scrollKey)
   const { setTimeoutTimer } = useTimer()
@@ -25,7 +26,12 @@ export default function useScrollPosition(key: string, throttleWait?: number) {
     () =>
       throttle(() => {
         const position = containerRef.current?.scrollTop ?? 0
-        window.requestAnimationFrame(() => {
+        if (scrollFrameRef.current !== null) {
+          window.cancelAnimationFrame(scrollFrameRef.current)
+        }
+
+        scrollFrameRef.current = window.requestAnimationFrame(() => {
+          scrollFrameRef.current = null
           cacheService.setCasual(scrollKeyRef.current, position)
         })
       }, throttleWait ?? 100),
@@ -39,7 +45,13 @@ export default function useScrollPosition(key: string, throttleWait?: number) {
   }, [scrollKey, setTimeoutTimer])
 
   useEffect(() => {
-    return () => handleScroll.cancel()
+    return () => {
+      handleScroll.cancel()
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current)
+        scrollFrameRef.current = null
+      }
+    }
   }, [handleScroll])
 
   return { containerRef, handleScroll }
