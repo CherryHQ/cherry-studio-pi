@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('node:child_process', () => ({
-  exec: mocks.exec
+  execFile: mocks.exec
 }))
 
 vi.mock('node:os', () => ({
@@ -57,9 +57,62 @@ describe('OvmsManager process discovery', () => {
   })
 
   it('returns false when OVMS process discovery returns malformed PowerShell JSON', async () => {
-    mocks.exec.mockImplementation((_command, callback) => callback(null, '{ broken json', ''))
+    mocks.exec.mockImplementation((_file, _args, _options, callback) => callback(null, '{ broken json', ''))
     const manager = await loadOvmsManager()
 
     await expect(manager.initializeOvms()).resolves.toBe(false)
+  })
+
+  it('passes OVMS downloader input as execFile arguments instead of a shell command string', async () => {
+    const ovmsDir = '/mock/home/.cherrystudio/ovms/ovms'
+    mocks.fs.pathExists.mockResolvedValue(false)
+    mocks.exec.mockImplementation((_file, _args, _options, callback) => callback(null, 'downloaded', ''))
+    const manager = await loadOvmsManager()
+    const updateModelConfig = vi.spyOn(manager, 'updateModelConfig').mockResolvedValue(true)
+    const applyModelPath = vi.spyOn(manager as any, 'applyModelPath').mockResolvedValue(true)
+
+    await expect(
+      manager.addModel('Model & Name', 'org/model";Remove-Item', 'https://hf.example.test', 'image_generation')
+    ).resolves.toEqual({ success: true })
+
+    expect(mocks.exec).toHaveBeenCalledWith(
+      `${ovmsDir}/ovdnd.exe`,
+      [
+        '--pull',
+        '--model_repository_path',
+        `${ovmsDir}/models`,
+        '--source_model',
+        'org/model";Remove-Item',
+        '--model_name',
+        'Model & Name',
+        '--target_device',
+        'GPU',
+        '--task',
+        'image_generation',
+        '--overwrite_models'
+      ],
+      expect.objectContaining({
+        cwd: ovmsDir,
+        env: expect.objectContaining({
+          HF_ENDPOINT: 'https://hf.example.test',
+          OVMS_DIR: ovmsDir
+        })
+      }),
+      expect.any(Function)
+    )
+    expect(updateModelConfig).toHaveBeenCalledWith('Model & Name', 'org/model";Remove-Item')
+    expect(applyModelPath).toHaveBeenCalledWith(`${ovmsDir}/models/org/model";Remove-Item`)
+  })
+
+  it('rejects model ids that would escape the OVMS models directory', async () => {
+    mocks.fs.pathExists.mockResolvedValue(false)
+    const manager = await loadOvmsManager()
+
+    await expect(manager.addModel('Bad Model', '../escape', '', 'text_generation')).resolves.toMatchObject({
+      success: false
+    })
+
+    expect(mocks.exec).not.toHaveBeenCalled()
+    expect(mocks.fs.remove).not.toHaveBeenCalled()
   })
 })

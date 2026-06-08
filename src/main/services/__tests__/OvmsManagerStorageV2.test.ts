@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('node:child_process', () => ({
-  exec: mocks.exec
+  execFile: mocks.exec
 }))
 
 vi.mock('node:os', () => ({

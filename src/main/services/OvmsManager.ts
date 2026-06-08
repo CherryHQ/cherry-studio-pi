@@ -1,6 +1,5 @@
-import { exec } from 'node:child_process'
+import { execFile, type ExecFileOptions } from 'node:child_process'
 import { homedir } from 'node:os'
-import { promisify } from 'node:util'
 
 import { loggerService } from '@logger'
 import {
@@ -21,7 +20,6 @@ import { storageV2SettingsRepository } from './storageV2/StorageV2Repositories'
 
 const logger = loggerService.withContext('OvmsManager')
 
-const execAsync = promisify(exec)
 const STORAGE_V2_OVMS_SCOPE = 'ovms'
 const STORAGE_V2_OVMS_MODEL_CONFIG_KEY = 'ovms.model_config'
 
@@ -58,6 +56,70 @@ function parsePowerShellJsonList<T extends Record<string, unknown>>(stdout: stri
     logger.warn(`Failed to parse ${context} PowerShell JSON`, error as Error)
     return []
   }
+}
+
+function outputToString(output: string | Buffer | undefined): string {
+  return Buffer.isBuffer(output) ? output.toString('utf8') : (output ?? '')
+}
+
+function execFileCapture(file: string, args: string[], options: ExecFileOptions = {}) {
+  return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+    execFile(file, args, { windowsHide: true, ...options }, (error, stdout, stderr) => {
+      if (error) {
+        reject(error)
+        return
+      }
+
+      resolve({
+        stderr: outputToString(stderr),
+        stdout: outputToString(stdout)
+      })
+    })
+  })
+}
+
+function powershellExecutable() {
+  return process.platform === 'win32' ? 'powershell.exe' : 'powershell'
+}
+
+function runPowerShellCommand(command: string) {
+  return execFileCapture(powershellExecutable(), ['-NoProfile', '-NonInteractive', '-Command', command])
+}
+
+function runBatchFileDetached(filePath: string, cwd: string, onError: (error: Error) => void) {
+  if (process.platform === 'win32') {
+    execFile('cmd.exe', ['/d', '/s', '/c', `"${filePath}"`], { cwd, windowsHide: true }, (error) => {
+      if (error) onError(error)
+    })
+    return
+  }
+
+  execFile(filePath, [], { cwd, windowsHide: true }, (error) => {
+    if (error) onError(error)
+  })
+}
+
+function resolveSafeModelDirectory(modelsDir: string, modelId: string): string {
+  const trimmedModelId = modelId.trim()
+  const pathSegments = trimmedModelId.split(/[\\/]+/)
+
+  if (
+    !trimmedModelId ||
+    trimmedModelId.includes('\0') ||
+    path.posix.isAbsolute(trimmedModelId) ||
+    path.win32.isAbsolute(trimmedModelId) ||
+    pathSegments.includes('..')
+  ) {
+    throw new Error(`Invalid OVMS model id path: ${modelId}`)
+  }
+
+  const resolvedModelsDir = path.resolve(modelsDir)
+  const resolvedModelDir = path.resolve(resolvedModelsDir, trimmedModelId)
+  if (resolvedModelDir === resolvedModelsDir || !resolvedModelDir.startsWith(resolvedModelsDir + path.sep)) {
+    throw new Error(`Invalid OVMS model id path: ${modelId}`)
+  }
+
+  return resolvedModelDir
 }
 
 @Injectable('OvmsManager')
@@ -152,10 +214,15 @@ export class OvmsManager extends BaseService {
    * @returns Promise<{ success: boolean; message?: string }>
    */
   private async terminalProcess(pid: number): Promise<{ success: boolean; message?: string }> {
+    if (!Number.isInteger(pid) || pid <= 0) {
+      logger.warn('Refusing to terminate OVMS process with invalid PID', { pid })
+      return { success: false, message: `Invalid process id: ${pid}` }
+    }
+
     try {
       // Check if the process is running
       const processCheckCommand = `Get-Process -Id ${pid} -ErrorAction SilentlyContinue | Select-Object Id | ConvertTo-Json`
-      const { stdout: processStdout } = await execAsync(`powershell -Command "${processCheckCommand}"`)
+      const { stdout: processStdout } = await runPowerShellCommand(processCheckCommand)
 
       if (!processStdout.trim()) {
         logger.info(`Process with PID ${pid} is not running`)
@@ -164,7 +231,7 @@ export class OvmsManager extends BaseService {
 
       // Find child processes
       const childProcessCommand = `Get-WmiObject -Class Win32_Process | Where-Object { $_.ParentProcessId -eq ${pid} } | Select-Object ProcessId | ConvertTo-Json`
-      const { stdout: childStdout } = await execAsync(`powershell -Command "${childProcessCommand}"`)
+      const { stdout: childStdout } = await runPowerShellCommand(childProcessCommand)
 
       // If there are child processes, terminate them first
       if (childStdout.trim()) {
@@ -188,7 +255,7 @@ export class OvmsManager extends BaseService {
 
       // Finally, terminate the parent process
       const killCommand = `Stop-Process -Id ${pid} -Force -ErrorAction SilentlyContinue`
-      await execAsync(`powershell -Command "${killCommand}"`)
+      await runPowerShellCommand(killCommand)
       logger.info(`Terminated process with PID: ${pid}`)
 
       // Wait for the process to disappear with 5-second timeout
@@ -197,7 +264,7 @@ export class OvmsManager extends BaseService {
 
       while (Date.now() - startTime < timeout) {
         const checkCommand = `Get-Process -Id ${pid} -ErrorAction SilentlyContinue | Select-Object Id | ConvertTo-Json`
-        const { stdout: checkStdout } = await execAsync(`powershell -Command "${checkCommand}"`)
+        const { stdout: checkStdout } = await runPowerShellCommand(checkCommand)
 
         if (!checkStdout.trim()) {
           logger.info(`Process with PID ${pid} has disappeared`)
@@ -223,8 +290,8 @@ export class OvmsManager extends BaseService {
   public async stopOvms(): Promise<{ success: boolean; message?: string }> {
     try {
       // close the OVMS process
-      await execAsync(
-        `powershell -Command "Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -like 'ovms.exe*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"`
+      await runPowerShellCommand(
+        "Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -like 'ovms.exe*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
       )
 
       // Reset the ovms instance
@@ -274,10 +341,8 @@ export class OvmsManager extends BaseService {
 
       // Run run.bat without waiting for it to complete
       logger.info(`Starting OVMS with run.bat: ${runBatPath}`)
-      exec(`"${runBatPath}"`, { cwd: ovmsDir }, (error) => {
-        if (error) {
-          logger.error(`Error running run.bat: ${error}`)
-        }
+      runBatchFileDetached(runBatPath, ovmsDir, (error) => {
+        logger.error('Error running run.bat:', error)
       })
 
       logger.info('OVMS started successfully')
@@ -305,7 +370,7 @@ export class OvmsManager extends BaseService {
 
       // Check if OVMS process is running
       const psCommand = `Get-Process -Name "ovms" -ErrorAction SilentlyContinue | Select-Object Id, Path | ConvertTo-Json`
-      const { stdout } = await execAsync(`powershell -Command "${psCommand}"`)
+      const { stdout } = await runPowerShellCommand(psCommand)
 
       if (!stdout.trim()) {
         logger.info('OVMS process not running')
@@ -334,7 +399,7 @@ export class OvmsManager extends BaseService {
     try {
       // Use PowerShell to find ovms.exe processes with their paths
       const psCommand = `Get-Process -Name "ovms" -ErrorAction SilentlyContinue | Select-Object Id, Path | ConvertTo-Json`
-      const { stdout } = await execAsync(`powershell -Command "${psCommand}"`)
+      const { stdout } = await runPowerShellCommand(psCommand)
 
       if (!stdout.trim()) {
         logger.error('Command to find OVMS process returned no output')
@@ -459,9 +524,12 @@ export class OvmsManager extends BaseService {
 
     const homeDir = homedir()
     const ovdndDir = path.join(homeDir, HOME_CHERRY_DIR, 'ovms', 'ovms')
-    const pathModel = path.join(ovdndDir, 'models', modelId)
+    const modelsDir = path.join(ovdndDir, 'models')
+    let pathModel: string | null = null
 
     try {
+      pathModel = resolveSafeModelDirectory(modelsDir, modelId)
+
       // check the ovdnDir+'models'+modelId exist or not
       if (await fs.pathExists(pathModel)) {
         logger.error(`Model with ID ${modelId} already exists`)
@@ -476,14 +544,20 @@ export class OvmsManager extends BaseService {
 
       // Use ovdnd.exe for downloading instead of ovms.exe
       const ovdndPath = path.join(ovdndDir, 'ovdnd.exe')
-      const command =
-        `"${ovdndPath}" --pull ` +
-        `--model_repository_path "${ovdndDir}/models" ` +
-        `--source_model "${modelId}" ` +
-        `--model_name "${modelName}" ` +
-        `--target_device GPU ` +
-        `--task ${task} ` +
-        `--overwrite_models`
+      const args = [
+        '--pull',
+        '--model_repository_path',
+        modelsDir,
+        '--source_model',
+        modelId,
+        '--model_name',
+        modelName,
+        '--target_device',
+        'GPU',
+        '--task',
+        task,
+        '--overwrite_models'
+      ]
 
       const env: Record<string, string | undefined> = {
         ...process.env,
@@ -496,14 +570,14 @@ export class OvmsManager extends BaseService {
         env.HF_ENDPOINT = modelSource
       }
 
-      logger.info(`Running command: ${command} from ${modelSource}`)
-      const { stdout } = await execAsync(command, { env: env, cwd: ovdndDir })
+      logger.info(`Running OVMS downloader from ${modelSource}`)
+      const { stdout } = await execFileCapture(ovdndPath, args, { env: env, cwd: ovdndDir })
 
       logger.info('Model download completed')
       logger.debug(`Command output: ${stdout}`)
     } catch (error) {
       // remove ovdnDir+'models'+modelId if it exists
-      if (await fs.pathExists(pathModel)) {
+      if (pathModel && (await fs.pathExists(pathModel))) {
         logger.info(`Removing failed model directory: ${pathModel}`)
         await fs.remove(pathModel)
       }
@@ -537,7 +611,7 @@ export class OvmsManager extends BaseService {
     try {
       // Check if ovdnd.exe process is running
       const psCommand = `Get-Process -Name "ovdnd" -ErrorAction SilentlyContinue | Select-Object Id, Path | ConvertTo-Json`
-      const { stdout } = await execAsync(`powershell -Command "${psCommand}"`)
+      const { stdout } = await runPowerShellCommand(psCommand)
 
       if (!stdout.trim()) {
         logger.info('ovdnd process is not running')
