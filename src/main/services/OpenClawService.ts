@@ -988,7 +988,11 @@ export class OpenClawService extends BaseService {
       await this.saveConfigSnapshotToStorageV2(config)
 
       // Write config file
-      fs.writeFileSync(OPENCLAW_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8')
+      fs.writeFileSync(OPENCLAW_CONFIG_PATH, JSON.stringify(config, null, 2), {
+        encoding: 'utf-8',
+        mode: 0o600
+      })
+      fs.chmodSync(OPENCLAW_CONFIG_PATH, 0o600)
 
       logger.info(`Synced provider ${provider.id} to OpenClaw config`)
       return { success: true }

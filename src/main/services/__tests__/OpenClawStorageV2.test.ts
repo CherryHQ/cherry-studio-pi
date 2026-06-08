@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   fs: {
+    chmodSync: vi.fn(),
     existsSync: vi.fn(),
     mkdirSync: vi.fn(),
     readFileSync: vi.fn(),
@@ -148,6 +149,11 @@ describe('OpenClawService Storage v2 config snapshot', () => {
     expect(mocks.secretVault.setSecret.mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(fs.writeFileSync).mock.invocationCallOrder[0]
     )
+    expect(fs.writeFileSync).toHaveBeenCalledWith('/mock/home/.openclaw/openclaw.json', expect.any(String), {
+      encoding: 'utf-8',
+      mode: 0o600
+    })
+    expect(fs.chmodSync).toHaveBeenCalledWith('/mock/home/.openclaw/openclaw.json', 0o600)
     expect(mocks.settingsRepository.set).toHaveBeenCalledWith(
       'openclaw.config',
       {
