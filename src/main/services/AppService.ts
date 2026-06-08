@@ -1,16 +1,13 @@
 import { application } from '@application'
 import { loggerService } from '@logger'
 import { isDev, isLinux, isMac, isWin } from '@main/core/platform'
+import { quoteDesktopExecArg } from '@main/utils/desktopEntry'
 import { app } from 'electron'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
 
 const logger = loggerService.withContext('AppService')
-
-function escapeDesktopExecPath(filePath: string): string {
-  return `'${filePath.replace(/'/g, "'\\''")}'`
-}
 
 export class AppService {
   public async setAppLaunchOnBoot(isLaunchOnBoot: boolean): Promise<void> {
@@ -43,7 +40,7 @@ export class AppService {
 Type=Application
 Name=Cherry Studio Pi
 Comment=A powerful AI desktop client with the pi agent runtime.
-Exec=${escapeDesktopExecPath(executablePath)}
+Exec=${quoteDesktopExecArg(executablePath)}
 Icon=CherryStudioPi
 Terminal=false
 StartupNotify=false

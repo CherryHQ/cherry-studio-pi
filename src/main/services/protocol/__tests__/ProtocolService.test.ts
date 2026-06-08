@@ -220,7 +220,7 @@ describe('ProtocolService', () => {
 
     expect(fsPromisesMock.writeFile).toHaveBeenCalledWith(
       '/mock/feature.protocol.desktop_entries/cherrystudio-url-handler.desktop',
-      expect.stringContaining("Name=Cherry Studio Pi\nExec='/mock/app.exe_file' %U"),
+      expect.stringContaining('Name=Cherry Studio Pi\nExec="/mock/app.exe_file" %U'),
       'utf-8'
     )
     expect(execFileMock).toHaveBeenCalledWith(

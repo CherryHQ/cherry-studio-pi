@@ -83,7 +83,7 @@ describe('AppService', () => {
     const [desktopFile, content] = mocks.fsPromises.writeFile.mock.calls[0]
     expect(desktopFile).toBe('/home/cherry/.config/autostart/cherry-studio-pi.desktop')
     expect(content).toContain('[Desktop Entry]\nType=Application\nName=Cherry Studio Pi\n')
-    expect(content).toContain("Exec='/home/cherry/Apps/Cherry Studio Pi'\\''s Nightly.AppImage'")
+    expect(content).toContain('Exec="/home/cherry/Apps/Cherry Studio Pi\'s Nightly.AppImage"')
     expect(content).not.toContain('\n  Type=')
   })
 

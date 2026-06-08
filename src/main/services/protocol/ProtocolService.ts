@@ -7,6 +7,7 @@ import { application } from '@application'
 import { loggerService } from '@logger'
 import { BaseService, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
 import { isLinux } from '@main/core/platform'
+import { quoteDesktopExecArg } from '@main/utils/desktopEntry'
 import { app } from 'electron'
 
 import { handleMcpProtocolUrl } from './handlers/mcpInstall'
@@ -171,7 +172,7 @@ export class ProtocolService extends BaseService {
 
       const desktopFileContent = `[Desktop Entry]
 Name=Cherry Studio Pi
-Exec=${escapePathForExec(appPath)} %U
+Exec=${quoteDesktopExecArg(appPath)} %U
 Terminal=false
 Type=Application
 MimeType=x-scheme-handler/${CHERRY_STUDIO_PROTOCOL};
@@ -199,12 +200,4 @@ NoDisplay=true
       logger.error('Failed to setup AppImage deep link:', error as Error)
     }
   }
-}
-
-/**
- * Escapes a path for safe use within the Exec field of a .desktop file
- * and for shell commands.
- */
-function escapePathForExec(filePath: string): string {
-  return `'${filePath.replace(/'/g, "'\\''")}'`
 }
