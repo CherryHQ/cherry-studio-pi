@@ -1,6 +1,9 @@
 import type { ImageModelV3, ImageModelV3CallOptions } from '@ai-sdk/provider'
+import { loggerService } from '@logger'
 
 import { createAbortError } from './transportUtils'
+
+const logger = loggerService.withContext('ImageGenerationModel')
 
 export interface ImageGenerationTransport {
   submit(input: ImageGenerationSubmitInput): Promise<{ taskId?: string; imageUrls?: string[] }>
@@ -95,7 +98,14 @@ export function createImageGenerationModel(
         const cancelRemoteTask = () => {
           if (cancelRequested) return
           cancelRequested = true
-          void transport.cancel?.(submitResult.taskId as string).catch(() => {})
+          void transport.cancel?.(submitResult.taskId as string).catch((err) => {
+            logger.warn('Failed to cancel remote image generation task', {
+              provider,
+              modelId,
+              taskId: submitResult.taskId,
+              error: err instanceof Error ? err.message : String(err)
+            })
+          })
         }
 
         if (abortSignal?.aborted) {

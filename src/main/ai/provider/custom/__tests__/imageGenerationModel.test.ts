@@ -6,6 +6,22 @@ import {
   type ImageGenerationTransport
 } from '../imageGenerationModel'
 
+const { mockLogger } = vi.hoisted(() => ({
+  mockLogger: {
+    warn: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    silly: vi.fn()
+  }
+}))
+
+vi.mock('@logger', () => ({
+  loggerService: {
+    withContext: () => mockLogger
+  }
+}))
+
 function makeOptions(
   overrides: Partial<Parameters<ReturnType<typeof createImageGenerationModel>['doGenerate']>[0]> = {}
 ) {
@@ -113,6 +129,43 @@ describe('createImageGenerationModel.doGenerate', () => {
 
     await expect(promise).rejects.toMatchObject({ name: 'AbortError' })
     expect(cancel).toHaveBeenCalledWith('task-1')
+  })
+
+  it('logs when remote async task cancellation fails', async () => {
+    const controller = new AbortController()
+    const cancel = vi.fn().mockRejectedValue(new Error('cancel failed'))
+    const transport: ImageGenerationTransport = {
+      submit: vi.fn().mockResolvedValue({ taskId: 'task-1' }),
+      poll: vi.fn(
+        async (_taskId, opts) =>
+          new Promise<string[]>((_resolve, reject) => {
+            opts.signal?.addEventListener('abort', () => {
+              const error = new Error('Task polling aborted')
+              error.name = 'AbortError'
+              reject(error)
+            })
+          })
+      ),
+      cancel
+    }
+    const model = createImageGenerationModel('m', { provider: 'ppio', transport })
+
+    const promise = model.doGenerate(makeOptions({ abortSignal: controller.signal }))
+    await vi.waitFor(() => expect(transport.poll).toHaveBeenCalled())
+    controller.abort()
+
+    await expect(promise).rejects.toMatchObject({ name: 'AbortError' })
+    await vi.waitFor(() =>
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Failed to cancel remote image generation task',
+        expect.objectContaining({
+          provider: 'ppio',
+          modelId: 'm',
+          taskId: 'task-1',
+          error: 'cancel failed'
+        })
+      )
+    )
   })
 
   it('forwards the onProgress callback (by reference) and provider params to submit', async () => {
