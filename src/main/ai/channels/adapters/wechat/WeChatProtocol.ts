@@ -1385,6 +1385,7 @@ export class WeixinBot {
     if (!this.contextTokenPath) return
     await mkdir(path.dirname(this.contextTokenPath), { recursive: true, mode: 0o700 })
     await writeFile(this.contextTokenPath, JSON.stringify(tokens), { mode: 0o600 })
+    await chmod(this.contextTokenPath, 0o600)
   }
 
   private reportError(error: unknown): void {
