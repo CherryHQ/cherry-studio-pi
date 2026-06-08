@@ -540,7 +540,9 @@ describe('AppDataSyncService', () => {
       'http://192.168.1.100:8080',
       expect.objectContaining({
         username: 'webdav',
-        password: 'test-webdav-password'
+        password: 'test-webdav-password',
+        httpAgent: expect.any(Object),
+        httpsAgent: expect.any(Object)
       })
     )
   })
@@ -561,7 +563,9 @@ describe('AppDataSyncService', () => {
       'http://192.168.1.100:8080',
       expect.objectContaining({
         username: 'webdav',
-        password: 'test-webdav-password'
+        password: 'test-webdav-password',
+        httpAgent: expect.any(Object),
+        httpsAgent: expect.any(Object)
       })
     )
   })

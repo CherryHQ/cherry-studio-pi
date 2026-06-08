@@ -1,7 +1,6 @@
 import { loggerService } from '@logger'
 import { normalizeWebDavConfig } from '@shared/webdavConfig'
 import type { WebDavConfig } from '@types'
-import https from 'https'
 import path from 'path'
 import type Stream from 'stream'
 import type {
@@ -12,6 +11,8 @@ import type {
   WebDAVClient
 } from 'webdav'
 import { createClient } from 'webdav'
+
+import { createWebDavClientOptions } from './WebDavClientOptions'
 
 const logger = loggerService.withContext('WebDav')
 const DEFAULT_BACKUP_WEBDAV_PATH = '/cherry-studio-pi'
@@ -51,15 +52,13 @@ export default class WebDav {
       hasPassword: Boolean(normalizedConfig.webdavPass)
     })
 
-    this.instance = createClient(normalizedConfig.webdavHost, {
-      username: normalizedConfig.webdavUser,
-      password: normalizedConfig.webdavPass,
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity,
-      httpsAgent: new https.Agent({
-        rejectUnauthorized: false
+    this.instance = createClient(
+      normalizedConfig.webdavHost,
+      createWebDavClientOptions({
+        username: normalizedConfig.webdavUser,
+        password: normalizedConfig.webdavPass
       })
-    })
+    )
 
     this.putFileContents = this.putFileContents.bind(this)
     this.getFileContents = this.getFileContents.bind(this)

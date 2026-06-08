@@ -1,7 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import * as fs from 'node:fs'
 import fsp from 'node:fs/promises'
-import https from 'node:https'
 import path from 'node:path'
 import { gunzipSync, gzipSync } from 'node:zlib'
 
@@ -25,6 +24,7 @@ import {
   type StorageV2WebDavRecordSyncSummary
 } from '@main/services/storageV2/WebDavRecordSyncService'
 import { hashJsonValue, writeWebDavJsonAtomically } from '@main/services/WebDavAtomic'
+import { createWebDavClientOptions } from '@main/services/WebDavClientOptions'
 import { normalizeWebDavHost, runWebDavOperation, WebDavOperationError } from '@main/services/WebDavRetry'
 import { getDataPath } from '@main/utils'
 import { getNotesDir } from '@main/utils/file'
@@ -1237,13 +1237,13 @@ export class AppDataSyncService {
       hasPassword: Boolean(normalizedConfig.webdavPass)
     })
 
-    const client = createClient(webdavHost, {
-      username: normalizedConfig.webdavUser,
-      password: normalizedConfig.webdavPass,
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity,
-      httpsAgent: new https.Agent({ rejectUnauthorized: false })
-    })
+    const client = createClient(
+      webdavHost,
+      createWebDavClientOptions({
+        username: normalizedConfig.webdavUser,
+        password: normalizedConfig.webdavPass
+      })
+    )
 
     return {
       client,
@@ -1262,13 +1262,13 @@ export class AppDataSyncService {
       hasPassword: Boolean(normalizedConfig.webdavPass)
     })
 
-    return createClient(webdavHost, {
-      username: normalizedConfig.webdavUser,
-      password: normalizedConfig.webdavPass,
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity,
-      httpsAgent: new https.Agent({ rejectUnauthorized: false })
-    })
+    return createClient(
+      webdavHost,
+      createWebDavClientOptions({
+        username: normalizedConfig.webdavUser,
+        password: normalizedConfig.webdavPass
+      })
+    )
   }
 
   private async ensureDirectory(client: WebDAVClient, dirPath: string) {

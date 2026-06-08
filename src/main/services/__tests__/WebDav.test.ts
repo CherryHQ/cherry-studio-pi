@@ -48,7 +48,11 @@ describe('WebDav', () => {
       'http://192.168.1.100:8080',
       expect.objectContaining({
         username: 'webdav',
-        password: 'test-webdav-password'
+        password: 'test-webdav-password',
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+        httpAgent: expect.any(Object),
+        httpsAgent: expect.any(Object)
       })
     )
   })
