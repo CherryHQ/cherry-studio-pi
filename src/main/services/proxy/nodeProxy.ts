@@ -6,6 +6,8 @@ import * as ipaddr from 'ipaddr.js'
 import { ProxyAgent } from 'proxy-agent'
 import { Dispatcher, EnvHttpProxyAgent, getGlobalDispatcher, setGlobalDispatcher } from 'undici'
 
+import { redactProxyValueForLog } from './redact'
+
 export const CHERRY_NODE_PROXY_RULES_ENV = 'CHERRY_STUDIO_NODE_PROXY_RULES'
 export const CHERRY_NODE_PROXY_BYPASS_RULES_ENV = 'CHERRY_STUDIO_NODE_PROXY_BYPASS_RULES'
 
@@ -760,7 +762,7 @@ export class NodeProxyController {
     try {
       url = new URL(proxyUrl)
     } catch {
-      this.logger?.error?.(`Invalid proxy URL: ${proxyUrl}`)
+      this.logger?.error?.(`Invalid proxy URL: ${redactProxyValueForLog(proxyUrl)}`)
       return
     }
 

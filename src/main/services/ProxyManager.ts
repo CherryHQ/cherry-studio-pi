@@ -5,6 +5,7 @@ import { app, session } from 'electron'
 import { getSystemProxy } from 'os-proxy-config'
 
 import { getEffectiveProxyBypassRules, NodeProxyController } from './proxy/nodeProxy'
+import { redactProxyValueForLog } from './proxy/redact'
 
 const logger = loggerService.withContext('ProxyManager')
 
@@ -28,7 +29,7 @@ export class ProxyManager extends BaseService {
       }
 
       logger.info(
-        `system proxy changed: ${currentProxy?.proxyUrl}, this.config.proxyRules: ${this.config.proxyRules}, this.config.proxyBypassRules: ${this.config.proxyBypassRules}`
+        `system proxy changed: ${redactProxyValueForLog(currentProxy?.proxyUrl)}, this.config.proxyRules: ${redactProxyValueForLog(this.config.proxyRules)}, this.config.proxyBypassRules: ${redactProxyValueForLog(this.config.proxyBypassRules)}`
       )
       await this.configureProxy({
         mode: 'system',
@@ -46,7 +47,9 @@ export class ProxyManager extends BaseService {
   }
 
   private async configureProxy(config: ProxyConfig): Promise<void> {
-    logger.info(`configureProxy: ${config?.mode} ${config?.proxyRules} ${config?.proxyBypassRules}`)
+    logger.info(
+      `configureProxy: ${config?.mode} ${redactProxyValueForLog(config?.proxyRules)} ${redactProxyValueForLog(config?.proxyBypassRules)}`
+    )
 
     if (this.isSettingProxy) {
       logger.info('Proxy configuration already in progress, skipping')
@@ -60,7 +63,9 @@ export class ProxyManager extends BaseService {
       if (config.mode === 'system') {
         const currentProxy = await getSystemProxy()
         if (currentProxy) {
-          logger.info(`current system proxy: ${currentProxy.proxyUrl}, bypass rules: ${currentProxy.noProxy.join(',')}`)
+          logger.info(
+            `current system proxy: ${redactProxyValueForLog(currentProxy.proxyUrl)}, bypass rules: ${redactProxyValueForLog(currentProxy.noProxy.join(','))}`
+          )
           config.proxyRules = currentProxy.proxyUrl.toLowerCase()
           config.proxyBypassRules = currentProxy.noProxy.join(',')
         }

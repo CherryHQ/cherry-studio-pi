@@ -11,6 +11,7 @@ import {
   ProxyBypassRuleMatcher,
   resolveHttpRequestUrlForProxyBypass
 } from '../proxy/nodeProxy'
+import { redactProxyValueForLog } from '../proxy/redact'
 
 // Mock lifecycle to allow direct instantiation
 vi.mock('@main/core/lifecycle', () => {
@@ -222,6 +223,17 @@ describe('ProxyManager - bypass evaluation', () => {
 
   it('returns null for invalid proxy urls when detecting protocol', () => {
     expect(getProxyProtocol('127.0.0.1:7890')).toBe(null)
+  })
+
+  it('redacts proxy credentials before values are written to logs', () => {
+    expect(redactProxyValueForLog('http://user:secret@proxy.example.com:8080')).toBe(
+      'http://<redacted>@proxy.example.com:8080'
+    )
+    expect(redactProxyValueForLog('socks5://token@127.0.0.1:6153')).toBe('socks5://<redacted>@127.0.0.1:6153')
+    expect(redactProxyValueForLog('http=user:secret@proxy.example.com:8080;https=socks5://u:p@10.0.0.2:6153')).toBe(
+      'http=<redacted>@proxy.example.com:8080;https=socks5://<redacted>@10.0.0.2:6153'
+    )
+    expect(redactProxyValueForLog('http://127.0.0.1:7890')).toBe('http://127.0.0.1:7890')
   })
 
   it('extracts only proxy-related env vars', () => {
