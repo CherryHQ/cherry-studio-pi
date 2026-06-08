@@ -9,11 +9,12 @@ import { useAppUpdateState } from '@renderer/hooks/useAppUpdate'
 import { useMiniAppPopup } from '@renderer/hooks/useMiniAppPopup'
 import i18n from '@renderer/i18n'
 import { runAsyncFunction } from '@renderer/utils'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { ThemeMode, UpgradeChannel } from '@shared/data/preference/preferenceTypes'
 import { debounce } from 'lodash'
 import { BadgeQuestionMark, Briefcase, Bug, Building2, Github, Globe, Mail, Rss } from 'lucide-react'
 import type { FC, ReactNode } from 'react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Markdown from 'react-markdown'
 
@@ -31,6 +32,13 @@ const AboutSettings: FC = () => {
   const { openSmartMiniApp } = useMiniAppPopup()
 
   const { appUpdateState, updateAppUpdateState } = useAppUpdateState()
+
+  const showSaveFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    },
+    [t]
+  )
 
   const onCheckUpdate = useMemo(
     () =>
@@ -112,15 +120,19 @@ const AboutSettings: FC = () => {
     if (testPlan && currentChannelByVersion !== UpgradeChannel.LATEST && value !== currentChannelByVersion) {
       window.toast.warning(t('settings.general.test_plan.version_channel_not_match'))
     }
-    void setTestChannel(value)
-    updateAppUpdateState({
-      available: false,
-      info: null,
-      downloaded: false,
-      checking: false,
-      downloading: false,
-      downloadProgress: 0
-    })
+    try {
+      await setTestChannel(value)
+      updateAppUpdateState({
+        available: false,
+        info: null,
+        downloaded: false,
+        checking: false,
+        downloading: false,
+        downloadProgress: 0
+      })
+    } catch (error) {
+      showSaveFailed(error)
+    }
   }
 
   const getAvailableTestChannels = () => {
@@ -138,19 +150,24 @@ const AboutSettings: FC = () => {
     ]
   }
 
-  const handleSetTestPlan = (value: boolean) => {
-    void setTestPlan(value)
-    updateAppUpdateState({
-      available: false,
-      info: null,
-      downloaded: false,
-      checking: false,
-      downloading: false,
-      downloadProgress: 0
-    })
+  const handleSetTestPlan = async (value: boolean) => {
+    try {
+      await setTestPlan(value)
 
-    if (value === true) {
-      void setTestChannel(getTestChannel())
+      if (value === true) {
+        await setTestChannel(getTestChannel())
+      }
+
+      updateAppUpdateState({
+        available: false,
+        info: null,
+        downloaded: false,
+        checking: false,
+        downloading: false,
+        downloadProgress: 0
+      })
+    } catch (error) {
+      showSaveFailed(error)
     }
   }
 
@@ -167,8 +184,15 @@ const AboutSettings: FC = () => {
       setVersion(appInfo.version)
       setIsPortable(appInfo.isPortable)
     })
-    void setAutoCheckUpdate(autoCheckUpdate)
-  }, [autoCheckUpdate, setAutoCheckUpdate])
+  }, [])
+
+  const handleAutoCheckUpdateChange = async (value: boolean) => {
+    try {
+      await setAutoCheckUpdate(value)
+    } catch (error) {
+      showSaveFailed(error)
+    }
+  }
 
   const onOpenDocs = () => {
     const isChinese = i18n.language.startsWith('zh')
@@ -251,7 +275,7 @@ const AboutSettings: FC = () => {
             <Divider className="my-3" />
             <SettingRow className="gap-3">
               <SettingRowTitle>{t('settings.general.auto_check_update.title')}</SettingRowTitle>
-              <Switch checked={autoCheckUpdate} onCheckedChange={(v) => setAutoCheckUpdate(v)} />
+              <Switch checked={autoCheckUpdate} onCheckedChange={handleAutoCheckUpdateChange} />
             </SettingRow>
 
             <Divider className="my-3" />
@@ -377,13 +401,24 @@ function AboutActionRow({
   onAction: () => void | Promise<void>
   title: string
 }) {
+  const handleAction = async () => {
+    await onAction()
+  }
+
   return (
     <SettingRow className="gap-3">
       <SettingRowTitle className="gap-2.5">
         {icon}
         {title}
       </SettingRowTitle>
-      <Button size="sm" onClick={() => void onAction()} variant="outline">
+      <Button
+        size="sm"
+        onClick={() => {
+          void handleAction().catch((error) => {
+            window.toast.error(formatErrorMessageWithPrefix(error, i18n.t('common.operation_failed')))
+          })
+        }}
+        variant="outline">
         {actionLabel}
       </Button>
     </SettingRow>
