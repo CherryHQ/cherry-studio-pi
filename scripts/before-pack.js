@@ -76,8 +76,18 @@ function buildDownloadRtkArgs(platform, arch) {
   return [path.join(__dirname, 'download-rtk-binaries.js'), platform, arch]
 }
 
-function getPnpmExecutable(platform = process.platform) {
-  return platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+function buildPnpmInstallInvocation(platform = process.platform, env = process.env) {
+  if (platform === 'win32') {
+    return {
+      command: env.ComSpec || 'cmd.exe',
+      args: ['/d', '/s', '/c', 'pnpm install']
+    }
+  }
+
+  return {
+    command: 'pnpm',
+    args: ['install']
+  }
 }
 
 exports.default = async function (context) {
@@ -121,7 +131,8 @@ exports.default = async function (context) {
     fs.writeFileSync(workspaceConfigPath, modifiedWorkspaceConfig)
 
     try {
-      execFileSync(getPnpmExecutable(), ['install'], { stdio: 'inherit' })
+      const { command, args } = buildPnpmInstallInvocation()
+      execFileSync(command, args, { stdio: 'inherit' })
     } finally {
       // Restore original pnpm-workspace.yaml
       fs.writeFileSync(workspaceConfigPath, originalWorkspaceConfig)
@@ -178,5 +189,5 @@ exports.default = async function (context) {
 
 exports._internal = {
   buildDownloadRtkArgs,
-  getPnpmExecutable
+  buildPnpmInstallInvocation
 }

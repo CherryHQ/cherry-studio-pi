@@ -21,11 +21,19 @@ describe('before-pack', () => {
     ])
   })
 
-  it('uses pnpm.cmd on Windows without relying on shell lookup', () => {
-    const { getPnpmExecutable } = loadInternal()
+  it('runs pnpm install through cmd.exe on Windows', () => {
+    const { buildPnpmInstallInvocation } = loadInternal()
 
-    expect(getPnpmExecutable('win32')).toBe('pnpm.cmd')
-    expect(getPnpmExecutable('darwin')).toBe('pnpm')
-    expect(getPnpmExecutable('linux')).toBe('pnpm')
+    expect(buildPnpmInstallInvocation('win32', { ComSpec: 'C:\\Windows\\System32\\cmd.exe' })).toEqual({
+      command: 'C:\\Windows\\System32\\cmd.exe',
+      args: ['/d', '/s', '/c', 'pnpm install']
+    })
+  })
+
+  it('runs pnpm install directly on Unix platforms', () => {
+    const { buildPnpmInstallInvocation } = loadInternal()
+
+    expect(buildPnpmInstallInvocation('darwin')).toEqual({ command: 'pnpm', args: ['install'] })
+    expect(buildPnpmInstallInvocation('linux')).toEqual({ command: 'pnpm', args: ['install'] })
   })
 })
