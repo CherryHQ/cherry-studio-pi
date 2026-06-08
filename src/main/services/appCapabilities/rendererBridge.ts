@@ -61,6 +61,7 @@ export async function callRendererBridge<T>(
   }))
 
   const pendingProbes = new Set(probes)
+  let lastCallError: unknown
   while (pendingProbes.size > 0) {
     const { probe, result } = await Promise.race(
       Array.from(pendingProbes, (probe) => probe.promise.then((result) => ({ probe, result })))
@@ -79,10 +80,13 @@ export async function callRendererBridge<T>(
         options.timeoutMessage ?? '调用主窗口桥接能力超时'
       )
     } catch (error) {
-      throw new Error(getBridgeErrorMessage(error))
+      lastCallError = error
     }
   }
 
+  if (lastCallError) {
+    throw new Error(getBridgeErrorMessage(lastCallError))
+  }
   if (lastProbeError) {
     throw new Error(getBridgeErrorMessage(lastProbeError))
   }

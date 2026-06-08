@@ -57,4 +57,25 @@ describe('app capability renderer bridge', () => {
 
     expect(destroyedWindow.webContents.executeJavaScript).not.toHaveBeenCalled()
   })
+
+  it('tries another renderer bridge when a probed bridge fails during the actual call', async () => {
+    const failingWindow = createWindow(
+      vi.fn(async (script: string) => {
+        if (script.includes('typeof')) return true
+        throw new Error('renderer is navigating')
+      })
+    )
+    const responsiveWindow = createWindow(
+      vi.fn(async (script: string) => {
+        if (script.includes('typeof')) return true
+        return 'called'
+      })
+    )
+    mocks.getAllWindows.mockReturnValue([failingWindow, responsiveWindow])
+
+    await expect(callRendererBridge('test.bridge')).resolves.toBe('called')
+
+    expect(failingWindow.webContents.executeJavaScript).toHaveBeenCalledWith('window["test.bridge"]()')
+    expect(responsiveWindow.webContents.executeJavaScript).toHaveBeenCalledWith('window["test.bridge"]()')
+  })
 })
