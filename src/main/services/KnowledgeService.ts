@@ -30,6 +30,7 @@ import { NoteLoader } from '@main/knowledge/embedjs/loader/noteLoader'
 import PreprocessProvider from '@main/knowledge/preprocess/PreprocessProvider'
 import Reranker from '@main/knowledge/reranker/Reranker'
 import { fileStorage } from '@main/services/FileStorage'
+import { getRemainingPendingDeleteIds } from '@main/services/knowledge/KnowledgePendingDelete'
 import { getAllFiles, sanitizeFilename } from '@main/utils/file'
 import { summarizeTextForLog } from '@main/utils/logging'
 import { TraceMethod } from '@mcp-trace/trace-core'
@@ -240,17 +241,22 @@ class KnowledgeService {
 
     logger.info(`Found ${pendingDeleteIds.length} knowledge bases pending deletion from previous session`)
 
-    let deletedCount = 0
+    const deletedIds: string[] = []
     pendingDeleteIds.forEach((id) => {
       if (this.deleteKnowledgeFile(id)) {
-        deletedCount++
+        deletedIds.push(id)
       } else {
         logger.warn(`Failed to delete knowledge base ${id}, please delete it manually`)
       }
     })
 
-    this.pendingDeleteManager.clear()
-    logger.info(`Startup cleanup completed: ${deletedCount}/${pendingDeleteIds.length} knowledge bases deleted`)
+    const remainingIds = getRemainingPendingDeleteIds(pendingDeleteIds, deletedIds)
+    if (remainingIds.length === 0) {
+      this.pendingDeleteManager.clear()
+    } else {
+      this.pendingDeleteManager.save(remainingIds)
+    }
+    logger.info(`Startup cleanup completed: ${deletedIds.length}/${pendingDeleteIds.length} knowledge bases deleted`)
   }
 
   private getRagApplication = async ({
