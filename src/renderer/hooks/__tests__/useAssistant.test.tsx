@@ -1,7 +1,8 @@
 import { DEFAULT_ASSISTANT_ID } from '@shared/data/types/assistant'
-import { mockUseQuery } from '@test-mocks/renderer/useDataApi'
+import { MockUseDataApiUtils, mockUseQuery } from '@test-mocks/renderer/useDataApi'
 import { MockUsePreferenceUtils } from '@test-mocks/renderer/usePreference'
-import { renderHook } from '@testing-library/react'
+import { mockRendererLoggerService } from '@test-mocks/RendererLoggerService'
+import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useAssistant, useDefaultAssistant } from '../useAssistant'
@@ -59,7 +60,17 @@ describe('useDefaultAssistant', () => {
 describe('useAssistant', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    MockUseDataApiUtils.resetMocks()
     MockUsePreferenceUtils.resetMocks()
+    mockUseQuery.mockImplementation((_path, options) => (options?.enabled === false ? queryResult() : queryResult()))
+    vi.spyOn(mockRendererLoggerService, 'error').mockImplementation(() => {})
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: {
+        ...window.toast,
+        error: vi.fn()
+      }
+    })
   })
 
   it('disables the DataApi query when id is null', () => {
@@ -137,5 +148,65 @@ describe('useAssistant', () => {
       enabled: true,
       swrOptions: { keepPreviousData: false }
     })
+  })
+
+  it('shows an error toast when quick assistant settings persistence fails', async () => {
+    const assistant = {
+      id: 'assistant-1',
+      name: 'Assistant 1',
+      modelId: null,
+      settings: {},
+      mcpServerIds: [],
+      knowledgeBaseIds: []
+    }
+    const patchTrigger = vi.fn().mockRejectedValue(new Error('persist failed'))
+
+    MockUseDataApiUtils.mockQueryResult('/assistants/:id', { data: assistant as never })
+    MockUseDataApiUtils.mockMutationWithTrigger('PATCH', '/assistants/:id', patchTrigger)
+
+    const { result } = renderHook(() => useAssistant('assistant-1'))
+
+    await act(async () => {
+      await result.current.updateAssistantSettings({ enableWebSearch: true })
+    })
+
+    expect(patchTrigger).toHaveBeenCalledWith({
+      params: { id: 'assistant-1' },
+      body: { settings: { enableWebSearch: true } }
+    })
+    expect(window.toast.error).toHaveBeenCalledWith(expect.stringContaining('persist failed'))
+  })
+
+  it('shows an error toast when quick assistant model persistence fails', async () => {
+    const assistant = {
+      id: 'assistant-1',
+      name: 'Assistant 1',
+      modelId: null,
+      settings: { enableWebSearch: false },
+      mcpServerIds: [],
+      knowledgeBaseIds: []
+    }
+    const nextModel = {
+      id: 'openai::gpt-4o',
+      name: 'GPT-4o',
+      provider: 'openai',
+      providerId: 'openai'
+    }
+    const patchTrigger = vi.fn().mockRejectedValue(new Error('model persist failed'))
+
+    MockUseDataApiUtils.mockQueryResult('/assistants/:id', { data: assistant as never })
+    MockUseDataApiUtils.mockMutationWithTrigger('PATCH', '/assistants/:id', patchTrigger)
+
+    const { result } = renderHook(() => useAssistant('assistant-1'))
+
+    await act(async () => {
+      await result.current.setModel(nextModel as never)
+    })
+
+    expect(patchTrigger).toHaveBeenCalledWith({
+      params: { id: 'assistant-1' },
+      body: { modelId: 'openai::gpt-4o' }
+    })
+    expect(window.toast.error).toHaveBeenCalledWith(expect.stringContaining('model persist failed'))
   })
 })

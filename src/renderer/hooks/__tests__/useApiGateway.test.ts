@@ -43,7 +43,7 @@ const setWindowApi = () => {
   Object.defineProperty(window, 'api', {
     configurable: true,
     value: {
-      ...(window.api ?? {}),
+      ...window.api,
       apiGateway: mockApiGateway
     }
   })

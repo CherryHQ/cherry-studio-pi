@@ -82,7 +82,7 @@ const ThinkingButton: FC<Props> = ({
 
       if (!isEnabled) {
         cacheService.set(`assistant.reasoning_effort_cache.${assistantId}`, option)
-        updateAssistantSettings({
+        void updateAssistantSettings({
           reasoning_effort: option
         })
         return
@@ -97,7 +97,7 @@ const ThinkingButton: FC<Props> = ({
         return
       }
       cacheService.set(`assistant.reasoning_effort_cache.${assistantId}`, option)
-      updateAssistantSettings({
+      void updateAssistantSettings({
         reasoning_effort: option
       })
     },

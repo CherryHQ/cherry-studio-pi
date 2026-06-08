@@ -24,6 +24,7 @@ import { loggerService } from '@logger'
 import { useDefaultModel, useModelById } from '@renderer/hooks/useModel'
 import i18n from '@renderer/i18n'
 import type { Assistant, AssistantSettings } from '@renderer/types'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { reconcileReasoningEffortForModel, reconcileWebSearchForModel } from '@renderer/utils/modelReconcile'
 import type { ConcreteApiPaths } from '@shared/data/api/apiTypes'
 import type { CreateAssistantDto, UpdateAssistantDto } from '@shared/data/api/schemas/assistants'
@@ -226,28 +227,53 @@ export function useAssistant(id: string | null | undefined) {
   const modelId = assistant?.modelId ?? (!id ? defaultModel?.id : undefined)
   const { model } = useModelById(modelId)
 
+  const reportAssistantUpdateError = useCallback((message: string, error: unknown) => {
+    logger.error(message, error as Error)
+    window.toast.error(formatErrorMessageWithPrefix(error, i18n.t('common.save_failed')))
+  }, [])
+
   const updateAssistantSettings = useCallback(
-    (settings: Partial<AssistantSettings>) => {
-      if (!id || !assistant) return
-      void patchAssistant(id, { settings })
+    async (settings: Partial<AssistantSettings>) => {
+      if (!id || !assistant) return undefined
+
+      try {
+        return await patchAssistant(id, { settings })
+      } catch (error) {
+        reportAssistantUpdateError('Failed to update assistant settings', error)
+        return undefined
+      }
     },
-    [assistant, id, patchAssistant]
+    [assistant, id, patchAssistant, reportAssistantUpdateError]
+  )
+
+  const setModel = useCallback(
+    async (next: Model, extraSettings?: Partial<AssistantSettings>) => {
+      if (!id || !assistant) return undefined
+
+      try {
+        // reconcile* are v2-native; next.id is the UniqueModelId.
+        const reasoning = reconcileReasoningEffortForModel(next, assistant.settings.reasoning_effort, id)
+        const webSearch = reconcileWebSearchForModel(next, assistant.settings)
+        const settingsPatch =
+          extraSettings || reasoning || webSearch
+            ? { ...assistant.settings, ...extraSettings, ...reasoning, ...webSearch }
+            : undefined
+        return await patchAssistant(
+          id,
+          settingsPatch ? { modelId: next.id, settings: settingsPatch } : { modelId: next.id }
+        )
+      } catch (error) {
+        reportAssistantUpdateError('Failed to update assistant model', error)
+        return undefined
+      }
+    },
+    [assistant, id, patchAssistant, reportAssistantUpdateError]
   )
 
   return {
     assistant,
     model,
-    setModel: (next: Model, extraSettings?: Partial<AssistantSettings>) => {
-      if (!id || !assistant) return
-      // reconcile* are v2-native; next.id is the UniqueModelId.
-      const reasoning = reconcileReasoningEffortForModel(next, assistant.settings.reasoning_effort, id)
-      const webSearch = reconcileWebSearchForModel(next, assistant.settings)
-      const settingsPatch =
-        extraSettings || reasoning || webSearch
-          ? { ...assistant.settings, ...extraSettings, ...reasoning, ...webSearch }
-          : undefined
-      void patchAssistant(id, settingsPatch ? { modelId: next.id, settings: settingsPatch } : { modelId: next.id })
-    },
+    setModel,
     updateAssistant: (patch: UpdateAssistantDto) => {
       if (!id) return Promise.resolve(undefined)
       return patchAssistant(id, patch)
