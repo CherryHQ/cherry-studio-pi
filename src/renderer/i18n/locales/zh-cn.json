@@ -583,6 +583,9 @@
       }
     },
     "sidebar_title": "智能体",
+    "system_agent": {
+      "auto_triggered": "系统智能体已自动检查"
+    },
     "todo": {
       "mock": {
         "actions": {
@@ -2488,6 +2491,11 @@
             "help": "0 表示使用默认值",
             "label": "最大对话轮数"
           },
+          "mcps": {
+            "add": "添加 MCP 服务",
+            "empty": "未绑定",
+            "label": "MCP 服务 (id)"
+          },
           "mode": {
             "option": {
               "enhanced": {
@@ -2499,11 +2507,6 @@
                 "title": "常规模式"
               }
             }
-          },
-          "mcps": {
-            "add": "添加 MCP 服务",
-            "empty": "未绑定",
-            "label": "MCP 服务 (id)"
           },
           "model": {
             "help": "UniqueModelId,后续版本将改为从 /models 选择",
@@ -2540,11 +2543,6 @@
         },
         "model_config": "模型配置",
         "section": {
-          "mode": {
-            "desc": "选择这个 Agent 的底层运行方式",
-            "label": "运行模式",
-            "title": "选择运行模式"
-          },
           "advanced": {
             "desc": "最大轮次与环境变量",
             "label": "高级设置",
@@ -2554,6 +2552,11 @@
             "desc": "名称、头像、模型、目录、运行时",
             "label": "基础设置",
             "title": "基础设置"
+          },
+          "mode": {
+            "desc": "选择这个 Agent 的底层运行方式",
+            "label": "运行模式",
+            "title": "选择运行模式"
           },
           "permission": {
             "desc": "控制 Agent 可执行操作的授权范围",

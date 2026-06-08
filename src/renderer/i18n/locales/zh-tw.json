@@ -583,6 +583,9 @@
       }
     },
     "sidebar_title": "Agents",
+    "system_agent": {
+      "auto_triggered": "系統智能體已自動檢查"
+    },
     "todo": {
       "mock": {
         "actions": {
@@ -2488,6 +2491,11 @@
             "help": "0 表示使用預設值",
             "label": "最大對話回合數"
           },
+          "mcps": {
+            "add": "新增 MCP 伺服器",
+            "empty": "無綁定",
+            "label": "MCP 伺服器（id）"
+          },
           "mode": {
             "option": {
               "enhanced": {
@@ -2499,11 +2507,6 @@
                 "title": "常規模式"
               }
             }
-          },
-          "mcps": {
-            "add": "新增 MCP 伺服器",
-            "empty": "無綁定",
-            "label": "MCP 伺服器（id）"
           },
           "model": {
             "help": "UniqueModelId；稍後將切換為由 /models 支援的選擇器",
@@ -2540,11 +2543,6 @@
         },
         "model_config": "模型配置",
         "section": {
-          "mode": {
-            "desc": "選擇這個 Agent 的底層執行方式",
-            "label": "執行模式",
-            "title": "選擇執行模式"
-          },
           "advanced": {
             "desc": "執行限制與執行時期參數",
             "label": "進階",
@@ -2554,6 +2552,11 @@
             "desc": "代理名稱、描述與主要模型",
             "label": "基本",
             "title": "基本"
+          },
+          "mode": {
+            "desc": "選擇這個 Agent 的底層執行方式",
+            "label": "執行模式",
+            "title": "選擇執行模式"
           },
           "permission": {
             "desc": "控制 Agent 可執行操作的授權範圍",

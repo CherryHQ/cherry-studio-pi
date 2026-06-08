@@ -583,6 +583,9 @@
       }
     },
     "sidebar_title": "エージェント",
+    "system_agent": {
+      "auto_triggered": "[to be translated]:System Agent checked automatically"
+    },
     "todo": {
       "mock": {
         "actions": {
@@ -2074,6 +2077,7 @@
         "newest": "最新のものから",
         "oldest": "古いものから"
       },
+      "stats": "[to be translated]:Found {{count}} results in {{time}} seconds",
       "topics": {
         "empty": "トピックが見つかりませんでした。Enterキーを押してすべてのメッセージを検索"
       }
@@ -2162,16 +2166,10 @@
           "supported_formats": "PDF、DOCX、MD、XLSX、TXT、CSVに対応",
           "title": "ファイルを選択するにはクリックするか、ここにドラッグしてください"
         },
-        "sitemap": {
-          "description": "サイトマップのURLを入力してください:",
-          "help": "サイトマップに記載されているページは読み込まれ、インデックスされます。",
-          "placeholder": "https://docs.cherry-ai.com/sitemap-pages.xml"
-        },
         "sources": {
           "directory": "フォルダ",
           "file": "ファイル",
           "note": "注",
-          "sitemap": "ウェブサイト",
           "url": "URL"
         },
         "submit": {
@@ -2209,9 +2207,6 @@
           "file": {
             "title": "ファイル"
           },
-          "sitemap": {
-            "title": "ウェブサイト同期"
-          },
           "url": {
             "title": "URL"
           }
@@ -2224,7 +2219,6 @@
         "directory": "フォルダ",
         "file": "ファイル",
         "note": "メモ",
-        "sitemap": "ウェブサイト",
         "url": "URL"
       },
       "preview": {
@@ -2502,6 +2496,18 @@
             "empty": "バインドされていません",
             "label": "MCPサーバー (id)"
           },
+          "mode": {
+            "option": {
+              "enhanced": {
+                "desc": "[to be translated]:Best for more complex scenarios. Uses the Claude Agent SDK, with stronger behavior but usually slower responses and higher token usage.",
+                "title": "[to be translated]:Enhanced mode"
+              },
+              "standard": {
+                "desc": "[to be translated]:Best for most cases. Uses Pi Agent, responds faster, uses fewer tokens, and matches the default Cherry Studio Pi experience.",
+                "title": "[to be translated]:Standard mode"
+              }
+            }
+          },
           "model": {
             "help": "UniqueModelId; 後で /models をバックエンドにしたピッカーに切り替わります",
             "hint": "主な推論と実行",
@@ -2546,6 +2552,11 @@
             "desc": "エージェント名、説明、およびプライマリモデル",
             "label": "基本",
             "title": "基本"
+          },
+          "mode": {
+            "desc": "[to be translated]:Choose how this agent runs under the hood",
+            "label": "[to be translated]:Runtime mode",
+            "title": "[to be translated]:Choose runtime mode"
           },
           "permission": {
             "desc": "エージェントアクションの認可範囲",
@@ -5875,6 +5886,7 @@
         "selectProvider": "プロバイダーを選択：",
         "setToken": "トークンを入力してください",
         "success": "MCPサーバーの同期成功",
+        "timeout": "[to be translated]:Sync timed out after {{seconds}}s. Please check your network connection and try again.",
         "title": "サーバーの同期",
         "tokenPlaceholder": "ここに API トークンを入力してください",
         "tokenRequired": "API トークンは必須です",
@@ -6147,6 +6159,9 @@
         "enabled": "開く",
         "failed": "失敗",
         "failed_to_start": "ヘルスチェックの開始に失敗しました",
+        "generation_output_audio": "[to be translated]:audio",
+        "generation_output_image": "[to be translated]:an image",
+        "generation_output_video": "[to be translated]:a video",
         "keys_status_count": "合格：{{count_passed}}個のキー、不合格：{{count_failed}}個のキー",
         "model_status_failed": "{{count}} 個のモデルが完全にアクセスできません",
         "model_status_partial": "{{count}} 個のモデルが一部のキーでアクセスできません",
@@ -6155,6 +6170,7 @@
         "no_api_keys": "APIキーが見つかりません。まずAPIキーを追加してください。",
         "no_results": "結果なし",
         "outcome_fail_short": "{{count}} failed",
+        "outcome_skipped_short": "[to be translated]:{{count}} skipped",
         "outcome_success_short": "{{count}} passed",
         "outcome_total": "{{count}} total",
         "passed": "成功",
@@ -6166,8 +6182,11 @@
         "retry": "Check again",
         "select_api_key": "使用するAPIキーを選択：",
         "single": "単一",
+        "skip_reason_generation_cost": "[to be translated]:This model's health check would generate {{output}} and consume quota, so it is skipped by default.",
+        "skip_reason_unsupported_probe": "[to be translated]:This model type does not have a low-cost health check yet, so it is skipped by default.",
         "start": "開始",
         "status_checking": "Checking…",
+        "status_skipped": "[to be translated]:Skipped",
         "timeout": "タイムアウト",
         "title": "モデル健康チェック",
         "use_all_keys": "キー"
@@ -6176,6 +6195,8 @@
       "default_assistant_model": "デフォルトアシスタントモデル",
       "default_assistant_model_description": "アシスタントにモデルがない場合に使用されます",
       "empty": "モデルが見つかりません",
+      "group_disable": "[to be translated]:Close this group",
+      "group_enable": "[to be translated]:Enable this group",
       "list_title": "Model list",
       "manage": {
         "add_custom_model": "Add custom model",

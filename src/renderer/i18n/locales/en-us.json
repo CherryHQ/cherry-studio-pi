@@ -583,6 +583,9 @@
       }
     },
     "sidebar_title": "Agents",
+    "system_agent": {
+      "auto_triggered": "System Agent checked automatically"
+    },
     "todo": {
       "mock": {
         "actions": {
@@ -2488,6 +2491,11 @@
             "help": "0 means use the default",
             "label": "Max conversation turns"
           },
+          "mcps": {
+            "add": "Add MCP server",
+            "empty": "None bound",
+            "label": "MCP servers (id)"
+          },
           "mode": {
             "option": {
               "enhanced": {
@@ -2499,11 +2507,6 @@
                 "title": "Standard mode"
               }
             }
-          },
-          "mcps": {
-            "add": "Add MCP server",
-            "empty": "None bound",
-            "label": "MCP servers (id)"
           },
           "model": {
             "help": "UniqueModelId; will switch to a picker backed by /models later",
@@ -2540,11 +2543,6 @@
         },
         "model_config": "Model configuration",
         "section": {
-          "mode": {
-            "desc": "Choose how this agent runs under the hood",
-            "label": "Runtime mode",
-            "title": "Choose runtime mode"
-          },
           "advanced": {
             "desc": "Max turns and environment variables",
             "label": "Advanced",
@@ -2554,6 +2552,11 @@
             "desc": "Name, avatar, model, directories, runtime",
             "label": "Basic",
             "title": "Basic"
+          },
+          "mode": {
+            "desc": "Choose how this agent runs under the hood",
+            "label": "Runtime mode",
+            "title": "Choose runtime mode"
           },
           "permission": {
             "desc": "Authorization scope for agent actions",

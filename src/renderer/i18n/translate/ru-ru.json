@@ -4,8 +4,7 @@
       "description": "Справляйтесь со сложными задачами с помощью различных инструментов",
       "error": {
         "failed": "Не удалось добавить агента",
-        "invalid_agent": "Недействительный агент",
-        "name_required": "Укажите имя"
+        "invalid_agent": "Недействительный агент"
       },
       "model": {
         "supported_providers": "Поддерживаемые поставщики",
@@ -279,46 +278,6 @@
       "warning": {
         "bypassPermissions": "Агенты CherryClaw по умолчанию работают в полностью автоматическом режиме. Все инструменты выполняются без запроса одобрения."
       }
-    },
-    "createWizard": {
-      "actions": {
-        "create": "Создать агента",
-        "next": "Далее",
-        "previous": "Назад"
-      },
-      "advanced": {
-        "title": "Расширенные настройки"
-      },
-      "capabilities": {
-        "description": "Cherry Studio Pi запускается с Soul Mode и встроенными навыками. Добавьте рабочие папки сейчас, а расширенные правила выполнения настройте при необходимости.",
-        "title": "Выберите возможности"
-      },
-      "done": {
-        "description": "У {{name}} теперь есть модель, роль и рабочее пространство. Дайте ему первую задачу.",
-        "startTask": "Начать первую задачу",
-        "title": "Агент готов"
-      },
-      "identity": {
-        "description": "Начните с ясной идентичности. По этому имени вы будете узнавать и вызывать агента позже.",
-        "helper": "Конкретное имя помогает легче доверять агенту, находить и переиспользовать его.",
-        "placeholder": "например: Партнёр по исследованиям",
-        "title": "Назовите агента"
-      },
-      "instructions": {
-        "description": "Эти инструкции станут системным промптом агента и основой soul.md. Пишите кратко, конкретно и по задаче.",
-        "helper": "Опишите роль агента, как он должен работать и какие границы соблюдать.",
-        "label": "Системный промпт / soul.md",
-        "title": "Сформируйте роль"
-      },
-      "model": {
-        "description": "Модель определяет силу, скорость и стоимость работы агента. Её можно изменить позже.",
-        "helper": "Выберите модель, которой доверили бы основную работу агента. Более сильные модели обычно лучше подходят для долгих задач.",
-        "title": "Выберите модель"
-      },
-      "soulMode": {
-        "helper": "Включено по умолчанию. Агент получает постоянное рабочее пространство и основу идентичности в стиле soul.md."
-      },
-      "stepCounter": "Шаг {{current}} из {{total}}"
     },
     "delete": {
       "content": "Удаление этого агента приведёт к принудительному завершению и удалению всех сессий, связанных с ним. Вы уверены?",
@@ -827,31 +786,6 @@
       "enable_server_description": "Для работы агентов необходимо включить API-сервер. Вы можете включить его напрямую или в настройках.",
       "server_not_running": "Сервер API включен, но не запущен. Пожалуйста, проверьте конфигурацию сервера.",
       "server_not_running_description": "Для работы агентов необходимо, чтобы API-сервер был запущен. Вы можете запустить его напрямую или проверить настройки."
-    },
-    "welcome": {
-      "suggestions": {
-        "explore": "[to be translated]:Inspect this project's structure and tell me where to start",
-        "plan": "[to be translated]:Help me break the current goal into an executable plan",
-        "review": "[to be translated]:Review the latest changes, point out risks and next steps"
-      }
-    }
-  },
-  "agentTools": {
-    "install": {
-      "access_token_placeholder": "[to be translated]:Optional, used when writing the tool config",
-      "custom": "[to be translated]:Custom",
-      "initialize": "[to be translated]:Initialize",
-      "model_service": "[to be translated]:Model service",
-      "models_json": "[to be translated]:Multi-model config JSON",
-      "not_filled": "[to be translated]:Not filled",
-      "open_webui": "[to be translated]:Open WebUI",
-      "prompt": "[to be translated]:Please install and initialize {{title}} globally.\n\nRepository: {{repo}}\n\nOfficial recommended install commands:\n- macOS / Linux / WSL: {{posixInstall}}\n- Windows PowerShell: {{windowsInstall}}\n- If npm/source fallback is more suitable for this system: {{fallbackInstall}}\n\nAfter installation, please do the following:\n1. Verify installation: {{verify}}\n2. If a local WebUI or dashboard is needed, start it and confirm the access URL.\n3. Write the config below into the actual {{title}} config file or through its CLI config command. If the path is unclear, locate it with official commands or source structure first; do not guess.\n4. After configuration, return the WebUI URL, key command output, and next usage steps.\n\nAccess token:\n{{accessToken}}\n\nModel service type:\n{{modelProvider}}\n\nMulti-model config:\n{{modelsJson}}\n",
-      "runtime_config": "[to be translated]:Runtime config",
-      "save_config": "[to be translated]:Save config",
-      "saved": "[to be translated]:Config saved",
-      "send_to_agent": "[to be translated]:Ask Agent to install",
-      "sent_to_agent": "[to be translated]:Installation task sent to Agent",
-      "webui_url": "[to be translated]:WebUI URL"
     }
   },
   "apiGateway": {
@@ -1762,7 +1696,6 @@
     },
     "expand": "Развернуть",
     "more": "Ещё",
-    "next": "[to be translated]:Next",
     "run": "Выполнить код",
     "split": {
       "label": "Разделить на два окна",
@@ -2060,9 +1993,6 @@
     "statusCode": "Код состояния",
     "statusText": "Текст состояния",
     "stream_paused": "Получение ответа приостановлено",
-    "stream_paused_description": "[to be translated]:You stopped this response manually. The current content was kept, and you can continue typing or regenerate this response.",
-    "stream_paused_resume": "[to be translated]:Regenerate",
-    "stream_paused_title": "[to be translated]:Task paused",
     "text": "текст",
     "toolInput": "ввод инструмента",
     "toolName": "имя инструмента",
@@ -2147,6 +2077,7 @@
         "newest": "Сначала новые",
         "oldest": "Сначала старые"
       },
+      "stats": "[to be translated]:Found {{count}} results in {{time}} seconds",
       "topics": {
         "empty": "Топики не найдены, нажмите Enter для поиска всех сообщений"
       }
@@ -2162,11 +2093,6 @@
     "code": "Код",
     "empty_preview": "Нет содержания для отображения",
     "generating": "Генерация",
-    "install_workbench": {
-      "failed": "[to be translated]:Failed to install to workbench: {{message}}",
-      "success": "[to be translated]:Installed to workbench",
-      "title": "[to be translated]:Install to Workbench"
-    },
     "preview": "Предпросмотр",
     "split": "Разделить",
     "view_mode": "Режим просмотра"
@@ -2240,16 +2166,10 @@
           "supported_formats": "Поддерживает PDF, DOCX, MD, XLSX, TXT, CSV",
           "title": "Нажмите, чтобы выбрать файлы, или перетащите их сюда"
         },
-        "sitemap": {
-          "description": "Введите URL карты сайта:",
-          "help": "Страницы, перечисленные в карте сайта, будут прочитаны и проиндексированы",
-          "placeholder": "https://docs.cherry-ai.com/sitemap-pages.xml"
-        },
         "sources": {
           "directory": "Папка",
           "file": "Файл",
           "note": "Примечание",
-          "sitemap": "Веб-сайт",
           "url": "URL"
         },
         "submit": {
@@ -2287,9 +2207,6 @@
           "file": {
             "title": "Файл"
           },
-          "sitemap": {
-            "title": "Синхронизация веб-сайта"
-          },
           "url": {
             "title": "URL"
           }
@@ -2302,7 +2219,6 @@
         "directory": "Папки",
         "file": "Файлы",
         "note": "Заметки",
-        "sitemap": "Веб-сайты",
         "url": "URL-адреса"
       },
       "preview": {
@@ -2580,6 +2496,18 @@
             "empty": "Ничто не ограничено",
             "label": "Серверы MCP (id)"
           },
+          "mode": {
+            "option": {
+              "enhanced": {
+                "desc": "[to be translated]:Best for more complex scenarios. Uses the Claude Agent SDK, with stronger behavior but usually slower responses and higher token usage.",
+                "title": "[to be translated]:Enhanced mode"
+              },
+              "standard": {
+                "desc": "[to be translated]:Best for most cases. Uses Pi Agent, responds faster, uses fewer tokens, and matches the default Cherry Studio Pi experience.",
+                "title": "[to be translated]:Standard mode"
+              }
+            }
+          },
           "model": {
             "help": "UniqueModelId; позже перейдёт на выбор, поддерживаемый /models",
             "hint": "Основное обоснование и выполнение",
@@ -2624,6 +2552,11 @@
             "desc": "Имя агента, описание и основная модель",
             "label": "Базовый",
             "title": "Базовый"
+          },
+          "mode": {
+            "desc": "[to be translated]:Choose how this agent runs under the hood",
+            "label": "[to be translated]:Runtime mode",
+            "title": "[to be translated]:Choose runtime mode"
           },
           "permission": {
             "desc": "Область авторизации для действий агента",
@@ -3213,9 +3146,6 @@
     "tools": {
       "abort_failed": "Вызов инструмента прерван",
       "aborted": "Вызов инструмента прерван",
-      "activity": {
-        "running": "[to be translated]:Working"
-      },
       "approvalRequired": "Инструмент \"{{tool}}\" требует одобрения",
       "autoApproveEnabled": "Для этого инструмента включен автоматический одобрен",
       "cancelled": "Отменено",
@@ -5017,104 +4947,11 @@
       "data": {
         "title": "Каталог данных"
       },
-      "data_sync": {
-        "auto_sync": "[to be translated]:Auto sync",
-        "current_device": "[to be translated]:Current device",
-        "diagnose": "[to be translated]:Diagnose connection",
-        "diagnosis": {
-          "checked_at": "[to be translated]:Checked at: {{time}}",
-          "device": "[to be translated]:This device: {{deviceId}}",
-          "remote_path": "[to be translated]:Remote directory read: {{path}}, {{count}} selectable subdirectories",
-          "title": "[to be translated]:WebDAV Sync Diagnosis",
-          "write_path": "[to be translated]:Verified actual write path: {{path}}",
-          "write_success": "[to be translated]:The WebDAV sync directory is writable and can be used for multi-device sync."
-        },
-        "effective_path": "[to be translated]:Actual write path",
-        "effective_path_help": "[to be translated]:The app stores record-level sync data under sync/v1 inside the selected directory. Safety snapshots are stored in sync/v1/backups.",
-        "help": "Data sync merges Storage v2 records through WebDAV for settings, models, assistants, agents, conversations, knowledge, files, and app data. A full safety snapshot is uploaded only for disaster recovery.",
-        "interval": {
-          "day_one": "[to be translated]:Every day",
-          "hour_one": "[to be translated]:Every 1 hour",
-          "hour_other": "[to be translated]:Every {{count}} hours",
-          "minute_one": "[to be translated]:Every 1 minute",
-          "minute_other": "[to be translated]:Every {{count}} minutes",
-          "off": "[to be translated]:Off"
-        },
-        "last_result": "[to be translated]:Last result",
-        "menu_title": "[to be translated]:Multi-device Sync",
-        "method": "[to be translated]:Sync method",
-        "method_value": "Record-level Storage v2 sync + WebDAV",
-        "password": "[to be translated]:Password",
-        "password_placeholder": "[to be translated]:WebDAV password or app password",
-        "refresh_status": "[to be translated]:Refresh",
-        "remote_browser": {
-          "current_path": "[to be translated]:Current directory: {{path}}",
-          "empty": "[to be translated]:No selectable subdirectories in this directory",
-          "error_title": "[to be translated]:Failed to read directory",
-          "path_hint": "[to be translated]:The browser only shows directories that already exist remotely. If the current sync directory {{path}} has not been created yet, it may not appear here. You can still use the current sync directory; sync will create sync/v1 automatically when WebDAV allows writes.",
-          "path_hint_title": "[to be translated]:Can't find the current sync directory?",
-          "refresh": "[to be translated]:Refresh",
-          "select": "[to be translated]:Select",
-          "select_current": "[to be translated]:Select current directory",
-          "title": "[to be translated]:Select WebDAV sync directory",
-          "use_current_path": "[to be translated]:Use current sync directory",
-          "use_default": "[to be translated]:Use recommended directory",
-          "use_root": "[to be translated]:Use root directory"
-        },
-        "remote_path": "[to be translated]:Sync directory",
-        "remote_path_browse": "[to be translated]:Browse",
-        "remote_path_help": "[to be translated]:Choose a root directory for Cherry Studio Pi sync. You do not need to type sync/v1 manually.",
-        "restore_confirm_content": "This is only for disaster recovery. It will replace this device's data with the latest safety snapshot on WebDAV and restart the app. Normal multi-device sync does not need this.",
-        "restore_confirm_title": "Restore safety snapshot?",
-        "restore_latest": "Restore safety snapshot",
-        "snapshot": {
-          "uploaded": "Safety snapshot {{file}} ({{size}})"
-        },
-        "storage": {
-          "blobs": "Files up {{uploaded}} / down {{downloaded}}",
-          "conflicts": "Record conflicts {{count}}",
-          "records": "Records up {{uploaded}} / down {{downloaded}}"
-        },
-        "summary": {
-          "conflicts": "[to be translated]:Conflicts {{count}}",
-          "deleted": "[to be translated]:Deleted {{count}}",
-          "downloaded": "[to be translated]:Downloaded {{count}}",
-          "error": "[to be translated]:Error: {{message}}",
-          "remote_path": "[to be translated]:Remote path {{path}}",
-          "status_failed": "[to be translated]:Failed",
-          "status_success": "[to be translated]:Success",
-          "uploaded": "[to be translated]:Uploaded {{count}}"
-        },
-        "sync": "[to be translated]:Sync",
-        "sync_now": "[to be translated]:Sync now",
-        "title": "[to be translated]:Data Sync",
-        "toast": {
-          "diagnose_failed": "[to be translated]:Diagnosis failed: {{message}}",
-          "diagnose_success": "[to be translated]:WebDAV sync diagnosis passed",
-          "remote_path_selected": "[to be translated]:Sync directory selected: {{path}}",
-          "restore_failed": "Restore failed: {{message}}",
-          "restore_success": "Restore started. The app will restart.",
-          "sync_failed": "[to be translated]:Sync failed: {{message}}",
-          "sync_running": "[to be translated]:Data sync is already running. Please wait for it to finish.",
-          "sync_success": "[to be translated]:Data sync completed",
-          "webdav_required": "[to be translated]:Configure the WebDAV URL first"
-        },
-        "uninitialized": "[to be translated]:Not initialized",
-        "unresolved_conflicts": "[to be translated]:Unresolved conflicts",
-        "username": "[to be translated]:Username",
-        "username_placeholder": "[to be translated]:WebDAV username",
-        "webdav_host": "[to be translated]:WebDAV URL"
-      },
       "divider": {
-        "backup": "[to be translated]:Backup and Restore",
         "basic": "Основные настройки данных",
         "cloud_storage": "Настройки облачного резервирования",
         "export_settings": "Настройки экспорта",
-        "import_export": "[to be translated]:Import and Export",
         "import_settings": "Импорт настроек",
-        "integrations": "[to be translated]:External Connections",
-        "storage": "[to be translated]:Local Data",
-        "sync": "[to be translated]:Multi-device Sync",
         "third_party": "Сторонние подключения"
       },
       "export_menu": {
@@ -5391,7 +5228,6 @@
           "content": "После выхода вы не сможете создавать резервные копии в Nutstore или восстанавливать данные из Nutstore.",
           "title": "Вы уверены, что хотите выйти из Nutstore?"
         },
-        "menu_title": "[to be translated]:Nutstore Backup",
         "new_folder": {
           "button": {
             "cancel": "Отмена",
@@ -5503,7 +5339,6 @@
           "label": "Макс. резервных копий",
           "unlimited": "Неограниченно"
         },
-        "menu_title": "[to be translated]:S3 Remote Backup",
         "region": {
           "label": "Регион",
           "placeholder": "Регион, например: us-east-1"
@@ -5576,284 +5411,6 @@
         },
         "token_placeholder": "Введите токен SiYuan Note"
       },
-      "storage_v2": {
-        "actions": {
-          "backup": "[to be translated]:Create backup",
-          "dry_run": "[to be translated]:Dry run",
-          "help": "[to be translated]:Dry run only reads legacy data. Import writes to Storage v2 and keeps the current legacy stores untouched.",
-          "hydrate": "[to be translated]:Restore from Storage v2",
-          "import": "[to be translated]:Import to Storage v2",
-          "open": "[to be translated]:Open",
-          "refresh": "[to be translated]:Refresh",
-          "relaunch": "[to be translated]:Restart now",
-          "restore_backup": "[to be translated]:Restore backup",
-          "select_backup": "[to be translated]:Select backup",
-          "snapshot": "[to be translated]:Create snapshot",
-          "title": "[to be translated]:Operations",
-          "verify": "[to be translated]:Verify storage"
-        },
-        "audit": {
-          "exists": "[to be translated]:Found",
-          "files": "[to be translated]:{{value}} files",
-          "missing": "[to be translated]:Missing",
-          "title": "[to be translated]:Legacy data audit"
-        },
-        "audit_items": {
-          "agents_db": "[to be translated]:Pi agent database",
-          "agents_workspaces": "[to be translated]:Agent workspaces",
-          "anthropic_oauth_legacy": "[to be translated]:Anthropic OAuth token file",
-          "app_db": "[to be translated]:App database",
-          "channels": "[to be translated]:Channel runtime files",
-          "code_tools_bin": "[to be translated]:CodeTools managed CLI binaries",
-          "code_tools_install": "[to be translated]:CodeTools managed CLI install tree",
-          "copilot_token_legacy": "[to be translated]:Config Copilot token",
-          "data": "[to be translated]:Current Data directory",
-          "external_notes_path": "[to be translated]:External notes directory",
-          "files": "[to be translated]:Uploaded files",
-          "home_config": "[to be translated]:Home config.json",
-          "indexeddb": "[to be translated]:Chromium IndexedDB",
-          "knowledge_base": "[to be translated]:Knowledge bases",
-          "legacy_mcp_dxt_servers": "[to be translated]:Legacy DXT MCP server packages",
-          "legacy_user_data_agents_db": "[to be translated]:Legacy userData agents.db",
-          "legacy_user_data_copilot_token": "[to be translated]:Legacy userData Copilot token",
-          "legacy_user_data_memory_db": "[to be translated]:Legacy userData memories.db",
-          "local_storage": "[to be translated]:Chromium Local Storage",
-          "logs": "[to be translated]:Runtime logs",
-          "mcp_dxt_servers": "[to be translated]:DXT MCP server packages",
-          "mcp_memory_json": "[to be translated]:MCP memory.json",
-          "mcp_oauth_legacy": "[to be translated]:MCP OAuth token directory",
-          "memory": "[to be translated]:Memory database",
-          "notes": "[to be translated]:Default notes directory",
-          "obsidian_config": "[to be translated]:Obsidian vault registry",
-          "openclaw_config": "[to be translated]:OpenClaw config",
-          "openclaw_legacy_config": "[to be translated]:Legacy OpenClaw config",
-          "ovms_config": "[to be translated]:OVMS model config",
-          "redux_local_storage_leveldb": "[to be translated]:Chromium Local Storage LevelDB",
-          "skills": "[to be translated]:Global skills",
-          "storage_v2_backups": "[to be translated]:Storage v2 backup history",
-          "storage_v2_legacy_archives": "[to be translated]:Storage v2 legacy archives",
-          "storage_v2_main_db": "[to be translated]:Storage v2 main database",
-          "storage_v2_manifest": "[to be translated]:Storage v2 manifest",
-          "storage_v2_snapshots": "[to be translated]:Storage v2 snapshots",
-          "storage_v2_temp": "[to be translated]:Storage v2 temp directory",
-          "tesseract_cache": "[to be translated]:Tesseract cache",
-          "trace_cache": "[to be translated]:Trace cache",
-          "user_data_cache": "[to be translated]:Chromium runtime cache",
-          "version_log": "[to be translated]:Version history log",
-          "workbench": "[to be translated]:Workbench artifacts",
-          "workspace": "[to be translated]:Default agent workspace"
-        },
-        "auto_hydrate": {
-          "help": "[to be translated]:When enabled, app startup restores the runtime cache from Storage v2 settings, model providers, and assistant configuration first. Keep this off until migration checks look good.",
-          "title": "[to be translated]:Restore from Storage v2 on startup"
-        },
-        "backup_overview": {
-          "count": "[to be translated]:{{count}} backup(s)",
-          "latest": "[to be translated]:Latest: {{time}}",
-          "none": "[to be translated]:No Storage v2 backups yet",
-          "reason": "[to be translated]:Reason: {{reason}}",
-          "title": "[to be translated]:Recent backup"
-        },
-        "backup_restore": {
-          "archived": "[to be translated]:Archived old files: {{path}}",
-          "invalid": "[to be translated]:Backup is not usable",
-          "issue": "[to be translated]:Issue: {{message}}",
-          "issues": {
-            "copied_directory_missing": "[to be translated]:Backup metadata says {{directory}} was copied, but the directory is missing",
-            "corrupt_blob_files": "[to be translated]:Backup has {{count}} blob file(s) with checksum mismatch",
-            "db_missing": "[to be translated]:Backup main.db is missing",
-            "db_open_failed": "[to be translated]:Backup database cannot be opened: {{message}}",
-            "format_unsupported": "[to be translated]:Backup format is not supported",
-            "integrity_check_failed": "[to be translated]:Backup integrity_check failed: {{integrityCheck}}",
-            "invalid_secret_refs": "[to be translated]:Backup contains {{count}} invalid secret reference(s)",
-            "metadata_invalid": "[to be translated]:Backup metadata.json is missing or invalid",
-            "missing_blob_files": "[to be translated]:Backup is missing {{count}} referenced blob file(s)",
-            "missing_secret_refs": "[to be translated]:Backup is missing {{count}} secret value(s) referenced by the database",
-            "path_not_directory": "[to be translated]:Selected path is not a directory",
-            "quick_check_failed": "[to be translated]:Backup quick_check failed: {{quickCheck}}",
-            "secret_vault_invalid": "[to be translated]:Backup secrets/vault.json is invalid",
-            "version_unsupported": "[to be translated]:Backup version is not supported"
-          },
-          "no_backup_selected": "[to be translated]:Select a usable Storage v2 backup first",
-          "pre_restore": "[to be translated]:Pre-restore backup: {{path}}",
-          "restart_content": "[to be translated]:A pre-restore backup was saved to {{preRestoreBackupPath}}. Restart now so every window reloads the database.",
-          "restart_title": "[to be translated]:Storage v2 backup restored",
-          "select_title": "[to be translated]:Select Storage v2 backup directory",
-          "selected": "[to be translated]:Backup: {{path}}",
-          "summary": "[to be translated]:quick_check={{quickCheck}}, integrity_check={{integrityCheck}}, missing_blob={{missingBlobFileCount}}, corrupt_blob={{corruptBlobFileCount}}, secrets={{secretVaultSecretCount}}, missing_secret={{missingSecretRefCount}}, invalid_secret_ref={{invalidSecretRefCount}}, orphan_secret={{orphanSecretVaultEntryCount}}, undecryptable_secret={{undecryptableSecretVaultEntryCount}}",
-          "valid": "[to be translated]:Backup is usable",
-          "warning": "[to be translated]:Warning: {{message}}",
-          "warnings": {
-            "manifest_missing": "[to be translated]:Backup manifest.json is missing or invalid; a new manifest may be created after restore",
-            "orphan_secret_vault_entries": "[to be translated]:Backup contains {{count}} secret value(s) that are no longer referenced by the database. New backups prune them automatically",
-            "restorable_directory_untracked": "[to be translated]:Backup contains restorable directories not listed in metadata: {{directories}}; restore still recognizes them",
-            "schema_tables_missing": "[to be translated]:Backup database is missing {{count}} current Storage v2 table(s): {{tables}}; the tables can be recreated after restore, but their records are not present in this backup",
-            "secret_vault_decrypt_unavailable": "[to be translated]:System encryption is unavailable, so this backup's secret values cannot be verified on this device",
-            "secret_vault_missing": "[to be translated]:Backup metadata says secrets were copied, but secrets/vault.json is missing",
-            "undecryptable_secret_vault_entries": "[to be translated]:Backup contains {{count}} secret value(s) that cannot be decrypted on this device; you may need to re-enter them after cross-device restore",
-            "unknown_copied_directories": "[to be translated]:Backup metadata contains unknown directory entries: {{directories}}"
-          }
-        },
-        "banner": "[to be translated]:Storage v2 is a parallel local data layer for migration, backup, and future sync recovery.",
-        "confirm_hydrate": {
-          "content": "[to be translated]:This will overwrite the current runtime cache with settings, model providers, and assistant configuration from Storage v2. Check Storage v2 stats first.",
-          "title": "[to be translated]:Restore runtime cache from Storage v2?"
-        },
-        "confirm_import": {
-          "content": "[to be translated]:A snapshot will be created before import. The current app data path and legacy stores will not be deleted.",
-          "title": "[to be translated]:Import legacy data to Storage v2?"
-        },
-        "confirm_restore": {
-          "content": "[to be translated]:A backup of the current Storage v2 data will be created first, and old files will be archived under legacy. Restart the app after restore.",
-          "title": "[to be translated]:Restore this Storage v2 backup?"
-        },
-        "data_root": "[to be translated]:Data root",
-        "empty": "[to be translated]:-",
-        "entities": {
-          "agent_sessions": "[to be translated]:Agent sessions",
-          "agents": "[to be translated]:Agents",
-          "assistants": "[to be translated]:Assistants",
-          "channels": "[to be translated]:Channels",
-          "conversations": "[to be translated]:Conversations",
-          "files": "[to be translated]:Files",
-          "knowledge_bases": "[to be translated]:Knowledge bases",
-          "knowledge_items": "[to be translated]:Knowledge items",
-          "kv_records": "[to be translated]:App records",
-          "message_blocks": "[to be translated]:Message blocks",
-          "messages": "[to be translated]:Messages",
-          "migration_runs": "[to be translated]:Migration runs",
-          "models": "[to be translated]:Models",
-          "providers": "[to be translated]:Providers",
-          "scheduled_tasks": "[to be translated]:Scheduled tasks",
-          "settings": "[to be translated]:Settings",
-          "skills": "[to be translated]:Skills",
-          "sync_changes": "[to be translated]:Sync changes",
-          "sync_conflicts": "[to be translated]:Sync conflicts",
-          "sync_tombstones": "[to be translated]:Sync tombstones"
-        },
-        "health": "[to be translated]:Health",
-        "health_failed": "[to be translated]:Failed",
-        "health_ok": "[to be translated]:OK",
-        "health_summary": {
-          "backup_blocked": "[to be translated]:Backup blocked",
-          "backup_ready": "[to be translated]:Backup ready",
-          "checks": {
-            "audit_warnings": "[to be translated]:{{count}} migration audit warning(s) need review",
-            "integrity": "[to be translated]:Integrity report has {{count}} issue(s), foreign_key={{foreignKeyIssueCount}}",
-            "legacy_only_paths": "[to be translated]:{{count}} legacy-only path(s) need handling before final migration",
-            "record_coverage": "[to be translated]:Storage v2 currently has {{count}} record(s)",
-            "storage_health": "[to be translated]:Storage health check: {{quickCheck}}"
-          },
-          "migration_blocked": "[to be translated]:Migration needs attention",
-          "migration_ready": "[to be translated]:Migration ready",
-          "status_blocked": "[to be translated]:Blocked",
-          "status_ready": "[to be translated]:Ready",
-          "status_warning": "[to be translated]:Needs attention",
-          "summary": "[to be translated]:{{issueCount}} blocker(s), {{warningCount}} warning(s)",
-          "title": "[to be translated]:Migration/Backup Readiness"
-        },
-        "history": {
-          "dry_run": "[to be translated]:Dry run",
-          "empty": "[to be translated]:No migration records yet",
-          "failed": "[to be translated]:Failed",
-          "import": "[to be translated]:Import",
-          "success": "[to be translated]:Success",
-          "title": "[to be translated]:Migration history"
-        },
-        "integrity": {
-          "failed": "[to be translated]:Issues found",
-          "issues": {
-            "agent_avatars_without_blob": "[to be translated]:{{count}} agent avatar(s) without a blob",
-            "agent_sessions_without_agent": "[to be translated]:{{count}} agent session(s) without an agent",
-            "agent_skills_without_agent": "[to be translated]:{{count}} agent skill binding(s) without an agent",
-            "agent_skills_without_skill": "[to be translated]:{{count}} agent skill binding(s) without a skill",
-            "assistant_avatars_without_blob": "[to be translated]:{{count}} assistant avatar(s) without a blob",
-            "blob_ref_count_mismatch": "[to be translated]:{{count}} blob(s) with mismatched ref_count",
-            "corrupt_blob_files": "[to be translated]:{{count}} blob file(s) with checksum mismatch",
-            "files_without_blob": "[to be translated]:{{count}} file record(s) without a blob",
-            "invalid_secret_refs": "[to be translated]:{{count}} invalid secret reference(s)",
-            "knowledge_items_without_base": "[to be translated]:{{count}} knowledge item(s) without a knowledge base",
-            "message_blocks_without_blob": "[to be translated]:{{count}} message block(s) without a blob",
-            "message_blocks_without_message": "[to be translated]:{{count}} message block(s) without a message",
-            "messages_without_conversation": "[to be translated]:{{count}} message(s) without a conversation",
-            "missing_blob_files": "[to be translated]:{{count}} blob file(s) missing on disk",
-            "missing_secret_refs": "[to be translated]:{{count}} secret reference(s) without vault entries",
-            "models_without_provider": "[to be translated]:{{count}} model(s) without a provider",
-            "orphan_blobs": "[to be translated]:{{count}} blob(s) without logical references",
-            "orphan_secret_vault_entries": "[to be translated]:{{count}} unreferenced secret vault entries",
-            "profile_avatars_without_blob": "[to be translated]:{{count}} profile avatar(s) without a blob",
-            "provider_credentials_without_provider": "[to be translated]:{{count}} credential reference(s) without a provider",
-            "secret_vault_invalid": "[to be translated]:secrets/vault.json is invalid",
-            "task_logs_without_task": "[to be translated]:{{count}} task log(s) without a task",
-            "tasks_without_agent": "[to be translated]:{{count}} scheduled task(s) without an agent",
-            "unknown": "[to be translated]:{{label}}: {{count}}"
-          },
-          "ok": "[to be translated]:Healthy",
-          "summary": "[to be translated]:quick_check={{quickCheck}}, integrity_check={{integrityCheck}}, foreign_key={{foreignKeyIssueCount}}",
-          "title": "[to be translated]:Integrity check"
-        },
-        "last_report": {
-          "dry_run": "[to be translated]:Dry run",
-          "imported": "[to be translated]:Imported",
-          "imported_count": "[to be translated]:Imported {{value}}",
-          "title": "[to be translated]:Last migration report"
-        },
-        "manifest": "[to be translated]:Manifest",
-        "menu": "[to be translated]:Unified Storage",
-        "mirror_status": {
-          "failed_item": "[to be translated]:{{label}}: {{message}}",
-          "failures": "[to be translated]:{{count}} failed retry queue(s)",
-          "healthy": "[to be translated]:No failures",
-          "idle": "[to be translated]:No pending work",
-          "labels": {
-            "agents": "[to be translated]:Agent database",
-            "conversations": "[to be translated]:Conversations",
-            "dexie_settings": "[to be translated]:Dexie settings",
-            "dexie_tables": "[to be translated]:Dexie auxiliary tables",
-            "files": "[to be translated]:Files",
-            "local_storage": "[to be translated]:localStorage",
-            "redux": "[to be translated]:Redux state",
-            "unknown": "[to be translated]:Unknown queue"
-          },
-          "pending": "[to be translated]:{{count}} pending write(s)",
-          "pending_item": "[to be translated]:{{label}}: {{count}} pending write(s)",
-          "title": "[to be translated]:Mirror queue"
-        },
-        "profile": "[to be translated]:Profile {{value}}",
-        "reports": {
-          "agent_db": "[to be translated]:Agent database",
-          "app_db": "[to be translated]:App database",
-          "dexie": "[to be translated]:IndexedDB",
-          "redux": "[to be translated]:Redux state"
-        },
-        "source": "[to be translated]:Source",
-        "sources": {
-          "config": "[to be translated]:Config file",
-          "current_user_data": "[to be translated]:Current user data",
-          "env": "[to be translated]:Environment variable",
-          "legacy_user_data": "[to be translated]:Legacy user data",
-          "unknown": "[to be translated]:Unknown"
-        },
-        "stats": {
-          "title": "[to be translated]:Storage v2 records"
-        },
-        "title": "[to be translated]:Unified Local Storage",
-        "toast": {
-          "action_failed": "[to be translated]:Operation failed: {{message}}",
-          "auto_hydrate_updated": "[to be translated]:Startup restore setting updated",
-          "backup_success": "[to be translated]:Storage v2 backup created",
-          "backup_validate_failed": "[to be translated]:Backup validation failed",
-          "backup_validate_success": "[to be translated]:Backup validation passed",
-          "dry_run_success": "[to be translated]:Dry run completed",
-          "hydrate_success": "[to be translated]:Runtime cache restored from Storage v2",
-          "import_success": "[to be translated]:Import completed",
-          "refresh_failed": "[to be translated]:Refresh failed: {{message}}",
-          "restore_success": "[to be translated]:Storage v2 backup restored",
-          "snapshot_success": "[to be translated]:Storage v2 snapshot created",
-          "verify_success": "[to be translated]:Storage v2 integrity check completed"
-        },
-        "version": "[to be translated]:v{{value}}"
-      },
       "title": "Настройки данных",
       "webdav": {
         "autoSync": {
@@ -5918,7 +5475,6 @@
         "hour_interval_other": "{{count}} часов",
         "lastSync": "Последняя синхронизация",
         "maxBackups": "Максимальное количество резервных копий",
-        "menu_title": "[to be translated]:WebDAV Remote Backup",
         "minute_interval_one": "{{count}} минута",
         "minute_interval_other": "{{count}} минут",
         "noSync": "Ожидание следующего резервного копирования",
@@ -6022,28 +5578,6 @@
       "zoom": {
         "title": "Настройки масштаба"
       }
-    },
-    "environment": {
-      "dependencies": "[to be translated]:Dependency Status",
-      "description": "[to be translated]:Manage the integrated runtime and system dependencies used by agents.",
-      "install": "[to be translated]:Install",
-      "installSuccess": "[to be translated]:Environment dependencies updated",
-      "integratedRuntime": "[to be translated]:Integrated Runtime",
-      "notFound": "[to be translated]:Not found",
-      "openDir": "[to be translated]:Open Folder",
-      "refresh": "[to be translated]:Refresh",
-      "reinstall": "[to be translated]:Reinstall",
-      "source": {
-        "managed": "[to be translated]:Integrated",
-        "missing": "[to be translated]:Optional missing",
-        "requiredMissing": "[to be translated]:Required missing",
-        "runtime": "[to be translated]:Built in",
-        "system": "[to be translated]:System"
-      },
-      "title": "[to be translated]:Environment",
-      "uninstall": "[to be translated]:Uninstall",
-      "uninstallConfirm": "[to be translated]:Uninstall Cherry Studio Pi's integrated runtime? System dependencies will not be removed.",
-      "uninstallSuccess": "[to be translated]:Integrated runtime uninstalled"
     },
     "font_size": {
       "title": "Размер шрифта сообщений"
@@ -6352,6 +5886,7 @@
         "selectProvider": "Выберите провайдера:",
         "setToken": "Введите ваш токен",
         "success": "Синхронизация серверов MCP успешна",
+        "timeout": "[to be translated]:Sync timed out after {{seconds}}s. Please check your network connection and try again.",
         "title": "Синхронизация серверов",
         "tokenPlaceholder": "Введите API токен здесь",
         "tokenRequired": "Требуется API токен",
@@ -6624,6 +6159,9 @@
         "enabled": "Включено",
         "failed": "Не прошло",
         "failed_to_start": "Не удалось запустить проверку работоспособности",
+        "generation_output_audio": "[to be translated]:audio",
+        "generation_output_image": "[to be translated]:an image",
+        "generation_output_video": "[to be translated]:a video",
         "keys_status_count": "Прошло: {{count_passed}} ключей, Не прошло: {{count_failed}} ключей",
         "model_status_failed": "{{count}} моделей полностью недоступны",
         "model_status_partial": "{{count}} моделей недоступны с некоторыми ключами",
@@ -6632,6 +6170,7 @@
         "no_api_keys": "API ключи не найдены, пожалуйста, добавьте API ключи.",
         "no_results": "нет результатов",
         "outcome_fail_short": "{{count}} failed",
+        "outcome_skipped_short": "[to be translated]:{{count}} skipped",
         "outcome_success_short": "{{count}} passed",
         "outcome_total": "{{count}} total",
         "passed": "Прошло",
@@ -6643,8 +6182,11 @@
         "retry": "Check again",
         "select_api_key": "Выберите API ключ для использования:",
         "single": "Один",
+        "skip_reason_generation_cost": "[to be translated]:This model's health check would generate {{output}} and consume quota, so it is skipped by default.",
+        "skip_reason_unsupported_probe": "[to be translated]:This model type does not have a low-cost health check yet, so it is skipped by default.",
         "start": "Начать",
         "status_checking": "Checking…",
+        "status_skipped": "[to be translated]:Skipped",
         "timeout": "Тайм-аут",
         "title": "Проверка состояния моделей",
         "use_all_keys": "Использовать все ключи"
@@ -6653,6 +6195,8 @@
       "default_assistant_model": "Модель ассистента по умолчанию",
       "default_assistant_model_description": "Используется, если у ассистента нет модели.",
       "empty": "Модели не найдены",
+      "group_disable": "[to be translated]:Close this group",
+      "group_enable": "[to be translated]:Enable this group",
       "list_title": "Model list",
       "manage": {
         "add_custom_model": "Add custom model",

@@ -583,6 +583,9 @@
       }
     },
     "sidebar_title": "Πράκτορες",
+    "system_agent": {
+      "auto_triggered": "[to be translated]:System Agent checked automatically"
+    },
     "todo": {
       "mock": {
         "actions": {
@@ -2074,6 +2077,7 @@
         "newest": "Νεότερα πρώτα",
         "oldest": "Παλαιότερα πρώτα"
       },
+      "stats": "[to be translated]:Found {{count}} results in {{time}} seconds",
       "topics": {
         "empty": "Δεν βρέθηκαν σχετικά θέματα, πατήστε Enter για να αναζητήσετε όλα τα μηνύματα"
       }
@@ -2162,16 +2166,10 @@
           "supported_formats": "Υποστηρίζει PDF, DOCX, MD, XLSX, TXT, CSV",
           "title": "Κάντε κλικ για να επιλέξετε αρχεία ή σύρετε τα εδώ"
         },
-        "sitemap": {
-          "description": "Εισαγάγετε ένα URL χάρτη ιστότοπου:",
-          "help": "Οι σελίδες που περιλαμβάνονται στον χάρτη ιστότοπου θα διαβαστούν και θα ευρετηριαστούν",
-          "placeholder": "https://docs.cherry-ai.com/sitemap-pages.xml"
-        },
         "sources": {
           "directory": "Φάκελος",
           "file": "Αρχείο",
           "note": "Σημείωση",
-          "sitemap": "Ιστοσελίδα",
           "url": "URL"
         },
         "submit": {
@@ -2209,9 +2207,6 @@
           "file": {
             "title": "Αρχείο"
           },
-          "sitemap": {
-            "title": "Συγχρονισμός Ιστοσελίδας"
-          },
           "url": {
             "title": "URL"
           }
@@ -2224,7 +2219,6 @@
         "directory": "Φάκελοι",
         "file": "Αρχεία",
         "note": "Σημειώσεις",
-        "sitemap": "Ιστοσελίδες",
         "url": "Διευθύνσεις URL"
       },
       "preview": {
@@ -2502,6 +2496,18 @@
             "empty": "Κανένας δεσμευμένος",
             "label": "Διακομιστές MCP (id)"
           },
+          "mode": {
+            "option": {
+              "enhanced": {
+                "desc": "[to be translated]:Best for more complex scenarios. Uses the Claude Agent SDK, with stronger behavior but usually slower responses and higher token usage.",
+                "title": "[to be translated]:Enhanced mode"
+              },
+              "standard": {
+                "desc": "[to be translated]:Best for most cases. Uses Pi Agent, responds faster, uses fewer tokens, and matches the default Cherry Studio Pi experience.",
+                "title": "[to be translated]:Standard mode"
+              }
+            }
+          },
           "model": {
             "help": "UniqueModelId· θα μεταβεί σε έναν επιλογέα που υποστηρίζεται από το /models αργότερα",
             "hint": "Κύριος συλλογισμός και εκτέλεση",
@@ -2546,6 +2552,11 @@
             "desc": "Όνομα πράκτορα, περιγραφή και κύριο μοντέλο",
             "label": "Βασικό",
             "title": "Βασικό"
+          },
+          "mode": {
+            "desc": "[to be translated]:Choose how this agent runs under the hood",
+            "label": "[to be translated]:Runtime mode",
+            "title": "[to be translated]:Choose runtime mode"
           },
           "permission": {
             "desc": "Εύρος εξουσιοδότησης για ενέργειες πληρεξουσίου",
@@ -5875,6 +5886,7 @@
         "selectProvider": "Επιλέξτε Πάροχο:",
         "setToken": "Εισαγάγετε το τοκεν σας",
         "success": "Ο συγχρονισμός MCP διακομιστή ολοκληρώθηκε επιτυχώς",
+        "timeout": "[to be translated]:Sync timed out after {{seconds}}s. Please check your network connection and try again.",
         "title": "Συγχρονισμός Διακομιστή",
         "tokenPlaceholder": "Εισάγετε το API τοκεν εδώ",
         "tokenRequired": "Απαιτείται API Τοκεν",
@@ -6147,6 +6159,9 @@
         "enabled": "Ενεργοποίηση",
         "failed": "Αποτυχία",
         "failed_to_start": "Αποτυχία έναρξης ελέγχου υγείας",
+        "generation_output_audio": "[to be translated]:audio",
+        "generation_output_image": "[to be translated]:an image",
+        "generation_output_video": "[to be translated]:a video",
         "keys_status_count": "Επιτυχημένοι: {{count_passed}} κλειδιά, αποτυχημένοι: {{count_failed}} κλειδιά",
         "model_status_failed": "{{count}} μοντέλα είναι εντελώς απρόσιτα",
         "model_status_partial": "Από αυτά, {{count}} μοντέλα είναι απρόσιτα με ορισμένα κλειδιά",
@@ -6155,6 +6170,7 @@
         "no_api_keys": "Δεν βρέθηκαν API κλειδιά. Παρακαλούμε πρώτα προσθέστε κλειδιά API.",
         "no_results": "χωρίς αποτελέσματα",
         "outcome_fail_short": "{{count}} failed",
+        "outcome_skipped_short": "[to be translated]:{{count}} skipped",
         "outcome_success_short": "{{count}} passed",
         "outcome_total": "{{count}} total",
         "passed": "Επιτυχία",
@@ -6166,8 +6182,11 @@
         "retry": "Check again",
         "select_api_key": "Επιλέξτε το API key που θέλετε να χρησιμοποιήσετε:",
         "single": "Μόνο",
+        "skip_reason_generation_cost": "[to be translated]:This model's health check would generate {{output}} and consume quota, so it is skipped by default.",
+        "skip_reason_unsupported_probe": "[to be translated]:This model type does not have a low-cost health check yet, so it is skipped by default.",
         "start": "Έναρξη",
         "status_checking": "Checking…",
+        "status_skipped": "[to be translated]:Skipped",
         "timeout": "Χρονική καθυστέρηση",
         "title": "Ελεγχος υγείας μοντέλου",
         "use_all_keys": "Χρήση όλων των κλειδιών"
@@ -6176,6 +6195,8 @@
       "default_assistant_model": "Πρόεδρος Υπηρεσίας προεπιλεγμένου μοντέλου",
       "default_assistant_model_description": "Χρησιμοποιείται όταν ένας βοηθός δεν έχει μοντέλο.",
       "empty": "Δεν υπάρχουν μοντέλα",
+      "group_disable": "[to be translated]:Close this group",
+      "group_enable": "[to be translated]:Enable this group",
       "list_title": "Model list",
       "manage": {
         "add_custom_model": "Add custom model",
