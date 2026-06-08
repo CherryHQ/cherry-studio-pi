@@ -29,6 +29,7 @@ import {
   finishTopicRenaming,
   getTopicMessages,
   mapApiTopicToRendererTopic,
+  MESSAGES_PAGE_SIZE,
   startTopicRenaming,
   useAllTopics,
   useTopicMutations
@@ -655,7 +656,7 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
                 <TopicListItem
                   onMouseEnter={() =>
                     prefetch(`/topics/${topic.id}/messages`, {
-                      query: { limit: 999, includeSiblings: true }
+                      query: { limit: MESSAGES_PAGE_SIZE, includeSiblings: true }
                     })
                   }
                   className={classNames(

@@ -111,7 +111,7 @@ export const finishTopicRenaming = (topicId: string) => {
 // analysis, topic rename) want the full branch — `getTopicMessages`
 // follows nextCursor until the server has nothing left rather than
 // hard-capping at one large page.
-const MESSAGES_PAGE_SIZE = 200
+export const MESSAGES_PAGE_SIZE = 200
 
 /**
  * Load and return all messages for a topic.

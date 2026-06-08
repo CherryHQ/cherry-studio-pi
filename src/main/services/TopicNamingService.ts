@@ -262,7 +262,7 @@ export class TopicNamingService {
 
   private async getBranchMessages(topicId: string): Promise<Message[]> {
     const response = await messageService.getBranchMessages(topicId, {
-      limit: 999,
+      limit: SUMMARY_LIMIT,
       includeSiblings: false
     })
     return response.items.map((item) => item.message)

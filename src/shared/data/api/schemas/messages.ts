@@ -16,6 +16,9 @@ import {
 } from '@shared/data/types/message'
 import * as z from 'zod'
 
+export const MESSAGE_TREE_MAX_DEPTH = 25
+export const BRANCH_MESSAGES_MAX_LIMIT = 200
+
 // ============================================================================
 // DTOs
 // ============================================================================
@@ -114,7 +117,7 @@ export const TreeQuerySchema = z.strictObject({
   /** End node ID (defaults to topic.activeNodeId) */
   nodeId: z.string().optional(),
   /** Depth to expand beyond active path (-1 = all, 0 = path only, 1+ = layers) */
-  depth: z.number().int().optional()
+  depth: z.coerce.number().int().min(-1).max(MESSAGE_TREE_MAX_DEPTH).optional()
 })
 export type TreeQueryParams = z.infer<typeof TreeQuerySchema>
 
@@ -131,7 +134,7 @@ export const BranchMessagesQuerySchema = z.strictObject({
   /** Cursor for pagination (exclusive boundary) */
   cursor: z.string().optional(),
   /** Page size */
-  limit: z.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().max(BRANCH_MESSAGES_MAX_LIMIT).optional(),
   /** End node ID (defaults to topic.activeNodeId) */
   nodeId: z.string().optional(),
   /** Whether to include siblingsGroup in response */
