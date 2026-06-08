@@ -103,7 +103,7 @@ export const SettingHelpLink = ({
 export const SettingTitleExternalLink = ({
   className,
   target = '_blank',
-  rel = 'noreferrer',
+  rel = 'noopener noreferrer',
   ...props
 }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
   <a
