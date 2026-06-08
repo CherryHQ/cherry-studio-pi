@@ -4,6 +4,7 @@ import SelectionToolbar from '@renderer/windows/selection/toolbar/SelectionToolb
 import { DefaultPreferences } from '@shared/data/preference/preferenceSchemas'
 import type { SelectionActionItem } from '@shared/data/preference/preferenceTypes'
 import type { FC } from 'react'
+import { useEffect } from 'react'
 
 import { SettingDivider, SettingGroup } from '../..'
 import { useActionItems } from '../hooks/useSettingsActionsList'
@@ -46,9 +47,11 @@ const SelectionActionsList: FC<SelectionActionsListProps> = ({ actionItems, setA
 
   const { theme } = useTheme()
 
-  if (!actionItems || actionItems.length === 0) {
-    setActionItems(DefaultPreferences.default['feature.selection.action_items'])
-  }
+  useEffect(() => {
+    if (!actionItems || actionItems.length === 0) {
+      setActionItems(DefaultPreferences.default['feature.selection.action_items'])
+    }
+  }, [actionItems, setActionItems])
 
   return (
     <SettingGroup theme={theme}>
