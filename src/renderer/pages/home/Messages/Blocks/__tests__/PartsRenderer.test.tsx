@@ -10,6 +10,10 @@ import { PartsProvider } from '../V2Contexts'
 // Mocks — keep minimal, only mock what prevents module loading
 // ============================================================================
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key })
+}))
+
 vi.mock('@logger', () => ({
   loggerService: { withContext: () => ({ warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() }) }
 }))

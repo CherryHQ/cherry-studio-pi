@@ -7,6 +7,10 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AgentFormState } from '../descriptor'
 import BasicSection from '../sections/BasicSection'
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key })
+}))
+
 const models = [
   { id: 'anthropic::claude-sonnet-4-5', name: 'Claude Sonnet 4.5' },
   { id: 'anthropic::claude-haiku-4-5', name: 'Claude Haiku 4.5' },

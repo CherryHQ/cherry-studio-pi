@@ -10,6 +10,10 @@ const mockUseChatWithHistory = vi.fn()
 const mockUseTopicMessagesV2 = vi.fn()
 let capturedOnSend: ((text: string) => Promise<void> | void) | undefined
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key })
+}))
+
 vi.mock('@renderer/hooks/useChatContext', () => ({
   useChatContextProvider: vi.fn(() => ({ isMultiSelectMode: false })),
   ChatContextProvider: ({ children }: { children: ReactNode }) => children

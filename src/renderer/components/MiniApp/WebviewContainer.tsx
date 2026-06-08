@@ -193,7 +193,7 @@ const WebviewContainer = memo(
         ref={handleRef}
         data-mini-app-id={appid}
         style={WebviewStyle}
-        allowpopups={true}
+        allowpopups={'true' as unknown as boolean}
         partition="persist:webview"
         useragent={
           appid === 'google'

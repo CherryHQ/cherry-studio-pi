@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useTranslateHistories } from '../useTranslateHistories'
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key })
+}))
+
 type HistoryItem = { id: string }
 
 function buildInfiniteState(overrides: Record<string, unknown> = {}) {

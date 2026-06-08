@@ -7,6 +7,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { type AssistantFormState } from '../descriptor'
 import { BasicSection } from '../sections/BasicSection'
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key })
+}))
+
 const models = [
   { id: 'anthropic::claude-sonnet-4-5', name: 'Claude Sonnet 4.5' },
   { id: 'moonshot::moonshot-v1', name: 'Moonshot v1' },

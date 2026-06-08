@@ -6,6 +6,11 @@ import ProviderHeader from '../ProviderHeader'
 const useProviderMock = vi.fn()
 const useProviderMetaMock = vi.fn()
 const useProviderEnableMock = vi.fn()
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key })
+}))
+
 vi.mock('@cherrystudio/ui', () => {
   return {
     Switch: ({ checked, onCheckedChange }: any) => (

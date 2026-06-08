@@ -9,6 +9,10 @@ import ToolsSection from '../sections/ToolsSection'
 
 const toggleSkillMock = vi.hoisted(() => vi.fn())
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key })
+}))
+
 vi.mock('@cherrystudio/ui', async (importOriginal) => {
   const actual = await importOriginal<typeof CherryUiModule>()
   return actual
