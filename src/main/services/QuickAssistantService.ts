@@ -34,6 +34,7 @@ import windowStateKeeper from 'electron-window-state'
 
 import { isSafeExternalUrl } from '../utils/externalUrlSafety'
 import { isLocalViteDevServerUrl } from '../utils/localDevServerUrl'
+import { summarizeUrlForLog } from '../utils/logging'
 import { openExternalUrl } from '../utils/openExternal'
 
 const DEFAULT_QUICK_ASSISTANT_WIDTH = 550
@@ -283,7 +284,7 @@ export class QuickAssistantService extends BaseService implements Activatable {
       if (isSafeExternalUrl(url)) {
         openExternalUrl(url, 'quick assistant navigation')
       } else {
-        logger.warn(`Blocked navigation to untrusted URL scheme: ${url}`)
+        logger.warn('Blocked navigation to untrusted URL scheme', { url: summarizeUrlForLog(url) })
       }
     })
 
@@ -291,7 +292,7 @@ export class QuickAssistantService extends BaseService implements Activatable {
       if (isSafeExternalUrl(details.url)) {
         openExternalUrl(details.url, 'quick assistant popup')
       } else {
-        logger.warn(`Blocked shell.openExternal for untrusted URL scheme: ${details.url}`)
+        logger.warn('Blocked shell.openExternal for untrusted URL scheme', { url: summarizeUrlForLog(details.url) })
       }
       return { action: 'deny' }
     })

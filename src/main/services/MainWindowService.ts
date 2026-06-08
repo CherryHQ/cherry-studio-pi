@@ -16,6 +16,7 @@ import path, { join } from 'path'
 import iconPath from '../../../build/icon.png?asset'
 import { isSafeExternalUrl } from '../utils/externalUrlSafety'
 import { isLocalViteDevServerUrl } from '../utils/localDevServerUrl'
+import { summarizeUrlForLog } from '../utils/logging'
 import { openExternalUrl } from '../utils/openExternal'
 import { openPathInShellAndLog } from '../utils/openPath'
 import { contextMenu } from './ContextMenu'
@@ -382,7 +383,7 @@ export class MainWindowService extends BaseService {
       if (isSafeExternalUrl(url)) {
         openExternalUrl(url, 'main window navigation')
       } else {
-        logger.warn(`Blocked navigation to untrusted URL scheme: ${url}`)
+        logger.warn('Blocked navigation to untrusted URL scheme', { url: summarizeUrlForLog(url) })
       }
     })
 
@@ -429,7 +430,7 @@ export class MainWindowService extends BaseService {
       } else if (isSafeExternalUrl(details.url)) {
         openExternalUrl(details.url, 'main window popup')
       } else {
-        logger.warn(`Blocked shell.openExternal for untrusted URL scheme: ${details.url}`)
+        logger.warn('Blocked shell.openExternal for untrusted URL scheme', { url: summarizeUrlForLog(details.url) })
       }
 
       return { action: 'deny' }

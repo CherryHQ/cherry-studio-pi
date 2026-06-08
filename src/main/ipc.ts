@@ -45,6 +45,7 @@ import { calculateDirectorySize } from './utils'
 import { decrypt, encrypt } from './utils/aes'
 import { isSafeExternalUrl } from './utils/externalUrlSafety'
 import { hasWritePermission, isPathInside, untildify } from './utils/file'
+import { summarizeUrlForLog } from './utils/logging'
 import { openPathInShell } from './utils/openPath'
 import { getCpuName, getDeviceType, getHostname } from './utils/system'
 import { compress, decompress } from './utils/zip'
@@ -90,7 +91,7 @@ export async function registerIpc() {
   // Application_Quit is registered by Application.registerApplicationIpc()
   ipcMain.handle(IpcChannel.Open_Website, (_, url: string) => {
     if (!isSafeExternalUrl(url)) {
-      logger.warn(`Blocked shell.openExternal for untrusted URL scheme: ${url}`)
+      logger.warn('Blocked shell.openExternal for untrusted URL scheme', { url: summarizeUrlForLog(url) })
       return
     }
     return shell.openExternal(url)

@@ -7,6 +7,7 @@ import { app, dialog, session, webContents } from 'electron'
 import { promises as fs } from 'fs'
 
 import { isSafeExternalUrl } from '../utils/externalUrlSafety'
+import { summarizeUrlForLog } from '../utils/logging'
 import { openExternalUrl } from '../utils/openExternal'
 
 const logger = loggerService.withContext('WebviewService')
@@ -45,7 +46,7 @@ export function setOpenLinkExternal(webviewId: number, isExternal: boolean) {
       if (isSafeExternalUrl(url)) {
         openExternalUrl(url, 'webview popup')
       } else {
-        logger.warn(`Blocked shell.openExternal for untrusted URL scheme: ${url}`)
+        logger.warn('Blocked shell.openExternal for untrusted URL scheme', { url: summarizeUrlForLog(url) })
       }
       return { action: 'deny' }
     } else {

@@ -37,6 +37,37 @@ describe('openExternalUrl', () => {
     openExternalUrl('javascript:alert(1)', 'test link')
 
     expect(mocks.openExternal).not.toHaveBeenCalled()
-    expect(mocks.logger.warn).toHaveBeenCalledWith('Blocked unsafe test link: javascript:alert(1)')
+    expect(mocks.logger.warn).toHaveBeenCalledWith('Blocked unsafe test link', {
+      url: {
+        type: 'url',
+        protocol: 'javascript:',
+        host: '',
+        pathnameLength: 8,
+        searchLength: 0,
+        hashLength: 0,
+        hasSearch: false,
+        hasHash: false
+      }
+    })
+  })
+
+  it('summarizes blocked external URLs without logging embedded credentials', () => {
+    openExternalUrl('ftp://user:secret@example.com/download?token=abc#secret', 'test link')
+
+    expect(mocks.openExternal).not.toHaveBeenCalled()
+    expect(JSON.stringify(mocks.logger.warn.mock.calls)).not.toContain('secret')
+    expect(JSON.stringify(mocks.logger.warn.mock.calls)).not.toContain('token=abc')
+    expect(mocks.logger.warn).toHaveBeenCalledWith('Blocked unsafe test link', {
+      url: {
+        type: 'url',
+        protocol: 'ftp:',
+        host: 'example.com',
+        pathnameLength: 9,
+        searchLength: 10,
+        hashLength: 7,
+        hasSearch: true,
+        hasHash: true
+      }
+    })
   })
 })
