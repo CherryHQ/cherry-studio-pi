@@ -716,22 +716,32 @@ const resolveAllowedPath = (rawPath: string | undefined, cwd: string) => {
 
 const sandboxProfileForRoots = () => '(version 1)\n(allow default)'
 
-const runBash = async (command: string, cwd: string, signal?: AbortSignal, extraEnv: NodeJS.ProcessEnv = {}) => {
-  const env = await buildBashEnv(cwd, extraEnv)
-
-  if (process.platform === 'darwin') {
-    return await execFileAsync('/usr/bin/sandbox-exec', ['-p', sandboxProfileForRoots(), '/bin/zsh', '-lc', command], {
-      cwd,
-      env,
-      signal,
-      timeout: BASH_TIMEOUT_MS,
-      maxBuffer: BASH_MAX_BUFFER
-    })
+export const buildPiBashShellInvocation = (platform: NodeJS.Platform, command: string) => {
+  if (platform === 'darwin') {
+    return {
+      file: '/usr/bin/sandbox-exec',
+      args: ['-p', sandboxProfileForRoots(), '/bin/zsh', '-lc', command]
+    }
   }
 
-  const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/sh'
-  const args = process.platform === 'win32' ? ['/d', '/s', '/c', command] : ['-lc', command]
-  return await execFileAsync(shell, args, {
+  if (platform === 'win32') {
+    return {
+      file: 'cmd.exe',
+      args: ['/d', '/s', '/c', command]
+    }
+  }
+
+  return {
+    file: '/bin/sh',
+    args: ['-c', command]
+  }
+}
+
+const runBash = async (command: string, cwd: string, signal?: AbortSignal, extraEnv: NodeJS.ProcessEnv = {}) => {
+  const env = await buildBashEnv(cwd, extraEnv)
+  const shell = buildPiBashShellInvocation(process.platform, command)
+
+  return await execFileAsync(shell.file, shell.args, {
     cwd,
     env,
     signal,

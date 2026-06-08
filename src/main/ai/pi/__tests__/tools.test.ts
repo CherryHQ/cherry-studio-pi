@@ -44,7 +44,7 @@ import mcpService from '@main/services/MCPService'
 import { net } from 'electron'
 
 import { builtinTools } from '../builtin'
-import { createPiMcpTools, createPiTools } from '../tools'
+import { buildPiBashShellInvocation, createPiMcpTools, createPiTools } from '../tools'
 
 const getTool = (name: string, cwd: string, roots: string[]) => {
   const tool = createPiTools(cwd, roots).find((item) => item.name === name)
@@ -470,6 +470,13 @@ exit 1
 
     expect(result.details).toMatchObject({ exitCode: 0 })
     expect(resultText(result).trim()).toBe('hi')
+  })
+
+  it('uses POSIX sh without the unsupported login flag on Linux', () => {
+    expect(buildPiBashShellInvocation('linux', 'echo hi')).toEqual({
+      file: '/bin/sh',
+      args: ['-c', 'echo hi']
+    })
   })
 
   it('includes HTTP, app capability, and browser tools by default', () => {
