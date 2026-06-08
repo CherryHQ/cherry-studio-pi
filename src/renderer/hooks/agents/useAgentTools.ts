@@ -28,8 +28,7 @@ export type AgentToolSource = {
 }
 
 function useMcpToolsCache(serverIds: readonly string[]): Record<string, McpTool[]> {
-  const serverIdsSignature = JSON.stringify(Array.from(new Set(serverIds)).sort())
-  const uniqueIds = useMemo(() => JSON.parse(serverIdsSignature) as string[], [serverIdsSignature])
+  const uniqueIds = useStableUniqueServerIds(serverIds)
   const cacheKeys = useMemo(() => uniqueIds.map((id) => mcpToolsCacheKey(id)), [uniqueIds])
 
   const readSnapshot = useCallback(
@@ -51,6 +50,16 @@ function useMcpToolsCache(serverIds: readonly string[]): Record<string, McpTool[
   }, [cacheKeys, readSnapshot])
 
   return snapshot
+}
+
+function useStableUniqueServerIds(serverIds: readonly string[]): string[] {
+  const sortedIds = Array.from(new Set(serverIds)).sort()
+  const signature = JSON.stringify(sortedIds)
+  const ref = useRef<{ ids: string[]; signature: string } | null>(null)
+  if (ref.current?.signature !== signature) {
+    ref.current = { ids: sortedIds, signature }
+  }
+  return ref.current.ids
 }
 
 function toTool(descriptor: ClaudeToolDescriptor, source: AgentToolSource): Tool {

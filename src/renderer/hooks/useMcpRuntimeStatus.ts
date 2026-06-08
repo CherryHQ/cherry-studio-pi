@@ -2,7 +2,7 @@ import { cacheService } from '@renderer/data/CacheService'
 import { useSharedCache } from '@renderer/data/hooks/useCache'
 import type { SharedCacheKey } from '@shared/data/cache/cacheSchemas'
 import type { McpRuntimeStatus } from '@shared/data/cache/cacheValueTypes'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 type McpStatusCacheKey = `mcp.status.${string}`
 type McpRuntimeStatusServer = { id: string; isActive: boolean }
@@ -22,13 +22,7 @@ export function useMcpRuntimeStatus(serverId: string | undefined, isActive: bool
 export function useMcpRuntimeStatusMap(
   servers: readonly { id: string; isActive: boolean }[]
 ): Record<string, McpRuntimeStatus> {
-  const serverSignature = JSON.stringify(
-    [...servers].sort((a, b) => a.id.localeCompare(b.id)).map(({ id, isActive }) => [id, isActive])
-  )
-  const sortedServers = useMemo(
-    () => JSON.parse(serverSignature).map(([id, isActive]: [string, boolean]) => ({ id, isActive })),
-    [serverSignature]
-  ) as McpRuntimeStatusServer[]
+  const sortedServers = useStableSortedRuntimeServers(servers)
   const cacheKeys = useMemo(() => sortedServers.map((server) => mcpStatusCacheKey(server.id)), [sortedServers])
 
   const readSnapshot = useCallback(
@@ -54,4 +48,18 @@ export function useMcpRuntimeStatusMap(
   }, [cacheKeys, readSnapshot])
 
   return snapshot
+}
+
+function useStableSortedRuntimeServers(
+  servers: readonly { id: string; isActive: boolean }[]
+): McpRuntimeStatusServer[] {
+  const sortedServers = [...servers]
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map(({ id, isActive }) => ({ id, isActive }))
+  const signature = JSON.stringify(sortedServers)
+  const ref = useRef<{ servers: McpRuntimeStatusServer[]; signature: string } | null>(null)
+  if (ref.current?.signature !== signature) {
+    ref.current = { servers: sortedServers, signature }
+  }
+  return ref.current.servers
 }
