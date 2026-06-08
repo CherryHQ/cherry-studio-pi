@@ -271,12 +271,6 @@ export default function ProviderCustomHeaderDrawer({ providerId, open, onClose }
       parsedHeaders = rowsToHeadersObject(rows)
     }
 
-    applyProviderCustomHeaderSideEffects({
-      providerId,
-      headers: parsedHeaders,
-      updateCopilotHeaders: updateDefaultHeaders
-    })
-
     try {
       await updateProvider({
         endpointConfigs: nextEndpointConfigs,
@@ -289,6 +283,12 @@ export default function ProviderCustomHeaderDrawer({ providerId, open, onClose }
       window.toast.error(t('settings.provider.save_failed'))
       return
     }
+
+    applyProviderCustomHeaderSideEffects({
+      providerId,
+      headers: parsedHeaders,
+      updateCopilotHeaders: updateDefaultHeaders
+    })
 
     if (primaryDraft !== previousPrimaryBaseUrl) {
       syncProviderModels().catch((error) => {
