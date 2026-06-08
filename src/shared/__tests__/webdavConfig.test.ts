@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { normalizeWebDavConfig, normalizeWebDavHost, parseWebDavInput } from '../webdavConfig'
+import { normalizeWebDavConfig, normalizeWebDavHost, normalizeWebDavPath, parseWebDavInput } from '../webdavConfig'
 
 describe('webdavConfig', () => {
   it('splits a pasted WebDAV account block into separate fields', () => {
@@ -92,6 +92,23 @@ describe('webdavConfig', () => {
     )
 
     expect(config.webdavHost).toBe('https://dav.example.com/remote.php/dav')
+  })
+
+  it('normalizes remote path dot segments without escaping the WebDAV root', () => {
+    expect(normalizeWebDavPath('/team/../Cherry Studio Pi//./sync')).toBe('/Cherry Studio Pi/sync')
+    expect(normalizeWebDavPath('../../outside')).toBe('/outside')
+
+    const config = normalizeWebDavConfig(
+      {
+        webdavHost: 'https://dav.example.com',
+        webdavUser: 'webdav',
+        webdavPass: 'test-webdav-password',
+        webdavPath: '/team/../Cherry Studio Pi//./sync/v1'
+      },
+      { requireCredentials: true }
+    )
+
+    expect(config.webdavPath).toBe('/Cherry Studio Pi/sync/v1')
   })
 
   it('preserves explicit password bytes while still trimming usernames', () => {

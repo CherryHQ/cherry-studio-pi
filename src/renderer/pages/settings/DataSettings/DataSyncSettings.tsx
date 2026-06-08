@@ -19,7 +19,7 @@ import {
   setDataSyncWebdavPath,
   setDataSyncWebdavUser
 } from '@renderer/store/settings'
-import { normalizeWebDavConfig, normalizeWebDavHost, parseWebDavInput } from '@shared/webdavConfig'
+import { normalizeWebDavConfig, normalizeWebDavHost, normalizeWebDavPath, parseWebDavInput } from '@shared/webdavConfig'
 import { Alert, Breadcrumb, Button, Empty, Input, List, Modal, Space, Spin, Tooltip, Typography } from 'antd'
 import dayjs from 'dayjs'
 import type { CSSProperties, FC, ReactNode } from 'react'
@@ -118,14 +118,7 @@ function normalizeWebdavHostInput(value: string) {
 }
 
 function normalizeRemotePathInput(value?: string) {
-  const trimmed = value?.trim() || DEFAULT_REMOTE_PATH
-  let normalized = trimmed.replace(/\\/g, '/').replace(/\/+/g, '/')
-  if (!normalized.startsWith('/')) {
-    normalized = `/${normalized}`
-  }
-  if (normalized.length > 1) {
-    normalized = normalized.replace(/\/$/g, '')
-  }
+  let normalized = normalizeWebDavPath(value, DEFAULT_REMOTE_PATH)
   if (normalized === DATA_SYNC_SUFFIX || normalized.endsWith(DATA_SYNC_SUFFIX)) {
     normalized = normalized.slice(0, -DATA_SYNC_SUFFIX.length) || '/'
   }
@@ -144,15 +137,7 @@ function getDirectoryBrowserStartPath(value?: string) {
 }
 
 function normalizeDirectoryBrowserPath(value?: string) {
-  const trimmed = value?.trim() || '/'
-  let normalized = trimmed.replace(/\\/g, '/').replace(/\/+/g, '/')
-  if (!normalized.startsWith('/')) {
-    normalized = `/${normalized}`
-  }
-  if (normalized.length > 1) {
-    normalized = normalized.replace(/\/$/g, '')
-  }
-  return normalized
+  return normalizeWebDavPath(value, '/')
 }
 
 function getErrorMessage(error: unknown) {

@@ -77,10 +77,18 @@ export function normalizeWebDavHost(webdavHost?: string) {
 
 export function normalizeWebDavPath(value?: string, defaultPath = DEFAULT_WEBDAV_SYNC_PATH) {
   const trimmed = value?.trim() || defaultPath
-  let normalized = trimmed.replace(/\\/g, '/').replace(/\/+/g, '/')
-  if (!normalized.startsWith('/')) normalized = `/${normalized}`
-  if (normalized.length > 1) normalized = normalized.replace(/\/+$/g, '')
-  return normalized
+  const parts: string[] = []
+
+  for (const part of trimmed.replace(/\\/g, '/').split('/')) {
+    if (!part || part === '.') continue
+    if (part === '..') {
+      parts.pop()
+      continue
+    }
+    parts.push(part)
+  }
+
+  return parts.length ? `/${parts.join('/')}` : '/'
 }
 
 export function parseWebDavInput(input?: string): ParsedWebDavInput {

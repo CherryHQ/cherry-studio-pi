@@ -29,7 +29,7 @@ import { normalizeWebDavHost, runWebDavOperation, WebDavOperationError } from '@
 import { getDataPath } from '@main/utils'
 import { getNotesDir } from '@main/utils/file'
 import { sanitizeFilename } from '@shared/file/types/filename'
-import { normalizeWebDavConfig } from '@shared/webdavConfig'
+import { normalizeWebDavConfig, normalizeWebDavPath } from '@shared/webdavConfig'
 import type { WebDavConfig } from '@types'
 import { XMLParser } from 'fast-xml-parser'
 import { createClient, type FileStat, type WebDAVClient } from 'webdav'
@@ -442,11 +442,7 @@ function recordPath(record: Pick<AppDataRecord, 'scope' | 'key' | 'valueHash'>) 
 }
 
 function normalizeWebDavDirectoryPath(webdavPath?: string) {
-  const trimmed = webdavPath?.trim() || DATA_SYNC_REMOTE_ROOT
-  const withSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
-  const normalized = path.posix.normalize(withSlash.replace(/\\/g, '/').replace(/\/+/g, '/'))
-  const withoutTrailingSlash = normalized.length > 1 ? normalized.replace(/\/+$/g, '') : normalized
-  return withoutTrailingSlash === '.' ? '/' : withoutTrailingSlash
+  return normalizeWebDavPath(webdavPath, DATA_SYNC_REMOTE_ROOT)
 }
 
 function normalizeBasePath(webdavPath?: string) {
