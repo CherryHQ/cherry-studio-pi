@@ -30,13 +30,9 @@ vi.mock('@logger', () => ({
   }
 }))
 
-vi.mock('@reduxjs/toolkit', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@reduxjs/toolkit')>()
-  return {
-    ...actual,
-    nanoid: vi.fn(() => 'server-id')
-  }
-})
+vi.mock('@reduxjs/toolkit', () => ({
+  nanoid: vi.fn(() => 'server-id')
+}))
 
 import { handleMcpProtocolUrl } from '../mcpInstall'
 
