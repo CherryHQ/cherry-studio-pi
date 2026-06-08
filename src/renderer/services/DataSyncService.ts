@@ -341,7 +341,13 @@ function getWebDavConfig(): WebDavConfig {
 
 function getAutoSyncIntervalMs() {
   const settings = store.getState().settings
-  if (!settings.dataSyncAutoSync || !settings.dataSyncWebdavHost || settings.dataSyncSyncInterval <= 0) {
+  if (
+    !settings.dataSyncAutoSync ||
+    !settings.dataSyncWebdavHost ||
+    !settings.dataSyncWebdavUser ||
+    !settings.dataSyncWebdavPass ||
+    settings.dataSyncSyncInterval <= 0
+  ) {
     return null
   }
 

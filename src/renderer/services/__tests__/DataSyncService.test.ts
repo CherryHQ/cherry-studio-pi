@@ -679,6 +679,28 @@ describe('DataSyncService', () => {
     expect(mocks.prepareStorageV2ForDataSync).toHaveBeenCalledTimes(1)
   })
 
+  it('does not start auto sync until WebDAV credentials are complete', async () => {
+    vi.useFakeTimers()
+    mocks.getState.mockReturnValue({
+      settings: {
+        dataSyncWebdavHost: 'https://dav.example.test',
+        dataSyncWebdavUser: 'user',
+        dataSyncWebdavPass: '',
+        dataSyncWebdavPath: '/cherry-studio-pi',
+        dataSyncAutoSync: true,
+        dataSyncSyncInterval: 15
+      }
+    })
+
+    startDataSyncAutoSync(false)
+    notifyDataSyncLocalChange('redux')
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(mocks.onLocalStorageV2Changed).not.toHaveBeenCalled()
+    expect(mocks.syncNow).not.toHaveBeenCalled()
+    expect(mocks.prepareStorageV2ForDataSync).not.toHaveBeenCalled()
+  })
+
   it('runs a debounced auto sync after main-process Storage v2 data changes', async () => {
     vi.useFakeTimers()
     mocks.getState.mockReturnValue({
