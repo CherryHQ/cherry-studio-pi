@@ -3,6 +3,7 @@ import { useProvider } from '@renderer/hooks/useProvider'
 import { SettingDivider, SettingRow } from '@renderer/pages/settings'
 import { CollapsibleSettingGroup } from '@renderer/pages/settings/SettingGroup'
 import { SystemProviderIds } from '@renderer/types'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { toOptionValue, toRealValue } from '@renderer/utils/select'
 import type { GroqServiceTier, ServiceTier } from '@shared/data/types/provider'
 import { Tooltip } from 'antd'
@@ -28,9 +29,11 @@ const GroqSettingsGroup: FC<Props> = ({ SettingGroup, SettingRowTitleSmall }) =>
       if (!provider) return
       void updateProvider({
         providerSettings: { ...provider.settings, serviceTier: value ?? undefined }
+      }).catch((error) => {
+        window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
       })
     },
-    [provider, updateProvider]
+    [provider, t, updateProvider]
   )
 
   const serviceTierOptions = useMemo(() => {

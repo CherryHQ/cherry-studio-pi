@@ -1,6 +1,7 @@
 import Selector from '@renderer/components/Selector'
 import { useProvider } from '@renderer/hooks/useProvider'
 import { SettingRow } from '@renderer/pages/settings'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { toOptionValue, toRealValue } from '@renderer/utils/select'
 import type { Model } from '@shared/data/types/model'
 import type { OpenAIServiceTier, ServiceTier } from '@shared/data/types/provider'
@@ -30,9 +31,11 @@ const ServiceTierSetting: FC<Props> = ({ model, providerId, SettingRowTitleSmall
       if (!provider) return
       void updateProvider({
         providerSettings: { ...provider.settings, serviceTier: value ?? undefined }
+      }).catch((error) => {
+        window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
       })
     },
-    [provider, updateProvider]
+    [provider, t, updateProvider]
   )
 
   const serviceTierOptions = useMemo(() => {
