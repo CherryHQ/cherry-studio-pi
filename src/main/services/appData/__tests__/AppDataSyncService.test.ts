@@ -2639,6 +2639,42 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('skips optional full data snapshots when the local backup is too large', async () => {
+    process.env.CHERRY_STUDIO_DATA_SYNC_REMOTE_SNAPSHOT = '1'
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
+      if (mocks.remoteFiles.has(filePath)) {
+        return mocks.remoteFiles.get(filePath)
+      }
+
+      if (filePath.endsWith('/manifest.json')) {
+        return JSON.stringify({ version: 1, updatedAt: 0, records: {} })
+      }
+      throw new Error(`Unexpected WebDAV read: ${filePath}`)
+    })
+
+    const originalStat = fsp.stat
+    const statSpy = vi.spyOn(fsp, 'stat').mockImplementation(async (...args: Parameters<typeof fsp.stat>) => {
+      const result = await originalStat(...args)
+      const filePath = String(args[0])
+      if (filePath.includes('cherry-studio-pi.data-sync.local-device')) {
+        return { ...result, size: 2 * 1024 * 1024 * 1024 + 1 } as Awaited<ReturnType<typeof fsp.stat>>
+      }
+      return result
+    })
+
+    try {
+      const summary = await new AppDataSyncService().syncNow(config)
+
+      expect(summary.status).toBe('success')
+      expect(summary.snapshotUploaded).toBe(false)
+      expect(mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).includes('/backups/'))).toBe(
+        false
+      )
+    } finally {
+      statSpy.mockRestore()
+    }
+  })
+
   it('prunes stale app-data record and backup artifacts after publishing the manifest', async () => {
     mockDirectoryContentsFromRemoteFiles()
     mocks.remoteFiles.set('/remote-root/sync/v1/.tmp-manifest.json-stale.json', JSON.stringify({ stale: true }))

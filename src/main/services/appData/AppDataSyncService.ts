@@ -3726,6 +3726,11 @@ export class AppDataSyncService {
 
     try {
       const stat = await fsp.stat(localBackupPath)
+      if (stat.size > REMOTE_SNAPSHOT_MAX_BYTES) {
+        throw new RemoteSyncSizeLimitError(
+          `本地安全快照过大（${stat.size} 字节，限制 ${REMOTE_SNAPSHOT_MAX_BYTES} 字节）。为避免上传失败、长时间占用带宽或撑爆 WebDAV 限额，本次远端安全快照已跳过。`
+        )
+      }
       const checksum = await sha256File(localBackupPath)
       await this.ensureDirectory(client, path.posix.dirname(remotePath))
       await runWebDavOperation(
