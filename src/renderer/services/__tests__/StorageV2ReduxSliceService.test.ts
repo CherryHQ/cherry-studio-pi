@@ -40,7 +40,7 @@ describe('StorageV2ReduxSliceService', () => {
           mcp: mcpState
         }
       },
-      { dryRun: false, pruneMissing: true }
+      { dryRun: false, pruneMissing: false }
     )
   })
 
@@ -59,6 +59,25 @@ describe('StorageV2ReduxSliceService', () => {
     const snapshot = { assistants: { presets: [{ id: 'preset-1' }] } }
 
     await persistStorageV2PartialReduxSnapshot(snapshot)
+
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(snapshot, { dryRun: false, pruneMissing: false })
+  })
+
+  it('allows callers to explicitly opt in to pruning for full snapshots', async () => {
+    const importLegacyReduxSnapshot = vi.fn().mockResolvedValue({ dryRun: false })
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          importLegacyReduxSnapshot
+        }
+      }
+    })
+
+    const { persistStorageV2PartialReduxSnapshot } = await import('../StorageV2ReduxSliceService')
+    const snapshot = { assistants: { assistants: [] } }
+
+    await persistStorageV2PartialReduxSnapshot(snapshot, { pruneMissing: true })
 
     expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(snapshot, { dryRun: false, pruneMissing: true })
   })
