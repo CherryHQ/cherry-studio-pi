@@ -11,6 +11,7 @@ import { renderSvgInShadowHost } from './utils'
 const logger = loggerService.withContext('PlantUmlPreview')
 
 const PlantUMLServer = 'https://www.plantuml.com/plantuml'
+const PLANTUML_FETCH_TIMEOUT_MS = 15_000
 function encode64(data: Uint8Array) {
   let r = ''
   for (let i = 0; i < data.length; i += 3) {
@@ -80,6 +81,10 @@ function getPlantUMLImageUrl(format: 'png' | 'svg', diagram: string, isDark?: bo
   return `${PlantUMLServer}/${format}/${encodedDiagram}`
 }
 
+function isTimeoutError(error: unknown) {
+  return error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError')
+}
+
 const PlantUmlPreview = ({
   children,
   enableToolbar = false,
@@ -88,7 +93,15 @@ const PlantUmlPreview = ({
   // 定义渲染函数
   const renderPlantUml = useCallback(async (content: string, container: HTMLDivElement) => {
     const url = getPlantUMLImageUrl('svg', content, false)
-    const response = await fetch(url)
+    let response: Response
+    try {
+      response = await fetch(url, { signal: AbortSignal.timeout(PLANTUML_FETCH_TIMEOUT_MS) })
+    } catch (error) {
+      if (isTimeoutError(error)) {
+        throw new Error(`Diagram rendering timed out after ${PLANTUML_FETCH_TIMEOUT_MS / 1000}s.`)
+      }
+      throw error
+    }
     if (!response.ok) {
       if (response.status === 400) {
         throw new Error(
@@ -114,7 +127,7 @@ const PlantUmlPreview = ({
 
   // 记录网络错误
   useEffect(() => {
-    if (error && error.includes('Failed to fetch')) {
+    if (error && (error.includes('Failed to fetch') || error.includes('timed out'))) {
       logger.warn('Network Error: Unable to connect to PlantUML server. Please check your network connection.')
     } else if (error) {
       logger.warn(error)
