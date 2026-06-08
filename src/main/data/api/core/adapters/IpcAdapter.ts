@@ -1,13 +1,57 @@
 import { loggerService } from '@logger'
 import type { Disposable } from '@main/core/lifecycle'
-import { toDataApiError } from '@shared/data/api/apiErrors'
-import type { DataRequest, DataResponse } from '@shared/data/api/apiTypes'
+import { DataApiErrorFactory, ErrorCode, toDataApiError } from '@shared/data/api/apiErrors'
+import type { DataRequest, DataResponse, HttpMethod } from '@shared/data/api/apiTypes'
 import { IpcChannel } from '@shared/IpcChannel'
 import { ipcMain } from 'electron'
 
 import type { ApiServer } from '../ApiServer'
 
 const logger = loggerService.withContext('DataApi:IpcAdapter')
+const MALFORMED_REQUEST_ID = 'malformed-data-api-request'
+const DATA_API_METHODS = new Set<HttpMethod>(['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function getRequestLogContext(request: unknown) {
+  const record = isPlainRecord(request) ? request : {}
+  const id = typeof record.id === 'string' && record.id ? record.id : MALFORMED_REQUEST_ID
+  const method = typeof record.method === 'string' && record.method ? record.method : 'UNKNOWN'
+  const path = typeof record.path === 'string' && record.path ? record.path : '<unknown>'
+
+  return {
+    id,
+    label: `${method} ${path}`
+  }
+}
+
+function isDataRequest(value: unknown): value is DataRequest {
+  if (!isPlainRecord(value)) return false
+
+  return (
+    typeof value.id === 'string' &&
+    value.id.length > 0 &&
+    typeof value.method === 'string' &&
+    DATA_API_METHODS.has(value.method as HttpMethod) &&
+    typeof value.path === 'string' &&
+    value.path.length > 0
+  )
+}
+
+function dataApiErrorResponse(id: string, error: unknown, context: string): DataResponse {
+  const apiError = toDataApiError(error, context)
+  return {
+    id,
+    status: apiError.status,
+    error: apiError.toJSON(),
+    metadata: {
+      duration: 0,
+      timestamp: Date.now()
+    }
+  }
+}
 
 /**
  * IPC transport adapter for Electron environment.
@@ -46,7 +90,16 @@ export class IpcAdapter implements Disposable {
     logger.debug('Setting up IPC handlers...')
 
     // Main data request handler
-    ipcMain.handle(IpcChannel.DataApi_Request, async (_event, request: DataRequest): Promise<DataResponse> => {
+    ipcMain.handle(IpcChannel.DataApi_Request, async (_event, request: unknown): Promise<DataResponse> => {
+      const requestContext = getRequestLogContext(request)
+      if (!isDataRequest(request)) {
+        logger.warn(`Rejected malformed data request: ${requestContext.label}`, { id: requestContext.id })
+        const badRequest = DataApiErrorFactory.create(ErrorCode.BAD_REQUEST, 'Malformed Data API request', {
+          reason: 'Request must include a non-empty id, valid method, and non-empty path'
+        })
+        return dataApiErrorResponse(requestContext.id, badRequest, requestContext.label)
+      }
+
       try {
         logger.debug(`Handling data request: ${request.method} ${request.path}`, {
           id: request.id,
@@ -57,20 +110,8 @@ export class IpcAdapter implements Disposable {
 
         return response
       } catch (error) {
-        logger.error(`Data request failed: ${request.method} ${request.path}`, error as Error)
-
-        const apiError = toDataApiError(error, `${request.method} ${request.path}`)
-        const errorResponse: DataResponse = {
-          id: request.id,
-          status: apiError.status,
-          error: apiError.toJSON(), // Serialize for IPC transmission
-          metadata: {
-            duration: 0,
-            timestamp: Date.now()
-          }
-        }
-
-        return errorResponse
+        logger.error(`Data request failed: ${requestContext.label}`, error as Error)
+        return dataApiErrorResponse(requestContext.id, error, requestContext.label)
       }
     })
 
