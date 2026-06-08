@@ -10,7 +10,8 @@ import {
   scanDir
 } from '@main/utils/file'
 import { t } from '@main/utils/language'
-import { summarizeTextForLog } from '@main/utils/logging'
+import { summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
+import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
 import { getRipgrepBinaryPath, runRipgrep } from '@main/utils/ripgrep'
 import { documentExts, imageExts, KB, MB } from '@shared/config/constant'
 import { sanitizeFilename } from '@shared/file/types/filename'
@@ -43,6 +44,8 @@ import {
 import { storageV2FileRepository } from './storageV2/StorageV2Repositories'
 
 const logger = loggerService.withContext('FileStorage')
+const REMOTE_FILE_DOWNLOAD_MAX_BYTES = 100 * MB
+const REMOTE_FILE_DOWNLOAD_TIMEOUT_MS = 120_000
 
 function sanitizeTempFileName(fileName: string): string {
   const rawName = String(fileName ?? '')
@@ -77,6 +80,15 @@ function resolveStorageFilePath(storageDir: string, fileName: string): string {
   }
 
   return resolvedPath
+}
+
+function parseContentLength(value: string | null): number | undefined {
+  if (!value) {
+    return undefined
+  }
+
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined
 }
 
 /**
@@ -1583,10 +1595,21 @@ class FileStorage {
     url: string,
     isUseContentType?: boolean
   ): Promise<FileMetadata> => {
+    let destPath: string | undefined
     try {
-      const response = await net.fetch(url)
+      const safeUrl = sanitizeRemoteUrl(url)
+      const response = await net.fetch(safeUrl, {
+        signal: AbortSignal.timeout(REMOTE_FILE_DOWNLOAD_TIMEOUT_MS)
+      })
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const contentLength = parseContentLength(response.headers.get('Content-Length'))
+      if (contentLength !== undefined && contentLength > REMOTE_FILE_DOWNLOAD_MAX_BYTES) {
+        throw new Error(
+          `Remote file is too large (${contentLength} bytes, limit ${REMOTE_FILE_DOWNLOAD_MAX_BYTES} bytes)`
+        )
       }
 
       // 尝试从Content-Disposition获取文件名
@@ -1596,12 +1619,12 @@ class FileStorage {
       if (contentDisposition) {
         const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i)
         if (filenameMatch) {
-          filename = filenameMatch[1]
+          filename = sanitizeTempFileName(filenameMatch[1])
         }
       }
 
       // 如果URL中有文件名，使用URL中的文件名
-      const urlFilename = url.split('/').pop()?.split('?')[0]
+      const urlFilename = sanitizeTempFileName(path.posix.basename(new URL(safeUrl).pathname))
       if (urlFilename && urlFilename.includes('.')) {
         filename = urlFilename
       }
@@ -1615,11 +1638,10 @@ class FileStorage {
 
       const uuid = uuidv4()
       const ext = path.extname(filename)
-      const destPath = path.join(this.storageDir, uuid + ext)
+      destPath = path.join(this.storageDir, uuid + ext)
 
       // 将响应内容写入文件
-      const buffer = Buffer.from(await response.arrayBuffer())
-      await fs.promises.writeFile(destPath, buffer)
+      const writtenBytes = await this.writeRemoteResponseToFile(response, destPath)
 
       const stats = await fs.promises.stat(destPath)
       const fileType = await this.getFileType(destPath)
@@ -1630,14 +1652,68 @@ class FileStorage {
         name: uuid + ext,
         path: destPath,
         created_at: stats.birthtime.toISOString(),
-        size: stats.size,
+        size: writtenBytes,
         ext: ext,
         type: fileType,
         count: 1
       }
     } catch (error) {
-      logger.error('Download file error:', error as Error)
+      if (destPath) {
+        await fs.promises.rm(destPath, { force: true }).catch(() => undefined)
+      }
+      logger.error('Download file error:', error as Error, { url: summarizeUrlForLog(url) })
       throw error
+    }
+  }
+
+  private writeRemoteResponseToFile = async (response: Response, destPath: string): Promise<number> => {
+    if (!response.body) {
+      throw new Error('Downloaded file response has no body')
+    }
+
+    const reader = response.body.getReader()
+    const writer = fs.createWriteStream(destPath)
+    let writtenBytes = 0
+    let writerFinished = false
+
+    try {
+      for (;;) {
+        const { value, done } = await reader.read()
+        if (done) {
+          break
+        }
+
+        writtenBytes += value.byteLength
+        if (writtenBytes > REMOTE_FILE_DOWNLOAD_MAX_BYTES) {
+          throw new Error(
+            `Remote file is too large (${writtenBytes} bytes, limit ${REMOTE_FILE_DOWNLOAD_MAX_BYTES} bytes)`
+          )
+        }
+
+        if (!writer.write(Buffer.from(value))) {
+          await new Promise<void>((resolve, reject) => {
+            writer.once('drain', resolve)
+            writer.once('error', reject)
+          })
+        }
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        writer.once('error', reject)
+        writer.end(() => resolve())
+      })
+      writerFinished = true
+
+      return writtenBytes
+    } catch (error) {
+      await reader.cancel(error).catch(() => undefined)
+      writer.destroy(error instanceof Error ? error : undefined)
+      await fs.promises.rm(destPath, { force: true }).catch(() => undefined)
+      throw error
+    } finally {
+      if (!writerFinished) {
+        writer.destroy()
+      }
     }
   }
 

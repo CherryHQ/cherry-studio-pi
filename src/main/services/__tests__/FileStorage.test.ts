@@ -12,7 +12,8 @@ const mocks = vi.hoisted(() => ({
   },
   storageV2FileRepository: {
     importFile: vi.fn()
-  }
+  },
+  netFetch: vi.fn()
 }))
 
 let fs: typeof NodeFs
@@ -22,6 +23,7 @@ vi.mock('fs', async () => {
 
   return {
     default: actual,
+    createWriteStream: vi.fn(actual.createWriteStream),
     promises: actual.promises,
     createReadStream: vi.fn(actual.createReadStream),
     existsSync: actual.existsSync,
@@ -39,7 +41,9 @@ vi.mock('electron', () => ({
   dialog: {
     showOpenDialog: vi.fn()
   },
-  net: {},
+  net: {
+    fetch: mocks.netFetch
+  },
   shell: {
     openPath: vi.fn()
   }
@@ -60,6 +64,22 @@ vi.mock('../storageV2/StorageV2Repositories', () => ({
   storageV2FileRepository: mocks.storageV2FileRepository
 }))
 
+function mockDownloadResponse(body: string, headers: Record<string, string> = {}, ok = true, status = 200): Response {
+  const bytes = new TextEncoder().encode(body)
+
+  return {
+    ok,
+    status,
+    headers: new Headers(headers),
+    body: new ReadableStream({
+      start(controller) {
+        controller.enqueue(bytes)
+        controller.close()
+      }
+    })
+  } as Response
+}
+
 describe('FileStorage Storage v2 upload flow', () => {
   beforeEach(async () => {
     vi.resetModules()
@@ -71,6 +91,7 @@ describe('FileStorage Storage v2 upload flow', () => {
     mocks.dirs.notes = path.join(root, 'Notes')
     mocks.dirs.temp = path.join(root, 'Temp')
     mocks.storageV2FileRepository.importFile.mockResolvedValue({ imported: true })
+    mocks.netFetch.mockReset()
   })
 
   afterEach(() => {
@@ -206,5 +227,34 @@ describe('FileStorage Storage v2 upload flow', () => {
       'Unsafe stored file name'
     )
     expect(fs.readFileSync(outsidePath, 'utf8')).toBe('outside')
+  })
+
+  it('rejects private remote download URLs before the main process fetches them', async () => {
+    const { fileStorage } = await import('../FileStorage')
+
+    await expect(fileStorage.downloadFile(undefined as never, 'http://127.0.0.1:8080/secret.txt')).rejects.toThrow(
+      'Unsafe remote url'
+    )
+
+    expect(mocks.netFetch).not.toHaveBeenCalled()
+    expect(fs.readdirSync(mocks.dirs.files)).toEqual([])
+  })
+
+  it('rejects oversized remote downloads before writing a stored file', async () => {
+    mocks.netFetch.mockResolvedValue(
+      mockDownloadResponse('', { 'Content-Length': String(101 * 1024 * 1024), 'Content-Type': 'text/plain' })
+    )
+
+    const { fileStorage } = await import('../FileStorage')
+
+    await expect(fileStorage.downloadFile(undefined as never, 'https://example.com/huge.txt')).rejects.toThrow(
+      'Remote file is too large'
+    )
+
+    expect(mocks.netFetch).toHaveBeenCalledWith(
+      'https://example.com/huge.txt',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+    expect(fs.readdirSync(mocks.dirs.files)).toEqual([])
   })
 })
