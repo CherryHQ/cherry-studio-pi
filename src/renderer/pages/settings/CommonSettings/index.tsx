@@ -376,32 +376,32 @@ const CommonSettings: FC = () => {
 
   const handleColorPrimaryChange = useCallback(
     (colorHex: string) => {
-      setUserTheme({
+      void setUserTheme({
         ...userTheme,
         colorPrimary: colorHex
-      })
+      }).catch(showSaveFailed)
     },
-    [setUserTheme, userTheme]
+    [setUserTheme, showSaveFailed, userTheme]
   )
 
   const handleUserFontChange = useCallback(
     (value: string) => {
-      setUserTheme({
+      void setUserTheme({
         ...userTheme,
         userFontFamily: value
-      })
+      }).catch(showSaveFailed)
     },
-    [setUserTheme, userTheme]
+    [setUserTheme, showSaveFailed, userTheme]
   )
 
   const handleUserCodeFontChange = useCallback(
     (value: string) => {
-      setUserTheme({
+      void setUserTheme({
         ...userTheme,
         userCodeFontFamily: value
-      })
+      }).catch(showSaveFailed)
     },
-    [setUserTheme, userTheme]
+    [setUserTheme, showSaveFailed, userTheme]
   )
 
   const fontOptions = useMemo<ComboboxOption[]>(
