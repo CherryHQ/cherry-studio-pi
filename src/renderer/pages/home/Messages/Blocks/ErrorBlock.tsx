@@ -41,7 +41,7 @@ const ErrorBlock: React.FC<Props> = ({ partId, error, message, cachedDiagnosis }
   return <MessageErrorInfo partId={partId} error={error} message={message} cachedDiagnosis={cachedDiagnosis} />
 }
 
-const ErrorMessage: React.FC<{ error: Props['error'] }> = ({ error }) => {
+export const ErrorMessage: React.FC<{ error: Props['error'] }> = ({ error }) => {
   const { t, i18n } = useTranslation()
 
   const i18nKey = error && 'i18nKey' in error ? `error.${(error as Record<string, unknown>).i18nKey}` : ''
@@ -68,6 +68,7 @@ const ErrorMessage: React.FC<{ error: Props['error'] }> = ({ error }) => {
         />
       )
     }
+    return t(i18nKey)
   }
 
   if (i18n.exists(errorKey)) {
@@ -123,7 +124,12 @@ const MessageErrorInfo: React.FC<{
       .then((summary: string) => {
         if (!cancelled && summary) setAiSummary(summary)
       })
-      .catch(() => {})
+      .catch((err) => {
+        cacheService.deleteCasual(cacheKey)
+        logger.warn('Failed to classify chat error with AI', {
+          error: err instanceof Error ? err.message : String(err)
+        })
+      })
     return () => {
       cancelled = true
     }
@@ -222,7 +228,7 @@ const MessageErrorInfo: React.FC<{
       <div
         className="wrap-break-word ml-5.75 line-clamp-3 text-xs leading-normal [&_a]:text-(--color-link)"
         style={{ color: 'var(--color-text-2)' }}>
-        {error?.message || <ErrorMessage error={error} />}
+        <ErrorMessage error={error} />
       </div>
 
       {/* Footer */}
