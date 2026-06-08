@@ -25,8 +25,7 @@ export class AnalyticsService extends BaseService implements Activatable {
     const preferenceService = application.get('PreferenceService')
     this.registerDisposable(
       preferenceService.subscribeChange('app.privacy.data_collection.enabled', (enabled: boolean) => {
-        if (enabled) void this.activate()
-        else void this.deactivate()
+        this.setActivationFromPreference(enabled, 'app.privacy.data_collection.enabled')
       })
     )
   }

@@ -380,6 +380,23 @@ export abstract class BaseService {
   }
 
   /**
+   * Apply a boolean preference to this service's activatable state from a fire-and-forget
+   * preference callback. Lifecycle errors are logged here so preference changes cannot
+   * create unhandled rejections.
+   */
+  protected setActivationFromPreference(enabled: boolean, preferenceKey: string): void {
+    const action = enabled ? 'activate' : 'deactivate'
+    const serviceName = getServiceName(this.constructor as ServiceConstructor)
+
+    void (enabled ? this.activate() : this.deactivate()).catch((error: unknown) => {
+      logger.error(
+        `Service '${serviceName}' failed to ${action} after preference '${preferenceKey}' changed`,
+        error as Error
+      )
+    })
+  }
+
+  /**
    * Internal method to execute pause.
    * Only works if the service implements Pausable interface.
    * Called by LifecycleManager.

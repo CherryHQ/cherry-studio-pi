@@ -117,8 +117,7 @@ export class TrayService extends BaseService implements Activatable {
     const preferenceService = application.get('PreferenceService')
     this.registerDisposable(
       preferenceService.subscribeChange('app.tray.enabled', (enabled: boolean) => {
-        if (enabled) void this.activate()
-        else void this.deactivate()
+        this.setActivationFromPreference(enabled, 'app.tray.enabled')
       })
     )
     this.registerDisposable(

@@ -260,8 +260,7 @@ export class SelectionService extends BaseService implements Activatable {
     const preferenceService = application.get('PreferenceService')
     this.registerDisposable({
       dispose: preferenceService.subscribeChange('feature.selection.enabled', (enabled: boolean) => {
-        if (enabled) void this.activate()
-        else void this.deactivate()
+        this.setActivationFromPreference(enabled, 'feature.selection.enabled')
       })
     })
   }

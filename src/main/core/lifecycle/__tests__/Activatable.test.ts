@@ -240,6 +240,76 @@ describe('Activatable', () => {
     })
   })
 
+  describe('setActivationFromPreference', () => {
+    it('should apply preference values through the self-activation path', async () => {
+      class PreferenceActivationService extends BaseService implements Activatable {
+        public activateCalls = 0
+        public deactivateCalls = 0
+
+        async onActivate() {
+          this.activateCalls++
+        }
+
+        async onDeactivate() {
+          this.deactivateCalls++
+        }
+
+        public applyPreference(enabled: boolean) {
+          this.setActivationFromPreference(enabled, 'feature.test.enabled')
+        }
+      }
+      Reflect.defineMetadata('lifecycle:injectable', true, PreferenceActivationService)
+      Reflect.defineMetadata('lifecycle:serviceName', 'PreferenceActivation', PreferenceActivationService)
+
+      const service = new PreferenceActivationService()
+      await service._doInit()
+
+      service.applyPreference(true)
+      await Promise.resolve()
+
+      expect(service.isActivated).toBe(true)
+      expect(service.activateCalls).toBe(1)
+
+      service.applyPreference(false)
+      await Promise.resolve()
+
+      expect(service.isActivated).toBe(false)
+      expect(service.deactivateCalls).toBe(1)
+    })
+
+    it('should catch preference-triggered activation failures', async () => {
+      const unhandledRejection = vi.fn()
+
+      class FailingPreferenceActivationService extends BaseService implements Activatable {
+        async onActivate() {
+          throw new Error('preference activation failed')
+        }
+
+        async onDeactivate() {}
+
+        public applyPreference(enabled: boolean) {
+          this.setActivationFromPreference(enabled, 'feature.test.enabled')
+        }
+      }
+      Reflect.defineMetadata('lifecycle:injectable', true, FailingPreferenceActivationService)
+      Reflect.defineMetadata('lifecycle:serviceName', 'FailingPreferenceActivation', FailingPreferenceActivationService)
+
+      const service = new FailingPreferenceActivationService()
+      await service._doInit()
+
+      process.once('unhandledRejection', unhandledRejection)
+      try {
+        service.applyPreference(true)
+        await new Promise((resolve) => setImmediate(resolve))
+
+        expect(service.isActivated).toBe(false)
+        expect(unhandledRejection).not.toHaveBeenCalled()
+      } finally {
+        process.removeListener('unhandledRejection', unhandledRejection)
+      }
+    })
+  })
+
   // ========================================================================
   // _doStop / _doDestroy integration
   // ========================================================================

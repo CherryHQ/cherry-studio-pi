@@ -155,8 +155,7 @@ export class QuickAssistantService extends BaseService implements Activatable {
     const preferenceService = application.get('PreferenceService')
     this.registerDisposable({
       dispose: preferenceService.subscribeChange('feature.quick_assistant.enabled', (enabled: boolean) => {
-        if (enabled) void this.activate()
-        else void this.deactivate()
+        this.setActivationFromPreference(enabled, 'feature.quick_assistant.enabled')
       })
     })
   }
