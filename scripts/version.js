@@ -100,6 +100,17 @@ function assertCleanGitWorktree(statusOutput = exec('git', ['status', '--porcela
   }
 }
 
+function getPushCommands(version) {
+  return [
+    ['git', ['push']],
+    ['git', ['push', 'origin', `v${version}`]]
+  ]
+}
+
+function getPushInstructions(version) {
+  return `Changes are committed locally. Use "git push && git push origin v${version}" to push to remote.`
+}
+
 function runVersion(args = process.argv.slice(2)) {
   const { shouldPush, versionType } = parseVersionArgs(args)
   assertCleanGitWorktree()
@@ -123,11 +134,12 @@ function runVersion(args = process.argv.slice(2)) {
 
   if (shouldPush) {
     console.log('Pushing to remote...')
-    exec('git', ['push'])
-    exec('git', ['push', '--tags'])
+    for (const [command, commandArgs] of getPushCommands(newVersion)) {
+      exec(command, commandArgs)
+    }
     console.log('Pushed to remote.')
   } else {
-    console.log('Changes are committed locally. Use "git push && git push --tags" to push to remote.')
+    console.log(getPushInstructions(newVersion))
   }
 }
 
@@ -148,5 +160,7 @@ exports._internal = {
   selectKnownVersions,
   resolveNextVersion,
   assertCleanGitWorktree,
+  getPushCommands,
+  getPushInstructions,
   runVersion
 }
