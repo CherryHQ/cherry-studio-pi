@@ -80,6 +80,19 @@ function mockDownloadResponse(body: string, headers: Record<string, string> = {}
   } as Response
 }
 
+function mockOversizedDownloadStreamResponse(): Response {
+  return {
+    ok: true,
+    status: 200,
+    headers: new Headers({ 'Content-Type': 'text/plain' }),
+    body: new ReadableStream({
+      start(controller) {
+        controller.enqueue({ byteLength: 101 * 1024 * 1024 } as unknown as Uint8Array<ArrayBuffer>)
+      }
+    })
+  } as Response
+}
+
 describe('FileStorage Storage v2 upload flow', () => {
   beforeEach(async () => {
     vi.resetModules()
@@ -255,6 +268,18 @@ describe('FileStorage Storage v2 upload flow', () => {
       'https://example.com/huge.txt',
       expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
+    expect(fs.readdirSync(mocks.dirs.files)).toEqual([])
+  })
+
+  it('rejects oversized remote download streams without leaving a partial stored file', async () => {
+    mocks.netFetch.mockResolvedValue(mockOversizedDownloadStreamResponse())
+
+    const { fileStorage } = await import('../FileStorage')
+
+    await expect(
+      fileStorage.downloadFile(undefined as never, 'https://example.com/streaming-huge.txt')
+    ).rejects.toThrow('Remote file is too large')
+
     expect(fs.readdirSync(mocks.dirs.files)).toEqual([])
   })
 })

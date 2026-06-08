@@ -9,11 +9,13 @@ import {
   readTextFileWithAutoEncoding,
   scanDir
 } from '@main/utils/file'
+import { createAtomicWriteStream } from '@main/utils/file/fs'
 import { t } from '@main/utils/language'
 import { summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
 import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
 import { getRipgrepBinaryPath, runRipgrep } from '@main/utils/ripgrep'
 import { documentExts, imageExts, KB, MB } from '@shared/config/constant'
+import type { FilePath } from '@shared/file/types'
 import { sanitizeFilename } from '@shared/file/types/filename'
 import { parseDataUrl } from '@shared/utils'
 import type { FileMetadata, FileType, NotesTreeNode } from '@types'
@@ -1672,7 +1674,7 @@ class FileStorage {
     }
 
     const reader = response.body.getReader()
-    const writer = fs.createWriteStream(destPath)
+    const writer = createAtomicWriteStream(destPath as FilePath)
     let writtenBytes = 0
     let writerFinished = false
 
@@ -1707,12 +1709,12 @@ class FileStorage {
       return writtenBytes
     } catch (error) {
       await reader.cancel(error).catch(() => undefined)
-      writer.destroy(error instanceof Error ? error : undefined)
+      await writer.abort().catch(() => undefined)
       await fs.promises.rm(destPath, { force: true }).catch(() => undefined)
       throw error
     } finally {
       if (!writerFinished) {
-        writer.destroy()
+        await writer.abort().catch(() => undefined)
       }
     }
   }
