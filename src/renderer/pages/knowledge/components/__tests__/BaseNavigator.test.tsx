@@ -194,6 +194,7 @@ vi.mock('@cherrystudio/ui', () => {
           onClick?: (event: ReactMouseEvent) => void
         }>
 
+        // eslint-disable-next-line @eslint-react/no-clone-element -- Test-only asChild mock injects trigger behavior into its child.
         return React.cloneElement(child, {
           onClick: (event: ReactMouseEvent) => {
             child.props.onClick?.(event)

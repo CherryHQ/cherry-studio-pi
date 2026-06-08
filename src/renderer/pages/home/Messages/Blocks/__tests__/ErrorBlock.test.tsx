@@ -2,7 +2,11 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@cherrystudio/ui', () => ({
-  Button: ({ children, ...props }: any) => <button {...props}>{children}</button>
+  Button: ({ children, ...props }: any) => (
+    <button type="button" {...props}>
+      {children}
+    </button>
+  )
 }))
 
 vi.mock('@data/DataApiService', () => ({
