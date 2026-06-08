@@ -5,6 +5,7 @@ import type { Message, MessageBlock } from '@renderer/types/newMessage'
 
 import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
 import { fetchStorageV2TopicMessages } from './StorageV2ConversationHydrationService'
+import { getRendererStorageV2Api, type RendererStorageV2Api } from './StorageV2RendererApi'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
 
 const logger = loggerService.withContext('StorageV2ConversationMirrorService')
@@ -296,7 +297,8 @@ class StorageV2ConversationMirrorService {
 
     await this.flush()
 
-    if (!window.api?.storageV2) {
+    const { api } = getRendererStorageV2Api()
+    if (!api) {
       throw new Error('Storage v2 API unavailable while persisting conversation snapshot')
     }
 
@@ -315,11 +317,16 @@ class StorageV2ConversationMirrorService {
           )
         : []
 
-    await this.flushTopicSnapshot(topicId, getState, {
-      topic: options.topic,
-      messages,
-      blocks
-    })
+    await this.flushTopicSnapshot(
+      topicId,
+      getState,
+      {
+        topic: options.topic,
+        messages,
+        blocks
+      },
+      api
+    )
   }
 
   async flushTopicSnapshot(
@@ -329,14 +336,16 @@ class StorageV2ConversationMirrorService {
       topic?: TopicSnapshotMetadata
       messages: Message[]
       blocks: MessageBlock[]
-    }
+    },
+    storageV2Api?: RendererStorageV2Api
   ) {
     if (this.suspended) return
     if (!topicId) return
 
     await this.flush()
 
-    if (!window.api?.storageV2) {
+    const storageV2 = storageV2Api ?? getRendererStorageV2Api().api
+    if (!storageV2) {
       throw new Error('Storage v2 API unavailable while persisting conversation snapshot')
     }
 
@@ -363,7 +372,7 @@ class StorageV2ConversationMirrorService {
       }
     }
 
-    await this.mirrorConversations([conversation], Array.from(files.values()))
+    await this.mirrorConversations(storageV2, [conversation], Array.from(files.values()))
 
     const snapshotJson = JSON.stringify(conversation)
     this.lastTopicSnapshotJson.set(topicId, snapshotJson)
@@ -387,7 +396,7 @@ class StorageV2ConversationMirrorService {
 
     await this.flush()
 
-    const storageV2 = window.api?.storageV2
+    const storageV2 = getRendererStorageV2Api().api
     if (
       typeof storageV2?.upsertConversation !== 'function' ||
       typeof storageV2.upsertMessage !== 'function' ||
@@ -438,7 +447,7 @@ class StorageV2ConversationMirrorService {
       await storageV2.upsertMessageBlocks(messageId, normalizedBlocks, {
         pruneMissing: Boolean(options.pruneMissingBlocks)
       })
-      await this.mirrorFiles(Array.from(collectFilesFromBlocks(normalizedBlocks).values()))
+      await this.mirrorFiles(storageV2, Array.from(collectFilesFromBlocks(normalizedBlocks).values()))
     }
 
     notifyDataSyncLocalChange('conversation')
@@ -454,7 +463,7 @@ class StorageV2ConversationMirrorService {
 
     await this.flush()
 
-    const storageV2 = window.api?.storageV2
+    const storageV2 = getRendererStorageV2Api().api
     if (typeof storageV2?.upsertMessageBlocks !== 'function') {
       throw new Error('Storage v2 direct message block write API unavailable')
     }
@@ -468,7 +477,7 @@ class StorageV2ConversationMirrorService {
     await storageV2.upsertMessageBlocks(messageId, normalizedBlocks, {
       pruneMissing: Boolean(options.pruneMissing)
     })
-    await this.mirrorFiles(Array.from(collectFilesFromBlocks(normalizedBlocks).values()))
+    await this.mirrorFiles(storageV2, Array.from(collectFilesFromBlocks(normalizedBlocks).values()))
     notifyDataSyncLocalChange('conversation')
   }
 
@@ -508,7 +517,15 @@ class StorageV2ConversationMirrorService {
 
     if (!this.hasPendingWork()) return
 
-    this.inflight = this.mirrorPendingNow().finally(() => {
+    const { hasWindow, api } = getRendererStorageV2Api()
+    if (!api) {
+      if (hasWindow) {
+        this.scheduleFlush(DEFAULT_DEBOUNCE_MS)
+      }
+      return
+    }
+
+    this.inflight = this.mirrorPendingNow(api).finally(() => {
       this.inflight = null
     })
 
@@ -520,7 +537,7 @@ class StorageV2ConversationMirrorService {
 
     if (!this.hasPendingWork()) return
 
-    if (!window.api?.storageV2) {
+    if (!getRendererStorageV2Api().api) {
       throw new Error('Storage v2 API unavailable while conversation mirror work is pending')
     }
 
@@ -555,13 +572,8 @@ class StorageV2ConversationMirrorService {
     }
   }
 
-  private async mirrorPendingNow() {
+  private async mirrorPendingNow(storageV2: RendererStorageV2Api) {
     if (!this.latestGetState) return
-
-    if (!window.api?.storageV2) {
-      this.scheduleFlush(DEFAULT_DEBOUNCE_MS)
-      return
-    }
 
     const getState = this.latestGetState
     const state = getState()
@@ -604,7 +616,7 @@ class StorageV2ConversationMirrorService {
       const pendingSnapshots = new Map<string, string>()
 
       for (const topicId of topicIds) {
-        const snapshot = await this.buildMirrorSnapshot(topicId, state, {
+        const snapshot = await this.buildMirrorSnapshot(storageV2, topicId, state, {
           destructive: destructiveTopicIds.has(topicId)
         })
         if (!snapshot) continue
@@ -625,7 +637,7 @@ class StorageV2ConversationMirrorService {
         return
       }
 
-      await this.mirrorConversations(conversations, Array.from(filesById.values()))
+      await this.mirrorConversations(storageV2, conversations, Array.from(filesById.values()))
 
       for (const [topicId, snapshotJson] of pendingSnapshots) {
         this.lastTopicSnapshotJson.set(topicId, snapshotJson)
@@ -641,15 +653,20 @@ class StorageV2ConversationMirrorService {
           this.pendingDestructiveTopicIds.add(topicId)
         }
       }
-      this.scheduleFlush(DEFAULT_DEBOUNCE_MS)
+      if (getRendererStorageV2Api().hasWindow) {
+        this.scheduleFlush(DEFAULT_DEBOUNCE_MS)
+      }
       this.lastError = error
 
       logger.warn('Failed to mirror conversations to Storage v2', error as Error)
     }
   }
 
-  private async mirrorConversations(conversations: ConversationSnapshot[], files: FileMetadata[]) {
-    const storageV2 = window.api.storageV2
+  private async mirrorConversations(
+    storageV2: RendererStorageV2Api,
+    conversations: ConversationSnapshot[],
+    files: FileMetadata[]
+  ) {
     const canSyncConversation = typeof storageV2.syncConversation === 'function'
     const canUseDirectApi =
       typeof storageV2.upsertConversation === 'function' &&
@@ -661,7 +678,7 @@ class StorageV2ConversationMirrorService {
         await storageV2.syncConversation(this.toConversationImport(conversation))
       }
 
-      await this.mirrorFiles(files)
+      await this.mirrorFiles(storageV2, files)
       return
     }
 
@@ -677,16 +694,14 @@ class StorageV2ConversationMirrorService {
     }
 
     for (const conversation of conversations) {
-      await this.mirrorConversationDirect(conversation)
+      await this.mirrorConversationDirect(storageV2, conversation)
     }
 
-    await this.mirrorFiles(files)
+    await this.mirrorFiles(storageV2, files)
   }
 
-  private async mirrorFiles(files: FileMetadata[]) {
+  private async mirrorFiles(storageV2: RendererStorageV2Api, files: FileMetadata[]) {
     if (files.length > 0) {
-      const storageV2 = window.api.storageV2
-
       if (typeof storageV2.upsertFile === 'function') {
         for (const file of files) {
           await storageV2.upsertFile(file as unknown as Record<string, unknown>)
@@ -722,7 +737,7 @@ class StorageV2ConversationMirrorService {
     }
   }
 
-  private async mirrorConversationDirect(conversation: ConversationSnapshot) {
+  private async mirrorConversationDirect(storageV2: RendererStorageV2Api, conversation: ConversationSnapshot) {
     const topic = conversation.topic
     const topicId = topic.id
     const activeMessageIds = conversation.messages.map((message, index) => getMirrorMessageId(topicId, message, index))
@@ -734,7 +749,7 @@ class StorageV2ConversationMirrorService {
       blocksByMessage.set(block.messageId, blocks)
     }
 
-    await window.api.storageV2.upsertConversation(
+    await storageV2.upsertConversation(
       {
         id: topicId,
         kind: 'assistant_chat',
@@ -757,11 +772,11 @@ class StorageV2ConversationMirrorService {
       const messageId = activeMessageIds[messageIndex]
       const messageBlocks = blocksByMessage.get(messageId) ?? []
 
-      await window.api.storageV2.upsertMessage(topicId, {
+      await storageV2.upsertMessage(topicId, {
         ...message,
         id: messageId
       })
-      await window.api.storageV2.upsertMessageBlocks(
+      await storageV2.upsertMessageBlocks(
         messageId,
         messageBlocks.map((block, blockIndex) => ({
           ...block,
@@ -870,6 +885,7 @@ class StorageV2ConversationMirrorService {
   }
 
   private async buildMirrorSnapshot(
+    storageV2: RendererStorageV2Api,
     topicId: string,
     state: Record<string, any>,
     options: MirrorScheduleOptions
@@ -879,7 +895,7 @@ class StorageV2ConversationMirrorService {
       return snapshot
     }
 
-    await this.seedStorageV2TopicWithoutPruning(snapshot.conversation)
+    await this.seedStorageV2TopicWithoutPruning(storageV2, snapshot.conversation)
     await fetchStorageV2TopicMessages(topicId).catch((error) => {
       logger.warn('Failed to pre-hydrate Storage v2 topic before mirror prune', error as Error)
       return null
@@ -888,8 +904,7 @@ class StorageV2ConversationMirrorService {
     return (await this.buildTopicSnapshot(topicId, state)) ?? snapshot
   }
 
-  private async seedStorageV2TopicWithoutPruning(conversation: ConversationSnapshot) {
-    const storageV2 = window.api?.storageV2
+  private async seedStorageV2TopicWithoutPruning(storageV2: RendererStorageV2Api, conversation: ConversationSnapshot) {
     if (typeof storageV2?.syncConversation !== 'function') return
 
     await storageV2.syncConversation(this.toConversationImport(conversation), {

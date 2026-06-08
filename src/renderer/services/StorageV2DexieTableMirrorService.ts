@@ -293,7 +293,9 @@ class StorageV2DexieTableMirrorService {
     } catch (error) {
       this.requeuePending(rowIdsByTable, deletedIdsByTable)
       this.lastError = error
-      this.scheduleFlush(DEFAULT_DEBOUNCE_MS)
+      if (getRendererStorageV2Api().hasWindow) {
+        this.scheduleFlush(DEFAULT_DEBOUNCE_MS)
+      }
       logger.warn('Failed to mirror Dexie auxiliary tables to Storage v2', error as Error)
     }
   }

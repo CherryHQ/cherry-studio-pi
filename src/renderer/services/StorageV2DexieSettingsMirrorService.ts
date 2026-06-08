@@ -225,7 +225,9 @@ class StorageV2DexieSettingsMirrorService {
         this.pendingDeletedIds.add(settingId)
       }
       this.lastError = error
-      this.scheduleFlush(RETRY_DEBOUNCE_MS)
+      if (getRendererStorageV2Api().hasWindow) {
+        this.scheduleFlush(RETRY_DEBOUNCE_MS)
+      }
       logger.warn('Failed to mirror Dexie settings to Storage v2', error as Error)
     }
   }

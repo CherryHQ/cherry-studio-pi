@@ -93,7 +93,9 @@ class StorageV2AgentMirrorService {
     } catch (error) {
       this.pending = true
       this.lastError = error
-      this.schedule()
+      if (getRendererStorageV2Api().hasWindow) {
+        this.schedule()
+      }
       logger.warn('Failed to mirror agent database to Storage v2', error as Error)
     }
   }

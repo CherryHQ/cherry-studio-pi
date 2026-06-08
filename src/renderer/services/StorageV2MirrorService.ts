@@ -308,7 +308,9 @@ class StorageV2MirrorService {
       logger.debug('Mirrored Redux settings to Storage v2')
     } catch (error) {
       this.lastError = error
-      this.scheduleRetry()
+      if (getRendererStorageV2Api().hasWindow) {
+        this.scheduleRetry()
+      }
       logger.warn('Failed to mirror Redux settings to Storage v2', error as Error)
     }
   }

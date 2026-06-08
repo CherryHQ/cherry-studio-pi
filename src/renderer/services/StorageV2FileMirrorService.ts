@@ -142,7 +142,9 @@ class StorageV2FileMirrorService {
         this.pendingFileIds.add(fileId)
       }
       this.lastError = error
-      this.scheduleFlush(DEFAULT_DEBOUNCE_MS)
+      if (getRendererStorageV2Api().hasWindow) {
+        this.scheduleFlush(DEFAULT_DEBOUNCE_MS)
+      }
       logger.warn('Failed to mirror files to Storage v2', error as Error)
     }
   }
