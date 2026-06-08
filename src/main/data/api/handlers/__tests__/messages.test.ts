@@ -81,7 +81,7 @@ describe('messageHandlers', () => {
     await expect(
       messageHandlers['/topics/:topicId/messages'].GET({
         params: { topicId: 'topic-1' },
-        query: { limit: '50', cursor: 'cursor-1', nodeId: 'node-1', includeSiblings: true }
+        query: { limit: '50', cursor: 'cursor-1', nodeId: 'node-1', includeSiblings: 'false' }
       } as never)
     ).resolves.toMatchObject({ items: [] })
 
@@ -89,7 +89,7 @@ describe('messageHandlers', () => {
       cursor: 'cursor-1',
       limit: 50,
       nodeId: 'node-1',
-      includeSiblings: true
+      includeSiblings: false
     })
   })
 
@@ -140,7 +140,7 @@ describe('messageHandlers', () => {
     await expect(
       messageHandlers['/messages/:id'].DELETE({
         params: { id: 'message-1' },
-        query: { cascade: true, activeNodeStrategy: 'clear' }
+        query: { cascade: 'false', activeNodeStrategy: 'clear' }
       } as never)
     ).resolves.toEqual({ deletedIds: ['message-1'] })
 
@@ -155,7 +155,7 @@ describe('messageHandlers', () => {
     expect(getPathThroughMock).toHaveBeenCalledWith('topic-1', 'message-1')
     expect(getByIdMock).toHaveBeenCalledWith('message-1')
     expect(updateMessageMock).toHaveBeenCalledWith('message-1', { status: 'success' })
-    expect(deleteMessageMock).toHaveBeenCalledWith('message-1', true, 'clear')
+    expect(deleteMessageMock).toHaveBeenCalledWith('message-1', false, 'clear')
     expect(createSiblingMock).toHaveBeenCalledWith('message-1', { parts: [] })
   })
 })

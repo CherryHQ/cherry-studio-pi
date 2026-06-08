@@ -1,6 +1,7 @@
 import * as z from 'zod'
 
 import { type Note, NoteSchema } from '../../types/note'
+import { QueryBooleanSchema } from './_endpointHelpers'
 
 const NotePathSchema = NoteSchema.shape.path
   .transform((value) => value.trim().replace(/\\/g, '/'))
@@ -29,7 +30,7 @@ export const UpsertNoteSchema = z
 export type UpsertNoteDto = z.infer<typeof UpsertNoteSchema>
 
 export const DeleteNoteQuerySchema = NoteIdentitySchema.extend({
-  recursive: z.boolean().optional()
+  recursive: QueryBooleanSchema.optional()
 })
 export type DeleteNoteQuery = z.infer<typeof DeleteNoteQuerySchema>
 

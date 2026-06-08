@@ -28,6 +28,21 @@ import * as z from 'zod'
 // ============================================================================
 
 /**
+ * Boolean values carried in URL query strings.
+ *
+ * Keep this intentionally narrower than `z.coerce.boolean()`:
+ * JavaScript's Boolean("false") is true, so `z.coerce.boolean()` would turn
+ * `?enabled=false` into `enabled: true`. Query callers may send real booleans
+ * through in-process DataApi clients, or the literal strings "true"/"false"
+ * through HTTP-style transports.
+ */
+export const QueryBooleanSchema = z.preprocess((value) => {
+  if (value === 'true') return true
+  if (value === 'false') return false
+  return value
+}, z.boolean())
+
+/**
  * Anchor describing where to place an item relative to siblings.
  * Exactly one of `before` / `after` / `position` must be provided.
  */

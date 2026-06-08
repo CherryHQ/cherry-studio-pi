@@ -16,6 +16,8 @@ import {
 } from '@shared/data/types/message'
 import * as z from 'zod'
 
+import { QueryBooleanSchema } from './_endpointHelpers'
+
 export const MESSAGE_TREE_MAX_DEPTH = 25
 export const BRANCH_MESSAGES_MAX_LIMIT = 200
 
@@ -138,7 +140,7 @@ export const BranchMessagesQuerySchema = z.strictObject({
   /** End node ID (defaults to topic.activeNodeId) */
   nodeId: z.string().optional(),
   /** Whether to include siblingsGroup in response */
-  includeSiblings: z.boolean().optional()
+  includeSiblings: QueryBooleanSchema.optional()
 })
 export type BranchMessagesQueryParams = z.infer<typeof BranchMessagesQuerySchema> & CursorPaginationParams
 
@@ -146,7 +148,7 @@ export type BranchMessagesQueryParams = z.infer<typeof BranchMessagesQuerySchema
  * Query parameters for DELETE /messages/:id
  */
 export const DeleteMessageQuerySchema = z.strictObject({
-  cascade: z.boolean().optional(),
+  cascade: QueryBooleanSchema.optional(),
   activeNodeStrategy: ActiveNodeStrategySchema.optional()
 })
 export type DeleteMessageQuery = z.infer<typeof DeleteMessageQuerySchema>

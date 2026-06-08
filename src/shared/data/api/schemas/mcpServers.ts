@@ -9,6 +9,7 @@ import * as z from 'zod'
 
 import { type McpServer, McpServerSchema, McpServerTypeSchema } from '../../types/mcpServer'
 import type { OffsetPaginationResponse } from '../apiTypes'
+import { QueryBooleanSchema } from './_endpointHelpers'
 
 /**
  * Mutable MCP server fields — explicit whitelist of everything a client may write.
@@ -75,7 +76,7 @@ export const ListMcpServersQuerySchema = z.object({
   /** Filter by server ID */
   id: z.string().optional(),
   /** Filter by active state */
-  isActive: z.boolean().optional(),
+  isActive: QueryBooleanSchema.optional(),
   /** Filter by server type */
   type: McpServerTypeSchema.optional()
 })

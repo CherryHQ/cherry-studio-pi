@@ -20,6 +20,7 @@ import {
   ProviderSettingsSchema
 } from '../../types/provider'
 import type { OrderEndpoints } from './_endpointHelpers'
+import { QueryBooleanSchema } from './_endpointHelpers'
 
 // ============================================================================
 // Field atoms
@@ -98,7 +99,7 @@ export type UpdateProviderDto = z.infer<typeof UpdateProviderSchema>
 /** Query parameters for GET /providers */
 export const ListProvidersQuerySchema = z.strictObject({
   /** Filter by enabled status */
-  enabled: z.boolean().optional(),
+  enabled: QueryBooleanSchema.optional(),
   /** Filter by endpoint type (kebab-case `EndpointType` value) */
   endpointType: z.string().optional() as z.ZodOptional<z.ZodType<EndpointType>>
 })
@@ -107,7 +108,7 @@ export type ListProvidersQuery = z.infer<typeof ListProvidersQuerySchema>
 /** Query parameters for GET /providers/:providerId/api-keys */
 export const ListProviderApiKeysQuerySchema = z.strictObject({
   /** When `true`, only enabled keys are returned. */
-  enabled: z.boolean().optional()
+  enabled: QueryBooleanSchema.optional()
 })
 export type ListProviderApiKeysQuery = z.infer<typeof ListProviderApiKeysQuerySchema>
 

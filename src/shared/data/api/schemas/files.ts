@@ -51,6 +51,8 @@ import type { FileEntry, FileEntryId, FileRef } from '@shared/data/types/file'
 import { FileEntryIdSchema, FileEntryOriginSchema, FileRefSourceTypeSchema } from '@shared/data/types/file'
 import * as z from 'zod'
 
+import { QueryBooleanSchema } from './_endpointHelpers'
+
 /**
  * Per-entry reference-count record produced by `GET /files/entries/ref-counts`.
  *
@@ -81,7 +83,7 @@ export const REF_COUNTS_MAX_ENTRY_IDS = 500
 export const ListFilesQuerySchema = z
   .strictObject({
     origin: FileEntryOriginSchema.optional(),
-    inTrash: z.boolean().optional(),
+    inTrash: QueryBooleanSchema.optional(),
     sortBy: z.enum(['name', 'createdAt', 'updatedAt', 'size']).optional(),
     sortOrder: z.enum(['asc', 'desc']).optional(),
     page: z.int().positive().default(LIST_FILES_DEFAULT_PAGE),

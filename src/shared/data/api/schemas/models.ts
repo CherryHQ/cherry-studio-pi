@@ -20,6 +20,7 @@ import {
   type UniqueModelId,
   UniqueModelIdSchema
 } from '../../types/model'
+import { QueryBooleanSchema } from './_endpointHelpers'
 
 /** Query parameters for listing models */
 export const ListModelsQuerySchema = z.object({
@@ -28,7 +29,7 @@ export const ListModelsQuerySchema = z.object({
   /** Filter by capability (ModelCapability string value) */
   capability: z.enum(objectValues(MODEL_CAPABILITY)).optional(),
   /** Filter by enabled status */
-  enabled: z.boolean().optional()
+  enabled: QueryBooleanSchema.optional()
 })
 export type ListModelsQuery = z.infer<typeof ListModelsQuerySchema>
 

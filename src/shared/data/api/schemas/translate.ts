@@ -17,6 +17,7 @@ import {
   TranslateLanguageSchema
 } from '../../types/translate'
 import type { CursorPaginationParams, CursorPaginationResponse } from '../apiTypes'
+import { QueryBooleanSchema } from './_endpointHelpers'
 
 // ============================================================================
 // Translate History DTOs & Query
@@ -67,7 +68,7 @@ export const TranslateHistoryQuerySchema = z
      */
     search: z.string().min(1).max(TRANSLATE_HISTORY_SEARCH_MAX_LENGTH).optional(),
     /** Filter by starred status */
-    star: z.boolean().optional()
+    star: QueryBooleanSchema.optional()
   })
   .strict()
 /** Parsed query parameters for listing translate histories. */
