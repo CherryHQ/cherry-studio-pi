@@ -60,6 +60,7 @@ async function callTool(server: any, name: string, args: Record<string, unknown>
 }
 
 const secretRef = 'storage-v2://secret/mcp-memory/default/graph'
+const memoryPath = '/mock/config/memory.json'
 const emptyGraph = { entities: [], relations: [] }
 const storageGraph = {
   entities: [{ name: 'Ada', entityType: 'person', observations: ['Loves durable storage'] }],
@@ -89,16 +90,16 @@ describe('MemoryServer Storage v2 graph persistence', () => {
     mocks.fs.readFile.mockResolvedValue(JSON.stringify(legacyGraph))
     const MemoryServer = await loadMemoryServer()
 
-    const result = await callTool(new MemoryServer(), 'read_graph', {})
+    const result = await callTool(new MemoryServer(memoryPath), 'read_graph', {})
 
     expect(JSON.parse(result.content[0].text)).toEqual(storageGraph)
     expect(mocks.fs.readFile).not.toHaveBeenCalled()
-    expect(mocks.fs.writeFile).toHaveBeenCalledWith('/mock/config/memory.json', JSON.stringify(storageGraph, null, 2))
+    expect(mocks.fs.writeFile).toHaveBeenCalledWith(memoryPath, JSON.stringify(storageGraph, null, 2))
   })
 
   it('mirrors memory graph mutations to Storage v2 before writing memory.json', async () => {
     const MemoryServer = await loadMemoryServer()
-    const server = new MemoryServer()
+    const server = new MemoryServer(memoryPath)
     await callTool(server, 'read_graph', {})
     vi.clearAllMocks()
     mocks.secretVault.setSecret.mockResolvedValue(secretRef)
@@ -125,7 +126,7 @@ describe('MemoryServer Storage v2 graph persistence', () => {
     mocks.fs.readFile.mockResolvedValue(JSON.stringify(legacyGraph))
     const MemoryServer = await loadMemoryServer()
 
-    const result = await callTool(new MemoryServer(), 'read_graph', {})
+    const result = await callTool(new MemoryServer(memoryPath), 'read_graph', {})
 
     expect(JSON.parse(result.content[0].text)).toEqual(legacyGraph)
     expect(mocks.secretVault.setSecret).toHaveBeenCalledWith(
@@ -141,7 +142,7 @@ describe('MemoryServer Storage v2 graph persistence', () => {
     mocks.fs.readFile.mockResolvedValue(JSON.stringify(legacyGraph))
     const MemoryServer = await loadMemoryServer()
 
-    const result = await callTool(new MemoryServer(), 'read_graph', {})
+    const result = await callTool(new MemoryServer(memoryPath), 'read_graph', {})
 
     expect(JSON.parse(result.content[0].text)).toEqual(emptyGraph)
     expect(mocks.fs.readFile).not.toHaveBeenCalled()

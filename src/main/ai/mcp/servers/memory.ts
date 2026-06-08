@@ -1,5 +1,7 @@
 import { application } from '@application'
 import { loggerService } from '@logger'
+import { storageV2SecretVaultService } from '@main/services/storageV2/SecretVaultService'
+import { storageV2SettingsRepository } from '@main/services/storageV2/StorageV2Repositories'
 import { TraceMethod } from '@mcp-trace/trace-core'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } from '@modelcontextprotocol/sdk/types.js'
@@ -8,6 +10,10 @@ import { promises as fs } from 'fs'
 import path from 'path'
 
 const logger = loggerService.withContext('MCPServer:Memory')
+const STORAGE_V2_MEMORY_SCOPE = 'mcp-memory'
+const STORAGE_V2_MEMORY_OWNER = 'default'
+const STORAGE_V2_MEMORY_GRAPH_KIND = 'graph'
+const STORAGE_V2_MEMORY_GRAPH_SETTING_KEY = 'mcp.memory.graph'
 
 // Define memory file path
 const getDefaultMemoryPath = () => application.getPath('feature.mcp.memory_file')
@@ -31,6 +37,20 @@ interface KnowledgeGraph {
   relations: Relation[]
 }
 
+type MemoryGraphStorageV2Setting = {
+  clearedAt?: string
+  graphSecretRef?: string
+  updatedAt?: string
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function isKnowledgeGraph(value: unknown): value is KnowledgeGraph {
+  return isRecord(value) && Array.isArray(value.entities) && Array.isArray(value.relations)
+}
+
 // The KnowledgeGraphManager class contains all operations to interact with the knowledge graph
 class KnowledgeGraphManager {
   private memoryPath: string
@@ -50,7 +70,20 @@ class KnowledgeGraphManager {
   public static async create(memoryPath: string): Promise<KnowledgeGraphManager> {
     const manager = new KnowledgeGraphManager(memoryPath)
     await manager._ensureMemoryPathExists()
+    const storageState = await manager._loadGraphFromStorageV2()
+    if (storageState.status === 'loaded') {
+      manager._replaceGraph(storageState.graph)
+      await manager._writeGraphToDisk(storageState.graph)
+      return manager
+    }
+
+    if (storageState.status === 'cleared') {
+      manager._replaceGraph({ entities: [], relations: [] })
+      return manager
+    }
+
     await manager._loadGraphFromDisk()
+    await manager._persistGraphToStorageV2(manager._currentGraph())
     return manager
   }
 
@@ -86,11 +119,11 @@ class KnowledgeGraphManager {
         await this._persistGraph()
         return
       }
-      const graph: KnowledgeGraph = JSON.parse(data)
-      this.entities.clear()
-      this.relations.clear()
-      graph.entities.forEach((entity) => this.entities.set(entity.name, entity))
-      graph.relations.forEach((relation) => this.relations.add(this._serializeRelation(relation)))
+      const graph = JSON.parse(data)
+      if (!isKnowledgeGraph(graph)) {
+        throw new SyntaxError('Invalid memory graph shape')
+      }
+      this._replaceGraph(graph)
     } catch (error) {
       if (error instanceof Error && 'code' in error && (error as any).code === 'ENOENT') {
         // File doesn't exist (should have been created by _ensureMemoryPathExists, but handle defensively)
@@ -113,15 +146,80 @@ class KnowledgeGraphManager {
     }
   }
 
+  private async _loadGraphFromStorageV2(): Promise<
+    { status: 'cleared' | 'missing' } | { status: 'loaded'; graph: KnowledgeGraph }
+  > {
+    const setting = await storageV2SettingsRepository.get(STORAGE_V2_MEMORY_GRAPH_SETTING_KEY)
+    if (!isRecord(setting)) {
+      return { status: 'missing' }
+    }
+
+    if (typeof (setting as MemoryGraphStorageV2Setting).clearedAt === 'string') {
+      return { status: 'cleared' }
+    }
+
+    const graphSecretRef = (setting as MemoryGraphStorageV2Setting).graphSecretRef
+    if (typeof graphSecretRef !== 'string' || !graphSecretRef) {
+      return { status: 'missing' }
+    }
+
+    const content = await storageV2SecretVaultService.getSecret(graphSecretRef)
+    if (!content) {
+      return { status: 'missing' }
+    }
+
+    try {
+      const graph = JSON.parse(content)
+      return isKnowledgeGraph(graph) ? { status: 'loaded', graph } : { status: 'missing' }
+    } catch (error) {
+      logger.warn('Failed to parse memory graph from Storage v2', error as Error)
+      return { status: 'missing' }
+    }
+  }
+
+  private _currentGraph(): KnowledgeGraph {
+    return {
+      entities: Array.from(this.entities.values()),
+      relations: Array.from(this.relations).map((rStr) => this._deserializeRelation(rStr))
+    }
+  }
+
+  private _replaceGraph(graph: KnowledgeGraph): void {
+    this.entities.clear()
+    this.relations.clear()
+    graph.entities.forEach((entity) => this.entities.set(entity.name, entity))
+    graph.relations.forEach((relation) => this.relations.add(this._serializeRelation(relation)))
+  }
+
+  private async _persistGraphToStorageV2(graphData: KnowledgeGraph): Promise<void> {
+    const graphSecretRef = await storageV2SecretVaultService.setSecret(
+      STORAGE_V2_MEMORY_SCOPE,
+      STORAGE_V2_MEMORY_OWNER,
+      STORAGE_V2_MEMORY_GRAPH_KIND,
+      JSON.stringify(graphData)
+    )
+
+    await storageV2SettingsRepository.set(
+      STORAGE_V2_MEMORY_GRAPH_SETTING_KEY,
+      {
+        graphSecretRef,
+        updatedAt: new Date().toISOString()
+      } satisfies MemoryGraphStorageV2Setting,
+      STORAGE_V2_MEMORY_SCOPE
+    )
+  }
+
+  private async _writeGraphToDisk(graphData: KnowledgeGraph): Promise<void> {
+    await fs.writeFile(this.memoryPath, JSON.stringify(graphData, null, 2))
+  }
+
   // Persist the current in-memory graph to disk using a mutex
   private async _persistGraph(): Promise<void> {
     const release = await this.fileMutex.acquire()
     try {
-      const graphData: KnowledgeGraph = {
-        entities: Array.from(this.entities.values()),
-        relations: Array.from(this.relations).map((rStr) => this._deserializeRelation(rStr))
-      }
-      await fs.writeFile(this.memoryPath, JSON.stringify(graphData, null, 2))
+      const graphData = this._currentGraph()
+      await this._persistGraphToStorageV2(graphData)
+      await this._writeGraphToDisk(graphData)
     } catch (error) {
       logger.error('Failed to save knowledge graph:', error as Error)
       // Decide how to handle write errors - potentially retry or notify
