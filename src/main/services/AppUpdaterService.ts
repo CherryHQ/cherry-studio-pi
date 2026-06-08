@@ -67,6 +67,7 @@ export class AppUpdaterService extends BaseService {
   private cancellationToken: CancellationToken = new CancellationToken()
   private updateCheckResult: UpdateCheckResult | null = null
   private quitAndInstallStarted = false
+  private releaseUpdateInstallBlocker: ((reason: string) => void) | null = null
 
   protected async onInit(): Promise<void> {
     autoUpdater.logger = logger as Logger
@@ -103,6 +104,7 @@ export class AppUpdaterService extends BaseService {
       this.quitAndInstallStarted = false
       if (wasInstalling) {
         application.unmarkQuitting()
+        this.releaseUpdateInstallBlocker?.('update-error')
       }
       logger.error('update error', error)
       wm().broadcastToType(WindowType.Main, IpcChannel.UpdateError, error)
@@ -395,6 +397,9 @@ export class AppUpdaterService extends BaseService {
       }
       willQuitDisposable?.dispose()
       willQuitDisposable = undefined
+      if (this.releaseUpdateInstallBlocker === releaseInstallBlocker) {
+        this.releaseUpdateInstallBlocker = null
+      }
       blocker.release()
       logger.info('Update install power save blocker released', { reason })
     }
@@ -405,6 +410,7 @@ export class AppUpdaterService extends BaseService {
       releaseInstallBlocker('fallback-timeout')
     }, INSTALL_BLOCKER_FALLBACK_RELEASE_MS)
     fallbackReleaseTimer.unref?.()
+    this.releaseUpdateInstallBlocker = releaseInstallBlocker
 
     setImmediate(() => {
       try {

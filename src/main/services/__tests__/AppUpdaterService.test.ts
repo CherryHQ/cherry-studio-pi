@@ -44,6 +44,9 @@ vi.mock('@application', async () => {
     if (name === 'MainWindowService') {
       return { getMainWindow: vi.fn() }
     }
+    if (name === 'WindowManager') {
+      return { broadcastToType: vi.fn() }
+    }
     return originalGet(name)
   })
   return result
@@ -54,7 +57,15 @@ vi.mock('@main/services/PowerSaveBlockerService', () => ({
 }))
 
 vi.mock('@main/core/lifecycle', () => {
-  class MockBaseService {}
+  class MockBaseService {
+    protected registerDisposable<T extends { dispose: () => void } | (() => void)>(disposable: T): T {
+      return disposable
+    }
+
+    protected ipcHandle() {
+      return { dispose: vi.fn() }
+    }
+  }
   return {
     BaseService: MockBaseService,
     Injectable: () => (target: unknown) => target,
@@ -367,6 +378,26 @@ describe('AppUpdaterService', () => {
       expect(application.markQuitting).toHaveBeenCalledTimes(1)
       expect(application.unmarkQuitting).toHaveBeenCalledTimes(1)
       expect(mocks.updateInstallBlocker.release).toHaveBeenCalledTimes(1)
+    })
+
+    it('releases the install power blocker if the updater emits an async install error', async () => {
+      ;(appUpdater as any).registerAutoUpdaterListeners()
+      appUpdater.quitAndInstall()
+
+      await new Promise((resolve) => setImmediate(resolve))
+
+      const errorHandler = vi.mocked(autoUpdater.on).mock.calls.find(([event]) => event === 'error')?.[1] as
+        | ((error: Error) => void)
+        | undefined
+
+      expect(errorHandler).toBeTypeOf('function')
+      expect(mocks.updateInstallBlocker.release).not.toHaveBeenCalled()
+
+      errorHandler?.(new Error('installer failed after launch'))
+
+      expect(application.unmarkQuitting).toHaveBeenCalledTimes(1)
+      expect(mocks.updateInstallBlocker.release).toHaveBeenCalledTimes(1)
+      expect(mocks.willQuitDisposable.dispose).toHaveBeenCalledTimes(1)
     })
   })
 
