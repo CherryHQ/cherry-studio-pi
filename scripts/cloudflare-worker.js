@@ -3,11 +3,14 @@ const config = {
   R2_CUSTOM_DOMAIN: 'cherrystudio.ocool.online',
   R2_BUCKET_NAME: 'cherrystudio',
   // 缓存键名
-  CACHE_KEY: 'cherry-studio-latest-release',
+  CACHE_KEY: 'cherry-studio-pi-latest-release',
   VERSION_DB: 'versions.json',
   LOG_FILE: 'logs.json',
   MAX_LOGS: 1000 // 最多保存多少条日志
 }
+
+const WORKER_METADATA_KEYS = new Set([config.CACHE_KEY, config.VERSION_DB, config.LOG_FILE])
+const RELEASE_REPO = 'CherryHQ/cherry-studio-pi'
 
 // Worker 入口函数
 const worker = {
@@ -158,7 +161,7 @@ async function getLatestRelease(env) {
     return new Response(
       JSON.stringify({
         error: '获取版本信息失败: ' + error.message,
-        detail: '请稍���再试'
+        detail: '请稍后再试'
       }),
       {
         status: 500,
@@ -204,7 +207,10 @@ function getContentType(filename) {
     exe: 'application/x-msdownload', // Windows 可执行文件
     dmg: 'application/x-apple-diskimage', // macOS 安装包
     zip: 'application/zip', // 压缩包
-    AppImage: 'application/x-executable', // Linux 可执行文件
+    appimage: 'application/x-executable', // Linux 可执行文件
+    gz: 'application/gzip',
+    yml: 'application/x-yaml',
+    yaml: 'application/x-yaml',
     blockmap: 'application/octet-stream' // 更新文件
   }
   return types[ext] || 'application/octet-stream'
@@ -349,7 +355,7 @@ async function getCachedRelease(env) {
 async function checkNewRelease(env) {
   try {
     // 获取 GitHub 最新版本
-    const githubResponse = await fetch('https://api.github.com/repos/CherryHQ/cherry-studio/releases/latest', {
+    const githubResponse = await fetch(`https://api.github.com/repos/${RELEASE_REPO}/releases/latest`, {
       headers: { 'User-Agent': 'CloudflareWorker' }
     })
 
@@ -466,7 +472,7 @@ async function checkNewRelease(env) {
         const allFiles = await listAllFiles(env)
 
         // 获取需要保留的文件名列表
-        const keepFiles = new Set()
+        const keepFiles = new Set(WORKER_METADATA_KEYS)
         for (const keepVersion of keepVersions) {
           const versionFiles = versions.versions[keepVersion].files
           versionFiles.forEach((file) => keepFiles.add(file.name))
@@ -477,7 +483,7 @@ async function checkNewRelease(env) {
           const oldFiles = versions.versions[oldVersion].files
           for (const file of oldFiles) {
             try {
-              if (file.uploaded) {
+              if (file.uploaded && !keepFiles.has(file.name)) {
                 await env.R2_BUCKET.delete(file.name)
                 await addLog(env, 'INFO', `删除旧文件: ${file.name}`)
               }
@@ -503,11 +509,13 @@ async function checkNewRelease(env) {
         // 保存更新后的版本数据库
         await env.R2_BUCKET.put(config.VERSION_DB, JSON.stringify(versions, null, 2))
       }
+
+      return cacheData
     } else {
       await addLog(env, 'INFO', '所有文件完整性检查通过，无需更新')
     }
 
-    return hasUpdates ? cacheData : null
+    return null
   } catch (error) {
     await addLog(env, 'ERROR', '检查新版本失败', error.message)
     throw error

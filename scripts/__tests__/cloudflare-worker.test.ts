@@ -110,7 +110,7 @@ describe('cloudflare-worker', () => {
       'orphan.tmp': { body: 'orphan', size: 6 }
     })
 
-    globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input)
 
       if (url.includes('api.github.com')) {
@@ -142,13 +142,18 @@ describe('cloudflare-worker', () => {
       }
 
       return new Response(releaseAsset, { status: 200 })
-    }) as typeof fetch
+    })
+    globalThis.fetch = fetchMock as typeof fetch
 
     const { default: worker } = await import('../cloudflare-worker.js')
 
     await worker.scheduled({}, { R2_BUCKET: bucket }, {})
 
     expect(consoleErrorSpy).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.github.com/repos/CherryHQ/cherry-studio-pi/releases/latest',
+      expect.objectContaining({ headers: expect.objectContaining({ 'User-Agent': 'CloudflareWorker' }) })
+    )
     expect(bucket.objects.has('versions.json')).toBe(true)
     expect(bucket.objects.has('logs.json')).toBe(true)
     expect(bucket.objects.has('cherry-studio-pi-latest-release')).toBe(true)
