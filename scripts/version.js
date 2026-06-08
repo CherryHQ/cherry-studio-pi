@@ -59,22 +59,28 @@ function getHighestVersion(versions) {
   return uniqueVersions.sort(semver.rcompare)[0]
 }
 
+function selectKnownVersions(packageVersion, remoteVersions, localVersions) {
+  const sourceVersions = remoteVersions.length > 0 ? remoteVersions : localVersions
+  return [packageVersion, ...sourceVersions]
+}
+
 function collectKnownVersions(packageVersion) {
-  const versions = [packageVersion]
+  let remoteVersions = []
+  let localVersions = []
 
   try {
-    versions.push(...extractVersionsFromGitRefs(exec('git', ['tag', '--list', 'v*'])))
+    remoteVersions = extractVersionsFromGitRefs(exec('git', ['ls-remote', '--tags', 'origin', 'v*']))
   } catch {
-    // Local tags are an optimization; package.json remains the offline fallback.
+    // Remote tags are authoritative when available; local tags are only an offline fallback.
   }
 
   try {
-    versions.push(...extractVersionsFromGitRefs(exec('git', ['ls-remote', '--tags', 'origin', 'v*'])))
+    localVersions = extractVersionsFromGitRefs(exec('git', ['tag', '--list', 'v*']))
   } catch {
     // The release script should still work offline when local tags are available.
   }
 
-  return versions
+  return selectKnownVersions(packageVersion, remoteVersions, localVersions)
 }
 
 function resolveNextVersion(packageVersion, versionType, knownVersions = collectKnownVersions(packageVersion)) {
@@ -139,6 +145,7 @@ exports._internal = {
   parseVersionArgs,
   extractVersionsFromGitRefs,
   getHighestVersion,
+  selectKnownVersions,
   resolveNextVersion,
   assertCleanGitWorktree,
   runVersion

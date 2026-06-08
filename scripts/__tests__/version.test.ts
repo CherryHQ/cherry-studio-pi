@@ -61,6 +61,23 @@ describe('version script', () => {
     expect(getHighestVersion(['1.9.33', '1.10.0-beta.1', '1.10.0'])).toBe('1.10.0')
   })
 
+  it('prefers remote release tags over local tags when both are available', () => {
+    const { selectKnownVersions, resolveNextVersion } = loadInternal()
+    const knownVersions = selectKnownVersions('1.9.33', ['1.9.34'], ['99.0.0'])
+
+    expect(knownVersions).toEqual(['1.9.33', '1.9.34'])
+    expect(resolveNextVersion('1.9.33', 'patch', knownVersions)).toEqual({
+      baseVersion: '1.9.34',
+      nextVersion: '1.9.35'
+    })
+  })
+
+  it('falls back to local release tags when remote tags are unavailable', () => {
+    const { selectKnownVersions } = loadInternal()
+
+    expect(selectKnownVersions('1.9.33', [], ['1.9.34'])).toEqual(['1.9.33', '1.9.34'])
+  })
+
   it('rejects release bumps from a dirty working tree', () => {
     const { assertCleanGitWorktree } = loadInternal()
 
