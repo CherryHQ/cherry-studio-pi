@@ -1,6 +1,6 @@
 import { usePersistCache } from '@data/hooks/useCache'
 import { usePreference } from '@data/hooks/usePreference'
-import { AppLogo } from '@renderer/config/env'
+import { APP_NAME, AppLogo } from '@renderer/config/env'
 import useAvatar from '@renderer/hooks/useAvatar'
 import { useTabs } from '@renderer/hooks/useTabs'
 import { getSidebarIconLabel } from '@renderer/i18n/label'
@@ -28,7 +28,7 @@ import { Sidebar as UISidebar } from '../Sidebar'
 import { getSidebarLayout } from '../Sidebar/constants'
 import type { SidebarMenuItem, SidebarUser } from '../Sidebar/types'
 
-const APP_LOGO = <img src={AppLogo} alt="Cherry Studio" className="h-9 w-9 rounded-lg" draggable={false} />
+const APP_LOGO = <img src={AppLogo} alt={APP_NAME} className="h-9 w-9 rounded-lg" draggable={false} />
 const noop = () => {}
 
 const routePrefixMap: Record<SidebarIconType, string> = {
@@ -154,7 +154,7 @@ export default function Sidebar({ ref }: { ref?: Ref<HTMLDivElement | null> }) {
   const sidebarProps = {
     activeItem,
     items,
-    title: 'Cherry Studio',
+    title: APP_NAME,
     logo: APP_LOGO,
     user: sidebarUser,
     dockedTabs: [],

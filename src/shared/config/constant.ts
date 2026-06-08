@@ -521,7 +521,7 @@ export const CHERRYIN_CONFIG = {
   SCOPES: 'openid profile email offline_access balance:read usage:read tokens:read tokens:write'
 }
 
-export const APP_NAME = 'Cherry Studio'
+export const APP_NAME = 'Cherry Studio Pi'
 
 export const DEFAULT_TEMPERATURE = 1.0
 export const DEFAULT_CONTEXTCOUNT = 5

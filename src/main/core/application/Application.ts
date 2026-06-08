@@ -6,6 +6,7 @@ import type { PathKey, PathMap } from '@main/core/paths'
 import { buildPathRegistry, shouldAutoEnsure } from '@main/core/paths/pathRegistry'
 import { isDev, isLinux, isMac, isPortable, isWin } from '@main/core/platform'
 import { bootConfigService } from '@main/data/bootConfig'
+import { APP_NAME } from '@shared/config/constant'
 import { IpcChannel } from '@shared/IpcChannel'
 import { app, dialog, ipcMain } from 'electron'
 import { v4 as uuidv4 } from 'uuid'
@@ -284,7 +285,7 @@ export class Application {
     const result = await dialog.showMessageBox({
       type: 'error',
       title: 'Unable to Start',
-      message: `Cherry Studio could not start because ${error.serviceName} failed to initialize.`,
+      message: `${APP_NAME} could not start because ${error.serviceName} failed to initialize.`,
       detail:
         'Try restarting the application. If the problem persists, check the application logs for detailed error information.',
       buttons: ['Exit', 'Restart'],

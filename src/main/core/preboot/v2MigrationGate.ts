@@ -18,6 +18,7 @@ import {
 } from '@data/migration/v2/core/versionPolicy'
 import { loggerService } from '@logger'
 import { isDev } from '@main/core/platform'
+import { APP_NAME } from '@shared/config/constant'
 import { app, dialog } from 'electron'
 
 const logger = loggerService.withContext('V2MigrationGate')
@@ -188,7 +189,7 @@ export async function runV2MigrationGate(): Promise<V2MigrationGateResult> {
       unregisterMigrationIpcHandlers()
       dialog.showErrorBox(
         'Migration Required - Application Cannot Start',
-        `This version of Cherry Studio requires data migration to function properly.\n\nMigration window failed to start: ${(migrationError as Error).message}\n\nThe application will now exit. Please try starting again or contact support if the problem persists.`
+        `This version of ${APP_NAME} requires data migration to function properly.\n\nMigration window failed to start: ${(migrationError as Error).message}\n\nThe application will now exit. Please try starting again or contact support if the problem persists.`
       )
       logger.error('Exiting application due to failed migration startup')
       application.quit()
