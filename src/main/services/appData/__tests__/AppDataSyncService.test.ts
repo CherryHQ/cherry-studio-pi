@@ -1626,6 +1626,35 @@ describe('AppDataSyncService', () => {
     ).toBe(false)
   })
 
+  it('rejects remote app-data record manifests with root-relative artifact paths before publishing', async () => {
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 3,
+        updatedAt: 1760000000000,
+        records: {
+          'settings:theme': {
+            scope: 'settings',
+            key: 'theme',
+            valueHash: 'hash',
+            updatedAt: 1760000000000,
+            deviceId: 'remote-device',
+            version: 1,
+            path: '.'
+          }
+        }
+      })
+    )
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('Remote app data record path is invalid')
+
+    expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/manifest.json'))
+    ).toBe(false)
+  })
+
   it('rejects malformed top-level Storage v2 manifests before publishing', async () => {
     mocks.remoteFiles.set(
       '/remote-root/sync/v1/manifest.json',
