@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const mocks = vi.hoisted(() => ({
+  exec: vi.fn(),
+  execAsync: vi.fn(),
+  execFile: vi.fn(),
+  execFileAsync: vi.fn(),
+  spawn: vi.fn()
+}))
+
 vi.mock('@logger', () => ({
   loggerService: {
     withContext: () => ({
@@ -29,12 +37,13 @@ vi.mock('@main/utils/process', () => ({
 }))
 
 vi.mock('child_process', () => ({
-  spawn: vi.fn(),
-  exec: vi.fn()
+  spawn: mocks.spawn,
+  exec: mocks.exec,
+  execFile: mocks.execFile
 }))
 
 vi.mock('util', () => ({
-  promisify: vi.fn().mockReturnValue(vi.fn().mockResolvedValue({ stdout: '' }))
+  promisify: vi.fn((fn) => (fn === mocks.execFile ? mocks.execFileAsync : mocks.execAsync))
 }))
 
 vi.mock('semver', () => ({
@@ -69,6 +78,8 @@ describe('CodeCliService', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
+    mocks.execAsync.mockResolvedValue({ stdout: '' })
+    mocks.execFileAsync.mockResolvedValue({ stdout: '' })
   })
 
   afterEach(() => {
@@ -120,6 +131,26 @@ describe('CodeCliService', () => {
     await expect(service.getNpmRegistryUrl()).resolves.toBe('https://registry.npmjs.org')
 
     expect(isUserInChina).toHaveBeenCalledTimes(1)
+  })
+
+  it('checks custom terminal paths with execFile arguments instead of a shell command string', async () => {
+    const { codeCliService } = await loadModules()
+    const fs = await import('node:fs')
+    const { terminalApps } = await import('@shared/config/constant')
+    const service = codeCliService as unknown as {
+      checkCustomTerminalPath: (terminal: { id: string; name: string }) => Promise<unknown>
+    }
+    const customPath = 'C:\\Tools\\terminal" & calc.exe'
+
+    vi.mocked(fs.default.existsSync).mockReturnValue(true)
+    codeCliService.setCustomTerminalPath(terminalApps.alacritty, customPath)
+
+    await expect(service.checkCustomTerminalPath({ id: terminalApps.alacritty, name: 'Alacritty' })).resolves.toEqual(
+      expect.objectContaining({ customPath })
+    )
+
+    expect(mocks.execFileAsync).toHaveBeenCalledWith(customPath, ['--version'], { timeout: 3000 })
+    expect(mocks.execAsync).not.toHaveBeenCalledWith(expect.stringContaining(customPath), expect.anything())
   })
 
   it('skips pre-launch version checks for installed tools when auto update is disabled', async () => {

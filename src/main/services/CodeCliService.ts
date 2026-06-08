@@ -38,11 +38,12 @@ import {
 import type { CodeToolsRunResult } from '@shared/config/types'
 import { IpcChannel } from '@shared/IpcChannel'
 import { getFunctionalKeys, parseJSONC, sanitizeEnvForLogging } from '@shared/utils'
-import { spawn } from 'child_process'
+import { exec, execFile, spawn } from 'child_process'
 import semver from 'semver'
 import { promisify } from 'util'
 
-const execAsync = promisify(require('child_process').exec)
+const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 const logger = loggerService.withContext('CodeCliService')
 
 interface VersionInfo {
@@ -492,7 +493,7 @@ export class CodeCliService extends BaseService {
     try {
       if (isMac && terminal.bundleId) {
         // macOS: Check if application is installed via bundle ID with timeout
-        const { stdout } = await execAsync(`mdfind "kMDItemCFBundleIdentifier == '${terminal.bundleId}'"`, {
+        const { stdout } = await execFileAsync('mdfind', [`kMDItemCFBundleIdentifier == '${terminal.bundleId}'`], {
           timeout: 3000
         })
         if (stdout.trim()) {
@@ -503,7 +504,7 @@ export class CodeCliService extends BaseService {
         return await this.checkWindowsTerminalAvailability(terminal)
       } else {
         // TODO: Check if terminal is available in linux
-        await execAsync(`which ${terminal.id}`, { timeout: 2000 })
+        await execFileAsync('which', [terminal.id], { timeout: 2000 })
         return terminal
       }
     } catch (error) {
@@ -525,13 +526,13 @@ export class CodeCliService extends BaseService {
         case terminalApps.powershell:
           // Check for PowerShell in PATH
           try {
-            await execAsync('powershell -Command "Get-Host"', {
+            await execFileAsync('powershell', ['-NoProfile', '-Command', 'Get-Host'], {
               timeout: 3000
             })
             return terminal
           } catch {
             try {
-              await execAsync('pwsh -Command "Get-Host"', { timeout: 3000 })
+              await execFileAsync('pwsh', ['-NoProfile', '-Command', 'Get-Host'], { timeout: 3000 })
               return terminal
             } catch {
               return null
@@ -541,7 +542,7 @@ export class CodeCliService extends BaseService {
         case terminalApps.windowsTerminal:
           // Check for Windows Terminal via where command (doesn't launch the terminal)
           try {
-            await execAsync('where wt', { timeout: 3000 })
+            await execFileAsync('where.exe', ['wt'], { timeout: 3000 })
             return terminal
           } catch {
             return null
@@ -550,7 +551,7 @@ export class CodeCliService extends BaseService {
         case terminalApps.wsl:
           // Check for WSL
           try {
-            await execAsync('wsl --status', { timeout: 3000 })
+            await execFileAsync('wsl', ['--status'], { timeout: 3000 })
             return terminal
           } catch {
             return null
@@ -574,7 +575,7 @@ export class CodeCliService extends BaseService {
     const customPath = this.customTerminalPaths.get(terminal.id)
     if (customPath && fs.existsSync(customPath)) {
       try {
-        await execAsync(`"${customPath}" --version`, { timeout: 3000 })
+        await execFileAsync(customPath, ['--version'], { timeout: 3000 })
         return { ...terminal, customPath }
       } catch {
         return null
@@ -584,7 +585,7 @@ export class CodeCliService extends BaseService {
     // Fallback to PATH check
     try {
       const command = terminal.id === terminalApps.alacritty ? 'alacritty' : 'wezterm'
-      await execAsync(`${command} --version`, { timeout: 3000 })
+      await execFileAsync(command, ['--version'], { timeout: 3000 })
       return terminal
     } catch {
       return null
