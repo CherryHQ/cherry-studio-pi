@@ -9,6 +9,7 @@ import { useTheme } from '@renderer/context/ThemeProvider'
 import { startAutoSync, stopAutoSync } from '@renderer/services/BackupService'
 import { useAppSelector } from '@renderer/store'
 import type { AppInfo } from '@renderer/types'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import dayjs from 'dayjs'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -69,14 +70,22 @@ const LocalBackupSettings: React.FC = () => {
 
   const { localBackupSync } = useAppSelector((state) => state.backup)
 
+  const showSaveFailed = (error: unknown) => {
+    window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+  }
+
   const onSyncIntervalChange = async (value: number) => {
-    await setLocalBackupSyncInterval(value)
-    if (value === 0) {
-      await setLocalBackupAutoSync(false)
-      stopAutoSync('local')
-    } else {
-      await setLocalBackupAutoSync(true)
-      startAutoSync(false, 'local')
+    try {
+      await setLocalBackupSyncInterval(value)
+      if (value === 0) {
+        await setLocalBackupAutoSync(false)
+        stopAutoSync('local')
+      } else {
+        await setLocalBackupAutoSync(true)
+        startAutoSync(false, 'local')
+      }
+    } catch (error) {
+      showSaveFailed(error)
     }
   }
 
@@ -147,11 +156,11 @@ const LocalBackupSettings: React.FC = () => {
   }
 
   const onMaxBackupsChange = (value: number) => {
-    void setLocalBackupMaxBackups(value)
+    void setLocalBackupMaxBackups(value).catch(showSaveFailed)
   }
 
   const onSkipBackupFilesChange = (value: boolean) => {
-    void setLocalBackupSkipBackupFile(value)
+    void setLocalBackupSkipBackupFile(value).catch(showSaveFailed)
   }
 
   const handleBrowseDirectory = async () => {

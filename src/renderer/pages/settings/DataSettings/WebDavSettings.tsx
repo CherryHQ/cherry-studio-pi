@@ -7,6 +7,7 @@ import { useWebdavBackupModal, WebdavBackupModal } from '@renderer/components/We
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { startAutoSync, stopAutoSync } from '@renderer/services/BackupService'
 import { useAppSelector } from '@renderer/store'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import dayjs from 'dayjs'
 import type { FC } from 'react'
 import { useState } from 'react'
@@ -35,27 +36,35 @@ const WebDavSettings: FC = () => {
 
   // 把之前备份的文件定时上传到 webdav，首先先配置 webdav 的 host, port, user, pass, path
 
+  const showSaveFailed = (error: unknown) => {
+    window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+  }
+
   const onSyncIntervalChange = async (value: number) => {
-    await setWebdavSyncInterval(value)
-    if (value === 0) {
-      await setWebdavAutoSync(false)
-      stopAutoSync('webdav')
-    } else {
-      await setWebdavAutoSync(true)
-      startAutoSync(false, 'webdav')
+    try {
+      await setWebdavSyncInterval(value)
+      if (value === 0) {
+        await setWebdavAutoSync(false)
+        stopAutoSync('webdav')
+      } else {
+        await setWebdavAutoSync(true)
+        startAutoSync(false, 'webdav')
+      }
+    } catch (error) {
+      showSaveFailed(error)
     }
   }
 
   const onMaxBackupsChange = (value: number) => {
-    void setWebdavMaxBackups(value)
+    void setWebdavMaxBackups(value).catch(showSaveFailed)
   }
 
   const onSkipBackupFilesChange = (value: boolean) => {
-    void setWebdavSkipBackupFile(value)
+    void setWebdavSkipBackupFile(value).catch(showSaveFailed)
   }
 
   const onDisableStreamChange = (value: boolean) => {
-    void setWebdavDisableStream(value)
+    void setWebdavDisableStream(value).catch(showSaveFailed)
   }
 
   const renderSyncStatus = () => {

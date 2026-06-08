@@ -9,6 +9,7 @@ import { useTheme } from '@renderer/context/ThemeProvider'
 import { useMiniAppPopup } from '@renderer/hooks/useMiniAppPopup'
 import { startAutoSync, stopAutoSync } from '@renderer/services/BackupService'
 import { useAppSelector } from '@renderer/store'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import dayjs from 'dayjs'
 import type { FC } from 'react'
 import { useState } from 'react'
@@ -37,14 +38,22 @@ const S3Settings: FC = () => {
 
   const { s3Sync } = useAppSelector((state) => state.backup)
 
+  const showSaveFailed = (error: unknown) => {
+    window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+  }
+
   const onSyncIntervalChange = async (value: number) => {
-    await setS3SyncInterval(value)
-    if (value === 0) {
-      await setS3AutoSync(false)
-      stopAutoSync('s3')
-    } else {
-      await setS3AutoSync(true)
-      startAutoSync(false, 's3')
+    try {
+      await setS3SyncInterval(value)
+      if (value === 0) {
+        await setS3AutoSync(false)
+        stopAutoSync('s3')
+      } else {
+        await setS3AutoSync(true)
+        startAutoSync(false, 's3')
+      }
+    } catch (error) {
+      showSaveFailed(error)
     }
   }
 
@@ -58,11 +67,11 @@ const S3Settings: FC = () => {
   }
 
   const onMaxBackupsChange = (value: number) => {
-    void setS3MaxBackups(value)
+    void setS3MaxBackups(value).catch(showSaveFailed)
   }
 
   const onSkipBackupFilesChange = (value: boolean) => {
-    void setS3SkipBackupFile(value)
+    void setS3SkipBackupFile(value).catch(showSaveFailed)
   }
 
   const renderSyncStatus = () => {
