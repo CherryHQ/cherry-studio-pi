@@ -13,6 +13,7 @@ import type {
 import { v4 as uuidv4 } from 'uuid'
 
 import { ApiServer } from '../apiServer'
+import { summarizeApiServerConfigForLog } from '../apiServer/logging'
 
 const logger = loggerService.withContext('ApiServerService')
 
@@ -215,7 +216,7 @@ export class ApiServerService extends BaseService implements Activatable {
   private async shouldAutoStart(): Promise<boolean> {
     try {
       const config = this.getCurrentConfig()
-      logger.info('API server config:', config)
+      logger.info('API server config:', summarizeApiServerConfigForLog(config))
 
       if (config.enabled) {
         return true

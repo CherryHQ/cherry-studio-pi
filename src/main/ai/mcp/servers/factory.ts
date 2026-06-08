@@ -10,6 +10,7 @@ import DifyKnowledgeServer from './dify-knowledge'
 import FetchServer from './fetch'
 import FileSystemServer from './filesystem'
 import { resolveFilesystemBaseDir } from './filesystem/config'
+import { summarizeMCPFactoryEnvForLog } from './logging'
 import MemoryServer from './memory'
 import PythonServer from './python'
 import ThinkingServer from './sequentialthinking'
@@ -21,7 +22,11 @@ export function createInMemoryMcpServer(
   args: string[] = [],
   envs: Record<string, string> = {}
 ): Server {
-  logger.debug(`[MCP] Creating in-memory MCP server: ${name} with args: ${args} and envs: ${JSON.stringify(envs)}`)
+  logger.debug('[MCP] Creating in-memory MCP server', {
+    name,
+    args,
+    envs: summarizeMCPFactoryEnvForLog(envs)
+  })
   switch (name) {
     case BuiltinMcpServerNames.memory: {
       const envPath = envs.MEMORY_FILE_PATH
