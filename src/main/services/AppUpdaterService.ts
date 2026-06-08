@@ -407,6 +407,11 @@ export class AppUpdaterService extends BaseService {
 
     willQuitDisposable = application.onWillQuit(onWillQuit)
     fallbackReleaseTimer = setTimeout(() => {
+      if (this.quitAndInstallStarted) {
+        this.quitAndInstallStarted = false
+        application.unmarkQuitting()
+        logger.warn('Update installer did not reach will-quit before fallback timeout; allowing retry')
+      }
       releaseInstallBlocker('fallback-timeout')
     }, INSTALL_BLOCKER_FALLBACK_RELEASE_MS)
     fallbackReleaseTimer.unref?.()

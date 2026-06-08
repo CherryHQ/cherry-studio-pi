@@ -380,6 +380,29 @@ describe('AppUpdaterService', () => {
       expect(mocks.updateInstallBlocker.release).toHaveBeenCalledTimes(1)
     })
 
+    it('allows retry if the installer launch never reaches will-quit or emits an error', async () => {
+      vi.useFakeTimers()
+      try {
+        appUpdater.quitAndInstall()
+
+        expect(application.markQuitting).toHaveBeenCalledTimes(1)
+        expect(mocks.powerSaveBlockerService.acquire).toHaveBeenCalledTimes(1)
+
+        await vi.advanceTimersByTimeAsync(5 * 60 * 1000)
+
+        expect(application.unmarkQuitting).toHaveBeenCalledTimes(1)
+        expect(mocks.updateInstallBlocker.release).toHaveBeenCalledTimes(1)
+        expect(mocks.willQuitDisposable.dispose).toHaveBeenCalledTimes(1)
+
+        appUpdater.quitAndInstall()
+
+        expect(application.markQuitting).toHaveBeenCalledTimes(2)
+        expect(mocks.powerSaveBlockerService.acquire).toHaveBeenCalledTimes(2)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
     it('releases the install power blocker if the updater emits an async install error', async () => {
       ;(appUpdater as any).registerAutoUpdaterListeners()
       appUpdater.quitAndInstall()
