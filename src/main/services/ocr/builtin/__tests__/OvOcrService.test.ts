@@ -1,6 +1,6 @@
 import { FILE_TYPE } from '@shared/file/types'
 import type { SupportedOcrFile } from '@types'
-import { exec } from 'child_process'
+import { execFile } from 'child_process'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -23,7 +23,7 @@ vi.mock('@main/core/platform', () => ({
 }))
 
 vi.mock('child_process', () => ({
-  exec: vi.fn()
+  execFile: vi.fn()
 }))
 
 describe('OvOcrService', () => {
@@ -35,12 +35,12 @@ describe('OvOcrService', () => {
     workingDirectories.length = 0
     tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ovocr-service-test-'))
 
-    vi.mocked(exec).mockImplementation((_command, options, callback) => {
+    vi.mocked(execFile).mockImplementation((_file, _args, options, callback) => {
       const cwd = typeof options === 'object' && options ? options.cwd?.toString() : undefined
       const done = typeof options === 'function' ? options : callback
 
       if (!cwd || !done) {
-        throw new Error('OV OCR test exec mock requires cwd and callback')
+        throw new Error('OV OCR test execFile mock requires cwd and callback')
       }
 
       workingDirectories.push(cwd)
@@ -71,6 +71,16 @@ describe('OvOcrService', () => {
     } as SupportedOcrFile)
 
     expect(result).toEqual({ text: 'ocr result' })
+    expect(execFile).toHaveBeenCalledWith(
+      'cmd.exe',
+      expect.arrayContaining(['/d', '/s', '/c']),
+      expect.objectContaining({
+        cwd: workingDirectories[0],
+        timeout: 60000,
+        windowsHide: true
+      }),
+      expect.any(Function)
+    )
     expect(workingDirectories).toHaveLength(1)
     await expect(fs.promises.stat(workingDirectories[0])).rejects.toMatchObject({ code: 'ENOENT' })
   })

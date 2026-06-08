@@ -1,8 +1,7 @@
-import { exec } from 'node:child_process'
+import { execFile, type ExecFileOptions } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { promisify } from 'node:util'
 
 import { application } from '@application'
 import { isWin } from '@main/core/platform'
@@ -12,7 +11,18 @@ import { FILE_TYPE, type FileInfo } from '@shared/file/types'
 import type { ImageToTextHandlerOutput } from '../types'
 import type { PreparedOvOcrContext } from './types'
 
-const execAsync = promisify(exec)
+function runBatchFile(filePath: string, options: ExecFileOptions): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile('cmd.exe', ['/d', '/s', '/c', `"${filePath}"`], { windowsHide: true, ...options }, (error) => {
+      if (error) {
+        reject(error)
+        return
+      }
+
+      resolve()
+    })
+  })
+}
 
 export function prepareContext(
   file: FileInfo,
@@ -54,7 +64,7 @@ export async function executeExtraction(context: PreparedOvOcrContext): Promise<
     // TODO(file-processing): Once unified ProcessManagerService lands, delegate
     // OV OCR process lifecycle/logging/restart handling there and keep this
     // provider focused on input/output preparation plus result parsing.
-    await execAsync(`"${getOvOcrScriptPath()}"`, {
+    await runBatchFile(getOvOcrScriptPath(), {
       cwd: workingDirectory,
       timeout: 60000,
       signal: context.signal

@@ -7,10 +7,10 @@ import os from 'node:os'
 import { application } from '@application'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { existsSyncMock, cpusMock, execMock } = vi.hoisted(() => ({
+const { cpusMock, execFileMock, existsSyncMock } = vi.hoisted(() => ({
   existsSyncMock: vi.fn(),
   cpusMock: vi.fn(),
-  execMock: vi.fn()
+  execFileMock: vi.fn()
 }))
 
 vi.mock('node:fs', async () => {
@@ -30,7 +30,7 @@ vi.mock('node:child_process', async () => {
   const actual = await vi.importActual<typeof NodeChildProcess>('node:child_process')
   const mocked = {
     ...actual,
-    exec: execMock
+    execFile: execFileMock
   }
 
   return {
@@ -122,7 +122,7 @@ describe('OvOcr executeExtraction', () => {
     const rmSpy = vi.spyOn(fs.promises, 'rm').mockResolvedValue(undefined)
     const mkdirSpy = vi.spyOn(fs.promises, 'mkdir').mockResolvedValue(undefined as never)
     const readFileSpy = vi.spyOn(fs.promises, 'readFile').mockResolvedValue('recognized text' as never)
-    execMock.mockImplementation((_command, _options, callback) => {
+    execFileMock.mockImplementation((_file, _args, _options, callback) => {
       callback?.(null, '', '')
       return {} as never
     })
@@ -143,11 +143,13 @@ describe('OvOcr executeExtraction', () => {
       })
 
       expect(mkdtempSpy).toHaveBeenCalledWith('/tmp/app-temp/cherry-ovocr-')
-      expect(execMock).toHaveBeenCalledWith(
-        '"/mock/ovocr"',
+      expect(execFileMock).toHaveBeenCalledWith(
+        'cmd.exe',
+        ['/d', '/s', '/c', '"/mock/ovocr"'],
         expect.objectContaining({
           cwd: '/tmp/cherry-ovocr-1',
           timeout: 60000,
+          windowsHide: true,
           signal: controller.signal
         }),
         expect.any(Function)

@@ -3,18 +3,29 @@ import { isWin } from '@main/core/platform'
 import { HOME_CHERRY_DIR } from '@shared/config/constant'
 import type { OcrOvConfig, OcrResult, SupportedOcrFile } from '@types'
 import { isImageFileMetadata } from '@types'
-import { exec } from 'child_process'
+import { execFile, type ExecFileOptions } from 'child_process'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import { promisify } from 'util'
 
 import { OcrBaseService } from './OcrBaseService'
 
 const logger = loggerService.withContext('OvOcrService')
-const execAsync = promisify(exec)
 
 const PATH_BAT_FILE = path.join(os.homedir(), HOME_CHERRY_DIR, 'ovms', 'ovocr', 'run.npu.bat')
+
+function runBatchFile(filePath: string, options: ExecFileOptions): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile('cmd.exe', ['/d', '/s', '/c', `"${filePath}"`], { windowsHide: true, ...options }, (error) => {
+      if (error) {
+        reject(error)
+        return
+      }
+
+      resolve()
+    })
+  })
+}
 
 export class OvOcrService extends OcrBaseService {
   constructor() {
@@ -35,7 +46,7 @@ export class OvOcrService extends OcrBaseService {
     try {
       // The batch reads ./img and writes ./output relative to cwd, so each OCR
       // request gets an isolated temporary working directory.
-      await execAsync(`"${PATH_BAT_FILE}"`, {
+      await runBatchFile(PATH_BAT_FILE, {
         cwd: workingDirectory,
         timeout: 60000 // 60 second timeout
       })
