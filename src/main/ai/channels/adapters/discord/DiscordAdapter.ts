@@ -5,6 +5,7 @@ import {
   type ImageAttachment,
   MAX_FILE_SIZE_BYTES
 } from '@main/utils/downloadAsBase64'
+import { summarizeUrlForLog } from '@main/utils/logging'
 import { net } from 'electron'
 import WebSocket from 'ws'
 
@@ -289,7 +290,7 @@ class DiscordAdapter extends ChannelAdapter {
 
       const gatewayUrl = this.resumeGatewayUrl ?? (await this.getGatewayUrl())
       const wsUrl = `${gatewayUrl}?v=10&encoding=json`
-      this.log.info('Connecting to Discord gateway', { url: wsUrl })
+      this.log.info('Connecting to Discord gateway', { url: summarizeUrlForLog(wsUrl) })
 
       const ws = new WebSocket(wsUrl)
       this.ws = ws

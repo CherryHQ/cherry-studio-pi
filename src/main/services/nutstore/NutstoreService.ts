@@ -1,6 +1,7 @@
 import path from 'node:path'
 
 import { loggerService } from '@logger'
+import { summarizeUrlForLog } from '@main/utils/logging'
 import { NUTSTORE_HOST } from '@shared/config/nutstore'
 import { net } from 'electron'
 import { XMLParser } from 'fast-xml-parser'
@@ -71,7 +72,9 @@ export async function getDirectoryContents(token: string, target: string): Promi
 
   while (true) {
     if (visitedUrls.has(currentUrl)) {
-      logger.warn('Nutstore directory listing stopped due to cyclic pagination link', { url: currentUrl })
+      logger.warn('Nutstore directory listing stopped due to cyclic pagination link', {
+        url: summarizeUrlForLog(currentUrl)
+      })
       break
     }
     if (visitedUrls.size >= MAX_DIRECTORY_PAGES) {

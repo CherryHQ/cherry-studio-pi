@@ -3,9 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Hoisted state mirrors the pattern in MainWindowService.test.ts: platform flags are
 // per-test mutable, mocks use getters to preserve live-binding semantics.
-const { platformState, nativeThemeState, applicationMock, windowManagerMock } = vi.hoisted(() => {
+const { platformState, nativeThemeState, applicationMock, windowManagerMock, loggerMock } = vi.hoisted(() => {
   const platformState = { isMac: false, isWin: false, isLinux: false }
   const nativeThemeState = { shouldUseDarkColors: false }
+  const loggerMock = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }
   const windowManagerMock = {
     open: vi.fn<(type: string, args?: { initData?: unknown; options?: Record<string, unknown> }) => string>(
       () => 'mock-window-id'
@@ -23,7 +24,7 @@ const { platformState, nativeThemeState, applicationMock, windowManagerMock } = 
       throw new Error(`unexpected service: ${name}`)
     })
   }
-  return { platformState, nativeThemeState, applicationMock, windowManagerMock }
+  return { platformState, nativeThemeState, applicationMock, windowManagerMock, loggerMock }
 })
 
 vi.mock('@main/core/platform', () => ({
@@ -40,7 +41,7 @@ vi.mock('@main/core/platform', () => ({
 
 vi.mock('@logger', () => ({
   loggerService: {
-    withContext: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() })
+    withContext: () => loggerMock
   }
 }))
 
@@ -228,6 +229,30 @@ describe('SubWindowService', () => {
       const opts = lastOpenCall().args.options
       expect(opts).not.toHaveProperty('x')
       expect(opts).not.toHaveProperty('y')
+    })
+
+    it('logs a summarized URL when creating a window', () => {
+      const win = createMockWindow()
+      windowManagerMock.getWindow.mockReturnValue(win)
+
+      svc.createWindow({ id: 'tab-secret', url: 'https://example.com/path?token=secret#frag' })
+
+      expect(loggerMock.info).toHaveBeenCalledWith(
+        'Created sub window for tab tab-secret',
+        expect.objectContaining({
+          url: expect.objectContaining({
+            type: 'url',
+            protocol: 'https:',
+            host: 'example.com',
+            hasSearch: true,
+            hasHash: true
+          })
+        })
+      )
+      expect(loggerMock.info).not.toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ url: expect.any(String) })
+      )
     })
   })
 

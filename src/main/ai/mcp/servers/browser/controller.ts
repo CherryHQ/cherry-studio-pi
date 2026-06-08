@@ -1,4 +1,5 @@
 import { isMac, isWin } from '@main/core/platform'
+import { summarizeUrlForLog } from '@main/utils/logging'
 import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
 import { randomUUID } from 'crypto'
 import { app, BrowserView, BrowserWindow, nativeTheme } from 'electron'
@@ -197,7 +198,11 @@ export class CdpBrowserController {
     }
 
     activeTab.view.webContents.loadURL(finalUrl).catch((error) => {
-      logger.warn('Navigation failed in tab bar', { error, url: finalUrl, tabId: windowInfo.activeTabId })
+      logger.warn('Navigation failed in tab bar', {
+        error,
+        url: summarizeUrlForLog(finalUrl),
+        tabId: windowInfo.activeTabId
+      })
     })
   }
 
@@ -514,7 +519,7 @@ export class CdpBrowserController {
           })
         })
         .catch((error) => {
-          logger.warn('Failed to open link in new tab', { error, url })
+          logger.warn('Failed to open link in new tab', { error, url: summarizeUrlForLog(url) })
         })
       return { action: 'deny' }
     })
@@ -610,7 +615,7 @@ export class CdpBrowserController {
     const view = tab.view
     const windowKey = this.getWindowKey(privateMode)
 
-    logger.info('Loading URL', { url, windowKey, tabId: actualTabId, privateMode })
+    logger.info('Loading URL', { url: summarizeUrlForLog(url), windowKey, tabId: actualTabId, privateMode })
     const { webContents } = view
     this.touchTab(windowKey, actualTabId)
 

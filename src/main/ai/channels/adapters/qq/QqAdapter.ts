@@ -1,4 +1,5 @@
 import { type FileAttachment, type ImageAttachment, MAX_FILE_SIZE_BYTES } from '@main/utils/downloadAsBase64'
+import { summarizeUrlForLog } from '@main/utils/logging'
 import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
 import { net } from 'electron'
 import WebSocket from 'ws'
@@ -187,7 +188,7 @@ class QqAdapter extends ChannelAdapter {
       this.cleanup()
 
       const gatewayUrl = await this.getGatewayUrl()
-      this.log.info('Connecting to QQ gateway', { url: gatewayUrl })
+      this.log.info('Connecting to QQ gateway', { url: summarizeUrlForLog(gatewayUrl) })
 
       const ws = new WebSocket(gatewayUrl)
       this.ws = ws
@@ -448,7 +449,10 @@ class QqAdapter extends ChannelAdapter {
               this.pushAttachment(att, buffer, images, files)
             }
           } catch {
-            this.log.warn('Failed to download QQ attachment', { filename: att.filename, url: att.url })
+            this.log.warn('Failed to download QQ attachment', {
+              filename: att.filename,
+              url: summarizeUrlForLog(att.url)
+            })
           }
         })
     )

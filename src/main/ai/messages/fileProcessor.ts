@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url'
 
 import { application } from '@application'
 import { loggerService } from '@logger'
+import { summarizeUrlForLog } from '@main/utils/logging'
 import type { FileUIPart } from '@shared/data/types/message'
 import { readCherryMeta } from '@shared/data/types/uiParts'
 
@@ -83,7 +84,10 @@ async function fileUrlToDataUrl(fileUrl: string, mediaTypeHint?: string): Promis
     const absPath = fileURLToPath(fileUrl)
     return await pathToDataUrl(absPath, mediaTypeHint)
   } catch (error) {
-    logger.warn('Failed to inline file:// URL', { fileUrl, error: error instanceof Error ? error.message : error })
+    logger.warn('Failed to inline file:// URL', {
+      fileUrl: summarizeUrlForLog(fileUrl),
+      error: error instanceof Error ? error.message : error
+    })
     return null
   }
 }

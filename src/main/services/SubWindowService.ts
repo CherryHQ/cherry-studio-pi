@@ -4,6 +4,7 @@ import { BaseService, DependsOn, Injectable, Phase, ServicePhase } from '@main/c
 import { isLinux, isMac, isWin } from '@main/core/platform'
 import type { WindowOptions } from '@main/core/window/types'
 import { WindowType } from '@main/core/window/types'
+import { summarizeUrlForLog } from '@main/utils/logging'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { SubWindowInitData } from '@shared/types/subWindow'
 import { BrowserWindow, nativeImage, nativeTheme } from 'electron'
@@ -278,7 +279,13 @@ export class SubWindowService extends BaseService {
       this.windowState.delete(tabId)
     })
 
-    logger.info(`Created sub window for tab ${tabId}`, { windowId, url, title, type, isPinned })
+    logger.info(`Created sub window for tab ${tabId}`, {
+      windowId,
+      url: summarizeUrlForLog(url),
+      title,
+      type,
+      isPinned
+    })
     return windowId
   }
 }

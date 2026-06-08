@@ -34,6 +34,7 @@ import { app, BrowserWindow, screen } from 'electron'
 import { v4 as uuidv4 } from 'uuid'
 
 import { isSafeExternalUrl } from '../../utils/externalUrlSafety'
+import { summarizeUrlForLog } from '../../utils/logging'
 import { openExternalUrl } from '../../utils/openExternal'
 
 const logger = loggerService.withContext('WindowManager')
@@ -1630,9 +1631,9 @@ export class WindowManager extends BaseService {
   private loadWindowContent(windowId: string, window: BrowserWindow, htmlPath: string): void {
     if (isDev && process.env.ELECTRON_RENDERER_URL) {
       const url = `${process.env.ELECTRON_RENDERER_URL}/${htmlPath}`
-      logger.debug('Loading dev server', { windowId, url })
+      logger.debug('Loading dev server', { windowId, url: summarizeUrlForLog(url) })
       window.loadURL(url).catch((err) => {
-        logger.error('Failed to load window content', { windowId, url, error: String(err) })
+        logger.error('Failed to load window content', { windowId, url: summarizeUrlForLog(url), error: String(err) })
       })
     } else {
       const filePath = join(__dirname, `../renderer/${htmlPath}`)
