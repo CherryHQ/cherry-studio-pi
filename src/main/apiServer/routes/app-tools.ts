@@ -83,6 +83,10 @@ function resolveNotePath(root: string, input?: string, defaultExt = false) {
   return withExt
 }
 
+function isNotesRoot(root: string, target: string) {
+  return path.resolve(root) === path.resolve(target)
+}
+
 async function resolveNoteDeletePath(root: string, input?: string) {
   const target = resolveNotePath(root, input)
   if (path.extname(target) || (await fs.stat(target).catch(() => null))) {
@@ -475,6 +479,10 @@ appToolsRouter.delete('/notes', async (req, res, next) => {
   try {
     const root = await getNotesRoot()
     const target = await resolveNoteDeletePath(root, String(req.query.path || req.body?.path || ''))
+    if (isNotesRoot(root, target)) {
+      res.status(400).json({ error: 'Cannot delete the notes root directory' })
+      return
+    }
     await fs.rm(target, { force: true, recursive: true })
     notifyMainProcessDataSyncLocalChange('file', { source: 'api.app-tools.notes.delete', path: target })
     res.json({ ok: true, path: target })
