@@ -18,6 +18,7 @@ import {
 } from '@renderer/services/NutstoreService'
 import { useAppSelector } from '@renderer/store'
 import { modalConfirm } from '@renderer/utils'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { openHttpExternalUrl } from '@renderer/utils/openExternal'
 import { NUTSTORE_HOST } from '@shared/config/nutstore'
 import dayjs from 'dayjs'
@@ -55,6 +56,13 @@ const NutstoreSettings: FC = () => {
   const nutstoreSsoHandler = useNutstoreSso()
   const { setTimeoutTimer } = useTimer()
 
+  const showSaveFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    },
+    [t]
+  )
+
   const handleClickNutstoreSSO = useCallback(async () => {
     setNutstoreLoginLoading(true)
     try {
@@ -64,7 +72,7 @@ const NutstoreSettings: FC = () => {
       }
       const nutstoreToken = await nutstoreSsoHandler()
 
-      void setNutstoreToken(nutstoreToken)
+      await setNutstoreToken(nutstoreToken)
     } catch (error) {
       const message =
         error instanceof Error && error.message.includes('timed out')
@@ -85,14 +93,14 @@ const NutstoreSettings: FC = () => {
           setNutstoreUsername(decrypted.username)
           setNutstorePass(decrypted.access_token)
           if (!nutstorePath) {
-            void setNutstorePath('/cherry-studio-pi')
+            void setNutstorePath('/cherry-studio-pi').catch(showSaveFailed)
             // setStoragePath('/cherry-studio-pi')
           }
         }
       }
     }
     void decryptTokenEffect()
-  }, [nutstoreToken, setNutstorePath, nutstorePath])
+  }, [nutstoreToken, setNutstorePath, nutstorePath, showSaveFailed])
 
   const handleLayout = useCallback(async () => {
     const confirmedLogout = await modalConfirm({
@@ -100,29 +108,40 @@ const NutstoreSettings: FC = () => {
       content: t('settings.data.nutstore.logout.content')
     })
     if (confirmedLogout) {
-      void setNutstoreToken('')
-      void setNutstorePath('')
-      void setNutstoreAutoSync(false)
+      try {
+        await setNutstoreToken('')
+        await setNutstorePath('')
+        await setNutstoreAutoSync(false)
+      } catch (error) {
+        showSaveFailed(error)
+        return
+      }
       setNutstoreUsername('')
     }
-  }, [setNutstorePath, setNutstoreToken, setNutstoreAutoSync, t])
+  }, [setNutstorePath, setNutstoreToken, setNutstoreAutoSync, showSaveFailed, t])
 
   const handleCheckConnection = async () => {
     if (!nutstoreToken) return
     setCheckConnectionLoading(true)
-    const isConnectedToNutstore = await checkConnection()
+    try {
+      const isConnectedToNutstore = await checkConnection()
 
-    window.toast[isConnectedToNutstore ? 'success' : 'error']({
-      timeout: 2000,
-      title: isConnectedToNutstore
-        ? t('settings.data.nutstore.checkConnection.success')
-        : t('settings.data.nutstore.checkConnection.fail')
-    })
+      window.toast[isConnectedToNutstore ? 'success' : 'error']({
+        timeout: 2000,
+        title: isConnectedToNutstore
+          ? t('settings.data.nutstore.checkConnection.success')
+          : t('settings.data.nutstore.checkConnection.fail')
+      })
 
-    setNsConnected(isConnectedToNutstore)
-    setCheckConnectionLoading(false)
+      setNsConnected(isConnectedToNutstore)
 
-    setTimeoutTimer('handleCheckConnection', () => setNsConnected(false), 3000)
+      setTimeoutTimer('handleCheckConnection', () => setNsConnected(false), 3000)
+    } catch (error) {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('settings.data.nutstore.checkConnection.fail')))
+      setNsConnected(false)
+    } finally {
+      setCheckConnectionLoading(false)
+    }
   }
 
   const { isModalVisible, handleBackup, handleCancel, backuping, customFileName, setCustomFileName, showBackupModal } =
@@ -131,22 +150,26 @@ const NutstoreSettings: FC = () => {
     })
 
   const onSyncIntervalChange = async (value: number) => {
-    await setNutstoreSyncInterval(value)
-    if (value === 0) {
-      await setNutstoreAutoSync(false)
-      stopNutstoreAutoSync()
-    } else {
-      await setNutstoreAutoSync(true)
-      await startNutstoreAutoSync()
+    try {
+      await setNutstoreSyncInterval(value)
+      if (value === 0) {
+        await setNutstoreAutoSync(false)
+        stopNutstoreAutoSync()
+      } else {
+        await setNutstoreAutoSync(true)
+        await startNutstoreAutoSync()
+      }
+    } catch (error) {
+      showSaveFailed(error)
     }
   }
 
   const onSkipBackupFilesChange = (value: boolean) => {
-    void setNutstoreSkipBackupFile(value)
+    void setNutstoreSkipBackupFile(value).catch(showSaveFailed)
   }
 
   const onMaxBackupsChange = (value: number) => {
-    void setNutstoreMaxBackups(value)
+    void setNutstoreMaxBackups(value).catch(showSaveFailed)
   }
 
   const handleClickPathChange = async () => {
@@ -176,7 +199,7 @@ const NutstoreSettings: FC = () => {
       return
     }
 
-    void setNutstorePath(targetPath)
+    void setNutstorePath(targetPath).catch(showSaveFailed)
   }
 
   const renderSyncStatus = () => {
