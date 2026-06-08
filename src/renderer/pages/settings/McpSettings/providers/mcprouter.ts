@@ -2,6 +2,7 @@ import { loggerService } from '@logger'
 import { nanoid } from '@reduxjs/toolkit'
 import { notifyStorageV2MirroredLocalStorageKeyChanged } from '@renderer/services/StorageV2LocalStorageSnapshot'
 import type { McpServer } from '@renderer/types'
+import { APP_NAME } from '@shared/config/constant'
 import i18next from 'i18next'
 
 import { fetchWithProviderTimeout, getProviderSyncErrorDetails, getProviderSyncErrorMessage } from './request'
@@ -61,7 +62,7 @@ export const syncMcpRouterServers = async (token: string): Promise<McpRouterSync
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
         'HTTP-Referer': 'https://cherry-ai.com',
-        'X-Title': 'Cherry Studio'
+        'X-Title': APP_NAME
       },
       body: JSON.stringify({})
     })
