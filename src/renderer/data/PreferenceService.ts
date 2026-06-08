@@ -10,6 +10,13 @@ import { isEqual } from 'lodash'
 
 const logger = loggerService.withContext('PreferenceService')
 
+function describePreferenceValue(value: unknown) {
+  return {
+    valueType: Array.isArray(value) ? 'array' : typeof value,
+    hasValue: value !== undefined && value !== null
+  }
+}
+
 /**
  * Renderer-side PreferenceService providing cached access to preferences with real-time synchronization
  *
@@ -79,7 +86,7 @@ export class PreferenceService {
       if (!isEqual(oldValue, value)) {
         this.cache[key] = value
         this.notifyChangeListeners(key)
-        logger.debug(`Preference ${key} updated to:`, { value })
+        logger.debug(`Preference ${key} updated`, describePreferenceValue(value))
       }
     })
   }
