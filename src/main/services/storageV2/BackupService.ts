@@ -62,6 +62,7 @@ export type StorageV2BackupValidation = {
   copiedDirectories: string[]
   quickCheck: string | null
   integrityCheck: string | null
+  invalidBlobPathCount: number
   missingBlobFileCount: number
   corruptBlobFileCount: number
   secretVaultSecretCount: number
@@ -352,6 +353,40 @@ function normalizeBackupPath(inputPath: string) {
   return resolved
 }
 
+function isPathInsideOrEqual(childPath: string, parentPath: string) {
+  const childResolved = path.resolve(childPath)
+  const parentResolved = path.resolve(parentPath)
+  const caseInsensitive = process.platform === 'darwin' || process.platform === 'win32'
+  const child = caseInsensitive ? childResolved.toLowerCase() : childResolved
+  const parent = caseInsensitive ? parentResolved.toLowerCase() : parentResolved
+  if (child === parent) return true
+  const relative = path.relative(parent, child)
+  return relative.length > 0 && !relative.startsWith('..') && !path.isAbsolute(relative)
+}
+
+function resolveBackupStoragePath(backupPath: string, storagePath: string) {
+  const rawPath = String(storagePath ?? '')
+    .split('\u0000')
+    .join('')
+    .replace(/\\/g, '/')
+
+  if (!rawPath.trim() || /^[a-z]:/i.test(rawPath)) return null
+
+  const normalized = path.posix.normalize(rawPath)
+  if (
+    !normalized ||
+    normalized === '.' ||
+    normalized === '..' ||
+    normalized.startsWith('../') ||
+    normalized.startsWith('/')
+  ) {
+    return null
+  }
+
+  const candidate = path.resolve(backupPath, normalized.split('/').join(path.sep))
+  return isPathInsideOrEqual(candidate, backupPath) ? candidate : null
+}
+
 function getBackupManifest(metadata: Record<string, any> | null, manifestPath: string | null) {
   if (manifestPath && fs.existsSync(manifestPath)) {
     return readJsonFile(manifestPath)
@@ -608,6 +643,7 @@ export class StorageV2BackupService {
 
     let quickCheck: string | null = null
     let integrityCheck: string | null = null
+    let invalidBlobPathCount = 0
     let missingBlobFileCount = 0
     let corruptBlobFileCount = 0
     let secretVaultSecretCount = 0
@@ -667,18 +703,46 @@ export class StorageV2BackupService {
           FROM blobs
           WHERE storage_path IS NOT NULL AND storage_path != ''
         `)
+        const realBackupPath = fs.existsSync(backupPath) ? fs.realpathSync(backupPath) : backupPath
         for (const row of blobsResult.rows) {
           const storagePath = String(row.storage_path)
-          const blobPath = path.join(backupPath, storagePath)
+          const blobPath = resolveBackupStoragePath(backupPath, storagePath)
+          if (!blobPath) {
+            invalidBlobPathCount++
+            continue
+          }
+
           if (!fs.existsSync(blobPath)) {
             missingBlobFileCount++
             continue
           }
 
+          let realBlobPath: string
+          try {
+            realBlobPath = fs.realpathSync(blobPath)
+          } catch {
+            missingBlobFileCount++
+            continue
+          }
+          if (!isPathInsideOrEqual(realBlobPath, realBackupPath)) {
+            invalidBlobPathCount++
+            continue
+          }
+
           const checksum = typeof row.checksum === 'string' ? row.checksum : null
-          if (checksum && (await sha256File(blobPath)) !== checksum) {
+          if (checksum && (await sha256File(realBlobPath)) !== checksum) {
             corruptBlobFileCount++
           }
+        }
+
+        if (invalidBlobPathCount > 0) {
+          issues.push(
+            validationMessage(
+              'invalid_blob_paths',
+              `Backup contains ${invalidBlobPathCount} blob path(s) outside the backup directory.`,
+              { count: invalidBlobPathCount }
+            )
+          )
         }
 
         if (missingBlobFileCount > 0) {
@@ -844,6 +908,7 @@ export class StorageV2BackupService {
       copiedDirectories,
       quickCheck,
       integrityCheck,
+      invalidBlobPathCount,
       missingBlobFileCount,
       corruptBlobFileCount,
       secretVaultSecretCount,

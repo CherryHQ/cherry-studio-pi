@@ -133,6 +133,7 @@ function createValidation(backupPath: string): StorageV2BackupValidation {
     copiedDirectories: [],
     quickCheck: 'ok',
     integrityCheck: 'ok',
+    invalidBlobPathCount: 0,
     missingBlobFileCount: 0,
     corruptBlobFileCount: 0,
     secretVaultSecretCount: 0,
@@ -547,6 +548,44 @@ describe('StorageV2BackupService.validateBackup', () => {
     expect(validation.manifestPath).toBe(path.join(backupPath, 'manifest.json'))
     expect(validation.warnings).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 'manifest_missing' })])
+    )
+  })
+
+  it('rejects backup blob paths that resolve outside the backup directory', async () => {
+    const secretRef = 'storage-v2://secret/provider/provider-1/apiKey'
+    const outsideContent = 'outside blob should never be trusted'
+    const outsideChecksum = createHash('sha256').update(outsideContent).digest('hex')
+
+    fs.writeFileSync(path.join(tmpDir, 'outside.txt'), outsideContent)
+    fs.mkdirSync(path.join(backupPath, 'secrets'), { recursive: true })
+    fs.writeFileSync(
+      path.join(backupPath, 'metadata.json'),
+      JSON.stringify({
+        format: 'cherry-studio-pi-storage-backup',
+        version: 1,
+        reason: 'path-traversal',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        copiedDirectories: ['secrets']
+      })
+    )
+    writeLocalSecretVault(path.join(backupPath, 'secrets'), 'provider:provider-1:apiKey')
+    await createCompleteBackupValidationDb(path.join(backupPath, 'main.db'), {
+      blobStoragePath: '..\\outside.txt',
+      blobChecksum: outsideChecksum,
+      secretRef
+    })
+
+    const validation = await new StorageV2BackupService().validateBackup(backupPath)
+
+    expect(validation.ok).toBe(false)
+    expect(validation.invalidBlobPathCount).toBe(1)
+    expect(validation.missingBlobFileCount).toBe(0)
+    expect(validation.corruptBlobFileCount).toBe(0)
+    expect(validation.issues).toContainEqual(
+      expect.objectContaining({
+        id: 'invalid_blob_paths',
+        values: { count: 1 }
+      })
     )
   })
 
