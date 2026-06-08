@@ -13,6 +13,6 @@ export function openExternalUrl(url: string, context = 'external URL'): void {
   }
 
   void Promise.resolve(shell.openExternal(url)).catch((error) => {
-    logger.warn(`Failed to open ${context}: ${url}`, error as Error)
+    logger.warn(`Failed to open ${context}`, { url: summarizeUrlForLog(url), error: error as Error })
   })
 }
