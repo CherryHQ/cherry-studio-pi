@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
 import { Readability } from '@mozilla/readability'
 import type { WebSearchResult } from '@shared/data/types/webSearch'
 import { isValidUrl } from '@shared/utils'
@@ -61,7 +62,11 @@ export async function fetchWebSearchContent(url: string, httpOptions: RequestIni
     }
 
     const normalizedError = error instanceof Error ? error : new Error(String(error))
-    logger.error(`Failed to fetch ${url}`, normalizedError)
+    logger.error('Failed to fetch web search content', {
+      url: summarizeUrlForLog(url),
+      errorName: normalizedError.name,
+      error: summarizeTextForLog(normalizedError.message)
+    })
     throw error
   }
 }

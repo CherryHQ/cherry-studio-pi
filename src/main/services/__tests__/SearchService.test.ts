@@ -3,6 +3,7 @@ import { BrowserWindow } from 'electron'
 import { EventEmitter } from 'events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { mockMainLoggerService } from '../../../../tests/__mocks__/MainLoggerService'
 import { SearchService } from '../SearchService'
 
 type MockSearchWindow = EventEmitter & {
@@ -45,10 +46,24 @@ describe('SearchService', () => {
 
   it('waits only for a short settle delay after loadURL resolves', async () => {
     const service = new SearchService()
-    const resultPromise = service.openUrlInSearchWindow('search-1', 'https://example.com')
+    const resultPromise = service.openUrlInSearchWindow('search-1', 'https://example.com?token=abc#secret')
 
-    await vi.waitFor(() => expect(window.loadURL).toHaveBeenCalledWith('https://example.com'))
+    await vi.waitFor(() => expect(window.loadURL).toHaveBeenCalledWith('https://example.com?token=abc#secret'))
     await vi.waitFor(() => expect(vi.getTimerCount()).toBe(1))
+    expect(JSON.stringify(mockMainLoggerService.debug.mock.calls)).not.toContain('token=abc')
+    expect(JSON.stringify(mockMainLoggerService.debug.mock.calls)).not.toContain('#secret')
+    expect(mockMainLoggerService.debug).toHaveBeenCalledWith('Searching with URL', {
+      url: {
+        type: 'url',
+        protocol: 'https:',
+        host: 'example.com',
+        pathnameLength: 1,
+        searchLength: 10,
+        hashLength: 7,
+        hasSearch: true,
+        hasHash: true
+      }
+    })
 
     expect(window.webContents.listenerCount('did-finish-load')).toBe(0)
     expect(window.webContents.executeJavaScript).not.toHaveBeenCalled()

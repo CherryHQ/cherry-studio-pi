@@ -3,15 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const fetchMock = vi.hoisted(() => vi.fn())
 const jsdomConstructorMock = vi.hoisted(() => vi.fn())
+const loggerMocks = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn()
+}))
 
 vi.mock('@logger', () => ({
   loggerService: {
-    withContext: () => ({
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn()
-    })
+    withContext: () => loggerMocks
   }
 }))
 
@@ -50,6 +51,7 @@ describe('fetchWebSearchContent', () => {
   beforeEach(() => {
     fetchMock.mockReset()
     jsdomConstructorMock.mockReset()
+    loggerMocks.error.mockClear()
   })
 
   it('normalizes empty readability output to an empty string', async () => {
@@ -77,6 +79,30 @@ describe('fetchWebSearchContent', () => {
   it('throws when fetching content fails', async () => {
     fetchMock.mockResolvedValue(createTextResponse('server error', 'text/plain', 500))
 
-    await expect(fetchWebSearchContent('https://example.com/article')).rejects.toThrow('HTTP error: 500')
+    await expect(fetchWebSearchContent('https://example.com/article?token=abc#secret')).rejects.toThrow(
+      'HTTP error: 500'
+    )
+
+    expect(JSON.stringify(loggerMocks.error.mock.calls)).not.toContain('token=abc')
+    expect(JSON.stringify(loggerMocks.error.mock.calls)).not.toContain('#secret')
+    expect(loggerMocks.error).toHaveBeenCalledWith('Failed to fetch web search content', {
+      url: {
+        type: 'url',
+        protocol: 'https:',
+        host: 'example.com',
+        pathnameLength: 8,
+        searchLength: 10,
+        hashLength: 7,
+        hasSearch: true,
+        hasHash: true
+      },
+      errorName: 'Error',
+      error: {
+        type: 'string',
+        length: 15,
+        trimmedLength: 15,
+        isEmpty: false
+      }
+    })
   })
 })

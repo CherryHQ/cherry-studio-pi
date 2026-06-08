@@ -1,15 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const fetchMock = vi.hoisted(() => vi.fn())
+const loggerMocks = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn()
+}))
 
 vi.mock('@logger', () => ({
   loggerService: {
-    withContext: () => ({
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn()
-    })
+    withContext: () => loggerMocks
   }
 }))
 
@@ -36,6 +37,7 @@ describe('fetchKnowledgeWebPage', () => {
   beforeEach(() => {
     vi.useRealTimers()
     fetchMock.mockReset()
+    loggerMocks.error.mockClear()
   })
 
   it('fetches a page and returns markdown content', async () => {
@@ -70,9 +72,31 @@ describe('fetchKnowledgeWebPage', () => {
   it('throws on non-ok upstream responses', async () => {
     fetchMock.mockResolvedValue(new Response('nope', { status: 500 }))
 
-    await expect(fetchKnowledgeWebPage('https://example.com')).rejects.toThrow(
-      'Failed to fetch knowledge web page https://example.com: HTTP 500'
+    await expect(fetchKnowledgeWebPage('https://example.com/page?token=abc#secret')).rejects.toThrow(
+      'Failed to fetch knowledge web page https://example.com/page?token=abc#secret: HTTP 500'
     )
+
+    expect(JSON.stringify(loggerMocks.error.mock.calls)).not.toContain('token=abc')
+    expect(JSON.stringify(loggerMocks.error.mock.calls)).not.toContain('#secret')
+    expect(loggerMocks.error).toHaveBeenCalledWith('Failed to load knowledge web page', {
+      url: {
+        type: 'url',
+        protocol: 'https:',
+        host: 'example.com',
+        pathnameLength: 5,
+        searchLength: 10,
+        hashLength: 7,
+        hasSearch: true,
+        hasHash: true
+      },
+      errorName: 'Error',
+      error: {
+        type: 'string',
+        length: 86,
+        trimmedLength: 86,
+        isEmpty: false
+      }
+    })
   })
 
   it('rejects unsupported protocols before dispatching the request', async () => {

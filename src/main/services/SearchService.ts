@@ -1,6 +1,7 @@
 import { loggerService } from '@logger'
 import { BaseService, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
 import { isDev } from '@main/core/platform'
+import { summarizeUrlForLog } from '@main/utils/logging'
 import { IpcChannel } from '@shared/IpcChannel'
 import { BrowserWindow } from 'electron'
 
@@ -84,7 +85,7 @@ export class SearchService extends BaseService {
 
   public async openUrlInSearchWindow(uid: string, url: string): Promise<any> {
     let window = this.searchWindows[uid]
-    logger.debug(`Searching with URL: ${url}`)
+    logger.debug('Searching with URL', { url: summarizeUrlForLog(url) })
     if (!window) {
       window = await this.createNewSearchWindow(uid)
     }

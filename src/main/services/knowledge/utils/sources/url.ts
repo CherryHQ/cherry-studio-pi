@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
 import { net } from 'electron'
 import PQueue from 'p-queue'
 import { sanitizeUrl } from 'strict-url-sanitise'
@@ -63,7 +64,11 @@ export async function fetchKnowledgeWebPage(url: string, signal?: AbortSignal): 
     return markdown
   } catch (error) {
     const normalizedError = error instanceof Error ? error : new Error(String(error))
-    logger.error(`Failed to load knowledge web page: ${url}`, normalizedError)
+    logger.error('Failed to load knowledge web page', {
+      url: summarizeUrlForLog(url),
+      errorName: normalizedError.name,
+      error: summarizeTextForLog(normalizedError.message)
+    })
     throw error
   }
 }
