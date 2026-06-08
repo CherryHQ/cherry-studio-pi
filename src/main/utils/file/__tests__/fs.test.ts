@@ -1,5 +1,4 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, stat as fsStatPromise, utimes, writeFile } from 'node:fs/promises'
-import type { Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -26,6 +25,36 @@ import {
   stat,
   write as fsWrite
 } from '../fs'
+
+function toReadableBytes(body: Uint8Array | string): Uint8Array<ArrayBuffer> {
+  if (typeof body === 'string') {
+    return new TextEncoder().encode(body)
+  }
+
+  const bytes = new Uint8Array(body.byteLength)
+  bytes.set(body)
+  return bytes
+}
+
+function mockDownloadResponse(
+  route: { status: number; body: Uint8Array | string; type?: string } | undefined
+): Response {
+  const status = route?.status ?? 404
+  const bytes = toReadableBytes(route?.body ?? 'not found')
+
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: status >= 200 && status < 300 ? 'OK' : 'Not Found',
+    headers: new Headers(route?.type ? { 'content-type': route.type } : undefined),
+    body: new ReadableStream({
+      start(controller) {
+        controller.enqueue(bytes)
+        controller.close()
+      }
+    })
+  } as Response
+}
 
 describe('stat', () => {
   let tmp: string
@@ -556,32 +585,23 @@ describe('mkdir / ensureDir / removeDir', () => {
 
 describe('download', () => {
   let tmp: string
-  let server: Server
   let baseUrl: string
   let routes: Map<string, { status: number; body: Uint8Array | string; type?: string }>
+  let fetchMock: ReturnType<typeof vi.fn>
 
   beforeEach(async () => {
     tmp = await mkdtemp(path.join(tmpdir(), 'cherry-fm-fs-test-'))
     routes = new Map()
-    const http = await import('node:http')
-    server = http.createServer((req, res) => {
-      const route = routes.get(req.url ?? '/')
-      if (!route) {
-        res.statusCode = 404
-        res.end('not found')
-        return
-      }
-      res.statusCode = route.status
-      if (route.type) res.setHeader('Content-Type', route.type)
-      res.end(route.body)
+    baseUrl = 'https://example.com'
+    fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const requestUrl = new URL(String(input))
+      return mockDownloadResponse(routes.get(requestUrl.pathname))
     })
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-    const addr = server.address() as { port: number }
-    baseUrl = `http://127.0.0.1:${addr.port}`
+    vi.stubGlobal('fetch', fetchMock)
   })
   afterEach(async () => {
+    vi.unstubAllGlobals()
     await rm(tmp, { recursive: true, force: true })
-    await new Promise<void>((resolve) => server.close(() => resolve()))
   })
 
   it('downloads response body to dest atomically', async () => {
@@ -595,13 +615,8 @@ describe('download', () => {
   it('sets a timeout abort signal on remote requests', async () => {
     routes.set('/file.bin', { status: 200, body: Buffer.from([0x01]), type: 'application/octet-stream' })
     const dest = path.join(tmp, 'out.bin') as FilePath
-    const fetchSpy = vi.spyOn(globalThis, 'fetch')
-    try {
-      await fsDownload(`${baseUrl}/file.bin`, dest)
-      expect(fetchSpy).toHaveBeenCalledWith(`${baseUrl}/file.bin`, { signal: expect.any(AbortSignal) })
-    } finally {
-      fetchSpy.mockRestore()
-    }
+    await fsDownload(`${baseUrl}/file.bin`, dest)
+    expect(fetchMock).toHaveBeenCalledWith(`${baseUrl}/file.bin`, { signal: expect.any(AbortSignal) })
   })
 
   it('throws and leaves no dest file on a non-2xx response', async () => {

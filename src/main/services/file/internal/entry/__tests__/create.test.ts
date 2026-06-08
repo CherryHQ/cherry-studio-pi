@@ -1,5 +1,4 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import type { Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -20,6 +19,34 @@ const { createDefaultOrphanCheckerRegistry } = await import('@main/services/file
 const { createInternal, ensureExternal } = await import('../create')
 
 import type { FileManagerDeps } from '../../deps'
+
+function toReadableBytes(body: Uint8Array | string): Uint8Array<ArrayBuffer> {
+  if (typeof body === 'string') {
+    return new TextEncoder().encode(body)
+  }
+
+  const bytes = new Uint8Array(body.byteLength)
+  bytes.set(body)
+  return bytes
+}
+
+function mockFetchResponse(route: { status: number; body: Uint8Array | string; type?: string } | undefined): Response {
+  const status = route?.status ?? 404
+  const bytes = toReadableBytes(route?.body ?? 'not found')
+
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    statusText: status >= 200 && status < 300 ? 'OK' : 'Not Found',
+    headers: new Headers(route?.type ? { 'content-type': route.type } : undefined),
+    body: new ReadableStream({
+      start(controller) {
+        controller.enqueue(bytes)
+        controller.close()
+      }
+    })
+  } as Response
+}
 
 describe('internal/entry/create.createInternal', () => {
   const dbh = setupTestDatabase()
@@ -110,31 +137,21 @@ describe('internal/entry/create.createInternal', () => {
   })
 
   describe('source: url', () => {
-    let server: Server
     let baseUrl: string
-    let routes: Map<string, { status: number; body: Buffer; type?: string }>
+    let routes: Map<string, { status: number; body: Uint8Array | string; type?: string }>
 
-    beforeEach(async () => {
+    beforeEach(() => {
       routes = new Map()
-      const http = await import('node:http')
-      server = http.createServer((req, res) => {
-        const route = routes.get(req.url ?? '/')
-        if (!route) {
-          res.statusCode = 404
-          res.end('not found')
-          return
-        }
-        res.statusCode = route.status
-        if (route.type) res.setHeader('Content-Type', route.type)
-        res.end(route.body)
+      baseUrl = 'https://example.com'
+      const fetchMock = vi.fn(async (input: string | URL | Request) => {
+        const requestUrl = new URL(String(input))
+        return mockFetchResponse(routes.get(requestUrl.pathname))
       })
-      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-      const addr = server.address() as { port: number }
-      baseUrl = `http://127.0.0.1:${addr.port}`
+      vi.stubGlobal('fetch', fetchMock)
     })
 
-    afterEach(async () => {
-      await new Promise<void>((resolve) => server.close(() => resolve()))
+    afterEach(() => {
+      vi.unstubAllGlobals()
     })
 
     it('downloads to storage and derives name + ext from the URL path basename', async () => {
@@ -171,7 +188,7 @@ describe('internal/entry/create.createInternal', () => {
       // is the empty string — urlTail then falls through to u.hostname.
       routes.set('/', { status: 200, body: Buffer.from('hi') })
       const entry = await createInternal(deps, { source: 'url', url: `${baseUrl}/` as never })
-      expect(entry.name).toBe('127.0.0.1')
+      expect(entry.name).toBe('example.com')
       expect(entry.ext).toBeNull()
     })
 
