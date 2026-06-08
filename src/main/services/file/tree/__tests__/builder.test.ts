@@ -5,7 +5,7 @@ import path from 'node:path'
 import type { TreeMutationEvent } from '@shared/file/types'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { createDirectoryTree, type DirectoryTreeBuilder } from '../builder'
+import { createDirectoryTree, type DirectoryTreeBuilder, isTreePathSameOrChild } from '../builder'
 
 const waitForEvent = (
   builder: DirectoryTreeBuilder,
@@ -26,6 +26,20 @@ const waitForEvent = (
     })
   })
 }
+
+describe('isTreePathSameOrChild', () => {
+  it('keeps normal directory boundaries strict', () => {
+    expect(isTreePathSameOrChild('/Users/me/Notes', '/Users/me/Notes')).toBe(true)
+    expect(isTreePathSameOrChild('/Users/me/Notes/a.md', '/Users/me/Notes')).toBe(true)
+    expect(isTreePathSameOrChild('/Users/me/Notes-other/a.md', '/Users/me/Notes')).toBe(false)
+  })
+
+  it('supports filesystem roots without creating double-slash boundaries', () => {
+    expect(isTreePathSameOrChild('/Users/me/a.md', '/')).toBe(true)
+    expect(isTreePathSameOrChild('C:/Users/me/a.md', 'C:/')).toBe(true)
+    expect(isTreePathSameOrChild('C:/Users/me/a.md', 'D:/')).toBe(false)
+  })
+})
 
 describe('createDirectoryTree — initial scan', () => {
   let tmp: string

@@ -67,6 +67,15 @@ function normalizePath(p: string): string {
   return p.replace(/\\/g, '/')
 }
 
+export function isTreePathSameOrChild(absPath: string, rootPath: string): boolean {
+  const normalizedAbsPath = normalizePath(absPath)
+  const normalizedRootPath = normalizePath(rootPath)
+  if (normalizedAbsPath === normalizedRootPath) return true
+
+  const rootWithBoundary = normalizedRootPath.endsWith('/') ? normalizedRootPath : `${normalizedRootPath}/`
+  return normalizedAbsPath.startsWith(rootWithBoundary)
+}
+
 function extOf(filename: string): string {
   const dot = filename.lastIndexOf('.')
   return dot < 0 ? '' : filename.slice(dot).toLowerCase()
@@ -357,7 +366,7 @@ class DirectoryTreeBuilderImpl implements DirectoryTreeBuilder {
     emit: boolean
   ): TreeNode | null {
     if (absPath === this.rootPath) return this.root
-    if (!absPath.startsWith(`${this.rootPath}/`)) return null
+    if (!isTreePathSameOrChild(absPath, this.rootPath)) return null
 
     const existing = this.map.get(absPath)
     if (existing) {
@@ -407,7 +416,7 @@ class DirectoryTreeBuilderImpl implements DirectoryTreeBuilder {
       this.removeNode(absPath, /* emit */ false)
     }
     if (absPath === this.rootPath) return this.root
-    if (!absPath.startsWith(`${this.rootPath}/`)) return null
+    if (!isTreePathSameOrChild(absPath, this.rootPath)) return null
 
     const parentPath = normalizePath(path.posix.dirname(absPath))
     const parent = this.ensureDirectory(parentPath)
