@@ -397,6 +397,42 @@ describe('FileProcessingSettings', () => {
     expect(screen.getByPlaceholderText('settings.provider.api_host')).toHaveValue('https://draft.example.com')
   })
 
+  it('keeps API key drafts when API host save rerenders the same processor', async () => {
+    const { rerender } = render(<FileProcessingSettings />)
+
+    fireEvent.click(
+      (await screen.findAllByRole('button', { name: /settings.tool.file_processing.processors.mistral.name/ }))[0]
+    )
+
+    const apiKeysInput = screen.getByPlaceholderText('settings.tool.file_processing.fields.api_keys_placeholder')
+    fireEvent.change(apiKeysInput, {
+      target: { value: 'key-draft' }
+    })
+    fireEvent.change(screen.getByPlaceholderText('settings.provider.api_host'), {
+      target: { value: 'https://draft.example.com' }
+    })
+    fireEvent.blur(screen.getByPlaceholderText('settings.provider.api_host'))
+
+    await waitFor(() => {
+      expect(setOverridesMock).toHaveBeenCalledWith({
+        mistral: {
+          capabilities: {
+            image_to_text: {
+              apiHost: 'https://draft.example.com'
+            }
+          }
+        }
+      })
+    })
+
+    overridesMock.value = setOverridesMock.mock.calls.at(-1)?.[0] ?? {}
+    rerender(<FileProcessingSettings />)
+
+    expect(screen.getByPlaceholderText('settings.tool.file_processing.fields.api_keys_placeholder')).toHaveValue(
+      'key-draft'
+    )
+  })
+
   it('reports API host save failures', async () => {
     const error = new Error('persist failed')
     setOverridesMock.mockRejectedValueOnce(error)

@@ -71,15 +71,24 @@ export function ProcessorPanel({
       ? defaultImageProcessor === processor.id
       : defaultDocumentProcessor === processor.id
 
-  const [apiKeysInput, setApiKeysInput] = useState(() => processor.apiKeys?.join(', ') ?? '')
-  const [apiHostInput, setApiHostInput] = useState(entry.capability.apiHost ?? '')
-  const [modelIdInput, setModelIdInput] = useState(entry.capability.modelId ?? '')
+  const apiKeysValue = processor.apiKeys?.join(', ') ?? ''
+  const apiHostValue = entry.capability.apiHost ?? ''
+  const modelIdValue = entry.capability.modelId ?? ''
+  const [apiKeysInput, setApiKeysInput] = useState(() => apiKeysValue)
+  const [apiHostInput, setApiHostInput] = useState(apiHostValue)
+  const [modelIdInput, setModelIdInput] = useState(modelIdValue)
 
   useEffect(() => {
-    setApiKeysInput(processor.apiKeys?.join(', ') ?? '')
-    setApiHostInput(entry.capability.apiHost ?? '')
-    setModelIdInput(entry.capability.modelId ?? '')
-  }, [entry.key, entry.capability.apiHost, entry.capability.modelId, processor.apiKeys])
+    setApiKeysInput(apiKeysValue)
+  }, [apiKeysValue, entry.key])
+
+  useEffect(() => {
+    setApiHostInput(apiHostValue)
+  }, [apiHostValue, entry.key])
+
+  useEffect(() => {
+    setModelIdInput(modelIdValue)
+  }, [modelIdValue, entry.key])
 
   const languageOptions = useMemo(() => {
     if (!languages) {
