@@ -125,6 +125,7 @@ vi.mock('@cherrystudio/ui', async () => {
           onClick?: (event: React.MouseEvent) => void
         }>
 
+        // eslint-disable-next-line @eslint-react/no-clone-element -- Test double mirrors PopoverTrigger asChild semantics.
         return React.cloneElement(child, {
           onClick: (event: React.MouseEvent) => {
             child.props.onClick?.(event)

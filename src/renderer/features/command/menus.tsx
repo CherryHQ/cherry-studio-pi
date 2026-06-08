@@ -823,6 +823,7 @@ export function CommandPopupMenu({
     // span would be blocked by the child's stopPropagation.
     if (React.isValidElement(children)) {
       const childProps = (children.props ?? {}) as { onClick?: (event: React.MouseEvent) => void }
+      // eslint-disable-next-line @eslint-react/no-clone-element -- Native mode must attach to the trigger itself so child stopPropagation handlers still work.
       return React.cloneElement(children as React.ReactElement<{ onClick?: (event: React.MouseEvent) => void }>, {
         onClick: (event: React.MouseEvent) => {
           childProps.onClick?.(event)

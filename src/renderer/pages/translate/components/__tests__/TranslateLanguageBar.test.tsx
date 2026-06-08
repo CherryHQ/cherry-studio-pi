@@ -50,6 +50,7 @@ vi.mock('@cherrystudio/ui', async (importOriginal) => {
     const toggle = () => onOpenChange(!open)
     if (asChild && isValidElement(children)) {
       const child = children as React.ReactElement<{ onClick?: (e: React.MouseEvent) => void }>
+      // eslint-disable-next-line @eslint-react/no-clone-element -- Test double mirrors PopoverTrigger asChild semantics.
       return cloneElement(child, {
         onClick: (e: React.MouseEvent) => {
           child.props.onClick?.(e)
