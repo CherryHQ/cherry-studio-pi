@@ -37,13 +37,13 @@
         "rc": {
           "feedTemplates": {
             "github": "https://github.com/CherryHQ/cherry-studio-pi/releases/download/{{tag}}",
-            "gitcode": "https://github.com/CherryHQ/cherry-studio-pi/releases/download/{{tag}}"
+            "gitcode": "https://gitcode.com/CherryHQ/cherry-studio-pi/releases/download/{{tag}}"
           }
         },
         "beta": {
           "feedTemplates": {
             "github": "https://github.com/CherryHQ/cherry-studio-pi/releases/download/{{tag}}",
-            "gitcode": "https://github.com/CherryHQ/cherry-studio-pi/releases/download/{{tag}}"
+            "gitcode": "https://gitcode.com/CherryHQ/cherry-studio-pi/releases/download/{{tag}}"
           }
         }
       }
@@ -85,13 +85,13 @@
         "rc": {
           "feedTemplates": {
             "github": "https://github.com/CherryHQ/cherry-studio-pi/releases/download/{{tag}}",
-            "gitcode": "https://github.com/CherryHQ/cherry-studio-pi/releases/download/{{tag}}"
+            "gitcode": "https://gitcode.com/CherryHQ/cherry-studio-pi/releases/download/{{tag}}"
           }
         },
         "beta": {
           "feedTemplates": {
             "github": "https://github.com/CherryHQ/cherry-studio-pi/releases/download/{{tag}}",
-            "gitcode": "https://github.com/CherryHQ/cherry-studio-pi/releases/download/{{tag}}"
+            "gitcode": "https://gitcode.com/CherryHQ/cherry-studio-pi/releases/download/{{tag}}"
           }
         }
       }
