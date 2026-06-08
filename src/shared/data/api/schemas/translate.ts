@@ -59,7 +59,7 @@ export const TranslateHistoryQuerySchema = z
     /** Cursor returned by the previous page. Omitted for the first page. */
     cursor: z.string().optional(),
     /** Positive integer, max {@link TRANSLATE_HISTORY_MAX_LIMIT}, defaults to {@link TRANSLATE_HISTORY_DEFAULT_LIMIT} */
-    limit: z.int().positive().max(TRANSLATE_HISTORY_MAX_LIMIT).default(TRANSLATE_HISTORY_DEFAULT_LIMIT),
+    limit: z.coerce.number().int().positive().max(TRANSLATE_HISTORY_MAX_LIMIT).default(TRANSLATE_HISTORY_DEFAULT_LIMIT),
     /**
      * LIKE search on sourceText and targetText (wildcards are escaped).
      * Bounded `[1, TRANSLATE_HISTORY_SEARCH_MAX_LENGTH]` so an empty value can't

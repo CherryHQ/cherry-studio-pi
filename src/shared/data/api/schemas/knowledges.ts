@@ -50,8 +50,8 @@ export const KNOWLEDGE_BASES_DEFAULT_LIMIT = 20
 export const KNOWLEDGE_BASES_MAX_LIMIT = 100
 
 export const ListKnowledgeBasesQuerySchema = z.strictObject({
-  page: z.int().positive().default(KNOWLEDGE_BASES_DEFAULT_PAGE),
-  limit: z.int().positive().max(KNOWLEDGE_BASES_MAX_LIMIT).default(KNOWLEDGE_BASES_DEFAULT_LIMIT)
+  page: z.coerce.number().int().positive().default(KNOWLEDGE_BASES_DEFAULT_PAGE),
+  limit: z.coerce.number().int().positive().max(KNOWLEDGE_BASES_MAX_LIMIT).default(KNOWLEDGE_BASES_DEFAULT_LIMIT)
 })
 
 export type ListKnowledgeBasesQueryParams = z.input<typeof ListKnowledgeBasesQuerySchema>
@@ -66,8 +66,8 @@ export type KnowledgeBaseListItem = KnowledgeBase & {
  * Returns flat knowledge items for one knowledge base with optional filters.
  */
 export const ListKnowledgeItemsQuerySchema = z.strictObject({
-  page: z.int().positive().default(KNOWLEDGE_ITEMS_DEFAULT_PAGE),
-  limit: z.int().positive().max(KNOWLEDGE_ITEMS_MAX_LIMIT).default(KNOWLEDGE_ITEMS_DEFAULT_LIMIT),
+  page: z.coerce.number().int().positive().default(KNOWLEDGE_ITEMS_DEFAULT_PAGE),
+  limit: z.coerce.number().int().positive().max(KNOWLEDGE_ITEMS_MAX_LIMIT).default(KNOWLEDGE_ITEMS_DEFAULT_LIMIT),
   type: KnowledgeItemTypeSchema.optional(),
   groupId: z.string().nullable().optional()
 })

@@ -197,8 +197,8 @@ export type UpdateTaskDto = z.infer<typeof UpdateTaskSchema>
 // ============================================================================
 
 export const ListQuerySchema = z.strictObject({
-  page: z.number().int().positive().optional(),
-  limit: z.number().int().positive().max(500).optional()
+  page: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().max(500).optional()
 })
 export type ListQuery = z.infer<typeof ListQuerySchema>
 
@@ -215,9 +215,9 @@ export const ListAgentsQuerySchema = z.strictObject({
   /** Free-text match against name OR description (case-insensitive LIKE). */
   search: z.string().trim().min(1).optional(),
   /** Positive integer, defaults to {@link AGENTS_DEFAULT_PAGE}. */
-  page: z.int().positive().default(AGENTS_DEFAULT_PAGE),
+  page: z.coerce.number().int().positive().default(AGENTS_DEFAULT_PAGE),
   /** Positive integer, max {@link AGENTS_MAX_LIMIT}, defaults to {@link AGENTS_DEFAULT_LIMIT}. */
-  limit: z.int().positive().max(AGENTS_MAX_LIMIT).default(AGENTS_DEFAULT_LIMIT)
+  limit: z.coerce.number().int().positive().max(AGENTS_MAX_LIMIT).default(AGENTS_DEFAULT_LIMIT)
 })
 export type ListAgentsQueryParams = z.input<typeof ListAgentsQuerySchema>
 export type ListAgentsQuery = z.output<typeof ListAgentsQuerySchema>

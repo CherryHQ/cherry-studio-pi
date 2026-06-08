@@ -86,8 +86,8 @@ export const ListFilesQuerySchema = z
     inTrash: QueryBooleanSchema.optional(),
     sortBy: z.enum(['name', 'createdAt', 'updatedAt', 'size']).optional(),
     sortOrder: z.enum(['asc', 'desc']).optional(),
-    page: z.int().positive().default(LIST_FILES_DEFAULT_PAGE),
-    limit: z.int().positive().max(LIST_FILES_MAX_LIMIT).default(LIST_FILES_DEFAULT_LIMIT)
+    page: z.coerce.number().int().positive().default(LIST_FILES_DEFAULT_PAGE),
+    limit: z.coerce.number().int().positive().max(LIST_FILES_MAX_LIMIT).default(LIST_FILES_DEFAULT_LIMIT)
   })
   .refine(
     (q) => !(q.inTrash === true && q.origin === 'external'),

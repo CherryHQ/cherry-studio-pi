@@ -99,9 +99,9 @@ export const ListAssistantsQuerySchema = z.object({
   /** Return assistants bound to ANY of these tag ids (union) */
   tagIds: z.array(TagIdSchema).min(1).optional(),
   /** Positive integer, defaults to {@link ASSISTANTS_DEFAULT_PAGE} */
-  page: z.int().positive().default(ASSISTANTS_DEFAULT_PAGE),
+  page: z.coerce.number().int().positive().default(ASSISTANTS_DEFAULT_PAGE),
   /** Positive integer, max {@link ASSISTANTS_MAX_LIMIT}, defaults to {@link ASSISTANTS_DEFAULT_LIMIT} */
-  limit: z.int().positive().max(ASSISTANTS_MAX_LIMIT).default(ASSISTANTS_DEFAULT_LIMIT)
+  limit: z.coerce.number().int().positive().max(ASSISTANTS_MAX_LIMIT).default(ASSISTANTS_DEFAULT_LIMIT)
 })
 /**
  * Renderer-facing query params (schema input — `page`/`limit` are optional,

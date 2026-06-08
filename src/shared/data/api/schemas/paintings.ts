@@ -15,7 +15,7 @@ export const ListPaintingsQuerySchema = z
   .object({
     providerId: TrimmedStringSchema.optional(),
     cursor: z.string().optional(),
-    limit: z.int().positive().max(PAINTINGS_MAX_LIMIT).default(PAINTINGS_DEFAULT_LIMIT)
+    limit: z.coerce.number().int().positive().max(PAINTINGS_MAX_LIMIT).default(PAINTINGS_DEFAULT_LIMIT)
   })
   .strict()
 export type ListPaintingsQueryParams = z.input<typeof ListPaintingsQuerySchema>
