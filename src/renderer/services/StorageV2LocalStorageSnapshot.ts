@@ -5,6 +5,7 @@ import {
 } from '@shared/data/cache/cacheSchemas'
 
 import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
+import { getRendererStorageV2Api } from './StorageV2RendererApi'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
 
 const logger = loggerService.withContext('StorageV2LocalStorageSnapshot')
@@ -126,8 +127,9 @@ export function notifyStorageV2MirroredLocalStorageKeyChanged(
 export function scheduleStorageV2LocalStorageMirror(debounceMs = DEFAULT_LOCAL_STORAGE_MIRROR_DEBOUNCE_MS) {
   if (localStorageMirrorSuspended) return
   localStorageMirrorPending = true
-  if (typeof window === 'undefined') return
-  if (!window.api?.storageV2) {
+  const { hasWindow, api } = getRendererStorageV2Api()
+  if (!hasWindow) return
+  if (!api) {
     scheduleLocalStorageMirrorRetry()
     return
   }
@@ -152,8 +154,9 @@ export function scheduleStorageV2LocalStorageMirror(debounceMs = DEFAULT_LOCAL_S
 
 export async function flushStorageV2LocalStorageMirror() {
   if (localStorageMirrorSuspended) return
-  if (typeof window === 'undefined') return
-  if (!window.api?.storageV2) {
+  const { hasWindow, api } = getRendererStorageV2Api()
+  if (!hasWindow) return
+  if (!api) {
     if (localStorageMirrorPending) {
       scheduleLocalStorageMirrorRetry()
     }
@@ -185,7 +188,7 @@ export async function flushStorageV2LocalStorageMirror() {
     return
   }
 
-  localStorageMirrorInflight = window.api.storageV2
+  localStorageMirrorInflight = api
     .importLegacyReduxSnapshot(
       {
         localStorage: snapshot
@@ -215,7 +218,7 @@ export async function flushStorageV2LocalStorageMirror() {
 export async function flushStorageV2LocalStorageMirrorStrict() {
   await flushStorageV2LocalStorageMirror()
 
-  if (localStorageMirrorPending && (typeof window === 'undefined' || !window.api?.storageV2)) {
+  if (localStorageMirrorPending && !getRendererStorageV2Api().api) {
     throw new Error('Storage v2 API unavailable while durable localStorage mirror work is pending')
   }
 

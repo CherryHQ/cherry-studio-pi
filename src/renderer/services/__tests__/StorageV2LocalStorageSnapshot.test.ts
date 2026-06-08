@@ -5,6 +5,7 @@ import {
   applyStorageV2LocalStorageSnapshot,
   flushStorageV2LocalStorageMirror,
   flushStorageV2LocalStorageMirrorStrict,
+  getStorageV2LocalStorageMirrorStatus,
   getStorageV2LocalStorageSnapshot,
   notifyStorageV2MirroredLocalStorageKeyChanged,
   scheduleStorageV2LocalStorageMirror,
@@ -356,6 +357,34 @@ describe('StorageV2LocalStorageSnapshot', () => {
       },
       { dryRun: false }
     )
+  })
+
+  it('does not keep retrying after a durable localStorage write fails during renderer teardown', async () => {
+    vi.useFakeTimers()
+    const originalWindow = globalThis.window
+    const importLegacyReduxSnapshot = vi.fn().mockImplementation(async () => {
+      vi.stubGlobal('window', undefined)
+      throw new Error('renderer ipc closed')
+    })
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          importLegacyReduxSnapshot
+        }
+      }
+    })
+    localStorage.setItem('language', 'teardown-zh')
+
+    try {
+      await flushStorageV2LocalStorageMirror()
+      await vi.advanceTimersByTimeAsync(5000)
+
+      expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
+      expect(getStorageV2LocalStorageMirrorStatus().pendingCount).toBe(1)
+    } finally {
+      vi.stubGlobal('window', originalWindow)
+    }
   })
 
   it('suspends scheduled durable localStorage mirrors until reload after restore', async () => {
