@@ -1,7 +1,6 @@
 import { Tooltip } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import { ContentSearch, type ContentSearchRef } from '@renderer/components/ContentSearch'
-import { MARKDOWN_SOURCE_LINE_ATTR } from '@renderer/components/RichEditor/constants'
 import DragHandle from '@tiptap/extension-drag-handle-react'
 import { EditorContent } from '@tiptap/react'
 import { t } from 'i18next'
@@ -20,163 +19,16 @@ import {
   unregisterToolbarCommand
 } from './command'
 import { ActionMenu, type ActionMenuItem } from './components/ActionMenu'
-// DragContextMenuWrapper 已被 TipTap 扩展替代
 import LinkEditor from './components/LinkEditor'
 import PlusButton from './components/PlusButton'
+// DragContextMenuWrapper 已被 TipTap 扩展替代
+import { clearRichEditorHighlight, findElementByLine, scrollAndHighlight } from './highlight'
 import { EditorContent as StyledEditorContent, RichEditorWrapper } from './styles'
 import { ToC } from './TableOfContent'
 import { Toolbar } from './toolbar'
 import type { FormattingCommand, RichEditorProps, RichEditorRef } from './types'
 import { useRichEditor } from './useRichEditor'
 const logger = loggerService.withContext('RichEditor')
-
-/**
- * Find element by line number with fallback strategies:
- * 1. Exact line + content match
- * 2. Exact line match
- * 3. Closest line <= target
- */
-function findElementByLine(editorDom: HTMLElement, lineNumber: number, lineContent?: string): HTMLElement | null {
-  const allElements = Array.from(editorDom.querySelectorAll<HTMLElement>(`[${MARKDOWN_SOURCE_LINE_ATTR}]`))
-  if (allElements.length === 0) {
-    logger.warn('No elements with data-source-line attribute found')
-    return null
-  }
-  const exactMatches = editorDom.querySelectorAll<HTMLElement>(`[${MARKDOWN_SOURCE_LINE_ATTR}="${lineNumber}"]`)
-
-  // Strategy 1: Exact line + content match
-  if (exactMatches.length > 1 && lineContent) {
-    for (const match of Array.from(exactMatches)) {
-      if (match.textContent?.includes(lineContent)) {
-        return match
-      }
-    }
-  }
-
-  // Strategy 2: Exact line match
-  if (exactMatches.length > 0) {
-    return exactMatches[0]
-  }
-
-  // Strategy 3: Closest line <= target
-  let closestElement: HTMLElement | null = null
-  let closestLine = 0
-
-  for (const el of allElements) {
-    const sourceLine = parseInt(el.getAttribute(MARKDOWN_SOURCE_LINE_ATTR) || '0', 10)
-    if (sourceLine <= lineNumber && sourceLine > closestLine) {
-      closestLine = sourceLine
-      closestElement = el
-    }
-  }
-
-  return closestElement
-}
-
-/**
- * Create fixed-position highlight overlay at element location
- * with boundary detection to prevent overflow and toolbar overlap
- */
-function createHighlightOverlay(element: HTMLElement, container: HTMLElement): void {
-  try {
-    // Remove previous overlay
-    const previousOverlay = document.body.querySelector('.highlight-overlay')
-    if (previousOverlay) {
-      previousOverlay.remove()
-    }
-
-    const editorWrapper = container.closest('.rich-editor-wrapper')
-
-    // Create overlay at element position
-    const rect = element.getBoundingClientRect()
-    const overlay = document.createElement('div')
-    overlay.className = 'highlight-overlay animation-locate-highlight'
-    overlay.style.position = 'fixed'
-    overlay.style.left = `${rect.left}px`
-    overlay.style.top = `${rect.top}px`
-    overlay.style.width = `${rect.width}px`
-    overlay.style.height = `${rect.height}px`
-    overlay.style.pointerEvents = 'none'
-    overlay.style.zIndex = '9999'
-    overlay.style.borderRadius = '4px'
-
-    document.body.appendChild(overlay)
-
-    // Update overlay position and visibility on scroll
-    const updatePosition = () => {
-      const newRect = element.getBoundingClientRect()
-      const newContainerRect = container.getBoundingClientRect()
-
-      // Update position
-      overlay.style.left = `${newRect.left}px`
-      overlay.style.top = `${newRect.top}px`
-      overlay.style.width = `${newRect.width}px`
-      overlay.style.height = `${newRect.height}px`
-
-      // Get current toolbar bottom (it might change)
-      const currentToolbar = editorWrapper?.querySelector('[class*="ToolbarWrapper"]')
-      const currentToolbarRect = currentToolbar?.getBoundingClientRect()
-      const currentToolbarBottom = currentToolbarRect ? currentToolbarRect.bottom : newContainerRect.top
-
-      // Check if overlay is within visible bounds
-      const overlayTop = newRect.top
-      const overlayBottom = newRect.bottom
-      const visibleTop = currentToolbarBottom // Don't overlap toolbar
-      const visibleBottom = newContainerRect.bottom
-
-      // Hide overlay if any part is outside the visible container area
-      if (overlayTop < visibleTop || overlayBottom > visibleBottom) {
-        overlay.style.opacity = '0'
-        overlay.style.visibility = 'hidden'
-      } else {
-        overlay.style.opacity = '1'
-        overlay.style.visibility = 'visible'
-      }
-    }
-
-    container.addEventListener('scroll', updatePosition)
-
-    // Auto-remove after animation
-    const handleAnimationEnd = () => {
-      overlay.remove()
-      container.removeEventListener('scroll', updatePosition)
-      overlay.removeEventListener('animationend', handleAnimationEnd)
-    }
-    overlay.addEventListener('animationend', handleAnimationEnd)
-  } catch (error) {
-    logger.error('Failed to create highlight overlay:', error as Error)
-  }
-}
-
-/**
- * Scroll to element and show highlight after scroll completes
- */
-function scrollAndHighlight(element: HTMLElement, container: HTMLElement): void {
-  element.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
-
-  let scrollTimeout: NodeJS.Timeout
-  const handleScroll = () => {
-    clearTimeout(scrollTimeout)
-    scrollTimeout = setTimeout(() => {
-      container.removeEventListener('scroll', handleScroll)
-      requestAnimationFrame(() => createHighlightOverlay(element, container))
-    }, 150)
-  }
-
-  container.addEventListener('scroll', handleScroll)
-
-  // Fallback: if element already in view (no scroll happens)
-  setTimeout(() => {
-    const initialScrollTop = container.scrollTop
-    setTimeout(() => {
-      if (Math.abs(container.scrollTop - initialScrollTop) < 1) {
-        container.removeEventListener('scroll', handleScroll)
-        clearTimeout(scrollTimeout)
-        requestAnimationFrame(() => createHighlightOverlay(element, container))
-      }
-    }, 200)
-  }, 50)
-}
 
 const RichEditor = ({
   ref,
@@ -246,6 +98,7 @@ const RichEditor = ({
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const contentSearchRef = useRef<ContentSearchRef>(null)
+  const highlightCleanupRef = useRef<(() => void) | null>(null)
   const contentSearchFilter = useMemo<NodeFilter>(
     () => ({
       acceptNode(node) {
@@ -348,6 +201,14 @@ const RichEditor = ({
       items: []
     })
   }
+
+  useEffect(() => {
+    return () => {
+      highlightCleanupRef.current?.()
+      highlightCleanupRef.current = null
+      clearRichEditorHighlight()
+    }
+  }, [])
 
   const handlePlusButtonClick = useCallback(
     (event: MouseEvent) => {
@@ -538,9 +399,13 @@ const RichEditor = ({
           const element = findElementByLine(editor.view.dom, lineNumber, options?.lineContent)
           if (!element) return
 
+          highlightCleanupRef.current?.()
+          highlightCleanupRef.current = null
+
           if (options?.highlight) {
-            scrollAndHighlight(element, scrollContainerRef.current)
+            highlightCleanupRef.current = scrollAndHighlight(element, scrollContainerRef.current)
           } else {
+            clearRichEditorHighlight()
             element.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
           }
         } catch (error) {
