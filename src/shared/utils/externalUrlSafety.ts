@@ -44,6 +44,9 @@ export function isSafeExternalUrl(url: string): boolean {
     if (!ALLOWED_EXTERNAL_PROTOCOLS.has(parsed.protocol)) {
       return false
     }
+    if (parsed.username !== '' || parsed.password !== '') {
+      return false
+    }
     if (EDITOR_DEEP_LINK_PROTOCOLS.has(parsed.protocol)) {
       return isFileOpenEditorUrl(parsed, url)
     }
@@ -54,9 +57,6 @@ export function isSafeExternalUrl(url: string): boolean {
 }
 
 function isFileOpenEditorUrl(parsed: URL, rawUrl: string): boolean {
-  if (parsed.username !== '' || parsed.password !== '') {
-    return false
-  }
   if (parsed.protocol === 'zed:') {
     return ZED_FILE_URL_RE.test(rawUrl)
   }

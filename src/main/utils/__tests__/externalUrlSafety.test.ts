@@ -66,6 +66,12 @@ describe('isSafeExternalUrl', () => {
     expect(isSafeExternalUrl('file://localhost/tmp')).toBe(false)
   })
 
+  it('rejects URLs with embedded credentials', () => {
+    expect(isSafeExternalUrl('https://user:secret@example.com/path')).toBe(false)
+    expect(isSafeExternalUrl('https://trusted.example.com@evil.example/path')).toBe(false)
+    expect(isSafeExternalUrl('obsidian://user:secret@new?file=test')).toBe(false)
+  })
+
   it('rejects dangerous custom protocols', () => {
     expect(isSafeExternalUrl('javascript:alert(1)')).toBe(false)
     expect(isSafeExternalUrl('ms-msdt:something')).toBe(false)
