@@ -7,6 +7,7 @@ import {
   type ClaudeToolDescriptor,
   resolveClaudeToolAccess
 } from '@shared/ai/claudecode/toolRules'
+import { builtinPiTools } from '@shared/ai/pi/builtinTools'
 import type { Tool } from '@shared/ai/tool'
 import { resolveMcpSourceToolAccess } from '@shared/ai/tools/mcpSourcePolicy'
 import type { AgentConfiguration, AgentPermissionMode } from '@shared/data/api/schemas/agents'
@@ -98,6 +99,35 @@ function mcpDescriptors(server: McpServer, tools: readonly McpTool[]): ClaudeToo
   })
 }
 
+function toPiBuiltinTool(tool: (typeof builtinPiTools)[number]): Tool {
+  return {
+    id: tool.id,
+    name: tool.name,
+    description: tool.description,
+    origin: 'builtin',
+    approval: tool.requirePermissions ? 'prompt' : 'auto'
+  }
+}
+
+function piMcpTools(server: McpServer, tools: readonly McpTool[]): Tool[] {
+  if (!server.isActive) return []
+  return tools.flatMap((tool) => {
+    const sourceAccess = resolveMcpSourceToolAccess(server, tool)
+    if (!sourceAccess.enabled) return []
+    return [
+      {
+        id: tool.id,
+        name: tool.name,
+        description: tool.description || '',
+        origin: 'mcp',
+        approval: sourceAccess.approval,
+        sourceId: server.id,
+        sourceName: server.name
+      } satisfies Tool
+    ]
+  })
+}
+
 export const useAgentTools = (source: AgentToolSource | null | undefined) => {
   const { mcpServers, isLoading } = useMcpServers()
   const mcpIds = useMemo(() => source?.mcps ?? [], [source?.mcps])
@@ -118,9 +148,19 @@ export const useAgentTools = (source: AgentToolSource | null | undefined) => {
   }, [mcpIds, mcpServers, toolsByServer])
 
   const tools = useMemo<Tool[]>(() => {
-    if ((source?.type ?? 'claude-code') !== 'claude-code') return []
-
     const selectedServers = new Map(mcpServers.map((server) => [server.id, server]))
+    if ((source?.type ?? 'pi') === 'pi') {
+      const tools: Tool[] = builtinPiTools.map(toPiBuiltinTool)
+      for (const id of mcpIds) {
+        const server = selectedServers.get(id)
+        if (!server) continue
+        tools.push(...piMcpTools(server, toolsByServer[id] ?? []))
+      }
+      return tools
+    }
+
+    if (source?.type !== 'claude-code') return []
+
     const descriptors: ClaudeToolDescriptor[] = [...claudeCodeBuiltinToolDescriptors()]
     for (const id of mcpIds) {
       const server = selectedServers.get(id)

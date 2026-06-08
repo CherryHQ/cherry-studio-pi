@@ -222,6 +222,16 @@ describe('agent app capabilities', () => {
     expect(mocks.agentSessionService.createSession).toHaveBeenCalledWith({ agentId: 'agent-1', name: 'First task' })
   })
 
+  it('defaults app-created agents to the Pi runtime', async () => {
+    await capability('agents.create').execute({ name: ' Agent One ', model: ' model-1 ' }, { source: 'agent' })
+
+    expect(mocks.createAgentWithStorageV2Recovery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'pi'
+      })
+    )
+  })
+
   it('rejects empty required agent inputs before calling services', async () => {
     await expect(
       capability('agents.create').execute({ name: '   ', model: 'model-1' }, { source: 'agent' })

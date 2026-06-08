@@ -149,7 +149,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       inputSchema: {
         type: 'object',
         properties: {
-          type: { type: 'string', default: 'claude-code' },
+          type: { type: 'string', default: 'pi' },
           name: { type: 'string' },
           description: { type: 'string' },
           instructions: { type: 'string' },
@@ -174,7 +174,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
           ...input,
           name,
           model,
-          type: normalizeOptionalText(input?.type) || 'claude-code'
+          type: normalizeOptionalText(input?.type) || 'pi'
         })
         const session = await agentSessionService
           .createSession({ agentId: agent.id, name: sessionName })

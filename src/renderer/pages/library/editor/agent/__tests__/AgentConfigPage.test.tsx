@@ -50,8 +50,8 @@ vi.mock('../../ConfigEditorShell', () => ({
   }: {
     children: ReactNode
     onSave: () => Promise<void>
-    onSectionChange: (section: 'basic' | 'prompt' | 'advanced' | 'tools' | 'permission') => void
-    sections: Array<{ id: 'basic' | 'prompt' | 'advanced' | 'tools' | 'permission' }>
+    onSectionChange: (section: 'mode' | 'basic' | 'prompt' | 'advanced' | 'tools' | 'permission') => void
+    sections: Array<{ id: 'mode' | 'basic' | 'prompt' | 'advanced' | 'tools' | 'permission' }>
   }) => (
     <div>
       {sections.map((section) => (
@@ -195,6 +195,7 @@ describe('AgentConfigPage', () => {
 
     render(<AgentConfigPage onBack={vi.fn()} onCreated={vi.fn()} />)
 
+    await user.click(screen.getByRole('button', { name: 'basic' }))
     await user.click(screen.getByRole('button', { name: 'set basic' }))
     await user.click(screen.getByRole('button', { name: 'tools' }))
     await user.click(screen.getByRole('button', { name: 'set tools' }))
@@ -203,10 +204,32 @@ describe('AgentConfigPage', () => {
     await waitFor(() => expect(createAgentMock).toHaveBeenCalledTimes(1))
     expect(createAgentMock).toHaveBeenCalledWith(
       expect.objectContaining({
+        type: 'pi',
         name: 'Created Agent',
         model: 'anthropic::claude-sonnet-4-5',
         allowedTools: ['Read'],
         mcps: ['mcp-1']
+      })
+    )
+  })
+
+  it('creates enhanced-mode agents with the Claude SDK runtime when selected', async () => {
+    const user = userEvent.setup()
+    createAgentMock.mockResolvedValueOnce(createAgent({ id: 'created-2', name: 'Created Agent', type: 'claude-code' }))
+
+    render(<AgentConfigPage onBack={vi.fn()} onCreated={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: /enhanced\.title/ }))
+    await user.click(screen.getByRole('button', { name: 'basic' }))
+    await user.click(screen.getByRole('button', { name: 'set basic' }))
+    await user.click(screen.getByRole('button', { name: 'save' }))
+
+    await waitFor(() => expect(createAgentMock).toHaveBeenCalledTimes(1))
+    expect(createAgentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'claude-code',
+        name: 'Created Agent',
+        model: 'anthropic::claude-sonnet-4-5'
       })
     )
   })

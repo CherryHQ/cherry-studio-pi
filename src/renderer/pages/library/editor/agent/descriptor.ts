@@ -8,7 +8,7 @@ import type { Tool } from '@shared/ai/tool'
 import type { CreateAgentDto, UpdateAgentDto } from '@shared/data/api/schemas/agents'
 import type { AgentConfiguration, AgentType } from '@shared/data/types/agent'
 import type { UniqueModelId } from '@shared/data/types/model'
-import { FileText, Settings, Shield, SlidersHorizontal, Wrench } from 'lucide-react'
+import { FileText, Settings, Shield, SlidersHorizontal, Sparkles, Wrench } from 'lucide-react'
 
 import type { AgentDetail } from '../../types'
 import type { SectionDescriptor } from '../ConfigEditorShell'
@@ -17,9 +17,15 @@ import type { SectionDescriptor } from '../ConfigEditorShell'
 // Section metadata
 // ---------------------------------------------------------------------------
 
-export type AgentConfigSection = 'basic' | 'prompt' | 'permission' | 'tools' | 'advanced'
+export type AgentConfigSection = 'mode' | 'basic' | 'prompt' | 'permission' | 'tools' | 'advanced'
 
 export const AGENT_CONFIG_SECTIONS: readonly SectionDescriptor<AgentConfigSection>[] = [
+  {
+    id: 'mode',
+    icon: Sparkles,
+    labelKey: 'library.config.agent.section.mode.label',
+    descKey: 'library.config.agent.section.mode.desc'
+  },
   {
     id: 'basic',
     icon: Settings,
@@ -66,6 +72,14 @@ export const AGENT_CONFIG_SECTIONS: readonly SectionDescriptor<AgentConfigSectio
  * `UpdateAgentDto`.
  */
 export interface AgentFormState {
+  /**
+   * Runtime selected during creation. Existing agents keep their persisted
+   * runtime and do not expose type switching from this editor.
+   *
+   * Pi (`pi`) is Cherry Studio Pi's default path; Claude SDK
+   * (`claude-code`) remains a compatible enhanced mode for complex tasks.
+   */
+  type: AgentType
   name: string
   description: string
   /** `''` is the explicit "no model selected yet" draft sentinel; once chosen it is always a valid UniqueModelId. */
@@ -153,6 +167,7 @@ function envVarsFromText(text: string): Record<string, string> {
 export function buildInitialAgentFormState(agent?: AgentDetail | null): AgentFormState {
   const cfg: AgentConfiguration = agent?.configuration ?? {}
   return {
+    type: agent?.type ?? 'pi',
     name: agent?.name ?? '',
     description: agent?.description ?? '',
     model: agent?.model ?? '',
@@ -178,6 +193,10 @@ export function applyAgentFormPatch(
 ): AgentFormState {
   void _tools
   const next: AgentFormState = { ...current, ...patch }
+
+  if (patch.type && patch.type !== current.type) {
+    next.allowedTools = []
+  }
 
   if (Object.prototype.hasOwnProperty.call(patch, 'permissionMode')) {
     const nextMode = normalizePermissionMode(patch.permissionMode)
@@ -226,7 +245,7 @@ function buildConfigurationPayload(form: AgentFormState): AgentConfiguration | u
  * save from the config page, not on entry. Empty optional fields are omitted
  * so the backend can apply its own defaults.
  */
-export function buildCreateAgentPayload(form: AgentFormState, type: AgentType = 'claude-code'): CreateAgentDto {
+export function buildCreateAgentPayload(form: AgentFormState, type: AgentType = form.type): CreateAgentDto {
   return {
     type,
     name: form.name.trim(),

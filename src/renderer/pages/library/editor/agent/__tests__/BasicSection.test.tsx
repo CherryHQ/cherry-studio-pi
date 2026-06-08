@@ -110,6 +110,7 @@ vi.mock('@renderer/components/EmojiPicker', () => ({
 
 function createForm(overrides: Partial<AgentFormState> = {}): AgentFormState {
   return {
+    type: 'pi',
     name: 'Agent',
     description: '',
     model: '',

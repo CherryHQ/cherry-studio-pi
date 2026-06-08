@@ -23,6 +23,8 @@ export const TimeoutMinutesAtomSchema = z.number().min(1).nullable().optional()
 export const AgentPermissionModeSchema = z.enum(['default', 'acceptEdits', 'bypassPermissions', 'plan'])
 export type AgentPermissionMode = z.infer<typeof AgentPermissionModeSchema>
 export const AgentSchedulerTypeSchema = z.enum(['cron', 'interval', 'one-time'])
+export const AgentTypeSchema = z.enum(['pi', 'claude-code'])
+export type AgentType = z.infer<typeof AgentTypeSchema>
 
 export const AgentConfigurationSchema = z
   .object({
@@ -116,7 +118,7 @@ export const AGENT_MUTABLE_FIELDS = {
 
 export const AgentEntitySchema = AgentBaseSchema.extend({
   id: z.string(),
-  type: z.enum(['claude-code']),
+  type: AgentTypeSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
   model: UniqueModelIdSchema.nullable(),

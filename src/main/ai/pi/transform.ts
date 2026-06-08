@@ -128,11 +128,12 @@ export class PiStreamState {
       case 'tool_execution_end':
         return [
           {
-            type: event.isError ? 'tool-error' : 'tool-result',
+            type: event.isError ? 'tool-output-error' : 'tool-output-available',
             toolCallId: this.namespacedToolCallId(event.toolCallId),
             toolName: event.toolName,
-            input: this.toolInputs.get(event.toolCallId),
-            output: textFromContent(event.result?.content),
+            ...(event.isError
+              ? { errorText: textFromContent(event.result?.content) }
+              : { output: textFromContent(event.result?.content) }),
             providerMetadata: { pi: { raw: event } }
           } as AgentStreamPart
         ]
@@ -192,7 +193,7 @@ export class PiStreamState {
         const id = this.textIds.get(assistantEvent.contentIndex) ?? this.blockId('text', assistantEvent.contentIndex)
         this.textIds.set(assistantEvent.contentIndex, id)
         this.emittedTextByTurn += assistantEvent.delta
-        chunks.push({ type: 'text-delta', id, text: assistantEvent.delta, providerMetadata } as AgentStreamPart)
+        chunks.push({ type: 'text-delta', id, delta: assistantEvent.delta, providerMetadata } as AgentStreamPart)
         break
       }
       case 'text_end': {
@@ -217,7 +218,7 @@ export class PiStreamState {
         const id =
           this.reasoningIds.get(assistantEvent.contentIndex) ?? this.blockId('reasoning', assistantEvent.contentIndex)
         this.reasoningIds.set(assistantEvent.contentIndex, id)
-        chunks.push({ type: 'reasoning-delta', id, text: assistantEvent.delta, providerMetadata } as AgentStreamPart)
+        chunks.push({ type: 'reasoning-delta', id, delta: assistantEvent.delta, providerMetadata } as AgentStreamPart)
         break
       }
       case 'thinking_end': {
@@ -233,7 +234,7 @@ export class PiStreamState {
         if (toolCall) {
           chunks.push({
             type: 'tool-input-start',
-            id: this.namespacedToolCallId(toolCall.id),
+            toolCallId: this.namespacedToolCallId(toolCall.id),
             toolName: toolCall.name,
             providerMetadata
           } as AgentStreamPart)
@@ -245,8 +246,8 @@ export class PiStreamState {
         if (toolCall) {
           chunks.push({
             type: 'tool-input-delta',
-            id: this.namespacedToolCallId(toolCall.id),
-            delta: assistantEvent.delta,
+            toolCallId: this.namespacedToolCallId(toolCall.id),
+            inputTextDelta: assistantEvent.delta,
             providerMetadata
           } as AgentStreamPart)
         }
@@ -256,12 +257,7 @@ export class PiStreamState {
         const toolCall = assistantEvent.toolCall
         this.toolInputs.set(toolCall.id, toolCall.arguments)
         chunks.push({
-          type: 'tool-input-end',
-          id: this.namespacedToolCallId(toolCall.id),
-          providerMetadata
-        } as AgentStreamPart)
-        chunks.push({
-          type: 'tool-call',
+          type: 'tool-input-available',
           toolCallId: this.namespacedToolCallId(toolCall.id),
           toolName: toolCall.name,
           input: toolCall.arguments,

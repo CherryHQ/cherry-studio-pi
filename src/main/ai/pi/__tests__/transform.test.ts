@@ -72,7 +72,27 @@ describe('PiStreamState', () => {
     expect(chunks).toContainEqual(
       expect.objectContaining({
         type: 'reasoning-delta',
-        text: 'visible'
+        delta: 'visible'
+      })
+    )
+  })
+
+  it('emits text deltas with the AI SDK delta field', () => {
+    const state = new PiStreamState('session-1')
+    const chunks = state.transform({
+      type: 'message_update',
+      message: assistantMessage([{ type: 'text', text: 'hello' }]),
+      assistantMessageEvent: {
+        type: 'text_delta',
+        contentIndex: 0,
+        delta: 'hello'
+      }
+    } as any)
+
+    expect(chunks).toContainEqual(
+      expect.objectContaining({
+        type: 'text-delta',
+        delta: 'hello'
       })
     )
   })

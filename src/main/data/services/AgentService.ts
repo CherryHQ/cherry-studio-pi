@@ -54,7 +54,7 @@ function rowToAgent(row: AgentRow, modelName: string | null = null): AgentEntity
   const clean = nullsToUndefined(row)
   return {
     ...clean,
-    type: (row.type === 'cherry-claw' ? 'claude-code' : row.type) as AgentType,
+    type: (row.type === 'cherry-claw' ? 'pi' : row.type) as AgentType,
     model: (clean.model ?? null) as UniqueModelId | null,
     configuration: parseConfiguration(row.configuration),
     createdAt: timestampToISO(row.createdAt),

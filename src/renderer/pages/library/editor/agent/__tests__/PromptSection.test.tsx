@@ -28,6 +28,7 @@ vi.mock('@cherrystudio/ui', () => ({
 
 function createForm(overrides: Partial<AgentFormState> = {}): AgentFormState {
   return {
+    type: 'pi',
     name: 'Agent',
     description: '',
     model: '',

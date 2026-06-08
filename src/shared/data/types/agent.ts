@@ -10,6 +10,7 @@ export type {
   AgentBase,
   AgentConfiguration,
   AgentEntity,
+  AgentType,
   CreateTaskDto as CreateTaskRequest,
   ScheduledTaskEntity,
   TaskRunLogEntity,
@@ -17,9 +18,3 @@ export type {
 } from '../api/schemas/agents'
 export type { AgentSessionMessageEntity } from '../api/schemas/agentSessions'
 export type { InstalledSkill } from '../api/schemas/skills'
-
-// ============================================================================
-// Core agent types (plain aliases for non-Zod consumers)
-// ============================================================================
-
-export type AgentType = 'claude-code'

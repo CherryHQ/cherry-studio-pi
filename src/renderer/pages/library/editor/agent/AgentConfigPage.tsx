@@ -19,6 +19,7 @@ import {
 } from './descriptor'
 import AdvancedSection from './sections/AdvancedSection'
 import BasicSection from './sections/BasicSection'
+import ModeSection from './sections/ModeSection'
 import PermissionSection from './sections/PermissionSection'
 import PromptSection from './sections/PromptSection'
 import ToolsSection from './sections/ToolsSection'
@@ -43,7 +44,7 @@ interface Props {
 // saved with the create payload.
 const EMPTY_AGENT_FOR_CREATE: AgentDetail = {
   id: '',
-  type: 'claude-code',
+  type: 'pi',
   name: '',
   model: null,
   modelName: null,
@@ -72,7 +73,7 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated }) => {
   const isCreate = !agent
 
   const [currentAgent, setCurrentAgent] = useState<AgentDetail | undefined>(undefined)
-  const [activeSection, setActiveSection] = useState<AgentConfigSection>('basic')
+  const [activeSection, setActiveSection] = useState<AgentConfigSection>(isCreate ? 'mode' : 'basic')
 
   const editAgent = currentAgent && agent && currentAgent.id === agent.id ? currentAgent : agent
 
@@ -107,8 +108,9 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated }) => {
     },
     fallbackErrorMessage: t('library.config.save_failed')
   })
+  const runtimeType = isCreate ? form.type : (editAgent?.type ?? form.type)
   const { tools } = useAgentTools({
-    type: editAgent?.type ?? 'claude-code',
+    type: runtimeType,
     mcps: form.mcps,
     allowedTools: form.allowedTools,
     permissionMode: form.permissionMode
@@ -123,8 +125,11 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated }) => {
     [activeSection, setForm, tools]
   )
   const visibleSections = useMemo(
-    () => AGENT_CONFIG_SECTIONS.filter((section) => !form.soulEnabled || section.id !== 'permission'),
-    [form.soulEnabled]
+    () =>
+      AGENT_CONFIG_SECTIONS.filter(
+        (section) => (isCreate || section.id !== 'mode') && (!form.soulEnabled || section.id !== 'permission')
+      ),
+    [form.soulEnabled, isCreate]
   )
 
   const title = isCreate
@@ -147,6 +152,7 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated }) => {
       onSave={handleSave}
       onBack={onBack}
       topBanner={isCreate ? <CreateAgentBanner /> : undefined}>
+      {activeSection === 'mode' && isCreate && <ModeSection form={form} onChange={onChange} />}
       {activeSection === 'basic' && (
         <BasicSection
           form={form}
@@ -158,7 +164,12 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated }) => {
       {activeSection === 'prompt' && <PromptSection form={form} onChange={onChange} />}
       {activeSection === 'permission' && !form.soulEnabled && <PermissionSection form={form} onChange={onChange} />}
       {activeSection === 'tools' && (
-        <ToolsSection agent={editAgent ?? EMPTY_AGENT_FOR_CREATE} tools={tools} form={form} onChange={onChange} />
+        <ToolsSection
+          agent={editAgent ?? { ...EMPTY_AGENT_FOR_CREATE, type: runtimeType }}
+          tools={tools}
+          form={form}
+          onChange={onChange}
+        />
       )}
       {activeSection === 'advanced' && <AdvancedSection form={form} onChange={onChange} />}
     </ConfigEditorShell>

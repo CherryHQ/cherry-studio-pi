@@ -2488,6 +2488,18 @@
             "help": "0 means use the default",
             "label": "Max conversation turns"
           },
+          "mode": {
+            "option": {
+              "enhanced": {
+                "desc": "Best for more complex scenarios. Uses the Claude Agent SDK, with stronger behavior but usually slower responses and higher token usage.",
+                "title": "Enhanced mode"
+              },
+              "standard": {
+                "desc": "Best for most cases. Uses Pi Agent, responds faster, uses fewer tokens, and matches the default Cherry Studio Pi experience.",
+                "title": "Standard mode"
+              }
+            }
+          },
           "mcps": {
             "add": "Add MCP server",
             "empty": "None bound",
@@ -2528,6 +2540,11 @@
         },
         "model_config": "Model configuration",
         "section": {
+          "mode": {
+            "desc": "Choose how this agent runs under the hood",
+            "label": "Runtime mode",
+            "title": "Choose runtime mode"
+          },
           "advanced": {
             "desc": "Max turns and environment variables",
             "label": "Advanced",

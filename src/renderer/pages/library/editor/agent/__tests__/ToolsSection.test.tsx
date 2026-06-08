@@ -89,6 +89,7 @@ vi.mock('../../components/CatalogPicker', () => ({
 
 function createForm(overrides: Partial<AgentFormState> = {}): AgentFormState {
   return {
+    type: 'pi',
     name: 'Agent',
     description: '',
     model: 'anthropic::claude-sonnet-4-5',

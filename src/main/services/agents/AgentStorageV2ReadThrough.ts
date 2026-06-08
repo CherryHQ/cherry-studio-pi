@@ -25,7 +25,7 @@ function normalizeListOptions(options: ListOptions = {}) {
 function normalizeCreateAgentRequest(form: CreateAgentRequest): CreateAgentDto {
   return {
     ...form,
-    type: 'claude-code'
+    type: form.type || 'pi'
   } as CreateAgentDto
 }
 

@@ -6,9 +6,7 @@ import { promisify, TextDecoder } from 'node:util'
 
 import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core'
 import { Type } from '@earendil-works/pi-ai'
-import { config as apiServerConfig } from '@main/apiServer/config'
 import { promptForToolApproval } from '@main/services/agents/services/ToolPermissionService'
-import { appCapabilityService } from '@main/services/appCapabilities'
 import mcpService from '@main/services/MCPService'
 import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
 import getShellEnv from '@main/utils/shell-env'
@@ -46,6 +44,8 @@ const errorTextResult = (text: string, details: ToolResultDetails = {}): AgentTo
   content: [{ type: 'text', text }],
   details: { ...details, isError: true }
 })
+
+const getAppCapabilityService = async () => (await import('@main/services/appCapabilities')).appCapabilityService
 
 const normalizeOutputCharLimit = (value: unknown, fallback = MAX_SUCCESS_OUTPUT_CHARS) => {
   if (typeof value === 'undefined' || value === null) return fallback
@@ -615,7 +615,6 @@ const agentToolPrefixForCwd = (cwd: string) => {
 
 const buildBashEnv = async (cwd: string, extraEnv: NodeJS.ProcessEnv = {}) => {
   const shellEnv = await getShellEnv().catch(() => process.env)
-  const apiConfig = await apiServerConfig.get().catch(() => null)
   const toolPrefix = agentToolPrefixForCwd(cwd)
   const toolBin = path.join(toolPrefix, 'bin')
   const managedBin = path.join(os.homedir(), HOME_CHERRY_DIR, 'bin')
@@ -632,14 +631,6 @@ const buildBashEnv = async (cwd: string, extraEnv: NodeJS.ProcessEnv = {}) => {
     npm_config_prefix: extraEnv.npm_config_prefix ?? toolPrefix,
     PNPM_HOME: extraEnv.PNPM_HOME ?? toolBin,
     YARN_PREFIX: extraEnv.YARN_PREFIX ?? toolPrefix,
-    PERRY_STUDIO_API_BASE:
-      extraEnv.PERRY_STUDIO_API_BASE ??
-      (apiConfig ? `http://${apiConfig.host}:${apiConfig.port}` : process.env.PERRY_STUDIO_API_BASE),
-    PERRY_STUDIO_API_KEY: extraEnv.PERRY_STUDIO_API_KEY ?? apiConfig?.apiKey ?? process.env.PERRY_STUDIO_API_KEY,
-    CHERRY_STUDIO_API_BASE:
-      extraEnv.CHERRY_STUDIO_API_BASE ??
-      (apiConfig ? `http://${apiConfig.host}:${apiConfig.port}` : process.env.CHERRY_STUDIO_API_BASE),
-    CHERRY_STUDIO_API_KEY: extraEnv.CHERRY_STUDIO_API_KEY ?? apiConfig?.apiKey ?? process.env.CHERRY_STUDIO_API_KEY,
     PATH: nextPath,
     ...(process.platform === 'win32' ? { Path: nextPath } : {})
   }
@@ -1151,6 +1142,7 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
     async execute(_toolCallId, params) {
       return safeExecute('AppSearchCapabilities', async () => {
         const input = params as ToolParams
+        const appCapabilityService = await getAppCapabilityService()
         const capabilities = appCapabilityService.search({
           query: input.query,
           domain: input.domain,
@@ -1184,6 +1176,7 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
     async execute(toolCallId, params, signal) {
       return safeExecute('AppCallCapability', async () => {
         const input = params as ToolParams
+        const appCapabilityService = await getAppCapabilityService()
         const result = await appCapabilityService.call(input.id, input.input ?? {}, {
           source: 'agent',
           sessionId: options.sessionId,

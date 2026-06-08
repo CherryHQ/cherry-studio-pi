@@ -23,6 +23,8 @@ export const DEFAULT_CHERRY_CLAW_CONFIG: PartialAgentBase & { configuration: Age
 
 export const getAgentTypeAvatar = (type: AgentType) => {
   switch (type) {
+    case 'pi':
+      return resolveProviderIcon('cherryai')
     case 'claude-code':
       return resolveProviderIcon('anthropic')
     default:

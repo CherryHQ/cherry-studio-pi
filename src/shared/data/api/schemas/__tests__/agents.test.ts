@@ -22,6 +22,12 @@ describe('AgentEntitySchema', () => {
     expect(AgentEntitySchema.parse(baseAgent).modelName).toBe(modelName)
   })
 
+  it('accepts Pi agents while keeping Claude Code agents readable for compatibility', () => {
+    expect(AgentEntitySchema.safeParse({ ...baseAgent, type: 'pi' }).success).toBe(true)
+    expect(AgentEntitySchema.safeParse(baseAgent).success).toBe(true)
+    expect(CreateAgentSchema.safeParse({ type: 'pi', name: 'Agent', model: 'openai::gpt-4' }).success).toBe(true)
+  })
+
   it('does not expose outer user tags on agents', () => {
     expect(AgentEntitySchema.safeParse({ ...baseAgent, tags: [] }).success).toBe(false)
     expect(

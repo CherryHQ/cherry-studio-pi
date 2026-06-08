@@ -2488,6 +2488,18 @@
             "help": "0 表示使用預設值",
             "label": "最大對話回合數"
           },
+          "mode": {
+            "option": {
+              "enhanced": {
+                "desc": "適合更複雜的場景需求，使用 Claude Agent SDK，能力更強但通常較慢、token 消耗較高。",
+                "title": "增強模式"
+              },
+              "standard": {
+                "desc": "適合大多數情況，使用 Pi Agent，回應更快，更省 token，也更貼近 Cherry Studio Pi 的預設體驗。",
+                "title": "常規模式"
+              }
+            }
+          },
           "mcps": {
             "add": "新增 MCP 伺服器",
             "empty": "無綁定",
@@ -2528,6 +2540,11 @@
         },
         "model_config": "模型配置",
         "section": {
+          "mode": {
+            "desc": "選擇這個 Agent 的底層執行方式",
+            "label": "執行模式",
+            "title": "選擇執行模式"
+          },
           "advanced": {
             "desc": "執行限制與執行時期參數",
             "label": "進階",

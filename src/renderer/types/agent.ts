@@ -9,6 +9,7 @@ import { ToolSchema } from '@shared/ai/tool'
 import {
   type AgentConfiguration,
   AgentConfigurationSchema,
+  AgentTypeSchema,
   type CreateTaskDto as CreateTaskRequest,
   CreateTaskSchema as CreateTaskRequestSchema,
   type ScheduledTaskEntity,
@@ -39,7 +40,6 @@ export const SessionMessageRoleSchema = z.enum(sessionMessageRoles)
 
 export type SessionMessageType = TextStreamPart<Record<string, any>>['type']
 
-export const AgentTypeSchema = z.enum(['claude-code'])
 export type AgentType = z.infer<typeof AgentTypeSchema>
 
 // ------------------ CherryClaw-specific types ------------------

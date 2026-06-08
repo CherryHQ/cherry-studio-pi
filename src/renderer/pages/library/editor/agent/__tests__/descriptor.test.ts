@@ -43,6 +43,7 @@ describe('buildInitialAgentFormState', () => {
     })
     const state = buildInitialAgentFormState(agent)
     expect(state).toMatchObject({
+      type: 'claude-code',
       name: 'Demo',
       description: 'd',
       model: 'p-1::m-1',
@@ -119,10 +120,23 @@ describe('agent create flow helpers', () => {
     }
 
     expect(buildCreateAgentPayload(form)).toMatchObject({
+      type: 'pi',
       model: 'anthropic::claude-sonnet-4-5',
       planModel: 'anthropic::claude-haiku-4-5',
       smallModel: 'anthropic::claude-opus-4-5'
     })
+  })
+
+  it('defaults new agents to the Pi runtime and keeps Claude SDK as an explicit enhanced mode', () => {
+    const draft = buildInitialAgentFormState()
+    const baseForm: AgentFormState = {
+      ...draft,
+      name: 'Planner',
+      model: 'anthropic::claude-sonnet-4-5'
+    }
+
+    expect(buildCreateAgentPayload(baseForm).type).toBe('pi')
+    expect(buildCreateAgentPayload({ ...baseForm, type: 'claude-code' }).type).toBe('claude-code')
   })
 
   it('reports missing required fields individually for page-level validation', () => {
@@ -205,6 +219,14 @@ describe('applyAgentFormPatch', () => {
 
     expect(next.permissionMode).toBe('default')
     expect(next.soulEnabled).toBe(false)
+  })
+
+  it('clears manually selected tools when switching runtime modes', () => {
+    const draft = buildInitialAgentFormState()
+    const next = applyAgentFormPatch({ ...draft, allowedTools: ['Read'] }, { type: 'claude-code' }, tools)
+
+    expect(next.type).toBe('claude-code')
+    expect(next.allowedTools).toEqual([])
   })
 })
 
