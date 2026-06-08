@@ -1,22 +1,57 @@
 import * as fs from 'node:fs'
 
 import type { Client } from '@libsql/client'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { storageV2DataRootService } from '../DataRootService'
 import { StorageV2Database } from '../StorageV2Database'
 
-const { mockCreateClient } = vi.hoisted(() => ({
+const { fsMocks, mockCreateClient } = vi.hoisted(() => ({
+  fsMocks: {
+    existsSync: vi.fn(),
+    mkdirSync: vi.fn(),
+    readFileSync: vi.fn(),
+    renameSync: vi.fn()
+  },
   mockCreateClient: vi.fn()
 }))
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  const mockedFs = {
+    ...actual,
+    existsSync: fsMocks.existsSync,
+    mkdirSync: fsMocks.mkdirSync,
+    readFileSync: fsMocks.readFileSync,
+    renameSync: fsMocks.renameSync
+  }
+
+  return {
+    ...mockedFs,
+    default: mockedFs
+  }
+})
 
 vi.mock('@libsql/client', () => ({
   createClient: mockCreateClient
 }))
 
+function resetFsMocks() {
+  fsMocks.existsSync.mockReset()
+  fsMocks.existsSync.mockReturnValue(false)
+  fsMocks.mkdirSync.mockReset()
+  fsMocks.readFileSync.mockReset()
+  fsMocks.renameSync.mockReset()
+}
+
+beforeEach(() => {
+  resetFsMocks()
+})
+
 afterEach(() => {
   vi.restoreAllMocks()
   mockCreateClient.mockReset()
+  resetFsMocks()
 })
 
 function createMockClient(events: string[]): Client {

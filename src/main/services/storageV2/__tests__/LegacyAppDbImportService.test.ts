@@ -1,4 +1,3 @@
-import * as fsSync from 'node:fs'
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 
@@ -149,7 +148,6 @@ async function createLegacyDbWithTables(tables: LegacyAppTable[]) {
     }
   }
   verifyClient.close()
-  vi.mocked(fsSync.existsSync).mockImplementation((candidate) => String(candidate) === dbPath)
 
   return { tmpDir, dbPath }
 }
@@ -160,7 +158,6 @@ describe('StorageV2LegacyAppDbImportService', () => {
   beforeEach(() => {
     tmpDirs = []
     vi.clearAllMocks()
-    vi.mocked(fsSync.existsSync).mockReturnValue(false)
   })
 
   afterEach(async () => {

@@ -6,6 +6,13 @@ vi.mock('@application', async () => {
   return mockApplicationFactory()
 })
 
+vi.mock('@main/services/FileStorage', () => ({
+  fileStorage: {
+    createTempFile: vi.fn(),
+    writeFile: vi.fn()
+  }
+}))
+
 const { assertZipEntriesWithin, buildResolvedEnv, ensurePathWithin, validateArgs, validateCommand } = await import(
   '../DxtService'
 )
