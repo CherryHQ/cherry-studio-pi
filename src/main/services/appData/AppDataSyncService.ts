@@ -723,6 +723,15 @@ function jsonByteLength(value: unknown) {
   return Buffer.byteLength(JSON.stringify(value), 'utf8')
 }
 
+function normalizeRemoteNonNegativeInteger(value: unknown, label: string) {
+  if (value == null) return 0
+  const numberValue = Number(value)
+  if (!Number.isSafeInteger(numberValue) || numberValue < 0) {
+    throw new Error(`${label}字段损坏。为避免导入或发布不完整数据，本次同步已停止。`)
+  }
+  return numberValue
+}
+
 function notesFileRemotePath(relativePath: string, valueHash: string) {
   const pathHash = hashText(relativePath)
   return `${NOTES_REMOTE_ARTIFACT_ROOT}/files/${pathHash.slice(0, 2)}/${pathHash}/${valueHash}.bin`
@@ -2409,8 +2418,12 @@ export class AppDataSyncService {
         throw new Error(`远端运行时目录校验信息损坏：${name}`)
       }
       const normalizedValueHash = valueHash.toLowerCase()
-      const byteSize = Math.max(0, Number(meta.byteSize) || 0)
-      const fileCount = Math.max(0, Number(meta.fileCount) || 0)
+      const byteSize = normalizeRemoteNonNegativeInteger(meta.byteSize, `远端运行时目录 ${name} 总大小`)
+      const fileCount = normalizeRemoteNonNegativeInteger(meta.fileCount, `远端运行时目录 ${name} 文件数量`)
+      const compressedByteSize = normalizeRemoteNonNegativeInteger(
+        meta.compressedByteSize,
+        `远端运行时目录 ${name} 压缩大小`
+      )
       if (byteSize === 0 && fileCount === 0 && normalizedValueHash !== EMPTY_RUNTIME_DIRECTORY_VALUE_HASH) {
         throw new Error(`远端运行时目录空状态校验信息损坏：${name}`)
       }
@@ -2425,7 +2438,7 @@ export class AppDataSyncService {
         name,
         valueHash: normalizedValueHash,
         byteSize,
-        compressedByteSize: Math.max(0, Number(meta.compressedByteSize) || 0),
+        compressedByteSize,
         fileCount,
         updatedAt: Math.max(0, Number(meta.updatedAt) || 0),
         deviceId: typeof meta.deviceId === 'string' && meta.deviceId ? meta.deviceId : 'unknown',

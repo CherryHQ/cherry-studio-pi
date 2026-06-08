@@ -1878,6 +1878,43 @@ describe('AppDataSyncService', () => {
     ).toBe(false)
   })
 
+  it('rejects runtime directory manifests with invalid size fields before publishing', async () => {
+    const emptyRuntimeHash = hashJson([])
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 3,
+        updatedAt: 1760000000000,
+        records: {},
+        runtimeDirectories: {
+          version: 1,
+          updatedAt: 1760000000000,
+          directories: {
+            Skills: {
+              version: 1,
+              name: 'Skills',
+              valueHash: emptyRuntimeHash,
+              byteSize: 0,
+              compressedByteSize: 'many',
+              fileCount: 0,
+              updatedAt: 1760000000000,
+              deviceId: 'remote-device',
+              path: `runtime-directories/bundles/Skills/${emptyRuntimeHash}.json.gz`
+            }
+          }
+        }
+      })
+    )
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端运行时目录 Skills 压缩大小字段损坏')
+
+    expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/manifest.json'))
+    ).toBe(false)
+  })
+
   it('rejects oversized remote notes files before downloading their contents', async () => {
     const notePath = '/remote-root/sync/v1/notes/files/big-note.bin'
     mocks.remoteFiles.set(notePath, Buffer.from('oversized placeholder'))
