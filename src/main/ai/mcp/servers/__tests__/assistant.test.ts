@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { isBlockedSourceFile } from '../assistant'
+import { isBlockedSourceFile, redactAssistantDiagnosticText } from '../assistant'
 
 describe('isBlockedSourceFile', () => {
   it('blocks every dotenv variant (except the .env.example template)', () => {
@@ -31,5 +31,33 @@ describe('isBlockedSourceFile', () => {
     for (const name of ['index.ts', 'README.md', 'package.json', 'env.ts']) {
       expect(isBlockedSourceFile(name)).toBe(false)
     }
+  })
+})
+
+describe('redactAssistantDiagnosticText', () => {
+  it('redacts common secret shapes before diagnostic logs are sent to the model', () => {
+    const redacted = redactAssistantDiagnosticText(
+      [
+        'apiKey: sk-real-secret',
+        'token=ghp_real_secret',
+        '"password":"dav-password"',
+        "'private_key': 'pem-secret'",
+        'Authorization: Bearer bearer-secret',
+        'url=https://user:pass@example.com/dav'
+      ].join('\n')
+    )
+
+    expect(redacted).not.toContain('sk-real-secret')
+    expect(redacted).not.toContain('ghp_real_secret')
+    expect(redacted).not.toContain('dav-password')
+    expect(redacted).not.toContain('pem-secret')
+    expect(redacted).not.toContain('bearer-secret')
+    expect(redacted).not.toContain('user:pass@')
+    expect(redacted).toContain('<redacted>')
+    expect(redacted).toContain('https://<redacted>@example.com/dav')
+  })
+
+  it('preserves ordinary diagnostic text', () => {
+    expect(redactAssistantDiagnosticText('status=ok provider=openai count=3')).toBe('status=ok provider=openai count=3')
   })
 })

@@ -10,6 +10,9 @@ import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } fr
 import { app } from 'electron'
 
 const logger = loggerService.withContext('MCPServer:Assistant')
+const DIAGNOSTIC_SECRET_KEY_PATTERN =
+  /(api[-_]?key|apiKeys|private[-_]?key|token|secret|pass(word|phrase)?|passwd|authorization|cookie|webdavPass|webdavUser)/i
+const DIAGNOSTIC_SECRET_VALUE = '<redacted>'
 
 /**
  * Whether `read_source` must refuse a file as sensitive. Covers every dotenv variant
@@ -22,6 +25,24 @@ export function isBlockedSourceFile(basename: string): boolean {
   const isPrivateKeyOrCert = /\.(pem|key|p12|pfx)$/.test(name)
   const isExactSensitive = ['credentials.json', 'id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519'].includes(name)
   return isSensitiveEnv || isPrivateKeyOrCert || isExactSensitive
+}
+
+export function redactAssistantDiagnosticText(text: string): string {
+  return text
+    .replace(/(https?:\/\/)([^/@\s]+):([^/@\s]+)@/gi, `$1${DIAGNOSTIC_SECRET_VALUE}@`)
+    .replace(/\b(Authorization\s*[:=]\s*)(Bearer|Basic)\s+[^\s"',}]+/gi, `$1$2 ${DIAGNOSTIC_SECRET_VALUE}`)
+    .replace(
+      /(["'])([^"']+)\1(\s*:\s*)(["'])([^"']*)\4/g,
+      (match, quote: string, key: string, separator: string, valueQuote: string) =>
+        DIAGNOSTIC_SECRET_KEY_PATTERN.test(key)
+          ? `${quote}${key}${quote}${separator}${valueQuote}${DIAGNOSTIC_SECRET_VALUE}${valueQuote}`
+          : match
+    )
+    .replace(
+      /\b([A-Za-z][A-Za-z0-9_.-]*)(\s*[:=]\s*)(["']?)([^\s"',}]+)/g,
+      (match, key: string, separator: string, quote: string) =>
+        DIAGNOSTIC_SECRET_KEY_PATTERN.test(key) ? `${key}${separator}${quote}${DIAGNOSTIC_SECRET_VALUE}${quote}` : match
+    )
 }
 
 /**
@@ -458,7 +479,7 @@ class AssistantServer {
       const logPath = path.join(logsDir, latestLog.name)
       const content = fs.readFileSync(logPath, 'utf-8')
       const allLines = content.split('\n')
-      const tailLines = allLines.slice(-lines).join('\n')
+      const tailLines = redactAssistantDiagnosticText(allLines.slice(-lines).join('\n'))
 
       return {
         content: [
@@ -511,7 +532,7 @@ class AssistantServer {
         const lines = content.split('\n')
         for (let i = lines.length - 1; i >= 0 && errorLines.length < limit; i--) {
           if (errorPattern.test(lines[i])) {
-            errorLines.push(`[${logFile.name}] ${lines[i]}`)
+            errorLines.push(redactAssistantDiagnosticText(`[${logFile.name}] ${lines[i]}`))
           }
         }
       }
