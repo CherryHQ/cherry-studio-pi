@@ -128,13 +128,14 @@ Storage v2 引入稳定的数据根目录，而不是直接把 Electron `app.get
 2. 任意候选目录中格式和版本匹配的 Storage v2 manifest。
 3. `~/.cherrystudio/config/config.json` 中仍然存在的 active data root。
 4. 当前 Electron userData 下已有旧库数据的 `Data` 目录。
-5. 旧 Cherry Studio Pi / Perry Studio / Cherry Studio 目录中已有旧库数据的 `Data` 目录。
+5. 旧 Cherry Studio Pi / Perry Studio 目录中已有旧库数据的 `Data` 目录。
 6. 当前 Electron userData 的 `Data` 目录。
 7. 如果发现多个候选目录，进入数据目录选择和迁移 UI，不静默创建空库。
 
 当前实现会在非 `CHERRY_STUDIO_STORAGE_V2_ROOT` 场景下，把选中的 Storage v2 data root 回写到
 `~/.cherrystudio/config/config.json` 的 `dataRoots` 中，并保留既有 `appDataPath` 配置。读取配置时只采纳
-`app` 为空，或等于 `cherry-studio-pi` / `perry-studio` / `cherry-studio` 的 active entry，且只有格式和版本匹配的 `manifest.json` 才会被视为有效
+`app` 等于 `cherry-studio-pi` / `perry-studio` 的 active entry；无 `app` 归属或属于主 Cherry Studio 的 entry
+会被忽略，避免 Cherry Studio Pi 误用或停用主 Cherry Studio 的数据根。只有格式和版本匹配的 `manifest.json` 才会被视为有效
 Storage v2 根目录。这样产品名、仓库名或 Electron 默认 `userData` 路径变化后，下一次启动仍能优先找到同一个
 Storage v2 数据根。没有 manifest 的过渡期也会优先选择包含 `agents.db` / `app.db` / `Files` / `KnowledgeBase`
 等旧数据的目录，避免重命名后在新的空 userData 里静默创建空库，让用户误以为本地数据丢失。
@@ -800,7 +801,7 @@ files.upsert(file)
 当前代码已经完成 Storage v2 的安全并行骨架：
 
 - `StorageService`、data root discovery、`manifest.json`；manifest、appDataPath 和全局 data root config 都使用临时文件原子 rename 写入，选中的 data root 会登记到 `~/.cherrystudio/config/config.json`，避免产品名或 userData 默认路径变化后丢失入口。
-- 自定义 App Data 路径变更会同步把新路径下的 `Data` 注册为 active Storage v2 data root；复制数据前会先执行 renderer `handleSaveData()` strict flush，再让主进程 strict flush electron-store config 和 agent mirror，复制数据时会排除旧 `Data` 和 `.restore` staging 标记，再把当前 active data root 通过 Storage v2 snapshot 复制到新路径，避免真正的 active root 在自定义路径或旧 Perry/Cherry 根下时被漏掉，也避免直接复制正在写入的 `main.db`；如果用户选择不复制数据，也会在新 `Data` 下创建 fresh manifest，避免全局 `dataRoots` 中旧的 active 根在重启后重新抢占。
+- 自定义 App Data 路径变更会同步把新路径下的 `Data` 注册为 active Storage v2 data root；复制数据前会先执行 renderer `handleSaveData()` strict flush，再让主进程 strict flush electron-store config 和 agent mirror，复制数据时会排除旧 `Data` 和 `.restore` staging 标记，再把当前 active data root 通过 Storage v2 snapshot 复制到新路径，避免真正的 active root 在自定义路径或旧 Perry 根下时被漏掉，也避免直接复制正在写入的 `main.db`；如果用户选择不复制数据，也会在新 `Data` 下创建 fresh manifest，避免全局 `dataRoots` 中旧的 active 根在重启后重新抢占。
 - `main.db` 初始化、`PRAGMA quick_check`、`VACUUM INTO` snapshot；Storage v2 主库事务和 snapshot 通过进程内 exclusive queue 串行化，避免多个 mirror / 迁移入口并发时在同一 SQLite/libSQL 连接上互相抢 `BEGIN IMMEDIATE`。
 - Storage v2 backup 入口，可生成一致 DB 快照，并在等待 secret vault 写队列落盘、按当前 DB secret ref 清理未引用的 vault secret 后复制 `blobs` / `secrets` / `KnowledgeBase` / `Memory` / `Skills` / `Agents` / `Workbench` 到带 stats、secret prune 结果与 integrity metadata 的备份目录；Renderer 手动触发 snapshot / backup 前会按 Redux、durable localStorage、普通对话、文件、Dexie settings、Dexie 辅助表、agent 的顺序 strict flush mirror 队列，若任一队列因 Storage v2 写入失败、仍保留待重试任务，或 Storage v2 IPC 暂不可用时仍存在待落盘任务，会直接阻断本次保护点流程；主进程 StorageService 也会在 snapshot / backup / restore 前 strict flush electron-store config 和 agent mirror，并对完整 config 快照做一次 mirrorAll，避免绕过 renderer 入口或早前 config mirror 临时失败时漏掉最近的主进程系统设置。
 - Storage v2 backup 会同时保存 `KnowledgeBase` 和 `Memory` 目录，其中 `Memory/memories.db` 通过 `VACUUM INTO` 生成一致快照。

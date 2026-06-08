@@ -143,6 +143,33 @@ describe('getDataPath', () => {
     expect(getDataPath()).toBe(currentRoot)
   })
 
+  it('ignores unscoped configured roots because their owner app is ambiguous', async () => {
+    const configPath = '/mock/home/.cherrystudio/config/config.json'
+    const unscopedRoot = '/mock/unscoped/Data'
+    const currentRoot = '/mock/appData/Cherry Studio Pi/Data'
+    mocks.fs.existsSync.mockImplementation((candidate) =>
+      [configPath, unscopedRoot, `${unscopedRoot}/main.db`].includes(String(candidate))
+    )
+    mocks.fs.readFileSync.mockImplementation((candidate) => {
+      if (String(candidate) === configPath) {
+        return JSON.stringify({
+          dataRoots: [
+            {
+              path: unscopedRoot,
+              active: true
+            }
+          ]
+        })
+      }
+
+      return '{}'
+    })
+
+    const { getDataPath } = await import('../index')
+
+    expect(getDataPath()).toBe(currentRoot)
+  })
+
   it('does not let an empty configured data root shadow the current root with real data', async () => {
     const configPath = '/mock/home/.cherrystudio/config/config.json'
     const configuredRoot = '/mock/stable/Data'

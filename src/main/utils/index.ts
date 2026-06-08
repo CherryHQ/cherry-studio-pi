@@ -120,7 +120,7 @@ function getConfiguredDataRoots(): string[] {
 
   return config.dataRoots
     .filter((entry) => entry.active !== false)
-    .filter((entry) => !entry.app || COMPATIBLE_STORAGE_APP_IDS.has(entry.app))
+    .filter((entry) => typeof entry.app === 'string' && COMPATIBLE_STORAGE_APP_IDS.has(entry.app))
     .map((entry) => entry.path)
     .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
 }
