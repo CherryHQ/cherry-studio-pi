@@ -7,7 +7,6 @@ import db from '@renderer/databases'
 import { useAppUpdateHandler, useAppUpdateState } from '@renderer/hooks/useAppUpdate'
 import { useStorageMonitorNotification } from '@renderer/hooks/useStorageMonitorNotification'
 import i18n, { setDayjsLocale } from '@renderer/i18n'
-import { delay, runAsyncFunction } from '@renderer/utils'
 import { defaultLanguage } from '@shared/config/constant'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect } from 'react'
@@ -72,34 +71,45 @@ export function useAppInit() {
   }, [savedAvatar])
 
   useEffect(() => {
+    let active = true
+
     const checkForUpdates = async () => {
       try {
         const { isPackaged } = await window.api.getAppInfo()
 
-        if (!isPackaged || !autoCheckUpdate) {
+        if (!active || !isPackaged || !autoCheckUpdate) {
           return
         }
 
         const { updateInfo } = await window.api.checkForUpdate()
+        if (!active) {
+          return
+        }
+
         updateAppUpdateState({ info: updateInfo })
       } catch (error) {
+        if (!active) {
+          return
+        }
         logger.warn('Failed to check for updates', error as Error)
       }
     }
 
-    // Initial check with delay
-    void runAsyncFunction(async () => {
-      await delay(2)
-      await checkForUpdates()
-    })
+    const initialCheckTimer = window.setTimeout(() => {
+      void checkForUpdates()
+    }, 2000)
 
     // Set up 4-hour interval check
     const FOUR_HOURS = 4 * 60 * 60 * 1000
-    const intervalId = setInterval(() => {
+    const intervalId = window.setInterval(() => {
       void checkForUpdates()
     }, FOUR_HOURS)
 
-    return () => clearInterval(intervalId)
+    return () => {
+      active = false
+      window.clearTimeout(initialCheckTimer)
+      window.clearInterval(intervalId)
+    }
   }, [autoCheckUpdate, updateAppUpdateState])
 
   useEffect(() => {
