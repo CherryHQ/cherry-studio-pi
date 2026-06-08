@@ -684,7 +684,11 @@ function getLegacyDataSyncTempBackupDir() {
 }
 
 function normalizeRemoteRelativePath(value: string, label = 'Remote data sync path') {
-  const normalized = path.posix.normalize(value)
+  const rawPath = String(value ?? '')
+  if (!rawPath.trim() || rawPath.includes('\\') || /^[a-z]:/i.test(rawPath)) {
+    throw new Error(`${label} is invalid`)
+  }
+  const normalized = path.posix.normalize(rawPath)
   if (
     !normalized ||
     normalized === '.' ||
