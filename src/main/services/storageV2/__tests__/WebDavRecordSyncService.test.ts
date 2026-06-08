@@ -1566,6 +1566,32 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
   })
 
+  it('fails safe when the remote Storage v2 records manifest points at the sync root', async () => {
+    const remote = makeSharedWebDavStore()
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([settingsTable]).sync(remote.client as any, '/remote-root/sync/v1', {
+        version: 1,
+        records: {
+          'settings:theme': {
+            entityType: 'settings',
+            table: 'settings',
+            idValues: ['theme'],
+            valueHash: 'theme-hash',
+            updatedAt: 1760000000000,
+            deletedAt: null,
+            version: 1,
+            path: '.'
+          }
+        },
+        blobs: {},
+        bundle: null
+      })
+    ).rejects.toThrow('Remote Storage v2 record path is invalid')
+
+    expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
+  })
+
   it('fails safe when the remote Storage v2 blobs manifest is not an object', async () => {
     const remote = makeSharedWebDavStore()
     const db = makeBlobDb()

@@ -421,7 +421,13 @@ function encodePart(value: string) {
 
 function safeRemoteRelativePath(value: string) {
   const normalized = path.posix.normalize(value)
-  if (normalized === '..' || normalized.startsWith('../') || normalized.startsWith('/')) {
+  if (
+    !normalized ||
+    normalized === '.' ||
+    normalized === '..' ||
+    normalized.startsWith('../') ||
+    normalized.startsWith('/')
+  ) {
     throw new Error('Remote Storage v2 record path is invalid')
   }
   return normalized
