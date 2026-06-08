@@ -1,5 +1,5 @@
 const { Arch } = require('electron-builder')
-const { execSync } = require('child_process')
+const { execFileSync } = require('child_process')
 const fs = require('fs')
 const path = require('path')
 const { parse, stringify } = require('yaml')
@@ -72,6 +72,14 @@ const platformToArch = {
   linuxmusl: 'linuxmusl'
 }
 
+function buildDownloadRtkArgs(platform, arch) {
+  return [path.join(__dirname, 'download-rtk-binaries.js'), platform, arch]
+}
+
+function getPnpmExecutable(platform = process.platform) {
+  return platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+}
+
 exports.default = async function (context) {
   const arch = context.arch === Arch.arm64 ? 'arm64' : 'x64'
   const platformName = context.packager.platform.name
@@ -80,7 +88,7 @@ exports.default = async function (context) {
   // Download rtk binary for the target platform
   try {
     console.log(`Downloading rtk binary for ${platform}-${arch}...`)
-    execSync(`node "${path.join(__dirname, 'download-rtk-binaries.js')}" ${platform} ${arch}`, { stdio: 'inherit' })
+    execFileSync(process.execPath, buildDownloadRtkArgs(platform, arch), { stdio: 'inherit' })
   } catch (error) {
     console.warn(`Warning: rtk binary download failed (non-fatal): ${error.message}`)
   }
@@ -113,7 +121,7 @@ exports.default = async function (context) {
     fs.writeFileSync(workspaceConfigPath, modifiedWorkspaceConfig)
 
     try {
-      execSync(`pnpm install`, { stdio: 'inherit' })
+      execFileSync(getPnpmExecutable(), ['install'], { stdio: 'inherit' })
     } finally {
       // Restore original pnpm-workspace.yaml
       fs.writeFileSync(workspaceConfigPath, originalWorkspaceConfig)
@@ -166,4 +174,9 @@ exports.default = async function (context) {
   } else {
     await excludePackages([...x64ExcludePackages, ...excludeRipgrepFilters, ...excludeRtkFilters])
   }
+}
+
+exports._internal = {
+  buildDownloadRtkArgs,
+  getPnpmExecutable
 }
