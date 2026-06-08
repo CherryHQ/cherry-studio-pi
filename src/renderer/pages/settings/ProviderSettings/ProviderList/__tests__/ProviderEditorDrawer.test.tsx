@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ProviderEditorDrawer from '../ProviderEditorDrawer'
@@ -70,7 +70,7 @@ describe('ProviderEditorDrawer', () => {
     } as unknown as typeof window.toast
   })
 
-  it('submits a create-custom payload with api-key auth and OPENAI_CHAT_COMPLETIONS as the default endpoint', () => {
+  it('submits a create-custom payload with api-key auth and OPENAI_CHAT_COMPLETIONS as the default endpoint', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     render(
       <ProviderEditorDrawer
@@ -93,6 +93,7 @@ describe('ProviderEditorDrawer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'button.add' }))
 
+    await waitFor(() => expect(screen.getByRole('button', { name: 'button.add' })).not.toBeDisabled())
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'My Custom',
@@ -128,7 +129,7 @@ describe('ProviderEditorDrawer', () => {
     expect(screen.getByRole('button', { name: 'settings.provider.duplicate.menu_label' })).toBeInTheDocument()
   })
 
-  it('duplicate of an iam-azure source: keeps source defaultChatEndpoint + iam-azure auth, URL-keyed off it', () => {
+  it('duplicate of an iam-azure source: keeps source defaultChatEndpoint + iam-azure auth, URL-keyed off it', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     render(
       <ProviderEditorDrawer
@@ -157,6 +158,9 @@ describe('ProviderEditorDrawer', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'settings.provider.duplicate.menu_label' }))
 
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'settings.provider.duplicate.menu_label' })).not.toBeDisabled()
+    )
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
         mode: 'create',
@@ -169,7 +173,7 @@ describe('ProviderEditorDrawer', () => {
     )
   })
 
-  it('duplicate of an iam-aws source: no URL/api-key fields, region-bearing auth, source endpoint', () => {
+  it('duplicate of an iam-aws source: no URL/api-key fields, region-bearing auth, source endpoint', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     render(
       <ProviderEditorDrawer
@@ -196,6 +200,9 @@ describe('ProviderEditorDrawer', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'settings.provider.duplicate.menu_label' }))
 
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'settings.provider.duplicate.menu_label' })).not.toBeDisabled()
+    )
     const payload = onSubmit.mock.calls[0]?.[0] as Record<string, unknown>
     expect(payload).toMatchObject({
       mode: 'create',
@@ -208,7 +215,7 @@ describe('ProviderEditorDrawer', () => {
     expect(payload.apiKeys).toBeUndefined()
   })
 
-  it('duplicate of an api-key-aws source: emptyAuthConfigFor yields region-bearing api-key-aws', () => {
+  it('duplicate of an api-key-aws source: emptyAuthConfigFor yields region-bearing api-key-aws', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     render(
       <ProviderEditorDrawer
@@ -234,6 +241,9 @@ describe('ProviderEditorDrawer', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'settings.provider.duplicate.menu_label' }))
 
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'settings.provider.duplicate.menu_label' })).not.toBeDisabled()
+    )
     expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({
       mode: 'create',
       authConfig: { type: 'api-key-aws', region: '' }
@@ -265,6 +275,7 @@ describe('ProviderEditorDrawer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'common.save' }))
 
+    await waitFor(() => expect(screen.getByRole('button', { name: 'common.save' })).not.toBeDisabled())
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({
         name: 'OpenAI Work',

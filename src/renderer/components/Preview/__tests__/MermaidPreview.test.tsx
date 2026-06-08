@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
 
 import { MermaidPreview } from '..'
@@ -243,7 +243,9 @@ describe('MermaidPreview', () => {
       })
 
       // Simulate MutationObserver detecting visibility change
-      observerCallback([])
+      act(() => {
+        observerCallback([])
+      })
 
       // Now make it visible
       Object.defineProperty(mermaidElement, 'offsetParent', {
@@ -252,7 +254,9 @@ describe('MermaidPreview', () => {
       })
 
       // Simulate another MutationObserver callback for visibility change
-      observerCallback([])
+      act(() => {
+        observerCallback([])
+      })
 
       // The visibility change should have been detected and component should be ready to re-render
       // We verify the component structure is correct for potential re-rendering

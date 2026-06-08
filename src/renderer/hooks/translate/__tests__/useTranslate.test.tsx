@@ -147,7 +147,7 @@ describe('useTranslate', () => {
       expect(handedSignal.aborted).toBe(true)
     })
 
-    it('aborts the previous signal when a new translate() supersedes', () => {
+    it('aborts the previous signal when a new translate() supersedes', async () => {
       pendingTranslateText()
       translateTextMock.mockResolvedValueOnce('second')
 
@@ -159,8 +159,8 @@ describe('useTranslate', () => {
       const firstSignal = translateTextMock.mock.calls[0][3] as AbortSignal
       expect(firstSignal.aborted).toBe(false)
 
-      act(() => {
-        void result.current.translate('two', TARGET)
+      await act(async () => {
+        await result.current.translate('two', TARGET)
       })
 
       expect(firstSignal.aborted).toBe(true)
