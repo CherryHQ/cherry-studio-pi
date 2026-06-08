@@ -283,7 +283,7 @@ describe('CitationTooltip', () => {
       })
 
       const citationLink = (
-        <a href="https://research.example.com/study" target="_blank" rel="noreferrer">
+        <a href="https://research.example.com/study" target="_blank" rel="noopener noreferrer">
           <sup>1</sup>
         </a>
       )

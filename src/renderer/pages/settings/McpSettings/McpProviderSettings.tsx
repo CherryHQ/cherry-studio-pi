@@ -134,7 +134,7 @@ const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => 
                   variant="ghost"
                   size="icon-sm"
                   className="size-6 rounded-md text-muted-foreground shadow-none hover:text-blue-600 dark:hover:text-blue-400">
-                  <a target="_blank" rel="noreferrer" href={provider.discoverUrl}>
+                  <a target="_blank" rel="noopener noreferrer" href={provider.discoverUrl}>
                     <SquareArrowOutUpRight size={13} />
                   </a>
                 </Button>
@@ -166,7 +166,7 @@ const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => 
         {provider.apiKeyUrl && (
           <a
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             href={provider.apiKeyUrl}
             className="mt-3.5 inline-flex items-center font-medium text-xs hover:underline"
             style={{ color: 'var(--color-blue-600)' }}>

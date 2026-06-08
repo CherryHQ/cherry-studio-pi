@@ -44,7 +44,7 @@ const Link: React.FC<LinkProps> = (props) => {
           {...omit(props, ['node', 'citationData', 'href'])}
           href={isEmpty(href) ? undefined : href}
           target="_blank"
-          rel="noreferrer"
+          rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
         />
       </CitationTooltip>
@@ -58,7 +58,7 @@ const Link: React.FC<LinkProps> = (props) => {
         {...omit(props, ['node', 'citationData', 'href'])}
         href={isEmpty(href) ? undefined : href}
         target="_blank"
-        rel="noreferrer"
+        rel="noopener noreferrer"
         onClick={(e) => e.stopPropagation()}
       />
     </Hyperlink>

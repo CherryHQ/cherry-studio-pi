@@ -77,7 +77,7 @@ describe('Link', () => {
     const anchor = container.querySelector('a') as HTMLAnchorElement
     expect(anchor).not.toBeNull()
     expect(anchor.getAttribute('target')).toBe('_blank')
-    expect(anchor.getAttribute('rel')).toBe('noreferrer')
+    expect(anchor.getAttribute('rel')).toBe('noopener noreferrer')
 
     fireEvent.click(anchor)
     expect(onParentClick).not.toHaveBeenCalled()
@@ -111,7 +111,7 @@ describe('Link', () => {
     const anchor = container.querySelector('a') as HTMLAnchorElement
     expect(anchor.getAttribute('href')).toBe('https://domain.com/path')
     expect(anchor.getAttribute('target')).toBe('_blank')
-    expect(anchor.getAttribute('rel')).toBe('noreferrer')
+    expect(anchor.getAttribute('rel')).toBe('noopener noreferrer')
   })
 
   it('should render unsafe external links as inert text', () => {

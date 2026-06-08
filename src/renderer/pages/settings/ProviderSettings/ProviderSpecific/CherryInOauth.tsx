@@ -260,7 +260,7 @@ const CherryInOauth: FC<CherryInOauthProps> = ({ providerId }) => {
                   key="cherryin-service-link"
                   className={oauthCardClasses.serviceLink}
                   href={CHERRYIN_OAUTH_SERVER}
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   target="_blank"
                 />
               )

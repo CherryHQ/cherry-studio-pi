@@ -63,7 +63,7 @@ export default function ProviderHeader({ providerId }: ProviderHeaderProps) {
                     <a
                       href={meta.docsWebsite}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       aria-label={`${meta.fancyProviderName} · ${t('common.docs')}`}>
                       <ExternalLink className="size-3.5" aria-hidden />
                     </a>
@@ -81,7 +81,7 @@ export default function ProviderHeader({ providerId }: ProviderHeaderProps) {
                     <a
                       href={meta.modelsWebsite}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       aria-label={`${meta.fancyProviderName} · ${t('settings.models.list_title')}`}>
                       <BookOpen className="size-3.5" aria-hidden />
                     </a>
