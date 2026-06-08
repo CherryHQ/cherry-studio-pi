@@ -68,6 +68,18 @@ function assertZipEntriesWithin(entryNames: string[], baseDir: string): void {
   }
 }
 
+export function sanitizeBackupFileName(fileName: string | null | undefined): string {
+  const rawName = String(fileName ?? '')
+    .replace(/\0/g, '')
+    .trim()
+  const baseName = path.win32.basename(path.posix.basename(rawName))
+  const sanitized = baseName.replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_').trim()
+  const safeName = !sanitized || sanitized === '.' || sanitized === '..' ? DEFAULT_DIRECT_BACKUP_FILE_NAME : sanitized
+  const clippedName = safeName.slice(0, 180)
+
+  return clippedName.toLowerCase().endsWith('.zip') ? clippedName : `${clippedName}.zip`
+}
+
 class BackupManager {
   private backupDir = path.join(app.getPath('temp'), TEMP_APP_DIR, 'backup')
 
@@ -208,6 +220,7 @@ class BackupManager {
   ): Promise<string> {
     const onProgress = this.onProgress(IpcChannel.BackupProgress, true)
     const tempDir = await this.createTempWorkspace('backup-')
+    const safeFileName = sanitizeBackupFileName(fileName)
 
     try {
       onProgress({ stage: 'preparing', progress: 0, total: 100 })
@@ -265,7 +278,7 @@ class BackupManager {
       onProgress({ stage: 'compressing', progress: 80, total: 100 })
 
       // Step 5: Create ZIP archive
-      const backupedFilePath = path.join(destinationPath, fileName)
+      const backupedFilePath = path.join(destinationPath, safeFileName)
       const output = fs.createWriteStream(backupedFilePath)
       const archive = archiver('zip', {
         zlib: { level: 1 }, // Use lowest compression level for speed (same as legacy backup)
@@ -318,6 +331,7 @@ class BackupManager {
   ): Promise<string> {
     const onProgress = this.onProgress(IpcChannel.BackupProgress, true)
     const tempDir = await this.createTempWorkspace('legacy-backup-')
+    const safeFileName = sanitizeBackupFileName(fileName)
 
     try {
       onProgress({ stage: 'preparing', progress: 0, total: 100 })
@@ -361,7 +375,7 @@ class BackupManager {
       }
 
       // Create output file stream
-      const backupedFilePath = path.join(destinationPath, fileName)
+      const backupedFilePath = path.join(destinationPath, safeFileName)
       const output = fs.createWriteStream(backupedFilePath)
 
       // Create archiver instance, enable ZIP64 support
@@ -490,7 +504,7 @@ class BackupManager {
    * @returns Result from WebDAV upload operation
    */
   async backupToWebdav(_: Electron.IpcMainInvokeEvent, webdavConfig: WebDavConfig) {
-    const filename = webdavConfig.fileName || DEFAULT_DIRECT_BACKUP_FILE_NAME
+    const filename = sanitizeBackupFileName(webdavConfig.fileName || DEFAULT_DIRECT_BACKUP_FILE_NAME)
     const backupedFilePath = await this.backup(_, filename, undefined, webdavConfig.skipBackupFile)
     const webdavClient = this.getWebDavInstance(webdavConfig)
     try {
@@ -527,7 +541,9 @@ class BackupManager {
       .toISOString()
       .replace(/[-:T.Z]/g, '')
       .slice(0, 14)
-    const filename = s3Config.fileName || `cherry-studio-pi.backup.${deviceName}.${timestamp}.zip`
+    const filename = sanitizeBackupFileName(
+      s3Config.fileName || `cherry-studio-pi.backup.${deviceName}.${timestamp}.zip`
+    )
 
     logger.debug(`[backupToS3] Starting S3 backup to ${filename}`)
 
@@ -786,7 +802,7 @@ class BackupManager {
    * @returns Result from restore operation
    */
   async restoreFromWebdav(_: Electron.IpcMainInvokeEvent, webdavConfig: WebDavConfig) {
-    const filename = webdavConfig.fileName || DEFAULT_DIRECT_BACKUP_FILE_NAME
+    const filename = sanitizeBackupFileName(webdavConfig.fileName || DEFAULT_DIRECT_BACKUP_FILE_NAME)
     const webdavClient = this.getWebDavInstance(webdavConfig)
     const backupedFilePath = path.join(this.backupDir, filename)
     try {
@@ -823,7 +839,7 @@ class BackupManager {
    * @returns Result from restore operation
    */
   async restoreFromS3(_: Electron.IpcMainInvokeEvent, s3Config: S3Config) {
-    const filename = s3Config.fileName || DEFAULT_DIRECT_BACKUP_FILE_NAME
+    const filename = sanitizeBackupFileName(s3Config.fileName || DEFAULT_DIRECT_BACKUP_FILE_NAME)
 
     logger.debug(`Starting restore from S3: ${filename}`)
 

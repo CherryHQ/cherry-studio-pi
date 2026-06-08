@@ -148,7 +148,7 @@ import * as fs from 'fs-extra'
 import StreamZip from 'node-stream-zip'
 import * as path from 'path'
 
-import BackupManager from '../LegacyBackupManager'
+import BackupManager, { sanitizeBackupFileName } from '../LegacyBackupManager'
 import S3Storage from '../S3Storage'
 import WebDav from '../WebDav'
 
@@ -190,6 +190,19 @@ describe('BackupManager direct backup metadata', () => {
         version: 6
       })
     )
+  })
+})
+
+describe('sanitizeBackupFileName', () => {
+  it.each([
+    ['../../evil.zip', 'evil.zip'],
+    ['..\\..\\evil.zip', 'evil.zip'],
+    ['/tmp/evil.zip', 'evil.zip'],
+    ['C:\\Users\\me\\evil.zip', 'evil.zip'],
+    ['backup', 'backup.zip'],
+    ['', 'cherry-studio-pi.backup.zip']
+  ])('normalizes %s to %s', (input, expected) => {
+    expect(sanitizeBackupFileName(input)).toBe(expected)
   })
 })
 
