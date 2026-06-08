@@ -25,8 +25,12 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 vi.mock('@renderer/components/Buttons', () => ({
-  ActionIconButton: ({ icon, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { icon: React.ReactNode }) => (
-    <button type="button" {...props}>
+  ActionIconButton: ({
+    active,
+    icon,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean; icon: React.ReactNode }) => (
+    <button type="button" data-active={active ? 'true' : undefined} {...props}>
       {icon}
     </button>
   )
