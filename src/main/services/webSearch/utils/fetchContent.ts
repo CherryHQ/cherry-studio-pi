@@ -1,8 +1,8 @@
 import { loggerService } from '@logger'
 import { summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
+import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
 import { Readability } from '@mozilla/readability'
 import type { WebSearchResult } from '@shared/data/types/webSearch'
-import { isValidUrl } from '@shared/utils'
 import { net } from 'electron'
 import { JSDOM } from 'jsdom'
 import TurndownService from 'turndown'
@@ -28,11 +28,9 @@ function buildHeaders(headers?: HeadersInit) {
 
 export async function fetchWebSearchContent(url: string, httpOptions: RequestInit = {}): Promise<WebSearchResult> {
   try {
-    if (!isValidUrl(url)) {
-      throw new Error(`Invalid URL format: ${url}`)
-    }
+    const safeUrl = sanitizeRemoteUrl(url)
 
-    const response = await net.fetch(url, {
+    const response = await net.fetch(safeUrl, {
       ...httpOptions,
       headers: buildHeaders(httpOptions.headers),
       signal: httpOptions.signal
@@ -51,8 +49,8 @@ export async function fetchWebSearchContent(url: string, httpOptions: RequestIni
     const markdown = turndownService.turndown(article?.content || '').trim()
 
     return {
-      title: article?.title || url,
-      url,
+      title: article?.title || safeUrl,
+      url: safeUrl,
       content: markdown,
       sourceInput: url
     }

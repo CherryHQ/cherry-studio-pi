@@ -105,4 +105,14 @@ describe('fetchWebSearchContent', () => {
       }
     })
   })
+
+  it('rejects local or private URLs before dispatching the request', async () => {
+    await expect(fetchWebSearchContent('http://127.0.0.1/admin?token=abc#secret')).rejects.toThrow(
+      'Unsafe remote url: local or private addresses are not allowed'
+    )
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(JSON.stringify(loggerMocks.error.mock.calls)).not.toContain('token=abc')
+    expect(JSON.stringify(loggerMocks.error.mock.calls)).not.toContain('#secret')
+  })
 })

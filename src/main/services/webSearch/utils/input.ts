@@ -1,3 +1,4 @@
+import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
 import { isValidUrl } from '@shared/utils'
 
 export const MAX_WEB_SEARCH_INPUTS = 20
@@ -31,6 +32,18 @@ export function normalizeWebSearchUrls(urls: string[]): string[] {
   const invalidUrls = normalized.filter((url) => !isValidUrl(url))
   if (invalidUrls.length > 0) {
     throw new Error(`Invalid URL format: ${invalidUrls.join(', ')}`)
+  }
+
+  const unsafeUrls = normalized.filter((url) => {
+    try {
+      sanitizeRemoteUrl(url)
+      return false
+    } catch {
+      return true
+    }
+  })
+  if (unsafeUrls.length > 0) {
+    throw new Error('Unsafe URL: local, private, or credentialed URLs are not allowed')
   }
 
   return normalized

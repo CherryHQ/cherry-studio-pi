@@ -34,6 +34,15 @@ describe('webSearch input utils', () => {
     )
   })
 
+  it('throws for local, private, or credentialed URLs', () => {
+    expect(() => normalizeWebSearchUrls(['https://example.com', 'http://127.0.0.1/admin'])).toThrow(
+      'Unsafe URL: local, private, or credentialed URLs are not allowed'
+    )
+    expect(() => normalizeWebSearchUrls(['https://user:secret@example.com/report'])).toThrow(
+      'Unsafe URL: local, private, or credentialed URLs are not allowed'
+    )
+  })
+
   it('throws when URL count exceeds the per-request limit', () => {
     expect(() =>
       normalizeWebSearchUrls(
