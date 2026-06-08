@@ -717,11 +717,25 @@ function decryptRemoteSecret(secretId: string, entry: RemoteEncryptedSecretEntry
 }
 
 function normalizeLocalStoragePath(input: string) {
-  const normalized = path.normalize(input)
-  if (path.isAbsolute(normalized) || normalized === '..' || normalized.startsWith(`..${path.sep}`)) {
+  const rawPath = String(input ?? '')
+    .replace(/\0/g, '')
+    .replace(/\\/g, '/')
+  if (!rawPath.trim() || /^[a-z]:/i.test(rawPath)) {
     throw new Error('Storage v2 blob path is invalid')
   }
-  return normalized
+
+  const normalized = path.posix.normalize(rawPath)
+  if (
+    !normalized ||
+    normalized === '.' ||
+    normalized === '..' ||
+    normalized.startsWith('../') ||
+    normalized.startsWith('/')
+  ) {
+    throw new Error('Storage v2 blob path is invalid')
+  }
+
+  return normalized.split('/').join(path.sep)
 }
 
 async function sha256File(filePath: string): Promise<string> {
@@ -2255,8 +2269,12 @@ export class StorageV2WebDavRecordSyncService {
   }
 
   private blobLocalPath(storagePath: string) {
-    const dataRoot = storageV2DataRootService.ensureDataRoot().dataRoot
-    return path.join(dataRoot, normalizeLocalStoragePath(storagePath))
+    const dataRoot = path.resolve(storageV2DataRootService.ensureDataRoot().dataRoot)
+    const localPath = path.resolve(dataRoot, normalizeLocalStoragePath(storagePath))
+    if (localPath !== dataRoot && !localPath.startsWith(`${dataRoot}${path.sep}`)) {
+      throw new Error('Storage v2 blob path is invalid')
+    }
+    return localPath
   }
 
   private async pushBlobFile(
