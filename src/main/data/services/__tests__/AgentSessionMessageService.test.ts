@@ -2,6 +2,7 @@ import { agentSessionTable } from '@data/db/schemas/agentSession'
 import { agentSessionMessageTable } from '@data/db/schemas/agentSessionMessage'
 import { agentSessionMessageService } from '@data/services/AgentSessionMessageService'
 import { setupTestDatabase } from '@test-helpers/db'
+import { mockMainLoggerService } from '@test-mocks/MainLoggerService'
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -13,6 +14,7 @@ describe('AgentSessionMessageService', () => {
   const dbh = setupTestDatabase()
 
   beforeEach(async () => {
+    mockMainLoggerService.silly.mockClear()
     await dbh.db.insert(agentSessionTable).values({ id: SESSION_ID, name: 'Session', orderKey: 'a0' })
   })
 
@@ -132,6 +134,27 @@ describe('AgentSessionMessageService', () => {
     expect(rows.map((row) => row.createdAt)).toEqual([1_700_000_001_000, 1_700_000_001_000])
     expect(rows.map((row) => row.updatedAt)).toEqual([1_700_000_001_000, 1_700_000_001_000])
     expect(session.updatedAt).toBe(1_700_000_001_000)
+  })
+
+  it('does not write runtime resume token values to logs', async () => {
+    const runtimeResumeToken = 'runtime-secret-token'
+    await agentSessionMessageService.saveMessage({
+      sessionId: SESSION_ID,
+      runtimeResumeToken,
+      message: {
+        id: ASSISTANT_MESSAGE_ID,
+        role: 'assistant',
+        data: { parts: [{ type: 'text', text: 'hello' }] }
+      }
+    })
+
+    mockMainLoggerService.silly.mockClear()
+
+    await expect(agentSessionMessageService.getLastRuntimeResumeToken(SESSION_ID)).resolves.toBe(runtimeResumeToken)
+
+    const serializedLogs = mockMainLoggerService.silly.mock.calls.map((call) => JSON.stringify(call)).join('\n')
+    expect(serializedLogs).toContain('"hasRuntimeResumeToken":true')
+    expect(serializedLogs).not.toContain(runtimeResumeToken)
   })
 
   it('keeps searchable_text and FTS index in sync from message data', async () => {

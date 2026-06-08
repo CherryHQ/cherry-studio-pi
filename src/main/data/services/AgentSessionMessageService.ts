@@ -173,7 +173,7 @@ export class AgentSessionMessageService {
         .limit(1)
 
       logger.silly('Last runtime resume token result:', {
-        runtimeResumeToken: result[0]?.runtimeResumeToken,
+        hasRuntimeResumeToken: Boolean(result[0]?.runtimeResumeToken),
         sessionId
       })
       return result[0]?.runtimeResumeToken ?? null
