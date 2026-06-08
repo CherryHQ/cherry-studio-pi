@@ -28,6 +28,7 @@ import { hashJsonValue, writeWebDavJsonAtomically } from '@main/services/WebDavA
 import { normalizeWebDavHost, runWebDavOperation, WebDavOperationError } from '@main/services/WebDavRetry'
 import { getDataPath } from '@main/utils'
 import { getNotesDir } from '@main/utils/file'
+import { sanitizeFilename } from '@shared/file/types/filename'
 import { normalizeWebDavConfig } from '@shared/webdavConfig'
 import type { WebDavConfig } from '@types'
 import { XMLParser } from 'fast-xml-parser'
@@ -664,8 +665,14 @@ function snapshotFileName(deviceId: string, uploadedAt: number) {
 
 function safeSnapshotRestoreFileName(snapshot: RemoteSnapshotMeta) {
   const idSegment = safeFileSegment(snapshot.id).slice(0, 80) || 'snapshot'
-  const rawBaseName = path.win32.basename(path.posix.basename(String(snapshot.fileName ?? '').replace(/\0/g, '')))
-  const sanitizedBaseName = rawBaseName.replace(/[<>:"/\\|?*\u0000-\u001F]/g, '-').trim()
+  const rawBaseName = path.win32.basename(
+    path.posix.basename(
+      String(snapshot.fileName ?? '')
+        .split('\u0000')
+        .join('')
+    )
+  )
+  const sanitizedBaseName = sanitizeFilename(rawBaseName, '-').trim()
   const clippedBaseName =
     sanitizedBaseName && sanitizedBaseName !== '.' && sanitizedBaseName !== '..'
       ? sanitizedBaseName.slice(0, 160)

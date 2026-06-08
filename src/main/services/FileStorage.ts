@@ -7,6 +7,7 @@ import {
   getNotesDir,
   getTempDir,
   readTextFileWithAutoEncoding,
+  sanitizeFilename,
   scanDir
 } from '@main/utils/file'
 import { t } from '@main/utils/language'
@@ -45,10 +46,14 @@ const logger = loggerService.withContext('FileStorage')
 
 function sanitizeTempFileName(fileName: string): string {
   const rawName = String(fileName ?? '')
-    .replace(/\0/g, '')
+    .split('\u0000')
+    .join('')
     .trim()
   const baseName = path.win32.basename(path.posix.basename(rawName))
-  const sanitized = baseName.replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_').trim()
+  if (!baseName || baseName === '.' || baseName === '..') {
+    return 'file'
+  }
+  const sanitized = sanitizeFilename(baseName, '_').trim()
 
   if (!sanitized || sanitized === '.' || sanitized === '..') {
     return 'file'

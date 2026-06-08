@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { storageV2DataRootService } from '../DataRootService'
 import { StorageV2Database } from '../StorageV2Database'
 
+type NodeFsModule = typeof fs
+
 const { fsMocks, mockCreateClient } = vi.hoisted(() => ({
   fsMocks: {
     existsSync: vi.fn(),
@@ -17,7 +19,7 @@ const { fsMocks, mockCreateClient } = vi.hoisted(() => ({
 }))
 
 vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>()
+  const actual = await importOriginal<NodeFsModule>()
   const mockedFs = {
     ...actual,
     existsSync: fsMocks.existsSync,

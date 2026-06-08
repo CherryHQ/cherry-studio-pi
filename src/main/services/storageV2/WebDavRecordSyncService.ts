@@ -722,7 +722,8 @@ function decryptRemoteSecret(secretId: string, entry: RemoteEncryptedSecretEntry
 
 function normalizeLocalStoragePath(input: string) {
   const rawPath = String(input ?? '')
-    .replace(/\0/g, '')
+    .split('\u0000')
+    .join('')
     .replace(/\\/g, '/')
   if (!rawPath.trim() || /^[a-z]:/i.test(rawPath)) {
     throw new Error('Storage v2 blob path is invalid')

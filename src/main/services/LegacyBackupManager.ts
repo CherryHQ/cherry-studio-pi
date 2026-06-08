@@ -19,6 +19,7 @@ import type { Stats } from 'node:fs'
 import { application } from '@application'
 import { loggerService } from '@logger'
 import { WindowType } from '@main/core/window/types'
+import { sanitizeFilename } from '@shared/file/types/filename'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { WebDavConfig } from '@types'
 import type { S3Config } from '@types'
@@ -70,10 +71,14 @@ function assertZipEntriesWithin(entryNames: string[], baseDir: string): void {
 
 export function sanitizeBackupFileName(fileName: string | null | undefined): string {
   const rawName = String(fileName ?? '')
-    .replace(/\0/g, '')
+    .split('\u0000')
+    .join('')
     .trim()
   const baseName = path.win32.basename(path.posix.basename(rawName))
-  const sanitized = baseName.replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_').trim()
+  if (!baseName || baseName === '.' || baseName === '..') {
+    return DEFAULT_DIRECT_BACKUP_FILE_NAME
+  }
+  const sanitized = sanitizeFilename(baseName, '_').trim()
   const safeName = !sanitized || sanitized === '.' || sanitized === '..' ? DEFAULT_DIRECT_BACKUP_FILE_NAME : sanitized
   const clippedName = safeName.slice(0, 180)
 

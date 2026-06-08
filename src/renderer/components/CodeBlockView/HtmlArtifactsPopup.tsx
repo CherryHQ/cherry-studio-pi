@@ -83,7 +83,7 @@ const PreviewPanel = memo<PreviewPanelProps>(({ previewFrameRef, html, previewTi
           ref={previewFrameRef}
           srcDoc={html}
           title={previewTitle}
-          sandbox="allow-scripts allow-same-origin allow-forms"
+          sandbox="allow-same-origin allow-forms"
           className="h-full w-full border-0 bg-background"
         />
       ) : (
