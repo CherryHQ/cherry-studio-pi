@@ -30,4 +30,34 @@ describe('version script', () => {
     expect(getPnpmExecutable('darwin')).toBe('pnpm')
     expect(getPnpmExecutable('linux')).toBe('pnpm')
   })
+
+  it('extracts semantic versions from local and remote git tag output', () => {
+    const { extractVersionsFromGitRefs } = loadInternal()
+
+    expect(
+      extractVersionsFromGitRefs(
+        [
+          'v1.9.31',
+          '36bdf0a0c146767fe256c56fb83af4851fbe3702\trefs/tags/v1.9.33',
+          'fac0c9fe125e94039ca5c1e618581fec37a664b6\trefs/tags/v1.9.18^{}',
+          'not-a-version'
+        ].join('\n')
+      )
+    ).toEqual(['1.9.31', '1.9.33', '1.9.18'])
+  })
+
+  it('bumps from the highest known version instead of stale package.json', () => {
+    const { resolveNextVersion } = loadInternal()
+
+    expect(resolveNextVersion('1.9.21', 'patch', ['1.9.21', '1.9.33'])).toEqual({
+      baseVersion: '1.9.33',
+      nextVersion: '1.9.34'
+    })
+  })
+
+  it('sorts prerelease and release versions with semver rules', () => {
+    const { getHighestVersion } = loadInternal()
+
+    expect(getHighestVersion(['1.9.33', '1.10.0-beta.1', '1.10.0'])).toBe('1.10.0')
+  })
 })
