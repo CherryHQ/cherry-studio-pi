@@ -132,9 +132,14 @@ function readManifest(dataRoot: string): StorageV2Manifest | null {
 
 function writeJsonAtomic(filePath: string, value: unknown) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
-  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`
-  fs.writeFileSync(tempPath, JSON.stringify(value, null, 2))
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`
+  fs.writeFileSync(tempPath, JSON.stringify(value, null, 2), { mode: 0o600 })
   fs.renameSync(tempPath, filePath)
+  try {
+    fs.chmodSync(filePath, 0o600)
+  } catch {
+    // Some Windows/network file systems do not support POSIX modes; the atomic write is still valid.
+  }
 }
 
 export class StorageV2DataRootService {

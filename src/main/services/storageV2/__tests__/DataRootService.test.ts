@@ -12,7 +12,8 @@ const mocks = vi.hoisted(() => ({
     mkdirSync: vi.fn(),
     statSync: vi.fn(),
     writeFileSync: vi.fn(),
-    renameSync: vi.fn()
+    renameSync: vi.fn(),
+    chmodSync: vi.fn()
   }
 }))
 
@@ -62,6 +63,7 @@ describe('StorageV2DataRootService', () => {
     } as never)
     vi.mocked(fs.writeFileSync).mockReturnValue(undefined as never)
     vi.mocked(fs.renameSync).mockReturnValue(undefined as never)
+    vi.mocked(fs.chmodSync).mockReturnValue(undefined as never)
   })
 
   it('ignores renamed legacy user data roots when the current root is empty', async () => {
@@ -472,7 +474,8 @@ describe('StorageV2DataRootService', () => {
     expect(activated.workspaceId).toBeTruthy()
     expect(fs.writeFileSync).toHaveBeenCalledWith(
       expect.stringContaining(`${selectedRoot}/manifest.json.`),
-      expect.stringContaining('"format": "cherry-studio-pi-storage"')
+      expect.stringContaining('"format": "cherry-studio-pi-storage"'),
+      { mode: 0o600 }
     )
 
     const configWrite = vi
@@ -508,7 +511,8 @@ describe('StorageV2DataRootService', () => {
     expect(fs.mkdirSync).toHaveBeenCalledWith('/mock/appData/Cherry Studio Pi/Data.restore', { recursive: true })
     expect(fs.writeFileSync).toHaveBeenCalledWith(
       expect.stringContaining('/mock/appData/Cherry Studio Pi/Data.restore/manifest.json.'),
-      expect.stringContaining('"format": "cherry-studio-pi-storage"')
+      expect.stringContaining('"format": "cherry-studio-pi-storage"'),
+      { mode: 0o600 }
     )
 
     const configWrite = vi
