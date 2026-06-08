@@ -385,7 +385,7 @@ export const TAB_BAR_HTML = `<!DOCTYPE html>
 
     window.updateTabs = function(tabs, activeUrl, canGoBack, canGoForward) {
       // Capture current tab widths before update if in closing mode
-      var previousWidths = {};
+      var previousWidths = Object.create(null);
       if (isInClosingMode) {
         var existingTabs = tabsContainer.querySelectorAll('.tab');
         existingTabs.forEach(function(tab) {
@@ -403,14 +403,24 @@ export const TAB_BAR_HTML = `<!DOCTYPE html>
         });
         return;
       }
+      function escapeHtml(value) {
+        return String(value || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
       tabsContainer.innerHTML = tabs.map(function(tab) {
         var cls = 'tab' + (tab.isActive ? ' active' : '');
-        var title = (tab.title || 'New Tab').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-        var url = (tab.url || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-        return '<div class="' + cls + '" data-id="' + tab.id + '" title="' + url + '">' +
+        var tabId = escapeHtml(tab.id);
+        var title = escapeHtml(tab.title || 'New Tab');
+        var url = escapeHtml(tab.url);
+        return '<div class="' + cls + '" data-id="' + tabId + '" title="' + url + '">' +
           '<div class="tab-favicon"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg></div>' +
           '<span class="tab-title">' + title + '</span>' +
-          '<div class="tab-close" data-id="' + tab.id + '">' +
+          '<div class="tab-close" data-id="' + tabId + '">' +
             '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
           '</div>' +
         '</div>';
