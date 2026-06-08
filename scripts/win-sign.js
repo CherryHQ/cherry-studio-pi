@@ -1,4 +1,4 @@
-const { execSync } = require('child_process')
+const { spawnSync } = require('child_process')
 
 const DEFAULT_TIMESTAMP_URLS = [
   'http://timestamp.digicert.com',
@@ -22,9 +22,43 @@ function sleep(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 }
 
+function buildSignToolArgs({ certPath, csp, keyContainer, path, timestampUrl }) {
+  return [
+    'sign',
+    '/tr',
+    timestampUrl,
+    '/td',
+    'sha256',
+    '/fd',
+    'sha256',
+    '/v',
+    '/f',
+    certPath,
+    '/csp',
+    csp,
+    '/k',
+    keyContainer,
+    path
+  ]
+}
+
 function signFile({ certPath, csp, keyContainer, path, timestampUrl }) {
-  const signCommand = `signtool sign /tr "${timestampUrl}" /td sha256 /fd sha256 /v /f "${certPath}" /csp "${csp}" /k "${keyContainer}" "${path}"`
-  execSync(signCommand, { stdio: 'inherit' })
+  const result = spawnSync('signtool', buildSignToolArgs({ certPath, csp, keyContainer, path, timestampUrl }), {
+    shell: false,
+    stdio: 'inherit'
+  })
+
+  if (result.error) {
+    throw result.error
+  }
+
+  if (result.signal) {
+    throw new Error(`signtool was terminated by signal ${result.signal}`)
+  }
+
+  if (typeof result.status === 'number' && result.status !== 0) {
+    throw new Error(`signtool exited with code ${result.status}`)
+  }
 }
 
 function signFileWithRetry(options) {
@@ -54,6 +88,13 @@ function signFileWithRetry(options) {
   }
 
   throw lastError
+}
+
+exports._internal = {
+  buildSignToolArgs,
+  getTimestampUrls,
+  signFile,
+  signFileWithRetry
 }
 
 exports.default = async function (configuration) {
