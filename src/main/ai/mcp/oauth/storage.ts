@@ -183,15 +183,19 @@ export class JsonFileStorage implements IOAuthStorage {
   private async writeStorage(data: OAuthStorageData): Promise<void> {
     try {
       // Ensure directory exists
-      await fs.mkdir(path.dirname(this.filePath), { recursive: true })
+      const storageDir = path.dirname(this.filePath)
+      await fs.mkdir(storageDir, { recursive: true, mode: 0o700 })
+      await fs.chmod(storageDir, 0o700).catch(() => undefined)
 
       // Update timestamp
       data.lastUpdated = Date.now()
 
       // Write file atomically
       const tempPath = `${this.filePath}.tmp`
-      await fs.writeFile(tempPath, JSON.stringify(data, null, 2))
+      await fs.writeFile(tempPath, JSON.stringify(data, null, 2), { encoding: 'utf-8', mode: 0o600 })
+      await fs.chmod(tempPath, 0o600).catch(() => undefined)
       await fs.rename(tempPath, this.filePath)
+      await fs.chmod(this.filePath, 0o600).catch(() => undefined)
 
       await this.writeStorageV2(data).catch(async (error) => {
         logger.warn('Failed to write OAuth storage to Storage v2:', error as Error)

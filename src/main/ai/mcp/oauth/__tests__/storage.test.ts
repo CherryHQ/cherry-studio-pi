@@ -27,6 +27,20 @@ describe('JsonFileStorage round-trip', () => {
     await expect(fs.access(filePath)).resolves.toBeUndefined()
   })
 
+  it('restricts the legacy OAuth file permissions on POSIX systems', async () => {
+    if (process.platform === 'win32') return
+
+    const storage = new JsonFileStorage(serverUrlHash, configDir)
+
+    await storage.saveTokens({ access_token: 'tok', token_type: 'Bearer', refresh_token: 'refresh' })
+
+    const directoryMode = (await fs.stat(configDir)).mode & 0o777
+    const fileMode = (await fs.stat(path.join(configDir, `${serverUrlHash}_oauth.json`))).mode & 0o777
+
+    expect(directoryMode).toBe(0o700)
+    expect(fileMode).toBe(0o600)
+  })
+
   it('round-trips tokens through a fresh instance (no in-memory cache)', async () => {
     const tokens: OAuthTokens = {
       access_token: 'access-token-value',
