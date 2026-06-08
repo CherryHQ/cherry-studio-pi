@@ -62,6 +62,46 @@ function assertNotNotesRoot(root: string, target: string) {
   }
 }
 
+function isPathInsideOrEqual(target: string, root: string) {
+  const relativePath = path.relative(path.resolve(root), path.resolve(target))
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath))
+}
+
+async function realpathOrResolvedPath(filePath: string) {
+  try {
+    return await fs.realpath(filePath)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return path.resolve(filePath)
+    throw error
+  }
+}
+
+async function resolveRealPathPreservingMissingSegments(filePath: string) {
+  const missingSegments: string[] = []
+  let current = path.resolve(filePath)
+
+  while (true) {
+    try {
+      return path.join(await fs.realpath(current), ...missingSegments.reverse())
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+
+    const parent = path.dirname(current)
+    if (parent === current) return path.resolve(filePath)
+    missingSegments.push(path.basename(current))
+    current = parent
+  }
+}
+
+async function assertResolvedInsideNotesRoot(root: string, target: string, label = 'Note path') {
+  const realRoot = await realpathOrResolvedPath(root)
+  const realTarget = await resolveRealPathPreservingMissingSegments(target)
+  if (!isPathInsideOrEqual(realTarget, realRoot)) {
+    throw new Error(`${label} resolves outside the notes root directory`)
+  }
+}
+
 async function resolveNoteDeleteTarget(root: string, input: string) {
   const target = resolveInsideRoot(root, input)
   if (path.extname(target) || (await fs.stat(target).catch(() => null))) {
@@ -323,6 +363,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any) => {
         const root = await getNotesRoot()
         const filePath = resolveInsideRoot(root, normalizeRequiredText(input?.path, 'Note path'), '.md')
+        await assertResolvedInsideNotesRoot(root, filePath)
         return okResult('Note read', {
           path: filePath,
           ...(await readTextFilePreview(filePath, normalizeReadMaxBytes(input?.maxBytes)))
@@ -408,9 +449,11 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any) => {
         const root = await getNotesRoot()
         const parent = resolveInsideRoot(root, normalizeOptionalText(input?.parent))
+        await assertResolvedInsideNotesRoot(root, parent, 'Note parent')
         await fs.mkdir(parent, { recursive: true })
         const safeName = getName(parent, normalizeOptionalText(input?.name, 'Untitled') || 'Untitled', true)
         const filePath = path.join(parent, `${safeName}.md`)
+        await assertResolvedInsideNotesRoot(root, filePath)
         await fs.writeFile(filePath, normalizeNoteContent(input?.content), 'utf8')
         notifyMainProcessDataSyncLocalChange('file', { source: 'app-capability.notes.create', path: filePath })
         return {
@@ -442,6 +485,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any) => {
         const root = await getNotesRoot()
         const filePath = resolveInsideRoot(root, normalizeRequiredText(input?.path, 'Note path'), '.md')
+        await assertResolvedInsideNotesRoot(root, filePath)
         await fs.writeFile(filePath, normalizeNoteContent(input?.content), 'utf8')
         notifyMainProcessDataSyncLocalChange('file', { source: 'app-capability.notes.write', path: filePath })
         return okResult('Note written', { path: filePath })
@@ -469,6 +513,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
         const root = await getNotesRoot()
         const target = await resolveNoteDeleteTarget(root, normalizeRequiredText(input?.path, 'Note path'))
         assertNotNotesRoot(root, target)
+        await assertResolvedInsideNotesRoot(root, target)
         if (context.dryRun) return okResult('Note delete dry run completed', { path: target })
         await fs.rm(target, { force: true, recursive: true })
         notifyMainProcessDataSyncLocalChange('file', { source: 'app-capability.notes.delete', path: target })

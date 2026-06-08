@@ -224,6 +224,33 @@ describe('notes app capabilities', () => {
     expect((result.data as any).content).toBe('today\n')
   })
 
+  it('rejects note symlinks that resolve outside the notes root', async () => {
+    const outsideDir = `${tmpDir}-outside`
+    const outsideFile = path.join(outsideDir, 'secret.md')
+    const escapeFile = path.join(tmpDir, 'escape.md')
+    const escapeDir = path.join(tmpDir, 'linked-outside')
+    await fs.mkdir(outsideDir, { recursive: true })
+    try {
+      await fs.writeFile(outsideFile, 'outside\n', 'utf8')
+      await fs.symlink(outsideFile, escapeFile)
+      await fs.symlink(outsideDir, escapeDir, 'dir')
+
+      await expect(getCapability('notes.read').execute({ path: 'escape' }, { source: 'agent' })).rejects.toThrow(
+        'Note path resolves outside the notes root directory'
+      )
+      await expect(
+        getCapability('notes.write').execute({ path: 'escape', content: 'overwrite' }, { source: 'agent' })
+      ).rejects.toThrow('Note path resolves outside the notes root directory')
+      await expect(
+        getCapability('notes.create').execute({ parent: 'linked-outside', name: 'created' }, { source: 'agent' })
+      ).rejects.toThrow('Note parent resolves outside the notes root directory')
+      expect(await fs.readFile(outsideFile, 'utf8')).toBe('outside\n')
+      await expect(fs.stat(path.join(outsideDir, 'created.md'))).rejects.toThrow()
+    } finally {
+      await fs.rm(outsideDir, { recursive: true, force: true })
+    }
+  })
+
   it('normalizes note create and write inputs before touching the filesystem', async () => {
     mocks.getName.mockImplementation((_parent: string, name: string) => name)
 
