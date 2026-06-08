@@ -17,9 +17,13 @@ import { IpcChannel } from '@shared/IpcChannel'
 import * as fs from 'fs-extra'
 import * as path from 'path'
 
+import { storageV2SettingsRepository } from './storageV2/StorageV2Repositories'
+
 const logger = loggerService.withContext('OvmsManager')
 
 const execAsync = promisify(exec)
+const STORAGE_V2_OVMS_SCOPE = 'ovms'
+const STORAGE_V2_OVMS_MODEL_CONFIG_KEY = 'ovms.model_config'
 
 interface OvmsProcess {
   pid: number
@@ -34,6 +38,13 @@ interface ModelConfig {
 
 interface OvmsConfig {
   mediapipe_config_list: ModelConfig[]
+  model_config_list?: unknown[]
+}
+
+type OvmsConfigStorageV2Setting = {
+  config?: OvmsConfig
+  sourcePath?: string
+  updatedAt?: string
 }
 
 function parsePowerShellJsonList<T extends Record<string, unknown>>(stdout: string, context: string): T[] {
@@ -75,6 +86,64 @@ export class OvmsManager extends BaseService {
 
   protected async onStop() {
     await this.stopOvms()
+  }
+
+  private getConfigPath(): string {
+    return path.join(homedir(), HOME_CHERRY_DIR, 'ovms', 'ovms', 'models', 'config.json')
+  }
+
+  private getDefaultConfig(): OvmsConfig {
+    return {
+      mediapipe_config_list: [],
+      model_config_list: []
+    }
+  }
+
+  private isOvmsConfig(value: unknown): value is OvmsConfig {
+    return Boolean(
+      value &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        Array.isArray((value as OvmsConfig).mediapipe_config_list)
+    )
+  }
+
+  private async readConfigSnapshotFromStorageV2(): Promise<OvmsConfig | null> {
+    const setting = await storageV2SettingsRepository.get(STORAGE_V2_OVMS_MODEL_CONFIG_KEY)
+    if (!setting || typeof setting !== 'object' || Array.isArray(setting)) {
+      return null
+    }
+
+    const config = (setting as OvmsConfigStorageV2Setting).config
+    return this.isOvmsConfig(config) ? config : null
+  }
+
+  private async saveConfigSnapshotToStorageV2(config: OvmsConfig, sourcePath: string): Promise<void> {
+    await storageV2SettingsRepository.set(
+      STORAGE_V2_OVMS_MODEL_CONFIG_KEY,
+      {
+        config,
+        sourcePath,
+        updatedAt: new Date().toISOString()
+      } satisfies OvmsConfigStorageV2Setting,
+      STORAGE_V2_OVMS_SCOPE
+    )
+  }
+
+  private async readRuntimeConfig(configPath: string): Promise<OvmsConfig | null> {
+    if (await fs.pathExists(configPath)) {
+      return fs.readJson(configPath)
+    }
+
+    const storageConfig = await this.readConfigSnapshotFromStorageV2()
+    if (!storageConfig) {
+      return null
+    }
+
+    await fs.ensureDir(path.dirname(configPath))
+    await fs.writeJson(configPath, storageConfig, { spaces: 2 })
+    logger.info(`Restored OVMS config projection from Storage v2: ${configPath}`)
+    return storageConfig
   }
 
   /**
@@ -307,15 +376,14 @@ export class OvmsManager extends BaseService {
       return false
     }
 
-    const homeDir = homedir()
-    const configPath = path.join(homeDir, HOME_CHERRY_DIR, 'ovms', 'ovms', 'models', 'config.json')
+    const configPath = this.getConfigPath()
     try {
-      if (!(await fs.pathExists(configPath))) {
+      const config = await this.readRuntimeConfig(configPath)
+      if (!config) {
         logger.warn(`Config file does not exist: ${configPath}`)
         return false
       }
 
-      const config: OvmsConfig = await fs.readJson(configPath)
       if (!config.mediapipe_config_list) {
         logger.warn(`No mediapipe_config_list found in config: ${configPath}`)
         return false
@@ -504,17 +572,15 @@ export class OvmsManager extends BaseService {
    * @param modelId ID of the model to check
    */
   public async checkModelExists(modelId: string): Promise<boolean> {
-    const homeDir = homedir()
-    const ovmsDir = path.join(homeDir, HOME_CHERRY_DIR, 'ovms', 'ovms')
-    const configPath = path.join(ovmsDir, 'models', 'config.json')
+    const configPath = this.getConfigPath()
 
     try {
-      if (!(await fs.pathExists(configPath))) {
+      const config = await this.readRuntimeConfig(configPath)
+      if (!config) {
         logger.warn(`Config file does not exist: ${configPath}`)
         return false
       }
 
-      const config: OvmsConfig = await fs.readJson(configPath)
       if (!config.mediapipe_config_list) {
         logger.warn('No mediapipe_config_list found in config')
         return false
@@ -531,21 +597,12 @@ export class OvmsManager extends BaseService {
    * Update the model configuration file
    */
   public async updateModelConfig(modelName: string, modelId: string): Promise<boolean> {
-    const homeDir = homedir()
-    const ovmsDir = path.join(homeDir, HOME_CHERRY_DIR, 'ovms', 'ovms')
-    const configPath = path.join(ovmsDir, 'models', 'config.json')
+    const configPath = this.getConfigPath()
 
     try {
       // Ensure the models directory exists
       await fs.ensureDir(path.dirname(configPath))
-      let config: OvmsConfig
-
-      // Read existing config or create new one
-      if (await fs.pathExists(configPath)) {
-        config = await fs.readJson(configPath)
-      } else {
-        config = { mediapipe_config_list: [] }
-      }
+      const config = (await this.readRuntimeConfig(configPath)) ?? this.getDefaultConfig()
 
       // Ensure mediapipe_config_list exists
       if (!config.mediapipe_config_list) {
@@ -569,6 +626,8 @@ export class OvmsManager extends BaseService {
         logger.info(`Added new model config: ${modelName}`)
       }
 
+      await this.saveConfigSnapshotToStorageV2(config, configPath)
+
       // Write config back to file
       await fs.writeJson(configPath, config, { spaces: 2 })
       logger.info(`Config file updated: ${configPath}`)
@@ -584,17 +643,15 @@ export class OvmsManager extends BaseService {
    * @returns Array of model configurations
    */
   public async getModels(): Promise<ModelConfig[]> {
-    const homeDir = homedir()
-    const ovmsDir = path.join(homeDir, HOME_CHERRY_DIR, 'ovms', 'ovms')
-    const configPath = path.join(ovmsDir, 'models', 'config.json')
+    const configPath = this.getConfigPath()
 
     try {
-      if (!(await fs.pathExists(configPath))) {
+      const config = await this.readRuntimeConfig(configPath)
+      if (!config) {
         logger.warn(`Config file does not exist: ${configPath}`)
         return []
       }
 
-      const config: OvmsConfig = await fs.readJson(configPath)
       if (!config.mediapipe_config_list) {
         logger.warn('No mediapipe_config_list found in config')
         return []
