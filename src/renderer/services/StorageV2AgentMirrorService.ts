@@ -1,6 +1,7 @@
 import { loggerService } from '@logger'
 
 import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
+import { getRendererStorageV2Api, type RendererStorageV2Api } from './StorageV2RendererApi'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
 
 const logger = loggerService.withContext('StorageV2AgentMirrorService')
@@ -48,13 +49,16 @@ class StorageV2AgentMirrorService {
 
     if (!this.pending) return
 
-    if (!window.api?.storageV2) {
-      this.schedule()
+    const { hasWindow, api } = getRendererStorageV2Api()
+    if (!api) {
+      if (hasWindow) {
+        this.schedule()
+      }
       return
     }
 
     this.pending = false
-    this.inflight = this.mirrorNow().finally(() => {
+    this.inflight = this.mirrorNow(api).finally(() => {
       this.inflight = null
     })
 
@@ -66,7 +70,8 @@ class StorageV2AgentMirrorService {
 
     if (!this.pending) return
 
-    if (!window.api?.storageV2) {
+    const { api } = getRendererStorageV2Api()
+    if (!api) {
       throw new Error('Storage v2 API unavailable while agent database mirror work is pending')
     }
 
@@ -79,9 +84,9 @@ class StorageV2AgentMirrorService {
     throw new Error('Agent database mirror work is still pending after strict flush')
   }
 
-  private async mirrorNow() {
+  private async mirrorNow(storageV2: RendererStorageV2Api) {
     try {
-      await window.api.storageV2.importLegacyAgentDb({ dryRun: false, createSnapshot: false })
+      await storageV2.importLegacyAgentDb({ dryRun: false, createSnapshot: false })
       this.lastError = null
       notifyDataSyncLocalChange('agent')
       logger.debug('Mirrored agent database to Storage v2')

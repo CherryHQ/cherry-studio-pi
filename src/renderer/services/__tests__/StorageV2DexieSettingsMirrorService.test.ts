@@ -186,4 +186,21 @@ describe('StorageV2DexieSettingsMirrorService', () => {
     await vi.advanceTimersByTimeAsync(1)
     expect(setSetting).toHaveBeenCalledWith('dexie.settings.language', 'zh-CN', 'dexie-settings')
   })
+
+  it('does not keep retrying after the renderer window has been torn down', async () => {
+    const { storageV2DexieSettingsMirrorService } = await import('../StorageV2DexieSettingsMirrorService')
+    storageV2DexieSettingsMirrorService.scheduleSetting('language', 1000)
+
+    const originalWindow = globalThis.window
+    vi.stubGlobal('window', undefined)
+    try {
+      await storageV2DexieSettingsMirrorService.flush()
+      await vi.advanceTimersByTimeAsync(5000)
+    } finally {
+      vi.stubGlobal('window', originalWindow)
+    }
+
+    expect(mocks.settingsWhere).not.toHaveBeenCalled()
+    expect(storageV2DexieSettingsMirrorService.getStatus().pendingCount).toBe(1)
+  })
 })

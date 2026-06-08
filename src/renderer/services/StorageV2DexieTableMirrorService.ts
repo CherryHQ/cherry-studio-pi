@@ -2,6 +2,7 @@ import { loggerService } from '@logger'
 import db from '@renderer/databases'
 
 import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
+import { getRendererStorageV2Api, type RendererStorageV2Api } from './StorageV2RendererApi'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
 
 const logger = loggerService.withContext('StorageV2DexieTableMirrorService')
@@ -112,8 +113,9 @@ class StorageV2DexieTableMirrorService {
 
   async flush() {
     if (this.suspended) return
-    if (!window.api?.storageV2) {
-      if (this.hasPendingWork()) {
+    const { hasWindow, api } = getRendererStorageV2Api()
+    if (!api) {
+      if (hasWindow && this.hasPendingWork()) {
         this.scheduleFlush(DEFAULT_DEBOUNCE_MS)
       }
       return
@@ -136,7 +138,7 @@ class StorageV2DexieTableMirrorService {
 
     if (this.pendingRowIds.size === 0 && this.pendingDeletedIds.size === 0) return
 
-    this.inflight = this.mirrorPendingNow().finally(() => {
+    this.inflight = this.mirrorPendingNow(api).finally(() => {
       this.inflight = null
     })
 
@@ -148,7 +150,8 @@ class StorageV2DexieTableMirrorService {
 
     if (!this.hasPendingWork()) return
 
-    if (!window.api?.storageV2) {
+    const { api } = getRendererStorageV2Api()
+    if (!api) {
       throw new Error('Storage v2 API unavailable while Dexie auxiliary table mirror work is pending')
     }
 
@@ -249,7 +252,7 @@ class StorageV2DexieTableMirrorService {
     }
   }
 
-  private async mirrorPendingNow() {
+  private async mirrorPendingNow(storageV2: RendererStorageV2Api) {
     const rowIdsByTable = clonePendingMap(this.pendingRowIds)
     const deletedIdsByTable = clonePendingMap(this.pendingDeletedIds)
     this.pendingRowIds.clear()
@@ -270,20 +273,12 @@ class StorageV2DexieTableMirrorService {
         const missingRowIds = rowIds.filter((rowId) => !foundRowIds.has(rowId))
 
         for (const row of rows) {
-          await window.api.storageV2.setSetting(
-            toStorageV2SettingKey(tableName, row.id),
-            row,
-            `dexie-table:${tableName}`
-          )
+          await storageV2.setSetting(toStorageV2SettingKey(tableName, row.id), row, `dexie-table:${tableName}`)
           mirroredRowCount++
         }
 
         for (const rowId of [...missingRowIds, ...deletedIds]) {
-          await window.api.storageV2.setSetting(
-            toStorageV2SettingKey(tableName, rowId),
-            null,
-            `dexie-table:${tableName}`
-          )
+          await storageV2.setSetting(toStorageV2SettingKey(tableName, rowId), null, `dexie-table:${tableName}`)
           deleteMarkerCount++
         }
       }

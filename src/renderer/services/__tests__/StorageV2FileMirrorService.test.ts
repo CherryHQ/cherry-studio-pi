@@ -239,6 +239,23 @@ describe('StorageV2FileMirrorService', () => {
     expect(upsertFile).toHaveBeenCalledWith(file)
   })
 
+  it('does not keep retrying after the renderer window has been torn down', async () => {
+    const { storageV2FileMirrorService } = await import('../StorageV2FileMirrorService')
+    storageV2FileMirrorService.scheduleFile('file-after-teardown', 1000)
+
+    const originalWindow = globalThis.window
+    vi.stubGlobal('window', undefined)
+    try {
+      await storageV2FileMirrorService.flush()
+      await vi.advanceTimersByTimeAsync(1500)
+    } finally {
+      vi.stubGlobal('window', originalWindow)
+    }
+
+    expect(mocks.filesWhere).not.toHaveBeenCalled()
+    expect(storageV2FileMirrorService.getStatus().pendingCount).toBe(1)
+  })
+
   it('falls back to the legacy Dexie snapshot import when direct file upsert is unavailable', async () => {
     const file = {
       id: 'file-fallback',

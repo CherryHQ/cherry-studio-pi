@@ -81,4 +81,20 @@ describe('StorageV2AgentMirrorService', () => {
     await vi.advanceTimersByTimeAsync(1)
     expect(importLegacyAgentDb).toHaveBeenCalledWith({ dryRun: false, createSnapshot: false })
   })
+
+  it('does not keep retrying after the renderer window has been torn down', async () => {
+    const { storageV2AgentMirrorService } = await import('../StorageV2AgentMirrorService')
+    storageV2AgentMirrorService.schedule(1000)
+
+    const originalWindow = globalThis.window
+    vi.stubGlobal('window', undefined)
+    try {
+      await storageV2AgentMirrorService.flush()
+      await vi.advanceTimersByTimeAsync(4000)
+    } finally {
+      vi.stubGlobal('window', originalWindow)
+    }
+
+    expect(storageV2AgentMirrorService.getStatus().pendingCount).toBe(1)
+  })
 })

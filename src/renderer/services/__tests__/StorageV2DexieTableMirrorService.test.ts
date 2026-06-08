@@ -186,4 +186,26 @@ describe('StorageV2DexieTableMirrorService', () => {
       vi.useRealTimers()
     }
   })
+
+  it('does not keep retrying after the renderer window has been torn down', async () => {
+    vi.useFakeTimers()
+    try {
+      const { storageV2DexieTableMirrorService } = await import('../StorageV2DexieTableMirrorService')
+      storageV2DexieTableMirrorService.scheduleRow('quick_phrases', 'phrase-1', 1000)
+
+      const originalWindow = globalThis.window
+      vi.stubGlobal('window', undefined)
+      try {
+        await storageV2DexieTableMirrorService.flush()
+        await vi.advanceTimersByTimeAsync(1000)
+      } finally {
+        vi.stubGlobal('window', originalWindow)
+      }
+
+      expect(mocks.quickPhrasesWhere).not.toHaveBeenCalled()
+      expect(storageV2DexieTableMirrorService.getStatus().pendingCount).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

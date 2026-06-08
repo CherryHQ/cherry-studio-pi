@@ -3,6 +3,7 @@ import type { Middleware } from '@reduxjs/toolkit'
 
 import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
 import { getStorageV2LocalStorageSnapshot } from './StorageV2LocalStorageSnapshot'
+import { getRendererStorageV2Api } from './StorageV2RendererApi'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
 
 const logger = loggerService.withContext('StorageV2MirrorService')
@@ -19,14 +20,6 @@ type StateGetter = () => Record<string, any>
 type MirrorScheduleOptions = {
   pruneMissing?: boolean
   protectExistingFromDefaults?: boolean
-}
-
-function getStorageV2Api() {
-  if (typeof window === 'undefined') {
-    return { hasWindow: false, api: null }
-  }
-
-  return { hasWindow: true, api: window.api?.storageV2 ?? null }
 }
 
 const MIRRORED_ACTION_PREFIXES = [
@@ -261,7 +254,7 @@ class StorageV2MirrorService {
 
     if (!this.hasStrictPendingWork()) return
 
-    const { api } = getStorageV2Api()
+    const { api } = getRendererStorageV2Api()
     if (!api) {
       throw new Error('Storage v2 API unavailable while Redux settings mirror work is pending')
     }
@@ -278,7 +271,7 @@ class StorageV2MirrorService {
   private async mirrorNow() {
     if (!this.latestGetState) return
 
-    const { hasWindow, api } = getStorageV2Api()
+    const { hasWindow, api } = getRendererStorageV2Api()
     if (!api) {
       if (hasWindow) {
         this.scheduleRetry()

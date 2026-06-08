@@ -2,6 +2,7 @@ import { loggerService } from '@logger'
 import db from '@renderer/databases'
 
 import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
+import { getRendererStorageV2Api, type RendererStorageV2Api } from './StorageV2RendererApi'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
 
 const logger = loggerService.withContext('StorageV2DexieSettingsMirrorService')
@@ -86,8 +87,9 @@ class StorageV2DexieSettingsMirrorService {
 
   async flush() {
     if (this.suspended) return
-    if (!window.api?.storageV2) {
-      if (this.hasPendingWork()) {
+    const { hasWindow, api } = getRendererStorageV2Api()
+    if (!api) {
+      if (hasWindow && this.hasPendingWork()) {
         this.scheduleFlush(RETRY_DEBOUNCE_MS)
       }
       return
@@ -110,7 +112,7 @@ class StorageV2DexieSettingsMirrorService {
 
     if (this.pendingSettingIds.size === 0 && this.pendingDeletedIds.size === 0) return
 
-    this.inflight = this.mirrorPendingNow().finally(() => {
+    this.inflight = this.mirrorPendingNow(api).finally(() => {
       this.inflight = null
     })
 
@@ -122,7 +124,8 @@ class StorageV2DexieSettingsMirrorService {
 
     if (!this.hasPendingWork()) return
 
-    if (!window.api?.storageV2) {
+    const { api } = getRendererStorageV2Api()
+    if (!api) {
       throw new Error('Storage v2 API unavailable while Dexie settings mirror work is pending')
     }
 
@@ -188,7 +191,7 @@ class StorageV2DexieSettingsMirrorService {
     return this.pendingSettingIds.size > 0 || this.pendingDeletedIds.size > 0
   }
 
-  private async mirrorPendingNow() {
+  private async mirrorPendingNow(storageV2: RendererStorageV2Api) {
     const settingIds = Array.from(this.pendingSettingIds)
     const deletedIds = Array.from(this.pendingDeletedIds)
     this.pendingSettingIds.clear()
@@ -200,15 +203,11 @@ class StorageV2DexieSettingsMirrorService {
       const missingSettingIds = settingIds.filter((settingId) => !foundSettingIds.has(settingId))
 
       for (const setting of settings) {
-        await window.api.storageV2.setSetting(
-          toStorageV2SettingKey(setting.id),
-          setting.value ?? null,
-          'dexie-settings'
-        )
+        await storageV2.setSetting(toStorageV2SettingKey(setting.id), setting.value ?? null, 'dexie-settings')
       }
 
       for (const settingId of [...missingSettingIds, ...deletedIds]) {
-        await window.api.storageV2.setSetting(toStorageV2SettingKey(settingId), null, 'dexie-settings')
+        await storageV2.setSetting(toStorageV2SettingKey(settingId), null, 'dexie-settings')
       }
 
       logger.debug(

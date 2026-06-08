@@ -2,6 +2,7 @@ import { loggerService } from '@logger'
 import db from '@renderer/databases'
 
 import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
+import { getRendererStorageV2Api, type RendererStorageV2Api } from './StorageV2RendererApi'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
 
 const logger = loggerService.withContext('StorageV2FileMirrorService')
@@ -57,12 +58,15 @@ class StorageV2FileMirrorService {
 
     if (this.pendingFileIds.size === 0) return
 
-    if (!window.api?.storageV2) {
-      this.scheduleFlush(DEFAULT_DEBOUNCE_MS)
+    const { hasWindow, api } = getRendererStorageV2Api()
+    if (!api) {
+      if (hasWindow) {
+        this.scheduleFlush(DEFAULT_DEBOUNCE_MS)
+      }
       return
     }
 
-    this.inflight = this.mirrorPendingNow().finally(() => {
+    this.inflight = this.mirrorPendingNow(api).finally(() => {
       this.inflight = null
     })
 
@@ -74,7 +78,8 @@ class StorageV2FileMirrorService {
 
     if (this.pendingFileIds.size === 0) return
 
-    if (!window.api?.storageV2) {
+    const { api } = getRendererStorageV2Api()
+    if (!api) {
       throw new Error('Storage v2 API unavailable while file mirror work is pending')
     }
 
@@ -96,7 +101,7 @@ class StorageV2FileMirrorService {
     }, debounceMs)
   }
 
-  private async mirrorPendingNow() {
+  private async mirrorPendingNow(storageV2: RendererStorageV2Api) {
     const fileIds = Array.from(this.pendingFileIds)
     this.pendingFileIds.clear()
 
@@ -106,12 +111,12 @@ class StorageV2FileMirrorService {
       const missingFileIds = fileIds.filter((fileId) => !foundFileIds.has(fileId))
 
       if (files.length > 0) {
-        if (typeof window.api.storageV2.upsertFile === 'function') {
+        if (typeof storageV2.upsertFile === 'function') {
           for (const file of files) {
-            await window.api.storageV2.upsertFile(file as unknown as Record<string, unknown>)
+            await storageV2.upsertFile(file as unknown as Record<string, unknown>)
           }
         } else {
-          await window.api.storageV2.importLegacyDexieSnapshot(
+          await storageV2.importLegacyDexieSnapshot(
             {
               conversations: [],
               files
@@ -122,7 +127,7 @@ class StorageV2FileMirrorService {
       }
 
       for (const fileId of missingFileIds) {
-        await window.api.storageV2.deleteFile(fileId)
+        await storageV2.deleteFile(fileId)
       }
 
       logger.debug(
