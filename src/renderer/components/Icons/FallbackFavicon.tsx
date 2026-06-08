@@ -143,6 +143,7 @@ const FallbackFavicon: React.FC<FallbackFaviconProps> = ({ hostname, alt }) => {
     // Cleanup function
     return () => {
       cancelled = true
+      clearFallbackTimer()
       controller.abort()
     }
   }, [hostname]) // Only depend on hostname

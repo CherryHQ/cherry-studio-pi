@@ -76,4 +76,20 @@ describe('FallbackFavicon', () => {
       'https://example.com/favicon.ico'
     ])
   })
+
+  it('clears the fallback timer when unmounted', () => {
+    vi.useFakeTimers()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>(() => undefined))
+    )
+
+    const { unmount } = render(<FallbackFavicon hostname="example.com" alt="Example" />)
+
+    expect(vi.getTimerCount()).toBe(1)
+
+    unmount()
+
+    expect(vi.getTimerCount()).toBe(0)
+  })
 })
