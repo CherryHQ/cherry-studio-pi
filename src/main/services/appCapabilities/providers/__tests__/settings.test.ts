@@ -217,6 +217,26 @@ describe('settings app capabilities', () => {
     })
   })
 
+  it('redacts sensitive values when reading the full settings snapshot', async () => {
+    const result = await capability('settings.read').execute({}, { source: 'agent' })
+    const data = result.data as { settings: Record<string, unknown> }
+
+    expect(data.settings).toMatchObject({
+      apiServer: {
+        apiKey: '[redacted]',
+        port: 24444
+      },
+      serviceAccount: {
+        privateKey: '[redacted]'
+      },
+      webdavPass: '[redacted]',
+      theme: 'system'
+    })
+    expect(JSON.stringify(data.settings)).not.toContain('server-secret')
+    expect(JSON.stringify(data.settings)).not.toContain('preference-dav-secret')
+    expect(JSON.stringify(data.settings)).not.toContain('BEGIN PRIVATE KEY')
+  })
+
   it('redacts sensitive setting update values in the agent response only', async () => {
     const result = await capability('settings.value.set').execute(
       { path: 'apiServer.apiKey', value: 'new-server-secret' },

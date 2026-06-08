@@ -170,6 +170,27 @@ function sanitizeSettingValueForAgent(keyPath: string, value: unknown) {
   return sanitizeForAgent(value)
 }
 
+function sanitizeSettingsForAgent(value: unknown, keyPath = ''): unknown {
+  if (keyPath && SENSITIVE_SETTING_PATH_PATTERN.test(keyPath)) {
+    return sanitizeSettingValueForAgent(keyPath, value)
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item, index) => sanitizeSettingsForAgent(item, keyPath ? `${keyPath}.${index}` : String(index)))
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        sanitizeSettingsForAgent(item, keyPath ? `${keyPath}.${key}` : key)
+      ])
+    )
+  }
+
+  return sanitizeForAgent(value)
+}
+
 export async function readSettingsForAgent() {
   let settings: Record<string, any> = {}
   try {
@@ -245,7 +266,7 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       tags: ['settings', 'preferences', 'read'],
       execute: async () => {
         const settings = await readSettingsForAgent()
-        return okResult('Settings read', { settings: sanitizeForAgent(settings) })
+        return okResult('Settings read', { settings: sanitizeSettingsForAgent(settings) })
       }
     },
     {
