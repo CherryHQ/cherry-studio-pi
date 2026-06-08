@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { mockMainLoggerService } from '../../../../tests/__mocks__/MainLoggerService'
+
 const electron = await import('electron')
 const mockNetFetch = vi.mocked(electron.net.fetch)
 
@@ -7,10 +9,11 @@ const { ATTACHMENT_DOWNLOAD_TIMEOUT_MS, downloadFileAsBase64, downloadImageAsBas
   '../downloadAsBase64'
 )
 
-function mockResponse(body: string, headers: Record<string, string> = {}) {
+function mockResponse(body: string, headers: Record<string, string> = {}, ok = true, status = 200) {
   const bytes = new TextEncoder().encode(body)
   return {
-    ok: true,
+    ok,
+    status,
     headers: new Headers(headers),
     arrayBuffer: vi.fn().mockResolvedValue(bytes.buffer)
   } as unknown as Response
@@ -49,5 +52,52 @@ describe('downloadAsBase64', () => {
     expect(timeoutSpy).toHaveBeenCalledWith(ATTACHMENT_DOWNLOAD_TIMEOUT_MS)
 
     timeoutSpy.mockRestore()
+  })
+
+  it('summarizes failed image URLs without logging query or hash secrets', async () => {
+    mockNetFetch.mockResolvedValue(mockResponse('', {}, false, 403))
+
+    await expect(downloadImageAsBase64('https://example.com/image.png?token=abc#secret')).resolves.toBeNull()
+
+    expect(JSON.stringify(mockMainLoggerService.warn.mock.calls)).not.toContain('token=abc')
+    expect(JSON.stringify(mockMainLoggerService.warn.mock.calls)).not.toContain('#secret')
+    expect(mockMainLoggerService.warn).toHaveBeenCalledWith('Failed to download image', {
+      url: {
+        type: 'url',
+        protocol: 'https:',
+        host: 'example.com',
+        pathnameLength: 10,
+        searchLength: 10,
+        hashLength: 7,
+        hasSearch: true,
+        hasHash: true
+      },
+      status: 403
+    })
+  })
+
+  it('summarizes failed file URLs without logging query or hash secrets', async () => {
+    mockNetFetch.mockRejectedValue(new Error('network failed'))
+
+    await expect(
+      downloadFileAsBase64('https://example.com/report.pdf?token=abc#secret', 'report.pdf')
+    ).resolves.toBeNull()
+
+    expect(JSON.stringify(mockMainLoggerService.warn.mock.calls)).not.toContain('token=abc')
+    expect(JSON.stringify(mockMainLoggerService.warn.mock.calls)).not.toContain('#secret')
+    expect(mockMainLoggerService.warn).toHaveBeenCalledWith('Failed to fetch file', {
+      url: {
+        type: 'url',
+        protocol: 'https:',
+        host: 'example.com',
+        pathnameLength: 11,
+        searchLength: 10,
+        hashLength: 7,
+        hasSearch: true,
+        hasHash: true
+      },
+      filename: 'report.pdf',
+      error: 'network failed'
+    })
   })
 })

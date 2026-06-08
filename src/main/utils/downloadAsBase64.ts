@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeUrlForLog } from '@main/utils/logging'
 import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
 import { MB } from '@shared/config/constant'
 import { net } from 'electron'
@@ -38,19 +39,19 @@ export async function downloadImageAsBase64(url: string): Promise<ImageAttachmen
     // Reject non-http(s) schemes and local/private hosts before fetching (SSRF guard).
     const response = await fetchRemoteAttachment(url)
     if (!response.ok) {
-      logger.warn('Failed to download image', { url, status: response.status })
+      logger.warn('Failed to download image', { url: summarizeUrlForLog(url), status: response.status })
       return null
     }
 
     const contentLength = response.headers.get('content-length')
     if (contentLength && parseInt(contentLength, 10) > MAX_FILE_SIZE_BYTES) {
-      logger.warn('Image too large, skipping download', { url, size: contentLength })
+      logger.warn('Image too large, skipping download', { url: summarizeUrlForLog(url), size: contentLength })
       return null
     }
 
     const buffer = Buffer.from(await response.arrayBuffer())
     if (buffer.length > MAX_FILE_SIZE_BYTES) {
-      logger.warn('Image too large after download', { url, size: buffer.length })
+      logger.warn('Image too large after download', { url: summarizeUrlForLog(url), size: buffer.length })
       return null
     }
 
@@ -59,7 +60,7 @@ export async function downloadImageAsBase64(url: string): Promise<ImageAttachmen
     return { data: buffer.toString('base64'), media_type: mediaType }
   } catch (error) {
     logger.warn('Failed to fetch image', {
-      url,
+      url: summarizeUrlForLog(url),
       error: error instanceof Error ? error.message : String(error)
     })
     return null
@@ -75,7 +76,7 @@ export async function downloadFileAsBase64(url: string, filename: string): Promi
     // Reject non-http(s) schemes and local/private hosts before fetching (SSRF guard).
     const response = await fetchRemoteAttachment(url)
     if (!response.ok) {
-      logger.warn('Failed to download file', { url, filename, status: response.status })
+      logger.warn('Failed to download file', { url: summarizeUrlForLog(url), filename, status: response.status })
       return null
     }
 
@@ -102,7 +103,7 @@ export async function downloadFileAsBase64(url: string, filename: string): Promi
     }
   } catch (error) {
     logger.warn('Failed to fetch file', {
-      url,
+      url: summarizeUrlForLog(url),
       filename,
       error: error instanceof Error ? error.message : String(error)
     })
