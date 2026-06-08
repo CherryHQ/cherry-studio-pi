@@ -46,6 +46,13 @@ const WebviewContainer = memo(
       if (!webview) return
 
       let loadCallbackFired = false
+      let loadedCallbackTimer: ReturnType<typeof setTimeout> | undefined
+
+      const clearLoadedCallbackTimer = () => {
+        if (!loadedCallbackTimer) return
+        clearTimeout(loadedCallbackTimer)
+        loadedCallbackTimer = undefined
+      }
 
       const handleLoaded = () => {
         logger.debug(`WebView did-finish-load for app: ${appid}`)
@@ -53,7 +60,9 @@ const WebviewContainer = memo(
         if (!loadCallbackFired) {
           loadCallbackFired = true
           // Small delay to ensure content is actually visible
-          setTimeout(() => {
+          clearLoadedCallbackTimer()
+          loadedCallbackTimer = setTimeout(() => {
+            loadedCallbackTimer = undefined
             logger.debug(`Calling onLoadedCallback for app: ${appid}`)
             onLoadedCallback(appid)
           }, 100)
@@ -85,6 +94,7 @@ const WebviewContainer = memo(
 
       const handleStartLoading = () => {
         // Reset callback flag when starting a new load
+        clearLoadedCallbackTimer()
         loadCallbackFired = false
       }
 
@@ -98,6 +108,7 @@ const WebviewContainer = memo(
       webview.src = url
 
       return () => {
+        clearLoadedCallbackTimer()
         webview.removeEventListener('did-start-loading', handleStartLoading)
         webview.removeEventListener('dom-ready', handleDomReady)
         webview.removeEventListener('did-finish-load', handleLoaded)
