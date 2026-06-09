@@ -25,13 +25,13 @@ vi.mock('antd', () => ({
 }))
 
 vi.mock('antd/es/input/TextArea', () => {
-  const TextArea = ({
-    ref,
-    autoSize: _autoSize,
-    styles: _styles,
-    variant: _variant,
-    ...props
-  }: any & { ref?: React.RefObject<HTMLTextAreaElement | null> }) => <textarea ref={ref} {...props} />
+  const TextArea = ({ ref, ...props }: any & { ref?: React.RefObject<HTMLTextAreaElement | null> }) => {
+    const textareaProps = { ...props }
+    delete textareaProps.autoSize
+    delete textareaProps.styles
+    delete textareaProps.variant
+    return <textarea ref={ref} {...textareaProps} />
+  }
   TextArea.displayName = 'MockTextArea'
 
   return { default: TextArea }
