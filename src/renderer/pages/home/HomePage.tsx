@@ -1,11 +1,10 @@
-import { cacheService } from '@data/CacheService'
 import { usePreference } from '@data/hooks/usePreference'
 import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
 import { useCommandHandler } from '@renderer/features/command'
 import { useNavbarPosition } from '@renderer/hooks/useNavbar'
 import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { useTemporaryTopic } from '@renderer/hooks/useTemporaryTopic'
-import { useActiveTopic, useTopicMutations } from '@renderer/hooks/useTopic'
+import { useActiveTopic, useAllTopics, useTopicMutations } from '@renderer/hooks/useTopic'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import NavigationService from '@renderer/services/NavigationService'
 import type { Topic } from '@renderer/types'
@@ -13,7 +12,7 @@ import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, SECOND_MIN_WINDOW_WIDTH } from '@s
 import { useLocation, useNavigate } from '@tanstack/react-router'
 import { AnimatePresence, motion } from 'motion/react'
 import type { FC } from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import styled from 'styled-components'
 
 import Chat from './Chat'
@@ -46,17 +45,13 @@ const HomePage: FC = () => {
   const location = useLocation()
   const state = location.state as { topic?: Topic } | undefined
 
-  const [shouldUseTemporary] = useState(() => {
-    if (state?.topic) return false
-    if (cacheService.get('topic.home.first_launch_temp_used')) return false
-    cacheService.set('topic.home.first_launch_temp_used', true)
-    return true
-  })
+  const { topics: persistentTopics, isLoading: isPersistentTopicsLoading } = useAllTopics({ loadAll: true })
+  const shouldUseTemporary = !state?.topic && !isPersistentTopicsLoading && persistentTopics.length === 0
 
-  // Lease a temporary topic only when this is the app's first HomePage mount
-  // and the caller didn't pre-select a topic via router state. The temp topic
-  // has no assistant attached — message capabilities / model fall back to the
-  // `chat.default_model_id` preference.
+  // Lease a temporary topic whenever Home has no persistent topics and the
+  // caller didn't pre-select one via router state. Temporary topics are
+  // released when Home unmounts, so a one-shot "first launch" flag would leave
+  // a fresh user with a blank chat after visiting another tab and returning.
   const { topicId: tempTopicId, persist: persistTemporaryTopic } = useTemporaryTopic({
     enabled: shouldUseTemporary
   })
