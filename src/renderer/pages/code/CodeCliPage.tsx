@@ -23,6 +23,7 @@ import { getProviderDisplayName, useProviders } from '@renderer/hooks/useProvide
 import { useTimer } from '@renderer/hooks/useTimer'
 import { loggerService } from '@renderer/services/LoggerService'
 import { EFFORT_RATIO } from '@renderer/types'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { getThinkingBudget } from '@shared/ai/reasoningBudget'
 import type { TerminalConfig } from '@shared/config/constant'
 import { codeCLI, terminalApps } from '@shared/config/constant'
@@ -113,6 +114,13 @@ const CodeCliPage: FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false)
 
   const rawModelId = useCallback((m: Model) => m.apiModelId ?? parseUniqueModelId(m.id).modelId, [])
+
+  const showSaveFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    },
+    [t]
+  )
 
   const modelPredicate = useCallback(
     (m: Model) => {
@@ -226,14 +234,51 @@ const CodeCliPage: FC = () => {
 
   const handleModelChange = (value: string) => {
     if (!value) {
-      setModel(null).catch((err) => logger.error('Failed to clear model:', err as Error))
+      setModel(null).catch((err) => {
+        logger.error('Failed to clear model:', err as Error)
+        showSaveFailed(err)
+      })
       return
     }
-    setModel(value).catch((err) => logger.error('Failed to set model:', err as Error))
+    setModel(value).catch((err) => {
+      logger.error('Failed to set model:', err as Error)
+      showSaveFailed(err)
+    })
   }
 
   const handleRemoveDirectory = (directory: string) => {
-    removeDir(directory).catch((err) => logger.error('Failed to remove directory:', err as Error))
+    removeDir(directory).catch((err) => {
+      logger.error('Failed to remove directory:', err as Error)
+      showSaveFailed(err)
+    })
+  }
+
+  const handleDirectoryChange = (directory: string) => {
+    setCurrentDir(directory).catch((err) => {
+      logger.error('Failed to set current directory:', err as Error)
+      showSaveFailed(err)
+    })
+  }
+
+  const handleSelectFolder = () => {
+    selectFolder().catch((err) => {
+      logger.error('Failed to select code CLI folder:', err as Error)
+      showSaveFailed(err)
+    })
+  }
+
+  const handleTerminalChange = (terminal: string) => {
+    setTerminal(terminal).catch((err) => {
+      logger.error('Failed to set terminal:', err as Error)
+      showSaveFailed(err)
+    })
+  }
+
+  const handleEnvironmentVariablesChange = (value: string) => {
+    setEnvVars(value).catch((err) => {
+      logger.error('Failed to set environment variables:', err as Error)
+      showSaveFailed(err)
+    })
   }
 
   const checkBunInstallation = useCallback(async () => {
@@ -460,7 +505,7 @@ const CodeCliPage: FC = () => {
         await setCliTool(tool)
       } catch (err) {
         logger.error('Failed to set CLI tool:', err as Error)
-        window.toast.error(t('common.error'))
+        showSaveFailed(err)
         return
       }
     }
@@ -546,7 +591,7 @@ const CodeCliPage: FC = () => {
                       <SelectDropdown
                         items={directoryItems}
                         selectedId={currentDirectory || null}
-                        onSelect={(id) => void setCurrentDir(id)}
+                        onSelect={handleDirectoryChange}
                         onRemove={handleRemoveDirectory}
                         removeLabel={t('common.delete')}
                         emptyText={t('common.none')}
@@ -566,7 +611,7 @@ const CodeCliPage: FC = () => {
                         )}
                       />
                     </div>
-                    <Button variant="secondary" size="lg" onClick={() => void selectFolder()} className="shrink-0">
+                    <Button variant="secondary" size="lg" onClick={handleSelectFolder} className="shrink-0">
                       {t('code.select_folder')}
                     </Button>
                   </div>
@@ -578,7 +623,7 @@ const CodeCliPage: FC = () => {
                     <SelectDropdown
                       items={terminalItems}
                       selectedId={selectedTerminal}
-                      onSelect={setTerminal}
+                      onSelect={handleTerminalChange}
                       placeholder={t('code.terminal_placeholder')}
                       triggerClassName="data-[state=open]:border-foreground! data-[state=open]:ring-foreground/10!"
                       renderSelected={(item) => <span className="truncate text-foreground">{item.name}</span>}
@@ -613,7 +658,7 @@ const CodeCliPage: FC = () => {
                   <FieldLabel hint={t('code.env_vars_help')}>{t('code.environment_variables')}</FieldLabel>
                   <Textarea.Input
                     value={environmentVariables}
-                    onValueChange={setEnvVars}
+                    onValueChange={handleEnvironmentVariablesChange}
                     rows={4}
                     placeholder={'KEY1=value1\nKEY2=value2'}
                     className="min-h-24 resize-none rounded-md border-input px-3 py-2 font-mono text-xs shadow-none placeholder:text-muted-foreground focus-visible:border-foreground focus-visible:ring-2 focus-visible:ring-foreground/10 md:text-xs [&::-webkit-scrollbar-thumb]:bg-border/30 [&::-webkit-scrollbar]:w-0.75"
