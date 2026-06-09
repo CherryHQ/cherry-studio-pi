@@ -1,9 +1,11 @@
 import { usePreference } from '@data/hooks/usePreference'
+import { loggerService } from '@logger'
 import { useEffect, useMemo } from 'react'
 
 import { resolvePaintingProvider } from '../utils/providerSelection'
 
 const FALLBACK_PROVIDER = 'zhipu'
+const logger = loggerService.withContext('usePaintingInitialProvider')
 
 /**
  * Bootstrap the painting page's initial provider id:
@@ -23,7 +25,9 @@ export function usePaintingInitialProvider(providerOptions: string[]) {
     // Wait until provider options have loaded before persisting — otherwise
     // the first render persists the FALLBACK_PROVIDER the user never chose.
     if (!defaultPaintingProvider && providerOptions.length > 0) {
-      void setDefaultPaintingProvider(initialProviderId)
+      void setDefaultPaintingProvider(initialProviderId).catch((error) => {
+        logger.error('Failed to persist initial painting provider', error as Error)
+      })
     }
   }, [defaultPaintingProvider, initialProviderId, providerOptions, setDefaultPaintingProvider])
 

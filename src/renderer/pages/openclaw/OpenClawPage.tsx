@@ -9,6 +9,7 @@ import { usePreference } from '@renderer/data/hooks/usePreference'
 import { useMiniAppPopup } from '@renderer/hooks/useMiniAppPopup'
 import { useModelById } from '@renderer/hooks/useModel'
 import { useProviders } from '@renderer/hooks/useProvider'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { loggerService } from '@renderer/services/LoggerService'
 import { openHttpExternalUrl } from '@renderer/utils/openExternal'
 import type { Model as SharedModel } from '@shared/data/types/model'
@@ -57,6 +58,7 @@ const OpenClawPage: FC = () => {
   const { t, i18n } = useTranslation()
   const { providers } = useProviders()
   const { openSmartMiniApp } = useMiniAppPopup()
+  const showSaveFailed = useSaveFailedToast()
 
   const docsUrl = useMemo(() => {
     const lang = i18n.language?.toLowerCase() ?? ''
@@ -222,7 +224,7 @@ const OpenClawPage: FC = () => {
 
   const handleModelSelect = (next: UniqueModelId | undefined) => {
     if (!next) return
-    void setSelectedModelId(next)
+    void setSelectedModelId(next).catch(showSaveFailed)
   }
 
   const handleStartGateway = async () => {
