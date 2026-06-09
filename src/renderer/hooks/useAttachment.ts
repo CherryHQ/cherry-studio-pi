@@ -23,7 +23,7 @@ export function useAttachment() {
         }
         void TextFilePreviewPopup.show(content, title, ext)
       } else {
-        void window.api.file.openPath(path)
+        await window.api.file.openPath(path)
       }
     } catch (err) {
       logger.error(`Error opening ${path}:`, err as Error)
