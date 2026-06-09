@@ -17,6 +17,7 @@ import {
 import EmojiPicker from '@renderer/components/EmojiPicker'
 import type { AgentType } from '@shared/data/types/agent'
 import { ENDPOINT_TYPE, type Model, MODEL_CAPABILITY, type UniqueModelId } from '@shared/data/types/model'
+import type { Provider } from '@shared/data/types/provider'
 import type { FC } from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -41,14 +42,22 @@ const DISALLOWED_AGENT_CAPABILITIES = new Set<string>([
   MODEL_CAPABILITY.IMAGE_GENERATION
 ])
 
-function isSelectableAgentModel(model: Model, runtimeType: AgentType): boolean {
+function hasAnthropicMessagesEndpoint(model: Model, provider?: Provider): boolean {
+  return (
+    model.endpointTypes?.includes(ENDPOINT_TYPE.ANTHROPIC_MESSAGES) === true ||
+    provider?.defaultChatEndpoint === ENDPOINT_TYPE.ANTHROPIC_MESSAGES ||
+    Boolean(provider?.endpointConfigs?.[ENDPOINT_TYPE.ANTHROPIC_MESSAGES])
+  )
+}
+
+function isSelectableAgentModel(model: Model, runtimeType: AgentType, provider?: Provider): boolean {
   const capabilities = model.capabilities ?? []
   if (capabilities.some((capability) => DISALLOWED_AGENT_CAPABILITIES.has(capability))) {
     return false
   }
 
   if (runtimeType === 'claude-code') {
-    return model.endpointTypes?.includes(ENDPOINT_TYPE.ANTHROPIC_MESSAGES) === true
+    return hasAnthropicMessagesEndpoint(model, provider)
   }
 
   return true
@@ -271,7 +280,7 @@ function ModelField({
       value={value}
       allowClear={allowClear}
       errorMessage={errorMessage}
-      filter={(model) => isSelectableAgentModel(model, runtimeType)}
+      filter={(model, provider) => isSelectableAgentModel(model, runtimeType, provider)}
       onSelect={onSelect}
     />
   )

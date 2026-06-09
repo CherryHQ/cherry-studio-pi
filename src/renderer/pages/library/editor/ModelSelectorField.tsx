@@ -1,6 +1,7 @@
 import { Button, Field, FieldContent, FieldDescription, FieldError, Tooltip } from '@cherrystudio/ui'
 import { cn } from '@cherrystudio/ui/lib/utils'
 import { ModelSelector } from '@renderer/components/ModelSelector'
+import type { ModelSelectorFilter } from '@renderer/components/ModelSelector/types'
 import { useModels } from '@renderer/hooks/useModel'
 import { isUniqueModelId, type Model, type UniqueModelId } from '@shared/data/types/model'
 import { ChevronsUpDown, Trash2 } from 'lucide-react'
@@ -15,7 +16,7 @@ interface Props {
   value?: string | null
   allowClear?: boolean
   errorMessage?: string
-  filter?: (model: Model) => boolean
+  filter?: ModelSelectorFilter
   onSelect: (modelId: UniqueModelId | null, model?: Model) => void
 }
 

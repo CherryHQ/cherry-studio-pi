@@ -1,4 +1,4 @@
-import { type Model, MODEL_CAPABILITY } from '@shared/data/types/model'
+import { ENDPOINT_TYPE, type Model, MODEL_CAPABILITY } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
 import { renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -338,6 +338,34 @@ describe('useModelSelectorData', () => {
     )
 
     expect(result.current.modelItems.map((m) => m.modelId)).toEqual(['openai::gpt-4'])
+  })
+
+  it('passes provider context to caller-provided filters', () => {
+    wireDeps({
+      providers: [
+        makeProvider('deepseek', {
+          endpointConfigs: {
+            [ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS]: { baseUrl: 'https://api.deepseek.com' },
+            [ENDPOINT_TYPE.ANTHROPIC_MESSAGES]: { baseUrl: 'https://api.deepseek.com/anthropic' }
+          }
+        }),
+        makeProvider('openai', {
+          endpointConfigs: {
+            [ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS]: { baseUrl: 'https://api.openai.com/v1' }
+          }
+        })
+      ],
+      models: [makeModel('deepseek-chat', 'deepseek'), makeModel('gpt-4', 'openai')]
+    })
+
+    const { result } = renderHook(() =>
+      useModelSelectorData({
+        searchText: '',
+        filter: (_model, provider) => Boolean(provider?.endpointConfigs?.[ENDPOINT_TYPE.ANTHROPIC_MESSAGES])
+      })
+    )
+
+    expect(result.current.modelItems.map((m) => m.modelId)).toEqual(['deepseek::deepseek-chat'])
   })
 
   it('exposes availableTags that are actually represented in the filtered model pool', () => {

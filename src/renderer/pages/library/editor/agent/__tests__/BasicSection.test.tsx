@@ -9,7 +9,7 @@ import type { AgentFormState } from '../descriptor'
 import BasicSection from '../sections/BasicSection'
 
 const { modelFilters } = vi.hoisted(() => ({
-  modelFilters: [] as Array<((model: any) => boolean) | undefined>
+  modelFilters: [] as Array<((model: any, provider?: any) => boolean) | undefined>
 }))
 
 vi.mock('react-i18next', () => ({
@@ -107,7 +107,7 @@ vi.mock('@renderer/components/ModelSelector', () => ({
     onSelect
   }: {
     trigger: ReactNode
-    filter?: (model: any) => boolean
+    filter?: (model: any, provider?: any) => boolean
     onSelect: (modelId: string | undefined) => void
   }) => {
     modelFilters.push(filter)
@@ -169,9 +169,19 @@ describe('BasicSection agent model selectors', () => {
   function createModel(overrides: Record<string, unknown> = {}) {
     return {
       id: 'openai::gpt-4.1',
+      providerId: 'openai',
       name: 'GPT 4.1',
       capabilities: [],
-      endpointTypes: ['openai_responses'],
+      endpointTypes: [ENDPOINT_TYPE.OPENAI_RESPONSES],
+      ...overrides
+    }
+  }
+
+  function createProvider(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'openai',
+      name: 'OpenAI',
+      endpointConfigs: {},
       ...overrides
     }
   }
@@ -207,6 +217,37 @@ describe('BasicSection agent model selectors', () => {
     const filter = modelFilters[0]
     expect(filter?.(createModel())).toBe(false)
     expect(filter?.(createModel({ endpointTypes: [ENDPOINT_TYPE.ANTHROPIC_MESSAGES] }))).toBe(true)
+    expect(
+      filter?.(
+        createModel({
+          providerId: 'deepseek',
+          id: 'deepseek::deepseek-chat',
+          endpointTypes: undefined
+        }),
+        createProvider({
+          id: 'deepseek',
+          endpointConfigs: {
+            [ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS]: { baseUrl: 'https://api.deepseek.com' },
+            [ENDPOINT_TYPE.ANTHROPIC_MESSAGES]: { baseUrl: 'https://api.deepseek.com/anthropic' }
+          }
+        })
+      )
+    ).toBe(true)
+    expect(
+      filter?.(
+        createModel({
+          providerId: 'openai',
+          id: 'openai::gpt-4.1',
+          endpointTypes: undefined
+        }),
+        createProvider({
+          id: 'openai',
+          endpointConfigs: {
+            [ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS]: { baseUrl: 'https://api.openai.com/v1' }
+          }
+        })
+      )
+    ).toBe(false)
     expect(screen.getByText('agent.add.model.tooltip')).toBeInTheDocument()
   })
 

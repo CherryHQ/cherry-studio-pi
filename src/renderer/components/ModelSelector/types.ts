@@ -8,12 +8,13 @@ import type { ModelSelectorTag } from './filters'
 export type ModelSelectorSide = 'top' | 'right' | 'bottom' | 'left'
 export type ModelSelectorAlign = 'start' | 'center' | 'end'
 export type ModelSelectorSelectionType = 'model' | 'id'
+export type ModelSelectorFilter = (model: Model, provider?: Provider) => boolean
 
 interface ModelSelectorCommonProps {
   trigger: ReactNode
   open?: boolean
   onOpenChange?: (open: boolean) => void
-  filter?: (model: Model) => boolean
+  filter?: ModelSelectorFilter
   showTagFilter?: boolean
   showPinnedModels?: boolean
   showPinActions?: boolean
@@ -93,7 +94,7 @@ export interface UseModelSelectorDataOptions {
   selectedModelIds?: readonly UniqueModelId[]
   maxSelectedCount?: number
   searchText: string
-  filter?: (model: Model) => boolean
+  filter?: ModelSelectorFilter
   showTagFilter?: boolean
   showPinnedModels?: boolean
   prioritizedProviderIds?: string[]
