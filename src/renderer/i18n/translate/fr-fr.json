@@ -8,7 +8,7 @@
       },
       "model": {
         "supported_providers": "Fournisseurs pris en charge",
-        "tooltip": "Actuellement, seuls les modèles qui prennent en charge les points de terminaison Anthropic sont disponibles pour la fonctionnalité Agent.",
+        "tooltip": "Le mode standard (Pi Agent) prend en charge tous les modèles de chat. Le mode avancé utilise Claude Agent SDK et nécessite actuellement un modèle avec endpoint Anthropic.",
         "view_providers": "Afficher les fournisseurs pris en charge"
       },
       "title": "Ajouter un agent",

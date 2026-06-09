@@ -8,7 +8,7 @@
       },
       "model": {
         "supported_providers": "Unterstützte Anbieter",
-        "tooltip": "Derzeit sind für die Agent-Funktion nur Modelle verfügbar, die Anthropic-Endpunkte unterstützen.",
+        "tooltip": "Der Standardmodus (Pi Agent) unterstützt alle Chat-Modelle. Der erweiterte Modus nutzt das Claude Agent SDK und benötigt derzeit ein Modell mit Anthropic-Endpunkt.",
         "view_providers": "Unterstützte Anbieter anzeigen"
       },
       "title": "Agent hinzufügen",

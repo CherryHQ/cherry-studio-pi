@@ -8,7 +8,7 @@
       },
       "model": {
         "supported_providers": "支持的服务商",
-        "tooltip": "目前，只有支持 Anthropic 端点的模型可用于 Agent 功能。",
+        "tooltip": "常规模式（Pi Agent）支持所有可聊天模型；增强模式使用 Claude Agent SDK，目前仅支持 Anthropic 端点模型。",
         "view_providers": "查看支持的服务商"
       },
       "title": "添加 Agent",

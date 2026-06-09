@@ -8,7 +8,7 @@
       },
       "model": {
         "supported_providers": "Furnizori acceptați",
-        "tooltip": "Momentan, doar modelele care acceptă endpoint-uri Anthropic sunt disponibile pentru funcția Agent.",
+        "tooltip": "Modul standard (Pi Agent) acceptă toate modelele de chat. Modul avansat folosește Claude Agent SDK și necesită momentan un model cu endpoint Anthropic.",
         "view_providers": "Vizualizați furnizorii acceptați"
       },
       "title": "Adaugă agent",

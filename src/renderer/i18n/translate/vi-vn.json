@@ -8,7 +8,7 @@
       },
       "model": {
         "supported_providers": "Nhà cung cấp được hỗ trợ",
-        "tooltip": "Hiện tại, chỉ những mô hình hỗ trợ các điểm cuối Anthropic mới có sẵn cho tính năng Agent.",
+        "tooltip": "Chế độ tiêu chuẩn (Pi Agent) hỗ trợ mọi mô hình chat. Chế độ nâng cao dùng Claude Agent SDK và hiện cần mô hình có endpoint Anthropic.",
         "view_providers": "Xem các nhà cung cấp được hỗ trợ"
       },
       "title": "Thêm Đại lý",

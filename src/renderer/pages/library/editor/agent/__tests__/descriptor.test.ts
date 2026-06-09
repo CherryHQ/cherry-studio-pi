@@ -100,6 +100,14 @@ describe('buildInitialAgentFormState', () => {
 })
 
 describe('agent create flow helpers', () => {
+  it('defaults new agents to Pi runtime with Soul mode enabled', () => {
+    const draft = buildInitialAgentFormState()
+
+    expect(draft.type).toBe('pi')
+    expect(draft.soulEnabled).toBe(true)
+    expect(draft.permissionMode).toBe('bypassPermissions')
+  })
+
   it('requires both name and model before create save is enabled', () => {
     const draft = buildInitialAgentFormState()
 

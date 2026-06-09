@@ -200,7 +200,10 @@ export const ResourceGrid: FC<Props> = ({
             {activeResourceType !== 'skill' && (
               <Button
                 variant="default"
-                onClick={() => onCreate(activeResourceType)}
+                onClick={() => {
+                  closeMenu()
+                  onCreate(activeResourceType)
+                }}
                 className="flex h-auto min-h-0 items-center gap-1.5 rounded-lg px-3 py-1.5 font-normal text-xs shadow-none transition-colors focus-visible:ring-0 active:scale-[0.97]">
                 <Plus size={11} className="lucide-custom" />
                 <span>
@@ -212,7 +215,10 @@ export const ResourceGrid: FC<Props> = ({
             {activeResourceType === 'assistant' && (
               <Button
                 variant="ghost"
-                onClick={onImportAssistant}
+                onClick={() => {
+                  closeMenu()
+                  onImportAssistant()
+                }}
                 className="flex h-auto min-h-0 items-center gap-1.5 rounded-lg border border-border/40 px-3 py-1.5 font-normal text-muted-foreground/70 text-xs shadow-none transition-colors hover:border-border/60 hover:bg-accent/50 hover:text-foreground focus-visible:ring-0 active:scale-[0.97]">
                 <Upload size={11} />
                 <span>{t('assistants.presets.import.action')}</span>
@@ -222,7 +228,10 @@ export const ResourceGrid: FC<Props> = ({
             {activeResourceType === 'skill' && (
               <Button
                 variant="default"
-                onClick={() => onCreate('skill')}
+                onClick={() => {
+                  closeMenu()
+                  onCreate('skill')
+                }}
                 className="flex h-auto min-h-0 items-center gap-1.5 rounded-lg px-3 py-1.5 font-normal text-xs shadow-none transition-colors focus-visible:ring-0 active:scale-[0.97]">
                 <Upload size={11} className="lucide-custom" />
                 <span>{t('library.create_menu.import', { type: t(RESOURCE_TYPE_META.skill.labelKey) })}</span>

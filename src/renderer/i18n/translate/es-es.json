@@ -8,7 +8,7 @@
       },
       "model": {
         "supported_providers": "Proveedores Admitidos",
-        "tooltip": "Actualmente, solo los modelos que admiten puntos finales de Anthropic están disponibles para la función Agente.",
+        "tooltip": "El modo estándar (Pi Agent) admite todos los modelos de chat. El modo avanzado usa Claude Agent SDK y actualmente requiere un modelo con endpoint Anthropic.",
         "view_providers": "Ver proveedores compatibles"
       },
       "title": "Agregar Agente",

@@ -15,6 +15,7 @@ import {
   Textarea
 } from '@cherrystudio/ui'
 import EmojiPicker from '@renderer/components/EmojiPicker'
+import type { AgentType } from '@shared/data/types/agent'
 import { ENDPOINT_TYPE, type Model, MODEL_CAPABILITY, type UniqueModelId } from '@shared/data/types/model'
 import type { FC } from 'react'
 import { useState } from 'react'
@@ -29,6 +30,7 @@ interface Props {
   onChange: (patch: Partial<AgentFormState>) => void
   nameError?: string
   modelError?: string
+  variant?: 'full' | 'create'
 }
 
 // Avatar quick-pick presets shown next to the emoji picker button.
@@ -39,11 +41,17 @@ const DISALLOWED_AGENT_CAPABILITIES = new Set<string>([
   MODEL_CAPABILITY.IMAGE_GENERATION
 ])
 
-function isSelectableAgentModel(model: Model): boolean {
-  return (
-    model.endpointTypes?.includes(ENDPOINT_TYPE.ANTHROPIC_MESSAGES) === true &&
-    !model.capabilities.some((capability) => DISALLOWED_AGENT_CAPABILITIES.has(capability))
-  )
+function isSelectableAgentModel(model: Model, runtimeType: AgentType): boolean {
+  const capabilities = model.capabilities ?? []
+  if (capabilities.some((capability) => DISALLOWED_AGENT_CAPABILITIES.has(capability))) {
+    return false
+  }
+
+  if (runtimeType === 'claude-code') {
+    return model.endpointTypes?.includes(ENDPOINT_TYPE.ANTHROPIC_MESSAGES) === true
+  }
+
+  return true
 }
 
 /**
@@ -59,9 +67,10 @@ function isSelectableAgentModel(model: Model): boolean {
  * Each sub-field stays in one flat list to match the "one tall Essential
  * tab" feel of the legacy popup.
  */
-const BasicSection: FC<Props> = ({ form, onChange, nameError, modelError }) => {
+const BasicSection: FC<Props> = ({ form, onChange, nameError, modelError, variant = 'full' }) => {
   const { t } = useTranslation()
   const [emojiOpen, setEmojiOpen] = useState(false)
+  const isCreateVariant = variant === 'create'
 
   return (
     <div className="flex flex-col gap-5">
@@ -132,65 +141,76 @@ const BasicSection: FC<Props> = ({ form, onChange, nameError, modelError }) => {
         </FieldContent>
       </Field>
 
-      <ModelSubsection>
+      <ModelSubsection runtimeType={form.type}>
         <ModelField
           label={t('library.config.agent.field.model.label')}
           hint={t('library.config.agent.field.model.hint')}
           value={form.model}
+          runtimeType={form.type}
           errorMessage={modelError}
           onSelect={(modelId) => onChange({ model: modelId ?? '' })}
         />
-        <ModelField
-          label={t('library.config.agent.field.plan_model.label')}
-          hint={t('library.config.agent.field.plan_model.hint')}
-          value={form.planModel}
-          allowClear
-          onSelect={(modelId) => onChange({ planModel: modelId ?? '' })}
-        />
-        <ModelField
-          label={t('library.config.agent.field.small_model.label')}
-          hint={t('library.config.agent.field.small_model.hint')}
-          value={form.smallModel}
-          allowClear
-          onSelect={(modelId) => onChange({ smallModel: modelId ?? '' })}
-        />
+        {!isCreateVariant && (
+          <>
+            <ModelField
+              label={t('library.config.agent.field.plan_model.label')}
+              hint={t('library.config.agent.field.plan_model.hint')}
+              value={form.planModel}
+              runtimeType={form.type}
+              allowClear
+              onSelect={(modelId) => onChange({ planModel: modelId ?? '' })}
+            />
+            <ModelField
+              label={t('library.config.agent.field.small_model.label')}
+              hint={t('library.config.agent.field.small_model.hint')}
+              value={form.smallModel}
+              runtimeType={form.type}
+              allowClear
+              onSelect={(modelId) => onChange({ smallModel: modelId ?? '' })}
+            />
+          </>
+        )}
       </ModelSubsection>
 
-      <SwitchRow
-        label={t('library.config.agent.field.soul_enabled.label')}
-        hint={t('library.config.agent.field.soul_enabled.help')}
-        checked={form.soulEnabled}
-        onCheckedChange={(checked) => onChange({ soulEnabled: checked })}
-      />
-
-      <SwitchRow
-        label={t('library.config.agent.field.heartbeat_enabled.label')}
-        hint={t('agent.cherryClaw.heartbeat.enabledHelper')}
-        checked={form.heartbeatEnabled}
-        onCheckedChange={(checked) => onChange({ heartbeatEnabled: checked })}
-      />
-
-      {form.heartbeatEnabled ? (
-        <Field className="gap-1.5">
-          <FieldHeader
-            label={t('library.config.agent.field.heartbeat_interval.label')}
-            hint={t('agent.cherryClaw.heartbeat.intervalHelper')}
+      {!isCreateVariant && (
+        <>
+          <SwitchRow
+            label={t('library.config.agent.field.soul_enabled.label')}
+            hint={t('library.config.agent.field.soul_enabled.help')}
+            checked={form.soulEnabled}
+            onCheckedChange={(checked) => onChange({ soulEnabled: checked })}
           />
-          <FieldContent>
-            <EditableNumber
-              block
-              min={1}
-              max={1440}
-              step={1}
-              precision={0}
-              align="start"
-              changeOnBlur
-              value={form.heartbeatInterval || null}
-              onChange={(v) => onChange({ heartbeatInterval: typeof v === 'number' ? v : 0 })}
-            />
-          </FieldContent>
-        </Field>
-      ) : null}
+
+          <SwitchRow
+            label={t('library.config.agent.field.heartbeat_enabled.label')}
+            hint={t('agent.cherryClaw.heartbeat.enabledHelper')}
+            checked={form.heartbeatEnabled}
+            onCheckedChange={(checked) => onChange({ heartbeatEnabled: checked })}
+          />
+
+          {form.heartbeatEnabled ? (
+            <Field className="gap-1.5">
+              <FieldHeader
+                label={t('library.config.agent.field.heartbeat_interval.label')}
+                hint={t('agent.cherryClaw.heartbeat.intervalHelper')}
+              />
+              <FieldContent>
+                <EditableNumber
+                  block
+                  min={1}
+                  max={1440}
+                  step={1}
+                  precision={0}
+                  align="start"
+                  changeOnBlur
+                  value={form.heartbeatInterval || null}
+                  onChange={(v) => onChange({ heartbeatInterval: typeof v === 'number' ? v : 0 })}
+                />
+              </FieldContent>
+            </Field>
+          ) : null}
+        </>
+      )}
 
       <Field className="gap-1.5">
         <FieldHeader
@@ -210,13 +230,18 @@ const BasicSection: FC<Props> = ({ form, onChange, nameError, modelError }) => {
   )
 }
 
-function ModelSubsection({ children }: { children: React.ReactNode }) {
+function ModelSubsection({ children, runtimeType }: { children: React.ReactNode; runtimeType: AgentType }) {
   const { t } = useTranslation()
   return (
     <FieldSet className="gap-3">
       <FieldSeparator className="font-medium text-foreground *:data-[slot=field-separator-content]:bg-background [&>[data-slot=field-separator-content]]:font-medium">
         {t('library.config.agent.model_config')}
       </FieldSeparator>
+      {runtimeType === 'claude-code' ? (
+        <div className="rounded-xs border border-border/40 bg-accent/20 px-3 py-2 text-muted-foreground/80 text-xs">
+          {t('agent.add.model.tooltip')}
+        </div>
+      ) : null}
       {children}
     </FieldSet>
   )
@@ -226,6 +251,7 @@ function ModelField({
   label,
   hint,
   value,
+  runtimeType,
   allowClear = false,
   errorMessage,
   onSelect
@@ -233,6 +259,7 @@ function ModelField({
   label: string
   hint: string
   value: string
+  runtimeType: AgentType
   allowClear?: boolean
   errorMessage?: string
   onSelect: (modelId: UniqueModelId | null) => void
@@ -244,7 +271,7 @@ function ModelField({
       value={value}
       allowClear={allowClear}
       errorMessage={errorMessage}
-      filter={isSelectableAgentModel}
+      filter={(model) => isSelectableAgentModel(model, runtimeType)}
       onSelect={onSelect}
     />
   )

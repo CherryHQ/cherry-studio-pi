@@ -1,4 +1,4 @@
-import { Alert, Button } from '@cherrystudio/ui'
+import { Alert, Button, Dialog, DialogContent } from '@cherrystudio/ui'
 import { useEnsureTags, useTagList } from '@renderer/hooks/useTags'
 import type { InstalledSkill } from '@shared/data/types/agent'
 import type { Assistant } from '@shared/data/types/assistant'
@@ -305,6 +305,8 @@ export default function LibraryPage() {
   )
 
   const handleCreate = useCallback((type: ResourceType) => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }))
+
     if (type === 'assistant') {
       // Mirror the agent create flow: enter the form first, then POST only
       // after the user fills the required fields and clicks Save.
@@ -391,21 +393,6 @@ export default function LibraryPage() {
           exit={{ opacity: 0 }}
           className="flex min-h-0 flex-1 flex-col bg-background">
           <AgentConfigPage agent={configView.agent} onBack={handleBackToList} />
-        </motion.div>
-      </AnimatePresence>
-    )
-  }
-
-  if (configView.type === 'agent-create') {
-    return (
-      <AnimatePresence mode="wait">
-        <motion.div
-          key="agent-create"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="flex min-h-0 flex-1 flex-col bg-background">
-          <AgentConfigPage onBack={handleBackToList} onCreated={handleCreated} />
         </motion.div>
       </AnimatePresence>
     )
@@ -526,6 +513,13 @@ export default function LibraryPage() {
       </div>
 
       <DeleteConfirmDialog resource={deleteConfirm} onClose={() => setDeleteConfirm(null)} />
+      <Dialog open={configView.type === 'agent-create'} onOpenChange={(open) => !open && handleBackToList()}>
+        <DialogContent
+          aria-describedby={undefined}
+          className="w-[min(920px,calc(100vw-2rem))] max-w-none overflow-hidden rounded-xl p-0 sm:max-w-[920px]">
+          <AgentConfigPage onBack={handleBackToList} onCreated={handleCreated} presentation="dialog" />
+        </DialogContent>
+      </Dialog>
       <AssistantPresetPreviewDialog
         preset={previewAssistantPreset}
         open={Boolean(previewAssistantPreset)}

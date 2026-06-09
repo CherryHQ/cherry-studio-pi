@@ -1,4 +1,6 @@
+import { Button, DialogHeader, DialogTitle, Switch } from '@cherrystudio/ui'
 import { useAgentTools } from '@renderer/hooks/agents/useAgentTools'
+import { Check, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
 import type { FC } from 'react'
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -37,7 +39,10 @@ interface Props {
    * parent can return to list mode and refetch the latest collection.
    */
   onCreated?: (created: AgentDetail) => void
+  presentation?: 'page' | 'dialog'
 }
+
+const CREATE_AGENT_STEP_IDS: AgentConfigSection[] = ['mode', 'basic', 'prompt', 'tools']
 
 // Stub used by the Tools tab in create mode so `agent.id` reads are safe.
 // Skills still require a persisted agent id; tool and MCP draft changes are
@@ -68,9 +73,10 @@ const EMPTY_AGENT_FOR_CREATE: AgentDetail = {
  * `onCommit` and the `AgentSaveIntent` discriminant returned by
  * `diffAgentSaveIntent`.
  */
-const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated }) => {
+const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated, presentation = 'page' }) => {
   const { t } = useTranslation()
   const isCreate = !agent
+  const isDialogCreate = isCreate && presentation === 'dialog'
 
   const [currentAgent, setCurrentAgent] = useState<AgentDetail | undefined>(undefined)
   const [activeSection, setActiveSection] = useState<AgentConfigSection>(isCreate ? 'mode' : 'basic')
@@ -137,6 +143,130 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated }) => {
     : form.name || editAgent?.name || editAgent?.id || ''
   const requiredFieldMessage = t('common.required_field')
   const createValidation = isCreate ? validateAgentCreateForm(form) : null
+  const createSteps = useMemo(
+    () => AGENT_CONFIG_SECTIONS.filter((section) => CREATE_AGENT_STEP_IDS.includes(section.id)),
+    []
+  )
+  const activeCreateStepIndex = Math.max(
+    0,
+    createSteps.findIndex((section) => section.id === activeSection)
+  )
+  const isFirstCreateStep = activeCreateStepIndex <= 0
+  const isLastCreateStep = activeCreateStepIndex >= createSteps.length - 1
+  const activeCreateStep = createSteps[activeCreateStepIndex] ?? createSteps[0]
+
+  const renderSection = (sectionId: AgentConfigSection) => (
+    <>
+      {sectionId === 'mode' && isCreate && <ModeSection form={form} onChange={onChange} />}
+      {sectionId === 'basic' && (
+        <BasicSection
+          form={form}
+          onChange={onChange}
+          variant={isDialogCreate ? 'create' : 'full'}
+          nameError={createValidation?.nameMissing ? requiredFieldMessage : undefined}
+          modelError={createValidation?.modelMissing ? requiredFieldMessage : undefined}
+        />
+      )}
+      {sectionId === 'prompt' && <PromptSection form={form} onChange={onChange} />}
+      {sectionId === 'permission' && !form.soulEnabled && <PermissionSection form={form} onChange={onChange} />}
+      {sectionId === 'tools' && (
+        <>
+          <ToolsSection
+            agent={editAgent ?? { ...EMPTY_AGENT_FOR_CREATE, type: runtimeType }}
+            tools={tools}
+            form={form}
+            onChange={onChange}
+          />
+          {isDialogCreate ? <CreateAdvancedSettings form={form} onChange={onChange} /> : null}
+        </>
+      )}
+      {sectionId === 'advanced' && <AdvancedSection form={form} onChange={onChange} />}
+    </>
+  )
+
+  if (isDialogCreate) {
+    const goToCreateStep = (index: number) => {
+      const nextSection = createSteps[index]
+      if (nextSection) setActiveSection(nextSection.id)
+    }
+
+    const goNext = () => {
+      if (activeCreateStep.id === 'basic' && createValidation && !createValidation.isValid) {
+        return
+      }
+      goToCreateStep(activeCreateStepIndex + 1)
+    }
+
+    return (
+      <div className="flex max-h-[min(760px,calc(100vh-3rem))] min-h-[560px] flex-col overflow-hidden bg-background">
+        <DialogHeader className="shrink-0 border-border/40 border-b px-5 py-4 text-left">
+          <DialogTitle className="text-base text-foreground">
+            {form.name.trim() || t('library.config.agent.create_title')}
+          </DialogTitle>
+          <p className="text-muted-foreground/70 text-xs">{t(activeCreateStep.descKey)}</p>
+        </DialogHeader>
+
+        <div className="shrink-0 border-border/40 border-b px-5 py-3">
+          <div className="grid grid-cols-4 gap-2">
+            {createSteps.map((section, index) => {
+              const Icon = section.icon
+              const active = activeCreateStepIndex === index
+              const completed = activeCreateStepIndex > index
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => goToCreateStep(index)}
+                  className={`flex min-h-[54px] flex-col items-start justify-center rounded-xs border px-3 text-left transition-colors ${
+                    active
+                      ? 'border-primary/40 bg-primary/10 text-foreground'
+                      : completed
+                        ? 'border-border/40 bg-accent/25 text-foreground'
+                        : 'border-border/30 bg-transparent text-muted-foreground/70 hover:bg-accent/20'
+                  }`}>
+                  <span className="mb-1 flex items-center gap-1.5 text-xs">
+                    {completed ? <Check size={12} /> : <Icon size={12} />}
+                    {t(section.labelKey)}
+                  </span>
+                  <span className="line-clamp-1 text-[11px] text-muted-foreground/70">{t(section.descKey)}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">{renderSection(activeCreateStep.id)}</div>
+
+        <div className="flex shrink-0 items-center gap-3 border-border/40 border-t px-5 py-4">
+          <div className="min-w-0 flex-1">
+            {error ? <p className="truncate text-destructive text-xs">{error}</p> : null}
+            {saved ? <p className="text-muted-foreground/70 text-xs">{t('common.saved')}</p> : null}
+          </div>
+          <Button variant="ghost" onClick={onBack} disabled={saving}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => goToCreateStep(activeCreateStepIndex - 1)}
+            disabled={isFirstCreateStep || saving}>
+            <ChevronLeft size={14} />
+            {t('common.previous')}
+          </Button>
+          {isLastCreateStep ? (
+            <Button onClick={() => void handleSave()} disabled={!canSave || saving}>
+              <Check size={14} />
+              {saving ? t('library.config.saving') : t('library.config.agent.create_title')}
+            </Button>
+          ) : (
+            <Button onClick={goNext} disabled={saving}>
+              {t('common.next')}
+              <ChevronRight size={14} />
+            </Button>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <ConfigEditorShell<AgentConfigSection>
@@ -152,26 +282,7 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated }) => {
       onSave={handleSave}
       onBack={onBack}
       topBanner={isCreate ? <CreateAgentBanner /> : undefined}>
-      {activeSection === 'mode' && isCreate && <ModeSection form={form} onChange={onChange} />}
-      {activeSection === 'basic' && (
-        <BasicSection
-          form={form}
-          onChange={onChange}
-          nameError={createValidation?.nameMissing ? requiredFieldMessage : undefined}
-          modelError={createValidation?.modelMissing ? requiredFieldMessage : undefined}
-        />
-      )}
-      {activeSection === 'prompt' && <PromptSection form={form} onChange={onChange} />}
-      {activeSection === 'permission' && !form.soulEnabled && <PermissionSection form={form} onChange={onChange} />}
-      {activeSection === 'tools' && (
-        <ToolsSection
-          agent={editAgent ?? { ...EMPTY_AGENT_FOR_CREATE, type: runtimeType }}
-          tools={tools}
-          form={form}
-          onChange={onChange}
-        />
-      )}
-      {activeSection === 'advanced' && <AdvancedSection form={form} onChange={onChange} />}
+      {renderSection(activeSection)}
     </ConfigEditorShell>
   )
 }
@@ -188,5 +299,45 @@ function CreateAgentBanner() {
     <div className="flex shrink-0 items-center gap-2 border-border/40 border-b bg-accent/20 px-5 py-2 text-muted-foreground/70 text-xs">
       <span>{t('library.config.agent.section.tools.skills_require_save')}</span>
     </div>
+  )
+}
+
+function CreateAdvancedSettings({
+  form,
+  onChange
+}: {
+  form: AgentFormState
+  onChange: (patch: Partial<AgentFormState>) => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <details className="mt-5 rounded-xs border border-border/40 bg-accent/10">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 font-medium text-foreground text-sm [&::-webkit-details-marker]:hidden">
+        <SlidersHorizontal size={14} />
+        {t('common.advanced_settings')}
+      </summary>
+      <div className="flex flex-col gap-5 border-border/30 border-t px-3 py-4">
+        <div className="rounded-xs border border-border/30 bg-background/70 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-foreground text-sm">{t('library.config.agent.field.soul_enabled.label')}</p>
+              <p className="mt-0.5 text-muted-foreground/70 text-xs">
+                {t('library.config.agent.field.soul_enabled.help')}
+              </p>
+            </div>
+            <Switch
+              size="sm"
+              checked={form.soulEnabled}
+              onCheckedChange={(checked) => onChange({ soulEnabled: checked })}
+              aria-label={t('library.config.agent.field.soul_enabled.label')}
+            />
+          </div>
+        </div>
+
+        {!form.soulEnabled ? <PermissionSection form={form} onChange={onChange} /> : null}
+        <AdvancedSection form={form} onChange={onChange} />
+      </div>
+    </details>
   )
 }

@@ -166,6 +166,7 @@ function envVarsFromText(text: string): Record<string, string> {
 
 export function buildInitialAgentFormState(agent?: AgentDetail | null): AgentFormState {
   const cfg: AgentConfiguration = agent?.configuration ?? {}
+  const isCreate = !agent
   return {
     type: agent?.type ?? 'pi',
     name: agent?.name ?? '',
@@ -177,10 +178,10 @@ export function buildInitialAgentFormState(agent?: AgentDetail | null): AgentFor
     mcps: [...(agent?.mcps ?? [])],
     allowedTools: [...(agent?.allowedTools ?? [])],
     avatar: asString(cfg.avatar),
-    permissionMode: asString(cfg.permission_mode),
+    permissionMode: isCreate ? 'bypassPermissions' : asString(cfg.permission_mode),
     maxTurns: asFormMaxTurns(cfg.max_turns),
     envVarsText: envVarsToText(cfg.env_vars),
-    soulEnabled: asBoolean(cfg.soul_enabled),
+    soulEnabled: isCreate ? true : asBoolean(cfg.soul_enabled),
     heartbeatEnabled: cfg.heartbeat_enabled ?? DEFAULT_HEARTBEAT_ENABLED,
     heartbeatInterval: asNumber(cfg.heartbeat_interval) || DEFAULT_HEARTBEAT_INTERVAL
   }

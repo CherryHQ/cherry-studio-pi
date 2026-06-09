@@ -8,7 +8,7 @@
       },
       "model": {
         "supported_providers": "サポートされているプロバイダー",
-        "tooltip": "現在、エージェント機能では、Anthropicエンドポイントをサポートするモデルのみが利用可能です。",
+        "tooltip": "標準モード（Pi Agent）はすべてのチャットモデルに対応します。拡張モードは Claude Agent SDK を使用し、現在は Anthropic エンドポイントのモデルが必要です。",
         "view_providers": "サポートされているプロバイダーを表示"
       },
       "title": "エージェントを追加",

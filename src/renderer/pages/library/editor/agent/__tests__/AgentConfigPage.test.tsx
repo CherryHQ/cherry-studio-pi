@@ -234,6 +234,37 @@ describe('AgentConfigPage', () => {
     )
   })
 
+  it('guides new agents through the dialog wizard before creation', async () => {
+    const user = userEvent.setup()
+    const onCreated = vi.fn()
+    createAgentMock.mockResolvedValueOnce(createAgent({ id: 'created-dialog', name: 'Created Agent' }))
+
+    render(<AgentConfigPage onBack={vi.fn()} onCreated={onCreated} presentation="dialog" />)
+
+    expect(screen.getByRole('button', { name: /common\.next/ })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /common\.next/ }))
+    expect(screen.getByRole('button', { name: 'set basic' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'set basic' }))
+    await user.click(screen.getByRole('button', { name: /common\.next/ }))
+    await user.click(screen.getByRole('button', { name: /common\.next/ }))
+    await user.click(screen.getByRole('button', { name: 'set tools' }))
+    await user.click(screen.getByRole('button', { name: /library\.config\.agent\.create_title/ }))
+
+    await waitFor(() => expect(createAgentMock).toHaveBeenCalledTimes(1))
+    expect(createAgentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'pi',
+        name: 'Created Agent',
+        model: 'anthropic::claude-sonnet-4-5',
+        allowedTools: ['Read'],
+        mcps: ['mcp-1']
+      })
+    )
+    expect(onCreated).toHaveBeenCalledTimes(1)
+  })
+
   it('hides the permission section when autonomous mode is enabled', async () => {
     const user = userEvent.setup()
 

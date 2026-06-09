@@ -8,7 +8,7 @@
       },
       "model": {
         "supported_providers": "Supported Providers",
-        "tooltip": "Currently, only models that support Anthropic endpoints are available for the Agent feature.",
+        "tooltip": "Standard mode (Pi Agent) supports all chat-capable models. Enhanced mode uses Claude Agent SDK and currently requires an Anthropic endpoint model.",
         "view_providers": "View supported providers"
       },
       "title": "Add Agent",
