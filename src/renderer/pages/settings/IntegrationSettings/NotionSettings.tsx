@@ -72,7 +72,10 @@ const NotionSettings: FC = () => {
   }
 
   const handleNotionTitleClick = () => {
-    void window.api.openWebsite('https://docs.cherry-ai.com/advanced-basic/notion')
+    void window.api.openWebsite('https://docs.cherry-ai.com/advanced-basic/notion').catch((error) => {
+      logger.error('Failed to open Notion documentation', error as Error)
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+    })
   }
 
   return (

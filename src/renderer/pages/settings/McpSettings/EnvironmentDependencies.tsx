@@ -208,7 +208,10 @@ const EnvironmentDependencies: FC<EnvironmentDependenciesProps> = ({ mini = fals
 
   const openBinariesDir = () => {
     if (binariesDir) {
-      void window.api.openPath(binariesDir)
+      void window.api.openPath(binariesDir).catch((error) => {
+        logger.error('Failed to open MCP binaries directory', error as Error)
+        window.toast.error(`${t('common.operation_failed')}: ${formatErrorMessage(error)}`)
+      })
     }
   }
 

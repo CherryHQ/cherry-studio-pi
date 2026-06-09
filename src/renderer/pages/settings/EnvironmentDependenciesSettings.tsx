@@ -1,4 +1,5 @@
 import { useTheme } from '@renderer/context/ThemeProvider'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { EnvironmentDependenciesStatus, EnvironmentDependencyStatus } from '@shared/config/types'
 import { Button, Popconfirm, Space, Tag } from 'antd'
 import { Download, FolderOpen, RefreshCw, Trash2 } from 'lucide-react'
@@ -45,7 +46,9 @@ const EnvironmentDependenciesSettings: FC = () => {
 
   const openManagedDir = () => {
     if (status?.managedDir) {
-      void window.api.openPath(status.managedDir)
+      void window.api.openPath(status.managedDir).catch((error) => {
+        window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+      })
     }
   }
 

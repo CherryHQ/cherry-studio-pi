@@ -45,7 +45,10 @@ const SiyuanSettings: FC = () => {
   }
 
   const handleSiyuanHelpClick = () => {
-    void window.api.openWebsite('https://docs.cherry-ai.com/advanced-basic/siyuan')
+    void window.api.openWebsite('https://docs.cherry-ai.com/advanced-basic/siyuan').catch((error) => {
+      logger.error('Failed to open Siyuan documentation', error as Error)
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+    })
   }
 
   const handleCheckConnection = async () => {

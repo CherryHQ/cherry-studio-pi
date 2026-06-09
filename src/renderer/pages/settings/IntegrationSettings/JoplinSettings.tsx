@@ -85,7 +85,10 @@ const JoplinSettings: FC = () => {
   }
 
   const handleJoplinHelpClick = () => {
-    void window.api.openWebsite('https://joplinapp.org/help/apps/clipper')
+    void window.api.openWebsite('https://joplinapp.org/help/apps/clipper').catch((error) => {
+      logger.error('Failed to open Joplin documentation', error as Error)
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+    })
   }
 
   return (

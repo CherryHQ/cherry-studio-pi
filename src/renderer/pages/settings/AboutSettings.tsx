@@ -39,6 +39,12 @@ const AboutSettings: FC = () => {
     },
     [t]
   )
+  const showOperationFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+    },
+    [t]
+  )
 
   const onCheckUpdate = useMemo(
     () =>
@@ -80,7 +86,7 @@ const AboutSettings: FC = () => {
   useEffect(() => () => onCheckUpdate.cancel(), [onCheckUpdate])
 
   const onOpenWebsite = (url: string) => {
-    void window.api.openWebsite(url)
+    void window.api.openWebsite(url).catch(showOperationFailed)
   }
 
   const mailto = async () => {
@@ -196,7 +202,9 @@ const AboutSettings: FC = () => {
 
   const onOpenDocs = () => {
     const isChinese = i18n.language.startsWith('zh')
-    void window.api.openWebsite(isChinese ? 'https://docs.cherry-ai.com/' : 'https://docs.cherry-ai.com/docs/en-us')
+    void window.api
+      .openWebsite(isChinese ? 'https://docs.cherry-ai.com/' : 'https://docs.cherry-ai.com/docs/en-us')
+      .catch(showOperationFailed)
   }
 
   const testChannels = getAvailableTestChannels()

@@ -89,7 +89,10 @@ const YuqueSettings: FC = () => {
   }
 
   const handleYuqueHelpClick = () => {
-    void window.api.openWebsite('https://www.yuque.com/settings/tokens')
+    void window.api.openWebsite('https://www.yuque.com/settings/tokens').catch((error) => {
+      logger.error('Failed to open Yuque token settings', error as Error)
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+    })
   }
 
   return (
