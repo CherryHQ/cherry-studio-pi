@@ -286,7 +286,7 @@ const NutstoreSettings: FC = () => {
                 style={{ width: 250 }}
                 value={nutstorePath}
                 onChange={(e) => {
-                  void setNutstorePath(e.target.value)
+                  void setNutstorePath(e.target.value).catch(showSaveFailed)
                 }}
               />
               <Button variant="outline" onClick={handleClickPathChange} size="icon">

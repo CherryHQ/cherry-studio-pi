@@ -2,6 +2,8 @@ import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { useOptionalTabsContext } from '@renderer/context/TabsContext'
 import { useMiniApps } from '@renderer/hooks/useMiniApps'
+import i18n from '@renderer/i18n'
+import { formatErrorMessage } from '@renderer/utils/error'
 import { fileUrlToPath } from '@renderer/utils/fileUrl'
 import { clearWebviewState } from '@renderer/utils/webviewStateManager'
 import { DataApiErrorFactory } from '@shared/data/api'
@@ -86,18 +88,29 @@ function miniAppIdFromTabUrl(url: string): string | null {
   return id ? id : null
 }
 
-function openExternalMiniAppUrl(url: string) {
+function showExternalOpenError(error: unknown) {
+  logger.error('Failed to open miniapp externally', error as Error)
+  window.toast?.error?.({ title: i18n.t('common.error'), description: formatErrorMessage(error) })
+}
+
+async function openExternalMiniAppUrl(url: string): Promise<void> {
+  let parsed: URL | null = null
   try {
-    const parsed = new URL(url)
-    if (parsed.protocol === 'file:') {
-      void window.api.openPath(fileUrlToPath(parsed))
-      return
-    }
+    parsed = new URL(url)
   } catch {
     // Fall through to openWebsite so the existing main-process URL guard handles it.
   }
 
-  void window.api.openWebsite(url)
+  try {
+    if (parsed?.protocol === 'file:') {
+      await window.api.openPath(fileUrlToPath(parsed))
+      return
+    }
+
+    await window.api.openWebsite(url)
+  } catch (error) {
+    showExternalOpenError(error)
+  }
 }
 
 /**
@@ -276,7 +289,7 @@ export const useMiniAppPopup = () => {
   const openSmartMiniApp = useCallback(
     (config: MiniAppInput) => {
       if (!openTab) {
-        openExternalMiniAppUrl(config.url)
+        void openExternalMiniAppUrl(config.url)
         return
       }
 
