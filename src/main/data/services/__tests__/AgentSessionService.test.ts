@@ -7,7 +7,7 @@ import { agentWorkspaceService } from '@data/services/AgentWorkspaceService'
 import { ErrorCode } from '@shared/data/api'
 import { setupTestDatabase } from '@test-helpers/db'
 import { eq } from 'drizzle-orm'
-import { mkdtemp } from 'fs/promises'
+import { mkdtemp, stat } from 'fs/promises'
 import { tmpdir } from 'os'
 import path from 'path'
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
@@ -49,6 +49,54 @@ describe('AgentSessionService', () => {
       workspaceId
     })
   }
+
+  it('searches sessions as lean navigation items with agent names resolved inline', async () => {
+    await dbh.db.insert(agentSessionTable).values([
+      {
+        id: 'session-search-old',
+        agentId: 'agent-session-test',
+        name: 'Needle Old Session',
+        orderKey: 'a0',
+        updatedAt: 100
+      },
+      {
+        id: 'session-search-new',
+        agentId: 'agent-session-test',
+        name: 'Needle New Session',
+        orderKey: 'a1',
+        updatedAt: 200
+      },
+      {
+        id: 'session-search-miss',
+        agentId: 'agent-session-test',
+        name: 'Other Session',
+        orderKey: 'a2',
+        updatedAt: 300
+      }
+    ])
+
+    const result = await agentSessionService.search({ q: 'Needle', limit: 5 })
+
+    expect(result).toEqual([
+      {
+        type: 'session',
+        id: 'session-search-new',
+        title: 'Needle New Session',
+        subtitle: 'Session Test Agent',
+        updatedAt: '1970-01-01T00:00:00.200Z',
+        target: { sessionId: 'session-search-new', agentId: 'agent-session-test' }
+      },
+      {
+        type: 'session',
+        id: 'session-search-old',
+        title: 'Needle Old Session',
+        subtitle: 'Session Test Agent',
+        updatedAt: '1970-01-01T00:00:00.100Z',
+        target: { sessionId: 'session-search-old', agentId: 'agent-session-test' }
+      }
+    ])
+    expect(result[0]).not.toHaveProperty('workspace')
+  })
 
   it('binds a session to an explicit workspace', async () => {
     const workspace = await agentWorkspaceService.findOrCreateByPath(path.join(root, 'explicit'))
@@ -200,7 +248,7 @@ describe('AgentSessionService', () => {
     expect(refetched.workspace).toBeNull()
   })
 
-  it('throws when a corrupt session references a missing workspace', async () => {
+  it('repairs a corrupt session that references a missing workspace', async () => {
     await dbh.client.execute('PRAGMA foreign_keys = OFF')
     try {
       await dbh.db.insert(agentSessionTable).values({
@@ -214,9 +262,19 @@ describe('AgentSessionService', () => {
       await dbh.client.execute('PRAGMA foreign_keys = ON')
     }
 
-    await expect(agentSessionService.listByCursor()).rejects.toMatchObject({
-      code: ErrorCode.NOT_FOUND
-    })
+    const list = await agentSessionService.listByCursor()
+    const repaired = list.items.find((item) => item.id === 'corrupt-session')
+
+    expect(repaired?.workspaceId).toBeTruthy()
+    expect(repaired?.workspaceId).not.toBe('missing-workspace')
+    expect(repaired?.workspace?.path).toBeTruthy()
+    expect((await stat(repaired!.workspace!.path)).isDirectory()).toBe(true)
+
+    const [row] = await dbh.db
+      .select({ workspaceId: agentSessionTable.workspaceId })
+      .from(agentSessionTable)
+      .where(eq(agentSessionTable.id, 'corrupt-session'))
+    expect(row.workspaceId).toBe(repaired?.workspaceId)
   })
 
   it('does not leave an orphan default workspace row when session creation fails', async () => {

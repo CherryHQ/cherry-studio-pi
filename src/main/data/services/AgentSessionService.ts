@@ -17,7 +17,8 @@ import type {
   ListAgentSessionsQuery,
   UpdateAgentSessionDto
 } from '@shared/data/api/schemas/agentSessions'
-import { and, asc, desc, eq, gt, or, type SQL } from 'drizzle-orm'
+import type { EntitySearchItem } from '@shared/data/api/schemas/search'
+import { and, asc, desc, eq, gt, gte, isNull, or, type SQL, sql } from 'drizzle-orm'
 import { v4 as uuidv4 } from 'uuid'
 
 import { applyMoves, insertWithOrderKey } from './utils/orderKey'
@@ -26,6 +27,7 @@ const logger = loggerService.withContext('AgentSessionService')
 
 const DEFAULT_LIMIT = 50
 const MAX_LIMIT = 200
+type SessionEntitySearchItem = Extract<EntitySearchItem, { type: 'session' }>
 
 // Cursor wire format: `<orderKey>:<id>`. Stale/legacy cursors fall back
 // to first page (warn) instead of throwing — opaque server-issued tokens.
@@ -51,7 +53,10 @@ type JoinedSessionRow = {
 
 function rowToSession(row: JoinedSessionRow): AgentSessionEntity {
   if (row.session.workspaceId && !row.workspace) {
-    throw DataApiErrorFactory.notFound('Workspace', row.session.workspaceId)
+    logger.warn('Agent session references a missing workspace row; returning without workspace', {
+      sessionId: row.session.id,
+      workspaceId: row.session.workspaceId
+    })
   }
 
   return {
@@ -59,7 +64,7 @@ function rowToSession(row: JoinedSessionRow): AgentSessionEntity {
     agentId: row.session.agentId,
     name: row.session.name,
     description: row.session.description,
-    workspaceId: row.session.workspaceId,
+    workspaceId: row.workspace ? row.session.workspaceId : null,
     workspace: row.workspace ? rowToWorkspace(row.workspace) : null,
     orderKey: row.session.orderKey,
     createdAt: timestampToISO(row.session.createdAt),
@@ -67,7 +72,94 @@ function rowToSession(row: JoinedSessionRow): AgentSessionEntity {
   }
 }
 
+function buildSearchPredicate(search: string | undefined): SQL | undefined {
+  const trimmed = search?.trim()
+  if (!trimmed) return undefined
+
+  const pattern = `%${trimmed.replace(/[\\%_]/g, '\\$&')}%`
+  const nameMatch = sql`${sessionsTable.name} LIKE ${pattern} ESCAPE '\\'`
+  const descriptionMatch = sql`${sessionsTable.description} LIKE ${pattern} ESCAPE '\\'`
+
+  return or(nameMatch, descriptionMatch)
+}
+
 export class AgentSessionService {
+  private async repairMissingWorkspace(row: JoinedSessionRow): Promise<JoinedSessionRow> {
+    if (!row.session.workspaceId || row.workspace) return row
+
+    const missingWorkspaceId = row.session.workspaceId
+    const defaultWorkspacePath = agentWorkspaceService.prepareDefaultWorkspaceDirectory()
+    let keepDefaultWorkspaceDirectory = false
+
+    logger.warn('Repairing agent session with missing workspace reference', {
+      sessionId: row.session.id,
+      missingWorkspaceId
+    })
+
+    try {
+      const repaired = await application.get('DbService').withWriteTx(async (tx) => {
+        const workspace = await agentWorkspaceService.createDefaultWorkspaceTx(tx, defaultWorkspacePath)
+        await tx.update(sessionsTable).set({ workspaceId: workspace.id }).where(eq(sessionsTable.id, row.session.id))
+
+        const [nextRow] = await tx
+          .select({ session: sessionsTable, workspace: agentWorkspaceTable })
+          .from(sessionsTable)
+          .leftJoin(agentWorkspaceTable, eq(sessionsTable.workspaceId, agentWorkspaceTable.id))
+          .where(eq(sessionsTable.id, row.session.id))
+          .limit(1)
+
+        return nextRow
+      })
+      keepDefaultWorkspaceDirectory = true
+      return repaired ?? row
+    } catch (error) {
+      logger.warn('Failed to repair agent session workspace reference', {
+        sessionId: row.session.id,
+        missingWorkspaceId,
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return row
+    } finally {
+      if (!keepDefaultWorkspaceDirectory) {
+        agentWorkspaceService.cleanupPreparedWorkspaceDirectory(defaultWorkspacePath)
+      }
+    }
+  }
+
+  async search(query: { q: string; limit: number; updatedAtFrom?: number }): Promise<SessionEntitySearchItem[]> {
+    const db = application.get('DbService').getDb()
+    const limit = Math.min(query.limit, MAX_LIMIT)
+    const filters: SQL[] = []
+    const search = buildSearchPredicate(query.q)
+    if (search) filters.push(search)
+    if (query.updatedAtFrom !== undefined) {
+      filters.push(gte(sessionsTable.updatedAt, query.updatedAtFrom))
+    }
+
+    const rows = await db
+      .select({
+        id: sessionsTable.id,
+        agentId: sessionsTable.agentId,
+        agentName: agentsTable.name,
+        name: sessionsTable.name,
+        updatedAt: sessionsTable.updatedAt
+      })
+      .from(sessionsTable)
+      .leftJoin(agentsTable, and(eq(sessionsTable.agentId, agentsTable.id), isNull(agentsTable.deletedAt)))
+      .where(filters.length > 0 ? and(...filters) : undefined)
+      .orderBy(desc(sessionsTable.updatedAt), asc(sessionsTable.id))
+      .limit(limit)
+
+    return rows.map((row) => ({
+      type: 'session',
+      id: row.id,
+      title: row.name,
+      subtitle: row.agentName ?? undefined,
+      updatedAt: timestampToISO(row.updatedAt),
+      target: { sessionId: row.id, agentId: row.agentId }
+    }))
+  }
+
   async createSession(dto: CreateAgentSessionDto): Promise<AgentSessionEntity> {
     const dbService = application.get('DbService')
     const id = uuidv4()
@@ -148,7 +240,7 @@ export class AgentSessionService {
       .where(eq(sessionsTable.id, id))
       .limit(1)
     if (!row) throw DataApiErrorFactory.notFound('Session', id)
-    return rowToSession(row)
+    return rowToSession(await this.repairMissingWorkspace(row))
   }
 
   /**
@@ -195,7 +287,9 @@ export class AgentSessionService {
       .limit(limit + 1)
 
     const hasNext = rows.length > limit
-    const items = (hasNext ? rows.slice(0, limit) : rows).map(rowToSession)
+    const pageRows = hasNext ? rows.slice(0, limit) : rows
+    const repairedRows = await Promise.all(pageRows.map((row) => this.repairMissingWorkspace(row)))
+    const items = repairedRows.map(rowToSession)
     const last = items[items.length - 1]
     const nextCursor = hasNext && last ? `${last.orderKey}:${last.id}` : undefined
 

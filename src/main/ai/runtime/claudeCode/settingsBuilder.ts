@@ -288,8 +288,23 @@ export function isAgentSessionWorkspaceError(error: unknown): error is AgentSess
 }
 
 export async function assertClaudeCodeWorkspaceDirectory(sessionId: string, cwd: string): Promise<void> {
-  const status = await getPathStatus(cwd)
+  let status = await getPathStatus(cwd)
   if (status.ok && status.kind === 'directory') return
+
+  if (!status.ok && status.reason === 'missing') {
+    try {
+      await fs.promises.mkdir(cwd, { recursive: true })
+      status = await getPathStatus(cwd)
+      if (status.ok && status.kind === 'directory') return
+    } catch (error) {
+      logger.warn('Failed to recreate missing Claude Code workspace directory', {
+        sessionId,
+        cwd,
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+  }
+
   // The operation fails here, so this is where the workspace-path problem is
   // reported: the directory policy and the user-facing (i18n'd) message both
   // live on this consumer, surfaced to the renderer via the dispatch `blocked`
