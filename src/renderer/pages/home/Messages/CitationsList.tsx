@@ -1,21 +1,25 @@
 import { Button } from '@cherrystudio/ui'
+import { loggerService } from '@logger'
 import Favicon from '@renderer/components/Icons/FallbackFavicon'
 import Scrollbar from '@renderer/components/Scrollbar'
 import SelectionContextMenu from '@renderer/components/SelectionContextMenu'
 import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
 import type { Citation } from '@renderer/types'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { fetchWebContent, fetchXOEmbed, isXPostUrl } from '@renderer/utils/fetch'
 import { cleanMarkdownContent } from '@renderer/utils/formats'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { Popover, Skeleton } from 'antd'
 import { Check, Copy, FileSearch } from 'lucide-react'
-import React from 'react'
+import React, { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
 interface CitationsListProps {
   citations: Citation[]
 }
+
+const logger = loggerService.withContext('CitationsList')
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -125,7 +129,11 @@ const CitationsList: React.FC<CitationsListProps> = ({ citations }) => {
   )
 }
 
-const handleLinkClick = (url: string, event: React.MouseEvent, options: { allowLocalPath?: boolean } = {}) => {
+const handleLinkClick = (
+  url: string,
+  event: React.MouseEvent,
+  options: { allowLocalPath?: boolean; onOpenLocalPathError?: (error: unknown) => void } = {}
+) => {
   event.preventDefault()
   if (!url) return
 
@@ -143,7 +151,7 @@ const handleLinkClick = (url: string, event: React.MouseEvent, options: { allowL
 
   if (!options.allowLocalPath) return
 
-  void window.api.file.openPath(url)
+  void Promise.resolve(window.api.file.openPath(url)).catch(options.onOpenLocalPathError)
 }
 
 const CopyButton: React.FC<{ content: string }> = ({ content }) => {
@@ -232,6 +240,16 @@ const WebSearchCitation: React.FC<{ citation: Citation }> = ({ citation }) => {
 }
 
 const KnowledgeCitation: React.FC<{ citation: Citation }> = ({ citation }) => {
+  const { t } = useTranslation()
+
+  const handleOpenLocalPathError = useCallback(
+    (error: unknown) => {
+      logger.error('Failed to open citation source path', error as Error)
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+    },
+    [t]
+  )
+
   return (
     <SelectionContextMenu>
       <WebSearchCard>
@@ -240,7 +258,12 @@ const KnowledgeCitation: React.FC<{ citation: Citation }> = ({ citation }) => {
           <CitationLink
             className="text-nowrap"
             href={citation.url}
-            onClick={(e) => handleLinkClick(citation.url, e, { allowLocalPath: true })}>
+            onClick={(e) =>
+              handleLinkClick(citation.url, e, {
+                allowLocalPath: true,
+                onOpenLocalPathError: handleOpenLocalPathError
+              })
+            }>
             {/* example title: User/path/example.pdf */}
             {citation.title?.split('/').pop()}
           </CitationLink>

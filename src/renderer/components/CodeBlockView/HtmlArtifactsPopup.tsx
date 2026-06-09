@@ -20,6 +20,7 @@ import { cn } from '@cherrystudio/ui/lib/utils'
 import { CopyIcon, FilePngIcon } from '@renderer/components/Icons'
 import { isMac } from '@renderer/config/constant'
 import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
+import { loggerService } from '@renderer/services/LoggerService'
 import { extractHtmlTitle, getFileNameFromHtmlTitle } from '@renderer/utils/formats'
 import { captureScrollableIframeAsBlob, captureScrollableIframeAsDataURL } from '@renderer/utils/image'
 import { Camera, Check, Code, Eye, Maximize2, Minimize2, SaveIcon, SquareSplitHorizontal, X } from 'lucide-react'
@@ -34,6 +35,8 @@ interface CodePanelProps {
   onClickSave: () => void
   saveLabel: string
 }
+
+const logger = loggerService.withContext('HtmlArtifactsPopup')
 
 const CodePanel = memo<CodePanelProps>(({ codeEditorRef, html, onSave, saved, onClickSave, saveLabel }) => {
   return (
@@ -140,7 +143,12 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({ open, title, ht
       if (to === 'file') {
         const dataUrl = await captureScrollableIframeAsDataURL(previewFrameRef)
         if (dataUrl) {
-          void window.api.file.saveImage(fileName, dataUrl)
+          try {
+            await window.api.file.saveImage(fileName, dataUrl)
+          } catch (error) {
+            logger.error('Failed to save HTML artifact image', error as Error)
+            window.toast.error(t('common.save_failed'))
+          }
         }
       }
       if (to === 'clipboard') {

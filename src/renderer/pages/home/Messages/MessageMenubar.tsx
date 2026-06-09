@@ -26,6 +26,7 @@ import type { Model, Topic, TranslateLanguage } from '@renderer/types'
 import type { Message } from '@renderer/types/newMessage'
 import { captureScrollableAsBlob, captureScrollableAsDataURL, classNames } from '@renderer/utils'
 import { copyMessageAsPlainText } from '@renderer/utils/copy'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import {
   exportMarkdownToJoplin,
   exportMarkdownToSiyuan,
@@ -323,7 +324,10 @@ const MessageMenubar: FC<Props> = (props) => {
             key: 'file',
             onClick: () => {
               const fileName = dayjs(message.createdAt).format('YYYYMMDDHHmm') + '.md'
-              void window.api.file.save(fileName, mainTextContent)
+              void window.api.file.save(fileName, mainTextContent).catch((error) => {
+                logger.error('Failed to save message file', error as Error)
+                window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+              })
             }
           },
           {
@@ -384,7 +388,12 @@ const MessageMenubar: FC<Props> = (props) => {
             onClick: async () => {
               const markdown = await messageToMarkdown(message)
               const title = await getMessageTitle(message)
-              void window.api.export.toWord(markdown, title)
+              try {
+                await window.api.export.toWord(markdown, title)
+              } catch (error) {
+                logger.error('Failed to export message to Word', error as Error)
+                window.toast.error(formatErrorMessageWithPrefix(error, t('chat.topics.export_to_word_failed')))
+              }
             }
           },
           exportMenuOptions.notion && {

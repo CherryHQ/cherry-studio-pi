@@ -175,8 +175,11 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
     }
 
     const ext = getExtensionByLanguage(language)
-    void window.api.file.save(`${fileName}${ext}`, children)
-  }, [children, language])
+    void window.api.file.save(`${fileName}${ext}`, children).catch((error) => {
+      logger.error('Failed to save code block source', error as Error)
+      window.toast.error(t('common.save_failed'))
+    })
+  }, [children, language, t])
 
   const handleRunScript = useCallback(() => {
     setIsRunning(true)

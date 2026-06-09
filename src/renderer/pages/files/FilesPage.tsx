@@ -13,6 +13,7 @@ import store from '@renderer/store'
 import type { FileMetadata, FileType } from '@renderer/types'
 import { FILE_TYPE } from '@renderer/types'
 import { formatFileSize } from '@renderer/utils'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { Checkbox, Dropdown, Empty, Popconfirm } from 'antd'
 import dayjs from 'dayjs'
 import { useLiveQuery } from 'dexie-react-hooks'
@@ -94,15 +95,18 @@ const FilesPage: FC = () => {
     }
   }
 
+  const handleOpenFile = (file: FileMetadata) => {
+    void window.api.file.openPath(FileManager.getFilePath(file)).catch((error) => {
+      logger.error('Failed to open file from files page', error as Error)
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+    })
+  }
+
   const dataSource = sortedFiles?.map((file) => {
     logger.debug('FileItem', file)
     return {
       key: file.id,
-      file: (
-        <span onClick={() => window.api.file.openPath(FileManager.getFilePath(file))}>
-          {FileManager.formatFileName(file)}
-        </span>
-      ),
+      file: <span onClick={() => handleOpenFile(file)}>{FileManager.formatFileName(file)}</span>,
       size: formatFileSize(file.size),
       size_bytes: file.size,
       count: file.count,

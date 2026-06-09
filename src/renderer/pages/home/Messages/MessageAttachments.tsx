@@ -1,8 +1,10 @@
 import { Button } from '@cherrystudio/ui'
+import { loggerService } from '@logger'
 import { useAttachment } from '@renderer/hooks/useAttachment'
 import FileManager from '@renderer/services/FileManager'
 import type { FileMetadata } from '@renderer/types/file'
 import { formatFileSize, parseFileTypes } from '@renderer/utils'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { t } from 'i18next'
 import { Paperclip } from 'lucide-react'
 import type { FC } from 'react'
@@ -10,6 +12,8 @@ import type { FC } from 'react'
 interface Props {
   file: FileMetadata
 }
+
+const logger = loggerService.withContext('MessageAttachments')
 
 const MessageAttachments: FC<Props> = ({ file }) => {
   const { preview } = useAttachment()
@@ -29,6 +33,13 @@ const MessageAttachments: FC<Props> = ({ file }) => {
       return
     }
     void preview(safePath, fileName, fileType, file.ext)
+  }
+
+  const handleOpen = () => {
+    void window.api.file.openPath(safePath).catch((error) => {
+      logger.error('Failed to open message attachment', error as Error)
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+    })
   }
 
   return (
@@ -52,7 +63,7 @@ const MessageAttachments: FC<Props> = ({ file }) => {
           <Button size="sm" variant="secondary" onClick={handlePreview}>
             {t('common.preview')}
           </Button>
-          <Button size="sm" variant="outline" onClick={() => window.api.file.openPath(safePath)}>
+          <Button size="sm" variant="outline" onClick={handleOpen}>
             {t('files.open')}
           </Button>
         </div>
