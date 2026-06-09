@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export interface UseInputTextOptions {
   initialValue?: string
@@ -36,18 +36,23 @@ export interface UseInputTextReturn {
  * ```
  */
 export function useInputText(options: UseInputTextOptions = {}): UseInputTextReturn {
-  const [text, setText] = useState(options.initialValue ?? '')
+  const [text, setTextState] = useState(options.initialValue ?? '')
+  const textRef = useRef(text)
   const prevTextRef = useRef(text)
+  const onChangeRef = useRef(options.onChange)
 
-  const handleSetText = useCallback(
-    (value: string | ((prev: string) => string)) => {
-      const newText = typeof value === 'function' ? value(text) : value
-      prevTextRef.current = text
-      setText(newText)
-      options.onChange?.(newText)
-    },
-    [text, options]
-  )
+  useEffect(() => {
+    onChangeRef.current = options.onChange
+  }, [options.onChange])
+
+  const handleSetText = useCallback((value: string | ((prev: string) => string)) => {
+    const previousText = textRef.current
+    const newText = typeof value === 'function' ? value(previousText) : value
+    prevTextRef.current = previousText
+    textRef.current = newText
+    setTextState(newText)
+    onChangeRef.current?.(newText)
+  }, [])
 
   const clear = useCallback(() => {
     handleSetText('')

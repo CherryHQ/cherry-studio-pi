@@ -127,7 +127,9 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
   const { files, isExpanded } = useInputbarToolsState()
   const { setFiles, setIsExpanded, toolsRegistry, triggers } = useInputbarToolsDispatch()
   const { setExtensions } = useInputbarToolsInternalDispatch()
+  const [searching, setSearching] = useCache('chat.web_search.searching')
   const isEmpty = text.trim().length === 0
+  const isWebSearchSendBlocked = scope === 'chat' && searching
   const [targetLanguage] = usePreference('chat.input.translate.target_language')
   const [sendMessageShortcut] = usePreference('chat.input.send_message_shortcut')
   const [pasteLongTextAsFile] = usePreference('chat.input.paste_long_text_as_file')
@@ -136,7 +138,6 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
   const [enableQuickPanelTriggers] = usePreference('chat.input.quick_panel.triggers_enabled')
   const [enableSpellCheck] = usePreference('app.spell_check.enabled')
   const [fontSize] = usePreference('chat.message.font_size')
-  const [searching, setSearching] = useCache('chat.web_search.searching')
   const quickPanelTriggersEnabled = forceEnableQuickPanelTriggers ?? enableQuickPanelTriggers
 
   const { t } = useTranslation()
@@ -184,8 +185,8 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
   })
   // 判断是否有内容：文本不为空或有文件
   const noContent = isEmpty && files.length === 0
-  // 发送入口统一禁用条件：空内容、正在生成、全局搜索态
-  const isSendDisabled = noContent || isLoading || searching
+  // 发送入口统一禁用条件：空内容、正在生成、普通聊天 web-search 搜索态
+  const isSendDisabled = noContent || isLoading || isWebSearchSendBlocked
 
   useEffect(() => {
     setExtensions(supportedExts)
@@ -646,7 +647,7 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
               height: height,
               minHeight: '30px'
             }}
-            disabled={isTranslating || searching}
+            disabled={isTranslating}
             onClick={() => {
               searching && setSearching(false)
               quickPanel.close()
