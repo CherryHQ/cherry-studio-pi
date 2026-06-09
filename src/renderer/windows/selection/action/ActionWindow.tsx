@@ -1,5 +1,6 @@
 import { Button, Tooltip } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
+import { loggerService } from '@logger'
 import { isMac } from '@renderer/config/constant'
 import { useWindowInitData } from '@renderer/hooks/useWindowInitData'
 import i18n from '@renderer/i18n'
@@ -15,6 +16,8 @@ import styled from 'styled-components'
 
 import ActionGeneral from './components/ActionGeneral'
 import ActionTranslate from './components/ActionTranslate'
+
+const logger = loggerService.withContext('SelectionActionWindow')
 
 /**
  * Outer shell. Pulls the current action payload via `useWindowInitData`, which
@@ -78,7 +81,9 @@ const SelectionActionContent: FC<{ action: SelectionActionItem }> = ({ action })
   // would leak stale pin/opacity/slider/scroll state across same-type reuses.
   useEffect(() => {
     setIsPinned(isAutoPin)
-    void window.api.selection.pinActionWindow(isAutoPin)
+    void window.api.selection.pinActionWindow(isAutoPin).catch((error) => {
+      logger.error('Failed to sync selection action pin state', error as Error)
+    })
     setOpacity(actionWindowOpacity)
     setShowOpacitySlider(false)
     isAutoScrollEnabled.current = true
@@ -91,10 +96,14 @@ const SelectionActionContent: FC<{ action: SelectionActionItem }> = ({ action })
 
   useEffect(() => {
     if (isAutoPin) {
-      void window.api.selection.pinActionWindow(true)
+      void window.api.selection.pinActionWindow(true).catch((error) => {
+        logger.error('Failed to pin selection action window', error as Error)
+      })
       setIsPinned(true)
     } else {
-      void window.api.selection.pinActionWindow(false)
+      void window.api.selection.pinActionWindow(false).catch((error) => {
+        logger.error('Failed to unpin selection action window', error as Error)
+      })
       setIsPinned(false)
     }
   }, [isAutoPin])
@@ -148,11 +157,15 @@ const SelectionActionContent: FC<{ action: SelectionActionItem }> = ({ action })
   }, [actionWindowOpacity])
 
   const handleMinimize = () => {
-    void window.api.windowManager.minimize()
+    void window.api.windowManager.minimize().catch((error) => {
+      logger.error('Failed to minimize selection action window', error as Error)
+    })
   }
 
   const handleClose = () => {
-    void window.api.windowManager.close()
+    void window.api.windowManager.close().catch((error) => {
+      logger.error('Failed to close selection action window', error as Error)
+    })
   }
 
   /**
@@ -160,7 +173,9 @@ const SelectionActionContent: FC<{ action: SelectionActionItem }> = ({ action })
    */
   const togglePin = () => {
     setIsPinned(!isPinned)
-    void window.api.selection.pinActionWindow(!isPinned)
+    void window.api.selection.pinActionWindow(!isPinned).catch((error) => {
+      logger.error('Failed to toggle selection action pin state', error as Error)
+    })
   }
 
   const handleWindowFocus = () => {

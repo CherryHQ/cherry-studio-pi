@@ -1,4 +1,5 @@
 import { LoadingOutlined } from '@ant-design/icons'
+import { loggerService } from '@logger'
 import { RefreshIcon } from '@renderer/components/Icons'
 import { useTimer } from '@renderer/hooks/useTimer'
 import { CircleX, Copy, Pause } from 'lucide-react'
@@ -13,6 +14,8 @@ interface FooterProps {
   onPause?: () => void
   onRegenerate?: () => void
 }
+
+const logger = loggerService.withContext('SelectionActionWindowFooter')
 
 const WindowFooter: FC<FooterProps> = ({
   content = '',
@@ -97,7 +100,9 @@ const WindowFooter: FC<FooterProps> = ({
     if (loading && onPause) {
       onPause()
     } else {
-      void window.api.windowManager.close()
+      void window.api.windowManager.close().catch((error) => {
+        logger.error('Failed to close selection action window from footer', error as Error)
+      })
     }
   }
 

@@ -57,7 +57,9 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
   // defer IPC by at least one render, opening a race where blur fires with
   // the main flag still stale.
   const setIsPinned = useCallback((next: boolean) => {
-    void window.api.quickAssistant.setPin(next)
+    void window.api.quickAssistant.setPin(next).catch((error) => {
+      logger.error('Failed to sync quick assistant pin state', error as Error)
+    })
     setIsPinnedState(next)
   }, [])
 
