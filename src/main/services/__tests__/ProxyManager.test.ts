@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import type { ProxyConfig } from 'electron'
+import { app, session } from 'electron'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   applyNodeProxyFromEnvironment,
@@ -12,6 +14,29 @@ import {
   resolveHttpRequestUrlForProxyBypass
 } from '../proxy/nodeProxy'
 import { redactProxyValueForLog } from '../proxy/redact'
+import { ProxyManager } from '../ProxyManager'
+
+const electronMocks = vi.hoisted(() => {
+  const defaultSession = { setProxy: vi.fn(() => Promise.resolve()) }
+  const webviewSession = { setProxy: vi.fn(() => Promise.resolve()) }
+
+  return {
+    appSetProxy: vi.fn(() => Promise.resolve()),
+    defaultSession,
+    fromPartition: vi.fn(() => webviewSession),
+    webviewSession
+  }
+})
+
+vi.mock('electron', () => ({
+  app: {
+    setProxy: electronMocks.appSetProxy
+  },
+  session: {
+    defaultSession: electronMocks.defaultSession,
+    fromPartition: electronMocks.fromPartition
+  }
+}))
 
 // Mock lifecycle to allow direct instantiation
 vi.mock('@main/core/lifecycle', () => {
@@ -33,6 +58,77 @@ vi.mock('@main/core/lifecycle', () => {
     ServicePhase: () => (target: unknown) => target,
     Phase: { Background: 'background', WhenReady: 'whenReady', BeforeReady: 'beforeReady' }
   }
+})
+
+describe('ProxyManager - Electron proxy application', () => {
+  beforeEach(() => {
+    electronMocks.defaultSession.setProxy.mockReset()
+    electronMocks.defaultSession.setProxy.mockResolvedValue(undefined)
+    electronMocks.webviewSession.setProxy.mockReset()
+    electronMocks.webviewSession.setProxy.mockResolvedValue(undefined)
+    electronMocks.appSetProxy.mockReset()
+    electronMocks.appSetProxy.mockResolvedValue(undefined)
+    electronMocks.fromPartition.mockReset()
+    electronMocks.fromPartition.mockReturnValue(electronMocks.webviewSession)
+  })
+
+  it('waits for every Electron proxy target before configuration resolves', async () => {
+    let releaseDefaultSession!: () => void
+    let releaseWebviewSession!: () => void
+    let releaseAppProxy!: () => void
+    electronMocks.defaultSession.setProxy.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseDefaultSession = resolve
+        })
+    )
+    electronMocks.webviewSession.setProxy.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseWebviewSession = resolve
+        })
+    )
+    electronMocks.appSetProxy.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseAppProxy = resolve
+        })
+    )
+
+    const manager = new ProxyManager()
+    const configureProxy = (manager as unknown as { configureProxy(config: ProxyConfig): Promise<void> }).configureProxy
+    let resolved = false
+    const configurePromise = configureProxy.call(manager, {
+      mode: 'fixed_servers',
+      proxyRules: 'http://127.0.0.1:7890',
+      proxyBypassRules: 'api.example.com'
+    })
+    void configurePromise.then(() => {
+      resolved = true
+    })
+
+    await Promise.resolve()
+    expect(session.fromPartition).toHaveBeenCalledWith('persist:webview')
+    expect(resolved).toBe(false)
+
+    releaseDefaultSession()
+    await Promise.resolve()
+    expect(resolved).toBe(false)
+
+    releaseWebviewSession()
+    await Promise.resolve()
+    expect(resolved).toBe(false)
+
+    releaseAppProxy()
+    await configurePromise
+    expect(resolved).toBe(true)
+    expect(app.setProxy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: 'fixed_servers',
+        proxyRules: 'http://127.0.0.1:7890'
+      })
+    )
+  })
 })
 
 describe('ProxyManager - bypass evaluation', () => {

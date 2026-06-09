@@ -72,7 +72,7 @@ export class ProxyManager extends BaseService {
         void this.monitorSystemProxy()
       }
 
-      this.setGlobalProxy(config)
+      await this.setGlobalProxy(config)
       this.config = config
     } catch (error) {
       logger.error('Failed to config proxy:', error as Error)
@@ -82,14 +82,14 @@ export class ProxyManager extends BaseService {
     }
   }
 
-  private setGlobalProxy(config: ProxyConfig) {
+  private async setGlobalProxy(config: ProxyConfig): Promise<void> {
     const effectiveConfig = this.getEffectiveProxyConfig(config)
 
     this.nodeProxyController.configure({
       proxyRules: effectiveConfig.mode === 'direct' ? undefined : effectiveConfig.proxyRules,
       proxyBypassRules: effectiveConfig.proxyBypassRules
     })
-    void this.setSessionsProxy(effectiveConfig)
+    await this.setSessionsProxy(effectiveConfig)
   }
 
   private getEffectiveProxyConfig(config: ProxyConfig): ProxyConfig {
@@ -105,8 +105,6 @@ export class ProxyManager extends BaseService {
 
   private async setSessionsProxy(config: ProxyConfig): Promise<void> {
     const sessions = [session.defaultSession, session.fromPartition('persist:webview')]
-    await Promise.all(sessions.map((session) => session.setProxy(config)))
-
-    void app.setProxy(config)
+    await Promise.all([...sessions.map((session) => session.setProxy(config)), app.setProxy(config)])
   }
 }
