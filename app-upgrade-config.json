@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-06-08T18:31:25.317Z",
+  "lastUpdated": "2026-06-09T04:10:13.531Z",
   "versions": {
     "2.0.0": {
       "metadata": {
@@ -14,14 +14,14 @@
         "beta": null
       }
     },
-    "1.9.35": {
+    "1.9.36": {
       "minCompatibleVersion": "1.8.1",
       "description": "Current latest v1.x release for users on v1.8.1+",
       "channels": {
         "latest": {
-          "version": "1.9.35",
+          "version": "1.9.36",
           "feedUrls": {
-            "github": "https://github.com/CherryHQ/cherry-studio-pi/releases/download/v1.9.35",
+            "github": "https://github.com/CherryHQ/cherry-studio-pi/releases/download/v1.9.36",
             "gitcode": "https://github.com/CherryHQ/cherry-studio-pi/releases/latest/download"
           }
         },
