@@ -162,6 +162,25 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
     return { serverToAdd, error: null }
   }
 
+  const updateServerConnectivityState = async (createdServer: McpServer, notifyUser: boolean) => {
+    try {
+      const isConnected = await window.api.mcp.checkMcpConnectivity(createdServer.id)
+      logger.debug(`Connectivity check for ${createdServer.name}: ${isConnected}`)
+      await dataApiService.patch(`/mcp-servers/${createdServer.id}`, {
+        body: { isActive: isConnected }
+      })
+    } catch (error) {
+      logger.error(`Connectivity state update failed for ${createdServer.name}:`, error as Error)
+      if (notifyUser) {
+        window.toast.error(createdServer.name + t('settings.mcp.addServer.importFrom.connectionFailed'))
+      } else {
+        logger.warn(
+          `DXT server ${createdServer.name} connectivity state update failed; this is normal for servers requiring additional configuration`
+        )
+      }
+    }
+  }
+
   const handleOk = async (jsonValues?: JsonFieldType) => {
     try {
       setLoading(true)
@@ -241,21 +260,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
           setTimeoutTimer(
             'handleOk',
             () => {
-              window.api.mcp
-                .checkMcpConnectivity(createdServer.id)
-                .then((isConnected) => {
-                  logger.debug(`Connectivity check for ${createdServer.name}: ${isConnected}`)
-                  void dataApiService.patch(`/mcp-servers/${createdServer.id}`, {
-                    body: { isActive: isConnected }
-                  })
-                })
-                .catch((connError: any) => {
-                  logger.error(`Connectivity check failed for ${createdServer.name}:`, connError)
-                  // Don't show error for DXT servers as they might need additional setup
-                  logger.warn(
-                    `DXT server ${createdServer.name} connectivity check failed, this is normal for servers requiring additional configuration`
-                  )
-                })
+              void updateServerConnectivityState(createdServer, false)
             },
             1000
           ) // Delay to ensure server is properly added to store
@@ -305,18 +310,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
         onClose()
 
         // 在背景非同步檢查伺服器可用性並更新狀態
-        window.api.mcp
-          .checkMcpConnectivity(createdServer.id)
-          .then((isConnected) => {
-            logger.debug(`Connectivity check for ${createdServer.name}: ${isConnected}`)
-            void dataApiService.patch(`/mcp-servers/${createdServer.id}`, {
-              body: { isActive: isConnected }
-            })
-          })
-          .catch((connError: any) => {
-            logger.error(`Connectivity check failed for ${createdServer.name}:`, connError)
-            window.toast.error(createdServer.name + t('settings.mcp.addServer.importFrom.connectionFailed'))
-          })
+        void updateServerConnectivityState(createdServer, true)
       }
     } finally {
       setLoading(false)
