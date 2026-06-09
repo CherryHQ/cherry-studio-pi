@@ -2045,6 +2045,7 @@
     "preview": {
       "error": "Failed to open file"
     },
+    "rename_failed": "Rename failed",
     "size": "Size",
     "text": "Text",
     "title": "Files",

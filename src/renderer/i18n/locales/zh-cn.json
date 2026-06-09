@@ -2045,6 +2045,7 @@
     "preview": {
       "error": "打开文件失败"
     },
+    "rename_failed": "重命名失败",
     "size": "大小",
     "text": "文本",
     "title": "文件",

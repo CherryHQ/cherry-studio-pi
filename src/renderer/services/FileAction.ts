@@ -1,6 +1,7 @@
 import { loggerService } from '@logger'
 import TextEditPopup from '@renderer/components/Popups/TextEditPopup'
 import db from '@renderer/databases'
+import i18n from '@renderer/i18n'
 import FileManager from '@renderer/services/FileManager'
 import { storageV2ConversationMirrorService } from '@renderer/services/StorageV2ConversationMirrorService'
 import store from '@renderer/store'
@@ -107,7 +108,12 @@ export async function handleRename(fileId: string) {
   const file = await FileManager.getFile(fileId)
   if (!file) return
   const newName = await TextEditPopup.show({ text: file.origin_name })
-  if (newName) {
-    void FileManager.updateFile({ ...file, origin_name: newName })
+  if (!newName || newName === file.origin_name) return
+
+  try {
+    await FileManager.updateFile({ ...file, origin_name: newName })
+  } catch (error) {
+    logger.error(`Error renaming file ${fileId}:`, error as Error)
+    window.modal.error({ content: i18n.t('files.rename_failed'), centered: true })
   }
 }

@@ -3,13 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   fileManagerDeleteFile: vi.fn(),
   fileManagerGetFile: vi.fn(),
+  fileManagerUpdateFile: vi.fn(),
   flushTopicMessagesSnapshot: vi.fn(),
   messageBlocksBulkDelete: vi.fn(),
   messageBlocksEquals: vi.fn(),
   messageBlocksWhere: vi.fn(),
   modalError: vi.fn(),
+  textEditShow: vi.fn(),
   topicsToArray: vi.fn(),
   topicsUpdate: vi.fn(),
+  t: vi.fn((key: string) => key),
   transaction: vi.fn(),
   getState: vi.fn()
 }))
@@ -31,7 +34,8 @@ vi.mock('@renderer/databases', () => ({
 vi.mock('@renderer/services/FileManager', () => ({
   default: {
     deleteFile: mocks.fileManagerDeleteFile,
-    getFile: mocks.fileManagerGetFile
+    getFile: mocks.fileManagerGetFile,
+    updateFile: mocks.fileManagerUpdateFile
   }
 }))
 
@@ -49,7 +53,13 @@ vi.mock('@renderer/store', () => ({
 
 vi.mock('@renderer/components/Popups/TextEditPopup', () => ({
   default: {
-    show: vi.fn()
+    show: mocks.textEditShow
+  }
+}))
+
+vi.mock('@renderer/i18n', () => ({
+  default: {
+    t: mocks.t
   }
 }))
 
@@ -73,6 +83,8 @@ describe('FileAction', () => {
       origin_name: 'note.txt'
     })
     mocks.fileManagerDeleteFile.mockResolvedValue(undefined)
+    mocks.fileManagerUpdateFile.mockResolvedValue(undefined)
+    mocks.textEditShow.mockResolvedValue('renamed.txt')
     mocks.messageBlocksWhere.mockReturnValue({
       equals: mocks.messageBlocksEquals
     })
@@ -157,6 +169,42 @@ describe('FileAction', () => {
     expect(mocks.fileManagerDeleteFile).not.toHaveBeenCalled()
     expect(mocks.modalError).toHaveBeenCalledWith({
       content: 'files.delete.db_error',
+      centered: true
+    })
+  })
+
+  it('awaits file rename updates', async () => {
+    const { handleRename } = await import('../FileAction')
+
+    await handleRename('file-1')
+
+    expect(mocks.textEditShow).toHaveBeenCalledWith({ text: 'note.txt' })
+    expect(mocks.fileManagerUpdateFile).toHaveBeenCalledWith({
+      id: 'file-1',
+      ext: '.txt',
+      count: 1,
+      origin_name: 'renamed.txt'
+    })
+    expect(mocks.modalError).not.toHaveBeenCalled()
+  })
+
+  it('skips file rename updates when the name is unchanged', async () => {
+    mocks.textEditShow.mockResolvedValue('note.txt')
+    const { handleRename } = await import('../FileAction')
+
+    await handleRename('file-1')
+
+    expect(mocks.fileManagerUpdateFile).not.toHaveBeenCalled()
+  })
+
+  it('shows an i18n error when file rename updates fail', async () => {
+    mocks.fileManagerUpdateFile.mockRejectedValue(new Error('storage busy'))
+    const { handleRename } = await import('../FileAction')
+
+    await handleRename('file-1')
+
+    expect(mocks.modalError).toHaveBeenCalledWith({
+      content: 'files.rename_failed',
       centered: true
     })
   })
