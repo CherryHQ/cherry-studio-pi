@@ -50,7 +50,7 @@ import type { UpdateMcpServerDto } from '@shared/data/api/schemas/mcpServers'
 import type { McpServer } from '@shared/data/types/mcpServer'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { ArrowLeft, ChevronDown, SaveIcon, X } from 'lucide-react'
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import * as z from 'zod'
@@ -155,6 +155,7 @@ const McpSettings: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [isFormChanged, setIsFormChanged] = useState(false)
   const [loadingServer, setLoadingServer] = useState<string | null>(null)
+  const loadingServerCountRef = useRef(0)
   const [activeTab, setActiveTab] = useState<TabKey>('settings')
   const [toolSearchText, setToolSearchText] = useState('')
   const [tools] = useSharedCache(serverId ? mcpToolsCacheKey(serverId) : mcpToolsCacheKey('__draft__'), [] as McpTool[])
@@ -175,6 +176,23 @@ const McpSettings: React.FC = () => {
   const { theme } = useTheme()
 
   const navigate = useNavigate()
+
+  const beginServerLoading = useCallback((id: string) => {
+    loadingServerCountRef.current += 1
+    setLoadingServer(id)
+
+    let released = false
+    return () => {
+      if (released) {
+        return
+      }
+      released = true
+      loadingServerCountRef.current = Math.max(0, loadingServerCountRef.current - 1)
+      if (loadingServerCountRef.current === 0) {
+        setLoadingServer(null)
+      }
+    }
+  }, [])
 
   // Initialize form values whenever the server changes
   useEffect(() => {
@@ -260,43 +278,43 @@ const McpSettings: React.FC = () => {
 
   const fetchTools = async () => {
     if (server?.isActive) {
+      const finishLoading = beginServerLoading(server.id)
       try {
-        setLoadingServer(server.id)
         await window.api.mcp.refreshTools(server.id)
       } catch (error) {
         logger.error('Failed to list MCP tools', error as Error)
       } finally {
-        setLoadingServer(null)
+        finishLoading()
       }
     }
   }
 
   const fetchPrompts = async () => {
     if (server?.isActive) {
+      const finishLoading = beginServerLoading(server.id)
       try {
-        setLoadingServer(server.id)
         const localPrompts = await window.api.mcp.listPrompts(server.id)
         setPrompts(localPrompts)
       } catch (error) {
         logger.error('Failed to list MCP prompts', error as Error)
         setPrompts([])
       } finally {
-        setLoadingServer(null)
+        finishLoading()
       }
     }
   }
 
   const fetchResources = async () => {
     if (server?.isActive) {
+      const finishLoading = beginServerLoading(server.id)
       try {
-        setLoadingServer(server.id)
         const localResources = await window.api.mcp.listResources(server.id)
         setResources(localResources)
       } catch (error) {
         logger.error('Failed to list MCP resources', error as Error)
         setResources([])
       } finally {
-        setLoadingServer(null)
+        finishLoading()
       }
     }
   }
@@ -522,7 +540,7 @@ const McpSettings: React.FC = () => {
       serverForUpdate = trustedServer
     }
 
-    setLoadingServer(serverForUpdate.id)
+    const finishLoading = beginServerLoading(serverForUpdate.id)
 
     try {
       if (active) {
@@ -557,7 +575,7 @@ const McpSettings: React.FC = () => {
         centered: true
       })
     } finally {
-      setLoadingServer(null)
+      finishLoading()
     }
   }
 
