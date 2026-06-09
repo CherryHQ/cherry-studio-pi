@@ -3,6 +3,7 @@ import { Navbar, NavbarCenter, NavbarLeft, NavbarRight } from '@renderer/compone
 import NavbarIcon from '@renderer/components/NavbarIcon'
 import SearchPopup from '@renderer/components/Popups/SearchPopup'
 import { useCommandHandler } from '@renderer/features/command'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { Tooltip } from 'antd'
 import { t } from 'i18next'
 import { Menu, PanelLeftClose, PanelRightClose, Search } from 'lucide-react'
@@ -14,7 +15,8 @@ import AgentSidePanelDrawer from './components/AgentSidePanelDrawer'
 
 const AgentNavbar = () => {
   const [showSidebar, setShowSidebar] = usePreference('topic.tab.show')
-  const toggleShowSidebar = () => void setShowSidebar(!showSidebar)
+  const showSaveFailed = useSaveFailedToast()
+  const toggleShowSidebar = () => void setShowSidebar(!showSidebar).catch(showSaveFailed)
   const [narrowMode, setNarrowMode] = usePreference('chat.narrow_mode')
   const [topicPosition] = usePreference('topic.position')
 
@@ -23,7 +25,7 @@ const AgentNavbar = () => {
   })
 
   const handleNarrowModeToggle = () => {
-    void setNarrowMode(!narrowMode)
+    void setNarrowMode(!narrowMode).catch(showSaveFailed)
   }
 
   return (

@@ -3,6 +3,7 @@ import { usePreference } from '@data/hooks/usePreference'
 import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
 import { useCommandHandler } from '@renderer/features/command'
 import { useNavbarPosition } from '@renderer/hooks/useNavbar'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { useTemporaryTopic } from '@renderer/hooks/useTemporaryTopic'
 import { useActiveTopic, useTopicMutations } from '@renderer/hooks/useTopic'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
@@ -86,15 +87,16 @@ const HomePage: FC = () => {
   )
   const [showSidebar, setShowSidebar] = usePreference('topic.tab.show')
   const [topicPosition] = usePreference('topic.position')
+  const showSaveFailed = useSaveFailedToast()
 
   useCommandHandler('app.sidebar.toggle', () => {
     if (topicPosition === 'right') {
-      void setShowSidebar(!showSidebar)
+      void setShowSidebar(!showSidebar).catch(showSaveFailed)
       return
     }
 
     if (!showSidebar) {
-      void setShowSidebar(true)
+      void setShowSidebar(true).catch(showSaveFailed)
       requestAnimationFrame(() => {
         void EventEmitter.emit(EVENT_NAMES.SHOW_ASSISTANTS)
       })
@@ -106,12 +108,12 @@ const HomePage: FC = () => {
 
   useCommandHandler('topic.sidebar.toggle', () => {
     if (topicPosition === 'right') {
-      void setShowSidebar(!showSidebar)
+      void setShowSidebar(!showSidebar).catch(showSaveFailed)
       return
     }
 
     if (!showSidebar) {
-      void setShowSidebar(true)
+      void setShowSidebar(true).catch(showSaveFailed)
       requestAnimationFrame(() => {
         void EventEmitter.emit(EVENT_NAMES.SHOW_TOPIC_SIDEBAR)
       })

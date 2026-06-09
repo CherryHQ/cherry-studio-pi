@@ -11,6 +11,7 @@ import { useActiveSession, useUpdateSession } from '@renderer/hooks/agents/useSe
 import { useModelById } from '@renderer/hooks/useModel'
 import { useNavbarPosition } from '@renderer/hooks/useNavbar'
 import { useProviderDisplayName } from '@renderer/hooks/useProvider'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import type { AgentEntity } from '@shared/data/types/agent'
 import type { Model as SharedModel, UniqueModelId } from '@shared/data/types/model'
 import { Menu, PanelLeftClose, PanelRightClose } from 'lucide-react'
@@ -32,7 +33,8 @@ type AgentContentProps = {
 const AgentContent = ({ activeAgent }: AgentContentProps) => {
   const { t } = useTranslation()
   const [showSidebar, setShowSidebar] = usePreference('topic.tab.show')
-  const toggleShowSidebar = () => void setShowSidebar(!showSidebar)
+  const showSaveFailed = useSaveFailedToast()
+  const toggleShowSidebar = () => void setShowSidebar(!showSidebar).catch(showSaveFailed)
   const { isTopNavbar } = useNavbarPosition()
   const { session: activeSession } = useActiveSession()
   const { updateModel } = useUpdateAgent()

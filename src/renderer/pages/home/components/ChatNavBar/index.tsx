@@ -4,6 +4,7 @@ import { NavbarHeader } from '@renderer/components/app/Navbar'
 import SearchPopup from '@renderer/components/Popups/SearchPopup'
 import { useCommandHandler } from '@renderer/features/command'
 import { useNavbarPosition } from '@renderer/hooks/useNavbar'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { t } from 'i18next'
 import { PanelLeftClose, PanelRightClose } from 'lucide-react'
 import type { FC } from 'react'
@@ -19,7 +20,8 @@ interface Props {
 
 const HeaderNavbar: FC<Props> = ({ assistantId, topicId }) => {
   const [showSidebar, setShowSidebar] = usePreference('topic.tab.show')
-  const toggleShowSidebar = () => void setShowSidebar(!showSidebar)
+  const showSaveFailed = useSaveFailedToast()
+  const toggleShowSidebar = () => void setShowSidebar(!showSidebar).catch(showSaveFailed)
   const { isTopNavbar } = useNavbarPosition()
 
   useCommandHandler('app.search', () => {

@@ -3,6 +3,7 @@ import { usePreference } from '@data/hooks/usePreference'
 import { Navbar, NavbarCenter, NavbarLeft, NavbarRight } from '@renderer/components/app/Navbar'
 import SearchPopup from '@renderer/components/Popups/SearchPopup'
 import { useCommandHandler } from '@renderer/features/command'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { t } from 'i18next'
 import { PanelLeftClose, PanelRightClose, Search } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
@@ -21,14 +22,15 @@ const HeaderNavbar: FC<Props> = () => {
   const [topicPosition] = usePreference('topic.position')
   // Single source of truth for the topics sidebar (the only sidebar in v2).
   const [showSidebar, setShowSidebar] = usePreference('topic.tab.show')
-  const toggleShowSidebar = () => void setShowSidebar(!showSidebar)
+  const showSaveFailed = useSaveFailedToast()
+  const toggleShowSidebar = () => void setShowSidebar(!showSidebar).catch(showSaveFailed)
 
   useCommandHandler('app.search', () => {
     void SearchPopup.show()
   })
 
   const handleNarrowModeToggle = () => {
-    void setNarrowMode(!narrowMode)
+    void setNarrowMode(!narrowMode).catch(showSaveFailed)
   }
 
   return (

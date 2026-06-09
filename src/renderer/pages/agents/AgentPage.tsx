@@ -6,6 +6,7 @@ import { useAgents } from '@renderer/hooks/agents/useAgent'
 import { useAgentSessionInitializer } from '@renderer/hooks/agents/useAgentSessionInitializer'
 import { useApiGateway } from '@renderer/hooks/useApiGateway'
 import { useNavbarPosition } from '@renderer/hooks/useNavbar'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import { cn } from '@renderer/utils'
@@ -23,7 +24,8 @@ import { AgentEmpty, AgentServerDisabled, AgentServerStopped } from './component
 const AgentPage = () => {
   const { isLeftNavbar } = useNavbarPosition()
   const [showSidebar, setShowSidebar] = usePreference('topic.tab.show')
-  const toggleShowSidebar = () => void setShowSidebar(!showSidebar)
+  const showSaveFailed = useSaveFailedToast()
+  const toggleShowSidebar = () => void setShowSidebar(!showSidebar).catch(showSaveFailed)
   const { topicPosition } = useSettings()
   const { agents } = useAgents()
   const { apiGatewayConfig, apiGatewayRunning, apiGatewayLoading } = useApiGateway()

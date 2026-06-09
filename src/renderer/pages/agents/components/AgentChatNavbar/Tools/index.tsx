@@ -1,6 +1,7 @@
 import { usePreference } from '@data/hooks/usePreference'
 import NavbarIcon from '@renderer/components/NavbarIcon'
 import { useNavbarPosition } from '@renderer/hooks/useNavbar'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { Tooltip } from 'antd'
 import { PanelLeftClose, PanelRightClose } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -11,13 +12,14 @@ import SettingsButton from './SettingsButton'
 const Tools = () => {
   const { t } = useTranslation()
   const [showSidebar, setShowSidebar] = usePreference('topic.tab.show')
-  const toggleShowSidebar = () => void setShowSidebar(!showSidebar)
+  const showSaveFailed = useSaveFailedToast()
+  const toggleShowSidebar = () => void setShowSidebar(!showSidebar).catch(showSaveFailed)
   const { isTopNavbar } = useNavbarPosition()
   const [topicPosition] = usePreference('topic.position')
   const [narrowMode, setNarrowMode] = usePreference('chat.narrow_mode')
 
   const handleNarrowModeToggle = () => {
-    void setNarrowMode(!narrowMode)
+    void setNarrowMode(!narrowMode).catch(showSaveFailed)
   }
 
   return (
