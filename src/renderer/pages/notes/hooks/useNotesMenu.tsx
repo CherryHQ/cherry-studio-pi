@@ -12,6 +12,7 @@ import { DeleteIcon } from '@renderer/components/Icons'
 import SaveToKnowledgePopup from '@renderer/components/Popups/SaveToKnowledgePopup'
 import { useKnowledgeBases } from '@renderer/hooks/useKnowledgeBase'
 import type { NotesTreeNode } from '@renderer/types/note'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { exportNote } from '@renderer/utils/export'
 import { Edit3, FilePlus, FileSearch, Folder, FolderOpen, Sparkles, Star, StarOff, UploadIcon } from 'lucide-react'
 import { useCallback } from 'react'
@@ -126,6 +127,16 @@ export const useNotesMenu = ({
     [onDeleteNode, t]
   )
 
+  const handleOpenOutside = useCallback(
+    (node: NotesTreeNode) => {
+      void window.api.openPath(node.externalPath).catch((error) => {
+        logger.error('Failed to open note externally', error as Error)
+        window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+      })
+    },
+    [t]
+  )
+
   const renderMenuItems = useCallback(
     (node: NotesTreeNode) => {
       const isFolder = node.type === 'folder'
@@ -154,7 +165,7 @@ export const useNotesMenu = ({
           <ContextMenuItem onSelect={() => handleStartEdit(node)}>
             <ContextMenuItemContent icon={<Edit3 size={14} />}>{t('notes.rename')}</ContextMenuItemContent>
           </ContextMenuItem>
-          <ContextMenuItem onSelect={() => void window.api.openPath(node.externalPath)}>
+          <ContextMenuItem onSelect={() => handleOpenOutside(node)}>
             <ContextMenuItemContent icon={<FolderOpen size={14} />}>{t('notes.open_outside')}</ContextMenuItemContent>
           </ContextMenuItem>
 
@@ -247,7 +258,8 @@ export const useNotesMenu = ({
       exportMenuOptions,
       onCreateNote,
       onCreateFolder,
-      runExport
+      runExport,
+      handleOpenOutside
     ]
   )
 

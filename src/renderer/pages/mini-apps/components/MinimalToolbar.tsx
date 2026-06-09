@@ -4,6 +4,7 @@ import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { isDev } from '@renderer/config/constant'
 import { useMiniApps } from '@renderer/hooks/useMiniApps'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { isDataApiError, toDataApiError } from '@shared/data/api'
 import type { MiniApp } from '@shared/data/types/miniApp'
 import type { WebviewTag } from 'electron'
@@ -224,13 +225,19 @@ const MinimalToolbar: FC<Props> = ({ app, webviewRef, currentUrl, onReload, onOp
   }, [app.appId, isPinned, updateAppStatus, t])
 
   const handleToggleOpenExternal = useCallback(() => {
-    void setOpenLinkExternal(!openLinkExternal)
-  }, [setOpenLinkExternal, openLinkExternal])
+    void setOpenLinkExternal(!openLinkExternal).catch((error) => {
+      logger.error('Failed to update miniapp external link preference', error as Error)
+      window.toast?.error?.(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    })
+  }, [setOpenLinkExternal, openLinkExternal, t])
 
   const handleOpenLink = useCallback(() => {
     const urlToOpen = currentUrl || app.url
-    void window.api.openWebsite(urlToOpen)
-  }, [currentUrl, app.url])
+    void window.api.openWebsite(urlToOpen).catch((error) => {
+      logger.error('Failed to open miniapp link externally', error as Error)
+      window.toast?.error?.(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+    })
+  }, [currentUrl, app.url, t])
 
   return (
     <div className="flex h-8.75 shrink-0 items-center justify-between bg-background px-3">
