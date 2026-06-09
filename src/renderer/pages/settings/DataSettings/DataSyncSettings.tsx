@@ -249,6 +249,26 @@ const DataSyncSettings: FC = () => {
   const statusRefreshLoadingSeqRef = useRef(0)
   const directoryLoadSeqRef = useRef(0)
 
+  useEffect(() => {
+    setWebdavHost(dataSyncWebdavHost)
+  }, [dataSyncWebdavHost])
+
+  useEffect(() => {
+    setWebdavUser(dataSyncWebdavUser)
+  }, [dataSyncWebdavUser])
+
+  useEffect(() => {
+    setWebdavPass(dataSyncWebdavPass)
+  }, [dataSyncWebdavPass])
+
+  useEffect(() => {
+    setWebdavPath(dataSyncWebdavPath)
+  }, [dataSyncWebdavPath])
+
+  useEffect(() => {
+    setSyncInterval(dataSyncSyncInterval)
+  }, [dataSyncSyncInterval])
+
   const applyStructuredWebDavInput = (value: string) => {
     const parsed = parseWebDavInput(value)
     if (!parsed.structured) return false
