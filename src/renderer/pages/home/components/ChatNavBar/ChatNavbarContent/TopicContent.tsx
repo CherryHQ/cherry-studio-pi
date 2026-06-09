@@ -7,7 +7,9 @@ import { AssistantSelector } from '@renderer/components/ResourceSelector'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import { useProviderDisplayName } from '@renderer/hooks/useProvider'
 import { useTopicMutations } from '@renderer/hooks/useTopic'
+import { loggerService } from '@renderer/services/LoggerService'
 import { getLeadingEmoji } from '@renderer/utils'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { Model as SharedModel } from '@shared/data/types/model'
 import { isNonChatModel, isWebSearchModel } from '@shared/utils/model'
 import { ChevronDown } from 'lucide-react'
@@ -15,6 +17,8 @@ import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import Tools from '../Tools'
+
+const logger = loggerService.withContext('TopicContent')
 
 type TopicContentProps = {
   /** `undefined` when the topic has no associated assistant. */
@@ -31,21 +35,38 @@ const TopicContent = ({ assistantId, topicId }: TopicContentProps) => {
   const assistantName = useMemo(() => assistant?.name || t('chat.default.name'), [assistant?.name, t])
   const providerName = useProviderDisplayName(currentSharedModel?.providerId)
 
+  const showSaveFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    },
+    [t]
+  )
+
   const handleAssistantChange = useCallback(
     async (nextId: string | null) => {
       if (!nextId || nextId === assistantId) return
-      await updateTopic(topicId, { assistantId: nextId })
+      try {
+        await updateTopic(topicId, { assistantId: nextId })
+      } catch (error) {
+        logger.error('Failed to update topic assistant:', error as Error)
+        showSaveFailed(error)
+      }
     },
-    [assistantId, topicId, updateTopic]
+    [assistantId, showSaveFailed, topicId, updateTopic]
   )
 
   const handleModelSelect = useCallback(
     (model: SharedModel | undefined) => {
       if (!model || !assistant) return
       const enabledWebSearch = isWebSearchModel(model)
-      void setModel(model, { enableWebSearch: enabledWebSearch && assistant.settings.enableWebSearch })
+      void setModel(model, { enableWebSearch: enabledWebSearch && assistant.settings.enableWebSearch }).catch(
+        (error) => {
+          logger.error('Failed to update assistant model:', error as Error)
+          showSaveFailed(error)
+        }
+      )
     },
-    [assistant, setModel]
+    [assistant, setModel, showSaveFailed]
   )
 
   return (
