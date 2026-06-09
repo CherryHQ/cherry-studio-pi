@@ -103,6 +103,27 @@ describe('StorageV2DexieTableMirrorService', () => {
     )
   })
 
+  it('coalesces batched auxiliary table delete markers', async () => {
+    const setSetting = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          setSetting
+        }
+      }
+    })
+
+    const { storageV2DexieTableMirrorService } = await import('../StorageV2DexieTableMirrorService')
+
+    storageV2DexieTableMirrorService.scheduleDeletes('quick_phrases', ['phrase-1', 'phrase-1', 'phrase-2'], 0)
+    await storageV2DexieTableMirrorService.flush()
+
+    expect(setSetting).toHaveBeenCalledTimes(2)
+    expect(setSetting).toHaveBeenCalledWith('dexie.table.quick_phrases.phrase-1', null, 'dexie-table:quick_phrases')
+    expect(setSetting).toHaveBeenCalledWith('dexie.table.quick_phrases.phrase-2', null, 'dexie-table:quick_phrases')
+  })
+
   it('rejects strict flushes when an auxiliary table mirror write is still pending after failure', async () => {
     vi.useFakeTimers()
     const setSetting = vi.fn().mockRejectedValue(new Error('storage busy'))

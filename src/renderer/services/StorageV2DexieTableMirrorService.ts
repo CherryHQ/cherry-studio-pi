@@ -106,8 +106,18 @@ class StorageV2DexieTableMirrorService {
   }
 
   scheduleDeletes(tableName: StorageV2DexieTableName, rowIds: string[], debounceMs = DEFAULT_DEBOUNCE_MS) {
+    if (this.suspended || rowIds.length === 0) return
+
+    let hasPending = false
     for (const rowId of rowIds) {
-      this.scheduleDelete(tableName, rowId, debounceMs)
+      if (!rowId) continue
+      this.addPending(this.pendingDeletedIds, tableName, rowId)
+      this.removePending(this.pendingRowIds, tableName, rowId)
+      hasPending = true
+    }
+
+    if (hasPending) {
+      this.scheduleFlush(debounceMs)
     }
   }
 

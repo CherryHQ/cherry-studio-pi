@@ -207,6 +207,104 @@ describe('FileManager', () => {
     )
   })
 
+  it('returns updated metadata when adding an existing file', async () => {
+    const existingFile = {
+      id: 'file-existing',
+      ext: '.txt',
+      count: 2,
+      origin_name: 'existing.txt'
+    }
+    const expectedFile = {
+      ...existingFile,
+      count: 3
+    }
+    mocks.filesGet.mockResolvedValue(existingFile)
+    mocks.filesUpdate.mockResolvedValue(1)
+    mocks.storageV2UpsertFile.mockResolvedValue({ id: 'file-existing' })
+
+    const { default: FileManager } = await import('../FileManager')
+
+    await expect(FileManager.addFile(existingFile as any)).resolves.toEqual(expectedFile)
+
+    expect(mocks.storageV2UpsertFile).toHaveBeenCalledWith(expectedFile)
+    expect(mocks.filesUpdate).toHaveBeenCalledWith('file-existing', expectedFile)
+    expect(mocks.filesAdd).not.toHaveBeenCalled()
+  })
+
+  it('returns updated metadata when adding an existing base64 file', async () => {
+    const sourceFile = {
+      id: 'file-base64-source',
+      name: 'image.png',
+      origin_name: 'image.png',
+      ext: '.png',
+      count: 1
+    }
+    const storedFile = {
+      id: 'file-base64-stored',
+      name: 'image.png',
+      origin_name: 'image.png',
+      ext: '.png',
+      count: 1
+    }
+    const existingFile = {
+      ...storedFile,
+      count: 4
+    }
+    const expectedFile = {
+      ...existingFile,
+      count: 5
+    }
+    mocks.localBase64File.mockResolvedValue(storedFile)
+    mocks.filesGet.mockResolvedValue(existingFile)
+    mocks.filesUpdate.mockResolvedValue(1)
+    mocks.storageV2UpsertFile.mockResolvedValue({ id: 'file-base64-stored' })
+
+    const { default: FileManager } = await import('../FileManager')
+
+    await expect(FileManager.addBase64File(sourceFile as any)).resolves.toEqual(expectedFile)
+
+    expect(mocks.storageV2UpsertFile).toHaveBeenCalledWith(expectedFile)
+    expect(mocks.filesUpdate).toHaveBeenCalledWith('file-base64-stored', expectedFile)
+    expect(mocks.filesAdd).not.toHaveBeenCalled()
+  })
+
+  it('returns updated metadata when uploading an existing file', async () => {
+    const sourceFile = {
+      id: 'file-upload-source',
+      name: 'draft.txt',
+      origin_name: 'draft.txt',
+      ext: '.txt',
+      count: 1
+    }
+    const uploadedFile = {
+      id: 'file-uploaded',
+      name: 'draft.txt',
+      origin_name: 'draft.txt',
+      ext: '.txt',
+      count: 1
+    }
+    const existingFile = {
+      ...uploadedFile,
+      count: 6
+    }
+    const expectedFile = {
+      ...existingFile,
+      count: 7
+    }
+    mocks.localFileUpload.mockResolvedValue(uploadedFile)
+    mocks.filesGet.mockResolvedValue(existingFile)
+    mocks.filesUpdate.mockResolvedValue(1)
+    mocks.storageV2UpsertFile.mockResolvedValue({ id: 'file-uploaded' })
+
+    const { default: FileManager } = await import('../FileManager')
+
+    await expect(FileManager.uploadFile(sourceFile as any)).resolves.toEqual(expectedFile)
+
+    expect(mocks.storageV2UpsertFile).toHaveBeenCalledWith(expectedFile)
+    expect(mocks.filesUpdate).toHaveBeenCalledWith('file-uploaded', expectedFile)
+    expect(mocks.filesAdd).not.toHaveBeenCalled()
+  })
+
   it('logs only file summaries when adding base64 files', async () => {
     const sourceFile = {
       id: 'file-base64',

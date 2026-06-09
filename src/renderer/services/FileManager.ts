@@ -80,7 +80,7 @@ class FileManager {
       const updatedFile = { ...fileRecord, count: fileRecord.count + 1 }
       await this.upsertStorageV2File(updatedFile)
       await db.files.update(fileRecord.id, updatedFile)
-      return fileRecord
+      return updatedFile
     }
 
     await this.upsertStorageV2File(file)
@@ -113,7 +113,7 @@ class FileManager {
       const updatedFile = { ...fileRecord, count: fileRecord.count + 1 }
       await this.upsertStorageV2File(updatedFile)
       await db.files.update(fileRecord.id, updatedFile)
-      return fileRecord
+      return updatedFile
     }
 
     await this.upsertStorageV2File(base64File)
@@ -133,7 +133,7 @@ class FileManager {
       const updatedFile = { ...fileRecord, count: fileRecord.count + 1 }
       await this.upsertStorageV2File(updatedFile)
       await db.files.update(fileRecord.id, updatedFile)
-      return fileRecord
+      return updatedFile
     }
 
     await this.upsertStorageV2File(uploadFile)
