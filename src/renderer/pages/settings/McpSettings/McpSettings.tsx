@@ -596,10 +596,14 @@ const McpSettings: React.FC = () => {
         }
       }
 
-      // Save the updated server configuration
-      void updateMcpServer({ body: { disabledTools } })
+      try {
+        await updateMcpServer({ body: { disabledTools } })
+      } catch (error) {
+        logger.error('Failed to update MCP tool enabled state', error as Error)
+        window.toast.error(t('settings.mcp.updateError'))
+      }
     },
-    [server, updateMcpServer]
+    [server, t, updateMcpServer]
   )
 
   // Handle toggling auto-approve for a tool
@@ -617,10 +621,14 @@ const McpSettings: React.FC = () => {
         }
       }
 
-      // Save the updated server configuration
-      void updateMcpServer({ body: { disabledAutoApproveTools } })
+      try {
+        await updateMcpServer({ body: { disabledAutoApproveTools } })
+      } catch (error) {
+        logger.error('Failed to update MCP tool auto-approve state', error as Error)
+        window.toast.error(t('settings.mcp.updateError'))
+      }
     },
-    [server, updateMcpServer]
+    [server, t, updateMcpServer]
   )
 
   if (!server || isServerLoading) {
