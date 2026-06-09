@@ -57,14 +57,15 @@ const TopicContent = ({ assistantId, topicId }: TopicContentProps) => {
 
   const handleModelSelect = useCallback(
     (model: SharedModel | undefined) => {
-      if (!model || !assistant) return
+      if (!model) return
       const enabledWebSearch = isWebSearchModel(model)
-      void setModel(model, { enableWebSearch: enabledWebSearch && assistant.settings.enableWebSearch }).catch(
-        (error) => {
-          logger.error('Failed to update assistant model:', error as Error)
-          showSaveFailed(error)
-        }
-      )
+      const extraSettings = assistant
+        ? { enableWebSearch: enabledWebSearch && assistant.settings.enableWebSearch }
+        : undefined
+      void setModel(model, extraSettings).catch((error) => {
+        logger.error('Failed to update assistant model:', error as Error)
+        showSaveFailed(error)
+      })
     },
     [assistant, setModel, showSaveFailed]
   )

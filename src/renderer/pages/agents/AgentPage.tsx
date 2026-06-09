@@ -4,7 +4,6 @@ import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
 import { useCommandHandler } from '@renderer/features/command'
 import { useAgents } from '@renderer/hooks/agents/useAgent'
 import { useAgentSessionInitializer } from '@renderer/hooks/agents/useAgentSessionInitializer'
-import { useApiGateway } from '@renderer/hooks/useApiGateway'
 import { useNavbarPosition } from '@renderer/hooks/useNavbar'
 import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { useSettings } from '@renderer/hooks/useSettings'
@@ -19,7 +18,7 @@ import { useTranslation } from 'react-i18next'
 import AgentChat from './AgentChat'
 import AgentNavbar from './AgentNavbar'
 import AgentSidePanel from './AgentSidePanel'
-import { AgentEmpty, AgentServerDisabled, AgentServerStopped } from './components/status'
+import { AgentEmpty } from './components/status'
 
 const AgentPage = () => {
   const { isLeftNavbar } = useNavbarPosition()
@@ -28,7 +27,6 @@ const AgentPage = () => {
   const toggleShowSidebar = () => void setShowSidebar(!showSidebar).catch(showSaveFailed)
   const { topicPosition } = useSettings()
   const { agents } = useAgents()
-  const { apiGatewayConfig, apiGatewayRunning, apiGatewayLoading } = useApiGateway()
   const { t } = useTranslation()
 
   // Seed `agent.active_session_id` to the most-recent session when nothing is set.
@@ -57,28 +55,6 @@ const AgentPage = () => {
       void window.api.window.resetMinimumSize()
     }
   }, [showSidebar])
-
-  if (!apiGatewayConfig.enabled) {
-    return (
-      <Container>
-        <Navbar>
-          <NavbarCenter style={{ borderRight: 'none' }}>{t('common.agent_one')}</NavbarCenter>
-        </Navbar>
-        <AgentServerDisabled />
-      </Container>
-    )
-  }
-
-  if (!apiGatewayLoading && !apiGatewayRunning) {
-    return (
-      <Container>
-        <Navbar>
-          <NavbarCenter style={{ borderRight: 'none' }}>{t('common.agent_one')}</NavbarCenter>
-        </Navbar>
-        <AgentServerStopped />
-      </Container>
-    )
-  }
 
   if (agents && agents.length === 0) {
     return (

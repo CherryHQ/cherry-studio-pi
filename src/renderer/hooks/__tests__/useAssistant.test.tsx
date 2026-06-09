@@ -110,6 +110,23 @@ describe('useAssistant', () => {
     })
   })
 
+  it('persists model changes to the default model preference when the topic has no assistant', async () => {
+    const nextModel = {
+      id: 'openai::gpt-4o',
+      name: 'GPT-4o',
+      provider: 'openai',
+      providerId: 'openai'
+    }
+
+    const { result } = renderHook(() => useAssistant(null))
+
+    await act(async () => {
+      await result.current.setModel(nextModel as never)
+    })
+
+    expect(MockUsePreferenceUtils.getPreferenceValue('chat.default_model_id')).toBe('openai::gpt-4o')
+  })
+
   it('does not fall back to the default model when a persisted assistant has no model', () => {
     MockUsePreferenceUtils.setPreferenceValue('chat.default_model_id', 'provider::default-model')
     mockUseQuery.mockImplementation((path, options) => {

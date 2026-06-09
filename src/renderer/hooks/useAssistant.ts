@@ -222,7 +222,7 @@ export function useDefaultAssistant(): { assistant: Assistant } {
 export function useAssistant(id: string | null | undefined) {
   const { assistant } = useAssistantApiById(id ?? undefined)
   const { updateAssistant: patchAssistant } = useAssistantMutations()
-  const { defaultModel } = useDefaultModel()
+  const { defaultModel, setDefaultModel } = useDefaultModel()
 
   const modelId = assistant?.modelId ?? (!id ? defaultModel?.id : undefined)
   const { model } = useModelById(modelId)
@@ -248,9 +248,14 @@ export function useAssistant(id: string | null | undefined) {
 
   const setModel = useCallback(
     async (next: Model, extraSettings?: Partial<AssistantSettings>) => {
-      if (!id || !assistant) return undefined
-
       try {
+        if (!id) {
+          await setDefaultModel(next)
+          return undefined
+        }
+
+        if (!assistant) return undefined
+
         // reconcile* are v2-native; next.id is the UniqueModelId.
         const reasoning = reconcileReasoningEffortForModel(next, assistant.settings.reasoning_effort, id)
         const webSearch = reconcileWebSearchForModel(next, assistant.settings)
@@ -267,7 +272,7 @@ export function useAssistant(id: string | null | undefined) {
         return undefined
       }
     },
-    [assistant, id, patchAssistant, reportAssistantUpdateError]
+    [assistant, id, patchAssistant, reportAssistantUpdateError, setDefaultModel]
   )
 
   return {

@@ -7,7 +7,6 @@ import { isGenerateImageModel, isVisionModel } from '@renderer/config/models'
 import { isSoulModeEnabled } from '@renderer/hooks/agents/agentConfiguration'
 import { useAgent } from '@renderer/hooks/agents/useAgent'
 import { useSession } from '@renderer/hooks/agents/useSession'
-import { useApiGateway } from '@renderer/hooks/useApiGateway'
 import { useInputText } from '@renderer/hooks/useInputText'
 import { useModels } from '@renderer/hooks/useModel'
 import { useTextareaResize } from '@renderer/hooks/useTextareaResize'
@@ -32,11 +31,12 @@ import { getBuiltinSlashCommands } from '@shared/ai/agentSlashCommands'
 import { documentExts, imageExts, textExts } from '@shared/config/constant'
 import { DEFAULT_ASSISTANT_SETTINGS } from '@shared/data/types/assistant'
 import type { Model } from '@shared/data/types/model'
-import { parseUniqueModelId } from '@shared/data/types/model'
 import type { FC } from 'react'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
+
+import { resolveAgentSessionModel } from './agentSessionModel'
 
 const logger = loggerService.withContext('AgentSessionInputbar')
 
@@ -81,12 +81,7 @@ const AgentSessionInputbar = ({
   // Resolve the v2 model the InputbarTools / model checks need.
   // Model now lives on the parent agent, not the session.
   const sessionModel = useMemo<Model | undefined>(() => {
-    if (!agent?.model) return undefined
-    const [providerId, actualModelId] = agent.model.split(':')
-    if (!providerId || !actualModelId) return undefined
-    return models.find(
-      (m) => m.providerId === providerId && (m.apiModelId ?? parseUniqueModelId(m.id).modelId) === actualModelId
-    )
+    return resolveAgentSessionModel(agent?.model, models)
   }, [agent?.model, models])
 
   // v2-shape Assistant stub for tools that expect a real assistant record.
@@ -213,7 +208,6 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
     setCustomHeight
   } = useTextareaResize({ maxHeight: 500, minHeight: 30 })
   const [sendMessageShortcut] = usePreference('chat.input.send_message_shortcut')
-  const { apiGatewayConfig, apiGatewayRunning } = useApiGateway()
 
   const { t } = useTranslation()
   const quickPanel = useQuickPanel()
@@ -369,7 +363,7 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
     }
   }, [config.enableQuickPanel, toolsRegistry])
 
-  const sendDisabled = (inputEmpty && files.length === 0) || !apiGatewayConfig.enabled || !apiGatewayRunning
+  const sendDisabled = inputEmpty && files.length === 0
 
   const isStreaming = isStreamingFromProp
 
@@ -383,6 +377,11 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
       return
     }
 
+    if (!model) {
+      window.toast.error(t('code.model_required'))
+      return
+    }
+
     logger.info('Starting to send message')
 
     try {
@@ -393,7 +392,7 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
         messageText = text ? `${text}\n\nAttached files:\n${filePaths}` : `Attached files:\n${filePaths}`
       }
 
-      void chatSendMessage({ text: messageText }, { body: { agentId, sessionId } })
+      await chatSendMessage({ text: messageText }, { body: { agentId, sessionId } })
 
       // Emit event to trigger scroll to bottom in AgentSessionMessages
       void EventEmitter.emit(EVENT_NAMES.SEND_MESSAGE, { topicId: sessionTopicId })
@@ -405,6 +404,7 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
       focusTextarea()
     } catch (error) {
       logger.warn('Failed to send message:', error as Error)
+      window.toast.error(t('chat.input.send_failed'))
     }
   }, [
     sendDisabled,
@@ -412,12 +412,14 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
     sessionId,
     sessionTopicId,
     chatSendMessage,
+    model,
     setText,
     setFiles,
     setTimeoutTimer,
     text,
     files,
-    focusTextarea
+    focusTextarea,
+    t
   ])
 
   useEffect(() => {

@@ -22,9 +22,9 @@ import {
   useEffect,
   useEffectEvent,
   useMemo,
-  useRef,
   useState
 } from 'react'
+import { flushSync } from 'react-dom'
 
 export type ResourceSelectorShellItem = {
   id: string
@@ -216,25 +216,18 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
     },
     [openProp, onOpenChangeProp]
   )
-  const pendingCloseActionRef = useRef<(() => void) | null>(null)
-  const runPendingCloseAction = useCallback(() => {
-    const action = pendingCloseActionRef.current
-    if (!action) return
-
-    pendingCloseActionRef.current = null
-    action()
-  }, [])
   const closeBeforeAction = useCallback(
     (action: () => void) => {
-      pendingCloseActionRef.current = action
-      if (!open) {
-        runPendingCloseAction()
-        return
+      if (open) {
+        // eslint-disable-next-line @eslint-react/dom/no-flush-sync -- prevent the selector portal from lingering above the modal/router action that follows.
+        flushSync(() => {
+          handleOpenChange(false)
+        })
       }
 
-      handleOpenChange(false)
+      action()
     },
-    [handleOpenChange, open, runPendingCloseAction]
+    [handleOpenChange, open]
   )
 
   const [searchValue, setSearchValue] = useState('')
@@ -245,9 +238,7 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
   useEffect(() => {
     if (open) return
     setSearchValue('')
-    const timer = window.setTimeout(runPendingCloseAction, 0)
-    return () => window.clearTimeout(timer)
-  }, [open, runPendingCloseAction])
+  }, [open])
 
   // Fire onOpen for both Radix-internal and external (controlled) opens. Routing this through
   // an effect on the effective `open` value covers the controlled `open=true` path that
