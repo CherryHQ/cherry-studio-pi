@@ -390,6 +390,9 @@
       },
       "label_one": "会话",
       "label_other": "会话",
+      "orphan": {
+        "message": "这个会话绑定的智能体不存在。请切换到其他会话或新建会话；当前对话将以只读方式保留。"
+      },
       "reorder": {
         "error": {
           "failed": "会话排序失败"

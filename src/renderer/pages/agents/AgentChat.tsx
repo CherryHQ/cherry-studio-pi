@@ -12,6 +12,7 @@ import { useTopicStreamStatus } from '@renderer/hooks/useTopicStreamStatus'
 import type { Message } from '@renderer/types/newMessage'
 import { cn } from '@renderer/utils'
 import { buildAgentSessionTopicId } from '@renderer/utils/agentSession'
+import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
 import type { AgentEntity } from '@shared/data/types/agent'
 import type { CherryMessagePart, ModelSnapshot } from '@shared/data/types/message'
 import { isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
@@ -29,6 +30,14 @@ import AgentChatNavbar from './components/AgentChatNavbar'
 import AgentSessionInputbar from './components/AgentSessionInputbar'
 import AgentSessionMessages from './components/AgentSessionMessages'
 import Sessions from './components/Sessions'
+
+export function isSessionAgentMissing(
+  activeSession: Pick<AgentSessionEntity, 'agentId'> | null | undefined,
+  activeAgent: Pick<AgentEntity, 'id'> | undefined,
+  isAgentLoading: boolean
+): boolean {
+  return Boolean(activeSession?.agentId && !isAgentLoading && !activeAgent)
+}
 
 const AgentChat = () => {
   const { t } = useTranslation()
@@ -62,13 +71,13 @@ const AgentChat = () => {
     )
   }
 
-  // Orphan session — its agent was deleted. Show a read-only placeholder; user
-  // must reattach to another agent (UX TBD) or delete the session.
-  if (!activeSession.agentId) {
+  // Orphan session — its agent was deleted or missing after sync. Show a
+  // read-only placeholder instead of silently hiding the navbar/inputbar.
+  if (!activeSession.agentId || isSessionAgentMissing(activeSession, activeAgent, isAgentLoading)) {
     return (
       <Container className="flex flex-1 flex-col justify-between">
         <div className="flex h-full w-full items-center justify-center">
-          <WarningAlert message={t('agent.session.orphan.message', 'This session’s agent has been deleted')} />
+          <WarningAlert message={t('agent.session.orphan.message')} />
         </div>
       </Container>
     )

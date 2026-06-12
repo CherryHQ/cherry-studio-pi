@@ -390,6 +390,9 @@
       },
       "label_one": "セッション",
       "label_other": "セッション",
+      "orphan": {
+        "message": "[to be translated]:This session's agent is missing. The conversation is read-only until you switch to another session or create a new one."
+      },
       "reorder": {
         "error": {
           "failed": "セッションの並び替えに失敗しました"

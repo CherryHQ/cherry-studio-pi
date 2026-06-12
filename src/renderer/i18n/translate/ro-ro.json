@@ -390,6 +390,9 @@
       },
       "label_one": "Sesiune",
       "label_other": "Sesiuni",
+      "orphan": {
+        "message": "[to be translated]:This session's agent is missing. The conversation is read-only until you switch to another session or create a new one."
+      },
       "reorder": {
         "error": {
           "failed": "Nu s-a putut reordona sesiunile"
