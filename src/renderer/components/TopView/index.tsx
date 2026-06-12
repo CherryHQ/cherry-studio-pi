@@ -58,10 +58,9 @@ const TopViewContent: React.FC<Props> = ({ children }) => {
   }
 
   onShow = ({ element, id }: ElementItem) => {
-    if (!elementsRef.current.find((el) => el.id === id)) {
-      elementsRef.current = elementsRef.current.concat([{ element, id }])
-      setElements(elementsRef.current)
-    }
+    const next = elementsRef.current.filter((el) => el.id !== id).concat([{ element, id }])
+    elementsRef.current = next
+    setElements(next)
   }
 
   onHide = (id: string) => {
@@ -138,7 +137,7 @@ export const TopView = {
   show: (element: React.FC | React.ReactNode, id: string) => onShow({ element, id }),
   hide: (id: string) => onHide(id),
   clear: () => onHideAll(),
-  pop: onPop
+  pop: () => onPop()
 }
 
 export default TopViewContainer
