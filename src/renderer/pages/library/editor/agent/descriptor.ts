@@ -8,7 +8,7 @@ import type { Tool } from '@shared/ai/tool'
 import type { CreateAgentDto, UpdateAgentDto } from '@shared/data/api/schemas/agents'
 import type { AgentConfiguration, AgentType } from '@shared/data/types/agent'
 import type { UniqueModelId } from '@shared/data/types/model'
-import { FileText, Settings, Shield, SlidersHorizontal, Sparkles, Wrench } from 'lucide-react'
+import { FileText, FolderOpen, Settings, Shield, SlidersHorizontal, Sparkles, Wrench } from 'lucide-react'
 
 import type { AgentDetail } from '../../types'
 import type { SectionDescriptor } from '../ConfigEditorShell'
@@ -17,7 +17,7 @@ import type { SectionDescriptor } from '../ConfigEditorShell'
 // Section metadata
 // ---------------------------------------------------------------------------
 
-export type AgentConfigSection = 'mode' | 'basic' | 'prompt' | 'permission' | 'tools' | 'advanced'
+export type AgentConfigSection = 'mode' | 'basic' | 'workspace' | 'prompt' | 'permission' | 'tools' | 'advanced'
 
 export const AGENT_CONFIG_SECTIONS: readonly SectionDescriptor<AgentConfigSection>[] = [
   {
@@ -31,6 +31,12 @@ export const AGENT_CONFIG_SECTIONS: readonly SectionDescriptor<AgentConfigSectio
     icon: Settings,
     labelKey: 'library.config.agent.section.basic.label',
     descKey: 'library.config.agent.section.basic.desc'
+  },
+  {
+    id: 'workspace',
+    icon: FolderOpen,
+    labelKey: 'library.config.agent.section.workspace.label',
+    descKey: 'library.config.agent.section.workspace.desc'
   },
   {
     id: 'prompt',

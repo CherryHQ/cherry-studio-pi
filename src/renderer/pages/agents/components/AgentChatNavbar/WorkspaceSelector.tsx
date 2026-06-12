@@ -1,4 +1,4 @@
-import { Button, Tooltip } from '@cherrystudio/ui'
+import { Button } from '@cherrystudio/ui'
 import { useUpdateSession } from '@renderer/hooks/agents/useSession'
 import { useAgentWorkspaceMutations } from '@renderer/hooks/agents/useWorkspace'
 import { cn } from '@renderer/utils'
@@ -58,25 +58,27 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
   }
 
   return (
-    <div className="ml-2 max-w-60 [-webkit-app-region:no-drag]" title={workspacePath ?? undefined}>
-      <Tooltip content={actionLabel}>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={selecting}
-          loading={selecting}
-          onClick={() => void handleSelectWorkspace()}
-          onPointerDown={(event) => event.stopPropagation()}
-          aria-label={`${actionLabel}: ${workspaceLabel}`}
-          className={cn(
-            'flex h-7 w-auto max-w-60 items-center gap-1.5 rounded-full px-2 text-xs shadow-none',
-            'text-foreground-500 dark:text-foreground-400'
-          )}>
-          <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 truncate">{workspaceLabel}</span>
-        </Button>
-      </Tooltip>
+    <div className="ml-2 max-w-60 shrink-0 [-webkit-app-region:no-drag]" title={workspacePath ?? undefined}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        disabled={selecting}
+        loading={selecting}
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          void handleSelectWorkspace()
+        }}
+        onMouseDown={(event) => event.stopPropagation()}
+        aria-label={`${actionLabel}: ${workspaceLabel}`}
+        className={cn(
+          'flex h-7 w-auto max-w-60 items-center gap-1.5 rounded-full px-2 text-xs shadow-none',
+          'text-foreground-500 dark:text-foreground-400'
+        )}>
+        <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 truncate">{workspaceLabel}</span>
+      </Button>
     </div>
   )
 }

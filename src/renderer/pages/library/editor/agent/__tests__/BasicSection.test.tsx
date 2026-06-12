@@ -282,43 +282,11 @@ describe('BasicSection agent model selectors', () => {
     expect(onChange).toHaveBeenCalledWith({ smallModel: '' })
   })
 
-  it('selects a first-session workspace in the create variant', async () => {
-    const user = userEvent.setup()
-    const onChange = vi.fn()
-    const originalApi = window.api
-    const selectFolder = vi.fn().mockResolvedValue('/Users/me/project')
-    Object.defineProperty(window, 'api', {
-      configurable: true,
-      value: {
-        ...originalApi,
-        file: {
-          ...originalApi?.file,
-          selectFolder
-        }
-      }
-    })
+  it('keeps workspace selection out of the basic create step', () => {
+    render(<BasicSection form={createForm()} onChange={vi.fn()} variant="create" />)
 
-    try {
-      render(<BasicSection form={createForm()} onChange={onChange} variant="create" />)
-
-      await user.click(screen.getByRole('button', { name: 'library.config.agent.field.workspace.select' }))
-
-      expect(selectFolder).toHaveBeenCalledWith({
-        title: 'library.config.agent.field.workspace.label',
-        properties: ['openDirectory', 'createDirectory']
-      })
-      expect(onChange).toHaveBeenCalledWith({ workspacePath: '/Users/me/project' })
-    } finally {
-      Object.defineProperty(window, 'api', { configurable: true, value: originalApi })
-    }
-  })
-
-  it('shows the selected workspace path and exposes a change action in the create variant', () => {
-    render(
-      <BasicSection form={createForm({ workspacePath: '/Users/me/project' })} onChange={vi.fn()} variant="create" />
-    )
-
-    expect(screen.getByRole('button', { name: 'library.config.agent.field.workspace.change' })).toBeInTheDocument()
-    expect(screen.getByText('/Users/me/project')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'library.config.agent.field.workspace.select' })
+    ).not.toBeInTheDocument()
   })
 })

@@ -2603,6 +2603,11 @@
               "tools": "Công cụ tích hợp sẵn"
             },
             "title": "Công cụ & thời gian chạy"
+          },
+          "workspace": {
+            "desc": "[to be translated]:Choose where this agent reads and writes local project files",
+            "label": "[to be translated]:Workspace",
+            "title": "[to be translated]:Workspace"
           }
         }
       },

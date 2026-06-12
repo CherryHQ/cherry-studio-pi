@@ -2568,7 +2568,7 @@
             "title": "Advanced"
           },
           "basic": {
-            "desc": "Name, avatar, model, directories, runtime",
+            "desc": "Name, avatar, model, runtime",
             "label": "Basic",
             "title": "Basic"
           },
@@ -2603,6 +2603,11 @@
               "tools": "Built-in tools"
             },
             "title": "Capabilities"
+          },
+          "workspace": {
+            "desc": "Choose where this agent reads and writes local project files",
+            "label": "Workspace",
+            "title": "Workspace"
           }
         }
       },

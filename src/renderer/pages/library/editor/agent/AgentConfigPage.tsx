@@ -26,6 +26,7 @@ import ModeSection from './sections/ModeSection'
 import PermissionSection from './sections/PermissionSection'
 import PromptSection from './sections/PromptSection'
 import ToolsSection from './sections/ToolsSection'
+import WorkspaceSection from './sections/WorkspaceSection'
 
 interface Props {
   /**
@@ -43,7 +44,7 @@ interface Props {
   presentation?: 'page' | 'dialog'
 }
 
-const CREATE_AGENT_STEP_IDS: AgentConfigSection[] = ['mode', 'basic', 'prompt', 'tools']
+const CREATE_AGENT_STEP_IDS: AgentConfigSection[] = ['mode', 'basic', 'workspace', 'prompt', 'tools']
 
 // Stub used by the Tools tab in create mode so `agent.id` reads are safe.
 // Skills still require a persisted agent id; tool and MCP draft changes are
@@ -146,7 +147,9 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated, presentation = '
   const visibleSections = useMemo(
     () =>
       AGENT_CONFIG_SECTIONS.filter(
-        (section) => (isCreate || section.id !== 'mode') && (!form.soulEnabled || section.id !== 'permission')
+        (section) =>
+          (isCreate || (section.id !== 'mode' && section.id !== 'workspace')) &&
+          (!form.soulEnabled || section.id !== 'permission')
       ),
     [form.soulEnabled, isCreate]
   )
@@ -180,6 +183,7 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated, presentation = '
           modelError={createValidation?.modelMissing ? requiredFieldMessage : undefined}
         />
       )}
+      {sectionId === 'workspace' && isCreate && <WorkspaceSection form={form} onChange={onChange} />}
       {sectionId === 'prompt' && <PromptSection form={form} onChange={onChange} />}
       {sectionId === 'permission' && !form.soulEnabled && <PermissionSection form={form} onChange={onChange} />}
       {sectionId === 'tools' && (
@@ -220,7 +224,7 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated, presentation = '
         </DialogHeader>
 
         <div className="shrink-0 border-border/40 border-b px-5 py-3">
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             {createSteps.map((section, index) => {
               const Icon = section.icon
               const active = activeCreateStepIndex === index

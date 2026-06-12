@@ -124,12 +124,11 @@ const AgentContent = ({ activeAgent }: AgentContentProps) => {
                     </Button>
                   }
                 />
-
-                <WorkspaceSelector session={activeSession} />
               </>
             )}
           </div>
         </HorizontalScrollContainer>
+        {activeSession && <WorkspaceSelector session={activeSession} />}
       </div>
       <div className="flex items-center">
         {activeSession?.workspace?.path && (

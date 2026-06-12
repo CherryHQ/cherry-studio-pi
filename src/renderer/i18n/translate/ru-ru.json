@@ -2603,6 +2603,11 @@
               "tools": "Встроенные инструменты"
             },
             "title": "Инструменты и среда выполнения"
+          },
+          "workspace": {
+            "desc": "[to be translated]:Choose where this agent reads and writes local project files",
+            "label": "[to be translated]:Workspace",
+            "title": "[to be translated]:Workspace"
           }
         }
       },

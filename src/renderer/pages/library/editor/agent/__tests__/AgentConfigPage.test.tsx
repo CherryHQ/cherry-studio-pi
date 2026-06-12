@@ -98,14 +98,11 @@ vi.mock('../sections/BasicSection', () => ({
   default: ({
     onChange
   }: {
-    onChange: (patch: Partial<{ name: string; model: string; soulEnabled: boolean; workspacePath: string }>) => void
+    onChange: (patch: Partial<{ name: string; model: string; soulEnabled: boolean }>) => void
   }) => (
     <div>
       <button type="button" onClick={() => onChange({ name: 'Created Agent', model: 'anthropic::claude-sonnet-4-5' })}>
         set basic
-      </button>
-      <button type="button" onClick={() => onChange({ workspacePath: '/Users/me/project' })}>
-        set workspace
       </button>
       <button type="button" onClick={() => onChange({ soulEnabled: true })}>
         enable autonomous
@@ -126,6 +123,14 @@ vi.mock('../sections/ToolsSection', () => ({
   default: ({ onChange }: { onChange: (patch: Partial<{ allowedTools: string[]; mcps: string[] }>) => void }) => (
     <button type="button" onClick={() => onChange({ allowedTools: ['Read'], mcps: ['mcp-1'] })}>
       set tools
+    </button>
+  )
+}))
+
+vi.mock('../sections/WorkspaceSection', () => ({
+  default: ({ onChange }: { onChange: (patch: Partial<{ workspacePath: string }>) => void }) => (
+    <button type="button" onClick={() => onChange({ workspacePath: '/Users/me/project' })}>
+      set workspace
     </button>
   )
 }))
@@ -267,6 +272,7 @@ describe('AgentConfigPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'basic' }))
     await user.click(screen.getByRole('button', { name: 'set basic' }))
+    await user.click(screen.getByRole('button', { name: 'workspace' }))
     await user.click(screen.getByRole('button', { name: 'set workspace' }))
     await user.click(screen.getByRole('button', { name: 'save' }))
 
@@ -287,6 +293,7 @@ describe('AgentConfigPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'basic' }))
     await user.click(screen.getByRole('button', { name: 'set basic' }))
+    await user.click(screen.getByRole('button', { name: 'workspace' }))
     await user.click(screen.getByRole('button', { name: 'set workspace' }))
     await user.click(screen.getByRole('button', { name: 'save' }))
 
@@ -329,6 +336,7 @@ describe('AgentConfigPage', () => {
     expect(screen.getByRole('button', { name: 'set basic' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'set basic' }))
+    await user.click(screen.getByRole('button', { name: /common\.next/ }))
     await user.click(screen.getByRole('button', { name: /common\.next/ }))
     await user.click(screen.getByRole('button', { name: /common\.next/ }))
     await user.click(screen.getByRole('button', { name: 'set tools' }))

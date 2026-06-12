@@ -15,11 +15,9 @@ import {
   Textarea
 } from '@cherrystudio/ui'
 import EmojiPicker from '@renderer/components/EmojiPicker'
-import { getErrorMessage } from '@renderer/utils/error'
 import type { AgentType } from '@shared/data/types/agent'
 import { ENDPOINT_TYPE, type Model, MODEL_CAPABILITY, type UniqueModelId } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
-import { FolderOpen, X } from 'lucide-react'
 import type { FC } from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -161,9 +159,6 @@ const BasicSection: FC<Props> = ({ form, onChange, nameError, modelError, varian
           errorMessage={modelError}
           onSelect={(modelId) => onChange({ model: modelId ?? '' })}
         />
-        {isCreateVariant ? (
-          <WorkspaceField value={form.workspacePath} onChange={(workspacePath) => onChange({ workspacePath })} />
-        ) : null}
         {!isCreateVariant && (
           <>
             <ModelField
@@ -288,79 +283,6 @@ function ModelField({
       filter={(model, provider) => isSelectableAgentModel(model, runtimeType, provider)}
       onSelect={onSelect}
     />
-  )
-}
-
-function WorkspaceField({ value, onChange }: { value: string; onChange: (path: string) => void }) {
-  const { t } = useTranslation()
-  const [selecting, setSelecting] = useState(false)
-  const hasValue = Boolean(value)
-  const displayValue = value || t('library.config.agent.field.workspace.auto')
-  const actionLabel = t(
-    hasValue ? 'library.config.agent.field.workspace.change' : 'library.config.agent.field.workspace.select'
-  )
-
-  const handleSelect = async () => {
-    if (selecting) return
-    setSelecting(true)
-    try {
-      const selected = await window.api.file.selectFolder({
-        title: t('library.config.agent.field.workspace.label'),
-        properties: ['openDirectory', 'createDirectory']
-      })
-      if (selected) {
-        onChange(selected)
-      }
-    } catch (error) {
-      window.toast.error({
-        title: t('agent.session.workspace.select_failed'),
-        description: getErrorMessage(error)
-      })
-    } finally {
-      setSelecting(false)
-    }
-  }
-
-  return (
-    <Field className="gap-1.5">
-      <FieldHeader
-        label={t('library.config.agent.field.workspace.label')}
-        hint={t('library.config.agent.field.workspace.hint')}
-      />
-      <FieldContent>
-        <div className="rounded-md border border-border/20 bg-accent/15">
-          <div className="flex items-center gap-1.5 px-2 py-1">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => void handleSelect()}
-              onPointerDown={(event) => event.stopPropagation()}
-              disabled={selecting}
-              loading={selecting}
-              aria-label={actionLabel}
-              className="flex h-auto min-h-0 min-w-0 flex-1 items-center justify-between gap-2 rounded-sm px-2 py-1 font-normal text-foreground text-xs shadow-none hover:bg-accent/50 focus-visible:ring-0">
-              <span className="flex min-w-0 items-center gap-1.5">
-                <FolderOpen size={12} className="shrink-0 text-muted-foreground/80" />
-                <span className="min-w-0 truncate text-left" title={value || undefined}>
-                  {displayValue}
-                </span>
-              </span>
-              <span className="shrink-0 text-primary">{actionLabel}</span>
-            </Button>
-            {value ? (
-              <Button
-                type="button"
-                variant="ghost"
-                aria-label={t('library.config.agent.field.workspace.clear')}
-                onClick={() => onChange('')}
-                className="flex h-6 min-h-0 w-6 shrink-0 items-center justify-center rounded-3xs font-normal text-muted-foreground/80 shadow-none transition-colors hover:bg-accent/50 focus-visible:ring-0">
-                <X size={12} />
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      </FieldContent>
-    </Field>
   )
 }
 
