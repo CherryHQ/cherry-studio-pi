@@ -304,6 +304,7 @@ describe('BasicSection agent model selectors', () => {
       await user.click(screen.getByRole('button', { name: /library\.config\.agent\.field\.workspace\.auto/ }))
 
       expect(selectFolder).toHaveBeenCalledWith({
+        title: 'library.config.agent.field.workspace.label',
         properties: ['openDirectory', 'createDirectory']
       })
       expect(onChange).toHaveBeenCalledWith({ workspacePath: '/Users/me/project' })

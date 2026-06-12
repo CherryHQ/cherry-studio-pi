@@ -2,6 +2,7 @@ import { Button, Tooltip } from '@cherrystudio/ui'
 import { useUpdateSession } from '@renderer/hooks/agents/useSession'
 import { useAgentWorkspaceMutations } from '@renderer/hooks/agents/useWorkspace'
 import { cn } from '@renderer/utils'
+import { getErrorMessage } from '@renderer/utils/error'
 import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
 import { FolderOpen } from 'lucide-react'
 import { useState } from 'react'
@@ -28,6 +29,7 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
     setSelecting(true)
     try {
       const selectedPath = await window.api.file.selectFolder({
+        title: t('agent.session.workspace.change'),
         properties: ['openDirectory', 'createDirectory']
       })
       if (!selectedPath) return
@@ -35,30 +37,37 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
       const workspace = await createWorkspaceByPath(selectedPath)
       if (!workspace) return
 
-      await updateSession(
+      const updated = await updateSession(
         {
           id: session.id,
           workspaceId: workspace.id
         },
         { showSuccessToast: false }
       )
+      if (!updated) return
       window.toast.success(t('agent.session.workspace.updated'))
-    } catch {
-      window.toast.error(t('agent.session.workspace.select_failed'))
+    } catch (error) {
+      window.toast.error({
+        title: t('agent.session.workspace.select_failed'),
+        description: getErrorMessage(error)
+      })
     } finally {
       setSelecting(false)
     }
   }
 
   return (
-    <div className="ml-2 max-w-60" title={workspacePath ?? undefined}>
+    <div className="ml-2 max-w-60 [-webkit-app-region:no-drag]" title={workspacePath ?? undefined}>
       <Tooltip content={t('agent.session.workspace.change')}>
         <Button
           type="button"
           variant="ghost"
           size="sm"
           disabled={selecting}
+          loading={selecting}
           onClick={() => void handleSelectWorkspace()}
+          onPointerDown={(event) => event.stopPropagation()}
+          aria-label={`${t('agent.session.workspace.change')}: ${workspaceLabel}`}
           className={cn(
             'flex h-7 w-auto max-w-60 items-center gap-1.5 rounded-full px-2 text-xs shadow-none',
             'text-foreground-500 dark:text-foreground-400'

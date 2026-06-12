@@ -175,7 +175,7 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated, presentation = '
         <BasicSection
           form={form}
           onChange={onChange}
-          variant={isDialogCreate ? 'create' : 'full'}
+          variant={isCreate ? 'create' : 'full'}
           nameError={createValidation?.nameMissing ? requiredFieldMessage : undefined}
           modelError={createValidation?.modelMissing ? requiredFieldMessage : undefined}
         />

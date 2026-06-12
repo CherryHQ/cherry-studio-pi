@@ -15,6 +15,7 @@ import {
   Textarea
 } from '@cherrystudio/ui'
 import EmojiPicker from '@renderer/components/EmojiPicker'
+import { getErrorMessage } from '@renderer/utils/error'
 import type { AgentType } from '@shared/data/types/agent'
 import { ENDPOINT_TYPE, type Model, MODEL_CAPABILITY, type UniqueModelId } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
@@ -300,13 +301,17 @@ function WorkspaceField({ value, onChange }: { value: string; onChange: (path: s
     setSelecting(true)
     try {
       const selected = await window.api.file.selectFolder({
+        title: t('library.config.agent.field.workspace.label'),
         properties: ['openDirectory', 'createDirectory']
       })
       if (selected) {
         onChange(selected)
       }
-    } catch {
-      window.toast.error(t('agent.session.workspace.select_failed'))
+    } catch (error) {
+      window.toast.error({
+        title: t('agent.session.workspace.select_failed'),
+        description: getErrorMessage(error)
+      })
     } finally {
       setSelecting(false)
     }
@@ -325,7 +330,9 @@ function WorkspaceField({ value, onChange }: { value: string; onChange: (path: s
               type="button"
               variant="ghost"
               onClick={() => void handleSelect()}
+              onPointerDown={(event) => event.stopPropagation()}
               disabled={selecting}
+              loading={selecting}
               className="flex h-auto min-h-0 min-w-0 flex-1 items-center justify-start gap-1.5 rounded-sm px-2 py-1 font-normal text-foreground text-xs shadow-none hover:bg-accent/50 focus-visible:ring-0">
               <FolderOpen size={12} className="shrink-0 text-muted-foreground/80" />
               <span className="min-w-0 truncate text-left" title={value || undefined}>
