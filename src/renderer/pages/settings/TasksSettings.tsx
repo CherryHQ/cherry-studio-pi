@@ -47,7 +47,7 @@ import {
   Trash2,
   X
 } from 'lucide-react'
-import { type FC, useCallback, useEffect, useMemo, useState } from 'react'
+import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingsContentColumn, SettingTitle } from '.'
@@ -896,6 +896,18 @@ const TasksSettings: FC = () => {
   const [loading, setLoading] = useState(true)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const mountedRef = useRef(true)
+  const runRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+      if (runRefreshTimerRef.current) {
+        clearTimeout(runRefreshTimerRef.current)
+        runRefreshTimerRef.current = null
+      }
+    }
+  }, [])
 
   const channels: ChannelInfo[] = useMemo(
     () =>
@@ -923,6 +935,7 @@ const TasksSettings: FC = () => {
           return (result as any).items ?? []
         })
       )
+      if (!mountedRef.current) return
       setTasks(tasksPerAgent.flat())
       setAgents(
         agentList
@@ -934,10 +947,13 @@ const TasksSettings: FC = () => {
           .map((a: AgentEntity) => ({ id: a.id, name: a.name ?? a.id }))
       )
     } catch (error) {
+      if (!mountedRef.current) return
       logger.error('Failed to load tasks settings', error as Error)
       window.toast.error(t('agent.cherryClaw.tasks.error.loadFailed'))
     } finally {
-      setLoading(false)
+      if (mountedRef.current) {
+        setLoading(false)
+      }
     }
   }, [t])
 
@@ -1002,10 +1018,18 @@ const TasksSettings: FC = () => {
   const handleRun = useCallback(
     async (taskId: string) => {
       await runTask(taskId)
-      void loadData()
-      // Task runs asynchronously — refresh again after a delay to capture completion
-      setTimeout(() => {
+      if (mountedRef.current) {
         void loadData()
+      }
+      // Task runs asynchronously — refresh again after a delay to capture completion
+      if (runRefreshTimerRef.current) {
+        clearTimeout(runRefreshTimerRef.current)
+      }
+      runRefreshTimerRef.current = setTimeout(() => {
+        runRefreshTimerRef.current = null
+        if (mountedRef.current) {
+          void loadData()
+        }
       }, 1000)
     },
     [runTask, loadData]
