@@ -3,9 +3,12 @@ import AddButton from '@renderer/components/AddButton'
 import DraggableVirtualList, { type DraggableVirtualListRef } from '@renderer/components/DraggableList/VirtualList'
 import { useCache } from '@renderer/data/hooks/useCache'
 import { useQuery } from '@renderer/data/hooks/useDataApi'
+import { useAgents } from '@renderer/hooks/agents/useAgent'
 import { useCreateDefaultSession } from '@renderer/hooks/agents/useCreateDefaultSession'
 import { useSessions } from '@renderer/hooks/agents/useSession'
 import { formatErrorMessage } from '@renderer/utils/error'
+import type { AgentEntity } from '@shared/data/api/schemas/agents'
+import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
 import { motion } from 'framer-motion'
 import { throttle } from 'lodash'
 import { AlertTriangle, Loader2 } from 'lucide-react'
@@ -20,6 +23,15 @@ interface SessionsProps {
 
 const LOAD_MORE_THRESHOLD = 100
 const SCROLL_THROTTLE_DELAY = 150
+
+export function resolveCreateSessionAgentId(
+  sessions: readonly Pick<AgentSessionEntity, 'id' | 'agentId'>[],
+  activeSessionId: string | null | undefined,
+  agents: readonly Pick<AgentEntity, 'id'>[]
+): string | null {
+  const activeAgentId = sessions.find((session) => session.id === activeSessionId)?.agentId
+  return activeAgentId ?? sessions[0]?.agentId ?? agents[0]?.id ?? null
+}
 
 const Sessions = ({ onSelectItem }: SessionsProps) => {
   const { t } = useTranslation()
@@ -37,14 +49,15 @@ const Sessions = ({ onSelectItem }: SessionsProps) => {
     reorderSessions,
     togglePin
   } = useSessions()
+  const { agents } = useAgents()
   const [activeSessionId, setActiveSessionId] = useCache('agent.active_session_id')
 
   // Create-session entry: pick the agent of the currently-active session by
-  // default, falling back to the agent owning the first listed session.
+  // default, then the first listed session, then the first available agent.
+  // The final fallback keeps "has agents but no sessions yet" recoverable.
   const fallbackAgentId = useMemo(() => {
-    const activeAgentId = sessions.find((s) => s.id === activeSessionId)?.agentId
-    return activeAgentId ?? sessions[0]?.agentId ?? null
-  }, [sessions, activeSessionId])
+    return resolveCreateSessionAgentId(sessions, activeSessionId, agents)
+  }, [sessions, activeSessionId, agents])
   const { createDefaultSession, creatingSession } = useCreateDefaultSession(fallbackAgentId)
 
   const listRef = useRef<DraggableVirtualListRef>(null)
