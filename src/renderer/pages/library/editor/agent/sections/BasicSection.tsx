@@ -294,7 +294,11 @@ function ModelField({
 function WorkspaceField({ value, onChange }: { value: string; onChange: (path: string) => void }) {
   const { t } = useTranslation()
   const [selecting, setSelecting] = useState(false)
+  const hasValue = Boolean(value)
   const displayValue = value || t('library.config.agent.field.workspace.auto')
+  const actionLabel = t(
+    hasValue ? 'library.config.agent.field.workspace.change' : 'library.config.agent.field.workspace.select'
+  )
 
   const handleSelect = async () => {
     if (selecting) return
@@ -333,11 +337,15 @@ function WorkspaceField({ value, onChange }: { value: string; onChange: (path: s
               onPointerDown={(event) => event.stopPropagation()}
               disabled={selecting}
               loading={selecting}
-              className="flex h-auto min-h-0 min-w-0 flex-1 items-center justify-start gap-1.5 rounded-sm px-2 py-1 font-normal text-foreground text-xs shadow-none hover:bg-accent/50 focus-visible:ring-0">
-              <FolderOpen size={12} className="shrink-0 text-muted-foreground/80" />
-              <span className="min-w-0 truncate text-left" title={value || undefined}>
-                {displayValue}
+              aria-label={actionLabel}
+              className="flex h-auto min-h-0 min-w-0 flex-1 items-center justify-between gap-2 rounded-sm px-2 py-1 font-normal text-foreground text-xs shadow-none hover:bg-accent/50 focus-visible:ring-0">
+              <span className="flex min-w-0 items-center gap-1.5">
+                <FolderOpen size={12} className="shrink-0 text-muted-foreground/80" />
+                <span className="min-w-0 truncate text-left" title={value || undefined}>
+                  {displayValue}
+                </span>
               </span>
+              <span className="shrink-0 text-primary">{actionLabel}</span>
             </Button>
             {value ? (
               <Button

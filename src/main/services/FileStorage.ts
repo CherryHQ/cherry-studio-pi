@@ -25,7 +25,7 @@ import type { FSWatcher } from 'chokidar'
 import chokidar from 'chokidar'
 import * as crypto from 'crypto'
 import type { OpenDialogOptions, OpenDialogReturnValue, SaveDialogOptions, SaveDialogReturnValue } from 'electron'
-import { dialog, net, shell } from 'electron'
+import { BrowserWindow, dialog, net, shell } from 'electron'
 import * as fs from 'fs'
 import { writeFileSync } from 'fs'
 import { readFile } from 'fs/promises'
@@ -1589,13 +1589,20 @@ class FileStorage {
     return false
   }
 
-  public selectFolder = async (_: Electron.IpcMainInvokeEvent, options: OpenDialogOptions): Promise<string | null> => {
+  public selectFolder = async (
+    event: Electron.IpcMainInvokeEvent,
+    options: OpenDialogOptions = {}
+  ): Promise<string | null> => {
     try {
-      const result: OpenDialogReturnValue = await dialog.showOpenDialog({
+      const dialogOptions: OpenDialogOptions = {
         title: t('dialog.select_folder'),
         properties: ['openDirectory'],
         ...options
-      })
+      }
+      const parentWindow = BrowserWindow.fromWebContents(event.sender)
+      const result: OpenDialogReturnValue = parentWindow
+        ? await dialog.showOpenDialog(parentWindow, dialogOptions)
+        : await dialog.showOpenDialog(dialogOptions)
 
       if (!result.canceled && result.filePaths.length > 0) {
         return result.filePaths[0]

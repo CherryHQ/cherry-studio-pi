@@ -403,6 +403,7 @@
       "workspace": {
         "change": "[to be translated]:Change workspace",
         "create_failed": "[to be translated]:Failed to create workspace",
+        "select": "[to be translated]:Select workspace",
         "select_failed": "[to be translated]:Failed to select workspace",
         "updated": "[to be translated]:Workspace updated"
       },
@@ -2549,9 +2550,11 @@
           },
           "workspace": {
             "auto": "[to be translated]:Create a dedicated workspace automatically",
+            "change": "[to be translated]:Change directory",
             "clear": "[to be translated]:Clear workspace",
             "hint": "[to be translated]:Choose the working directory for this agent's first session. A dedicated directory is created automatically when left empty.",
-            "label": "[to be translated]:Workspace"
+            "label": "[to be translated]:Workspace",
+            "select": "[to be translated]:Select directory"
           }
         },
         "model_config": "Configuração do modelo",

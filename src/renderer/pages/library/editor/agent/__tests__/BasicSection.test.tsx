@@ -301,7 +301,7 @@ describe('BasicSection agent model selectors', () => {
     try {
       render(<BasicSection form={createForm()} onChange={onChange} variant="create" />)
 
-      await user.click(screen.getByRole('button', { name: /library\.config\.agent\.field\.workspace\.auto/ }))
+      await user.click(screen.getByRole('button', { name: 'library.config.agent.field.workspace.select' }))
 
       expect(selectFolder).toHaveBeenCalledWith({
         title: 'library.config.agent.field.workspace.label',
@@ -311,5 +311,14 @@ describe('BasicSection agent model selectors', () => {
     } finally {
       Object.defineProperty(window, 'api', { configurable: true, value: originalApi })
     }
+  })
+
+  it('shows the selected workspace path and exposes a change action in the create variant', () => {
+    render(
+      <BasicSection form={createForm({ workspacePath: '/Users/me/project' })} onChange={vi.fn()} variant="create" />
+    )
+
+    expect(screen.getByRole('button', { name: 'library.config.agent.field.workspace.change' })).toBeInTheDocument()
+    expect(screen.getByText('/Users/me/project')).toBeInTheDocument()
   })
 })

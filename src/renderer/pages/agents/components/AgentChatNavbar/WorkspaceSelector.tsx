@@ -23,6 +23,7 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
   const workspaceLabel = session.workspace
     ? session.workspace.name || session.workspace.path
     : t('selector.workspace.placeholder')
+  const actionLabel = session.workspace ? t('agent.session.workspace.change') : t('agent.session.workspace.select')
 
   const handleSelectWorkspace = async () => {
     if (selecting) return
@@ -58,7 +59,7 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
 
   return (
     <div className="ml-2 max-w-60 [-webkit-app-region:no-drag]" title={workspacePath ?? undefined}>
-      <Tooltip content={t('agent.session.workspace.change')}>
+      <Tooltip content={actionLabel}>
         <Button
           type="button"
           variant="ghost"
@@ -67,7 +68,7 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
           loading={selecting}
           onClick={() => void handleSelectWorkspace()}
           onPointerDown={(event) => event.stopPropagation()}
-          aria-label={`${t('agent.session.workspace.change')}: ${workspaceLabel}`}
+          aria-label={`${actionLabel}: ${workspaceLabel}`}
           className={cn(
             'flex h-7 w-auto max-w-60 items-center gap-1.5 rounded-full px-2 text-xs shadow-none',
             'text-foreground-500 dark:text-foreground-400'

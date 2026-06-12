@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   storageV2FileRepository: {
     importFile: vi.fn()
   },
+  browserWindowFromWebContents: vi.fn(),
+  showOpenDialog: vi.fn(),
   netFetch: vi.fn()
 }))
 
@@ -38,8 +40,11 @@ vi.mock('fs', async () => {
 })
 
 vi.mock('electron', () => ({
+  BrowserWindow: {
+    fromWebContents: mocks.browserWindowFromWebContents
+  },
   dialog: {
-    showOpenDialog: vi.fn()
+    showOpenDialog: mocks.showOpenDialog
   },
   net: {
     fetch: mocks.netFetch
@@ -69,6 +74,10 @@ vi.mock('@main/utils/file', () => ({
   getTempDir: () => mocks.dirs.temp,
   readTextFileWithAutoEncoding: vi.fn(),
   scanDir: vi.fn()
+}))
+
+vi.mock('@main/utils/language', () => ({
+  t: vi.fn((key: string) => key)
 }))
 
 vi.mock('../storageV2/StorageV2Repositories', () => ({
@@ -118,6 +127,8 @@ describe('FileStorage Storage v2 upload flow', () => {
     fs.mkdirSync(mocks.dirs.notes, { recursive: true })
     fs.mkdirSync(mocks.dirs.temp, { recursive: true })
     mocks.storageV2FileRepository.importFile.mockResolvedValue({ imported: true })
+    mocks.browserWindowFromWebContents.mockReset()
+    mocks.showOpenDialog.mockReset()
     mocks.netFetch.mockReset()
   })
 
@@ -254,6 +265,29 @@ describe('FileStorage Storage v2 upload flow', () => {
       'Unsafe stored file name'
     )
     expect(fs.readFileSync(outsidePath, 'utf8')).toBe('outside')
+  })
+
+  it('opens folder selection as a child of the invoking window', async () => {
+    const parentWindow = { id: 1 }
+    const sender = {}
+    mocks.browserWindowFromWebContents.mockReturnValueOnce(parentWindow)
+    mocks.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: ['/Users/me/project']
+    })
+
+    const { fileStorage } = await import('../FileStorage')
+    const selectedPath = await fileStorage.selectFolder({ sender } as never, { title: 'Pick workspace' })
+
+    expect(mocks.browserWindowFromWebContents).toHaveBeenCalledWith(sender)
+    expect(mocks.showOpenDialog).toHaveBeenCalledWith(
+      parentWindow,
+      expect.objectContaining({
+        title: 'Pick workspace',
+        properties: ['openDirectory']
+      })
+    )
+    expect(selectedPath).toBe('/Users/me/project')
   })
 
   it('rejects private remote download URLs before the main process fetches them', async () => {

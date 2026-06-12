@@ -403,6 +403,7 @@
       "workspace": {
         "change": "更换工作目录",
         "create_failed": "创建工作目录失败",
+        "select": "选择工作目录",
         "select_failed": "选择工作目录失败",
         "updated": "工作目录已更新"
       },
@@ -2549,9 +2550,11 @@
           },
           "workspace": {
             "auto": "自动创建专属工作目录",
+            "change": "更换目录",
             "clear": "清除工作目录",
             "hint": "选择这个智能体首个会话的工作目录；未选择时自动创建专属目录",
-            "label": "工作目录"
+            "label": "工作目录",
+            "select": "选择目录"
           }
         },
         "model_config": "模型配置",

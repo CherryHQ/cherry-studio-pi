@@ -1,3 +1,4 @@
+import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
@@ -53,7 +54,7 @@ vi.mock('@renderer/hooks/agents/useSession', () => ({
   })
 }))
 
-function createSession() {
+function createSession(overrides: Partial<AgentSessionEntity> = {}): AgentSessionEntity {
   return {
     id: 'session-1',
     agentId: 'agent-1',
@@ -62,7 +63,8 @@ function createSession() {
     workspace: null,
     orderKey: 'a0',
     createdAt: '2026-06-12T00:00:00.000Z',
-    updatedAt: '2026-06-12T00:00:00.000Z'
+    updatedAt: '2026-06-12T00:00:00.000Z',
+    ...overrides
   }
 }
 
@@ -123,7 +125,7 @@ describe('WorkspaceSelector', () => {
     try {
       render(<WorkspaceSelector session={createSession()} />)
 
-      await user.click(screen.getByRole('button', { name: /agent\.session\.workspace\.change/ }))
+      await user.click(screen.getByRole('button', { name: /agent\.session\.workspace\.select/ }))
 
       expect(selectFolder).toHaveBeenCalledWith({
         title: 'agent.session.workspace.change',
@@ -158,12 +160,32 @@ describe('WorkspaceSelector', () => {
     try {
       render(<WorkspaceSelector session={createSession()} />)
 
-      await user.click(screen.getByRole('button', { name: /agent\.session\.workspace\.change/ }))
+      await user.click(screen.getByRole('button', { name: /agent\.session\.workspace\.select/ }))
 
       await waitFor(() => expect(updateSessionMock).toHaveBeenCalledTimes(1))
       expect(success).not.toHaveBeenCalled()
     } finally {
       restoreWindow()
     }
+  })
+
+  it('labels an existing workspace action as change instead of select', () => {
+    render(
+      <WorkspaceSelector
+        session={createSession({
+          workspaceId: 'workspace-1',
+          workspace: {
+            id: 'workspace-1',
+            name: 'Project',
+            path: '/Users/me/project',
+            orderKey: 'a0',
+            createdAt: '2026-06-12T00:00:00.000Z',
+            updatedAt: '2026-06-12T00:00:00.000Z'
+          }
+        })}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: /agent\.session\.workspace\.change: Project/ })).toBeInTheDocument()
   })
 })

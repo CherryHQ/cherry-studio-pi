@@ -403,6 +403,7 @@
       "workspace": {
         "change": "Change workspace",
         "create_failed": "Failed to create workspace",
+        "select": "Select workspace",
         "select_failed": "Failed to select workspace",
         "updated": "Workspace updated"
       },
@@ -2549,9 +2550,11 @@
           },
           "workspace": {
             "auto": "Create a dedicated workspace automatically",
+            "change": "Change directory",
             "clear": "Clear workspace",
             "hint": "Choose the working directory for this agent's first session. A dedicated directory is created automatically when left empty.",
-            "label": "Workspace"
+            "label": "Workspace",
+            "select": "Select directory"
           }
         },
         "model_config": "Model configuration",
