@@ -183,17 +183,21 @@ describe('AgentSessionService', () => {
     })
   })
 
-  it('ignores workspace updates even if callers bypass the schema', async () => {
+  it('updates a session workspace when the user switches working directories', async () => {
     const firstWorkspace = await agentWorkspaceService.findOrCreateByPath(path.join(root, 'before-switch'))
     const secondWorkspace = await agentWorkspaceService.findOrCreateByPath(path.join(root, 'after-switch'))
     const session = await createSession('Workspace switch', firstWorkspace.id)
 
     const updated = await agentSessionService.update(session.id, {
       workspaceId: secondWorkspace.id
-    } as never)
+    })
 
-    expect(updated.workspaceId).toBe(firstWorkspace.id)
-    expect(updated.workspace?.path).toBe(firstWorkspace.path)
+    expect(updated.workspaceId).toBe(secondWorkspace.id)
+    expect(updated.workspace?.path).toBe(secondWorkspace.path)
+
+    const refetched = await agentSessionService.getById(session.id)
+    expect(refetched.workspaceId).toBe(secondWorkspace.id)
+    expect(refetched.workspace?.path).toBe(secondWorkspace.path)
   })
 
   it('deletes a session', async () => {

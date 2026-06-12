@@ -52,7 +52,7 @@ export function useDefaultModel() {
     })
   }, [fallbackChatModel?.id, normalizedDefaultModelId, setDefaultModelId])
 
-  const { model: defaultModel } = useModelById(effectiveDefaultModelId as UniqueModelId | null)
+  const { model: defaultModel } = useModelById(effectiveDefaultModelId)
   const { model: quickModel } = useModelById(normalizedQuickModelId ?? effectiveDefaultModelId)
   const { model: translateModel } = useModelById(normalizedTranslateModelId ?? effectiveDefaultModelId)
 

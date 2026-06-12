@@ -290,9 +290,9 @@ describe('BasicSection agent model selectors', () => {
     Object.defineProperty(window, 'api', {
       configurable: true,
       value: {
-        ...(originalApi ?? {}),
+        ...originalApi,
         file: {
-          ...(originalApi?.file ?? {}),
+          ...originalApi?.file,
           selectFolder
         }
       }

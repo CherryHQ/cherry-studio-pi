@@ -23,18 +23,21 @@ vi.mock('@renderer/utils', () => ({
 vi.mock('@cherrystudio/ui', () => ({
   Button: ({
     children,
-    loading: _loading,
+    loading,
     type = 'button',
     ...props
   }: {
     children: ReactNode
     loading?: boolean
     type?: 'button' | 'submit' | 'reset'
-  }) => (
-    <button type={type} {...props}>
-      {children}
-    </button>
-  ),
+  }) => {
+    void loading
+    return (
+      <button type={type} {...props}>
+        {children}
+      </button>
+    )
+  },
   Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>
 }))
 
@@ -63,6 +66,43 @@ function createSession() {
   }
 }
 
+function installWindowMocks({
+  selectFolder,
+  success,
+  error
+}: {
+  selectFolder: ReturnType<typeof vi.fn>
+  success: ReturnType<typeof vi.fn>
+  error: ReturnType<typeof vi.fn>
+}) {
+  const originalApi = window.api
+  const originalToast = window.toast
+
+  Object.defineProperty(window, 'api', {
+    configurable: true,
+    value: {
+      ...originalApi,
+      file: {
+        ...originalApi?.file,
+        selectFolder
+      }
+    }
+  })
+  Object.defineProperty(window, 'toast', {
+    configurable: true,
+    value: {
+      ...originalToast,
+      success,
+      error
+    }
+  })
+
+  return () => {
+    Object.defineProperty(window, 'api', { configurable: true, value: originalApi })
+    Object.defineProperty(window, 'toast', { configurable: true, value: originalToast })
+  }
+}
+
 describe('WorkspaceSelector', () => {
   beforeEach(() => {
     createWorkspaceByPathMock.mockReset()
@@ -71,8 +111,6 @@ describe('WorkspaceSelector', () => {
 
   it('selects a folder, creates a workspace, and updates the active session', async () => {
     const user = userEvent.setup()
-    const originalApi = window.api
-    const originalToast = window.toast
     const selectFolder = vi.fn().mockResolvedValue('/Users/me/project')
     const success = vi.fn()
     const error = vi.fn()
@@ -80,24 +118,7 @@ describe('WorkspaceSelector', () => {
     createWorkspaceByPathMock.mockResolvedValueOnce({ id: 'workspace-1', path: '/Users/me/project' })
     updateSessionMock.mockResolvedValueOnce({ ...createSession(), workspaceId: 'workspace-1' })
 
-    Object.defineProperty(window, 'api', {
-      configurable: true,
-      value: {
-        ...(originalApi ?? {}),
-        file: {
-          ...(originalApi?.file ?? {}),
-          selectFolder
-        }
-      }
-    })
-    Object.defineProperty(window, 'toast', {
-      configurable: true,
-      value: {
-        ...(originalToast ?? {}),
-        success,
-        error
-      }
-    })
+    const restoreWindow = installWindowMocks({ selectFolder, success, error })
 
     try {
       render(<WorkspaceSelector session={createSession()} />)
@@ -119,15 +140,12 @@ describe('WorkspaceSelector', () => {
       expect(success).toHaveBeenCalledWith('agent.session.workspace.updated')
       expect(error).not.toHaveBeenCalled()
     } finally {
-      Object.defineProperty(window, 'api', { configurable: true, value: originalApi })
-      Object.defineProperty(window, 'toast', { configurable: true, value: originalToast })
+      restoreWindow()
     }
   })
 
   it('does not show a success toast when the session update fails', async () => {
     const user = userEvent.setup()
-    const originalApi = window.api
-    const originalToast = window.toast
     const selectFolder = vi.fn().mockResolvedValue('/Users/me/project')
     const success = vi.fn()
     const error = vi.fn()
@@ -135,24 +153,7 @@ describe('WorkspaceSelector', () => {
     createWorkspaceByPathMock.mockResolvedValueOnce({ id: 'workspace-1', path: '/Users/me/project' })
     updateSessionMock.mockResolvedValueOnce(undefined)
 
-    Object.defineProperty(window, 'api', {
-      configurable: true,
-      value: {
-        ...(originalApi ?? {}),
-        file: {
-          ...(originalApi?.file ?? {}),
-          selectFolder
-        }
-      }
-    })
-    Object.defineProperty(window, 'toast', {
-      configurable: true,
-      value: {
-        ...(originalToast ?? {}),
-        success,
-        error
-      }
-    })
+    const restoreWindow = installWindowMocks({ selectFolder, success, error })
 
     try {
       render(<WorkspaceSelector session={createSession()} />)
@@ -162,8 +163,7 @@ describe('WorkspaceSelector', () => {
       await waitFor(() => expect(updateSessionMock).toHaveBeenCalledTimes(1))
       expect(success).not.toHaveBeenCalled()
     } finally {
-      Object.defineProperty(window, 'api', { configurable: true, value: originalApi })
-      Object.defineProperty(window, 'toast', { configurable: true, value: originalToast })
+      restoreWindow()
     }
   })
 })

@@ -83,7 +83,7 @@ export class BuiltinAgentSeeder implements ISeeder {
       mcps: definition.mcps ?? [],
       allowedTools: definition.allowed_tools ?? [],
       configuration: {
-        ...(definition.configuration ?? {}),
+        ...definition.configuration,
         permission_mode: 'bypassPermissions',
         max_turns: 100,
         env_vars: {},
