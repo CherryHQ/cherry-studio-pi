@@ -155,6 +155,11 @@ export default function LibraryPage() {
     setConfigView({ type: 'list' })
     clearRouteActionSearch()
   }, [clearRouteActionSearch, refetch])
+  const handleAgentCreated = useCallback(() => {
+    refetch()
+    setConfigView({ type: 'list' })
+    void navigate({ to: '/app/agents', replace: true })
+  }, [navigate, refetch])
 
   useEffect(() => {
     if (!routeResourceType) return
@@ -517,7 +522,7 @@ export default function LibraryPage() {
         <DialogContent
           aria-describedby={undefined}
           className="w-[min(920px,calc(100vw-2rem))] max-w-none overflow-hidden rounded-xl p-0 sm:max-w-[920px]">
-          <AgentConfigPage onBack={handleBackToList} onCreated={handleCreated} presentation="dialog" />
+          <AgentConfigPage onBack={handleBackToList} onCreated={handleAgentCreated} presentation="dialog" />
         </DialogContent>
       </Dialog>
       <AssistantPresetPreviewDialog

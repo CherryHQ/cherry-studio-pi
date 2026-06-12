@@ -236,7 +236,7 @@ describe('LibraryPage create flow', () => {
     expect(refetchSpy).toHaveBeenCalledTimes(1)
   })
 
-  it('returns to the list and refetches after agent creation succeeds', async () => {
+  it('opens the agent chat page after agent creation succeeds', async () => {
     const user = userEvent.setup()
 
     render(<LibraryPage />)
@@ -251,6 +251,7 @@ describe('LibraryPage create flow', () => {
     })
     expect(screen.queryByTestId('agent-edit-page')).not.toBeInTheDocument()
     expect(refetchSpy).toHaveBeenCalledTimes(1)
+    expect(navigateMock).toHaveBeenCalledWith({ to: '/app/agents', replace: true })
   })
 
   it('returns to the list and refetches after prompt creation succeeds', async () => {
