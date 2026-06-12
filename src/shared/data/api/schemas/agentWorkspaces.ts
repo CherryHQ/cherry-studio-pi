@@ -15,10 +15,20 @@ export const AgentWorkspaceEntitySchema = z.strictObject({
 })
 export type AgentWorkspaceEntity = z.infer<typeof AgentWorkspaceEntitySchema>
 
+export const CreateAgentWorkspaceSchema = z.strictObject({
+  path: AgentWorkspacePathSchema,
+  name: AgentWorkspaceNameSchema.optional()
+})
+export type CreateAgentWorkspaceDto = z.infer<typeof CreateAgentWorkspaceSchema>
+
 export type AgentWorkspaceSchemas = {
   '/agent-workspaces': {
     GET: {
       response: AgentWorkspaceEntity[]
+    }
+    POST: {
+      body: CreateAgentWorkspaceDto
+      response: AgentWorkspaceEntity
     }
   }
 

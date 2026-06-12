@@ -93,6 +93,7 @@ function createForm(overrides: Partial<AgentFormState> = {}): AgentFormState {
     name: 'Agent',
     description: '',
     model: 'anthropic::claude-sonnet-4-5',
+    workspacePath: '',
     planModel: '',
     smallModel: '',
     instructions: '',

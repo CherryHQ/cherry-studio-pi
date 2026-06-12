@@ -1,9 +1,8 @@
 import { loggerService } from '@logger'
-import { convertSpanToSpanEntity } from '@mcp-trace/trace-core/core/spanConvert'
 import type { Attributes, Span, SpanOptions, Tracer } from '@opentelemetry/api'
 import { SpanStatusCode, trace } from '@opentelemetry/api'
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base'
 
+import { AiSdkSpanAdapter } from '../adapters/aiSdk/aiSdkSpanAdapter'
 import { TRACER_NAME } from '../constants'
 import { observabilitySinks } from '../sinks/ObservabilitySinkRegistry'
 
@@ -85,7 +84,11 @@ export function startTraceRootSpan(tracer: Tracer, name: string, options: SpanOp
   span.end = (endTime?: any) => {
     originalEnd(endTime)
     try {
-      const spanEntity = convertSpanToSpanEntity(span as unknown as ReadableSpan)
+      const spanEntity = AiSdkSpanAdapter.convertToSpanEntity({
+        span,
+        topicId: meta.topicId,
+        modelName: meta.modelName
+      })
       observabilitySinks.writeSpanEntity({
         ...spanEntity,
         topicId: meta.topicId,

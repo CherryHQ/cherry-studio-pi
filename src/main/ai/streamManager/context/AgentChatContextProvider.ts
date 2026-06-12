@@ -12,6 +12,7 @@ import type { AgentSessionMessageEntity } from '@shared/data/api/schemas/agentSe
 import { parseUniqueModelId } from '@shared/data/types/model'
 import { v7 as uuidv7 } from 'uuid'
 
+import { AGENT_SESSION_IDLE_TIMEOUT_MS } from '../../agentSession/constants'
 import { extractAgentSessionId, isAgentSessionTopic } from '../../agentSession/topic'
 import { startAiTurnTrace } from '../../observability'
 import { runtimeDriverRegistry } from '../../runtime'
@@ -166,6 +167,7 @@ export class AgentChatContextProvider implements ChatContextProvider {
               { id: userMessageId, role: 'user', parts: userMessageParts },
               { id: assistantMessageId, role: 'assistant', parts: [] }
             ],
+            requestOptions: { timeout: AGENT_SESSION_IDLE_TIMEOUT_MS },
             messageId: assistantMessageId,
             runtime: { kind: 'agent-session', sessionId, turnId: runtime.turnId }
           },

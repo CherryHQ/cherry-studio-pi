@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { requestCloseResourceSelectors } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { usePersistCache } from '@renderer/data/hooks/useCache'
 import { TabLruManager } from '@renderer/services/TabLruManager'
 import { uuid } from '@renderer/utils'
@@ -190,6 +191,9 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     (id: string, updates: Partial<Tab>) => {
       const tab = tabs.find((t) => t.id === id)
       if (!tab) return
+      if (id === activeTabId && updates.url && updates.url !== tab.url) {
+        requestCloseResourceSelectors()
+      }
 
       if (tab.isPinned) {
         setPinnedTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
@@ -197,7 +201,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         setNormalTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
       }
     },
-    [tabs, setPinnedTabs]
+    [activeTabId, tabs, setPinnedTabs]
   )
 
   const setActiveTab = useCallback(
@@ -206,6 +210,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
 
       const targetTab = tabs.find((t) => t.id === id)
       if (!targetTab) return
+      requestCloseResourceSelectors()
 
       // If a dormant tab was awakened, log it
       if (targetTab.isDormant) {
@@ -236,6 +241,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         setActiveTab(tab.id)
         return
       }
+      requestCloseResourceSelectors()
 
       const newTab: Tab = {
         ...tab,
@@ -268,6 +274,9 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         const remainingTabs = tabs.filter((t) => t.id !== id)
         const nextTab = remainingTabs[index - 1] || remainingTabs[index] || remainingTabs[0]
         newActiveId = nextTab ? nextTab.id : ''
+      }
+      if (newActiveId !== activeTabId) {
+        requestCloseResourceSelectors()
       }
 
       if (tab.isPinned) {

@@ -171,6 +171,32 @@ describe('useUpdateSession', () => {
     expect(mockToast.success).toHaveBeenCalledWith('common.update_success')
   })
 
+  it('sends workspaceId when updating the active workspace', async () => {
+    const mockResult = {
+      id: 'session-1',
+      agentId: 'agent-1',
+      name: 'Session',
+      workspaceId: 'workspace-2',
+      orderKey: 'a0',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z'
+    }
+    const mockTrigger = vi.fn().mockResolvedValue(mockResult)
+    MockUseDataApiUtils.mockMutationWithTrigger('PATCH', '/agent-sessions/:sessionId', mockTrigger)
+
+    const { result } = renderHook(() => useUpdateSession('agent-1'))
+    const updated = await act(async () =>
+      result.current.updateSession({ id: 'session-1', workspaceId: 'workspace-2' }, { showSuccessToast: false })
+    )
+
+    expect(mockTrigger).toHaveBeenCalledWith({
+      params: { sessionId: 'session-1' },
+      body: { workspaceId: 'workspace-2' }
+    })
+    expect(updated).toBeDefined()
+    expect(mockToast.success).not.toHaveBeenCalled()
+  })
+
   it('does not show success toast when showSuccessToast is false', async () => {
     const mockResult = {
       id: 's1',

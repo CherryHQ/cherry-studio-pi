@@ -1,6 +1,8 @@
 import { loggerService } from '@logger'
-import { storageV2ProviderRepository } from '@main/services/storageV2/StorageV2Repositories'
-import type { Model, Provider } from '@types'
+import { modelService } from '@main/data/services/ModelService'
+import { providerService } from '@main/data/services/ProviderService'
+import { type Model, parseUniqueModelId, type UniqueModelId } from '@shared/data/types/model'
+import type { Provider } from '@shared/data/types/provider'
 
 const logger = loggerService.withContext('ApiServerUtils')
 
@@ -10,56 +12,64 @@ export interface ModelValidationError {
   code: string
 }
 
-function getRealProviderModel(model: string): string {
-  return model.split(':').slice(1).join(':')
-}
-
-async function getProviders(): Promise<Provider[]> {
-  try {
-    const providers = (await storageV2ProviderRepository.list()) as unknown as Provider[]
-    return Array.isArray(providers) ? providers : []
-  } catch (error) {
-    logger.warn('Failed to read providers from Storage v2', error as Error)
-    return []
-  }
-}
-
-function getProviderModels(provider: Provider): Model[] {
-  return Array.isArray(provider.models) ? provider.models : []
-}
-
 export async function validateModelId(model: string): Promise<{
   valid: boolean
   error?: ModelValidationError
   provider?: Provider
+  model?: Model
   modelId?: string
 }> {
-  if (!model || typeof model !== 'string' || !model.includes(':')) {
+  if (!model || typeof model !== 'string') {
     return {
       valid: false,
       error: {
         type: 'invalid_format',
-        message: "Invalid model format. Expected 'provider:model_id'.",
+        message: "Invalid model format. Expected 'provider::model_id'.",
         code: 'invalid_model_format'
       }
     }
   }
 
-  const providerId = model.split(':')[0]
-  const modelId = getRealProviderModel(model)
+  let providerId: string
+  let modelId: string
+  try {
+    const parsed = parseUniqueModelId(model as UniqueModelId)
+    providerId = parsed.providerId
+    modelId = parsed.modelId
+  } catch {
+    return {
+      valid: false,
+      error: {
+        type: 'invalid_format',
+        message: "Invalid model format. Expected 'provider::model_id'.",
+        code: 'invalid_model_format'
+      }
+    }
+  }
+
   if (!providerId || !modelId) {
     return {
       valid: false,
       error: {
         type: 'invalid_format',
-        message: "Invalid model format. Expected non-empty 'provider:model_id'.",
+        message: "Invalid model format. Expected non-empty 'provider::model_id'.",
         code: 'invalid_model_format'
       }
     }
   }
 
-  const provider = (await getProviders()).find((item) => item.id === providerId)
-  if (!provider || provider.enabled === false) {
+  let provider: Provider | undefined
+  try {
+    provider = (await providerService.getByProviderId(providerId)) as unknown as Provider
+  } catch (error) {
+    logger.warn('Failed to resolve provider for model validation', { providerId, error })
+  }
+
+  if (
+    !provider ||
+    (provider as { enabled?: boolean; isEnabled?: boolean }).enabled === false ||
+    provider.isEnabled === false
+  ) {
     return {
       valid: false,
       error: {
@@ -70,8 +80,18 @@ export async function validateModelId(model: string): Promise<{
     }
   }
 
-  const models = getProviderModels(provider)
-  if (models.length > 0 && !models.some((item) => item.id === modelId)) {
+  let resolvedModel: Model | undefined
+  try {
+    resolvedModel = (await modelService.getByKey(providerId, modelId)) as unknown as Model
+  } catch (error) {
+    logger.warn('Failed to resolve model for validation', { providerId, modelId, error })
+  }
+
+  if (
+    !resolvedModel ||
+    (resolvedModel as { enabled?: boolean; isEnabled?: boolean }).enabled === false ||
+    resolvedModel.isEnabled === false
+  ) {
     return {
       valid: false,
       error: {
@@ -82,5 +102,5 @@ export async function validateModelId(model: string): Promise<{
     }
   }
 
-  return { valid: true, provider, modelId }
+  return { valid: true, provider, model: resolvedModel, modelId }
 }

@@ -145,6 +145,7 @@ function createForm(overrides: Partial<AgentFormState> = {}): AgentFormState {
     name: 'Agent',
     description: '',
     model: '',
+    workspacePath: '',
     planModel: '',
     smallModel: '',
     instructions: '',
@@ -279,5 +280,35 @@ describe('BasicSection agent model selectors', () => {
 
     expect(onChange).toHaveBeenCalledWith({ planModel: '' })
     expect(onChange).toHaveBeenCalledWith({ smallModel: '' })
+  })
+
+  it('selects a first-session workspace in the create variant', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    const originalApi = window.api
+    const selectFolder = vi.fn().mockResolvedValue('/Users/me/project')
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        ...(originalApi ?? {}),
+        file: {
+          ...(originalApi?.file ?? {}),
+          selectFolder
+        }
+      }
+    })
+
+    try {
+      render(<BasicSection form={createForm()} onChange={onChange} variant="create" />)
+
+      await user.click(screen.getByRole('button', { name: /library\.config\.agent\.field\.workspace\.auto/ }))
+
+      expect(selectFolder).toHaveBeenCalledWith({
+        properties: ['openDirectory', 'createDirectory']
+      })
+      expect(onChange).toHaveBeenCalledWith({ workspacePath: '/Users/me/project' })
+    } finally {
+      Object.defineProperty(window, 'api', { configurable: true, value: originalApi })
+    }
   })
 })

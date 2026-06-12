@@ -9,14 +9,19 @@ import type {
   UpdateModelDto
 } from '@shared/data/api/schemas/models'
 import type { Model, UniqueModelId } from '@shared/data/types/model'
-import { createUniqueModelId } from '@shared/data/types/model'
+import { createUniqueModelId, isUniqueModelId } from '@shared/data/types/model'
+import { isNonChatModel } from '@shared/utils/model'
 import { isUndefined, omitBy } from 'lodash'
-import { useCallback } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import type { SWRConfiguration } from 'swr'
 
 const logger = loggerService.withContext('useModels')
 
 const EMPTY_MODELS: readonly Model[] = Object.freeze([])
+
+function normalizeModelPreferenceId(value: unknown): UniqueModelId | null {
+  return typeof value === 'string' && isUniqueModelId(value) ? value : null
+}
 
 /**
  * Reactive read of the user's default / quick / translate models. Each id
@@ -27,10 +32,29 @@ export function useDefaultModel() {
   const [defaultModelId, setDefaultModelId] = usePreference('chat.default_model_id')
   const [quickModelId, setQuickModelId] = usePreference('feature.quick_assistant.model_id')
   const [translateModelId, setTranslateModelId] = usePreference('feature.translate.model_id')
+  const normalizedDefaultModelId = normalizeModelPreferenceId(defaultModelId)
+  const normalizedQuickModelId = normalizeModelPreferenceId(quickModelId)
+  const normalizedTranslateModelId = normalizeModelPreferenceId(translateModelId)
+  const { models: enabledModels } = useModels({ enabled: true })
+  const fallbackChatModel = useMemo(
+    () => enabledModels.find((model) => !isNonChatModel(model)) ?? null,
+    [enabledModels]
+  )
+  const effectiveDefaultModelId = normalizedDefaultModelId ?? fallbackChatModel?.id ?? null
 
-  const { model: defaultModel } = useModelById(defaultModelId as UniqueModelId)
-  const { model: quickModel } = useModelById((quickModelId as UniqueModelId) ?? defaultModelId)
-  const { model: translateModel } = useModelById((translateModelId as UniqueModelId) ?? defaultModelId)
+  useEffect(() => {
+    if (normalizedDefaultModelId || !fallbackChatModel?.id) {
+      return
+    }
+
+    setDefaultModelId(fallbackChatModel.id).catch((error) => {
+      logger.error('Failed to initialize default model preference', { modelId: fallbackChatModel.id, error })
+    })
+  }, [fallbackChatModel?.id, normalizedDefaultModelId, setDefaultModelId])
+
+  const { model: defaultModel } = useModelById(effectiveDefaultModelId as UniqueModelId | null)
+  const { model: quickModel } = useModelById(normalizedQuickModelId ?? effectiveDefaultModelId)
+  const { model: translateModel } = useModelById(normalizedTranslateModelId ?? effectiveDefaultModelId)
 
   return {
     defaultModel,

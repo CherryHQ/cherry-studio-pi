@@ -1,11 +1,12 @@
 import { Button, DialogHeader, DialogTitle, Switch } from '@cherrystudio/ui'
+import { cacheService } from '@renderer/data/CacheService'
 import { useAgentTools } from '@renderer/hooks/agents/useAgentTools'
 import { Check, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
 import type { FC } from 'react'
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { useAgentMutations, useAgentMutationsById } from '../../adapters/agentAdapter'
+import { useAgentCreateCompanionMutations, useAgentMutations, useAgentMutationsById } from '../../adapters/agentAdapter'
 import type { AgentDetail } from '../../types'
 import { ConfigEditorShell } from '../ConfigEditorShell'
 import { useResourceEditorState } from '../useResourceEditorState'
@@ -84,6 +85,7 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated, presentation = '
   const editAgent = currentAgent && agent && currentAgent.id === agent.id ? currentAgent : agent
 
   const { createAgent } = useAgentMutations()
+  const { createWorkspaceByPath, createInitialSession } = useAgentCreateCompanionMutations()
   // Safe empty-string id in create mode — `useMutation` builds the path at
   // call-time and we only invoke the edit mutations in edit mode.
   const { updateAgent } = useAgentMutationsById(editAgent?.id ?? '')
@@ -99,7 +101,18 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated, presentation = '
     diff: (nextForm, baseline) => diffAgentSaveIntent(nextForm, baseline, editAgent ?? null),
     onCommit: async (intent) => {
       if (intent.kind === 'create') {
+        const workspacePath = form.workspacePath.trim()
+        const workspace = workspacePath ? await createWorkspaceByPath(workspacePath) : undefined
+        if (workspacePath && !workspace) {
+          throw new Error(t('agent.session.workspace.create_failed'))
+        }
         const created = await createAgent(intent.payload)
+        const initialSession = await createInitialSession({
+          agentId: created.id,
+          name: t('common.unnamed'),
+          ...(workspace ? { workspaceId: workspace.id } : {})
+        })
+        cacheService.set('agent.active_session_id', initialSession.id)
         onCreated?.(created)
         // Even though the page returns to the list right after create, keep
         // the canonical row here so the save state machine completes against

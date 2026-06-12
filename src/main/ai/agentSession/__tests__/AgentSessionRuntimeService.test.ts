@@ -2,6 +2,8 @@ import { BaseService } from '@main/core/lifecycle/BaseService'
 import { mockMainLoggerService } from '@test-mocks/MainLoggerService'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { AGENT_SESSION_IDLE_TIMEOUT_MS } from '../constants'
+
 const mocks = vi.hoisted(() => ({
   saveMessage: vi.fn(),
   getLastRuntimeResumeToken: vi.fn(),
@@ -936,6 +938,7 @@ describe('AgentSessionRuntimeService', () => {
           { id: 'user-2', role: 'user', parts: [{ type: 'text', text: 'hello' }] },
           { id: 'generated-message-id', role: 'assistant', parts: [] }
         ],
+        requestOptions: { timeout: AGENT_SESSION_IDLE_TIMEOUT_MS },
         runtime: { kind: 'agent-session', sessionId: 'session-1', turnId: expect.any(String) }
       },
       listeners: [

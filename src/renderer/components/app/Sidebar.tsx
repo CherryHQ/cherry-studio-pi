@@ -19,7 +19,7 @@ import {
   Sparkle
 } from 'lucide-react'
 import type { Ref } from 'react'
-import { useCallback, useLayoutEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { OpenClawSidebarIcon } from '../Icons/SvgIcon'
@@ -73,7 +73,7 @@ function resolveActiveItem(pathname: string): SidebarIconType | '' {
 export default function Sidebar({ ref }: { ref?: Ref<HTMLDivElement | null> }) {
   const { t } = useTranslation()
   const [userName] = usePreference('app.user.name')
-  const [visibleSidebarIcons] = usePreference('ui.sidebar.icons.visible')
+  const [visibleSidebarIcons, setVisibleSidebarIcons] = usePreference('ui.sidebar.icons.visible')
   const { activeTab, updateTab, openTab } = useTabs()
 
   // Sidebar width — persisted across restarts. Drive the CSS variable
@@ -103,12 +103,34 @@ export default function Sidebar({ ref }: { ref?: Ref<HTMLDivElement | null> }) {
   const [hoverVisible, setHoverVisible] = useState(false)
   const layout = getSidebarLayout(sidebarWidth)
 
+  const normalizedVisibleSidebarIcons = useMemo<SidebarIconType[]>(() => {
+    if (visibleSidebarIcons.includes('agents')) {
+      return visibleSidebarIcons
+    }
+
+    const assistantsIndex = visibleSidebarIcons.indexOf('assistants')
+    if (assistantsIndex === -1) {
+      return ['agents', ...visibleSidebarIcons]
+    }
+
+    return [
+      ...visibleSidebarIcons.slice(0, assistantsIndex + 1),
+      'agents',
+      ...visibleSidebarIcons.slice(assistantsIndex + 1)
+    ]
+  }, [visibleSidebarIcons])
+
+  useEffect(() => {
+    if (visibleSidebarIcons.includes('agents')) return
+    void setVisibleSidebarIcons(normalizedVisibleSidebarIcons)
+  }, [normalizedVisibleSidebarIcons, setVisibleSidebarIcons, visibleSidebarIcons])
+
   // Menu items
   const pathname = activeTab?.url || '/'
 
   const items = useMemo<SidebarMenuItem[]>(
     () =>
-      visibleSidebarIcons.flatMap((icon) => {
+      normalizedVisibleSidebarIcons.flatMap((icon) => {
         const path = getMenuPath(icon)
         const Icon = iconMap[icon]
         if (!path || !Icon) {
@@ -122,7 +144,7 @@ export default function Sidebar({ ref }: { ref?: Ref<HTMLDivElement | null> }) {
           }
         ]
       }),
-    [visibleSidebarIcons]
+    [normalizedVisibleSidebarIcons]
   )
 
   const activeItem = resolveActiveItem(pathname)

@@ -1,5 +1,4 @@
 import { application } from '@application'
-import { agentService } from '@data/services/AgentService'
 import { loggerService } from '@logger'
 import { type Activatable, BaseService, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
 import { IpcChannel } from '@shared/IpcChannel'
@@ -14,7 +13,7 @@ const logger = loggerService.withContext('ApiGatewayService')
 @ServicePhase(Phase.WhenReady)
 export class ApiGatewayService extends BaseService implements Activatable {
   private apiGateway: ApiGateway | null = null
-  /** Latest desired running state — the `enabled` preference, or the boot auto-start decision. */
+  /** Latest desired running state — the explicit `enabled` preference. */
   private desiredEnabled = false
   /**
    * True while a `reconcile()` loop is converging. `reconcile()` is the SOLE caller of
@@ -221,21 +220,7 @@ export class ApiGatewayService extends BaseService implements Activatable {
       // Never log the raw API key — redact before emitting.
       logger.info('API gateway config:', { ...config, apiKey: config.apiKey ? '[redacted]' : null })
 
-      if (config.enabled) {
-        return true
-      }
-
-      try {
-        const { total } = await agentService.listAgents({ limit: 1 })
-        if (total > 0) {
-          logger.info(`Detected ${total} agent(s), auto-starting API gateway`)
-          return true
-        }
-      } catch (error: any) {
-        logger.warn('Failed to check agent count:', error)
-      }
-
-      return false
+      return Boolean(config.enabled)
     } catch (error: any) {
       logger.error('Failed to check API gateway auto-start condition:', error)
       return false

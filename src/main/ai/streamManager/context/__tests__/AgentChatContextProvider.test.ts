@@ -1,6 +1,7 @@
 import type { AiStreamOpenRequest } from '@shared/ai/transport'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { AGENT_SESSION_IDLE_TIMEOUT_MS } from '../../../agentSession/constants'
 import type { StreamListener } from '../../types'
 
 const mocks = vi.hoisted(() => ({
@@ -126,6 +127,7 @@ describe('AgentChatContextProvider', () => {
       { id: expect.any(String), role: 'user', parts: [{ type: 'text', text: 'hello' }] },
       { id: expect.any(String), role: 'assistant', parts: [] }
     ])
+    expect(prepared.models[0].request.requestOptions).toEqual({ timeout: AGENT_SESSION_IDLE_TIMEOUT_MS })
     expect(prepared.models[0].request.messageId).toBe(prepared.models[0].request.messages?.[1]?.id)
     expect(mocks.runtimeBeginTurn).toHaveBeenCalledWith({
       sessionId: 'session-1',

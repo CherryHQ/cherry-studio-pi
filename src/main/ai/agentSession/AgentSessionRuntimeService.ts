@@ -25,6 +25,7 @@ import { type DispatchDecision, toolApprovalRegistry } from '../runtime/claudeCo
 import { PersistenceListener } from '../streamManager/listeners/PersistenceListener'
 import { TraceFlushListener } from '../streamManager/listeners/TraceFlushListener'
 import type { StreamDoneResult, StreamErrorResult, StreamListener, StreamPausedResult } from '../streamManager/types'
+import { AGENT_SESSION_IDLE_TIMEOUT_MS } from './constants'
 import { AgentSessionMessageBackend } from './persistence/AgentSessionMessageBackend'
 
 const logger = loggerService.withContext('AgentSessionRuntimeService')
@@ -683,6 +684,7 @@ export class AgentSessionRuntimeService extends BaseService {
         trigger: 'submit-message',
         messageId: assistantMessageId,
         messages: createRuntimeSeedMessages(nextMessage, assistantMessageId),
+        requestOptions: { timeout: AGENT_SESSION_IDLE_TIMEOUT_MS },
         runtime: { kind: 'agent-session', sessionId: entry.sessionId, turnId }
       },
       listeners: [

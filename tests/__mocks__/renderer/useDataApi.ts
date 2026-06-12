@@ -42,6 +42,20 @@ type RefreshOption<TPath extends ApiPath, TMethod extends 'POST' | 'PUT' | 'DELE
  * Create mock data based on API path
  */
 function createMockDataForPath(path: string): any {
+  if (path === '/models') {
+    return []
+  }
+
+  if (path.startsWith('/models/')) {
+    return {
+      id: path.slice('/models/'.length),
+      name: 'Mock Model',
+      providerId: 'mock-provider',
+      capabilities: [],
+      isEnabled: true
+    }
+  }
+
   if (path.includes('/topics')) {
     if (path.endsWith('/topics')) {
       return {

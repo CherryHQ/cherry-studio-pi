@@ -192,9 +192,9 @@ export const useSessions = (agentId?: string | null, pageSize = DEFAULT_SESSION_
 }
 
 /**
- * Patch session-level fields (only `name`, `description`). Config fields
- * (model, instructions, configuration, ...) live on the parent agent — use
- * {@link import('./useAgent').useUpdateAgent} for those.
+ * Patch session-level fields (`name`, `description`, `workspaceId`). Config
+ * fields (model, instructions, configuration, ...) live on the parent agent —
+ * use {@link import('./useAgent').useUpdateAgent} for those.
  */
 export const useUpdateSession = (agentId: string | null) => {
   const { t } = useTranslation()

@@ -50,11 +50,11 @@ describe('AgentSessionMessage schemas', () => {
 })
 
 describe('AgentSession schemas', () => {
-  it('rejects workspace updates because workspace binding is insert-only', () => {
+  it('allows workspace updates for user-selected working directories', () => {
     expect(
-      UpdateAgentSessionSchema.safeParse({
+      UpdateAgentSessionSchema.parse({
         workspaceId: 'workspace-1'
-      }).success
-    ).toBe(false)
+      }).workspaceId
+    ).toBe('workspace-1')
   })
 })

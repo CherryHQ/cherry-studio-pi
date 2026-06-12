@@ -12,6 +12,8 @@ import type {
 } from '@earendil-works/pi-ai'
 import { streamSimple } from '@earendil-works/pi-ai'
 import { loggerService } from '@logger'
+import { providerToAiSdkConfig } from '@main/ai/provider/config'
+import { resolveEffectiveEndpoint } from '@main/ai/provider/endpoint'
 import { validateModelId } from '@main/apiServer/utils'
 import { getAgentSessionHistoryWithStorageV2Recovery } from '@main/services/agents/AgentStorageV2ReadThrough'
 import type {
@@ -27,8 +29,9 @@ import {
   isDefaultCherryStudioPiAgentInstructions,
   normalizeAgentInstructions
 } from '@shared/ai/pi/constants'
-import { formatApiHost, hasAPIVersion, withoutTrailingApiVersion, withoutTrailingSlash } from '@shared/utils'
-import type { AgentPersistedMessage, MessageBlock, Model, Provider } from '@types'
+import { ENDPOINT_TYPE, type EndpointType, MODALITY, type Model, MODEL_CAPABILITY } from '@shared/data/types/model'
+import type { Provider } from '@shared/data/types/provider'
+import type { AgentPersistedMessage, MessageBlock } from '@types'
 
 import { createPiMcpTools, createPiTools } from './tools'
 import { PiStreamState } from './transform'
@@ -42,29 +45,59 @@ const NO_KEY_PLACEHOLDERS: Record<string, string> = {
 
 const PROVIDER_API_MAP = {
   anthropic: 'anthropic-messages',
-  'vertex-anthropic': 'anthropic-messages',
-  gemini: 'google-generative-ai',
-  vertexai: 'google-vertex',
+  'azure-anthropic': 'anthropic-messages',
+  'google-vertex-anthropic': 'anthropic-messages',
+  google: 'google-generative-ai',
+  'google-vertex': 'google-vertex',
   mistral: 'mistral-conversations',
-  'aws-bedrock': 'bedrock-converse-stream',
-  'openai-response': 'openai-responses',
-  'azure-openai': 'azure-openai-responses'
-} satisfies Partial<Record<Provider['type'], Api>>
+  bedrock: 'bedrock-converse-stream',
+  'azure-responses': 'azure-openai-responses',
+  'azure-openai-responses': 'azure-openai-responses',
+  openai: 'openai-completions',
+  'openai-compatible': 'openai-completions',
+  deepseek: 'openai-completions'
+} satisfies Partial<Record<string, Api>>
 
 const ENDPOINT_API_MAP = {
-  anthropic: 'anthropic-messages',
-  gemini: 'google-generative-ai',
-  openai: 'openai-completions',
-  'openai-response': 'openai-responses'
-} satisfies Partial<Record<NonNullable<Model['endpoint_type']>, Api>>
+  [ENDPOINT_TYPE.ANTHROPIC_MESSAGES]: 'anthropic-messages',
+  [ENDPOINT_TYPE.GOOGLE_GENERATE_CONTENT]: 'google-generative-ai',
+  [ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS]: 'openai-completions',
+  [ENDPOINT_TYPE.OLLAMA_CHAT]: 'openai-completions',
+  [ENDPOINT_TYPE.OPENAI_RESPONSES]: 'openai-responses'
+} satisfies Partial<Record<EndpointType, Api>>
 
 const MAX_HYDRATED_HISTORY_MESSAGES = 80
 
 class PiAgentStream extends EventEmitter implements AgentStream {
   declare emit: (event: 'data', data: AgentStreamEvent) => boolean
-  declare on: (event: 'data', listener: (data: AgentStreamEvent) => void) => this
-  declare once: (event: 'data', listener: (data: AgentStreamEvent) => void) => this
+  private readonly pendingEvents: AgentStreamEvent[] = []
   sdkSessionId?: string
+
+  emitData(data: AgentStreamEvent): void {
+    if (this.listenerCount('data') === 0) {
+      this.pendingEvents.push(data)
+      return
+    }
+    this.emit('data', data)
+  }
+
+  on(event: 'data', listener: (data: AgentStreamEvent) => void): this {
+    super.on(event, listener)
+    this.flushPendingEvents()
+    return this
+  }
+
+  once(event: 'data', listener: (data: AgentStreamEvent) => void): this {
+    super.once(event, listener)
+    this.flushPendingEvents()
+    return this
+  }
+
+  private flushPendingEvents(): void {
+    if (this.pendingEvents.length === 0 || this.listenerCount('data') === 0) return
+    const events = this.pendingEvents.splice(0)
+    for (const event of events) this.emit('data', event)
+  }
 }
 
 type CachedAgent = {
@@ -98,29 +131,30 @@ class PiAgentService implements AgentServiceInterface {
     const paths = this.getAccessiblePaths(session)
     const cwd = paths[0]
     if (!cwd) {
-      stream.emit('data', { type: 'error', error: new Error('No accessible paths defined for the agent session') })
+      stream.emitData({ type: 'error', error: new Error('No accessible paths defined for the agent session') })
       return stream
     }
 
     const sessionModel = this.getSessionModel(session)
     if (!sessionModel) {
-      stream.emit('data', { type: 'error', error: new Error('No model defined for the agent session') })
+      stream.emitData({ type: 'error', error: new Error('No model defined for the agent session') })
       return stream
     }
 
     const mcps = this.getSessionMcps(session)
     const allowedTools = this.getAllowedTools(session)
     const modelInfo = await validateModelId(sessionModel)
-    if (!modelInfo.valid || !modelInfo.provider || !modelInfo.modelId) {
-      stream.emit('data', {
+    if (!modelInfo.valid || !modelInfo.provider || !modelInfo.model || !modelInfo.modelId) {
+      stream.emitData({
         type: 'error',
         error: new Error(`Invalid model ID '${sessionModel}': ${JSON.stringify(modelInfo.error)}`)
       })
       return stream
     }
 
-    const piModel = this.toPiModel(modelInfo.provider, modelInfo.modelId)
-    const apiKey = await this.resolveApiKey(modelInfo.provider)
+    const providerConfig = await providerToAiSdkConfig(modelInfo.provider, modelInfo.model)
+    const apiKey = this.resolveApiKey(modelInfo.provider, providerConfig.providerSettings as Record<string, unknown>)
+    const piModel = this.toPiModel(modelInfo.provider, modelInfo.model, modelInfo.modelId, providerConfig)
     const sessionKey = this.buildSessionKey({
       api: piModel.api,
       apiKeyHash: this.hashSecret(apiKey),
@@ -160,11 +194,11 @@ class PiAgentService implements AgentServiceInterface {
     let completed = false
     const unsubscribe = agent.subscribe((event) => {
       for (const chunk of state.transform(event)) {
-        stream.emit('data', { type: 'chunk', chunk })
+        stream.emitData({ type: 'chunk', chunk })
       }
       if (event.type === 'agent_end') {
         completed = true
-        stream.emit('data', { type: 'complete' })
+        stream.emitData({ type: 'complete' })
       }
     })
 
@@ -172,7 +206,7 @@ class PiAgentService implements AgentServiceInterface {
       'abort',
       () => {
         agent.abort()
-        stream.emit('data', { type: 'cancelled' })
+        stream.emitData({ type: 'cancelled' })
       },
       { once: true }
     )
@@ -182,12 +216,12 @@ class PiAgentService implements AgentServiceInterface {
         .prompt(prompt, this.toPiImages(images))
         .catch((error) => {
           logger.error('Pi agent stream failed', error as Error)
-          stream.emit('data', { type: 'error', error: error instanceof Error ? error : new Error(String(error)) })
+          stream.emitData({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) })
         })
         .finally(() => {
           if (!completed) {
             completed = true
-            stream.emit('data', { type: 'complete' })
+            stream.emitData({ type: 'complete' })
           }
           unsubscribe()
         })
@@ -440,78 +474,74 @@ Use the least expensive tool first:
     }))
   }
 
-  private async resolveApiKey(provider: Provider): Promise<string> {
-    const apiKey = provider.apiKey ? provider.apiKey.split(',')[0].trim() : ''
-    return apiKey || NO_KEY_PLACEHOLDERS[provider.id] || NO_KEY_PLACEHOLDERS[provider.type] || 'no-key-required'
+  private resolveApiKey(provider: Provider, providerSettings: Record<string, unknown>): string {
+    const apiKey = typeof providerSettings.apiKey === 'string' ? providerSettings.apiKey.trim() : ''
+    return (
+      apiKey ||
+      NO_KEY_PLACEHOLDERS[provider.id] ||
+      NO_KEY_PLACEHOLDERS[provider.presetProviderId ?? ''] ||
+      'no-key-required'
+    )
   }
 
-  private toPiModel(provider: Provider, modelId: string): PiModel<Api> {
-    const cherryModel = provider.models.find((model) => model.id === modelId)
-    const api = this.determineApi(provider, cherryModel)
-    const baseUrl = this.getBaseUrl(provider, api)
-    const pricing = cherryModel?.pricing
+  private toPiModel(
+    provider: Provider,
+    model: Model,
+    modelId: string,
+    providerConfig: Awaited<ReturnType<typeof providerToAiSdkConfig>>
+  ): PiModel<Api> {
+    const providerSettings = providerConfig.providerSettings as Record<string, unknown>
+    const { endpointType } = resolveEffectiveEndpoint(provider, model)
+    const api = this.determineApi(endpointType, providerConfig.providerId)
+    const pricing = model.pricing
 
     return {
       id: modelId,
-      name: cherryModel?.name || modelId,
+      name: model.name || modelId,
       api,
       provider: `cherry-${provider.id}`,
-      baseUrl,
-      reasoning: this.hasCapability(cherryModel, 'reasoning'),
-      input: this.hasCapability(cherryModel, 'vision') ? ['text', 'image'] : ['text'],
+      baseUrl: typeof providerSettings.baseURL === 'string' ? providerSettings.baseURL : '',
+      reasoning: this.hasCapability(model, MODEL_CAPABILITY.REASONING),
+      input: this.supportsImageInput(model) ? ['text', 'image'] : ['text'],
       cost: {
-        input: pricing?.input_per_million_tokens ?? 0,
-        output: pricing?.output_per_million_tokens ?? 0,
-        cacheRead: 0,
-        cacheWrite: 0
+        input: pricing?.input?.perMillionTokens ?? 0,
+        output: pricing?.output?.perMillionTokens ?? 0,
+        cacheRead: pricing?.cacheRead?.perMillionTokens ?? 0,
+        cacheWrite: pricing?.cacheWrite?.perMillionTokens ?? 0
       },
-      contextWindow: 128_000,
-      maxTokens: 16_384,
-      headers: provider.extra_headers
+      contextWindow: model.contextWindow ?? 128_000,
+      maxTokens: model.maxOutputTokens ?? 16_384,
+      headers: this.getProviderHeaders(providerSettings)
     }
   }
 
-  private determineApi(provider: Provider, model?: Model): Api {
-    const providerApi = PROVIDER_API_MAP[provider.type]
+  private determineApi(endpointType: EndpointType | undefined, providerId: string): Api {
+    const endpointApi = endpointType ? ENDPOINT_API_MAP[endpointType] : undefined
+    if (endpointApi) return endpointApi
+
+    const providerApi = PROVIDER_API_MAP[providerId]
     if (providerApi) return providerApi
 
-    if (model?.endpoint_type) {
-      const endpointApi = ENDPOINT_API_MAP[model.endpoint_type]
-      if (endpointApi) return endpointApi
-    }
-
-    const supportedEndpointApi = model?.supported_endpoint_types
-      ?.map((endpoint) => ENDPOINT_API_MAP[endpoint])
-      .find((api): api is Api => Boolean(api))
-    if (supportedEndpointApi) return supportedEndpointApi
-
-    if (provider.anthropicApiHost && !model?.supported_endpoint_types?.length) return 'anthropic-messages'
     return 'openai-completions'
   }
 
-  private getBaseUrl(provider: Provider, api: Api): string {
-    if (api === 'anthropic-messages') {
-      return withoutTrailingApiVersion(withoutTrailingSlash(provider.anthropicApiHost || provider.apiHost))
-    }
-
-    if (
-      api === 'azure-openai-responses' ||
-      api === 'google-generative-ai' ||
-      api === 'google-vertex' ||
-      api === 'mistral-conversations' ||
-      api === 'bedrock-converse-stream'
-    ) {
-      return withoutTrailingSlash(provider.apiHost)
-    }
-
-    const raw = withoutTrailingSlash(provider.apiHost)
-    if (provider.id === 'copilot' || provider.id === 'github') return formatApiHost(raw, false)
-    if (provider.type === 'gateway' && raw.endsWith('/v1/ai')) return raw.replace(/\/v1\/ai$/, '/v1')
-    return hasAPIVersion(raw) ? raw : `${raw}/v1`
+  private supportsImageInput(model: Model): boolean {
+    return (
+      model.inputModalities?.includes(MODALITY.IMAGE) === true ||
+      this.hasCapability(model, MODEL_CAPABILITY.IMAGE_RECOGNITION)
+    )
   }
 
-  private hasCapability(model: Model | undefined, capability: string): boolean {
-    return Boolean(model?.capabilities?.some((item) => item.type === capability && item.isUserSelected !== false))
+  private hasCapability(model: Model, capability: (typeof MODEL_CAPABILITY)[keyof typeof MODEL_CAPABILITY]): boolean {
+    return model.capabilities.includes(capability)
+  }
+
+  private getProviderHeaders(providerSettings: Record<string, unknown>): Record<string, string> | undefined {
+    const headers = providerSettings.headers
+    if (!headers || typeof headers !== 'object' || Array.isArray(headers)) return undefined
+    return Object.fromEntries(
+      Object.entries(headers).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+    )
   }
 
   private mapThinkingLevel(thinkingOptions?: AgentThinkingOptions) {

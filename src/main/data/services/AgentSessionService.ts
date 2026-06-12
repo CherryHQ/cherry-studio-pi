@@ -301,6 +301,7 @@ export class AgentSessionService {
     if (dto.name !== undefined) patch.name = dto.name
     if (dto.description !== undefined) patch.description = dto.description
     if (dto.agentId !== undefined) patch.agentId = dto.agentId
+    if (dto.workspaceId !== undefined) patch.workspaceId = dto.workspaceId
     if (Object.keys(patch).length === 0) return this.getById(id)
 
     const row = await withSqliteErrors(
@@ -312,6 +313,9 @@ export class AgentSessionService {
   }
 
   async updateTx(tx: DbOrTx, id: string, patch: UpdateAgentSessionDto): Promise<SessionRow | undefined> {
+    if (patch.workspaceId) {
+      await agentWorkspaceService.getByIdTx(tx, patch.workspaceId)
+    }
     const [row] = await tx.update(sessionsTable).set(patch).where(eq(sessionsTable.id, id)).returning()
     return row
   }

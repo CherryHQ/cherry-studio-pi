@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { AgentSessionEntitySchema, CreateAgentSessionSchema, UpdateAgentSessionSchema } from '../agentSessions'
-import { AgentWorkspaceEntitySchema } from '../agentWorkspaces'
+import { AgentWorkspaceEntitySchema, CreateAgentWorkspaceSchema } from '../agentWorkspaces'
 
 describe('AgentWorkspaceEntitySchema', () => {
   const workspace = {
@@ -15,6 +15,13 @@ describe('AgentWorkspaceEntitySchema', () => {
 
   it('describes normalized workspace rows', () => {
     expect(AgentWorkspaceEntitySchema.parse(workspace)).toEqual(workspace)
+  })
+
+  it('accepts local workspace directories for creation', () => {
+    expect(CreateAgentWorkspaceSchema.parse({ path: '/tmp/workspace', name: 'workspace' })).toEqual({
+      path: '/tmp/workspace',
+      name: 'workspace'
+    })
   })
 
   it('exposes workspace on sessions instead of accessiblePaths', () => {
@@ -50,10 +57,10 @@ describe('AgentWorkspaceEntitySchema', () => {
     ).toBeNull()
   })
 
-  it('allows workspace selection on session create only', () => {
+  it('allows workspace selection on session create and update', () => {
     expect(
       CreateAgentSessionSchema.parse({ agentId: 'agent-1', name: 'Session', workspaceId: workspace.id }).workspaceId
     ).toBe(workspace.id)
-    expect(UpdateAgentSessionSchema.safeParse({ workspaceId: workspace.id }).success).toBe(false)
+    expect(UpdateAgentSessionSchema.parse({ workspaceId: workspace.id }).workspaceId).toBe(workspace.id)
   })
 })

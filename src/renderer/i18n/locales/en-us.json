@@ -371,6 +371,12 @@
           "failed": "Failed to add a session"
         }
       },
+      "workspace": {
+        "change": "Change workspace",
+        "create_failed": "Failed to create workspace",
+        "select_failed": "Failed to select workspace",
+        "updated": "Workspace updated"
+      },
       "delete": {
         "content": "Are you sure to delete this session?",
         "error": {
@@ -2513,6 +2519,12 @@
             "help": "UniqueModelId; will switch to a picker backed by /models later",
             "hint": "Main reasoning and execution",
             "label": "Primary model (required)"
+          },
+          "workspace": {
+            "auto": "Create a dedicated workspace automatically",
+            "clear": "Clear workspace",
+            "hint": "Choose the working directory for this agent's first session. A dedicated directory is created automatically when left empty.",
+            "label": "Workspace"
           },
           "name": {
             "hint": "Shown in the library and session lists",

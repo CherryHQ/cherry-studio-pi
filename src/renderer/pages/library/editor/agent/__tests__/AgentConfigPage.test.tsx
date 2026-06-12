@@ -6,10 +6,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentDetail } from '../../../types'
 import AgentConfigPage from '../AgentConfigPage'
 
-const { createAgentMock, updateAgentMock } = vi.hoisted(() => ({
-  createAgentMock: vi.fn(),
-  updateAgentMock: vi.fn()
-}))
+const { createAgentMock, updateAgentMock, createWorkspaceByPathMock, createInitialSessionMock, cacheSetMock } =
+  vi.hoisted(() => ({
+    createAgentMock: vi.fn(),
+    updateAgentMock: vi.fn(),
+    createWorkspaceByPathMock: vi.fn(),
+    createInitialSessionMock: vi.fn(),
+    cacheSetMock: vi.fn()
+  }))
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -21,9 +25,19 @@ vi.mock('../../../adapters/agentAdapter', () => ({
   useAgentMutations: () => ({
     createAgent: createAgentMock
   }),
+  useAgentCreateCompanionMutations: () => ({
+    createWorkspaceByPath: createWorkspaceByPathMock,
+    createInitialSession: createInitialSessionMock
+  }),
   useAgentMutationsById: () => ({
     updateAgent: updateAgentMock
   })
+}))
+
+vi.mock('@renderer/data/CacheService', () => ({
+  cacheService: {
+    set: cacheSetMock
+  }
 }))
 
 vi.mock('@renderer/hooks/agents/useAgentTools', () => ({
@@ -84,11 +98,14 @@ vi.mock('../sections/BasicSection', () => ({
   default: ({
     onChange
   }: {
-    onChange: (patch: Partial<{ name: string; model: string; soulEnabled: boolean }>) => void
+    onChange: (patch: Partial<{ name: string; model: string; soulEnabled: boolean; workspacePath: string }>) => void
   }) => (
     <div>
       <button type="button" onClick={() => onChange({ name: 'Created Agent', model: 'anthropic::claude-sonnet-4-5' })}>
         set basic
+      </button>
+      <button type="button" onClick={() => onChange({ workspacePath: '/Users/me/project' })}>
+        set workspace
       </button>
       <button type="button" onClick={() => onChange({ soulEnabled: true })}>
         enable autonomous
@@ -138,6 +155,19 @@ describe('AgentConfigPage', () => {
   beforeEach(() => {
     createAgentMock.mockReset()
     updateAgentMock.mockReset()
+    createWorkspaceByPathMock.mockReset()
+    createInitialSessionMock.mockReset()
+    cacheSetMock.mockReset()
+    createInitialSessionMock.mockResolvedValue({
+      id: 'session-created',
+      agentId: 'created-1',
+      name: 'common.unnamed',
+      workspaceId: null,
+      workspace: null,
+      orderKey: 'a0',
+      createdAt: '2026-05-06T00:00:00.000Z',
+      updatedAt: '2026-05-06T00:00:00.000Z'
+    })
   })
 
   it('uses the latest saved agent configuration as the next merge base', async () => {
@@ -211,6 +241,58 @@ describe('AgentConfigPage', () => {
         mcps: ['mcp-1']
       })
     )
+    expect(createInitialSessionMock).toHaveBeenCalledWith({
+      agentId: 'created-1',
+      name: 'common.unnamed'
+    })
+    expect(cacheSetMock).toHaveBeenCalledWith('agent.active_session_id', 'session-created')
+  })
+
+  it('uses the selected workspace for the initial session during creation', async () => {
+    const user = userEvent.setup()
+    createWorkspaceByPathMock.mockResolvedValueOnce({ id: 'workspace-1', path: '/Users/me/project' })
+    createAgentMock.mockResolvedValueOnce(createAgent({ id: 'created-workspace', name: 'Created Agent' }))
+    createInitialSessionMock.mockResolvedValueOnce({
+      id: 'session-workspace',
+      agentId: 'created-workspace',
+      name: 'common.unnamed',
+      workspaceId: 'workspace-1',
+      workspace: null,
+      orderKey: 'a0',
+      createdAt: '2026-05-06T00:00:00.000Z',
+      updatedAt: '2026-05-06T00:00:00.000Z'
+    })
+
+    render(<AgentConfigPage onBack={vi.fn()} onCreated={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'basic' }))
+    await user.click(screen.getByRole('button', { name: 'set basic' }))
+    await user.click(screen.getByRole('button', { name: 'set workspace' }))
+    await user.click(screen.getByRole('button', { name: 'save' }))
+
+    await waitFor(() => expect(createWorkspaceByPathMock).toHaveBeenCalledWith('/Users/me/project'))
+    expect(createInitialSessionMock).toHaveBeenCalledWith({
+      agentId: 'created-workspace',
+      name: 'common.unnamed',
+      workspaceId: 'workspace-1'
+    })
+    expect(cacheSetMock).toHaveBeenCalledWith('agent.active_session_id', 'session-workspace')
+  })
+
+  it('does not create the agent when the selected workspace cannot be created', async () => {
+    const user = userEvent.setup()
+    createWorkspaceByPathMock.mockResolvedValueOnce(undefined)
+
+    render(<AgentConfigPage onBack={vi.fn()} onCreated={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'basic' }))
+    await user.click(screen.getByRole('button', { name: 'set basic' }))
+    await user.click(screen.getByRole('button', { name: 'set workspace' }))
+    await user.click(screen.getByRole('button', { name: 'save' }))
+
+    await waitFor(() => expect(createWorkspaceByPathMock).toHaveBeenCalledWith('/Users/me/project'))
+    expect(createAgentMock).not.toHaveBeenCalled()
+    expect(createInitialSessionMock).not.toHaveBeenCalled()
   })
 
   it('creates enhanced-mode agents with the Claude SDK runtime when selected', async () => {

@@ -84,6 +84,8 @@ export interface AgentFormState {
   description: string
   /** `''` is the explicit "no model selected yet" draft sentinel; once chosen it is always a valid UniqueModelId. */
   model: UniqueModelId | ''
+  /** Optional first-session workspace chosen during agent creation. Agent rows stay session-agnostic. */
+  workspacePath: string
   planModel: string
   smallModel: string
   instructions: string
@@ -172,6 +174,7 @@ export function buildInitialAgentFormState(agent?: AgentDetail | null): AgentFor
     name: agent?.name ?? '',
     description: agent?.description ?? '',
     model: agent?.model ?? '',
+    workspacePath: '',
     planModel: agent?.planModel ?? '',
     smallModel: agent?.smallModel ?? '',
     instructions: agent?.instructions ?? '',

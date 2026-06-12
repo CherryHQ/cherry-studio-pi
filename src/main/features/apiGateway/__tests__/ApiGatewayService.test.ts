@@ -14,7 +14,10 @@ const { mockLogger, mockStart, mockStop, captured } = vi.hoisted(() => ({
   mockLogger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
   mockStart: vi.fn(),
   mockStop: vi.fn(),
-  captured: { prefHandler: undefined as ((enabled: boolean) => void) | undefined }
+  captured: {
+    prefHandler: undefined as ((enabled: boolean) => void) | undefined,
+    gatewayConfig: { enabled: false, host: '127.0.0.1', port: 23333, apiKey: 'existing-key' }
+  }
 }))
 
 vi.mock('@logger', () => ({
@@ -27,10 +30,6 @@ vi.mock('../server', () => ({
   ApiGateway: vi.fn(() => ({ start: mockStart, stop: mockStop, isRunning: () => true }))
 }))
 
-vi.mock('@data/services/AgentService', () => ({
-  agentService: { listAgents: vi.fn(async () => ({ total: 0 })) }
-}))
-
 vi.mock('@application', async () => {
   const { mockApplicationFactory } = await import('@test-mocks/main/application')
   return mockApplicationFactory({
@@ -40,7 +39,7 @@ vi.mock('@application', async () => {
         return () => {}
       }),
       get: vi.fn((key: string) => (key.endsWith('api_key') ? 'existing-key' : false)),
-      getMultiple: vi.fn(() => ({ enabled: false, host: '127.0.0.1', port: 23333, apiKey: 'existing-key' })),
+      getMultiple: vi.fn(() => captured.gatewayConfig),
       set: vi.fn(async () => {})
     },
     CacheService: { setShared: vi.fn() }
@@ -55,6 +54,7 @@ let rejectStart: boolean
 beforeEach(() => {
   BaseService.resetInstances()
   captured.prefHandler = undefined
+  captured.gatewayConfig = { enabled: false, host: '127.0.0.1', port: 23333, apiKey: 'existing-key' }
   startResolvers = []
   rejectStart = false
   vi.clearAllMocks()
@@ -69,6 +69,26 @@ beforeEach(() => {
 })
 
 describe('ApiGatewayService reconcile', () => {
+  it('does not auto-start on boot unless the API gateway preference is enabled', async () => {
+    const service = new ApiGatewayService()
+    await service._doInit()
+
+    expect(service.isActivated).toBe(false)
+    expect(mockStart).not.toHaveBeenCalled()
+  })
+
+  it('auto-starts on boot when the API gateway preference is enabled', async () => {
+    captured.gatewayConfig = { enabled: true, host: '127.0.0.1', port: 23333, apiKey: 'existing-key' }
+    const service = new ApiGatewayService()
+
+    const ready = service._doInit()
+    await vi.waitFor(() => expect(mockStart).toHaveBeenCalledTimes(1))
+    startResolvers[0]()
+    await ready
+
+    expect(service.isActivated).toBe(true)
+  })
+
   it('honors an opposing toggle that lands during an in-flight activation (no dropped toggle)', async () => {
     const service = new ApiGatewayService()
     await service._doInit() // Ready; desiredEnabled=false; reconcile is a no-op.

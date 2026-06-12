@@ -22,9 +22,12 @@ import {
   useEffect,
   useEffectEvent,
   useMemo,
+  useRef,
   useState
 } from 'react'
 import { flushSync } from 'react-dom'
+
+import { requestCloseResourceSelectors, RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from './resourceSelectorEvents'
 
 export type ResourceSelectorShellItem = {
   id: string
@@ -208,7 +211,32 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
   // Own the open state so we can reset search on close without relying on the caller being
   // controlled. When `openProp` is set the caller wins; otherwise we track it ourselves.
   const [internalOpen, setInternalOpen] = useState(false)
+  const [portalContainer, setPortalContainer] = useState<HTMLSpanElement | null>(null)
   const open = openProp ?? internalOpen
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  const forceClose = useCallback(() => {
+    if (!mountedRef.current) return
+    if (openProp === undefined) setInternalOpen(false)
+    onOpenChangeProp?.(false)
+  }, [openProp, onOpenChangeProp])
+
+  useEffect(() => {
+    const handleForceClose = () => forceClose()
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, handleForceClose)
+    return () => window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, handleForceClose)
+  }, [forceClose])
+
+  const closeAllSelectors = useCallback(() => {
+    requestCloseResourceSelectors()
+    forceClose()
+  }, [forceClose])
+
   const handleOpenChange = useCallback(
     (next: boolean) => {
       if (openProp === undefined) setInternalOpen(next)
@@ -218,16 +246,18 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
   )
   const closeBeforeAction = useCallback(
     (action: () => void) => {
-      if (open) {
-        // eslint-disable-next-line @eslint-react/dom/no-flush-sync -- prevent the selector portal from lingering above the modal/router action that follows.
-        flushSync(() => {
-          handleOpenChange(false)
-        })
-      }
+      // eslint-disable-next-line @eslint-react/dom/no-flush-sync -- prevent the selector portal from lingering above the modal/router action that follows.
+      flushSync(closeAllSelectors)
 
       action()
+
+      // Some create/edit actions immediately switch tabs/routes. Re-assert close
+      // after that navigation has had a chance to commit so a stale Radix portal
+      // cannot remain anchored at the window origin.
+      queueMicrotask(closeAllSelectors)
+      requestAnimationFrame(closeAllSelectors)
     },
-    [handleOpenChange, open]
+    [closeAllSelectors]
   )
 
   const [searchValue, setSearchValue] = useState('')
@@ -244,8 +274,10 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
   // an effect on the effective `open` value covers the controlled `open=true` path that
   // `handleOpenChange` misses entirely.
   const handleOpen = useEffectEvent(() => onOpen?.())
+  const wasOpenRef = useRef(false)
   useEffect(() => {
-    if (open) handleOpen()
+    if (open && !wasOpenRef.current) handleOpen()
+    wasOpenRef.current = open
   }, [open, handleOpen])
 
   // Normalize caller's value to an id list for both the EntitySelector contract (string/string[])
@@ -529,62 +561,66 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
   ) : undefined
 
   return (
-    <EntitySelector
-      trigger={trigger}
-      open={open}
-      onOpenChange={handleOpenChange}
-      sections={sections}
-      mode={entityMode}
-      value={entityValue}
-      onChange={handleEntityChange}
-      renderItem={renderItem}
-      width={width ?? 320}
-      loading={loading}
-      emptyState={<div className="px-3 py-4 text-center text-muted-foreground/40 text-sm">{labels.emptyText}</div>}
-      search={{ value: searchValue, onChange: setSearchValue, placeholder: labels.searchPlaceholder }}
-      filterActive={filterActive}
-      filterPanel={filterPanel}
-      multiSelect={
-        isMulti
-          ? {
-              enabled: multiEnabled,
-              onEnabledChange: handleMultiEnabledChange,
-              label: multiToggleLabel,
-              hint: multiToggleHint
-            }
-          : undefined
-      }
-      renderItemContextMenu={(item, { close }) => (
-        <div className="min-w-0 rounded-2xs border border-border bg-popover p-0.5 shadow-md">
-          {onEditItem && (
+    <>
+      <span ref={setPortalContainer} data-resource-selector-portal="" />
+      <EntitySelector
+        trigger={trigger}
+        open={open}
+        onOpenChange={handleOpenChange}
+        sections={sections}
+        mode={entityMode}
+        value={entityValue}
+        onChange={handleEntityChange}
+        renderItem={renderItem}
+        width={width ?? 320}
+        loading={loading}
+        emptyState={<div className="px-3 py-4 text-center text-muted-foreground/40 text-sm">{labels.emptyText}</div>}
+        search={{ value: searchValue, onChange: setSearchValue, placeholder: labels.searchPlaceholder }}
+        filterActive={filterActive}
+        filterPanel={filterPanel}
+        multiSelect={
+          isMulti
+            ? {
+                enabled: multiEnabled,
+                onEnabledChange: handleMultiEnabledChange,
+                label: multiToggleLabel,
+                hint: multiToggleHint
+              }
+            : undefined
+        }
+        renderItemContextMenu={(item, { close }) => (
+          <div className="min-w-0 rounded-2xs border border-border bg-popover p-0.5 shadow-md">
+            {onEditItem && (
+              <button
+                type="button"
+                onClick={() => {
+                  close()
+                  closeBeforeAction(() => onEditItem(item.id))
+                }}
+                className="flex w-full cursor-pointer items-center gap-1.5 rounded-3xs px-2 py-[3px] text-left text-foreground text-xs transition-colors hover:bg-accent/15">
+                <Pencil size={10} />
+                <span>{labels.edit}</span>
+              </button>
+            )}
             <button
               type="button"
+              disabled={isPinActionDisabled}
               onClick={() => {
+                togglePin(item.id)
                 close()
-                closeBeforeAction(() => onEditItem(item.id))
               }}
-              className="flex w-full cursor-pointer items-center gap-1.5 rounded-3xs px-2 py-[3px] text-left text-foreground text-xs transition-colors hover:bg-accent/15">
-              <Pencil size={10} />
-              <span>{labels.edit}</span>
+              className="flex w-full cursor-pointer items-center gap-1.5 rounded-3xs px-2 py-[3px] text-left text-foreground text-xs transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
+              <Pin size={10} className={pinnedSet.has(item.id) ? 'rotate-45' : ''} />
+              <span>{pinnedSet.has(item.id) ? labels.unpin : labels.pin}</span>
             </button>
-          )}
-          <button
-            type="button"
-            disabled={isPinActionDisabled}
-            onClick={() => {
-              togglePin(item.id)
-              close()
-            }}
-            className="flex w-full cursor-pointer items-center gap-1.5 rounded-3xs px-2 py-[3px] text-left text-foreground text-xs transition-colors hover:bg-accent/15 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent">
-            <Pin size={10} className={pinnedSet.has(item.id) ? 'rotate-45' : ''} />
-            <span>{pinnedSet.has(item.id) ? labels.unpin : labels.pin}</span>
-          </button>
-        </div>
-      )}
-      footer={footer}
-      popoverContentProps={{
-        className: 'min-w-[280px] border-border/60'
-      }}
-    />
+          </div>
+        )}
+        footer={footer}
+        popoverContentProps={{
+          className: 'min-w-[280px] border-border/60',
+          container: portalContainer
+        }}
+      />
+    </>
   )
 }

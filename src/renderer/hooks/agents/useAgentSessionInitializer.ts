@@ -15,14 +15,35 @@ import { useEffect } from 'react'
  */
 export const useAgentSessionInitializer = () => {
   const [activeSessionId, setActiveSessionId] = useCache('agent.active_session_id')
+  const {
+    data: activeSession,
+    error: activeSessionError,
+    isLoading: isActiveSessionLoading
+  } = useQuery('/agent-sessions/:sessionId', {
+    params: { sessionId: activeSessionId! },
+    enabled: !!activeSessionId,
+    swrOptions: {
+      keepPreviousData: false
+    }
+  })
+
+  const needsFallbackSession = !activeSessionId || !!activeSessionError
   const { data } = useQuery('/agent-sessions', {
     query: { limit: 1 },
-    enabled: !activeSessionId
+    enabled: needsFallbackSession
   })
 
   useEffect(() => {
-    if (activeSessionId) return
+    if (activeSessionId && (activeSession || isActiveSessionLoading) && !activeSessionError) return
+
     const first = data?.items?.[0]?.id
-    if (first) setActiveSessionId(first)
-  }, [activeSessionId, data, setActiveSessionId])
+    if (first && first !== activeSessionId) {
+      setActiveSessionId(first)
+      return
+    }
+
+    if (!first && activeSessionId && activeSessionError) {
+      setActiveSessionId(null)
+    }
+  }, [activeSession, activeSessionError, activeSessionId, data, isActiveSessionLoading, setActiveSessionId])
 }

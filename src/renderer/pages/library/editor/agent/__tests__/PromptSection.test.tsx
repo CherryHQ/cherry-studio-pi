@@ -32,6 +32,7 @@ function createForm(overrides: Partial<AgentFormState> = {}): AgentFormState {
     name: 'Agent',
     description: '',
     model: '',
+    workspacePath: '',
     planModel: '',
     smallModel: '',
     instructions: '',

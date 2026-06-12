@@ -1,15 +1,25 @@
 import { OpenClawIcon } from '@renderer/components/Icons/SvgIcon'
 import App from '@renderer/components/MiniApp/MiniApp'
 import { useMiniApps } from '@renderer/hooks/useMiniApps'
-import { useNavigate } from '@tanstack/react-router'
-import { Code, FileSearch, Folder, Languages, LayoutGrid, Library, NotepadText, Palette } from 'lucide-react'
+import { useTabs } from '@renderer/hooks/useTabs'
+import {
+  Code,
+  FileSearch,
+  Folder,
+  Languages,
+  LayoutGrid,
+  Library,
+  MousePointerClick,
+  NotepadText,
+  Palette
+} from 'lucide-react'
 import type { FC } from 'react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
 const LaunchpadPage: FC = () => {
-  const navigate = useNavigate()
+  const { openTab } = useTabs()
   const { t } = useTranslation()
   const { pinned, openedKeepAliveMiniApps } = useMiniApps()
 
@@ -19,6 +29,12 @@ const LaunchpadPage: FC = () => {
       text: t('title.apps'),
       path: '/app/mini-app',
       bgColor: 'linear-gradient(135deg, #8B5CF6, #A855F7)' // 小程序：紫色，代表多功能和灵活性
+    },
+    {
+      icon: <MousePointerClick size={32} className="icon" />,
+      text: t('agent.sidebar_title'),
+      path: '/app/agents',
+      bgColor: 'linear-gradient(135deg, #14B8A6, #0F766E)' // 智能体：清晰、快速的行动入口
     },
     {
       icon: <FileSearch size={32} className="icon" />,
@@ -92,9 +108,9 @@ const LaunchpadPage: FC = () => {
           <SectionTitle>{t('launchpad.apps')}</SectionTitle>
           <Grid>
             {appMenuItems.map((item) => (
-              <AppIcon key={item.path} onClick={() => navigate({ to: item.path })}>
+              <AppIcon key={item.path} onClick={() => openTab(item.path)}>
                 <IconContainer>
-                  <IconWrapper bgColor={item.bgColor}>{item.icon}</IconWrapper>
+                  <IconWrapper $bgColor={item.bgColor}>{item.icon}</IconWrapper>
                 </IconContainer>
                 <AppName>{item.text}</AppName>
               </AppIcon>
@@ -188,11 +204,11 @@ const IconContainer = styled.div`
   height: 56px;
 `
 
-const IconWrapper = styled.div<{ bgColor: string }>`
+const IconWrapper = styled.div<{ $bgColor: string }>`
   width: 56px;
   height: 56px;
   border-radius: 16px;
-  background: ${(props) => props.bgColor};
+  background: ${(props) => props.$bgColor};
   display: flex;
   justify-content: center;
   align-items: center;

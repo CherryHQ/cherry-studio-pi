@@ -1,11 +1,12 @@
 import type { BulkUpdateModelItem } from '@shared/data/api/schemas/models'
 import { MODEL_CAPABILITY } from '@shared/data/types/model'
 import { mockUseMutation, mockUseQuery } from '@test-mocks/renderer/useDataApi'
+import { MockUsePreferenceUtils } from '@test-mocks/renderer/usePreference'
 import { mockRendererLoggerService } from '@test-mocks/RendererLoggerService'
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { useModelById, useModelMutations, useModels } from '../useModel'
+import { useDefaultModel, useModelById, useModelMutations, useModels } from '../useModel'
 
 // ─── Mock data ────────────────────────────────────────────────────────
 const mockModel1: any = {
@@ -13,6 +14,7 @@ const mockModel1: any = {
   providerId: 'openai',
   modelId: 'gpt-4o',
   name: 'GPT-4o',
+  capabilities: [],
   isEnabled: true
 }
 
@@ -21,6 +23,7 @@ const mockModel2: any = {
   providerId: 'anthropic',
   modelId: 'claude-3-opus',
   name: 'Claude 3 Opus',
+  capabilities: [],
   isEnabled: true
 }
 
@@ -164,6 +167,121 @@ describe('useModelById', () => {
 
     expect(mockUseQuery).toHaveBeenCalledWith('/models/', {
       enabled: false,
+      swrOptions: { keepPreviousData: false }
+    })
+  })
+})
+
+describe('useDefaultModel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    MockUsePreferenceUtils.resetMocks()
+  })
+
+  it('initializes an empty default model preference from the first enabled chat model', async () => {
+    const imageModel = {
+      id: 'openai::gpt-image-1',
+      providerId: 'openai',
+      name: 'GPT Image',
+      capabilities: [MODEL_CAPABILITY.IMAGE_GENERATION],
+      isEnabled: true
+    }
+    const chatModel = {
+      id: 'deepseek::deepseek-v4-flash',
+      providerId: 'deepseek',
+      name: 'DeepSeek V4 Flash',
+      capabilities: [],
+      isEnabled: true
+    }
+
+    MockUsePreferenceUtils.setPreferenceValue('chat.default_model_id', null)
+    mockUseQuery.mockImplementation((path: string, options?: any) => {
+      if (path === '/models' && options?.query?.enabled === true) {
+        return {
+          data: [imageModel, chatModel],
+          isLoading: false,
+          isRefreshing: false,
+          error: undefined,
+          refetch: vi.fn().mockResolvedValue(undefined),
+          mutate: vi.fn()
+        }
+      }
+      if (path === '/models/deepseek::deepseek-v4-flash') {
+        return {
+          data: chatModel,
+          isLoading: false,
+          isRefreshing: false,
+          error: undefined,
+          refetch: vi.fn().mockResolvedValue(undefined),
+          mutate: vi.fn()
+        }
+      }
+      return {
+        data: undefined,
+        isLoading: false,
+        isRefreshing: false,
+        error: undefined,
+        refetch: vi.fn().mockResolvedValue(undefined),
+        mutate: vi.fn()
+      }
+    })
+
+    const { result } = renderHook(() => useDefaultModel())
+
+    expect(result.current.defaultModel).toEqual(chatModel)
+    await waitFor(() =>
+      expect(MockUsePreferenceUtils.getPreferenceValue('chat.default_model_id')).toBe('deepseek::deepseek-v4-flash')
+    )
+  })
+
+  it('does not replace an existing valid default model preference', async () => {
+    MockUsePreferenceUtils.setPreferenceValue('chat.default_model_id', 'openai::gpt-4o')
+    mockUseQuery.mockImplementation((path: string, options?: any) => {
+      if (path === '/models' && options?.query?.enabled === true) {
+        return {
+          data: [mockModel2],
+          isLoading: false,
+          isRefreshing: false,
+          error: undefined,
+          refetch: vi.fn().mockResolvedValue(undefined),
+          mutate: vi.fn()
+        }
+      }
+      return {
+        data: path === '/models/openai::gpt-4o' ? mockModel1 : undefined,
+        isLoading: false,
+        isRefreshing: false,
+        error: undefined,
+        refetch: vi.fn().mockResolvedValue(undefined),
+        mutate: vi.fn()
+      }
+    })
+
+    renderHook(() => useDefaultModel())
+
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(MockUsePreferenceUtils.getPreferenceValue('chat.default_model_id')).toBe('openai::gpt-4o')
+  })
+
+  it('falls back from invalid quick and translate model preference ids to the effective default model', () => {
+    MockUsePreferenceUtils.setPreferenceValue('chat.default_model_id', 'openai::gpt-4o')
+    MockUsePreferenceUtils.setPreferenceValue('feature.quick_assistant.model_id', '')
+    MockUsePreferenceUtils.setPreferenceValue('feature.translate.model_id', 'legacy:bad-id')
+    mockUseQuery.mockImplementation((path: string) => ({
+      data: path === '/models' ? [] : mockModel1,
+      isLoading: false,
+      isRefreshing: false,
+      error: undefined,
+      refetch: vi.fn().mockResolvedValue(undefined),
+      mutate: vi.fn()
+    }))
+
+    const { result } = renderHook(() => useDefaultModel())
+
+    expect(result.current.quickModel).toEqual(mockModel1)
+    expect(result.current.translateModel).toEqual(mockModel1)
+    expect(mockUseQuery).toHaveBeenCalledWith('/models/openai::gpt-4o', {
+      enabled: true,
       swrOptions: { keepPreviousData: false }
     })
   })

@@ -105,7 +105,8 @@ export type CreateAgentSessionDto = z.infer<typeof CreateAgentSessionSchema>
 export const UpdateAgentSessionSchema = z.strictObject({
   name: AgentNameAtomSchema.optional(),
   description: z.string().optional(),
-  agentId: z.string().min(1).optional()
+  agentId: z.string().min(1).optional(),
+  workspaceId: z.string().min(1).optional()
 })
 
 export type UpdateAgentSessionDto = z.infer<typeof UpdateAgentSessionSchema>

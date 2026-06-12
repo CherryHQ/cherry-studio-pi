@@ -81,6 +81,75 @@ function clickRowByName(name: string) {
 }
 
 describe('ResourceSelectorShell', () => {
+  describe('open lifecycle', () => {
+    it('fires onOpen once per closed-to-open transition', async () => {
+      const onOpen = vi.fn()
+      const baseProps = {
+        trigger: <button type="button">Open</button>,
+        items: ITEMS,
+        pinnedIds: [],
+        onTogglePin: vi.fn(),
+        onEditItem: vi.fn(),
+        onCreateNew: vi.fn(),
+        labels: LABELS,
+        value: null,
+        onChange: vi.fn(),
+        onOpen
+      }
+
+      const { rerender } = render(<ResourceSelectorShell {...baseProps} open />)
+
+      await waitFor(() => expect(onOpen).toHaveBeenCalledTimes(1))
+      rerender(<ResourceSelectorShell {...baseProps} open />)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(onOpen).toHaveBeenCalledTimes(1)
+
+      rerender(<ResourceSelectorShell {...baseProps} open={false} />)
+      rerender(<ResourceSelectorShell {...baseProps} open />)
+
+      await waitFor(() => expect(onOpen).toHaveBeenCalledTimes(2))
+    })
+
+    it('closes all open selectors before running a create action', async () => {
+      const onCreateNew = vi.fn()
+
+      render(
+        <>
+          <ResourceSelectorShell
+            trigger={<button type="button">Open first</button>}
+            items={ITEMS}
+            pinnedIds={[]}
+            onTogglePin={vi.fn()}
+            onEditItem={vi.fn()}
+            onCreateNew={onCreateNew}
+            labels={LABELS}
+            value={null}
+            onChange={vi.fn()}
+          />
+          <ResourceSelectorShell
+            trigger={<button type="button">Open second</button>}
+            items={ITEMS}
+            pinnedIds={[]}
+            onTogglePin={vi.fn()}
+            onEditItem={vi.fn()}
+            onCreateNew={vi.fn()}
+            labels={LABELS}
+            value={null}
+            onChange={vi.fn()}
+          />
+        </>
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Open first' }))
+      expect(screen.getByPlaceholderText('Search')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Create new' }))
+
+      await waitFor(() => expect(onCreateNew).toHaveBeenCalledTimes(1))
+      expect(screen.queryByPlaceholderText('Search')).not.toBeInTheDocument()
+    })
+  })
+
   describe('value adapter', () => {
     it('single + id: onChange fires the plain id on row click', () => {
       const onChange = vi.fn()
