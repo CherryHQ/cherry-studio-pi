@@ -36,6 +36,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
+import { restoreTextareaCursor } from './AgentSessionInputbarCursor'
 import { resolveAgentSessionModel } from './agentSessionModel'
 
 const logger = loggerService.withContext('AgentSessionInputbar')
@@ -317,12 +318,11 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
                 const newText = prev.slice(0, lastSlashIndex) + cmd.command + ' ' + prev.slice(cursorPosition)
                 const newCursorPos = lastSlashIndex + cmd.command.length + 1
 
-                setTimeout(() => {
-                  if (textArea) {
-                    textArea.focus()
-                    textArea.setSelectionRange(newCursorPos, newCursorPos)
-                  }
-                }, 0)
+                setTimeoutTimer(
+                  'agentSession_slashCommandCursor',
+                  () => restoreTextareaCursor(textArea, newCursorPos),
+                  0
+                )
 
                 return newText
               }
@@ -331,12 +331,7 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
               const newText = prev.slice(0, cursorPosition) + cmd.command + ' ' + prev.slice(cursorPosition)
               const newCursorPos = cursorPosition + cmd.command.length + 1
 
-              setTimeout(() => {
-                if (textArea) {
-                  textArea.focus()
-                  textArea.setSelectionRange(newCursorPos, newCursorPos)
-                }
-              }, 0)
+              setTimeoutTimer('agentSession_slashCommandCursor', () => restoreTextareaCursor(textArea, newCursorPos), 0)
 
               return newText
             })
@@ -344,7 +339,7 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
         }))
       })
     }
-  }, [sessionData, quickPanel, t, setText])
+  }, [sessionData, quickPanel, t, setText, setTimeoutTimer])
 
   // Register the trigger handler (only once)
   useEffect(() => {

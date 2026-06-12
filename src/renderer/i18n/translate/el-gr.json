@@ -400,6 +400,12 @@
           "failed": "Αποτυχία ενημέρωσης της συνεδρίας"
         }
       },
+      "workspace": {
+        "change": "[to be translated]:Change workspace",
+        "create_failed": "[to be translated]:Failed to create workspace",
+        "select_failed": "[to be translated]:Failed to select workspace",
+        "updated": "[to be translated]:Workspace updated"
+      },
       "workspace_status": {
         "inaccessible": "Η διαδρομή του χώρου εργασίας δεν είναι προσβάσιμη: {{path}}",
         "missing": "Η διαδρομή του χώρου εργασίας δεν υπάρχει: {{path}}",
@@ -2045,6 +2051,7 @@
     "preview": {
       "error": "Αποτυχία ανοίγματος του αρχείου"
     },
+    "rename_failed": "[to be translated]:Rename failed",
     "size": "Μέγεθος",
     "text": "Κείμενο",
     "title": "Αρχεία",
@@ -2539,6 +2546,12 @@
           "soul_enabled": {
             "help": "Όταν είναι ενεργοποιημένο, παραχωρεί αυτόματα bypassPermissions",
             "label": "Λειτουργία ψυχής"
+          },
+          "workspace": {
+            "auto": "[to be translated]:Create a dedicated workspace automatically",
+            "clear": "[to be translated]:Clear workspace",
+            "hint": "[to be translated]:Choose the working directory for this agent's first session. A dedicated directory is created automatically when left empty.",
+            "label": "[to be translated]:Workspace"
           }
         },
         "model_config": "Διαμόρφωση μοντέλου",

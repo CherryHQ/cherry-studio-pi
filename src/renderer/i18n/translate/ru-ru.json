@@ -400,6 +400,12 @@
           "failed": "Не удалось обновить сеанс"
         }
       },
+      "workspace": {
+        "change": "[to be translated]:Change workspace",
+        "create_failed": "[to be translated]:Failed to create workspace",
+        "select_failed": "[to be translated]:Failed to select workspace",
+        "updated": "[to be translated]:Workspace updated"
+      },
       "workspace_status": {
         "inaccessible": "Путь к рабочей области недоступен: {{path}}",
         "missing": "Путь к рабочей области не существует: {{path}}",
@@ -2045,6 +2051,7 @@
     "preview": {
       "error": "Не удалось открыть файл"
     },
+    "rename_failed": "[to be translated]:Rename failed",
     "size": "Размер",
     "text": "Текст",
     "title": "Файлы",
@@ -2539,6 +2546,12 @@
           "soul_enabled": {
             "help": "При включении автоматически предоставляет bypassPermissions",
             "label": "Режим души"
+          },
+          "workspace": {
+            "auto": "[to be translated]:Create a dedicated workspace automatically",
+            "clear": "[to be translated]:Clear workspace",
+            "hint": "[to be translated]:Choose the working directory for this agent's first session. A dedicated directory is created automatically when left empty.",
+            "label": "[to be translated]:Workspace"
           }
         },
         "model_config": "Конфигурация модели",

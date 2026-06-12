@@ -400,6 +400,12 @@
           "failed": "Error al actualizar la sesión"
         }
       },
+      "workspace": {
+        "change": "[to be translated]:Change workspace",
+        "create_failed": "[to be translated]:Failed to create workspace",
+        "select_failed": "[to be translated]:Failed to select workspace",
+        "updated": "[to be translated]:Workspace updated"
+      },
       "workspace_status": {
         "inaccessible": "La ruta del espacio de trabajo no es accesible: {{path}}",
         "missing": "La ruta del espacio de trabajo no existe: {{path}}",
@@ -2045,6 +2051,7 @@
     "preview": {
       "error": "No se pudo abrir el archivo"
     },
+    "rename_failed": "[to be translated]:Rename failed",
     "size": "Tamaño",
     "text": "Texto",
     "title": "Archivo",
@@ -2539,6 +2546,12 @@
           "soul_enabled": {
             "help": "Cuando está habilitado, otorga automáticamente bypassPermissions",
             "label": "Modo alma"
+          },
+          "workspace": {
+            "auto": "[to be translated]:Create a dedicated workspace automatically",
+            "clear": "[to be translated]:Clear workspace",
+            "hint": "[to be translated]:Choose the working directory for this agent's first session. A dedicated directory is created automatically when left empty.",
+            "label": "[to be translated]:Workspace"
           }
         },
         "model_config": "Configuración del modelo",

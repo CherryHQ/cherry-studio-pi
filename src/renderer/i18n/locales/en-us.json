@@ -371,12 +371,6 @@
           "failed": "Failed to add a session"
         }
       },
-      "workspace": {
-        "change": "Change workspace",
-        "create_failed": "Failed to create workspace",
-        "select_failed": "Failed to select workspace",
-        "updated": "Workspace updated"
-      },
       "delete": {
         "content": "Are you sure to delete this session?",
         "error": {
@@ -405,6 +399,12 @@
         "error": {
           "failed": "Failed to update the session"
         }
+      },
+      "workspace": {
+        "change": "Change workspace",
+        "create_failed": "Failed to create workspace",
+        "select_failed": "Failed to select workspace",
+        "updated": "Workspace updated"
       },
       "workspace_status": {
         "inaccessible": "Workspace path is not accessible: {{path}}",
@@ -2520,12 +2520,6 @@
             "hint": "Main reasoning and execution",
             "label": "Primary model (required)"
           },
-          "workspace": {
-            "auto": "Create a dedicated workspace automatically",
-            "clear": "Clear workspace",
-            "hint": "Choose the working directory for this agent's first session. A dedicated directory is created automatically when left empty.",
-            "label": "Workspace"
-          },
           "name": {
             "hint": "Shown in the library and session lists",
             "label": "Agent name",
@@ -2552,6 +2546,12 @@
           "soul_enabled": {
             "help": "When enabled, automatically grants bypassPermissions",
             "label": "Soul mode"
+          },
+          "workspace": {
+            "auto": "Create a dedicated workspace automatically",
+            "clear": "Clear workspace",
+            "hint": "Choose the working directory for this agent's first session. A dedicated directory is created automatically when left empty.",
+            "label": "Workspace"
           }
         },
         "model_config": "Model configuration",

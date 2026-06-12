@@ -400,6 +400,12 @@
           "failed": "Không cập nhật được phiên"
         }
       },
+      "workspace": {
+        "change": "[to be translated]:Change workspace",
+        "create_failed": "[to be translated]:Failed to create workspace",
+        "select_failed": "[to be translated]:Failed to select workspace",
+        "updated": "[to be translated]:Workspace updated"
+      },
       "workspace_status": {
         "inaccessible": "Đường dẫn không gian làm việc không thể truy cập: {{path}}",
         "missing": "Đường dẫn không gian làm việc không tồn tại: {{path}}",
@@ -2045,6 +2051,7 @@
     "preview": {
       "error": "Không thể mở tệp"
     },
+    "rename_failed": "[to be translated]:Rename failed",
     "size": "Kích thước",
     "text": "Văn bản",
     "title": "Tập tin",
@@ -2539,6 +2546,12 @@
           "soul_enabled": {
             "help": "Khi được bật, tự động cấp quyền bypassPermissions",
             "label": "Chế độ linh hồn"
+          },
+          "workspace": {
+            "auto": "[to be translated]:Create a dedicated workspace automatically",
+            "clear": "[to be translated]:Clear workspace",
+            "hint": "[to be translated]:Choose the working directory for this agent's first session. A dedicated directory is created automatically when left empty.",
+            "label": "[to be translated]:Workspace"
           }
         },
         "model_config": "Cấu hình mô hình",

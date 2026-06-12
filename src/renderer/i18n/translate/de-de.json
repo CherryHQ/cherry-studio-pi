@@ -400,6 +400,12 @@
           "failed": "Sitzung aktualisieren fehlgeschlagen"
         }
       },
+      "workspace": {
+        "change": "[to be translated]:Change workspace",
+        "create_failed": "[to be translated]:Failed to create workspace",
+        "select_failed": "[to be translated]:Failed to select workspace",
+        "updated": "[to be translated]:Workspace updated"
+      },
       "workspace_status": {
         "inaccessible": "Arbeitsbereichspfad ist nicht zugänglich: {{path}}",
         "missing": "Arbeitsbereichspfad existiert nicht: {{path}}",
@@ -2045,6 +2051,7 @@
     "preview": {
       "error": "Datei konnte nicht geöffnet werden"
     },
+    "rename_failed": "[to be translated]:Rename failed",
     "size": "Größe",
     "text": "Text",
     "title": "Dateien",
@@ -2539,6 +2546,12 @@
           "soul_enabled": {
             "help": "Wenn aktiviert, wird bypassPermissions automatisch gewährt",
             "label": "Seelenmodus"
+          },
+          "workspace": {
+            "auto": "[to be translated]:Create a dedicated workspace automatically",
+            "clear": "[to be translated]:Clear workspace",
+            "hint": "[to be translated]:Choose the working directory for this agent's first session. A dedicated directory is created automatically when left empty.",
+            "label": "[to be translated]:Workspace"
           }
         },
         "model_config": "Modellkonfiguration",

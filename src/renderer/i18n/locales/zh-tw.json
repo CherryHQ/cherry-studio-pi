@@ -371,12 +371,6 @@
           "failed": "無法新增工作階段"
         }
       },
-      "workspace": {
-        "change": "更換工作目錄",
-        "create_failed": "建立工作目錄失敗",
-        "select_failed": "選擇工作目錄失敗",
-        "updated": "工作目錄已更新"
-      },
       "delete": {
         "content": "您確定要刪除此工作階段嗎？",
         "error": {
@@ -405,6 +399,12 @@
         "error": {
           "failed": "無法更新工作階段"
         }
+      },
+      "workspace": {
+        "change": "更換工作目錄",
+        "create_failed": "建立工作目錄失敗",
+        "select_failed": "選擇工作目錄失敗",
+        "updated": "工作目錄已更新"
       },
       "workspace_status": {
         "inaccessible": "工作區路徑無法存取：{{path}}",
@@ -2520,12 +2520,6 @@
             "hint": "主要推理與執行",
             "label": "主要模型（必填）"
           },
-          "workspace": {
-            "auto": "自動建立專屬工作目錄",
-            "clear": "清除工作目錄",
-            "hint": "選擇這個智能體首個工作階段的工作目錄；未選擇時會自動建立專屬目錄",
-            "label": "工作目錄"
-          },
           "name": {
             "hint": "顯示於圖書館和會話清單",
             "label": "代理人名稱",
@@ -2552,6 +2546,12 @@
           "soul_enabled": {
             "help": "啟用後，將自動授予 bypassPermissions",
             "label": "靈魂模式"
+          },
+          "workspace": {
+            "auto": "自動建立專屬工作目錄",
+            "clear": "清除工作目錄",
+            "hint": "選擇這個智能體首個工作階段的工作目錄；未選擇時會自動建立專屬目錄",
+            "label": "工作目錄"
           }
         },
         "model_config": "模型配置",

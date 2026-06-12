@@ -371,12 +371,6 @@
           "failed": "添加会话失败"
         }
       },
-      "workspace": {
-        "change": "更换工作目录",
-        "create_failed": "创建工作目录失败",
-        "select_failed": "选择工作目录失败",
-        "updated": "工作目录已更新"
-      },
       "delete": {
         "content": "确定要删除此会话吗？",
         "error": {
@@ -405,6 +399,12 @@
         "error": {
           "failed": "更新会话失败"
         }
+      },
+      "workspace": {
+        "change": "更换工作目录",
+        "create_failed": "创建工作目录失败",
+        "select_failed": "选择工作目录失败",
+        "updated": "工作目录已更新"
       },
       "workspace_status": {
         "inaccessible": "工作区路径不可访问：{{path}}",
@@ -2520,12 +2520,6 @@
             "hint": "负责主要推理和执行",
             "label": "主模型 (必填)"
           },
-          "workspace": {
-            "auto": "自动创建专属工作目录",
-            "clear": "清除工作目录",
-            "hint": "选择这个智能体首个会话的工作目录；未选择时自动创建专属目录",
-            "label": "工作目录"
-          },
           "name": {
             "hint": "展示在资源库和会话列表中",
             "label": "Agent 名称",
@@ -2552,6 +2546,12 @@
           "soul_enabled": {
             "help": "启用后自动授予 bypassPermissions 权限",
             "label": "Soul 模式"
+          },
+          "workspace": {
+            "auto": "自动创建专属工作目录",
+            "clear": "清除工作目录",
+            "hint": "选择这个智能体首个会话的工作目录；未选择时自动创建专属目录",
+            "label": "工作目录"
           }
         },
         "model_config": "模型配置",
