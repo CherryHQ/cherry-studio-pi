@@ -4,6 +4,7 @@ import { ErrorCode } from '@shared/data/api'
 import type { CreateMiniAppDto, UpdateMiniAppDto } from '@shared/data/api/schemas/miniApps'
 import { PRESETS_MINI_APPS } from '@shared/data/presets/mini-apps'
 import { setupTestDatabase } from '@test-helpers/db'
+import { MockMainDbServiceExport } from '@test-mocks/main/DbService'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 
@@ -11,7 +12,7 @@ describe('MiniAppService', () => {
   const dbh = setupTestDatabase()
 
   beforeEach(() => {
-    // Each test gets a fresh DB.
+    MockMainDbServiceExport.dbService.withWriteTx.mockClear()
   })
 
   /** Insert a custom row directly. */
@@ -144,6 +145,21 @@ describe('MiniAppService', () => {
         })
       ).rejects.toMatchObject({ code: ErrorCode.CONFLICT })
     })
+
+    it('should route custom miniapp creation through the serialized write transaction helper', async () => {
+      const dto: CreateMiniAppDto = {
+        appId: 'serialized-app',
+        name: 'Serialized App',
+        url: 'https://serialized.app',
+        logo: 'custom-logo',
+        bordered: false,
+        supportedRegions: ['CN']
+      }
+
+      await miniAppService.create(dto)
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('update', () => {
@@ -197,6 +213,14 @@ describe('MiniAppService', () => {
 
       expect(result.orderKey).toBe('a5')
     })
+
+    it('should route status updates through the serialized write transaction helper', async () => {
+      await seedCustom({ appId: 'serialized-update', status: 'enabled' })
+
+      await miniAppService.update('serialized-update', { status: 'disabled' })
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('delete', () => {
@@ -218,6 +242,14 @@ describe('MiniAppService', () => {
       await expect(miniAppService.delete('nonexistent')).rejects.toMatchObject({
         code: ErrorCode.NOT_FOUND
       })
+    })
+
+    it('should route deletion through the serialized write transaction helper', async () => {
+      await seedCustom({ appId: 'serialized-delete' })
+
+      await miniAppService.delete('serialized-delete')
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -248,6 +280,7 @@ describe('MiniAppService', () => {
 
       const [row] = await dbh.db.select().from(miniAppTable).where(eq(miniAppTable.appId, 'untouched'))
       expect(row.orderKey).toBe('a0')
+      expect(MockMainDbServiceExport.dbService.withWriteTx).not.toHaveBeenCalled()
     })
 
     it('should reject cross-status batches with VALIDATION_ERROR (#3198896254)', async () => {
@@ -263,6 +296,15 @@ describe('MiniAppService', () => {
           { id: 'disabled-1', anchor: { position: 'first' } }
         ])
       ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_ERROR })
+    })
+
+    it('should route reorder through the serialized write transaction helper', async () => {
+      await seedCustom({ appId: 'app-a', name: 'A', orderKey: 'a0' })
+      await seedCustom({ appId: 'app-b', name: 'B', orderKey: 'b0' })
+
+      await miniAppService.reorder([{ id: 'app-b', anchor: { before: 'app-a' } }])
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
   })
 })

@@ -62,8 +62,12 @@ function rowToMiniApp(row: MiniAppRow): MiniApp {
 }
 
 export class MiniAppService {
+  private get dbService() {
+    return application.get('DbService')
+  }
+
   private get db() {
-    return application.get('DbService').getDb()
+    return this.dbService.getDb()
   }
 
   /** Get a miniapp by appId. Throws NOT_FOUND if absent. */
@@ -103,7 +107,7 @@ export class MiniAppService {
     const status: MiniAppStatus = 'enabled'
     const row = await withSqliteErrors(
       () =>
-        this.db.transaction(async (tx) => {
+        this.dbService.withWriteTx(async (tx) => {
           const inserted = await insertWithOrderKey(
             tx,
             miniAppTable,
@@ -159,7 +163,7 @@ export class MiniAppService {
 
     const row = await withSqliteErrors(
       () =>
-        this.db.transaction(async (tx) => {
+        this.dbService.withWriteTx(async (tx) => {
           const [existing] = await tx
             .select({ status: miniAppTable.status })
             .from(miniAppTable)
@@ -195,22 +199,25 @@ export class MiniAppService {
    * Mirrors {@link ProviderService.delete}'s preset guard.
    */
   async delete(appId: string): Promise<void> {
-    const [existing] = await this.db
-      .select({ presetMiniAppId: miniAppTable.presetMiniAppId })
-      .from(miniAppTable)
-      .where(eq(miniAppTable.appId, appId))
-      .limit(1)
-    if (!existing) throw DataApiErrorFactory.notFound('MiniApp', appId)
-
-    if (existing.presetMiniAppId !== null) {
-      throw DataApiErrorFactory.invalidOperation(
-        `delete miniapp ${appId}`,
-        'preset-derived miniapp cannot be deleted; use PATCH with status="disabled" to hide'
-      )
-    }
-
     await withSqliteErrors(
-      () => this.db.delete(miniAppTable).where(eq(miniAppTable.appId, appId)),
+      () =>
+        this.dbService.withWriteTx(async (tx) => {
+          const [existing] = await tx
+            .select({ presetMiniAppId: miniAppTable.presetMiniAppId })
+            .from(miniAppTable)
+            .where(eq(miniAppTable.appId, appId))
+            .limit(1)
+          if (!existing) throw DataApiErrorFactory.notFound('MiniApp', appId)
+
+          if (existing.presetMiniAppId !== null) {
+            throw DataApiErrorFactory.invalidOperation(
+              `delete miniapp ${appId}`,
+              'preset-derived miniapp cannot be deleted; use PATCH with status="disabled" to hide'
+            )
+          }
+
+          await tx.delete(miniAppTable).where(eq(miniAppTable.appId, appId))
+        }),
       defaultHandlersFor('MiniApp', appId)
     )
     logger.info('Deleted miniapp', { appId })
@@ -228,7 +235,7 @@ export class MiniAppService {
 
     await withSqliteErrors(
       () =>
-        this.db.transaction(async (tx) =>
+        this.dbService.withWriteTx(async (tx) =>
           applyScopedMoves(tx, miniAppTable, moves, {
             pkColumn: miniAppTable.appId,
             scopeColumn: miniAppTable.status
