@@ -10,6 +10,9 @@ const WEBDAV_AGENT_OPTIONS = {
   maxFreeSockets: 4
 } as const
 
+const sharedHttpAgent = new http.Agent(WEBDAV_AGENT_OPTIONS)
+const sharedHttpsAgent = new https.Agent({ ...WEBDAV_AGENT_OPTIONS, rejectUnauthorized: false })
+
 export function createWebDavClientOptions(
   options: Pick<WebDAVClientOptions, 'username' | 'password'> = {}
 ): WebDAVClientOptions {
@@ -17,7 +20,7 @@ export function createWebDavClientOptions(
     ...options,
     maxBodyLength: Infinity,
     maxContentLength: Infinity,
-    httpAgent: new http.Agent(WEBDAV_AGENT_OPTIONS),
-    httpsAgent: new https.Agent({ ...WEBDAV_AGENT_OPTIONS, rejectUnauthorized: false })
+    httpAgent: sharedHttpAgent,
+    httpsAgent: sharedHttpsAgent
   }
 }

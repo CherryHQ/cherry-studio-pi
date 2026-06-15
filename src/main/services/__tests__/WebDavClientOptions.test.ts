@@ -34,4 +34,13 @@ describe('WebDavClientOptions', () => {
       maxFreeSockets: 4
     })
   })
+
+  it('reuses keep-alive agents across WebDAV clients', () => {
+    const first = createWebDavClientOptions({ username: 'webdav', password: 'first' })
+    const second = createWebDavClientOptions({ username: 'webdav', password: 'second' })
+
+    expect(second.httpAgent).toBe(first.httpAgent)
+    expect(second.httpsAgent).toBe(first.httpsAgent)
+    expect(second.password).toBe('second')
+  })
 })
