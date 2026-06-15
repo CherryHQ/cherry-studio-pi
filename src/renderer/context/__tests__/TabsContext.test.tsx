@@ -52,13 +52,15 @@ vi.mock('@renderer/data/hooks/useCache', () => {
 import { TabsProvider, useTabsContext } from '../TabsContext'
 
 function TabsProbe() {
-  const { openTab, tabs } = useTabsContext()
+  const { activeTabId, closeTab, openTab, tabs } = useTabsContext()
   const homeTab = tabs.find((tab) => tab.id === 'home')
   const paintingsTab = tabs.find((tab) => tab.id === 'paintings-tab')
   const customTab = tabs.find((tab) => tab.id === 'mini-app-tab')
 
   return (
     <>
+      <div data-testid="active-tab-id">{activeTabId}</div>
+      <div data-testid="tab-count">{tabs.length}</div>
       <div data-testid="home-tab-title">{homeTab?.title}</div>
       <div data-testid="paintings-tab-title">{paintingsTab?.title}</div>
       <div data-testid="custom-tab-title">{customTab?.title}</div>
@@ -82,6 +84,9 @@ function TabsProbe() {
           })
         }>
         Open custom tab
+      </button>
+      <button type="button" onClick={() => closeTab('paintings-tab')}>
+        Close paintings tab
       </button>
     </>
   )
@@ -121,5 +126,24 @@ describe('TabsContext language refresh', () => {
     expect(screen.getByTestId('home-tab-title')).toHaveTextContent('首页')
     expect(screen.getByTestId('paintings-tab-title')).toHaveTextContent('绘画')
     expect(screen.getByTestId('custom-tab-title')).toHaveTextContent('Weather App')
+  })
+
+  it('allows closing the only business tab when the home tab remains', () => {
+    render(
+      <TabsProvider>
+        <TabsProbe />
+      </TabsProvider>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open paintings tab' }))
+
+    expect(screen.getByTestId('tab-count')).toHaveTextContent('2')
+    expect(screen.getByTestId('active-tab-id')).toHaveTextContent('paintings-tab')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close paintings tab' }))
+
+    expect(screen.getByTestId('tab-count')).toHaveTextContent('1')
+    expect(screen.getByTestId('active-tab-id')).toHaveTextContent('home')
+    expect(screen.getByTestId('paintings-tab-title')).toBeEmptyDOMElement()
   })
 })

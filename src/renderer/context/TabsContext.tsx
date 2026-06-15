@@ -31,10 +31,6 @@ function withLocalizedRouteTitle(tab: Tab): Tab {
   return { ...tab, title: getDefaultRouteTitle(tab.url) }
 }
 
-function countBusinessTabs(tabs: Tab[]): number {
-  return tabs.filter((tab) => tab.id !== DEFAULT_TAB.id).length
-}
-
 /**
  * Options for opening a tab
  */
@@ -267,7 +263,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     (id: string) => {
       const tab = tabs.find((t) => t.id === id)
       if (!tab) return
-      if (tab.id === DEFAULT_TAB.id || countBusinessTabs(tabs) <= 1) return
+      if (tab.id === DEFAULT_TAB.id || tabs.length <= 1) return
 
       // Calculate new activeTabId
       let newActiveId = activeTabId

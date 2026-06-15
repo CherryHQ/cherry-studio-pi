@@ -155,6 +155,7 @@ type NormalTabButtonProps = {
   isActive: boolean
   onSelect: () => void
   onClose: () => void
+  closeLabel: string
   showClose?: boolean
   drag: DragItemProps
   tabRef: (el: HTMLButtonElement | null) => void
@@ -167,6 +168,7 @@ const NormalTabButton = ({
   isActive,
   onSelect,
   onClose,
+  closeLabel,
   showClose = true,
   drag,
   tabRef,
@@ -231,6 +233,8 @@ const NormalTabButton = ({
         {showIconOverlayClose && (
           <div
             role="button"
+            aria-label={closeLabel}
+            title={closeLabel}
             tabIndex={0}
             onClick={(e) => {
               e.stopPropagation()
@@ -256,6 +260,8 @@ const NormalTabButton = ({
       {showRightClose && (
         <div
           role="button"
+          aria-label={closeLabel}
+          title={closeLabel}
           tabIndex={0}
           onClick={(e) => {
             e.stopPropagation()
@@ -365,7 +371,7 @@ export const AppShellTabBar = ({
     }
     return { homeTab: home, pinnedTabs: pinned, normalTabs: normal }
   }, [tabs])
-  const canCloseBusinessTab = !isDetached && pinnedTabs.length + normalTabs.length > 1
+  const canCloseBusinessTab = !isDetached && tabs.length > 1
 
   // ─── Context menu actions ───────────────────────────────────────────────────
 
@@ -502,6 +508,7 @@ export const AppShellTabBar = ({
                 isActive={tab.id === activeTabId}
                 onSelect={() => handleTabClick(tab.id)}
                 onClose={() => closeTab(tab.id)}
+                closeLabel={t('tab.close')}
                 showClose={canCloseBusinessTab}
                 tone={tabTone}
                 drag={{
