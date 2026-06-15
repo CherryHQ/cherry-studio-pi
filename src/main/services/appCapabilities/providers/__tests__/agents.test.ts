@@ -118,7 +118,7 @@ describe('agent app capabilities', () => {
     })
     expect(mocks.listAgentsWithStorageV2Recovery).toHaveBeenCalledWith({
       sortBy: 'created_at',
-      orderBy: 'desc',
+      sortOrder: 'desc',
       limit: 50,
       offset: 8
     })
@@ -131,6 +131,20 @@ describe('agent app capabilities', () => {
       limit: 1,
       offset: undefined,
       includeHeartbeat: undefined
+    })
+  })
+
+  it('prefers sortOrder over the legacy orderBy alias for agent list calls', async () => {
+    await capability('agents.list').execute(
+      { sortBy: 'name', sortOrder: 'asc', orderBy: 'desc', limit: 10 },
+      { source: 'agent' }
+    )
+
+    expect(mocks.listAgentsWithStorageV2Recovery).toHaveBeenCalledWith({
+      sortBy: 'name',
+      sortOrder: 'asc',
+      limit: 10,
+      offset: undefined
     })
   })
 

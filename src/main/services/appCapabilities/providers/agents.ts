@@ -28,6 +28,10 @@ function normalizeOffset(value: unknown) {
   return Math.max(0, Math.trunc(parsed))
 }
 
+function normalizeSortOrder(value: unknown) {
+  return value === 'asc' || value === 'desc' ? value : undefined
+}
+
 function normalizeOptionalText(value: unknown) {
   if (typeof value === 'string') {
     const trimmed = value.trim()
@@ -48,9 +52,11 @@ function normalizeRequiredText(value: unknown, label: string) {
 }
 
 function agentListOptions(input: any = {}) {
-  const { limit, offset, ...rest } = input ?? {}
+  const { limit, offset, orderBy, sortOrder, ...rest } = input ?? {}
+  const normalizedSortOrder = normalizeSortOrder(sortOrder) ?? normalizeSortOrder(orderBy)
   return {
     ...rest,
+    ...(normalizedSortOrder ? { sortOrder: normalizedSortOrder } : {}),
     limit: normalizeListLimit(limit),
     offset: normalizeOffset(offset)
   }
@@ -110,6 +116,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
           limit: { type: 'number', description: 'Maximum agents to return; defaults to 50 and is capped at 200' },
           offset: { type: 'number', description: 'Pagination offset' },
           sortBy: { type: 'string' },
+          sortOrder: { type: 'string', enum: ['asc', 'desc'] },
           orderBy: { type: 'string', enum: ['asc', 'desc'] }
         }
       },
