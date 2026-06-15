@@ -1,3 +1,4 @@
+import { RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import type { Model, UniqueModelId } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -336,5 +337,24 @@ describe('ModelSelector', () => {
     )
 
     expect(mockVirtualListSizes.at(-1)).toBe(8 * 36)
+  })
+
+  it('closes when a shared selector force-close event is dispatched', () => {
+    mockUseModelSelectorData.mockReturnValue(makeData())
+    const onOpenChange = vi.fn()
+
+    render(
+      <ModelSelector
+        open
+        onOpenChange={onOpenChange}
+        multiple={false}
+        trigger={<button type="button">open</button>}
+        onSelect={vi.fn()}
+      />
+    )
+
+    window.dispatchEvent(new Event(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT))
+
+    expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 })

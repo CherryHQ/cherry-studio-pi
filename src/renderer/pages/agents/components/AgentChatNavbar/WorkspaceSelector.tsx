@@ -13,6 +13,13 @@ type WorkspaceSelectorProps = {
   session: AgentSessionEntity
 }
 
+function closeTransientSelectors() {
+  requestCloseResourceSelectors()
+  if (typeof document === 'undefined') return
+
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }))
+}
+
 const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
   const { t } = useTranslation()
   const [selecting, setSelecting] = useState(false)
@@ -28,7 +35,7 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
 
   const handleSelectWorkspace = async () => {
     if (selecting) return
-    requestCloseResourceSelectors()
+    closeTransientSelectors()
     setSelecting(true)
     try {
       const selectedPath = await window.api.file.selectFolder({
@@ -60,7 +67,7 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
   }
 
   return (
-    <div className="ml-2 max-w-60 shrink-0 [-webkit-app-region:no-drag]" title={workspacePath ?? undefined}>
+    <div className="max-w-60 shrink-0 [-webkit-app-region:no-drag]" data-no-expand title={workspacePath ?? undefined}>
       <Button
         type="button"
         variant="ghost"
@@ -72,8 +79,14 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
           event.stopPropagation()
           void handleSelectWorkspace()
         }}
-        onPointerDown={(event) => event.stopPropagation()}
-        onMouseDown={(event) => event.stopPropagation()}
+        onPointerDown={(event) => {
+          event.stopPropagation()
+          closeTransientSelectors()
+        }}
+        onMouseDown={(event) => {
+          event.stopPropagation()
+          closeTransientSelectors()
+        }}
         aria-label={`${actionLabel}: ${workspaceLabel}`}
         className={cn(
           'flex h-7 w-auto max-w-60 items-center gap-1.5 rounded-full px-2 text-xs shadow-none [-webkit-app-region:no-drag]',

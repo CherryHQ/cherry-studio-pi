@@ -126,9 +126,9 @@ const AgentContent = ({ activeAgent }: AgentContentProps) => {
                 />
               </>
             )}
+            {activeSession && <WorkspaceSelector session={activeSession} />}
           </div>
         </HorizontalScrollContainer>
-        {activeSession && <WorkspaceSelector session={activeSession} />}
       </div>
       <div className="flex shrink-0 items-center [-webkit-app-region:no-drag]">
         {activeSession?.workspace?.path && (

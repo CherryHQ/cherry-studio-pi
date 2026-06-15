@@ -295,11 +295,9 @@ describe('BasicSection agent model selectors', () => {
     expect(onChange).toHaveBeenCalledWith({ smallModel: '' })
   })
 
-  it('keeps workspace selection out of the basic create step', () => {
+  it('surfaces workspace selection in the basic create step', () => {
     render(<BasicSection form={createForm()} onChange={vi.fn()} variant="create" />)
 
-    expect(
-      screen.queryByRole('button', { name: 'library.config.agent.field.workspace.select' })
-    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'library.config.agent.field.workspace.select' })).toBeInTheDocument()
   })
 })

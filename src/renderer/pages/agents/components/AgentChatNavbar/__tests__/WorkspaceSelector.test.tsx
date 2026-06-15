@@ -153,7 +153,9 @@ describe('WorkspaceSelector', () => {
     const success = vi.fn()
     const error = vi.fn()
     const closeResourceSelectors = vi.fn()
+    const closeTransientPopovers = vi.fn()
     window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+    document.addEventListener('keydown', closeTransientPopovers)
 
     const restoreWindow = installWindowMocks({ selectFolder, success, error })
 
@@ -162,10 +164,12 @@ describe('WorkspaceSelector', () => {
 
       await user.click(screen.getByRole('button', { name: /agent\.session\.workspace\.select/ }))
 
-      expect(closeResourceSelectors).toHaveBeenCalledTimes(1)
+      expect(closeResourceSelectors).toHaveBeenCalled()
+      expect(closeTransientPopovers).toHaveBeenCalledWith(expect.objectContaining({ key: 'Escape', code: 'Escape' }))
       expect(selectFolder).toHaveBeenCalledTimes(1)
     } finally {
       window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+      document.removeEventListener('keydown', closeTransientPopovers)
       restoreWindow()
     }
   })

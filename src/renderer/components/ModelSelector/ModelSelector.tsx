@@ -13,6 +13,7 @@ import {
 import { resolveIcon } from '@cherrystudio/ui/icons'
 import { cn } from '@cherrystudio/ui/lib/utils'
 import { loggerService } from '@logger'
+import { RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { DynamicVirtualList, type DynamicVirtualListRef } from '@renderer/components/VirtualList'
 import { isDev } from '@renderer/config/constant'
 import { useCommandHandler } from '@renderer/features/command'
@@ -334,6 +335,12 @@ export function ModelSelector(props: ModelSelectorProps) {
     },
     [onOpenChange, openProp]
   )
+
+  useEffect(() => {
+    const handleForceClose = () => setOpen(false)
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, handleForceClose)
+    return () => window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, handleForceClose)
+  }, [setOpen])
 
   const handleShortcut = useCallback(() => setOpen(true), [setOpen])
 
