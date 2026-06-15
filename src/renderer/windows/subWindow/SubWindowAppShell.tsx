@@ -1,5 +1,6 @@
 import '@renderer/databases'
 
+import { loggerService } from '@logger'
 import { AppShellTabBar } from '@renderer/components/layout/AppShellTabBar'
 import { TabRouter } from '@renderer/components/layout/TabRouter'
 import MiniAppTabsPool from '@renderer/components/MiniApp/MiniAppTabsPool'
@@ -8,6 +9,8 @@ import { useWindowInitData } from '@renderer/hooks/useWindowInitData'
 import { getDefaultRouteTitle } from '@renderer/utils/routeTitle'
 import type { SubWindowInitData } from '@shared/types/subWindow'
 import { Activity, useEffect, useRef } from 'react'
+
+const logger = loggerService.withContext('SubWindowAppShell')
 
 // Mock Webview component (TODO: Replace with actual MinApp/Webview)
 const WebviewContainer = ({ url, isActive }: { url: string; isActive: boolean }) => (
@@ -55,7 +58,10 @@ export const SubWindowAppShell = () => {
     // Compute remaining count excluding both the closed tab and the always-present home tab.
     const remainingUserTabs = tabs.filter((t) => t.id !== id && t.id !== 'home')
     if (remainingUserTabs.length === 0) {
-      window.close()
+      void window.api.windowManager.close().catch((error) => {
+        logger.warn('Failed to close sub window via WindowManager', error as Error)
+        window.close()
+      })
     }
   }
 

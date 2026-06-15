@@ -10,16 +10,26 @@ const mocks = vi.hoisted(() => ({
   resendUserMessageWithEdit: vi.fn(),
   scrollIntoView: vi.fn(),
   setTimeoutTimer: vi.fn(),
-  useChatContext: vi.fn().mockReturnValue({ isMultiSelectMode: false }),
-  useSettings: vi.fn().mockReturnValue({
+  preferenceValues: {
     multiModelMessageStyle: 'horizontal',
     gridColumns: 2,
-    gridPopoverTrigger: 'click',
-    messageFont: 'system',
-    fontSize: 14,
-    messageStyle: 'plain',
-    showMessageOutline: false
+    gridPopoverTrigger: 'click'
+  },
+  preferenceSetter: vi.fn(),
+  usePreference: vi.fn((key: string) => {
+    const values = mocks.preferenceValues
+    switch (key) {
+      case 'chat.message.multi_model.style':
+        return [values.multiModelMessageStyle, mocks.preferenceSetter]
+      case 'chat.message.multi_model.grid_columns':
+        return [values.gridColumns, mocks.preferenceSetter]
+      case 'chat.message.multi_model.grid_popover_trigger':
+        return [values.gridPopoverTrigger, mocks.preferenceSetter]
+      default:
+        return [undefined, mocks.preferenceSetter]
+    }
   }),
+  useChatContext: vi.fn().mockReturnValue({ isMultiSelectMode: false }),
   EventEmitter: {
     on: vi.fn(() => vi.fn()),
     off: vi.fn(),
@@ -49,6 +59,10 @@ vi.mock('@logger', () => ({
       info: vi.fn()
     })
   }
+}))
+
+vi.mock('@data/hooks/usePreference', () => ({
+  usePreference: mocks.usePreference
 }))
 
 vi.mock('@renderer/components/HorizontalScrollContainer', () => ({
@@ -100,10 +114,6 @@ vi.mock('@renderer/hooks/useMessageOperations', () => ({
 
 vi.mock('@renderer/hooks/useModel', () => ({
   useModel: () => null
-}))
-
-vi.mock('@renderer/hooks/useSettings', () => ({
-  useSettings: () => mocks.useSettings()
 }))
 
 vi.mock('@renderer/hooks/useTimer', () => ({
@@ -205,6 +215,9 @@ const setElementSize = (
 describe('MessageGroup', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.preferenceValues.multiModelMessageStyle = 'horizontal'
+    mocks.preferenceValues.gridColumns = 2
+    mocks.preferenceValues.gridPopoverTrigger = 'click'
   })
 
   // Layout / wheel tests depend on `getComputedStyle` resolving styled-components
@@ -229,7 +242,7 @@ describe('MessageGroup', () => {
     expect(getComputedStyle(horizontalGroup).overflowY).toBe('hidden')
   })
 
-  it.skip('prevents vertical wheel on non-content areas from bubbling to the outer chat scroll in horizontal layout', () => {
+  it('prevents vertical wheel on non-content areas from bubbling to the outer chat scroll in horizontal layout', () => {
     const parentWheel = vi.fn()
     const messages = [createMessage('msg-1', 0, 'horizontal'), createMessage('msg-2', 1, 'horizontal')]
     const topic = { id: 'topic-1' } as Topic
@@ -260,7 +273,7 @@ describe('MessageGroup', () => {
     expect(parentWheel).not.toHaveBeenCalled()
   })
 
-  it.skip('supports horizontal wheel scrolling on non-content areas in horizontal layout', () => {
+  it('supports horizontal wheel scrolling on non-content areas in horizontal layout', () => {
     const messages = [createMessage('msg-1', 0, 'horizontal'), createMessage('msg-2', 1, 'horizontal')]
     const topic = { id: 'topic-1' } as Topic
 
@@ -283,15 +296,7 @@ describe('MessageGroup', () => {
   })
 
   it('preserves visible content overflow for non-horizontal layouts', () => {
-    mocks.useSettings.mockReturnValue({
-      multiModelMessageStyle: 'vertical',
-      gridColumns: 2,
-      gridPopoverTrigger: 'click',
-      messageFont: 'system',
-      fontSize: 14,
-      messageStyle: 'plain',
-      showMessageOutline: false
-    })
+    mocks.preferenceValues.multiModelMessageStyle = 'vertical'
 
     const messages = [createMessage('msg-1', 0, 'vertical'), createMessage('msg-2', 1, 'vertical')]
     const topic = { id: 'topic-1' } as Topic
