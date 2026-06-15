@@ -5386,7 +5386,7 @@
         },
         "root": {
           "label": "备份目录（可选）",
-          "placeholder": "例如：/cherry-studio"
+          "placeholder": "例如：/cherry-studio-pi"
         },
         "secretAccessKey": {
           "label": "Secret Access Key",

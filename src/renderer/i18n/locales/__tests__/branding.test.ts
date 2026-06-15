@@ -11,5 +11,6 @@ describe('source locale branding', () => {
     expect(text).toContain('Cherry Studio Pi')
     expect(text).not.toMatch(/Cherry Studio(?! Pi)/)
     expect(text).not.toMatch(/CherryStudio(?!Pi)/)
+    expect(text).not.toMatch(/cherry-studio(?!-pi)/)
   })
 })
