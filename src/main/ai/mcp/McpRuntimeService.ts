@@ -51,11 +51,12 @@ import {
   type McpResource,
   type McpServer
 } from '@types'
-import { app, net } from 'electron'
+import { net } from 'electron'
 import { EventEmitter } from 'events'
 import { v4 as uuidv4 } from 'uuid'
 import * as z from 'zod'
 
+import { buildMcpClientInfo, getMcpAppHeader } from './clientIdentity'
 import type { McpPackageService } from './McpPackageService'
 import { CallBackServer } from './oauth/callback'
 import { McpOAuthClientProvider } from './oauth/provider'
@@ -393,7 +394,7 @@ export class McpRuntimeService extends BaseService {
     const initPromise = (async () => {
       try {
         // Create new client instance for each connection
-        const client = new Client({ name: 'Cherry Studio', version: app.getVersion() }, { capabilities: {} })
+        const client = new Client(buildMcpClientInfo(), { capabilities: {} })
 
         let args = [...(server.args || [])]
 
@@ -427,7 +428,7 @@ export class McpRuntimeService extends BaseService {
               requestInit: {
                 headers: {
                   ...defaultAppHeaders(),
-                  APP: 'Cherry Studio'
+                  APP: getMcpAppHeader()
                 }
               },
               authProvider
