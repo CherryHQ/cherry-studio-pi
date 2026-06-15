@@ -1,5 +1,6 @@
 import { application } from '@application'
 import { loggerService } from '@logger'
+import { APP_PRODUCT_NAME } from '@main/config/appIdentity'
 import { BaseService, DependsOn, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
 import { isLinux, isMac, isWin } from '@main/core/platform'
 import type { WindowOptions } from '@main/core/window/types'
@@ -12,6 +13,7 @@ import { BrowserWindow, nativeImage, nativeTheme } from 'electron'
 import iconPath from '../../../build/icon.png?asset'
 
 const logger = loggerService.withContext('SubWindowService')
+const DEFAULT_SUB_WINDOW_TITLE = `${APP_PRODUCT_NAME} Tab`
 
 // Mirrors MainWindowService: Linux (especially Wayland) needs a NativeImage here —
 // a raw string path silently fails to populate the task switcher / taskbar icon
@@ -242,7 +244,7 @@ export class SubWindowService extends BaseService {
     // Deliberately omit `backgroundColor` on macOS — an undefined value can still overwrite
     // the vibrancy-enabled default through the options merge path.
     const options: Partial<WindowOptions> = {
-      title: title || 'Cherry Studio Tab',
+      title: title || DEFAULT_SUB_WINDOW_TITLE,
       darkTheme: dark,
       ...(!isMac && { backgroundColor: dark ? '#181818' : '#FFFFFF' }),
       ...(isLinux && { icon: linuxIcon }),

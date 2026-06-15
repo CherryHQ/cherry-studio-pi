@@ -177,6 +177,17 @@ describe('SubWindowService', () => {
       expect(args.options).not.toHaveProperty('titleBarOverlay')
     })
 
+    it('uses a Cherry Studio Pi default title when the tab has no title', () => {
+      const win = createMockWindow()
+      windowManagerMock.getWindow.mockReturnValue(win)
+
+      svc.createWindow({ id: 'tab-default-title', url: 'cherry://mcp' })
+
+      expect(lastOpenCall().args.options).toMatchObject({
+        title: 'Cherry Studio Pi Tab'
+      })
+    })
+
     it('threads initData shape for both route and pinned tabs', () => {
       const win = createMockWindow()
       windowManagerMock.getWindow.mockReturnValue(win)
