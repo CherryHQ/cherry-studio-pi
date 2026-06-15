@@ -8,6 +8,7 @@ import { loggerService } from '@logger'
 import { BaseService, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
 import { isLinux } from '@main/core/platform'
 import { quoteDesktopExecArg } from '@main/utils/desktopEntry'
+import { summarizeTextForLog } from '@main/utils/logging'
 import { app } from 'electron'
 
 import { handleMcpProtocolUrl } from './handlers/mcpInstall'
@@ -189,9 +190,9 @@ NoDisplay=true
           application.getPath('feature.protocol.desktop_entries')
         ])
         if (stderr) {
-          logger.warn(`update-desktop-database stderr: ${stderr}`)
+          logger.warn('update-desktop-database stderr', { stderr: summarizeTextForLog(stderr) })
         }
-        logger.debug(`update-desktop-database stdout: ${stdout}`)
+        logger.debug('update-desktop-database stdout', { stdout: summarizeTextForLog(stdout) })
         logger.debug('Desktop database updated successfully.')
       } catch (updateError) {
         logger.error('Failed to update desktop database:', updateError as Error)

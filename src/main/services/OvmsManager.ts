@@ -11,6 +11,7 @@ import {
   Phase,
   ServicePhase
 } from '@main/core/lifecycle'
+import { summarizeTextForLog } from '@main/utils/logging'
 import { HOME_CHERRY_DIR } from '@shared/config/constant'
 import { IpcChannel } from '@shared/IpcChannel'
 import * as fs from 'fs-extra'
@@ -405,7 +406,7 @@ export class OvmsManager extends BaseService {
         logger.error('Command to find OVMS process returned no output')
         return false
       }
-      logger.debug(`OVMS process output: ${stdout}`)
+      logger.debug('OVMS process output', { output: summarizeTextForLog(stdout) })
 
       const processList = parsePowerShellJsonList<{ Id?: unknown; Path?: unknown }>(stdout, 'OVMS process')
 
@@ -574,7 +575,7 @@ export class OvmsManager extends BaseService {
       const { stdout } = await execFileCapture(ovdndPath, args, { env: env, cwd: ovdndDir })
 
       logger.info('Model download completed')
-      logger.debug(`Command output: ${stdout}`)
+      logger.debug('OVMS downloader command output', { output: summarizeTextForLog(stdout) })
     } catch (error) {
       // remove ovdnDir+'models'+modelId if it exists
       if (pathModel && (await fs.pathExists(pathModel))) {
