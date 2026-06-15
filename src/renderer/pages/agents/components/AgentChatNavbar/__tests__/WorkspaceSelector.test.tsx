@@ -128,7 +128,7 @@ describe('WorkspaceSelector', () => {
       await user.click(screen.getByRole('button', { name: /agent\.session\.workspace\.select/ }))
 
       expect(selectFolder).toHaveBeenCalledWith({
-        title: 'agent.session.workspace.change',
+        title: 'agent.session.workspace.select',
         properties: ['openDirectory', 'createDirectory']
       })
       await waitFor(() => expect(createWorkspaceByPathMock).toHaveBeenCalledWith('/Users/me/project'))

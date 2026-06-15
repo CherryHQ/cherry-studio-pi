@@ -39,7 +39,8 @@ export type UpdateSessionForm = UpdateAgentSessionDto & { id: string }
 /**
  * Fetch a single session by id. Config (model / instructions / ...) lives on
  * the parent agent — fetch via `useAgent(session.agentId)` separately. For
- * mutations call `useUpdateSession(agentId)` directly.
+ * mutations call `useUpdateSession(agentId)` directly; the id is retained for
+ * legacy callers, while the update itself is addressed by `sessionId`.
  */
 export const useSession = (sessionId: string | null) => {
   const {
@@ -192,11 +193,17 @@ export const useSessions = (agentId?: string | null, pageSize = DEFAULT_SESSION_
 }
 
 /**
- * Patch session-level fields (`name`, `description`, `workspaceId`). Config
- * fields (model, instructions, configuration, ...) live on the parent agent —
- * use {@link import('./useAgent').useUpdateAgent} for those.
+ * Patch session-level fields (`name`, `description`, `workspaceId`, `agentId`).
+ * Config fields (model, instructions, configuration, ...) live on the parent
+ * agent — use {@link import('./useAgent').useUpdateAgent} for those.
+ *
+ * `agentId` is kept in the hook signature for older call sites, but updates
+ * are session-addressed. Do not gate this mutation on `agentId`: workspace
+ * changes must still work for sessions whose agent was just restored, changed,
+ * or temporarily unresolved in the renderer.
  */
 export const useUpdateSession = (agentId: string | null) => {
+  void agentId
   const { t } = useTranslation()
   const { trigger: updateTrigger } = useMutation('PATCH', '/agent-sessions/:sessionId', {
     // `args.params.sessionId` is always supplied by `updateSession` below.
@@ -208,7 +215,6 @@ export const useUpdateSession = (agentId: string | null) => {
 
   const updateSession = useCallback(
     async (form: UpdateSessionForm, options?: UpdateAgentBaseOptions): Promise<AgentSessionEntity | undefined> => {
-      if (!agentId) return
       try {
         const { id, ...patch } = form
         const result = await updateTrigger({ params: { sessionId: id }, body: patch })
@@ -221,7 +227,7 @@ export const useUpdateSession = (agentId: string | null) => {
         return undefined
       }
     },
-    [agentId, updateTrigger, t]
+    [updateTrigger, t]
   )
 
   return { updateSession }

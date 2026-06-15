@@ -2555,8 +2555,8 @@
             "auto": "Create a dedicated workspace automatically",
             "change": "Change directory",
             "clear": "Clear workspace",
-            "hint": "Choose the working directory for this agent's first session. A dedicated directory is created automatically when left empty.",
-            "label": "Workspace",
+            "hint": "Choose the directory for the session that starts after creation. A dedicated directory is created automatically when left empty, and each later session can use its own directory.",
+            "label": "First session workspace",
             "select": "Select directory"
           }
         },
@@ -2605,7 +2605,7 @@
             "title": "Capabilities"
           },
           "workspace": {
-            "desc": "Choose where this agent reads and writes local project files",
+            "desc": "Choose where the session started after creation reads and writes local project files",
             "label": "Workspace",
             "title": "Workspace"
           }

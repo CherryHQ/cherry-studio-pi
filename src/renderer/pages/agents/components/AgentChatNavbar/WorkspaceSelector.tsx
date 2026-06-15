@@ -30,7 +30,7 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
     setSelecting(true)
     try {
       const selectedPath = await window.api.file.selectFolder({
-        title: t('agent.session.workspace.change'),
+        title: actionLabel,
         properties: ['openDirectory', 'createDirectory']
       })
       if (!selectedPath) return

@@ -141,11 +141,29 @@ describe('useUpdateSession', () => {
     vi.clearAllMocks()
   })
 
-  it('returns undefined when agentId is null', async () => {
-    const { result } = renderHook(() => useUpdateSession(null))
-    const updated = await act(async () => result.current.updateSession({ id: 'session-1' }))
+  it('updates a session even when the agent id is unresolved', async () => {
+    const mockResult = {
+      id: 'session-1',
+      agentId: null,
+      name: 'Session',
+      workspaceId: 'workspace-1',
+      orderKey: 'a0',
+      createdAt: '2024-01-01T00:00:00Z',
+      updatedAt: '2024-01-01T00:00:00Z'
+    }
+    const mockTrigger = vi.fn().mockResolvedValue(mockResult)
+    MockUseDataApiUtils.mockMutationWithTrigger('PATCH', '/agent-sessions/:sessionId', mockTrigger)
 
-    expect(updated).toBeUndefined()
+    const { result } = renderHook(() => useUpdateSession(null))
+    const updated = await act(async () =>
+      result.current.updateSession({ id: 'session-1', workspaceId: 'workspace-1' }, { showSuccessToast: false })
+    )
+
+    expect(mockTrigger).toHaveBeenCalledWith({
+      params: { sessionId: 'session-1' },
+      body: { workspaceId: 'workspace-1' }
+    })
+    expect(updated).toEqual(mockResult)
   })
 
   it('calls updateTrigger with sessionId-only params and returns session', async () => {
