@@ -228,15 +228,16 @@ export function formatNetworkProbeLine(v: { host: string; ok: boolean }): string
   return `- ${v.host}: ${v.ok ? 'reachable' : 'unreachable'}`
 }
 
-async function probeHost(host: string): Promise<{ host: string; ok: boolean }> {
+export async function probeHost(host: string): Promise<{ host: string; ok: boolean }> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 2000)
   try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 2000)
     await fetch(`https://${host}`, { method: 'HEAD', signal: controller.signal })
-    clearTimeout(timeout)
     return { host, ok: true }
   } catch {
     return { host, ok: false }
+  } finally {
+    clearTimeout(timeout)
   }
 }
 

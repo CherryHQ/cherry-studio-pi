@@ -147,7 +147,7 @@ vi.mock('../ToolApprovalRegistry', () => ({
   }
 }))
 
-const { buildClaudeCodeSessionSettings, disposeToolPolicySnapshot } = await import('../settingsBuilder')
+const { buildClaudeCodeSessionSettings, disposeToolPolicySnapshot, probeHost } = await import('../settingsBuilder')
 
 describe('buildClaudeCodeSessionSettings', () => {
   beforeEach(() => {
@@ -287,6 +287,21 @@ describe('buildClaudeCodeSessionSettings', () => {
       agentId: 'agent-1',
       error: 'channel db down'
     })
+  })
+
+  it('clears network probe timeout timers when fetch fails', async () => {
+    vi.useFakeTimers()
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
+
+    try {
+      await expect(probeHost('github.com')).resolves.toEqual({ host: 'github.com', ok: false })
+      expect(clearTimeoutSpy).toHaveBeenCalledTimes(1)
+    } finally {
+      clearTimeoutSpy.mockRestore()
+      vi.unstubAllGlobals()
+      vi.useRealTimers()
+    }
   })
 
   // Warm-pool correctness: hooks baked at prewarm must resolve session state by id at fire-time, so
