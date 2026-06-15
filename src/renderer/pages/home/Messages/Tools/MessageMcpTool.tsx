@@ -9,6 +9,7 @@ import { useIsToolAutoApproved } from '@renderer/hooks/useMcpServer'
 import { useTimer } from '@renderer/hooks/useTimer'
 import type { McpToolResponse } from '@renderer/types'
 import { createDataImageUri } from '@renderer/utils/dataImage'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { renderPlainTextCodeHtml, sanitizeHtml } from '@renderer/utils/html'
 import type { McpProgressEvent } from '@shared/config/types'
 import { IpcChannel } from '@shared/IpcChannel'
@@ -90,11 +91,16 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
     }
   }, [isStreaming, isDone, isError, id, isPending])
 
-  const copyContent = (content: string, toolId: string) => {
-    void navigator.clipboard.writeText(content)
-    window.toast.success({ title: t('message.copied'), key: 'copy-message' })
-    setCopiedMap((prev) => ({ ...prev, [toolId]: true }))
-    setTimeoutTimer('copyContent', () => setCopiedMap((prev) => ({ ...prev, [toolId]: false })), 2000)
+  const copyContent = async (content: string, toolId: string) => {
+    try {
+      await navigator.clipboard.writeText(content)
+      window.toast.success({ title: t('message.copied'), key: 'copy-message' })
+      setCopiedMap((prev) => ({ ...prev, [toolId]: true }))
+      setTimeoutTimer('copyContent', () => setCopiedMap((prev) => ({ ...prev, [toolId]: false })), 2000)
+    } catch (error) {
+      logger.error('Failed to copy MCP tool response:', error as Error)
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+    }
   }
 
   const handleCollapseChange = (keys: string | string[]) => {
@@ -151,7 +157,7 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
                   className="message-action-button"
                   onClick={(e) => {
                     e.stopPropagation()
-                    copyContent(JSON.stringify(result, null, 2), id)
+                    void copyContent(JSON.stringify(result, null, 2), id)
                   }}
                   aria-label={t('common.copy')}>
                   {!copiedMap[id] && <CopyIcon size={14} />}

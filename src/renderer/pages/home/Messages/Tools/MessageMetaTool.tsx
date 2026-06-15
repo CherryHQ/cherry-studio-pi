@@ -2,6 +2,7 @@ import { CopyIcon } from '@renderer/components/Icons'
 import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
 import { useTimer } from '@renderer/hooks/useTimer'
 import type { NormalToolResponse } from '@renderer/types'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { sanitizeHtml } from '@renderer/utils/html'
 import { Collapse } from 'antd'
 import { Check, ChevronRight, CornerDownRight } from 'lucide-react'
@@ -46,13 +47,17 @@ const MessageMetaTool: FC<Props> = ({ toolResponse }) => {
     }
   }, [isStreaming, isDone, isError, status, id])
 
-  const handleCopy = (e: React.MouseEvent) => {
+  const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation()
     const payload = JSON.stringify({ args: toolResponse.arguments, response: toolResponse.response }, null, 2)
-    void navigator.clipboard.writeText(payload)
-    window.toast.success({ title: t('message.copied'), key: 'copy-meta-tool' })
-    setCopied(true)
-    setTimeoutTimer('copyMetaTool', () => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(payload)
+      window.toast.success({ title: t('message.copied'), key: 'copy-meta-tool' })
+      setCopied(true)
+      setTimeoutTimer('copyMetaTool', () => setCopied(false), 2000)
+    } catch (error) {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+    }
   }
 
   const titleLabel = useTitleLabel(toolResponse)
