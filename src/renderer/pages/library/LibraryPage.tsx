@@ -1,4 +1,5 @@
 import { Alert, Button, Dialog, DialogContent } from '@cherrystudio/ui'
+import { requestCloseResourceSelectors } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { useEnsureTags, useTagList } from '@renderer/hooks/useTags'
 import type { InstalledSkill } from '@shared/data/types/agent'
 import type { Assistant } from '@shared/data/types/assistant'
@@ -310,6 +311,7 @@ export default function LibraryPage() {
   )
 
   const handleCreate = useCallback((type: ResourceType) => {
+    requestCloseResourceSelectors()
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }))
 
     if (type === 'assistant') {

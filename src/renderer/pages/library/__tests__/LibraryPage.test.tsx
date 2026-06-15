@@ -1,3 +1,4 @@
+import { RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ComponentProps, ComponentType, ReactNode } from 'react'
@@ -238,20 +239,27 @@ describe('LibraryPage create flow', () => {
 
   it('opens the agent chat page after agent creation succeeds', async () => {
     const user = userEvent.setup()
+    const closeResourceSelectors = vi.fn()
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
 
     render(<LibraryPage />)
 
-    await user.click(screen.getByRole('button', { name: 'create agent' }))
-    expect(screen.getByTestId('agent-create-page')).toBeInTheDocument()
+    try {
+      await user.click(screen.getByRole('button', { name: 'create agent' }))
+      expect(screen.getByTestId('agent-create-page')).toBeInTheDocument()
+      expect(closeResourceSelectors).toHaveBeenCalledTimes(1)
 
-    await user.click(screen.getByRole('button', { name: 'finish agent create' }))
+      await user.click(screen.getByRole('button', { name: 'finish agent create' }))
 
-    await waitFor(() => {
-      expect(screen.getByTestId('resource-grid')).toBeInTheDocument()
-    })
-    expect(screen.queryByTestId('agent-edit-page')).not.toBeInTheDocument()
-    expect(refetchSpy).toHaveBeenCalledTimes(1)
-    expect(navigateMock).toHaveBeenCalledWith({ to: '/app/agents', replace: true })
+      await waitFor(() => {
+        expect(screen.getByTestId('resource-grid')).toBeInTheDocument()
+      })
+      expect(screen.queryByTestId('agent-edit-page')).not.toBeInTheDocument()
+      expect(refetchSpy).toHaveBeenCalledTimes(1)
+      expect(navigateMock).toHaveBeenCalledWith({ to: '/app/agents', replace: true })
+    } finally {
+      window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+    }
   })
 
   it('returns to the list and refetches after prompt creation succeeds', async () => {
