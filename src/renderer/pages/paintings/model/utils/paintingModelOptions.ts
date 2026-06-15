@@ -1,12 +1,24 @@
 import { dataApiService } from '@data/DataApiService'
-import { ENDPOINT_TYPE, type Model, MODEL_CAPABILITY, parseUniqueModelId } from '@shared/data/types/model'
+import {
+  ENDPOINT_TYPE,
+  isUniqueModelId,
+  type Model,
+  MODEL_CAPABILITY,
+  parseUniqueModelId
+} from '@shared/data/types/model'
 
 import type { ModelOption } from '../types/paintingModel'
 
+function getModelOptionValue(model: Model): string {
+  return model.apiModelId || (isUniqueModelId(model.id) ? parseUniqueModelId(model.id).modelId : model.id)
+}
+
 export function createModelOptionFromModel(model: Model): ModelOption {
+  const modelId = getModelOptionValue(model)
+
   return {
-    label: model.name || model.apiModelId || parseUniqueModelId(model.id).modelId,
-    value: model.apiModelId || parseUniqueModelId(model.id).modelId,
+    label: model.name || modelId,
+    value: modelId,
     group: model.group,
     isEnabled: model.isEnabled,
     raw: model

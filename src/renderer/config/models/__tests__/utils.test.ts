@@ -9,6 +9,7 @@ import { isQwenMTModel } from '../qwen'
 import {
   agentModelFilter,
   getModelSupportedVerbosity,
+  getRawModelId,
   groupQwenModels,
   isAnthropicModel,
   isClaude46SeriesModel,
@@ -110,6 +111,18 @@ describe('model utils', () => {
     generateImageMock.mockReturnValue(true)
     reasoningMock.mockReturnValue(false)
     openAIWebSearchOnlyMock.mockReturnValue(false)
+  })
+
+  describe('getRawModelId', () => {
+    it('falls back to raw legacy ids instead of throwing', () => {
+      const model = {
+        ...createModel({ id: 'placeholder' }),
+        id: 'legacy-model-id',
+        apiModelId: undefined
+      } as unknown as Model
+
+      expect(getRawModelId(model)).toBe('legacy-model-id')
+    })
   })
 
   describe('Verbosity support', () => {

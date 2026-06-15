@@ -1,6 +1,6 @@
 import { getLowerBaseModelName } from '@renderer/utils'
 import type { Model } from '@shared/data/types/model'
-import { parseUniqueModelId } from '@shared/data/types/model'
+import { isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
 import type { OpenAIVerbosity, ValidOpenAIVerbosity } from '@shared/types/aiSdk'
 import {
   GEMINI_FLASH_MODEL_REGEX as SHARED_GEMINI_FLASH_MODEL_REGEX,
@@ -41,7 +41,8 @@ export const GEMINI_FLASH_MODEL_REGEX = SHARED_GEMINI_FLASH_MODEL_REGEX
 export const NOT_SUPPORTED_REGEX = /(?:^tts|whisper|speech)/i
 
 /** Raw model id (provider prefix stripped) for renderer-local string ops. */
-export const getRawModelId = (model: Model): string => model.apiModelId ?? parseUniqueModelId(model.id).modelId
+export const getRawModelId = (model: Model): string =>
+  model.apiModelId ?? (isUniqueModelId(model.id) ? parseUniqueModelId(model.id).modelId : model.id)
 
 // ── Renderer-only utility: id vs name fallback pattern ─────────────────────
 // Legacy v1 data sometimes stored the real id under `name`. v2 ids are
