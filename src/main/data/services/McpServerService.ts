@@ -33,8 +33,12 @@ function rowToMcpServer(row: typeof mcpServerTable.$inferSelect): McpServer {
 }
 
 export class McpServerService {
+  private get dbService() {
+    return application.get('DbService')
+  }
+
   private get db() {
-    return application.get('DbService').getDb()
+    return this.dbService.getDb()
   }
 
   /**
@@ -87,14 +91,16 @@ export class McpServerService {
 
     const { sortOrder, isActive, ...rest } = dto
 
-    const [row] = await this.db
-      .insert(mcpServerTable)
-      .values({
-        ...rest,
-        sortOrder: sortOrder ?? 0,
-        isActive: isActive ?? false
-      })
-      .returning()
+    const [row] = await this.dbService.withWriteTx((tx) =>
+      tx
+        .insert(mcpServerTable)
+        .values({
+          ...rest,
+          sortOrder: sortOrder ?? 0,
+          isActive: isActive ?? false
+        })
+        .returning()
+    )
 
     logger.info('Created MCP server', { id: row.id, name: row.name })
 
@@ -105,8 +111,6 @@ export class McpServerService {
    * Update an existing MCP server
    */
   async update(id: string, dto: UpdateMcpServerDto): Promise<McpServer> {
-    await this.getById(id)
-
     if (dto.name !== undefined) {
       this.validateName(dto.name)
     }
@@ -115,7 +119,13 @@ export class McpServerService {
       typeof mcpServerTable.$inferInsert
     >
 
-    const [row] = await this.db.update(mcpServerTable).set(updates).where(eq(mcpServerTable.id, id)).returning()
+    const [row] = await this.dbService.withWriteTx((tx) =>
+      tx.update(mcpServerTable).set(updates).where(eq(mcpServerTable.id, id)).returning()
+    )
+
+    if (!row) {
+      throw DataApiErrorFactory.notFound('McpServer', id)
+    }
 
     logger.info('Updated MCP server', { id, changes: Object.keys(dto) })
 
@@ -139,9 +149,13 @@ export class McpServerService {
    * Delete an MCP server
    */
   async delete(id: string): Promise<void> {
-    await this.getById(id)
+    const [row] = await this.dbService.withWriteTx((tx) =>
+      tx.delete(mcpServerTable).where(eq(mcpServerTable.id, id)).returning({ id: mcpServerTable.id })
+    )
 
-    await this.db.delete(mcpServerTable).where(eq(mcpServerTable.id, id))
+    if (!row) {
+      throw DataApiErrorFactory.notFound('McpServer', id)
+    }
 
     logger.info('Deleted MCP server', { id })
   }
@@ -150,7 +164,9 @@ export class McpServerService {
    * Reorder MCP servers by updating sortOrder based on ordered IDs
    */
   async reorder(orderedIds: string[]): Promise<void> {
-    await this.db.transaction(async (tx) => {
+    if (orderedIds.length === 0) return
+
+    await this.dbService.withWriteTx(async (tx) => {
       for (let i = 0; i < orderedIds.length; i++) {
         await tx.update(mcpServerTable).set({ sortOrder: i }).where(eq(mcpServerTable.id, orderedIds[i]))
       }

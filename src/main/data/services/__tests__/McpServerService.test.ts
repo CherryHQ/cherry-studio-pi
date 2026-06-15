@@ -2,11 +2,16 @@ import { mcpServerTable } from '@data/db/schemas/mcpServer'
 import { McpServerService, mcpServerService } from '@data/services/McpServerService'
 import { DataApiError, ErrorCode } from '@shared/data/api'
 import { setupTestDatabase } from '@test-helpers/db'
+import { MockMainDbServiceExport } from '@test-mocks/main/DbService'
 import { eq } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 describe('McpServerService', () => {
   const dbh = setupTestDatabase()
+
+  beforeEach(() => {
+    MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+  })
 
   async function seedServer(overrides: Partial<typeof mcpServerTable.$inferInsert> = {}) {
     const values: typeof mcpServerTable.$inferInsert = {
@@ -95,6 +100,12 @@ describe('McpServerService', () => {
     it('should throw validation error when name is whitespace only', async () => {
       await expect(mcpServerService.create({ name: '   ' })).rejects.toThrow(DataApiError)
     })
+
+    it('should route server creation through the serialized write transaction helper', async () => {
+      await mcpServerService.create({ name: 'serialized-server', command: 'npx' })
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('update', () => {
@@ -131,6 +142,14 @@ describe('McpServerService', () => {
         code: ErrorCode.VALIDATION_ERROR
       })
     })
+
+    it('should route server updates through the serialized write transaction helper', async () => {
+      await seedServer()
+
+      await mcpServerService.update('srv-1', { name: 'serialized-update' })
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('delete', () => {
@@ -147,6 +166,14 @@ describe('McpServerService', () => {
       await expect(mcpServerService.delete('non-existent')).rejects.toMatchObject({
         code: ErrorCode.NOT_FOUND
       })
+    })
+
+    it('should route server deletion through the serialized write transaction helper', async () => {
+      await seedServer()
+
+      await mcpServerService.delete('srv-1')
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -190,6 +217,16 @@ describe('McpServerService', () => {
 
     it('should handle empty array', async () => {
       await expect(mcpServerService.reorder([])).resolves.toBeUndefined()
+      expect(MockMainDbServiceExport.dbService.withWriteTx).not.toHaveBeenCalled()
+    })
+
+    it('should route reorder through the serialized write transaction helper', async () => {
+      await seedServer({ id: 'srv-a', name: 'A', sortOrder: 0 })
+      await seedServer({ id: 'srv-b', name: 'B', sortOrder: 0 })
+
+      await mcpServerService.reorder(['srv-b', 'srv-a'])
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
   })
 })
