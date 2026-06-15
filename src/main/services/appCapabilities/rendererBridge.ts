@@ -10,11 +10,6 @@ type RendererBridgeProbeResult = {
   error?: unknown
 }
 
-type RendererBridgeCallResult<T> =
-  | { status: 'success'; value: T }
-  | { status: 'miss'; error?: unknown }
-  | { status: 'error'; error: unknown }
-
 const cachedBridgeWindows = new Map<string, BrowserWindow>()
 
 export function getBridgeErrorMessage(error: unknown) {
@@ -47,37 +42,27 @@ async function waitForCachedBridgeGrace(): Promise<null> {
   })
 }
 
-function isUsableRendererWindow(browserWindow: BrowserWindow): boolean {
-  return !browserWindow.isDestroyed() && !browserWindow.webContents.isDestroyed?.()
-}
-
-async function tryCallRendererBridgeWindow<T>(
+async function probeRendererBridgeWindow(
   browserWindow: BrowserWindow,
   bridgeName: string,
-  callScript: string,
   options: {
     checkTimeoutMs?: number
-    timeoutMs?: number
-    timeoutMessage?: string
   }
-): Promise<RendererBridgeCallResult<T>> {
+): Promise<RendererBridgeProbeResult> {
   try {
     const hasBridge = await withRendererBridgeTimeout(
       browserWindow.webContents.executeJavaScript(`typeof window[${bridgeName}] === 'function'`) as Promise<boolean>,
       options.checkTimeoutMs ?? DEFAULT_RENDERER_BRIDGE_CHECK_TIMEOUT_MS,
       'Timed out waiting for the main window to respond'
     )
-    if (!hasBridge) return { status: 'miss' }
-
-    const value = await withRendererBridgeTimeout(
-      browserWindow.webContents.executeJavaScript(callScript),
-      options.timeoutMs ?? DEFAULT_RENDERER_BRIDGE_CALL_TIMEOUT_MS,
-      options.timeoutMessage ?? 'Timed out calling the main window bridge'
-    )
-    return { status: 'success', value: value as T }
+    return { hasBridge }
   } catch (error) {
-    return { status: 'error', error }
+    return { hasBridge: false, error }
   }
+}
+
+function isUsableRendererWindow(browserWindow: BrowserWindow): boolean {
+  return !browserWindow.isDestroyed() && !browserWindow.webContents.isDestroyed?.()
 }
 
 export async function callRendererBridge<T>(
@@ -97,7 +82,7 @@ export async function callRendererBridge<T>(
   const cachedWindow = cachedBridgeWindows.get(bridgeKey)
   let cachedProbe: Promise<{
     browserWindow: BrowserWindow
-    result: RendererBridgeCallResult<T>
+    result: RendererBridgeProbeResult
   }> | null = null
 
   if (cachedWindow && !browserWindows.includes(cachedWindow)) {
@@ -105,19 +90,28 @@ export async function callRendererBridge<T>(
   }
 
   if (cachedWindow && browserWindows.includes(cachedWindow)) {
-    cachedProbe = tryCallRendererBridgeWindow<T>(cachedWindow, bridgeName, callScript, options).then((result) => ({
+    cachedProbe = probeRendererBridgeWindow(cachedWindow, bridgeName, options).then((result) => ({
       browserWindow: cachedWindow,
       result
     }))
     const cachedFastResult = await Promise.race([cachedProbe, waitForCachedBridgeGrace()])
     if (cachedFastResult) {
       cachedProbe = null
-      if (cachedFastResult.result.status === 'success') {
-        return cachedFastResult.result.value
-      }
-
-      cachedBridgeWindows.delete(bridgeKey)
-      if (cachedFastResult.result.status === 'error') {
+      if (cachedFastResult.result.hasBridge) {
+        try {
+          const value = await withRendererBridgeTimeout(
+            cachedFastResult.browserWindow.webContents.executeJavaScript(callScript),
+            options.timeoutMs ?? DEFAULT_RENDERER_BRIDGE_CALL_TIMEOUT_MS,
+            options.timeoutMessage ?? 'Timed out calling the main window bridge'
+          )
+          cachedBridgeWindows.set(bridgeKey, cachedFastResult.browserWindow)
+          return value as T
+        } catch (error) {
+          cachedBridgeWindows.delete(bridgeKey)
+          lastProbeError = error
+        }
+      } else {
+        cachedBridgeWindows.delete(bridgeKey)
         lastProbeError = cachedFastResult.result.error
       }
     }
@@ -151,15 +145,7 @@ export async function callRendererBridge<T>(
     pendingProbes.add({
       type: 'cached',
       browserWindow: cachedWindow as BrowserWindow,
-      promise: cachedProbe.then(({ result }) => {
-        if (result.status === 'success') {
-          return { hasBridge: true, value: result.value } as RendererBridgeProbeResult & { value: T }
-        }
-        if (result.status === 'error') {
-          return { hasBridge: false, error: result.error }
-        }
-        return { hasBridge: false, error: result.error }
-      })
+      promise: cachedProbe.then(({ result }) => result)
     })
   }
   let lastCallError: unknown
@@ -171,10 +157,6 @@ export async function callRendererBridge<T>(
 
     if (result.error) {
       lastProbeError = result.error
-    }
-    if ('value' in result) {
-      cachedBridgeWindows.set(bridgeKey, probe.browserWindow)
-      return result.value as T
     }
     if (!result.hasBridge) continue
 

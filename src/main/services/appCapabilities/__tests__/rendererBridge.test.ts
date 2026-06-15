@@ -22,6 +22,16 @@ function createWindow(executeJavaScript: ReturnType<typeof vi.fn>) {
   }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+  return { promise, resolve, reject }
+}
+
 describe('app capability renderer bridge', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -138,6 +148,56 @@ describe('app capability renderer bridge', () => {
         'typeof window["test.cached.fallback"] === \'function\''
       )
       expect(otherWindow.webContents.executeJavaScript).toHaveBeenCalledWith('window["test.cached.fallback"]()')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not execute a slow cached bridge call after another window handles the request', async () => {
+    vi.useFakeTimers()
+    try {
+      const cachedWindow = createWindow(
+        vi.fn(async (script: string) => {
+          if (script.includes('typeof')) return true
+          return 'cached'
+        })
+      )
+      const otherWindow = createWindow(
+        vi.fn(async (script: string) => {
+          if (script.includes('typeof')) return true
+          return 'other'
+        })
+      )
+      mocks.getAllWindows.mockReturnValue([cachedWindow, otherWindow])
+
+      await expect(callRendererBridge('test.cached.no-duplicate', { write: true })).resolves.toBe('cached')
+
+      const cachedProbe = deferred<boolean>()
+      cachedWindow.webContents.executeJavaScript.mockClear()
+      otherWindow.webContents.executeJavaScript.mockClear()
+      cachedWindow.webContents.executeJavaScript.mockImplementation((script: string) => {
+        if (script.includes('typeof')) return cachedProbe.promise
+        return Promise.resolve('cached-side-effect')
+      })
+
+      const result = callRendererBridge('test.cached.no-duplicate', { write: true })
+      await vi.advanceTimersByTimeAsync(51)
+
+      await expect(result).resolves.toBe('other')
+
+      cachedProbe.resolve(true)
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(cachedWindow.webContents.executeJavaScript).toHaveBeenCalledWith(
+        'typeof window["test.cached.no-duplicate"] === \'function\''
+      )
+      expect(cachedWindow.webContents.executeJavaScript).not.toHaveBeenCalledWith(
+        'window["test.cached.no-duplicate"]({"write":true})'
+      )
+      expect(otherWindow.webContents.executeJavaScript).toHaveBeenCalledWith(
+        'window["test.cached.no-duplicate"]({"write":true})'
+      )
     } finally {
       vi.useRealTimers()
     }
