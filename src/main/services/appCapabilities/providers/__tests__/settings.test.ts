@@ -141,9 +141,7 @@ describe('settings app capabilities', () => {
         value: 24444
       }
     })
-    expect(mocks.browserWindows[0].webContents.executeJavaScript).toHaveBeenCalledWith(
-      `window[${JSON.stringify(RENDERER_GET_SETTINGS_BRIDGE)}]()`
-    )
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
     expect(mocks.preferenceService.get).toHaveBeenCalledWith('feature.api_gateway.port')
   })
 

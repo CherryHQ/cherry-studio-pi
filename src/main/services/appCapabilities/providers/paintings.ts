@@ -1,7 +1,7 @@
 import { readRendererStoreValue } from '../rendererBridge'
 import type { AppCapabilityDefinition } from '../types'
 import { navigateApp, okResult, sanitizeForAgent } from '../utils'
-import { persistSettingValue, readSettingsForAgent } from './settings'
+import { persistSettingValue, readSettingValueForAgent } from './settings'
 
 export const PAINTING_NAMESPACES = [
   'siliconflow_paintings',
@@ -149,8 +149,8 @@ export function listPaintingHistory(paintings: any, input: any) {
 }
 
 async function readDefaultPaintingProvider() {
-  const settings = await readSettingsForAgent()
-  return typeof settings?.defaultPaintingProvider === 'string' ? settings.defaultPaintingProvider.trim() : ''
+  const provider = await readSettingValueForAgent('defaultPaintingProvider')
+  return typeof provider === 'string' ? provider.trim() : ''
 }
 
 export function createPaintingCapabilities(): AppCapabilityDefinition[] {

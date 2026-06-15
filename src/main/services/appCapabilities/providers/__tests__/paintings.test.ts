@@ -124,6 +124,7 @@ describe('painting app capabilities', () => {
       namespaces: expect.arrayContaining(['openai_image_generate'])
     })
     expect(mocks.preferenceService.get).toHaveBeenCalledWith('feature.paintings.default_provider')
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
 
   it('lists painting history as compact paged summaries by default', async () => {

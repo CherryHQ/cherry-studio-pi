@@ -8,6 +8,8 @@ import type { AppCapabilityDefinition } from '../types'
 import { navigateApp, okResult, pickPath, sanitizeForAgent } from '../utils'
 
 const logger = loggerService.withContext('AppCapability:Settings')
+const SETTINGS_RENDERER_BRIDGE_CHECK_TIMEOUT_MS = 800
+const SETTINGS_RENDERER_BRIDGE_CALL_TIMEOUT_MS = 1_500
 
 export const SETTINGS_SECTIONS = [
   ['provider', 'Provider', '/settings/provider'],
@@ -196,6 +198,8 @@ export async function readSettingsForAgent() {
   let settings: Record<string, any> = {}
   try {
     settings = await callRendererBridge<Record<string, any>>(RENDERER_GET_SETTINGS_BRIDGE, undefined, {
+      checkTimeoutMs: SETTINGS_RENDERER_BRIDGE_CHECK_TIMEOUT_MS,
+      timeoutMs: SETTINGS_RENDERER_BRIDGE_CALL_TIMEOUT_MS,
       timeoutMessage: 'Timed out reading settings'
     })
   } catch {
@@ -217,6 +221,31 @@ export async function readSettingsForAgent() {
 
 export function isSupportedSettingPath(keyPath: string) {
   return Boolean(SETTINGS_SETTERS[keyPath] || PREFERENCE_SETTING_PATHS[keyPath])
+}
+
+function readPreferenceSettingValue(keyPath: string): { found: true; value: unknown } | { found: false } {
+  const preferenceKey = PREFERENCE_SETTING_PATHS[keyPath]
+  if (!preferenceKey) return { found: false }
+
+  try {
+    const value = application.get('PreferenceService').get(preferenceKey)
+    return typeof value === 'undefined' ? { found: false } : { found: true, value }
+  } catch (error) {
+    logger.warn('Failed to read preference-backed setting for app capability', {
+      path: keyPath,
+      preferenceKey,
+      error: getBridgeErrorMessage(error)
+    })
+    return { found: false }
+  }
+}
+
+export async function readSettingValueForAgent(keyPath: string) {
+  const preferenceValue = readPreferenceSettingValue(keyPath)
+  if (preferenceValue.found) return preferenceValue.value
+
+  const settings = await readSettingsForAgent()
+  return pickPath(settings, keyPath)
 }
 
 export async function persistSettingValue(keyPath: string, value: unknown) {
@@ -296,10 +325,9 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any) => {
         const keyPath = String(input?.path ?? '').trim()
         if (!keyPath) throw new Error('Setting path is required')
-        const settings = await readSettingsForAgent()
         return okResult('Setting value read', {
           path: keyPath,
-          value: sanitizeSettingValueForAgent(keyPath, pickPath(settings, keyPath))
+          value: sanitizeSettingValueForAgent(keyPath, await readSettingValueForAgent(keyPath))
         })
       }
     },
