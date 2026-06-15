@@ -3,7 +3,6 @@ import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import type { QuickPanelTriggerInfo } from '@renderer/components/QuickPanel'
 import { QuickPanelReservedSymbol, useQuickPanel } from '@renderer/components/QuickPanel'
-import { isGenerateImageModel, isVisionModel } from '@renderer/config/models'
 import { isSoulModeEnabled } from '@renderer/hooks/agents/agentConfiguration'
 import { useAgent } from '@renderer/hooks/agents/useAgent'
 import { useSession } from '@renderer/hooks/agents/useSession'
@@ -28,7 +27,7 @@ import type { FileMetadata } from '@renderer/types'
 import { buildAgentSessionTopicId } from '@renderer/utils/agentSession'
 import { getSendMessageShortcutLabel } from '@renderer/utils/input'
 import { getBuiltinSlashCommands } from '@shared/ai/agentSlashCommands'
-import { documentExts, imageExts, textExts } from '@shared/config/constant'
+import { allFilesExt } from '@shared/config/constant'
 import { DEFAULT_ASSISTANT_SETTINGS } from '@shared/data/types/assistant'
 import type { Model } from '@shared/data/types/model'
 import type { FC } from 'react'
@@ -45,6 +44,7 @@ import { restoreTextareaCursor } from './AgentSessionInputbarCursor'
 import { resolveAgentSessionModel } from './agentSessionModel'
 
 const logger = loggerService.withContext('AgentSessionInputbar')
+const AGENT_SESSION_SUPPORTED_EXTS = [allFilesExt]
 
 type Props = {
   agentId: string
@@ -224,23 +224,11 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
   const { setTimeoutTimer } = useTimer()
   const sessionTopicId = buildAgentSessionTopicId(sessionId)
 
-  // Calculate vision and image generation support
-  const isVisionAssistant = useMemo(() => (model ? isVisionModel(model) : false), [model])
-  const isGenerateImageAssistant = useMemo(() => (model ? isGenerateImageModel(model) : false), [model])
-
-  // Agent sessions don't support model mentions yet, so we only check the assistant's model
-  const canAddImageFile = useMemo(() => {
-    return isVisionAssistant || isGenerateImageAssistant
-  }, [isVisionAssistant, isGenerateImageAssistant])
-
-  const canAddTextFile = useMemo(() => {
-    return isVisionAssistant || (!isVisionAssistant && !isGenerateImageAssistant)
-  }, [isVisionAssistant, isGenerateImageAssistant])
-
-  // Update the couldAddImageFile state when the model changes
+  // Agent sessions pass file paths to the runtime and let the agent choose tools
+  // to inspect them, so attachments must not be gated by model modality.
   useEffect(() => {
-    setCouldAddImageFile(canAddImageFile)
-  }, [canAddImageFile, setCouldAddImageFile])
+    setCouldAddImageFile(true)
+  }, [setCouldAddImageFile])
 
   const syncExpandedState = useCallback(
     (expanded: boolean) => {
@@ -425,22 +413,6 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
     }
   }, [focusTextarea])
 
-  const supportedExts = useMemo(() => {
-    if (canAddImageFile && canAddTextFile) {
-      return [...imageExts, ...documentExts, ...textExts]
-    }
-
-    if (canAddImageFile) {
-      return [...imageExts]
-    }
-
-    if (canAddTextFile) {
-      return [...documentExts, ...textExts]
-    }
-
-    return []
-  }, [canAddImageFile, canAddTextFile])
-
   const toolsSession = useMemo(() => {
     if (!sessionData) return undefined
     return { ...sessionData, reasoningEffort, onReasoningEffortChange: setReasoningEffort }
@@ -476,7 +448,7 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
       resizeTextArea={resizeTextArea}
       focusTextarea={focusTextarea}
       placeholder={placeholderText}
-      supportedExts={supportedExts}
+      supportedExts={AGENT_SESSION_SUPPORTED_EXTS}
       onPause={abortAgentSession}
       isLoading={isStreaming}
       primaryActionMode={isStreaming ? 'pause' : 'send'}
