@@ -191,13 +191,17 @@ const MessageMenubar: FC<Props> = (props) => {
   const mainTextContent = useMemo(() => getTextFromParts(messageParts), [messageParts])
 
   const onCopy = useCallback(
-    (e: React.MouseEvent) => {
+    async (e: React.MouseEvent) => {
       e.stopPropagation()
 
-      void navigator.clipboard.writeText(removeTrailingDoubleSpaces(mainTextContent.trimStart()))
-
-      window.toast.success(t('message.copied'))
-      setCopied(true)
+      try {
+        await navigator.clipboard.writeText(removeTrailingDoubleSpaces(mainTextContent.trimStart()))
+        window.toast.success(t('message.copied'))
+        setCopied(true)
+      } catch (error) {
+        logger.error('Failed to copy message text', error as Error)
+        window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+      }
     },
     [mainTextContent, setCopied, t]
   )
@@ -354,11 +358,16 @@ const MessageMenubar: FC<Props> = (props) => {
             label: t('chat.topics.copy.image'),
             key: 'img',
             onClick: async () => {
-              await captureScrollableAsBlob(messageContainerRef, async (blob) => {
-                if (blob) {
-                  await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-                }
-              })
+              try {
+                await captureScrollableAsBlob(messageContainerRef, async (blob) => {
+                  if (blob) {
+                    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+                  }
+                })
+              } catch (error) {
+                logger.error('Failed to copy message image', error as Error)
+                window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+              }
             }
           },
           exportMenuOptions.image && {
@@ -728,15 +737,20 @@ const buttonRenderers: Record<MessageMenubarButtonId, MessageMenubarButtonRender
             {
               label: '📋 ' + t('common.copy'),
               key: 'translate-copy',
-              onClick: () => {
+              onClick: async () => {
                 const translationContent = getTranslationFromParts(messageParts)
                   .map((item) => item.content || '')
                   .join('\n\n')
                   .trim()
 
                 if (translationContent) {
-                  void navigator.clipboard.writeText(translationContent)
-                  window.toast.success(t('translate.copied'))
+                  try {
+                    await navigator.clipboard.writeText(translationContent)
+                    window.toast.success(t('translate.copied'))
+                  } catch (error) {
+                    logger.error('Failed to copy translated message', error as Error)
+                    window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+                  }
                 } else {
                   window.toast.warning(t('translate.empty'))
                 }
