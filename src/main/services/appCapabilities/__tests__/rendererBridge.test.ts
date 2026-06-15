@@ -78,4 +78,33 @@ describe('app capability renderer bridge', () => {
     expect(failingWindow.webContents.executeJavaScript).toHaveBeenCalledWith('window["test.bridge"]()')
     expect(responsiveWindow.webContents.executeJavaScript).toHaveBeenCalledWith('window["test.bridge"]()')
   })
+
+  it('reuses the last successful bridge window on repeated calls', async () => {
+    const cachedWindow = createWindow(
+      vi.fn(async (script: string) => {
+        if (script.includes('typeof')) return true
+        return 'called'
+      })
+    )
+    const otherWindow = createWindow(
+      vi.fn(async (script: string) => {
+        if (script.includes('typeof')) return true
+        return 'other'
+      })
+    )
+    mocks.getAllWindows.mockReturnValue([cachedWindow, otherWindow])
+
+    await expect(callRendererBridge('test.cached')).resolves.toBe('called')
+
+    cachedWindow.webContents.executeJavaScript.mockClear()
+    otherWindow.webContents.executeJavaScript.mockClear()
+
+    await expect(callRendererBridge('test.cached')).resolves.toBe('called')
+
+    expect(cachedWindow.webContents.executeJavaScript).toHaveBeenCalledWith(
+      'typeof window["test.cached"] === \'function\''
+    )
+    expect(cachedWindow.webContents.executeJavaScript).toHaveBeenCalledWith('window["test.cached"]()')
+    expect(otherWindow.webContents.executeJavaScript).not.toHaveBeenCalled()
+  })
 })
