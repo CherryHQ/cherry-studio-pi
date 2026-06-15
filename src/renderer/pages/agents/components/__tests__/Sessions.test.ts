@@ -17,6 +17,12 @@ describe('resolveCreateSessionAgentId', () => {
     expect(resolveCreateSessionAgentId(sessions, 'missing-session', agents)).toBe('agent-1')
   })
 
+  it('skips orphan sessions when selecting the default agent for a new session', () => {
+    expect(resolveCreateSessionAgentId([{ id: 'orphan-session', agentId: null }, ...sessions], null, agents)).toBe(
+      'agent-1'
+    )
+  })
+
   it('falls back to the first agent when no sessions exist yet', () => {
     expect(resolveCreateSessionAgentId([], null, agents)).toBe('agent-a')
   })

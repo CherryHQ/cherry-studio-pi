@@ -2,6 +2,10 @@ import { useQuery } from '@data/hooks/useDataApi'
 import { useCache } from '@renderer/data/hooks/useCache'
 import { useEffect } from 'react'
 
+import { resolveFallbackActiveSessionId } from './agentSessionSelection'
+
+const FALLBACK_SESSION_SCAN_LIMIT = 200
+
 /**
  * On startup, if no active session is set, pick the most-recently-ordered one
  * and seed `agent.active_session_id`. The list endpoint already returns
@@ -27,23 +31,38 @@ export const useAgentSessionInitializer = () => {
     }
   })
 
-  const needsFallbackSession = !activeSessionId || !!activeSessionError
+  const activeSessionMissingAgent = Boolean(activeSessionId && activeSession && !activeSession.agentId)
+  const needsFallbackSession = !activeSessionId || !!activeSessionError || activeSessionMissingAgent
   const { data } = useQuery('/agent-sessions', {
-    query: { limit: 1 },
+    query: { limit: FALLBACK_SESSION_SCAN_LIMIT },
     enabled: needsFallbackSession
   })
 
   useEffect(() => {
-    if (activeSessionId && (activeSession || isActiveSessionLoading) && !activeSessionError) return
+    if (
+      activeSessionId &&
+      !activeSessionMissingAgent &&
+      (activeSession || isActiveSessionLoading) &&
+      !activeSessionError
+    )
+      return
 
-    const first = data?.items?.[0]?.id
-    if (first && first !== activeSessionId) {
-      setActiveSessionId(first)
+    const fallbackId = resolveFallbackActiveSessionId(data?.items ?? [], { allowOrphan: !activeSessionMissingAgent })
+    if (fallbackId && fallbackId !== activeSessionId) {
+      setActiveSessionId(fallbackId)
       return
     }
 
-    if (!first && activeSessionId && activeSessionError) {
+    if (!fallbackId && activeSessionId && activeSessionError) {
       setActiveSessionId(null)
     }
-  }, [activeSession, activeSessionError, activeSessionId, data, isActiveSessionLoading, setActiveSessionId])
+  }, [
+    activeSession,
+    activeSessionError,
+    activeSessionId,
+    activeSessionMissingAgent,
+    data,
+    isActiveSessionLoading,
+    setActiveSessionId
+  ])
 }

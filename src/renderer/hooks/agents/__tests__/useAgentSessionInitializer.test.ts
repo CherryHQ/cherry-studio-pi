@@ -18,7 +18,7 @@ const queryResult = (overrides: Record<string, unknown> = {}) => ({
   ...overrides
 })
 
-const sessionsResult = (items: Array<{ id: string }> = []) =>
+const sessionsResult = (items: Array<{ id: string; agentId?: string | null }> = []) =>
   queryResult({
     data: { items, total: items.length, page: 1 }
   })
@@ -32,7 +32,7 @@ describe('useAgentSessionInitializer', () => {
   it('sets the first available session when no active session is cached', async () => {
     mockUseQuery.mockImplementation((path, options: any) => {
       if (options?.enabled === false) return queryResult()
-      if (path === '/agent-sessions') return sessionsResult([{ id: 'session-1' }])
+      if (path === '/agent-sessions') return sessionsResult([{ id: 'session-1', agentId: 'agent-1' }])
       return queryResult()
     })
 
@@ -50,7 +50,7 @@ describe('useAgentSessionInitializer', () => {
       if (path === '/agent-sessions/:sessionId') {
         return queryResult({ error: new Error('not found') })
       }
-      if (path === '/agent-sessions') return sessionsResult([{ id: 'session-1' }])
+      if (path === '/agent-sessions') return sessionsResult([{ id: 'session-1', agentId: 'agent-1' }])
       return queryResult()
     })
 
@@ -76,6 +76,49 @@ describe('useAgentSessionInitializer', () => {
 
     await waitFor(() => {
       expect(MockUseCacheUtils.getCacheValue('agent.active_session_id')).toBeNull()
+    })
+  })
+
+  it('replaces an orphan active session with the first session that still has an agent', async () => {
+    MockUseCacheUtils.setCacheValue('agent.active_session_id', 'orphan-session')
+    mockUseQuery.mockImplementation((path, options: any) => {
+      if (options?.enabled === false) return queryResult()
+      if (path === '/agent-sessions/:sessionId') {
+        return queryResult({ data: { id: 'orphan-session', agentId: null } })
+      }
+      if (path === '/agent-sessions') {
+        return sessionsResult([
+          { id: 'orphan-session', agentId: null },
+          { id: 'usable-session', agentId: 'agent-1' }
+        ])
+      }
+      return queryResult()
+    })
+
+    renderHook(() => useAgentSessionInitializer())
+
+    await waitFor(() => {
+      expect(MockUseCacheUtils.getCacheValue('agent.active_session_id')).toBe('usable-session')
+    })
+  })
+
+  it('keeps an orphan active session when no usable fallback exists', async () => {
+    MockUseCacheUtils.setCacheValue('agent.active_session_id', 'orphan-session')
+    mockUseQuery.mockImplementation((path, options: any) => {
+      if (options?.enabled === false) return queryResult()
+      if (path === '/agent-sessions/:sessionId') {
+        return queryResult({ data: { id: 'orphan-session', agentId: null } })
+      }
+      if (path === '/agent-sessions') {
+        return sessionsResult([{ id: 'orphan-session', agentId: null }])
+      }
+      return queryResult()
+    })
+
+    renderHook(() => useAgentSessionInitializer())
+
+    await waitFor(() => {
+      expect(MockUseCacheUtils.getCacheValue('agent.active_session_id')).toBe('orphan-session')
     })
   })
 })

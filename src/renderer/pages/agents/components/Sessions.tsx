@@ -3,6 +3,7 @@ import AddButton from '@renderer/components/AddButton'
 import DraggableVirtualList, { type DraggableVirtualListRef } from '@renderer/components/DraggableList/VirtualList'
 import { useCache } from '@renderer/data/hooks/useCache'
 import { useQuery } from '@renderer/data/hooks/useDataApi'
+import { resolveFallbackActiveSessionId } from '@renderer/hooks/agents/agentSessionSelection'
 import { useAgents } from '@renderer/hooks/agents/useAgent'
 import { useCreateDefaultSession } from '@renderer/hooks/agents/useCreateDefaultSession'
 import { useSessions } from '@renderer/hooks/agents/useSession'
@@ -30,7 +31,8 @@ export function resolveCreateSessionAgentId(
   agents: readonly Pick<AgentEntity, 'id'>[]
 ): string | null {
   const activeAgentId = sessions.find((session) => session.id === activeSessionId)?.agentId
-  return activeAgentId ?? sessions[0]?.agentId ?? agents[0]?.id ?? null
+  const firstUsableSessionAgentId = sessions.find((session) => Boolean(session.agentId))?.agentId
+  return activeAgentId ?? firstUsableSessionAgentId ?? agents[0]?.id ?? null
 }
 
 const Sessions = ({ onSelectItem }: SessionsProps) => {
@@ -109,8 +111,11 @@ const Sessions = ({ onSelectItem }: SessionsProps) => {
     async (id: string) => {
       const success = await deleteSession(id)
       if (success && activeSessionId === id) {
-        const remaining = sessions.find((s) => s.id !== id)
-        setActiveSessionId(remaining?.id ?? null)
+        const remainingSessionId = resolveFallbackActiveSessionId(
+          sessions.filter((session) => session.id !== id),
+          { allowOrphan: true }
+        )
+        setActiveSessionId(remainingSessionId)
       }
     },
     [activeSessionId, deleteSession, sessions, setActiveSessionId]
@@ -121,7 +126,7 @@ const Sessions = ({ onSelectItem }: SessionsProps) => {
   // via a direct fetch — whichever runs first wins, the other is a no-op.
   useEffect(() => {
     if (!isLoading && sessions.length > 0 && !activeSessionId) {
-      setActiveSessionId(sessions[0].id)
+      setActiveSessionId(resolveFallbackActiveSessionId(sessions))
     }
   }, [isLoading, sessions, activeSessionId, setActiveSessionId])
 
