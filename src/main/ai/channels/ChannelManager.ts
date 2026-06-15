@@ -23,6 +23,13 @@ type AdapterFactory<T extends AgentChannelType = AgentChannelType> = (
 ) => ChannelAdapter
 const adapterFactories = new Map<AgentChannelType, AdapterFactory>()
 
+type QrWaiter = {
+  resolve: (url: string) => void
+  reject: (error: Error) => void
+  timer: ReturnType<typeof setTimeout>
+  promise: Promise<string>
+}
+
 export function registerAdapterFactory<T extends AgentChannelType>(type: T, factory: AdapterFactory<T>): void {
   // A factory is always stored under, and looked up by, its own channel type
   // (see `connectChannelFromRow`), so the row handed to it is guaranteed to be
@@ -56,10 +63,7 @@ async function ensureAdapterLoaded(type: AgentChannelType): Promise<void> {
 @DependsOn(['WindowManager'])
 export class ChannelManager extends BaseService {
   private readonly adapters = new Map<string, ChannelAdapter>() // key: `${agentId}:${channelId}`
-  private readonly qrWaiters = new Map<
-    string,
-    { resolve: (url: string) => void; timer: ReturnType<typeof setTimeout> }
-  >()
+  private readonly qrWaiters = new Map<string, QrWaiter>()
   private readonly channelLogs = new ChannelLogBuffer()
   private readonly channelStatuses = new Map<string, ChannelStatusEvent>()
 
@@ -95,6 +99,7 @@ export class ChannelManager extends BaseService {
 
   async stop(): Promise<void> {
     logger.info('Stopping channel manager')
+    this.rejectQrWaiters('Channel manager stopped before QR code was received')
     const disconnects = Array.from(this.adapters.values()).map((adapter) =>
       adapter.disconnect().catch((err) => {
         logger.warn('Error disconnecting adapter', {
@@ -116,13 +121,23 @@ export class ChannelManager extends BaseService {
    */
   waitForQrUrl(agentId: string, channelId: string, timeoutMs = 30_000): Promise<string> {
     const key = `${agentId}:${channelId}`
-    return new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.qrWaiters.delete(key)
-        reject(new Error('Timed out waiting for QR code'))
-      }, timeoutMs)
-      this.qrWaiters.set(key, { resolve, timer })
+    const existing = this.qrWaiters.get(key)
+    if (existing) return existing.promise
+
+    let resolveQr!: (url: string) => void
+    let rejectQr!: (error: Error) => void
+    const promise = new Promise<string>((resolve, reject) => {
+      resolveQr = resolve
+      rejectQr = reject
     })
+    const timer = setTimeout(() => {
+      this.qrWaiters.delete(key)
+      rejectQr(new Error('Timed out waiting for QR code'))
+    }, timeoutMs)
+    timer.unref?.()
+
+    this.qrWaiters.set(key, { resolve: resolveQr, reject: rejectQr, timer, promise })
+    return promise
   }
 
   /** Return connection state for all adapters of an agent. */
@@ -215,6 +230,9 @@ export class ChannelManager extends BaseService {
   /** Disconnect the adapter for a single channel without reconnecting. */
   async disconnectChannel(channelId: string, options: { suppressErrors?: boolean } = {}): Promise<void> {
     const { suppressErrors = true } = options
+    this.rejectQrWaiters(`Channel ${channelId} disconnected before QR code was received`, (key) =>
+      key.endsWith(`:${channelId}`)
+    )
     for (const [key, adapter] of this.adapters) {
       if (adapter.channelId !== channelId) continue
 
@@ -261,6 +279,9 @@ export class ChannelManager extends BaseService {
    * Use when the agent is deleted or its channels should all be torn down.
    */
   async disconnectAgent(agentId: string): Promise<void> {
+    this.rejectQrWaiters(`Agent ${agentId} disconnected before QR code was received`, (key) =>
+      key.startsWith(`${agentId}:`)
+    )
     const toDisconnect = [...this.adapters.entries()].filter(([, a]) => a.agentId === agentId)
     await Promise.all(
       toDisconnect.map(([key, adapter]) =>
@@ -443,6 +464,15 @@ export class ChannelManager extends BaseService {
       if (options.awaitConnect) {
         throw error
       }
+    }
+  }
+
+  private rejectQrWaiters(reason: string, predicate: (key: string) => boolean = () => true): void {
+    for (const [key, waiter] of this.qrWaiters.entries()) {
+      if (!predicate(key)) continue
+      clearTimeout(waiter.timer)
+      this.qrWaiters.delete(key)
+      waiter.reject(new Error(reason))
     }
   }
 }

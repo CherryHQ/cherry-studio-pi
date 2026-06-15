@@ -179,6 +179,35 @@ describe('ChannelManager', () => {
     createdAdapters.forEach((a) => expect(a.disconnect).toHaveBeenCalledTimes(1))
   })
 
+  it('reuses an existing QR waiter for the same channel', async () => {
+    const first = channelManager.waitForQrUrl('agent-1', 'ch-qr')
+    const second = channelManager.waitForQrUrl('agent-1', 'ch-qr')
+    const assertion = expect(first).rejects.toThrow('Channel manager stopped before QR code was received')
+
+    expect(second).toBe(first)
+
+    await channelManager.stop()
+    await assertion
+  })
+
+  it('rejects pending QR waiters when the manager stops', async () => {
+    const pending = channelManager.waitForQrUrl('agent-1', 'ch-qr')
+    const assertion = expect(pending).rejects.toThrow('Channel manager stopped before QR code was received')
+
+    await channelManager.stop()
+
+    await assertion
+  })
+
+  it('rejects pending QR waiters when their channel disconnects', async () => {
+    const pending = channelManager.waitForQrUrl('agent-1', 'ch-1')
+    const assertion = expect(pending).rejects.toThrow('Channel ch-1 disconnected before QR code was received')
+
+    await channelManager.disconnectChannel('ch-1')
+
+    await assertion
+  })
+
   it('disconnectAgent disconnects all adapters for agent and clears session tracker', async () => {
     vi.mocked(channelService.listChannels).mockResolvedValueOnce([
       makeChannelRow({ id: 'ch-1', config: { bot_token: 'tok1' } }),
