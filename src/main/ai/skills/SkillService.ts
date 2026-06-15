@@ -20,6 +20,7 @@ import { net } from 'electron'
 import StreamZip from 'node-stream-zip'
 
 import { SkillInstaller } from './SkillInstaller'
+import { buildSkillMarketplaceUserAgent } from './skillMarketplaceIdentity'
 
 const logger = loggerService.withContext('SkillService')
 
@@ -568,7 +569,7 @@ export class SkillService {
   private async installFromClawhub(slug: string): Promise<InstalledSkill> {
     const detailUrl = `https://api.clawhub.ai/api/v1/skills/${slug}`
     const detailResp = await this.fetchWithTimeout(detailUrl, {
-      headers: { 'User-Agent': 'CherryStudio' }
+      headers: { 'User-Agent': buildSkillMarketplaceUserAgent() }
     })
 
     if (!detailResp.ok) {
@@ -579,7 +580,7 @@ export class SkillService {
     const downloadResp = await this.fetchWithTimeout(
       downloadUrl,
       {
-        headers: { 'User-Agent': 'CherryStudio' }
+        headers: { 'User-Agent': buildSkillMarketplaceUserAgent() }
       },
       MARKETPLACE_DOWNLOAD_TIMEOUT_MS
     )
