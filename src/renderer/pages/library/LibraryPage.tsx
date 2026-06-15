@@ -155,15 +155,18 @@ export default function LibraryPage() {
   }, [navigate, routeAction, routeResourceType, sidebarFilter.resourceType])
 
   const handleBackToList = useCallback(() => {
+    closeTransientLibraryOverlays()
     setConfigView({ type: 'list' })
     clearRouteActionSearch()
   }, [clearRouteActionSearch])
   const handleCreated = useCallback(() => {
+    closeTransientLibraryOverlays()
     refetch()
     setConfigView({ type: 'list' })
     clearRouteActionSearch()
   }, [clearRouteActionSearch, refetch])
   const handleAgentCreated = useCallback(() => {
+    closeTransientLibraryOverlays()
     refetch()
     setConfigView({ type: 'list' })
     void navigate({ to: '/app/agents', replace: true })

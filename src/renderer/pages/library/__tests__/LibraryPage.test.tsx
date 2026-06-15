@@ -175,8 +175,19 @@ vi.mock('../editor/assistant/AssistantConfigPage', () => ({
 }))
 
 vi.mock('../editor/agent/AgentConfigPage', () => ({
-  default: ({ agent, onCreated }: { agent?: { id: string }; onCreated?: (created: { id: string }) => void }) => (
+  default: ({
+    agent,
+    onBack,
+    onCreated
+  }: {
+    agent?: { id: string }
+    onBack?: () => void
+    onCreated?: (created: { id: string }) => void
+  }) => (
     <div data-testid={agent ? 'agent-edit-page' : 'agent-create-page'}>
+      <button type="button" onClick={() => onBack?.()}>
+        cancel agent create
+      </button>
       <button type="button" onClick={() => onCreated?.({ id: 'agent-created' })}>
         finish agent create
       </button>
@@ -257,6 +268,29 @@ describe('LibraryPage create flow', () => {
       expect(screen.queryByTestId('agent-edit-page')).not.toBeInTheDocument()
       expect(refetchSpy).toHaveBeenCalledTimes(1)
       expect(navigateMock).toHaveBeenCalledWith({ to: '/app/agents', replace: true })
+      expect(closeResourceSelectors).toHaveBeenCalledTimes(2)
+    } finally {
+      window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+    }
+  })
+
+  it('closes transient resource selectors when cancelling agent creation', async () => {
+    const user = userEvent.setup()
+    const closeResourceSelectors = vi.fn()
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+
+    render(<LibraryPage />)
+
+    try {
+      await user.click(screen.getByRole('button', { name: 'create agent' }))
+      expect(screen.getByTestId('agent-create-page')).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'cancel agent create' }))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('resource-grid')).toBeInTheDocument()
+      })
+      expect(closeResourceSelectors).toHaveBeenCalledTimes(2)
     } finally {
       window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
     }
