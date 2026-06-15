@@ -1,6 +1,6 @@
 import { useQuery } from '@data/hooks/useDataApi'
 import { MockCacheUtils } from '@test-mocks/renderer/CacheService'
-import { MockUseDataApiUtils } from '@test-mocks/renderer/useDataApi'
+import { MockUseDataApiUtils, mockUseMutation } from '@test-mocks/renderer/useDataApi'
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -227,6 +227,9 @@ describe('useAgents', () => {
       await act(async () => result.current.deleteAgent('agent-1'))
 
       expect(mockTrigger).toHaveBeenCalledWith({ params: { agentId: 'agent-1' } })
+      expect(mockUseMutation).toHaveBeenCalledWith('DELETE', '/agents/:agentId', {
+        refresh: ['/agents', '/agent-sessions', '/pins']
+      })
       expect(mockToast.success).toHaveBeenCalledWith('common.delete_success')
     })
 

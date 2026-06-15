@@ -145,7 +145,7 @@ export function useAssistantMutations() {
     refresh: ASSISTANTS_REFRESH_KEYS
   })
   const { trigger: deleteTrigger, isLoading: isDeleting } = useMutation('DELETE', '/assistants/:id', {
-    refresh: ASSISTANTS_REFRESH_KEYS
+    refresh: [...ASSISTANTS_REFRESH_KEYS, '/pins']
   })
 
   const createAssistant = useCallback(
