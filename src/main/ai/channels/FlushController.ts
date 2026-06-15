@@ -34,6 +34,8 @@ export class FlushController {
   /** Mark the controller as completed — no more flushes after current one. */
   complete(): void {
     this._completed = true
+    this.needsReflush = false
+    this.cancelPendingFlush()
   }
 
   get isCompleted(): boolean {
