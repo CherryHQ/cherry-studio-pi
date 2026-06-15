@@ -10,7 +10,7 @@ import { useMiniAppPopup } from '@renderer/hooks/useMiniAppPopup'
 import i18n from '@renderer/i18n'
 import { runAsyncFunction } from '@renderer/utils'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
-import { ThemeMode, UpgradeChannel } from '@shared/data/preference/preferenceTypes'
+import { UpgradeChannel } from '@shared/data/preference/preferenceTypes'
 import { debounce } from 'lodash'
 import { BadgeQuestionMark, Briefcase, Bug, Building2, Github, Globe, Mail, Rss } from 'lucide-react'
 import type { FC, ReactNode } from 'react'
@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next'
 import Markdown from 'react-markdown'
 
 import { SettingGroup, SettingRow, SettingRowTitle, SettingsContentColumn, SettingTitle } from '.'
+import { buildAboutReleaseNotesUrl } from './aboutReleaseNotesUrl'
 
 const AboutSettings: FC = () => {
   const [autoCheckUpdate, setAutoCheckUpdate] = usePreference('app.dist.auto_update.enabled')
@@ -111,7 +112,7 @@ const AboutSettings: FC = () => {
     openSmartMiniApp({
       appId: 'cherrystudio-pi-releases',
       name: t('settings.about.releases.title'),
-      url: `file://${appPath}/resources/cherry-studio/releases.html?theme=${theme === ThemeMode.dark ? 'dark' : 'light'}`,
+      url: buildAboutReleaseNotesUrl(appPath, theme),
       logo: AppLogo
     })
   }
