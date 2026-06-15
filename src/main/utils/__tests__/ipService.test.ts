@@ -52,4 +52,33 @@ describe('ipService', () => {
     await expect(isUserInChina()).resolves.toBe(false)
     expect(net.fetch).toHaveBeenCalledTimes(2)
   })
+
+  it('short-caches the CN fallback after an unsuccessful HTTP response', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+    const json = vi.fn(async () => ({ country_code: 'US' }))
+    vi.mocked(net.fetch)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        json
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn(async () => ({ country_code: 'US' }))
+      } as unknown as Response)
+
+    const { getIpCountry } = await loadIpService()
+
+    await expect(getIpCountry()).resolves.toBe('CN')
+    await expect(getIpCountry()).resolves.toBe('CN')
+    expect(json).not.toHaveBeenCalled()
+    expect(net.fetch).toHaveBeenCalledTimes(1)
+
+    vi.setSystemTime(new Date('2026-01-01T00:06:00.000Z'))
+
+    await expect(getIpCountry()).resolves.toBe('US')
+    expect(net.fetch).toHaveBeenCalledTimes(2)
+  })
 })

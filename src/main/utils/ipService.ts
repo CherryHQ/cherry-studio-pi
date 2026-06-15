@@ -39,6 +39,11 @@ async function fetchIpCountry(): Promise<{ country: string; cacheTtlMs: number }
       signal: controller.signal
     })
 
+    if (ipinfo.ok === false) {
+      logger.warn(`IP country lookup returned HTTP ${ipinfo.status}; defaulting to CN temporarily`)
+      return { country: 'CN', cacheTtlMs: FALLBACK_CACHE_TTL_MS }
+    }
+
     const data = await ipinfo.json()
     const country =
       typeof data.country_code === 'string' && data.country_code.trim() ? data.country_code.trim().toUpperCase() : null
