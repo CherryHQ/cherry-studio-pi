@@ -7,6 +7,8 @@ import db from '@renderer/databases'
 import { useAppUpdateHandler, useAppUpdateState } from '@renderer/hooks/useAppUpdate'
 import { useStorageMonitorNotification } from '@renderer/hooks/useStorageMonitorNotification'
 import i18n, { setDayjsLocale } from '@renderer/i18n'
+import { startDataSyncAutoSync, stopDataSyncAutoSync } from '@renderer/services/DataSyncService'
+import { useAppSelector } from '@renderer/store'
 import { defaultLanguage } from '@shared/config/constant'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect } from 'react'
@@ -24,6 +26,11 @@ export function useAppInit() {
   const [customCss] = usePreference('ui.custom_css')
   const [autoCheckUpdate] = usePreference('app.dist.auto_update.enabled')
   const [enableDataCollection] = usePreference('app.privacy.data_collection.enabled')
+  const dataSyncAutoSync = useAppSelector((state) => state.settings.dataSyncAutoSync)
+  const dataSyncSyncInterval = useAppSelector((state) => state.settings.dataSyncSyncInterval)
+  const dataSyncWebdavHost = useAppSelector((state) => state.settings.dataSyncWebdavHost)
+  const dataSyncWebdavPass = useAppSelector((state) => state.settings.dataSyncWebdavPass)
+  const dataSyncWebdavUser = useAppSelector((state) => state.settings.dataSyncWebdavUser)
 
   const { isLeftNavbar } = useNavbarPosition()
   const { miniAppShow } = useMiniApps()
@@ -141,6 +148,24 @@ export function useAppInit() {
         logger.warn('Failed to cache application paths', error as Error)
       })
   }, [])
+
+  useEffect(() => {
+    if (
+      dataSyncAutoSync &&
+      dataSyncSyncInterval > 0 &&
+      dataSyncWebdavHost &&
+      dataSyncWebdavUser &&
+      dataSyncWebdavPass
+    ) {
+      startDataSyncAutoSync(false)
+    } else {
+      stopDataSyncAutoSync()
+    }
+
+    return () => {
+      stopDataSyncAutoSync()
+    }
+  }, [dataSyncAutoSync, dataSyncSyncInterval, dataSyncWebdavHost, dataSyncWebdavPass, dataSyncWebdavUser])
 
   useEffect(() => {
     let customCssElement = document.getElementById('user-defined-custom-css') as HTMLStyleElement

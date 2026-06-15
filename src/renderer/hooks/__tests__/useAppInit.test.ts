@@ -9,7 +9,16 @@ const mocks = vi.hoisted(() => ({
   getAppInfo: vi.fn(),
   getDataPathFromArgs: vi.fn(),
   loggerWarn: vi.fn(),
+  settings: {
+    dataSyncAutoSync: false,
+    dataSyncSyncInterval: 0,
+    dataSyncWebdavHost: '',
+    dataSyncWebdavPass: '',
+    dataSyncWebdavUser: ''
+  },
+  startDataSyncAutoSync: vi.fn(),
   setDayjsLocale: vi.fn(),
+  stopDataSyncAutoSync: vi.fn(),
   updateAppUpdateState: vi.fn()
 }))
 
@@ -61,6 +70,16 @@ vi.mock('@renderer/hooks/useAppUpdate', () => ({
 
 vi.mock('@renderer/hooks/useStorageMonitorNotification', () => ({
   useStorageMonitorNotification: vi.fn()
+}))
+
+vi.mock('@renderer/services/DataSyncService', () => ({
+  startDataSyncAutoSync: mocks.startDataSyncAutoSync,
+  stopDataSyncAutoSync: mocks.stopDataSyncAutoSync
+}))
+
+vi.mock('@renderer/store', () => ({
+  useAppSelector: (selector: (state: { settings: typeof mocks.settings }) => unknown) =>
+    selector({ settings: mocks.settings })
 }))
 
 vi.mock('@renderer/i18n', () => ({
@@ -118,6 +137,13 @@ describe('useAppInit', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
+    mocks.settings = {
+      dataSyncAutoSync: false,
+      dataSyncSyncInterval: 0,
+      dataSyncWebdavHost: '',
+      dataSyncWebdavPass: '',
+      dataSyncWebdavUser: ''
+    }
     vi.spyOn(console, 'timeEnd').mockImplementation(() => undefined)
     mocks.getDataPathFromArgs.mockResolvedValue(null)
     mocks.getAppInfo.mockResolvedValue({
@@ -174,5 +200,40 @@ describe('useAppInit', () => {
     await flushMicrotasks()
 
     expect(mocks.updateAppUpdateState).not.toHaveBeenCalled()
+  })
+
+  it('starts WebDAV auto sync from app init when the saved config is complete', () => {
+    mocks.settings = {
+      dataSyncAutoSync: true,
+      dataSyncSyncInterval: 15,
+      dataSyncWebdavHost: 'https://dav.example.test',
+      dataSyncWebdavPass: 'pass',
+      dataSyncWebdavUser: 'user'
+    }
+
+    const { unmount } = renderHook(() => useAppInit())
+
+    expect(mocks.startDataSyncAutoSync).toHaveBeenCalledWith(false)
+    expect(mocks.stopDataSyncAutoSync).not.toHaveBeenCalled()
+
+    unmount()
+    expect(mocks.stopDataSyncAutoSync).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops WebDAV auto sync from app init when saved credentials are incomplete', () => {
+    mocks.settings = {
+      dataSyncAutoSync: true,
+      dataSyncSyncInterval: 15,
+      dataSyncWebdavHost: 'https://dav.example.test',
+      dataSyncWebdavPass: '',
+      dataSyncWebdavUser: 'user'
+    }
+
+    const { unmount } = renderHook(() => useAppInit())
+
+    expect(mocks.startDataSyncAutoSync).not.toHaveBeenCalled()
+    expect(mocks.stopDataSyncAutoSync).toHaveBeenCalledTimes(1)
+
+    unmount()
   })
 })
