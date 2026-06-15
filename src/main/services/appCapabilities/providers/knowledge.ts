@@ -178,13 +178,13 @@ function summarizeKnowledgeBaseForAgent(base: KnowledgeBase, input: any = {}) {
 
 async function listKnowledgeBases(): Promise<KnowledgeBase[]> {
   try {
-    const bases = (await readRendererStoreValue<KnowledgeBase[]>('state.knowledge.bases')) ?? []
+    const bases = (await storageV2KnowledgeRepository.listBases()) as KnowledgeBase[]
     if (bases.length > 0) return bases
   } catch (error) {
-    logger.debug('Knowledge runtime store bridge unavailable, falling back to Storage v2', error as Error)
+    logger.debug('Knowledge Storage v2 repository unavailable, falling back to runtime store bridge', error as Error)
   }
 
-  return (await storageV2KnowledgeRepository.listBases()) as KnowledgeBase[]
+  return (await readRendererStoreValue<KnowledgeBase[]>('state.knowledge.bases').catch(() => [])) ?? []
 }
 
 async function getProviderConfigFromRuntime(providerId: string): Promise<ProviderRuntimeConfig | null> {
@@ -214,15 +214,27 @@ async function getProviderConfigFromStorageV2(providerId: string): Promise<Provi
   }
 }
 
+function hasUsableProviderRuntimeConfig(config: ProviderRuntimeConfig | null) {
+  return Boolean(config && (config.apiKey || config.baseURL))
+}
+
 async function getProviderConfig(providerId: string): Promise<ProviderRuntimeConfig | null> {
+  let storageConfig: ProviderRuntimeConfig | null = null
   try {
-    const config = await getProviderConfigFromRuntime(providerId)
-    if (config) return config
+    storageConfig = await getProviderConfigFromStorageV2(providerId)
+    if (hasUsableProviderRuntimeConfig(storageConfig)) return storageConfig
+  } catch (error) {
+    logger.debug('Provider Storage v2 config unavailable, falling back to runtime store bridge', error as Error)
+  }
+
+  try {
+    const runtimeConfig = await getProviderConfigFromRuntime(providerId)
+    if (runtimeConfig) return runtimeConfig
   } catch (error) {
     logger.debug('Provider runtime store bridge unavailable, falling back to Storage v2', error as Error)
   }
 
-  return getProviderConfigFromStorageV2(providerId)
+  return storageConfig ?? getProviderConfigFromStorageV2(providerId)
 }
 
 function createCachedProviderConfigResolver(): ProviderConfigResolver {

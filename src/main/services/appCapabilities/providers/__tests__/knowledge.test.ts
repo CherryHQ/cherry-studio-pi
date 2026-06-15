@@ -114,7 +114,7 @@ describe('knowledge app capabilities', () => {
     mocks.storageV2SecretVaultService.getSecret.mockResolvedValue('')
   })
 
-  it('lists knowledge bases with lightweight item summaries by default', async () => {
+  it('lists knowledge bases from Storage v2 with lightweight item summaries by default', async () => {
     const bases = [
       {
         id: 'kb-large',
@@ -134,7 +134,7 @@ describe('knowledge app capabilities', () => {
         }))
       }
     ]
-    runtimeBases = bases
+    mocks.storageV2KnowledgeRepository.listBases.mockResolvedValueOnce(bases)
 
     const result = await capability('knowledge.bases.list').execute({}, { source: 'agent' })
 
@@ -147,6 +147,7 @@ describe('knowledge app capabilities', () => {
       })
     ])
     expect((result.data as any).knowledge_bases[0].items).toBeUndefined()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
 
   it('bounds knowledge base item previews when explicitly requested', async () => {
@@ -224,6 +225,38 @@ describe('knowledge app capabilities', () => {
         String(script).includes('"path":"state.llm.providers"')
       )
     ).toHaveLength(1)
+  })
+
+  it('uses Storage v2 provider config for knowledge search without the renderer bridge', async () => {
+    const base = {
+      id: 'kb-storage',
+      name: 'Storage Knowledge',
+      model: { id: 'embed-model', provider: 'shared-provider' },
+      dimensions: 1024,
+      chunkSize: 500,
+      chunkOverlap: 50,
+      documentCount: 10,
+      items: []
+    }
+    mocks.storageV2KnowledgeRepository.listBases.mockResolvedValueOnce([base])
+    mocks.storageV2ProviderRepository.list.mockResolvedValueOnce([
+      {
+        id: 'shared-provider',
+        apiHost: 'https://storage.example.com/'
+      }
+    ])
+    mocks.storageV2ProviderRepository.listCredentialRefs.mockResolvedValueOnce(
+      new Map([['shared-provider', { apiKey: 'secret-ref' }]])
+    )
+    mocks.storageV2SecretVaultService.getSecret.mockResolvedValueOnce('sk-storage')
+    mocks.knowledgeService.search.mockResolvedValueOnce([{ id: 'result-kb-storage', content: 'matched' }])
+
+    const result = await capability('knowledge.search').execute({ query: 'matched' }, { source: 'agent' })
+
+    expect(result.ok).toBe(true)
+    expect(mocks.storageV2SecretVaultService.getSecret).toHaveBeenCalledWith('secret-ref')
+    expect(mocks.knowledgeService.search).toHaveBeenCalledWith('kb-storage', 'matched')
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
 
   it('normalizes knowledge search ids and falls back for invalid document counts', async () => {
