@@ -1,8 +1,10 @@
+import { getRawModelId } from '@renderer/config/models/utils'
 import { useModels } from '@renderer/hooks/useModel'
 import { usePins } from '@renderer/hooks/usePins'
 import { useProviders } from '@renderer/hooks/useProvider'
 import { getSearchMatchScore } from '@renderer/utils/modelSearch'
-import { isUniqueModelId, type Model, parseUniqueModelId, type UniqueModelId } from '@shared/data/types/model'
+import type { Model, UniqueModelId } from '@shared/data/types/model'
+import { isUniqueModelId } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
 import { sortBy } from 'lodash'
 import { useCallback, useMemo } from 'react'
@@ -46,7 +48,7 @@ function sortModels(models: Model[]) {
 }
 
 function getModelIdentifier(model: Model) {
-  return model.apiModelId ?? (isUniqueModelId(model.id) ? parseUniqueModelId(model.id).modelId : model.id)
+  return getRawModelId(model)
 }
 
 function sortProvidersByPriority(providers: Provider[], prioritizedProviderIds: string[]) {
