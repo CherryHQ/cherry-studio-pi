@@ -7,6 +7,7 @@ import store, { handleSaveData } from '@renderer/store'
 import { setLocalBackupSyncState, setS3SyncState, setWebDAVSyncState } from '@renderer/store/backup'
 import type { S3Config, WebDavConfig } from '@renderer/types'
 import { uuid } from '@renderer/utils'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { UnifiedPreferenceKeyType, UnifiedPreferenceType } from '@shared/data/preference/preferenceTypes'
 import dayjs from 'dayjs'
 
@@ -113,6 +114,20 @@ async function mirrorRestoredLegacyDexieToStorageV2() {
   } catch (error) {
     logger.warn('Failed to mirror restored legacy IndexedDB to Storage v2', error as Error)
   }
+}
+
+function requestRelaunchAfterRestore(source: string) {
+  setTimeout(() => {
+    try {
+      void Promise.resolve(window.api.relaunchApp()).catch((error) => {
+        logger.error(`${source}: Failed to relaunch app after data restore`, error as Error)
+        window.toast.error(formatErrorMessageWithPrefix(error, i18n.t('common.operation_failed')))
+      })
+    } catch (error) {
+      logger.error(`${source}: Failed to relaunch app after data restore`, error as Error)
+      window.toast.error(formatErrorMessageWithPrefix(error, i18n.t('common.operation_failed')))
+    }
+  }, 1000)
 }
 
 // 重试删除S3文件的辅助函数
@@ -269,7 +284,7 @@ export async function reset() {
             localStorage.clear()
             await clearDatabase()
             window.toast.success(i18n.t('message.reset.success'))
-            setTimeout(() => window.api.relaunchApp(), 1000)
+            requestRelaunchAfterRestore('reset')
           } catch (error) {
             logger.error('reset: Error resetting app data:', error as Error)
             window.toast.error(i18n.t('notes.settings.data.reset_failed'))
@@ -1045,7 +1060,7 @@ export async function handleData(data: Record<string, any>) {
     await mirrorRestoredLegacyDexieToStorageV2()
     await disableStorageV2AutoHydrateAfterLegacyRestore()
     window.toast.success(i18n.t('message.restore.success'))
-    setTimeout(() => window.api.relaunchApp(), 1000)
+    requestRelaunchAfterRestore('handleData:v1')
     return
   }
 
@@ -1076,7 +1091,7 @@ export async function handleData(data: Record<string, any>) {
     await mirrorRestoredLegacyDexieToStorageV2()
     await disableStorageV2AutoHydrateAfterLegacyRestore()
     window.toast.success(i18n.t('message.restore.success'))
-    setTimeout(() => window.api.relaunchApp(), 1000)
+    requestRelaunchAfterRestore(`handleData:v${data.version}`)
     return
   }
 

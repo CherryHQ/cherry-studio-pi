@@ -255,6 +255,26 @@ describe('BackupService legacy restore', () => {
     expect(window.toast.success).toHaveBeenCalledWith('message.restore.success')
   })
 
+  it('reports relaunch failures after a legacy restore has been applied', async () => {
+    vi.mocked(window.api.relaunchApp).mockRejectedValueOnce(new Error('relaunch unavailable'))
+
+    await handleData({
+      version: 2,
+      localStorage: {
+        'persist:cherry-studio': '{"settings":"{}"}'
+      },
+      indexedDB: {}
+    })
+
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(mocks.logger.error).toHaveBeenCalledWith(
+      'handleData:v2: Failed to relaunch app after data restore',
+      expect.any(Error)
+    )
+    expect(window.toast.error).toHaveBeenCalledWith('common.operation_failed: relaunch unavailable')
+  })
+
   it('shows restore errors when the backup file cannot be opened', async () => {
     vi.mocked(window.api.file.open).mockRejectedValueOnce(new Error('dialog unavailable'))
 
