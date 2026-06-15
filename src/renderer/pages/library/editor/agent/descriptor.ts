@@ -207,6 +207,9 @@ export function applyAgentFormPatch(
 
   if (patch.type && patch.type !== current.type) {
     next.disabledTools = []
+    next.model = ''
+    next.planModel = ''
+    next.smallModel = ''
   }
 
   if (Object.prototype.hasOwnProperty.call(patch, 'permissionMode')) {

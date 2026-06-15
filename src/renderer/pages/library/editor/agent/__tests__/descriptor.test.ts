@@ -244,9 +244,22 @@ describe('applyAgentFormPatch', () => {
 
   it('clears manually selected tools when switching runtime modes', () => {
     const draft = buildInitialAgentFormState()
-    const next = applyAgentFormPatch({ ...draft, disabledTools: ['Read'] }, { type: 'claude-code' }, tools)
+    const next = applyAgentFormPatch(
+      {
+        ...draft,
+        model: 'openai::gpt-4.1',
+        planModel: 'openai::gpt-4.1-mini',
+        smallModel: 'openai::gpt-4.1-nano',
+        disabledTools: ['Read']
+      },
+      { type: 'claude-code' },
+      tools
+    )
 
     expect(next.type).toBe('claude-code')
+    expect(next.model).toBe('')
+    expect(next.planModel).toBe('')
+    expect(next.smallModel).toBe('')
     expect(next.disabledTools).toEqual([])
   })
 })
