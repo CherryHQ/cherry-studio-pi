@@ -5,6 +5,7 @@ import { application } from '@application'
 import { loggerService } from '@logger'
 import { BaseService, DependsOn, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
 import { WindowType } from '@main/core/window/types'
+import { summarizeTextForLog } from '@main/utils/logging'
 import type {
   LanClientEvent,
   LanFileCompleteMessage,
@@ -42,6 +43,17 @@ import type { ActiveFileTransfer, ConnectionContext, FileTransferContext } from 
 const DISCOVERY_SERVICE_TYPE = 'cherrystudio'
 const DISCOVERY_SERVICE_PROTOCOL = 'tcp' as const
 const DEFAULT_HANDSHAKE_TIMEOUT_MS = 10_000
+
+function summarizeControlPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const keys = Object.keys(payload).sort()
+  return {
+    type: typeof payload.type === 'string' ? payload.type : undefined,
+    transferId: typeof payload.transferId === 'string' ? summarizeTextForLog(payload.transferId) : undefined,
+    chunkIndex: typeof payload.chunkIndex === 'number' ? payload.chunkIndex : undefined,
+    keys,
+    keyCount: keys.length
+  }
+}
 
 const logger = loggerService.withContext('LanTransferService')
 
@@ -649,7 +661,10 @@ export class LanTransferService extends BaseService {
       this.consecutiveJsonErrors = 0 // Reset on successful parse
     } catch {
       this.consecutiveJsonErrors++
-      logger.warn('Received invalid JSON control message', { line, consecutiveErrors: this.consecutiveJsonErrors })
+      logger.warn('Received invalid JSON control message', {
+        line: summarizeTextForLog(line),
+        consecutiveErrors: this.consecutiveJsonErrors
+      })
 
       if (this.consecutiveJsonErrors >= LanTransferService.MAX_CONSECUTIVE_JSON_ERRORS) {
         const message = `Protocol error: ${this.consecutiveJsonErrors} consecutive invalid messages, disconnecting`
@@ -666,7 +681,7 @@ export class LanTransferService extends BaseService {
 
     const type = payload?.type as string | undefined
     if (!type) {
-      logger.warn('Received control message without type', payload)
+      logger.warn('Received control message without type', summarizeControlPayload(payload))
       return
     }
 
@@ -677,7 +692,7 @@ export class LanTransferService extends BaseService {
       return
     }
 
-    logger.info('Received control message', payload)
+    logger.info('Received control message', summarizeControlPayload(payload))
 
     if (type === 'pong') {
       this.broadcastClientEvent({
@@ -692,7 +707,7 @@ export class LanTransferService extends BaseService {
     // Ignore late-arriving file transfer messages
     const fileTransferMessageTypes = ['file_start_ack', 'file_complete']
     if (fileTransferMessageTypes.includes(type)) {
-      logger.debug('Ignoring late file transfer message', { type, payload })
+      logger.debug('Ignoring late file transfer message', summarizeControlPayload(payload))
       return
     }
 

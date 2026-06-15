@@ -13,6 +13,7 @@ import {
   Label
 } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
+import { summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import CustomTag from '@renderer/components/Tags/CustomTag'
 import { TopView } from '@renderer/components/TopView'
 import { useKnowledgeBases } from '@renderer/hooks/useKnowledgeBase'
@@ -327,7 +328,6 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
           throw new Error('Note content is empty. Cannot export empty notes to knowledge base.')
         }
 
-        logger.debug('Note content loaded', { contentLength: content.length })
         items.push({
           type: 'note',
           data: {
@@ -342,7 +342,6 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
           ? await processTopicContent(source?.data, selectedTypes)
           : processMessageContent(source?.data, selectedTypes)
 
-        logger.debug('Processed content:', result)
         if (result.text.trim() && selectedTypes.some((type) => type !== CONTENT_TYPES.FILE)) {
           items.push({
             type: 'note',
@@ -362,8 +361,10 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
               ? [
                   {
                     index,
-                    source: result.files[index]?.origin_name || result.files[index]?.name,
-                    reason: item.reason instanceof Error ? item.reason.message : String(item.reason)
+                    source: summarizeTextForLog(result.files[index]?.origin_name || result.files[index]?.name),
+                    reason: summarizeTextForLog(
+                      item.reason instanceof Error ? item.reason.message : String(item.reason)
+                    )
                   }
                 ]
               : []
