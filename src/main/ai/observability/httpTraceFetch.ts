@@ -34,7 +34,7 @@ const SENSITIVE_HEADER_KEYS = new Set([
 export interface HttpTraceOptions {
   topicId?: string
   modelName?: string
-  /** Injectable for tests; defaults to the shared CherryStudio tracer. */
+  /** Injectable for tests; defaults to the shared Cherry Studio Pi tracer. */
   tracer?: Tracer
   /** Per-body capture cap; defaults to {@link MAX_BODY_BYTES}. */
   maxBodyBytes?: number
