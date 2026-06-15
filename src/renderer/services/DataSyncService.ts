@@ -488,7 +488,12 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
     const message = getErrorMessage(error)
     if (isDataSyncAlreadyRunningMessage(message)) {
       logger.info('Data sync already running in main process')
-      await reconcileRendererSyncStateWithMainProcess().catch(() => undefined)
+      await reconcileRendererSyncStateWithMainProcess().catch((reconcileError) => {
+        logger.warn(
+          'Failed to reconcile renderer data sync state after already-running response',
+          reconcileError as Error
+        )
+      })
       return null
     }
 
