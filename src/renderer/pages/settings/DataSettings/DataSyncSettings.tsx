@@ -658,6 +658,14 @@ const DataSyncSettings: FC = () => {
     }
   }
 
+  const closeDirectoryBrowser = () => {
+    directoryLoadSeqRef.current += 1
+    setDirectoryBrowserOpen(false)
+    setDirectoryLoading(false)
+    setDirectoryError(null)
+    setRemoteDirectoryList(null)
+  }
+
   const openDirectoryBrowser = () => {
     if (!webdavHost) {
       window.toast.warning(t('settings.data.data_sync.toast.webdav_required'))
@@ -673,7 +681,7 @@ const DataSyncSettings: FC = () => {
   const selectRemotePath = (path: string) => {
     const config = trySaveWebDavConfig(path)
     if (!config) return
-    setDirectoryBrowserOpen(false)
+    closeDirectoryBrowser()
     window.toast.success(
       t('settings.data.data_sync.toast.remote_path_selected', { path: normalizeRemotePathInput(path) })
     )
@@ -1024,7 +1032,7 @@ const DataSyncSettings: FC = () => {
         open={directoryBrowserOpen}
         title={t('settings.data.data_sync.remote_browser.title')}
         width={640}
-        onCancel={() => setDirectoryBrowserOpen(false)}
+        onCancel={closeDirectoryBrowser}
         footer={
           <Space>
             <Button onClick={() => selectRemotePath('/')}>

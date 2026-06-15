@@ -595,6 +595,49 @@ describe('DataSyncSettings', () => {
     expect(screen.getByText('/fast/current')).toBeTruthy()
   })
 
+  it('cancels pending remote directory loads after the browser is closed', async () => {
+    const staleDirectory = deferred<{
+      path: string
+      parentPath: string | null
+      directories: Array<{ name: string; path: string; modifiedAt: string | null }>
+    }>()
+    mocks.listRemoteDirectories
+      .mockResolvedValueOnce({
+        path: '/',
+        parentPath: null,
+        directories: [{ name: 'slow', path: '/slow', modifiedAt: null }]
+      })
+      .mockImplementationOnce(() => staleDirectory.promise)
+      .mockResolvedValueOnce({
+        path: '/',
+        parentPath: null,
+        directories: [{ name: 'fresh', path: '/fresh', modifiedAt: null }]
+      })
+
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(screen.getByText('settings.data.data_sync.remote_path_browse'))
+    expect(await screen.findByText('/slow')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('slow'))
+    await waitFor(() => expect(mocks.listRemoteDirectories).toHaveBeenCalledTimes(2))
+    fireEvent.click(screen.getByText('settings.data.data_sync.remote_browser.select_current'))
+
+    staleDirectory.resolve({
+      path: '/slow',
+      parentPath: '/',
+      directories: [{ name: 'stale', path: '/slow/stale', modifiedAt: null }]
+    })
+
+    await waitFor(() => expect(screen.queryByText('/slow/stale')).toBeNull())
+
+    fireEvent.click(screen.getByText('settings.data.data_sync.remote_path_browse'))
+
+    expect(await screen.findByText('/fresh')).toBeTruthy()
+    expect(screen.queryByText('/slow/stale')).toBeNull()
+  })
+
   it('shows directory browser failures without leaving the directory loader stuck', async () => {
     mocks.listRemoteDirectories.mockRejectedValueOnce(
       new Error('同步数据失败：当前账号没有访问这个 WebDAV 目录的权限。')
