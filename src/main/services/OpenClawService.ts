@@ -11,6 +11,7 @@ import { BaseService, DependsOn, Injectable, Phase, ServicePhase } from '@main/c
 import { isWin } from '@main/core/platform'
 import { WindowType } from '@main/core/window/types'
 import { isUserInChina } from '@main/utils/ipService'
+import { summarizeTextForLog } from '@main/utils/logging'
 import { crossPlatformSpawn, findExecutableInEnv, getBinaryPath, runInstallScript } from '@main/utils/process'
 import getShellEnv, { refreshShellEnv } from '@main/utils/shell-env'
 import type { OperationResult } from '@shared/config/types'
@@ -671,20 +672,25 @@ export class OpenClawService extends BaseService {
       })
 
       const timeout = setTimeout(() => {
-        logger.warn(`Gateway command timed out: ${args.join(' ')}`)
+        logger.warn('Gateway command timed out', { args: summarizeTextForLog(args.join(' ')) })
         proc.kill('SIGKILL')
         resolve({ code: null, stdout, stderr })
       }, timeoutMs)
 
       proc.on('exit', (code) => {
         clearTimeout(timeout)
-        logger.info(`Gateway command [${args.join(' ')}]:`, { code, stdout: stdout.trim(), stderr: stderr.trim() })
+        logger.info('Gateway command finished', {
+          args: summarizeTextForLog(args.join(' ')),
+          code,
+          stdout: summarizeTextForLog(stdout.trim()),
+          stderr: summarizeTextForLog(stderr.trim())
+        })
         resolve({ code, stdout, stderr })
       })
 
       proc.on('error', (err) => {
         clearTimeout(timeout)
-        logger.error(`Gateway command error [${args.join(' ')}]:`, err)
+        logger.error('Gateway command error', err, { args: summarizeTextForLog(args.join(' ')) })
         resolve({ code: null, stdout, stderr: err.message })
       })
     })
@@ -1082,7 +1088,7 @@ export class OpenClawService extends BaseService {
         return { success: false, message: errMsg }
       }
 
-      logger.info('OpenClaw updated successfully', { output: stdout.trim() })
+      logger.info('OpenClaw updated successfully', { output: summarizeTextForLog(stdout.trim()) })
       this.sendInstallProgress('OpenClaw updated successfully!')
       return { success: true }
     } catch (error) {
