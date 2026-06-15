@@ -81,6 +81,25 @@ export default class WebDav {
     return remoteFilePath
   }
 
+  private async ensureRemoteDirectory(dirPath: string) {
+    if (!this.instance) {
+      throw new Error('WebDAV client not initialized')
+    }
+
+    if (dirPath === '/') return
+
+    try {
+      if (!(await this.instance.exists(dirPath))) {
+        await this.instance.createDirectory(dirPath, {
+          recursive: true
+        })
+      }
+    } catch (error) {
+      logger.error('Error creating directory on WebDAV:', error as Error)
+      throw error
+    }
+  }
+
   public putFileContents = async (
     filename: string,
     data: string | BufferLike | Stream.Readable,
@@ -91,17 +110,7 @@ export default class WebDav {
     }
 
     const remoteFilePath = this.resolveRemoteFilePath(filename)
-
-    try {
-      if (!(await this.instance.exists(this.webdavPath))) {
-        await this.instance.createDirectory(this.webdavPath, {
-          recursive: true
-        })
-      }
-    } catch (error) {
-      logger.error('Error creating directory on WebDAV:', error as Error)
-      throw error
-    }
+    await this.ensureRemoteDirectory(path.posix.dirname(remoteFilePath))
 
     try {
       return await this.instance.putFileContents(remoteFilePath, data, options)
