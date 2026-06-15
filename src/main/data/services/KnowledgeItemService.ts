@@ -13,7 +13,7 @@ import { loggerService } from '@logger'
 import type { OffsetPaginationResponse } from '@shared/data/api'
 import { DataApiErrorFactory } from '@shared/data/api'
 import type { ListKnowledgeItemsQuery } from '@shared/data/api/schemas/knowledges'
-import type { FileEntryId } from '@shared/data/types/file'
+import { type FileEntryId, FileEntryIdSchema } from '@shared/data/types/file'
 import { type KnowledgeItemFileRefRole, knowledgeItemSourceType } from '@shared/data/types/file/ref'
 import {
   type CreateKnowledgeItemDto,
@@ -130,7 +130,8 @@ function rowToKnowledgeItem(row: KnowledgeItemRowLike): KnowledgeItem {
 function getKnowledgeItemFileEntryId(item: KnowledgeItem): FileEntryId | null {
   if (item.type !== 'file') return null
   const fileEntryId = (item.data as { fileEntryId?: unknown }).fileEntryId
-  return typeof fileEntryId === 'string' ? (fileEntryId as FileEntryId) : null
+  const parsed = FileEntryIdSchema.safeParse(fileEntryId)
+  return parsed.success ? parsed.data : null
 }
 
 export class KnowledgeItemService {

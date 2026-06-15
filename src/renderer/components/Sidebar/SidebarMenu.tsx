@@ -79,7 +79,7 @@ function FullMenuItems({ items, activeItem, activeTabId, onItemClick, onMiniAppT
                 variant="ghost"
                 icon={<Icon size={16} strokeWidth={1.6} />}
                 label={item.label}
-                active={isActive}
+                data-active={isActive || undefined}
                 onClick={() => void onItemClick(item.id)}
                 className="rounded-xl data-[active=true]:bg-sidebar-active-bg"
               />

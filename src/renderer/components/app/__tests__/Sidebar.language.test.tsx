@@ -80,6 +80,7 @@ vi.mock('@renderer/hooks/useTabs', () => ({
 }))
 
 vi.mock('@renderer/config/env', () => ({
+  APP_NAME: 'Cherry Studio Pi',
   AppLogo: 'app-logo.png',
   UserAvatar: 'user-avatar.png',
   isLocalAi: false

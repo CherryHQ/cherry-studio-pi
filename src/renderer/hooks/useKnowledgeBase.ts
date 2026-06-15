@@ -3,12 +3,13 @@ import { loggerService } from '@logger'
 import type { KnowledgeBaseListItem, UpdateKnowledgeBaseDto } from '@shared/data/api/schemas/knowledges'
 import { KNOWLEDGE_BASES_MAX_LIMIT } from '@shared/data/api/schemas/knowledges'
 import type { CreateKnowledgeBaseDto, RestoreKnowledgeBaseDto } from '@shared/data/types/knowledge'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useState } from 'react'
 
 const KNOWLEDGE_V2_BASES_QUERY = {
   page: 1,
   limit: KNOWLEDGE_BASES_MAX_LIMIT
 } as const
+const EMPTY_KNOWLEDGE_BASES: KnowledgeBaseListItem[] = []
 
 const logger = loggerService.withContext('useKnowledgeBases')
 
@@ -34,7 +35,7 @@ export const useKnowledgeBases = () => {
     query: KNOWLEDGE_V2_BASES_QUERY
   })
 
-  const bases = useMemo<KnowledgeBaseListItem[]>(() => (data?.items ?? []) as KnowledgeBaseListItem[], [data])
+  const bases = data?.items ?? EMPTY_KNOWLEDGE_BASES
 
   return {
     bases,

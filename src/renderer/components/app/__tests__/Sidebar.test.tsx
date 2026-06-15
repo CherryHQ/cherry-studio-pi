@@ -7,6 +7,7 @@ import { MockUsePreferenceUtils } from '../../../../../tests/__mocks__/renderer/
 import Sidebar from '../Sidebar'
 
 vi.mock('@renderer/config/env', () => ({
+  APP_NAME: 'Cherry Studio Pi',
   AppLogo: 'app-logo.png'
 }))
 
