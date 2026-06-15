@@ -1,7 +1,7 @@
 import { fileEntryTable, fileRefTable } from '@data/db/schemas/file'
 import type { FileEntryId } from '@shared/data/types/file'
 import { setupTestDatabase } from '@test-helpers/db'
-import { MockMainDbServiceUtils } from '@test-mocks/main/DbService'
+import { MockMainDbServiceExport, MockMainDbServiceUtils } from '@test-mocks/main/DbService'
 import { v4 as uuidv4 } from 'uuid'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -17,6 +17,7 @@ describe('FileRefService', () => {
 
   beforeEach(() => {
     MockMainDbServiceUtils.setDb(dbh.db)
+    MockMainDbServiceExport.dbService.withWriteTx.mockClear()
   })
 
   async function seedEntry(id: FileEntryId): Promise<void> {
@@ -137,6 +138,20 @@ describe('FileRefService', () => {
       expect(ref.role).toBe('pending')
     })
 
+    it('routes single ref creation through the serialized write transaction helper', async () => {
+      const entryId = '019606a0-0000-7000-8000-00000000ca01' as FileEntryId
+      await seedEntry(entryId)
+
+      await fileRefService.create({
+        fileEntryId: entryId,
+        sourceType: 'temp_session',
+        sourceId: 'session-serialized',
+        role: 'pending'
+      })
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    })
+
     it('throws on duplicate (entryId, sourceType, sourceId, role)', async () => {
       const entryId = '019606a0-0000-7000-8000-00000000cc02' as FileEntryId
       await seedEntry(entryId)
@@ -165,6 +180,23 @@ describe('FileRefService', () => {
       expect(result).toHaveLength(2)
       const ids = result.map((r) => r.sourceId).sort()
       expect(ids).toEqual(['three', 'two'])
+    })
+
+    it('chunks large createMany batches inside one serialized write transaction', async () => {
+      const entryId = '019606a0-0000-7000-8000-00000000ca02' as FileEntryId
+      await seedEntry(entryId)
+
+      const result = await fileRefService.createMany(
+        Array.from({ length: 250 }, (_, i) => ({
+          fileEntryId: entryId,
+          sourceType: 'temp_session' as const,
+          sourceId: `bulk-create-${String(i).padStart(3, '0')}`,
+          role: 'pending'
+        }))
+      )
+
+      expect(result).toHaveLength(250)
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -294,9 +326,11 @@ describe('FileRefService', () => {
         sourceId: 'cleanup-A',
         role: 'pending'
       })
+      MockMainDbServiceExport.dbService.withWriteTx.mockClear()
       const removed = await fileRefService.cleanupBySource({ sourceType: 'temp_session', sourceId: 'cleanup-A' })
       expect(removed).toBe(2)
       expect(await fileRefService.findBySource({ sourceType: 'temp_session', sourceId: 'cleanup-A' })).toEqual([])
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
 
     it('cleanupBySource on missing source returns 0', async () => {
@@ -316,10 +350,18 @@ describe('FileRefService', () => {
       await fileRefService.create(make('s1'))
       await fileRefService.create(make('s2'))
       await fileRefService.create(make('s3'))
+      MockMainDbServiceExport.dbService.withWriteTx.mockClear()
       const removed = await fileRefService.cleanupBySourceBatch('temp_session', ['s1', 's3'])
       expect(removed).toBe(2)
       const remaining = await fileRefService.findByEntryId(entryId)
       expect(remaining.map((r) => r.sourceId)).toEqual(['s2'])
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    })
+
+    it('cleanupBySourceBatch skips the write transaction for an empty source id list', async () => {
+      await expect(fileRefService.cleanupBySourceBatch('temp_session', [])).resolves.toBe(0)
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).not.toHaveBeenCalled()
     })
 
     it('cleanupBySourceBatch chunks past the SQLite IN-list cap', async () => {

@@ -116,8 +116,12 @@ function rowToFileRef(row: FileRefRow): FileRef {
 }
 
 class FileRefServiceImpl implements FileRefService {
+  private getDbService() {
+    return application.get('DbService')
+  }
+
   private getDb() {
-    return application.get('DbService').getDb()
+    return this.getDbService().getDb()
   }
 
   async findByEntryId(fileEntryId: FileEntryId): Promise<FileRef[]> {
@@ -145,39 +149,49 @@ class FileRefServiceImpl implements FileRefService {
 
   async create(values: CreateFileRefRow): Promise<FileRef> {
     const now = Date.now()
-    const rows = await this.getDb()
-      .insert(fileRefTable)
-      .values({
-        id: uuidv4(),
-        fileEntryId: values.fileEntryId,
-        sourceType: values.sourceType,
-        sourceId: values.sourceId,
-        role: values.role,
-        createdAt: now,
-        updatedAt: now
-      })
-      .returning()
+    const rows = await this.getDbService().withWriteTx((tx) =>
+      tx
+        .insert(fileRefTable)
+        .values({
+          id: uuidv4(),
+          fileEntryId: values.fileEntryId,
+          sourceType: values.sourceType,
+          sourceId: values.sourceId,
+          role: values.role,
+          createdAt: now,
+          updatedAt: now
+        })
+        .returning()
+    )
     return rowToFileRef(rows[0])
   }
 
   async createMany(values: readonly CreateFileRefRow[]): Promise<FileRef[]> {
     if (values.length === 0) return []
     const now = Date.now()
-    const rows = await this.getDb()
-      .insert(fileRefTable)
-      .values(
-        values.map((v) => ({
-          id: uuidv4(),
-          fileEntryId: v.fileEntryId,
-          sourceType: v.sourceType,
-          sourceId: v.sourceId,
-          role: v.role,
-          createdAt: now,
-          updatedAt: now
-        }))
-      )
-      .onConflictDoNothing()
-      .returning()
+    const rows = await this.getDbService().withWriteTx(async (tx) => {
+      const inserted: FileRefRow[] = []
+      for (let i = 0; i < values.length; i += SQLITE_INSERT_CHUNK) {
+        const chunk = values.slice(i, i + SQLITE_INSERT_CHUNK)
+        const chunkRows = await tx
+          .insert(fileRefTable)
+          .values(
+            chunk.map((v) => ({
+              id: uuidv4(),
+              fileEntryId: v.fileEntryId,
+              sourceType: v.sourceType,
+              sourceId: v.sourceId,
+              role: v.role,
+              createdAt: now,
+              updatedAt: now
+            }))
+          )
+          .onConflictDoNothing()
+          .returning()
+        inserted.push(...chunkRows)
+      }
+      return inserted
+    })
     return rows.map(rowToFileRef)
   }
 
@@ -222,7 +236,7 @@ class FileRefServiceImpl implements FileRefService {
   }
 
   async cleanupBySource(source: FileRefSourceKey): Promise<number> {
-    return this.getDb().transaction((tx) => this.cleanupBySourceTx(tx, source))
+    return this.getDbService().withWriteTx((tx) => this.cleanupBySourceTx(tx, source))
   }
 
   async cleanupBySourceTx(tx: Pick<DbType, 'delete'>, source: FileRefSourceKey): Promise<number> {
@@ -235,19 +249,21 @@ class FileRefServiceImpl implements FileRefService {
 
   async cleanupBySourceBatch(sourceType: FileRefSourceType, sourceIds: readonly string[]): Promise<number> {
     if (sourceIds.length === 0) return 0
-    let total = 0
-    // SQLite caps `IN (?, ?, …)` at SQLITE_LIMIT_VARIABLE_NUMBER (default 999;
-    // sometimes 32766). Chunk so a long-tenured user with thousands of
-    // orphaned source ids doesn't blow up the single-statement DELETE.
-    for (let i = 0; i < sourceIds.length; i += SQLITE_INARRAY_CHUNK) {
-      const chunk = sourceIds.slice(i, i + SQLITE_INARRAY_CHUNK)
-      const rows = await this.getDb()
-        .delete(fileRefTable)
-        .where(and(eq(fileRefTable.sourceType, sourceType), inArray(fileRefTable.sourceId, chunk)))
-        .returning({ id: fileRefTable.id })
-      total += rows.length
-    }
-    return total
+    return this.getDbService().withWriteTx(async (tx) => {
+      let total = 0
+      // SQLite caps `IN (?, ?, …)` at SQLITE_LIMIT_VARIABLE_NUMBER (default 999;
+      // sometimes 32766). Chunk so a long-tenured user with thousands of
+      // orphaned source ids doesn't blow up the single-statement DELETE.
+      for (let i = 0; i < sourceIds.length; i += SQLITE_INARRAY_CHUNK) {
+        const chunk = sourceIds.slice(i, i + SQLITE_INARRAY_CHUNK)
+        const rows = await tx
+          .delete(fileRefTable)
+          .where(and(eq(fileRefTable.sourceType, sourceType), inArray(fileRefTable.sourceId, chunk)))
+          .returning({ id: fileRefTable.id })
+        total += rows.length
+      }
+      return total
+    })
   }
 
   async listDistinctSourceIds(sourceType: FileRefSourceType): Promise<string[]> {
