@@ -228,7 +228,7 @@ describe('SystemAgentRuntimeService', () => {
       'dataSync.sync.now',
       { saveConfig: false },
       {
-        source: 'ui',
+        source: 'system',
         sessionId: 'session-1',
         toolCallId: undefined,
         dryRun: undefined
@@ -252,7 +252,7 @@ describe('SystemAgentRuntimeService', () => {
     expect(mocks.appCapabilityService.call).toHaveBeenCalledWith(
       'dataSync.sync.now',
       { saveConfig: false },
-      expect.objectContaining({ source: 'ui' })
+      expect.objectContaining({ source: 'system' })
     )
   })
 })

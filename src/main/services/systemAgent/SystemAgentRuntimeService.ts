@@ -254,7 +254,7 @@ export class SystemAgentRuntimeService {
     })
 
     return appCapabilityService.call<T>(capabilityId, input, {
-      source: 'ui',
+      source: 'system',
       sessionId: options.sessionId,
       toolCallId: options.toolCallId,
       dryRun: options.dryRun
