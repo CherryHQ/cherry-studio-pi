@@ -90,7 +90,7 @@ export function useAgentMutationsById(id: string) {
     refresh: ['/agents']
   })
   const { trigger: deleteTrigger } = useMutation('DELETE', path, {
-    refresh: ['/agents']
+    refresh: ['/agents', '/agent-sessions', '/pins']
   })
 
   const updateAgent = useCallback(

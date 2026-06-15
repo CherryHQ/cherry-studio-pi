@@ -100,7 +100,7 @@ export function useAssistantMutationsById(id: string) {
     refresh: ['/assistants']
   })
   const { trigger: deleteTrigger } = useMutation('DELETE', path, {
-    refresh: ['/assistants']
+    refresh: ['/assistants', '/pins']
   })
 
   const updateAssistant = useCallback(
