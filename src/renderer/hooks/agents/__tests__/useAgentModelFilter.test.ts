@@ -69,6 +69,10 @@ describe('useAgentModelFilter', () => {
         }
       }),
       createProvider({
+        id: 'anthropic-workspace',
+        presetProviderId: 'anthropic'
+      }),
+      createProvider({
         id: 'openai',
         endpointConfigs: {
           [ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS]: { baseUrl: 'https://api.openai.com/v1' }
@@ -91,6 +95,15 @@ describe('useAgentModelFilter', () => {
         createModel({
           id: 'siliconflow::qwen3-coder',
           providerId: 'siliconflow',
+          endpointTypes: undefined
+        })
+      )
+    ).toBe(true)
+    expect(
+      result.current(
+        createModel({
+          id: 'anthropic-workspace::claude-sonnet',
+          providerId: 'anthropic-workspace',
           endpointTypes: undefined
         })
       )

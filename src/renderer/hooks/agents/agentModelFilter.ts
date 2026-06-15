@@ -10,6 +10,7 @@ export function hasAnthropicMessagesEndpoint(model: Model, provider?: Provider):
     model.endpointTypes?.includes(ENDPOINT_TYPE.ANTHROPIC_MESSAGES) === true ||
     provider?.defaultChatEndpoint === ENDPOINT_TYPE.ANTHROPIC_MESSAGES ||
     Boolean(provider?.endpointConfigs?.[ENDPOINT_TYPE.ANTHROPIC_MESSAGES]) ||
+    provider?.presetProviderId === 'anthropic' ||
     NATIVE_ANTHROPIC_PROVIDER_IDS.has(provider?.id ?? model.providerId)
   )
 }
