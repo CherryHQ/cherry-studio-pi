@@ -88,53 +88,56 @@ class PiRuntimeConnection implements AgentRuntimeConnection {
     const abortController = new AbortController()
     this.currentAbortController = abortController
 
-    const session = await this.buildPiRuntimeSession()
-    const { prompt, images } = extractPromptInput(message)
-    const stream = await this.piAgentService.invoke(
-      prompt,
-      session as never,
-      abortController,
-      this.input.resumeToken,
-      undefined,
-      images
-    )
+    try {
+      const session = await this.buildPiRuntimeSession()
+      const { prompt, images } = extractPromptInput(message)
+      const stream = await this.piAgentService.invoke(
+        prompt,
+        session as never,
+        abortController,
+        this.input.resumeToken,
+        undefined,
+        images
+      )
 
-    if (stream.sdkSessionId) {
-      this.eventQueue.push({ type: 'resume-token', token: stream.sdkSessionId })
-    }
-
-    await new Promise<void>((resolve) => {
-      let settled = false
-      const settle = () => {
-        if (settled) return
-        settled = true
-        if (this.currentAbortController === abortController) this.currentAbortController = undefined
-        resolve()
+      if (stream.sdkSessionId) {
+        this.eventQueue.push({ type: 'resume-token', token: stream.sdkSessionId })
       }
 
-      stream.on('data', (event) => {
-        if (this.closed || settled) return
-        switch (event.type) {
-          case 'chunk':
-            if (event.chunk) {
-              this.eventQueue.push({ type: 'chunk', chunk: event.chunk as UIMessageChunk })
-            }
-            break
-          case 'complete':
-            this.eventQueue.push({ type: 'turn-complete' })
-            settle()
-            break
-          case 'cancelled':
-            this.eventQueue.push({ type: 'error', error: new Error('Pi agent turn cancelled') })
-            settle()
-            break
-          case 'error':
-            this.eventQueue.push({ type: 'error', error: event.error ?? new Error('Pi agent turn failed') })
-            settle()
-            break
+      await new Promise<void>((resolve) => {
+        let settled = false
+        const settle = () => {
+          if (settled) return
+          settled = true
+          resolve()
         }
+
+        stream.on('data', (event) => {
+          if (this.closed || settled) return
+          switch (event.type) {
+            case 'chunk':
+              if (event.chunk) {
+                this.eventQueue.push({ type: 'chunk', chunk: event.chunk as UIMessageChunk })
+              }
+              break
+            case 'complete':
+              this.eventQueue.push({ type: 'turn-complete' })
+              settle()
+              break
+            case 'cancelled':
+              this.eventQueue.push({ type: 'error', error: new Error('Pi agent turn cancelled') })
+              settle()
+              break
+            case 'error':
+              this.eventQueue.push({ type: 'error', error: event.error ?? new Error('Pi agent turn failed') })
+              settle()
+              break
+          }
+        })
       })
-    })
+    } finally {
+      if (this.currentAbortController === abortController) this.currentAbortController = undefined
+    }
   }
 
   private async buildPiRuntimeSession() {

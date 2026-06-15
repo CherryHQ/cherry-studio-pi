@@ -2,7 +2,7 @@ import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
+import type { AgentSessionEntity, AgentSessionMessageEntity } from '@shared/data/api/schemas/agentSessions'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@data/services/AgentService', () => ({
@@ -33,6 +33,8 @@ vi.mock('@main/utils/language', () => ({
 
 const { PiRuntimeDriver } = await import('../PiRuntimeDriver')
 const { isAgentSessionWorkspaceError } = await import('../../agentSessionWorkspace')
+const { agentService } = await import('@data/services/AgentService')
+const { agentSessionService } = await import('@data/services/AgentSessionService')
 
 const roots: string[] = []
 
@@ -44,6 +46,24 @@ function createSession(workspacePath: string | null): AgentSessionEntity {
   } as AgentSessionEntity
 }
 
+function createMessage(): AgentSessionMessageEntity {
+  const now = new Date().toISOString()
+  return {
+    id: 'message-1',
+    sessionId: 'session-1',
+    role: 'user',
+    data: { parts: [{ type: 'text', text: 'hello' }] },
+    status: 'success',
+    searchableText: 'hello',
+    modelId: null,
+    modelSnapshot: null,
+    stats: null,
+    runtimeResumeToken: null,
+    createdAt: now,
+    updatedAt: now
+  } as AgentSessionMessageEntity
+}
+
 async function createTempRoot(): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), 'pi-runtime-workspace-'))
   roots.push(root)
@@ -51,6 +71,8 @@ async function createTempRoot(): Promise<string> {
 }
 
 afterEach(async () => {
+  vi.mocked(agentService.getAgent).mockReset()
+  vi.mocked(agentSessionService.getById).mockReset()
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
 
@@ -94,5 +116,32 @@ describe('PiRuntimeDriver validateSession', () => {
 
     expect(isAgentSessionWorkspaceError(thrown)).toBe(true)
     expect(thrown).toMatchObject({ message: expect.stringContaining(filePath) })
+  })
+
+  it('clears the active abort controller when a turn fails before opening a Pi stream', async () => {
+    const driver = new PiRuntimeDriver()
+    const root = await createTempRoot()
+    vi.mocked(agentService.getAgent).mockResolvedValueOnce(null)
+    vi.mocked(agentSessionService.getById).mockResolvedValueOnce(createSession(root))
+
+    const connection = await driver.connect({
+      sessionId: 'session-1',
+      agentId: 'missing-agent',
+      modelId: 'openai::gpt-4.1' as never
+    })
+
+    const iterator = connection.events[Symbol.asyncIterator]()
+    const nextEvent = iterator.next()
+    void connection.send({ message: createMessage() })
+
+    const event = await nextEvent
+    expect(event.done).toBe(false)
+    expect(event.value).toMatchObject({
+      type: 'error',
+      error: expect.objectContaining({ message: 'Agent not found: missing-agent' })
+    })
+    expect(
+      (connection as unknown as { currentAbortController?: AbortController }).currentAbortController
+    ).toBeUndefined()
   })
 })
