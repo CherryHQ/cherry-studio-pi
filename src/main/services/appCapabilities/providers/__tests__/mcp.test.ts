@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => ({
     listAllActiveServerTools: vi.fn(),
     callToolById: vi.fn()
   },
+  mcpServerService: {
+    list: vi.fn()
+  },
   reduxService: {
     select: vi.fn()
   }
@@ -27,6 +30,10 @@ vi.mock('electron', () => ({
 
 vi.mock('@main/services/MCPService', () => ({
   default: mocks.mcpService
+}))
+
+vi.mock('@data/services/McpServerService', () => ({
+  mcpServerService: mocks.mcpServerService
 }))
 
 vi.mock('@main/services/ReduxService', () => ({
@@ -86,11 +93,33 @@ describe('mcp app capabilities', () => {
       }
       return undefined
     })
+    mocks.mcpServerService.list.mockResolvedValue({
+      items: [
+        { id: 'server-1', name: 'Server 1', command: 'npx', env: { TOKEN: 'secret' } },
+        { id: 'server-2', name: 'Server 2', command: 'uvx' }
+      ],
+      total: 2,
+      page: 1
+    })
     mocks.mcpService.listAllActiveServerTools.mockResolvedValue([makeTool(1), makeTool(2), makeTool(3)])
     mocks.mcpService.callToolById.mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] })
   })
 
-  it('lists configured MCP servers through the renderer store bridge', async () => {
+  it('lists configured MCP servers from the main-process data service', async () => {
+    const result = await capability('mcp.servers.list').execute({}, { source: 'agent' })
+
+    expect(result.ok).toBe(true)
+    expect(result.data).toEqual([
+      { id: 'server-1', name: 'Server 1', command: 'npx', env: { TOKEN: 'secret' } },
+      { id: 'server-2', name: 'Server 2', command: 'uvx' }
+    ])
+    expect(mocks.mcpServerService.list).toHaveBeenCalledWith({})
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the renderer MCP store when the main-process data service has no configured servers yet', async () => {
+    mocks.mcpServerService.list.mockResolvedValueOnce({ items: [], total: 0, page: 1 })
+
     const result = await capability('mcp.servers.list').execute({}, { source: 'agent' })
 
     expect(result.ok).toBe(true)

@@ -1,3 +1,4 @@
+import { mcpServerService } from '@data/services/McpServerService'
 import mcpService from '@main/services/MCPService'
 
 import { readRendererStoreValue } from '../rendererBridge'
@@ -51,6 +52,19 @@ function compactMcpTool(tool: any, includeSchemas: boolean) {
   }
 }
 
+async function listConfiguredMcpServers() {
+  try {
+    const { items } = await mcpServerService.list({})
+    if (items.length > 0) return items
+  } catch {
+    // Fall back to the legacy renderer store for pre-hydration or DB startup
+    // edge cases; listing servers is a read-only diagnostic capability.
+  }
+
+  const mcpState = await readRendererStoreValue<any>('state.mcp').catch(() => null)
+  return Array.isArray(mcpState?.servers) ? mcpState.servers : []
+}
+
 export function createMcpCapabilities(): AppCapabilityDefinition[] {
   return [
     {
@@ -63,8 +77,7 @@ export function createMcpCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['mcp', 'servers', 'tools'],
       execute: async () => {
-        const mcpState = await readRendererStoreValue<any>('state.mcp').catch(() => null)
-        return okResult('MCP servers listed', sanitizeForAgent(mcpState?.servers ?? []))
+        return okResult('MCP servers listed', sanitizeForAgent(await listConfiguredMcpServers()))
       }
     },
     {
