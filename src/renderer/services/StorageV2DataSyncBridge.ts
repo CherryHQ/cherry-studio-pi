@@ -1,5 +1,5 @@
 import { loggerService } from '@logger'
-import store from '@renderer/store'
+import store, { handleSaveData } from '@renderer/store'
 import {
   setDataSyncAutoSync,
   setDataSyncSyncInterval,
@@ -23,7 +23,7 @@ const logger = loggerService.withContext('StorageV2DataSyncBridge')
 type StorageV2DataSyncBridgeWindow = Window & {
   [RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE]?: () => Promise<void>
   [RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE]?: () => DataSyncBridgeSettings
-  [RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE]?: (settings: DataSyncBridgeSettingsUpdate) => DataSyncBridgeSettings
+  [RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE]?: (settings: DataSyncBridgeSettingsUpdate) => Promise<DataSyncBridgeSettings>
 }
 
 function readDataSyncSettings(): DataSyncBridgeSettings {
@@ -45,7 +45,7 @@ export function registerStorageV2DataSyncBridge() {
     await prepareStorageV2ForDataSync()
   }
   bridgeWindow[RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE] = () => readDataSyncSettings()
-  bridgeWindow[RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE] = (settings) => {
+  bridgeWindow[RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE] = async (settings) => {
     if (typeof settings.dataSyncWebdavHost === 'string') {
       store.dispatch(setDataSyncWebdavHost(settings.dataSyncWebdavHost))
     }
@@ -64,6 +64,8 @@ export function registerStorageV2DataSyncBridge() {
     if (typeof settings.dataSyncSyncInterval === 'number' && Number.isFinite(settings.dataSyncSyncInterval)) {
       store.dispatch(setDataSyncSyncInterval(settings.dataSyncSyncInterval))
     }
+
+    await handleSaveData()
     return readDataSyncSettings()
   }
 }
