@@ -41,6 +41,19 @@ function normalizeOffset(value: unknown) {
   return Math.max(0, safeOffset)
 }
 
+function normalizeOptionalText(value: unknown) {
+  if (typeof value === 'string') return value.trim()
+  if (value === null || typeof value === 'undefined') return ''
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return String(value).trim()
+  return ''
+}
+
+function normalizeRequiredText(value: unknown, label: string) {
+  const text = normalizeOptionalText(value)
+  if (!text) throw new Error(`${label} is required`)
+  return text
+}
+
 function truncateText(value: unknown, maxChars = MAX_PAINTING_PROMPT_CHARS) {
   if (typeof value !== 'string') return undefined
   if (value.length <= maxChars) return value
@@ -265,7 +278,8 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['model.call', 'network'],
       tags: ['paintings', 'image', 'generate', 'drawing'],
       execute: async (input: any) => {
-        const inputProvider = typeof input?.provider === 'string' ? input.provider.trim() : ''
+        const prompt = normalizeRequiredText(input?.prompt, 'Painting prompt')
+        const inputProvider = normalizeOptionalText(input?.provider)
         const provider = inputProvider || (await readDefaultPaintingProvider())
         const route = provider ? `/paintings/${provider}` : '/paintings'
         await navigateApp(route)
@@ -276,9 +290,9 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
           data: {
             provider,
             route,
-            prompt: input?.prompt,
-            model: input?.model,
-            size: input?.size
+            prompt: truncateText(prompt),
+            model: normalizeOptionalText(input?.model) || undefined,
+            size: normalizeOptionalText(input?.size) || undefined
           },
           warnings: ['Direct headless painting generation will be wired in the next provider bridge pass.']
         }

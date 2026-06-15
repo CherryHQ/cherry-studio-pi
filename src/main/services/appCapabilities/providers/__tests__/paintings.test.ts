@@ -272,4 +272,36 @@ describe('painting app capabilities', () => {
     expect(mocks.navigateApp).toHaveBeenCalledWith('/paintings/openai')
     expect(result.data).toEqual({ route: '/paintings/openai' })
   })
+
+  it('normalizes image generation requests before opening the painting workspace', async () => {
+    const prompt = `${'p'.repeat(600)} trailing`
+
+    const result = await capability('paintings.image.generate').execute(
+      {
+        prompt: ` ${prompt} `,
+        provider: ' openai ',
+        model: ' gpt-image-1 ',
+        size: ' 1024x1024 '
+      },
+      { source: 'agent' }
+    )
+
+    expect(mocks.navigateApp).toHaveBeenCalledWith('/paintings/openai')
+    expect(result.data).toMatchObject({
+      provider: 'openai',
+      route: '/paintings/openai',
+      model: 'gpt-image-1',
+      size: '1024x1024'
+    })
+    expect((result.data as any).prompt).toHaveLength(503)
+    expect((result.data as any).prompt).toContain('...')
+  })
+
+  it('rejects empty image generation prompts before opening the painting workspace', async () => {
+    await expect(
+      capability('paintings.image.generate').execute({ prompt: '   ', provider: 'openai' }, { source: 'agent' })
+    ).rejects.toThrow('Painting prompt is required')
+
+    expect(mocks.navigateApp).not.toHaveBeenCalled()
+  })
 })
