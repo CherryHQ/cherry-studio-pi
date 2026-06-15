@@ -116,7 +116,9 @@ export type RootState = ReturnType<typeof rootReducer>
 export type AppDispatch = typeof store.dispatch
 
 export const persistor = {
-  flush: async () => undefined
+  flush: async () => {
+    await storageV2MirrorService.flushStrict()
+  }
 }
 
 // [v2] redux-persist removed — no persistor. The rehydration callback below initialised the
@@ -149,7 +151,8 @@ export const useAppStore = useStore.withTypes<typeof store>()
 window.store = store
 storageV2MirrorService.scheduleStartupMirror(() => store.getState())
 
-// [v2] Removed: Redux persistor flush is no longer needed after v2 data refactoring
+// [v2] Keep the legacy save hook wired to Storage v2 so backup/sync callers
+// still force pending Redux mirrors to disk before packaging local data.
 export async function handleSaveData() {
   await persistor.flush()
 }
