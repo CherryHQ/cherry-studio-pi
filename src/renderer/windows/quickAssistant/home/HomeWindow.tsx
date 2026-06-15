@@ -11,6 +11,7 @@ import { useTopicStreamStatus } from '@renderer/hooks/useTopicStreamStatus'
 import i18n from '@renderer/i18n'
 import { ipcChatTransport } from '@renderer/transport/IpcChatTransport'
 import { AssistantMessageStatus, UserMessageStatus } from '@renderer/types/newMessage'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { getTextFromParts } from '@renderer/utils/messageUtils/partsHelpers'
 import { defaultLanguage } from '@shared/config/constant'
 import { ThemeMode } from '@shared/data/preference/preferenceTypes'
@@ -327,10 +328,15 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
     setUserInputText('')
   }, [handleCloseWindow, handlePause, isLoading, resetConversation, route])
 
-  const handleCopy = useCallback(() => {
+  const handleCopy = useCallback(async () => {
     if (!content) return
-    void navigator.clipboard.writeText(content)
-    window.toast.success(t('message.copy.success'))
+    try {
+      await navigator.clipboard.writeText(content)
+      window.toast.success(t('message.copy.success'))
+    } catch (error) {
+      logger.error('Failed to copy quick assistant content', error as Error)
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+    }
   }, [content, t])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

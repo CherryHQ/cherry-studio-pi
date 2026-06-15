@@ -1,9 +1,11 @@
 import { SwapOutlined } from '@ant-design/icons'
 import { usePreference } from '@data/hooks/usePreference'
+import { loggerService } from '@logger'
 import LanguageSelect from '@renderer/components/LanguageSelect'
 import Scrollbar from '@renderer/components/Scrollbar'
 import { useTranslate } from '@renderer/hooks/translate'
 import { useDefaultModel } from '@renderer/hooks/useModel'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { Select } from 'antd'
 import { isEmpty } from 'lodash'
 import type { FC } from 'react'
@@ -15,6 +17,8 @@ import styled from 'styled-components'
 interface Props {
   text: string
 }
+
+const logger = loggerService.withContext('TranslateWindow')
 
 const Translate: FC<Props> = ({ text }) => {
   const [result, setResult] = useState('')
@@ -36,9 +40,19 @@ const Translate: FC<Props> = ({ text }) => {
     void translate()
   }, [translate])
 
+  const copyResult = useCallback(async () => {
+    if (!result) return
+    try {
+      await navigator.clipboard.writeText(result)
+      window.toast.success(t('message.copy.success'))
+    } catch (error) {
+      logger.error('Failed to copy quick assistant translation result', error as Error)
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+    }
+  }, [result, t])
+
   useHotkeys('c', () => {
-    void navigator.clipboard.writeText(result)
-    window.toast.success(t('message.copy.success'))
+    void copyResult()
   })
 
   return (
