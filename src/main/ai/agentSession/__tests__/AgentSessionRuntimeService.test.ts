@@ -568,6 +568,7 @@ describe('AgentSessionRuntimeService', () => {
 
     await expect(reader.read()).rejects.toThrow('Agent runtime connection ended before the active turn completed')
     await vi.waitFor(() => expect(getEntry(service).currentTurn?.terminalStatus).toBe('error'))
+    expect(service.inspect('session-1')).toMatchObject({ status: 'idle', lastTerminalStatus: 'error' })
   })
 
   it('surfaces a runtime error event via controller.error and drops trailing chunks (REGRESSION agent-session-3)', async () => {
@@ -605,9 +606,42 @@ describe('AgentSessionRuntimeService', () => {
     // The turn is marked terminal synchronously, so a trailing chunk in the same connection
     // loop is dropped instead of being enqueued on the now-errored controller (which would throw).
     await vi.waitFor(() => expect(getEntry(service).currentTurn?.terminalStatus).toBe('error'))
+    expect(service.inspect('session-1')).toMatchObject({ status: 'idle', lastTerminalStatus: 'error' })
     events.push({ type: 'chunk', chunk: { type: 'text-delta', id: 't', delta: 'late' } })
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(getEntry(service).currentTurn?.terminalStatus).toBe('error')
+  })
+
+  it('settles the session when sending the admitted turn fails', async () => {
+    const events = createAsyncQueue<any>()
+    const sendError = new Error('send failed')
+    const connection = {
+      events: events.iterable,
+      send: vi.fn().mockRejectedValue(sendError),
+      close: vi.fn()
+    }
+    runtimeDriverRegistry.register({
+      type: 'test-runtime',
+      capabilities: ['agent-session'],
+      connect: vi.fn().mockResolvedValue(connection),
+      validateSession: vi.fn(),
+      listAvailableTools: vi.fn().mockResolvedValue([])
+    })
+    const service = new AgentSessionRuntimeService()
+    const handle = service.beginTurn({ ...baseTurnInput, userMessage: userMessage('user-1') })
+    const stream = service.openTurnStream({
+      sessionId: 'session-1',
+      turnId: handle.turnId,
+      signal: new AbortController().signal
+    })
+    const reader = stream.getReader()
+
+    await expect(reader.read()).resolves.toMatchObject({ value: { type: 'start' }, done: false })
+    await expect(reader.read()).rejects.toThrow('send failed')
+
+    expect(connection.send).toHaveBeenCalledWith({ message: userMessage('user-1') })
+    expect(service.inspect('session-1')).toMatchObject({ status: 'idle', lastTerminalStatus: 'error' })
+    expect(service.isSessionBusy('session-1')).toBe(false)
   })
 
   it('passes trace context to the runtime driver and closes the connection after trace turns', async () => {

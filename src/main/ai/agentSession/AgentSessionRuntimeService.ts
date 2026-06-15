@@ -314,7 +314,7 @@ export class AgentSessionRuntimeService extends BaseService {
           if (!connected || !this.isCurrentEntry(entry) || turn.terminalStatus) return
           await this.admitTurn(entry, turn)
         } catch (error) {
-          controller.error(error)
+          if (!this.errorCurrentTurn(entry, turn, error)) controller.error(error)
         }
       },
       cancel: () => {
@@ -526,11 +526,7 @@ export class AgentSessionRuntimeService extends BaseService {
   private handleRuntimeError(entry: AgentSessionRuntimeEntry, error: unknown): void {
     const turn = entry.currentTurn
     if (turn?.controller && !turn.terminalStatus) {
-      turn.controller.error(error)
-      // Mark terminal synchronously: the listener's markTurnTerminal arrives async (after the
-      // stream error propagates), so a trailing `chunk` event in the same connection loop would
-      // otherwise hit enqueueTurnChunk and throw on the now-errored controller.
-      turn.terminalStatus = 'error'
+      this.errorCurrentTurn(entry, turn, error)
     } else if (isAbortError(error)) {
       // Expected when a turn was interrupted/closed — the connection ending is not a fault.
       logger.warn('Agent runtime connection ended without an active turn', { sessionId: entry.sessionId, error })
@@ -586,6 +582,25 @@ export class AgentSessionRuntimeService extends BaseService {
       logger.warn('Agent runtime interrupt failed', { sessionId: entry.sessionId, error })
     })
     application.get('AiStreamManager').pauseRuntimeTurn(entry.topicId, 'agent-runtime-interrupt')
+  }
+
+  private errorCurrentTurn(entry: AgentSessionRuntimeEntry, turn: AgentSessionTurn, error: unknown): boolean {
+    if (!this.isCurrentEntry(entry) || entry.currentTurn !== turn || turn.terminalStatus) return false
+
+    // Mark terminal synchronously: the stream error propagates asynchronously, so a trailing
+    // `chunk` event in the same connection loop would otherwise enqueue on an errored controller.
+    turn.terminalStatus = 'error'
+    try {
+      turn.controller?.error(error)
+    } catch {
+      // Already errored/closed by the stream reader.
+    }
+    turn.cleanupAbortListener?.()
+    turn.cleanupAbortListener = undefined
+    turn.controller = undefined
+    turn.activeToolIds.clear()
+    this.markTurnTerminal(entry.sessionId, 'error')
+    return true
   }
 
   private stopTurn(entry: AgentSessionRuntimeEntry, intent: AgentTurnStopIntent): void {
