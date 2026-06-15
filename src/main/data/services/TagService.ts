@@ -87,8 +87,12 @@ function rowToTag(row: TagRow): Tag {
 }
 
 export class TagService {
+  private get dbService() {
+    return application.get('DbService')
+  }
+
   private get db() {
-    return application.get('DbService').getDb()
+    return this.dbService.getDb()
   }
 
   private async assertTagsExistTx(tx: Pick<DbType, 'select'>, tagIds: string[]): Promise<void> {
@@ -134,13 +138,15 @@ export class TagService {
   async create(dto: CreateTagDto): Promise<Tag> {
     const [row] = await withSqliteErrors(
       () =>
-        this.db
-          .insert(tagTable)
-          .values({
-            name: dto.name,
-            color: dto.color
-          })
-          .returning(),
+        this.dbService.withWriteTx((tx) =>
+          tx
+            .insert(tagTable)
+            .values({
+              name: dto.name,
+              color: dto.color
+            })
+            .returning()
+        ),
       {
         ...defaultHandlersFor('Tag', dto.name),
         unique: () => DataApiErrorFactory.conflict(`Tag with name '${dto.name}' already exists`, 'Tag')
@@ -165,7 +171,7 @@ export class TagService {
     }
 
     const [row] = await withSqliteErrors(
-      () => this.db.update(tagTable).set(updates).where(eq(tagTable.id, id)).returning(),
+      () => this.dbService.withWriteTx((tx) => tx.update(tagTable).set(updates).where(eq(tagTable.id, id)).returning()),
       {
         ...defaultHandlersFor('Tag', dto.name ?? id),
         unique: () =>
@@ -191,7 +197,9 @@ export class TagService {
    * Delete a tag (hard delete, cascades to entity_tag via FK)
    */
   async delete(id: string): Promise<void> {
-    const [row] = await this.db.delete(tagTable).where(eq(tagTable.id, id)).returning({ id: tagTable.id })
+    const [row] = await this.dbService.withWriteTx((tx) =>
+      tx.delete(tagTable).where(eq(tagTable.id, id)).returning({ id: tagTable.id })
+    )
 
     if (!row) {
       throw DataApiErrorFactory.notFound('Tag', id)
@@ -283,7 +291,7 @@ export class TagService {
   async syncEntityTags(entityType: EntityType, entityId: string, dto: SyncEntityTagsDto): Promise<void> {
     const desiredTagIds = [...new Set(dto.tagIds)]
 
-    await this.db.transaction(async (tx) => {
+    await this.dbService.withWriteTx(async (tx) => {
       const existing = await tx
         .select({ tagId: entityTagTable.tagId })
         .from(entityTagTable)
@@ -404,7 +412,7 @@ export class TagService {
   async setEntities(tagId: string, dto: SetTagEntitiesDto): Promise<void> {
     const desiredEntities = dedupeEntityBindings(dto.entities)
 
-    await this.db.transaction(async (tx) => {
+    await this.dbService.withWriteTx(async (tx) => {
       const [tag] = await tx.select({ id: tagTable.id }).from(tagTable).where(eq(tagTable.id, tagId)).limit(1)
 
       if (!tag) {

@@ -2,8 +2,9 @@ import { entityTagTable, tagTable } from '@data/db/schemas/tagging'
 import { TagService, tagService } from '@data/services/TagService'
 import { DataApiError, ErrorCode } from '@shared/data/api'
 import { setupTestDatabase } from '@test-helpers/db'
+import { MockMainDbServiceExport } from '@test-mocks/main/DbService'
 import { eq } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 const TAG_1 = '11111111-1111-4111-8111-111111111111'
 const TAG_2 = '22222222-2222-4222-8222-222222222222'
@@ -14,6 +15,11 @@ const TOPIC_1 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1'
 
 describe('TagService', () => {
   const dbh = setupTestDatabase()
+
+  beforeEach(() => {
+    MockMainDbServiceExport.dbService.withWriteTx.mockImplementation((fn) => dbh.db.transaction(fn as never))
+    MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+  })
 
   async function seedTags() {
     await dbh.db.insert(tagTable).values([
@@ -70,6 +76,7 @@ describe('TagService', () => {
       const result = await tagService.create({ name: 'work', color: '#ff0000' })
 
       expect(result.name).toBe('work')
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
       const [row] = await dbh.db.select().from(tagTable).where(eq(tagTable.id, result.id))
       expect(row).toMatchObject({ name: 'work', color: '#ff0000' })
     })
@@ -92,6 +99,7 @@ describe('TagService', () => {
       const result = await tagService.update(TAG_1, { name: 'updated', color: '#0000ff' })
 
       expect(result).toMatchObject({ name: 'updated', color: '#0000ff' })
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
       const [row] = await dbh.db.select().from(tagTable).where(eq(tagTable.id, TAG_1))
       expect(row).toMatchObject({ name: 'updated', color: '#0000ff' })
     })
@@ -110,6 +118,7 @@ describe('TagService', () => {
       const result = await tagService.update(TAG_1, {})
 
       expect(result).toMatchObject({ id: TAG_1, name: 'work' })
+      expect(MockMainDbServiceExport.dbService.withWriteTx).not.toHaveBeenCalled()
     })
 
     it('should throw NOT_FOUND when no row exists', async () => {
@@ -141,6 +150,7 @@ describe('TagService', () => {
 
       await expect(tagService.delete(TAG_1)).resolves.toBeUndefined()
 
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
       expect(await dbh.db.select().from(tagTable)).toHaveLength(2)
       expect(await dbh.db.select().from(entityTagTable)).toHaveLength(0)
     })
@@ -249,6 +259,7 @@ describe('TagService', () => {
         tagIds: [TAG_2, TAG_3]
       })
 
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
       const rows = (await dbh.db.select().from(entityTagTable)).filter(
         (row) => row.entityType === 'assistant' && row.entityId === ASSISTANT_1
       )
@@ -304,6 +315,7 @@ describe('TagService', () => {
         ]
       })
 
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
       const rows = (await dbh.db.select().from(entityTagTable)).filter((row) => row.tagId === TAG_1)
 
       expect(rows).toHaveLength(2)
