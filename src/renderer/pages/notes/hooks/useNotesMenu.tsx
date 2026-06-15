@@ -89,7 +89,7 @@ export const useNotesMenu = ({
         await exportNote({ node, platform })
       } catch (error) {
         logger.error(`Failed to ${platform === 'copyImage' ? 'copy' : 'export'} as image:`, error as Error)
-        window.toast.error(t('common.copy_failed'))
+        window.toast.error(t(platform === 'copyImage' ? 'common.copy_failed' : 'common.save_failed'))
       }
     },
     [activeNode, onSelectNode, t]

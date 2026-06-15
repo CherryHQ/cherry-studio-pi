@@ -374,11 +374,16 @@ const MessageMenubar: FC<Props> = (props) => {
             label: t('chat.topics.export.image'),
             key: 'image',
             onClick: async () => {
-              const imageData = await captureScrollableAsDataURL(messageContainerRef)
-              const title = await getMessageTitle(message)
-              if (title && imageData) {
-                const success = await window.api.file.saveImage(title, imageData)
-                if (success) window.toast.success(t('chat.topics.export.image_saved'))
+              try {
+                const imageData = await captureScrollableAsDataURL(messageContainerRef)
+                const title = await getMessageTitle(message)
+                if (title && imageData) {
+                  const success = await window.api.file.saveImage(title, imageData)
+                  if (success) window.toast.success(t('chat.topics.export.image_saved'))
+                }
+              } catch (error) {
+                logger.error('Failed to export message image', error as Error)
+                window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
               }
             }
           },
