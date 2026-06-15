@@ -1,10 +1,13 @@
 import { application } from '@application'
+import { loggerService } from '@logger'
 import type { UnifiedPreferenceKeyType } from '@shared/data/preference/preferenceTypes'
 import { RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE, RENDERER_GET_SETTINGS_BRIDGE } from '@shared/settingsBridge'
 
 import { callRendererBridge, getBridgeErrorMessage } from '../rendererBridge'
 import type { AppCapabilityDefinition } from '../types'
 import { navigateApp, okResult, pickPath, sanitizeForAgent } from '../utils'
+
+const logger = loggerService.withContext('AppCapability:Settings')
 
 export const SETTINGS_SECTIONS = [
   ['provider', 'Provider', '/settings/provider'],
@@ -235,6 +238,14 @@ export async function persistSettingValue(keyPath: string, value: unknown) {
         }
       )
     } catch (error) {
+      if (preferenceKey) {
+        logger.warn('Runtime setting dispatch failed after preference write; keeping persisted setting', {
+          path: keyPath,
+          preferenceKey,
+          error: getBridgeErrorMessage(error)
+        })
+        return
+      }
       throw new Error(`Failed to write runtime setting: ${getBridgeErrorMessage(error)}`)
     }
   }

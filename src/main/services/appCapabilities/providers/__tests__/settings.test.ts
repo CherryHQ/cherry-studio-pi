@@ -296,6 +296,39 @@ describe('settings app capabilities', () => {
     })
   })
 
+  it('keeps preference-backed updates when the renderer runtime dispatch is unavailable', async () => {
+    mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation(async (script: string) => {
+      if (script.includes('typeof')) return true
+      if (script.includes(RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE)) throw new Error('renderer asleep')
+      return undefined
+    })
+
+    const result = await capability('settings.value.set').execute(
+      { path: 'defaultPaintingProvider', value: 'ppio' },
+      { source: 'agent' }
+    )
+
+    expect(mocks.preferenceService.set).toHaveBeenCalledWith('feature.paintings.default_provider', 'ppio')
+    expect(result.data).toEqual({
+      path: 'defaultPaintingProvider',
+      value: 'ppio'
+    })
+  })
+
+  it('rejects runtime-only setting updates when the renderer runtime dispatch fails', async () => {
+    mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation(async (script: string) => {
+      if (script.includes('typeof')) return true
+      if (script.includes(RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE)) throw new Error('renderer asleep')
+      return undefined
+    })
+
+    await expect(
+      capability('settings.value.set').execute({ path: 'showAssistants', value: false }, { source: 'agent' })
+    ).rejects.toThrow('Failed to write runtime setting: renderer asleep')
+
+    expect(mocks.preferenceService.set).not.toHaveBeenCalled()
+  })
+
   it('updates preference-backed assistant list click behavior', async () => {
     const result = await capability('settings.value.set').execute(
       { path: 'clickAssistantToShowTopic', value: true },
