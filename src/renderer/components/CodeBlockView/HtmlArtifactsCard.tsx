@@ -1,6 +1,7 @@
 import { Button } from '@cherrystudio/ui'
 import { cn } from '@cherrystudio/ui/lib/utils'
 import { loggerService } from '@logger'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { extractHtmlTitle, getFileNameFromHtmlTitle } from '@renderer/utils/formats'
 import { Code, DownloadIcon, Globe, LinkIcon, Sparkles } from 'lucide-react'
 import type { FC } from 'react'
@@ -39,8 +40,13 @@ const HtmlArtifactsCard: FC<Props> = ({ html, onSave, isStreaming = false }) => 
 
   const handleDownload = async () => {
     const fileName = `${getFileNameFromHtmlTitle(title) || 'html-artifact'}.html`
-    await window.api.file.save(fileName, htmlContent)
-    window.toast.success(t('message.download.success'))
+    try {
+      await window.api.file.save(fileName, htmlContent)
+      window.toast.success(t('message.download.success'))
+    } catch (error) {
+      logger.error('Failed to download HTML artifact', error as Error)
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+    }
   }
 
   return (

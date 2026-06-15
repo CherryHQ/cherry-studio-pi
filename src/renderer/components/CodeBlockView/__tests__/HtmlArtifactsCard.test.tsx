@@ -7,7 +7,9 @@ const mockCreateTempFile = vi.fn()
 const mockWrite = vi.fn()
 const mockOpenPath = vi.fn()
 const mockOpenExternal = vi.fn()
+const mockSave = vi.fn()
 const mockToastError = vi.fn()
+const mockToastSuccess = vi.fn()
 
 vi.mock('@logger', () => ({
   loggerService: {
@@ -54,7 +56,7 @@ describe('HtmlArtifactsCard', () => {
         createTempFile: mockCreateTempFile,
         write: mockWrite,
         openPath: mockOpenPath,
-        save: vi.fn()
+        save: mockSave
       },
       shell: {
         openExternal: mockOpenExternal
@@ -63,7 +65,7 @@ describe('HtmlArtifactsCard', () => {
     ;(window as any).toast = {
       ...(window.toast as any),
       error: mockToastError,
-      success: vi.fn()
+      success: mockToastSuccess
     }
   })
 
@@ -86,5 +88,15 @@ describe('HtmlArtifactsCard', () => {
     fireEvent.click(screen.getByText('Open external'))
 
     await waitFor(() => expect(mockToastError).toHaveBeenCalledWith('Open failed'))
+  })
+
+  it('shows a toast when artifact download fails', async () => {
+    mockSave.mockRejectedValueOnce(new Error('save failed'))
+    render(<HtmlArtifactsCard html="<html><head><title>Demo</title></head><body>Hello</body></html>" />)
+
+    fireEvent.click(screen.getByText('code_block.download.label'))
+
+    await waitFor(() => expect(mockToastError).toHaveBeenCalledWith('common.save_failed: save failed'))
+    expect(mockToastSuccess).not.toHaveBeenCalled()
   })
 })
