@@ -1,3 +1,4 @@
+import { loggerService } from '@logger'
 import db from '@renderer/databases'
 import store from '@renderer/store'
 import type { FileMetadata, LegacyAssistant, Topic } from '@renderer/types'
@@ -17,6 +18,8 @@ import {
 } from './StorageV2LocalStorageSnapshot'
 import { storageV2MirrorService } from './StorageV2MirrorService'
 import type { StorageV2RuntimeMirrorStatus, StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
+
+const logger = loggerService.withContext('StorageV2Service')
 
 export type { StorageV2RuntimeMirrorStatus } from './StorageV2RuntimeMirrorStatus'
 
@@ -640,7 +643,9 @@ export async function runLegacyMigrationToStorageV2(
       finishedAt: report.finishedAt,
       snapshotPath,
       report
-    }).catch(() => undefined)
+    }).catch((recordError) => {
+      logger.warn('Failed to record successful Storage v2 migration run', recordError as Error)
+    })
 
     return report
   } catch (error) {
@@ -653,7 +658,9 @@ export async function runLegacyMigrationToStorageV2(
       finishedAt,
       snapshotPath,
       error: error instanceof Error ? error.message : String(error)
-    }).catch(() => undefined)
+    }).catch((recordError) => {
+      logger.warn('Failed to record failed Storage v2 migration run', recordError as Error)
+    })
     throw error
   }
 }
