@@ -3,6 +3,7 @@ import { cors } from '@elysia/cors'
 import { node } from '@elysia/node'
 import { openapi } from '@elysia/openapi'
 import { loggerService } from '@logger'
+import { APP_PRODUCT_NAME } from '@main/config/appIdentity'
 import { DataApiError } from '@shared/data/api'
 import { Elysia } from 'elysia'
 import { v4 as uuidv4 } from 'uuid'
@@ -17,6 +18,7 @@ import { modelsRoutes } from './routes/models'
 import { responsesRoutes } from './routes/responses'
 
 const logger = loggerService.withContext('ApiGateway')
+const API_NAME = `${APP_PRODUCT_NAME} API`
 
 /** Path under which OpenAPI docs (UI) and JSON spec (`${OPENAPI_PATH}/json`) are served. */
 export const OPENAPI_PATH = '/openapi' as const
@@ -75,10 +77,9 @@ export function buildApp() {
         mapJsonSchema: { zod: z.toJSONSchema },
         documentation: {
           info: {
-            title: 'Cherry Studio API',
+            title: API_NAME,
             version: '1.0.0',
-            description:
-              'OpenAI- and Anthropic-compatible HTTP API for Cherry Studio, plus Cherry-specific endpoints (models, knowledge bases)'
+            description: `OpenAI- and Anthropic-compatible HTTP API for ${APP_PRODUCT_NAME}, plus app endpoints (models, knowledge bases)`
           }
         }
       })
@@ -116,7 +117,7 @@ export function buildApp() {
     .get(
       '/',
       () => ({
-        name: 'Cherry Studio API',
+        name: API_NAME,
         version: '1.0.0',
         endpoints: {
           health: 'GET /health',

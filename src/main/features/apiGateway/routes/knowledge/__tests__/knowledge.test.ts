@@ -119,7 +119,7 @@ describe('knowledge routes (v2)', () => {
     const { status, body } = await call('POST', '/knowledge-bases/search', { query: 'hi' })
     expect(status).toBe(200)
     expect(body.results).toEqual([])
-    expect(body.warnings).toHaveLength(1)
+    expect(body.warnings).toEqual(['No knowledge bases configured. Please add knowledge bases in Cherry Studio Pi.'])
   })
 
   it('POST /search → 503 when every targeted base search fails', async () => {
