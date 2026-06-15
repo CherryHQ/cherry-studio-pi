@@ -42,8 +42,12 @@ function rowToGroup(row: GroupRow): Group {
 }
 
 export class GroupService {
+  private get dbService() {
+    return application.get('DbService')
+  }
+
   private get db() {
-    return application.get('DbService').getDb()
+    return this.dbService.getDb()
   }
 
   /**
@@ -78,7 +82,7 @@ export class GroupService {
   async create(dto: CreateGroupDto): Promise<Group> {
     const row = await withSqliteErrors(
       () =>
-        this.db.transaction(async (tx) =>
+        this.dbService.withWriteTx(async (tx) =>
           insertWithOrderKey(
             tx,
             groupTable,
@@ -139,7 +143,7 @@ export class GroupService {
    * from the target row — callers do not pass scope.
    */
   async reorder(id: string, anchor: OrderRequest): Promise<void> {
-    await this.db.transaction(async (tx) =>
+    await this.dbService.withWriteTx(async (tx) =>
       applyScopedMoves(tx, groupTable, [{ id, anchor }], {
         pkColumn: groupTable.id,
         scopeColumn: groupTable.entityType
@@ -152,7 +156,7 @@ export class GroupService {
    * span multiple entityTypes with a VALIDATION_ERROR.
    */
   async reorderBatch(moves: Array<{ id: string; anchor: OrderRequest }>): Promise<void> {
-    await this.db.transaction(async (tx) =>
+    await this.dbService.withWriteTx(async (tx) =>
       applyScopedMoves(tx, groupTable, moves, {
         pkColumn: groupTable.id,
         scopeColumn: groupTable.entityType

@@ -2,13 +2,18 @@ import { groupTable } from '@data/db/schemas/group'
 import { GroupService, groupService } from '@data/services/GroupService'
 import { DataApiError, ErrorCode } from '@shared/data/api'
 import { setupTestDatabase } from '@test-helpers/db'
+import { MockMainDbServiceExport } from '@test-mocks/main/DbService'
 import { eq } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 const GROUP_ID_MISSING = '11111111-1111-4111-8111-111111111111'
 
 describe('GroupService', () => {
   const dbh = setupTestDatabase()
+
+  beforeEach(() => {
+    MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+  })
 
   it('should export a module-level singleton of GroupService', () => {
     expect(groupService).toBeInstanceOf(GroupService)
@@ -48,6 +53,12 @@ describe('GroupService', () => {
       const result = await groupService.create({ entityType: 'knowledge', name: 'Knowledge Group' })
 
       expect(result).toMatchObject({ entityType: 'knowledge', name: 'Knowledge Group' })
+    })
+
+    it('should route group creation through the serialized write transaction helper', async () => {
+      await groupService.create({ entityType: 'topic', name: 'Serialized' })
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -156,6 +167,16 @@ describe('GroupService', () => {
         code: ErrorCode.NOT_FOUND
       })
     })
+
+    it('should route single reorders through the serialized write transaction helper', async () => {
+      const a = await groupService.create({ entityType: 'topic', name: 'A' })
+      const b = await groupService.create({ entityType: 'topic', name: 'B' })
+
+      MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+      await groupService.reorder(a.id, { after: b.id })
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('reorderBatch', () => {
@@ -195,6 +216,19 @@ describe('GroupService', () => {
           { id: GROUP_ID_MISSING, anchor: { position: 'first' } }
         ])
       ).rejects.toMatchObject({ code: ErrorCode.NOT_FOUND })
+    })
+
+    it('should route batch reorders through the serialized write transaction helper', async () => {
+      const a = await groupService.create({ entityType: 'topic', name: 'A' })
+      const b = await groupService.create({ entityType: 'topic', name: 'B' })
+
+      MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+      await groupService.reorderBatch([
+        { id: a.id, anchor: { position: 'last' } },
+        { id: b.id, anchor: { position: 'first' } }
+      ])
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
   })
 
