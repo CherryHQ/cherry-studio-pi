@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { isWin } from '@main/core/platform'
+import { summarizeObjectShapeForLog, summarizeTextForLog } from '@main/utils/logging'
 import { HOME_CHERRY_DIR } from '@shared/config/constant'
 import type { OcrOvConfig, OcrResult, SupportedOcrFile } from '@types'
 import { isImageFileMetadata } from '@types'
@@ -57,7 +58,11 @@ export class OvOcrService extends OcrBaseService {
   }
 
   private async ocrImage(filePath: string, options?: OcrOvConfig): Promise<OcrResult> {
-    logger.info(`OV OCR called on ${filePath} with options ${JSON.stringify(options)}`)
+    logger.info('OV OCR called', {
+      extension: path.extname(filePath).toLowerCase(),
+      filePath: summarizeTextForLog(filePath),
+      options: summarizeObjectShapeForLog(options)
+    })
 
     let workingDirectory: string | null = null
 
@@ -73,7 +78,10 @@ export class OvOcrService extends OcrBaseService {
       // 2. Copy file to img directory
       const fileName = path.basename(filePath)
       await this.copyFileToImgDir(imgDir, filePath, fileName)
-      logger.info(`File copied to img directory: ${fileName}`)
+      logger.info('File copied to OV OCR img directory', {
+        extension: path.extname(fileName).toLowerCase(),
+        fileName: summarizeTextForLog(fileName)
+      })
 
       // 3. Run run.bat
       logger.info('Running OV OCR batch process...')
@@ -88,7 +96,7 @@ export class OvOcrService extends OcrBaseService {
 
       // 5. Read output/[basename].txt file content
       const ocrText = await fs.promises.readFile(outputFilePath, 'utf-8')
-      logger.info(`OV OCR text extracted: ${ocrText.substring(0, 100)}...`)
+      logger.info('OV OCR text extracted', { text: summarizeTextForLog(ocrText) })
 
       // 6. Return result
       return { text: ocrText }

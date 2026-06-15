@@ -8,12 +8,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { OvOcrService } from '../OvOcrService'
 
+const loggerMocks = vi.hoisted(() => ({
+  error: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn()
+}))
+
 vi.mock('@logger', () => ({
   loggerService: {
     withContext: () => ({
-      error: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn()
+      error: loggerMocks.error,
+      info: loggerMocks.info,
+      warn: loggerMocks.warn
     })
   }
 }))
@@ -83,5 +89,25 @@ describe('OvOcrService', () => {
     )
     expect(workingDirectories).toHaveLength(1)
     await expect(fs.promises.stat(workingDirectories[0])).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('does not write source file names or OCR text into logs', async () => {
+    const sourcePath = path.join(tempRoot, 'private-id-card.png')
+    await fs.promises.writeFile(sourcePath, 'image')
+
+    const service = new OvOcrService()
+    await service.ocr({
+      path: sourcePath,
+      type: FILE_TYPE.IMAGE
+    } as SupportedOcrFile)
+
+    const serializedLogs = JSON.stringify(loggerMocks.info.mock.calls)
+
+    expect(serializedLogs).not.toContain(sourcePath)
+    expect(serializedLogs).not.toContain('private-id-card.png')
+    expect(serializedLogs).not.toContain('ocr result')
+    expect(loggerMocks.info).toHaveBeenCalledWith('OV OCR text extracted', {
+      text: expect.objectContaining({ length: 'ocr result'.length })
+    })
   })
 })
