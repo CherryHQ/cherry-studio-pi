@@ -76,7 +76,6 @@ export const syncAi302Servers = async (token: string): Promise<Ai302SyncResult> 
     // Process successful response
     const data = await response.json()
     const servers: McpServer[] = data.mcps || []
-    logger.debug('servers', servers)
 
     if (servers.length === 0) {
       return {

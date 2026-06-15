@@ -94,7 +94,6 @@ export const syncModelScopeServers = async (token: string): Promise<ModelScopeSy
 
     // Transform ModelScope servers to MCP servers format
     const allServers: McpServer[] = []
-    logger.debug('ModelScope servers:', servers)
     for (const server of servers) {
       try {
         if (!server.operational_urls?.[0]?.url) continue

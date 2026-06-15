@@ -128,7 +128,6 @@ export const syncTokenLanYunServers = async (token: string): Promise<TokenLanYun
 
     // Transform Token servers to MCP servers format
     const allServers: McpServer[] = []
-    logger.debug('TokenLanYun servers:', servers)
 
     for (const server of servers) {
       try {
