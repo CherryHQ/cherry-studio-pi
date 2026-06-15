@@ -267,12 +267,16 @@ function rowToFileEntrySafe(row: FileEntryRow): FileEntry | null {
 }
 
 class FileEntryServiceImpl implements FileEntryService {
-  private getDb() {
-    return application.get('DbService').getDb()
+  private get dbService() {
+    return application.get('DbService')
+  }
+
+  private get db() {
+    return this.dbService.getDb()
   }
 
   async findById(id: FileEntryId): Promise<FileEntry | null> {
-    const rows = await this.getDb().select().from(fileEntryTable).where(eq(fileEntryTable.id, id)).limit(1)
+    const rows = await this.db.select().from(fileEntryTable).where(eq(fileEntryTable.id, id)).limit(1)
     return rows.length === 0 ? null : rowToFileEntry(rows[0])
   }
 
@@ -285,7 +289,7 @@ class FileEntryServiceImpl implements FileEntryService {
   }
 
   async findByExternalPath(canonicalPath: CanonicalExternalPath): Promise<FileEntry | null> {
-    const rows = await this.getDb()
+    const rows = await this.db
       .select()
       .from(fileEntryTable)
       .where(eq(fileEntryTable.externalPath, canonicalPath))
@@ -294,7 +298,7 @@ class FileEntryServiceImpl implements FileEntryService {
   }
 
   async findCaseInsensitivePeers(canonicalPath: CanonicalExternalPath): Promise<FileEntry[]> {
-    const rows = await this.getDb()
+    const rows = await this.db
       .select()
       .from(fileEntryTable)
       .where(
@@ -322,7 +326,7 @@ class FileEntryServiceImpl implements FileEntryService {
       conditions.push(isNull(fileEntryTable.deletedAt))
     }
 
-    let queryBuilder = this.getDb()
+    let queryBuilder = this.db
       .select()
       .from(fileEntryTable)
       .where(and(...conditions))
@@ -377,8 +381,8 @@ class FileEntryServiceImpl implements FileEntryService {
     const offset = (page - 1) * pageSize
 
     const [rows, totalRow] = await Promise.all([
-      this.getDb().select().from(fileEntryTable).where(where).orderBy(order, tieBreaker).limit(pageSize).offset(offset),
-      this.getDb().select({ value: count() }).from(fileEntryTable).where(where)
+      this.db.select().from(fileEntryTable).where(where).orderBy(order, tieBreaker).limit(pageSize).offset(offset),
+      this.db.select({ value: count() }).from(fileEntryTable).where(where)
     ])
 
     return {
@@ -391,7 +395,7 @@ class FileEntryServiceImpl implements FileEntryService {
   async findUnreferenced(query: { origin?: FileEntryOrigin } = {}): Promise<FileEntry[]> {
     const conditions: SQL[] = [isNull(fileEntryTable.deletedAt), isNull(fileRefTable.id)]
     if (query.origin) conditions.push(eq(fileEntryTable.origin, query.origin))
-    const rows = await this.getDb()
+    const rows = await this.db
       .select({ entry: fileEntryTable })
       .from(fileEntryTable)
       .leftJoin(fileRefTable, eq(fileRefTable.fileEntryId, fileEntryTable.id))
@@ -401,27 +405,29 @@ class FileEntryServiceImpl implements FileEntryService {
   }
 
   async listAllIds(): Promise<Set<FileEntryId>> {
-    const rows = await this.getDb().select({ id: fileEntryTable.id }).from(fileEntryTable)
+    const rows = await this.db.select({ id: fileEntryTable.id }).from(fileEntryTable)
     return new Set(rows.map((r) => r.id))
   }
 
   async create(values: CreateFileEntryRow): Promise<FileEntry> {
     const now = Date.now()
     const id = values.id ?? uuidv7()
-    const rows = await this.getDb()
-      .insert(fileEntryTable)
-      .values({
-        id,
-        origin: values.origin,
-        name: values.name,
-        ext: values.ext,
-        size: values.size,
-        externalPath: values.externalPath,
-        deletedAt: values.deletedAt ?? null,
-        createdAt: now,
-        updatedAt: now
-      })
-      .returning()
+    const rows = await this.dbService.withWriteTx((tx) =>
+      tx
+        .insert(fileEntryTable)
+        .values({
+          id,
+          origin: values.origin,
+          name: values.name,
+          ext: values.ext,
+          size: values.size,
+          externalPath: values.externalPath,
+          deletedAt: values.deletedAt ?? null,
+          createdAt: now,
+          updatedAt: now
+        })
+        .returning()
+    )
     return rowToFileEntry(rows[0])
   }
 
@@ -439,7 +445,9 @@ class FileEntryServiceImpl implements FileEntryService {
     if (values.ext !== undefined) updates.ext = values.ext
     if (values.size !== undefined) updates.size = values.size
     if (values.deletedAt !== undefined) updates.deletedAt = values.deletedAt
-    const rows = await this.getDb().update(fileEntryTable).set(updates).where(eq(fileEntryTable.id, id)).returning()
+    const rows = await this.dbService.withWriteTx((tx) =>
+      tx.update(fileEntryTable).set(updates).where(eq(fileEntryTable.id, id)).returning()
+    )
     if (rows.length === 0) {
       throw DataApiErrorFactory.notFound('FileEntry', id)
     }
@@ -460,11 +468,13 @@ class FileEntryServiceImpl implements FileEntryService {
     // `canonicalizeExternalPath`).
     SafeNameSchema.parse(name)
     AbsolutePathSchema.parse(externalPath)
-    const rows = await this.getDb()
-      .update(fileEntryTable)
-      .set({ externalPath, name, updatedAt: Date.now() })
-      .where(eq(fileEntryTable.id, id))
-      .returning()
+    const rows = await this.dbService.withWriteTx((tx) =>
+      tx
+        .update(fileEntryTable)
+        .set({ externalPath, name, updatedAt: Date.now() })
+        .where(eq(fileEntryTable.id, id))
+        .returning()
+    )
     if (rows.length === 0) {
       throw DataApiErrorFactory.notFound('FileEntry', id)
     }
@@ -472,7 +482,7 @@ class FileEntryServiceImpl implements FileEntryService {
   }
 
   async delete(id: FileEntryId): Promise<void> {
-    await this.getDb().delete(fileEntryTable).where(eq(fileEntryTable.id, id))
+    await this.dbService.withWriteTx((tx) => tx.delete(fileEntryTable).where(eq(fileEntryTable.id, id)))
   }
 }
 

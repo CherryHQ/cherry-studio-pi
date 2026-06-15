@@ -2,7 +2,7 @@ import { fileEntryTable, fileRefTable } from '@data/db/schemas/file'
 import { DataApiError, ErrorCode } from '@shared/data/api'
 import type { CanonicalExternalPath, FileEntryId } from '@shared/data/types/file'
 import { setupTestDatabase } from '@test-helpers/db'
-import { MockMainDbServiceUtils } from '@test-mocks/main/DbService'
+import { MockMainDbServiceExport, MockMainDbServiceUtils } from '@test-mocks/main/DbService'
 import { mockMainLoggerService } from '@test-mocks/MainLoggerService'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -22,6 +22,8 @@ describe('FileEntryService', () => {
 
   beforeEach(() => {
     MockMainDbServiceUtils.setDb(dbh.db)
+    MockMainDbServiceExport.dbService.withWriteTx.mockImplementation((fn) => dbh.db.transaction(fn as never))
+    MockMainDbServiceExport.dbService.withWriteTx.mockClear()
   })
 
   describe('findById / getById', () => {
@@ -557,6 +559,7 @@ describe('FileEntryService', () => {
       }
       expect(entry.createdAt).toBeGreaterThan(0)
       expect(entry.updatedAt).toBeGreaterThan(0)
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
 
     it('inserts an external row with size=null in DB; size absent on BO projection', async () => {
@@ -613,9 +616,11 @@ describe('FileEntryService', () => {
       await fileEntryService.create({ id, origin: 'internal', name: 'old', ext: 'txt', size: 1, externalPath: null })
       const original = await fileEntryService.getById(id)
       await new Promise((r) => setTimeout(r, 5))
+      MockMainDbServiceExport.dbService.withWriteTx.mockClear()
       const updated = await fileEntryService.update(id, { name: 'new' })
       expect(updated.name).toBe('new')
       expect(updated.updatedAt).toBeGreaterThanOrEqual(original.updatedAt)
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
 
     it('throws a typed DataApiError(NOT_FOUND) when entry does not exist', async () => {
@@ -733,6 +738,7 @@ describe('FileEntryService', () => {
       const original = await fileEntryService.getById(id)
       await new Promise((r) => setTimeout(r, 5))
 
+      MockMainDbServiceExport.dbService.withWriteTx.mockClear()
       const updated = await fileEntryService.setExternalPathAndName(
         id,
         '/Users/me/new-doc.pdf' as CanonicalExternalPath,
@@ -749,6 +755,7 @@ describe('FileEntryService', () => {
       if (refetched.origin !== 'external') throw new Error('expected external entry')
       expect(refetched.externalPath).toBe('/Users/me/new-doc.pdf')
       expect(refetched.name).toBe('new-doc')
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
 
     it('throws a typed DataApiError(NOT_FOUND) when the entry does not exist', async () => {
@@ -861,8 +868,10 @@ describe('FileEntryService', () => {
     it('removes an existing row', async () => {
       const id = '019606a0-0000-7000-8000-000000000c01' as FileEntryId
       await fileEntryService.create({ id, origin: 'internal', name: 'd', ext: 'txt', size: 1, externalPath: null })
+      MockMainDbServiceExport.dbService.withWriteTx.mockClear()
       await fileEntryService.delete(id)
       expect(await fileEntryService.findById(id)).toBeNull()
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
 
     it('is idempotent on missing id', async () => {
