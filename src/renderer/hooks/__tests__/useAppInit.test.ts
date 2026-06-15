@@ -17,8 +17,10 @@ const mocks = vi.hoisted(() => ({
     dataSyncWebdavUser: ''
   },
   startDataSyncAutoSync: vi.fn(),
+  startDataSyncExternalSyncListener: vi.fn(),
   setDayjsLocale: vi.fn(),
   stopDataSyncAutoSync: vi.fn(),
+  stopDataSyncExternalSyncListener: vi.fn(),
   updateAppUpdateState: vi.fn()
 }))
 
@@ -74,6 +76,8 @@ vi.mock('@renderer/hooks/useStorageMonitorNotification', () => ({
 
 vi.mock('@renderer/services/DataSyncService', () => ({
   startDataSyncAutoSync: mocks.startDataSyncAutoSync,
+  startDataSyncExternalSyncListener: mocks.startDataSyncExternalSyncListener,
+  stopDataSyncExternalSyncListener: mocks.stopDataSyncExternalSyncListener,
   stopDataSyncAutoSync: mocks.stopDataSyncAutoSync
 }))
 
@@ -218,6 +222,16 @@ describe('useAppInit', () => {
 
     unmount()
     expect(mocks.stopDataSyncAutoSync).toHaveBeenCalledTimes(1)
+  })
+
+  it('starts the external data sync completion listener from app init', () => {
+    const { unmount } = renderHook(() => useAppInit())
+
+    expect(mocks.startDataSyncExternalSyncListener).toHaveBeenCalledTimes(1)
+    expect(mocks.stopDataSyncExternalSyncListener).not.toHaveBeenCalled()
+
+    unmount()
+    expect(mocks.stopDataSyncExternalSyncListener).toHaveBeenCalledTimes(1)
   })
 
   it('stops WebDAV auto sync from app init when saved credentials are incomplete', () => {

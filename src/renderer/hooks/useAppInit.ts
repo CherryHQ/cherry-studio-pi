@@ -7,7 +7,12 @@ import db from '@renderer/databases'
 import { useAppUpdateHandler, useAppUpdateState } from '@renderer/hooks/useAppUpdate'
 import { useStorageMonitorNotification } from '@renderer/hooks/useStorageMonitorNotification'
 import i18n, { setDayjsLocale } from '@renderer/i18n'
-import { startDataSyncAutoSync, stopDataSyncAutoSync } from '@renderer/services/DataSyncService'
+import {
+  startDataSyncAutoSync,
+  startDataSyncExternalSyncListener,
+  stopDataSyncAutoSync,
+  stopDataSyncExternalSyncListener
+} from '@renderer/services/DataSyncService'
 import { useAppSelector } from '@renderer/store'
 import { defaultLanguage } from '@shared/config/constant'
 import { useLiveQuery } from 'dexie-react-hooks'
@@ -166,6 +171,14 @@ export function useAppInit() {
       stopDataSyncAutoSync()
     }
   }, [dataSyncAutoSync, dataSyncSyncInterval, dataSyncWebdavHost, dataSyncWebdavPass, dataSyncWebdavUser])
+
+  useEffect(() => {
+    startDataSyncExternalSyncListener()
+
+    return () => {
+      stopDataSyncExternalSyncListener()
+    }
+  }, [])
 
   useEffect(() => {
     let customCssElement = document.getElementById('user-defined-custom-css') as HTMLStyleElement
