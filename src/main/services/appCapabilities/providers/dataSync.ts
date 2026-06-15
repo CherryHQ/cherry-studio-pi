@@ -1,4 +1,7 @@
+import { loggerService } from '@logger'
 import { appDataSyncService } from '@main/services/appData/AppDataSyncService'
+import { storageV2SecretVaultService } from '@main/services/storageV2/SecretVaultService'
+import { storageV2Service } from '@main/services/storageV2/StorageService'
 import { describeWebDavUserFacingError } from '@main/services/WebDavRetry'
 import {
   type DataSyncBridgeSettings,
@@ -16,6 +19,7 @@ import { callRendererBridge, getBridgeErrorMessage } from '../rendererBridge'
 import type { AppCapabilityDefinition } from '../types'
 import { okResult, sanitizeForAgent } from '../utils'
 
+const logger = loggerService.withContext('AppCapability:DataSync')
 const DEFAULT_DATA_SYNC_PATH = '/cherry-studio-pi'
 const DATA_SYNC_SUFFIX = '/sync/v1'
 const RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS = 5 * 60_000
@@ -29,13 +33,104 @@ type DataSyncSettingsState = {
   dataSyncSyncInterval?: number
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0
+}
+
+function normalizeStoredString(value: unknown, fallback = '') {
+  return typeof value === 'string' ? value : fallback
+}
+
+function normalizeStoredBoolean(value: unknown, fallback = false) {
+  return typeof value === 'boolean' ? value : fallback
+}
+
+function normalizeStoredNumber(value: unknown, fallback = 0) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+async function resolveStoredSecret(value: unknown) {
+  if (typeof value === 'string') return value
+  if (!isRecord(value)) return ''
+
+  const secretRef = value.secretRef
+  if (!isNonEmptyString(secretRef)) return ''
+
+  return (await storageV2SecretVaultService.getSecret(secretRef)) ?? ''
+}
+
+async function getStorageV2DataSyncSettings(): Promise<{
+  settings: DataSyncSettingsState
+  hasConfiguredValue: boolean
+}> {
+  const [webdavHost, webdavUser, webdavPass, webdavPath, dataSyncAutoSync, dataSyncSyncInterval] = await Promise.all([
+    storageV2Service.getSetting('settings.dataSyncWebdavHost'),
+    storageV2Service.getSetting('settings.dataSyncWebdavUser'),
+    storageV2Service.getSetting('settings.dataSyncWebdavPass'),
+    storageV2Service.getSetting('settings.dataSyncWebdavPath'),
+    storageV2Service.getSetting('settings.dataSyncAutoSync'),
+    storageV2Service.getSetting('settings.dataSyncSyncInterval')
+  ])
+
+  const settings = {
+    dataSyncWebdavHost: normalizeStoredString(webdavHost),
+    dataSyncWebdavUser: normalizeStoredString(webdavUser),
+    dataSyncWebdavPass: await resolveStoredSecret(webdavPass),
+    dataSyncWebdavPath: normalizeStoredString(webdavPath, DEFAULT_DATA_SYNC_PATH),
+    dataSyncAutoSync: normalizeStoredBoolean(dataSyncAutoSync),
+    dataSyncSyncInterval: normalizeStoredNumber(dataSyncSyncInterval)
+  }
+
+  return {
+    settings,
+    hasConfiguredValue: Boolean(
+      settings.dataSyncWebdavHost ||
+        settings.dataSyncWebdavUser ||
+        settings.dataSyncWebdavPass ||
+        (settings.dataSyncWebdavPath && settings.dataSyncWebdavPath !== DEFAULT_DATA_SYNC_PATH) ||
+        settings.dataSyncAutoSync ||
+        settings.dataSyncSyncInterval
+    )
+  }
+}
+
 async function getDataSyncSettings(): Promise<DataSyncSettingsState> {
+  let storageSettings: Awaited<ReturnType<typeof getStorageV2DataSyncSettings>> = {
+    settings: {
+      dataSyncWebdavHost: '',
+      dataSyncWebdavUser: '',
+      dataSyncWebdavPass: '',
+      dataSyncWebdavPath: DEFAULT_DATA_SYNC_PATH,
+      dataSyncAutoSync: false,
+      dataSyncSyncInterval: 0
+    },
+    hasConfiguredValue: false
+  }
+
+  try {
+    storageSettings = await getStorageV2DataSyncSettings()
+    if (storageSettings.hasConfiguredValue) {
+      return storageSettings.settings
+    }
+  } catch (error) {
+    logger.warn('Failed to read data sync settings from Storage v2; falling back to renderer settings bridge', {
+      error: getBridgeErrorMessage(error)
+    })
+  }
+
   try {
     return await callRendererBridge<DataSyncBridgeSettings>(RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE, undefined, {
       timeoutMessage: 'Timed out reading data sync settings'
     })
   } catch (error) {
-    throw new Error(`Failed to read data sync settings: ${getBridgeErrorMessage(error)}`)
+    logger.warn('Failed to read data sync settings from renderer; using Storage v2 fallback', {
+      error: getBridgeErrorMessage(error)
+    })
+    return storageSettings.settings
   }
 }
 
@@ -141,7 +236,44 @@ async function prepareRendererStorageV2ForDataSync() {
       timeoutMessage: 'Timed out preparing local data before sync'
     })
   } catch (error) {
-    throw new Error(`Failed to prepare local data before sync: ${getBridgeErrorMessage(error)}`)
+    logger.warn('Renderer Storage v2 preparation bridge is unavailable; continuing with persisted Storage v2 data', {
+      error: getBridgeErrorMessage(error)
+    })
+  }
+}
+
+async function persistWebDavConfigToStorageV2(
+  config: WebDavConfig,
+  options: { autoSync?: boolean; syncInterval?: number } = {}
+) {
+  const secretValue = config.webdavPass || ''
+  const secretSettingValue = secretValue
+    ? {
+        secretRef: await storageV2SecretVaultService.setSecret(
+          'settings',
+          'dataSyncWebdavPass',
+          'dataSyncWebdavPassword',
+          secretValue
+        )
+      }
+    : ''
+
+  const entries: Array<[key: string, value: unknown]> = [
+    ['settings.dataSyncWebdavHost', config.webdavHost || ''],
+    ['settings.dataSyncWebdavUser', config.webdavUser || ''],
+    ['settings.dataSyncWebdavPass', secretSettingValue],
+    ['settings.dataSyncWebdavPath', config.webdavPath || DEFAULT_DATA_SYNC_PATH]
+  ]
+
+  if (typeof options.syncInterval === 'number') {
+    entries.push(['settings.dataSyncSyncInterval', options.syncInterval])
+  }
+  if (typeof options.autoSync === 'boolean') {
+    entries.push(['settings.dataSyncAutoSync', options.autoSync])
+  }
+
+  for (const [key, value] of entries) {
+    await storageV2Service.setSetting(key, value, 'settings')
   }
 }
 
@@ -159,12 +291,16 @@ async function persistWebDavConfig(config: WebDavConfig, options: { autoSync?: b
     settings.dataSyncAutoSync = options.autoSync
   }
 
+  await persistWebDavConfigToStorageV2(config, options)
+
   try {
     await callRendererBridge<DataSyncBridgeSettings>(RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE, settings, {
       timeoutMessage: 'Timed out saving data sync settings'
     })
   } catch (error) {
-    throw new Error(`Failed to save data sync settings: ${getBridgeErrorMessage(error)}`)
+    logger.warn('Saved data sync settings to Storage v2, but renderer settings refresh failed', {
+      error: getBridgeErrorMessage(error)
+    })
   }
 }
 

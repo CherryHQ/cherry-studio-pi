@@ -19,6 +19,14 @@ const mocks = vi.hoisted(() => ({
     syncNow: vi.fn(),
     recordSyncFailure: vi.fn(),
     restoreLatestSnapshot: vi.fn()
+  },
+  storageV2Service: {
+    getSetting: vi.fn(),
+    setSetting: vi.fn()
+  },
+  secretVault: {
+    getSecret: vi.fn(),
+    setSecret: vi.fn()
   }
 }))
 
@@ -30,6 +38,14 @@ vi.mock('electron', () => ({
 
 vi.mock('@main/services/appData/AppDataSyncService', () => ({
   appDataSyncService: mocks.appDataSyncService
+}))
+
+vi.mock('@main/services/storageV2/StorageService', () => ({
+  storageV2Service: mocks.storageV2Service
+}))
+
+vi.mock('@main/services/storageV2/SecretVaultService', () => ({
+  storageV2SecretVaultService: mocks.secretVault
 }))
 
 vi.mock('../../utils', () => ({
@@ -66,6 +82,24 @@ const settings = {
   dataSyncAutoSync: true,
   dataSyncSyncInterval: 15
 }
+const DATA_SYNC_PASS_SECRET_REF = 'storage-v2://secret/settings/dataSyncWebdavPass/dataSyncWebdavPassword'
+
+function mockStorageV2DataSyncSettings(overrides: Partial<typeof settings> = {}) {
+  const next = { ...settings, ...overrides }
+  const values = new Map<string, unknown>([
+    ['settings.dataSyncWebdavHost', next.dataSyncWebdavHost],
+    ['settings.dataSyncWebdavUser', next.dataSyncWebdavUser],
+    ['settings.dataSyncWebdavPass', { secretRef: DATA_SYNC_PASS_SECRET_REF }],
+    ['settings.dataSyncWebdavPath', next.dataSyncWebdavPath],
+    ['settings.dataSyncAutoSync', next.dataSyncAutoSync],
+    ['settings.dataSyncSyncInterval', next.dataSyncSyncInterval]
+  ])
+
+  mocks.storageV2Service.getSetting.mockImplementation(async (key: string) => values.get(key) ?? null)
+  mocks.secretVault.getSecret.mockImplementation(async (secretRef: string) =>
+    secretRef === DATA_SYNC_PASS_SECRET_REF ? next.dataSyncWebdavPass : null
+  )
+}
 
 function capability(id: string) {
   const item = createDataSyncCapabilities().find((capability) => capability.id === id)
@@ -86,9 +120,12 @@ describe('data sync app capabilities', () => {
       if (script.includes(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE)) return undefined
       return undefined
     })
+    mockStorageV2DataSyncSettings()
+    mocks.storageV2Service.setSetting.mockResolvedValue({ key: '', value: null, scope: 'settings' })
+    mocks.secretVault.setSecret.mockResolvedValue(DATA_SYNC_PASS_SECRET_REF)
   })
 
-  it('reads WebDAV config with secrets redacted', async () => {
+  it('reads WebDAV config from Storage v2 with secrets redacted', async () => {
     const result = await capability('dataSync.webdav.config.get').execute({}, { source: 'agent' })
 
     expect(result.ok).toBe(true)
@@ -100,12 +137,44 @@ describe('data sync app capabilities', () => {
       autoSync: true,
       syncInterval: 15
     })
+    expect(mocks.secretVault.getSecret).toHaveBeenCalledWith(DATA_SYNC_PASS_SECRET_REF)
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the renderer settings bridge when Storage v2 has no sync config yet', async () => {
+    mocks.storageV2Service.getSetting.mockResolvedValue(null)
+    mocks.secretVault.getSecret.mockResolvedValue(null)
+
+    const result = await capability('dataSync.webdav.config.get').execute({}, { source: 'agent' })
+
+    expect(result.ok).toBe(true)
+    expect(result.data).toMatchObject({
+      webdavHost: 'https://dav.example.com',
+      webdavUser: 'user',
+      webdavPass: '[redacted]'
+    })
     expect(mocks.browserWindows[0].webContents.executeJavaScript).toHaveBeenCalledWith(
       `window[${JSON.stringify(RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE)}]()`
     )
   })
 
-  it('saves WebDAV config through the renderer settings bridge', async () => {
+  it('falls back to the renderer settings bridge when Storage v2 settings cannot be read', async () => {
+    mocks.storageV2Service.getSetting.mockRejectedValueOnce(new Error('database is busy'))
+
+    const result = await capability('dataSync.webdav.config.get').execute({}, { source: 'agent' })
+
+    expect(result.ok).toBe(true)
+    expect(result.data).toMatchObject({
+      webdavHost: 'https://dav.example.com',
+      webdavUser: 'user',
+      webdavPass: '[redacted]'
+    })
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).toHaveBeenCalledWith(
+      `window[${JSON.stringify(RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE)}]()`
+    )
+  })
+
+  it('saves WebDAV config to Storage v2 and refreshes the renderer settings bridge when available', async () => {
     const result = await capability('dataSync.webdav.config.set').execute(
       {
         webdavHost: ' dav.example.com ',
@@ -122,6 +191,22 @@ describe('data sync app capabilities', () => {
       String(script).startsWith(`window[${JSON.stringify(RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE)}](`)
     )
     expect(result.ok).toBe(true)
+    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith(
+      'settings',
+      'dataSyncWebdavPass',
+      'dataSyncWebdavPassword',
+      ' secret '
+    )
+    expect(mocks.storageV2Service.setSetting).toHaveBeenCalledWith(
+      'settings.dataSyncWebdavPass',
+      { secretRef: DATA_SYNC_PASS_SECRET_REF },
+      'settings'
+    )
+    expect(mocks.storageV2Service.setSetting).toHaveBeenCalledWith(
+      'settings.dataSyncWebdavHost',
+      'https://dav.example.com',
+      'settings'
+    )
     expect(setCall?.[0]).toContain('"dataSyncWebdavHost":"https://dav.example.com"')
     expect(setCall?.[0]).toContain('"dataSyncWebdavUser":"user"')
     expect(setCall?.[0]).toContain('"dataSyncWebdavPass":" secret "')
@@ -142,6 +227,8 @@ describe('data sync app capabilities', () => {
       )
     ).rejects.toThrow('WebDAV 用户名和密码不能为空')
 
+    expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.setSetting).not.toHaveBeenCalled()
     expect(
       mocks.browserWindows[0].webContents.executeJavaScript.mock.calls.some(([script]) =>
         String(script).startsWith(`window[${JSON.stringify(RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE)}](`)
@@ -242,9 +329,7 @@ describe('data sync app capabilities', () => {
     const result = await capability('dataSync.sync.now').execute({}, { source: 'agent', dryRun: true })
 
     expect(result.ok).toBe(true)
-    expect(mocks.browserWindows[0].webContents.executeJavaScript).toHaveBeenCalledWith(
-      `window[${JSON.stringify(RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE)}]()`
-    )
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
     expect(result.summary).toContain('dry run')
     expect(mocks.appDataSyncService.syncNow).not.toHaveBeenCalled()
   })
@@ -313,22 +398,31 @@ describe('data sync app capabilities', () => {
     expect(result.summary).toBe('Data sync completed')
   })
 
-  it('fails agent-triggered data sync when the renderer preparation bridge is unavailable', async () => {
+  it('keeps agent-triggered data sync running when the renderer preparation bridge is unavailable', async () => {
     mocks.browserWindows[0].webContents.executeJavaScript.mockResolvedValueOnce(false)
+    mocks.appDataSyncService.syncNow.mockResolvedValueOnce({ status: 'success' })
 
-    await expect(
-      capability('dataSync.sync.now').execute(
-        {
-          webdavHost: 'https://dav.example.com',
-          webdavUser: 'user',
-          webdavPass: 'secret',
-          webdavPath: '/sync-root'
-        },
-        { source: 'agent' }
-      )
-    ).rejects.toThrow(/main window is not ready/i)
+    const result = await capability('dataSync.sync.now').execute(
+      {
+        webdavHost: 'https://dav.example.com',
+        webdavUser: 'user',
+        webdavPass: 'secret',
+        webdavPath: '/sync-root'
+      },
+      { source: 'agent' }
+    )
 
-    expect(mocks.appDataSyncService.syncNow).not.toHaveBeenCalled()
-    expect(mocks.browserWindows[0].webContents.send).not.toHaveBeenCalled()
+    expect(result.ok).toBe(true)
+    expect(mocks.appDataSyncService.syncNow).toHaveBeenCalledWith({
+      webdavHost: 'https://dav.example.com',
+      webdavUser: 'user',
+      webdavPass: 'secret',
+      webdavPath: '/sync-root'
+    })
+    expect(mocks.browserWindows[0].webContents.send).toHaveBeenCalledWith(IpcChannel.DataSync_ExternalSyncCompleted, {
+      completedAt: expect.any(Number),
+      source: 'agent',
+      summary: { status: 'success' }
+    })
   })
 })
