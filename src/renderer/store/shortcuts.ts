@@ -15,10 +15,13 @@
  * - v2 Refactor PR   : https://github.com/CherryHQ/cherry-studio/pull/10162
  * --------------------------------------------------------------------------
  */
+import { loggerService } from '@logger'
 import type { PayloadAction } from '@reduxjs/toolkit'
 import { createSlice } from '@reduxjs/toolkit'
 import type { Shortcut } from '@renderer/types'
 import { ZOOM_SHORTCUTS } from '@shared/config/constant'
+
+const logger = loggerService.withContext('ShortcutsStore')
 
 export interface ShortcutsState {
   shortcuts: Shortcut[]
@@ -162,6 +165,12 @@ const getSerializableShortcuts = (shortcuts: Shortcut[]) => {
   }))
 }
 
+const persistShortcuts = (shortcuts: Shortcut[]) => {
+  void window.api.shortcuts.update(getSerializableShortcuts(shortcuts)).catch((error) => {
+    logger.error('Failed to persist shortcuts', error as Error)
+  })
+}
+
 const shortcutsSlice = createSlice({
   name: 'shortcuts',
   initialState,
@@ -171,20 +180,20 @@ const shortcutsSlice = createSlice({
         ...initialState,
         ...action.payload
       }
-      void window.api.shortcuts.update(getSerializableShortcuts(nextState.shortcuts))
+      persistShortcuts(nextState.shortcuts)
       return nextState
     },
     updateShortcut: (state, action: PayloadAction<Shortcut>) => {
       state.shortcuts = state.shortcuts.map((s) => (s.key === action.payload.key ? action.payload : s))
-      void window.api.shortcuts.update(getSerializableShortcuts(state.shortcuts))
+      persistShortcuts(state.shortcuts)
     },
     toggleShortcut: (state, action: PayloadAction<string>) => {
       state.shortcuts = state.shortcuts.map((s) => (s.key === action.payload ? { ...s, enabled: !s.enabled } : s))
-      void window.api.shortcuts.update(getSerializableShortcuts(state.shortcuts))
+      persistShortcuts(state.shortcuts)
     },
     resetShortcuts: (state) => {
       state.shortcuts = initialState.shortcuts
-      void window.api.shortcuts.update(getSerializableShortcuts(state.shortcuts))
+      persistShortcuts(state.shortcuts)
     }
   }
 })
