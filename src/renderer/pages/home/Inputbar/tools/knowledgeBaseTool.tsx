@@ -1,8 +1,8 @@
 import { useAssistantMutations } from '@renderer/hooks/useAssistant'
 import { defineTool, registerTool, TopicType } from '@renderer/pages/home/Inputbar/types'
-import type { KnowledgeBase } from '@renderer/types'
 import { isSupportedToolUse } from '@renderer/utils/assistant'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
+import type { KnowledgeBaseListItem } from '@shared/data/api/schemas/knowledges'
 import { useCallback } from 'react'
 
 import KnowledgeBaseButton from './components/KnowledgeBaseButton'
@@ -20,7 +20,7 @@ const knowledgeBaseTool = defineTool({
   condition: ({ model }) => isSupportedToolUse(model),
 
   dependencies: {
-    state: ['selectedKnowledgeBases', 'files'] as const,
+    state: ['selectedKnowledgeBases', 'availableKnowledgeBases', 'files'] as const,
     actions: ['setSelectedKnowledgeBases'] as const
   },
 
@@ -29,7 +29,7 @@ const knowledgeBaseTool = defineTool({
     const { updateAssistant } = useAssistantMutations()
 
     const handleSelect = useCallback(
-      (bases: KnowledgeBase[]) => {
+      (bases: KnowledgeBaseListItem[]) => {
         void updateAssistant(assistant.id, { knowledgeBaseIds: bases.map((b) => b.id) })
           .then(() => {
             actions.setSelectedKnowledgeBases?.(bases)
@@ -44,6 +44,7 @@ const knowledgeBaseTool = defineTool({
     return (
       <KnowledgeBaseButton
         quickPanel={quickPanel}
+        bases={state.availableKnowledgeBases}
         selectedBases={state.selectedKnowledgeBases}
         onSelect={handleSelect}
         disabled={Array.isArray(state.files) && state.files.length > 0}

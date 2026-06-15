@@ -177,7 +177,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
           type: normalizeOptionalText(input?.type) || 'pi'
         })
         const session = await agentSessionService
-          .createSession({ agentId: agent.id, name: sessionName })
+          .createSession({ agentId: agent.id, name: sessionName, workspace: { type: 'system' } })
           .catch(() => null)
         return {
           ok: true,
@@ -240,7 +240,8 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
         const session = await agentSessionService.createSession({
           agentId: normalizeRequiredText(agentId, 'Agent id'),
           name: normalizeOptionalText(sessionInput.name) || 'New session',
-          description: normalizeOptionalText(sessionInput.description)
+          description: normalizeOptionalText(sessionInput.description),
+          workspace: { type: 'system' }
         })
         return okResult('Agent session created', sanitizeForAgent(session))
       }

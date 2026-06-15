@@ -53,7 +53,6 @@ export default defineConfig({
         '@cherrystudio/ai-core/built-in/plugins': resolve('packages/aiCore/src/core/plugins/built-in'),
         '@cherrystudio/ai-core': resolve('packages/aiCore/src'),
         '@cherrystudio/ai-sdk-provider': resolve('packages/ai-sdk-provider/src'),
-        '@vectorstores/libsql': resolve('packages/vectorstores/libsql/src/index.ts'),
         '@cherrystudio/provider-registry/node': resolve('packages/provider-registry/src/registry-loader'),
         '@cherrystudio/provider-registry': resolve('packages/provider-registry/src'),
         '@test-mocks': resolve('tests/__mocks__'),

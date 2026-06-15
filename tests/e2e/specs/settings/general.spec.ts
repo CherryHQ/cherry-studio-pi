@@ -37,12 +37,12 @@ test.describe('Settings Page', () => {
     expect(currentUrl).toContain('/settings/general')
   })
 
-  test('should navigate to Display settings', async ({ mainWindow }) => {
-    await settingsPage.goToDisplay()
+  test('should navigate to Data settings', async ({ mainWindow }) => {
+    await settingsPage.goToData()
     await mainWindow.waitForTimeout(500)
 
     const currentUrl = mainWindow.url()
-    expect(currentUrl).toContain('/settings/display')
+    expect(currentUrl).toContain('/settings/data')
   })
 
   test('should navigate to About page', async ({ mainWindow }) => {

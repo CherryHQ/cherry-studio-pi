@@ -51,8 +51,6 @@ export class MiddlewareEngine {
     }
 
     this.middlewareOrder.splice(insertIndex, 0, middleware.name)
-
-    logger.debug(`Registered middleware: ${middleware.name} (priority: ${priority})`)
   }
 
   /**

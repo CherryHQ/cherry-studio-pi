@@ -60,7 +60,7 @@ const Sessions = ({ onSelectItem }: SessionsProps) => {
   const fallbackAgentId = useMemo(() => {
     return resolveCreateSessionAgentId(sessions, activeSessionId, agents)
   }, [sessions, activeSessionId, agents])
-  const { createDefaultSession, creatingSession } = useCreateDefaultSession(fallbackAgentId)
+  const { createDefaultSession, creatingSession } = useCreateDefaultSession(fallbackAgentId, { type: 'system' })
 
   const listRef = useRef<DraggableVirtualListRef>(null)
 

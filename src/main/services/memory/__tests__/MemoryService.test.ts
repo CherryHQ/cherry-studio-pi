@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   app: {
     getPath: vi.fn()
   },
+  application: {
+    get: vi.fn()
+  },
   utils: {
     getDataPath: vi.fn(),
     makeSureDirExists: vi.fn()
@@ -31,6 +34,10 @@ vi.mock('electron', () => ({
 
 vi.mock('@main/utils', () => mocks.utils)
 
+vi.mock('@application', () => ({
+  application: mocks.application
+}))
+
 vi.mock('@libsql/client', () => ({
   createClient: vi.fn(() => mocks.client)
 }))
@@ -44,10 +51,6 @@ vi.mock('@logger', () => ({
       warn: vi.fn()
     })
   }
-}))
-
-vi.mock('@main/knowledge/embedjs/embeddings/Embeddings', () => ({
-  default: vi.fn()
 }))
 
 import { createClient } from '@libsql/client'
@@ -69,6 +72,9 @@ describe('MemoryService migration', () => {
     mocks.fs.unlinkSync.mockReturnValue(undefined)
     mocks.client.execute.mockResolvedValue({ rows: [], columns: [], columnTypes: [] })
     mocks.client.close.mockReturnValue(undefined)
+    mocks.application.get.mockReturnValue({
+      embedMany: vi.fn().mockResolvedValue({ embeddings: [[0.1, 0.2, 0.3]] })
+    })
   })
 
   it('migrates the legacy memory database and sidecars into the stable data root', () => {

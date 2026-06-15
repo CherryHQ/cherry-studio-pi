@@ -325,7 +325,22 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         const warnings: string[] = []
         if (input?.initialize !== false) {
           try {
-            await knowledgeService.create({} as Electron.IpcMainInvokeEvent, await toKnowledgeBaseParams(base))
+            const modelRecord = model as Record<string, unknown>
+            const provider = typeof modelRecord.provider === 'string' ? modelRecord.provider : ''
+            const modelId = typeof modelRecord.id === 'string' ? modelRecord.id : ''
+            const dimensions = Number(base.dimensions)
+            if (!provider || !modelId || !Number.isFinite(dimensions) || dimensions <= 0) {
+              throw new Error('Missing embedding provider, model id, or dimensions')
+            }
+            await knowledgeService.createBase({
+              name: base.name,
+              dimensions,
+              embeddingModelId: `${provider}::${modelId}`,
+              chunkSize: base.chunkSize,
+              chunkOverlap: base.chunkOverlap,
+              documentCount: base.documentCount,
+              searchMode: 'vector'
+            })
           } catch (error) {
             warnings.push(`Vector store was not initialized: ${error instanceof Error ? error.message : String(error)}`)
           }
@@ -377,11 +392,8 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         const resolveProviderConfig = createCachedProviderConfigResolver()
         const resultsPerBase = await mapWithConcurrency(targetBases, KNOWLEDGE_SEARCH_CONCURRENCY, async (base) => {
           try {
-            const params = await toKnowledgeBaseParams(base, resolveProviderConfig)
-            const results = await knowledgeService.search({} as Electron.IpcMainInvokeEvent, {
-              search: query,
-              base: params
-            })
+            await toKnowledgeBaseParams(base, resolveProviderConfig)
+            const results = await knowledgeService.search(base.id, query)
             return {
               baseId: base.id,
               baseName: base.name,
@@ -451,15 +463,11 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         const base = (await listKnowledgeBases()).find((item) => item.id === baseId)
         if (!base) throw new Error(`Knowledge base not found: ${baseId}`)
         const knowledgeItem = normalizeKnowledgeItem(input?.item)
-        const result = await knowledgeService.add({} as Electron.IpcMainInvokeEvent, {
-          base: await toKnowledgeBaseParams(base),
-          item: knowledgeItem,
-          forceReload: input?.forceReload,
-          userId: input?.userId
-        })
+        await toKnowledgeBaseParams(base)
+        await knowledgeService.addItems(base.id, [knowledgeItem as never])
         const updatedBase = { ...base, items: [...(base.items ?? []), knowledgeItem], updated_at: Date.now() }
         await upsertKnowledgeBaseMetadata(updatedBase)
-        return okResult('Knowledge item added', sanitizeForAgent(result))
+        return okResult('Knowledge item added', sanitizeForAgent({ baseId: base.id, item: knowledgeItem }))
       }
     },
     {
@@ -485,7 +493,14 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         const base = (await listKnowledgeBases()).find((item) => item.id === baseId)
         if (!base) throw new Error(`Knowledge base not found: ${baseId}`)
         if (context.dryRun) return okResult('Knowledge base reset dry run completed', { baseId: base.id })
-        await knowledgeService.reset({} as Electron.IpcMainInvokeEvent, await toKnowledgeBaseParams(base))
+        await toKnowledgeBaseParams(base)
+        const roots = await knowledgeService.listRootItems(base.id)
+        if (roots.length > 0) {
+          await knowledgeService.reindexItems(
+            base.id,
+            roots.map((item) => item.id)
+          )
+        }
         return okResult('Knowledge base reset', { baseId: base.id, name: base.name })
       }
     }

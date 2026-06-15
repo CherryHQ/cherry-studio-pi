@@ -92,6 +92,7 @@ export enum IpcChannel {
   Mcp_ServersUpdated = 'mcp:servers-updated',
   Mcp_CheckConnectivity = 'mcp:check-connectivity',
   Mcp_UploadDxt = 'mcp:upload-dxt',
+  Mcp_UploadMcpb = 'mcp:upload-mcpb',
   Mcp_AbortTool = 'mcp:abort-tool',
   Mcp_GetServerVersion = 'mcp:get-server-version',
   Mcp_Progress = 'mcp:progress',
@@ -174,16 +175,14 @@ export enum IpcChannel {
   Tab_TryAttach = 'tab:try-attach',
   Tab_DragEnd = 'tab:drag-end',
 
-  KnowledgeBase_Delete = 'knowledge-base:delete',
-  KnowledgeRuntime_CreateBase = 'knowledge-runtime:create-base',
-  KnowledgeRuntime_RestoreBase = 'knowledge-runtime:restore-base',
-  KnowledgeRuntime_DeleteBase = 'knowledge-runtime:delete-base',
-  KnowledgeRuntime_AddItems = 'knowledge-runtime:add-items',
-  KnowledgeRuntime_DeleteItems = 'knowledge-runtime:delete-items',
-  KnowledgeRuntime_ReindexItems = 'knowledge-runtime:reindex-items',
-  KnowledgeRuntime_Search = 'knowledge-runtime:search',
-  KnowledgeRuntime_ListItemChunks = 'knowledge-runtime:list-item-chunks',
-  KnowledgeRuntime_DeleteItemChunk = 'knowledge-runtime:delete-item-chunk',
+  Knowledge_CreateBase = 'knowledge:create-base',
+  Knowledge_RestoreBase = 'knowledge:restore-base',
+  Knowledge_DeleteBase = 'knowledge:delete-base',
+  Knowledge_AddItems = 'knowledge:add-items',
+  Knowledge_DeleteItems = 'knowledge:delete-items',
+  Knowledge_ReindexItems = 'knowledge:reindex-items',
+  Knowledge_Search = 'knowledge:search',
+  Knowledge_ListItemChunks = 'knowledge:list-item-chunks',
 
   FileProcessing_StartJob = 'file-processing:start-job',
   FileProcessing_ListAvailableProcessors = 'file-processing:list-available-processors',
@@ -402,16 +401,6 @@ export enum IpcChannel {
   WebSearch_FetchUrls = 'web-search:fetch-urls',
   WebSearch_CheckProvider = 'web-search:check-provider',
 
-  //Selection Assistant
-  Selection_TextSelected = 'selection:text-selected',
-  Selection_ToolbarHide = 'selection:toolbar-hide',
-  Selection_ToolbarVisibilityChange = 'selection:toolbar-visibility-change',
-  Selection_ToolbarDetermineSize = 'selection:toolbar-determine-size',
-  Selection_WriteToClipboard = 'selection:write-to-clipboard',
-  Selection_ActionWindowPin = 'selection:action-window-pin',
-  Selection_ProcessAction = 'selection:process-action',
-  Selection_GetLinuxEnvInfo = 'selection:get-linux-env-info',
-
   // Data: Preference
   Preference_Get = 'preference:get',
   Preference_Set = 'preference:set',
@@ -432,17 +421,17 @@ export enum IpcChannel {
   DataApi_Unsubscribe = 'data-api:unsubscribe',
   DataApi_Stream = 'data-api:stream',
 
+  // IpcApi: RPC-over-IPC command channel (renderer→main request, main→renderer event)
+  IpcApi_Request = 'ipc-api:request',
+  IpcApi_Event = 'ipc-api:event',
+
   // Topic auto-rename push (main → renderer; payload: { topicId })
   Topic_AutoRenamed = 'topic:auto-renamed',
   // Agent session auto-rename push (main → renderer; payload: { sessionId })
   AgentSession_AutoRenamed = 'agent-session:auto-renamed',
 
   // TRACE
-  TRACE_SAVE_DATA = 'trace:saveData',
-  TRACE_SAVE_ENTITY = 'trace:saveEntity',
-  TRACE_GET_ENTITY = 'trace:getEntity',
-  TRACE_BIND_TOPIC = 'trace:bindTopic',
-  TRACE_CLEAN_HISTORY = 'trace:cleanHistory',
+  TRACE_GET_DATA = 'trace:getData',
   TRACE_CLEAN_LOCAL_DATA = 'trace:cleanLocalData',
 
   // API Gateway
@@ -545,24 +534,9 @@ export enum IpcChannel {
   Ai_ListModels = 'ai:list-models',
   Ai_Agent_RunTask = 'ai:agent:run-task',
 
-  // WindowManager
-  SettingsWindow_Open = 'settings-window:open',
-  WindowManager_Open = 'window-manager:open',
-  WindowManager_Close = 'window-manager:close',
-  WindowManager_Minimize = 'window-manager:minimize',
-  WindowManager_Maximize = 'window-manager:maximize',
-  WindowManager_Unmaximize = 'window-manager:unmaximize',
-  WindowManager_SetFullScreen = 'window-manager:set-full-screen',
-  WindowManager_IsMaximized = 'window-manager:is-maximized',
-  WindowManager_IsFullScreen = 'window-manager:is-full-screen',
-  WindowManager_GetInitData = 'window-manager:get-init-data',
-  // All three below are sent only to the originating window's webContents.
-  // macOS unreliable for maximize/unmaximize (electron#3325, #28699) — use FullscreenChanged on macOS.
-  WindowManager_MaximizedChanged = 'window-manager:maximized-changed',
-  // OS-level only; does NOT cover HTML5 element.requestFullscreen() or macOS setSimpleFullScreen.
-  WindowManager_FullscreenChanged = 'window-manager:fullscreen-changed',
-  // Payload = the initData passed to open(); omitted if none supplied, not fired on fresh creation.
-  WindowManager_Reused = 'window-manager:reused'
+  // Settings window — legacy "open a named window" channel (preload `settings.openSettings`).
+  // The former WindowManager_* control + event channels were migrated to IpcApi (`window.*`).
+  SettingsWindow_Open = 'settings-window:open'
 
   // ──────────────────────────────────────────────────────────────
   // TODO(v2): the following IPC channels are still referenced via

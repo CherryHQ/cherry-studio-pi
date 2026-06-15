@@ -123,7 +123,6 @@ export default defineConfig([
       '.conductor/**',
       'scripts/cloudflare-worker.js',
       'src/main/services/nutstore/sso/lib/**',
-      'src/main/integration/cherryai/index.js',
       'src/renderer/ui/**',
       'src/renderer/routeTree.gen.ts',
       'packages/**/dist',
@@ -307,6 +306,27 @@ export default defineConfig([
               importNames: ['Switch'],
               message:
                 '❌ Do not import the component from heroui directly. It\'s deprecated.'
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    // Bundle guard: the IpcApi zod schema *values* must never enter the renderer
+    // bundle. Renderer code may only `import type` from the schema modules.
+    files: ['src/renderer/**/*.{ts,tsx,js,jsx}'],
+    ignores: ['src/renderer/**/*.test.*', 'src/renderer/**/__tests__/**', 'src/renderer/**/__mocks__/**'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@shared/ipc/schemas', '@shared/ipc/schemas/*'],
+              allowTypeImports: true,
+              message:
+                'Renderer may only `import type` from @shared/ipc/schemas — a value import pulls the entire zod schema set into the renderer bundle.'
             }
           ]
         }

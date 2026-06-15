@@ -11,7 +11,9 @@
 import { application } from '@application'
 import { messageTable } from '@data/db/schemas/message'
 import { topicTable } from '@data/db/schemas/topic'
+import type { DbOrTx } from '@data/db/types'
 import { loggerService } from '@logger'
+import { applyApprovalDecisions, type ApprovalDecision } from '@shared/ai/transport'
 import { DataApiErrorFactory } from '@shared/data/api'
 import type {
   ActiveNodeStrategy,
@@ -23,6 +25,7 @@ import type { TopicMessageContentSearchItem } from '@shared/data/api/schemas/sea
 import {
   type BranchMessage,
   type BranchMessagesResponse,
+  type CherryMessagePart,
   coerceSearchRole,
   type Message,
   type MessageData,
@@ -33,6 +36,7 @@ import {
 } from '@shared/data/types/message'
 import type { UniqueModelId } from '@shared/data/types/model'
 import { buildSearchSnippet } from '@shared/utils/searchSnippet'
+import { isToolUIPart } from 'ai'
 import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm'
 
 import { topicService } from './TopicService'
@@ -104,7 +108,6 @@ const messageEntitySelection = {
   siblingsGroupId: messageTable.siblingsGroupId,
   modelId: messageTable.modelId,
   modelSnapshot: sql<string | null>`${messageTable.modelSnapshot}`,
-  traceId: messageTable.traceId,
   stats: sql<string | null>`${messageTable.stats}`,
   createdAt: messageTable.createdAt,
   updatedAt: messageTable.updatedAt,
@@ -155,7 +158,6 @@ function rowToMessage(row: MessageRowLike): Message {
     siblingsGroupId: row.siblingsGroupId,
     modelId: (row.modelId ?? null) as UniqueModelId | null,
     modelSnapshot: parseMessageJsonColumn(row.id, 'modelSnapshot', row.modelSnapshot, null),
-    traceId: row.traceId,
     stats: parseMessageJsonColumn(row.id, 'stats', row.stats, null),
     createdAt: timestampToISO(row.createdAt),
     updatedAt: timestampToISO(row.updatedAt)
@@ -486,11 +488,12 @@ export class MessageService {
     // mapping. See docs/references/data/database-patterns.md.
     const pathIdRows = await db.all<{ id: string }>(sql`
       WITH RECURSIVE path AS (
-        SELECT id, parent_id FROM message WHERE id = ${nodeId} AND deleted_at IS NULL
+        SELECT id, parent_id FROM message
+          WHERE id = ${nodeId} AND topic_id = ${topicId} AND deleted_at IS NULL
         UNION ALL
         SELECT m.id, m.parent_id FROM message m
         INNER JOIN path p ON m.id = p.parent_id
-        WHERE m.deleted_at IS NULL
+        WHERE m.topic_id = ${topicId} AND m.deleted_at IS NULL
       )
       SELECT id FROM path
     `)
@@ -558,6 +561,7 @@ export class MessageService {
         // `eq(col, null)` never matches in SQL — use `isNull` for root siblings.
         const orConditions = groupsToQuery.map((g) =>
           and(
+            eq(messageTable.topicId, topicId),
             g.parentId === null ? isNull(messageTable.parentId) : eq(messageTable.parentId, g.parentId),
             eq(messageTable.siblingsGroupId, g.siblingsGroupId)
           )
@@ -896,7 +900,6 @@ export class MessageService {
           siblingsGroupId: dto.siblingsGroupId,
           modelId: dto.modelId ?? null,
           modelSnapshot: dto.modelSnapshot,
-          traceId: dto.traceId,
           stats: dto.stats
         })
         .returning()
@@ -987,7 +990,6 @@ export class MessageService {
             ...(dto.siblingsGroupId !== undefined ? { siblingsGroupId: dto.siblingsGroupId } : {}),
             modelId: dto.modelId,
             modelSnapshot: dto.modelSnapshot,
-            traceId: dto.traceId,
             stats: dto.stats
           })
           .returning()
@@ -1033,7 +1035,6 @@ export class MessageService {
             ...(input.siblingsGroupId !== undefined ? { siblingsGroupId: input.siblingsGroupId } : {}),
             modelId: p.modelId,
             modelSnapshot: p.modelSnapshot,
-            traceId: p.traceId,
             stats: p.stats
           })
           .returning()
@@ -1106,7 +1107,6 @@ export class MessageService {
       if (dto.parentId !== undefined) updates.parentId = dto.parentId
       if (dto.siblingsGroupId !== undefined) updates.siblingsGroupId = dto.siblingsGroupId
       if (dto.status !== undefined) updates.status = dto.status
-      if (dto.traceId !== undefined) updates.traceId = dto.traceId
       if (dto.stats !== undefined) updates.stats = dto.stats
 
       await tx.update(messageTable).set(updates).where(eq(messageTable.id, id))
@@ -1118,6 +1118,62 @@ export class MessageService {
       logger.info('Updated message', { id, changes: Object.keys(dto) })
 
       return rowToMessage(row)
+    })
+  }
+
+  /**
+   * Atomically apply tool-approval decisions to an anchor message's `parts` within a single write
+   * transaction. A multi-tool turn can request several approvals on one assistant row at once;
+   * without serialization two concurrent responses read the same stale parts, each writes the whole
+   * array back (the later write erasing the earlier decision), and each computes "still pending" from
+   * its own stale copy — so a decision is lost and the turn can wait forever. Reading + applying +
+   * writing inside one `withWriteTx` serializes them, and the returned committed parts let the caller
+   * compute the pending check from authoritative post-commit state.
+   *
+   * Returns the committed parts + per-decision disposition, or `null` when the anchor row no longer
+   * exists (stale click on a deleted message). When no decision targets a present
+   * `approval-requested` part (overlay-only — the part isn't persisted yet) the row is left untouched
+   * and the still-overlay parts are returned; the caller carries the decision to the continuation,
+   * which applies it authoritatively. A decision that targets an already-settled part is reported so
+   * stale duplicate clicks don't dispatch another continuation.
+   */
+  async applyToolApprovalDecisions(
+    anchorId: string,
+    decisions: ApprovalDecision[]
+  ): Promise<{
+    parts: CherryMessagePart[]
+    appliedApprovalIds: string[]
+    alreadySettledApprovalIds: string[]
+  } | null> {
+    return await application.get('DbService').withWriteTx(async (tx) => {
+      const [row] = await tx.select().from(messageTable).where(eq(messageTable.id, anchorId)).limit(1)
+      if (!row) return null
+
+      const existing = rowToMessage(row)
+      const parts = existing.data.parts ?? []
+      const after = applyApprovalDecisions(parts, decisions)
+      const requestedIds = new Set(
+        parts
+          .filter((p) => isToolUIPart(p) && p.state === 'approval-requested')
+          .map((p) => (p as { approval?: { id?: string } }).approval?.id)
+          .filter((id): id is string => typeof id === 'string')
+      )
+      const settledIds = new Set(
+        parts
+          .filter((p) => isToolUIPart(p) && p.state !== 'approval-requested')
+          .map((p) => (p as { approval?: { id?: string } }).approval?.id)
+          .filter((id): id is string => typeof id === 'string')
+      )
+      const appliedApprovalIds = decisions.map((d) => d.approvalId).filter((id) => requestedIds.has(id))
+      const alreadySettledApprovalIds = decisions.map((d) => d.approvalId).filter((id) => settledIds.has(id))
+      const targetPresent = appliedApprovalIds.length > 0
+      if (targetPresent) {
+        await tx
+          .update(messageTable)
+          .set({ data: { ...existing.data, parts: after } })
+          .where(eq(messageTable.id, anchorId))
+      }
+      return { parts: after, appliedApprovalIds, alreadySettledApprovalIds }
     })
   }
 
@@ -1271,26 +1327,47 @@ export class MessageService {
    */
   async getPathToNode(nodeId: string): Promise<Message[]> {
     const db = application.get('DbService').getDb()
+    const pathRows = await this.getPathRowsToNodeTx(db, nodeId)
+    return pathRows.map(rowToMessage)
+  }
 
+  /**
+   * Transaction-aware root -> node path helper. When `topicId` is provided, the
+   * full ancestor walk is scoped to that topic so copy/navigation callers keep
+   * the same-topic message-tree invariant.
+   */
+  async getPathRowsToNodeTx(tx: DbOrTx, nodeId: string, options: { topicId?: string } = {}): Promise<MessageRowLike[]> {
     // Recursive CTE collects ancestor IDs (single-column, casing-safe);
     // full rows fetched via ORM for camelCase mapping.
-    const ancestorIdRows = await db.all<{ id: string }>(sql`
-      WITH RECURSIVE ancestors AS (
-        SELECT id, parent_id FROM message WHERE id = ${nodeId} AND deleted_at IS NULL
-        UNION ALL
-        SELECT m.id, m.parent_id FROM message m
-        INNER JOIN ancestors a ON m.id = a.parent_id
-        WHERE m.deleted_at IS NULL
-      )
-      SELECT id FROM ancestors
-    `)
+    const ancestorIdRows = options.topicId
+      ? await tx.all<{ id: string }>(sql`
+          WITH RECURSIVE ancestors AS (
+            SELECT id, parent_id FROM message
+            WHERE id = ${nodeId} AND topic_id = ${options.topicId} AND deleted_at IS NULL
+            UNION ALL
+            SELECT m.id, m.parent_id FROM message m
+            INNER JOIN ancestors a ON m.id = a.parent_id
+            WHERE m.topic_id = ${options.topicId} AND m.deleted_at IS NULL
+          )
+          SELECT id FROM ancestors
+        `)
+      : await tx.all<{ id: string }>(sql`
+          WITH RECURSIVE ancestors AS (
+            SELECT id, parent_id FROM message WHERE id = ${nodeId} AND deleted_at IS NULL
+            UNION ALL
+            SELECT m.id, m.parent_id FROM message m
+            INNER JOIN ancestors a ON m.id = a.parent_id
+            WHERE m.deleted_at IS NULL
+          )
+          SELECT id FROM ancestors
+        `)
 
     if (ancestorIdRows.length === 0) {
       throw DataApiErrorFactory.notFound('Message', nodeId)
     }
 
     const ancestorIds = ancestorIdRows.map((r) => r.id)
-    const ancestorRows = await db
+    const ancestorRows = await tx
       .select(messageEntitySelection)
       .from(messageTable)
       .where(inArray(messageTable.id, ancestorIds))
@@ -1299,7 +1376,60 @@ export class MessageService {
     const ancestorOrder = new Map(ancestorIds.map((id, i) => [id, i]))
     const ordered = ancestorRows.sort((a, b) => ancestorOrder.get(a.id)! - ancestorOrder.get(b.id)!)
 
-    return ordered.reverse().map(rowToMessage)
+    return ordered.reverse()
+  }
+
+  /**
+   * Copy one contiguous root -> node path into another topic.
+   *
+   * `rows` must be the ordered chain returned by `getPathRowsToNodeTx`; callers
+   * should not pass arbitrary or forked message sets. The copy preserves the
+   * renderable message content and terminal runtime metadata, but intentionally
+   * does not copy `traceId`: trace links describe the original conversation run,
+   * while the duplicated topic starts without trace linkage.
+   */
+  async copyPathRowsTx(
+    tx: DbOrTx,
+    rows: MessageRowLike[],
+    options: { topicId: string }
+  ): Promise<{ copiedMessageIds: Map<string, string>; copiedActiveNodeId: string }> {
+    if (rows.length === 0) {
+      throw DataApiErrorFactory.invalidOperation('copy message path', 'Source path is empty')
+    }
+
+    const copiedMessageIds = new Map<string, string>()
+    let copiedActiveNodeId = ''
+
+    for (const sourceMessage of rows) {
+      let copiedParentId: string | null = null
+      if (sourceMessage.parentId) {
+        const copiedParent = copiedMessageIds.get(sourceMessage.parentId)
+        if (!copiedParent) {
+          throw DataApiErrorFactory.invalidOperation('copy message path', 'Parent message has not been copied')
+        }
+        copiedParentId = copiedParent
+      }
+      const [copiedMessage] = await tx
+        .insert(messageTable)
+        .values({
+          topicId: options.topicId,
+          parentId: copiedParentId,
+          role: sourceMessage.role,
+          data: parseMessageJsonColumn(sourceMessage.id, 'data', sourceMessage.data, emptyMessageData()),
+          // A copied pending row has no stream owner; make it terminal.
+          status: sourceMessage.status === 'pending' ? 'error' : sourceMessage.status,
+          siblingsGroupId: 0,
+          modelId: sourceMessage.modelId,
+          modelSnapshot: parseMessageJsonColumn(sourceMessage.id, 'modelSnapshot', sourceMessage.modelSnapshot, null),
+          stats: parseMessageJsonColumn(sourceMessage.id, 'stats', sourceMessage.stats, null)
+        })
+        .returning()
+
+      copiedMessageIds.set(sourceMessage.id, copiedMessage.id)
+      copiedActiveNodeId = copiedMessage.id
+    }
+
+    return { copiedMessageIds, copiedActiveNodeId }
   }
 
   /**
@@ -1332,18 +1462,19 @@ export class MessageService {
         UNION ALL
         SELECT m.id, m.created_at FROM message m
           INNER JOIN subtree s ON m.parent_id = s.id
-          WHERE m.deleted_at IS NULL
+          WHERE m.topic_id = ${topicId} AND m.deleted_at IS NULL
       )
       SELECT s.id FROM subtree s
       WHERE NOT EXISTS (
         SELECT 1 FROM message c
-        WHERE c.parent_id = s.id AND c.deleted_at IS NULL
+        WHERE c.parent_id = s.id AND c.topic_id = ${topicId} AND c.deleted_at IS NULL
       )
       ORDER BY s.created_at DESC
       LIMIT 1
     `)
 
-    return await this.getPathToNode(leaf?.id ?? nodeId)
+    const pathRows = await this.getPathRowsToNodeTx(db, leaf?.id ?? nodeId, { topicId })
+    return pathRows.map(rowToMessage)
   }
 }
 

@@ -8,6 +8,7 @@ describe('AgentWorkspaceEntitySchema', () => {
     id: '550e8400-e29b-41d4-a716-446655440000',
     name: 'workspace',
     path: '/tmp/workspace',
+    type: 'user',
     orderKey: 'a0',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z'
@@ -41,9 +42,9 @@ describe('AgentWorkspaceEntitySchema', () => {
     expect(AgentSessionEntitySchema.safeParse({ ...session, accessiblePaths: ['/tmp/workspace'] }).success).toBe(false)
   })
 
-  it('allows migrated sessions without a workspace binding', () => {
+  it('allows legacy session entities while create still requires a workspace binding', () => {
     expect(
-      AgentSessionEntitySchema.parse({
+      AgentSessionEntitySchema.safeParse({
         id: 'session-1',
         agentId: 'agent-1',
         name: 'Session',
@@ -53,14 +54,18 @@ describe('AgentWorkspaceEntitySchema', () => {
         orderKey: 'a0',
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z'
-      }).workspaceId
-    ).toBeNull()
+      }).success
+    ).toBe(true)
   })
 
   it('allows workspace selection on session create and update', () => {
     expect(
-      CreateAgentSessionSchema.parse({ agentId: 'agent-1', name: 'Session', workspaceId: workspace.id }).workspaceId
-    ).toBe(workspace.id)
+      CreateAgentSessionSchema.parse({
+        agentId: 'agent-1',
+        name: 'Session',
+        workspace: { type: 'user', workspaceId: workspace.id }
+      }).workspace
+    ).toEqual({ type: 'user', workspaceId: workspace.id })
     expect(UpdateAgentSessionSchema.parse({ workspaceId: workspace.id }).workspaceId).toBe(workspace.id)
   })
 })

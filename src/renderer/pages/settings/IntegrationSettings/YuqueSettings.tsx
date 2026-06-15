@@ -101,7 +101,7 @@ const YuqueSettings: FC = () => {
       <SettingDivider />
       <SettingRow>
         <SettingRowTitle>{t('settings.data.yuque.repo_url')}</SettingRowTitle>
-        <RowFlex className="w-[315px] min-w-0 max-w-full items-center gap-1.25">
+        <RowFlex className="w-78.75 min-w-0 max-w-full items-center gap-1.25">
           <Input
             type="text"
             value={yuqueUrl || ''}
@@ -123,7 +123,7 @@ const YuqueSettings: FC = () => {
             onClick={handleYuqueHelpClick}
           />
         </SettingRowTitle>
-        <RowFlex className="w-[315px] min-w-0 max-w-full items-center gap-1.25">
+        <RowFlex className="w-78.75 min-w-0 max-w-full items-center gap-1.25">
           <RowFlex className="w-full min-w-0 items-center gap-1.25">
             <Input
               type="password"

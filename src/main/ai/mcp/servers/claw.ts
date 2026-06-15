@@ -7,12 +7,13 @@ import { application } from '@main/core/application'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { Tool } from '@modelcontextprotocol/sdk/types.js'
 import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } from '@modelcontextprotocol/sdk/types.js'
+import type { AgentConfiguration } from '@shared/data/api/schemas/agents'
+import type { AgentSessionWorkspaceSource } from '@shared/data/api/schemas/agentWorkspaces'
 import type { Trigger } from '@shared/data/api/schemas/jobs'
 import { type ChannelConfig, ChannelConfigSchema } from '@shared/data/types/channel'
-import type { AgentConfiguration } from '@types'
 import QRCode from 'qrcode'
 
-const logger = loggerService.withContext('MCPServer:Claw')
+const logger = loggerService.withContext('McpServer:Claw')
 
 /**
  * Parse a human-friendly duration string (e.g. '30m', '2h', '1h30m') into minutes.
@@ -212,10 +213,12 @@ const CONFIG_TOOL: Tool = {
 class ClawServer {
   public mcpServer: McpServer
   private agentId: string
+  private workspace: AgentSessionWorkspaceSource
   private sourceChannelId: string | undefined
 
-  constructor(agentId: string, sourceChannelId?: string) {
+  constructor(agentId: string, workspace: AgentSessionWorkspaceSource, sourceChannelId?: string) {
     this.agentId = agentId
+    this.workspace = workspace
     this.sourceChannelId = sourceChannelId
     this.mcpServer = new McpServer(
       {
@@ -338,6 +341,7 @@ class ClawServer {
       name,
       prompt: message,
       trigger,
+      workspace: this.workspace,
       timeoutMinutes: timeoutMinutes && timeoutMinutes > 0 ? timeoutMinutes : undefined,
       channelIds: channelIds && channelIds.length > 0 ? channelIds : undefined
     })
@@ -493,6 +497,7 @@ class ClawServer {
         type: channelType,
         name,
         agentId: this.agentId,
+        workspace: this.workspace,
         config,
         isActive: enabled ?? true
       })
@@ -562,6 +567,7 @@ class ClawServer {
       type: channelType,
       name,
       agentId: this.agentId,
+      workspace: this.workspace,
       config,
       isActive: enabled ?? true
     })

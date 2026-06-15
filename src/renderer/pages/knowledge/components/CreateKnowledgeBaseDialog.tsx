@@ -22,6 +22,7 @@ import type { FormEvent, ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { useEmbeddingDimensions } from '../hooks/useEmbeddingDimensions'
 import {
   KnowledgeDialogBody,
   KnowledgeDialogField,
@@ -38,8 +39,6 @@ interface CreateKnowledgeBaseDialogProps {
   onOpenChange: (open: boolean) => void
   onCreated: (base: KnowledgeBase) => void
 }
-
-export const KNOWLEDGE_BASE_DEFAULT_DIMENSIONS = 1024
 
 type CreateKnowledgeBaseInput = Pick<CreateKnowledgeBaseDto, 'name' | 'groupId' | 'embeddingModelId' | 'dimensions'>
 type CreateKnowledgeBaseFormValues = Omit<CreateKnowledgeBaseInput, 'dimensions' | 'embeddingModelId'> & {
@@ -123,6 +122,7 @@ const CreateKnowledgeBaseDialogRoot = ({
   )
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const { fetchDimensions, isFetchingDimensions } = useEmbeddingDimensions()
 
   useEffect(() => {
     if (!open) {
@@ -146,6 +146,10 @@ const CreateKnowledgeBaseDialogRoot = ({
     value: model.id,
     label: formatKnowledgeModelOptionLabel(model.id)
   }))
+  const handleEmbeddingModelChange = (embeddingModelId: string) => {
+    setValues((currentValues) => ({ ...currentValues, embeddingModelId }))
+    setSubmitError(null)
+  }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -156,10 +160,19 @@ const CreateKnowledgeBaseDialogRoot = ({
       return
     }
 
+    let dimensions: number
+
+    try {
+      dimensions = await fetchDimensions(values.embeddingModelId)
+    } catch (error) {
+      setSubmitError(formatErrorMessageWithPrefix(error, t('message.error.get_embedding_dimensions')))
+      return
+    }
+
     const createInput: CreateKnowledgeBaseInput = {
       name: values.name,
       embeddingModelId: values.embeddingModelId,
-      dimensions: KNOWLEDGE_BASE_DEFAULT_DIMENSIONS
+      dimensions
     }
 
     if (values.groupId && groupIds.has(values.groupId)) {
@@ -227,11 +240,7 @@ const CreateKnowledgeBaseDialogRoot = ({
 
             <KnowledgeDialogField>
               <Label>{t('knowledge.embedding_model')}</Label>
-              <Select
-                value={values.embeddingModelId ?? undefined}
-                onValueChange={(embeddingModelId) =>
-                  setValues((currentValues) => ({ ...currentValues, embeddingModelId }))
-                }>
+              <Select value={values.embeddingModelId ?? undefined} onValueChange={handleEmbeddingModelChange}>
                 <SelectTrigger
                   size="sm"
                   className="w-full"
@@ -259,7 +268,7 @@ const CreateKnowledgeBaseDialogRoot = ({
           </KnowledgeDialogBody>
 
           <CreateKnowledgeBaseDialog.Actions
-            isCreating={isCreating}
+            isCreating={isCreating || isFetchingDimensions}
             onCancel={() => onOpenChange(false)}
             cancelLabel={t('common.cancel')}
             submitLabel={t('knowledge.add.submit')}

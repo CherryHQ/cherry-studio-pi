@@ -1,6 +1,5 @@
 import type { TokenUsageData } from '@cherrystudio/analytics-client'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { SpanEntity } from '@mcp-trace/trace-core'
 import type { SpanContext } from '@opentelemetry/api'
 import type {
   AiAgentSessionWarmCloseRequest,
@@ -35,20 +34,19 @@ import type { CacheEntry, CacheSyncMessage } from '@shared/data/cache/cacheTypes
 import type {
   FileProcessorFeature,
   FileProcessorId,
-  SelectionActionItem,
   UnifiedPreferenceKeyType,
   UnifiedPreferenceMultipleResultType,
   UnifiedPreferenceType,
   UpgradeChannel
 } from '@shared/data/preference/preferenceTypes'
 import type { Assistant } from '@shared/data/types/assistant'
-import type { FileEntry, FileEntryId } from '@shared/data/types/file'
-import type { ListAvailableFileProcessorsResult } from '@shared/data/types/fileProcessing'
+import type { FileEntry } from '@shared/data/types/file'
+import type { FileProcessingOutputTarget, ListAvailableFileProcessorsResult } from '@shared/data/types/fileProcessing'
 import type {
   CreateKnowledgeBaseDto,
+  KnowledgeAddItemInput,
   KnowledgeBase,
   KnowledgeItemChunk,
-  KnowledgeRuntimeAddItemInput,
   KnowledgeSearchResult as KnowledgeVectorSearchResult,
   RestoreKnowledgeBaseDto
 } from '@shared/data/types/knowledge'
@@ -99,6 +97,8 @@ import type {
   SkillResult,
   SkillToggleOptions
 } from '../renderer/types/skill'
+import { ipcApi } from './ipc'
+
 // OpenClaw types
 type OpenClawGatewayStatus = 'stopped' | 'starting' | 'running' | 'error'
 
@@ -128,6 +128,13 @@ type ShortcutRegistrationConflictPayload = {
   key: ShortcutPreferenceKey
   accelerator?: string
   hasConflict: boolean
+}
+
+type SelectionLinuxEnvInfo = {
+  isLinuxWaylandDisplay: boolean
+  isLinuxXWaylandMode: boolean
+  hasLinuxInputDeviceAccess: boolean
+  isLinuxCompositorCompatible: boolean
 }
 
 export function tracedInvoke(channel: string, spanContext: SpanContext | undefined, ...args: any[]) {
@@ -466,31 +473,22 @@ const api = {
     getFiles: (vaultName: string) => ipcRenderer.invoke(IpcChannel.Obsidian_GetFiles, vaultName)
   },
   openPath: (path: string) => ipcRenderer.invoke(IpcChannel.Open_Path, path),
-  knowledgeBase: {
-    // v1 renderer knowledge path retired (T4.2). Only base deletion remains,
-    // still invoked by the v1 Redux store/knowledge slice until that slice is
-    // removed in the unified step. v2 knowledge runs via window.api.knowledgeRuntime.*.
-    delete: (id: string) => ipcRenderer.invoke(IpcChannel.KnowledgeBase_Delete, id)
-  },
-  knowledgeRuntime: {
+  knowledge: {
     createBase: (base: CreateKnowledgeBaseDto): Promise<KnowledgeBase> =>
-      ipcRenderer.invoke(IpcChannel.KnowledgeRuntime_CreateBase, { base }),
+      ipcRenderer.invoke(IpcChannel.Knowledge_CreateBase, { base }),
     restoreBase: (dto: RestoreKnowledgeBaseDto): Promise<KnowledgeBase> =>
-      ipcRenderer.invoke(IpcChannel.KnowledgeRuntime_RestoreBase, dto),
-    deleteBase: (baseId: string): Promise<void> =>
-      ipcRenderer.invoke(IpcChannel.KnowledgeRuntime_DeleteBase, { baseId }),
-    addItems: (baseId: string, items: KnowledgeRuntimeAddItemInput[]): Promise<void> =>
-      ipcRenderer.invoke(IpcChannel.KnowledgeRuntime_AddItems, { baseId, items }),
+      ipcRenderer.invoke(IpcChannel.Knowledge_RestoreBase, dto),
+    deleteBase: (baseId: string): Promise<void> => ipcRenderer.invoke(IpcChannel.Knowledge_DeleteBase, { baseId }),
+    addItems: (baseId: string, items: KnowledgeAddItemInput[]): Promise<void> =>
+      ipcRenderer.invoke(IpcChannel.Knowledge_AddItems, { baseId, items }),
     deleteItems: (baseId: string, itemIds: string[]): Promise<void> =>
-      ipcRenderer.invoke(IpcChannel.KnowledgeRuntime_DeleteItems, { baseId, itemIds }),
+      ipcRenderer.invoke(IpcChannel.Knowledge_DeleteItems, { baseId, itemIds }),
     reindexItems: (baseId: string, itemIds: string[]): Promise<void> =>
-      ipcRenderer.invoke(IpcChannel.KnowledgeRuntime_ReindexItems, { baseId, itemIds }),
+      ipcRenderer.invoke(IpcChannel.Knowledge_ReindexItems, { baseId, itemIds }),
     search: (baseId: string, query: string): Promise<KnowledgeVectorSearchResult[]> =>
-      ipcRenderer.invoke(IpcChannel.KnowledgeRuntime_Search, { baseId, query }),
+      ipcRenderer.invoke(IpcChannel.Knowledge_Search, { baseId, query }),
     listItemChunks: (baseId: string, itemId: string): Promise<KnowledgeItemChunk[]> =>
-      ipcRenderer.invoke(IpcChannel.KnowledgeRuntime_ListItemChunks, { baseId, itemId }),
-    deleteItemChunk: (baseId: string, itemId: string, chunkId: string): Promise<void> =>
-      ipcRenderer.invoke(IpcChannel.KnowledgeRuntime_DeleteItemChunk, { baseId, itemId, chunkId })
+      ipcRenderer.invoke(IpcChannel.Knowledge_ListItemChunks, { baseId, itemId })
   },
   window: {
     setMinimumSize: (width: number, height: number) =>
@@ -572,6 +570,10 @@ const api = {
     uploadDxt: async (file: File) => {
       const buffer = await file.arrayBuffer()
       return ipcRenderer.invoke(IpcChannel.Mcp_UploadDxt, buffer, file.name)
+    },
+    uploadMcpb: async (file: File) => {
+      const buffer = await file.arrayBuffer()
+      return ipcRenderer.invoke(IpcChannel.Mcp_UploadMcpb, buffer, file.name)
     },
     abortTool: (callId: string) => ipcRenderer.invoke(IpcChannel.Mcp_AbortTool, callId),
     getServerVersion: (serverId: string): Promise<string | null> =>
@@ -689,46 +691,15 @@ const api = {
       }
     }
   },
-  windowManager: {
+  settings: {
+    // NOTE: misplaced API, kept here as an interim home. `openSettings` opens the
+    // Settings *window* — a navigation/feature concern, NOT a window-control primitive —
+    // yet it was historically grouped under `windowManager`. It is parked under `settings`
+    // so it stops leaking into the window domain, but the underlying `SettingsWindow_Open`
+    // IPC is still legacy (not on IpcApi). FOLLOW-UP: migrate it onto a proper settings /
+    // navigation IpcApi domain and remove this stopgap.
     openSettings: (path: SettingsPath = '/settings/provider'): Promise<string> =>
-      ipcRenderer.invoke(IpcChannel.SettingsWindow_Open, path),
-
-    // Retrieve init data that the main process stored for this window via
-    // wm.setInitData() or wm.open({ initData }). Returns null when no data was set or when
-    // the sender window is not managed by WindowManager (e.g., detached devtools).
-    // Renderers that also need to update on reuse should prefer the useWindowInitData
-    // hook (hooks/useWindowInitData), which also listens for WindowManager_Reused.
-    getInitData: <T = unknown>(): Promise<T | null> => ipcRenderer.invoke(IpcChannel.WindowManager_GetInitData),
-
-    minimize: (): Promise<void> => ipcRenderer.invoke(IpcChannel.WindowManager_Minimize),
-    maximize: (): Promise<void> => ipcRenderer.invoke(IpcChannel.WindowManager_Maximize),
-    unmaximize: (): Promise<void> => ipcRenderer.invoke(IpcChannel.WindowManager_Unmaximize),
-    close: (): Promise<void> => ipcRenderer.invoke(IpcChannel.WindowManager_Close),
-    isMaximized: (): Promise<boolean> => ipcRenderer.invoke(IpcChannel.WindowManager_IsMaximized),
-
-    setFullScreen: (value: boolean): Promise<void> => ipcRenderer.invoke(IpcChannel.WindowManager_SetFullScreen, value),
-    isFullScreen: (): Promise<boolean> => ipcRenderer.invoke(IpcChannel.WindowManager_IsFullScreen),
-
-    onMaximizedChange: (callback: (isMaximized: boolean) => void): (() => void) => {
-      const listener = (_: Electron.IpcRendererEvent, isMaximized: boolean) => callback(isMaximized)
-      ipcRenderer.on(IpcChannel.WindowManager_MaximizedChanged, listener)
-      return () => ipcRenderer.off(IpcChannel.WindowManager_MaximizedChanged, listener)
-    },
-    onFullscreenChange: (callback: (isFullscreen: boolean) => void): (() => void) => {
-      const listener = (_: Electron.IpcRendererEvent, isFullscreen: boolean) => callback(isFullscreen)
-      ipcRenderer.on(IpcChannel.WindowManager_FullscreenChanged, listener)
-      return () => ipcRenderer.off(IpcChannel.WindowManager_FullscreenChanged, listener)
-    }
-  },
-  selection: {
-    hideToolbar: () => ipcRenderer.invoke(IpcChannel.Selection_ToolbarHide),
-    writeToClipboard: (text: string) => ipcRenderer.invoke(IpcChannel.Selection_WriteToClipboard, text),
-    determineToolbarSize: (width: number, height: number) =>
-      ipcRenderer.invoke(IpcChannel.Selection_ToolbarDetermineSize, width, height),
-    processAction: (actionItem: SelectionActionItem, isFullScreen: boolean = false) =>
-      ipcRenderer.invoke(IpcChannel.Selection_ProcessAction, actionItem, isFullScreen),
-    pinActionWindow: (isPinned: boolean) => ipcRenderer.invoke(IpcChannel.Selection_ActionWindowPin, isPinned),
-    getLinuxEnvInfo: () => ipcRenderer.invoke(IpcChannel.Selection_GetLinuxEnvInfo)
+      ipcRenderer.invoke(IpcChannel.SettingsWindow_Open, path)
   },
   wechat: {
     onQrLogin: (
@@ -828,12 +799,7 @@ const api = {
   //   ipcRenderer.invoke(IpcChannel.App_SetDisableHardwareAcceleration, isDisable),
   // setUseSystemTitleBar: (isActive: boolean) => ipcRenderer.invoke(IpcChannel.App_SetUseSystemTitleBar, isActive),
   trace: {
-    saveData: (topicId: string) => ipcRenderer.invoke(IpcChannel.TRACE_SAVE_DATA, topicId),
-    saveEntity: (entity: SpanEntity) => ipcRenderer.invoke(IpcChannel.TRACE_SAVE_ENTITY, entity),
-    getEntity: (spanId: string) => ipcRenderer.invoke(IpcChannel.TRACE_GET_ENTITY, spanId),
-    bindTopic: (topicId: string, traceId: string) => ipcRenderer.invoke(IpcChannel.TRACE_BIND_TOPIC, topicId, traceId),
-    cleanHistory: (topicId: string, traceId: string, modelName?: string) =>
-      ipcRenderer.invoke(IpcChannel.TRACE_CLEAN_HISTORY, topicId, traceId, modelName),
+    getData: (topicId: string, traceId: string) => ipcRenderer.invoke(IpcChannel.TRACE_GET_DATA, topicId, traceId),
     cleanLocalData: () => ipcRenderer.invoke(IpcChannel.TRACE_CLEAN_LOCAL_DATA)
   },
   codeCli: {
@@ -862,7 +828,11 @@ const api = {
   fileProcessing: {
     startJob: (payload: {
       feature: FileProcessorFeature
-      fileEntryId: FileEntryId
+      file: FileHandle
+      output?: FileProcessingOutputTarget
+      context?: {
+        dataId?: string
+      }
       processorId?: FileProcessorId
     }): Promise<JobSnapshot> => ipcRenderer.invoke(IpcChannel.FileProcessing_StartJob, payload),
     listAvailableProcessors: (): Promise<ListAvailableFileProcessorsResult> =>
@@ -947,6 +917,29 @@ const api = {
       ipcRenderer.on(channel, listener)
       return () => ipcRenderer.off(channel, listener)
     }
+  },
+  // IpcApi RPC channel — generic forwarder; the typed facade lives in src/renderer/ipc
+  ipcApi,
+  windowManager: {
+    close: (): Promise<void> => ipcApi.request('window.close').then(() => undefined),
+    minimize: (): Promise<void> => ipcApi.request('window.minimize').then(() => undefined),
+    maximize: (): Promise<void> => ipcApi.request('window.maximize').then(() => undefined),
+    unmaximize: (): Promise<void> => ipcApi.request('window.unmaximize').then(() => undefined),
+    setFullScreen: (value: boolean): Promise<void> =>
+      ipcApi.request('window.set_full_screen', value).then(() => undefined),
+    isMaximized: (): Promise<boolean> => ipcApi.request('window.is_maximized') as Promise<boolean>,
+    isFullScreen: (): Promise<boolean> => ipcApi.request('window.is_full_screen') as Promise<boolean>,
+    getInitData: <T = unknown>(): Promise<T | null> => ipcApi.request('window.get_init_data') as Promise<T | null>,
+    onMaximizedChange: (callback: (value: boolean) => void): (() => void) =>
+      ipcApi.on('window.maximized_changed', (payload) => callback(Boolean(payload))),
+    onFullscreenChange: (callback: (value: boolean) => void): (() => void) =>
+      ipcApi.on('window.fullscreen_changed', (payload) => callback(Boolean(payload)))
+  },
+  selection: {
+    pinActionWindow: (isPinned: boolean): Promise<void> =>
+      ipcApi.request('selection.pin_action_window', isPinned).then(() => undefined),
+    getLinuxEnvInfo: (): Promise<SelectionLinuxEnvInfo> =>
+      ipcApi.request('selection.get_linux_env_info') as Promise<SelectionLinuxEnvInfo>
   },
   topic: {
     onAutoRenamed: (callback: (payload: { topicId: string }) => void) => {

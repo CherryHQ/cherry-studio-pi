@@ -1,8 +1,9 @@
+import { application } from '@application'
 import type { Client } from '@libsql/client'
 import { createClient } from '@libsql/client'
 import { loggerService } from '@logger'
-import Embeddings from '@main/knowledge/embedjs/embeddings/Embeddings'
 import { getDataPath, makeSureDirExists } from '@main/utils'
+import { createUniqueModelId, type UniqueModelId, UniqueModelIdSchema } from '@shared/data/types/model'
 import type {
   AddMemoryOptions,
   AssistantMessage,
@@ -49,7 +50,6 @@ export class MemoryService {
   private static instance: MemoryService | null = null
   private db: Client | null = null
   private isInitialized = false
-  private embeddings: Embeddings | null = null
   private config: MemoryConfig | null = null
   private static readonly UNIFIED_DIMENSION = 1536
   private static readonly SIMILARITY_THRESHOLD = 0.85
@@ -729,8 +729,6 @@ export class MemoryService {
    */
   public setConfig(config: MemoryConfig): void {
     this.config = config
-    // Reset embeddings instance when config changes
-    this.embeddings = null
   }
 
   /**
@@ -763,6 +761,37 @@ export class MemoryService {
     }
   }
 
+  private resolveEmbeddingModelId(): UniqueModelId {
+    const model = this.config?.embeddingModel
+    if (!model) {
+      throw new Error('Embedder model not configured')
+    }
+
+    const modelRecord = model as unknown as Record<string, unknown>
+    const rawId = typeof modelRecord.id === 'string' ? modelRecord.id.trim() : ''
+    const parsed = UniqueModelIdSchema.safeParse(rawId)
+    if (parsed.success) {
+      return parsed.data
+    }
+
+    const providerId = this.firstNonEmptyString(modelRecord.providerId, modelRecord.provider)
+    const modelId = this.firstNonEmptyString(modelRecord.apiModelId, rawId, modelRecord.name)
+    if (!providerId || !modelId) {
+      throw new Error('Embedder model is missing provider or model id')
+    }
+
+    return createUniqueModelId(providerId, modelId)
+  }
+
+  private firstNonEmptyString(...values: unknown[]): string | undefined {
+    for (const value of values) {
+      if (typeof value !== 'string') continue
+      const trimmed = value.trim()
+      if (trimmed) return trimmed
+    }
+    return undefined
+  }
+
   /**
    * Generate embedding for text
    */
@@ -772,21 +801,15 @@ export class MemoryService {
     }
 
     try {
-      // Initialize embeddings instance if needed
-      if (!this.embeddings) {
-        if (!this.config.embeddingApiClient) {
-          throw new Error('Embedder provider not configured')
-        }
-
-        this.embeddings = new Embeddings({
-          embedApiClient: this.config.embeddingApiClient,
-          dimensions: this.config.embeddingDimensions
-        })
-
-        await this.embeddings.init()
+      const uniqueModelId = this.resolveEmbeddingModelId()
+      const result = await application.get('AiService').embedMany({
+        uniqueModelId,
+        values: [text]
+      })
+      const embedding = result.embeddings[0]
+      if (!embedding) {
+        throw new Error('Embedding model returned no vectors')
       }
-
-      const embedding = await this.embeddings.embedQuery(text)
 
       // Normalize to unified dimension
       return this.normalizeEmbedding(embedding)

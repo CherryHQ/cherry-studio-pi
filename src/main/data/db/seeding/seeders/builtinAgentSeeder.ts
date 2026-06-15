@@ -2,12 +2,13 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { application } from '@application'
-import { agentTable } from '@data/db/schemas/agent'
+import { agentTable, type InsertAgentRow } from '@data/db/schemas/agent'
 import { agentSessionTable } from '@data/db/schemas/agentSession'
-import { agentWorkspaceTable } from '@data/db/schemas/agentWorkspace'
+import { agentWorkspaceTable, type InsertAgentWorkspaceRow } from '@data/db/schemas/agentWorkspace'
 import { preferenceTable } from '@data/db/schemas/preference'
 import { userModelTable } from '@data/db/schemas/userModel'
 import { generateOrderKeySequence } from '@data/services/utils/orderKey'
+import { AGENT_WORKSPACE_TYPE } from '@shared/data/api/schemas/agentWorkspaces'
 import { and, count, eq, isNull } from 'drizzle-orm'
 import { v5 as uuidv5 } from 'uuid'
 
@@ -73,7 +74,7 @@ export class BuiltinAgentSeeder implements ISeeder {
     const workspace = await this.ensureWorkspace(db, definition.name ?? '小梅子助理')
     const [agentOrderKey, sessionOrderKey] = generateOrderKeySequence(2)
 
-    await db.insert(agentTable).values({
+    const agentRow: InsertAgentRow = {
       id: CHERRY_ASSISTANT_AGENT_ID,
       type: 'pi',
       name: definition.name ?? '小梅子助理',
@@ -81,9 +82,10 @@ export class BuiltinAgentSeeder implements ISeeder {
       instructions: pickLocalizedText(definition.instructions) || 'You are a helpful assistant.',
       model: defaultModelId,
       mcps: definition.mcps ?? [],
-      allowedTools: definition.allowed_tools ?? [],
+      disabledTools: [],
       configuration: {
         ...definition.configuration,
+        allowed_tools: definition.allowed_tools ?? [],
         permission_mode: 'bypassPermissions',
         max_turns: 100,
         env_vars: {},
@@ -92,7 +94,8 @@ export class BuiltinAgentSeeder implements ISeeder {
         builtin_template: CHERRY_ASSISTANT_FOLDER
       },
       orderKey: agentOrderKey
-    })
+    }
+    await db.insert(agentTable).values(agentRow)
 
     await db.insert(agentSessionTable).values({
       id: CHERRY_ASSISTANT_SESSION_ID,
@@ -135,12 +138,14 @@ export class BuiltinAgentSeeder implements ISeeder {
     if (existing) return existing
 
     const [workspaceOrderKey] = generateOrderKeySequence(1)
-    await db.insert(agentWorkspaceTable).values({
+    const workspaceRow: InsertAgentWorkspaceRow = {
       id: CHERRY_ASSISTANT_WORKSPACE_ID,
       name: agentName,
       path: workspacePath,
+      type: AGENT_WORKSPACE_TYPE.SYSTEM,
       orderKey: workspaceOrderKey
-    })
+    }
+    await db.insert(agentWorkspaceTable).values(workspaceRow)
 
     return { id: CHERRY_ASSISTANT_WORKSPACE_ID }
   }

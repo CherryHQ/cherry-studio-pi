@@ -56,7 +56,8 @@ const EMPTY_AGENT_FOR_CREATE: AgentDetail = {
   model: null,
   modelName: null,
   createdAt: '',
-  updatedAt: ''
+  updatedAt: '',
+  orderKey: ''
 }
 
 /**
@@ -111,7 +112,7 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated, presentation = '
         const initialSession = await createInitialSession({
           agentId: created.id,
           name: t('common.unnamed'),
-          ...(workspace ? { workspaceId: workspace.id } : {})
+          workspace: workspace ? { type: 'user', workspaceId: workspace.id } : { type: 'system' }
         })
         cacheService.set('agent.active_session_id', initialSession.id)
         onCreated?.(created)
@@ -132,7 +133,6 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated, presentation = '
   const { tools } = useAgentTools({
     type: runtimeType,
     mcps: form.mcps,
-    allowedTools: form.allowedTools,
     permissionMode: form.permissionMode
   })
   const onChange = useCallback(

@@ -228,14 +228,11 @@ describe('KnowledgeItemRow', () => {
       <KnowledgeItemRow item={createFileItem({ id: 'file-1', originName: 'old-name.md' })} {...defaultHandlers} />
     )
 
-    expect(screen.getByText('季度报告.pdf')).toBeInTheDocument()
-    expect(screen.getByText('pdf')).toBeInTheDocument()
+    expect(screen.getByText('old-name.md')).toBeInTheDocument()
+    expect(screen.getByText('md')).toBeInTheDocument()
     expect(screen.getByText('文件')).toBeInTheDocument()
     expect(screen.getAllByText('刚刚')).toHaveLength(2)
-    expect(mockUseQuery).toHaveBeenCalledWith('/files/entries/:id', {
-      params: { id: '019606a0-0000-7000-8000-000000000001' },
-      enabled: true
-    })
+    expect(mockUseQuery).not.toHaveBeenCalledWith('/files/entries/:id', expect.anything())
   })
 
   it('falls back to the file source when the file entry is not loaded', () => {

@@ -282,7 +282,7 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
         <Button
           type="button"
           variant="ghost"
-          className="mr-auto px-2.5 text-destructive shadow-none hover:bg-[var(--color-error-bg)] hover:text-[var(--color-error-text)]"
+          className="mr-auto px-2.5 text-destructive shadow-none hover:bg-error-bg hover:text-error-text"
           onClick={() => void handleDeleteModel()}>
           {t('common.delete')}
         </Button>
@@ -304,7 +304,7 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
       <form
         id="provider-settings-model-edit-form"
         data-testid="provider-settings-model-edit-drawer-content"
-        className={drawerClasses.form}
+        className="flex min-h-0 flex-col gap-4 py-0"
         onSubmit={(event) => void handleFormSubmit(event)}>
         <ProviderSection className={drawerClasses.section}>
           <div className={drawerClasses.fieldList}>
@@ -350,7 +350,7 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
         <ProviderActions>
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             className={drawerClasses.toggleButton}
             onClick={() => setShowMoreSettings((current) => !current)}>
             {t('settings.moresetting.label')}

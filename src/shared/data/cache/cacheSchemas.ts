@@ -261,6 +261,8 @@ export type SharedCacheSchema = {
   'chat.web_search.active_searches': CacheValueTypes.CacheActiveSearches
   'mcp.tools.${serverId}': CacheValueTypes.CacheMcpTool[]
   'mcp.status.${serverId}': CacheValueTypes.McpRuntimeStatus
+  'agent.session.compaction.${sessionId}': CacheValueTypes.CacheAgentSessionCompactionState
+  'agent.session.context_usage.${sessionId}': CacheValueTypes.CacheAgentSessionContextUsage
   'topic.stream.statuses.${topicId}': TopicStatusSnapshotEntry | null
   'topic.stream.last_seen_completion.${topicId}': number | null
   'feature.openclaw.gateway_status': CacheValueTypes.OpenClawGatewayStatus
@@ -282,6 +284,8 @@ export const DefaultSharedCache: SharedCacheSchema = {
   'chat.web_search.active_searches': {},
   'mcp.tools.${serverId}': [],
   'mcp.status.${serverId}': { state: 'disabled', lastCheckedAt: 0 },
+  'agent.session.compaction.${sessionId}': null,
+  'agent.session.context_usage.${sessionId}': null,
   'topic.stream.statuses.${topicId}': null,
   'topic.stream.last_seen_completion.${topicId}': null,
   'feature.openclaw.gateway_status': 'stopped',
@@ -316,7 +320,7 @@ export type RendererPersistCacheSchema = {
 export const DefaultRendererPersistCache: RendererPersistCacheSchema = {
   'ui.tab.pinned_tabs': [],
   'ui.sidebar.docked_tabs': [],
-  'ui.sidebar.width': 65,
+  'ui.sidebar.width': 50, // keep in sync with SIDEBAR_ICON_WIDTH (renderer Sidebar/constants.ts)
   'settings.provider.last_selected_provider_id': null,
   'settings.provider.openai.alert.dismissed': false,
   'feature.mcp.is_uv_installed': false,

@@ -1,6 +1,14 @@
 # KnowledgeVectorMigrator
 
-`KnowledgeVectorMigrator` migrates legacy per-base `embedjs` vector databases into the new libsql-backed `vectorstores` layout.
+`KnowledgeVectorMigrator` migrates legacy per-base `embedjs` vector databases into the legacy single-table `libsql_vectorstores_embedding` layout.
+
+> **⚠️ Transitional state (PR A → PR B).** The runtime `KnowledgeIndexStore` no longer
+> reads this single-table layout — it uses the 7-table material model in the same
+> `index.sqlite` file. Until this migrator is rewritten to emit that final layout
+> (PR B), its output mounts as an **empty** index: the store-open path detects the
+> legacy remnant and logs an error, and an integration test in
+> `__tests__/KnowledgeVectorMigrator.test.ts` pins the contract. PR B is a hard
+> blocker for enabling this migration for real users.
 
 ## Data Sources
 
@@ -15,8 +23,10 @@ The source reader is initialized by `MigrationContext` with `ctx.paths.knowledge
 
 ## Target Storage
 
-- Per-base libsql vector store file at the existing knowledge DB path
-- Table: `libsql_vectorstores_embedding`
+- Per-base libsql vector store at the migrated base's runtime path:
+  `{knowledgeBaseDir}/{migratedBaseId}/.cherry/index.sqlite`
+- Table: `libsql_vectorstores_embedding` — the legacy single-table layout, which
+  the runtime store does not read (see the transitional note above)
 
 ## Key Transformations
 
@@ -53,25 +63,41 @@ The source reader is initialized by `MigrationContext` with `ctx.paths.knowledge
    - Every migrated vector row gets a new UUID v4 `id`.
 
 6. Schema bootstrap
-   - Creates `external_id`, `collection`, and FTS schema needed by `@vectorstores/libsql`.
-   - Migrated rows use `collection = base.id` so runtime reads and deletes match the same per-base store contract.
+   - Creates the legacy single-table layout (`external_id`, `collection`, FTS shadow tables). The runtime store does **not** read this layout; it is rewritten to the 7-table final state in PR B.
+   - Migrated rows use `collection = base.id`, matching what the removed vendored store wrote.
 
 ## File-Safety Contract
 
-- The migrator writes each rebuilt vector store to a temporary sibling file first.
-- The original embedjs DB stays untouched until the temporary file has been written successfully.
-- Once the temp file is ready, the migrator moves the original embedjs DB to a
-  `.embedjs.bak` sibling and places the rebuilt V2 store at the original path.
-- Retry reads from the `.embedjs.bak` sibling when the original path already
-  contains a V2 vector store from an earlier attempt.
+- The migrator writes each rebuilt vector store to a temporary sibling of the
+  target (`{targetDbPath}.vectorstore.tmp`), then renames it onto the target path.
+- The v1 legacy embedjs DB (`{knowledgeBaseDir}/{legacyBaseId}`) is **never**
+  moved or deleted. Each migrated base gets a new uuid, so the rebuilt V2 store
+  lives under a different path (`{migratedBaseId}/.cherry/index.sqlite`) and never
+  collides with the legacy flat path — the legacy source needs no relocation. A
+  user who rolls back to v1 after a failed, abandoned, or even successful
+  migration keeps a working knowledge base.
+- Before the rename, any pre-existing target (the runtime may have auto-created an
+  empty store there) is removed; that unlink retries on `EBUSY` so a transient
+  Windows file lock does not abort the migration.
+- Retry is naturally idempotent: the legacy source is still in place, so a retry
+  re-reads the original legacy DB directly. `.embedjs.bak` is no longer written by
+  this flow; `KnowledgeVectorSourceReader` keeps a read-only `.embedjs.bak`
+  fallback solely for installs that already ran the previous migration (which
+  renamed the original aside).
 
 ## IMPORTANT: Current Limitations
 
 - Base-level execution failures are treated as migration failures, not as skippable data warnings. If rebuilding or replacing one base fails, `execute()` returns `success: false`.
-- Retry depends on the `.embedjs.bak` sibling staying beside the rewritten V2
-  store until the migration flow has completed.
+- After a successful migration the v1 legacy vector DBs (and the copied legacy
+  upload files) remain on disk as orphans; disk space is not reclaimed. Reclaiming
+  it is intentionally left to a separate future cleanup step gated on the user
+  abandoning v1.
 
 ## Validation
+
+Validation checks the migrated rows inside the legacy table only — it does not
+(and currently cannot) prove the runtime store can read them; see the
+transitional note at the top.
 
 - Per-base row count must equal the prepared row count.
 - `external_id` must be non-empty for every migrated row.

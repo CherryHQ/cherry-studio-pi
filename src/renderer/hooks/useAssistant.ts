@@ -28,6 +28,12 @@ import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { reconcileReasoningEffortForModel, reconcileWebSearchForModel } from '@renderer/utils/modelReconcile'
 import type { ConcreteApiPaths } from '@shared/data/api/apiTypes'
 import type { CreateAssistantDto, UpdateAssistantDto } from '@shared/data/api/schemas/assistants'
+import { CHERRYAI_DEFAULT_UNIQUE_MODEL_ID } from '@shared/data/presets/cherryai'
+import {
+  DEFAULT_ASSISTANT_EMOJI,
+  DEFAULT_ASSISTANT_NAME,
+  DEFAULT_ASSISTANT_PROMPT
+} from '@shared/data/presets/default-assistant'
 import { DEFAULT_ASSISTANT_ID, DEFAULT_ASSISTANT_SETTINGS } from '@shared/data/types/assistant'
 import type { Model } from '@shared/data/types/model'
 import { type UniqueModelId } from '@shared/data/types/model'
@@ -56,6 +62,7 @@ export function composeDefaultAssistant(modelId: UniqueModelId | null): Assistan
     description: '',
     settings: DEFAULT_ASSISTANT_SETTINGS,
     modelId,
+    orderKey: '',
     modelName: null,
     mcpServerIds: [],
     knowledgeBaseIds: [],
@@ -63,6 +70,19 @@ export function composeDefaultAssistant(modelId: UniqueModelId | null): Assistan
     createdAt: DEFAULT_ASSISTANT_TIMESTAMP,
     updatedAt: DEFAULT_ASSISTANT_TIMESTAMP
   }
+}
+
+export function isSeededDefaultAssistant(assistant: Assistant): boolean {
+  return (
+    assistant.name === DEFAULT_ASSISTANT_NAME &&
+    assistant.emoji === DEFAULT_ASSISTANT_EMOJI &&
+    assistant.prompt === DEFAULT_ASSISTANT_PROMPT &&
+    assistant.modelId === CHERRYAI_DEFAULT_UNIQUE_MODEL_ID
+  )
+}
+
+export function resolveDefaultAssistantOption(assistants: readonly Assistant[], fallback: Assistant): Assistant {
+  return assistants.find(isSeededDefaultAssistant) ?? fallback
 }
 
 // ─── Tier 2: raw DataApi queries/mutations ────────────────────────────────

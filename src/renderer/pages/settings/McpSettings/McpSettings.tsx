@@ -707,7 +707,7 @@ const McpSettings: React.FC = () => {
                         <Textarea.Input
                           rows={2}
                           placeholder={t('common.description')}
-                          className="min-h-[64px] px-3 py-2 text-sm leading-5"
+                          className="min-h-16 px-3 py-2 text-sm leading-5"
                           {...field}
                         />
                       </FormControl>
@@ -754,7 +754,7 @@ const McpSettings: React.FC = () => {
                           <Textarea.Input
                             rows={3}
                             placeholder={`Content-Type=application/json\nAuthorization=Bearer token`}
-                            className="max-h-[160px] min-h-[84px] px-3 py-2 font-mono text-sm leading-5"
+                            className="max-h-40 min-h-21 px-3 py-2 font-mono text-sm leading-5"
                             {...field}
                           />
                         </FormControl>
@@ -840,7 +840,7 @@ const McpSettings: React.FC = () => {
                           <Textarea.Input
                             rows={3}
                             placeholder={`arg1\narg2`}
-                            className="max-h-[160px] min-h-[84px] px-3 py-2 font-mono text-sm leading-5"
+                            className="max-h-40 min-h-21 px-3 py-2 font-mono text-sm leading-5"
                             {...field}
                           />
                         </FormControl>
@@ -860,7 +860,7 @@ const McpSettings: React.FC = () => {
                           <Textarea.Input
                             rows={3}
                             placeholder={`KEY1=value1\nKEY2=value2`}
-                            className="max-h-[160px] min-h-[84px] px-3 py-2 font-mono text-sm leading-5"
+                            className="max-h-40 min-h-21 px-3 py-2 font-mono text-sm leading-5"
                             {...field}
                           />
                         </FormControl>
@@ -884,7 +884,7 @@ const McpSettings: React.FC = () => {
                           <Textarea.Input
                             rows={3}
                             placeholder={`arg1\narg2`}
-                            className="max-h-[160px] min-h-[84px] px-3 py-2 font-mono text-sm leading-5"
+                            className="max-h-40 min-h-21 px-3 py-2 font-mono text-sm leading-5"
                             {...field}
                           />
                         </FormControl>
@@ -904,7 +904,7 @@ const McpSettings: React.FC = () => {
                           <Textarea.Input
                             rows={3}
                             placeholder={`KEY1=value1\nKEY2=value2`}
-                            className="max-h-[160px] min-h-[84px] px-3 py-2 font-mono text-sm leading-5"
+                            className="max-h-40 min-h-21 px-3 py-2 font-mono text-sm leading-5"
                             {...field}
                           />
                         </FormControl>
@@ -1108,7 +1108,7 @@ const McpSettings: React.FC = () => {
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    className="shrink-0 rounded-full"
+                    className="-ml-2 shrink-0 rounded-full"
                     aria-label={t('common.back')}
                     title={t('common.back')}
                     onClick={() => void navigate({ to: '/settings/mcp/servers' })}>
@@ -1193,7 +1193,7 @@ const McpSettings: React.FC = () => {
           setLogModalOpen(next)
           if (next) void fetchServerLogs()
         }}>
-        <DialogContent className="max-h-[70vh] sm:max-w-[720px]">
+        <DialogContent className="max-h-[70vh] sm:max-w-180">
           <DialogHeader>
             <DialogTitle>{t('settings.mcp.logs', 'Server Logs')}</DialogTitle>
           </DialogHeader>
@@ -1231,7 +1231,7 @@ const ServerName = ({ className, ...props }: React.ComponentPropsWithoutRef<'spa
 )
 
 const McpFormSection = ({ className, ...props }: React.ComponentPropsWithoutRef<'div'>) => (
-  <div className={cn('border-border/60 border-t pt-5 first:border-t-0 first:pt-0', className)} {...props} />
+  <div className={cn(className)} {...props} />
 )
 
 const McpFormGrid = ({ className, ...props }: React.ComponentPropsWithoutRef<'div'>) => (
@@ -1274,13 +1274,13 @@ const Timestamp = ({ className, ...props }: React.ComponentPropsWithoutRef<'span
 )
 
 const LogMessage = ({ className, ...props }: React.ComponentPropsWithoutRef<'span'>) => (
-  <span className={cn('break-words text-[13px] leading-normal', className)} {...props} />
+  <span className={cn('wrap-break-word text-[13px] leading-normal', className)} {...props} />
 )
 
 const PreBlock = ({ className, ...props }: React.ComponentPropsWithoutRef<'pre'>) => (
   <pre
     className={cn(
-      'mt-1.5 whitespace-pre-wrap break-words rounded-md border border-border bg-background px-2 py-2 text-foreground text-xs',
+      'wrap-break-word mt-1.5 whitespace-pre-wrap rounded-md border border-border bg-background px-2 py-2 text-foreground text-xs',
       className
     )}
     {...props}
@@ -1305,7 +1305,7 @@ function mapLogLevelClass(level: McpServerLogEntry['level']) {
 const VersionBadge = ({ count, className, ...props }: { count: string } & React.ComponentProps<'span'>) => (
   <span
     className={cn(
-      'inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[9px] bg-primary px-1.5 font-medium text-[11px] text-white leading-[18px] shadow-sm',
+      'inline-flex h-4.5 min-w-4.5 items-center justify-center rounded-[9px] bg-primary px-1.5 font-medium text-[11px] text-white leading-4.5 shadow-sm',
       className
     )}
     {...props}>
@@ -1320,7 +1320,7 @@ const McpRuntimeStatusBadge = ({
 }: { state: 'disabled' | 'connecting' | 'connected' | 'error' } & React.ComponentProps<'span'>) => (
   <span
     className={cn(
-      'inline-flex h-[18px] items-center rounded-[9px] px-1.5 font-medium text-[11px] leading-[18px]',
+      'inline-flex h-4.5 items-center rounded-[9px] px-1.5 font-medium text-[11px] leading-4.5',
       state === 'connected' && 'bg-success/10 text-success',
       state === 'connecting' && 'bg-warning/10 text-warning',
       state === 'error' && 'bg-destructive/10 text-destructive',
@@ -1371,7 +1371,7 @@ const TagsInput = ({ value, onChange }: TagsInputProps) => {
         </span>
       ))}
       <input
-        className="min-w-[120px] flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+        className="min-w-30 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         value={draft}
         placeholder={t('settings.mcp.tagsPlaceholder', 'Enter tags')}
         onChange={(e) => {

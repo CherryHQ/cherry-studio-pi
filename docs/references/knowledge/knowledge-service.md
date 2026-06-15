@@ -20,7 +20,7 @@ The current implementation is split into four responsibility areas:
 2. Data API knowledge handlers
    - Expose database-backed list/get operations and base metadata/config patch.
    - Do not perform vector-store mutations.
-3. `KnowledgeOrchestrationService`
+3. `KnowledgeService`
    - Owns caller-facing runtime IPC workflow.
    - Creates/deletes/restores bases through data services and vector store services.
    - Registers Knowledge JobManager handlers.
@@ -37,8 +37,8 @@ caller
      -> KnowledgeBaseService / KnowledgeItemService
 
 caller
-  -> preload knowledgeRuntime IPC
-     -> KnowledgeOrchestrationService
+  -> preload knowledge IPC
+     -> KnowledgeService
         -> KnowledgeWorkflowService
         -> JobManager
            -> knowledge.prepare-root / knowledge.index-documents
@@ -60,7 +60,7 @@ Current Data API knowledge endpoints are read/update-only for database state tha
 - `GET /knowledge-bases/:id/items`
 - `GET /knowledge-items/:id`
 
-Caller-facing create/delete/index/search operations go through `KnowledgeOrchestrationService` IPC.
+Caller-facing create/delete/index/search operations go through `KnowledgeService` IPC.
 
 The caller-facing add model is payload-based:
 
@@ -91,7 +91,7 @@ caller
     -> workflow service schedules each child
 ```
 
-Callers should not create item records through Data API and then call runtime IPC with item ids. `add-items` accepts `KnowledgeRuntimeAddItemInput[]` and returns after root items are accepted and first jobs are queued, not after indexing completes.
+Callers should not create item records through Data API and then call runtime IPC with item ids. `add-items` accepts `KnowledgeAddItemInput[]` and returns after root items are accepted and first jobs are queued, not after indexing completes.
 
 Delete and reindex remain id-based because they operate on existing persisted items:
 
@@ -100,33 +100,34 @@ delete-items(baseId, itemIds)
 reindex-items(baseId, itemIds)
 ```
 
-`KnowledgeOrchestrationService` collapses nested selected ids to top-level roots before calling the workflow service.
+`KnowledgeService` collapses nested selected ids to top-level roots before calling the workflow service.
 
 ## IPC Surface
 
-`KnowledgeOrchestrationService` currently owns these public IPC entrypoints:
+`KnowledgeService` currently owns these public IPC entrypoints:
 
-- `knowledge-runtime:create-base`
-- `knowledge-runtime:restore-base`
-- `knowledge-runtime:delete-base`
-- `knowledge-runtime:add-items`
-- `knowledge-runtime:delete-items`
-- `knowledge-runtime:reindex-items`
-- `knowledge-runtime:search`
-- `knowledge-runtime:list-item-chunks`
-- `knowledge-runtime:delete-item-chunk`
+- `knowledge:create-base`
+- `knowledge:restore-base`
+- `knowledge:delete-base`
+- `knowledge:add-items`
+- `knowledge:delete-items`
+- `knowledge:reindex-items`
+- `knowledge:search`
+- `knowledge:list-item-chunks`
 
-These IPC handlers are workflow-oriented. They validate payloads, call data services, and enqueue or execute runtime work internally.
+These IPC handlers are workflow-oriented. They validate payloads, call data services, and enqueue or execute runtime work internally. (The former `knowledge:delete-item-chunk` entrypoint was removed with the per-base index store cutover — chunks are derived index rows, replaced wholesale by reindexing.)
 
-Chunk IPC entrypoints are runtime inspection/mutation helpers:
+`KnowledgeService` also owns one v1 bridge entrypoint, `knowledge-base:delete`, still invoked by the legacy Redux `store/knowledge` slice until that slice is removed in the unified step. It routes to the same `delete-base` path.
 
-- `list-item-chunks` and `delete-item-chunk` reject failed bases.
-- Both require the requested item to be `completed`.
+The chunk IPC entrypoint is a runtime inspection helper:
+
+- `list-item-chunks` rejects failed bases.
+- It requires the requested item to be `completed`.
 - Listing chunks for a completed `directory` also rejects when the subtree still contains `deleting` descendants, because container status reconciliation ignores deleting children.
 
 ## Runtime Behavior
 
-Knowledge runtime work is persisted in JobManager. `KnowledgeOrchestrationService.onInit` registers:
+Knowledge runtime work is persisted in JobManager. `KnowledgeService.onInit` registers:
 
 - `knowledge.prepare-root`
 - `knowledge.index-documents`
@@ -240,7 +241,7 @@ In that case, migration must preserve the user-created knowledge data instead of
 
 This means the migrated base is visible as recoverable data, but it is not usable for search/index operations until the user chooses a valid embedding model.
 
-The failed-base recovery path is `knowledge-runtime:restore-base`, not an in-place rebuild:
+The failed-base recovery path is `knowledge:restore-base`, not an in-place rebuild:
 
 ```text
 user selects a valid embedding model for the failed base
@@ -254,15 +255,15 @@ Only root items (`groupId = null`) are copied. Expanded directory children are i
 
 ## Search
 
-Search is executed by `KnowledgeOrchestrationService.search(baseId, query)`:
+Search is executed by `KnowledgeService.search(baseId, query)`:
 
 1. Reject failed bases.
 2. Reject queries without searchable tokens.
-3. Resolve and run the embedding model for the query.
-4. Query the libSQL vector store.
-5. Filter results whose source items are missing, outside the base, or `deleting`.
+3. Resolve the base's `searchMode` (`vector` / `bm25` / `hybrid`) and embed the query — skipped for `bm25`, which is lexical only.
+4. Call `KnowledgeIndexStore.search` on the base's per-base index store with an over-fetched candidate limit (`topK × overfetch`, capped). The store runs the BM25 lane (`search_text_fts`, with a LIKE fallback for short CJK tokens), the brute-force vector lane, or fuses both with RRF (`hybridAlpha`).
+5. Filter results whose source items are missing, outside the base, or `deleting`, then trim to `documentCount ?? 10`.
 6. Rerank when `base.rerankModelId` is configured.
-7. Apply relevance threshold and assign ranks.
+7. Apply relevance threshold (a no-op for `ranking`-kind scores) and assign ranks.
 
 Current `KnowledgeSearchResult` includes:
 
@@ -274,12 +275,12 @@ Current `KnowledgeSearchResult` includes:
 - optional `itemId`
 - required `chunkId`
 
-`chunkId` is the vector row identity used for result-level attribution. `itemId` is populated from stored metadata when available.
+`chunkId` is the search unit identity (`search_unit.unit_id`) used for result-level attribution. `itemId` equals the unit's `material_id` (= `knowledge_item.id`).
 
 ### Current Retrieval Cost Assumption
 
-The current v2 implementation intentionally does not create a libSQL vector index and does not use `vector_top_k`.
-Similarity search currently queries the base table directly and sorts by `vector_distance_cos(...)`.
+The current v2 implementation intentionally does not create a vector index and does not use `vector_top_k`.
+Similarity search scans the `embedding` rows directly and sorts by the engine's scalar cosine distance (`vector_distance_cos` on libsql).
 
 This means retrieval cost scales roughly linearly with the number of vector rows in a single knowledge base.
 That tradeoff is currently accepted because it keeps the runtime path simpler for expected near-term corpus sizes.

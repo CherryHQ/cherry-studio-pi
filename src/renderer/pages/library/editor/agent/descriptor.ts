@@ -92,11 +92,12 @@ export interface AgentFormState {
   model: UniqueModelId | ''
   /** Optional first-session workspace chosen during agent creation. Agent rows stay session-agnostic. */
   workspacePath: string
-  planModel: string
-  smallModel: string
+  planModel: UniqueModelId | ''
+  smallModel: UniqueModelId | ''
   instructions: string
   mcps: string[]
-  allowedTools: string[]
+  /** Opt-out list of disabled tool names (empty = all enabled). */
+  disabledTools: string[]
 
   // configuration.* derived fields we edit in the library UI.
   avatar: string
@@ -185,7 +186,7 @@ export function buildInitialAgentFormState(agent?: AgentDetail | null): AgentFor
     smallModel: agent?.smallModel ?? '',
     instructions: agent?.instructions ?? '',
     mcps: [...(agent?.mcps ?? [])],
-    allowedTools: [...(agent?.allowedTools ?? [])],
+    disabledTools: uniqueStrings(agent?.disabledTools ?? []),
     avatar: asString(cfg.avatar),
     permissionMode: isCreate ? 'bypassPermissions' : asString(cfg.permission_mode),
     maxTurns: asFormMaxTurns(cfg.max_turns),
@@ -205,7 +206,7 @@ export function applyAgentFormPatch(
   const next: AgentFormState = { ...current, ...patch }
 
   if (patch.type && patch.type !== current.type) {
-    next.allowedTools = []
+    next.disabledTools = []
   }
 
   if (Object.prototype.hasOwnProperty.call(patch, 'permissionMode')) {
@@ -256,6 +257,8 @@ function buildConfigurationPayload(form: AgentFormState): AgentConfiguration | u
  * so the backend can apply its own defaults.
  */
 export function buildCreateAgentPayload(form: AgentFormState, type: AgentType = form.type): CreateAgentDto {
+  const disabledTools = uniqueStrings(form.disabledTools)
+
   return {
     type,
     name: form.name.trim(),
@@ -267,7 +270,7 @@ export function buildCreateAgentPayload(form: AgentFormState, type: AgentType = 
     planModel: form.planModel || undefined,
     smallModel: form.smallModel || undefined,
     mcps: form.mcps.length > 0 ? form.mcps : undefined,
-    allowedTools: form.allowedTools.length > 0 ? form.allowedTools : undefined,
+    disabledTools: disabledTools.length > 0 ? disabledTools : undefined,
     configuration: buildConfigurationPayload(form)
   }
 }
@@ -347,8 +350,9 @@ export function diffAgentUpdate(
     dto.mcps = next.mcps
     dirty = true
   }
-  if (!arraysEqual(baseline.allowedTools, next.allowedTools)) {
-    dto.allowedTools = next.allowedTools
+  const nextDisabledTools = uniqueStrings(next.disabledTools)
+  if (!stringSetsEqual(baseline.disabledTools, nextDisabledTools)) {
+    dto.disabledTools = nextDisabledTools
     dirty = true
   }
 
@@ -400,6 +404,20 @@ export function diffAgentUpdate(
 function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
   if (a.length !== b.length) return false
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false
+  return true
+}
+
+function uniqueStrings(values: readonly string[]): string[] {
+  return Array.from(new Set(values))
+}
+
+function stringSetsEqual(a: readonly string[], b: readonly string[]): boolean {
+  const aSet = new Set(a)
+  const bSet = new Set(b)
+  if (aSet.size !== bSet.size) return false
+  for (const value of aSet) {
+    if (!bSet.has(value)) return false
+  }
   return true
 }
 

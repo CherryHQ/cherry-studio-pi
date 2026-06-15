@@ -23,19 +23,16 @@
       "@renderer/*": ["./src/renderer/*"],
       "@shared/*": ["./src/shared/*"],
       "@test-mocks/*": ["./tests/__mocks__/*"],
-      "@types": ["./src/renderer/types/index.ts"],
-      "@vectorstores/libsql": ["./packages/vectorstores/libsql/src/index.ts"],
-      "@vectorstores/libsql/*": ["./packages/vectorstores/libsql/src/*"]
+      "@types": ["./src/renderer/types/index.ts"]
     },
     "tsBuildInfoFile": ".tsbuildinfo/tsconfig.web.tsbuildinfo",
     "useDefineForClassFields": true
   },
-  "exclude": ["packages/aiCore/src/**/__tests__/**"],
+  "exclude": ["packages/aiCore/src/**/__tests__/**", "packages/*/vitest.config.ts"],
   "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
   "include": [
     "local/src/renderer/**/*",
     "src/renderer/**/*",
-    "src/main/integration/cherryai/index.js",
     "src/preload/*.d.ts",
     "tests/__mocks__/**/*",
     "packages/aiCore/src/**/*",
@@ -44,7 +41,6 @@
     "packages/mcp-trace/**/*",
     "packages/provider-registry/**/*",
     "src/shared/**/*",
-    "packages/vectorstores/**/*",
     "packages/ui/**/*"
   ]
 }

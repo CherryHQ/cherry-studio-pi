@@ -5,7 +5,7 @@ import { loggerService } from '@logger'
 import { Navbar, NavbarCenter } from '@renderer/components/app/Navbar'
 import { DeleteIcon, EditIcon } from '@renderer/components/Icons'
 import ListItem from '@renderer/components/ListItem'
-import { getFileFieldLabel } from '@renderer/i18n/label'
+import { getFileFieldLabelKey } from '@renderer/i18n/label'
 import { handleDelete, handleRename, sortFiles, tempFilesSort } from '@renderer/services/FileAction'
 import FileManager from '@renderer/services/FileManager'
 import { storageV2FileRecoveryService } from '@renderer/services/StorageV2FileRecoveryService'
@@ -182,7 +182,7 @@ const FilesPage: FC = () => {
                       setSortOrder('desc')
                     }
                   }}>
-                  {getFileFieldLabel(field)}
+                  {t(getFileFieldLabelKey(field))}
                   {sortField === field &&
                     (sortOrder === 'desc' ? <ArrowUpWideNarrow size={12} /> : <ArrowDownNarrowWide size={12} />)}
                 </SortButton>

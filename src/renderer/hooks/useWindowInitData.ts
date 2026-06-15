@@ -1,5 +1,5 @@
 import { loggerService } from '@logger'
-import { IpcChannel } from '@shared/IpcChannel'
+import { useIpcOn } from '@renderer/ipc/useIpcOn'
 import { useEffect, useState } from 'react'
 
 const logger = loggerService.withContext('useWindowInitData')
@@ -12,18 +12,18 @@ const logger = loggerService.withContext('useWindowInitData')
  * - **Cold start** — when a window first mounts (singleton first open, pooled
  *   fresh, default creation, or any `create()` path), the main process has
  *   synchronously written the init data into its store BEFORE the window was
- *   returned. The hook calls `window-manager:get-init-data` once on mount to
- *   pull that stored value.
+ *   returned. The hook calls `window.get_init_data` once on mount to pull
+ *   that stored value.
  *
  * - **Reuse** — when the same window is re-used (pool recycle or singleton
  *   re-open) and the caller provides new init data, the main process pushes
- *   it as the payload of the `window-manager:reused` IPC event. The hook
- *   updates state in-place, so the DOM stays continuous through the
- *   transition (no empty-DOM frame, no flash of bare window chrome).
+ *   it as the payload of the `window.reused` IpcApi event. The hook updates
+ *   state in-place, so the DOM stays continuous through the transition (no
+ *   empty-DOM frame, no flash of bare window chrome).
  *
- * Main only fires `Reused` for reuse paths AND only when init data is
- * provided — there is no "empty Reused" event, so the hook never has to
- * fall back to a second invoke.
+ * Main only fires `window.reused` for reuse paths AND only when init data is
+ * provided — there is no "empty reused" event, so the hook never has to fall
+ * back to a second request.
  *
  * Usage:
  *
@@ -52,17 +52,16 @@ export function useWindowInitData<T>(): T | null {
         logger.warn('Failed to read window init data', error as Error)
       })
 
-    const remover = window.electron?.ipcRenderer.on(IpcChannel.WindowManager_Reused, (_event, payload: unknown) => {
-      if (!cancelled && payload !== undefined && payload !== null) {
-        setData(payload as T)
-      }
-    })
-
     return () => {
       cancelled = true
-      remover?.()
     }
   }, [])
+
+  useIpcOn('window.reused', (payload) => {
+    if (payload !== undefined && payload !== null) {
+      setData(payload as T)
+    }
+  })
 
   return data
 }

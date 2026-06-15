@@ -20,17 +20,14 @@ import type { FormEvent } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import CreateKnowledgeBaseDialog, {
-  formatKnowledgeModelOptionLabel,
-  KNOWLEDGE_BASE_DEFAULT_DIMENSIONS
-} from './CreateKnowledgeBaseDialog'
+import { useEmbeddingDimensions } from '../hooks/useEmbeddingDimensions'
+import CreateKnowledgeBaseDialog, { formatKnowledgeModelOptionLabel } from './CreateKnowledgeBaseDialog'
 import { KnowledgeDialogBody, KnowledgeDialogField } from './KnowledgeDialogLayout'
 
 interface RestoreKnowledgeBaseDialogProps {
   open: boolean
   base: KnowledgeBase
   initialEmbeddingModelId?: string | null
-  initialDimensions?: number | null
   isRestoring: boolean
   restoreBase: (input: RestoreKnowledgeBaseInput) => Promise<KnowledgeBase>
   onOpenChange: (open: boolean) => void
@@ -54,7 +51,6 @@ const RestoreKnowledgeBaseDialog = ({
   open,
   base,
   initialEmbeddingModelId,
-  initialDimensions,
   isRestoring,
   restoreBase,
   onOpenChange,
@@ -71,6 +67,7 @@ const RestoreKnowledgeBaseDialog = ({
   )
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const { fetchDimensions, isFetchingDimensions } = useEmbeddingDimensions()
 
   useEffect(() => {
     setValues(createInitialValues(defaultName, initialEmbeddingModelId))
@@ -83,12 +80,26 @@ const RestoreKnowledgeBaseDialog = ({
     label: formatKnowledgeModelOptionLabel(model.id)
   }))
 
+  const handleEmbeddingModelChange = (embeddingModelId: string) => {
+    setValues((currentValues) => ({ ...currentValues, embeddingModelId }))
+    setSubmitError(null)
+  }
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setHasAttemptedSubmit(true)
     setSubmitError(null)
 
     if (!values.name.trim() || !values.embeddingModelId) {
+      return
+    }
+
+    let dimensions: number
+
+    try {
+      dimensions = await fetchDimensions(values.embeddingModelId)
+    } catch (error) {
+      setSubmitError(formatErrorMessageWithPrefix(error, t('message.error.get_embedding_dimensions')))
       return
     }
 
@@ -99,7 +110,7 @@ const RestoreKnowledgeBaseDialog = ({
         sourceBaseId: base.id,
         name: values.name,
         embeddingModelId: values.embeddingModelId,
-        dimensions: initialDimensions ?? KNOWLEDGE_BASE_DEFAULT_DIMENSIONS
+        dimensions
       })
     } catch (error) {
       setSubmitError(formatErrorMessageWithPrefix(error, t('knowledge.restore.failed_to_restore')))
@@ -133,11 +144,7 @@ const RestoreKnowledgeBaseDialog = ({
 
             <KnowledgeDialogField>
               <Label>{t('knowledge.embedding_model')}</Label>
-              <Select
-                value={values.embeddingModelId ?? undefined}
-                onValueChange={(embeddingModelId) =>
-                  setValues((currentValues) => ({ ...currentValues, embeddingModelId }))
-                }>
+              <Select value={values.embeddingModelId ?? undefined} onValueChange={handleEmbeddingModelChange}>
                 <SelectTrigger
                   size="sm"
                   className="w-full"
@@ -165,7 +172,7 @@ const RestoreKnowledgeBaseDialog = ({
           </KnowledgeDialogBody>
 
           <CreateKnowledgeBaseDialog.Actions
-            isCreating={isRestoring}
+            isCreating={isRestoring || isFetchingDimensions}
             onCancel={() => onOpenChange(false)}
             cancelLabel={t('common.cancel')}
             submitLabel={t('knowledge.restore.submit')}

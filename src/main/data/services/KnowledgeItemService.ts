@@ -14,8 +14,7 @@ import type { OffsetPaginationResponse } from '@shared/data/api'
 import { DataApiErrorFactory } from '@shared/data/api'
 import type { ListKnowledgeItemsQuery } from '@shared/data/api/schemas/knowledges'
 import type { FileEntryId } from '@shared/data/types/file'
-import type { KnowledgeItemFileRefRole } from '@shared/data/types/file/ref'
-import { knowledgeItemSourceType } from '@shared/data/types/file/ref'
+import { type KnowledgeItemFileRefRole, knowledgeItemSourceType } from '@shared/data/types/file/ref'
 import {
   type CreateKnowledgeItemDto,
   DirectoryItemDataSchema,
@@ -35,7 +34,6 @@ import { timestampToISO } from './utils/rowMappers'
 
 const logger = loggerService.withContext('DataApi:KnowledgeItemService')
 const CONTAINER_CHILD_FAILURE_ERROR = 'One or more child items failed'
-const FALLBACK_FILE_ENTRY_ID = '00000000-0000-4000-8000-000000000000' as FileEntryId
 
 type KnowledgeItemRow = typeof knowledgeItemTable.$inferSelect
 type KnowledgeItemRowLike = Omit<KnowledgeItemRow, 'data'> & {
@@ -76,7 +74,7 @@ function fallbackKnowledgeItemData(row: KnowledgeItemRowLike): KnowledgeItemData
   const source = `invalid:${row.id}`
   switch (row.type) {
     case 'file':
-      return { source, fileEntryId: FALLBACK_FILE_ENTRY_ID }
+      return { source, relativePath: source }
     case 'url':
       return { source, url: source }
     case 'directory':
@@ -127,6 +125,12 @@ function rowToKnowledgeItem(row: KnowledgeItemRowLike): KnowledgeItem {
     createdAt: timestampToISO(row.createdAt),
     updatedAt: timestampToISO(row.updatedAt)
   })
+}
+
+function getKnowledgeItemFileEntryId(item: KnowledgeItem): FileEntryId | null {
+  if (item.type !== 'file') return null
+  const fileEntryId = (item.data as { fileEntryId?: unknown }).fileEntryId
+  return typeof fileEntryId === 'string' ? (fileEntryId as FileEntryId) : null
 }
 
 export class KnowledgeItemService {
@@ -246,18 +250,6 @@ export class KnowledgeItemService {
     const row = await dbService.withWriteTx(async (tx) => {
       await this.validateGroupOwnerTx(tx, baseId, item.groupId)
 
-      if (item.type === 'file') {
-        const [fileEntry] = await tx
-          .select({ id: fileEntryTable.id })
-          .from(fileEntryTable)
-          .where(eq(fileEntryTable.id, item.data.fileEntryId))
-          .limit(1)
-
-        if (!fileEntry) {
-          throw DataApiErrorFactory.notFound('FileEntry', item.data.fileEntryId)
-        }
-      }
-
       const [insertedRow] = await withSqliteErrors(
         async () =>
           await tx
@@ -291,19 +283,6 @@ export class KnowledgeItemService {
 
       if (!insertedRow) {
         throw DataApiErrorFactory.dataInconsistent('KnowledgeItem', 'Knowledge item create result missing')
-      }
-
-      if (item.type === 'file') {
-        const now = Date.now()
-        await tx.insert(fileRefTable).values({
-          id: uuidv4(),
-          fileEntryId: item.data.fileEntryId,
-          sourceType: knowledgeItemSourceType,
-          sourceId: insertedRow.id,
-          role: 'source',
-          createdAt: now,
-          updatedAt: now
-        })
       }
 
       return insertedRow
@@ -565,8 +544,11 @@ export class KnowledgeItemService {
           )
         )
 
-      const fileItems = targetItems.filter((item) => item.type === 'file')
-      if (fileItems.length === 0) {
+      const fileRefs = targetItems.flatMap((item) => {
+        const fileEntryId = getKnowledgeItemFileEntryId(item)
+        return fileEntryId ? [{ itemId: item.id, fileEntryId }] : []
+      })
+      if (fileRefs.length === 0) {
         return {
           itemCount: targetItems.length,
           refCount: 0
@@ -577,11 +559,11 @@ export class KnowledgeItemService {
       const refs = await tx
         .insert(fileRefTable)
         .values(
-          fileItems.map((item) => ({
+          fileRefs.map((ref) => ({
             id: uuidv4(),
-            fileEntryId: item.data.fileEntryId,
+            fileEntryId: ref.fileEntryId,
             sourceType: knowledgeItemSourceType,
-            sourceId: item.id,
+            sourceId: ref.itemId,
             role: 'source',
             createdAt: now,
             updatedAt: now
@@ -723,6 +705,47 @@ export class KnowledgeItemService {
     return item
   }
 
+  async updateIndexedRelativePath(id: string, indexedRelativePath: string): Promise<KnowledgeItem> {
+    const dbService = application.get('DbService')
+    const row = await dbService.withWriteTx(async (tx) => {
+      const [existingRow] = await tx.select().from(knowledgeItemTable).where(eq(knowledgeItemTable.id, id)).limit(1)
+
+      if (!existingRow) {
+        throw DataApiErrorFactory.notFound('KnowledgeItem', id)
+      }
+
+      const existingItem = rowToKnowledgeItem(existingRow)
+      if (existingItem.type !== 'file') {
+        throw DataApiErrorFactory.validation({
+          type: [`Knowledge item must be a file to store indexed relative path: ${id}`]
+        })
+      }
+
+      const [updatedRow] = await tx
+        .update(knowledgeItemTable)
+        .set({
+          data: {
+            ...existingItem.data,
+            indexedRelativePath
+          }
+        })
+        .where(eq(knowledgeItemTable.id, id))
+        .returning()
+
+      if (!updatedRow) {
+        throw DataApiErrorFactory.dataInconsistent(
+          'KnowledgeItem',
+          `Knowledge item indexed path update result missing for id '${id}'`
+        )
+      }
+
+      return updatedRow
+    })
+
+    logger.info('Updated knowledge item indexed relative path', { id, indexedRelativePath })
+    return rowToKnowledgeItem(row)
+  }
+
   private async reconcileContainers(
     baseId: string,
     startContainerIds: Array<string | null | undefined>
@@ -805,8 +828,6 @@ export class KnowledgeItemService {
       if (!existingRow) {
         throw DataApiErrorFactory.notFound('KnowledgeItem', id)
       }
-
-      await this.deleteFileRefsForSubtreeTx(tx, existingRow.baseId, [id])
 
       const [row] = await tx.delete(knowledgeItemTable).where(eq(knowledgeItemTable.id, id)).returning({
         id: knowledgeItemTable.id

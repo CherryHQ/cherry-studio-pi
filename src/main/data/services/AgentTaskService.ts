@@ -12,14 +12,18 @@ import { jobScheduleService } from '@data/services/JobScheduleService'
 import { jobService } from '@data/services/JobService'
 import { loggerService } from '@logger'
 import { DataApiErrorFactory } from '@shared/data/api'
+import type { ListOptions } from '@shared/data/api/apiTypes'
 import type {
   CreateTaskDto,
   ScheduledTaskEntity,
   TaskRunLogEntity,
   UpdateTaskDto
 } from '@shared/data/api/schemas/agents'
+import {
+  type AgentSessionWorkspaceSource,
+  AgentSessionWorkspaceSourceSchema
+} from '@shared/data/api/schemas/agentWorkspaces'
 import type { JobScheduleSnapshot, JobSnapshot, UpdateJobScheduleDto } from '@shared/data/api/schemas/jobs'
-import type { ListOptions } from '@types'
 import { eq } from 'drizzle-orm'
 
 const logger = loggerService.withContext('AgentTaskService')
@@ -31,6 +35,7 @@ type AgentTaskJobInputTemplate = {
   agentId: string
   prompt: string
   timeoutMinutes: number
+  workspace: AgentSessionWorkspaceSource
 }
 
 type ListAgentTasksOptions = ListOptions & {
@@ -46,8 +51,23 @@ function isAgentTaskTemplate(value: unknown): value is AgentTaskJobInputTemplate
     typeof value === 'object' &&
     value !== null &&
     typeof (value as AgentTaskJobInputTemplate).agentId === 'string' &&
-    typeof (value as AgentTaskJobInputTemplate).prompt === 'string'
+    typeof (value as AgentTaskJobInputTemplate).prompt === 'string' &&
+    typeof (value as AgentTaskJobInputTemplate).timeoutMinutes === 'number'
   )
+}
+
+function normalizeAgentTaskTemplate(value: unknown): AgentTaskJobInputTemplate | null {
+  if (!isAgentTaskTemplate(value)) return null
+
+  const workspace = AgentSessionWorkspaceSourceSchema.safeParse(value.workspace)
+  if (!workspace.success) return null
+
+  return {
+    agentId: value.agentId,
+    prompt: value.prompt,
+    timeoutMinutes: value.timeoutMinutes,
+    workspace: workspace.data
+  }
 }
 
 function deriveStatus(snapshot: JobScheduleSnapshot): 'active' | 'paused' | 'completed' {
@@ -92,7 +112,8 @@ export class AgentTaskService {
     const jobInputTemplate: AgentTaskJobInputTemplate = {
       agentId,
       prompt: dto.prompt,
-      timeoutMinutes
+      timeoutMinutes,
+      workspace: dto.workspace
     }
 
     const { id } = await application.get('JobManager').registerJobSchedule({
@@ -131,7 +152,8 @@ export class AgentTaskService {
   async getTask(agentId: string, taskId: string): Promise<ScheduledTaskEntity | null> {
     const snapshot = await jobScheduleService.getById(taskId)
     if (!snapshot || snapshot.type !== AGENT_TASK_TYPE) return null
-    if (!isAgentTaskTemplate(snapshot.jobInputTemplate) || snapshot.jobInputTemplate.agentId !== agentId) return null
+    const template = normalizeAgentTaskTemplate(snapshot.jobInputTemplate)
+    if (!template || template.agentId !== agentId) return null
     return await this.toScheduledTaskEntity(snapshot)
   }
 
@@ -153,15 +175,17 @@ export class AgentTaskService {
     if (!existing) return null
 
     const existingSnapshot = await jobScheduleService.getById(taskId)
-    if (!existingSnapshot || !isAgentTaskTemplate(existingSnapshot.jobInputTemplate)) return null
+    const existingTemplate = existingSnapshot ? normalizeAgentTaskTemplate(existingSnapshot.jobInputTemplate) : null
+    if (!existingSnapshot || !existingTemplate) return null
 
     // Build the updated jobInputTemplate when prompt/timeoutMinutes changed.
-    const existingTemplate = existingSnapshot.jobInputTemplate
     const nextPrompt = patch.prompt ?? existingTemplate.prompt
     const nextTimeoutMinutes = patch.timeoutMinutes ?? existingTemplate.timeoutMinutes
+    const nextWorkspace = patch.workspace ?? existingTemplate.workspace
     const templateChanged =
       (patch.prompt !== undefined && patch.prompt !== existingTemplate.prompt) ||
-      (patch.timeoutMinutes !== undefined && patch.timeoutMinutes !== existingTemplate.timeoutMinutes)
+      (patch.timeoutMinutes !== undefined && patch.timeoutMinutes !== existingTemplate.timeoutMinutes) ||
+      patch.workspace !== undefined
 
     const updatePatch: UpdateJobScheduleDto = {}
     if (patch.name !== undefined) updatePatch.name = patch.name
@@ -171,7 +195,8 @@ export class AgentTaskService {
       updatePatch.jobInputTemplate = {
         agentId: existingTemplate.agentId,
         prompt: nextPrompt,
-        timeoutMinutes: nextTimeoutMinutes
+        timeoutMinutes: nextTimeoutMinutes,
+        workspace: nextWorkspace
       }
     }
 
@@ -219,9 +244,10 @@ export class AgentTaskService {
   // ------------------------------------------------------------------
 
   private async toScheduledTaskEntity(snapshot: JobScheduleSnapshot): Promise<ScheduledTaskEntity> {
-    const tmpl = isAgentTaskTemplate(snapshot.jobInputTemplate)
-      ? snapshot.jobInputTemplate
-      : { agentId: '', prompt: '', timeoutMinutes: 2 }
+    const tmpl = normalizeAgentTaskTemplate(snapshot.jobInputTemplate)
+    if (!tmpl) {
+      throw DataApiErrorFactory.invalidOperation('read task', 'invalid agent task template')
+    }
     const channelRows = await agentChannelService.getSubscribedChannels(snapshot.id)
     return {
       id: snapshot.id,
@@ -233,6 +259,7 @@ export class AgentTaskService {
       prompt: tmpl.prompt,
       trigger: snapshot.trigger,
       timeoutMinutes: tmpl.timeoutMinutes,
+      workspace: tmpl.workspace,
       channelIds: channelRows.map((c) => c.id),
       nextRun: snapshot.nextRun,
       lastRun: snapshot.lastRun,

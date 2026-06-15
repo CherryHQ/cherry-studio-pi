@@ -98,8 +98,8 @@ type MessageMenubarButtonContext = {
   confirmDeleteMessage: boolean
   confirmRegenerateMessage: boolean
   copied: boolean
-  /** Bound by `useMessage(message.id, topic)` — signature drops the leading id. */
-  deleteMessage: (traceId?: string, modelName?: string) => Promise<void>
+  /** Bound by `useMessage(message.id, topic)`. */
+  deleteMessage: () => Promise<void>
   dropdownItems: MenuProps['items']
   enableDeveloperMode: boolean
   handleTranslate: (language: TranslateLanguage) => Promise<void>
@@ -812,7 +812,6 @@ const buttonRenderers: Record<MessageMenubarButtonId, MessageMenubarButtonRender
       cancelTranslate,
       confirmDeleteMessage,
       deleteMessage,
-      message,
       setShowDeleteTooltip,
       showDeleteTooltip,
       softHoverBg,
@@ -834,7 +833,7 @@ const buttonRenderers: Record<MessageMenubarButtonId, MessageMenubarButtonRender
     const handleDeleteMessage = async () => {
       // Drop any in-flight translation on this message before the parts go away.
       cancelTranslate()
-      await deleteMessage(message.traceId, message.model?.name)
+      await deleteMessage()
     }
 
     if (confirmDeleteMessage) {

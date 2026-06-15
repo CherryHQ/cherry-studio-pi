@@ -1,6 +1,5 @@
 import { Alert, Button, Scrollbar } from '@cherrystudio/ui'
-import { loggerService } from '@logger'
-import { formatErrorMessageWithPrefix, getErrorMessage } from '@renderer/utils/error'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { KnowledgeBase } from '@shared/data/types/knowledge'
 import { RotateCcw } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -9,17 +8,14 @@ import { useTranslation } from 'react-i18next'
 import { KnowledgeDialogFooter } from '../../components/KnowledgeDialogLayout'
 import KnowledgePanelShell from '../../components/KnowledgePanelShell'
 import { useKnowledgeRagConfig } from '../../hooks'
-import { getKnowledgeBaseFailureReason, getKnowledgeRagConfigFormState, parseRequiredInteger } from '../../utils'
+import { getKnowledgeBaseFailureReason, getKnowledgeRagConfigFormState } from '../../utils'
 import ChunkingSection from './ChunkingSection'
 import EmbeddingSection from './EmbeddingSection'
 import FileProcessingSection from './FileProcessingSection'
 import RetrievalSection from './RetrievalSection'
 
-const logger = loggerService.withContext('RagConfigPanel')
-
 export interface KnowledgeRestoreBaseInitialValues {
   embeddingModelId?: string | null
-  dimensions?: number | null
 }
 
 interface RagConfigPanelProps {
@@ -54,7 +50,6 @@ const ActiveRagConfigPanel = ({ base, onRestoreBase }: RagConfigPanelProps) => {
   const { t } = useTranslation()
   const {
     initialValues,
-    embeddingModels,
     fileProcessorOptions,
     embeddingModelOptions,
     rerankModelOptions,
@@ -70,46 +65,18 @@ const ActiveRagConfigPanel = ({ base, onRestoreBase }: RagConfigPanelProps) => {
 
   const formState = useMemo(() => getKnowledgeRagConfigFormState(initialValues, values), [initialValues, values])
   const { validationErrorCodes, isDirty, canSave } = formState
-  const selectedEmbeddingModel = useMemo(
-    () => embeddingModels.find((model) => model.id === values.embeddingModelId),
-    [embeddingModels, values.embeddingModelId]
-  )
-  const [isFetchingDimensions, setIsFetchingDimensions] = useState(false)
-  const embeddingConfigChanged =
-    values.embeddingModelId !== initialValues.embeddingModelId || values.dimensions !== initialValues.dimensions
-
-  const handleRefreshDimensions = async () => {
-    if (!selectedEmbeddingModel) {
-      window.toast.error(t('knowledge.embedding_model_required'))
-      return
-    }
-
-    setIsFetchingDimensions(true)
-    try {
-      const { embeddings } = await window.api.ai.embedMany({
-        uniqueModelId: selectedEmbeddingModel.id,
-        values: ['test']
-      })
-      const dimensions = embeddings[0].length
-      setValues((currentValues) => ({ ...currentValues, dimensions: dimensions.toString() }))
-    } catch (error) {
-      logger.error(t('message.error.get_embedding_dimensions'), error as Error)
-      window.toast.error(t('message.error.get_embedding_dimensions') + '\n' + getErrorMessage(error))
-    } finally {
-      setIsFetchingDimensions(false)
-    }
-  }
+  // Changing the embedding model re-embeds existing content, so it routes through the
+  // restore flow (which auto-detects the new model's dimensions) instead of a plain save.
+  const embeddingModelChanged = values.embeddingModelId !== initialValues.embeddingModelId
+  const canSubmit = canSave || embeddingModelChanged
 
   const handleSave = async () => {
-    if (!canSave) {
+    if (!canSubmit) {
       return
     }
 
-    if (embeddingConfigChanged) {
-      onRestoreBase(base, {
-        embeddingModelId: values.embeddingModelId,
-        dimensions: parseRequiredInteger(values.dimensions)
-      })
+    if (embeddingModelChanged) {
+      onRestoreBase(base, { embeddingModelId: values.embeddingModelId })
       return
     }
 
@@ -119,6 +86,10 @@ const ActiveRagConfigPanel = ({ base, onRestoreBase }: RagConfigPanelProps) => {
     } catch (error) {
       window.toast.error(formatErrorMessageWithPrefix(error, t('knowledge.error.failed_to_edit')))
     }
+  }
+
+  const handleEmbeddingModelChange = (embeddingModelId: string) => {
+    setValues((currentValues) => ({ ...currentValues, embeddingModelId }))
   }
 
   return (
@@ -148,18 +119,8 @@ const ActiveRagConfigPanel = ({ base, onRestoreBase }: RagConfigPanelProps) => {
 
           <EmbeddingSection
             embeddingModelId={values.embeddingModelId}
-            embeddingModel={selectedEmbeddingModel}
             embeddingModelOptions={embeddingModelOptions}
-            dimensions={values.dimensions}
-            dimensionsErrorCode={validationErrorCodes.dimensions}
-            isFetchingDimensions={isFetchingDimensions}
-            onEmbeddingModelChange={(embeddingModelId) =>
-              setValues((currentValues) => ({ ...currentValues, embeddingModelId }))
-            }
-            onDimensionsChange={(dimensions) =>
-              setValues((currentValues) => ({ ...currentValues, dimensions: dimensions.replace(/\D/g, '') }))
-            }
-            onRefreshDimensions={handleRefreshDimensions}
+            onEmbeddingModelChange={handleEmbeddingModelChange}
           />
 
           <RetrievalSection
@@ -192,8 +153,8 @@ const ActiveRagConfigPanel = ({ base, onRestoreBase }: RagConfigPanelProps) => {
           <RotateCcw />
           {t('knowledge.rag.reset_action')}
         </Button>
-        <Button type="button" variant="emphasis" loading={isLoading} disabled={!canSave} onClick={handleSave}>
-          {embeddingConfigChanged ? t('knowledge.restore.submit') : t('knowledge.rag.save_action')}
+        <Button type="button" variant="emphasis" loading={isLoading} disabled={!canSubmit} onClick={handleSave}>
+          {embeddingModelChanged ? t('knowledge.restore.submit') : t('knowledge.rag.save_action')}
         </Button>
       </KnowledgeDialogFooter>
     </KnowledgePanelShell>

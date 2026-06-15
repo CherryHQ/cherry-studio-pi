@@ -206,6 +206,7 @@ describe('WorkspaceSelector', () => {
             id: 'workspace-1',
             name: 'Project',
             path: '/Users/me/project',
+            type: 'user',
             orderKey: 'a0',
             createdAt: '2026-06-12T00:00:00.000Z',
             updatedAt: '2026-06-12T00:00:00.000Z'

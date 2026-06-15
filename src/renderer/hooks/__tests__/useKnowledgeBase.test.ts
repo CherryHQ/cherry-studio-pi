@@ -43,7 +43,6 @@ const createKnowledgeBase = (overrides: Partial<KnowledgeBase> = {}): KnowledgeB
   status: 'completed',
   error: null,
   searchMode: 'hybrid',
-  hybridAlpha: undefined,
   createdAt: '2026-04-15T09:00:00+08:00',
   updatedAt: '2026-04-15T09:00:00+08:00',
   ...overrides
@@ -113,7 +112,7 @@ describe('useCreateKnowledgeBase', () => {
     mockInvalidateCache.mockResolvedValue(undefined)
     mockRuntimeCreateBase.mockResolvedValue(createKnowledgeBase())
     ;(window as any).api = {
-      knowledgeRuntime: {
+      knowledge: {
         createBase: mockRuntimeCreateBase
       }
     }
@@ -217,7 +216,7 @@ describe('useRestoreKnowledgeBase', () => {
     mockInvalidateCache.mockResolvedValue(undefined)
     mockRuntimeRestoreBase.mockResolvedValue(createKnowledgeBase())
     ;(window as any).api = {
-      knowledgeRuntime: {
+      knowledge: {
         restoreBase: mockRuntimeRestoreBase
       }
     }
@@ -336,7 +335,7 @@ describe('useDeleteKnowledgeBase', () => {
     mockInvalidateCache.mockResolvedValue(undefined)
     mockRuntimeDeleteBase.mockResolvedValue(undefined)
     ;(window as any).api = {
-      knowledgeRuntime: {
+      knowledge: {
         deleteBase: mockRuntimeDeleteBase
       }
     }

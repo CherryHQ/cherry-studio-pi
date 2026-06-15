@@ -2,6 +2,7 @@ import { Tooltip } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { isLinux, isWin } from '@renderer/config/constant'
+import { useIpcOn } from '@renderer/ipc/useIpcOn'
 import { Minus, Square, X } from 'lucide-react'
 import type { SVGProps } from 'react'
 import { useEffect, useState } from 'react'
@@ -74,6 +75,9 @@ const WindowControls: React.FC = () => {
       unsubscribe()
     }
   }, [])
+
+  // Listen for maximized state changes (auto-unsubscribes on unmount)
+  useIpcOn('window.maximized_changed', setIsMaximized)
 
   // Only show on Windows and Linux
   if (!isWin && !isLinux) {

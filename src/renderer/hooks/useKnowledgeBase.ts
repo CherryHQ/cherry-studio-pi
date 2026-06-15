@@ -1,6 +1,6 @@
 import { useInvalidateCache, useMutation, useQuery } from '@data/hooks/useDataApi'
 import { loggerService } from '@logger'
-import type { UpdateKnowledgeBaseDto } from '@shared/data/api/schemas/knowledges'
+import type { KnowledgeBaseListItem, UpdateKnowledgeBaseDto } from '@shared/data/api/schemas/knowledges'
 import { KNOWLEDGE_BASES_MAX_LIMIT } from '@shared/data/api/schemas/knowledges'
 import type { CreateKnowledgeBaseDto, RestoreKnowledgeBaseDto } from '@shared/data/types/knowledge'
 import { useCallback, useMemo, useState } from 'react'
@@ -34,7 +34,7 @@ export const useKnowledgeBases = () => {
     query: KNOWLEDGE_V2_BASES_QUERY
   })
 
-  const bases = useMemo(() => data?.items ?? [], [data])
+  const bases = useMemo<KnowledgeBaseListItem[]>(() => (data?.items ?? []) as KnowledgeBaseListItem[], [data])
 
   return {
     bases,
@@ -88,7 +88,7 @@ export const useCreateKnowledgeBase = () => {
       setIsCreating(true)
 
       try {
-        const createdBase = await window.api.knowledgeRuntime.createBase(body)
+        const createdBase = await window.api.knowledge.createBase(body)
 
         try {
           await invalidateCache('/knowledge-bases')
@@ -155,7 +155,7 @@ export const useRestoreKnowledgeBase = () => {
       setIsRestoring(true)
 
       try {
-        const restoredBase = await window.api.knowledgeRuntime.restoreBase({
+        const restoredBase = await window.api.knowledge.restoreBase({
           sourceBaseId,
           name,
           embeddingModelId,
@@ -242,7 +242,7 @@ export const useDeleteKnowledgeBase = () => {
       let mutationError: Error | undefined
 
       try {
-        await window.api.knowledgeRuntime.deleteBase(baseId)
+        await window.api.knowledge.deleteBase(baseId)
       } catch (error) {
         const normalizedError = normalizeError(error)
         logger.error('Failed to delete knowledge base', normalizedError, {

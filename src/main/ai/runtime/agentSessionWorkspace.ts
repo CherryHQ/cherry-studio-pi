@@ -1,5 +1,3 @@
-import * as fs from 'node:fs'
-
 import { loggerService } from '@logger'
 import { getPathStatus, type PathStatus } from '@main/utils/file/pathStatus'
 import { t } from '@main/utils/language'
@@ -26,23 +24,8 @@ export async function assertAgentSessionWorkspaceDirectory(
   cwd: string,
   options: { runtime: string }
 ): Promise<void> {
-  let status = await getPathStatus(cwd)
+  const status = await getPathStatus(cwd)
   if (status.ok && status.kind === 'directory') return
-
-  if (!status.ok && status.reason === 'missing') {
-    try {
-      await fs.promises.mkdir(cwd, { recursive: true })
-      status = await getPathStatus(cwd)
-      if (status.ok && status.kind === 'directory') return
-    } catch (error) {
-      logger.warn('Failed to recreate missing agent session workspace directory', {
-        sessionId,
-        runtime: options.runtime,
-        cwd,
-        error: error instanceof Error ? error.message : String(error)
-      })
-    }
-  }
 
   logger.warn(`Agent session ${sessionId} workspace invalid: ${cwd}`, { runtime: options.runtime })
   throw new AgentSessionWorkspaceError(workspacePathErrorMessage(cwd, status))

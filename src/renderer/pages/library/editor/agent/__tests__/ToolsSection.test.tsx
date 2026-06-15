@@ -66,10 +66,12 @@ vi.mock('../../components/CatalogPicker', () => ({
   ),
   BoundCatalogList: ({
     items,
-    emptyLabel
+    emptyLabel,
+    onDisable
   }: {
     items: Array<{ id: string; name: string; disableToggle?: boolean; statusBadge?: ReactNode }>
     emptyLabel: ReactNode
+    onDisable: (id: string) => void
   }) => (
     <div>
       {items.length === 0
@@ -78,7 +80,7 @@ vi.mock('../../components/CatalogPicker', () => ({
             <div key={item.id}>
               <span>{item.name}</span>
               {item.statusBadge ? <span>{item.statusBadge}</span> : null}
-              <button type="button" disabled={item.disableToggle}>
+              <button type="button" disabled={item.disableToggle} onClick={() => onDisable(item.id)}>
                 toggle {item.name}
               </button>
             </div>
@@ -98,7 +100,7 @@ function createForm(overrides: Partial<AgentFormState> = {}): AgentFormState {
     smallModel: '',
     instructions: '',
     mcps: [],
-    allowedTools: [],
+    disabledTools: [],
     avatar: '',
     permissionMode: '',
     maxTurns: 0,
@@ -132,7 +134,7 @@ describe('ToolsSection', () => {
     }
   ]
 
-  it('shows permission-mode default tools even when allowedTools is empty', () => {
+  it('shows built-in tools when disabledTools is empty', () => {
     render(
       <ToolsSection
         agent={{
@@ -142,41 +144,21 @@ describe('ToolsSection', () => {
           model: 'anthropic::claude-sonnet-4-5',
           modelName: null,
           createdAt: '',
-          updatedAt: ''
+          updatedAt: '',
+          orderKey: 'k'
         }}
         tools={tools}
-        form={createForm({ permissionMode: 'default', allowedTools: [] })}
+        form={createForm({ permissionMode: 'default', disabledTools: [] })}
         onChange={vi.fn()}
       />
     )
 
     expect(screen.getByText('Read')).toBeInTheDocument()
     expect(screen.getByText('Glob')).toBeInTheDocument()
+    expect(screen.getByText('Bash')).toBeInTheDocument()
   })
 
-  it('locks permission-mode default tool switches', () => {
-    render(
-      <ToolsSection
-        agent={{
-          id: 'agent-1',
-          type: 'claude-code',
-          name: 'Agent',
-          model: 'anthropic::claude-sonnet-4-5',
-          modelName: null,
-          createdAt: '',
-          updatedAt: ''
-        }}
-        tools={tools}
-        form={createForm({ permissionMode: 'default', allowedTools: [] })}
-        onChange={vi.fn()}
-      />
-    )
-
-    expect(screen.getByRole('button', { name: 'toggle Read' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'toggle Glob' })).toBeDisabled()
-  })
-
-  it('adds a built-in tool while preserving auto-approved defaults', async () => {
+  it('disables a built-in tool by adding it to disabledTools', async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()
 
@@ -189,10 +171,40 @@ describe('ToolsSection', () => {
           model: 'anthropic::claude-sonnet-4-5',
           modelName: null,
           createdAt: '',
-          updatedAt: ''
+          updatedAt: '',
+          orderKey: 'k'
         }}
         tools={tools}
-        form={createForm({ permissionMode: 'default', allowedTools: [] })}
+        form={createForm({ permissionMode: 'default', disabledTools: [] })}
+        onChange={onChange}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: 'toggle Read' }))
+
+    expect(onChange).toHaveBeenCalledWith({
+      disabledTools: ['Read']
+    })
+  })
+
+  it('re-enables a disabled built-in tool', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+
+    render(
+      <ToolsSection
+        agent={{
+          id: 'agent-1',
+          type: 'claude-code',
+          name: 'Agent',
+          model: 'anthropic::claude-sonnet-4-5',
+          modelName: null,
+          createdAt: '',
+          updatedAt: '',
+          orderKey: 'k'
+        }}
+        tools={tools}
+        form={createForm({ permissionMode: 'default', disabledTools: ['Bash'] })}
         onChange={onChange}
       />
     )
@@ -200,7 +212,7 @@ describe('ToolsSection', () => {
     await user.click(screen.getByRole('button', { name: 'library.config.agent.section.tools.add' }))
 
     expect(onChange).toHaveBeenCalledWith({
-      allowedTools: ['Bash']
+      disabledTools: []
     })
   })
 
@@ -217,6 +229,7 @@ describe('ToolsSection', () => {
           modelName: null,
           createdAt: '',
           updatedAt: '',
+          orderKey: '',
           tools: []
         }}
         tools={[]}

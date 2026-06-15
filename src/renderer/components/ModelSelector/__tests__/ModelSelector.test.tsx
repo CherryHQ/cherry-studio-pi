@@ -40,7 +40,11 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 vi.mock('@renderer/i18n/label', () => ({
-  getProviderLabel: (id: string) => id
+  getProviderLabelKey: (id: string) => id
+}))
+
+vi.mock('@renderer/i18n', () => ({
+  default: { t: (key: string) => key }
 }))
 
 vi.mock('@cherrystudio/ui/icons', () => ({

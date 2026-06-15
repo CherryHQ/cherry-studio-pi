@@ -3,7 +3,7 @@ import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { isLinux, isMac, isWin } from '@renderer/config/constant'
 import { useTheme } from '@renderer/context/ThemeProvider'
-import { getSelectionDescriptionLabel } from '@renderer/i18n/label'
+import { getSelectionDescriptionLabelKey } from '@renderer/i18n/label'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { cn } from '@renderer/utils/style'
 import SelectionToolbar from '@renderer/windows/selection/toolbar/SelectionToolbar'
@@ -250,7 +250,7 @@ const SelectionAssistantSettings: FC = () => {
                 <SettingRowTitle>
                   <div style={{ marginRight: '4px' }}>{t('selection.settings.toolbar.trigger_mode.title')}</div>
                   {/* FIXME: 没有考虑Linux？ */}
-                  <Tooltip content={getSelectionDescriptionLabel(isWin ? 'windows' : isLinux ? 'linux' : 'mac')}>
+                  <Tooltip content={t(getSelectionDescriptionLabelKey(isWin ? 'windows' : isLinux ? 'linux' : 'mac'))}>
                     <QuestionIcon size={14} />
                   </Tooltip>
                 </SettingRowTitle>
@@ -358,7 +358,7 @@ const SelectionAssistantSettings: FC = () => {
               </SettingLabel>
               <div style={{ marginRight: '16px' }}>{opacityValue}%</div>
               <Slider
-                className="w-[100px]"
+                className="w-25"
                 min={20}
                 max={100}
                 inverted

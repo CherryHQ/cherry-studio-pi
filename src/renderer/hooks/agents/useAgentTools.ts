@@ -23,7 +23,6 @@ const mcpToolsCacheKey = (serverId: string): McpToolsCacheKey => `mcp.tools.${se
 export type AgentToolSource = {
   type?: AgentType
   mcps?: string[]
-  allowedTools?: string[]
   configuration?: Pick<AgentConfiguration, 'permission_mode'> | null
   permissionMode?: AgentPermissionMode | string | null
 }
@@ -65,8 +64,7 @@ function useStableUniqueServerIds(serverIds: readonly string[]): string[] {
 
 function toTool(descriptor: ClaudeToolDescriptor, source: AgentToolSource): Tool {
   const decision = resolveClaudeToolAccess(descriptor, {
-    permissionMode: source.configuration?.permission_mode ?? (source.permissionMode as AgentPermissionMode | undefined),
-    allowedTools: source.allowedTools ?? []
+    permissionMode: source.configuration?.permission_mode ?? (source.permissionMode as AgentPermissionMode | undefined)
   })
   return {
     id: descriptor.id,

@@ -3,10 +3,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { createClient } from '@libsql/client'
+import { application } from '@main/core/application'
 import { app } from 'electron'
 
 import { configManager } from '../ConfigManager'
-import { knowledgeService } from '../KnowledgeService'
 import MemoryService from '../memory/MemoryService'
 import {
   type StorageV2AgentLegacyProjectionReport,
@@ -554,7 +554,10 @@ export class StorageV2BackupService {
       fs.copyFileSync(sourceManifestPath, path.join(backupDir, 'manifest.json'))
     }
 
-    await knowledgeService.closeAll().catch(() => undefined)
+    await application
+      .get('KnowledgeVectorStoreService')
+      .closeAll()
+      .catch(() => undefined)
     await storageV2SecretVaultService.waitForIdle()
 
     const copiedDirectories: string[] = []
@@ -954,7 +957,10 @@ export class StorageV2BackupService {
         copyDirectoryIfExists(path.join(validation.backupPath, dirname), path.join(stagingDir, dirname))
       }
 
-      await Promise.allSettled([knowledgeService.closeAll(), MemoryService.getInstance().close()])
+      await Promise.allSettled([
+        application.get('KnowledgeVectorStoreService').closeAll(),
+        MemoryService.getInstance().close()
+      ])
       await storageV2Database.waitForIdle()
       storageV2Database.close()
 

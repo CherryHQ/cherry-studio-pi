@@ -2,6 +2,7 @@ import { agentService } from '@data/services/AgentService'
 import { agentSessionMessageService } from '@data/services/AgentSessionMessageService'
 import { agentSessionService } from '@data/services/AgentSessionService'
 import { agentTaskService } from '@data/services/AgentTaskService'
+import type { ListOptions } from '@shared/data/api/apiTypes'
 import type { CreateAgentDto, UpdateAgentDto } from '@shared/data/api/schemas/agents'
 import type { AgentSessionMessageEntity } from '@shared/data/api/schemas/agentSessions'
 import type {
@@ -10,15 +11,23 @@ import type {
   CreateAgentResponse,
   CreateTaskRequest,
   GetAgentResponse,
-  ListOptions,
   UpdateAgentRequest,
   UpdateAgentResponse
 } from '@types'
 
-function normalizeListOptions(options: ListOptions = {}) {
+type LegacyListOptions = Omit<ListOptions, 'sortBy'> & { sortBy?: string }
+
+function normalizeListOptions(options: LegacyListOptions = {}): ListOptions {
+  const sortBy =
+    options.sortBy === 'createdAt' ||
+    options.sortBy === 'updatedAt' ||
+    options.sortBy === 'name' ||
+    options.sortBy === 'orderKey'
+      ? options.sortBy
+      : undefined
   return {
     ...options,
-    sortBy: options.sortBy === 'sortOrder' ? undefined : options.sortBy
+    sortBy
   }
 }
 
@@ -33,7 +42,7 @@ function normalizeUpdateAgentRequest(updates: UpdateAgentRequest): UpdateAgentDt
   return updates as UpdateAgentDto
 }
 
-export async function listAgentsWithStorageV2Recovery(options: ListOptions = {}) {
+export async function listAgentsWithStorageV2Recovery(options: LegacyListOptions = {}) {
   return agentService.listAgents(normalizeListOptions(options))
 }
 
@@ -59,11 +68,12 @@ export async function deleteAgentWithStorageV2Recovery(id: string): Promise<bool
 export async function createSessionWithStorageV2Recovery(agentId: string, form: { name?: string } = {}) {
   return agentSessionService.createSession({
     agentId,
-    name: form.name || 'New session'
+    name: form.name || 'New session',
+    workspace: { type: 'system' }
   })
 }
 
-export async function listSessionsWithStorageV2Recovery(agentId: string, options: ListOptions = {}) {
+export async function listSessionsWithStorageV2Recovery(agentId: string, options: LegacyListOptions = {}) {
   const result = await agentSessionService.listByCursor({ agentId, limit: options.limit })
   return { data: result.items, sessions: result.items, total: result.items.length, limit: options.limit, offset: 0 }
 }
@@ -76,8 +86,8 @@ export async function createTaskWithStorageV2Recovery(agentId: string, task: Cre
   return agentTaskService.createTask(agentId, task)
 }
 
-export async function listTasksWithStorageV2Recovery(agentId: string, options: ListOptions = {}) {
-  return agentTaskService.listTasks(agentId, options)
+export async function listTasksWithStorageV2Recovery(agentId: string, options: LegacyListOptions = {}) {
+  return agentTaskService.listTasks(agentId, normalizeListOptions(options))
 }
 
 function extractMessageText(message: AgentSessionMessageEntity): string {

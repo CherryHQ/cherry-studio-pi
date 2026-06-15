@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { useIpcOn } from '@renderer/ipc/useIpcOn'
 import { useEffect, useState } from 'react'
 
 const logger = loggerService.withContext('useFullscreen')
@@ -25,6 +26,8 @@ export function useFullscreen() {
       unsubscribe()
     }
   }, [])
+
+  useIpcOn('window.fullscreen_changed', setIsFullscreen)
 
   return isFullscreen
 }

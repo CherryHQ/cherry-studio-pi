@@ -1,9 +1,10 @@
+import { agentSessionService } from '@data/services/AgentSessionService'
 import { agentWorkspaceService } from '@data/services/AgentWorkspaceService'
 import { toDataApiError } from '@shared/data/api'
-import type { HandlersFor } from '@shared/data/api/apiTypes'
+import { type HandlersFor, SuccessStatus } from '@shared/data/api/apiTypes'
 import { OrderBatchRequestSchema, OrderRequestSchema } from '@shared/data/api/schemas/_endpointHelpers'
 import type { AgentWorkspaceSchemas } from '@shared/data/api/schemas/agentWorkspaces'
-import { CreateAgentWorkspaceSchema } from '@shared/data/api/schemas/agentWorkspaces'
+import { CreateAgentWorkspaceSchema, UpdateAgentWorkspaceSchema } from '@shared/data/api/schemas/agentWorkspaces'
 
 export const agentWorkspaceHandlers: HandlersFor<AgentWorkspaceSchemas> = {
   '/agent-workspaces': {
@@ -14,13 +15,26 @@ export const agentWorkspaceHandlers: HandlersFor<AgentWorkspaceSchemas> = {
     POST: async ({ body }) => {
       const parsed = CreateAgentWorkspaceSchema.safeParse(body)
       if (!parsed.success) throw toDataApiError(parsed.error)
-      return await agentWorkspaceService.findOrCreateByPath(parsed.data.path, { name: parsed.data.name })
+      const result = await agentWorkspaceService.findOrCreateByPathResult(parsed.data.path, { name: parsed.data.name })
+      return {
+        data: result.workspace,
+        status: result.created ? SuccessStatus.CREATED : SuccessStatus.OK
+      }
     }
   },
 
   '/agent-workspaces/:workspaceId': {
     GET: async ({ params }) => {
       return await agentWorkspaceService.getById(params.workspaceId)
+    },
+    PATCH: async ({ params, body }) => {
+      const parsed = UpdateAgentWorkspaceSchema.safeParse(body)
+      if (!parsed.success) throw toDataApiError(parsed.error)
+      return await agentWorkspaceService.update(params.workspaceId, parsed.data)
+    },
+    DELETE: async ({ params }) => {
+      await agentSessionService.deleteWorkspaceCascade(params.workspaceId)
+      return undefined
     }
   },
 
