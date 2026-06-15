@@ -125,6 +125,13 @@ const CommonSettings: FC = () => {
     [t]
   )
 
+  const showOperationFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+    },
+    [t]
+  )
+
   const persistPreference = useCallback(
     (operation: () => Promise<unknown>) => {
       try {
@@ -836,7 +843,7 @@ const CommonSettings: FC = () => {
       <SettingGroup theme={theme}>
         <SettingTitle>
           {t('settings.display.custom.css.label')}
-          <TitleExtra onClick={() => window.api.openWebsite('https://cherrycss.com/')}>
+          <TitleExtra onClick={() => void window.api.openWebsite('https://cherrycss.com/').catch(showOperationFailed)}>
             {t('settings.display.custom.css.cherrycss')}
           </TitleExtra>
         </SettingTitle>
