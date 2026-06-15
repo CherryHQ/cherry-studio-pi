@@ -232,6 +232,41 @@ describe('useSessions', () => {
     expect(created).toBeNull()
     expect(mockToast.error).toHaveBeenCalled()
   })
+
+  it('deletes selected sessions through comma-separated query ids', async () => {
+    const response = { deletedIds: ['session-a', 'session-b'] }
+    const deleteTrigger = vi.fn().mockResolvedValueOnce(response)
+    mockUseInfiniteQuery.mockReturnValue(buildInfiniteReturn() as never)
+    MockUseDataApiUtils.mockMutationWithTrigger('DELETE', '/agent-sessions', deleteTrigger)
+
+    const { result } = renderHook(() => useSessions('agent-1'))
+    const deleted = await act(async () => result.current.deleteSessions(['session-a', 'session-b']))
+
+    expect(deleteTrigger).toHaveBeenCalledWith({ query: { ids: 'session-a,session-b' } })
+    expect(deleted).toBe(response)
+  })
+
+  it('shows an error toast and returns null when selected session delete fails', async () => {
+    const deleteTrigger = vi.fn().mockRejectedValueOnce(new Error('delete failed'))
+    mockUseInfiniteQuery.mockReturnValue(buildInfiniteReturn() as never)
+    MockUseDataApiUtils.mockMutationWithTrigger('DELETE', '/agent-sessions', deleteTrigger)
+
+    const { result } = renderHook(() => useSessions('agent-1'))
+    const deleted = await act(async () => result.current.deleteSessions(['session-a']))
+
+    expect(deleteTrigger).toHaveBeenCalledWith({ query: { ids: 'session-a' } })
+    expect(deleted).toBeNull()
+    expect(mockToast.error).toHaveBeenCalled()
+  })
+
+  it('exposes selected-session delete loading through isDeleting', () => {
+    mockUseInfiniteQuery.mockReturnValue(buildInfiniteReturn() as never)
+    MockUseDataApiUtils.mockMutationWithTrigger('DELETE', '/agent-sessions', vi.fn(), { isLoading: true })
+
+    const { result } = renderHook(() => useSessions('agent-1'))
+
+    expect(result.current.isDeleting).toBe(true)
+  })
 })
 
 describe('useUpdateSession', () => {
