@@ -69,6 +69,13 @@ const SelectionAssistantSettings: FC = () => {
     [t]
   )
 
+  const showOperationFailed = useCallback(
+    (error: unknown) => {
+      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+    },
+    [t]
+  )
+
   const persistPreference = useCallback(
     (operation: () => Promise<unknown>) => {
       try {
@@ -161,7 +168,11 @@ const SelectionAssistantSettings: FC = () => {
             <button
               type="button"
               className="cursor-pointer border-0 bg-transparent p-0 font-normal text-link text-xs hover:text-link-hover hover:underline"
-              onClick={() => window.api.openWebsite('https://github.com/CherryHQ/cherry-studio/issues/6505')}>
+              onClick={() =>
+                void window.api
+                  .openWebsite('https://github.com/CherryHQ/cherry-studio/issues/6505')
+                  .catch(showOperationFailed)
+              }>
               {'FAQ & ' + t('settings.about.feedback.button')}
             </button>
           </div>
