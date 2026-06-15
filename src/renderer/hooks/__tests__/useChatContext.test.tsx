@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useChatContextProvider } from '../useChatContext'
 
 const mocks = vi.hoisted(() => ({
+  clipboardWriteText: vi.fn(),
   deleteMessage: vi.fn(),
   fileSave: vi.fn(),
   loggerError: vi.fn(),
@@ -84,6 +85,12 @@ describe('useChatContextProvider', () => {
         warning: mocks.toastWarning
       }
     })
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: mocks.clipboardWriteText
+      }
+    })
   })
 
   it('shows an error and keeps multi-select mode when selected message export fails', async () => {
@@ -100,6 +107,22 @@ describe('useChatContextProvider', () => {
       'hello from selected message'
     )
     expect(mocks.toastError).toHaveBeenCalledWith('common.save_failed: disk full')
+    expect(mocks.toastSuccess).not.toHaveBeenCalled()
+    expect(mocks.setMultiSelectMode).not.toHaveBeenCalled()
+    expect(mocks.setSelectedMessageIds).not.toHaveBeenCalled()
+  })
+
+  it('shows an error and keeps multi-select mode when selected message copy fails', async () => {
+    mocks.clipboardWriteText.mockRejectedValueOnce(new Error('permission denied'))
+
+    const { result } = renderHook(() => useChatContextProvider({ id: 'topic-1' } as any))
+
+    await act(async () => {
+      await result.current.handleMultiSelectAction('copy', ['m1'])
+    })
+
+    expect(mocks.clipboardWriteText).toHaveBeenCalledWith('hello from selected message')
+    expect(mocks.toastError).toHaveBeenCalledWith('common.copy_failed: permission denied')
     expect(mocks.toastSuccess).not.toHaveBeenCalled()
     expect(mocks.setMultiSelectMode).not.toHaveBeenCalled()
     expect(mocks.setSelectedMessageIds).not.toHaveBeenCalled()

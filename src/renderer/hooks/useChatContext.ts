@@ -163,9 +163,14 @@ export const useChatContextProvider = (activeTopic: Topic): ChatContextValue => 
             .filter(Boolean)
             .join('\n\n---\n\n')
           if (contentToCopy) {
-            void navigator.clipboard.writeText(contentToCopy)
-            window.toast.success(t('message.copied'))
-            handleToggleMultiSelectMode(false)
+            try {
+              await navigator.clipboard.writeText(contentToCopy)
+              window.toast.success(t('message.copied'))
+              handleToggleMultiSelectMode(false)
+            } catch (error) {
+              logger.error('Failed to copy selected messages:', error as Error)
+              window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+            }
           }
           break
         }
