@@ -17,8 +17,8 @@ const AgentChatNavbar = ({ activeAgent, className }: Props) => {
   })
 
   return (
-    <NavbarHeader className={cn('agent-navbar h-(--navbar-height)', className)}>
-      <div className="flex h-full min-w-0 flex-1 shrink items-center overflow-auto">
+    <NavbarHeader className={cn('agent-navbar h-(--navbar-height) [-webkit-app-region:no-drag]', className)}>
+      <div className="flex h-full min-w-0 flex-1 shrink items-center overflow-hidden [-webkit-app-region:no-drag]">
         <AgentContent activeAgent={activeAgent} />
       </div>
     </NavbarHeader>

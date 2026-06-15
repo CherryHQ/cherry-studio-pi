@@ -61,8 +61,8 @@ const AgentContent = ({ activeAgent }: AgentContentProps) => {
   )
 
   return (
-    <div className="flex w-full justify-between pr-2">
-      <div className="flex min-w-0 shrink items-center">
+    <div className="flex w-full min-w-0 justify-between pr-2 [-webkit-app-region:no-drag]">
+      <div className="flex min-w-0 flex-1 shrink items-center [-webkit-app-region:no-drag]">
         {isTopNavbar && showSidebar && (
           <Tooltip title={t('navbar.hide_sidebar')} delay={800}>
             <NavbarIcon onClick={toggleShowSidebar}>
@@ -130,7 +130,7 @@ const AgentContent = ({ activeAgent }: AgentContentProps) => {
         </HorizontalScrollContainer>
         {activeSession && <WorkspaceSelector session={activeSession} />}
       </div>
-      <div className="flex items-center">
+      <div className="flex shrink-0 items-center [-webkit-app-region:no-drag]">
         {activeSession?.workspace?.path && (
           <OpenExternalAppButton workdir={activeSession.workspace.path} className="mr-2" />
         )}

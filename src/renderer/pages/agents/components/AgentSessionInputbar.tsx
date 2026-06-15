@@ -36,14 +36,15 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
+import {
+  AGENT_SESSION_DRAFT_CACHE_TTL,
+  getAgentSessionDraftCacheKey,
+  readInitialAgentSessionDraft
+} from './AgentSessionDraft'
 import { restoreTextareaCursor } from './AgentSessionInputbarCursor'
 import { resolveAgentSessionModel } from './agentSessionModel'
 
 const logger = loggerService.withContext('AgentSessionInputbar')
-
-const DRAFT_CACHE_TTL = 24 * 60 * 60 * 1000 // 24 hours
-
-const getAgentDraftCacheKey = (agentId: string) => `agent-session-draft-${agentId}`
 
 type Props = {
   agentId: string
@@ -190,14 +191,15 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
   const config = getInputbarConfig(scope)
 
   // Use shared hooks for text and textarea management with draft persistence
-  const draftCacheKey = getAgentDraftCacheKey(agentId)
+  const draftCacheKey = getAgentSessionDraftCacheKey(agentId, sessionId)
+  const [initialDraftText] = useState(() => readInitialAgentSessionDraft(cacheService, agentId, sessionId))
   const {
     text,
     setText,
     isEmpty: inputEmpty
   } = useInputText({
-    initialValue: cacheService.getCasual<string>(draftCacheKey) ?? '',
-    onChange: (value) => cacheService.setCasual(draftCacheKey, value, DRAFT_CACHE_TTL)
+    initialValue: initialDraftText,
+    onChange: (value) => cacheService.setCasual(draftCacheKey, value, AGENT_SESSION_DRAFT_CACHE_TTL)
   })
   const {
     textareaRef,

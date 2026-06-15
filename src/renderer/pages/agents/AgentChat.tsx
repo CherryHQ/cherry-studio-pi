@@ -185,6 +185,7 @@ const AgentChatInner = ({
           </div>
 
           <AgentSessionInputbar
+            key={sessionId}
             agentId={agentId}
             sessionId={sessionId}
             sendMessage={chat.sendMessage}

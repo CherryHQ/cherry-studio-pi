@@ -70,6 +70,7 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
           event.stopPropagation()
           void handleSelectWorkspace()
         }}
+        onPointerDown={(event) => event.stopPropagation()}
         onMouseDown={(event) => event.stopPropagation()}
         aria-label={`${actionLabel}: ${workspaceLabel}`}
         className={cn(
