@@ -52,7 +52,7 @@ vi.mock('@renderer/data/hooks/useCache', () => {
 import { TabsProvider, useTabsContext } from '../TabsContext'
 
 function TabsProbe() {
-  const { activeTabId, closeTab, openTab, tabs } = useTabsContext()
+  const { activeTabId, closeTab, openTab, setTabs, tabs } = useTabsContext()
   const homeTab = tabs.find((tab) => tab.id === 'home')
   const paintingsTab = tabs.find((tab) => tab.id === 'paintings-tab')
   const customTab = tabs.find((tab) => tab.id === 'mini-app-tab')
@@ -87,6 +87,37 @@ function TabsProbe() {
       </button>
       <button type="button" onClick={() => closeTab('paintings-tab')}>
         Close paintings tab
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          setTabs([
+            {
+              id: 'home',
+              type: 'route',
+              url: '/home',
+              title: 'Home',
+              lastAccessTime: 1,
+              isDormant: false
+            },
+            {
+              id: 'raw-agent-tab',
+              type: 'route',
+              url: '/agents/raw-agent',
+              title: 'Raw agent',
+              lastAccessTime: 2,
+              isDormant: false
+            }
+          ])
+        }>
+        Set raw tabs with home
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          setTabs([{ id: 'home', type: 'route', url: '/home', title: 'Home', lastAccessTime: 1, isDormant: false }])
+        }>
+        Reset to home only
       </button>
     </>
   )
@@ -145,5 +176,34 @@ describe('TabsContext language refresh', () => {
     expect(screen.getByTestId('tab-count')).toHaveTextContent('1')
     expect(screen.getByTestId('active-tab-id')).toHaveTextContent('home')
     expect(screen.getByTestId('paintings-tab-title')).toBeEmptyDOMElement()
+  })
+
+  it('does not duplicate the implicit home tab when replacing tabs', () => {
+    render(
+      <TabsProvider>
+        <TabsProbe />
+      </TabsProvider>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set raw tabs with home' }))
+
+    expect(screen.getByTestId('tab-count')).toHaveTextContent('2')
+    expect(screen.getByTestId('home-tab-title')).toHaveTextContent('Home')
+  })
+
+  it('falls back to the home tab when replacing tabs removes the active tab', () => {
+    render(
+      <TabsProvider>
+        <TabsProbe />
+      </TabsProvider>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open paintings tab' }))
+    expect(screen.getByTestId('active-tab-id')).toHaveTextContent('paintings-tab')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset to home only' }))
+
+    expect(screen.getByTestId('tab-count')).toHaveTextContent('1')
+    expect(screen.getByTestId('active-tab-id')).toHaveTextContent('home')
   })
 })

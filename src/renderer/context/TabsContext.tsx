@@ -291,12 +291,16 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   const setTabs = useCallback(
     (newTabs: Tab[] | ((prev: Tab[]) => Tab[])) => {
       const resolvedTabs = typeof newTabs === 'function' ? newTabs(tabs) : newTabs
-      const pinned = resolvedTabs.filter((t) => t.isPinned)
-      const normal = resolvedTabs.filter((t) => !t.isPinned)
+      const userTabs = resolvedTabs.filter((t) => t.id !== DEFAULT_TAB.id)
+      const pinned = userTabs.filter((t) => t.isPinned)
+      const normal = userTabs.filter((t) => !t.isPinned)
       setPinnedTabs(pinned)
       setNormalTabs(normal)
+      if (![DEFAULT_TAB.id, ...userTabs.map((t) => t.id)].includes(activeTabId)) {
+        setActiveTabIdState(DEFAULT_TAB.id)
+      }
     },
-    [tabs, setPinnedTabs]
+    [activeTabId, tabs, setPinnedTabs]
   )
 
   /**
