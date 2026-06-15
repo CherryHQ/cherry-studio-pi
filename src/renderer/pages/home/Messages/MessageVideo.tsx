@@ -16,8 +16,6 @@ const MessageVideo: FC<Props> = ({ url, filePath, videoPath, startTime }) => {
   const playerRef = useRef<HTMLVideoElement | null>(null)
   const { t } = useTranslation()
 
-  logger.debug(`MessageVideo: ${JSON.stringify({ url, filePath, videoPath, startTime })}`)
-
   if (!url && !filePath) {
     return null
   }

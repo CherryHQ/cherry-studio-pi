@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { summarizeObjectShapeForLog } from '@renderer/aiCore/utils/logging'
 import type { CodeEditorHandles } from '@renderer/components/CodeEditor'
 import type { RichEditorRef } from '@renderer/components/RichEditor/types'
 import { useCache } from '@renderer/data/hooks/useCache'
@@ -771,7 +772,7 @@ const NotesPage: FC = () => {
 
         // Validate uploadNotes function is available
         if (typeof uploadNotes !== 'function') {
-          logger.error('uploadNotes function is not available', { uploadNotes })
+          logger.error('uploadNotes function is not available', { type: typeof uploadNotes })
           window.toast.error(t('notes.upload_failed'))
           return
         }
@@ -786,7 +787,7 @@ const NotesPage: FC = () => {
 
         // Validate result object
         if (!result || typeof result !== 'object') {
-          logger.error('Invalid upload result:', { result })
+          logger.error('Invalid upload result:', { result: summarizeObjectShapeForLog(result) })
           window.toast.error(t('notes.upload_failed'))
           return
         }
