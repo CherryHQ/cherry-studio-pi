@@ -138,11 +138,16 @@ const Messages: React.FC<MessagesProps> = ({
         })
       }),
       EventEmitter.on(EVENT_NAMES.COPY_TOPIC_IMAGE, async () => {
-        await captureScrollableAsBlob(scrollContainerRef, async (blob) => {
-          if (blob) {
-            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-          }
-        })
+        try {
+          await captureScrollableAsBlob(scrollContainerRef, async (blob) => {
+            if (blob) {
+              await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+            }
+          })
+        } catch (error) {
+          logger.error('Failed to copy topic image:', error as Error)
+          window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+        }
       }),
       EventEmitter.on(EVENT_NAMES.EXPORT_TOPIC_IMAGE, async () => {
         try {

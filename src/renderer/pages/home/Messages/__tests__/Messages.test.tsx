@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   cancelAnimationFrame: vi.fn(),
+  captureScrollableAsBlob: vi.fn(),
+  clipboardWrite: vi.fn(),
   clipboardWriteText: vi.fn(),
   getGroupedMessages: vi.fn(() => ({})),
   requestAnimationFrame: vi.fn(() => 42),
@@ -91,7 +93,7 @@ vi.mock('@renderer/services/MessagesService', () => ({
 }))
 
 vi.mock('@renderer/utils', () => ({
-  captureScrollableAsBlob: vi.fn(),
+  captureScrollableAsBlob: mocks.captureScrollableAsBlob,
   captureScrollableAsDataURL: vi.fn(),
   removeSpecialCharactersForFileName: (value: string) => value
 }))
@@ -169,6 +171,7 @@ describe('Messages', () => {
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: {
+        write: mocks.clipboardWrite,
         writeText: mocks.clipboardWriteText
       }
     })
@@ -179,6 +182,10 @@ describe('Messages', () => {
         success: mocks.toastSuccess
       }
     })
+    vi.stubGlobal(
+      'ClipboardItem',
+      vi.fn((items) => ({ items }))
+    )
   })
 
   afterEach(() => {
@@ -219,5 +226,23 @@ describe('Messages', () => {
 
     expect(mocks.toastError).toHaveBeenCalledWith('common.copy_failed: clipboard unavailable')
     expect(mocks.toastSuccess).not.toHaveBeenCalledWith('message.copy.success')
+  })
+
+  it('shows an error when copying the topic image cannot write to clipboard', async () => {
+    mocks.captureScrollableAsBlob.mockImplementationOnce(async (_ref, callback) => {
+      await callback(new Blob(['image'], { type: 'image/png' }))
+    })
+    mocks.clipboardWrite.mockRejectedValueOnce(new Error('image clipboard unavailable'))
+    const topic = { id: 'topic-1', assistantId: 'assistant-1', name: 'Topic' } as Topic
+
+    render(<Messages topic={topic} messages={[]} onComponentUpdate={vi.fn()} />)
+
+    const eventCalls = mocks.eventOn.mock.calls as unknown as Array<[string, (...args: unknown[]) => unknown]>
+    const eventHandler = eventCalls.find(([eventName]) => eventName === 'copy-topic-image')?.[1]
+
+    await eventHandler?.(topic)
+
+    expect(mocks.toastError).toHaveBeenCalledWith('common.copy_failed: image clipboard unavailable')
+    expect(mocks.clipboardWrite).toHaveBeenCalled()
   })
 })
