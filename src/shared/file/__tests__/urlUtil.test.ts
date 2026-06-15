@@ -45,6 +45,10 @@ describe('toFileUrl', () => {
     expect(toFileUrl('C:\\a\\b\\c.txt' as FilePath)).toBe('file:///C:/a/b/c.txt')
   })
 
+  it('preserves UNC hosts while encoding share path segments', () => {
+    expect(toFileUrl('\\\\server\\share\\My File.pdf' as FilePath)).toBe('file://server/share/My%20File.pdf')
+  })
+
   it('encodes non-ASCII characters', () => {
     expect(toFileUrl('/foo/中文.pdf' as FilePath)).toBe('file:///foo/%E4%B8%AD%E6%96%87.pdf')
   })

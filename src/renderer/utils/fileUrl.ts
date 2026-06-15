@@ -1,29 +1,9 @@
-function encodeFileUrlPathSegment(segment: string): string {
-  return encodeURIComponent(segment)
-}
+import type { FilePath } from '@shared/file/types/common'
+import { toFileUrl } from '@shared/file/urlUtil'
 
 export function pathToFileUrl(value: string): string {
   if (value.startsWith('file://')) return value
-
-  const normalizedPath = value.replace(/\\/g, '/')
-
-  if (normalizedPath.startsWith('//')) {
-    const [host = '', ...segments] = normalizedPath.slice(2).split('/')
-    const encodedPath = segments.map(encodeFileUrlPathSegment).join('/')
-    return `file://${host}${encodedPath ? `/${encodedPath}` : ''}`
-  }
-
-  const absolutePath = /^[A-Za-z]:\//.test(normalizedPath)
-    ? `/${normalizedPath}`
-    : normalizedPath.startsWith('/')
-      ? normalizedPath
-      : `/${normalizedPath}`
-  const encodedPath = absolutePath
-    .split('/')
-    .map((segment, index) => (index === 1 && /^[A-Za-z]:$/.test(segment) ? segment : encodeFileUrlPathSegment(segment)))
-    .join('/')
-
-  return `file://${encodedPath}`
+  return toFileUrl(value as FilePath)
 }
 
 export function fileUrlToPath(value: string | URL): string {

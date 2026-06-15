@@ -130,8 +130,9 @@ function dirnameSimple(absolutePath: string): string {
 /**
  * Encode an absolute filesystem path into a `file://` URL.
  *
- * - Unix:    `/foo/bar baz.pdf`     → `file:///foo/bar%20baz.pdf`
- * - Windows: `C:\foo\bar baz.pdf`   → `file:///C:/foo/bar%20baz.pdf`
+ * - Unix:    `/foo/bar baz.pdf`            → `file:///foo/bar%20baz.pdf`
+ * - Windows: `C:\foo\bar baz.pdf`          → `file:///C:/foo/bar%20baz.pdf`
+ * - UNC:     `\\server\share\bar baz.pdf`  → `file://server/share/bar%20baz.pdf`
  *
  * Backslashes are normalized to forward slashes; each path segment is URL-encoded
  * (special chars like space, `#`, `?` become `%20` / `%23` / `%3F`). The Windows
@@ -143,6 +144,11 @@ function dirnameSimple(absolutePath: string): string {
  */
 export function toFileUrl(absolutePath: FilePath): FileURLString {
   let normalized: string = absolutePath.replace(/\\/g, '/')
+  if (normalized.startsWith('//')) {
+    const [host = '', ...segments] = normalized.slice(2).split('/')
+    const encodedPath = segments.map((segment) => encodeURIComponent(segment)).join('/')
+    return `file://${host}${encodedPath ? `/${encodedPath}` : ''}`
+  }
   if (/^[A-Za-z]:/.test(normalized)) {
     normalized = '/' + normalized
   }
