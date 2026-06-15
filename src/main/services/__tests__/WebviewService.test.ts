@@ -42,7 +42,16 @@ vi.mock('@main/core/lifecycle', async () => {
   return { ...actual, BaseService: StubBase }
 })
 
-import { setOpenLinkExternal } from '../WebviewService'
+import { sanitizeWebviewUserAgent, setOpenLinkExternal } from '../WebviewService'
+
+describe('sanitizeWebviewUserAgent', () => {
+  it('removes Cherry Studio Pi, legacy Cherry Studio, and Electron product tokens', () => {
+    const userAgent =
+      'Mozilla/5.0 AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36 CherryStudioPi/1.9.50 CherryStudio/1.9.0 Electron/31.0.0'
+
+    expect(sanitizeWebviewUserAgent(userAgent)).toBe('Mozilla/5.0 AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36')
+  })
+})
 
 describe('setOpenLinkExternal', () => {
   beforeEach(() => {

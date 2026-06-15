@@ -12,14 +12,23 @@ import { openExternalUrl } from '../utils/openExternal'
 
 const logger = loggerService.withContext('WebviewService')
 
+const DESKTOP_USER_AGENT_PRODUCT_PATTERN = /\s?(?:CherryStudioPi|CherryStudio|Electron)\/\S+/g
+
+export function sanitizeWebviewUserAgent(originUA: string): string {
+  return originUA
+    .replace(DESKTOP_USER_AGENT_PRODUCT_PATTERN, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
 /**
  * init the useragent of the webview session
- * remove the CherryStudio and Electron from the useragent
+ * remove the Cherry Studio Pi app token and Electron from the useragent
  */
 export function initSessionUserAgent() {
   const wvSession = session.fromPartition('persist:webview')
   const originUA = wvSession.getUserAgent()
-  const newUA = originUA.replace(/CherryStudio\/\S+\s/, '').replace(/Electron\/\S+\s/, '')
+  const newUA = sanitizeWebviewUserAgent(originUA)
 
   wvSession.setUserAgent(newUA)
   wvSession.webRequest.onBeforeSendHeaders((details, cb) => {
@@ -153,12 +162,12 @@ export class WebviewService extends BaseService {
 
   /**
    * Initialize the useragent of the webview session.
-   * Removes CherryStudio and Electron from the useragent.
+   * Removes Cherry Studio Pi and Electron from the useragent.
    */
   private initSessionUserAgent() {
     const wvSession = session.fromPartition('persist:webview')
     const originUA = wvSession.getUserAgent()
-    const newUA = originUA.replace(/CherryStudio\/\S+\s/, '').replace(/Electron\/\S+\s/, '')
+    const newUA = sanitizeWebviewUserAgent(originUA)
 
     wvSession.setUserAgent(newUA)
     wvSession.webRequest.onBeforeSendHeaders((details, cb) => {
