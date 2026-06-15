@@ -260,36 +260,41 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
       setError(i18n.t('chat.topics.export.obsidian_no_vault_selected'))
       return
     }
-    let markdown = ''
-    if (rawContent) {
-      markdown = rawContent
-    } else if (topic) {
-      markdown = await topicToMarkdown(topic, exportReasoning)
-    } else if (messages && messages.length > 0) {
-      markdown = await messagesToMarkdown(messages, exportReasoning)
-    } else if (message) {
-      markdown = exportReasoning ? await messageToMarkdownWithReasoning(message) : await messageToMarkdown(message)
-    } else {
-      markdown = ''
-    }
-    let content = ''
-    if (state.processingMethod !== ObsidianProcessingMethod.NEW_OR_OVERWRITE) {
-      content = `\n---\n${markdown}`
-    } else {
-      content = `---\ntitle: ${state.title}\ncreated: ${state.createdAt}\nsource: ${state.source}\ntags: ${state.tags}\n---\n${markdown}`
-    }
-    if (content === '') {
+    try {
+      let markdown = ''
+      if (rawContent) {
+        markdown = rawContent
+      } else if (topic) {
+        markdown = await topicToMarkdown(topic, exportReasoning)
+      } else if (messages && messages.length > 0) {
+        markdown = await messagesToMarkdown(messages, exportReasoning)
+      } else if (message) {
+        markdown = exportReasoning ? await messageToMarkdownWithReasoning(message) : await messageToMarkdown(message)
+      } else {
+        markdown = ''
+      }
+      let content = ''
+      if (state.processingMethod !== ObsidianProcessingMethod.NEW_OR_OVERWRITE) {
+        content = `\n---\n${markdown}`
+      } else {
+        content = `---\ntitle: ${state.title}\ncreated: ${state.createdAt}\nsource: ${state.source}\ntags: ${state.tags}\n---\n${markdown}`
+      }
+      if (content === '') {
+        window.toast.error(i18n.t('chat.topics.export.obsidian_export_failed'))
+        return
+      }
+      await navigator.clipboard.writeText(content)
+      void exportMarkdownToObsidian({
+        ...state,
+        folder: state.folder,
+        vault: selectedVault
+      })
+      setOpen(false)
+      resolve(true)
+    } catch (error) {
+      logger.error('Failed to prepare Obsidian export:', error as Error)
       window.toast.error(i18n.t('chat.topics.export.obsidian_export_failed'))
-      return
     }
-    await navigator.clipboard.writeText(content)
-    void exportMarkdownToObsidian({
-      ...state,
-      folder: state.folder,
-      vault: selectedVault
-    })
-    setOpen(false)
-    resolve(true)
   }
 
   const [openState, setOpen] = useState(open)
