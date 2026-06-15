@@ -1,10 +1,13 @@
-import { render, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ErrorDetailContent } from '..'
 
 const mocks = vi.hoisted(() => ({
-  highlightCode: vi.fn()
+  clipboardWriteText: vi.fn(),
+  highlightCode: vi.fn(),
+  toastError: vi.fn(),
+  toastSuccess: vi.fn()
 }))
 
 vi.mock('@renderer/context/CodeStyleProvider', () => ({
@@ -39,6 +42,19 @@ describe('ErrorDetailContent', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.highlightCode.mockImplementation(async (code: string) => `<pre><code>${code}</code></pre>`)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: mocks.clipboardWriteText
+      }
+    })
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: {
+        error: mocks.toastError,
+        success: mocks.toastSuccess
+      }
+    })
   })
 
   it('renders non-JSON AI SDK error causes as escaped text', async () => {
@@ -77,5 +93,26 @@ describe('ErrorDetailContent', () => {
     await waitFor(() => expect(container.querySelector('.markdown pre')).not.toBeNull())
     expect(container.querySelector('.markdown script')).toBeNull()
     expect(container.querySelector('.markdown')?.textContent).toContain('{"ok":true}')
+  })
+
+  it('shows copy failure feedback when copying error details fails', async () => {
+    mocks.clipboardWriteText.mockRejectedValueOnce(new Error('clipboard locked'))
+
+    render(
+      <ErrorDetailContent
+        error={{
+          name: 'Error',
+          message: 'Something failed',
+          stack: null
+        }}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /common.copy/ }))
+
+    await waitFor(() => {
+      expect(mocks.toastError).toHaveBeenCalledWith('common.copy_failed: clipboard locked')
+    })
+    expect(mocks.toastSuccess).not.toHaveBeenCalled()
   })
 })

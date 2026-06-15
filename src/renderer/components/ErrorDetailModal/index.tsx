@@ -30,7 +30,7 @@ import {
   isSerializedAiSdkUnsupportedFunctionalityError,
   isSerializedError
 } from '@renderer/types/error'
-import { formatAiSdkError, formatError, safeToString } from '@renderer/utils/error'
+import { formatAiSdkError, formatError, formatErrorMessageWithPrefix, safeToString } from '@renderer/utils/error'
 import { escapeHtmlText, sanitizeHtml } from '@renderer/utils/html'
 import { parseDataUrl } from '@shared/utils'
 import { CheckCircle, Copy, Loader2, Stethoscope } from 'lucide-react'
@@ -517,7 +517,7 @@ const ErrorDetailContent: React.FC<ErrorDetailContentProps> = ({
     }
   }, [diagStatus])
 
-  const copyErrorDetails = useCallback(() => {
+  const copyErrorDetails = useCallback(async () => {
     if (!error) {
       return
     }
@@ -531,8 +531,12 @@ const ErrorDetailContent: React.FC<ErrorDetailContentProps> = ({
       errorText = safeToString(error)
     }
 
-    void navigator.clipboard.writeText(errorText)
-    window.toast.success(t('message.copied'))
+    try {
+      await navigator.clipboard.writeText(errorText)
+      window.toast.success(t('message.copied'))
+    } catch (clipboardError) {
+      window.toast.error(formatErrorMessageWithPrefix(clipboardError, t('common.copy_failed')))
+    }
   }, [error, t])
 
   const renderErrorDetails = (error?: SerializedError) => {
