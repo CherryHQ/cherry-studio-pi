@@ -37,6 +37,18 @@ describe('resolveAgentSessionModel', () => {
     expect(resolveAgentSessionModel('openai:gpt-4o', [model])).toBeUndefined()
   })
 
+  it('resolves legacy raw stored agent models by canonical unique model rows', () => {
+    const model = makeModel('openai::gpt-4o')
+
+    expect(resolveAgentSessionModel('gpt-4o', [model])).toBe(model)
+  })
+
+  it('resolves trimmed legacy raw stored agent models by apiModelId', () => {
+    const model = makeModel('deepseek::deepseek-chat-internal', 'deepseek-chat')
+
+    expect(resolveAgentSessionModel('  deepseek-chat  ', [model])).toBe(model)
+  })
+
   it('resolves legacy raw candidate ids without throwing during chat input render', () => {
     const model = {
       ...makeModel('openai::placeholder'),
