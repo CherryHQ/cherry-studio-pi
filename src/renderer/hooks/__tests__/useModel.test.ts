@@ -170,6 +170,15 @@ describe('useModelById', () => {
       swrOptions: { keepPreviousData: false }
     })
   })
+
+  it('does not fetch when the model id is malformed', () => {
+    renderHook(() => useModelById('gpt-4o' as never))
+
+    expect(mockUseQuery).toHaveBeenCalledWith('/models/', {
+      enabled: false,
+      swrOptions: { keepPreviousData: false }
+    })
+  })
 })
 
 describe('useDefaultModel', () => {

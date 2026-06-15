@@ -222,7 +222,7 @@ export function useModelMutations() {
  * should use `parseUniqueModelId(model.id)`.
  */
 export function useModelById(uniqueModelId: UniqueModelId | null | undefined) {
-  const modelKey = uniqueModelId ?? ''
+  const modelKey = typeof uniqueModelId === 'string' && isUniqueModelId(uniqueModelId) ? uniqueModelId : ''
   const { data, isLoading, error, refetch, mutate } = useQuery(`/models/${modelKey}`, {
     enabled: !!modelKey,
     swrOptions: { keepPreviousData: false }
