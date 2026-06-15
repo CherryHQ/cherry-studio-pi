@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 
 import {
+  APP_COMPACT_NAME,
   APP_ID,
   APP_LINUX_WM_CLASS,
   APP_PROCESS_IDENTIFIERS,
@@ -24,6 +25,7 @@ describe('appIdentity', () => {
 
     expect(APP_ID).toBe(builderConfig.appId)
     expect(APP_PRODUCT_NAME).toBe(builderConfig.productName)
+    expect(APP_COMPACT_NAME).toBe('CherryStudioPi')
     expect(APP_LINUX_WM_CLASS).toBe(builderConfig.linux.desktop.entry.StartupWMClass)
   })
 

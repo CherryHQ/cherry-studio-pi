@@ -12,6 +12,7 @@
 import os from 'node:os'
 import path from 'node:path'
 
+import { APP_TEMP_DIRNAME } from '@main/config/appIdentity'
 import { isMac, isWin } from '@main/core/platform'
 import { app } from 'electron'
 
@@ -33,7 +34,7 @@ export function buildPathRegistry() {
   const appUserDataData = path.join(appUserData, 'Data')
   const appSession = app.getPath('sessionData')
   const sysTemp = app.getPath('temp')
-  const appTemp = path.join(sysTemp, 'CherryStudio')
+  const appTemp = path.join(sysTemp, APP_TEMP_DIRNAME)
   // electron-builder `extraResources` output — distinct from appRootResources
   const appExtraResources = process.resourcesPath
   // `resources/` inside asar (bundled assets) — distinct from appExtraResources
