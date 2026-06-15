@@ -12,6 +12,7 @@ import CopyIcon from '@renderer/components/Icons/CopyIcon'
 import { useModelMutations } from '@renderer/hooks/useModel'
 import { useProvider } from '@renderer/hooks/useProvider'
 import { getDefaultGroupName } from '@renderer/utils'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { CURRENCY, type Currency, type EndpointType, type Model } from '@shared/data/types/model'
 import { isNewApiProvider } from '@shared/utils/provider'
 import { ChevronDown, ChevronUp, SaveIcon } from 'lucide-react'
@@ -325,9 +326,13 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
                   type="button"
                   aria-label={t('message.copied')}
                   className={fieldClasses.iconButton}
-                  onClick={() => {
-                    void navigator.clipboard.writeText(apiModelId)
-                    window.toast.success(t('message.copied'))
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(apiModelId)
+                      window.toast.success(t('message.copied'))
+                    } catch (error) {
+                      window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+                    }
                   }}>
                   <CopyIcon size={14} />
                 </button>
