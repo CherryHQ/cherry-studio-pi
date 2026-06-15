@@ -5,6 +5,7 @@ import { loggerService } from '@logger'
 import { MARKDOWN_SOURCE_LINE_ATTR } from '@renderer/components/RichEditor/constants'
 import type { FormattingState } from '@renderer/components/RichEditor/types'
 import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
+import { pathToFileUrl } from '@renderer/utils/fileUrl'
 import {
   htmlToMarkdown,
   isMarkdownContent,
@@ -519,7 +520,7 @@ export const useRichEditor = (options: UseRichEditorOptions = {}): UseRichEditor
 
         // Insert image into editor using local file path
         if (editor && !editor.isDestroyed) {
-          const imageUrl = `file://${fileMetadata.path}`
+          const imageUrl = pathToFileUrl(fileMetadata.path)
           editor.chain().focus().setImage({ src: imageUrl, alt: fileMetadata.origin_name }).run()
         }
 

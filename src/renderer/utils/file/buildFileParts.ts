@@ -20,6 +20,7 @@
 
 import type { FileMetadata } from '@renderer/types'
 import { FILE_TYPE } from '@renderer/types/file'
+import { pathToFileUrl } from '@renderer/utils/fileUrl'
 import type { FileUIPart } from '@shared/data/types/message'
 import { withCherryMeta } from '@shared/data/types/uiParts'
 import type { FilePath } from '@shared/file/types/common'
@@ -48,7 +49,7 @@ export async function buildFilePartsForAttachments(files: FileMetadata[]): Promi
       const basePart: FileUIPart = {
         type: 'file',
         mediaType: mediaTypeFor(file, ext),
-        url: `file://${physicalPath}`,
+        url: pathToFileUrl(physicalPath),
         filename: file.origin_name || file.name
       }
       return withCherryMeta(basePart, { fileEntryId: entry.id })

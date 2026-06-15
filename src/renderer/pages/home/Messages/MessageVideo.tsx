@@ -1,4 +1,5 @@
 import { loggerService } from '@renderer/services/LoggerService'
+import { pathToFileUrl } from '@renderer/utils/fileUrl'
 import type { FC } from 'react'
 import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -29,7 +30,7 @@ const MessageVideo: FC<Props> = ({ url, filePath, videoPath, startTime }) => {
       return <div>{t('message.video.error.local_file_missing')}</div>
     }
 
-    const videoSrc = `file://${videoPath ?? filePath}`
+    const videoSrc = pathToFileUrl(videoPath ?? filePath)
 
     const handleReady = () => {
       const start = Math.floor(startTime ?? 0)
