@@ -375,6 +375,12 @@ function clearLocalChangeSyncTimeout() {
   localChangeSyncTimeout = null
 }
 
+function unrefTimer(timer: ReturnType<typeof setTimeout>) {
+  if (typeof timer === 'object' && timer && 'unref' in timer && typeof timer.unref === 'function') {
+    timer.unref()
+  }
+}
+
 function scheduleLocalChangeSync(delayMs = LOCAL_CHANGE_AUTO_SYNC_DEBOUNCE_MS) {
   if (!autoSyncStarted || getAutoSyncIntervalMs() === null) return
 
@@ -393,6 +399,7 @@ function scheduleLocalChangeSync(delayMs = LOCAL_CHANGE_AUTO_SYNC_DEBOUNCE_MS) {
     localChangeSyncTimeout = null
     void performAutoSync()
   }, effectiveDelayMs)
+  unrefTimer(localChangeSyncTimeout)
 
   logger.info('Data sync scheduled after local Storage v2 change', {
     delayMs: effectiveDelayMs,
@@ -610,6 +617,7 @@ function scheduleNextSync(delayMs: number) {
   syncTimeout = setTimeout(() => {
     void performAutoSync()
   }, effectiveDelayMs)
+  unrefTimer(syncTimeout)
 
   logger.info('Data sync scheduled', {
     delayMs: effectiveDelayMs,
