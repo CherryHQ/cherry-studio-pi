@@ -105,6 +105,7 @@ type AgentSessionTurn = {
   admitted: boolean
   terminalStatus?: AgentSessionRuntimeTerminalStatus
   controller?: ReadableStreamDefaultController<UIMessageChunk>
+  cleanupAbortListener?: () => void
   activeToolIds: Set<string>
   interruptRequested: boolean
   trace?: AgentRuntimeTraceContext
@@ -294,12 +295,18 @@ export class AgentSessionRuntimeService extends BaseService {
           this.clearIdleTimer(entry)
           turn.controller = controller
 
-          const onAbort = () => this.stopTurn(entry, turn.interruptRequested ? 'interrupt' : 'user-stop')
+          const onAbort = () => {
+            if (!this.isCurrentEntry(entry) || entry.currentTurn !== turn || turn.terminalStatus) return
+            this.stopTurn(entry, turn.interruptRequested ? 'interrupt' : 'user-stop')
+          }
           if (input.signal.aborted) {
             onAbort()
             return
           } else {
             input.signal.addEventListener('abort', onAbort, { once: true })
+            turn.cleanupAbortListener = () => {
+              input.signal.removeEventListener('abort', onAbort)
+            }
           }
 
           controller.enqueue({ type: 'start' })
@@ -599,6 +606,8 @@ export class AgentSessionRuntimeService extends BaseService {
     } catch {
       // Already closed by the stream reader.
     }
+    turn.cleanupAbortListener?.()
+    turn.cleanupAbortListener = undefined
     turn.controller = undefined
     turn.activeToolIds.clear()
   }

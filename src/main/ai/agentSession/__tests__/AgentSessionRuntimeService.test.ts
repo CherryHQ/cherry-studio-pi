@@ -473,6 +473,42 @@ describe('AgentSessionRuntimeService', () => {
     await expect(reader.read()).resolves.toMatchObject({ done: true })
   })
 
+  it('ignores a late abort after the runtime turn stream has already closed', async () => {
+    const events = createAsyncQueue<any>()
+    const connection = {
+      events: events.iterable,
+      send: vi.fn(),
+      close: vi.fn()
+    }
+    runtimeDriverRegistry.register({
+      type: 'test-runtime',
+      capabilities: ['agent-session'],
+      connect: vi.fn().mockResolvedValue(connection),
+      validateSession: vi.fn(),
+      listAvailableTools: vi.fn().mockResolvedValue([])
+    })
+    const service = new AgentSessionRuntimeService()
+    const handle = service.beginTurn({ ...baseTurnInput, userMessage: userMessage('user-1') })
+    const controller = new AbortController()
+    const stream = service.openTurnStream({
+      sessionId: 'session-1',
+      turnId: handle.turnId,
+      signal: controller.signal
+    })
+    const reader = stream.getReader()
+
+    await expect(reader.read()).resolves.toMatchObject({ value: { type: 'start' }, done: false })
+    await vi.waitFor(() => expect(connection.send).toHaveBeenCalledWith({ message: userMessage('user-1') }))
+
+    events.push({ type: 'turn-complete' })
+    await expect(reader.read()).resolves.toMatchObject({ done: true })
+
+    controller.abort('late-cleanup')
+
+    expect(service.inspect('session-1')).toBeDefined()
+    expect(connection.close).not.toHaveBeenCalled()
+  })
+
   it('surfaces an unexpected runtime event stream close instead of leaving the turn hanging (REGRESSION agent-session-6)', async () => {
     const events = createAsyncQueue<any>()
     const connection = {
