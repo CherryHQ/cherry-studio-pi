@@ -2,6 +2,7 @@
  * Tests for ModelService — field mapping, update behavior, and create merge logic.
  */
 
+import { application } from '@application'
 import { pinTable } from '@data/db/schemas/pin'
 import { userModelTable } from '@data/db/schemas/userModel'
 import { userProviderTable } from '@data/db/schemas/userProvider'
@@ -19,7 +20,7 @@ import {
 import { createUniqueModelId, MODEL_CAPABILITY } from '@shared/data/types/model'
 import { setupTestDatabase } from '@test-helpers/db'
 import { and, eq, or } from 'drizzle-orm'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
 
 import { mockMainLoggerService } from '../../../../../tests/__mocks__/MainLoggerService'
 
@@ -51,6 +52,12 @@ vi.mock('@data/services/ProviderRegistryService', async (importOriginal) => {
       lookupModel: lookupModelMock
     }
   }
+})
+
+beforeEach(() => {
+  const withWriteTx = application.get('DbService').withWriteTx as Mock
+  withWriteTx.mockImplementation((fn: (tx: unknown) => Promise<unknown>) => fn(application.get('DbService').getDb()))
+  withWriteTx.mockClear()
 })
 
 function providerRow(providerId: string, name: string, orderKey = generateOrderKeyBetween(null, null)) {
@@ -164,6 +171,7 @@ describe('ModelService.update', () => {
     expect(row.capabilities).toEqual(['function-call'])
     expect(row.contextWindow).toBe(128_000)
     expect(row.maxOutputTokens).toBe(4096)
+    expect(application.get('DbService').withWriteTx).toHaveBeenCalledTimes(1)
   })
 
   it('exposes presetModelId in runtime model responses for sync diff ownership', async () => {
@@ -345,6 +353,7 @@ describe('ModelService.create', () => {
     expect(row.name).toBe('GPT-4o')
     expect(row.capabilities).toEqual(['function-call'])
     expect(row.contextWindow).toBe(128_000)
+    expect(application.get('DbService').withWriteTx).toHaveBeenCalledTimes(1)
   })
 
   it('uses DTO maxInputTokens over registry values during merge', async () => {
@@ -866,6 +875,7 @@ describe('ModelService.batchUpsert', () => {
     expect(row.capabilities).toEqual(['reasoning'])
     expect(row.maxOutputTokens).toBe(8192)
     expect(row.userOverrides).toEqual(['name', 'contextWindow'])
+    expect(application.get('DbService').withWriteTx).toHaveBeenCalledTimes(1)
   })
 
   it('rejects batch upsert for the managed CherryAI default model', async () => {
@@ -1075,12 +1085,21 @@ describe('ModelService.bulkUpdate', () => {
       .where(eq(userModelTable.id, createUniqueModelId('openai', 'gpt-4o')))
       .then((rows) => rows[0])
 
-    await expect(
-      modelService.bulkUpdate([
-        { providerId: 'openai', modelId: 'gpt-4o', patch: { name: 'GPT-4o-new' } },
-        { providerId: 'openai', modelId: 'missing', patch: { name: 'should-rollback' } }
-      ])
-    ).rejects.toMatchObject({ code: ErrorCode.NOT_FOUND })
+    const withWriteTx = application.get('DbService').withWriteTx as Mock
+    withWriteTx.mockImplementation((fn: (tx: unknown) => Promise<unknown>) => dbh.db.transaction(fn as never))
+    try {
+      await expect(
+        modelService.bulkUpdate([
+          { providerId: 'openai', modelId: 'gpt-4o', patch: { name: 'GPT-4o-new' } },
+          { providerId: 'openai', modelId: 'missing', patch: { name: 'should-rollback' } }
+        ])
+      ).rejects.toMatchObject({ code: ErrorCode.NOT_FOUND })
+    } finally {
+      withWriteTx.mockImplementation((fn: (tx: unknown) => Promise<unknown>) =>
+        fn(application.get('DbService').getDb())
+      )
+    }
+    expect(application.get('DbService').withWriteTx).toHaveBeenCalledTimes(1)
 
     const afterRollback = await dbh.db
       .select()
@@ -1123,6 +1142,7 @@ describe('ModelService.reconcileForProvider', () => {
 
     await pinService.pin({ entityType: 'model', entityId: openaiGpt4o })
     await pinService.pin({ entityType: 'model', entityId: anthropicClaude })
+    ;(application.get('DbService').withWriteTx as Mock).mockClear()
 
     // Cross MODELS_RECONCILE per-INSERT chunk size of 500 (use 600).
     const toAdd = Array.from({ length: 600 }, (_, index) => ({
@@ -1161,6 +1181,7 @@ describe('ModelService.reconcileForProvider', () => {
       .where(or(...bulkRows.map((m) => and(eq(userModelTable.providerId, 'openai'), eq(userModelTable.id, m.id))!)))
     const sortedKeys = bulkOrderKeys.map((r) => r.orderKey).sort()
     expect(new Set(sortedKeys).size).toBe(sortedKeys.length)
+    expect(application.get('DbService').withWriteTx).toHaveBeenCalledTimes(1)
   })
 
   it('warns when toRemove references IDs that do not exist for this provider', async () => {
