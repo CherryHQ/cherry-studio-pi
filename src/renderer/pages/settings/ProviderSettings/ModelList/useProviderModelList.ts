@@ -1,6 +1,5 @@
 import { useModelMutations, useModels } from '@renderer/hooks/useModel'
 import type { Model } from '@shared/data/types/model'
-import { parseUniqueModelId } from '@shared/data/types/model'
 import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 
 import { PROVIDER_SETTINGS_MODEL_SWR_OPTIONS } from '../hooks/providerSetting/constants'
@@ -13,6 +12,7 @@ import {
   type ModelListCapabilityFilter,
   type ModelSections
 } from './modelListDerivedState'
+import { getProviderModelApiId } from './utils'
 
 export interface ModelListGroupItem {
   model: Model
@@ -199,7 +199,7 @@ export function useProviderModelList({ providerId, disabled = false }: UseProvid
 
   const onToggleModel = useCallback(
     async (model: Model, enabled: boolean) => {
-      const { modelId } = parseUniqueModelId(model.id)
+      const modelId = getProviderModelApiId(model)
       const previousEnabled = optimisticEnabledByModelId[model.id] ?? model.isEnabled
 
       setOptimisticEnabledByModelId((current) => ({ ...current, [model.id]: enabled }))

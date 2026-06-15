@@ -1,17 +1,18 @@
 import { getSearchMatchScore } from '@renderer/utils/modelSearch'
-import { type Model, parseUniqueModelId } from '@shared/data/types/model'
+import { isUniqueModelId, type Model, parseUniqueModelId } from '@shared/data/types/model'
 
 export const isValidNewApiModel = (model: Model): boolean => !!(model.endpointTypes && model.endpointTypes.length > 0)
 
-/** API-facing model id for clipboard (aligns with design “copy model ID”). */
-export function getModelClipboardId(model: Pick<Model, 'apiModelId' | 'id' | 'name'>): string {
+/** API-facing model id used by provider model management. */
+export function getProviderModelApiId(model: Pick<Model, 'apiModelId' | 'id'>): string {
   const api = model.apiModelId?.trim()
   if (api) return api
-  try {
-    return parseUniqueModelId(model.id).modelId
-  } catch {
-    return model.name
-  }
+  return isUniqueModelId(model.id) ? parseUniqueModelId(model.id).modelId : model.id
+}
+
+/** API-facing model id for clipboard (aligns with design “copy model ID”). */
+export function getModelClipboardId(model: Pick<Model, 'apiModelId' | 'id' | 'name'>): string {
+  return getProviderModelApiId(model) || model.name
 }
 
 export const filterProviderSettingModelsByKeywords = <T extends Model>(keywords: string, models: T[]): T[] => {

@@ -13,7 +13,6 @@ import { useModelMutations } from '@renderer/hooks/useModel'
 import { useProvider } from '@renderer/hooks/useProvider'
 import { getDefaultGroupName } from '@renderer/utils'
 import { CURRENCY, type Currency, type EndpointType, type Model } from '@shared/data/types/model'
-import { parseUniqueModelId } from '@shared/data/types/model'
 import { isNewApiProvider } from '@shared/utils/provider'
 import { ChevronDown, ChevronUp, SaveIcon } from 'lucide-react'
 import type { FormEvent } from 'react'
@@ -137,7 +136,7 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
         return
       }
 
-      const { modelId } = parseUniqueModelId(model.id)
+      const modelId = getModelApiId(model)
       await updateModel(model.providerId ?? providerId, modelId, {
         name: patch.name,
         group: patch.group,
@@ -257,7 +256,7 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
       return
     }
 
-    const { modelId } = parseUniqueModelId(model.id)
+    const modelId = getModelApiId(model)
 
     window.modal.confirm({
       title: t('common.delete_confirm'),

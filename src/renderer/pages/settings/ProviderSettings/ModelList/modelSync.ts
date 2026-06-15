@@ -2,8 +2,10 @@ import { dataApiService } from '@data/DataApiService'
 import { loggerService } from '@logger'
 import type { ConcreteApiPaths } from '@shared/data/api/apiTypes'
 import type { CreateModelDto } from '@shared/data/api/schemas/models'
-import { type EndpointType as RuntimeEndpointType, type Model, parseUniqueModelId } from '@shared/data/types/model'
+import { type EndpointType as RuntimeEndpointType, type Model } from '@shared/data/types/model'
 import { isEmpty } from 'lodash'
+
+import { getProviderModelApiId } from './utils'
 
 const logger = loggerService.withContext('ProviderModelSync')
 
@@ -27,7 +29,7 @@ export function toCreateModelDto(
   model: Model,
   endpointTypes?: RuntimeEndpointType[]
 ): CreateModelDto {
-  const modelId = model.apiModelId ?? parseUniqueModelId(model.id).modelId
+  const modelId = getProviderModelApiId(model)
 
   return {
     providerId,
@@ -60,7 +62,7 @@ async function enrichFetchedModels(providerId: string, fetchedModels: Partial<Mo
 
   const resolvedMap = new Map<string, Model>()
   for (const model of resolved) {
-    const key = model.apiModelId ?? parseUniqueModelId(model.id).modelId
+    const key = getProviderModelApiId(model)
     if (!resolvedMap.has(key)) {
       resolvedMap.set(key, model)
     }

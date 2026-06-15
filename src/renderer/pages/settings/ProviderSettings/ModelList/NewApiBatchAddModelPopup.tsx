@@ -17,13 +17,14 @@ import { TopView } from '@renderer/components/TopView'
 import { useModelMutations, useModels } from '@renderer/hooks/useModel'
 import type { CreateModelDto } from '@shared/data/api/schemas/models'
 import type { Model } from '@shared/data/types/model'
-import { ENDPOINT_TYPE, type EndpointType, parseUniqueModelId } from '@shared/data/types/model'
+import { ENDPOINT_TYPE, type EndpointType } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { drawerClasses } from '../primitives/ProviderSettingsPrimitives'
 import { MODEL_ENDPOINT_OPTIONS } from './ModelDrawer/helpers'
+import { getProviderModelApiId } from './utils'
 
 const logger = loggerService.withContext('ProviderSettings:NewApiBatchAddModelPopup')
 
@@ -66,9 +67,9 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
   }
 
   const onAddModel = async (values: FieldType) => {
-    const existingModelApiIds = new Set(existingModels.map((model) => parseUniqueModelId(model.id).modelId))
+    const existingModelApiIds = new Set(existingModels.map(getProviderModelApiId))
     const modelsToAdd = batchModels.filter((model) => {
-      const modelId = model.apiModelId ?? parseUniqueModelId(model.id).modelId
+      const modelId = getProviderModelApiId(model)
       return !existingModelApiIds.has(modelId)
     })
 
@@ -78,7 +79,7 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
     }
 
     const dtos: CreateModelDto[] = modelsToAdd.map((model) => {
-      const modelId = model.apiModelId ?? parseUniqueModelId(model.id).modelId
+      const modelId = getProviderModelApiId(model)
       return {
         providerId: provider.id,
         modelId,

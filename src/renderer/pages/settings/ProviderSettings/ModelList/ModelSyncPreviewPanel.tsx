@@ -1,7 +1,6 @@
 import { Alert, Button, Checkbox } from '@cherrystudio/ui'
 import { getModelLogo } from '@renderer/config/models'
 import type { Model } from '@shared/data/types/model'
-import { parseUniqueModelId, type UniqueModelId } from '@shared/data/types/model'
 import { CheckCircle2, Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -9,6 +8,7 @@ import ModelTagsWithLabel, { type ModelTagsWithLabelModel } from '../components/
 import { modelSyncClasses } from '../primitives/ProviderSettingsPrimitives'
 import type { ModelSyncPreviewResponse } from './modelSyncPreviewTypes'
 import type { useModelListSyncSelections } from './useModelListSyncSelections'
+import { getProviderModelApiId } from './utils'
 
 export type ModelSyncPreviewSelections = ReturnType<typeof useModelListSyncSelections>
 
@@ -26,8 +26,8 @@ interface ModelSyncPreviewFooterProps {
   onCancel: () => void
 }
 
-function modelIdLine(uniqueModelId: UniqueModelId, apiModelId?: string) {
-  return apiModelId ?? parseUniqueModelId(uniqueModelId).modelId
+function modelIdLine(model: Model) {
+  return getProviderModelApiId(model)
 }
 
 function ModelGlyph({ model }: { model: Model }) {
@@ -121,7 +121,7 @@ export default function ModelSyncPreviewPanel({ preview, selections, isApplying 
                   <ModelGlyph model={model} />
                   <div className="min-w-0 flex-1">
                     <p className={modelSyncClasses.fetchRowTitle}>{model.name}</p>
-                    <p className={modelSyncClasses.fetchRowId}>{modelIdLine(model.id, model.apiModelId)}</p>
+                    <p className={modelSyncClasses.fetchRowId}>{modelIdLine(model)}</p>
                   </div>
                   {model.contextWindow != null && model.contextWindow > 0 ? (
                     <span className={modelSyncClasses.fetchContextValue}>{model.contextWindow}</span>
@@ -194,9 +194,7 @@ export default function ModelSyncPreviewPanel({ preview, selections, isApplying 
                   <ModelGlyph model={item.model} />
                   <div className="min-w-0 flex-1">
                     <p className={modelSyncClasses.fetchRowTitleStrike}>{item.model.name}</p>
-                    <p className={modelSyncClasses.fetchRowIdStrike}>
-                      {modelIdLine(item.model.id, item.model.apiModelId)}
-                    </p>
+                    <p className={modelSyncClasses.fetchRowIdStrike}>{modelIdLine(item.model)}</p>
                   </div>
                   {item.model.contextWindow != null && item.model.contextWindow > 0 ? (
                     <span className={modelSyncClasses.fetchContextValue}>{item.model.contextWindow}</span>
