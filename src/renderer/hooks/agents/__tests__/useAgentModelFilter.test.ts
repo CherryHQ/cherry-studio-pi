@@ -28,7 +28,7 @@ function createModel(overrides: Partial<Model> = {}): Model {
   } as Model
 }
 
-function createProvider(overrides: Partial<Provider> = {}): Provider {
+function createProvider(overrides: Partial<Provider> & { anthropicApiHost?: string } = {}): Provider {
   return {
     id: 'openai',
     name: 'OpenAI',
@@ -69,6 +69,10 @@ describe('useAgentModelFilter', () => {
         }
       }),
       createProvider({
+        id: 'legacy-deepseek',
+        anthropicApiHost: 'https://api.deepseek.com/anthropic'
+      }),
+      createProvider({
         id: 'anthropic-workspace',
         presetProviderId: 'anthropic'
       }),
@@ -95,6 +99,15 @@ describe('useAgentModelFilter', () => {
         createModel({
           id: 'siliconflow::qwen3-coder',
           providerId: 'siliconflow',
+          endpointTypes: undefined
+        })
+      )
+    ).toBe(true)
+    expect(
+      result.current(
+        createModel({
+          id: 'legacy-deepseek::deepseek-chat',
+          providerId: 'legacy-deepseek',
           endpointTypes: undefined
         })
       )

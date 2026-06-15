@@ -5,11 +5,21 @@ import { isNonChatModel } from '@shared/utils/model'
 
 const NATIVE_ANTHROPIC_PROVIDER_IDS = new Set(['anthropic'])
 
+type LegacyAnthropicHostProvider = Provider & {
+  anthropicApiHost?: unknown
+}
+
+function hasLegacyAnthropicApiHost(provider?: Provider): boolean {
+  const host = (provider as LegacyAnthropicHostProvider | undefined)?.anthropicApiHost
+  return typeof host === 'string' && host.trim().length > 0
+}
+
 export function hasAnthropicMessagesEndpoint(model: Model, provider?: Provider): boolean {
   return (
     model.endpointTypes?.includes(ENDPOINT_TYPE.ANTHROPIC_MESSAGES) === true ||
     provider?.defaultChatEndpoint === ENDPOINT_TYPE.ANTHROPIC_MESSAGES ||
     Boolean(provider?.endpointConfigs?.[ENDPOINT_TYPE.ANTHROPIC_MESSAGES]) ||
+    hasLegacyAnthropicApiHost(provider) ||
     provider?.presetProviderId === 'anthropic' ||
     NATIVE_ANTHROPIC_PROVIDER_IDS.has(provider?.id ?? model.providerId)
   )
