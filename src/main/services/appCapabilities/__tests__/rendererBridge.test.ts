@@ -107,4 +107,39 @@ describe('app capability renderer bridge', () => {
     expect(cachedWindow.webContents.executeJavaScript).toHaveBeenCalledWith('window["test.cached"]()')
     expect(otherWindow.webContents.executeJavaScript).not.toHaveBeenCalled()
   })
+
+  it('falls back to another bridge window when the cached window stops responding', async () => {
+    vi.useFakeTimers()
+    try {
+      const cachedWindow = createWindow(
+        vi.fn(async (script: string) => {
+          if (script.includes('typeof')) return true
+          return 'cached'
+        })
+      )
+      const otherWindow = createWindow(
+        vi.fn(async (script: string) => {
+          if (script.includes('typeof')) return true
+          return 'other'
+        })
+      )
+      mocks.getAllWindows.mockReturnValue([cachedWindow, otherWindow])
+
+      await expect(callRendererBridge('test.cached.fallback')).resolves.toBe('cached')
+
+      cachedWindow.webContents.executeJavaScript.mockImplementation(() => new Promise(() => undefined))
+      otherWindow.webContents.executeJavaScript.mockClear()
+
+      const result = callRendererBridge('test.cached.fallback')
+      await vi.advanceTimersByTimeAsync(51)
+
+      await expect(result).resolves.toBe('other')
+      expect(otherWindow.webContents.executeJavaScript).toHaveBeenCalledWith(
+        'typeof window["test.cached.fallback"] === \'function\''
+      )
+      expect(otherWindow.webContents.executeJavaScript).toHaveBeenCalledWith('window["test.cached.fallback"]()')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

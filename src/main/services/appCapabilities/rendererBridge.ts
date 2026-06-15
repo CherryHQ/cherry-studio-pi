@@ -3,6 +3,7 @@ import { BrowserWindow } from 'electron'
 
 const DEFAULT_RENDERER_BRIDGE_CHECK_TIMEOUT_MS = 5_000
 const DEFAULT_RENDERER_BRIDGE_CALL_TIMEOUT_MS = 5_000
+const CACHED_RENDERER_BRIDGE_GRACE_MS = 50
 
 type RendererBridgeProbeResult = {
   hasBridge: boolean
@@ -37,6 +38,13 @@ export async function withRendererBridgeTimeout<T>(
   } finally {
     if (timeout) clearTimeout(timeout)
   }
+}
+
+async function waitForCachedBridgeGrace(): Promise<null> {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve(null), CACHED_RENDERER_BRIDGE_GRACE_MS)
+    timeout.unref?.()
+  })
 }
 
 function isUsableRendererWindow(browserWindow: BrowserWindow): boolean {
@@ -87,20 +95,31 @@ export async function callRendererBridge<T>(
   let lastProbeError: unknown
   const browserWindows = BrowserWindow.getAllWindows().filter(isUsableRendererWindow)
   const cachedWindow = cachedBridgeWindows.get(bridgeKey)
+  let cachedProbe: Promise<{
+    browserWindow: BrowserWindow
+    result: RendererBridgeCallResult<T>
+  }> | null = null
 
   if (cachedWindow && !browserWindows.includes(cachedWindow)) {
     cachedBridgeWindows.delete(bridgeKey)
   }
 
   if (cachedWindow && browserWindows.includes(cachedWindow)) {
-    const cachedResult = await tryCallRendererBridgeWindow<T>(cachedWindow, bridgeName, callScript, options)
-    if (cachedResult.status === 'success') {
-      return cachedResult.value
-    }
+    cachedProbe = tryCallRendererBridgeWindow<T>(cachedWindow, bridgeName, callScript, options).then((result) => ({
+      browserWindow: cachedWindow,
+      result
+    }))
+    const cachedFastResult = await Promise.race([cachedProbe, waitForCachedBridgeGrace()])
+    if (cachedFastResult) {
+      cachedProbe = null
+      if (cachedFastResult.result.status === 'success') {
+        return cachedFastResult.result.value
+      }
 
-    cachedBridgeWindows.delete(bridgeKey)
-    if (cachedResult.status === 'error') {
-      lastProbeError = cachedResult.error
+      cachedBridgeWindows.delete(bridgeKey)
+      if (cachedFastResult.result.status === 'error') {
+        lastProbeError = cachedFastResult.result.error
+      }
     }
   }
 
@@ -109,6 +128,7 @@ export async function callRendererBridge<T>(
     : browserWindows
 
   const probes = probeWindows.map((browserWindow) => ({
+    type: 'probe' as const,
     browserWindow,
     promise: withRendererBridgeTimeout(
       browserWindow.webContents.executeJavaScript(`typeof window[${bridgeName}] === 'function'`) as Promise<boolean>,
@@ -119,7 +139,29 @@ export async function callRendererBridge<T>(
       .catch<RendererBridgeProbeResult>((error) => ({ hasBridge: false, error }))
   }))
 
-  const pendingProbes = new Set(probes)
+  const pendingProbes = new Set<
+    | (typeof probes)[number]
+    | {
+        type: 'cached'
+        browserWindow: BrowserWindow
+        promise: Promise<RendererBridgeProbeResult>
+      }
+  >(probes)
+  if (cachedProbe) {
+    pendingProbes.add({
+      type: 'cached',
+      browserWindow: cachedWindow as BrowserWindow,
+      promise: cachedProbe.then(({ result }) => {
+        if (result.status === 'success') {
+          return { hasBridge: true, value: result.value } as RendererBridgeProbeResult & { value: T }
+        }
+        if (result.status === 'error') {
+          return { hasBridge: false, error: result.error }
+        }
+        return { hasBridge: false, error: result.error }
+      })
+    })
+  }
   let lastCallError: unknown
   while (pendingProbes.size > 0) {
     const { probe, result } = await Promise.race(
@@ -129,6 +171,10 @@ export async function callRendererBridge<T>(
 
     if (result.error) {
       lastProbeError = result.error
+    }
+    if ('value' in result) {
+      cachedBridgeWindows.set(bridgeKey, probe.browserWindow)
+      return result.value as T
     }
     if (!result.hasBridge) continue
 
