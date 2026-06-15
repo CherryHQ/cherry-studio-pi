@@ -2,6 +2,7 @@
  * Hook for subscribing to migration progress updates
  */
 
+import { loggerService } from '@logger'
 import {
   MigrationIpcChannels,
   type MigrationProgress,
@@ -10,6 +11,8 @@ import {
   type StartMigrationPayload
 } from '@shared/data/migration/v2/types'
 import { useCallback, useEffect, useState } from 'react'
+
+const logger = loggerService.withContext('MigrationProgress')
 
 // Re-export types for convenience
 export type { MigrationProgress, MigrationStage, MigratorStatus }
@@ -44,7 +47,9 @@ export function useMigrationProgress() {
           setProgress(initialProgress)
         }
       })
-      .catch(console.error)
+      .catch((error) => {
+        logger.error('Failed to load initial migration progress', error as Error)
+      })
 
     // Check for last error
     window.electron.ipcRenderer
@@ -54,7 +59,9 @@ export function useMigrationProgress() {
           setLastError(error)
         }
       })
-      .catch(console.error)
+      .catch((error) => {
+        logger.error('Failed to load last migration error', error as Error)
+      })
 
     return removeProgressListener
   }, [])
