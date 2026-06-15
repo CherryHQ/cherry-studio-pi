@@ -36,4 +36,25 @@ describe('resolveAgentSessionModel', () => {
 
     expect(resolveAgentSessionModel('openai:gpt-4o', [model])).toBeUndefined()
   })
+
+  it('skips malformed candidate ids instead of throwing during chat input render', () => {
+    const model = {
+      ...makeModel('openai::placeholder'),
+      id: 'gpt-4o',
+      apiModelId: undefined
+    } as unknown as Model
+
+    expect(() => resolveAgentSessionModel('openai::gpt-4o', [model])).not.toThrow()
+    expect(resolveAgentSessionModel('openai::gpt-4o', [model])).toBeUndefined()
+  })
+
+  it('still resolves malformed candidate rows when apiModelId is available', () => {
+    const model = {
+      ...makeModel('deepseek::placeholder'),
+      id: 'legacy-deepseek-row',
+      apiModelId: 'deepseek-chat'
+    } as unknown as Model
+
+    expect(resolveAgentSessionModel('deepseek::deepseek-chat', [model])).toBe(model)
+  })
 })

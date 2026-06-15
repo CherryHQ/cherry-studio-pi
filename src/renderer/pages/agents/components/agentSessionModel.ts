@@ -10,7 +10,8 @@ export function resolveAgentSessionModel(agentModel: string | null | undefined, 
     if (model.id === agentModel) return true
     if (model.providerId !== providerId) return false
 
-    const modelIdentifier = model.apiModelId ?? parseUniqueModelId(model.id).modelId
+    const modelIdentifier =
+      model.apiModelId ?? (isUniqueModelId(model.id) ? parseUniqueModelId(model.id).modelId : undefined)
     return modelIdentifier === modelId
   })
 }
