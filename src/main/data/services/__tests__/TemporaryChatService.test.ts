@@ -3,6 +3,7 @@ import { topicTable } from '@data/db/schemas/topic'
 import { TemporaryChatService } from '@data/services/TemporaryChatService'
 import type { MessageData } from '@shared/data/types/message'
 import { setupTestDatabase } from '@test-helpers/db'
+import { MockMainDbServiceExport } from '@test-mocks/main/DbService'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 
@@ -21,6 +22,8 @@ describe('TemporaryChatService', () => {
 
   beforeEach(() => {
     service = new TemporaryChatService()
+    MockMainDbServiceExport.dbService.withWriteTx.mockImplementation((fn) => dbh.db.transaction(fn as never))
+    MockMainDbServiceExport.dbService.withWriteTx.mockClear()
   })
 
   describe('appendMessage — input validation', () => {
@@ -156,6 +159,7 @@ describe('TemporaryChatService', () => {
 
       const result = await service.persist(topic.id)
       expect(result).toEqual({ topicId: topic.id, messageCount: 3 })
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
 
       // In-memory store is cleared
       await expect(service.listMessages(topic.id)).rejects.toThrow(/not found/i)
@@ -199,10 +203,20 @@ describe('TemporaryChatService', () => {
       expect(dbTopic?.orderKey?.length).toBeGreaterThan(0)
     })
 
-    // NOTE: The original "rollback on tx failure" test dropped the message
-    // table mid-run. That would corrupt the shared schema for all subsequent
-    // tests in the harness. We drop this specific scenario — the rollback
-    // semantics are better exercised by the handler-layer integration test
-    // that uses a fresh tmpdir per case.
+    it('restores the in-memory snapshot when the write transaction fails', async () => {
+      const topic = await service.createTopic({ name: 'retryable' })
+      const msg = await service.appendMessage(topic.id, { role: 'user', data: mainText('keep me') })
+      const failure = new Error('boom')
+
+      MockMainDbServiceExport.dbService.withWriteTx.mockRejectedValueOnce(failure)
+
+      await expect(service.persist(topic.id)).rejects.toThrow('boom')
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+      expect(service.hasTopic(topic.id)).toBe(true)
+      await expect(service.listMessages(topic.id)).resolves.toEqual([expect.objectContaining({ id: msg.id })])
+
+      MockMainDbServiceExport.dbService.withWriteTx.mockImplementation((fn) => dbh.db.transaction(fn as never))
+      await expect(service.persist(topic.id)).resolves.toEqual({ topicId: topic.id, messageCount: 1 })
+    })
   })
 })

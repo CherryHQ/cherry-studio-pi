@@ -66,6 +66,10 @@ export class TemporaryChatService {
   private topics = new Map<string, TemporaryTopicRow>()
   private messages = new Map<string, TemporaryMessageRow[]>()
 
+  private get dbService() {
+    return application.get('DbService')
+  }
+
   async createTopic(dto: CreateTopicDto): Promise<Topic> {
     const now = Date.now()
     const row: TemporaryTopicRow = {
@@ -171,8 +175,7 @@ export class TemporaryChatService {
     this.messages.delete(topicId)
 
     try {
-      const db = application.get('DbService').getDb()
-      await db.transaction(async (tx) => {
+      await this.dbService.withWriteTx(async (tx) => {
         // 2. Insert topic with the same id. Timestamps / defaults are filled by
         // Drizzle's $defaultFn; we do not pass createdAt / updatedAt manually
         // because the TS-side ISO strings don't match the DB's integer column.
