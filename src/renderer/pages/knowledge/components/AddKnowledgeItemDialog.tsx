@@ -71,7 +71,13 @@ const AddKnowledgeItemDialog = ({ open, onOpenChange }: AddKnowledgeItemDialogPr
 
   const handleDirectorySelect = useCallback(async () => {
     setSubmitErrorMessage('')
-    const directoryPath = await window.api.file.selectFolder()
+    let directoryPath: string | null = null
+    try {
+      directoryPath = await window.api.file.selectFolder()
+    } catch (error) {
+      setSubmitErrorMessage(formatErrorMessageWithPrefix(error, t('common.error')))
+      return
+    }
 
     if (!directoryPath) {
       return
@@ -90,7 +96,7 @@ const AddKnowledgeItemDialog = ({ open, onOpenChange }: AddKnowledgeItemDialogPr
         }
       ]
     })
-  }, [])
+  }, [t])
 
   const handleFileRemove = useCallback((fileIndex: number) => {
     setSubmitErrorMessage('')

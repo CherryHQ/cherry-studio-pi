@@ -156,6 +156,7 @@ vi.mock('react-i18next', () => ({
         'common.cancel': '取消',
         'common.close': '关闭',
         'common.delete': '删除',
+        'common.error': '错误',
         'knowledge.drag_file': '拖拽文件到这里',
         'knowledge.data_source.add_dialog.directory.description': '将递归导入文件夹中的支持文件',
         'knowledge.data_source.add_dialog.directory.title': '点击选择文件夹',
@@ -352,6 +353,17 @@ describe('AddKnowledgeItemDialog', () => {
       expect(mockSelectFolder).toHaveBeenCalledTimes(2)
     })
     expect(screen.getByText('docs')).toBeInTheDocument()
+  })
+
+  it('shows an error when folder picker fails', async () => {
+    setPendingAddSource('directory')
+    mockSelectFolder.mockRejectedValueOnce(new Error('dialog unavailable'))
+    render(<AddKnowledgeItemDialog open onOpenChange={vi.fn()} />)
+
+    fireEvent.click(screen.getByTestId('knowledge-source-directory-select'))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('错误: dialog unavailable')
+    expect(screen.getByRole('button', { name: '添加' })).toBeDisabled()
   })
 
   it('enables url submit only after input', () => {

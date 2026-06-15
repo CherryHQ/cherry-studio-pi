@@ -11,6 +11,7 @@ import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { getBackupProgressLabelKey } from '@renderer/i18n/label'
 import { backup, backupToLanTransfer } from '@renderer/services/BackupService'
+import { getErrorMessage } from '@renderer/utils/error'
 import { IpcChannel } from '@shared/IpcChannel'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -53,12 +54,17 @@ const PopupContainer: React.FC<Props> = ({ resolve, backupType = 'direct' }) => 
   const onOk = async () => {
     logger.debug(`skipBackupFile: ${skipBackupFile}, backupType: ${backupType}`)
 
-    if (backupType === 'lan-transfer') {
-      await backupToLanTransfer()
-    } else {
-      await backup(skipBackupFile)
+    try {
+      if (backupType === 'lan-transfer') {
+        await backupToLanTransfer()
+      } else {
+        await backup(skipBackupFile)
+      }
+      close({})
+    } catch (error) {
+      logger.error('Backup failed:', error as Error)
+      window.toast.error(`${t('message.backup.failed')}: ${getErrorMessage(error)}`)
     }
-    close({})
   }
 
   const onCancel = () => {
