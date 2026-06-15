@@ -77,4 +77,27 @@ describe('QqAdapter.downloadAttachments', () => {
     expect(mockNetFetch).toHaveBeenCalled()
     expect(mockNetFetch.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal)
   })
+
+  it('keeps only one heartbeat interval across duplicate HELLO payloads', async () => {
+    vi.useFakeTimers()
+    try {
+      const adapter = createAdapter()
+      vi.spyOn(adapter, 'getAccessToken').mockResolvedValue('tok')
+      const heartbeatSpy = vi.spyOn(adapter, 'sendHeartbeat').mockImplementation(() => {})
+
+      await adapter.handleHello({ heartbeat_interval: 1000 })
+      await adapter.handleHello({ heartbeat_interval: 1000 })
+
+      vi.advanceTimersByTime(1000)
+
+      expect(heartbeatSpy).toHaveBeenCalledTimes(1)
+
+      adapter.cleanup()
+      vi.advanceTimersByTime(1000)
+
+      expect(heartbeatSpy).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

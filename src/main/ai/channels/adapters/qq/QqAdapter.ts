@@ -212,6 +212,8 @@ class QqAdapter extends ChannelAdapter {
           code,
           reason: reason.toString()
         })
+        if (this.ws === ws) this.ws = null
+        this.clearHeartbeat()
         this.scheduleReconnect()
       })
 
@@ -269,10 +271,12 @@ class QqAdapter extends ChannelAdapter {
   }
 
   private async handleHello(data: { heartbeat_interval: number }): Promise<void> {
-    // Start heartbeat
+    // A reconnect or duplicate HELLO must not leave an older heartbeat interval running.
+    this.clearHeartbeat()
     this.heartbeatInterval = setInterval(() => {
       this.sendHeartbeat()
     }, data.heartbeat_interval)
+    this.heartbeatInterval.unref?.()
 
     // Identify or resume
     if (this.sessionId && this.lastSeq !== null) {
@@ -571,15 +575,18 @@ class QqAdapter extends ChannelAdapter {
     // This is a no-op
   }
 
+  private clearHeartbeat(): void {
+    if (!this.heartbeatInterval) return
+    clearInterval(this.heartbeatInterval)
+    this.heartbeatInterval = null
+  }
+
   private cleanup(): void {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
     }
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval)
-      this.heartbeatInterval = null
-    }
+    this.clearHeartbeat()
     if (this.ws) {
       if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
         this.ws.close()
@@ -636,6 +643,7 @@ class QqAdapter extends ChannelAdapter {
         })
       }
     }, delay)
+    this.reconnectTimer.unref?.()
   }
 }
 
