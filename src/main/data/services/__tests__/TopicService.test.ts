@@ -10,11 +10,17 @@ import { DataApiError, ErrorCode } from '@shared/data/api'
 import { DEFAULT_ASSISTANT_SETTINGS } from '@shared/data/types/assistant'
 import { chatMessageSourceType, type FileEntryId } from '@shared/data/types/file'
 import { setupTestDatabase } from '@test-helpers/db'
+import { MockMainDbServiceExport } from '@test-mocks/main/DbService'
 import { asc, eq } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 describe('TopicService', () => {
   const dbh = setupTestDatabase()
+
+  beforeEach(() => {
+    MockMainDbServiceExport.dbService.withWriteTx.mockImplementation((fn) => dbh.db.transaction(fn as never))
+    MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+  })
 
   describe('search', () => {
     it('returns lean topic items with assistant names resolved inline', async () => {
@@ -82,6 +88,7 @@ describe('TopicService', () => {
     expect(traceId).toMatch(/^[0-9a-f]{32}$/)
     expect(await topicService.ensureTraceId('topic-trace')).toBe(traceId)
     expect((await topicService.getById('topic-trace')).traceId).toBe(traceId)
+    expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(2)
   })
 
   describe('listByCursor', () => {
@@ -411,6 +418,7 @@ describe('TopicService', () => {
       await seedThree()
       await topicService.reorder('t3', { before: 't1' })
       expect(await getOrderedIds()).toEqual(['t3', 't1', 't2'])
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
 
     it('moves a topic to after a successor with anchor.after', async () => {
@@ -513,9 +521,26 @@ describe('TopicService', () => {
       const result = await topicService.create({ name: 'fresh' })
       expect(result.activeNodeId).toBeUndefined()
       expect(result.name).toBe('fresh')
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
       const [row] = await dbh.db.select().from(topicTable).where(eq(topicTable.id, result.id))
       expect(row?.orderKey).toBeDefined()
       expect(row?.orderKey).not.toBe('')
+    })
+  })
+
+  describe('update', () => {
+    it('updates a topic inside the serialized write transaction', async () => {
+      await dbh.db
+        .insert(topicTable)
+        .values({ id: 'topic-update', name: 'Before', orderKey: 'a0', createdAt: 1, updatedAt: 1 })
+
+      const result = await topicService.update('topic-update', {
+        name: 'After',
+        isNameManuallyEdited: true
+      })
+
+      expect(result).toMatchObject({ id: 'topic-update', name: 'After', isNameManuallyEdited: true })
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -920,6 +945,7 @@ describe('TopicService', () => {
         .select({ id: topicTable.id, orderKey: topicTable.orderKey, updatedAt: topicTable.updatedAt })
         .from(topicTable)
       expect(after).toEqual(before)
+      expect(MockMainDbServiceExport.dbService.withWriteTx).not.toHaveBeenCalled()
     })
 
     it('applies multiple moves sequentially in one transaction', async () => {
@@ -930,6 +956,7 @@ describe('TopicService', () => {
       ])
       const ids = await dbh.db.select({ id: topicTable.id }).from(topicTable).orderBy(asc(topicTable.orderKey))
       expect(ids.map((r) => r.id)).toEqual(['t4', 't2', 't3', 't1'])
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
 
     it('rejects cross-scope batch (mixed groupId) with VALIDATION_ERROR', async () => {

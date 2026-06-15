@@ -114,10 +114,16 @@ function buildSearchPredicate(q: string | undefined): SQL | undefined {
 }
 
 export class TopicService {
-  async getById(id: string): Promise<Topic> {
-    const db = application.get('DbService').getDb()
+  private get dbService() {
+    return application.get('DbService')
+  }
 
-    const [row] = await db
+  private get db() {
+    return this.dbService.getDb()
+  }
+
+  async getById(id: string): Promise<Topic> {
+    const [row] = await this.db
       .select()
       .from(topicTable)
       .where(and(eq(topicTable.id, id), isNull(topicTable.deletedAt)))
@@ -131,7 +137,7 @@ export class TopicService {
   }
 
   async ensureTraceId(topicId: string): Promise<string> {
-    return application.get('DbService').withWriteTx(async (tx) => {
+    return this.dbService.withWriteTx(async (tx) => {
       const [row] = await tx
         .select({ traceId: topicTable.traceId })
         .from(topicTable)
@@ -152,10 +158,9 @@ export class TopicService {
   }
 
   async create(dto: CreateTopicDto): Promise<Topic> {
-    const dbService = application.get('DbService')
     const groupId = dto.groupId ?? null
 
-    const row = (await dbService.withWriteTx((tx) => {
+    const row = (await this.dbService.withWriteTx((tx) => {
       return insertWithOrderKey(
         tx,
         topicTable,
@@ -178,11 +183,10 @@ export class TopicService {
   }
 
   async duplicate(sourceTopicId: string, dto: DuplicateTopicDto): Promise<Topic> {
-    const dbService = application.get('DbService')
     // Lazy import avoids a singleton cycle: MessageService already depends on TopicService for active-node updates.
     const { messageService } = await import('./MessageService')
 
-    const copiedTopic = await dbService.withWriteTx(async (tx) => {
+    const copiedTopic = await this.dbService.withWriteTx(async (tx) => {
       const [sourceTopic] = await tx
         .select()
         .from(topicTable)
@@ -242,9 +246,7 @@ export class TopicService {
 
   /** Pin state and ordering go through `/pins` and `/topics/:id/order` — not this DTO. */
   async update(id: string, dto: UpdateTopicDto): Promise<Topic> {
-    const db = application.get('DbService').getDb()
-
-    const topic = await db.transaction(async (tx) => {
+    const topic = await this.dbService.withWriteTx(async (tx) => {
       const [existing] = await tx
         .select({ id: topicTable.id })
         .from(topicTable)
@@ -277,15 +279,13 @@ export class TopicService {
    * TODO: Clean up associated files (images, attachments) from disk.
    */
   async delete(id: string): Promise<void> {
-    const dbService = application.get('DbService')
-    await dbService.withWriteTx((tx) => this.deleteManyByIdsTx(tx, [id], { requireAll: true }))
+    await this.dbService.withWriteTx((tx) => this.deleteManyByIdsTx(tx, [id], { requireAll: true }))
 
     logger.info('Deleted topic', { id })
   }
 
   async deleteByIds(ids: string[]): Promise<DeleteTopicsResult> {
-    const dbService = application.get('DbService')
-    const deletedIds = await dbService.withWriteTx((tx) => this.deleteManyByIdsTx(tx, ids, { requireAll: true }))
+    const deletedIds = await this.dbService.withWriteTx((tx) => this.deleteManyByIdsTx(tx, ids, { requireAll: true }))
 
     logger.info('Deleted topics', { count: deletedIds.length })
 
@@ -323,7 +323,7 @@ export class TopicService {
   }
 
   async setActiveNode(topicId: string, nodeId: string): Promise<{ activeNodeId: string }> {
-    await application.get('DbService').withWriteTx((tx) => this.setActiveNodeTx(tx, topicId, nodeId))
+    await this.dbService.withWriteTx((tx) => this.setActiveNodeTx(tx, topicId, nodeId))
     logger.info('Set active node', { topicId, activeNodeId: nodeId })
     return { activeNodeId: nodeId }
   }
@@ -383,7 +383,7 @@ export class TopicService {
    * toggle.
    */
   async listByCursor(query: ListTopicsQuery = {}): Promise<CursorPaginationResponse<Topic>> {
-    const db = application.get('DbService').getDb()
+    const db = this.db
     const limit = Math.min(query.limit ?? DEFAULT_LIMIT, MAX_LIMIT)
     const cursor: Cursor = query.cursor ? decodeCursor(query.cursor) : { section: 'pin', orderKey: '' }
     const search = buildSearchPredicate(query.q)
@@ -464,7 +464,7 @@ export class TopicService {
   }
 
   async search(query: { q: string; limit: number; updatedAtFrom?: number }): Promise<TopicEntitySearchItem[]> {
-    const db = application.get('DbService').getDb()
+    const db = this.db
     const limit = Math.min(query.limit, MAX_LIMIT)
     const filters: SQL[] = [isNull(topicTable.deletedAt)]
     const search = buildSearchPredicate(query.q)
@@ -498,8 +498,7 @@ export class TopicService {
   }
 
   async reorder(id: string, anchor: OrderRequest): Promise<void> {
-    const db = application.get('DbService').getDb()
-    await db.transaction(async (tx) => {
+    await this.dbService.withWriteTx(async (tx) => {
       const [target] = await tx
         .select({ groupId: topicTable.groupId })
         .from(topicTable)
@@ -518,8 +517,7 @@ export class TopicService {
   async reorderBatch(moves: Array<{ id: string; anchor: OrderRequest }>): Promise<void> {
     if (moves.length === 0) return
 
-    const db = application.get('DbService').getDb()
-    await db.transaction(async (tx) => {
+    await this.dbService.withWriteTx(async (tx) => {
       const ids = moves.map((m) => m.id)
       const targets = await tx
         .select({ id: topicTable.id, groupId: topicTable.groupId })
