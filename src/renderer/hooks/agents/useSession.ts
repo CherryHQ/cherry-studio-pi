@@ -140,7 +140,7 @@ export const useSessions = (agentId?: string | null, pageSize = DEFAULT_SESSION_
   )
 
   const { trigger: deleteTrigger, isLoading: isDeleting } = useMutation('DELETE', '/agent-sessions/:sessionId', {
-    refresh: ['/agent-sessions']
+    refresh: ['/agent-sessions', '/pins']
   })
   const { trigger: deleteManyTrigger, isLoading: isDeletingMany } = useMutation('DELETE', '/agent-sessions', {
     refresh: ['/agent-sessions', '/pins']

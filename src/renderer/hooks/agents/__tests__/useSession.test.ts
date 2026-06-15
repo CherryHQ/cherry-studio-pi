@@ -1,4 +1,4 @@
-import { MockUseDataApiUtils, mockUseInfiniteQuery } from '@test-mocks/renderer/useDataApi'
+import { MockUseDataApiUtils, mockUseInfiniteQuery, mockUseMutation } from '@test-mocks/renderer/useDataApi'
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -231,6 +231,21 @@ describe('useSessions', () => {
 
     expect(created).toBeNull()
     expect(mockToast.error).toHaveBeenCalled()
+  })
+
+  it('refreshes session and pin caches after deleting one session', async () => {
+    const deleteTrigger = vi.fn().mockResolvedValueOnce(undefined)
+    mockUseInfiniteQuery.mockReturnValue(buildInfiniteReturn() as never)
+    MockUseDataApiUtils.mockMutationWithTrigger('DELETE', '/agent-sessions/:sessionId', deleteTrigger)
+
+    const { result } = renderHook(() => useSessions('agent-1'))
+    const deleted = await act(async () => result.current.deleteSession('session-a'))
+
+    expect(deleteTrigger).toHaveBeenCalledWith({ params: { sessionId: 'session-a' } })
+    expect(deleted).toBe(true)
+    expect(mockUseMutation).toHaveBeenCalledWith('DELETE', '/agent-sessions/:sessionId', {
+      refresh: ['/agent-sessions', '/pins']
+    })
   })
 
   it('deletes selected sessions through comma-separated query ids', async () => {

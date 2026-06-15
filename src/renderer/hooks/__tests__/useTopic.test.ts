@@ -1,4 +1,4 @@
-import { MockUseDataApiUtils } from '@test-mocks/renderer/useDataApi'
+import { MockUseDataApiUtils, mockUseMutation } from '@test-mocks/renderer/useDataApi'
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -25,6 +25,19 @@ describe('useTopicMutations', () => {
 
     expect(deleteTrigger).toHaveBeenCalledWith({ query: { ids: 'topic-a,topic-b' } })
     expect(deleted).toBe(response)
+  })
+
+  it('refreshes topic and pin caches after deleting one topic', async () => {
+    const deleteTrigger = vi.fn().mockResolvedValueOnce(undefined)
+    MockUseDataApiUtils.mockMutationWithTrigger('DELETE', '/topics/:id', deleteTrigger)
+
+    const { result } = renderHook(() => useTopicMutations())
+    await act(async () => result.current.deleteTopic('topic-a'))
+
+    expect(deleteTrigger).toHaveBeenCalledWith({ params: { id: 'topic-a' } })
+    expect(mockUseMutation).toHaveBeenCalledWith('DELETE', '/topics/:id', {
+      refresh: ['/topics', '/pins']
+    })
   })
 
   it('exposes selected-topic delete loading through isDeleting', () => {
