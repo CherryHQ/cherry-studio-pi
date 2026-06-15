@@ -173,15 +173,19 @@ jobs:
           LC_ALL: C.UTF-8
         run: |
           # Always use gh cli to avoid special character issues
-          RELEASE_NAME=$(gh release view "$TAG_NAME" --repo "${{ github.repository }}" --json name -q '.name')
+          gh release view "$TAG_NAME" --repo "${{ github.repository }}" --json name,body > release_info.json
+          RELEASE_NAME=$(jq -r '.name // ""' release_info.json)
           # Use delimiter to safely handle special characters in release name
           {
             echo 'name<<EOF'
             echo "$RELEASE_NAME"
             echo 'EOF'
           } >> $GITHUB_OUTPUT
-          # Extract releaseNotes from electron-builder.yml (from releaseNotes: | to end of file, remove 4-space indent)
-          sed -n '/releaseNotes: |/,$ { /releaseNotes: |/d; s/^    //; p }' electron-builder.yml > release_body.txt
+          jq -r '.body // ""' release_info.json > release_body.txt
+          if ! grep -q '[^[:space:]]' release_body.txt; then
+            # Fallback for old releases that predate generated GitHub release notes.
+            sed -n '/releaseNotes: |/,$ { /releaseNotes: |/d; s/^    //; p }' electron-builder.yml > release_body.txt
+          fi
 
       - name: Dry run GitCode release sync
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
