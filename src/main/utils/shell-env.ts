@@ -3,6 +3,7 @@ import path from 'node:path'
 
 import { loggerService } from '@logger'
 import { isMac, isWin } from '@main/core/platform'
+import { summarizeTextForLog } from '@main/utils/logging'
 import { execFileSync, spawn } from 'child_process'
 
 const logger = loggerService.withContext('ShellEnv')
@@ -251,7 +252,7 @@ function getLoginShellEnvironment(): Promise<Record<string, string>> {
       }
 
       if (code !== 0) {
-        const errorMessage = `Shell process exited with code ${code}. Shell: ${shellPath}. Args: ${commandArgs.join(' ')}. CWD: ${homeDirectory}. Stderr: ${errorOutput.trim()}`
+        const errorMessage = `Shell process exited with code ${code}. Shell: ${shellPath}. Args: ${commandArgs.join(' ')}. CWD: ${homeDirectory}. Stderr length: ${errorOutput.trim().length}`
         logger.error(errorMessage)
         return rejectOnce(new Error(errorMessage))
       }
@@ -259,7 +260,9 @@ function getLoginShellEnvironment(): Promise<Record<string, string>> {
       if (errorOutput.trim()) {
         // Some shells might output warnings or non-fatal errors to stderr
         // during profile loading. Log it, but proceed if exit code is 0.
-        logger.warn(`Shell process stderr output (even with exit code 0):\n${errorOutput.trim()}`)
+        logger.warn('Shell process stderr output even with exit code 0', {
+          stderr: summarizeTextForLog(errorOutput.trim())
+        })
       }
 
       // Convert each VAR=VALUE line into our env map.
@@ -285,7 +288,9 @@ function getLoginShellEnvironment(): Promise<Record<string, string>> {
         logger.warn(
           'Parsed environment is empty or output was very short. This might indicate an issue with shell execution or environment variable retrieval.'
         )
-        logger.warn(`Raw output from shell:\n${output}`)
+        logger.warn('Raw shell environment output was empty or very short', {
+          output: summarizeTextForLog(output)
+        })
       }
 
       appendCherryBinToPath(env)
