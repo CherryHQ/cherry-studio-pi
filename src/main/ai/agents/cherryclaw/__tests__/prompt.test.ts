@@ -73,7 +73,10 @@ describe('PromptBuilder', () => {
     const result = await builder.buildSystemPrompt('/workspace')
 
     expect(result).toContain('You are CherryClaw')
+    expect(result).toContain('inside Cherry Studio Pi')
     expect(result).toContain('## CherryClaw Tools')
+    expect(result).toContain("Cherry Studio Pi's autonomous features")
+    expect(result).not.toContain('inside CherryStudio')
     expect(result).not.toContain('## Memories')
   })
 
