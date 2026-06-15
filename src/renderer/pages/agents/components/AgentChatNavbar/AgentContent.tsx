@@ -8,19 +8,20 @@ import { AgentSelector } from '@renderer/components/ResourceSelector'
 import { useUpdateAgent } from '@renderer/hooks/agents/useAgent'
 import { useAgentModelFilter } from '@renderer/hooks/agents/useAgentModelFilter'
 import { useActiveSession, useUpdateSession } from '@renderer/hooks/agents/useSession'
-import { useModelById } from '@renderer/hooks/useModel'
+import { useModels } from '@renderer/hooks/useModel'
 import { useNavbarPosition } from '@renderer/hooks/useNavbar'
 import { useProviderDisplayName } from '@renderer/hooks/useProvider'
 import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import type { AgentEntity } from '@shared/data/types/agent'
-import type { Model as SharedModel, UniqueModelId } from '@shared/data/types/model'
+import type { Model as SharedModel } from '@shared/data/types/model'
 import { Menu, PanelLeftClose, PanelRightClose } from 'lucide-react'
 import { ChevronDown } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { AgentLabel } from '../AgentLabel'
+import { resolveAgentSessionModel } from '../agentSessionModel'
 import AgentSidePanelDrawer from '../AgentSidePanelDrawer'
 import OpenExternalAppButton from './OpenExternalAppButton'
 import Tools from './Tools'
@@ -41,7 +42,11 @@ const AgentContent = ({ activeAgent }: AgentContentProps) => {
   const { updateSession } = useUpdateSession(activeAgent.id)
   const modelFilter = useAgentModelFilter(activeAgent.type)
 
-  const { model: currentSharedModel } = useModelById((activeAgent.model ?? '') as UniqueModelId)
+  const { models } = useModels()
+  const currentSharedModel = useMemo(
+    () => resolveAgentSessionModel(activeAgent.model, models),
+    [activeAgent.model, models]
+  )
   const providerName = useProviderDisplayName(currentSharedModel?.providerId)
 
   const handleAgentChange = useCallback(
