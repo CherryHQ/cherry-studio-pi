@@ -3,6 +3,13 @@ import https from 'node:https'
 
 import type { WebDAVClientOptions } from 'webdav'
 
+const WEBDAV_AGENT_OPTIONS = {
+  keepAlive: true,
+  keepAliveMsecs: 10_000,
+  maxSockets: 8,
+  maxFreeSockets: 4
+} as const
+
 export function createWebDavClientOptions(
   options: Pick<WebDAVClientOptions, 'username' | 'password'> = {}
 ): WebDAVClientOptions {
@@ -10,7 +17,7 @@ export function createWebDavClientOptions(
     ...options,
     maxBodyLength: Infinity,
     maxContentLength: Infinity,
-    httpAgent: new http.Agent(),
-    httpsAgent: new https.Agent({ rejectUnauthorized: false })
+    httpAgent: new http.Agent(WEBDAV_AGENT_OPTIONS),
+    httpsAgent: new https.Agent({ ...WEBDAV_AGENT_OPTIONS, rejectUnauthorized: false })
   }
 }
