@@ -26,19 +26,12 @@ import { hydrateTranslateState, type TranslateState } from '@renderer/store/tran
 import { hydrateWebSearchState, type WebSearchState } from '@renderer/store/websearch'
 import type { McpConfig } from '@renderer/types'
 
+import { STORAGE_V2_DEXIE_TABLE_NAMES, type StorageV2DexieTableName } from './StorageV2DexieTableMirrorService'
 import { applyStorageV2LocalStorageSnapshot, type StorageV2LocalStorageSnapshot } from './StorageV2LocalStorageSnapshot'
 import { getStorageV2CoreSnapshot } from './StorageV2Service'
 
 const logger = loggerService.withContext('StorageV2HydrationService')
 const AUTO_HYDRATE_SETTING_KEY = 'storage_v2.runtime.auto_hydrate'
-const STORAGE_V2_DEXIE_TABLE_NAMES = [
-  'knowledge_notes',
-  'quick_phrases',
-  'translate_history',
-  'translate_languages'
-] as const
-
-type StorageV2DexieTableName = (typeof STORAGE_V2_DEXIE_TABLE_NAMES)[number]
 
 type RuntimeHydrationTarget = {
   dispatch: (
