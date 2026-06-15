@@ -152,12 +152,17 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({ open, title, ht
         }
       }
       if (to === 'clipboard') {
-        await captureScrollableIframeAsBlob(previewFrameRef, async (blob) => {
-          if (blob) {
-            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-            window.toast.success(t('message.copy.success'))
-          }
-        })
+        try {
+          await captureScrollableIframeAsBlob(previewFrameRef, async (blob) => {
+            if (blob) {
+              await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+              window.toast.success(t('message.copy.success'))
+            }
+          })
+        } catch (error) {
+          logger.error('Failed to copy HTML artifact image', error as Error)
+          window.toast.error(t('message.copy.failed'))
+        }
       }
 
       setCaptureOpen(false)
