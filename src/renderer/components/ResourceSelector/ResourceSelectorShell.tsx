@@ -21,13 +21,18 @@ import {
   useCallback,
   useEffect,
   useEffectEvent,
+  useId,
   useMemo,
   useRef,
   useState
 } from 'react'
 import { flushSync } from 'react-dom'
 
-import { requestCloseResourceSelectors, RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from './resourceSelectorEvents'
+import {
+  getResourceSelectorForceCloseSource,
+  requestCloseResourceSelectors,
+  RESOURCE_SELECTOR_FORCE_CLOSE_EVENT
+} from './resourceSelectorEvents'
 
 export type ResourceSelectorShellItem = {
   id: string
@@ -212,6 +217,7 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
   // controlled. When `openProp` is set the caller wins; otherwise we track it ourselves.
   const [internalOpen, setInternalOpen] = useState(false)
   const [portalContainer, setPortalContainer] = useState<HTMLSpanElement | null>(null)
+  const selectorId = useId()
   const open = openProp ?? internalOpen
   const mountedRef = useRef(true)
   useEffect(() => {
@@ -227,22 +233,28 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
   }, [openProp, onOpenChangeProp])
 
   useEffect(() => {
-    const handleForceClose = () => forceClose()
+    const handleForceClose = (event: Event) => {
+      if (getResourceSelectorForceCloseSource(event) === selectorId) return
+      forceClose()
+    }
     window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, handleForceClose)
     return () => window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, handleForceClose)
-  }, [forceClose])
+  }, [forceClose, selectorId])
 
   const closeAllSelectors = useCallback(() => {
-    requestCloseResourceSelectors()
+    requestCloseResourceSelectors(selectorId)
     forceClose()
-  }, [forceClose])
+  }, [forceClose, selectorId])
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
+      if (next) {
+        requestCloseResourceSelectors(selectorId)
+      }
       if (openProp === undefined) setInternalOpen(next)
       onOpenChangeProp?.(next)
     },
-    [openProp, onOpenChangeProp]
+    [openProp, onOpenChangeProp, selectorId]
   )
   const closeBeforeAction = useCallback(
     (action: () => void) => {

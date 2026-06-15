@@ -47,7 +47,10 @@ vi.mock('@cherrystudio/ui/lib/utils', () => ({
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' ')
 }))
 
-vi.mock('@cherrystudio/ui', () => {
+vi.mock('@cherrystudio/ui', async () => {
+  const React = await import('react')
+  const PopoverContext = React.createContext<{ open: boolean; setOpen: (open: boolean) => void } | null>(null)
+
   return {
     Avatar: ({ children }: { children: ReactNode }) => <div>{children}</div>,
     AvatarFallback: ({ children }: { children: ReactNode }) => <span>{children}</span>,
@@ -71,7 +74,26 @@ vi.mock('@cherrystudio/ui', () => {
     }: InputHTMLAttributes<HTMLInputElement> & { ref?: RefObject<HTMLInputElement | null> }) => (
       <input ref={ref} {...props} />
     ),
-    Popover: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    Popover: ({
+      children,
+      open,
+      onOpenChange
+    }: {
+      children: ReactNode
+      open?: boolean
+      onOpenChange?: (open: boolean) => void
+    }) => {
+      const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false)
+      const resolvedOpen = open ?? uncontrolledOpen
+      const setOpen = (nextOpen: boolean) => {
+        if (open === undefined) {
+          setUncontrolledOpen(nextOpen)
+        }
+        onOpenChange?.(nextOpen)
+      }
+
+      return <PopoverContext value={{ open: resolvedOpen, setOpen }}>{children}</PopoverContext>
+    },
     PopoverContent: ({
       children,
       ...props
@@ -81,9 +103,23 @@ vi.mock('@cherrystudio/ui', () => {
       void align
       void sideOffset
 
+      const context = React.use(PopoverContext)
+      if (!context?.open) return null
+
       return <div {...contentProps}>{children}</div>
     },
-    PopoverTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
+    PopoverTrigger: ({ children }: { children: React.ReactElement<{ onClick?: React.MouseEventHandler }> }) => {
+      const context = React.use(PopoverContext)
+      if (!context) return children
+
+      // eslint-disable-next-line @eslint-react/no-clone-element -- Test double mirrors PopoverTrigger asChild semantics.
+      return React.cloneElement(children, {
+        onClick: (event: React.MouseEvent) => {
+          children.props.onClick?.(event)
+          context.setOpen(!context.open)
+        }
+      })
+    },
     Switch: ({
       checked,
       onCheckedChange,
@@ -356,5 +392,22 @@ describe('ModelSelector', () => {
     window.dispatchEvent(new Event(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT))
 
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('broadcasts a shared close event before opening without closing itself', () => {
+    mockUseModelSelectorData.mockReturnValue(makeData())
+    const closeSelectors = vi.fn()
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeSelectors)
+
+    try {
+      render(<ModelSelector multiple={false} trigger={<button type="button">open</button>} onSelect={vi.fn()} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'open' }))
+
+      expect(closeSelectors).toHaveBeenCalledTimes(1)
+      expect(screen.getByTestId('model-selector-content')).toBeInTheDocument()
+    } finally {
+      window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeSelectors)
+    }
   })
 })

@@ -13,7 +13,11 @@ import {
 import { resolveIcon } from '@cherrystudio/ui/icons'
 import { cn } from '@cherrystudio/ui/lib/utils'
 import { loggerService } from '@logger'
-import { RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
+import {
+  getResourceSelectorForceCloseSource,
+  requestCloseResourceSelectors,
+  RESOURCE_SELECTOR_FORCE_CLOSE_EVENT
+} from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { DynamicVirtualList, type DynamicVirtualListRef } from '@renderer/components/VirtualList'
 import { isDev } from '@renderer/config/constant'
 import { useCommandHandler } from '@renderer/features/command'
@@ -27,6 +31,7 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState
@@ -290,6 +295,7 @@ export function ModelSelector(props: ModelSelectorProps) {
   const [searchText, setSearchText] = useState('')
   const deferredSearchText = useDeferredValue(searchText)
   const [focusedItemKey, _setFocusedItemKey] = useState('')
+  const selectorId = useId()
   // 用 startTransition 包裹：滚动时虚拟列表内部可能已进入 layout lifecycle（flushSync），
   // 此时 onMouseEnter 同步 setState 会与之冲突，转为 transition 避免竞争。
   const setFocusedItemKey = useCallback((key: string) => {
@@ -328,19 +334,25 @@ export function ModelSelector(props: ModelSelectorProps) {
 
   const setOpen = useCallback(
     (nextOpen: boolean) => {
+      if (nextOpen) {
+        requestCloseResourceSelectors(selectorId)
+      }
       if (openProp === undefined) {
         setInternalOpen(nextOpen)
       }
       onOpenChange?.(nextOpen)
     },
-    [onOpenChange, openProp]
+    [onOpenChange, openProp, selectorId]
   )
 
   useEffect(() => {
-    const handleForceClose = () => setOpen(false)
+    const handleForceClose = (event: Event) => {
+      if (getResourceSelectorForceCloseSource(event) === selectorId) return
+      setOpen(false)
+    }
     window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, handleForceClose)
     return () => window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, handleForceClose)
-  }, [setOpen])
+  }, [selectorId, setOpen])
 
   const handleShortcut = useCallback(() => setOpen(true), [setOpen])
 

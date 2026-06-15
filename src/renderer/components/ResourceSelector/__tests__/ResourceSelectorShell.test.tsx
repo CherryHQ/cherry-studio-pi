@@ -148,6 +148,42 @@ describe('ResourceSelectorShell', () => {
       await waitFor(() => expect(onCreateNew).toHaveBeenCalledTimes(1))
       expect(screen.queryByPlaceholderText('Search')).not.toBeInTheDocument()
     })
+
+    it('closes another open selector before opening the next selector', () => {
+      const firstLabels = { ...LABELS, searchPlaceholder: 'Search first' }
+      const secondLabels = { ...LABELS, searchPlaceholder: 'Search second' }
+
+      render(
+        <>
+          <ResourceSelectorShell
+            trigger={<button type="button">Open first</button>}
+            items={ITEMS}
+            pinnedIds={[]}
+            onTogglePin={vi.fn()}
+            labels={firstLabels}
+            value={null}
+            onChange={vi.fn()}
+          />
+          <ResourceSelectorShell
+            trigger={<button type="button">Open second</button>}
+            items={ITEMS}
+            pinnedIds={[]}
+            onTogglePin={vi.fn()}
+            labels={secondLabels}
+            value={null}
+            onChange={vi.fn()}
+          />
+        </>
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Open first' }))
+      expect(screen.getByPlaceholderText('Search first')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Open second' }))
+
+      expect(screen.queryByPlaceholderText('Search first')).not.toBeInTheDocument()
+      expect(screen.getByPlaceholderText('Search second')).toBeInTheDocument()
+    })
   })
 
   describe('value adapter', () => {
