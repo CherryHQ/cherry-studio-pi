@@ -2,7 +2,7 @@ import { agentChannelService as channelService } from '@data/services/AgentChann
 import { agentService } from '@data/services/AgentService'
 import { agentSessionService } from '@data/services/AgentSessionService'
 import { buildAgentSessionTopicId } from '@main/ai/agentSession/topic'
-import { AgentSessionWorkspaceError } from '@main/ai/runtime/claudeCode/settingsBuilder'
+import { AgentSessionWorkspaceError } from '@main/ai/runtime/agentSessionWorkspace'
 import { EventEmitter } from 'events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 

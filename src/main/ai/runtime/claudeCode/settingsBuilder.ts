@@ -40,8 +40,7 @@ import { application } from '@main/core/application'
 import { isLinux, isWin } from '@main/core/platform'
 import { getProxyEnvironment } from '@main/services/proxy/nodeProxy'
 import { toAsarUnpackedPath } from '@main/utils'
-import { getPathStatus, type PathStatus } from '@main/utils/file/pathStatus'
-import { getAppLanguage, t } from '@main/utils/language'
+import { getAppLanguage } from '@main/utils/language'
 import { autoDiscoverGitBash, getBinaryPath } from '@main/utils/process'
 import { rtkRewrite } from '@main/utils/rtk'
 import getLoginShellEnvironment from '@main/utils/shell-env'
@@ -59,8 +58,11 @@ import type { Provider } from '@shared/data/types/provider'
 import type { CherryToolMeta } from '@shared/data/types/uiParts'
 import { app } from 'electron'
 
+import { AgentSessionWorkspaceError, assertAgentSessionWorkspaceDirectory } from '../agentSessionWorkspace'
 import { toolApprovalRegistry } from './ToolApprovalRegistry'
 import type { ClaudeCodeSettings, ToolApprovalEmitterHolder } from './types'
+
+export { AgentSessionWorkspaceError, isAgentSessionWorkspaceError } from '../agentSessionWorkspace'
 
 const logger = loggerService.withContext('ClaudeCodeSettingsBuilder')
 const require_ = createRequire(import.meta.url)
@@ -276,52 +278,12 @@ export function resolveClaudeExecutablePath(): string {
   )
 }
 
-export class AgentSessionWorkspaceError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'AgentSessionWorkspaceError'
-  }
-}
-
-export function isAgentSessionWorkspaceError(error: unknown): error is AgentSessionWorkspaceError {
-  return error instanceof AgentSessionWorkspaceError
-}
-
 export async function assertClaudeCodeWorkspaceDirectory(sessionId: string, cwd: string): Promise<void> {
-  let status = await getPathStatus(cwd)
-  if (status.ok && status.kind === 'directory') return
-
-  if (!status.ok && status.reason === 'missing') {
-    try {
-      await fs.promises.mkdir(cwd, { recursive: true })
-      status = await getPathStatus(cwd)
-      if (status.ok && status.kind === 'directory') return
-    } catch (error) {
-      logger.warn('Failed to recreate missing Claude Code workspace directory', {
-        sessionId,
-        cwd,
-        error: error instanceof Error ? error.message : String(error)
-      })
-    }
-  }
-
   // The operation fails here, so this is where the workspace-path problem is
   // reported: the directory policy and the user-facing (i18n'd) message both
   // live on this consumer, surfaced to the renderer via the dispatch `blocked`
   // reason / channel adapters; the session id goes to the log for operators.
-  logger.warn(`Agent session ${sessionId} workspace invalid: ${cwd}`)
-  throw new AgentSessionWorkspaceError(workspacePathErrorMessage(cwd, status))
-}
-
-function workspacePathErrorMessage(path: string, status: PathStatus): string {
-  // The directory case returned already, so an `ok` status here means the path
-  // exists but is a file — i.e. "not a directory".
-  if (status.ok) {
-    return t('agent.session.workspace_status.not_directory', { path })
-  }
-  return status.reason === 'missing'
-    ? t('agent.session.workspace_status.missing', { path })
-    : t('agent.session.workspace_status.inaccessible', { path })
+  await assertAgentSessionWorkspaceDirectory(sessionId, cwd, { runtime: 'claude-code' })
 }
 
 async function buildEnvironment(

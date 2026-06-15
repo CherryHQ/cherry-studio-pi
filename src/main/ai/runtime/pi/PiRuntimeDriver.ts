@@ -1,5 +1,3 @@
-import fs from 'node:fs/promises'
-
 import { agentService } from '@data/services/AgentService'
 import { agentSessionService } from '@data/services/AgentSessionService'
 import { loggerService } from '@logger'
@@ -11,6 +9,7 @@ import type { AgentSessionEntity, AgentSessionMessageEntity } from '@shared/data
 import { parseDataUrl } from '@shared/utils'
 import type { UIMessageChunk } from 'ai'
 
+import { assertAgentSessionWorkspaceDirectory, missingAgentSessionWorkspaceError } from '../agentSessionWorkspace'
 import type {
   AgentRuntimeConnectInput,
   AgentRuntimeConnection,
@@ -193,9 +192,9 @@ export class PiRuntimeDriver implements AgentSessionRuntimeDriver {
   async validateSession(session: AgentSessionEntity): Promise<void> {
     const cwd = session.workspace?.path
     if (!cwd) {
-      throw new Error(`Agent session ${session.id} has no workspace configured`)
+      throw missingAgentSessionWorkspaceError(session.id)
     }
-    await fs.mkdir(cwd, { recursive: true })
+    await assertAgentSessionWorkspaceDirectory(session.id, cwd, { runtime: 'pi' })
   }
 
   async listAvailableTools(mcpIds: string[]): Promise<Tool[]> {
