@@ -23,7 +23,7 @@ import { normalizeWebDavConfig, normalizeWebDavHost, normalizeWebDavPath, parseW
 import { Alert, Breadcrumb, Button, Empty, Input, List, Modal, Space, Spin, Tooltip, Typography } from 'antd'
 import dayjs from 'dayjs'
 import type { CSSProperties, FC, ReactNode } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -248,6 +248,8 @@ const DataSyncSettings: FC = () => {
   const statusRefreshSeqRef = useRef(0)
   const statusRefreshLoadingSeqRef = useRef(0)
   const directoryLoadSeqRef = useRef(0)
+  const statusRefreshFeedbackRef = useRef({ t, webdavHost, webdavPath })
+  statusRefreshFeedbackRef.current = { t, webdavHost, webdavPath }
 
   useEffect(() => {
     setWebdavHost(dataSyncWebdavHost)
@@ -326,7 +328,7 @@ const DataSyncSettings: FC = () => {
     }
   }
 
-  const refreshStatus = async (showLoading = false) => {
+  const refreshStatus = useCallback(async (showLoading = false) => {
     const requestSeq = ++statusRefreshSeqRef.current
     const isLatestRequest = () => requestSeq === statusRefreshSeqRef.current
     let loadingSeq: number | null = null
@@ -353,13 +355,29 @@ const DataSyncSettings: FC = () => {
       setSyncing(false)
       setRuntimeSyncing(false)
       setStatus((prev) => (prev ? { ...prev, syncing: false, syncStartedAt: null } : prev))
+      if (showLoading) {
+        const feedback = statusRefreshFeedbackRef.current
+        window.toast.error(`${feedback.t('common.operation_failed')}: ${getErrorMessage(error)}`)
+        void reportErrorToSystemAgent(
+          error,
+          {
+            source: 'settings.data_sync.refresh_status',
+            domain: 'dataSync',
+            details: {
+              webdavHost: feedback.webdavHost,
+              webdavPath: normalizeRemotePathInput(feedback.webdavPath)
+            }
+          },
+          { showToast: false }
+        )
+      }
       return null
     } finally {
       if (loadingSeq !== null && loadingSeq === statusRefreshLoadingSeqRef.current) {
         setStatusRefreshing(false)
       }
     }
-  }
+  }, [])
 
   const isSyncing = (nextStatus?: SyncStatus | null) => {
     return Boolean(nextStatus?.syncing)
@@ -369,7 +387,7 @@ const DataSyncSettings: FC = () => {
 
   useEffect(() => {
     void refreshStatus().catch(() => undefined)
-  }, [])
+  }, [refreshStatus])
 
   useEffect(() => subscribeDataSyncRuntimeState((state) => setRuntimeSyncing(state.syncing)), [])
 
@@ -379,7 +397,7 @@ const DataSyncSettings: FC = () => {
     }, 10_000)
 
     return () => window.clearInterval(timer)
-  }, [])
+  }, [refreshStatus])
 
   useEffect(() => {
     if (!syncInProgress) return
@@ -389,7 +407,7 @@ const DataSyncSettings: FC = () => {
     }, 2_000)
 
     return () => window.clearInterval(timer)
-  }, [syncInProgress])
+  }, [refreshStatus, syncInProgress])
 
   const syncNow = async () => {
     if (!webdavHost) {

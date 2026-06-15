@@ -249,6 +249,15 @@ describe('DataSyncSettings', () => {
     fireEvent.click(screen.getByText('settings.data.data_sync.refresh_status'))
 
     await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+    expect(mocks.toast.error).toHaveBeenCalledWith('common.operation_failed: status unavailable')
+    expect(mocks.reportErrorToSystemAgent).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        domain: 'dataSync',
+        source: 'settings.data_sync.refresh_status'
+      }),
+      { showToast: false }
+    )
   })
 
   it('clears stale runtime syncing state when status refresh fails', async () => {
