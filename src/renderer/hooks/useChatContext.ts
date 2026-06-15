@@ -4,6 +4,7 @@ import { useV2Chat } from '@renderer/hooks/V2ChatContext'
 import { usePartsMap } from '@renderer/pages/home/Messages/Blocks'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import type { Topic } from '@renderer/types'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { getTextFromParts } from '@renderer/utils/messageUtils/partsHelpers'
 import { createContext, use, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -145,9 +146,14 @@ export const useChatContextProvider = (activeTopic: Topic): ChatContextValue => 
             .join('\n\n---\n\n')
           if (contentToSave) {
             const fileName = `chat_export_${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.md`
-            await window.api.file.save(fileName, contentToSave)
-            window.toast.success(t('message.save.success.title'))
-            handleToggleMultiSelectMode(false)
+            try {
+              await window.api.file.save(fileName, contentToSave)
+              window.toast.success(t('message.save.success.title'))
+              handleToggleMultiSelectMode(false)
+            } catch (error) {
+              logger.error('Failed to save selected messages:', error as Error)
+              window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+            }
           }
           break
         }
