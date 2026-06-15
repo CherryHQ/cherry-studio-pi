@@ -1,4 +1,3 @@
-import { IpcChannel } from '@shared/IpcChannel'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -6,17 +5,9 @@ const mocks = vi.hoisted(() => ({
     flushPendingStorageV2ConfigStrict: vi.fn(),
     mirrorAllToStorageV2: vi.fn()
   },
-  ipcMain: {
-    off: vi.fn(),
-    on: vi.fn()
-  },
   mirror: {
     flushStrict: vi.fn()
   }
-}))
-
-vi.mock('electron', () => ({
-  ipcMain: mocks.ipcMain
 }))
 
 vi.mock('../ConfigManager', () => ({
@@ -27,14 +18,12 @@ vi.mock('../storageV2/AgentDbMirrorService', () => ({
   storageV2AgentDbMirrorService: mocks.mirror
 }))
 
-function createWindow(send?: (channel: IpcChannel, requestId: string) => void) {
+function createWindow() {
   return {
     isDestroyed: vi.fn(() => false),
     webContents: {
       id: 10,
-      send: vi.fn((channel: IpcChannel, requestId: string) => {
-        send?.(channel, requestId)
-      })
+      send: vi.fn()
     }
   } as any
 }
@@ -63,36 +52,22 @@ describe('AppRuntimeSaveService', () => {
     )
   })
 
-  it('waits for renderer save data acknowledgement', async () => {
+  it('keeps renderer save data as a fast no-op after v2 persistence migration', async () => {
     const { requestRendererSaveData } = await import('../AppRuntimeSaveService')
-    let listener: any
-    mocks.ipcMain.on.mockImplementation((_channel, cb) => {
-      listener = cb
-    })
-    const window = createWindow((_channel, requestId) => {
-      listener({ sender: { id: 10 } }, { requestId, ok: true })
-    })
+    const window = createWindow()
 
-    await expect(requestRendererSaveData(window)).resolves.toBe(true)
+    await expect(requestRendererSaveData(window, 1)).resolves.toBe(false)
 
-    expect(mocks.ipcMain.on).toHaveBeenCalledWith(IpcChannel.App_SaveDataAck, expect.any(Function))
-    expect(window.webContents.send).toHaveBeenCalledWith(IpcChannel.App_SaveData, expect.stringMatching(/^save-/))
-    expect(mocks.ipcMain.off).toHaveBeenCalledWith(IpcChannel.App_SaveDataAck, expect.any(Function))
+    expect(window.webContents.send).not.toHaveBeenCalled()
   })
 
-  it('continues renderer save when a main flush fails and reports the failure', async () => {
+  it('reports main flush failures without waiting for a renderer ack', async () => {
     const { flushAppRuntimeData } = await import('../AppRuntimeSaveService')
     mocks.configManager.flushPendingStorageV2ConfigStrict.mockRejectedValueOnce(new Error('config locked'))
-    let listener: any
-    mocks.ipcMain.on.mockImplementation((_channel, cb) => {
-      listener = cb
-    })
-    const window = createWindow((_channel, requestId) => {
-      listener({ sender: { id: 10 } }, { requestId, ok: true })
-    })
+    const window = createWindow()
 
     await expect(flushAppRuntimeData({ window })).rejects.toThrow('config locked')
 
-    expect(window.webContents.send).toHaveBeenCalledWith(IpcChannel.App_SaveData, expect.any(String))
+    expect(window.webContents.send).not.toHaveBeenCalled()
   })
 })
