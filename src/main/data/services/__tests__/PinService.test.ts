@@ -2,8 +2,9 @@ import { pinTable } from '@data/db/schemas/pin'
 import { PinService, pinService } from '@data/services/PinService'
 import { DataApiError, ErrorCode } from '@shared/data/api'
 import { setupTestDatabase } from '@test-helpers/db'
+import { MockMainDbServiceExport } from '@test-mocks/main/DbService'
 import { eq } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 const PIN_ID_MISSING = '11111111-1111-4111-8111-111111111111'
 const ENTITY_ID_1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
@@ -15,6 +16,10 @@ const AGENT_ID = 'agent_1700000000000_abc123xyz'
 
 describe('PinService', () => {
   const dbh = setupTestDatabase()
+
+  beforeEach(() => {
+    MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+  })
 
   it('should export a module-level singleton of PinService', () => {
     expect(pinService).toBeInstanceOf(PinService)
@@ -100,6 +105,12 @@ describe('PinService', () => {
 
       expect(result).toMatchObject({ entityType: 'agent', entityId: AGENT_ID })
     })
+
+    it('should route pin creation through the serialized write transaction helper', async () => {
+      await pinService.pin({ entityType: 'topic', entityId: ENTITY_ID_1 })
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('unpin', () => {
@@ -117,6 +128,15 @@ describe('PinService', () => {
       await expect(pinService.unpin(PIN_ID_MISSING)).rejects.toMatchObject({
         code: ErrorCode.NOT_FOUND
       })
+    })
+
+    it('should route unpin through the serialized write transaction helper', async () => {
+      const pin = await pinService.pin({ entityType: 'topic', entityId: ENTITY_ID_1 })
+
+      MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+      await pinService.unpin(pin.id)
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -178,6 +198,16 @@ describe('PinService', () => {
         code: ErrorCode.NOT_FOUND
       })
     })
+
+    it('should route single reorders through the serialized write transaction helper', async () => {
+      const a = await pinService.pin({ entityType: 'topic', entityId: ENTITY_ID_1 })
+      const b = await pinService.pin({ entityType: 'topic', entityId: ENTITY_ID_2 })
+
+      MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+      await pinService.reorder(a.id, { after: b.id })
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('reorderBatch', () => {
@@ -217,6 +247,19 @@ describe('PinService', () => {
           { id: PIN_ID_MISSING, anchor: { position: 'first' } }
         ])
       ).rejects.toMatchObject({ code: ErrorCode.NOT_FOUND })
+    })
+
+    it('should route batch reorders through the serialized write transaction helper', async () => {
+      const a = await pinService.pin({ entityType: 'topic', entityId: ENTITY_ID_1 })
+      const b = await pinService.pin({ entityType: 'topic', entityId: ENTITY_ID_2 })
+
+      MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+      await pinService.reorderBatch([
+        { id: a.id, anchor: { position: 'last' } },
+        { id: b.id, anchor: { position: 'first' } }
+      ])
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
   })
 

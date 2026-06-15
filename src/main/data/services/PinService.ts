@@ -49,8 +49,12 @@ function rowToPin(row: PinRow): Pin {
 }
 
 export class PinService {
+  private get dbService() {
+    return application.get('DbService')
+  }
+
   private get db() {
-    return application.get('DbService').getDb()
+    return this.dbService.getDb()
   }
 
   /**
@@ -94,7 +98,7 @@ export class PinService {
    * the TOCTOU concurrency fallback.
    */
   async pin(dto: CreatePinDto): Promise<Pin> {
-    return this.db.transaction(async (tx) => {
+    return this.dbService.withWriteTx(async (tx) => {
       const [existing] = await tx
         .select()
         .from(pinTable)
@@ -137,7 +141,9 @@ export class PinService {
    * Unpin by pin id. Hard delete.
    */
   async unpin(id: string): Promise<void> {
-    const [row] = await this.db.delete(pinTable).where(eq(pinTable.id, id)).returning({ id: pinTable.id })
+    const [row] = await this.dbService.withWriteTx((tx) =>
+      tx.delete(pinTable).where(eq(pinTable.id, id)).returning({ id: pinTable.id })
+    )
 
     if (!row) {
       throw DataApiErrorFactory.notFound('Pin', id)
@@ -151,7 +157,7 @@ export class PinService {
    * from the target row — callers do not pass scope.
    */
   async reorder(id: string, anchor: OrderRequest): Promise<void> {
-    await this.db.transaction(async (tx) =>
+    await this.dbService.withWriteTx(async (tx) =>
       applyScopedMoves(tx, pinTable, [{ id, anchor }], {
         pkColumn: pinTable.id,
         scopeColumn: pinTable.entityType
@@ -164,7 +170,7 @@ export class PinService {
    * span multiple entityTypes with a VALIDATION_ERROR.
    */
   async reorderBatch(moves: Array<{ id: string; anchor: OrderRequest }>): Promise<void> {
-    await this.db.transaction(async (tx) =>
+    await this.dbService.withWriteTx(async (tx) =>
       applyScopedMoves(tx, pinTable, moves, {
         pkColumn: pinTable.id,
         scopeColumn: pinTable.entityType
