@@ -14,11 +14,11 @@ import { registerAdapterFactory } from '../../ChannelManager'
 import { isSlashCommand, SLASH_COMMANDS } from '../../constants'
 import { FlushController } from '../../FlushController'
 import { splitMessage } from '../../utils'
+import { buildDiscordUserAgent } from './userAgent'
 
 const DISCORD_API_BASE = 'https://discord.com/api/v10'
 const DISCORD_MAX_LENGTH = 2000
 const DISCORD_API_TIMEOUT_MS = 30_000
-const USER_AGENT = 'DiscordBot (https://github.com/CherryHQ/cherry-studio-pi, 1.0.0)'
 
 // Discord Gateway Opcodes
 const OP_DISPATCH = 0
@@ -269,7 +269,7 @@ class DiscordAdapter extends ChannelAdapter {
     const response = await net.fetch(`${DISCORD_API_BASE}/gateway/bot`, {
       headers: {
         Authorization: `Bot ${this.botToken}`,
-        'User-Agent': USER_AGENT
+        'User-Agent': buildDiscordUserAgent()
       },
       signal: AbortSignal.timeout(DISCORD_API_TIMEOUT_MS)
     })
@@ -751,7 +751,7 @@ class DiscordAdapter extends ChannelAdapter {
       headers: {
         Authorization: `Bot ${this.botToken}`,
         'Content-Type': 'application/json',
-        'User-Agent': USER_AGENT
+        'User-Agent': buildDiscordUserAgent()
       },
       ...(options?.body ? { body: JSON.stringify(options.body) } : {}),
       signal: AbortSignal.timeout(DISCORD_API_TIMEOUT_MS)
