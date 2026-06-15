@@ -292,6 +292,26 @@ describe('FileStorage Storage v2 upload flow', () => {
     expect(selectedPath).toBe('/Users/me/project')
   })
 
+  it('returns null when folder selection is canceled', async () => {
+    mocks.showOpenDialog.mockResolvedValueOnce({
+      canceled: true,
+      filePaths: []
+    })
+
+    const { fileStorage } = await import('../FileStorage')
+    const selectedPath = await fileStorage.selectFolder({ sender: {} } as never)
+
+    expect(selectedPath).toBeNull()
+  })
+
+  it('rejects folder selection dialog failures instead of reporting a cancel', async () => {
+    mocks.showOpenDialog.mockRejectedValueOnce(new Error('dialog unavailable'))
+
+    const { fileStorage } = await import('../FileStorage')
+
+    await expect(fileStorage.selectFolder({ sender: {} } as never)).rejects.toThrow('dialog unavailable')
+  })
+
   it('returns false when image save is canceled', async () => {
     mocks.showSaveDialogSync.mockReturnValueOnce(undefined)
     const mockedFs = await import('fs')

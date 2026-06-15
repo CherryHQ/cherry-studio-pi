@@ -1612,7 +1612,7 @@ class FileStorage {
       return null
     } catch (err) {
       logger.error('[IPC - Error] An error occurred selecting the folder:', err as Error)
-      return null
+      throw err
     }
   }
 
