@@ -39,4 +39,17 @@ describe('getProviderHostTopology', () => {
       hasAnthropicEndpoint: true
     })
   })
+
+  it('treats an Anthropic default chat endpoint as an available Anthropic endpoint', () => {
+    const provider = {
+      id: 'anthropic-proxy',
+      defaultChatEndpoint: ENDPOINT_TYPE.ANTHROPIC_MESSAGES,
+      endpointConfigs: {}
+    } as Provider
+
+    expect(getProviderHostTopology(provider)).toMatchObject({
+      primaryEndpoint: ENDPOINT_TYPE.ANTHROPIC_MESSAGES,
+      hasAnthropicEndpoint: true
+    })
+  })
 })

@@ -59,6 +59,8 @@ export function getProviderHostTopology(provider: Provider | undefined): Provide
     primaryBaseUrl,
     anthropicBaseUrl,
     hasAnthropicEndpoint:
-      hasEndpointConfig(provider, ENDPOINT_TYPE.ANTHROPIC_MESSAGES) || Boolean(legacyAnthropicApiHost)
+      provider?.defaultChatEndpoint === ENDPOINT_TYPE.ANTHROPIC_MESSAGES ||
+      hasEndpointConfig(provider, ENDPOINT_TYPE.ANTHROPIC_MESSAGES) ||
+      Boolean(legacyAnthropicApiHost)
   }
 }
