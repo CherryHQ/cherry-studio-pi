@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   },
   browserWindowFromWebContents: vi.fn(),
   showOpenDialog: vi.fn(),
+  showSaveDialogSync: vi.fn(),
   netFetch: vi.fn()
 }))
 
@@ -35,7 +36,7 @@ vi.mock('fs', async () => {
     readdirSync: actual.readdirSync,
     rmSync: actual.rmSync,
     statSync: actual.statSync,
-    writeFileSync: actual.writeFileSync
+    writeFileSync: vi.fn(actual.writeFileSync)
   }
 })
 
@@ -44,7 +45,8 @@ vi.mock('electron', () => ({
     fromWebContents: mocks.browserWindowFromWebContents
   },
   dialog: {
-    showOpenDialog: mocks.showOpenDialog
+    showOpenDialog: mocks.showOpenDialog,
+    showSaveDialogSync: mocks.showSaveDialogSync
   },
   net: {
     fetch: mocks.netFetch
@@ -288,6 +290,31 @@ describe('FileStorage Storage v2 upload flow', () => {
       })
     )
     expect(selectedPath).toBe('/Users/me/project')
+  })
+
+  it('returns false when image save is canceled', async () => {
+    mocks.showSaveDialogSync.mockReturnValueOnce(undefined)
+    const mockedFs = await import('fs')
+
+    const { fileStorage } = await import('../FileStorage')
+    const saved = await fileStorage.saveImage(undefined as never, 'plot', 'data:image/png;base64,aGVsbG8=')
+
+    expect(saved).toBe(false)
+    expect(mockedFs.writeFileSync).not.toHaveBeenCalled()
+  })
+
+  it('rejects image save write failures instead of reporting a cancel', async () => {
+    mocks.showSaveDialogSync.mockReturnValueOnce(path.join(mocks.dirs.root, 'plot.png'))
+    const mockedFs = await import('fs')
+    vi.mocked(mockedFs.writeFileSync).mockImplementationOnce(() => {
+      throw new Error('disk full')
+    })
+
+    const { fileStorage } = await import('../FileStorage')
+
+    await expect(fileStorage.saveImage(undefined as never, 'plot', 'data:image/png;base64,aGVsbG8=')).rejects.toThrow(
+      'disk full'
+    )
   })
 
   it('rejects private remote download URLs before the main process fetches them', async () => {

@@ -1585,6 +1585,7 @@ class FileStorage {
       }
     } catch (error) {
       logger.error('[IPC - Error] An error occurred saving the image:', error as Error)
+      throw error
     }
     return false
   }
