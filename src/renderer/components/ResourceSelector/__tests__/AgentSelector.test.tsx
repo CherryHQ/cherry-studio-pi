@@ -52,6 +52,7 @@ vi.mock('react-i18next', async (importOriginal) => {
 })
 
 import { AgentSelector, type AgentSelectorItem } from '../AgentSelector'
+import { RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '../resourceSelectorEvents'
 
 const ALPHA_AGENT_ID = '44444444-4444-4444-8444-444444444444'
 const BETA_AGENT_ID = '55555555-5555-4555-8555-555555555555'
@@ -230,6 +231,22 @@ describe('AgentSelector', () => {
     await waitFor(() =>
       expect(openTabMock).toHaveBeenCalledWith('/app/library?resourceType=agent&action=create', { forceNew: true })
     )
+  })
+
+  it('broadcasts selector close when unmounted so stale portals cannot linger', () => {
+    const closeResourceSelectors = vi.fn()
+    const { unmount } = render(
+      <AgentSelector trigger={<button type="button">Open</button>} value={null} onChange={vi.fn()} />
+    )
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+
+    try {
+      unmount()
+
+      expect(closeResourceSelectors).toHaveBeenCalledTimes(1)
+    } finally {
+      window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+    }
   })
 
   it('does not show the empty state while the agents query is loading', () => {

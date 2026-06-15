@@ -223,8 +223,9 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
   useEffect(() => {
     return () => {
       mountedRef.current = false
+      requestCloseResourceSelectors(selectorId)
     }
-  }, [])
+  }, [selectorId])
 
   const forceClose = useCallback(() => {
     if (!mountedRef.current) return
@@ -630,7 +631,8 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
         footer={footer}
         popoverContentProps={{
           className: 'min-w-[280px] border-border/60',
-          container: portalContainer
+          container: portalContainer,
+          hideWhenDetached: true
         }}
       />
     </>
