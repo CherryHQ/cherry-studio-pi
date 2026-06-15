@@ -5,14 +5,20 @@ import { userProviderTable } from '@data/db/schemas/userProvider'
 import { generateOrderKeySequence } from '@data/services/utils/orderKey'
 import { createUniqueModelId } from '@shared/data/types/model'
 import { setupTestDatabase } from '@test-helpers/db'
+import { MockMainDbServiceExport } from '@test-mocks/main/DbService'
 import { asc, eq } from 'drizzle-orm'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { fileRefService } from '../FileRefService'
 import { paintingService } from '../PaintingService'
 
 describe('PaintingService', () => {
   const dbh = setupTestDatabase()
+
+  beforeEach(() => {
+    MockMainDbServiceExport.dbService.withWriteTx.mockImplementation((fn) => dbh.db.transaction(fn as never))
+    MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+  })
 
   function p(fields: { providerId: string; prompt: string; modelId?: string }) {
     return {
@@ -45,6 +51,7 @@ describe('PaintingService', () => {
 
     expect(first.orderKey).toBeTruthy()
     expect(first.orderKey > second.orderKey).toBe(true)
+    expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(2)
 
     const rows = await dbh.db.select().from(paintingTable).orderBy(asc(paintingTable.orderKey))
     expect(rows.map((row) => row.id)).toEqual([second.id, first.id])
@@ -105,10 +112,12 @@ describe('PaintingService', () => {
     const modelId = await insertModel('aihubmix', 'gpt-image-1')
     const painting = await paintingService.create(p({ providerId: 'aihubmix', modelId, prompt: 'with model' }))
 
+    MockMainDbServiceExport.dbService.withWriteTx.mockClear()
     const updated = await paintingService.update(painting.id, { providerId: 'zhipu' })
 
     expect(updated.providerId).toBe('zhipu')
     expect(updated.modelId).toBeNull()
+    expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
   })
 
   it("moves a painting to the first position via { position: 'first' }", async () => {
@@ -116,6 +125,7 @@ describe('PaintingService', () => {
     const second = await paintingService.create(p({ providerId: 'aihubmix', prompt: 'second' }))
     const third = await paintingService.create(p({ providerId: 'aihubmix', prompt: 'third' }))
 
+    MockMainDbServiceExport.dbService.withWriteTx.mockClear()
     await paintingService.reorder(first.id, { position: 'first' })
 
     const result = await paintingService.list({
@@ -123,6 +133,7 @@ describe('PaintingService', () => {
       limit: 20
     })
     expect(result.items.map((item) => item.id)).toEqual([first.id, third.id, second.id])
+    expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
   })
 
   it('paginates painting history with cursors', async () => {
@@ -158,6 +169,7 @@ describe('PaintingService', () => {
     const second = await paintingService.create(p({ providerId: 'aihubmix', prompt: 'second' }))
     const third = await paintingService.create(p({ providerId: 'dmxapi', prompt: 'third' }))
 
+    MockMainDbServiceExport.dbService.withWriteTx.mockClear()
     await paintingService.reorderBatch([
       { id: third.id, anchor: { position: 'first' } },
       { id: first.id, anchor: { after: third.id } }
@@ -165,6 +177,7 @@ describe('PaintingService', () => {
 
     const rows = await dbh.db.select().from(paintingTable).orderBy(asc(paintingTable.orderKey))
     expect(rows.map((row) => row.id)).toEqual([third.id, first.id, second.id])
+    expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
   })
 
   describe('delete', () => {
@@ -201,8 +214,10 @@ describe('PaintingService', () => {
         { fileEntryId, sourceType: 'painting', sourceId: painting.id, role: 'input' }
       ])
 
+      MockMainDbServiceExport.dbService.withWriteTx.mockClear()
       await paintingService.delete(painting.id)
 
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
       expect(await paintingExists(painting.id)).toBe(false)
       expect(await fileRefService.findBySource({ sourceType: 'painting', sourceId: painting.id })).toEqual([])
     })
@@ -217,8 +232,10 @@ describe('PaintingService', () => {
         .spyOn(fileRefService, 'cleanupBySourceTx')
         .mockRejectedValue(new Error('synthetic ref-cleanup failure'))
 
+      MockMainDbServiceExport.dbService.withWriteTx.mockClear()
       await expect(paintingService.delete(painting.id)).rejects.toThrow()
 
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
       expect(spy).toHaveBeenCalled()
       // Both writes share one transaction: the painting row must survive and
       // its refs must be untouched when the deref step throws.

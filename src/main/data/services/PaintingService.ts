@@ -114,8 +114,15 @@ async function loadFilesForPaintings(paintingIds: readonly string[]): Promise<Ma
 }
 
 class PaintingService {
+  private get dbService() {
+    return application.get('DbService')
+  }
+
+  private get db() {
+    return this.dbService.getDb()
+  }
+
   async list(query: ListPaintingsQuery): Promise<PaintingListResponse> {
-    const db = application.get('DbService').getDb()
     const conditions: SQL[] = []
     const filterConditions: SQL[] = []
     const limit = Math.min(query.limit ?? PAINTINGS_DEFAULT_LIMIT, PAINTINGS_MAX_LIMIT)
@@ -135,13 +142,13 @@ class PaintingService {
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 
     const [rows, countResult] = await Promise.all([
-      db
+      this.db
         .select()
         .from(paintingTable)
         .where(whereClause)
         .orderBy(asc(paintingTable.orderKey))
         .limit(limit + 1),
-      db
+      this.db
         .select({ count: sql<number>`count(*)` })
         .from(paintingTable)
         .where(filterConditions.length > 0 ? and(...filterConditions) : undefined)
@@ -157,8 +164,7 @@ class PaintingService {
   }
 
   async getById(id: string): Promise<Painting> {
-    const db = application.get('DbService').getDb()
-    const [row] = await db.select().from(paintingTable).where(eq(paintingTable.id, id)).limit(1)
+    const [row] = await this.db.select().from(paintingTable).where(eq(paintingTable.id, id)).limit(1)
 
     if (!row) {
       throw DataApiErrorFactory.notFound('Painting', id)
@@ -169,11 +175,9 @@ class PaintingService {
   }
 
   async create(dto: CreatePaintingDto): Promise<Painting> {
-    const db = application.get('DbService').getDb()
-
     const row = await withSqliteErrors(
       () =>
-        db.transaction(async (tx) => {
+        this.dbService.withWriteTx(async (tx) => {
           const inserted = await insertWithOrderKey(
             tx,
             paintingTable,
@@ -216,35 +220,29 @@ class PaintingService {
   }
 
   async update(id: string, dto: UpdatePaintingDto): Promise<Painting> {
-    const db = application.get('DbService').getDb()
-    const [existing] = await db.select().from(paintingTable).where(eq(paintingTable.id, id)).limit(1)
-    if (!existing) {
-      throw DataApiErrorFactory.notFound('Painting', id)
-    }
-
-    const updates: Partial<InsertPaintingRow> = {}
-    for (const key of UPDATE_PAINTING_FIELD_MAP) {
-      if (dto[key] !== undefined) {
-        ;(updates as Record<string, unknown>)[key] = dto[key]
-      }
-    }
-
-    if (dto.modelId !== undefined) {
-      updates.modelId = normalizeModelId(updates.providerId ?? existing.providerId, dto.modelId)
-    } else if (dto.providerId !== undefined && dto.providerId !== existing.providerId) {
-      updates.modelId = null
-    }
-
     const filesDirty = dto.files !== undefined
-
-    if (Object.keys(updates).length === 0 && !filesDirty) {
-      const filesByPainting = await loadFilesForPaintings([existing.id])
-      return rowToPainting(existing, filesByPainting.get(existing.id) ?? EMPTY_FILES)
-    }
 
     const row = await withSqliteErrors(
       () =>
-        db.transaction(async (tx) => {
+        this.dbService.withWriteTx(async (tx) => {
+          const [existing] = await tx.select().from(paintingTable).where(eq(paintingTable.id, id)).limit(1)
+          if (!existing) {
+            throw DataApiErrorFactory.notFound('Painting', id)
+          }
+
+          const updates: Partial<InsertPaintingRow> = {}
+          for (const key of UPDATE_PAINTING_FIELD_MAP) {
+            if (dto[key] !== undefined) {
+              ;(updates as Record<string, unknown>)[key] = dto[key]
+            }
+          }
+
+          if (dto.modelId !== undefined) {
+            updates.modelId = normalizeModelId(updates.providerId ?? existing.providerId, dto.modelId)
+          } else if (dto.providerId !== undefined && dto.providerId !== existing.providerId) {
+            updates.modelId = null
+          }
+
           let target = existing
           if (Object.keys(updates).length > 0) {
             const [updated] = await tx.update(paintingTable).set(updates).where(eq(paintingTable.id, id)).returning()
@@ -280,12 +278,18 @@ class PaintingService {
   }
 
   async delete(id: string): Promise<void> {
-    const db = application.get('DbService').getDb()
-    await this.getById(id)
     // Delete the painting row and its file refs in one atomic boundary.
     await withSqliteErrors(
       () =>
-        db.transaction(async (tx) => {
+        this.dbService.withWriteTx(async (tx) => {
+          const [target] = await tx
+            .select({ id: paintingTable.id })
+            .from(paintingTable)
+            .where(eq(paintingTable.id, id))
+            .limit(1)
+          if (!target) {
+            throw DataApiErrorFactory.notFound('Painting', id)
+          }
           await tx.delete(paintingTable).where(eq(paintingTable.id, id))
           await fileRefService.cleanupBySourceTx(tx, { sourceType: paintingSourceType, sourceId: id })
         }),
@@ -295,9 +299,7 @@ class PaintingService {
   }
 
   async reorder(id: string, anchor: OrderRequest): Promise<void> {
-    const db = application.get('DbService').getDb()
-
-    await db.transaction(async (tx) => {
+    await this.dbService.withWriteTx(async (tx) => {
       const [target] = await tx.select().from(paintingTable).where(eq(paintingTable.id, id)).limit(1)
       if (!target) {
         throw DataApiErrorFactory.notFound('Painting', id)
@@ -316,9 +318,7 @@ class PaintingService {
   async reorderBatch(moves: Array<{ id: string; anchor: OrderRequest }>): Promise<void> {
     if (moves.length === 0) return
 
-    const db = application.get('DbService').getDb()
-
-    await db.transaction(async (tx) => {
+    await this.dbService.withWriteTx(async (tx) => {
       for (const move of moves) {
         const [target] = await tx.select().from(paintingTable).where(eq(paintingTable.id, move.id)).limit(1)
         if (!target) {
