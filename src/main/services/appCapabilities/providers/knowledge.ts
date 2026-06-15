@@ -5,6 +5,7 @@ import {
   storageV2KnowledgeRepository,
   storageV2ProviderRepository
 } from '@main/services/storageV2/StorageV2Repositories'
+import type { KnowledgeBase as RuntimeKnowledgeBase } from '@shared/data/types/knowledge'
 import type { KnowledgeBase, KnowledgeBaseParams, KnowledgeItem, Provider } from '@types'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -96,6 +97,64 @@ function normalizeKnowledgeModel(value: unknown) {
     throw new Error('Knowledge base model is required')
   }
   return value
+}
+
+function toRuntimeModelId(model: unknown) {
+  if (!model || typeof model !== 'object' || Array.isArray(model)) return ''
+
+  const modelRecord = model as Record<string, unknown>
+  const provider = typeof modelRecord.provider === 'string' ? modelRecord.provider.trim() : ''
+  const modelId = typeof modelRecord.id === 'string' ? modelRecord.id.trim() : ''
+  if (!provider || !modelId) return ''
+  return modelId.includes('::') ? modelId : `${provider}::${modelId}`
+}
+
+function modelFromRuntimeModelId(modelId: string | null | undefined) {
+  const trimmed = typeof modelId === 'string' ? modelId.trim() : ''
+  if (!trimmed) return undefined
+
+  const separatorIndex = trimmed.indexOf('::')
+  const provider = separatorIndex > 0 ? trimmed.slice(0, separatorIndex) : ''
+  const id = separatorIndex > 0 ? trimmed.slice(separatorIndex + 2) : trimmed
+  if (!id) return undefined
+
+  return {
+    id,
+    provider,
+    name: id,
+    group: provider
+  }
+}
+
+function parseRuntimeTimestamp(value: unknown, fallback: number) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value !== 'string' || !value) return fallback
+
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function runtimeKnowledgeBaseToLegacyMetadata(
+  runtimeBase: RuntimeKnowledgeBase,
+  fallback: KnowledgeBase
+): KnowledgeBase {
+  const now = Date.now()
+  return {
+    ...fallback,
+    id: runtimeBase.id,
+    name: runtimeBase.name,
+    model: fallback.model ?? modelFromRuntimeModelId(runtimeBase.embeddingModelId) ?? fallback.model,
+    dimensions: runtimeBase.dimensions ?? fallback.dimensions,
+    chunkSize: runtimeBase.chunkSize ?? fallback.chunkSize,
+    chunkOverlap: runtimeBase.chunkOverlap ?? fallback.chunkOverlap,
+    threshold: runtimeBase.threshold ?? fallback.threshold,
+    documentCount: runtimeBase.documentCount ?? fallback.documentCount,
+    rerankModel: fallback.rerankModel ?? modelFromRuntimeModelId(runtimeBase.rerankModelId),
+    items: fallback.items ?? [],
+    created_at: parseRuntimeTimestamp(runtimeBase.createdAt, fallback.created_at ?? now),
+    updated_at: parseRuntimeTimestamp(runtimeBase.updatedAt, fallback.updated_at ?? now),
+    version: fallback.version ?? 1
+  }
 }
 
 function summarizeKnowledgeBaseForAgent(base: KnowledgeBase, input: any = {}) {
@@ -320,32 +379,40 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
           updated_at: now
         } as KnowledgeBase
 
-        await upsertKnowledgeBaseMetadata(base)
-
         const warnings: string[] = []
         if (input?.initialize !== false) {
           try {
-            const modelRecord = model as Record<string, unknown>
-            const provider = typeof modelRecord.provider === 'string' ? modelRecord.provider : ''
-            const modelId = typeof modelRecord.id === 'string' ? modelRecord.id : ''
+            const embeddingModelId = toRuntimeModelId(model)
             const dimensions = Number(base.dimensions)
-            if (!provider || !modelId || !Number.isFinite(dimensions) || dimensions <= 0) {
+            if (!embeddingModelId || !Number.isFinite(dimensions) || dimensions <= 0) {
               throw new Error('Missing embedding provider, model id, or dimensions')
             }
-            await knowledgeService.createBase({
+            const runtimeBase = await knowledgeService.createBase({
               name: base.name,
               dimensions,
-              embeddingModelId: `${provider}::${modelId}`,
+              embeddingModelId,
               chunkSize: base.chunkSize,
               chunkOverlap: base.chunkOverlap,
               documentCount: base.documentCount,
+              threshold: base.threshold,
+              rerankModelId: toRuntimeModelId(base.rerankModel) || undefined,
+              fileProcessorId: base.preprocessProvider?.provider?.id,
               searchMode: 'vector'
             })
+            const savedBase = runtimeKnowledgeBaseToLegacyMetadata(runtimeBase, base)
+            await upsertKnowledgeBaseMetadata(savedBase)
+            return {
+              ok: true,
+              summary: `Knowledge base saved: ${savedBase.name}`,
+              data: sanitizeForAgent(savedBase),
+              warnings
+            }
           } catch (error) {
             warnings.push(`Vector store was not initialized: ${error instanceof Error ? error.message : String(error)}`)
           }
         }
 
+        await upsertKnowledgeBaseMetadata(base)
         return {
           ok: true,
           summary: `Knowledge base saved: ${base.name}`,

@@ -313,6 +313,91 @@ describe('knowledge app capabilities', () => {
     ])
   })
 
+  it('uses the runtime-created knowledge base id when initializing vector storage', async () => {
+    mocks.knowledgeService.createBase.mockResolvedValueOnce({
+      id: 'runtime-kb-1',
+      name: 'Runtime Knowledge',
+      groupId: null,
+      dimensions: 1024,
+      embeddingModelId: 'shared-provider::embed-model',
+      status: 'completed',
+      error: null,
+      rerankModelId: null,
+      fileProcessorId: null,
+      chunkSize: 500,
+      chunkOverlap: 50,
+      threshold: 0.4,
+      documentCount: 12,
+      searchMode: 'vector',
+      hybridAlpha: null,
+      createdAt: '2026-06-16T00:00:00.000Z',
+      updatedAt: '2026-06-16T00:01:00.000Z'
+    })
+
+    const result = await capability('knowledge.base.create').execute(
+      {
+        id: 'requested-kb-id',
+        name: 'Runtime Knowledge',
+        model: { id: 'embed-model', provider: 'shared-provider', name: 'Embed Model', group: 'shared-provider' },
+        dimensions: 1024,
+        chunkSize: 500,
+        chunkOverlap: 50,
+        documentCount: 12,
+        threshold: 0.4
+      },
+      { source: 'agent' }
+    )
+
+    expect(mocks.knowledgeService.createBase).toHaveBeenCalledWith({
+      name: 'Runtime Knowledge',
+      dimensions: 1024,
+      embeddingModelId: 'shared-provider::embed-model',
+      chunkSize: 500,
+      chunkOverlap: 50,
+      documentCount: 12,
+      threshold: 0.4,
+      rerankModelId: undefined,
+      fileProcessorId: undefined,
+      searchMode: 'vector'
+    })
+    expect(mocks.storageV2KnowledgeRepository.importBases).toHaveBeenCalledTimes(1)
+    expect(mocks.storageV2KnowledgeRepository.importBases).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          id: 'runtime-kb-1',
+          name: 'Runtime Knowledge',
+          dimensions: 1024,
+          chunkSize: 500,
+          chunkOverlap: 50,
+          documentCount: 12,
+          threshold: 0.4
+        })
+      ],
+      { pruneMissing: false }
+    )
+    expect((result.data as any).id).toBe('runtime-kb-1')
+    expect(result.warnings).toEqual([])
+  })
+
+  it('keeps metadata-only creation available when vector initialization is disabled', async () => {
+    const result = await capability('knowledge.base.create').execute(
+      {
+        id: 'metadata-kb',
+        name: 'Metadata Knowledge',
+        model: { id: 'embed-model', provider: 'shared-provider', name: 'Embed Model', group: 'shared-provider' },
+        initialize: false
+      },
+      { source: 'agent' }
+    )
+
+    expect(mocks.knowledgeService.createBase).not.toHaveBeenCalled()
+    expect(mocks.storageV2KnowledgeRepository.importBases).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: 'metadata-kb', name: 'Metadata Knowledge' })],
+      { pruneMissing: false }
+    )
+    expect((result.data as any).id).toBe('metadata-kb')
+  })
+
   it('normalizes knowledge add and reset base ids before calling services', async () => {
     const base = {
       id: 'kb-1',
