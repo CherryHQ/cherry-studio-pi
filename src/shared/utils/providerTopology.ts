@@ -30,6 +30,10 @@ function hasEndpointConfig(provider: Provider | undefined, endpoint: EndpointTyp
   return Object.prototype.hasOwnProperty.call(provider?.endpointConfigs ?? {}, endpoint)
 }
 
+function isNativeAnthropicProvider(provider: Provider | undefined) {
+  return provider?.id === 'anthropic' || provider?.presetProviderId === 'anthropic'
+}
+
 function resolvePrimaryEndpoint(provider: Provider | undefined): EndpointType {
   if (provider?.defaultChatEndpoint) {
     return provider.defaultChatEndpoint
@@ -59,6 +63,7 @@ export function getProviderHostTopology(provider: Provider | undefined): Provide
     primaryBaseUrl,
     anthropicBaseUrl,
     hasAnthropicEndpoint:
+      isNativeAnthropicProvider(provider) ||
       provider?.defaultChatEndpoint === ENDPOINT_TYPE.ANTHROPIC_MESSAGES ||
       hasEndpointConfig(provider, ENDPOINT_TYPE.ANTHROPIC_MESSAGES) ||
       Boolean(legacyAnthropicApiHost)

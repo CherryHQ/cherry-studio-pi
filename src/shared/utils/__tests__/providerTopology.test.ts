@@ -52,4 +52,21 @@ describe('getProviderHostTopology', () => {
       hasAnthropicEndpoint: true
     })
   })
+
+  it('treats native Anthropic providers as Anthropic-capable even before endpoint configs are hydrated', () => {
+    expect(
+      getProviderHostTopology({
+        id: 'anthropic',
+        endpointConfigs: {}
+      } as Provider)
+    ).toMatchObject({ hasAnthropicEndpoint: true })
+
+    expect(
+      getProviderHostTopology({
+        id: 'workspace-anthropic',
+        presetProviderId: 'anthropic',
+        endpointConfigs: {}
+      } as Provider)
+    ).toMatchObject({ hasAnthropicEndpoint: true })
+  })
 })
