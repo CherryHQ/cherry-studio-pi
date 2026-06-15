@@ -20,6 +20,10 @@ describe('pathToFileUrl', () => {
   it('passes existing file URLs through unchanged', () => {
     expect(pathToFileUrl('file:///Users/me/My%20File.pdf')).toBe('file:///Users/me/My%20File.pdf')
   })
+
+  it('treats bare filenames as local paths instead of file URL hosts', () => {
+    expect(pathToFileUrl('My File #1?.png')).toBe('file:///My%20File%20%231%3F.png')
+  })
 })
 
 describe('fileUrlToPath', () => {

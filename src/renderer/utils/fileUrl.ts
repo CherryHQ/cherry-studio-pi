@@ -3,7 +3,14 @@ import { toFileUrl } from '@shared/file/urlUtil'
 
 export function pathToFileUrl(value: string): string {
   if (value.startsWith('file://')) return value
-  return toFileUrl(value as FilePath)
+
+  const normalizedPath = value.replace(/\\/g, '/')
+  const absolutePath =
+    normalizedPath.startsWith('/') || normalizedPath.startsWith('//') || /^[A-Za-z]:\//.test(normalizedPath)
+      ? value
+      : `/${value}`
+
+  return toFileUrl(absolutePath as FilePath)
 }
 
 export function fileUrlToPath(value: string | URL): string {
