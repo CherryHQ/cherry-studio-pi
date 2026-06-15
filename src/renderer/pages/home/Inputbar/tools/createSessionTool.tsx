@@ -8,6 +8,7 @@ import { MessageSquareDiff } from 'lucide-react'
 import { useCallback } from 'react'
 
 const logger = loggerService.withContext('CreateSessionTool')
+const SYSTEM_WORKSPACE_SOURCE = { type: 'system' as const }
 
 const createSessionTool = defineTool({
   key: 'create_session',
@@ -20,9 +21,7 @@ const createSessionTool = defineTool({
     const sessionAgentId = session?.agentId
 
     const agentId = sessionAgentId || assistant.id
-    // TODO(agent-workspace-picker): wire the workspace picker before re-enabling this create entry.
-    const workspaceSource = null
-    const { createDefaultSession, creatingSession } = useCreateDefaultSession(agentId, workspaceSource)
+    const { createDefaultSession, creatingSession } = useCreateDefaultSession(agentId, SYSTEM_WORKSPACE_SOURCE)
 
     const createSessionDisabled = creatingSession
 

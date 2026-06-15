@@ -37,6 +37,7 @@ import { getFormForType } from './ChannelForms'
 import type { AvailableChannel, ChannelData } from './channelTypes'
 
 const logger = loggerService.withContext('ChannelDetail')
+const SYSTEM_CHANNEL_WORKSPACE_SOURCE = { type: 'system' as const } satisfies CreateAgentChannelDto['workspace']
 
 // --------------- Types ---------------
 
@@ -416,8 +417,7 @@ const ChannelDetail: FC<ChannelDetailProps> = ({ channelDef }) => {
 
   // Log modal
   const [logChannel, setLogChannel] = useState<{ id: string; name: string } | null>(null)
-  // TODO(agent-workspace-picker): wire the workspace picker before re-enabling channel creation.
-  const [workspaceSource] = useState<CreateAgentChannelDto['workspace'] | null>(null)
+  const workspaceSource = SYSTEM_CHANNEL_WORKSPACE_SOURCE
 
   // Fetch initial statuses + subscribe to real-time changes
   useEffect(() => {
@@ -446,7 +446,6 @@ const ChannelDetail: FC<ChannelDetailProps> = ({ channelDef }) => {
   }, [mutate])
 
   const handleAdd = useCallback(async () => {
-    if (!workspaceSource) return
     const existingCount = channels?.length ?? 0
     const newChannel = await createChannel({
       type: channelDef.type,
@@ -516,7 +515,7 @@ const ChannelDetail: FC<ChannelDetailProps> = ({ channelDef }) => {
               {channelDef.available ? t(channelDef.description) : t('agent.cherryClaw.channels.comingSoon')}
             </p>
           </div>
-          <Button size="sm" disabled={!channelDef.available || !workspaceSource} variant="outline" onClick={handleAdd}>
+          <Button size="sm" disabled={!channelDef.available} variant="outline" onClick={handleAdd}>
             <Plus className="size-4" />
             {t('agent.cherryClaw.channels.add')}
           </Button>

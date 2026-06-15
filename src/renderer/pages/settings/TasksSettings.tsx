@@ -53,6 +53,7 @@ import { useTranslation } from 'react-i18next'
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingsContentColumn, SettingTitle } from '.'
 
 const logger = loggerService.withContext('TasksSettings')
+const SYSTEM_TASK_WORKSPACE_SOURCE = { type: 'system' as const } satisfies CreateTaskRequest['workspace']
 
 // --------------- Types ---------------
 
@@ -701,14 +702,13 @@ const CreateForm: FC<{
   const [scheduleValue, setScheduleValue] = useState('')
   const [timeoutMinutes, setTimeoutMinutes] = useState('')
   const [channelIds, setChannelIds] = useState<string[]>([])
-  // TODO(agent-workspace-picker): wire the workspace picker before re-enabling task creation.
-  const [workspaceSource] = useState<CreateTaskRequest['workspace'] | null>(null)
+  const workspaceSource = SYSTEM_TASK_WORKSPACE_SOURCE
   const [saving, setSaving] = useState(false)
 
   const isValid = agentId && name.trim() && prompt.trim() && scheduleValue.trim() && workspaceSource
 
   const handleCreate = useCallback(async () => {
-    if (!agentId || !name.trim() || !prompt.trim() || !scheduleValue.trim() || !workspaceSource) return
+    if (!agentId || !name.trim() || !prompt.trim() || !scheduleValue.trim()) return
     const trigger = formStateToTrigger(scheduleType, scheduleValue.trim())
     if (!trigger) return
     setSaving(true)
