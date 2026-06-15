@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { languageState, translate } = vi.hoisted(() => {
+const { cacheState, languageState, setPinnedTabsRaw, translate } = vi.hoisted(() => {
   const translations: Record<string, Record<string, string>> = {
     'en-US': {
       'title.home': 'Home',
@@ -15,9 +15,17 @@ const { languageState, translate } = vi.hoisted(() => {
       'title.paintings': '绘画'
     }
   }
+  const cacheState = {
+    pinnedTabs: [] as unknown[]
+  }
+  const setPinnedTabsRaw = vi.fn((next: unknown[] | ((prev: unknown[]) => unknown[])) => {
+    cacheState.pinnedTabs = typeof next === 'function' ? next(cacheState.pinnedTabs) : next
+  })
 
   return {
+    cacheState,
     languageState: { language: 'en-US' },
+    setPinnedTabsRaw,
     translate: (key: string) => translations[languageState.language]?.[key] ?? key
   }
 })
@@ -38,21 +46,19 @@ vi.mock('react-i18next', () => ({
 }))
 
 vi.mock('@renderer/data/hooks/useCache', () => {
-  // Return stable references across renders. With a fresh [] every render the
+  // Return stable references across renders. With a fresh array every render the
   // `tabs` useMemo would recompute unconditionally, masking whether
   // `i18n.language` is actually wired into its dependency array — so the
   // language-flip assertion below would pass even if the dep were dropped.
-  const pinnedTabs: unknown[] = []
-  const setPinnedTabs = vi.fn()
   return {
-    usePersistCache: () => [pinnedTabs, setPinnedTabs]
+    usePersistCache: () => [cacheState.pinnedTabs, setPinnedTabsRaw]
   }
 })
 
 import { TabsProvider, useTabsContext } from '../TabsContext'
 
 function TabsProbe() {
-  const { activeTabId, closeTab, openTab, setTabs, tabs } = useTabsContext()
+  const { activeTabId, closeTab, openTab, pinTab, setTabs, tabs } = useTabsContext()
   const homeTab = tabs.find((tab) => tab.id === 'home')
   const paintingsTab = tabs.find((tab) => tab.id === 'paintings-tab')
   const customTab = tabs.find((tab) => tab.id === 'mini-app-tab')
@@ -119,6 +125,9 @@ function TabsProbe() {
         }>
         Reset to home only
       </button>
+      <button type="button" onClick={() => pinTab('home')}>
+        Pin home tab
+      </button>
     </>
   )
 }
@@ -126,6 +135,8 @@ function TabsProbe() {
 describe('TabsContext language refresh', () => {
   beforeEach(() => {
     languageState.language = 'en-US'
+    cacheState.pinnedTabs = []
+    setPinnedTabsRaw.mockClear()
   })
 
   afterEach(() => {
@@ -205,5 +216,45 @@ describe('TabsContext language refresh', () => {
 
     expect(screen.getByTestId('tab-count')).toHaveTextContent('1')
     expect(screen.getByTestId('active-tab-id')).toHaveTextContent('home')
+  })
+
+  it('sanitizes legacy persisted pinned home tabs', async () => {
+    cacheState.pinnedTabs = [
+      {
+        id: 'home',
+        type: 'route',
+        url: '/home',
+        title: 'Pinned Home',
+        lastAccessTime: 1,
+        isDormant: false,
+        isPinned: true
+      }
+    ]
+
+    render(
+      <TabsProvider>
+        <TabsProbe />
+      </TabsProvider>
+    )
+
+    expect(screen.getByTestId('tab-count')).toHaveTextContent('1')
+    expect(screen.getByTestId('home-tab-title')).toHaveTextContent('Home')
+
+    await waitFor(() => {
+      expect(setPinnedTabsRaw).toHaveBeenCalledWith([])
+    })
+  })
+
+  it('does not allow the implicit home tab to be pinned', () => {
+    render(
+      <TabsProvider>
+        <TabsProbe />
+      </TabsProvider>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pin home tab' }))
+
+    expect(screen.getByTestId('tab-count')).toHaveTextContent('1')
+    expect(setPinnedTabsRaw).not.toHaveBeenCalled()
   })
 })

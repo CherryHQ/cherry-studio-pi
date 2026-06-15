@@ -31,6 +31,10 @@ function withLocalizedRouteTitle(tab: Tab): Tab {
   return { ...tab, title: getDefaultRouteTitle(tab.url) }
 }
 
+function sanitizeUserTabs(tabs: Tab[] | undefined): Tab[] {
+  return (tabs ?? []).filter((tab) => tab.id !== DEFAULT_TAB.id)
+}
+
 /**
  * Options for opening a tab
  */
@@ -88,25 +92,28 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   // Pinned tabs - persistent storage
   const [pinnedTabs, setPinnedTabsRaw] = usePersistCache('ui.tab.pinned_tabs')
 
+  // Normal tabs - in-memory storage (cleared on restart), excludes home tab
+  const [normalTabs, setNormalTabs] = useState<Tab[]>([])
+
+  const pinnedUserTabs = useMemo(() => sanitizeUserTabs(pinnedTabs), [pinnedTabs])
+  const normalUserTabs = useMemo(() => sanitizeUserTabs(normalTabs), [normalTabs])
+
   // Use ref to keep a reference to the latest pinnedTabs, avoiding closure issues
-  const pinnedTabsRef = useRef(pinnedTabs)
-  pinnedTabsRef.current = pinnedTabs
+  const pinnedTabsRef = useRef(pinnedUserTabs)
+  pinnedTabsRef.current = pinnedUserTabs
 
   // Wrap setter to support functional updates
   const setPinnedTabs = useCallback(
     (updater: Tab[] | ((prev: Tab[]) => Tab[])) => {
       if (typeof updater === 'function') {
-        const newValue = updater(pinnedTabsRef.current || [])
-        setPinnedTabsRaw(newValue)
+        const newValue = updater(pinnedTabsRef.current)
+        setPinnedTabsRaw(sanitizeUserTabs(newValue))
       } else {
-        setPinnedTabsRaw(updater)
+        setPinnedTabsRaw(sanitizeUserTabs(updater))
       }
     },
     [setPinnedTabsRaw]
   )
-
-  // Normal tabs - in-memory storage (cleared on restart), excludes home tab
-  const [normalTabs, setNormalTabs] = useState<Tab[]>([])
 
   // Active tab ID - in-memory storage
   const [activeTabId, setActiveTabIdState] = useState<string>(DEFAULT_TAB.id)
@@ -137,10 +144,16 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   // Merge tabs: home + pinned + normal (route titles follow current i18n language)
   const tabs = useMemo(() => {
     const home = withLocalizedRouteTitle({ ...DEFAULT_TAB })
-    return [home, ...(pinnedTabs || []).map(withLocalizedRouteTitle), ...normalTabs.map(withLocalizedRouteTitle)]
+    return [home, ...pinnedUserTabs.map(withLocalizedRouteTitle), ...normalUserTabs.map(withLocalizedRouteTitle)]
     // getDefaultRouteTitle reads the shared i18n instance; language refreshes those derived titles.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pinnedTabs, normalTabs, i18n.language])
+  }, [pinnedUserTabs, normalUserTabs, i18n.language])
+
+  useEffect(() => {
+    if ((pinnedTabs ?? []).some((tab) => tab.id === DEFAULT_TAB.id)) {
+      setPinnedTabsRaw(pinnedUserTabs)
+    }
+  }, [pinnedTabs, pinnedUserTabs, setPinnedTabsRaw])
 
   /**
    * Hibernate tab (manual)
@@ -340,7 +353,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   const pinTab = useCallback(
     (id: string) => {
       const tab = tabs.find((t) => t.id === id)
-      if (!tab || tab.isPinned) return
+      if (!tab || tab.id === DEFAULT_TAB.id || tab.isPinned) return
 
       // Remove from normalTabs
       setNormalTabs((prev) => prev.filter((t) => t.id !== id))
