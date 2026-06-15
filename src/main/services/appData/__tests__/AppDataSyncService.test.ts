@@ -1227,6 +1227,65 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('uses TEMP as the restore temp root when TMPDIR is unavailable', async () => {
+    const previousTmpdir = process.env.TMPDIR
+    const previousTemp = process.env.TEMP
+    const previousTmp = process.env.TMP
+    const tempRoot = path.join('/tmp', `cherry-studio-pi-restore-temp-${Date.now()}`)
+    const snapshot = {
+      id: 'remote-temp',
+      fileName: 'remote-temp.zip',
+      path: 'backups/remote-temp.zip',
+      byteSize: 6,
+      createdAt: new Date(1760000000000).toISOString(),
+      uploadedAt: 1760000000000,
+      deviceId: 'remote-device',
+      format: 'cherry-studio-direct-backup-zip'
+    }
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 2,
+        updatedAt: 1760000000000,
+        records: {},
+        snapshots: {
+          [snapshot.id]: snapshot
+        }
+      })
+    )
+    mocks.remoteFiles.set('/remote-root/sync/v1/backups/remote-temp.zip', Buffer.from('latest'))
+
+    try {
+      delete process.env.TMPDIR
+      process.env.TEMP = tempRoot
+      delete process.env.TMP
+
+      await new AppDataSyncService().restoreLatestSnapshot(config)
+
+      expect(path.dirname(mocks.backupManager.restore.mock.calls[0]?.[1] as string)).toBe(
+        path.join(tempRoot, 'cherry-studio-pi-data-sync')
+      )
+    } finally {
+      if (previousTmpdir === undefined) {
+        delete process.env.TMPDIR
+      } else {
+        process.env.TMPDIR = previousTmpdir
+      }
+      if (previousTemp === undefined) {
+        delete process.env.TEMP
+      } else {
+        process.env.TEMP = previousTemp
+      }
+      if (previousTmp === undefined) {
+        delete process.env.TMP
+      } else {
+        process.env.TMP = previousTmp
+      }
+      await fsp.rm(tempRoot, { recursive: true, force: true })
+    }
+  })
+
   it('rejects oversized remote safety snapshots before downloading them', async () => {
     const oversizedSnapshot = {
       id: 'remote-big',

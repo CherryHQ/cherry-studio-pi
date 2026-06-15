@@ -690,12 +690,16 @@ function isJoinSafetyTempBackupFile(fileName: string) {
   return DATA_SYNC_JOIN_SAFETY_FILE_PATTERN.test(fileName)
 }
 
+function getSystemTempDir() {
+  return process.env.TMPDIR || process.env.TEMP || process.env.TMP || '/tmp'
+}
+
 function getDataSyncTempBackupDir() {
-  return path.join(process.env.TMPDIR || process.env.TEMP || process.env.TMP || '/tmp', 'cherry-studio-pi', 'backup')
+  return path.join(getSystemTempDir(), 'cherry-studio-pi', 'backup')
 }
 
 function getLegacyDataSyncTempBackupDir() {
-  return path.join(process.env.TMPDIR || process.env.TEMP || process.env.TMP || '/tmp', 'cherry-studio', 'backup')
+  return path.join(getSystemTempDir(), 'cherry-studio', 'backup')
 }
 
 function normalizeRemoteRelativePath(value: string, label = 'Remote data sync path') {
@@ -3936,7 +3940,7 @@ export class AppDataSyncService {
       throw new Error('远端安全快照校验失败。为避免恢复损坏数据，本次恢复已停止。')
     }
     const localBackupPath = path.join(
-      process.env.TMPDIR || '/tmp',
+      getSystemTempDir(),
       'cherry-studio-pi-data-sync',
       safeSnapshotRestoreFileName(snapshot)
     )
