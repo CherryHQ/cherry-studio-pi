@@ -7,6 +7,7 @@
  * deletable.
  */
 
+import { application } from '@application'
 import { pinTable } from '@data/db/schemas/pin'
 import { userModelTable } from '@data/db/schemas/userModel'
 import { userProviderTable } from '@data/db/schemas/userProvider'
@@ -18,10 +19,14 @@ import { createUniqueModelId } from '@shared/data/types/model'
 import type { Pin } from '@shared/data/types/pin'
 import { setupTestDatabase } from '@test-helpers/db'
 import { eq } from 'drizzle-orm'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
 
 describe('ProviderService.delete — preset protection boundary', () => {
   const dbh = setupTestDatabase()
+
+  beforeEach(() => {
+    ;(application.get('DbService').withWriteTx as Mock).mockClear()
+  })
 
   afterEach(() => {
     vi.restoreAllMocks()
@@ -101,6 +106,7 @@ describe('ProviderService.delete — preset protection boundary', () => {
 
     const rows = await dbh.db.select().from(userProviderTable).where(eq(userProviderTable.providerId, 'my-local-llm'))
     expect(rows).toHaveLength(0)
+    expect(application.get('DbService').withWriteTx).toHaveBeenCalledTimes(1)
   })
 
   it('should bulk purge pins for models owned by the deleted provider', async () => {

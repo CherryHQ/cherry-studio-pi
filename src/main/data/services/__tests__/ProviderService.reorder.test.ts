@@ -1,3 +1,4 @@
+import { application } from '@application'
 import { userProviderTable } from '@data/db/schemas/userProvider'
 import { providerService } from '@data/services/ProviderService'
 import { generateOrderKeySequence } from '@data/services/utils/orderKey'
@@ -5,10 +6,14 @@ import { ErrorCode } from '@shared/data/api'
 import { CHERRYAI_PROVIDER_ID } from '@shared/data/presets/cherryai'
 import { setupTestDatabase } from '@test-helpers/db'
 import { asc, eq } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, type Mock } from 'vitest'
 
 describe('ProviderService reorder', () => {
   const dbh = setupTestDatabase()
+
+  beforeEach(() => {
+    ;(application.get('DbService').withWriteTx as Mock).mockClear()
+  })
 
   async function seedProviders() {
     const [openaiKey, anthropicKey, geminiKey] = generateOrderKeySequence(3)
@@ -36,6 +41,7 @@ describe('ProviderService reorder', () => {
     expect(created.isEnabled).toBe(false)
     expect(rows[0]?.isEnabled).toBe(false)
     expect(await readOrder()).toEqual(['openai', 'anthropic', 'gemini', 'grok'])
+    expect(application.get('DbService').withWriteTx).toHaveBeenCalledTimes(1)
   })
 
   it('batchUpsert appends only missing providers in input order', async () => {
@@ -48,6 +54,7 @@ describe('ProviderService reorder', () => {
     ])
 
     expect(await readOrder()).toEqual(['openai', 'anthropic', 'gemini', 'grok', 'openrouter'])
+    expect(application.get('DbService').withWriteTx).toHaveBeenCalledTimes(1)
   })
 
   it('moves a provider to the first position', async () => {
@@ -56,6 +63,7 @@ describe('ProviderService reorder', () => {
     await providerService.move('gemini', { position: 'first' })
 
     expect(await readOrder()).toEqual(['gemini', 'openai', 'anthropic'])
+    expect(application.get('DbService').withWriteTx).toHaveBeenCalledTimes(1)
   })
 
   it('moves a provider after an anchor', async () => {
@@ -95,6 +103,7 @@ describe('ProviderService reorder', () => {
     ])
 
     expect(await readOrder()).toEqual(['gemini', 'openai', 'anthropic'])
+    expect(application.get('DbService').withWriteTx).toHaveBeenCalledTimes(1)
   })
 
   it('throws when target provider does not exist', async () => {

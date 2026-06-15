@@ -133,6 +133,14 @@ function rowToRuntimeProvider(row: UserProviderRow): Provider {
 class ProviderService {
   private apiKeyMutationQueues = new Map<string, Promise<void>>()
 
+  private get dbService() {
+    return application.get('DbService')
+  }
+
+  private get db() {
+    return this.dbService.getDb()
+  }
+
   private async runApiKeyMutation<T>(providerId: string, operation: () => Promise<T>): Promise<T> {
     const previous = this.apiKeyMutationQueues.get(providerId) ?? Promise.resolve()
     let release!: () => void
@@ -173,8 +181,6 @@ class ProviderService {
    * List providers with optional filters
    */
   async list(query: ListProvidersQuery): Promise<Provider[]> {
-    const db = application.get('DbService').getDb()
-
     const conditions: SQLWrapper[] = []
 
     if (query.enabled !== undefined) {
@@ -189,12 +195,12 @@ class ProviderService {
 
     const rows =
       conditions.length > 0
-        ? await db
+        ? await this.db
             .select()
             .from(userProviderTable)
             .where(and(...conditions))
             .orderBy(asc(userProviderTable.orderKey))
-        : await db.select().from(userProviderTable).orderBy(asc(userProviderTable.orderKey))
+        : await this.db.select().from(userProviderTable).orderBy(asc(userProviderTable.orderKey))
 
     return rows.map(rowToRuntimeProvider)
   }
@@ -203,8 +209,11 @@ class ProviderService {
    * Get a provider by its provider ID
    */
   async getByProviderId(providerId: string): Promise<Provider> {
-    const db = application.get('DbService').getDb()
-    const [row] = await db.select().from(userProviderTable).where(eq(userProviderTable.providerId, providerId)).limit(1)
+    const [row] = await this.db
+      .select()
+      .from(userProviderTable)
+      .where(eq(userProviderTable.providerId, providerId))
+      .limit(1)
 
     if (!row) {
       throw DataApiErrorFactory.notFound('Provider', providerId)
@@ -218,8 +227,6 @@ class ProviderService {
    */
   async create(dto: CreateProviderDto): Promise<Provider> {
     assertManagedCherryAiProviderMutationAllowed(dto.providerId, `create provider ${dto.providerId}`)
-
-    const db = application.get('DbService').getDb()
 
     const values: NewUserProviderInput = {
       providerId: dto.providerId,
@@ -236,7 +243,7 @@ class ProviderService {
 
     const row = await withSqliteErrors(
       async () =>
-        await db.transaction(async (tx) => {
+        await this.dbService.withWriteTx(async (tx) => {
           return (await insertWithOrderKey(tx, userProviderTable, values, {
             pkColumn: userProviderTable.providerId
           })) as UserProviderRow
@@ -262,7 +269,7 @@ class ProviderService {
     // read the same old providerSettings and have the later write clobber the
     // other's keys (lost update); withWriteTx serializes them so each merges on
     // the latest row value.
-    const row = await application.get('DbService').withWriteTx(async (tx) => {
+    const row = await this.dbService.withWriteTx(async (tx) => {
       // Read the raw row's providerSettings, not the merged entity. PATCH
       // semantics require merging with the stored partial, not with runtime
       // defaults — otherwise DEFAULT_PROVIDER_SETTINGS would be persisted
@@ -317,8 +324,7 @@ class ProviderService {
   async batchUpsert(providers: NewUserProviderInput[]): Promise<void> {
     if (providers.length === 0) return
 
-    const db = application.get('DbService').getDb()
-    const insertedCount = await db.transaction((tx) => this.batchUpsertTx(tx, providers))
+    const insertedCount = await this.dbService.withWriteTx((tx) => this.batchUpsertTx(tx, providers))
 
     logger.info('Batch upserted providers', { insertedCount })
   }
@@ -341,8 +347,11 @@ class ProviderService {
    * Returns empty string for providers that don't have keys.
    */
   async getRotatedApiKey(providerId: string): Promise<string> {
-    const db = application.get('DbService').getDb()
-    const [row] = await db.select().from(userProviderTable).where(eq(userProviderTable.providerId, providerId)).limit(1)
+    const [row] = await this.db
+      .select()
+      .from(userProviderTable)
+      .where(eq(userProviderTable.providerId, providerId))
+      .limit(1)
 
     if (!row) {
       throw DataApiErrorFactory.notFound('Provider', providerId)
@@ -384,8 +393,11 @@ class ProviderService {
    * UI that needs to preserve disabled entries).
    */
   async getApiKeys(providerId: string, options: { enabled?: boolean } = {}): Promise<ApiKeyEntry[]> {
-    const db = application.get('DbService').getDb()
-    const [row] = await db.select().from(userProviderTable).where(eq(userProviderTable.providerId, providerId)).limit(1)
+    const [row] = await this.db
+      .select()
+      .from(userProviderTable)
+      .where(eq(userProviderTable.providerId, providerId))
+      .limit(1)
 
     if (!row) {
       throw DataApiErrorFactory.notFound('Provider', providerId)
@@ -399,8 +411,11 @@ class ProviderService {
    * Get full auth config (includes sensitive credentials).
    */
   async getAuthConfig(providerId: string): Promise<AuthConfig | null> {
-    const db = application.get('DbService').getDb()
-    const [row] = await db.select().from(userProviderTable).where(eq(userProviderTable.providerId, providerId)).limit(1)
+    const [row] = await this.db
+      .select()
+      .from(userProviderTable)
+      .where(eq(userProviderTable.providerId, providerId))
+      .limit(1)
 
     if (!row) {
       throw DataApiErrorFactory.notFound('Provider', providerId)
@@ -422,8 +437,7 @@ class ProviderService {
     }
 
     const { provider, added } = await this.runApiKeyMutation(providerId, async () => {
-      const db = application.get('DbService').getDb()
-      return await db.transaction(async (tx) => {
+      return await this.dbService.withWriteTx(async (tx) => {
         const [row] = await tx
           .select()
           .from(userProviderTable)
@@ -477,8 +491,7 @@ class ProviderService {
 
     const normalizedApiKeys = normalizeApiKeyEntries(apiKeys)
     const provider = await this.runApiKeyMutation(providerId, async () => {
-      const db = application.get('DbService').getDb()
-      return await db.transaction(async (tx) => {
+      return await this.dbService.withWriteTx(async (tx) => {
         const [row] = await tx
           .update(userProviderTable)
           .set({ apiKeys: normalizedApiKeys })
@@ -513,8 +526,7 @@ class ProviderService {
     assertManagedCherryAiProviderMutationAllowed(providerId, `update API key for provider ${providerId}`)
 
     const provider = await this.runApiKeyMutation(providerId, async () => {
-      const db = application.get('DbService').getDb()
-      return await db.transaction(async (tx) => {
+      return await this.dbService.withWriteTx(async (tx) => {
         const [row] = await tx
           .select()
           .from(userProviderTable)
@@ -588,8 +600,7 @@ class ProviderService {
     assertManagedCherryAiProviderMutationAllowed(providerId, `delete API key from provider ${providerId}`)
 
     const provider = await this.runApiKeyMutation(providerId, async () => {
-      const db = application.get('DbService').getDb()
-      return await db.transaction(async (tx) => {
+      return await this.dbService.withWriteTx(async (tx) => {
         const [row] = await tx
           .select()
           .from(userProviderTable)
@@ -627,9 +638,7 @@ class ProviderService {
    * cannot be deleted. User-created providers that inherit from a preset can be deleted.
    */
   async delete(providerId: string): Promise<void> {
-    const db = application.get('DbService').getDb()
-
-    await db.transaction(async (tx) => {
+    await this.dbService.withWriteTx(async (tx) => {
       const [provider] = await tx
         .select({ presetProviderId: userProviderTable.presetProviderId })
         .from(userProviderTable)
@@ -678,10 +687,8 @@ class ProviderService {
   async move(providerId: string, anchor: OrderRequest): Promise<void> {
     assertManagedCherryAiProviderMutationAllowed(providerId, `move provider ${providerId}`)
 
-    const db = application.get('DbService').getDb()
-
     try {
-      await db.transaction(async (tx) => {
+      await this.dbService.withWriteTx(async (tx) => {
         await applyMoves(tx, userProviderTable, [{ id: providerId, anchor }], {
           pkColumn: userProviderTable.providerId
         })
@@ -697,10 +704,8 @@ class ProviderService {
       assertManagedCherryAiProviderMutationAllowed(move.id, `move provider ${move.id}`)
     }
 
-    const db = application.get('DbService').getDb()
-
     try {
-      await db.transaction(async (tx) => {
+      await this.dbService.withWriteTx(async (tx) => {
         await applyMoves(tx, userProviderTable, moves, {
           pkColumn: userProviderTable.providerId
         })

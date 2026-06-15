@@ -11,7 +11,7 @@ import { CHERRYAI_PROVIDER_ID } from '@shared/data/presets/cherryai'
 import { setupTestDatabase } from '@test-helpers/db'
 import { MockMainCacheServiceUtils } from '@test-mocks/main/CacheService'
 import { eq } from 'drizzle-orm'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
 
 describe('ProviderService API keys', () => {
   const dbh = setupTestDatabase()
@@ -19,6 +19,7 @@ describe('ProviderService API keys', () => {
   beforeEach(() => {
     providerRegistryService.clearCache()
     MockMainCacheServiceUtils.resetMocks()
+    ;(application.get('DbService').withWriteTx as Mock).mockClear()
     vi.mocked(application.getPath).mockImplementation((key: string, filename?: string) => {
       if (key === 'feature.provider_registry.data' && filename) {
         return resolve('packages/provider-registry/data', filename)
@@ -75,6 +76,27 @@ describe('ProviderService API keys', () => {
     const keys = await readApiKeys()
     expect(keys.filter((entry) => entry.key === 'sk-new')).toHaveLength(1)
     expect(keys.some((entry) => entry.key === ' sk-new ')).toBe(false)
+  })
+
+  it('routes API key mutations through the serialized write transaction helper', async () => {
+    await seedProvider()
+    const withWriteTx = application.get('DbService').withWriteTx as Mock
+
+    withWriteTx.mockClear()
+    await providerService.addApiKey('openai', 'sk-added', 'Added')
+    expect(withWriteTx).toHaveBeenCalledTimes(1)
+
+    withWriteTx.mockClear()
+    await providerService.updateApiKey('openai', 'key-a', { label: 'Updated A' })
+    expect(withWriteTx).toHaveBeenCalledTimes(1)
+
+    withWriteTx.mockClear()
+    await providerService.deleteApiKey('openai', 'key-b')
+    expect(withWriteTx).toHaveBeenCalledTimes(1)
+
+    withWriteTx.mockClear()
+    await providerService.replaceApiKeys('openai', [{ id: 'replacement', key: 'sk-replacement', isEnabled: true }])
+    expect(withWriteTx).toHaveBeenCalledTimes(1)
   })
 
   it('rejects empty API keys added directly through the service layer', async () => {
