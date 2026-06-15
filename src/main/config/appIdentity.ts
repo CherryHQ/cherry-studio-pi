@@ -1,5 +1,6 @@
 export const APP_ID = 'com.cherryai.cherrystudio-pi'
 export const APP_PRODUCT_NAME = 'Cherry Studio Pi'
+export const APP_LINUX_WM_CLASS = 'CherryStudioPi'
 
 export const LEGACY_APP_ID = 'com.cherryai.cherrystudio'
 export const ELECTRON_DEV_APP_ID = 'com.github.Electron'

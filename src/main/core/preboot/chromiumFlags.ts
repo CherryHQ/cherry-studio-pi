@@ -1,3 +1,4 @@
+import { APP_LINUX_WM_CLASS } from '@main/config/appIdentity'
 import { isLinux, isWin } from '@main/core/platform'
 import { bootConfigService } from '@main/data/bootConfig'
 import { app } from 'electron'
@@ -44,8 +45,8 @@ export function configureChromiumFlags(): void {
   // Linux (X11 and Wayland): set the window class/name so window managers
   // identify the app correctly in alt-tab switchers, docks, etc.
   if (isLinux) {
-    app.commandLine.appendSwitch('class', 'CherryStudio')
-    app.commandLine.appendSwitch('name', 'CherryStudio')
+    app.commandLine.appendSwitch('class', APP_LINUX_WM_CLASS)
+    app.commandLine.appendSwitch('name', APP_LINUX_WM_CLASS)
   }
 
   // Unconditional Chromium feature flags:

@@ -6,6 +6,7 @@ import { parse } from 'yaml'
 
 import {
   APP_ID,
+  APP_LINUX_WM_CLASS,
   APP_PROCESS_IDENTIFIERS,
   APP_PRODUCT_NAME,
   ELECTRON_DEV_APP_ID,
@@ -17,11 +18,13 @@ describe('appIdentity', () => {
   it('keeps runtime identity aligned with the packaged app identity', () => {
     const builderConfig = parse(readFileSync(path.join(process.cwd(), 'electron-builder.yml'), 'utf8')) as {
       appId: string
+      linux: { desktop: { entry: { StartupWMClass: string } } }
       productName: string
     }
 
     expect(APP_ID).toBe(builderConfig.appId)
     expect(APP_PRODUCT_NAME).toBe(builderConfig.productName)
+    expect(APP_LINUX_WM_CLASS).toBe(builderConfig.linux.desktop.entry.StartupWMClass)
   })
 
   it('recognizes packaged, legacy, and development process identifiers as self', () => {
