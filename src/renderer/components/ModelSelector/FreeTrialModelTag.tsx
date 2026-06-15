@@ -1,7 +1,7 @@
 import { CustomTag } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import { getProviderLabel } from '@renderer/i18n/label'
-import { type Model, parseUniqueModelId } from '@shared/data/types/model'
+import { isUniqueModelId, type Model, parseUniqueModelId } from '@shared/data/types/model'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowUpRight } from 'lucide-react'
 import type { FC, MouseEvent } from 'react'
@@ -21,7 +21,7 @@ const CHERRY_TRIAL_PROVIDER_OVERRIDES: Record<string, string> = {
 }
 
 function resolveTrialProviderId(model: Model): string {
-  const apiModelId = model.apiModelId ?? parseUniqueModelId(model.id).modelId
+  const apiModelId = model.apiModelId ?? (isUniqueModelId(model.id) ? parseUniqueModelId(model.id).modelId : model.id)
   return CHERRY_TRIAL_PROVIDER_OVERRIDES[apiModelId] ?? model.providerId
 }
 

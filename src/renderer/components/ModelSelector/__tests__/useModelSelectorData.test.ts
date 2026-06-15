@@ -105,6 +105,24 @@ describe('useModelSelectorData', () => {
     expect(result.current.modelItems).toHaveLength(3)
   })
 
+  it('renders malformed legacy model ids without crashing the selector', () => {
+    const model = {
+      ...makeModel('placeholder', 'openai'),
+      id: 'legacy-gpt-4',
+      apiModelId: undefined
+    } as unknown as Model
+
+    wireDeps({
+      providers: [makeProvider('openai')],
+      models: [model]
+    })
+
+    const { result } = renderHook(() => useModelSelectorData({ searchText: '' }))
+
+    expect(result.current.modelItems).toHaveLength(1)
+    expect(result.current.modelItems[0].modelIdentifier).toBe('legacy-gpt-4')
+  })
+
   it('drops orphan models whose providerId is not in the providers list', () => {
     // Cross-filter invariant: a model whose provider is disabled/missing must not appear
     wireDeps({

@@ -46,7 +46,7 @@ function sortModels(models: Model[]) {
 }
 
 function getModelIdentifier(model: Model) {
-  return model.apiModelId ?? parseUniqueModelId(model.id).modelId
+  return model.apiModelId ?? (isUniqueModelId(model.id) ? parseUniqueModelId(model.id).modelId : model.id)
 }
 
 function sortProvidersByPriority(providers: Provider[], prioritizedProviderIds: string[]) {
