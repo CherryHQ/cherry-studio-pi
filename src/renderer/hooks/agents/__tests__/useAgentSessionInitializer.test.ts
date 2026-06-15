@@ -61,6 +61,43 @@ describe('useAgentSessionInitializer', () => {
     })
   })
 
+  it('replaces a missing active session when the detail query resolves empty without an error', async () => {
+    MockUseCacheUtils.setCacheValue('agent.active_session_id', 'missing-session')
+    mockUseQuery.mockImplementation((path, options: any) => {
+      if (options?.enabled === false) return queryResult()
+      if (path === '/agent-sessions/:sessionId') {
+        return queryResult({ data: undefined, error: undefined, isLoading: false })
+      }
+      if (path === '/agent-sessions') return sessionsResult([{ id: 'session-1', agentId: 'agent-1' }])
+      return queryResult()
+    })
+
+    renderHook(() => useAgentSessionInitializer())
+
+    await waitFor(() => {
+      expect(MockUseCacheUtils.getCacheValue('agent.active_session_id')).toBe('session-1')
+    })
+  })
+
+  it('does not clear a missing active session before fallback sessions finish loading', async () => {
+    MockUseCacheUtils.setCacheValue('agent.active_session_id', 'missing-session')
+    mockUseQuery.mockImplementation((path, options: any) => {
+      if (options?.enabled === false) return queryResult()
+      if (path === '/agent-sessions/:sessionId') {
+        return queryResult({ data: undefined, error: undefined, isLoading: false })
+      }
+      if (path === '/agent-sessions') return queryResult({ data: undefined, isLoading: true })
+      return queryResult()
+    })
+
+    renderHook(() => useAgentSessionInitializer())
+
+    await waitFor(() => {
+      expect(mockUseQuery).toHaveBeenCalledWith('/agent-sessions', expect.objectContaining({ enabled: true }))
+    })
+    expect(MockUseCacheUtils.getCacheValue('agent.active_session_id')).toBe('missing-session')
+  })
+
   it('clears a stale active session id when no sessions exist', async () => {
     MockUseCacheUtils.setCacheValue('agent.active_session_id', 'missing-session')
     mockUseQuery.mockImplementation((path, options: any) => {

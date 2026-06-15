@@ -32,8 +32,12 @@ export const useAgentSessionInitializer = () => {
   })
 
   const activeSessionMissingAgent = Boolean(activeSessionId && activeSession && !activeSession.agentId)
-  const needsFallbackSession = !activeSessionId || !!activeSessionError || activeSessionMissingAgent
-  const { data } = useQuery('/agent-sessions', {
+  const activeSessionUnavailable = Boolean(
+    activeSessionId && !isActiveSessionLoading && !activeSession && !activeSessionError
+  )
+  const needsFallbackSession =
+    !activeSessionId || !!activeSessionError || activeSessionMissingAgent || activeSessionUnavailable
+  const { data, isLoading: isFallbackSessionLoading } = useQuery('/agent-sessions', {
     query: { limit: FALLBACK_SESSION_SCAN_LIMIT },
     enabled: needsFallbackSession
   })
@@ -47,13 +51,15 @@ export const useAgentSessionInitializer = () => {
     )
       return
 
+    if (needsFallbackSession && isFallbackSessionLoading && !data) return
+
     const fallbackId = resolveFallbackActiveSessionId(data?.items ?? [], { allowOrphan: !activeSessionMissingAgent })
     if (fallbackId && fallbackId !== activeSessionId) {
       setActiveSessionId(fallbackId)
       return
     }
 
-    if (!fallbackId && activeSessionId && activeSessionError) {
+    if (!fallbackId && activeSessionId && (activeSessionError || activeSessionUnavailable)) {
       setActiveSessionId(null)
     }
   }, [
@@ -61,8 +67,11 @@ export const useAgentSessionInitializer = () => {
     activeSessionError,
     activeSessionId,
     activeSessionMissingAgent,
+    activeSessionUnavailable,
     data,
+    isFallbackSessionLoading,
     isActiveSessionLoading,
+    needsFallbackSession,
     setActiveSessionId
   ])
 }
