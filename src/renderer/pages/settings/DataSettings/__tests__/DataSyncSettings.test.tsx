@@ -251,6 +251,19 @@ describe('DataSyncSettings', () => {
     await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
   })
 
+  it('clears stale runtime syncing state when status refresh fails', async () => {
+    mocks.getStatus.mockRejectedValue(new Error('status unavailable'))
+    mocks.subscribeDataSyncRuntimeState.mockImplementation((listener: (state: { syncing: boolean }) => void) => {
+      listener({ syncing: true })
+      return vi.fn()
+    })
+
+    render(<DataSyncSettings />)
+
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+  })
+
   it('treats a null sync summary as an in-flight duplicate instead of success', async () => {
     render(<DataSyncSettings />)
     await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))

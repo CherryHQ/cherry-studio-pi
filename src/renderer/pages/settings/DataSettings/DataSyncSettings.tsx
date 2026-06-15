@@ -351,6 +351,7 @@ const DataSyncSettings: FC = () => {
       if (!isLatestRequest()) return null
 
       setSyncing(false)
+      setRuntimeSyncing(false)
       setStatus((prev) => (prev ? { ...prev, syncing: false, syncStartedAt: null } : prev))
       return null
     } finally {
