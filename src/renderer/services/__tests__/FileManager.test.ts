@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  cacheGet: vi.fn(),
   filesAdd: vi.fn(),
   filesDelete: vi.fn(),
   filesGet: vi.fn(),
@@ -22,6 +23,12 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@logger', () => ({
   loggerService: {
     withContext: () => mocks.logger
+  }
+}))
+
+vi.mock('@renderer/data/CacheService', () => ({
+  cacheService: {
+    get: mocks.cacheGet
   }
 }))
 
@@ -67,6 +74,7 @@ describe('FileManager', () => {
     vi.resetModules()
     vi.clearAllMocks()
     originalApi = window.api
+    mocks.cacheGet.mockReturnValue(undefined)
 
     Object.defineProperty(window, 'api', {
       configurable: true,
@@ -91,6 +99,29 @@ describe('FileManager', () => {
       configurable: true,
       value: originalApi
     })
+  })
+
+  it('builds encoded file URLs for cached file storage paths', async () => {
+    mocks.cacheGet.mockReturnValue('/Users/me/Cherry Studio Pi/Data/Files')
+    const { default: FileManager } = await import('../FileManager')
+
+    expect(
+      FileManager.getFileUrl({
+        name: 'My File #1?.png',
+        path: '/fallback/ignored.png'
+      } as any)
+    ).toBe('file:///Users/me/Cherry%20Studio%20Pi/Data/Files/My%20File%20%231%3F.png')
+  })
+
+  it('builds encoded safe file URLs from metadata paths', async () => {
+    const { default: FileManager } = await import('../FileManager')
+
+    expect(
+      FileManager.getSafeFileUrl({
+        ext: '.png',
+        path: 'C:\\Users\\me\\Pictures\\My File 中文.png'
+      } as any)
+    ).toBe('file:///C:/Users/me/Pictures/My%20File%20%E4%B8%AD%E6%96%87.png')
   })
 
   it('stops deleting file metadata when the Storage v2 tombstone fails', async () => {

@@ -4,6 +4,7 @@ import db from '@renderer/databases'
 import i18n from '@renderer/i18n'
 import type { FileMetadata } from '@renderer/types'
 import { getFileDirectory } from '@renderer/utils'
+import { pathToFileUrl } from '@renderer/utils/fileUrl'
 import dayjs from 'dayjs'
 
 import { storageV2FileRecoveryService } from './StorageV2FileRecoveryService'
@@ -224,7 +225,11 @@ class FileManager {
 
   static getFileUrl(file: FileMetadata) {
     const filesPath = getCachedFilesPath()
-    return 'file://' + (filesPath ? `${filesPath}/${file.name}` : file.path || file.name)
+    return pathToFileUrl(filesPath ? `${filesPath}/${file.name}` : file.path || file.name)
+  }
+
+  static getSafeFileUrl(file: FileMetadata) {
+    return pathToFileUrl(this.getSafePath(file))
   }
 
   static async updateFile(file: FileMetadata) {

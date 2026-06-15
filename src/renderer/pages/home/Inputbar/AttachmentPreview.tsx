@@ -118,10 +118,10 @@ export const FileNameRender: FC<{ file: FileMetadata }> = ({ file }) => {
           {isImage(file.ext) && (
             <ImageViewer
               className="max-h-[200px] w-20"
-              src={'file://' + FileManager.getSafePath(file)}
+              src={FileManager.getSafeFileUrl(file)}
               preview={{
                 visible: visible,
-                src: 'file://' + FileManager.getSafePath(file),
+                src: FileManager.getSafeFileUrl(file),
                 onVisibleChange: setVisible
               }}
             />
