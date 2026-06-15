@@ -79,13 +79,23 @@ export class AppCapabilityService {
         risk: capability.risk,
         dryRun: context.dryRun === true
       })
-      return (await capability.execute(input, {
+      const result = (await capability.execute(input, {
         source: context.source ?? 'system',
         sessionId: context.sessionId,
         toolCallId: context.toolCallId,
         signal: context.signal,
         dryRun: context.dryRun
       })) as AppCapabilityResult<T>
+      if (context.signal?.aborted) {
+        const message = abortReasonMessage(context.signal)
+        return {
+          ok: false,
+          isError: true,
+          summary: `${capabilityId} aborted: ${message}`,
+          error: message
+        }
+      }
+      return result
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       logger.warn('App capability failed', { id: capabilityId, error: message })

@@ -72,4 +72,23 @@ describe('AppCapabilityService', () => {
 
     expect(executeCapability).not.toHaveBeenCalled()
   })
+
+  it('drops capability results when the signal is aborted during execution', async () => {
+    executeCapability.mockClear()
+    const service = new AppCapabilityService()
+    const controller = new AbortController()
+    executeCapability.mockImplementationOnce(async () => {
+      controller.abort(new Error('user stopped while running'))
+      return { ok: true, summary: 'late success' }
+    })
+
+    await expect(service.call('settings.read', {}, { source: 'agent', signal: controller.signal })).resolves.toEqual({
+      ok: false,
+      isError: true,
+      summary: 'settings.read aborted: user stopped while running',
+      error: 'user stopped while running'
+    })
+
+    expect(executeCapability).toHaveBeenCalledTimes(1)
+  })
 })
