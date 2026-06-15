@@ -43,6 +43,26 @@ const BasicDataSettings: React.FC = () => {
     [t]
   )
 
+  const requestRelaunch = useCallback(
+    (options?: Parameters<typeof window.api.application.relaunch>[0]) => {
+      void window.api.application.relaunch(options).catch((error) => {
+        logger.error('Failed to relaunch app after data path change', error as Error)
+        showOperationFailed(error)
+      })
+    },
+    [showOperationFailed]
+  )
+
+  const releaseQuitHold = useCallback(
+    (holdId: string) => {
+      void window.api.application.allowQuit(holdId).catch((error) => {
+        logger.error('Failed to release data migration quit hold', error as Error)
+        showOperationFailed(error)
+      })
+    },
+    [showOperationFailed]
+  )
+
   useEffect(() => {
     let cancelled = false
     void window.api
@@ -135,7 +155,7 @@ const BasicDataSettings: React.FC = () => {
         setTimeoutTimer(
           'doubleConfirmModalBeforeCopyData',
           () => {
-            void window.api.application.relaunch({
+            requestRelaunch({
               args: ['--new-data-path=' + newPath]
             })
           },
@@ -220,7 +240,7 @@ const BasicDataSettings: React.FC = () => {
             setTimeoutTimer(
               'showMigrationConfirmModal_1',
               () => {
-                void window.api.application.relaunch({
+                requestRelaunch({
                   args: ['--new-data-path=' + newPath]
                 })
               },
@@ -237,7 +257,7 @@ const BasicDataSettings: React.FC = () => {
             'showMigrationConfirmModal_2',
             () => {
               window.toast.success(t('settings.data.app_data.select_success'))
-              void window.api.application.relaunch()
+              requestRelaunch()
             },
             500
           )
@@ -405,15 +425,15 @@ const BasicDataSettings: React.FC = () => {
           'handleDataMigration',
           () => {
             window.toast.success(t('settings.data.app_data.select_success'))
-            void window.api.application.allowQuit(holdId)
-            void window.api.application.relaunch({
+            releaseQuitHold(holdId)
+            requestRelaunch({
               args: ['--user-data-dir=' + newDataPath]
             })
           },
           1000
         )
       } catch (error) {
-        void window.api.application.allowQuit(holdId)
+        releaseQuitHold(holdId)
         window.toast.error({
           title: t('settings.data.app_data.copy_failed') + ': ' + error,
           timeout: 5000
