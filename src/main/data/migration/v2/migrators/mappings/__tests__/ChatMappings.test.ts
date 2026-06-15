@@ -377,12 +377,17 @@ describe('transformBlocksToParts', () => {
   it('transforms image with file path to file:// URL', async () => {
     const { parts } = await transformBlocksToParts([
       block('image', {
-        file: { id: 'abc-123', path: '/Users/test/files/photo.jpg', ext: '.jpg', origin_name: 'photo.jpg' }
+        file: {
+          id: 'abc-123',
+          path: '/Users/test/files/My Photo #1?.jpg',
+          ext: '.jpg',
+          origin_name: 'photo.jpg'
+        }
       })
     ])
 
     const part = parts[0] as FileUIPart
-    expect(part.url).toBe('file:///Users/test/files/photo.jpg')
+    expect(part.url).toBe('file:///Users/test/files/My%20Photo%20%231%3F.jpg')
     expect(part.mediaType).toBe('image/jpeg')
     expect(part.filename).toBe('photo.jpg')
   })
@@ -492,14 +497,19 @@ describe('transformBlocksToParts', () => {
   it('transforms file to FileUIPart with path and inferred mediaType', async () => {
     const { parts } = await transformBlocksToParts([
       block('file', {
-        file: { id: 'file-xyz', path: '/Users/test/files/doc.pdf', ext: '.pdf', origin_name: 'document.pdf' }
+        file: {
+          id: 'file-xyz',
+          path: '/Users/test/files/Doc #1 中文.pdf',
+          ext: '.pdf',
+          origin_name: 'document.pdf'
+        }
       })
     ])
 
     const part = parts[0] as FileUIPart
     expect(part.type).toBe('file')
     expect(part.mediaType).toBe('application/pdf')
-    expect(part.url).toBe('file:///Users/test/files/doc.pdf')
+    expect(part.url).toBe('file:///Users/test/files/Doc%20%231%20%E4%B8%AD%E6%96%87.pdf')
     expect(part.filename).toBe('document.pdf')
   })
 
