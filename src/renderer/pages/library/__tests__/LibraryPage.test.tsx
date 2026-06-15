@@ -339,6 +339,21 @@ describe('LibraryPage create flow', () => {
     expect(screen.getByTestId('assistant-create-page')).toBeInTheDocument()
   })
 
+  it('closes transient resource selectors when route search opens agent creation', () => {
+    const closeResourceSelectors = vi.fn()
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+    routeSearchMock.mockReturnValue({ resourceType: 'agent', action: 'create' })
+
+    try {
+      render(<LibraryPage />)
+
+      expect(screen.getByTestId('agent-create-page')).toBeInTheDocument()
+      expect(closeResourceSelectors).toHaveBeenCalledTimes(1)
+    } finally {
+      window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+    }
+  })
+
   it('opens the prompt create page from route search', () => {
     routeSearchMock.mockReturnValue({ resourceType: 'prompt', action: 'create' })
 

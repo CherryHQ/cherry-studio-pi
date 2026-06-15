@@ -68,6 +68,13 @@ function buildTags(resources: ResourceItem[], backendTags: Tag[], filterType?: R
     }))
 }
 
+function closeTransientLibraryOverlays() {
+  requestCloseResourceSelectors()
+  if (typeof document === 'undefined') return
+
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }))
+}
+
 export default function LibraryPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -183,6 +190,8 @@ export default function LibraryPage() {
   useEffect(() => {
     if (routeAction !== 'create' || !routeResourceType) return
 
+    closeTransientLibraryOverlays()
+
     if (routeResourceType === 'assistant') {
       setConfigView((prev) => (prev.type === 'assistant-create' ? prev : { type: 'assistant-create' }))
     } else if (routeResourceType === 'agent') {
@@ -194,6 +203,8 @@ export default function LibraryPage() {
 
   useEffect(() => {
     if (routeAction !== 'edit' || !routeResourceType || !routeResourceId) return
+
+    closeTransientLibraryOverlays()
 
     const resource = allResources.find((r) => r.type === routeResourceType && r.id === routeResourceId)
     if (!resource) return
@@ -311,8 +322,7 @@ export default function LibraryPage() {
   )
 
   const handleCreate = useCallback((type: ResourceType) => {
-    requestCloseResourceSelectors()
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }))
+    closeTransientLibraryOverlays()
 
     if (type === 'assistant') {
       // Mirror the agent create flow: enter the form first, then POST only
