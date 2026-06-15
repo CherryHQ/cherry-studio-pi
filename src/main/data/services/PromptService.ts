@@ -45,8 +45,12 @@ function collectAnchorIds(anchors: OrderRequest[]): string[] {
 }
 
 export class PromptService {
+  private get dbService() {
+    return application.get('DbService')
+  }
+
   private get db() {
-    return application.get('DbService').getDb()
+    return this.dbService.getDb()
   }
 
   async list(query: ListPromptsQuery = {}): Promise<Prompt[]> {
@@ -74,7 +78,7 @@ export class PromptService {
   }
 
   async create(dto: CreatePromptDto): Promise<Prompt> {
-    return this.db.transaction(async (tx) => {
+    return this.dbService.withWriteTx(async (tx) => {
       const inserted = await insertWithOrderKey(
         tx,
         promptTable,
@@ -92,7 +96,7 @@ export class PromptService {
   }
 
   async update(id: string, dto: UpdatePromptDto): Promise<Prompt> {
-    return this.db.transaction(async (tx) => {
+    return this.dbService.withWriteTx(async (tx) => {
       const updates: Partial<typeof promptTable.$inferInsert> = {}
       if (dto.title !== undefined) updates.title = dto.title
       if (dto.content !== undefined) updates.content = dto.content
@@ -114,7 +118,7 @@ export class PromptService {
 
   /** Move a single prompt relative to an anchor. */
   async reorder(id: string, anchor: OrderRequest): Promise<void> {
-    await this.db.transaction(async (tx) => {
+    await this.dbService.withWriteTx(async (tx) => {
       await this.assertPromptsExistTx(tx, [id, ...collectAnchorIds([anchor])])
       await applyMoves(tx, promptTable, [{ id, anchor }], { pkColumn: promptTable.id })
     })
@@ -123,7 +127,7 @@ export class PromptService {
   /** Apply a batch of moves atomically. */
   async reorderBatch(moves: Array<{ id: string; anchor: OrderRequest }>): Promise<void> {
     if (moves.length === 0) return
-    await this.db.transaction(async (tx) => {
+    await this.dbService.withWriteTx(async (tx) => {
       await this.assertPromptsExistTx(tx, [...moves.map((m) => m.id), ...collectAnchorIds(moves.map((m) => m.anchor))])
       await applyMoves(tx, promptTable, moves, { pkColumn: promptTable.id })
     })
@@ -143,7 +147,7 @@ export class PromptService {
   }
 
   async delete(id: string): Promise<void> {
-    const result = await this.db.delete(promptTable).where(eq(promptTable.id, id))
+    const result = await this.dbService.withWriteTx((tx) => tx.delete(promptTable).where(eq(promptTable.id, id)))
     if (result.rowsAffected === 0) {
       throw DataApiErrorFactory.notFound('Prompt', id)
     }

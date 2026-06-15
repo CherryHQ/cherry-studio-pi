@@ -2,8 +2,9 @@ import { promptTable } from '@data/db/schemas/prompt'
 import { PromptService, promptService } from '@data/services/PromptService'
 import { DataApiError, ErrorCode } from '@shared/data/api'
 import { setupTestDatabase } from '@test-helpers/db'
+import { MockMainDbServiceExport } from '@test-mocks/main/DbService'
 import { asc, eq } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 const PROMPT_ID_MISSING = '11111111-1111-4111-8111-111111111111'
 
@@ -13,6 +14,10 @@ async function seedPrompt(title = 'Hello', content = 'Prompt body') {
 
 describe('PromptService', () => {
   const dbh = setupTestDatabase()
+
+  beforeEach(() => {
+    MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+  })
 
   it('should export a module-level singleton of PromptService', () => {
     expect(promptService).toBeInstanceOf(PromptService)
@@ -40,6 +45,12 @@ describe('PromptService', () => {
 
       const rows = await dbh.db.select().from(promptTable).orderBy(asc(promptTable.orderKey))
       expect(rows.map((r) => r.id)).toEqual([a.id, b.id, c.id])
+    })
+
+    it('should route prompt creation through the serialized write transaction helper', async () => {
+      await promptService.create({ title: 'Serialized', content: 'write' })
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -127,6 +138,15 @@ describe('PromptService', () => {
         code: ErrorCode.NOT_FOUND
       })
     })
+
+    it('should route prompt updates through the serialized write transaction helper', async () => {
+      const p = await seedPrompt('title', 'body')
+
+      MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+      await promptService.update(p.id, { title: 'renamed' })
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('delete', () => {
@@ -143,6 +163,15 @@ describe('PromptService', () => {
       await expect(promptService.delete(PROMPT_ID_MISSING)).rejects.toMatchObject({
         code: ErrorCode.NOT_FOUND
       })
+    })
+
+    it('should route prompt deletion through the serialized write transaction helper', async () => {
+      const p = await seedPrompt('t', 'v1')
+
+      MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+      await promptService.delete(p.id)
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -200,6 +229,16 @@ describe('PromptService', () => {
       expect(bAfter.orderKey).toBe(bBefore.orderKey)
       expect(cAfter.orderKey < aBefore.orderKey).toBe(true)
     })
+
+    it('should route single reorders through the serialized write transaction helper', async () => {
+      const a = await seedPrompt('a', 'a')
+      const b = await seedPrompt('b', 'b')
+
+      MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+      await promptService.reorder(a.id, { after: b.id })
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('reorderBatch', () => {
@@ -227,6 +266,25 @@ describe('PromptService', () => {
           { id: b.id, anchor: { before: PROMPT_ID_MISSING } }
         ])
       ).rejects.toMatchObject({ code: ErrorCode.NOT_FOUND })
+    })
+
+    it('should route batch reorders through the serialized write transaction helper', async () => {
+      const a = await seedPrompt('a', 'a')
+      const b = await seedPrompt('b', 'b')
+
+      MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+      await promptService.reorderBatch([
+        { id: a.id, anchor: { position: 'last' } },
+        { id: b.id, anchor: { position: 'first' } }
+      ])
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    })
+
+    it('should not open a write transaction for an empty batch reorder', async () => {
+      await promptService.reorderBatch([])
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).not.toHaveBeenCalled()
     })
   })
 })
