@@ -1,3 +1,4 @@
+import { defaultByPassRules } from '@shared/config/constant'
 import type { ProxyConfig } from 'electron'
 import { app, session } from 'electron'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -237,6 +238,15 @@ describe('ProxyManager - bypass evaluation', () => {
     expect(isByPass('http://nas')).toBe(true)
     expect(isByPass('http://printer.local')).toBe(true)
     expect(isByPass('https://api.example.com')).toBe(true)
+  })
+
+  it('keeps the settings default bypass rules aligned with local WebDAV access needs', () => {
+    const rules = defaultByPassRules.split(',')
+
+    expect(rules).toEqual(expect.arrayContaining([...DEFAULT_NODE_PROXY_BYPASS_RULES]))
+    updateByPassRules(rules)
+    expect(isByPass('http://192.168.1.100:8080/dav')).toBe(true)
+    expect(isByPass('http://nas.local:8080/dav')).toBe(true)
   })
 
   it('resolves request-option URLs before checking proxy bypass rules', () => {

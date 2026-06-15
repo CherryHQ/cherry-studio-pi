@@ -243,7 +243,8 @@ export const occupiedDirs = ['logs', 'Network', 'Partitions/webview/Network']
 export const MIN_WINDOW_WIDTH = 960
 export const SECOND_MIN_WINDOW_WIDTH = 520
 export const MIN_WINDOW_HEIGHT = 600
-export const defaultByPassRules = 'localhost,127.0.0.1,::1'
+export const defaultByPassRules =
+  '<local>,localhost,127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16,fc00::/7,fe80::/10,*.local'
 
 export enum codeCLI {
   qwenCode = 'qwen-code',
