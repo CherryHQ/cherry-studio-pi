@@ -76,6 +76,16 @@ export async function dispatchStreamRequest(
         }
       }
     }
+    if (isAgentSessionTopic(req.topicId)) {
+      const message = error instanceof Error ? error.message : String(error)
+      logger.warn('Agent session dispatch preflight blocked', { topicId: req.topicId, error })
+      return {
+        blocked: {
+          reason: 'agent-session-preflight' as const,
+          message
+        }
+      }
+    }
     throw error
   })
   if ('blocked' in prepared) {

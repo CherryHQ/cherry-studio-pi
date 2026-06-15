@@ -142,13 +142,29 @@ describe('dispatchStreamRequest — steer-restart ordering (#B4)', () => {
     expect(manager.send).not.toHaveBeenCalled()
   })
 
-  it('rethrows a non-workspace prepareDispatch error and does not send', async () => {
+  it('returns mode:blocked for non-workspace agent preflight failures without sending', async () => {
     mocks.agentCanHandle.mockReturnValue(true)
     mocks.isWorkspaceErr.mockReturnValue(false)
     mocks.agentPrepare.mockRejectedValue(new Error('boom'))
     const manager = makeManager(true)
 
-    await expect(dispatchStreamRequest(manager, makeSubscriber(), chatReq('agent-session:s1'))).rejects.toThrow('boom')
+    const result = await dispatchStreamRequest(manager, makeSubscriber(), chatReq('agent-session:s1'))
+
+    expect(result).toMatchObject({
+      mode: 'blocked',
+      reason: 'agent-session-preflight',
+      message: 'boom'
+    })
+    expect(manager.send).not.toHaveBeenCalled()
+  })
+
+  it('still rethrows non-agent prepareDispatch errors and does not send', async () => {
+    mocks.agentCanHandle.mockReturnValue(false)
+    mocks.isWorkspaceErr.mockReturnValue(false)
+    mocks.persistentPrepare.mockRejectedValue(new Error('boom'))
+    const manager = makeManager(false)
+
+    await expect(dispatchStreamRequest(manager, makeSubscriber(), chatReq('topic-1'))).rejects.toThrow('boom')
     expect(manager.send).not.toHaveBeenCalled()
   })
 })

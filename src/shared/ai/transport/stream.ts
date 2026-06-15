@@ -204,6 +204,6 @@ export type AiStreamOpenResponse =
     }
   | {
       mode: 'blocked'
-      reason: 'agent-session-workspace'
+      reason: 'agent-session-workspace' | 'agent-session-preflight'
       message: string
     }

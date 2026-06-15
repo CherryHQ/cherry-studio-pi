@@ -71,6 +71,19 @@ describe('streamDispatchCoordinator', () => {
     expect(window.toast.error).toHaveBeenCalledWith('Workspace path for session session-1 is not accessible: /missing')
   })
 
+  it('shows agent preflight dispatch failures as toast', async () => {
+    streamOpen.mockResolvedValue({
+      mode: 'blocked',
+      reason: 'agent-session-preflight',
+      message: 'Agent agent-1 has no model configured'
+    } satisfies AiStreamOpenResponse)
+
+    streamDispatchCoordinator.dispatch(TOPIC, req)
+    await flush()
+
+    expect(window.toast.error).toHaveBeenCalledWith('Agent agent-1 has no model configured')
+  })
+
   it('unsubscribe stops further delivery', async () => {
     streamOpen.mockResolvedValue({ mode: 'started' })
     const seen: unknown[] = []

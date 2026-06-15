@@ -188,6 +188,20 @@ describe('IpcChatTransport', () => {
     expect(window.toast.error).toHaveBeenCalledWith('Workspace path for session session-1 is not accessible: /missing')
   })
 
+  it('shows agent preflight dispatch failures as toast and closes the stream', async () => {
+    mock.mockApi.streamOpen.mockResolvedValue({
+      mode: 'blocked',
+      reason: 'agent-session-preflight',
+      message: 'Agent agent-1 has no model configured'
+    })
+
+    const stream = await transport.sendMessages(baseOptions)
+    const reader = stream.getReader()
+
+    await expect(reader.read()).resolves.toMatchObject({ done: true })
+    expect(window.toast.error).toHaveBeenCalledWith('Agent agent-1 has no model configured')
+  })
+
   it('calls streamAbort on abort signal', async () => {
     const abortController = new AbortController()
     const stream = await transport.sendMessages({

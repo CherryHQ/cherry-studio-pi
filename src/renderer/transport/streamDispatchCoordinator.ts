@@ -28,7 +28,7 @@ export const streamDispatchCoordinator = {
     window.api.ai
       .streamOpen(request)
       .then((ack) => {
-        if (ack.mode === 'blocked' && ack.reason === 'agent-session-workspace') {
+        if (ack.mode === 'blocked') {
           window.toast?.error(ack.message)
         }
         notify({ ok: true, topicId, ack })
