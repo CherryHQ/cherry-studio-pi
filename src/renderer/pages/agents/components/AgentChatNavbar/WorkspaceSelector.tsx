@@ -1,4 +1,5 @@
 import { Button } from '@cherrystudio/ui'
+import { requestCloseResourceSelectors } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { useUpdateSession } from '@renderer/hooks/agents/useSession'
 import { useAgentWorkspaceMutations } from '@renderer/hooks/agents/useWorkspace'
 import { cn } from '@renderer/utils'
@@ -27,6 +28,7 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
 
   const handleSelectWorkspace = async () => {
     if (selecting) return
+    requestCloseResourceSelectors()
     setSelecting(true)
     try {
       const selectedPath = await window.api.file.selectFolder({
@@ -74,7 +76,7 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
         onMouseDown={(event) => event.stopPropagation()}
         aria-label={`${actionLabel}: ${workspaceLabel}`}
         className={cn(
-          'flex h-7 w-auto max-w-60 items-center gap-1.5 rounded-full px-2 text-xs shadow-none',
+          'flex h-7 w-auto max-w-60 items-center gap-1.5 rounded-full px-2 text-xs shadow-none [-webkit-app-region:no-drag]',
           'text-foreground-500 dark:text-foreground-400'
         )}>
         <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />

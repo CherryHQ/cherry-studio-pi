@@ -1,3 +1,4 @@
+import { RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -142,6 +143,29 @@ describe('WorkspaceSelector', () => {
       expect(success).toHaveBeenCalledWith('agent.session.workspace.updated')
       expect(error).not.toHaveBeenCalled()
     } finally {
+      restoreWindow()
+    }
+  })
+
+  it('closes lingering resource selector popovers before opening the folder picker', async () => {
+    const user = userEvent.setup()
+    const selectFolder = vi.fn().mockResolvedValue(null)
+    const success = vi.fn()
+    const error = vi.fn()
+    const closeResourceSelectors = vi.fn()
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+
+    const restoreWindow = installWindowMocks({ selectFolder, success, error })
+
+    try {
+      render(<WorkspaceSelector session={createSession()} />)
+
+      await user.click(screen.getByRole('button', { name: /agent\.session\.workspace\.select/ }))
+
+      expect(closeResourceSelectors).toHaveBeenCalledTimes(1)
+      expect(selectFolder).toHaveBeenCalledTimes(1)
+    } finally {
+      window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
       restoreWindow()
     }
   })

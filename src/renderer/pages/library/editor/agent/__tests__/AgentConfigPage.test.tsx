@@ -337,6 +337,7 @@ describe('AgentConfigPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'set basic' }))
     await user.click(screen.getByRole('button', { name: /common\.next/ }))
+    expect(screen.getByRole('button', { name: 'set workspace' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /common\.next/ }))
     await user.click(screen.getByRole('button', { name: /common\.next/ }))
     await user.click(screen.getByRole('button', { name: 'set tools' }))
