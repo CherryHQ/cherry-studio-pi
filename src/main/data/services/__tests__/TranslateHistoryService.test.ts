@@ -2,10 +2,15 @@ import { translateHistoryTable } from '@data/db/schemas/translateHistory'
 import { translateHistoryService } from '@data/services/TranslateHistoryService'
 import type { CreateTranslateHistoryDto, UpdateTranslateHistoryDto } from '@shared/data/api/schemas/translate'
 import { setupTestDatabase } from '@test-helpers/db'
-import { describe, expect, it } from 'vitest'
+import { MockMainDbServiceExport } from '@test-mocks/main/DbService'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 describe('TranslateHistoryService', () => {
   const dbh = setupTestDatabase()
+
+  beforeEach(() => {
+    MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+  })
 
   async function seedHistory(overrides: Partial<typeof translateHistoryTable.$inferInsert> = {}) {
     const values: typeof translateHistoryTable.$inferInsert = {
@@ -116,6 +121,15 @@ describe('TranslateHistoryService', () => {
       const rows = await dbh.db.select().from(translateHistoryTable)
       expect(rows).toHaveLength(1)
     })
+
+    it('should route creation through the serialized write transaction helper', async () => {
+      await translateHistoryService.create({
+        sourceText: 'Hello',
+        targetText: 'Bonjour'
+      } as CreateTranslateHistoryDto)
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('update', () => {
@@ -135,6 +149,15 @@ describe('TranslateHistoryService', () => {
 
       const result = await translateHistoryService.update(seeded.id!, {})
       expect(result.id).toBe(seeded.id)
+      expect(MockMainDbServiceExport.dbService.withWriteTx).not.toHaveBeenCalled()
+    })
+
+    it('should route non-empty updates through the serialized write transaction helper', async () => {
+      const seeded = await seedHistory()
+
+      await translateHistoryService.update(seeded.id!, { star: true })
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -151,6 +174,14 @@ describe('TranslateHistoryService', () => {
     it('should throw NotFound for non-existent id', async () => {
       await expect(translateHistoryService.delete('non-existent')).rejects.toThrow()
     })
+
+    it('should route deletion through the serialized write transaction helper', async () => {
+      const seeded = await seedHistory()
+
+      await translateHistoryService.delete(seeded.id!)
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('clearAll', () => {
@@ -162,6 +193,14 @@ describe('TranslateHistoryService', () => {
 
       const rows = await dbh.db.select().from(translateHistoryTable)
       expect(rows).toHaveLength(0)
+    })
+
+    it('should route clearAll through the serialized write transaction helper', async () => {
+      await seedHistory()
+
+      await translateHistoryService.clearAll()
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
   })
 })
