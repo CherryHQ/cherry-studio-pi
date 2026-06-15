@@ -44,8 +44,12 @@ const TranslateButton: FC<Props> = ({ text, onTranslated, disabled, style, isLoa
       return
     }
 
-    // 先复制原文到剪贴板
-    await navigator.clipboard.writeText(text)
+    // 先复制原文到剪贴板；剪贴板权限失败不应打断翻译主流程。
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch (error) {
+      logger.warn('Failed to copy source text before translation:', error as Error)
+    }
 
     setIsTranslating(true)
     try {
