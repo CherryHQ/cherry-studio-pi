@@ -83,7 +83,7 @@ describe('StorageV2LocalStorageSnapshot', () => {
       RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY,
       JSON.stringify({
         'ui.tab.pinned_tabs': [],
-        'ui.sidebar.width': 65,
+        'ui.sidebar.width': 50,
         'settings.provider.last_selected_provider_id': null
       })
     )

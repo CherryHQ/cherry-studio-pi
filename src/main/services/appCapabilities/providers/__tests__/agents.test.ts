@@ -183,7 +183,8 @@ describe('agent app capabilities', () => {
     expect(mocks.agentSessionService.createSession).toHaveBeenCalledWith({
       agentId: 'agent-1',
       name: 'Research',
-      description: 'Explore docs'
+      description: 'Explore docs',
+      workspace: { type: 'system' }
     })
     expect(mocks.agentTaskService.listTasks).toHaveBeenCalledWith('agent-1', {
       limit: 50,
@@ -219,7 +220,11 @@ describe('agent app capabilities', () => {
         sessionName: ' First task '
       })
     )
-    expect(mocks.agentSessionService.createSession).toHaveBeenCalledWith({ agentId: 'agent-1', name: 'First task' })
+    expect(mocks.agentSessionService.createSession).toHaveBeenCalledWith({
+      agentId: 'agent-1',
+      name: 'First task',
+      workspace: { type: 'system' }
+    })
   })
 
   it('defaults app-created agents to the Pi runtime', async () => {

@@ -18,9 +18,10 @@ const mocks = vi.hoisted(() => ({
   },
   knowledgeService: {
     search: vi.fn(),
-    create: vi.fn(),
-    add: vi.fn(),
-    reset: vi.fn()
+    createBase: vi.fn(),
+    addItems: vi.fn(),
+    listRootItems: vi.fn(),
+    reindexItems: vi.fn()
   },
   reduxService: {
     select: vi.fn(),
@@ -204,12 +205,12 @@ describe('knowledge app capabilities', () => {
     let maxActiveSearches = 0
     runtimeBases = bases
     runtimeProviders = providers
-    mocks.knowledgeService.search.mockImplementation(async (_event, input) => {
+    mocks.knowledgeService.search.mockImplementation(async (baseId: string) => {
       activeSearches += 1
       maxActiveSearches = Math.max(maxActiveSearches, activeSearches)
       await new Promise((resolve) => setTimeout(resolve, 5))
       activeSearches -= 1
-      return [{ id: `result-${input.base.id}`, content: 'matched' }]
+      return [{ id: `result-${baseId}`, content: 'matched' }]
     })
 
     const result = await capability('knowledge.search').execute({ query: 'matched' }, { source: 'agent' })
@@ -283,9 +284,9 @@ describe('knowledge app capabilities', () => {
     ]
     runtimeBases = bases
     runtimeProviders = providers
-    mocks.knowledgeService.search.mockImplementation(async (_event, input) =>
+    mocks.knowledgeService.search.mockImplementation(async (baseId: string) =>
       Array.from({ length: 3 }, (_, index) => ({
-        id: `${input.base.id}-result-${index}`,
+        id: `${baseId}-result-${index}`,
         content: 'matched'
       }))
     )
@@ -328,7 +329,7 @@ describe('knowledge app capabilities', () => {
     ]
     runtimeBases = [base]
     runtimeProviders = providers
-    mocks.knowledgeService.add.mockResolvedValue({ ok: true })
+    mocks.knowledgeService.addItems.mockResolvedValue({ ok: true })
 
     await capability('knowledge.item.add').execute(
       { baseId: ' kb-1 ', item: { id: 'item-1', type: 'note', content: 'hello' } },
@@ -339,14 +340,12 @@ describe('knowledge app capabilities', () => {
       { source: 'agent', dryRun: true }
     )
 
-    expect(mocks.knowledgeService.add).toHaveBeenCalledWith(
-      {},
-      expect.objectContaining({
-        item: { id: 'item-1', type: 'note', content: 'hello' }
-      })
-    )
+    expect(mocks.knowledgeService.addItems).toHaveBeenCalledWith('kb-1', [
+      { id: 'item-1', type: 'note', content: 'hello' }
+    ])
     expect(dryRun.data).toEqual({ baseId: 'kb-1' })
-    expect(mocks.knowledgeService.reset).not.toHaveBeenCalled()
+    expect(mocks.knowledgeService.listRootItems).not.toHaveBeenCalled()
+    expect(mocks.knowledgeService.reindexItems).not.toHaveBeenCalled()
   })
 
   it('rejects invalid knowledge base creation input before writing metadata', async () => {
@@ -358,7 +357,7 @@ describe('knowledge app capabilities', () => {
     ).rejects.toThrow('Knowledge base model is required')
 
     expect(mocks.storageV2KnowledgeRepository.importBases).not.toHaveBeenCalled()
-    expect(mocks.knowledgeService.create).not.toHaveBeenCalled()
+    expect(mocks.knowledgeService.createBase).not.toHaveBeenCalled()
   })
 
   it('rejects empty knowledge base ids and invalid knowledge items before calling services', async () => {
@@ -371,7 +370,7 @@ describe('knowledge app capabilities', () => {
       capability('knowledge.item.add').execute({ baseId: 'kb-1', item: [] }, { source: 'agent' })
     ).rejects.toThrow('Knowledge item is required')
 
-    expect(mocks.knowledgeService.add).not.toHaveBeenCalled()
-    expect(mocks.knowledgeService.reset).not.toHaveBeenCalled()
+    expect(mocks.knowledgeService.addItems).not.toHaveBeenCalled()
+    expect(mocks.knowledgeService.reindexItems).not.toHaveBeenCalled()
   })
 })

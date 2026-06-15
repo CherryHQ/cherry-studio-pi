@@ -67,6 +67,10 @@ const mockIpcApiService = {
   broadcast: vi.fn()
 }
 
+const mockKnowledgeVectorStoreService = {
+  closeAll: vi.fn().mockResolvedValue(undefined)
+}
+
 /** Default service instances from existing mock files */
 export const defaultServiceInstances = {
   PreferenceService: MockMainPreferenceServiceExport.preferenceService,
@@ -75,7 +79,8 @@ export const defaultServiceInstances = {
   DbService: MockMainDbServiceExport.dbService,
   MainWindowService: mockMainWindowService,
   WindowManager: mockWindowManager,
-  IpcApiService: mockIpcApiService
+  IpcApiService: mockIpcApiService,
+  KnowledgeVectorStoreService: mockKnowledgeVectorStoreService
 } as const
 
 /** Type for per-service overrides */

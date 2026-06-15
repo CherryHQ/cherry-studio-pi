@@ -1,3 +1,5 @@
+import { mkdir } from 'node:fs/promises'
+
 import { loggerService } from '@logger'
 import { getPathStatus, type PathStatus } from '@main/utils/file/pathStatus'
 import { t } from '@main/utils/language'
@@ -26,6 +28,32 @@ export async function assertAgentSessionWorkspaceDirectory(
 ): Promise<void> {
   const status = await getPathStatus(cwd)
   if (status.ok && status.kind === 'directory') return
+
+  logger.warn(`Agent session ${sessionId} workspace invalid: ${cwd}`, { runtime: options.runtime })
+  throw new AgentSessionWorkspaceError(workspacePathErrorMessage(cwd, status))
+}
+
+export async function ensureAgentSessionWorkspaceDirectory(
+  sessionId: string,
+  cwd: string,
+  options: { runtime: string }
+): Promise<void> {
+  const status = await getPathStatus(cwd)
+  if (status.ok && status.kind === 'directory') return
+
+  if (!status.ok && status.reason === 'missing') {
+    try {
+      await mkdir(cwd, { recursive: true })
+    } catch (error) {
+      const failedStatus = await getPathStatus(cwd)
+      logger.warn(`Agent session ${sessionId} workspace create failed: ${cwd}`, { runtime: options.runtime, error })
+      throw new AgentSessionWorkspaceError(workspacePathErrorMessage(cwd, failedStatus))
+    }
+    const createdStatus = await getPathStatus(cwd)
+    if (createdStatus.ok && createdStatus.kind === 'directory') return
+    logger.warn(`Agent session ${sessionId} workspace invalid after create: ${cwd}`, { runtime: options.runtime })
+    throw new AgentSessionWorkspaceError(workspacePathErrorMessage(cwd, createdStatus))
+  }
 
   logger.warn(`Agent session ${sessionId} workspace invalid: ${cwd}`, { runtime: options.runtime })
   throw new AgentSessionWorkspaceError(workspacePathErrorMessage(cwd, status))

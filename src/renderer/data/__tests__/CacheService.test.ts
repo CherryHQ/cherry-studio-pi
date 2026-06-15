@@ -210,7 +210,7 @@ describe('renderer CacheService equality semantics', () => {
 
       const service = await createService()
 
-      expect(service.getPersist('ui.sidebar.width')).toBe(65)
+      expect(service.getPersist('ui.sidebar.width')).toBe(50)
       expect(service.getPersist('settings.provider.openai.alert.dismissed')).toBe(false)
       expect(service.getPersist('ui.emoji.recently_used')).toEqual(['🧠'])
       expect(service.getPersist('ui.tab.pinned_tabs')).toEqual([

@@ -59,7 +59,11 @@ function isAgentTaskTemplate(value: unknown): value is AgentTaskJobInputTemplate
 function normalizeAgentTaskTemplate(value: unknown): AgentTaskJobInputTemplate | null {
   if (!isAgentTaskTemplate(value)) return null
 
-  const workspace = AgentSessionWorkspaceSourceSchema.safeParse(value.workspace)
+  const rawWorkspace =
+    Object.prototype.hasOwnProperty.call(value, 'workspace') && value.workspace !== undefined
+      ? value.workspace
+      : { type: 'system' }
+  const workspace = AgentSessionWorkspaceSourceSchema.safeParse(rawWorkspace)
   if (!workspace.success) return null
 
   return {

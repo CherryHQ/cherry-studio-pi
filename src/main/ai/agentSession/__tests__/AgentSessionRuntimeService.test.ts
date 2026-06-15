@@ -715,7 +715,9 @@ describe('AgentSessionRuntimeService', () => {
     const reader = stream.getReader()
 
     await expect(reader.read()).resolves.toMatchObject({ value: { type: 'start' }, done: false })
-    await vi.waitFor(() => expect(connection.send).toHaveBeenCalledWith({ message: userMessage('user-1') }))
+    await vi.waitFor(() =>
+      expect(connection.send).toHaveBeenCalledWith({ message: userMessage('user-1'), systemReminder: false })
+    )
 
     events.push({ type: 'turn-complete' })
     await expect(reader.read()).resolves.toMatchObject({ done: true })
@@ -751,7 +753,9 @@ describe('AgentSessionRuntimeService', () => {
     const reader = stream.getReader()
 
     await expect(reader.read()).resolves.toMatchObject({ value: { type: 'start' }, done: false })
-    await vi.waitFor(() => expect(connection.send).toHaveBeenCalledWith({ message: userMessage('user-1') }))
+    await vi.waitFor(() =>
+      expect(connection.send).toHaveBeenCalledWith({ message: userMessage('user-1'), systemReminder: false })
+    )
 
     events.close()
 
@@ -828,7 +832,7 @@ describe('AgentSessionRuntimeService', () => {
     await expect(reader.read()).resolves.toMatchObject({ value: { type: 'start' }, done: false })
     await expect(reader.read()).rejects.toThrow('send failed')
 
-    expect(connection.send).toHaveBeenCalledWith({ message: userMessage('user-1') })
+    expect(connection.send).toHaveBeenCalledWith({ message: userMessage('user-1'), systemReminder: false })
     expect(service.inspect('session-1')).toMatchObject({ status: 'idle', lastTerminalStatus: 'error' })
     expect(service.isSessionBusy('session-1')).toBe(false)
   })

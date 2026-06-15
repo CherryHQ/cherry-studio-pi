@@ -7,10 +7,21 @@ import { eq } from 'drizzle-orm'
 import { mkdtemp, stat } from 'fs/promises'
 import { tmpdir } from 'os'
 import path from 'path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 describe('AgentWorkspaceService', () => {
   const dbh = setupTestDatabase()
+  let systemWorkspaceRoot: string
+
+  beforeEach(async () => {
+    systemWorkspaceRoot = await mkdtemp(path.join(tmpdir(), 'cherry-system-workspace-'))
+    vi.spyOn(application, 'getPath').mockImplementation((key: string, filename?: string) => {
+      if (key === 'feature.agents.workspaces') {
+        return filename ? path.join(systemWorkspaceRoot, 'Agents', filename) : path.join(systemWorkspaceRoot, 'Agents')
+      }
+      return filename ? path.join('/mock', key, filename) : path.join('/mock', key)
+    })
+  })
 
   afterEach(() => {
     vi.restoreAllMocks()
@@ -132,24 +143,16 @@ describe('AgentWorkspaceService', () => {
     })
   })
 
-  it('creates system workspace rows without creating the backing directory', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'cherry-system-workspace-'))
-    vi.spyOn(application, 'getPath').mockImplementation((key: string, filename?: string) => {
-      if (key === 'feature.agents.workspaces') {
-        return filename ? path.join(root, 'Agents', filename) : path.join(root, 'Agents')
-      }
-      return filename ? path.join('/mock', key, filename) : path.join('/mock', key)
-    })
-
+  it('creates system workspace rows with a backing directory', async () => {
     const workspace = await dbh.db.transaction((tx) =>
       agentWorkspaceService.createSystemWorkspaceForSessionTx(tx, { sessionId: 'session-system' })
     )
 
     expect(workspace).toMatchObject({
-      path: path.join(root, 'Agents', 'session-system'),
+      path: path.join(systemWorkspaceRoot, 'Agents', 'session-system'),
       type: 'system'
     })
-    await expect(stat(workspace.path)).rejects.toThrow()
+    expect((await stat(workspace.path)).isDirectory()).toBe(true)
   })
 
   it('translates findOrCreateByPathTx unique races to conflict errors', async () => {

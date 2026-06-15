@@ -207,6 +207,7 @@ describe('AiStreamManager', () => {
     vi.useFakeTimers()
     mgr = createManager()
     vi.clearAllMocks()
+    mockWillContinueTopic.mockReturnValue(false)
     mockStreamText.mockImplementation(async (request: AiStreamRequest) =>
       pendingStream((request.requestOptions as { signal?: AbortSignal } | undefined)?.signal)
     )

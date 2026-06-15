@@ -249,7 +249,8 @@ describe('AgentConfigPage', () => {
     )
     expect(createInitialSessionMock).toHaveBeenCalledWith({
       agentId: 'created-1',
-      name: 'common.unnamed'
+      name: 'common.unnamed',
+      workspace: { type: 'system' }
     })
     expect(cacheSetMock).toHaveBeenCalledWith('agent.active_session_id', 'session-created')
   })
@@ -281,7 +282,7 @@ describe('AgentConfigPage', () => {
     expect(createInitialSessionMock).toHaveBeenCalledWith({
       agentId: 'created-workspace',
       name: 'common.unnamed',
-      workspaceId: 'workspace-1'
+      workspace: { type: 'user', workspaceId: 'workspace-1' }
     })
     expect(cacheSetMock).toHaveBeenCalledWith('agent.active_session_id', 'session-workspace')
   })

@@ -374,7 +374,7 @@ describe('runAgentTask', () => {
     ).rejects.toThrow('cancelled before start')
 
     expect(jobService.getById).not.toHaveBeenCalled()
-    expect(agentSessionService.createSession).not.toHaveBeenCalled()
+    expect(agentSessionService.create).not.toHaveBeenCalled()
     expect(mockStartRun).not.toHaveBeenCalled()
     expect(mockAbort).not.toHaveBeenCalled()
   })

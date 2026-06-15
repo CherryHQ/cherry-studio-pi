@@ -554,10 +554,7 @@ export class StorageV2BackupService {
       fs.copyFileSync(sourceManifestPath, path.join(backupDir, 'manifest.json'))
     }
 
-    await application
-      .get('KnowledgeVectorStoreService')
-      .closeAll()
-      .catch(() => undefined)
+    await Promise.resolve(application.get('KnowledgeVectorStoreService').closeAll()).catch(() => undefined)
     await storageV2SecretVaultService.waitForIdle()
 
     const copiedDirectories: string[] = []

@@ -414,6 +414,8 @@ class ProviderService {
    * Returns the updated Provider.
    */
   async addApiKey(providerId: string, key: string, label?: string): Promise<Provider> {
+    assertManagedCherryAiProviderMutationAllowed(providerId, `add API key to provider ${providerId}`)
+
     const normalizedKey = key.trim()
     if (!normalizedKey) {
       throw DataApiErrorFactory.validation({ key: ['API key cannot be empty'] })
