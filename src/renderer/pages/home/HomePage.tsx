@@ -1,4 +1,5 @@
 import { usePreference } from '@data/hooks/usePreference'
+import { loggerService } from '@logger'
 import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
 import { useCommandHandler } from '@renderer/features/command'
 import { useNavbarPosition } from '@renderer/hooks/useNavbar'
@@ -18,6 +19,8 @@ import styled from 'styled-components'
 import Chat from './Chat'
 import Navbar from './Navbar'
 import HomeTabs from './Tabs'
+
+const logger = loggerService.withContext('HomePage')
 
 /**
  * Synthesise a renderer Topic shape from a freshly-leased temporary id.
@@ -128,10 +131,16 @@ const HomePage: FC = () => {
   }, [state])
 
   useEffect(() => {
-    void window.api.window.setMinimumSize(showSidebar ? MIN_WINDOW_WIDTH : SECOND_MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
+    void window.api.window
+      .setMinimumSize(showSidebar ? MIN_WINDOW_WIDTH : SECOND_MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
+      .catch((error) => {
+        logger.warn('Failed to set home window minimum size', error as Error)
+      })
 
     return () => {
-      void window.api.window.resetMinimumSize()
+      void window.api.window.resetMinimumSize().catch((error) => {
+        logger.warn('Failed to reset home window minimum size', error as Error)
+      })
     }
   }, [showSidebar])
 

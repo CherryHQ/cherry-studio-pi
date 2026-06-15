@@ -1,4 +1,5 @@
 import { usePreference } from '@data/hooks/usePreference'
+import { loggerService } from '@logger'
 import { Navbar, NavbarCenter } from '@renderer/components/app/Navbar'
 import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
 import { useCommandHandler } from '@renderer/features/command'
@@ -19,6 +20,8 @@ import AgentChat from './AgentChat'
 import AgentNavbar from './AgentNavbar'
 import AgentSidePanel from './AgentSidePanel'
 import { AgentEmpty } from './components/status'
+
+const logger = loggerService.withContext('AgentPage')
 
 const AgentPage = () => {
   const { isLeftNavbar } = useNavbarPosition()
@@ -50,9 +53,15 @@ const AgentPage = () => {
   })
 
   useEffect(() => {
-    void window.api.window.setMinimumSize(showSidebar ? MIN_WINDOW_WIDTH : SECOND_MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
+    void window.api.window
+      .setMinimumSize(showSidebar ? MIN_WINDOW_WIDTH : SECOND_MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
+      .catch((error) => {
+        logger.warn('Failed to set agent window minimum size', error as Error)
+      })
     return () => {
-      void window.api.window.resetMinimumSize()
+      void window.api.window.resetMinimumSize().catch((error) => {
+        logger.warn('Failed to reset agent window minimum size', error as Error)
+      })
     }
   }, [showSidebar])
 
