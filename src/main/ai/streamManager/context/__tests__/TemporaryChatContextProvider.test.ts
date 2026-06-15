@@ -208,4 +208,22 @@ describe('TemporaryChatContextProvider', () => {
     // No pre-allocated messageId: AI SDK generates it for the streaming UIMessage
     expect(request.messageId).toBeUndefined()
   })
+
+  it('builds model snapshots for legacy raw model ids without throwing', async () => {
+    getByKeyMock.mockResolvedValueOnce({
+      id: 'gpt-4o',
+      providerId: 'openai',
+      apiModelId: undefined,
+      name: 'GPT-4o'
+    })
+
+    await provider.prepareDispatch(makeSubscriber(), openReq())
+
+    const [, userInput] = appendMessageMock.mock.calls[0]
+    expect(userInput.modelSnapshot).toEqual({
+      id: 'gpt-4o',
+      name: 'GPT-4o',
+      provider: 'openai'
+    })
+  })
 })

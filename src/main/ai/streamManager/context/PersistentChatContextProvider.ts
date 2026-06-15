@@ -22,6 +22,7 @@ import type { CherryUIMessage, StreamListener } from '../types'
 import type { ChatContextProvider, PreparedDispatch } from './ChatContextProvider'
 import type { MainContinueConversationRequest, MainDispatchRequest } from './dispatch'
 import { resolveAssistantModelId, resolveModels, resolvePersistentSiblingsGroupId } from './modelResolution'
+import { createModelSnapshot } from './modelSnapshot'
 
 /**
  * One OTel root span per execution. Its `traceId` is the source of truth
@@ -135,11 +136,7 @@ export class PersistentChatContextProvider implements ChatContextProvider {
           data: { parts: [] },
           status: 'pending',
           modelId: model.id,
-          modelSnapshot: {
-            id: model.apiModelId ?? parseUniqueModelId(model.id).modelId,
-            name: model.name,
-            provider: model.providerId
-          },
+          modelSnapshot: createModelSnapshot(model),
           traceId
         }))
       })
@@ -167,11 +164,7 @@ export class PersistentChatContextProvider implements ChatContextProvider {
             modelId: model.id,
             backend: new MessageServiceBackend({
               assistantMessageId: placeholder.id,
-              modelSnapshot: {
-                id: model.apiModelId ?? parseUniqueModelId(model.id).modelId,
-                name: model.name,
-                provider: model.providerId
-              },
+              modelSnapshot: createModelSnapshot(model),
               afterPersist: attachAutoRename
                 ? async (finalMessage) => {
                     await topicNamingService.maybeRenameFromConversationSummary(
@@ -258,11 +251,7 @@ export class PersistentChatContextProvider implements ChatContextProvider {
           modelId: model.id,
           backend: new MessageServiceBackend({
             assistantMessageId: anchor.id,
-            modelSnapshot: anchor.modelSnapshot ?? {
-              id: model.apiModelId ?? parseUniqueModelId(model.id).modelId,
-              name: model.name,
-              provider: model.providerId
-            }
+            modelSnapshot: anchor.modelSnapshot ?? createModelSnapshot(model)
           }),
           onPersistFailed: (error) =>
             void subscriber.onError({ error, status: 'error', modelId: model.id, isTopicDone: true })
