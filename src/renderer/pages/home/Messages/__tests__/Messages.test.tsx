@@ -5,8 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   cancelAnimationFrame: vi.fn(),
+  clipboardWriteText: vi.fn(),
   getGroupedMessages: vi.fn(() => ({})),
   requestAnimationFrame: vi.fn(() => 42),
+  toastError: vi.fn(),
+  toastSuccess: vi.fn(),
   usePreference: vi.fn((key: string) => [key === 'chat.message.navigation_mode' ? 'none' : false]),
   eventUnsubscribe: vi.fn(),
   eventOn: vi.fn(() => vi.fn()),
@@ -93,6 +96,11 @@ vi.mock('@renderer/utils', () => ({
   removeSpecialCharactersForFileName: (value: string) => value
 }))
 
+vi.mock('@renderer/utils/error', () => ({
+  formatErrorMessageWithPrefix: (error: unknown, prefix: string) =>
+    `${prefix}: ${error instanceof Error ? error.message : String(error)}`
+}))
+
 vi.mock('@renderer/utils/markdown', () => ({
   updateCodeBlock: vi.fn()
 }))
@@ -158,6 +166,19 @@ describe('Messages', () => {
     vi.clearAllMocks()
     vi.stubGlobal('requestAnimationFrame', mocks.requestAnimationFrame)
     vi.stubGlobal('cancelAnimationFrame', mocks.cancelAnimationFrame)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: mocks.clipboardWriteText
+      }
+    })
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: {
+        error: mocks.toastError,
+        success: mocks.toastSuccess
+      }
+    })
   })
 
   afterEach(() => {
@@ -177,5 +198,26 @@ describe('Messages', () => {
 
     expect(mocks.cancelAnimationFrame).toHaveBeenCalledWith(42)
     expect(onComponentUpdate).not.toHaveBeenCalled()
+  })
+
+  it('shows an error when the copy-last-message command cannot write to clipboard', async () => {
+    mocks.clipboardWriteText.mockRejectedValueOnce(new Error('clipboard unavailable'))
+    const topic = { id: 'topic-1', assistantId: 'assistant-1', name: 'Topic' } as Topic
+    render(
+      <Messages
+        topic={topic}
+        messages={[{ id: 'message-1', role: 'assistant', topicId: topic.id } as any]}
+        onComponentUpdate={vi.fn()}
+      />
+    )
+
+    const commandHandler = mocks.useCommandHandler.mock.calls.find(
+      ([command]) => command === 'chat.message.copy_last'
+    )?.[1]
+
+    await commandHandler?.()
+
+    expect(mocks.toastError).toHaveBeenCalledWith('common.copy_failed: clipboard unavailable')
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith('message.copy.success')
   })
 })

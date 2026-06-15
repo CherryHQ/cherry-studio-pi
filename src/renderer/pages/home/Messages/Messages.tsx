@@ -18,6 +18,7 @@ import {
   captureScrollableAsDataURL,
   removeSpecialCharactersForFileName
 } from '@renderer/utils'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { updateCodeBlock } from '@renderer/utils/markdown'
 import { getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { getTextFromParts } from '@renderer/utils/messageUtils/partsHelpers'
@@ -213,13 +214,18 @@ const Messages: React.FC<MessagesProps> = ({
     )
   }, [hasMore, isLoadingMore, loadOlder, setTimeoutTimer])
 
-  useCommandHandler('chat.message.copy_last', () => {
+  useCommandHandler('chat.message.copy_last', async () => {
     const lastMessage = last(messages)
     if (lastMessage) {
       const parts = partsMap?.[lastMessage.id]
       const text = parts ? getTextFromParts(parts) : getMainTextContent(lastMessage)
-      void navigator.clipboard.writeText(text)
-      window.toast.success(t('message.copy.success'))
+      try {
+        await navigator.clipboard.writeText(text)
+        window.toast.success(t('message.copy.success'))
+      } catch (error) {
+        logger.error('Failed to copy last message:', error as Error)
+        window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+      }
     }
   })
 
