@@ -37,6 +37,20 @@ function createRegistrationAbortError(): Error {
   return new Error('Registration polling aborted')
 }
 
+function summarizeRegistrationResponse(response: Record<string, unknown>): {
+  error?: string
+  keyCount: number
+  keys: string[]
+} {
+  const keys = Object.keys(response).sort()
+  const error = typeof response.error === 'string' ? response.error : undefined
+  return {
+    ...(error ? { error } : {}),
+    keyCount: keys.length,
+    keys
+  }
+}
+
 function waitForPollInterval(intervalMs: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) {
     return Promise.reject(createRegistrationAbortError())
@@ -83,7 +97,7 @@ async function postRegistration(
   try {
     return JSON.parse(text) as Record<string, unknown>
   } catch {
-    throw new Error(`Invalid JSON from Feishu registration API: ${text.slice(0, 200)}`)
+    throw new Error(`Invalid JSON from Feishu registration API (response length: ${text.length})`)
   }
 }
 
@@ -92,7 +106,7 @@ export async function registrationBegin(domain: FeishuDomain): Promise<Registrat
 
   // Step 1: init — check supported auth methods
   const initRes = await postRegistration(baseUrl, { action: 'init' })
-  logger.info('Feishu registration init response', { supported: initRes })
+  logger.info('Feishu registration init response', summarizeRegistrationResponse(initRes))
 
   // Step 2: begin — start device flow
   const res = await postRegistration(baseUrl, {
@@ -106,7 +120,10 @@ export async function registrationBegin(domain: FeishuDomain): Promise<Registrat
   const verificationUri = res.verification_uri_complete as string | undefined
 
   if (!deviceCode || !verificationUri) {
-    throw new Error(`Feishu registration begin failed: ${JSON.stringify(res)}`)
+    const summary = summarizeRegistrationResponse(res)
+    throw new Error(
+      `Feishu registration begin failed: missing required fields (keys: ${summary.keys.join(', ') || 'none'})`
+    )
   }
 
   return {

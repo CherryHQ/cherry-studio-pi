@@ -1,7 +1,7 @@
 import { net } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { registrationPoll } from '../FeishuAppRegistration'
+import { registrationBegin, registrationPoll } from '../FeishuAppRegistration'
 
 vi.mock('@logger', () => ({
   loggerService: {
@@ -89,5 +89,29 @@ describe('FeishuAppRegistration', () => {
     await expect(promise).rejects.toThrow('Registration polling aborted')
     expect(removeListenerSpy).toHaveBeenCalledTimes(1)
     expect(net.fetch).not.toHaveBeenCalled()
+  })
+
+  it('does not expose raw registration response fields when begin fails', async () => {
+    vi.mocked(net.fetch)
+      .mockResolvedValueOnce(jsonResponse({ auth_methods: ['client_secret'] }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          device_code: 'sensitive-device-code',
+          error: 'invalid_request'
+        })
+      )
+
+    let thrown: unknown
+    try {
+      await registrationBegin('feishu')
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(Error)
+    expect((thrown as Error).message).toBe(
+      'Feishu registration begin failed: missing required fields (keys: device_code, error)'
+    )
+    expect((thrown as Error).message).not.toContain('sensitive-device-code')
   })
 })
