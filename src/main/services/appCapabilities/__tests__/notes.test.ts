@@ -115,27 +115,13 @@ describe('notes app capabilities', () => {
   })
 
   it('treats notes.search limit as a result limit instead of a file scan limit', async () => {
-    const nodes: any[] = []
     for (let index = 0; index < 20; index += 1) {
       const filePath = path.join(tmpDir, `miss-${index}.md`)
       await fs.writeFile(filePath, 'ordinary note\n', 'utf8')
-      nodes.push({
-        type: 'file',
-        name: `miss-${index}`,
-        treePath: `/miss-${index}`,
-        externalPath: filePath
-      })
     }
 
     const targetPath = path.join(tmpDir, 'target.md')
     await fs.writeFile(targetPath, 'needle appears late\n', 'utf8')
-    nodes.push({
-      type: 'file',
-      name: 'target',
-      treePath: '/target',
-      externalPath: targetPath
-    })
-    mocks.scanDir.mockResolvedValue(nodes)
 
     const result = await getCapability('notes.search').execute({ query: 'needle', limit: 1 }, { source: 'agent' })
 
@@ -152,14 +138,6 @@ describe('notes app capabilities', () => {
   it('skips oversized note files during notes.search', async () => {
     const largePath = path.join(tmpDir, 'large.md')
     await fs.writeFile(largePath, `${'x'.repeat(512 * 1024 + 1)}needle`, 'utf8')
-    mocks.scanDir.mockResolvedValue([
-      {
-        type: 'file',
-        name: 'large',
-        treePath: '/large',
-        externalPath: largePath
-      }
-    ])
 
     const result = await getCapability('notes.search').execute({ query: 'needle' }, { source: 'agent' })
 
@@ -170,14 +148,6 @@ describe('notes app capabilities', () => {
   it('returns filename matches without reading oversized note content', async () => {
     const largePath = path.join(tmpDir, 'needle-large.md')
     await fs.writeFile(largePath, 'x'.repeat(512 * 1024 + 1), 'utf8')
-    mocks.scanDir.mockResolvedValue([
-      {
-        type: 'file',
-        name: 'needle-large',
-        treePath: '/needle-large',
-        externalPath: largePath
-      }
-    ])
     const readFileSpy = vi.spyOn(fs, 'readFile')
 
     const result = await getCapability('notes.search').execute({ query: 'needle' }, { source: 'agent' })
@@ -282,6 +252,25 @@ describe('notes app capabilities', () => {
     expect(written.data).toEqual({ path: filePath })
     expect(await fs.readFile(filePath, 'utf8')).toBe('123')
     expect(mocks.notifyDataSyncLocalChange).toHaveBeenLastCalledWith('file', {
+      source: 'app-capability.notes.write',
+      path: filePath
+    })
+  })
+
+  it('creates missing parent directories when writing nested notes', async () => {
+    const filePath = path.join(tmpDir, 'projects', 'alpha', 'plan.md')
+
+    const result = await getCapability('notes.write').execute(
+      {
+        path: 'projects/alpha/plan',
+        content: 'ship it\n'
+      },
+      { source: 'agent' }
+    )
+
+    expect(result.data).toEqual({ path: filePath })
+    expect(await fs.readFile(filePath, 'utf8')).toBe('ship it\n')
+    expect(mocks.notifyDataSyncLocalChange).toHaveBeenCalledWith('file', {
       source: 'app-capability.notes.write',
       path: filePath
     })
