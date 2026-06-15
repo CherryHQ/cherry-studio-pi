@@ -109,7 +109,7 @@ export function useModelMutations() {
     trigger: deleteTrigger,
     isLoading: isDeleting,
     error: deleteError
-  } = useMutation('DELETE', '/models/:uniqueModelId*', { refresh: ['/models'] })
+  } = useMutation('DELETE', '/models/:uniqueModelId*', { refresh: ['/models', '/pins'] })
 
   const {
     trigger: updateTrigger,

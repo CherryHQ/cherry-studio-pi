@@ -249,7 +249,7 @@ describe('useProviderMutations', () => {
     vi.clearAllMocks()
   })
 
-  it('should set up PATCH and DELETE mutations via template path with list + entity + /* wildcard refresh', () => {
+  it('should set up PATCH and DELETE mutations via template path with related cache refreshes', () => {
     renderHook(() => useProviderMutations('openai'))
 
     const patchCall = mockUseMutation.mock.calls.find(
@@ -264,7 +264,9 @@ describe('useProviderMutations', () => {
     expect(patchCall![2]).toEqual({ refresh: ['/providers', '/providers/openai', '/providers/openai/*'] })
 
     expect(deleteCall).toBeDefined()
-    expect(deleteCall![2]).toEqual({ refresh: ['/providers', '/providers/openai', '/providers/openai/*'] })
+    expect(deleteCall![2]).toEqual({
+      refresh: ['/providers', '/providers/openai', '/providers/openai/*', '/models', '/pins']
+    })
   })
 
   it('should set up POST api-keys mutation with /* wildcard refresh', () => {
@@ -673,12 +675,22 @@ describe('useProviderActions refresh', () => {
     const patchCall = mockUseMutation.mock.calls.find(
       (c: any[]) => c[0] === 'PATCH' && c[1] === '/providers/:providerId'
     )
+    const deleteCall = mockUseMutation.mock.calls.find(
+      (c: any[]) => c[0] === 'DELETE' && c[1] === '/providers/:providerId'
+    )
     expect(patchCall).toBeDefined()
+    expect(deleteCall).toBeDefined()
 
     // Invoke the function-form refresh with real args to confirm it calls providerRefreshPaths
     const refreshFn = (patchCall as any[])[2].refresh as (ctx: { args: { params: { providerId: string } } }) => string[]
     const result = refreshFn({ args: { params: { providerId: 'openai' } } })
     expect(result).toEqual(['/providers', '/providers/openai', '/providers/openai/*'])
+
+    const deleteRefreshFn = (deleteCall as any[])[2].refresh as (ctx: {
+      args: { params: { providerId: string } }
+    }) => string[]
+    const deleteResult = deleteRefreshFn({ args: { params: { providerId: 'openai' } } })
+    expect(deleteResult).toEqual(['/providers', '/providers/openai', '/providers/openai/*', '/models', '/pins'])
   })
 })
 

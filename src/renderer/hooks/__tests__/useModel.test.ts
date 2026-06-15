@@ -303,10 +303,16 @@ describe('useModelMutations', () => {
     expect(mockUseMutation).toHaveBeenCalledTimes(4)
   })
 
-  it('should configure all mutations to refresh /models', () => {
+  it('should configure model mutations to refresh affected caches', () => {
     renderHook(() => useModelMutations())
 
+    const deleteCall = mockUseMutation.mock.calls.find(
+      (c: any[]) => c[0] === 'DELETE' && c[1] === '/models/:uniqueModelId*'
+    )
+    expect(deleteCall?.[2]).toMatchObject({ refresh: ['/models', '/pins'] })
+
     for (const call of mockUseMutation.mock.calls as any[][]) {
+      if (call === deleteCall) continue
       expect(call[2]).toMatchObject({ refresh: ['/models'] })
     }
   })

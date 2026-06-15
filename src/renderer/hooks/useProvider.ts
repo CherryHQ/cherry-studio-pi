@@ -34,6 +34,10 @@ function providerRefreshPaths(providerId: string): ConcreteApiPaths[] {
   ]
 }
 
+function providerDeleteRefreshPaths(providerId: string): ConcreteApiPaths[] {
+  return [...providerRefreshPaths(providerId), '/models', '/pins']
+}
+
 // ─── Layer 1: List + Create ────────────────────────────────────────────
 export function useProviders(query?: ListProvidersQuery) {
   const filtered = query ? (omitBy(query, isUndefined) as ListProvidersQuery) : undefined
@@ -101,7 +105,7 @@ export function useProviderMutations(providerId: string) {
     trigger: deleteTrigger,
     isLoading: isDeleting,
     error: deleteError
-  } = useMutation('DELETE', '/providers/:providerId', { refresh })
+  } = useMutation('DELETE', '/providers/:providerId', { refresh: providerDeleteRefreshPaths(providerId) })
 
   // addApiKey/deleteApiKey use template paths so body/response types are schema-inferred.
   const {
@@ -272,7 +276,7 @@ export function useProviderActions() {
 
   const { trigger: deleteTrigger } = useMutation('DELETE', '/providers/:providerId', {
     // args is always present — callers always supply params.providerId
-    refresh: ({ args }) => providerRefreshPaths(args!.params.providerId)
+    refresh: ({ args }) => providerDeleteRefreshPaths(args!.params.providerId)
   })
 
   const updateProviderById = useCallback(
