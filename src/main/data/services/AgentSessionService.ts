@@ -49,9 +49,17 @@ function decodeSessionCursor(raw: string): { key: string; id: string } | null {
 type JoinedSessionRow = {
   session: SessionRow
   workspace: AgentWorkspaceRow | null
+  activeAgentId: string | null
 }
 
 function rowToSession(row: JoinedSessionRow): AgentSessionEntity {
+  const agentId = row.activeAgentId ? row.session.agentId : null
+  if (row.session.agentId && !row.activeAgentId) {
+    logger.debug('Agent session references a missing or deleted agent; returning as orphan session', {
+      sessionId: row.session.id,
+      agentId: row.session.agentId
+    })
+  }
   if (row.session.workspaceId && !row.workspace) {
     logger.warn('Agent session references a missing workspace row; returning without workspace', {
       sessionId: row.session.id,
@@ -61,7 +69,7 @@ function rowToSession(row: JoinedSessionRow): AgentSessionEntity {
 
   return {
     id: row.session.id,
-    agentId: row.session.agentId,
+    agentId,
     name: row.session.name,
     description: row.session.description,
     workspaceId: row.workspace ? row.session.workspaceId : null,
@@ -83,6 +91,10 @@ function buildSearchPredicate(search: string | undefined): SQL | undefined {
   return or(nameMatch, descriptionMatch)
 }
 
+function activeAgentJoinCondition(): SQL {
+  return and(eq(sessionsTable.agentId, agentsTable.id), isNull(agentsTable.deletedAt))!
+}
+
 export class AgentSessionService {
   private async repairMissingWorkspace(row: JoinedSessionRow): Promise<JoinedSessionRow> {
     if (!row.session.workspaceId || row.workspace) return row
@@ -102,9 +114,10 @@ export class AgentSessionService {
         await tx.update(sessionsTable).set({ workspaceId: workspace.id }).where(eq(sessionsTable.id, row.session.id))
 
         const [nextRow] = await tx
-          .select({ session: sessionsTable, workspace: agentWorkspaceTable })
+          .select({ session: sessionsTable, workspace: agentWorkspaceTable, activeAgentId: agentsTable.id })
           .from(sessionsTable)
           .leftJoin(agentWorkspaceTable, eq(sessionsTable.workspaceId, agentWorkspaceTable.id))
+          .leftJoin(agentsTable, activeAgentJoinCondition())
           .where(eq(sessionsTable.id, row.session.id))
           .limit(1)
 
@@ -139,13 +152,13 @@ export class AgentSessionService {
     const rows = await db
       .select({
         id: sessionsTable.id,
-        agentId: sessionsTable.agentId,
+        activeAgentId: agentsTable.id,
         agentName: agentsTable.name,
         name: sessionsTable.name,
         updatedAt: sessionsTable.updatedAt
       })
       .from(sessionsTable)
-      .leftJoin(agentsTable, and(eq(sessionsTable.agentId, agentsTable.id), isNull(agentsTable.deletedAt)))
+      .leftJoin(agentsTable, activeAgentJoinCondition())
       .where(filters.length > 0 ? and(...filters) : undefined)
       .orderBy(desc(sessionsTable.updatedAt), asc(sessionsTable.id))
       .limit(limit)
@@ -156,7 +169,7 @@ export class AgentSessionService {
       title: row.name,
       subtitle: row.agentName ?? undefined,
       updatedAt: timestampToISO(row.updatedAt),
-      target: { sessionId: row.id, agentId: row.agentId }
+      target: { sessionId: row.id, agentId: row.activeAgentId }
     }))
   }
 
@@ -195,7 +208,7 @@ export class AgentSessionService {
     const [agent] = await tx
       .select({ id: agentsTable.id })
       .from(agentsTable)
-      .where(eq(agentsTable.id, dto.agentId))
+      .where(and(eq(agentsTable.id, dto.agentId), isNull(agentsTable.deletedAt)))
       .limit(1)
     if (!agent) throw DataApiErrorFactory.notFound('Agent', dto.agentId)
 
@@ -234,9 +247,10 @@ export class AgentSessionService {
   async getById(id: string): Promise<AgentSessionEntity> {
     const db = application.get('DbService').getDb()
     const [row] = await db
-      .select({ session: sessionsTable, workspace: agentWorkspaceTable })
+      .select({ session: sessionsTable, workspace: agentWorkspaceTable, activeAgentId: agentsTable.id })
       .from(sessionsTable)
       .leftJoin(agentWorkspaceTable, eq(sessionsTable.workspaceId, agentWorkspaceTable.id))
+      .leftJoin(agentsTable, activeAgentJoinCondition())
       .where(eq(sessionsTable.id, id))
       .limit(1)
     if (!row) throw DataApiErrorFactory.notFound('Session', id)
@@ -255,6 +269,7 @@ export class AgentSessionService {
       .select({ path: agentWorkspaceTable.path })
       .from(sessionsTable)
       .innerJoin(agentWorkspaceTable, eq(sessionsTable.workspaceId, agentWorkspaceTable.id))
+      .innerJoin(agentsTable, activeAgentJoinCondition())
       .where(eq(sessionsTable.agentId, agentId))
       .orderBy(desc(sessionsTable.createdAt))
       .limit(1)
@@ -279,9 +294,10 @@ export class AgentSessionService {
     }
 
     const rows = await db
-      .select({ session: sessionsTable, workspace: agentWorkspaceTable })
+      .select({ session: sessionsTable, workspace: agentWorkspaceTable, activeAgentId: agentsTable.id })
       .from(sessionsTable)
       .leftJoin(agentWorkspaceTable, eq(sessionsTable.workspaceId, agentWorkspaceTable.id))
+      .leftJoin(agentsTable, activeAgentJoinCondition())
       .where(filters.length > 0 ? and(...filters) : undefined)
       .orderBy(asc(sessionsTable.orderKey), asc(sessionsTable.id))
       .limit(limit + 1)
@@ -313,6 +329,14 @@ export class AgentSessionService {
   }
 
   async updateTx(tx: DbOrTx, id: string, patch: UpdateAgentSessionDto): Promise<SessionRow | undefined> {
+    if (patch.agentId) {
+      const [agent] = await tx
+        .select({ id: agentsTable.id })
+        .from(agentsTable)
+        .where(and(eq(agentsTable.id, patch.agentId), isNull(agentsTable.deletedAt)))
+        .limit(1)
+      if (!agent) throw DataApiErrorFactory.notFound('Agent', patch.agentId)
+    }
     if (patch.workspaceId) {
       await agentWorkspaceService.getByIdTx(tx, patch.workspaceId)
     }

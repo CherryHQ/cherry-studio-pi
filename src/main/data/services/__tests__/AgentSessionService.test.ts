@@ -162,6 +162,32 @@ describe('AgentSessionService', () => {
     expect(session.workspace).toBeNull()
   })
 
+  it('returns sessions that point to soft-deleted agents as orphan sessions', async () => {
+    const session = await createSession('Soft deleted agent')
+
+    await dbh.db.update(agentTable).set({ deletedAt: Date.now() }).where(eq(agentTable.id, 'agent-session-test'))
+
+    const refetched = await agentSessionService.getById(session.id)
+    expect(refetched.agentId).toBeNull()
+    expect(refetched.workspaceId).toBe(session.workspaceId)
+
+    const list = await agentSessionService.listByCursor()
+    const listed = list.items.find((item) => item.id === session.id)
+    expect(listed?.agentId).toBeNull()
+
+    const search = await agentSessionService.search({ q: 'Soft deleted', limit: 5 })
+    expect(search).toEqual([
+      expect.objectContaining({
+        type: 'session',
+        id: session.id,
+        subtitle: undefined,
+        target: { sessionId: session.id, agentId: null }
+      })
+    ])
+
+    await expect(agentSessionService.findAgentWorkspacePath('agent-session-test')).resolves.toBeNull()
+  })
+
   it('throws not found for missing sessions', async () => {
     await expect(agentSessionService.getById('missing-session')).rejects.toMatchObject({
       code: ErrorCode.NOT_FOUND
@@ -198,6 +224,30 @@ describe('AgentSessionService', () => {
     const refetched = await agentSessionService.getById(session.id)
     expect(refetched.workspaceId).toBe(secondWorkspace.id)
     expect(refetched.workspace?.path).toBe(secondWorkspace.path)
+  })
+
+  it('rejects assigning a session to a soft-deleted agent', async () => {
+    const session = await createSession('Before reassignment')
+    await dbh.db.insert(agentTable).values({
+      id: 'soft-deleted-agent',
+      type: 'pi',
+      name: 'Soft deleted',
+      instructions: '',
+      model: null,
+      orderKey: 'b0',
+      deletedAt: Date.now()
+    })
+
+    await expect(
+      agentSessionService.update(session.id, {
+        agentId: 'soft-deleted-agent'
+      })
+    ).rejects.toMatchObject({ code: ErrorCode.NOT_FOUND })
+
+    await expect(agentSessionService.getById(session.id)).resolves.toMatchObject({
+      id: session.id,
+      agentId: 'agent-session-test'
+    })
   })
 
   it('deletes a session', async () => {
@@ -291,5 +341,19 @@ describe('AgentSessionService', () => {
 
     const rows = await dbh.db.select().from(agentWorkspaceTable)
     expect(rows).toHaveLength(0)
+  })
+
+  it('does not create sessions or default workspace rows for soft-deleted agents', async () => {
+    await dbh.db.update(agentTable).set({ deletedAt: Date.now() }).where(eq(agentTable.id, 'agent-session-test'))
+
+    await expect(
+      agentSessionService.createSession({
+        agentId: 'agent-session-test',
+        name: 'Rejected'
+      })
+    ).rejects.toMatchObject({ code: ErrorCode.NOT_FOUND })
+
+    expect(await dbh.db.select().from(agentSessionTable)).toHaveLength(0)
+    expect(await dbh.db.select().from(agentWorkspaceTable)).toHaveLength(0)
   })
 })
