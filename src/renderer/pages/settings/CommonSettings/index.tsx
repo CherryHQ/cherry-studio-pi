@@ -132,6 +132,13 @@ const CommonSettings: FC = () => {
     [t]
   )
 
+  const requestRelaunch = useCallback(() => {
+    void window.api.application.relaunch().catch((error) => {
+      logger.error('Failed to relaunch app after common settings change', error as Error)
+      showOperationFailed(error)
+    })
+  }, [showOperationFailed])
+
   const persistPreference = useCallback(
     (operation: () => Promise<unknown>) => {
       try {
@@ -307,7 +314,7 @@ const CommonSettings: FC = () => {
         setTimeoutTimer(
           'handleUseSystemTitleBarChange',
           () => {
-            void window.api.application.relaunch()
+            requestRelaunch()
           },
           500
         )
@@ -333,7 +340,7 @@ const CommonSettings: FC = () => {
         setTimeoutTimer(
           'handleHardwareAccelerationChange',
           () => {
-            void window.api.application.relaunch()
+            requestRelaunch()
           },
           500
         )
