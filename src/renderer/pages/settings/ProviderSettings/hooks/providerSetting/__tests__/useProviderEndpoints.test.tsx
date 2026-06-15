@@ -68,6 +68,22 @@ describe('useProviderEndpoints', () => {
     expect(result.current.providerAnthropicHost).toBe('https://anthropic.example.com')
   })
 
+  it('uses legacy apiHost and anthropicApiHost while provider data is migrating', () => {
+    const provider = {
+      id: 'deepseek',
+      apiHost: 'https://api.deepseek.com',
+      anthropicApiHost: 'https://api.deepseek.com/anthropic',
+      endpointConfigs: {}
+    } as any
+
+    const { result } = renderHook(() => useProviderEndpoints(provider))
+
+    expect(result.current.primaryEndpoint).toBe(ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS)
+    expect(result.current.providerApiHost).toBe('https://api.deepseek.com')
+    expect(result.current.providerAnthropicHost).toBe('https://api.deepseek.com/anthropic')
+    expect(result.current.anthropicApiHost).toBe('https://api.deepseek.com/anthropic')
+  })
+
   it('owns endpoint drafts locally per hook instance', () => {
     const provider = {
       id: 'openai',

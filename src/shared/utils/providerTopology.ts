@@ -16,6 +16,16 @@ export interface ProviderHostTopology {
   hasAnthropicEndpoint: boolean
 }
 
+type LegacyProviderHostFields = Provider & {
+  apiHost?: unknown
+  anthropicApiHost?: unknown
+}
+
+function getLegacyStringField(provider: Provider | undefined, field: 'apiHost' | 'anthropicApiHost') {
+  const value = (provider as LegacyProviderHostFields | undefined)?.[field]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 function hasEndpointConfig(provider: Provider | undefined, endpoint: EndpointType) {
   return Object.prototype.hasOwnProperty.call(provider?.endpointConfigs ?? {}, endpoint)
 }
@@ -36,13 +46,19 @@ function resolvePrimaryEndpoint(provider: Provider | undefined): EndpointType {
 
 export function getProviderHostTopology(provider: Provider | undefined): ProviderHostTopology {
   const primaryEndpoint = resolvePrimaryEndpoint(provider)
-  const primaryBaseUrl = provider?.endpointConfigs?.[primaryEndpoint]?.baseUrl ?? ''
-  const anthropicBaseUrl = provider?.endpointConfigs?.[ENDPOINT_TYPE.ANTHROPIC_MESSAGES]?.baseUrl ?? ''
+  const legacyApiHost = getLegacyStringField(provider, 'apiHost')
+  const legacyAnthropicApiHost = getLegacyStringField(provider, 'anthropicApiHost')
+  const primaryBaseUrl =
+    provider?.endpointConfigs?.[primaryEndpoint]?.baseUrl ??
+    (primaryEndpoint === ENDPOINT_TYPE.ANTHROPIC_MESSAGES ? legacyAnthropicApiHost || legacyApiHost : legacyApiHost)
+  const anthropicBaseUrl =
+    provider?.endpointConfigs?.[ENDPOINT_TYPE.ANTHROPIC_MESSAGES]?.baseUrl ?? legacyAnthropicApiHost
 
   return {
     primaryEndpoint,
     primaryBaseUrl,
     anthropicBaseUrl,
-    hasAnthropicEndpoint: hasEndpointConfig(provider, ENDPOINT_TYPE.ANTHROPIC_MESSAGES)
+    hasAnthropicEndpoint:
+      hasEndpointConfig(provider, ENDPOINT_TYPE.ANTHROPIC_MESSAGES) || Boolean(legacyAnthropicApiHost)
   }
 }
