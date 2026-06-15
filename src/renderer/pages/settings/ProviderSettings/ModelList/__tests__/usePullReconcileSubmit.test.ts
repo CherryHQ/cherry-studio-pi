@@ -4,17 +4,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { usePullReconcileSubmit } from '../usePullReconcileSubmit'
 
-const { reconcileTriggerMock } = vi.hoisted(() => ({
-  reconcileTriggerMock: vi.fn()
+const { reconcileTriggerMock, useMutationMock } = vi.hoisted(() => ({
+  reconcileTriggerMock: vi.fn(),
+  useMutationMock: vi.fn()
 }))
 const useProviderMock = vi.fn()
 const updateProviderMock = vi.fn()
 
 vi.mock('@data/hooks/useDataApi', () => ({
-  useMutation: () => ({
-    trigger: reconcileTriggerMock,
-    isLoading: false
-  })
+  useMutation: (...args: unknown[]) => useMutationMock(...args)
 }))
 
 vi.mock('@renderer/hooks/useProvider', () => ({
@@ -41,6 +39,11 @@ describe('usePullReconcileSubmit', () => {
   beforeEach(() => {
     reconcileTriggerMock.mockReset()
     reconcileTriggerMock.mockResolvedValue([])
+    useMutationMock.mockReset()
+    useMutationMock.mockReturnValue({
+      trigger: reconcileTriggerMock,
+      isLoading: false
+    })
     useProviderMock.mockReset()
     updateProviderMock.mockReset()
     updateProviderMock.mockResolvedValue(undefined)
@@ -78,6 +81,9 @@ describe('usePullReconcileSubmit', () => {
     })
 
     expect(reconcileTriggerMock).toHaveBeenCalledTimes(1)
+    expect(useMutationMock).toHaveBeenCalledWith('POST', '/providers/:providerId/models:reconcile', {
+      refresh: ['/models', '/pins']
+    })
     expect(reconcileTriggerMock).toHaveBeenCalledWith({
       params: { providerId: 'cherryin' },
       body: {

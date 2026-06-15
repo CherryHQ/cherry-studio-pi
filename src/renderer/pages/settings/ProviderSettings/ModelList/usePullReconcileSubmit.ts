@@ -27,7 +27,7 @@ export function usePullReconcileSubmit({ providerId, onApplyCommitted }: UsePull
   const { trigger: reconcileTrigger, isLoading: applyBusy } = useMutation(
     'POST',
     '/providers/:providerId/models:reconcile',
-    { refresh: ['/models'] }
+    { refresh: ['/models', '/pins'] }
   )
 
   const confirmApply = useCallback(
