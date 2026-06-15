@@ -25,7 +25,6 @@ import { useTranslation } from 'react-i18next'
 import { FieldHeader } from '../../FieldHeader'
 import { ModelSelectorField } from '../../ModelSelectorField'
 import type { AgentFormState } from '../descriptor'
-import { WorkspaceField } from './WorkspaceSection'
 
 interface Props {
   form: AgentFormState
@@ -155,15 +154,6 @@ const BasicSection: FC<Props> = ({ form, onChange, nameError, modelError, varian
           </>
         )}
       </ModelSubsection>
-
-      {isCreateVariant && (
-        <FieldSet className="gap-3">
-          <FieldSeparator className="font-medium text-foreground *:data-[slot=field-separator-content]:bg-background [&>[data-slot=field-separator-content]]:font-medium">
-            {t('library.config.agent.section.workspace.label')}
-          </FieldSeparator>
-          <WorkspaceField form={form} onChange={onChange} />
-        </FieldSet>
-      )}
 
       {!isCreateVariant && (
         <>

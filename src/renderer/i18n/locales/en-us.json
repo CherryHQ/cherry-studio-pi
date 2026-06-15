@@ -2568,7 +2568,7 @@
             "title": "Advanced"
           },
           "basic": {
-            "desc": "Name, avatar, model, workspace",
+            "desc": "Name, avatar, and model",
             "label": "Basic",
             "title": "Basic"
           },

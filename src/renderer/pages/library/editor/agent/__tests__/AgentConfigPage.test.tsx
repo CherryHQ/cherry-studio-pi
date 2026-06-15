@@ -64,8 +64,8 @@ vi.mock('../../ConfigEditorShell', () => ({
   }: {
     children: ReactNode
     onSave: () => Promise<void>
-    onSectionChange: (section: 'mode' | 'basic' | 'prompt' | 'advanced' | 'tools' | 'permission') => void
-    sections: Array<{ id: 'mode' | 'basic' | 'prompt' | 'advanced' | 'tools' | 'permission' }>
+    onSectionChange: (section: 'mode' | 'basic' | 'workspace' | 'prompt' | 'advanced' | 'tools' | 'permission') => void
+    sections: Array<{ id: 'mode' | 'basic' | 'workspace' | 'prompt' | 'advanced' | 'tools' | 'permission' }>
   }) => (
     <div>
       {sections.map((section) => (
@@ -103,9 +103,6 @@ vi.mock('../sections/BasicSection', () => ({
     <div>
       <button type="button" onClick={() => onChange({ name: 'Created Agent', model: 'anthropic::claude-sonnet-4-5' })}>
         set basic
-      </button>
-      <button type="button" onClick={() => onChange({ workspacePath: '/Users/me/project' })}>
-        set workspace
       </button>
       <button type="button" onClick={() => onChange({ soulEnabled: true })}>
         enable autonomous
@@ -275,6 +272,7 @@ describe('AgentConfigPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'basic' }))
     await user.click(screen.getByRole('button', { name: 'set basic' }))
+    await user.click(screen.getByRole('button', { name: 'workspace' }))
     await user.click(screen.getByRole('button', { name: 'set workspace' }))
     await user.click(screen.getByRole('button', { name: 'save' }))
 
@@ -295,6 +293,7 @@ describe('AgentConfigPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'basic' }))
     await user.click(screen.getByRole('button', { name: 'set basic' }))
+    await user.click(screen.getByRole('button', { name: 'workspace' }))
     await user.click(screen.getByRole('button', { name: 'set workspace' }))
     await user.click(screen.getByRole('button', { name: 'save' }))
 
@@ -335,9 +334,11 @@ describe('AgentConfigPage', () => {
 
     await user.click(screen.getByRole('button', { name: /common\.next/ }))
     expect(screen.getByRole('button', { name: 'set basic' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'set workspace' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'set basic' }))
+    await user.click(screen.getByRole('button', { name: /common\.next/ }))
+    expect(screen.getByRole('button', { name: 'set workspace' })).toBeInTheDocument()
+
     await user.click(screen.getByRole('button', { name: /common\.next/ }))
     await user.click(screen.getByRole('button', { name: /common\.next/ }))
     await user.click(screen.getByRole('button', { name: 'set tools' }))
