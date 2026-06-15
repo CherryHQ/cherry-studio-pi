@@ -113,7 +113,8 @@ export class GroupService {
     }
 
     const [row] = await withSqliteErrors(
-      () => this.db.update(groupTable).set(updates).where(eq(groupTable.id, id)).returning(),
+      () =>
+        this.dbService.withWriteTx((tx) => tx.update(groupTable).set(updates).where(eq(groupTable.id, id)).returning()),
       defaultHandlersFor('Group', dto.name ?? id)
     )
 
@@ -129,7 +130,9 @@ export class GroupService {
    * Delete a group.
    */
   async delete(id: string): Promise<void> {
-    const [row] = await this.db.delete(groupTable).where(eq(groupTable.id, id)).returning({ id: groupTable.id })
+    const [row] = await this.dbService.withWriteTx((tx) =>
+      tx.delete(groupTable).where(eq(groupTable.id, id)).returning({ id: groupTable.id })
+    )
 
     if (!row) {
       throw DataApiErrorFactory.notFound('Group', id)

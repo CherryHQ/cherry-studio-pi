@@ -12,6 +12,7 @@ describe('GroupService', () => {
   const dbh = setupTestDatabase()
 
   beforeEach(() => {
+    MockMainDbServiceExport.dbService.withWriteTx.mockImplementation((fn) => dbh.db.transaction(fn as never))
     MockMainDbServiceExport.dbService.withWriteTx.mockClear()
   })
 
@@ -100,6 +101,7 @@ describe('GroupService', () => {
       const updated = await groupService.update(created.id, { name: 'New' })
 
       expect(updated).toMatchObject({ id: created.id, name: 'New', entityType: 'topic' })
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(2)
     })
 
     it('should return the current row for an empty update payload', async () => {
@@ -244,6 +246,7 @@ describe('GroupService', () => {
       expect(remaining.map((g) => g.id)).toEqual([a.id, c.id])
       expect(remaining[0].orderKey).toBe(a.orderKey)
       expect(remaining[1].orderKey).toBe(c.orderKey)
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(4)
     })
 
     it('should throw NOT_FOUND when the group does not exist', async () => {
