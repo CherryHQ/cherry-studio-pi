@@ -46,6 +46,7 @@ import {
 import type { CherryMessagePart } from '@shared/data/types/message'
 import {
   createUniqueModelId,
+  isUniqueModelId,
   type Model as SharedModel,
   parseUniqueModelId,
   type UniqueModelId
@@ -226,11 +227,11 @@ const MessageMenubar: FC<Props> = (props) => {
   const onSelectMentionModel = useCallback(
     async (selected: SharedModel | undefined) => {
       if (!selected) return
-      const { providerId, modelId } = parseUniqueModelId(selected.id)
+      const parsed = isUniqueModelId(selected.id) ? parseUniqueModelId(selected.id) : undefined
       await regenerateWithModel(selected.id, {
-        id: modelId,
+        id: selected.apiModelId || parsed?.modelId || selected.id,
         name: selected.name,
-        provider: providerId,
+        provider: selected.providerId || parsed?.providerId || '',
         ...(selected.group && { group: selected.group })
       })
     },

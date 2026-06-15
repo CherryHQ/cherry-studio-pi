@@ -15,6 +15,7 @@ import { dataApiService } from '@data/DataApiService'
 import { Navbar, NavbarCenter } from '@renderer/components/app/Navbar'
 import ModelAvatar from '@renderer/components/Avatar/ModelAvatar'
 import { isMac, isWin } from '@renderer/config/constant'
+import { getRawModelId } from '@renderer/config/models/utils'
 import { usePersistCache } from '@renderer/data/hooks/useCache'
 import { useDefaultAssistant } from '@renderer/hooks/useAssistant'
 import { useCodeCli } from '@renderer/hooks/useCodeCli'
@@ -28,7 +29,7 @@ import { getThinkingBudget } from '@shared/ai/reasoningBudget'
 import type { TerminalConfig } from '@shared/config/constant'
 import { codeCLI, terminalApps } from '@shared/config/constant'
 import { CLAUDE_OFFICIAL_SUPPORTED_PROVIDERS, isSiliconAnthropicCompatibleModel } from '@shared/config/providers'
-import { type Model, parseUniqueModelId } from '@shared/data/types/model'
+import type { Model } from '@shared/data/types/model'
 import type { ApiKeyEntry } from '@shared/data/types/provider'
 import type { Provider } from '@shared/data/types/provider'
 import {
@@ -113,7 +114,7 @@ const CodeCliPage: FC = () => {
 
   const [dialogOpen, setDialogOpen] = useState(false)
 
-  const rawModelId = useCallback((m: Model) => m.apiModelId ?? parseUniqueModelId(m.id).modelId, [])
+  const rawModelId = useCallback((m: Model) => getRawModelId(m), [])
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
@@ -371,7 +372,7 @@ const CodeCliPage: FC = () => {
       logger.error(`Failed to load api keys for provider: ${modelProvider.id}`, error as Error)
     }
 
-    const id = resolvedModel.apiModelId ?? parseUniqueModelId(resolvedModel.id).modelId
+    const id = getRawModelId(resolvedModel)
     const reasoning = {
       isReasoning: isReasoningModel(resolvedModel),
       supportsReasoningEffort: isSupportedReasoningEffortModel(resolvedModel),
@@ -406,10 +407,7 @@ const CodeCliPage: FC = () => {
       window.toast.error(t('code.model_required'))
       return false
     }
-    const modelId =
-      selectedCliTool === codeCLI.githubCopilotCli || !resolvedModel
-        ? ''
-        : (resolvedModel.apiModelId ?? parseUniqueModelId(resolvedModel.id).modelId)
+    const modelId = selectedCliTool === codeCLI.githubCopilotCli || !resolvedModel ? '' : getRawModelId(resolvedModel)
 
     const runOptions = {
       autoUpdateToLatest,

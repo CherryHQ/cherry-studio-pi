@@ -123,6 +123,16 @@ describe('model utils', () => {
 
       expect(getRawModelId(model)).toBe('legacy-model-id')
     })
+
+    it('ignores blank apiModelId when falling back to the stored id', () => {
+      const model = {
+        ...createModel({ id: 'legacy-model-id' }),
+        id: 'legacy-model-id',
+        apiModelId: '  '
+      } as unknown as Model
+
+      expect(getRawModelId(model)).toBe('legacy-model-id')
+    })
   })
 
   describe('Verbosity support', () => {

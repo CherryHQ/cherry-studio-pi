@@ -13,7 +13,7 @@
 
 import { MODALITY, VENDOR_PATTERNS } from '@cherrystudio/provider-registry'
 import type { Model, RuntimeReasoning, ThinkingTokenLimits } from '@shared/data/types/model'
-import { MODEL_CAPABILITY, parseUniqueModelId } from '@shared/data/types/model'
+import { isUniqueModelId, MODEL_CAPABILITY, parseUniqueModelId } from '@shared/data/types/model'
 
 /** Check if model has reasoning capability */
 export const isReasoningModel = (model: Model): boolean =>
@@ -1065,7 +1065,9 @@ const GEMINI_SEARCH_REGEX = new RegExp(
 // ---------------------------------------------------------------------------
 
 function getRawModelId(model: Model): string {
-  return model.apiModelId ?? parseUniqueModelId(model.id).modelId
+  const apiModelId = typeof model.apiModelId === 'string' ? model.apiModelId.trim() : ''
+  if (apiModelId) return apiModelId
+  return isUniqueModelId(model.id) ? parseUniqueModelId(model.id).modelId : model.id
 }
 
 // ════════════════════════════════════════════════════════════════════════════

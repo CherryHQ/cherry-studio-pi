@@ -7,9 +7,12 @@ import {
   inferRerankFromModelId,
   inferVisionFromModelId,
   inferWebSearchFromModelId,
+  isAnthropicModel,
   isEmbeddingModel,
   isFunctionCallingModel,
+  isGemini3Model,
   isGenerateImageModel,
+  isOpenAIModel,
   isReasoningModel,
   isRerankModel,
   isVisionModel,
@@ -29,6 +32,19 @@ const createModel = (capabilities: Model['capabilities'] = []): Model => ({
 })
 
 describe('shared model capability helpers', () => {
+  it('tolerates legacy raw model ids in ID-based family checks', () => {
+    const legacyRawModel: Model = {
+      ...createModel(),
+      id: 'gpt-4o' as Model['id'],
+      apiModelId: undefined,
+      name: 'gpt-4o'
+    }
+
+    expect(isOpenAIModel(legacyRawModel)).toBe(true)
+    expect(isAnthropicModel({ ...legacyRawModel, id: 'claude-sonnet-4-5' as Model['id'] })).toBe(true)
+    expect(isGemini3Model({ ...legacyRawModel, id: 'gemini-3-pro-preview' as Model['id'] })).toBe(true)
+  })
+
   it('reads capability state from v2 Model.capabilities', () => {
     const model = createModel([
       MODEL_CAPABILITY.REASONING,

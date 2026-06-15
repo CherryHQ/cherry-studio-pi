@@ -14,7 +14,7 @@ import {
 import { DEFAULT_MAX_TOKENS } from '@shared/config/constant'
 import type { Assistant } from '@shared/data/types/assistant'
 import type { Model } from '@shared/data/types/model'
-import { parseUniqueModelId } from '@shared/data/types/model'
+import { isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
 import type { OpenAIReasoningSummary, ReasoningEffortOption } from '@shared/types/aiSdk'
 import {
@@ -61,6 +61,12 @@ import type { OllamaProviderOptions } from 'ollama-ai-provider-v2'
 
 const logger = loggerService.withContext('reasoning')
 
+function getRawModelId(model: Model): string {
+  const apiModelId = typeof model.apiModelId === 'string' ? model.apiModelId.trim() : ''
+  if (apiModelId) return apiModelId
+  return isUniqueModelId(model.id) ? parseUniqueModelId(model.id).modelId : model.id
+}
+
 type ReasoningEffortOptionalParams = {
   thinking?: { type: 'disabled' | 'enabled' | 'auto'; budget_tokens?: number }
   reasoning?: { max_tokens?: number; exclude?: boolean; effort?: string; enabled?: boolean } | OpenAI.Reasoning
@@ -100,7 +106,7 @@ export function getReasoningEffort(
   model: Model,
   provider: Provider
 ): ReasoningEffortOptionalParams {
-  const rawModelId = parseUniqueModelId(model.id).modelId
+  const rawModelId = getRawModelId(model)
   const modelId = getLowerBaseModelName(rawModelId)
   if (provider.id === 'groq') {
     return {}
@@ -850,7 +856,7 @@ export function getGeminiReasoningParams(
     return {}
   }
 
-  const rawModelId = parseUniqueModelId(model.id).modelId
+  const rawModelId = getRawModelId(model)
 
   let thinkingLevel: GoogleThinkingLevel | null = null
   const includeThoughts = reasoningEffort !== 'none'

@@ -19,7 +19,7 @@ import { useAssistant } from '@renderer/hooks/useAssistant'
 import type { Topic } from '@renderer/types'
 import type { Message } from '@renderer/types/newMessage'
 import type { CherryMessagePart, CherryUIMessage, ModelSnapshot } from '@shared/data/types/message'
-import { parseUniqueModelId } from '@shared/data/types/model'
+import { isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
 import { useMemo, useRef } from 'react'
 
 import type { TranslationOverlayEntry } from '../Messages/Blocks/V2Contexts'
@@ -40,11 +40,11 @@ export function useV2RenderingPipeline(
 
   const fallbackSnapshot = useMemo<ModelSnapshot | undefined>(() => {
     if (!model) return undefined
-    const { providerId, modelId } = parseUniqueModelId(model.id)
+    const parsed = isUniqueModelId(model.id) ? parseUniqueModelId(model.id) : undefined
     return {
-      id: modelId,
+      id: model.apiModelId || parsed?.modelId || model.id,
       name: model.name,
-      provider: providerId,
+      provider: model.providerId || parsed?.providerId || '',
       ...(model.group && { group: model.group })
     }
   }, [model])

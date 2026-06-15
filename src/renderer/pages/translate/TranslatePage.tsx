@@ -5,6 +5,7 @@ import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { Navbar } from '@renderer/components/app/Navbar'
 import { ModelSelector } from '@renderer/components/ModelSelector'
+import { getRawModelId } from '@renderer/config/models/utils'
 import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
 import { useTranslateHistory } from '@renderer/hooks/translate'
 import { useDetectLang } from '@renderer/hooks/translate/useDetectLang'
@@ -33,7 +34,6 @@ import {
   isUniqueModelId,
   type Model as SelectorModel,
   MODEL_CAPABILITY,
-  parseUniqueModelId,
   type UniqueModelId
 } from '@shared/data/types/model'
 import type { TranslateHistory } from '@shared/data/types/translate'
@@ -57,7 +57,7 @@ const EXCLUDED_TRANSLATE_MODEL_CAPABILITIES = new Set<string>([
 ])
 const PRIORITIZED_PROVIDER_IDS = ['cherryai', 'openai', 'anthropic', 'google', 'gemini', 'openrouter']
 
-const getModelIdentifier = (model: SelectorModel) => model.apiModelId ?? parseUniqueModelId(model.id).modelId
+const getModelIdentifier = (model: SelectorModel) => getRawModelId(model)
 
 const getModelInitial = (model: SelectorModel) => model.name.trim().charAt(0) || 'M'
 

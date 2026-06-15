@@ -3,6 +3,7 @@ import { resolveIcon } from '@cherrystudio/ui/icons'
 import { usePreference } from '@data/hooks/usePreference'
 import { ModelSelector } from '@renderer/components/ModelSelector'
 import { getProviderDisplayName } from '@renderer/components/ModelSelector/utils'
+import { getRawModelId } from '@renderer/config/models/utils'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useDefaultModel } from '@renderer/hooks/useModel'
 import { useProviders } from '@renderer/hooks/useProvider'
@@ -10,7 +11,7 @@ import { TranslateSettingsPanelContent } from '@renderer/pages/translate/Transla
 import { cn } from '@renderer/utils'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { TRANSLATE_PROMPT } from '@shared/config/prompts'
-import { type Model, parseUniqueModelId } from '@shared/data/types/model'
+import type { Model } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
 import { isNonChatModel } from '@shared/utils/model'
 import { ChevronDown, Languages, MessageSquareMore, Rocket, RotateCcw, Settings2 } from 'lucide-react'
@@ -79,7 +80,7 @@ const MODEL_SELECTOR_VISIBLE_COUNT = 8
 
 const drawerTitleClassName = 'truncate font-semibold text-foreground text-sm leading-4'
 
-const getModelIdentifier = (model: Model) => model.apiModelId ?? parseUniqueModelId(model.id).modelId
+const getModelIdentifier = (model: Model) => getRawModelId(model)
 
 const getModelInitial = (model: Model) => model.name.trim().charAt(0) || 'M'
 
