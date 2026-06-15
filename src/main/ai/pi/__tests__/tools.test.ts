@@ -820,6 +820,34 @@ exit 1
     expect(resultText(result)).toContain('https://[redacted]@example.test')
   })
 
+  it('times out stalled AppCallCapability calls and aborts the app capability signal', async () => {
+    vi.useFakeTimers()
+    let capturedSignal: AbortSignal | undefined
+
+    try {
+      vi.mocked(appCapabilityService.call).mockImplementationOnce(async (_id, _input, context) => {
+        capturedSignal = context?.signal
+        return new Promise(() => {})
+      })
+
+      const call = getTool('AppCallCapability', tmpDir, [tmpDir])
+      const pendingResult = call.execute('app-call-timeout', {
+        id: 'settings.read',
+        input: {},
+        timeoutMs: 100
+      })
+
+      await vi.advanceTimersByTimeAsync(100)
+      const result = await pendingResult
+
+      expect(capturedSignal?.aborted).toBe(true)
+      expect(result.details).toMatchObject({ isError: true })
+      expect(resultText(result)).toContain('AppCallCapability settings.read timed out after 100ms')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('compacts large AppCallCapability results before returning them to the agent', async () => {
     vi.mocked(appCapabilityService.call).mockResolvedValueOnce({
       ok: true,

@@ -26,6 +26,8 @@ const MAX_APP_CAPABILITY_STRUCTURED_CHARS = 12_000
 const MAX_TOOL_PREVIEW_DEPTH = 8
 const MAX_TOOL_PREVIEW_ARRAY_ITEMS = 100
 const MAX_TOOL_PREVIEW_OBJECT_KEYS = 100
+const MIN_APP_CAPABILITY_TIMEOUT_MS = 100
+const MAX_APP_CAPABILITY_TIMEOUT_MS = 10 * 60 * 1000
 const BASH_TIMEOUT_MS = 120_000
 const BASH_MAX_BUFFER = 1024 * 1024
 
@@ -718,6 +720,83 @@ const safeExecute = async (operation: string, fn: () => Promise<AgentToolResult<
   }
 }
 
+const abortReasonMessage = (signal: AbortSignal) => {
+  const reason = signal.reason
+  if (reason instanceof Error && reason.message) return reason.message
+  if (typeof reason === 'string' && reason.trim()) return reason.trim()
+  return 'Operation aborted'
+}
+
+const normalizeAppCapabilityTimeoutMs = (value: unknown) => {
+  if (typeof value === 'undefined' || value === null || value === '') return undefined
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    throw new Error('AppCallCapability timeoutMs must be a positive number when provided')
+  }
+  return Math.min(Math.max(Math.floor(numeric), MIN_APP_CAPABILITY_TIMEOUT_MS), MAX_APP_CAPABILITY_TIMEOUT_MS)
+}
+
+const createLinkedAbortSignal = (
+  parentSignal: AbortSignal | undefined,
+  timeoutMs: number | undefined,
+  timeoutMessage: string
+) => {
+  if (!parentSignal && typeof timeoutMs === 'undefined') {
+    return {
+      signal: undefined,
+      dispose: () => {}
+    }
+  }
+
+  const controller = new AbortController()
+  let timeout: NodeJS.Timeout | undefined
+
+  const abort = (reason: unknown) => {
+    if (!controller.signal.aborted) {
+      controller.abort(reason)
+    }
+  }
+
+  const onParentAbort = () => abort(parentSignal ? abortReasonMessage(parentSignal) : 'Operation aborted')
+
+  if (parentSignal?.aborted) {
+    onParentAbort()
+  } else {
+    parentSignal?.addEventListener('abort', onParentAbort, { once: true })
+  }
+
+  if (typeof timeoutMs !== 'undefined') {
+    timeout = setTimeout(() => abort(timeoutMessage), timeoutMs)
+    timeout.unref?.()
+  }
+
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      if (timeout) clearTimeout(timeout)
+      parentSignal?.removeEventListener('abort', onParentAbort)
+    }
+  }
+}
+
+const runWithAbortSignal = async <T>(promise: Promise<T>, signal?: AbortSignal) => {
+  if (!signal) return promise
+  if (signal.aborted) throw new Error(abortReasonMessage(signal))
+
+  let cleanup = () => {}
+  const abortPromise = new Promise<never>((_, reject) => {
+    const onAbort = () => reject(new Error(abortReasonMessage(signal)))
+    cleanup = () => signal.removeEventListener('abort', onAbort)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+
+  try {
+    return await Promise.race([promise, abortPromise])
+  } finally {
+    cleanup()
+  }
+}
+
 const resolveAllowedPath = (rawPath: string | undefined, cwd: string) => {
   return path.resolve(cwd, rawPath || '.')
 }
@@ -1169,7 +1248,12 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
       properties: {
         id: { type: 'string', description: 'Capability id, for example storage.backup.create or settings.value.set' },
         input: { type: 'object', additionalProperties: true, description: 'Structured capability input' },
-        dryRun: { type: 'boolean', description: 'Preview destructive operations when the capability supports it' }
+        dryRun: { type: 'boolean', description: 'Preview destructive operations when the capability supports it' },
+        timeoutMs: {
+          type: 'number',
+          description:
+            'Optional maximum duration in milliseconds. Use a small timeout for instant settings/navigation calls; leave unset for long-running backup or sync operations.'
+        }
       },
       required: ['id']
     } as any,
@@ -1177,13 +1261,19 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
       return safeExecute('AppCallCapability', async () => {
         const input = params as ToolParams
         const appCapabilityService = await getAppCapabilityService()
-        const result = await appCapabilityService.call(input.id, input.input ?? {}, {
-          source: 'agent',
-          sessionId: options.sessionId,
-          toolCallId: options.sessionId ? `${options.sessionId}:${toolCallId}` : toolCallId,
-          signal,
-          dryRun: input.dryRun === true
-        })
+        const timeoutMs = normalizeAppCapabilityTimeoutMs(input.timeoutMs)
+        const timeoutMessage = `AppCallCapability ${String(input.id ?? '(empty)')} timed out after ${timeoutMs}ms`
+        const linkedAbort = createLinkedAbortSignal(signal, timeoutMs, timeoutMessage)
+        const result = await runWithAbortSignal(
+          appCapabilityService.call(input.id, input.input ?? {}, {
+            source: 'agent',
+            sessionId: options.sessionId,
+            toolCallId: options.sessionId ? `${options.sessionId}:${toolCallId}` : toolCallId,
+            signal: linkedAbort.signal,
+            dryRun: input.dryRun === true
+          }),
+          linkedAbort.signal
+        ).finally(linkedAbort.dispose)
         const compacted = compactAppCapabilityResult(result, MAX_APP_CAPABILITY_STRUCTURED_CHARS)
         const text = truncateOutput(compacted.text, result.ok ? MAX_SUCCESS_OUTPUT_CHARS : MAX_ERROR_OUTPUT_CHARS)
         return result.ok
