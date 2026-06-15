@@ -763,7 +763,6 @@ export class CherryInOauthService extends BaseService implements Activatable {
       }
 
       const json = await response.json()
-      logger.debug('Balance API raw response:', json)
       const parsed = BalanceResponseSchema.parse(json)
 
       if (!parsed.success) {

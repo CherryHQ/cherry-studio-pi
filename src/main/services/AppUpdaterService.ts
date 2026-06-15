@@ -347,7 +347,7 @@ export class AppUpdaterService extends BaseService {
   private startManualDownloadUpdate(): void {
     const token = this.cancellationToken
 
-    logger.info('downloadUpdate manual by check for updates', token)
+    logger.info('Starting manual update download')
 
     try {
       void autoUpdater.downloadUpdate(token).catch((error: unknown) => {

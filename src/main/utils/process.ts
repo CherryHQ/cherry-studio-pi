@@ -11,6 +11,7 @@ import os from 'os'
 import path from 'path'
 
 import { ConfigKeys, configManager } from '../services/ConfigManager'
+import { summarizeTextForLog } from './logging'
 import getShellEnv, { refreshShellEnv } from './shell-env'
 
 const logger = loggerService.withContext('Utils:Process')
@@ -25,11 +26,11 @@ export function runInstallScript(scriptPath: string, extraEnv?: Record<string, s
     })
 
     nodeProcess.stdout.on('data', (data) => {
-      logger.debug(`Script output: ${data}`)
+      logger.debug('Script output', summarizeTextForLog(String(data)))
     })
 
     nodeProcess.stderr.on('data', (data) => {
-      logger.error(`Script error: ${data}`)
+      logger.error('Script error', summarizeTextForLog(String(data)))
     })
 
     nodeProcess.on('close', (code) => {
