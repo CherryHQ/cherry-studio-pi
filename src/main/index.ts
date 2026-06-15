@@ -12,6 +12,7 @@
 import '@main/data/bootConfig'
 
 import { application, serviceList } from '@application'
+import { APP_ID } from '@main/config/appIdentity'
 // Preboot phase — order matters. See core/preboot/README.md.
 import { configureChromiumFlags } from '@main/core/preboot/chromiumFlags'
 import { initCrashTelemetry } from '@main/core/preboot/crashTelemetry'
@@ -45,7 +46,7 @@ const startApp = async () => {
   // app's notifications, taskbar icon grouping, and Jump Lists (no-op on macOS/Linux).
   // Must run before any window is created or notification fires, hence after the
   // migration gate returns and before lifecycle bootstrap.
-  electronApp.setAppUserModelId('com.cherryai.cherrystudio')
+  electronApp.setAppUserModelId(APP_ID)
 
   // Start lifecycle (BeforeReady runs parallel with app.whenReady)
   application.registerAll(serviceList)
