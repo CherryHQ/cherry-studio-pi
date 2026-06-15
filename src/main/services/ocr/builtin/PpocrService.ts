@@ -86,8 +86,10 @@ export class PpocrService extends OcrBaseService {
       })
 
       if (!response.ok) {
-        const text = await response.text()
-        throw new Error(`OCR service error: ${response.status} ${response.statusText} - ${text}`)
+        const text = await response.text().catch(() => '')
+        throw new Error(
+          `OCR service returned HTTP ${response.status} ${response.statusText} (body length: ${text.length})`
+        )
       }
 
       const data = await response.json()

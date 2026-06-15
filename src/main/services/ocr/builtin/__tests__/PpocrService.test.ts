@@ -70,4 +70,31 @@ describe('PpocrService', () => {
 
     timeoutSpy.mockRestore()
   })
+
+  it('does not expose OCR error response bodies', async () => {
+    mockNetFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      text: vi.fn().mockResolvedValue('sensitive recognized text and base64 payload')
+    } as unknown as Response)
+
+    const service = new PpocrService()
+
+    let thrown: unknown
+    try {
+      await service.ocr(imageFile as never, {
+        apiUrl: 'https://ocr.example/api',
+        accessToken: 'ocr-token'
+      })
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toBeInstanceOf(Error)
+    expect((thrown as Error).message).toContain('OCR service returned HTTP 500 Internal Server Error')
+    expect((thrown as Error).message).toContain('body length:')
+    expect((thrown as Error).message).not.toContain('sensitive recognized text')
+    expect((thrown as Error).message).not.toContain('base64 payload')
+  })
 })
