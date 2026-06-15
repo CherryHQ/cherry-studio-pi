@@ -717,6 +717,38 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('ignores a legacy remote lock that disappears between exists and read', async () => {
+    const now = Date.now()
+    const lockPath = '/remote-root/sync/v1/.sync.lock.json'
+    mocks.remoteFiles.set(
+      lockPath,
+      JSON.stringify({
+        version: 1,
+        ownerId: 'device-b',
+        token: 'released-token',
+        createdAt: now,
+        updatedAt: now,
+        expiresAt: now + 10 * 60 * 1000,
+        leaseMs: 10 * 60 * 1000,
+        app: 'cherry-studio-pi',
+        reason: 'data-sync'
+      })
+    )
+    mocks.webdav.getFileContents.mockImplementationOnce(async (filePath: string) => {
+      expect(filePath).toBe(lockPath)
+      mocks.remoteFiles.delete(lockPath)
+      const error = new Error('Invalid response: 404 Not Found') as Error & { status: number }
+      error.status = 404
+      throw error
+    })
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.status).toBe('success')
+    expect(mocks.storageRecordSync.sync).toHaveBeenCalled()
+    expect(mocks.remoteFiles.has(lockPath)).toBe(false)
+  })
+
   it('rejects oversized remote lock files before downloading their contents', async () => {
     const lockPath = '/remote-root/sync/v1/.sync.lock.json'
     mocks.remoteFiles.set(lockPath, Buffer.alloc(65 * 1024))

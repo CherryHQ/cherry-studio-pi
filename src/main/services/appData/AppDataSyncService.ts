@@ -917,6 +917,11 @@ function isCausedByTransientWebDavError(error: unknown) {
   return cause instanceof WebDavOperationError && cause.transient
 }
 
+function isCausedByWebDavStatus(error: unknown, status: number) {
+  const cause = error instanceof Error ? error.cause : undefined
+  return cause instanceof WebDavOperationError && cause.status === status
+}
+
 function isIgnorableCreateDirectoryError(error: unknown) {
   return error instanceof WebDavOperationError && (error.status === 405 || error.status === 409)
 }
@@ -1911,9 +1916,17 @@ export class AppDataSyncService {
     )
     if (!hasLock) return { exists: false, lock: null }
 
-    return {
-      exists: true,
-      lock: await this.readRemoteLock(client, lockPath)
+    try {
+      return {
+        exists: true,
+        lock: await this.readRemoteLock(client, lockPath)
+      }
+    } catch (error) {
+      if (isCausedByWebDavStatus(error, 404)) {
+        logger.info('Remote data sync lock disappeared before it could be read', { lockPath })
+        return { exists: false, lock: null }
+      }
+      throw error
     }
   }
 
