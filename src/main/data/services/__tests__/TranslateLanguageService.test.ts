@@ -4,10 +4,15 @@ import { ErrorCode } from '@shared/data/api'
 import type { CreateTranslateLanguageDto } from '@shared/data/api/schemas/translate'
 import { parsePersistedLangCode } from '@shared/data/preference/preferenceTypes'
 import { setupTestDatabase } from '@test-helpers/db'
-import { describe, expect, it } from 'vitest'
+import { MockMainDbServiceExport } from '@test-mocks/main/DbService'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 describe('TranslateLanguageService', () => {
   const dbh = setupTestDatabase()
+
+  beforeEach(() => {
+    MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+  })
 
   async function seedLanguage(overrides: Record<string, unknown> = {}) {
     const values = {
@@ -75,6 +80,18 @@ describe('TranslateLanguageService', () => {
         message: expect.stringContaining('already exists')
       })
     })
+
+    it('should route creation through the serialized write transaction helper', async () => {
+      const dto: CreateTranslateLanguageDto = {
+        langCode: parsePersistedLangCode('ko-kr'),
+        value: 'Korean',
+        emoji: '🇰🇷'
+      }
+
+      await translateLanguageService.create(dto)
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('update', () => {
@@ -94,10 +111,19 @@ describe('TranslateLanguageService', () => {
       const result = await translateLanguageService.update('ja-jp', {})
       expect(result.langCode).toBe('ja-jp')
       expect(result.value).toBe('Japanese')
+      expect(MockMainDbServiceExport.dbService.withWriteTx).not.toHaveBeenCalled()
     })
 
     it('should throw NotFound for non-existent langCode', async () => {
       await expect(translateLanguageService.update('xx-xx', { value: 'Test' })).rejects.toThrow()
+    })
+
+    it('should route non-empty updates through the serialized write transaction helper', async () => {
+      await seedLanguage()
+
+      await translateLanguageService.update('ja-jp', { value: 'Updated' })
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -113,6 +139,14 @@ describe('TranslateLanguageService', () => {
 
     it('should throw NotFound for non-existent langCode', async () => {
       await expect(translateLanguageService.delete('xx-xx')).rejects.toThrow()
+    })
+
+    it('should route deletion through the serialized write transaction helper', async () => {
+      await seedLanguage()
+
+      await translateLanguageService.delete('ja-jp')
+
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
   })
 })
