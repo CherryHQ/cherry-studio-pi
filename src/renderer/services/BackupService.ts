@@ -192,58 +192,60 @@ export async function backupToLanTransfer() {
 }
 
 export async function restore() {
-  const file = await window.api.file.open({ filters: [{ name: '备份文件', extensions: ['bak', 'zip'] }] })
+  try {
+    const file = await window.api.file.open({ filters: [{ name: '备份文件', extensions: ['bak', 'zip'] }] })
 
-  if (file) {
-    try {
-      // zip backup file
-      if (file?.fileName.endsWith('.zip')) {
-        const restoreData = await window.api.backup.restore(file.filePath)
-
-        // Direct backup format returns void (app needs to relaunch)
-        // Legacy format returns JSON string that needs to be processed
-        if (restoreData !== undefined && restoreData !== null) {
-          const data = JSON.parse(restoreData)
-          await handleData(data)
-        } else {
-          // Direct backup was restored, app will relaunch
-          void notificationService.send({
-            id: uuid(),
-            type: 'success',
-            title: i18n.t('common.success'),
-            message: i18n.t('message.restore.success'),
-            silent: false,
-            timestamp: Date.now(),
-            source: 'backup',
-            channel: 'system'
-          })
-          // App will relaunch automatically
-          return
-        }
-      } else {
-        // Legacy .bak format
-        const data = JSON.parse(await window.api.zip.decompress(file.content))
-        await handleData(data)
-      }
-
-      void notificationService.send({
-        id: uuid(),
-        type: 'success',
-        title: i18n.t('common.success'),
-        message: i18n.t('message.restore.success'),
-        silent: false,
-        timestamp: Date.now(),
-        source: 'backup',
-        channel: 'system'
-      })
-    } catch (error) {
-      logger.error('restore: Error restoring backup file:', error as Error)
-      window.modal.error({
-        title: i18n.t('error.backup.file_format'),
-        content: (error as Error).message,
-        centered: true
-      })
+    if (!file) {
+      return
     }
+
+    // zip backup file
+    if (file.fileName.endsWith('.zip')) {
+      const restoreData = await window.api.backup.restore(file.filePath)
+
+      // Direct backup format returns void (app needs to relaunch)
+      // Legacy format returns JSON string that needs to be processed
+      if (restoreData !== undefined && restoreData !== null) {
+        const data = JSON.parse(restoreData)
+        await handleData(data)
+      } else {
+        // Direct backup was restored, app will relaunch
+        void notificationService.send({
+          id: uuid(),
+          type: 'success',
+          title: i18n.t('common.success'),
+          message: i18n.t('message.restore.success'),
+          silent: false,
+          timestamp: Date.now(),
+          source: 'backup',
+          channel: 'system'
+        })
+        // App will relaunch automatically
+        return
+      }
+    } else {
+      // Legacy .bak format
+      const data = JSON.parse(await window.api.zip.decompress(file.content))
+      await handleData(data)
+    }
+
+    void notificationService.send({
+      id: uuid(),
+      type: 'success',
+      title: i18n.t('common.success'),
+      message: i18n.t('message.restore.success'),
+      silent: false,
+      timestamp: Date.now(),
+      source: 'backup',
+      channel: 'system'
+    })
+  } catch (error) {
+    logger.error('restore: Error restoring backup file:', error as Error)
+    window.modal.error({
+      title: i18n.t('error.backup.file_format'),
+      content: (error as Error).message,
+      centered: true
+    })
   }
 }
 

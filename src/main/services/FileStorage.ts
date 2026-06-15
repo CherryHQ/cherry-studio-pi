@@ -962,7 +962,7 @@ class FileStorage {
       return null
     } catch (err) {
       logger.error('[IPC - Error] An error occurred opening the file:', err as Error)
-      return null
+      throw err
     }
   }
 

@@ -312,6 +312,45 @@ describe('FileStorage Storage v2 upload flow', () => {
     await expect(fileStorage.selectFolder({ sender: {} } as never)).rejects.toThrow('dialog unavailable')
   })
 
+  it('returns null when file open is canceled', async () => {
+    mocks.showOpenDialog.mockResolvedValueOnce({
+      canceled: true,
+      filePaths: []
+    })
+
+    const { fileStorage } = await import('../FileStorage')
+    const file = await fileStorage.open(undefined as never, {})
+
+    expect(file).toBeNull()
+  })
+
+  it('opens a selected file with content and size', async () => {
+    const filePath = path.join(mocks.dirs.root, 'import.json')
+    fs.writeFileSync(filePath, '{"ok":true}')
+    mocks.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: [filePath]
+    })
+
+    const { fileStorage } = await import('../FileStorage')
+    const file = await fileStorage.open(undefined as never, {})
+
+    expect(file).toMatchObject({
+      fileName: 'import.json',
+      filePath,
+      size: Buffer.byteLength('{"ok":true}')
+    })
+    expect(file?.content?.toString()).toBe('{"ok":true}')
+  })
+
+  it('rejects file open failures instead of reporting an empty selection', async () => {
+    mocks.showOpenDialog.mockRejectedValueOnce(new Error('dialog unavailable'))
+
+    const { fileStorage } = await import('../FileStorage')
+
+    await expect(fileStorage.open(undefined as never, {})).rejects.toThrow('dialog unavailable')
+  })
+
   it('returns false when image save is canceled', async () => {
     mocks.showSaveDialogSync.mockReturnValueOnce(undefined)
     const mockedFs = await import('fs')

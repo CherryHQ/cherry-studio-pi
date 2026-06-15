@@ -96,6 +96,7 @@ import {
   backupToWebdav,
   handleData,
   reset,
+  restore,
   startAutoSync,
   stopAutoSync
 } from '../BackupService'
@@ -132,6 +133,7 @@ describe('BackupService legacy restore', () => {
         resetData: vi.fn().mockResolvedValue(undefined),
         resolvePath: vi.fn(async (targetPath: string) => targetPath),
         backup: {
+          restore: vi.fn().mockResolvedValue(undefined),
           backupToLocalDir: vi.fn().mockResolvedValue(true),
           backupToS3: vi.fn().mockResolvedValue(true),
           backupToWebdav: vi.fn().mockResolvedValue(true),
@@ -148,6 +150,12 @@ describe('BackupService legacy restore', () => {
         },
         storageV2: {
           setSetting: vi.fn().mockResolvedValue(undefined)
+        },
+        file: {
+          open: vi.fn().mockResolvedValue(null)
+        },
+        zip: {
+          decompress: vi.fn().mockResolvedValue('{}')
         }
       }
     })
@@ -245,6 +253,21 @@ describe('BackupService legacy restore', () => {
       'storage-v2'
     )
     expect(window.toast.success).toHaveBeenCalledWith('message.restore.success')
+  })
+
+  it('shows restore errors when the backup file cannot be opened', async () => {
+    vi.mocked(window.api.file.open).mockRejectedValueOnce(new Error('dialog unavailable'))
+
+    await restore()
+
+    expect(window.modal.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'error.backup.file_format',
+        content: 'dialog unavailable',
+        centered: true
+      })
+    )
+    expect(window.api.backup.restore).not.toHaveBeenCalled()
   })
 
   it('clears all current IndexedDB tables before restoring backup tables', async () => {
