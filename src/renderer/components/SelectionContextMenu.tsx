@@ -84,7 +84,10 @@ const SelectionContextMenu: React.FC<SelectionContextMenuProps> = ({ children })
   }
 
   const handleQuote = () => {
-    void window.api.quoteToMainWindow(selectedText)
+    void window.api.quoteToMainWindow(selectedText).catch((error) => {
+      logger.error('quote to main window failed', error as Error)
+      window.toast.error(t('common.error'))
+    })
   }
 
   const hasSelection = selectedText.length > 0

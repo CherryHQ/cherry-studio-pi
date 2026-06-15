@@ -1,8 +1,11 @@
+import { loggerService } from '@logger'
 import { notificationQueue } from '@renderer/queue/NotificationQueue'
 import type { Notification } from '@renderer/types/notification'
 import { isFocused } from '@renderer/utils/window'
 import { notification } from 'antd'
 import React, { createContext, use, useEffect, useMemo } from 'react'
+
+const logger = loggerService.withContext('NotificationProvider')
 
 type NotificationContextType = {
   open: typeof notification.open
@@ -32,7 +35,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const listener = async (notification: Notification) => {
       // 判断是否需要系统通知
       if (notification.channel === 'system' || !isFocused()) {
-        void window.api.notification.send(notification)
+        void window.api.notification.send(notification).catch((error) => {
+          logger.error('Failed to send system notification', error as Error)
+        })
         return
       }
       return new Promise<void>((resolve) => {
