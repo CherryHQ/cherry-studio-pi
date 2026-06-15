@@ -6,6 +6,7 @@ import { useActiveSession } from '@renderer/hooks/agents/useSession'
 import { useAgentSessionParts } from '@renderer/hooks/useAgentSessionParts'
 import { useChatWithHistory } from '@renderer/hooks/useChatWithHistory'
 import { useExecutionOverlay } from '@renderer/hooks/useExecutionOverlay'
+import { useModels } from '@renderer/hooks/useModel'
 import { useNavbarPosition } from '@renderer/hooks/useNavbar'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { useTopicStreamStatus } from '@renderer/hooks/useTopicStreamStatus'
@@ -15,6 +16,7 @@ import { buildAgentSessionTopicId } from '@renderer/utils/agentSession'
 import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
 import type { AgentEntity } from '@shared/data/types/agent'
 import type { CherryMessagePart, ModelSnapshot } from '@shared/data/types/message'
+import type { Model } from '@shared/data/types/model'
 import { isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
 import { Loader2 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
@@ -29,6 +31,7 @@ import { uiToMessage } from '../home/uiToMessage'
 import AgentChatNavbar from './components/AgentChatNavbar'
 import AgentSessionInputbar from './components/AgentSessionInputbar'
 import AgentSessionMessages from './components/AgentSessionMessages'
+import { getModelRawIdentifier, resolveAgentSessionModel } from './components/agentSessionModel'
 import Sessions from './components/Sessions'
 
 export function isSessionAgentMissing(
@@ -37,6 +40,26 @@ export function isSessionAgentMissing(
   isAgentLoading: boolean
 ): boolean {
   return Boolean(activeSession?.agentId && !isAgentLoading && !activeAgent)
+}
+
+export function resolveAgentModelSnapshot(
+  agentModel: string | null | undefined,
+  models: readonly Model[]
+): ModelSnapshot | undefined {
+  const resolvedModel = resolveAgentSessionModel(agentModel, models)
+  if (resolvedModel) {
+    const rawModelId = getModelRawIdentifier(resolvedModel)
+    return {
+      id: rawModelId,
+      name: resolvedModel.name || rawModelId,
+      provider: resolvedModel.providerId,
+      ...(resolvedModel.group ? { group: resolvedModel.group } : {})
+    }
+  }
+
+  if (!isUniqueModelId(agentModel)) return undefined
+  const { providerId, modelId } = parseUniqueModelId(agentModel)
+  return { id: modelId, name: modelId, provider: providerId }
 }
 
 const AgentChat = () => {
@@ -120,13 +143,12 @@ const AgentChatInner = ({
   const sessionTopicId = useMemo(() => buildAgentSessionTopicId(sessionId), [sessionId])
   const { messages: uiMessages, isLoading, hasOlder, loadOlder, refresh } = useAgentSessionParts(agentId, sessionId)
   const chat = useChatWithHistory(sessionTopicId, uiMessages, refresh)
+  const { models } = useModels()
 
   // ── Rendering pipeline ────────────────────────────────────────────
   const snapshot = useMemo<ModelSnapshot | undefined>(() => {
-    if (!isUniqueModelId(activeAgent?.model)) return undefined
-    const { providerId, modelId } = parseUniqueModelId(activeAgent.model)
-    return { id: modelId, name: modelId, provider: providerId }
-  }, [activeAgent?.model])
+    return resolveAgentModelSnapshot(activeAgent?.model, models)
+  }, [activeAgent?.model, models])
 
   const projectedMessages = useMemo<Message[]>(
     () =>

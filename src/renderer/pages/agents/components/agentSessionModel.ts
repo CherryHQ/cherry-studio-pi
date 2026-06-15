@@ -1,7 +1,7 @@
 import type { Model } from '@shared/data/types/model'
 import { isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
 
-function getModelRawIdentifier(model: Model): string {
+export function getModelRawIdentifier(model: Model): string {
   const apiModelId = typeof model.apiModelId === 'string' ? model.apiModelId.trim() : ''
   if (apiModelId) return apiModelId
   return isUniqueModelId(model.id) ? parseUniqueModelId(model.id).modelId : model.id
