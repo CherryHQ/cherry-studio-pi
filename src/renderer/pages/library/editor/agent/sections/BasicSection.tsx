@@ -15,9 +15,9 @@ import {
   Textarea
 } from '@cherrystudio/ui'
 import EmojiPicker from '@renderer/components/EmojiPicker'
+import { isSelectableAgentModel } from '@renderer/hooks/agents/agentModelFilter'
 import type { AgentType } from '@shared/data/types/agent'
-import { ENDPOINT_TYPE, type Model, MODEL_CAPABILITY, type UniqueModelId } from '@shared/data/types/model'
-import type { Provider } from '@shared/data/types/provider'
+import type { UniqueModelId } from '@shared/data/types/model'
 import type { FC } from 'react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -36,32 +36,6 @@ interface Props {
 
 // Avatar quick-pick presets shown next to the emoji picker button.
 const AVATAR_PRESETS = ['🤖', '🧠', '⚡', '🚀', '🛠️', '🎯', '📊', '🔬'] as const
-const DISALLOWED_AGENT_CAPABILITIES = new Set<string>([
-  MODEL_CAPABILITY.EMBEDDING,
-  MODEL_CAPABILITY.RERANK,
-  MODEL_CAPABILITY.IMAGE_GENERATION
-])
-
-function hasAnthropicMessagesEndpoint(model: Model, provider?: Provider): boolean {
-  return (
-    model.endpointTypes?.includes(ENDPOINT_TYPE.ANTHROPIC_MESSAGES) === true ||
-    provider?.defaultChatEndpoint === ENDPOINT_TYPE.ANTHROPIC_MESSAGES ||
-    Boolean(provider?.endpointConfigs?.[ENDPOINT_TYPE.ANTHROPIC_MESSAGES])
-  )
-}
-
-function isSelectableAgentModel(model: Model, runtimeType: AgentType, provider?: Provider): boolean {
-  const capabilities = model.capabilities ?? []
-  if (capabilities.some((capability) => DISALLOWED_AGENT_CAPABILITIES.has(capability))) {
-    return false
-  }
-
-  if (runtimeType === 'claude-code') {
-    return hasAnthropicMessagesEndpoint(model, provider)
-  }
-
-  return true
-}
 
 /**
  * The section where everything identity- and runtime-related lives. Fields:

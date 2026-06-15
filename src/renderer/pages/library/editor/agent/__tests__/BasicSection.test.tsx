@@ -237,6 +237,19 @@ describe('BasicSection agent model selectors', () => {
     expect(
       filter?.(
         createModel({
+          providerId: 'deepseek',
+          id: 'deepseek::deepseek-chat',
+          endpointTypes: undefined
+        }),
+        createProvider({
+          id: 'deepseek',
+          defaultChatEndpoint: ENDPOINT_TYPE.ANTHROPIC_MESSAGES
+        })
+      )
+    ).toBe(true)
+    expect(
+      filter?.(
+        createModel({
           providerId: 'openai',
           id: 'openai::gpt-4.1',
           endpointTypes: undefined
