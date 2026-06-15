@@ -625,12 +625,14 @@ export class AgentSessionRuntimeService extends BaseService {
           logger.error('Failed to start next agent runtime turn', { sessionId: entry.sessionId, error })
         })
         .finally(() => {
-          entry.startingNextTurn = false
+          if (this.isCurrentEntry(entry)) entry.startingNextTurn = false
         })
     })
   }
 
   private async startNextTurn(entry: AgentSessionRuntimeEntry): Promise<void> {
+    if (!this.isCurrentEntry(entry)) return
+
     const nextMessage = entry.pendingTurns.shift()
     if (!nextMessage) {
       this.refreshIdleTimer(entry)
@@ -769,8 +771,12 @@ export class AgentSessionRuntimeService extends BaseService {
   }
 
   private refreshIdleTimer(entry: AgentSessionRuntimeEntry): void {
+    if (!this.isCurrentEntry(entry)) return
+
     this.clearIdleTimer(entry)
     entry.idleTimer = setTimeout(() => {
+      if (!this.isCurrentEntry(entry)) return
+
       const { sessionId, agentType, lastResumeToken } = entry
       this.closeSession(sessionId)
       if (lastResumeToken) {

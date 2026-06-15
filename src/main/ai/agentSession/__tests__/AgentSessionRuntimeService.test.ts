@@ -209,6 +209,34 @@ describe('AgentSessionRuntimeService', () => {
       expect(mocks.startRuntimeTurn.mock.calls.length).toBe(startCallsBefore)
       expect(getEntry(service)).toBeUndefined()
     })
+
+    it('ignores stale next-turn drains so an old idle timer cannot close a replacement session', async () => {
+      vi.useFakeTimers()
+      try {
+        const service = new AgentSessionRuntimeService()
+        service.beginTurn(baseTurnInput)
+        const staleEntry = getEntry(service)
+
+        service.closeSession('session-1')
+        service.beginTurn({
+          ...baseTurnInput,
+          assistantMessageId: 'assistant-replacement',
+          userMessage: userMessage('user-replacement')
+        })
+
+        expect(getEntry(service)).not.toBe(staleEntry)
+
+        await (service as any).startNextTurn(staleEntry)
+        vi.advanceTimersByTime(5 * 60 * 1000)
+
+        expect(service.inspect('session-1')).toMatchObject({
+          assistantMessageId: 'assistant-replacement',
+          status: 'active'
+        })
+      } finally {
+        vi.useRealTimers()
+      }
+    })
   })
 
   describe('reconcileStalePendingMessages — boot crash recovery', () => {
