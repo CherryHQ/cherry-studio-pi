@@ -5,7 +5,19 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { isBlockedSourceFile, redactAssistantDiagnosticText } from '../assistant'
+import { getAssistantTools, isBlockedSourceFile, redactAssistantDiagnosticText } from '../assistant'
+
+describe('assistant MCP tool metadata', () => {
+  it('uses Cherry Studio Pi in agent-facing tool descriptions', () => {
+    const descriptions = getAssistantTools()
+      .map((tool) => tool.description)
+      .join('\n')
+
+    expect(descriptions).toContain('Cherry Studio Pi')
+    expect(descriptions).not.toContain('Navigate Cherry Studio to')
+    expect(descriptions).not.toContain('Read Cherry Studio runtime state')
+  })
+})
 
 describe('isBlockedSourceFile', () => {
   it('blocks every dotenv variant (except the .env.example template)', () => {

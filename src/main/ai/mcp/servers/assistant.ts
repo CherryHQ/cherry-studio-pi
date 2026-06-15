@@ -93,7 +93,7 @@ const ALLOWED_ROUTES = [
 const NAVIGATE_TOOL: Tool = {
   name: 'navigate',
   description:
-    'Navigate Cherry Studio to a specific page. Refer to the route table in your skills for available paths.',
+    'Navigate Cherry Studio Pi to a specific page. Refer to the route table in your skills for available paths.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -114,7 +114,7 @@ const NAVIGATE_TOOL: Tool = {
 const DIAGNOSE_TOOL: Tool = {
   name: 'diagnose',
   description:
-    'Read Cherry Studio runtime state for troubleshooting. Use this to inspect app info, provider config, connectivity, logs, and MCP server status.',
+    'Read Cherry Studio Pi runtime state for troubleshooting. Use this to inspect app info, provider config, connectivity, logs, and MCP server status.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -141,6 +141,10 @@ const DIAGNOSE_TOOL: Tool = {
   }
 }
 
+export function getAssistantTools(): Tool[] {
+  return [NAVIGATE_TOOL, DIAGNOSE_TOOL]
+}
+
 // Health check cache: { providerId -> { result, timestamp } }
 const healthCache = new Map<string, { result: unknown; timestamp: number }>()
 const HEALTH_CACHE_TTL = 30_000 // 30 seconds
@@ -165,7 +169,7 @@ class AssistantServer {
 
   private setupHandlers() {
     this.mcpServer.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [NAVIGATE_TOOL, DIAGNOSE_TOOL]
+      tools: getAssistantTools()
     }))
 
     this.mcpServer.server.setRequestHandler(CallToolRequestSchema, async (request) => {
