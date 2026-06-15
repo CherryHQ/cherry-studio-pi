@@ -255,4 +255,26 @@ describe('SystemAgentRuntimeService', () => {
       expect.objectContaining({ source: 'system' })
     )
   })
+
+  it('times out direct system capability calls when a timeout is provided', async () => {
+    vi.useFakeTimers()
+    let capturedSignal: AbortSignal | undefined
+    mocks.appCapabilityService.get.mockReturnValueOnce({ ...writeCapability, risk: 'read' })
+    mocks.appCapabilityService.call.mockImplementationOnce(async (_id, _input, context) => {
+      capturedSignal = context?.signal
+      return new Promise(() => undefined)
+    })
+
+    const resultPromise = new SystemAgentRuntimeService().callCapability('dataSync.status.get', {}, { timeoutMs: 100 })
+
+    await vi.advanceTimersByTimeAsync(100)
+
+    await expect(resultPromise).resolves.toMatchObject({
+      ok: false,
+      isError: true,
+      summary: 'dataSync.status.get timed out',
+      error: 'System agent capability timed out after 100ms'
+    })
+    expect(capturedSignal?.aborted).toBe(true)
+  })
 })

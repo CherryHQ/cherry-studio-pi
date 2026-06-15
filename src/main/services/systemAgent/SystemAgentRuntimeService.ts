@@ -18,6 +18,8 @@ import {
 
 const logger = loggerService.withContext('SystemAgentRuntimeService')
 const SYSTEM_AGENT_AUTO_RUN_TIMEOUT_MS = 10_000
+const MIN_SYSTEM_AGENT_CAPABILITY_TIMEOUT_MS = 100
+const MAX_SYSTEM_AGENT_CAPABILITY_TIMEOUT_MS = 10 * 60 * 1000
 
 export type SystemAgentPlanIntentInput = AppCapabilitySearchOptions & {
   intent?: string
@@ -28,6 +30,7 @@ export type SystemAgentCapabilityCallOptions = {
   dryRun?: boolean
   sessionId?: string
   toolCallId?: string
+  timeoutMs?: number
 }
 
 export type SystemAgentEventInput = {
@@ -98,6 +101,18 @@ function makeGuidance(recommended: AppCapabilityDescriptor | null) {
   }
 
   return formatSystemAgentGuidance(recommended.id, recommended.risk, needsApproval(recommended.risk))
+}
+
+function normalizeCapabilityTimeoutMs(value: unknown) {
+  if (typeof value === 'undefined' || value === null || value === '') return undefined
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    throw new Error('System agent capability timeoutMs must be a positive number when provided')
+  }
+  return Math.min(
+    Math.max(Math.floor(numeric), MIN_SYSTEM_AGENT_CAPABILITY_TIMEOUT_MS),
+    MAX_SYSTEM_AGENT_CAPABILITY_TIMEOUT_MS
+  )
 }
 
 async function callAutoRunCapability(
@@ -250,15 +265,54 @@ export class SystemAgentRuntimeService {
       id: capabilityId,
       risk: capability.risk,
       approved: options.approved === true,
-      dryRun: options.dryRun === true
+      dryRun: options.dryRun === true,
+      timeoutMs: options.timeoutMs
     })
 
-    return appCapabilityService.call<T>(capabilityId, input, {
+    let timeoutMs: number | undefined
+    try {
+      timeoutMs = normalizeCapabilityTimeoutMs(options.timeoutMs)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return {
+        ok: false,
+        isError: true,
+        summary: `${capabilityId} invalid timeout`,
+        error: message
+      }
+    }
+
+    const controller = timeoutMs ? new AbortController() : null
+    let timeout: ReturnType<typeof setTimeout> | null = null
+    const timeoutResult = timeoutMs
+      ? new Promise<AppCapabilityResult<T>>((resolve) => {
+          timeout = setTimeout(() => {
+            controller?.abort(`System agent capability ${capabilityId} timed out after ${timeoutMs}ms`)
+            resolve({
+              ok: false,
+              isError: true,
+              summary: `${capabilityId} timed out`,
+              error: `System agent capability timed out after ${timeoutMs}ms`
+            })
+          }, timeoutMs)
+          timeout.unref?.()
+        })
+      : null
+
+    const context = {
       source: 'system',
       sessionId: options.sessionId,
       toolCallId: options.toolCallId,
-      dryRun: options.dryRun
-    })
+      dryRun: options.dryRun,
+      ...(controller ? { signal: controller.signal } : {})
+    } as const
+
+    try {
+      const call = appCapabilityService.call<T>(capabilityId, input, context)
+      return timeoutResult ? await Promise.race([call, timeoutResult]) : await call
+    } finally {
+      if (timeout) clearTimeout(timeout)
+    }
   }
 }
 
