@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import type { Client } from '@libsql/client'
+import { isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
 import type { Assistant, Model, Provider } from '@types'
 
 import { storageV2DataRootService } from './DataRootService'
@@ -165,6 +166,8 @@ export type StorageV2FileImport = Record<string, any> & {
 export type StorageV2KnowledgeBaseImport = Record<string, any> & {
   id?: string
   name?: string
+  embeddingModelId?: string | null
+  rerankModelId?: string | null
   model?: Model
   rerankModel?: Model
   items?: Array<Record<string, any>>
@@ -279,6 +282,43 @@ function normalizeProviderModels(provider: Provider): Model[] {
 
 function cloneJsonValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
+}
+
+function normalizeOptionalString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function getKnowledgeBaseModelId(base: StorageV2KnowledgeBaseImport): string | null {
+  return normalizeOptionalString(base.model?.id) ?? normalizeOptionalString(base.embeddingModelId)
+}
+
+function getKnowledgeBaseEmbeddingModelId(base: StorageV2KnowledgeBaseImport): string | null {
+  return normalizeOptionalString(base.embeddingModelId) ?? normalizeOptionalString(base.model?.id)
+}
+
+function getKnowledgeBaseRerankModelId(base: StorageV2KnowledgeBaseImport): string | null {
+  return normalizeOptionalString(base.rerankModelId) ?? normalizeOptionalString(base.rerankModel?.id)
+}
+
+function createKnowledgeBaseModelFallback(modelId: string): Model {
+  if (isUniqueModelId(modelId)) {
+    const parsed = parseUniqueModelId(modelId)
+    if (parsed.providerId && parsed.modelId) {
+      return {
+        id: parsed.modelId,
+        name: parsed.modelId,
+        provider: parsed.providerId,
+        group: parsed.providerId
+      }
+    }
+  }
+
+  return {
+    id: modelId,
+    name: modelId,
+    provider: '',
+    group: ''
+  }
 }
 
 function getKnowledgeItemFileId(item: Record<string, any>): string | null {
@@ -1736,12 +1776,25 @@ export class StorageV2KnowledgeRepository {
       base.version = typeof base.version === 'number' ? base.version : Number(row.version ?? 1)
       base.items = itemsByBaseId.get(baseId) ?? []
 
-      if (!base.model && typeof row.model_id === 'string' && row.model_id) {
-        base.model = { id: row.model_id }
+      const modelId = normalizeOptionalString(row.model_id)
+      const embeddingModelId = normalizeOptionalString(row.embedding_model_id) ?? modelId
+      const rerankModelId = normalizeOptionalString(row.rerank_model_id)
+
+      if (typeof base.embeddingModelId !== 'string' && embeddingModelId) {
+        base.embeddingModelId = embeddingModelId
       }
 
-      if (!base.rerankModel && typeof row.rerank_model_id === 'string' && row.rerank_model_id) {
-        base.rerankModel = { id: row.rerank_model_id }
+      const fallbackModelId = modelId ?? embeddingModelId
+      if (!base.model && fallbackModelId) {
+        base.model = createKnowledgeBaseModelFallback(fallbackModelId)
+      }
+
+      if (typeof base.rerankModelId !== 'string' && rerankModelId) {
+        base.rerankModelId = rerankModelId
+      }
+
+      if (!base.rerankModel && rerankModelId) {
+        base.rerankModel = createKnowledgeBaseModelFallback(rerankModelId)
       }
 
       return [base]
@@ -1795,9 +1848,9 @@ export class StorageV2KnowledgeRepository {
           args: [
             baseId,
             base.name ?? baseId,
-            base.model?.id ?? null,
-            base.model?.id ?? null,
-            base.rerankModel?.id ?? null,
+            getKnowledgeBaseModelId(base),
+            getKnowledgeBaseEmbeddingModelId(base),
+            getKnowledgeBaseRerankModelId(base),
             toJson(baseSnapshot),
             createdAt,
             updatedAt

@@ -494,4 +494,88 @@ describe('StorageV2KnowledgeRepository', () => {
       })
     ])
   })
+
+  it('reconstructs structured embedding and rerank model ids when snapshots are sparse', async () => {
+    const execute = vi.fn(async (input: string | { sql: string; args?: unknown[] }) => {
+      const sql = typeof input === 'string' ? input : input.sql
+
+      if (sql.includes('FROM knowledge_bases')) {
+        return {
+          rows: [
+            {
+              id: 'base-1',
+              name: 'Docs',
+              model_id: null,
+              embedding_model_id: 'openai::text-embedding-3-small',
+              rerank_model_id: 'jina::rerank',
+              settings_json: JSON.stringify({ id: 'base-1', name: 'Docs', items: [] }),
+              created_at: '2026-01-01T00:00:00.000Z',
+              updated_at: '2026-01-01T00:00:01.000Z',
+              version: 2
+            }
+          ],
+          columns: [],
+          columnTypes: []
+        }
+      }
+
+      return { rows: [], columns: [], columnTypes: [] }
+    })
+
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue({ execute } as unknown as Client)
+
+    await expect(new StorageV2KnowledgeRepository().listBases()).resolves.toEqual([
+      expect.objectContaining({
+        id: 'base-1',
+        embeddingModelId: 'openai::text-embedding-3-small',
+        model: {
+          id: 'text-embedding-3-small',
+          name: 'text-embedding-3-small',
+          provider: 'openai',
+          group: 'openai'
+        },
+        rerankModelId: 'jina::rerank',
+        rerankModel: {
+          id: 'rerank',
+          name: 'rerank',
+          provider: 'jina',
+          group: 'jina'
+        }
+      })
+    ])
+  })
+
+  it('persists structured knowledge model ids during import', async () => {
+    const { client, execute } = createMockClient()
+    vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
+    vi.spyOn(storageV2Database, 'withTransaction').mockImplementation(async (_client, fn) => fn())
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(client)
+
+    await new StorageV2KnowledgeRepository().importBases(
+      [
+        {
+          id: 'base-1',
+          name: 'Docs',
+          embeddingModelId: 'openai::text-embedding-3-small',
+          rerankModelId: 'jina::rerank',
+          items: []
+        }
+      ],
+      { pruneMissing: false }
+    )
+
+    const baseInsertCall = execute.mock.calls.find(([input]) => {
+      const sql = typeof input === 'string' ? input : input.sql
+      return sql.includes('INSERT INTO knowledge_bases')
+    })
+
+    const args = typeof baseInsertCall?.[0] === 'string' ? [] : baseInsertCall?.[0].args
+    expect(args?.slice(0, 5)).toEqual([
+      'base-1',
+      'Docs',
+      'openai::text-embedding-3-small',
+      'openai::text-embedding-3-small',
+      'jina::rerank'
+    ])
+  })
 })
