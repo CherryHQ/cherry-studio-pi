@@ -61,8 +61,16 @@ function makeRunSignal(
   return { signal, dispose: () => clearTimeout(timer) }
 }
 
+function abortReasonToError(reason: unknown, fallback = 'Task aborted'): Error {
+  return reason instanceof Error ? reason : new Error(String(reason ?? fallback))
+}
+
 export async function runAgentTask(ctx: JobContext<AgentTaskInput>): Promise<AgentTaskOutput> {
   const { agentId, prompt, timeoutMinutes } = ctx.input
+
+  if (ctx.signal.aborted) {
+    throw abortReasonToError(ctx.signal.reason)
+  }
 
   // schedule-fired jobs carry `scheduleId` on the row; manual ad-hoc enqueues
   // (no schedule) degrade gracefully: skip channel notification.
@@ -109,6 +117,10 @@ export async function runAgentTask(ctx: JobContext<AgentTaskInput>): Promise<Age
       '---',
       content
     ].join('\n')
+  }
+
+  if (ctx.signal.aborted) {
+    throw abortReasonToError(ctx.signal.reason)
   }
 
   // Always create a fresh session per fire. Scheduled tasks are discrete
@@ -176,10 +188,13 @@ export async function runAgentTask(ctx: JobContext<AgentTaskInput>): Promise<Age
     application
       .get('AiStreamManager')
       .abort(topicId, reason instanceof Error ? reason.message : String(reason ?? 'task-aborted'))
-    rejectExecution(reason instanceof Error ? reason : new Error(String(reason ?? 'Task aborted')))
+    rejectExecution(abortReasonToError(reason))
   }
-  if (runSignal.aborted) onRunAbort()
-  else runSignal.addEventListener('abort', onRunAbort, { once: true })
+  if (runSignal.aborted) {
+    dispose()
+    throw abortReasonToError(runSignal.reason)
+  }
+  runSignal.addEventListener('abort', onRunAbort, { once: true })
 
   let runError: Error | null = null
   let resultText = ''

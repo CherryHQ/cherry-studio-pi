@@ -307,6 +307,20 @@ describe('runAgentTask', () => {
   // C2 (agents-jobs-1) + agents-jobs-7: aborting the run (JobManager cancel or
   // per-task timeout) must abort the upstream stream AND settle the handler
   // promise — otherwise it leaks until the JobManager force-finalize timeout.
+  it('does not create a session or start a run when the job signal is already aborted', async () => {
+    const controller = new AbortController()
+    controller.abort(new Error('cancelled before start'))
+
+    await expect(
+      runAgentTask(makeCtx({ signal: controller.signal, input: { agentId: 'a1', prompt: 'hi', timeoutMinutes: 0 } }))
+    ).rejects.toThrow('cancelled before start')
+
+    expect(jobService.getById).not.toHaveBeenCalled()
+    expect(agentSessionService.createSession).not.toHaveBeenCalled()
+    expect(mockStartRun).not.toHaveBeenCalled()
+    expect(mockAbort).not.toHaveBeenCalled()
+  })
+
   it('aborts the upstream stream and rejects when the run signal aborts', async () => {
     vi.mocked(jobService.getById).mockResolvedValueOnce(makeJobSnapshot())
     vi.mocked(jobScheduleService.getById).mockResolvedValueOnce(makeSchedule('daily-summary'))
