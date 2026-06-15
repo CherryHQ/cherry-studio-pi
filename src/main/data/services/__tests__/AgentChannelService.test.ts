@@ -1,13 +1,20 @@
 import { agentTable } from '@data/db/schemas/agent'
+import { jobScheduleTable } from '@data/db/schemas/job'
 import { agentChannelService } from '@data/services/AgentChannelService'
 import { setupTestDatabase } from '@test-helpers/db'
-import { describe, expect, it } from 'vitest'
+import { MockMainDbServiceExport } from '@test-mocks/main/DbService'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 const TELEGRAM_CONFIG = { bot_token: 'test-token-123', allowed_chat_ids: [] }
 const SYSTEM_WORKSPACE = { type: 'system' as const }
 
 describe('AgentChannelService', () => {
   const dbh = setupTestDatabase()
+
+  beforeEach(() => {
+    MockMainDbServiceExport.dbService.withWriteTx.mockImplementation((fn) => dbh.db.transaction(fn as never))
+    MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+  })
 
   /** Insert a minimal agent row directly so agentId FK constraints are satisfied. */
   async function insertAgent(id: string): Promise<void> {
@@ -36,6 +43,7 @@ describe('AgentChannelService', () => {
       expect(channel.name).toBe('My Bot')
       expect(channel.isActive).toBe(true)
       expect(channel.config).toMatchObject({ bot_token: 'test-token-123' })
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     })
 
     it('creates an inactive channel', async () => {
@@ -179,6 +187,7 @@ describe('AgentChannelService', () => {
 
       const updated = await agentChannelService.updateChannel(channel.id, { name: 'After' })
       expect(updated!.name).toBe('After')
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(2)
     })
 
     it('returns null when channel does not exist', async () => {
@@ -197,6 +206,25 @@ describe('AgentChannelService', () => {
 
       const updated = await agentChannelService.updateChannel(channel.id, { isActive: false })
       expect(updated!.isActive).toBe(false)
+    })
+  })
+
+  describe('addActiveChatId', () => {
+    it('appends a new chat id inside one serialized read-modify-write transaction', async () => {
+      const channel = await agentChannelService.createChannel({
+        type: 'telegram',
+        name: 'Active Chats',
+        workspace: SYSTEM_WORKSPACE,
+        config: TELEGRAM_CONFIG
+      })
+
+      MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+      await agentChannelService.addActiveChatId(channel.id, 'chat-1')
+      await agentChannelService.addActiveChatId(channel.id, 'chat-1')
+
+      const updated = await agentChannelService.getChannel(channel.id)
+      expect(updated?.activeChatIds).toEqual(['chat-1'])
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(2)
     })
   })
 
@@ -236,6 +264,7 @@ describe('AgentChannelService', () => {
 
       const deleted = await agentChannelService.deleteChannel(channel.id)
       expect(deleted).toBe(true)
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(2)
 
       const found = await agentChannelService.getChannel(channel.id)
       expect(found).toBeNull()
@@ -244,6 +273,34 @@ describe('AgentChannelService', () => {
     it('returns false when channel does not exist', async () => {
       const result = await agentChannelService.deleteChannel('nonexistent')
       expect(result).toBe(false)
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('task subscriptions', () => {
+    it('subscribes and unsubscribes through serialized write transactions', async () => {
+      await dbh.db.insert(jobScheduleTable).values({
+        id: 'task-1',
+        type: 'agent.task',
+        name: 'task-1',
+        trigger: { kind: 'interval', ms: 60_000 },
+        jobInputTemplate: {},
+        catchUpPolicy: { kind: 'skip-missed' }
+      })
+      const channel = await agentChannelService.createChannel({
+        type: 'telegram',
+        name: 'Task Bot',
+        workspace: SYSTEM_WORKSPACE,
+        config: TELEGRAM_CONFIG
+      })
+
+      MockMainDbServiceExport.dbService.withWriteTx.mockClear()
+      await agentChannelService.subscribeToTask(channel.id, 'task-1')
+      await expect(agentChannelService.getSubscribedTasks(channel.id)).resolves.toEqual(['task-1'])
+
+      await agentChannelService.unsubscribeFromTask(channel.id, 'task-1')
+      await expect(agentChannelService.getSubscribedTasks(channel.id)).resolves.toEqual([])
+      expect(MockMainDbServiceExport.dbService.withWriteTx).toHaveBeenCalledTimes(2)
     })
   })
 })
