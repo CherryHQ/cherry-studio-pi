@@ -10,7 +10,7 @@ import { agentSessionService } from '@data/services/AgentSessionService'
 import { application } from '@main/core/application'
 import type { AgentSessionMessageEntity } from '@shared/data/api/schemas/agentSessions'
 import type { CherryUIMessage } from '@shared/data/types/message'
-import { parseUniqueModelId } from '@shared/data/types/model'
+import { isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
 import type { UIMessage } from 'ai'
 import { v7 as uuidv7 } from 'uuid'
 
@@ -61,6 +61,9 @@ export class AgentChatContextProvider implements ChatContextProvider {
     const agent = await agentService.getAgent(agentId)
     if (!agent) throw new Error(`Agent not found for session ${sessionId}: ${agentId}`)
     if (!agent.model) throw new Error(`Agent ${agent.id} has no model configured`)
+    if (!isUniqueModelId(agent.model)) {
+      throw new Error(`Agent ${agent.id} has invalid model id "${agent.model}"; expected "providerId::modelId"`)
+    }
 
     const driver = runtimeDriverRegistry.getAgentSessionDriver(agent.type)
     if (!driver) {
@@ -137,7 +140,7 @@ export class AgentChatContextProvider implements ChatContextProvider {
           'cs.session_id': sessionId
         }
       },
-      { topicId: req.topicId, modelName: parseUniqueModelId(uniqueModelId).modelId }
+      { topicId: req.topicId, modelName: rawModelId }
     )
     const traceId = turnTrace.traceId
 

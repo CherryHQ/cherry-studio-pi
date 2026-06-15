@@ -227,4 +227,21 @@ describe('AgentChatContextProvider', () => {
     expect(mocks.saveMessage).not.toHaveBeenCalled()
     expect(mocks.saveMessages).not.toHaveBeenCalled()
   })
+
+  it('rejects malformed agent model ids before writing messages or opening runtime turns', async () => {
+    mocks.getAgent.mockResolvedValue({
+      id: 'agent-1',
+      type: 'claude-code',
+      model: 'claude-sonnet',
+      modelName: 'Claude Sonnet'
+    })
+
+    await expect(provider.prepareDispatch(makeSubscriber(), openReq())).rejects.toThrow(
+      'Agent agent-1 has invalid model id "claude-sonnet"; expected "providerId::modelId"'
+    )
+    expect(mocks.runtimeValidateSession).not.toHaveBeenCalled()
+    expect(mocks.saveMessage).not.toHaveBeenCalled()
+    expect(mocks.saveMessages).not.toHaveBeenCalled()
+    expect(mocks.runtimeBeginTurn).not.toHaveBeenCalled()
+  })
 })
