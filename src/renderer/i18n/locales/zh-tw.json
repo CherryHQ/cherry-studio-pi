@@ -841,6 +841,7 @@
     "messages": {
       "apiKeyCopied": "API 金鑰已複製到剪貼簿",
       "apiKeyRegenerated": "API 金鑰已重新產生",
+      "invalidPort": "[to be translated]:Enter a port number between 1000 and 65535",
       "notEnabled": "API 閘道未啟用。",
       "operationFailed": "API 閘道操作失敗：",
       "restartError": "重新啟動 API 閘道失敗：",
@@ -6626,6 +6627,7 @@
         "content": "確定要刪除此提供者嗎？",
         "title": "刪除提供者"
       },
+      "delete_failed": "[to be translated]:Failed to delete provider",
       "dmxapi": {
         "platform_enterprise": "ssvip.DMXAPI.com（企業版）",
         "platform_international": "www.DMXAPI.com（國際）",

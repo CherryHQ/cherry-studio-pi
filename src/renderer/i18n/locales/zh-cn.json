@@ -6627,6 +6627,7 @@
         "content": "确定要删除此模型提供商吗？",
         "title": "删除提供商"
       },
+      "delete_failed": "删除服务商失败",
       "dmxapi": {
         "platform_enterprise": "ssvip.DMXAPI.com 生产级商用站",
         "platform_international": "www.DMXAPI.com 国际站",
@@ -6704,7 +6705,6 @@
       },
       "remove_duplicate_keys": "移除重复密钥",
       "remove_invalid_keys": "删除无效密钥",
-      "delete_failed": "删除服务商失败",
       "reorder_failed": "调整服务商顺序失败",
       "request_configuration": "请求配置",
       "request_configuration_tooltip": "配置 API Host 与自定义请求头",

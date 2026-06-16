@@ -841,6 +841,7 @@
     "messages": {
       "apiKeyCopied": "Khóa API đã được sao chép vào clipboard",
       "apiKeyRegenerated": "Khóa API đã được tạo lại",
+      "invalidPort": "[to be translated]:Enter a port number between 1000 and 65535",
       "notEnabled": "Máy chủ API chưa được kích hoạt.",
       "operationFailed": "Hoạt động của Máy chủ API không thành công:",
       "restartError": "Không khởi động lại được Máy chủ API:",
@@ -2177,7 +2178,8 @@
         "note": {
           "description": "Chọn các ghi chú hiện có làm nguồn cơ sở tri thức",
           "empty_description": "Các ghi chú có thể chọn sẽ xuất hiện ở đây sau khi danh sách ghi chú thực tế được kết nối. Hiện tại, hãy sử dụng tệp, thư mục, URL hoặc sơ đồ trang web.",
-          "empty_title": "Các ghi chú chưa được kết nối"
+          "empty_title": "Các ghi chú chưa được kết nối",
+          "loading": "[to be translated]:Loading notes…"
         },
         "placeholder": {
           "supported_formats": "Hỗ trợ PDF, DOCX, MD, XLSX, TXT, CSV",
@@ -2210,8 +2212,6 @@
         "reindex": "Lập chỉ mục lại",
         "selected_count": "{{count}} đã chọn"
       },
-      "chunk_delete_confirm_description": "Sau khi xóa, phần này sẽ không còn được sử dụng để truy xuất. Việc lập chỉ mục lại nguồn dữ liệu sẽ tạo ra nó một lần nữa.",
-      "chunk_delete_confirm_title": "Xóa đoạn?",
       "chunks_count": "{{count}} phần",
       "delete_confirm_description": "Nguồn dữ liệu này và dữ liệu chỉ mục của nó không thể được khôi phục sau khi xóa.",
       "delete_confirm_title": "Xóa Nguồn Dữ Liệu?",
@@ -2268,9 +2268,7 @@
         "search_placeholder": "Tìm kiếm nguồn dữ liệu"
       }
     },
-    "dimensions": "Kích thước nhúng",
     "dimensions_auto_set": "Tự động thiết lập kích thước embedding",
-    "dimensions_error_invalid": "Kích thước embedding không hợp lệ",
     "dimensions_size_placeholder": "Để trống để không truyền kích thước",
     "drag_file": "Kéo tệp vào đây",
     "embedding_model": "Mô hình Nhúng",
@@ -2322,7 +2320,6 @@
       "chunk_size_invalid": "Kích thước chunk phải lớn hơn 0",
       "chunking": "Phân đoạn",
       "default_separator": "Tự động (khuyên dùng)",
-      "dimensions": "Chiều của Véc-tơ",
       "document_count": "Số lượng tài liệu",
       "embedding_model": "Mô hình nhúng",
       "embedding_model_select": "Lựa chọn mô hình",
@@ -2331,7 +2328,6 @@
       "hints": {
         "chunk_overlap": "Số lượng token chồng lấp được giữ lại giữa các đoạn liền kề để giảm đứt gãy ngữ nghĩa.",
         "chunk_size": "Số lượng token mục tiêu cho mỗi đoạn tài liệu. Điều này ảnh hưởng đến độ chi tiết khi truy xuất và độ dài ngữ cảnh.",
-        "dimensions": "Kích thước chiều vectơ được đầu ra bởi mô hình nhúng hiện tại, dùng để tạo và khớp các chỉ mục vectơ.",
         "document_count": "Số lượng tối đa các đoạn tài liệu được trả về cho mỗi lần truy xuất. Giá trị cao hơn sẽ bao phủ nhiều nội dung hơn nhưng sử dụng nhiều ngữ cảnh hơn.",
         "embedding_model": "Dùng để chuyển nội dung cơ sở kiến thức thành các vector. Việc thay đổi mô hình thường đòi hỏi lập chỉ mục lại nội dung hiện có.",
         "hybrid_alpha": "Trọng số điểm vector trong truy xuất lai. Giá trị cao hơn ưu tiên khớp ngữ nghĩa.",
@@ -2342,9 +2338,7 @@
         "threshold_disabled": "Chế độ truy xuất này trả về kết quả có thứ tự và không sử dụng ngưỡng độ tương đồng."
       },
       "hybrid_alpha": "Hybrid Alpha",
-      "hybrid_alpha_hint": "Chỉ có thể cấu hình trong chế độ truy xuất Hybrid",
       "processor": "Nhà cung cấp xử lý",
-      "refresh_dimensions": "Làm mới kích thước vector",
       "rerank_disabled": "Vô hiệu hóa",
       "rerank_model": "Mô hình xếp hạng lại",
       "reset_action": "Khôi phục mặc định",
@@ -2354,9 +2348,9 @@
       "saved": "Đã lưu",
       "search_mode": {
         "bm25": "Tìm kiếm toàn văn",
-        "default": "Tìm kiếm Vector",
         "hybrid": "Tìm kiếm kết hợp (khuyên dùng)",
-        "title": "Chế độ tìm kiếm"
+        "title": "Chế độ tìm kiếm",
+        "vector": "[to be translated]:Vector Search"
       },
       "separator_rule": "Quy tắc phân cách",
       "threshold": "Ngưỡng Độ Tương Đồng",
@@ -6633,6 +6627,7 @@
         "content": "Bạn có chắc chắn muốn xóa nhà cung cấp này không?",
         "title": "Xóa Nhà Cung Cấp"
       },
+      "delete_failed": "[to be translated]:Failed to delete provider",
       "dmxapi": {
         "platform_enterprise": "ssvip.DMXAPI.com (Doanh nghiệp)",
         "platform_international": "www.DMXAPI.com (Quốc tế)",
@@ -6820,6 +6815,7 @@
       },
       "clear_shortcut": "Phím tắt rõ ràng",
       "clear_topic": "Tin nhắn rõ ràng",
+      "close_tab": "[to be translated]:Close Tab",
       "conflict_with": "Đã được \"{{name}}\" sử dụng",
       "copy_last_message": "Sao tin nhắn cuối cùng",
       "edit_last_user_message": "Chỉnh sửa tin nhắn cuối cùng của người dùng",
@@ -6827,8 +6823,11 @@
       "enabled": "Kích hoạt",
       "exit_fullscreen": "Thoát toàn màn hình",
       "label": "Khóa",
+      "move_tab_to_first": "[to be translated]:Move Tab to First",
       "new_topic": "Chủ đề mới",
       "occupied_by_other_application": "Phím tắt này đã được hệ thống hoặc một ứng dụng khác sử dụng",
+      "open_tab_in_new_window": "[to be translated]:Open Tab in New Window",
+      "pin_tab": "[to be translated]:Toggle Pin Tab",
       "press_shortcut": "Nhấn Phím tắt",
       "quick_assistant": "Trợ lý nhanh",
       "rename_topic": "Đổi tên chủ đề",

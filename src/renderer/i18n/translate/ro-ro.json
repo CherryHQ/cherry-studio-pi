@@ -841,6 +841,7 @@
     "messages": {
       "apiKeyCopied": "Cheia API a fost copiată în clipboard",
       "apiKeyRegenerated": "Cheia API a fost regenerată",
+      "invalidPort": "[to be translated]:Enter a port number between 1000 and 65535",
       "notEnabled": "Serverul API nu este activat.",
       "operationFailed": "Operațiunea serverului API a eșuat: ",
       "restartError": "Nu s-a putut reporni serverul API: ",
@@ -2177,7 +2178,8 @@
         "note": {
           "description": "Selectează notițele existente ca surse pentru baza de cunoștințe",
           "empty_description": "Notele selectabile vor apărea aici după ce lista reală de note va fi conectată. Deocamdată, folosiți fișiere, foldere, URL-uri sau hărți de site.",
-          "empty_title": "Notele nu sunt încă conectate"
+          "empty_title": "Notele nu sunt încă conectate",
+          "loading": "[to be translated]:Loading notes…"
         },
         "placeholder": {
           "supported_formats": "Acceptă PDF, DOCX, MD, XLSX, TXT, CSV",
@@ -2210,8 +2212,6 @@
         "reindex": "Reindexare",
         "selected_count": "{{count}} selectate"
       },
-      "chunk_delete_confirm_description": "După ștergere, acest fragment nu va mai fi folosit pentru recuperare. Reindexarea sursei de date îl va genera din nou.",
-      "chunk_delete_confirm_title": "Șterge fragmentul?",
       "chunks_count": "{{count}} fragmente",
       "delete_confirm_description": "Această sursă de date și datele sale index nu pot fi recuperate după ștergere.",
       "delete_confirm_title": "Șterge sursa de date?",
@@ -2268,9 +2268,7 @@
         "search_placeholder": "Căutați surse de date"
       }
     },
-    "dimensions": "Dimensiuni de înglobare",
     "dimensions_auto_set": "Setează automat dimensiunile embedding",
-    "dimensions_error_invalid": "Dimensiune embedding invalidă",
     "dimensions_size_placeholder": "Lasă gol pentru a nu transmite dimensiuni",
     "drag_file": "Trage fișierul aici",
     "embedding_model": "Model de încorporare",
@@ -2322,7 +2320,6 @@
       "chunk_size_invalid": "Dimensiunea fragmentului trebuie să fie mai mare decât 0",
       "chunking": "Segmentare",
       "default_separator": "Auto (recomandat)",
-      "dimensions": "Dimensiuni Vectoriale",
       "document_count": "Număr de documente",
       "embedding_model": "Model de încorporare",
       "embedding_model_select": "Selecția Modelului",
@@ -2331,7 +2328,6 @@
       "hints": {
         "chunk_overlap": "Numărul de token-uri suprapuse păstrate între fragmentele adiacente pentru a reduce rupturile semantice.",
         "chunk_size": "Numărul țintă de tokeni pentru fiecare fragment de document. Acest lucru afectează granularitatea recuperării și lungimea contextului.",
-        "dimensions": "Dimensiunea vectorului generat de modelul de încorporare actual, utilizată pentru a crea și potrivi indexurile vectoriale.",
         "document_count": "Numărul maxim de fragmente de document returnate pentru fiecare recuperare. Valori mai mari acoperă mai mult conținut, dar folosesc mai mult context.",
         "embedding_model": "Folosit pentru a converti conținutul bazei de cunoștințe în vectori. Schimbarea modelului necesită de obicei reindexarea conținutului existent.",
         "hybrid_alpha": "Ponderea scorului vectorial în recuperarea hibridă. Valorile mai mari favorizează potrivirea semantică.",
@@ -2342,9 +2338,7 @@
         "threshold_disabled": "Acest mod de recuperare returnează rezultate ordonate și nu utilizează un prag de similaritate."
       },
       "hybrid_alpha": "Alpha Hibrid",
-      "hybrid_alpha_hint": "Configurabil doar în modul de recuperare hibrid",
       "processor": "Furnizor de procesare",
-      "refresh_dimensions": "Reîmprospătează dimensiunile vectorului",
       "rerank_disabled": "Dezactivat",
       "rerank_model": "Model de Reordonare",
       "reset_action": "Restabilește valorile implicite",
@@ -2354,9 +2348,9 @@
       "saved": "Salvat",
       "search_mode": {
         "bm25": "Căutare în text complet",
-        "default": "Căutare Vectorială",
         "hybrid": "Căutare hibridă (recomandat)",
-        "title": "Mod de căutare"
+        "title": "Mod de căutare",
+        "vector": "[to be translated]:Vector Search"
       },
       "separator_rule": "Regula Separator",
       "threshold": "Prag de similaritate",
@@ -6633,6 +6627,7 @@
         "content": "Ești sigur că vrei să ștergi acest furnizor?",
         "title": "Șterge furnizor"
       },
+      "delete_failed": "[to be translated]:Failed to delete provider",
       "dmxapi": {
         "platform_enterprise": "ssvip.DMXAPI.com (Întreprindere)",
         "platform_international": "www.DMXAPI.com (Internațional)",
@@ -6820,6 +6815,7 @@
       },
       "clear_shortcut": "Șterge comanda rapidă",
       "clear_topic": "Șterge mesajele",
+      "close_tab": "[to be translated]:Close Tab",
       "conflict_with": "Deja folosit de \"{{name}}\"",
       "copy_last_message": "Copiază ultimul mesaj",
       "edit_last_user_message": "Editează ultimul mesaj al utilizatorului",
@@ -6827,8 +6823,11 @@
       "enabled": "Activează",
       "exit_fullscreen": "Ieși din ecran complet",
       "label": "Tastă",
+      "move_tab_to_first": "[to be translated]:Move Tab to First",
       "new_topic": "Subiect nou",
       "occupied_by_other_application": "Această comandă rapidă este deja utilizată de sistem sau de o altă aplicație",
+      "open_tab_in_new_window": "[to be translated]:Open Tab in New Window",
+      "pin_tab": "[to be translated]:Toggle Pin Tab",
       "press_shortcut": "Apasă comanda rapidă",
       "quick_assistant": "Asistent rapid",
       "rename_topic": "Redenumește subiectul",
