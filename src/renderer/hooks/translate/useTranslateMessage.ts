@@ -36,7 +36,7 @@ const TRANSLATE_STREAM_PREFIX = 'translate:'
 export interface UseTranslateMessageResult {
   /** Start a translation for this message. Resolves once `translate.open` has dispatched (not on stream completion). */
   translate: (text: string, language: TranslateLanguage) => Promise<void>
-  /** Abort the current stream (if any). Cleanup of subscriptions still happens via `onStreamError` / `onStreamDone`. */
+  /** Abort the current stream (if any) and immediately clear renderer-side translation state. */
   cancel: () => void
 }
 
