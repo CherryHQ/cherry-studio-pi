@@ -14,7 +14,7 @@ import { cn } from '@renderer/utils/style'
 import { occupiedDirs } from '@shared/config/constant'
 import { FolderInput, FolderOpen, FolderOutput, SaveIcon } from 'lucide-react'
 import type React from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -28,6 +28,8 @@ const BasicDataSettings: React.FC = () => {
   const { theme } = useTheme()
   const { setTimeoutTimer } = useTimer()
   const [skipBackupFile, setSkipBackupFile] = usePreference('data.backup.general.skip_backup_file')
+  const clearCacheConfirmRef = useRef(false)
+  const clearCacheOperationRef = useRef(false)
 
   const showOperationFailed = useCallback(
     (error: unknown) => {
@@ -461,6 +463,16 @@ const BasicDataSettings: React.FC = () => {
   }
 
   const handleClearCache = () => {
+    if (clearCacheConfirmRef.current || clearCacheOperationRef.current) {
+      return
+    }
+
+    const clearCacheGuard = () => {
+      if (clearCacheOperationRef.current) return
+      clearCacheConfirmRef.current = false
+    }
+
+    clearCacheConfirmRef.current = true
     window.modal.confirm({
       title: t('settings.data.clear_cache.title'),
       content: t('settings.data.clear_cache.confirm'),
@@ -469,7 +481,13 @@ const BasicDataSettings: React.FC = () => {
       okButtonProps: {
         danger: true
       },
+      onCancel: clearCacheGuard,
       onOk: async () => {
+        if (clearCacheOperationRef.current) {
+          return
+        }
+
+        clearCacheOperationRef.current = true
         try {
           await window.api.clearCache()
           await window.api.trace.cleanLocalData()
@@ -477,6 +495,9 @@ const BasicDataSettings: React.FC = () => {
           window.toast.success(t('settings.data.clear_cache.success'))
         } catch (error) {
           window.toast.error(t('settings.data.clear_cache.error'))
+        } finally {
+          clearCacheOperationRef.current = false
+          clearCacheConfirmRef.current = false
         }
       }
     })
