@@ -270,6 +270,30 @@ describe('AppModalProvider', () => {
     await expect(second!).resolves.toBe(false)
   })
 
+  it('resolves open modals as cancelled when the provider unmounts', async () => {
+    let modal: AppModalApi | undefined
+    const afterClose = vi.fn()
+    const view = render(<AppModalProvider onReady={(api) => (modal = api)} />)
+
+    await waitFor(() => {
+      expect(modal).toBeDefined()
+    })
+
+    let pendingModal: ReturnType<AppModalApi['info']>
+    act(() => {
+      pendingModal = modal!.info({ title: 'Unmounted modal', afterClose })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Unmounted modal')).toBeInTheDocument()
+    })
+
+    view.unmount()
+
+    await expect(pendingModal!).resolves.toBe(false)
+    expect(afterClose).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps the modal mounted until the close animation finishes', async () => {
     const modal = await renderModalProvider()
     vi.useFakeTimers()

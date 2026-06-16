@@ -392,6 +392,11 @@ export default function AppModalProvider({ onReady }: Props) {
     return () => {
       closeTimers.forEach((timer) => clearTimeout(timer))
       closeTimers.clear()
+      for (const item of itemsRef.current) {
+        item.resolve(false)
+        item.props.afterClose?.()
+      }
+      itemsRef.current = []
     }
   }, [])
 
