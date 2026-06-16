@@ -228,7 +228,12 @@ export default function ProviderList({ selectedProviderId, filterModeHint, onSel
         okText: t('common.delete'),
         centered: true,
         onOk: async () => {
-          await deleteProvider(providerId)
+          try {
+            await deleteProvider(providerId)
+          } catch (error) {
+            window.toast.error(t('settings.provider.delete_failed'))
+            throw error
+          }
         }
       })
     },

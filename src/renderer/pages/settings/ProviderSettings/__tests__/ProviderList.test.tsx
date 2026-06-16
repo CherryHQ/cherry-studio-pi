@@ -368,4 +368,16 @@ describe('ProviderList', () => {
 
     expect(deleteProviderMock).toHaveBeenCalledWith('openai')
   })
+
+  it('keeps failed provider deletion visible and reports the error', async () => {
+    const error = new Error('delete failed')
+    deleteProviderMock.mockRejectedValueOnce(error)
+    render(<ProviderList selectedProviderId="openai" onSelectProvider={vi.fn()} />)
+
+    fireEvent.click(screen.getByTestId('provider-list-delete-openai'))
+    const options = (window.modal.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0]
+
+    await expect(options.onOk()).rejects.toBe(error)
+    expect(window.toast.error).toHaveBeenCalled()
+  })
 })

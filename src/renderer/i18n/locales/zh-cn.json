@@ -6703,6 +6703,7 @@
       },
       "remove_duplicate_keys": "移除重复密钥",
       "remove_invalid_keys": "删除无效密钥",
+      "delete_failed": "删除服务商失败",
       "reorder_failed": "调整服务商顺序失败",
       "request_configuration": "请求配置",
       "request_configuration_tooltip": "配置 API Host 与自定义请求头",

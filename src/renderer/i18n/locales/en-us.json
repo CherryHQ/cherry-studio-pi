@@ -6703,6 +6703,7 @@
       },
       "remove_duplicate_keys": "Remove Duplicate Keys",
       "remove_invalid_keys": "Remove Invalid Keys",
+      "delete_failed": "Failed to delete provider",
       "reorder_failed": "Failed to reorder providers",
       "request_configuration": "Request configuration",
       "request_configuration_tooltip": "Configure API Host and custom request headers",
