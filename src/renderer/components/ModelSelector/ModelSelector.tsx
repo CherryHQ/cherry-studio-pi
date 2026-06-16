@@ -706,6 +706,14 @@ export function ModelSelector(props: ModelSelectorProps) {
         side={side}
         align={align}
         sideOffset={sideOffset}
+        hideWhenDetached
+        onCloseAutoFocus={(event) => {
+          // The selector is often closed immediately before a route, dialog, or
+          // navbar layout switch. Letting Radix refocus a trigger that has just
+          // unmounted can leave the floating content visually stranded at the
+          // viewport origin.
+          event.preventDefault()
+        }}
         className={cn('max-h-140 w-90 overflow-hidden rounded-lg p-0 py-1', contentClassName)}
         data-testid="model-selector-content">
         <div className="flex items-center gap-2 border-border/60 border-b px-3 py-2.5">
