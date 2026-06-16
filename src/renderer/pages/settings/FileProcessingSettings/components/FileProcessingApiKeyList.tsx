@@ -54,7 +54,9 @@ const FileProcessingApiKeyItem: FC<FileProcessingApiKeyItemProps> = ({ item, onU
   const { t } = useTranslation()
   const [isEditing, setIsEditing] = useState(item.isNew || !item.key.trim())
   const [editValue, setEditValue] = useState(item.key)
+  const [saving, setSaving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const savingRef = useRef(false)
   const hasUnsavedChanges = editValue.trim() !== item.key.trim()
 
   useEffect(() => {
@@ -68,22 +70,43 @@ const FileProcessingApiKeyItem: FC<FileProcessingApiKeyItemProps> = ({ item, onU
     setIsEditing(item.isNew || !item.key.trim())
   }, [item.isNew, item.key])
 
-  const handleSave = async () => {
-    try {
-      const result = await onUpdate(editValue)
-      if (!result.isValid) {
-        window.toast.warning(result.error)
-        return
-      }
+  const runSavingAction = async (action: () => Promise<void>) => {
+    if (savingRef.current) {
+      return
+    }
 
-      setIsEditing(false)
-    } catch (error) {
-      logger.error('Failed to save file processing API key', error as Error)
-      window.toast.error(t('settings.tool.file_processing.errors.save_failed'))
+    savingRef.current = true
+    setSaving(true)
+    try {
+      await action()
+    } finally {
+      savingRef.current = false
+      setSaving(false)
     }
   }
 
+  const handleSave = async () => {
+    await runSavingAction(async () => {
+      try {
+        const result = await onUpdate(editValue)
+        if (!result.isValid) {
+          window.toast.warning(result.error)
+          return
+        }
+
+        setIsEditing(false)
+      } catch (error) {
+        logger.error('Failed to save file processing API key', error as Error)
+        window.toast.error(t('settings.tool.file_processing.errors.save_failed'))
+      }
+    })
+  }
+
   const handleCancelEdit = () => {
+    if (savingRef.current) {
+      return
+    }
+
     if (item.isNew || !item.key.trim()) {
       void onRemove()
       return
@@ -104,21 +127,23 @@ const FileProcessingApiKeyItem: FC<FileProcessingApiKeyItemProps> = ({ item, onU
   }
 
   const handleRemove = async () => {
-    const confirmed = await window.modal.confirm({
-      title: t('common.delete_confirm'),
-      centered: true,
-      okText: t('common.confirm'),
-      cancelText: t('common.cancel')
-    })
+    await runSavingAction(async () => {
+      const confirmed = await window.modal.confirm({
+        title: t('common.delete_confirm'),
+        centered: true,
+        okText: t('common.confirm'),
+        cancelText: t('common.cancel')
+      })
 
-    if (confirmed) {
-      try {
-        await onRemove()
-      } catch (error) {
-        logger.error('Failed to remove file processing API key', error as Error)
-        window.toast.error(t('settings.tool.file_processing.errors.save_failed'))
+      if (confirmed) {
+        try {
+          await onRemove()
+        } catch (error) {
+          logger.error('Failed to remove file processing API key', error as Error)
+          window.toast.error(t('settings.tool.file_processing.errors.save_failed'))
+        }
       }
-    }
+    })
   }
 
   return (
@@ -129,6 +154,7 @@ const FileProcessingApiKeyItem: FC<FileProcessingApiKeyItemProps> = ({ item, onU
             ref={inputRef}
             type="password"
             value={editValue}
+            disabled={saving}
             onChange={(event) => setEditValue(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
@@ -145,6 +171,7 @@ const FileProcessingApiKeyItem: FC<FileProcessingApiKeyItemProps> = ({ item, onU
               variant={hasUnsavedChanges ? 'default' : 'ghost'}
               size="icon-sm"
               aria-label={t('common.save')}
+              disabled={saving}
               onClick={() => void handleSave()}>
               <Check className="size-3.5" />
             </Button>
@@ -153,6 +180,7 @@ const FileProcessingApiKeyItem: FC<FileProcessingApiKeyItemProps> = ({ item, onU
               variant="ghost"
               size="icon-sm"
               aria-label={t('common.cancel')}
+              disabled={saving}
               onClick={handleCancelEdit}>
               <X className="size-3.5" />
             </Button>
@@ -177,6 +205,7 @@ const FileProcessingApiKeyItem: FC<FileProcessingApiKeyItemProps> = ({ item, onU
               variant="ghost"
               size="icon-sm"
               aria-label={t('common.edit')}
+              disabled={saving}
               onClick={() => setIsEditing(true)}>
               <EditIcon size={14} />
             </Button>
@@ -185,6 +214,7 @@ const FileProcessingApiKeyItem: FC<FileProcessingApiKeyItemProps> = ({ item, onU
               variant="ghost"
               size="icon-sm"
               aria-label={t('common.delete')}
+              disabled={saving}
               onClick={() => void handleRemove()}>
               <Minus className="size-3.5" />
             </Button>

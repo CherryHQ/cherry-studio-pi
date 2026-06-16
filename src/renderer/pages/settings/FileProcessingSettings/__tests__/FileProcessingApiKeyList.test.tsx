@@ -55,6 +55,20 @@ vi.mock('@cherrystudio/ui', () => ({
   )
 }))
 
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
+}
+
 describe('FileProcessingApiKeyList', () => {
   let loggerErrorSpy: ReturnType<typeof vi.spyOn>
 
@@ -101,6 +115,26 @@ describe('FileProcessingApiKeyList', () => {
     })
   })
 
+  it('ignores duplicate save clicks while a key update is still in flight', async () => {
+    const runningUpdate = deferred<void>()
+    setApiKeysMock.mockReturnValueOnce(runningUpdate.promise)
+    render(<FileProcessingApiKeyList processorId="mistral" apiKeys={[]} onSetApiKeys={setApiKeysMock} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /common.add/ }))
+    fireEvent.change(screen.getByPlaceholderText('settings.provider.api.key.new_key.placeholder'), {
+      target: { value: 'key-1' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }))
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }))
+
+    expect(setApiKeysMock).toHaveBeenCalledTimes(1)
+
+    runningUpdate.resolve()
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText('settings.provider.api.key.new_key.placeholder')).not.toBeInTheDocument()
+    })
+  })
+
   it('rejects duplicate API keys', async () => {
     render(<FileProcessingApiKeyList processorId="mistral" apiKeys={['key-1']} onSetApiKeys={setApiKeysMock} />)
 
@@ -123,6 +157,26 @@ describe('FileProcessingApiKeyList', () => {
 
     await waitFor(() => {
       expect(setApiKeysMock).toHaveBeenCalledWith('mistral', [])
+    })
+  })
+
+  it('ignores duplicate delete clicks while confirmation is still open', async () => {
+    const runningConfirmation = deferred<boolean>()
+    const confirm = vi.fn().mockReturnValueOnce(runningConfirmation.promise)
+    Object.defineProperty(window, 'modal', {
+      configurable: true,
+      value: { confirm }
+    })
+    render(<FileProcessingApiKeyList processorId="mistral" apiKeys={['key-1']} onSetApiKeys={setApiKeysMock} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'common.delete' }))
+
+    expect(confirm).toHaveBeenCalledTimes(1)
+
+    runningConfirmation.resolve(false)
+    await waitFor(() => {
+      expect(setApiKeysMock).not.toHaveBeenCalled()
     })
   })
 
