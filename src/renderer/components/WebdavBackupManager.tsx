@@ -121,6 +121,14 @@ export function WebdavBackupManager({
     setCurrentPage((page) => Math.min(page, totalPages))
   }, [totalPages])
 
+  useEffect(() => {
+    const availableKeys = new Set(backupFiles.map((file) => file.fileName))
+    setSelectedRowKeys((previousKeys) => {
+      const nextKeys = previousKeys.filter((key) => availableKeys.has(key.toString()))
+      return nextKeys.length === previousKeys.length ? previousKeys : nextKeys
+    })
+  }, [backupFiles])
+
   const paginatedBackupFiles = useMemo(() => {
     const start = (safeCurrentPage - 1) * PAGE_SIZE
     return backupFiles.slice(start, start + PAGE_SIZE)

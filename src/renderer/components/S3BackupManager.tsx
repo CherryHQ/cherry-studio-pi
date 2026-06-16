@@ -16,7 +16,7 @@ import { formatFileSize } from '@renderer/utils'
 import dayjs from 'dayjs'
 import { ChevronLeft, ChevronRight, CircleAlert, RefreshCw, Trash2 } from 'lucide-react'
 import type { Key } from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface BackupFile {
@@ -41,6 +41,7 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
   const [deleting, setDeleting] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
+  const fetchSeqRef = useRef(0)
   const { t } = useTranslation()
 
   const { endpoint, region, bucket, accessKeyId, secretAccessKey } = s3Config
@@ -51,6 +52,7 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
       return
     }
 
+    const fetchSeq = ++fetchSeqRef.current
     setLoading(true)
     try {
       const files = await window.api.backup.listS3Files({
@@ -65,21 +67,43 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
         syncInterval: 0,
         maxBackups: 0
       })
-      setBackupFiles(files)
+      if (fetchSeq === fetchSeqRef.current) {
+        setBackupFiles(files)
+      }
     } catch (error: any) {
-      window.toast.error(t('settings.data.s3.manager.files.fetch.error', { message: error.message }))
+      if (fetchSeq === fetchSeqRef.current) {
+        window.toast.error(t('settings.data.s3.manager.files.fetch.error', { message: error.message }))
+      }
     } finally {
-      setLoading(false)
+      if (fetchSeq === fetchSeqRef.current) {
+        setLoading(false)
+      }
     }
   }, [endpoint, region, bucket, accessKeyId, secretAccessKey, t, s3Config])
 
   useEffect(() => {
-    if (visible) {
-      void fetchBackupFiles()
-      setSelectedRowKeys([])
-      setCurrentPage(1)
+    if (!visible) {
+      fetchSeqRef.current += 1
+      setLoading(false)
+      return
+    }
+
+    void fetchBackupFiles()
+    setSelectedRowKeys([])
+    setCurrentPage(1)
+
+    return () => {
+      fetchSeqRef.current += 1
     }
   }, [visible, fetchBackupFiles])
+
+  useEffect(() => {
+    const availableKeys = new Set(backupFiles.map((file) => file.fileName))
+    setSelectedRowKeys((previousKeys) => {
+      const nextKeys = previousKeys.filter((key) => availableKeys.has(key.toString()))
+      return nextKeys.length === previousKeys.length ? previousKeys : nextKeys
+    })
+  }, [backupFiles])
 
   const totalPages = Math.max(1, Math.ceil(backupFiles.length / PAGE_SIZE))
   const safeCurrentPage = Math.min(currentPage, totalPages)
