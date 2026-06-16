@@ -3804,7 +3804,7 @@
       "stop": "Parar OVMS",
       "stopping": "Parando"
     },
-    "description": "<div><p>1. Baixe o modelo OV.</p><p>2. Adicione o modelo no 'Gerenciador'.</p><p>Compatível apenas com Windows!</p><p>Caminho de instalação do OVMS: '%USERPROFILE%\\.cherrystudio\\ovms' .</p><p>Consulte o <a href=https://github.com/openvinotoolkit/model_server/blob/c55551763d02825829337b62c2dcef9339706f79/docs/deploying_server_baremetal.md>Guia do Intel OVMS</a></p></dev>",
+    "description": "<div><p>1. Baixe o modelo OV.</p><p>2. Adicione o modelo no 'Gerenciador'.</p><p>Compatível apenas com Windows!</p><p>Caminho de instalação do OVMS: '%USERPROFILE%\\.cherrystudio\\ovms' .</p><p>Consulte o <a href=https://github.com/openvinotoolkit/model_server/blob/c55551763d02825829337b62c2dcef9339706f79/docs/deploying_server_baremetal.md>Guia do Intel OVMS</a></p></div>",
     "download": {
       "button": "Baixar",
       "error": "Falha na seleção",

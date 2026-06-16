@@ -160,7 +160,6 @@ const OvmsSettings: FC = () => {
               i18nKey="ovms.description"
               components={{
                 div: <div />,
-                dev: <div />,
                 p: <p />,
                 a: (
                   <a
