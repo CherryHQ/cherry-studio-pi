@@ -372,7 +372,7 @@ describe('StorageV2ProviderRepository', () => {
     expect(execute).toHaveBeenCalledWith(
       expect.objectContaining({
         sql: expect.stringContaining('UPDATE models'),
-        args: [expect.any(String), expect.any(String), 'provider-1', 'provider-1:gpt-4o']
+        args: [expect.any(String), expect.any(String), 'provider-1', 'provider-1::gpt-4o']
       })
     )
   })
@@ -401,9 +401,49 @@ describe('StorageV2ProviderRepository', () => {
     expect(modelInsertCalls).toHaveLength(1)
     expect(modelInsertCalls[0]?.[0]).toEqual(
       expect.objectContaining({
-        args: expect.arrayContaining(['provider-1:gpt-4o', 'GPT-4o'])
+        args: expect.arrayContaining(['provider-1::gpt-4o', 'GPT-4o'])
       })
     )
+  })
+
+  it('stores provider model rows with UniqueModelId-compatible ids', async () => {
+    const { client, execute } = createMockClient()
+    vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
+    vi.spyOn(storageV2Database, 'withTransaction').mockImplementation(async (_client, fn) => fn())
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(client)
+
+    await new StorageV2ProviderRepository().upsert({
+      id: 'provider-1',
+      type: 'openai',
+      name: 'OpenAI',
+      models: [
+        { id: 'provider-1::gpt-4o', name: 'GPT-4o unique' },
+        { id: 'gpt-4o-mini', name: 'GPT-4o Mini' }
+      ]
+    } as any)
+
+    const modelInsertCalls = execute.mock.calls.filter(([input]) => {
+      const sql = typeof input === 'string' ? input : input.sql
+      return sql.includes('INSERT INTO models')
+    })
+
+    expect(modelInsertCalls).toHaveLength(2)
+    const [firstCall, secondCall] = modelInsertCalls
+    if (!firstCall || !secondCall) {
+      throw new Error('Expected two model insert calls')
+    }
+    const firstArgs = (firstCall[0] as { args: unknown[] }).args
+    const secondArgs = (secondCall[0] as { args: unknown[] }).args
+
+    expect(firstArgs[0]).toBe('provider-1::gpt-4o')
+    expect(firstArgs[1]).toBe('provider-1')
+    expect(firstArgs[2]).toBe('GPT-4o unique')
+    expect(JSON.parse(String(firstArgs[5]))).toMatchObject({ id: 'gpt-4o', provider: 'provider-1' })
+
+    expect(secondArgs[0]).toBe('provider-1::gpt-4o-mini')
+    expect(secondArgs[1]).toBe('provider-1')
+    expect(secondArgs[2]).toBe('GPT-4o Mini')
+    expect(JSON.parse(String(secondArgs[5]))).toMatchObject({ id: 'gpt-4o-mini', provider: 'provider-1' })
   })
 })
 

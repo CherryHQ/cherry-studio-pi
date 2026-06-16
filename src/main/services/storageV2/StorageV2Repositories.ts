@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import type { Client } from '@libsql/client'
-import { isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
+import { createUniqueModelId, isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
 import type { Assistant, Model, Provider } from '@types'
 
 import { storageV2DataRootService } from './DataRootService'
@@ -260,10 +260,18 @@ function stripProviderConfig(provider: Provider): Record<string, unknown> {
   return config
 }
 
+function getProviderModelRowId(providerId: string, modelId: string) {
+  return createUniqueModelId(providerId, modelId)
+}
+
 function normalizeModelProvider(model: Model, providerId: string): Model {
+  const modelId = String(model.id).trim()
+  const parsed = isUniqueModelId(modelId) ? parseUniqueModelId(modelId) : null
+
   return {
     ...model,
-    provider: model.provider || providerId
+    id: parsed?.modelId ?? modelId,
+    provider: model.provider || parsed?.providerId || providerId
   }
 }
 
@@ -274,7 +282,7 @@ function normalizeProviderModels(provider: Provider): Model[] {
     if (!model?.id) continue
 
     const normalized = normalizeModelProvider(model, provider.id)
-    modelsByStorageId.set(`${provider.id}:${normalized.id}`, normalized)
+    modelsByStorageId.set(getProviderModelRowId(provider.id, normalized.id), normalized)
   }
 
   return Array.from(modelsByStorageId.values())
@@ -647,7 +655,7 @@ export class StorageV2ProviderRepository {
     const timestamp = now()
     const config = stripProviderConfig(provider)
     const models = normalizeProviderModels(provider)
-    const modelIds = models.map((model) => `${provider.id}:${model.id}`)
+    const modelIds = models.map((model) => getProviderModelRowId(provider.id, model.id))
     const shouldClearCredential =
       options.clearCredential === true ||
       Boolean(provider.apiKey && !credentialRef && !options.preserveExistingCredential)
@@ -723,7 +731,7 @@ export class StorageV2ProviderRepository {
               deleted_at = NULL
           `,
           args: [
-            `${provider.id}:${model.id}`,
+            getProviderModelRowId(provider.id, model.id),
             provider.id,
             model.name || model.id,
             model.group || null,
