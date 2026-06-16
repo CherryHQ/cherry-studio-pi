@@ -129,6 +129,7 @@ class PpioTransport implements ImageGenerationTransport {
     const timeoutId = setTimeout(() => {
       controller.abort()
     }, timeout)
+    timeoutId.unref?.()
 
     const onExternalAbort = () => {
       externallyAborted = true

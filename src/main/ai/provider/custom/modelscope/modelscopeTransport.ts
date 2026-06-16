@@ -239,6 +239,7 @@ class ModelscopeTransport implements ImageGenerationTransport {
     let externallyAborted = false
 
     const timeoutId = setTimeout(() => controller.abort(), timeout)
+    timeoutId.unref?.()
     const onExternalAbort = () => {
       externallyAborted = true
       controller.abort()
