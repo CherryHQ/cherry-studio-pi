@@ -231,6 +231,7 @@ export function formatNetworkProbeLine(v: { host: string; ok: boolean }): string
 export async function probeHost(host: string): Promise<{ host: string; ok: boolean }> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 2000)
+  timeout.unref?.()
   try {
     await fetch(`https://${host}`, { method: 'HEAD', signal: controller.signal })
     return { host, ok: true }

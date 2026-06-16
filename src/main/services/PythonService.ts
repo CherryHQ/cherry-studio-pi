@@ -83,6 +83,7 @@ export class PythonService extends BaseService {
         this.pendingRequests.delete(requestId)
         reject(new Error('Python execution timed out'))
       }, timeout + 5000)
+      timeoutId.unref?.()
 
       this.pendingRequests.set(requestId, {
         resolve: (value: string) => {

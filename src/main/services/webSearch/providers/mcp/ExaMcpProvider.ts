@@ -222,6 +222,7 @@ export class ExaMcpProvider extends BaseWebSearchProvider {
     const timeoutController = new AbortController()
     const timeoutError = new DOMException(`Exa MCP search timed out after ${REQUEST_TIMEOUT_MS}ms`, 'TimeoutError')
     const timeoutId = setTimeout(() => timeoutController.abort(timeoutError), REQUEST_TIMEOUT_MS)
+    timeoutId.unref?.()
 
     const signal = context.upstreamSignal
       ? AbortSignal.any([timeoutController.signal, context.upstreamSignal])

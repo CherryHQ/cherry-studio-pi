@@ -162,6 +162,7 @@ export class CallBackServer {
         this.events.off('auth-code-received', onCode)
         reject(new Error(`Timed out waiting for OAuth authorization code after ${Math.round(timeoutMs / 1000)}s`))
       }, timeoutMs)
+      timer.unref?.()
       this.events.once('auth-code-received', onCode)
     })
   }
