@@ -484,6 +484,7 @@ export class ConfigManager {
       this.storageV2ConfigTimer = null
       void this.flushPendingStorageV2Config()
     }, STORAGE_V2_CONFIG_RETRY_MS)
+    this.storageV2ConfigTimer.unref?.()
   }
 
   private async setStorageV2Config(key: string, value: unknown) {

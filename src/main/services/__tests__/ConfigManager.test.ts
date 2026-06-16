@@ -84,6 +84,32 @@ describe('ConfigManager Storage v2 mirror', () => {
     expect(mocks.settingsRepository.set).toHaveBeenCalledTimes(2)
   })
 
+  it('does not keep the process alive while waiting to retry failed config mirrors', async () => {
+    mocks.settingsRepository.set.mockRejectedValueOnce(new Error('storage locked')).mockResolvedValueOnce(undefined)
+    const unref = vi.fn()
+    const timer = { unref } as unknown as ReturnType<typeof setTimeout>
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockReturnValue(timer)
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout').mockImplementation(() => undefined)
+
+    try {
+      const manager = new ConfigManager()
+      manager.set('tray', false)
+
+      await manager.flushPendingStorageV2Config()
+
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 5000)
+      expect(unref).toHaveBeenCalledTimes(1)
+
+      await manager.flushPendingStorageV2Config()
+
+      expect(mocks.settingsRepository.set).toHaveBeenCalledTimes(2)
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(timer)
+    } finally {
+      setTimeoutSpy.mockRestore()
+      clearTimeoutSpy.mockRestore()
+    }
+  })
+
   it('rejects strict config flushes while mirror writes are still failing', async () => {
     vi.useFakeTimers()
     mocks.settingsRepository.set.mockRejectedValue(new Error('storage locked'))
