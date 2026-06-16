@@ -658,6 +658,7 @@ export class CdpBrowserController {
 
     const timeoutPromise = new Promise<void>((_, reject) => {
       timeoutHandle = setTimeout(() => reject(new Error('Navigation timed out')), timeout)
+      timeoutHandle.unref?.()
     })
 
     try {
@@ -704,6 +705,7 @@ export class CdpBrowserController {
         evalPromise,
         new Promise((_, reject) => {
           timeoutHandle = setTimeout(() => reject(new Error('Execution timed out')), timeout)
+          timeoutHandle.unref?.()
         })
       ])
 
@@ -836,6 +838,7 @@ export class CdpBrowserController {
         }),
         new Promise<never>((_, reject) => {
           timeoutHandle = setTimeout(() => reject(new Error('Fetch content timed out')), timeout)
+          timeoutHandle.unref?.()
         })
       ])) as { result?: { value?: string } }
 
