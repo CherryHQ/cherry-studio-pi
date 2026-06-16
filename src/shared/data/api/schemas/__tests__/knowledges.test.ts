@@ -233,6 +233,29 @@ describe('Knowledge base schemas', () => {
     )
   })
 
+  it('coerces knowledge base pagination query strings while preserving optional filters', () => {
+    const result = ListKnowledgeBasesQuerySchema.safeParse({
+      page: '2',
+      limit: '50',
+      search: 'Docs',
+      updatedAtFrom: '2026-06-16T00:00:00.000Z',
+      sortBy: 'updatedAt',
+      sortOrder: 'desc'
+    })
+
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data).toEqual({
+        page: 2,
+        limit: 50,
+        search: 'Docs',
+        updatedAtFrom: '2026-06-16T00:00:00.000Z',
+        sortBy: 'updatedAt',
+        sortOrder: 'desc'
+      })
+    }
+  })
+
   it('rejects invalid numeric tuning fields in update schema', () => {
     const result = UpdateKnowledgeBaseSchema.safeParse({
       chunkSize: -10,
