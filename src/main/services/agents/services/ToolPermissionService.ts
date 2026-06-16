@@ -253,6 +253,7 @@ export async function promptForToolApproval(
     pending.timeout = setTimeout(() => {
       finalizeRequest(requestId, { behavior: 'deny', message: 'Tool permission request timed out' }, 'timeout')
     }, options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
+    pending.timeout.unref?.()
 
     pendingRequests.set(requestId, pending)
 
