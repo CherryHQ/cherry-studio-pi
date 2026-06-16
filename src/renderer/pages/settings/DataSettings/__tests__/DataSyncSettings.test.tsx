@@ -372,6 +372,40 @@ describe('DataSyncSettings', () => {
     expect(mocks.toast.error).not.toHaveBeenCalled()
   })
 
+  it('prevents duplicate manual sync requests while a sync is pending', async () => {
+    const runningSync = deferred<ReturnType<typeof successSummary>>()
+    mocks.syncAppDataNow.mockReturnValueOnce(runningSync.promise)
+
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(syncButton())
+    fireEvent.click(syncButton())
+
+    expect(mocks.syncAppDataNow).toHaveBeenCalledTimes(1)
+
+    runningSync.resolve(successSummary())
+    await waitFor(() => expect(mocks.toast.success).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_success'))
+  })
+
+  it('prevents duplicate data sync diagnostics while a diagnosis is pending', async () => {
+    const runningDiagnosis = deferred<{ ok: boolean; basePath: string }>()
+    mocks.checkWriteAccess.mockReturnValueOnce(runningDiagnosis.promise)
+
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(buttonByText('settings.data.data_sync.diagnose'))
+    fireEvent.click(buttonByText('settings.data.data_sync.diagnose'))
+
+    expect(mocks.checkWriteAccess).toHaveBeenCalledTimes(1)
+
+    runningDiagnosis.resolve({ ok: true, basePath: '/cherry-studio-pi/sync/v1' })
+    await waitFor(() =>
+      expect(mocks.toast.success).toHaveBeenCalledWith('settings.data.data_sync.toast.diagnose_success')
+    )
+  })
+
   it('splits a pasted WebDAV account block in the URL field into host username and password', async () => {
     render(<DataSyncSettings />)
     await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))

@@ -249,6 +249,9 @@ const DataSyncSettings: FC = () => {
   const statusRefreshLoadingSeqRef = useRef(0)
   const directoryLoadSeqRef = useRef(0)
   const diagnosisSeqRef = useRef(0)
+  const syncNowRef = useRef(false)
+  const restoreSnapshotRef = useRef(false)
+  const diagnosisRef = useRef(false)
   const statusRefreshFeedbackRef = useRef({ t, webdavHost, webdavPath })
   statusRefreshFeedbackRef.current = { t, webdavHost, webdavPath }
 
@@ -427,7 +430,7 @@ const DataSyncSettings: FC = () => {
       return
     }
 
-    if (syncInProgress) {
+    if (syncNowRef.current || syncInProgress) {
       setSyncing(true)
       window.toast.info(t('settings.data.data_sync.toast.sync_running'))
       return
@@ -438,6 +441,7 @@ const DataSyncSettings: FC = () => {
 
     let latestStatus: SyncStatus | null = null
     let completedSummary: SyncSummary | null = null
+    syncNowRef.current = true
     setSyncing(true)
     try {
       const summary = await syncAppDataNow(config)
@@ -487,6 +491,7 @@ const DataSyncSettings: FC = () => {
       }
 
       setSyncing(isSyncing(latestStatus))
+      syncNowRef.current = false
     }
   }
 
@@ -499,11 +504,19 @@ const DataSyncSettings: FC = () => {
     const config = trySaveWebDavConfig()
     if (!config) return
 
+    if (restoreSnapshotRef.current) {
+      return
+    }
+
+    restoreSnapshotRef.current = true
     Modal.confirm({
       title: t('settings.data.data_sync.restore_confirm_title'),
       content: t('settings.data.data_sync.restore_confirm_content'),
       okText: t('settings.data.data_sync.restore_latest'),
       okButtonProps: { danger: true },
+      onCancel: () => {
+        restoreSnapshotRef.current = false
+      },
       onOk: async () => {
         setRestoring(true)
         try {
@@ -525,6 +538,7 @@ const DataSyncSettings: FC = () => {
           )
         } finally {
           setRestoring(false)
+          restoreSnapshotRef.current = false
         }
       }
     })
@@ -555,11 +569,16 @@ const DataSyncSettings: FC = () => {
       return
     }
 
+    if (diagnosisRef.current) {
+      return
+    }
+
     const config = trySaveWebDavConfig()
     if (!config) return
 
     const requestSeq = ++diagnosisSeqRef.current
     const isLatestRequest = () => requestSeq === diagnosisSeqRef.current
+    diagnosisRef.current = true
     setDiagnosing(true)
     try {
       const [writeCheck, nextStatus] = await Promise.all([
@@ -602,6 +621,7 @@ const DataSyncSettings: FC = () => {
         { showToast: true }
       )
     } finally {
+      diagnosisRef.current = false
       if (isLatestRequest()) {
         setDiagnosing(false)
       }
