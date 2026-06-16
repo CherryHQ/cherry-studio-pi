@@ -28,15 +28,15 @@ import {
   type LucideIcon,
   Presentation
 } from 'lucide-react'
-import type { FC } from 'react'
-import { useRef, useState } from 'react'
+import type { Dispatch, FC, SetStateAction } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('AttachmentPreview')
 
 interface Props {
   files: FileMetadata[]
-  setFiles: (files: FileMetadata[]) => void
+  setFiles: Dispatch<SetStateAction<FileMetadata[]>>
   onPasteAsText?: (file: FileMetadata) => void
 }
 
@@ -156,16 +156,31 @@ const AttachmentItem: FC<{
   const { t } = useTranslation()
   const [isTextFile, setIsTextFile] = useState<boolean | null>(null)
   const probedRef = useRef(false)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const handleOpenChange = (open: boolean) => {
     if (!open || probedRef.current) return
     probedRef.current = true
     void window.api.file
       .isTextFile(file.path)
-      .then(setIsTextFile)
+      .then((nextIsTextFile) => {
+        if (mountedRef.current) {
+          setIsTextFile(nextIsTextFile)
+        }
+      })
       .catch((error) => {
         logger.warn('isTextFile probe failed; treating attachment as binary', error as Error)
-        setIsTextFile(false)
+        if (mountedRef.current) {
+          setIsTextFile(false)
+        }
       })
   }
 
@@ -202,7 +217,7 @@ const AttachmentPreview: FC<Props> = ({ files, setFiles, onPasteAsText }) => {
         <AttachmentItem
           key={file.id}
           file={file}
-          onRemove={() => setFiles(files.filter((f) => f.id !== file.id))}
+          onRemove={() => setFiles((currentFiles) => currentFiles.filter((f) => f.id !== file.id))}
           onPasteAsText={onPasteAsText}
         />
       ))}
