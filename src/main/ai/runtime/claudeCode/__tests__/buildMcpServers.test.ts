@@ -8,6 +8,7 @@ import type * as NodeFs from 'node:fs'
 
 import type { AgentEntity } from '@shared/data/api/schemas/agents'
 import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
+import type { Model } from '@shared/data/types/model'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { mockGetPathStatus, mockMkdir, mockRealpath, mockGetPath } = vi.hoisted(() => ({
@@ -115,6 +116,16 @@ const {
 } = await import('../settingsBuilder')
 
 const agent = { id: 'agent-1', mcps: [] } as unknown as AgentEntity
+const claudeModel = {
+  id: 'anthropic::claude-sonnet-4-5',
+  providerId: 'anthropic',
+  apiModelId: 'claude-sonnet-4-5',
+  name: 'Claude Sonnet 4.5',
+  capabilities: [],
+  supportsStreaming: true,
+  isEnabled: true,
+  isHidden: false
+} as Model
 const session = {
   id: 'sess-1',
   agentId: 'agent-1',
@@ -205,7 +216,7 @@ describe('buildClaudeCodeSessionSettings tool permissions', () => {
       disabledTools: ['Bash', 'Read'],
       configuration: {}
     })
-    settingsMocks.mockGetModelByKey.mockResolvedValue({ apiModelId: 'claude-sonnet-4-5' })
+    settingsMocks.mockGetModelByKey.mockResolvedValue(claudeModel)
     settingsMocks.mockReconcileAgentSkills.mockResolvedValue(undefined)
     settingsMocks.mockGetLoginShellEnvironment.mockResolvedValue({})
     settingsMocks.mockGetBinaryPath.mockResolvedValue('/usr/bin/bun')
