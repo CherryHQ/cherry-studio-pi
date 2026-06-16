@@ -123,6 +123,7 @@ vi.mock('@renderer/pages/home/Inputbar/components/InputbarCore', async () => {
       return (
         <>
           {props.leftToolbar}
+          <div data-testid="agent-session-text">{props.text}</div>
           <button type="button" data-testid="agent-session-inputbar" onClick={props.handleSendMessage}>
             send
           </button>
@@ -191,6 +192,40 @@ describe('AgentSessionInputbar', () => {
 
     await waitFor(() => expect(sendMessage).toHaveBeenCalled())
     expect(setTimeoutTimerMock).not.toHaveBeenCalledWith('agentSession_sendMessage', expect.any(Function), 500)
+  })
+
+  it('reloads the draft when switching to another session for the same agent', async () => {
+    cacheServiceMock.getCasual.mockImplementation((key: string) => {
+      if (key === 'agent-session-draft-agent-1-session-1') return 'draft from session one'
+      if (key === 'agent-session-draft-agent-1-session-2') return 'draft from session two'
+      return undefined
+    })
+
+    const { rerender } = render(
+      <AgentSessionInputbar
+        agentId="agent-1"
+        sessionId="session-1"
+        sendMessage={vi.fn()}
+        stop={vi.fn()}
+        isStreaming={false}
+      />
+    )
+
+    expect(screen.getByTestId('agent-session-text')).toHaveTextContent('draft from session one')
+
+    rerender(
+      <AgentSessionInputbar
+        agentId="agent-1"
+        sessionId="session-2"
+        sendMessage={vi.fn()}
+        stop={vi.fn()}
+        isStreaming={false}
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agent-session-text')).toHaveTextContent('draft from session two')
+    })
   })
 
   it('allows sending when the agent stores a model id that is not in the local model list yet', async () => {

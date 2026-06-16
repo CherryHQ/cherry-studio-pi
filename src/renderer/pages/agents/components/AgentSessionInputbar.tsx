@@ -135,6 +135,7 @@ const AgentSessionInputbar = ({
 
   return (
     <InputbarToolsProvider
+      key={`${agentId}:${sessionId}`}
       initialState={initialState}
       actions={{
         resizeTextArea: () => actionsRef.current.resizeTextArea(),
