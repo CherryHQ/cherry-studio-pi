@@ -41,7 +41,7 @@ import {
   readInitialAgentSessionDraft
 } from './AgentSessionDraft'
 import { restoreTextareaCursor } from './AgentSessionInputbarCursor'
-import { resolveAgentSessionModel } from './agentSessionModel'
+import { resolveAgentSessionModelForDisplay } from './agentSessionModel'
 
 const logger = loggerService.withContext('AgentSessionInputbar')
 const AGENT_SESSION_SUPPORTED_EXTS = [allFilesExt]
@@ -83,7 +83,7 @@ const AgentSessionInputbar = ({
   // Resolve the v2 model the InputbarTools / model checks need.
   // Model now lives on the parent agent, not the session.
   const sessionModel = useMemo<Model | undefined>(() => {
-    return resolveAgentSessionModel(agent?.model, models)
+    return resolveAgentSessionModelForDisplay(agent?.model, models)
   }, [agent?.model, models])
 
   // v2-shape Assistant stub for tools that expect a real assistant record.

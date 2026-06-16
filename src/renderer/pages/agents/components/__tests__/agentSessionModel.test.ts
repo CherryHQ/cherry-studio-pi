@@ -1,7 +1,11 @@
 import type { Model, UniqueModelId } from '@shared/data/types/model'
 import { describe, expect, it } from 'vitest'
 
-import { resolveAgentSessionModel } from '../agentSessionModel'
+import {
+  createAgentSessionModelFallback,
+  resolveAgentSessionModel,
+  resolveAgentSessionModelForDisplay
+} from '../agentSessionModel'
 
 function makeModel(id: UniqueModelId, apiModelId?: string): Model {
   const providerId = id.split('::')[0]
@@ -68,5 +72,32 @@ describe('resolveAgentSessionModel', () => {
     } as unknown as Model
 
     expect(resolveAgentSessionModel('deepseek::deepseek-chat', [model])).toBe(model)
+  })
+})
+
+describe('agent session model display fallback', () => {
+  it('builds a minimal display model from a saved UniqueModelId when the catalog has not refreshed yet', () => {
+    const fallback = createAgentSessionModelFallback('deepseek::deepseek-chat')
+
+    expect(fallback).toMatchObject({
+      id: 'deepseek::deepseek-chat',
+      providerId: 'deepseek',
+      apiModelId: 'deepseek-chat',
+      name: 'deepseek-chat',
+      capabilities: [],
+      supportsStreaming: true,
+      isEnabled: true,
+      isHidden: false
+    })
+  })
+
+  it('prefers a real catalog row over the display fallback', () => {
+    const model = makeModel('deepseek::deepseek-chat-internal', 'deepseek-chat')
+
+    expect(resolveAgentSessionModelForDisplay('deepseek::deepseek-chat', [model])).toBe(model)
+  })
+
+  it('does not fabricate a provider for legacy raw model ids', () => {
+    expect(createAgentSessionModelFallback('deepseek-chat')).toBeUndefined()
   })
 })

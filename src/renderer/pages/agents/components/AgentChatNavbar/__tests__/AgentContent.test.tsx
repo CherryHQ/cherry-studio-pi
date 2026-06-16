@@ -159,4 +159,11 @@ describe('AgentContent', () => {
     expect(screen.getByTestId('model-selector-value')).toHaveTextContent('deepseek::deepseek-chat-internal')
     expect(screen.getByText(/DeepSeek Chat/)).toBeInTheDocument()
   })
+
+  it('keeps showing the saved agent model while the model catalog is empty', () => {
+    render(<AgentContent activeAgent={createAgent()} />)
+
+    expect(screen.getByTestId('model-selector-value')).toHaveTextContent('deepseek::deepseek-chat')
+    expect(screen.getByTestId('model-selector-value')).toHaveTextContent('deepseek-chat | Provider deepseek')
+  })
 })

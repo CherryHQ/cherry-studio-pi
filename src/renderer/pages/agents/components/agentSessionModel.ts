@@ -26,3 +26,26 @@ export function resolveAgentSessionModel(agentModel: string | null | undefined, 
     return getModelRawIdentifier(model) === modelId
   })
 }
+
+export function createAgentSessionModelFallback(agentModel: string | null | undefined): Model | undefined {
+  const normalizedAgentModel = agentModel?.trim()
+  if (!normalizedAgentModel || !isUniqueModelId(normalizedAgentModel)) return undefined
+
+  const { providerId, modelId } = parseUniqueModelId(normalizedAgentModel)
+  if (!providerId || !modelId) return undefined
+
+  return {
+    id: normalizedAgentModel,
+    providerId,
+    apiModelId: modelId,
+    name: modelId,
+    capabilities: [],
+    supportsStreaming: true,
+    isEnabled: true,
+    isHidden: false
+  } as Model
+}
+
+export function resolveAgentSessionModelForDisplay(agentModel: string | null | undefined, models: readonly Model[]) {
+  return resolveAgentSessionModel(agentModel, models) ?? createAgentSessionModelFallback(agentModel)
+}

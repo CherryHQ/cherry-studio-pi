@@ -21,7 +21,7 @@ import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { AgentLabel } from '../AgentLabel'
-import { resolveAgentSessionModel } from '../agentSessionModel'
+import { resolveAgentSessionModelForDisplay } from '../agentSessionModel'
 import AgentSidePanelDrawer from '../AgentSidePanelDrawer'
 import OpenExternalAppButton from './OpenExternalAppButton'
 import Tools from './Tools'
@@ -44,7 +44,7 @@ const AgentContent = ({ activeAgent }: AgentContentProps) => {
 
   const { models } = useModels()
   const currentSharedModel = useMemo(
-    () => resolveAgentSessionModel(activeAgent.model, models),
+    () => resolveAgentSessionModelForDisplay(activeAgent.model, models),
     [activeAgent.model, models]
   )
   const providerName = useProviderDisplayName(currentSharedModel?.providerId)

@@ -5,31 +5,33 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AgentSessionInputbar from '../AgentSessionInputbar'
 
-const { agentState, cacheServiceMock, inputbarSnapshots, modelState, setTimeoutTimerMock } = vi.hoisted(() => ({
-  agentState: {
-    model: 'openai::gpt-4.1' as string | null
-  },
-  cacheServiceMock: {
-    deleteCasual: vi.fn(),
-    getCasual: vi.fn(),
-    setCasual: vi.fn()
-  },
-  inputbarSnapshots: [] as Array<{
-    supportedExts: string[]
-    couldAddImageFile: boolean
-  }>,
-  modelState: {
-    models: [
-      {
-        id: 'openai::gpt-4.1',
-        providerId: 'openai',
-        name: 'GPT 4.1',
-        capabilities: []
-      }
-    ] as Array<Record<string, unknown>>
-  },
-  setTimeoutTimerMock: vi.fn()
-}))
+const { agentState, cacheServiceMock, inputbarSnapshots, inputbarToolModelIds, modelState, setTimeoutTimerMock } =
+  vi.hoisted(() => ({
+    agentState: {
+      model: 'openai::gpt-4.1' as string | null
+    },
+    cacheServiceMock: {
+      deleteCasual: vi.fn(),
+      getCasual: vi.fn(),
+      setCasual: vi.fn()
+    },
+    inputbarSnapshots: [] as Array<{
+      supportedExts: string[]
+      couldAddImageFile: boolean
+    }>,
+    inputbarToolModelIds: [] as string[],
+    modelState: {
+      models: [
+        {
+          id: 'openai::gpt-4.1',
+          providerId: 'openai',
+          name: 'GPT 4.1',
+          capabilities: []
+        }
+      ] as Array<Record<string, unknown>>
+    },
+    setTimeoutTimerMock: vi.fn()
+  }))
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -102,7 +104,10 @@ vi.mock('@renderer/hooks/useTimer', () => ({
 }))
 
 vi.mock('@renderer/pages/home/Inputbar/InputbarTools', () => ({
-  default: () => null
+  default: ({ model }: { model: { id: string } }) => {
+    inputbarToolModelIds.push(model.id)
+    return null
+  }
 }))
 
 vi.mock('@renderer/pages/home/Inputbar/components/InputbarCore', async () => {
@@ -116,9 +121,12 @@ vi.mock('@renderer/pages/home/Inputbar/components/InputbarCore', async () => {
         couldAddImageFile: state.couldAddImageFile
       })
       return (
-        <button type="button" data-testid="agent-session-inputbar" onClick={props.handleSendMessage}>
-          send
-        </button>
+        <>
+          {props.leftToolbar}
+          <button type="button" data-testid="agent-session-inputbar" onClick={props.handleSendMessage}>
+            send
+          </button>
+        </>
       )
     }
   }
@@ -128,6 +136,7 @@ describe('AgentSessionInputbar', () => {
   beforeEach(() => {
     agentState.model = 'openai::gpt-4.1'
     inputbarSnapshots.length = 0
+    inputbarToolModelIds.length = 0
     modelState.models = [
       {
         id: 'openai::gpt-4.1',
@@ -203,5 +212,23 @@ describe('AgentSessionInputbar', () => {
 
     await waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ text: 'hello' }, { body: expect.any(Object) }))
     expect(window.toast.error).not.toHaveBeenCalledWith('code.model_required')
+  })
+
+  it('keeps input tools mounted from the saved agent model while the model catalog is empty', async () => {
+    modelState.models = []
+
+    render(
+      <AgentSessionInputbar
+        agentId="agent-1"
+        sessionId="session-1"
+        sendMessage={vi.fn()}
+        stop={vi.fn()}
+        isStreaming={false}
+      />
+    )
+
+    await waitFor(() => {
+      expect(inputbarToolModelIds).toContain('openai::gpt-4.1')
+    })
   })
 })
