@@ -373,6 +373,21 @@ describe('ModelSelector', () => {
     expect(onSelect).not.toHaveBeenCalled()
   })
 
+  it('closes the unmanaged selector immediately after selecting a model', async () => {
+    mockUseModelSelectorData.mockReturnValue(makeData())
+    const onSelect = vi.fn()
+
+    render(<ModelSelector multiple={false} trigger={<button type="button">open</button>} onSelect={onSelect} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'open' }))
+    expect(screen.getByTestId('model-selector-content')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('option', { name: /gpt-4/i }))
+
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'openai::gpt-4' }))
+    expect(screen.queryByTestId('model-selector-content')).not.toBeInTheDocument()
+  })
+
   it('uses listVisibleCount to size the visible model list', () => {
     const items = Array.from({ length: 10 }, (_, index) => makeModelItem(`openai::model-${index}` as UniqueModelId))
     mockUseModelSelectorData.mockReturnValue(

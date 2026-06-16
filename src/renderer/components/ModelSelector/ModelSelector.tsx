@@ -339,7 +339,7 @@ export function ModelSelector(props: ModelSelectorProps) {
     }
   }, [selectorId])
 
-  const setOpen = useCallback(
+  const applyOpenChange = useCallback(
     (nextOpen: boolean) => {
       if (nextOpen) {
         requestCloseResourceSelectors(selectorId)
@@ -352,17 +352,36 @@ export function ModelSelector(props: ModelSelectorProps) {
     [onOpenChange, openProp, selectorId]
   )
 
+  const forceClose = useCallback(() => {
+    // Match ResourceSelectorShell's close semantics: remount on close so a Radix
+    // portal cannot linger above the next route/modal while its exit animation
+    // settles.
+    setSelectorEpoch((epoch) => epoch + 1)
+    applyOpenChange(false)
+  }, [applyOpenChange])
+
+  const handlePopoverOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (nextOpen) {
+        applyOpenChange(true)
+        return
+      }
+
+      forceClose()
+    },
+    [applyOpenChange, forceClose]
+  )
+
   useEffect(() => {
     const handleForceClose = (event: Event) => {
       if (getResourceSelectorForceCloseSource(event) === selectorId) return
-      setSelectorEpoch((epoch) => epoch + 1)
-      setOpen(false)
+      forceClose()
     }
     window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, handleForceClose)
     return () => window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, handleForceClose)
-  }, [selectorId, setOpen])
+  }, [forceClose, selectorId])
 
-  const handleShortcut = useCallback(() => setOpen(true), [setOpen])
+  const handleShortcut = useCallback(() => applyOpenChange(true), [applyOpenChange])
 
   const setMultiSelectMode = useCallback(
     (nextEnabled: boolean) => {
@@ -477,23 +496,23 @@ export function ModelSelector(props: ModelSelectorProps) {
       }
 
       emitSelection([item.modelId])
-      setOpen(false)
+      forceClose()
     },
-    [emitSelection, multiple, multiSelectMode, rawSelectedModelIds, setOpen]
+    [emitSelection, forceClose, multiple, multiSelectMode, rawSelectedModelIds]
   )
 
   const handleClose = useCallback(() => {
-    setOpen(false)
-  }, [setOpen])
+    forceClose()
+  }, [forceClose])
 
   const handleNavigateToProviderSettings = useCallback(
     (providerId: string) => {
-      setOpen(false)
+      forceClose()
       navigate({ to: '/settings/provider', search: { id: providerId } }).catch((error) => {
         logger.error('Failed to navigate to provider settings', error as Error, { providerId })
       })
     },
-    [navigate, setOpen]
+    [forceClose, navigate]
   )
 
   const handleTogglePin = useCallback(
@@ -680,7 +699,7 @@ export function ModelSelector(props: ModelSelectorProps) {
   )
 
   return (
-    <Popover key={selectorEpoch} open={open} onOpenChange={setOpen}>
+    <Popover key={selectorEpoch} open={open} onOpenChange={handlePopoverOpenChange}>
       {shortcut ? <ShortcutBinding shortcut={shortcut} onTrigger={handleShortcut} /> : null}
       <PopoverTrigger asChild>{triggerNode}</PopoverTrigger>
       <PopoverContent
