@@ -54,6 +54,20 @@ const DELAYED_PROMOTION_INTERVAL_MS = 5 * 60 * 1000 // 5min
  */
 const JOB_MANAGER_STARTUP_DELAY_MS = 60_000
 
+function createUnrefTimeout<T>(value: T, timeoutMs: number): { promise: Promise<T>; clear: () => void } {
+  let handle: ReturnType<typeof setTimeout> | undefined
+  const promise = new Promise<T>((resolve) => {
+    handle = setTimeout(() => resolve(value), timeoutMs)
+    handle.unref?.()
+  })
+  return {
+    promise,
+    clear: () => {
+      if (handle) clearTimeout(handle)
+    }
+  }
+}
+
 /**
  * Sentinel thrown via `controller.abort(new JobHandlerTimeoutError())` when a
  * handler's `timeoutMs` elapses. Used instead of string-matching `err.message`
@@ -181,6 +195,7 @@ export class JobManager extends BaseService {
       }
       this._recoveryDone = this.runStartupRecoveryFlow()
     }, JOB_MANAGER_STARTUP_DELAY_MS)
+    handle.unref?.()
     this.registerDisposable(() => clearTimeout(handle))
   }
 
@@ -315,10 +330,11 @@ export class JobManager extends BaseService {
     } else {
       const pendingPromises = Array.from(this.inFlightExecuted.values())
 
-      const timeout = new Promise<'timeout'>((resolve) =>
-        setTimeout(() => resolve('timeout'), Application.SHUTDOWN_TIMEOUT_MS)
-      )
-      const winner = await Promise.race([Promise.allSettled(pendingPromises).then(() => 'done' as const), timeout])
+      const timeout = createUnrefTimeout<'timeout'>('timeout', Application.SHUTDOWN_TIMEOUT_MS)
+      const winner = await Promise.race([
+        Promise.allSettled(pendingPromises).then(() => 'done' as const),
+        timeout.promise
+      ]).finally(timeout.clear)
 
       if (winner === 'timeout') {
         logger.warn('JobManager.onStop timed out — pending jobs will be recovered on next start', {
@@ -526,8 +542,10 @@ export class JobManager extends BaseService {
       // who enqueued the job, so this works after cross-restart recovery too.
       const executed = this.inFlightExecuted.get(jobId)
       if (executed) {
-        const timeout = new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), graceMs))
-        const winner = await Promise.race([executed.then(() => 'done' as const), timeout])
+        const timeout = createUnrefTimeout<'timeout'>('timeout', graceMs)
+        const winner = await Promise.race([executed.then(() => 'done' as const), timeout.promise]).finally(
+          timeout.clear
+        )
         if (winner === 'timeout') {
           logger.warn('cancel timed out — forcing terminal state', { jobId, graceMs })
           await this.finalizeJob(jobId, 'cancelled', undefined, {
