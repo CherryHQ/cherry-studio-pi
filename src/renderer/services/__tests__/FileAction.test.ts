@@ -158,6 +158,20 @@ describe('FileAction', () => {
     )
   })
 
+  it('sorts temporary files last without mutating the source array', async () => {
+    const { tempFilesSort } = await import('../FileAction')
+    const files = [
+      { id: 'temp', origin_name: 'temp_file_1.txt' },
+      { id: 'normal', origin_name: 'note.txt' }
+    ] as any
+
+    const sorted = tempFilesSort(files)
+
+    expect(sorted.map((file) => file.id)).toEqual(['normal', 'temp'])
+    expect(files.map((file) => file.id)).toEqual(['temp', 'normal'])
+    expect(sorted).not.toBe(files)
+  })
+
   it('keeps legacy file records when the pre-delete Storage v2 snapshot fails', async () => {
     mocks.flushTopicMessagesSnapshot.mockRejectedValue(new Error('storage busy'))
 

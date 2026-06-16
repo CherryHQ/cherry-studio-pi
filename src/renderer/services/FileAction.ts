@@ -16,7 +16,7 @@ export type SortOrder = 'asc' | 'desc'
 const logger = loggerService.withContext('FileAction')
 
 export function tempFilesSort(files: FileMetadata[]): FileMetadata[] {
-  return files.sort((a, b) => {
+  return [...files].sort((a, b) => {
     const aIsTemp = a.origin_name.startsWith('temp_file')
     const bIsTemp = b.origin_name.startsWith('temp_file')
     if (aIsTemp && !bIsTemp) return 1
