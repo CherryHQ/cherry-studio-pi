@@ -53,6 +53,7 @@ export default function AddModelFormPanel({
   const [endpointTypeTouched, setEndpointTypeTouched] = useState(false)
   const [showMoreSettings, setShowMoreSettings] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const submittingRef = useRef(false)
 
   const mode: ModelDrawerMode = provider && isNewApiProvider(provider) ? 'new-api' : 'legacy'
 
@@ -108,7 +109,7 @@ export default function AddModelFormPanel({
   )
 
   const submitAddModel = useCallback(async () => {
-    if (isSubmitting) {
+    if (submittingRef.current) {
       return
     }
 
@@ -117,6 +118,7 @@ export default function AddModelFormPanel({
       return
     }
 
+    submittingRef.current = true
     setIsSubmitting(true)
 
     try {
@@ -159,9 +161,10 @@ export default function AddModelFormPanel({
     } catch {
       window.toast.error(t('settings.models.manage.operation_failed'))
     } finally {
+      submittingRef.current = false
       setIsSubmitting(false)
     }
-  }, [addSingleModel, formState, isSubmitting, mode, onSuccess, provider, t, updateProvider])
+  }, [addSingleModel, formState, mode, onSuccess, provider, t, updateProvider])
 
   const handleFormSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
