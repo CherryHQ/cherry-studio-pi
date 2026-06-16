@@ -36,7 +36,7 @@ import { ThemeMode } from '@shared/data/preference/preferenceTypes'
 import { Code, Minus, Monitor, Moon, Palette, Plus, Shield, Sun } from 'lucide-react'
 import type React from 'react'
 import type { FC } from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -117,6 +117,10 @@ const CommonSettings: FC = () => {
   const [proxyBypassRules, setProxyBypassRules] = useState<string>(storeProxyBypassRules)
   const [currentZoom, setCurrentZoom] = useState(1.0)
   const [fontList, setFontList] = useState<string[]>([])
+  const systemTitleBarConfirmRef = useRef(false)
+  const systemTitleBarOperationRef = useRef(false)
+  const hardwareAccelerationConfirmRef = useRef(false)
+  const hardwareAccelerationOperationRef = useRef(false)
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
@@ -297,18 +301,37 @@ const CommonSettings: FC = () => {
   )
 
   const handleUseSystemTitleBarChange = (checked: boolean) => {
+    if (systemTitleBarConfirmRef.current || systemTitleBarOperationRef.current) {
+      return
+    }
+
+    const clearSystemTitleBarGuard = () => {
+      if (systemTitleBarOperationRef.current) return
+      systemTitleBarConfirmRef.current = false
+    }
+
+    systemTitleBarConfirmRef.current = true
     void window.modal.confirm({
       title: t('settings.use_system_title_bar.confirm.title'),
       content: t('settings.use_system_title_bar.confirm.content'),
       okText: t('common.confirm'),
       cancelText: t('common.cancel'),
       centered: true,
+      onCancel: clearSystemTitleBarGuard,
       async onOk() {
+        if (systemTitleBarOperationRef.current) {
+          return
+        }
+
+        systemTitleBarOperationRef.current = true
         try {
           await setUseSystemTitleBar(checked)
         } catch (error) {
           window.toast.error(formatErrorMessage(error))
           throw error
+        } finally {
+          systemTitleBarOperationRef.current = false
+          systemTitleBarConfirmRef.current = false
         }
 
         setTimeoutTimer(
@@ -323,18 +346,37 @@ const CommonSettings: FC = () => {
   }
 
   const handleHardwareAccelerationChange = (checked: boolean) => {
+    if (hardwareAccelerationConfirmRef.current || hardwareAccelerationOperationRef.current) {
+      return
+    }
+
+    const clearHardwareAccelerationGuard = () => {
+      if (hardwareAccelerationOperationRef.current) return
+      hardwareAccelerationConfirmRef.current = false
+    }
+
+    hardwareAccelerationConfirmRef.current = true
     void window.modal.confirm({
       title: t('settings.hardware_acceleration.confirm.title'),
       content: t('settings.hardware_acceleration.confirm.content'),
       okText: t('common.confirm'),
       cancelText: t('common.cancel'),
       centered: true,
+      onCancel: clearHardwareAccelerationGuard,
       async onOk() {
+        if (hardwareAccelerationOperationRef.current) {
+          return
+        }
+
+        hardwareAccelerationOperationRef.current = true
         try {
           await setDisableHardwareAcceleration(checked)
         } catch (error) {
           window.toast.error(formatErrorMessage(error))
           throw error
+        } finally {
+          hardwareAccelerationOperationRef.current = false
+          hardwareAccelerationConfirmRef.current = false
         }
 
         setTimeoutTimer(
