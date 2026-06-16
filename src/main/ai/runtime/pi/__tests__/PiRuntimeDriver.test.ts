@@ -37,6 +37,7 @@ const { agentService } = await import('@data/services/AgentService')
 const { agentSessionService } = await import('@data/services/AgentSessionService')
 
 const roots: string[] = []
+const originalStorageV2Root = process.env.CHERRY_STUDIO_STORAGE_V2_ROOT
 
 function createSession(workspacePath: string | null): AgentSessionEntity {
   return {
@@ -73,22 +74,23 @@ async function createTempRoot(): Promise<string> {
 afterEach(async () => {
   vi.mocked(agentService.getAgent).mockReset()
   vi.mocked(agentSessionService.getById).mockReset()
+  if (originalStorageV2Root === undefined) {
+    delete process.env.CHERRY_STUDIO_STORAGE_V2_ROOT
+  } else {
+    process.env.CHERRY_STUDIO_STORAGE_V2_ROOT = originalStorageV2Root
+  }
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
 
 describe('PiRuntimeDriver validateSession', () => {
-  it('classifies missing workspace bindings as agent session workspace errors', async () => {
+  it('creates an app-owned default workspace when no session workspace is configured', async () => {
     const driver = new PiRuntimeDriver()
+    const root = await createTempRoot()
+    process.env.CHERRY_STUDIO_STORAGE_V2_ROOT = root
 
-    let thrown: unknown
-    try {
-      await driver.validateSession(createSession(null))
-    } catch (error) {
-      thrown = error
-    }
+    await driver.validateSession(createSession(null))
 
-    expect(isAgentSessionWorkspaceError(thrown)).toBe(true)
-    expect(thrown).toMatchObject({ message: 'Agent session session-1 has no workspace configured' })
+    expect((await stat(path.join(root, 'Agents', 'system-sessions', 'session-1'))).isDirectory()).toBe(true)
   })
 
   it('creates a missing workspace directory before running Pi agent sessions', async () => {

@@ -1,15 +1,18 @@
+import path from 'node:path'
+
 import { agentService } from '@data/services/AgentService'
 import { agentSessionService } from '@data/services/AgentSessionService'
 import { loggerService } from '@logger'
 import PiAgentService from '@main/ai/pi'
 import { builtinTools } from '@main/ai/pi/builtin'
 import mcpService from '@main/services/MCPService'
+import { getDataPath } from '@main/utils'
 import type { Tool } from '@shared/ai/tool'
 import type { AgentSessionEntity, AgentSessionMessageEntity } from '@shared/data/api/schemas/agentSessions'
 import { parseDataUrl } from '@shared/utils'
 import type { UIMessageChunk } from 'ai'
 
-import { ensureAgentSessionWorkspaceDirectory, missingAgentSessionWorkspaceError } from '../agentSessionWorkspace'
+import { ensureAgentSessionWorkspaceDirectory } from '../agentSessionWorkspace'
 import type {
   AgentRuntimeConnectInput,
   AgentRuntimeConnection,
@@ -19,6 +22,12 @@ import type {
 } from '../types'
 
 const logger = loggerService.withContext('PiRuntimeDriver')
+
+const PI_SYSTEM_WORKSPACE_DIR = 'system-sessions'
+
+function resolvePiRuntimeWorkspacePath(session: Pick<AgentSessionEntity, 'id' | 'workspace'>): string {
+  return session.workspace?.path ?? path.join(getDataPath('Agents'), PI_SYSTEM_WORKSPACE_DIR, session.id)
+}
 
 class AsyncEventQueue<T> implements AsyncIterable<T> {
   private readonly items: T[] = []
@@ -147,6 +156,8 @@ class PiRuntimeConnection implements AgentRuntimeConnection {
     ])
     if (!agent) throw new Error(`Agent not found: ${this.input.agentId}`)
 
+    const workspacePath = resolvePiRuntimeWorkspacePath(session)
+
     return {
       ...agent,
       id: session.id,
@@ -155,8 +166,8 @@ class PiRuntimeConnection implements AgentRuntimeConnection {
       model: this.input.modelId ?? agent.model,
       workspace: session.workspace,
       workspaceId: session.workspaceId,
-      accessible_paths: session.workspace?.path ? [session.workspace.path] : undefined,
-      accessiblePaths: session.workspace?.path ? [session.workspace.path] : undefined
+      accessible_paths: [workspacePath],
+      accessiblePaths: [workspacePath]
     }
   }
 }
@@ -193,10 +204,7 @@ export class PiRuntimeDriver implements AgentSessionRuntimeDriver {
   readonly capabilities = ['agent-session'] as const
 
   async validateSession(session: AgentSessionEntity): Promise<void> {
-    const cwd = session.workspace?.path
-    if (!cwd) {
-      throw missingAgentSessionWorkspaceError(session.id)
-    }
+    const cwd = resolvePiRuntimeWorkspacePath(session)
     await ensureAgentSessionWorkspaceDirectory(session.id, cwd, { runtime: 'pi' })
   }
 
