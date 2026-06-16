@@ -139,6 +139,7 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
   const [urlText, setUrlText] = useState('')
   const [status, setStatus] = useState<ImportStatus>({ kind: 'idle' })
   const [loading, setLoading] = useState(false)
+  const loadingRef = useRef(false)
   const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const clearAutoCloseTimer = useCallback(() => {
@@ -156,12 +157,25 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
       setClipboardText('')
       setUrlText('')
       setStatus({ kind: 'idle' })
+      loadingRef.current = false
       setLoading(false)
     }
   }, [clearAutoCloseTimer, open])
 
+  const beginLoading = useCallback(() => {
+    if (loadingRef.current) return false
+    loadingRef.current = true
+    setLoading(true)
+    return true
+  }, [])
+
+  const endLoading = useCallback(() => {
+    loadingRef.current = false
+    setLoading(false)
+  }, [])
+
   const close = () => {
-    if (loading) return
+    if (loadingRef.current) return
     onOpenChange(false)
   }
 
@@ -174,68 +188,74 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
    * outcomes are "ok" or "failed"; a mid-batch failure leaves prior successes
    * intact and continues with the next draft.
    */
-  const runImport = async (content: string, source: 'file' | 'clipboard' | 'url', fileName?: string) => {
-    setLoading(true)
+  const runImport = async (
+    content: string,
+    source: 'file' | 'clipboard' | 'url',
+    fileName?: string,
+    lockHeld = false
+  ) => {
+    if (!lockHeld && !beginLoading()) return
     setStatus({ kind: 'idle' })
 
-    // Parse error short-circuits the whole operation — no partial import possible.
-    let drafts: ReturnType<typeof parseAssistantImportContent>
     try {
-      drafts = parseAssistantImportContent(content)
-    } catch (error) {
-      const message =
-        error instanceof AssistantTransferError
-          ? t(IMPORT_ERROR_I18N_KEYS[error.code])
-          : error instanceof Error
-            ? error.message
-            : t('message.agents.import.error')
-      setStatus({ kind: 'error', message })
-      setLoading(false)
-      return
-    }
-
-    const outcomes: DraftOutcome[] = []
-
-    for (const draft of drafts) {
+      // Parse error short-circuits the whole operation — no partial import possible.
+      let drafts: ReturnType<typeof parseAssistantImportContent>
       try {
-        // Names → ids first so the create call carries tagIds directly.
-        // ensureTags is idempotent (POST /tags only for names the backend
-        // doesn't already have). A failure here aborts the draft without
-        // creating an orphan assistant row.
-        const tagIds = draft.tags.length > 0 ? (await ensureTags(draft.tags)).map((tag) => tag.id) : undefined
-
-        await createAssistant({ ...draft.dto, ...(tagIds ? { tagIds } : {}) })
-        outcomes.push({ kind: 'ok' })
+        drafts = parseAssistantImportContent(content)
       } catch (error) {
-        outcomes.push({
-          kind: 'failed',
-          name: draft.dto.name,
-          error: error instanceof Error ? error.message : t('message.agents.import.error')
-        })
+        const message =
+          error instanceof AssistantTransferError
+            ? t(IMPORT_ERROR_I18N_KEYS[error.code])
+            : error instanceof Error
+              ? error.message
+              : t('message.agents.import.error')
+        setStatus({ kind: 'error', message })
+        return
       }
-    }
 
-    await Promise.resolve(onImported?.()).catch(() => undefined)
+      const outcomes: DraftOutcome[] = []
 
-    const nextStatus = summarizeAssistantImportOutcomes(outcomes, t, fileName)
-    setStatus(nextStatus)
+      for (const draft of drafts) {
+        try {
+          // Names → ids first so the create call carries tagIds directly.
+          // ensureTags is idempotent (POST /tags only for names the backend
+          // doesn't already have). A failure here aborts the draft without
+          // creating an orphan assistant row.
+          const tagIds = draft.tags.length > 0 ? (await ensureTags(draft.tags)).map((tag) => tag.id) : undefined
 
-    if (nextStatus.kind === 'success') {
-      window.toast.success(nextStatus.message)
-      // File-mode banner stays so the filename echo is visible;
-      // clipboard / URL auto-close after a short delay.
-      if (source !== 'file') {
-        clearAutoCloseTimer()
-        autoCloseTimerRef.current = setTimeout(() => {
-          autoCloseTimerRef.current = null
-          onOpenChange(false)
-        }, AUTO_CLOSE_DELAY_MS)
+          await createAssistant({ ...draft.dto, ...(tagIds ? { tagIds } : {}) })
+          outcomes.push({ kind: 'ok' })
+        } catch (error) {
+          outcomes.push({
+            kind: 'failed',
+            name: draft.dto.name,
+            error: error instanceof Error ? error.message : t('message.agents.import.error')
+          })
+        }
       }
-    } else {
-      window.toast.error(nextStatus.message)
-    }
 
-    setLoading(false)
+      await Promise.resolve(onImported?.()).catch(() => undefined)
+
+      const nextStatus = summarizeAssistantImportOutcomes(outcomes, t, fileName)
+      setStatus(nextStatus)
+
+      if (nextStatus.kind === 'success') {
+        window.toast.success(nextStatus.message)
+        // File-mode banner stays so the filename echo is visible;
+        // clipboard / URL auto-close after a short delay.
+        if (source !== 'file') {
+          clearAutoCloseTimer()
+          autoCloseTimerRef.current = setTimeout(() => {
+            autoCloseTimerRef.current = null
+            onOpenChange(false)
+          }, AUTO_CLOSE_DELAY_MS)
+        }
+      } else {
+        window.toast.error(nextStatus.message)
+      }
+    } finally {
+      endLoading()
+    }
   }
 
   // ---- File tab ----
@@ -248,11 +268,18 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
   }
 
   const handleFileDrop = async (file?: File) => {
-    if (loading) return
     if (!file) return
-    const content = await readFileOrBail(file)
-    if (content === null) return
-    await runImport(content, 'file', file.name)
+    if (!beginLoading()) return
+
+    let handedOff = false
+    try {
+      const content = await readFileOrBail(file)
+      if (content === null) return
+      handedOff = true
+      await runImport(content, 'file', file.name, true)
+    } finally {
+      if (!handedOff) endLoading()
+    }
   }
 
   // ---- Clipboard tab ----
@@ -277,6 +304,7 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
   const handleUrlImport = async () => {
     const raw = urlText.trim()
     if (!raw) return
+    if (loadingRef.current) return
 
     const validation = validateAssistantImportUrl(raw)
     if (!validation.ok) {
@@ -284,8 +312,9 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
       return
     }
 
-    setLoading(true)
+    if (!beginLoading()) return
     setStatus({ kind: 'idle' })
+    let handedOff = false
     try {
       const response = await fetch(validation.url, createAssistantImportFetchInit())
       if (!response.ok) {
@@ -298,10 +327,9 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
       if (isAssistantImportContentTooLarge(content)) {
         throw new Error(t('library.import_dialog.error.response_too_large'))
       }
-      setLoading(false)
-      await runImport(content, 'url')
+      handedOff = true
+      await runImport(content, 'url', undefined, true)
     } catch (error) {
-      setLoading(false)
       const message =
         error instanceof DOMException && error.name === 'TimeoutError'
           ? t('library.import_dialog.error.timeout')
@@ -309,6 +337,8 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
             ? error.message
             : t('message.agents.import.error')
       setStatus({ kind: 'error', message })
+    } finally {
+      if (!handedOff) endLoading()
     }
   }
 
