@@ -185,12 +185,21 @@ export async function callRendererBridge<T>(
   throw new Error('The main window is not ready. Open the main window and try again.')
 }
 
-export async function readRendererStoreValue<T>(path: string): Promise<T> {
+export async function readRendererStoreValue<T>(
+  path: string,
+  options: {
+    checkTimeoutMs?: number
+    timeoutMs?: number
+    timeoutMessage?: string
+  } = {}
+): Promise<T> {
   return callRendererBridge<T>(
     RENDERER_GET_STORE_VALUE_BRIDGE,
     { path },
     {
-      timeoutMessage: `Timed out reading runtime state: ${path}`
+      checkTimeoutMs: options.checkTimeoutMs,
+      timeoutMs: options.timeoutMs,
+      timeoutMessage: options.timeoutMessage ?? `Timed out reading runtime state: ${path}`
     }
   )
 }

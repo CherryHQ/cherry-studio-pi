@@ -25,6 +25,7 @@ const MAX_PAINTING_PROMPT_CHARS = 500
 const MAX_RAW_PAINTING_STRING_CHARS = 2_000
 const MAX_RAW_PAINTING_ARRAY_ITEMS = 20
 const MAX_RAW_PAINTING_DEPTH = 4
+const RENDERER_STORE_FALLBACK_TIMEOUT_MS = 1_000
 
 function normalizeListLimit(value: unknown) {
   const parsed =
@@ -207,7 +208,10 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['paintings', 'image', 'history'],
       execute: async (input: any) => {
-        const paintings = await readRendererStoreValue<any>('state.paintings').catch(() => ({}))
+        const paintings = await readRendererStoreValue<any>('state.paintings', {
+          checkTimeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS,
+          timeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS
+        }).catch(() => ({}))
         return okResult('Painting history listed', listPaintingHistory(paintings, input))
       }
     },

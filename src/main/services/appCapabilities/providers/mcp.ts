@@ -7,6 +7,7 @@ import { okResult, sanitizeForAgent } from '../utils'
 
 const DEFAULT_MCP_TOOL_LIST_LIMIT = 50
 const MAX_MCP_TOOL_LIST_LIMIT = 200
+const RENDERER_STORE_FALLBACK_TIMEOUT_MS = 500
 
 function normalizeListLimit(value: unknown) {
   const parsed =
@@ -61,7 +62,10 @@ async function listConfiguredMcpServers() {
     // edge cases; listing servers is a read-only diagnostic capability.
   }
 
-  const mcpState = await readRendererStoreValue<any>('state.mcp').catch(() => null)
+  const mcpState = await readRendererStoreValue<any>('state.mcp', {
+    checkTimeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS,
+    timeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS
+  }).catch(() => null)
   return Array.isArray(mcpState?.servers) ? mcpState.servers : []
 }
 

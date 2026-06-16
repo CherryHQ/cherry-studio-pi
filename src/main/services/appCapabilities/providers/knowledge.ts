@@ -23,6 +23,7 @@ const DEFAULT_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT = 20
 const MAX_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT = 100
 const DEFAULT_KNOWLEDGE_SEARCH_RESULT_LIMIT = 50
 const MAX_KNOWLEDGE_SEARCH_RESULT_LIMIT = 100
+const RENDERER_STORE_FALLBACK_TIMEOUT_MS = 1_000
 
 function firstApiKey(value: unknown): string {
   return typeof value === 'string' ? (value.split(',')[0]?.trim() ?? '') : ''
@@ -184,11 +185,19 @@ async function listKnowledgeBases(): Promise<KnowledgeBase[]> {
     logger.debug('Knowledge Storage v2 repository unavailable, falling back to runtime store bridge', error as Error)
   }
 
-  return (await readRendererStoreValue<KnowledgeBase[]>('state.knowledge.bases').catch(() => [])) ?? []
+  return (
+    (await readRendererStoreValue<KnowledgeBase[]>('state.knowledge.bases', {
+      checkTimeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS,
+      timeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS
+    }).catch(() => [])) ?? []
+  )
 }
 
 async function getProviderConfigFromRuntime(providerId: string): Promise<ProviderRuntimeConfig | null> {
-  const providers = await readRendererStoreValue<Provider[]>('state.llm.providers')
+  const providers = await readRendererStoreValue<Provider[]>('state.llm.providers', {
+    checkTimeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS,
+    timeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS
+  })
   const provider = providers?.find((item) => item.id === providerId)
   if (!provider) return null
   return {

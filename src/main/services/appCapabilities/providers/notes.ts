@@ -19,6 +19,7 @@ const DEFAULT_NOTE_LIST_LIMIT = 100
 const MAX_NOTE_LIST_LIMIT = 500
 const MAX_NOTE_LIST_SCAN_ENTRIES = 5_000
 const MAX_NOTE_LIST_DEPTH = 10
+const RENDERER_STORE_FALLBACK_TIMEOUT_MS = 500
 
 async function getNotesRoot() {
   const preferredPath = await Promise.resolve()
@@ -26,7 +27,10 @@ async function getNotesRoot() {
     .catch(() => '')
   if (typeof preferredPath === 'string' && preferredPath.trim()) return path.resolve(preferredPath.trim())
 
-  const noteState = await readRendererStoreValue<any>('state.note').catch(() => null)
+  const noteState = await readRendererStoreValue<any>('state.note', {
+    checkTimeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS,
+    timeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS
+  }).catch(() => null)
   return path.resolve(noteState?.notesPath || getNotesDir())
 }
 
