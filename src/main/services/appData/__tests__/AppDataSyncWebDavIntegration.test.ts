@@ -19,6 +19,10 @@ vi.mock('@main/services/BackupManager', () => ({
   default: vi.fn()
 }))
 
+vi.mock('@main/services/AppRuntimeSaveService', () => ({
+  flushMainStorageV2RuntimeMirrors: vi.fn().mockResolvedValue(undefined)
+}))
+
 vi.unmock('node:fs')
 vi.unmock('node:fs/promises')
 vi.unmock('node:http')
