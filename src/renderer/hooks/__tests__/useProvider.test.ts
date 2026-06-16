@@ -109,7 +109,7 @@ describe('useProviders', () => {
     renderHook(() => useProviders())
 
     expect(mockUseMutation).toHaveBeenCalledWith('POST', '/providers', {
-      refresh: ['/providers']
+      refresh: ['/providers', '/models']
     })
   })
 
@@ -260,8 +260,10 @@ describe('useProviderMutations', () => {
     )
 
     expect(patchCall).toBeDefined()
-    // P0: list + entity + /* wildcard covers useProvider(id) and all sub-resource hooks
-    expect(patchCall![2]).toEqual({ refresh: ['/providers', '/providers/openai', '/providers/openai/*'] })
+    // P0: provider mutations can change model-selector visibility through provider.isEnabled.
+    expect(patchCall![2]).toEqual({
+      refresh: ['/providers', '/providers/openai', '/providers/openai/*', '/models', '/pins']
+    })
 
     expect(deleteCall).toBeDefined()
     expect(deleteCall![2]).toEqual({
@@ -331,7 +333,7 @@ describe('useProviderMutations', () => {
 
     expect(patchCall).toBeDefined()
     expect(patchCall![2]).toEqual({
-      refresh: ['/providers', '/providers/openai-main', '/providers/openai-main/*']
+      refresh: ['/providers', '/providers/openai-main', '/providers/openai-main/*', '/models', '/pins']
     })
   })
 
@@ -681,10 +683,10 @@ describe('useProviderActions refresh', () => {
     expect(patchCall).toBeDefined()
     expect(deleteCall).toBeDefined()
 
-    // Invoke the function-form refresh with real args to confirm it calls providerRefreshPaths
+    // Invoke the function-form refresh with real args to confirm it refreshes the dependent model catalog.
     const refreshFn = (patchCall as any[])[2].refresh as (ctx: { args: { params: { providerId: string } } }) => string[]
     const result = refreshFn({ args: { params: { providerId: 'openai' } } })
-    expect(result).toEqual(['/providers', '/providers/openai', '/providers/openai/*'])
+    expect(result).toEqual(['/providers', '/providers/openai', '/providers/openai/*', '/models', '/pins'])
 
     const deleteRefreshFn = (deleteCall as any[])[2].refresh as (ctx: {
       args: { params: { providerId: string } }
