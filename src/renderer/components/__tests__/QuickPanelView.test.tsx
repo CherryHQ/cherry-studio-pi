@@ -1,5 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import React, { useEffect } from 'react'
 import { Provider } from 'react-redux'
@@ -69,6 +69,24 @@ function OpenPanelOnMount({ list }: { list: QuickPanelListItem[] }) {
       pageSize: PAGE_SIZE
     })
   }, [list, quickPanel])
+  return null
+}
+
+function OpenPanelOnceOnMount({ list }: { list: QuickPanelListItem[] }) {
+  const quickPanel = useQuickPanel()
+  const didOpenRef = React.useRef(false)
+
+  useEffect(() => {
+    if (didOpenRef.current) return
+    didOpenRef.current = true
+    quickPanel.open({
+      title: 'Test Panel',
+      list,
+      symbol: 'test',
+      pageSize: PAGE_SIZE
+    })
+  }, [list, quickPanel])
+
   return null
 }
 
@@ -283,6 +301,47 @@ describe('QuickPanelView', () => {
       ]
 
       await runKeySequenceAndCheck(screen.getByTestId('quick-panel'), keySequence)
+    })
+
+    it('should return to the previous menu with Ctrl+ArrowLeft without mutating history state', async () => {
+      const user = userEvent.setup()
+      const childList = createList(1, 'Child')
+      const rootList: QuickPanelListItem[] = [
+        {
+          label: 'Open child menu',
+          icon: '',
+          isMenu: true,
+          action: ({ context }) => {
+            context.open({
+              title: 'Child Panel',
+              list: childList,
+              symbol: 'child',
+              pageSize: PAGE_SIZE
+            })
+          }
+        }
+      ]
+
+      render(
+        wrapWithProviders(
+          <>
+            <QuickPanelView setInputText={vi.fn()} />
+            <OpenPanelOnceOnMount list={rootList} />
+          </>
+        )
+      )
+
+      fireEvent.mouseMove(screen.getByTestId('quick-panel').firstElementChild!)
+      const rootMenuItem = screen.getByText('Open child menu').closest('[data-id]')
+      expect(rootMenuItem).not.toBeNull()
+      await user.click(rootMenuItem!)
+      await waitFor(() => expect(screen.getByText('Child 1')).toBeInTheDocument())
+      expect(screen.queryByText('Open child menu')).not.toBeInTheDocument()
+
+      await user.keyboard('{Control>}{ArrowLeft}{/Control}')
+
+      await waitFor(() => expect(screen.getByText('Open child menu')).toBeInTheDocument())
+      expect(screen.queryByText('Child 1')).not.toBeInTheDocument()
     })
   })
 })

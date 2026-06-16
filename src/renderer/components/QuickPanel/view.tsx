@@ -586,11 +586,10 @@ export const QuickPanelView: React.FC<Props> = ({ setInputText }) => {
           if (!historyPanel.length) return
           scrollTriggerRef.current = 'initial'
           clearSearchText(false)
-          if (historyPanel.length > 0) {
-            const lastPanel = historyPanel.pop()
-            if (lastPanel) {
-              ctx.open(lastPanel)
-            }
+          {
+            const lastPanel = historyPanel[historyPanel.length - 1]
+            setHistoryPanel((prev) => prev.slice(0, -1))
+            ctx.open(lastPanel)
           }
           break
 
