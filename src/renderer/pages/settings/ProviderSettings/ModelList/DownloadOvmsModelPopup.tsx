@@ -92,8 +92,12 @@ const PRESET_MODELS: PresetModel[] = [
 const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
   const [open, setOpen] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const [progress, setProgress] = useState(0)
   const cancelledRef = useRef(false)
+  const runningRef = useRef(false)
+  const cancellingRef = useRef(false)
+  const runIdRef = useRef(0)
   const [formValues, setFormValues] = useState<FieldType>({
     modelId: '',
     modelName: '',
@@ -173,16 +177,30 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
   }
 
   const onCancel = async () => {
-    if (loading) {
+    if (runningRef.current || loading) {
+      if (cancellingRef.current) {
+        return
+      }
+
+      const cancelRunId = runIdRef.current
       // Stop the download
+      cancellingRef.current = true
+      setCancelling(true)
       try {
         cancelledRef.current = true
         logger.info('Stopping download...')
         await window.api.ovms.stopAddModel()
-        stopFakeProgress(false)
-        setLoading(false)
       } catch (error) {
         logger.error(`Failed to stop download: ${error}`)
+      } finally {
+        if (runIdRef.current === cancelRunId) {
+          runIdRef.current += 1
+          runningRef.current = false
+          stopFakeProgress(false)
+          setLoading(false)
+        }
+        cancellingRef.current = false
+        setCancelling(false)
       }
       return
     }
@@ -191,6 +209,10 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
   }
 
   const onFinish = async () => {
+    if (runningRef.current) {
+      return
+    }
+
     const values = formValues
     if (!values.modelId) {
       setError(t('ovms.download.model_id.required'))
@@ -204,7 +226,13 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
       setError(t('ovms.download.model_name.required'))
       return
     }
+
+    const runId = runIdRef.current + 1
+    runIdRef.current = runId
+    const isCurrentRun = () => runIdRef.current === runId
+
     setError(null)
+    runningRef.current = true
     setLoading(true)
     cancelledRef.current = false
     startFakeProgress()
@@ -216,7 +244,15 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
       )
       const result = await window.api.ovms.addModel(modelName, modelId, normalizedModelSource, task)
 
+      if (!isCurrentRun()) {
+        return
+      }
+
       if (result.success) {
+        if (cancelledRef.current) {
+          stopFakeProgress(false)
+          return
+        }
         stopFakeProgress(true) // Complete the progress bar
         window.toast.success(t('ovms.download.success_desc', { modelName: modelName, modelId: modelId }))
         setOpen(false)
@@ -230,23 +266,32 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
         }
       }
     } catch (error: any) {
-      stopFakeProgress(false) // Reset progress on error
-      logger.error(`Download crashed, is it cancelled? ${cancelledRef.current}`)
-      // Only show error if not cancelled by user
-      if (!cancelledRef.current) {
-        setError(error.message)
+      if (isCurrentRun()) {
+        stopFakeProgress(false) // Reset progress on error
+        logger.error(`Download crashed, is it cancelled? ${cancelledRef.current}`)
+        // Only show error if not cancelled by user
+        if (!cancelledRef.current) {
+          setError(error.message)
+        }
       }
     } finally {
-      setLoading(false)
+      if (isCurrentRun()) {
+        runningRef.current = false
+        setLoading(false)
+      }
     }
   }
 
   const footer = (
     <div className={drawerClasses.footer}>
-      <Button variant={loading ? 'default' : 'outline'} type="button" onClick={() => void onCancel()}>
+      <Button
+        variant={loading ? 'default' : 'outline'}
+        type="button"
+        disabled={cancelling}
+        onClick={() => void onCancel()}>
         {loading ? t('common.cancel') : t('common.cancel')}
       </Button>
-      <Button disabled={loading} onClick={() => void onFinish()}>
+      <Button disabled={loading || cancelling} onClick={() => void onFinish()}>
         {t('ovms.download.button')}
       </Button>
     </div>
