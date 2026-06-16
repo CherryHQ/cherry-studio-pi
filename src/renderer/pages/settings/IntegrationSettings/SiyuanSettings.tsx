@@ -4,7 +4,7 @@ import { loggerService } from '@logger'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { FC } from 'react'
-import { useCallback } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -20,6 +20,8 @@ const SiyuanSettings: FC = () => {
 
   const { t } = useTranslation()
   const { theme } = useTheme()
+  const [checkingConnection, setCheckingConnection] = useState(false)
+  const checkingConnectionRef = useRef(false)
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
@@ -52,12 +54,18 @@ const SiyuanSettings: FC = () => {
   }
 
   const handleCheckConnection = async () => {
+    if (checkingConnectionRef.current) {
+      return
+    }
+
     try {
       if (!siyuanApiUrl || !siyuanToken) {
         window.toast.error(t('settings.data.siyuan.check.empty_config'))
         return
       }
 
+      checkingConnectionRef.current = true
+      setCheckingConnection(true)
       const response = await fetch(`${siyuanApiUrl}/api/notebook/lsNotebooks`, {
         method: 'POST',
         signal: AbortSignal.timeout(INTEGRATION_CHECK_TIMEOUT_MS),
@@ -82,6 +90,9 @@ const SiyuanSettings: FC = () => {
     } catch (error) {
       logger.error('Check Siyuan connection failed:', error as Error)
       window.toast.error(t('settings.data.siyuan.check.error'))
+    } finally {
+      checkingConnectionRef.current = false
+      setCheckingConnection(false)
     }
   }
 
@@ -121,7 +132,12 @@ const SiyuanSettings: FC = () => {
               placeholder={t('settings.data.siyuan.token_placeholder')}
               style={{ width: '100%' }}
             />
-            <Button onClick={handleCheckConnection} variant="outline" className="h-9 shrink-0">
+            <Button
+              onClick={handleCheckConnection}
+              variant="outline"
+              className="h-9 shrink-0"
+              disabled={checkingConnection}
+              loading={checkingConnection}>
               {t('settings.data.siyuan.check.button')}
             </Button>
           </RowFlex>

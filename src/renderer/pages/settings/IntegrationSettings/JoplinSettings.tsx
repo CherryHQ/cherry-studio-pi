@@ -4,7 +4,7 @@ import { loggerService } from '@logger'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { formatErrorMessage, formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { FC } from 'react'
-import { useCallback } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -27,6 +27,8 @@ const JoplinSettings: FC = () => {
 
   const { t } = useTranslation()
   const { theme } = useTheme()
+  const [checkingConnection, setCheckingConnection] = useState(false)
+  const checkingConnectionRef = useRef(false)
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
@@ -52,6 +54,10 @@ const JoplinSettings: FC = () => {
   }
 
   const handleJoplinConnectionCheck = async () => {
+    if (checkingConnectionRef.current) {
+      return
+    }
+
     try {
       if (!joplinToken) {
         window.toast.error(t('settings.data.joplin.check.empty_token'))
@@ -62,6 +68,8 @@ const JoplinSettings: FC = () => {
         return
       }
 
+      checkingConnectionRef.current = true
+      setCheckingConnection(true)
       const response = await fetch(buildJoplinNotesCheckUrl(joplinUrl, joplinToken), {
         signal: AbortSignal.timeout(INTEGRATION_CHECK_TIMEOUT_MS)
       })
@@ -77,6 +85,9 @@ const JoplinSettings: FC = () => {
     } catch (error) {
       logger.error('Failed to check Joplin connection', error as Error)
       window.toast.error(`${t('settings.data.joplin.check.fail')}: ${formatErrorMessage(error)}`)
+    } finally {
+      checkingConnectionRef.current = false
+      setCheckingConnection(false)
     }
   }
 
@@ -129,7 +140,12 @@ const JoplinSettings: FC = () => {
               placeholder={t('settings.data.joplin.token_placeholder')}
               style={{ width: '100%' }}
             />
-            <Button onClick={handleJoplinConnectionCheck} variant="outline" className="h-9 shrink-0">
+            <Button
+              onClick={handleJoplinConnectionCheck}
+              variant="outline"
+              className="h-9 shrink-0"
+              disabled={checkingConnection}
+              loading={checkingConnection}>
               {t('settings.data.joplin.check.button')}
             </Button>
           </RowFlex>
