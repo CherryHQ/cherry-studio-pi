@@ -52,6 +52,19 @@ const FilesPage: FC = () => {
     return storageV2FileRecoveryService.listFilesWithFallback(fileType, 'files-page-empty').then(tempFilesSort)
   }, [fileType])
 
+  useEffect(() => {
+    if (!files) {
+      setSelectedFileIds([])
+      return
+    }
+
+    const visibleFileIds = new Set(files.map((file) => file.id))
+    setSelectedFileIds((prev) => {
+      const next = prev.filter((id) => visibleFileIds.has(id))
+      return next.length === prev.length ? prev : next
+    })
+  }, [files])
+
   const sortedFiles = files ? sortFiles(files, sortField, sortOrder) : []
 
   const handleBatchDelete = async () => {
@@ -81,7 +94,7 @@ const FilesPage: FC = () => {
 
   const handleSelectFile = (fileId: string, checked: boolean) => {
     if (checked) {
-      setSelectedFileIds((prev) => [...prev, fileId])
+      setSelectedFileIds((prev) => (prev.includes(fileId) ? prev : [...prev, fileId]))
     } else {
       setSelectedFileIds((prev) => prev.filter((id) => id !== fileId))
     }
