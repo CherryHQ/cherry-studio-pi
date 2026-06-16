@@ -48,6 +48,7 @@ export class IdleTimeoutController {
     this.timerId = setTimeout(() => {
       this.controller.abort(new DOMException('Idle timeout exceeded', 'TimeoutError'))
     }, durationMs)
+    this.timerId.unref?.()
   }
 
   private clearTimer(): void {
