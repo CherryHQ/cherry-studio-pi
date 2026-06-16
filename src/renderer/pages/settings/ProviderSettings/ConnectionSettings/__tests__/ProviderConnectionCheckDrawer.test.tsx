@@ -43,4 +43,16 @@ describe('ProviderConnectionCheckDrawer', () => {
 
     expect(screen.queryByRole('button', { name: /Check all models|检测所有模型/ })).toBeNull()
   })
+
+  it('does not leak the idle loading state to DOM buttons', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    try {
+      render(<ProviderConnectionCheckDrawer {...baseProps} />)
+
+      expect(consoleError.mock.calls.some((args) => args.some((arg) => String(arg).includes('loading')))).toBe(false)
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
 })

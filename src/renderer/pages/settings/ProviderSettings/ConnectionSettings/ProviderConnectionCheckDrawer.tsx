@@ -68,7 +68,7 @@ export default function ProviderConnectionCheckDrawer({
         </Button>
         <Button
           disabled={!selectedModel || !selectedApiKey}
-          loading={isSubmitting}
+          loading={isSubmitting || undefined}
           onClick={() => selectedModel && void onStart({ model: selectedModel, apiKey: selectedApiKey })}>
           {t('settings.models.check.start')}
         </Button>
