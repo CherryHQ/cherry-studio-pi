@@ -3,7 +3,7 @@ import { loggerService } from '@logger'
 import { TopView } from '@renderer/components/TopView'
 import { useTimer } from '@renderer/hooks/useTimer'
 import type { Provider } from '@shared/data/types/provider'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import ProviderSettingsDrawer from '../primitives/ProviderSettingsDrawer'
@@ -98,6 +98,7 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
   const runningRef = useRef(false)
   const cancellingRef = useRef(false)
   const runIdRef = useRef(0)
+  const mountedRef = useRef(true)
   const [formValues, setFormValues] = useState<FieldType>({
     modelId: '',
     modelName: '',
@@ -107,6 +108,17 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
   const [error, setError] = useState<string | null>(null)
   const { t } = useTranslation()
   const { setIntervalTimer, clearIntervalTimer, setTimeoutTimer } = useTimer()
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+      runIdRef.current += 1
+      runningRef.current = false
+      cancellingRef.current = false
+    }
+  }, [])
 
   const getPresetTooltipLabel = (model: PresetModel) => {
     const labelKey =
@@ -119,10 +131,12 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
   }
 
   const startFakeProgress = () => {
+    if (!mountedRef.current) return
     setProgress(0)
     setIntervalTimer(
       'progress',
       () => {
+        if (!mountedRef.current) return
         setProgress((prev) => {
           if (prev >= 95) {
             return prev // Stop at 95% until actual completion
@@ -144,6 +158,7 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
 
   const stopFakeProgress = (complete = false) => {
     clearIntervalTimer('progress')
+    if (!mountedRef.current) return
     if (complete) {
       setProgress(100)
       // Reset progress after a short delay
@@ -197,10 +212,14 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
           runIdRef.current += 1
           runningRef.current = false
           stopFakeProgress(false)
-          setLoading(false)
+          if (mountedRef.current) {
+            setLoading(false)
+          }
         }
         cancellingRef.current = false
-        setCancelling(false)
+        if (mountedRef.current) {
+          setCancelling(false)
+        }
       }
       return
     }
@@ -244,7 +263,7 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
       )
       const result = await window.api.ovms.addModel(modelName, modelId, normalizedModelSource, task)
 
-      if (!isCurrentRun()) {
+      if (!mountedRef.current || !isCurrentRun()) {
         return
       }
 
@@ -266,7 +285,7 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
         }
       }
     } catch (error: any) {
-      if (isCurrentRun()) {
+      if (mountedRef.current && isCurrentRun()) {
         stopFakeProgress(false) // Reset progress on error
         logger.error(`Download crashed, is it cancelled? ${cancelledRef.current}`)
         // Only show error if not cancelled by user
@@ -275,7 +294,7 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
         }
       }
     } finally {
-      if (isCurrentRun()) {
+      if (mountedRef.current && isCurrentRun()) {
         runningRef.current = false
         setLoading(false)
       }
