@@ -3,7 +3,7 @@ import { getModelLogo } from '@renderer/config/models'
 import { cn } from '@renderer/utils'
 import type { Model } from '@shared/data/types/model'
 import { Settings } from 'lucide-react'
-import React, { memo, useCallback } from 'react'
+import React, { memo, useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { FreeTrialModelTag } from '../components/FreeTrialModelTag'
@@ -20,16 +20,29 @@ interface ModelListItemProps {
 
 const ModelListItem: React.FC<ModelListItemProps> = ({ ref, model, disabled, onEdit, onToggleEnabled }) => {
   const { t } = useTranslation()
+  const [toggling, setToggling] = useState(false)
+  const togglingRef = useRef(false)
 
   const handleEdit = useCallback(() => {
     onEdit(model)
   }, [model, onEdit])
 
   const handleToggleEnabled = useCallback(
-    (enabled: boolean) => {
-      void onToggleEnabled(model, enabled).catch(() => {
+    async (enabled: boolean) => {
+      if (togglingRef.current) {
+        return
+      }
+
+      togglingRef.current = true
+      setToggling(true)
+      try {
+        await onToggleEnabled(model, enabled)
+      } catch {
         window.toast.error(t('settings.models.manage.operation_failed'))
-      })
+      } finally {
+        togglingRef.current = false
+        setToggling(false)
+      }
     },
     [model, onToggleEnabled, t]
   )
@@ -83,10 +96,10 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ ref, model, disabled, onE
           <div className="flex h-7 items-center" onClick={(event) => event.stopPropagation()}>
             <Switch
               checked={model.isEnabled}
-              disabled={disabled}
+              disabled={disabled || toggling}
               size="xs"
               aria-label={t('common.enabled')}
-              onCheckedChange={handleToggleEnabled}
+              onCheckedChange={(enabled) => void handleToggleEnabled(enabled)}
             />
           </div>
         </div>

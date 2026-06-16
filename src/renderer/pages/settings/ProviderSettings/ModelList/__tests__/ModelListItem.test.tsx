@@ -58,6 +58,20 @@ vi.mock('../../components/ModelTagsWithLabel', () => ({
   default: () => null
 }))
 
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
+}
+
 describe('ModelListItem', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -96,6 +110,39 @@ describe('ModelListItem', () => {
     expect(onToggleEnabled).toHaveBeenCalledWith(expect.objectContaining({ id: 'openai::alpha' }), false)
     await waitFor(() => {
       expect(window.toast.error).toHaveBeenCalledWith('settings.models.manage.operation_failed')
+    })
+  })
+
+  it('ignores duplicate enable toggles while a toggle request is pending', async () => {
+    const runningToggle = deferred<void>()
+    const onToggleEnabled = vi.fn().mockReturnValueOnce(runningToggle.promise)
+
+    render(
+      <ModelListItem
+        model={
+          {
+            id: 'openai::alpha',
+            providerId: 'openai',
+            name: 'Alpha',
+            isEnabled: true,
+            capabilities: []
+          } as any
+        }
+        onEdit={vi.fn()}
+        onToggleEnabled={onToggleEnabled}
+      />
+    )
+
+    const toggle = screen.getByRole('switch')
+    fireEvent.click(toggle)
+    fireEvent.click(toggle)
+
+    expect(onToggleEnabled).toHaveBeenCalledTimes(1)
+    expect(toggle).toBeDisabled()
+
+    runningToggle.resolve()
+    await waitFor(() => {
+      expect(toggle).not.toBeDisabled()
     })
   })
 
