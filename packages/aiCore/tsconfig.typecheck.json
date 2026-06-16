@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "paths": {
+      "@cherrystudio/ai-sdk-provider": ["../ai-sdk-provider/src/index.ts"],
+      "@cherrystudio/ai-sdk-provider/*": ["../ai-sdk-provider/src/*"],
+      "@test-utils": ["./test_utils"],
+      "@test-utils/*": ["./test_utils/*"]
+    },
+    "rootDir": ".."
+  },
+  "extends": "./tsconfig.json"
+}

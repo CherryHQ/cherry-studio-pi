@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsc -w",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "lint": "oxlint --fix && eslint . --fix --cache",
     "lint:check": "oxlint && eslint . --cache",
     "format": "biome format --write && biome lint --write",
