@@ -148,4 +148,34 @@ describe('WorkspaceSection', () => {
       Object.defineProperty(window, 'api', { configurable: true, value: originalApi })
     }
   })
+
+  it('ignores a late folder picker result after the workspace step unmounts', async () => {
+    const onChange = vi.fn()
+    const originalApi = window.api
+    const selectFolderDeferred = createDeferred<string | null>()
+    const selectFolder = vi.fn().mockReturnValue(selectFolderDeferred.promise)
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        ...originalApi,
+        file: {
+          ...originalApi?.file,
+          selectFolder
+        }
+      }
+    })
+
+    try {
+      const { unmount } = render(<WorkspaceSection form={createForm()} onChange={onChange} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'library.config.agent.field.workspace.select' }))
+      unmount()
+
+      selectFolderDeferred.resolve('/Users/me/project')
+      await waitFor(() => expect(selectFolder).toHaveBeenCalledTimes(1))
+      expect(onChange).not.toHaveBeenCalled()
+    } finally {
+      Object.defineProperty(window, 'api', { configurable: true, value: originalApi })
+    }
+  })
 })

@@ -2,7 +2,7 @@ import { Button, Field, FieldContent } from '@cherrystudio/ui'
 import { getErrorMessage } from '@renderer/utils/error'
 import { FolderOpen, FolderPlus, X } from 'lucide-react'
 import type { FC } from 'react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { FieldHeader } from '../../FieldHeader'
@@ -16,7 +16,15 @@ interface Props {
 export const WorkspaceField: FC<Props> = ({ form, onChange }) => {
   const { t } = useTranslation()
   const [selecting, setSelecting] = useState(false)
+  const mountedRef = useRef(true)
   const selectingRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const hasValue = Boolean(form.workspacePath)
   const displayValue = form.workspacePath || t('library.config.agent.field.workspace.auto')
@@ -33,17 +41,21 @@ export const WorkspaceField: FC<Props> = ({ form, onChange }) => {
         title: t('library.config.agent.field.workspace.label'),
         properties: ['openDirectory', 'createDirectory']
       })
-      if (selected) {
+      if (selected && mountedRef.current) {
         onChange({ workspacePath: selected })
       }
     } catch (error) {
-      window.toast.error({
-        title: t('agent.session.workspace.select_failed'),
-        description: getErrorMessage(error)
-      })
+      if (mountedRef.current) {
+        window.toast.error({
+          title: t('agent.session.workspace.select_failed'),
+          description: getErrorMessage(error)
+        })
+      }
     } finally {
       selectingRef.current = false
-      setSelecting(false)
+      if (mountedRef.current) {
+        setSelecting(false)
+      }
     }
   }
 
