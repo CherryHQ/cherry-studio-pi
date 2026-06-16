@@ -38,7 +38,7 @@ const AgentPage = () => {
   const seededSessionId = useAgentSessionRouteSeed(routeSearch.sessionId)
 
   // Seed `agent.active_session_id` to the most-recent session when nothing is set.
-  useAgentSessionInitializer()
+  useAgentSessionInitializer({ disabled: Boolean(seededSessionId) })
 
   useEffect(() => {
     if (!seededSessionId) return

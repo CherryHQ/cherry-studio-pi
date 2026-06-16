@@ -158,4 +158,19 @@ describe('useAgentSessionInitializer', () => {
       expect(MockUseCacheUtils.getCacheValue('agent.active_session_id')).toBe('orphan-session')
     })
   })
+
+  it('does not overwrite an explicit route-seeded session while disabled', async () => {
+    mockUseQuery.mockImplementation((path, options: any) => {
+      if (options?.enabled === false) return queryResult()
+      if (path === '/agent-sessions') return sessionsResult([{ id: 'old-session', agentId: 'agent-1' }])
+      return queryResult()
+    })
+
+    renderHook(() => useAgentSessionInitializer({ disabled: true }))
+
+    await waitFor(() => {
+      expect(mockUseQuery).toHaveBeenCalledWith('/agent-sessions', expect.objectContaining({ enabled: false }))
+    })
+    expect(MockUseCacheUtils.getCacheValue('agent.active_session_id')).toBeNull()
+  })
 })

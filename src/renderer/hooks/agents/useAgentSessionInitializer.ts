@@ -17,7 +17,8 @@ const FALLBACK_SESSION_SCAN_LIMIT = 200
  * inside an effect — multiple windows on first launch would otherwise each
  * fire a fetch and stomp each other's `setActiveSessionId` write.
  */
-export const useAgentSessionInitializer = () => {
+export const useAgentSessionInitializer = (options: { disabled?: boolean } = {}) => {
+  const disabled = options.disabled === true
   const [activeSessionId, setActiveSessionId] = useCache('agent.active_session_id')
   const {
     data: activeSession,
@@ -25,7 +26,7 @@ export const useAgentSessionInitializer = () => {
     isLoading: isActiveSessionLoading
   } = useQuery('/agent-sessions/:sessionId', {
     params: { sessionId: activeSessionId! },
-    enabled: !!activeSessionId,
+    enabled: !!activeSessionId && !disabled,
     swrOptions: {
       keepPreviousData: false
     }
@@ -36,13 +37,15 @@ export const useAgentSessionInitializer = () => {
     activeSessionId && !isActiveSessionLoading && !activeSession && !activeSessionError
   )
   const needsFallbackSession =
-    !activeSessionId || !!activeSessionError || activeSessionMissingAgent || activeSessionUnavailable
+    !disabled && (!activeSessionId || !!activeSessionError || activeSessionMissingAgent || activeSessionUnavailable)
   const { data, isLoading: isFallbackSessionLoading } = useQuery('/agent-sessions', {
     query: { limit: FALLBACK_SESSION_SCAN_LIMIT },
     enabled: needsFallbackSession
   })
 
   useEffect(() => {
+    if (disabled) return
+
     if (
       activeSessionId &&
       !activeSessionMissingAgent &&
@@ -69,6 +72,7 @@ export const useAgentSessionInitializer = () => {
     activeSessionMissingAgent,
     activeSessionUnavailable,
     data,
+    disabled,
     isFallbackSessionLoading,
     isActiveSessionLoading,
     needsFallbackSession,
