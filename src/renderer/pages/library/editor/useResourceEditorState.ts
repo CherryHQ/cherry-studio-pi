@@ -41,6 +41,7 @@ export function useResourceEditorState<TForm, TDiff>(
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const mountedRef = useRef(true)
   const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const clearSavedTimeout = useCallback(() => {
@@ -66,6 +67,13 @@ export function useResourceEditorState<TForm, TDiff>(
 
   useEffect(() => clearSavedTimeout, [clearSavedTimeout])
 
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
   const diffResult = useMemo(() => diff(form, baseline), [diff, form, baseline])
   const canSave = diffResult !== null
 
@@ -86,6 +94,7 @@ export function useResourceEditorState<TForm, TDiff>(
     setError(null)
     try {
       const result = await onCommitRef.current(pending, form)
+      if (!mountedRef.current) return
       const nextBaseline = result?.nextBaseline ?? form
       setBaseline(nextBaseline)
       if (result?.nextForm !== undefined) {
@@ -96,13 +105,18 @@ export function useResourceEditorState<TForm, TDiff>(
       const flash = savedFlashMs ?? DEFAULT_SAVED_FLASH_MS
       savedTimeoutRef.current = setTimeout(() => {
         savedTimeoutRef.current = null
-        setSaved(false)
+        if (mountedRef.current) {
+          setSaved(false)
+        }
       }, flash)
     } catch (e) {
+      if (!mountedRef.current) return
       const message = e instanceof Error && e.message ? e.message : (fallbackErrorMessage ?? DEFAULT_FALLBACK_ERROR)
       setError(message)
     } finally {
-      setSaving(false)
+      if (mountedRef.current) {
+        setSaving(false)
+      }
     }
   }, [saving, form, baseline, fallbackErrorMessage, savedFlashMs, clearSavedTimeout])
 

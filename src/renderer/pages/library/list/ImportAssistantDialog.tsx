@@ -139,6 +139,7 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
   const [urlText, setUrlText] = useState('')
   const [status, setStatus] = useState<ImportStatus>({ kind: 'idle' })
   const [loading, setLoading] = useState(false)
+  const mountedRef = useRef(true)
   const loadingRef = useRef(false)
   const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -149,6 +150,13 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
   }, [])
 
   useEffect(() => clearAutoCloseTimer, [clearAutoCloseTimer])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     if (!open) {
@@ -165,13 +173,17 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
   const beginLoading = useCallback(() => {
     if (loadingRef.current) return false
     loadingRef.current = true
-    setLoading(true)
+    if (mountedRef.current) {
+      setLoading(true)
+    }
     return true
   }, [])
 
   const endLoading = useCallback(() => {
     loadingRef.current = false
-    setLoading(false)
+    if (mountedRef.current) {
+      setLoading(false)
+    }
   }, [])
 
   const close = () => {
@@ -195,7 +207,9 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
     lockHeld = false
   ) => {
     if (!lockHeld && !beginLoading()) return
-    setStatus({ kind: 'idle' })
+    if (mountedRef.current) {
+      setStatus({ kind: 'idle' })
+    }
 
     try {
       // Parse error short-circuits the whole operation — no partial import possible.
@@ -209,7 +223,9 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
             : error instanceof Error
               ? error.message
               : t('message.agents.import.error')
-        setStatus({ kind: 'error', message })
+        if (mountedRef.current) {
+          setStatus({ kind: 'error', message })
+        }
         return
       }
 
@@ -237,6 +253,9 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
       await Promise.resolve(onImported?.()).catch(() => undefined)
 
       const nextStatus = summarizeAssistantImportOutcomes(outcomes, t, fileName)
+      if (!mountedRef.current) {
+        return
+      }
       setStatus(nextStatus)
 
       if (nextStatus.kind === 'success') {
@@ -261,7 +280,9 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
   // ---- File tab ----
   const readFileOrBail = async (file: File): Promise<string | null> => {
     if (file.size > MAX_IMPORT_BYTES) {
-      setStatus({ kind: 'error', message: t('library.import_dialog.error.file_too_large') })
+      if (mountedRef.current) {
+        setStatus({ kind: 'error', message: t('library.import_dialog.error.file_too_large') })
+      }
       return null
     }
     return file.text()
@@ -308,12 +329,16 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
 
     const validation = validateAssistantImportUrl(raw)
     if (!validation.ok) {
-      setStatus({ kind: 'error', message: t(validation.errorKey) })
+      if (mountedRef.current) {
+        setStatus({ kind: 'error', message: t(validation.errorKey) })
+      }
       return
     }
 
     if (!beginLoading()) return
-    setStatus({ kind: 'idle' })
+    if (mountedRef.current) {
+      setStatus({ kind: 'idle' })
+    }
     let handedOff = false
     try {
       const response = await fetch(validation.url, createAssistantImportFetchInit())
@@ -336,7 +361,9 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
           : error instanceof Error
             ? error.message
             : t('message.agents.import.error')
-      setStatus({ kind: 'error', message })
+      if (mountedRef.current) {
+        setStatus({ kind: 'error', message })
+      }
     } finally {
       if (!handedOff) endLoading()
     }

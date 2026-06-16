@@ -35,6 +35,7 @@ export function ImportSkillDialog({ open, onOpenChange, onInstalled }: Props) {
 
   const [status, setStatus] = useState<ImportStatus>({ kind: 'idle' })
   const [installing, setInstalling] = useState<InstallingKey>(null)
+  const mountedRef = useRef(true)
   const installingRef = useRef<InstallingKey>(null)
   const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -45,6 +46,13 @@ export function ImportSkillDialog({ open, onOpenChange, onInstalled }: Props) {
   }, [])
 
   useEffect(() => clearAutoCloseTimer, [clearAutoCloseTimer])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   // Reset transient state on open / close.
   useEffect(() => {
@@ -59,18 +67,24 @@ export function ImportSkillDialog({ open, onOpenChange, onInstalled }: Props) {
   const beginInstall = useCallback((key: Exclude<InstallingKey, null>) => {
     if (installingRef.current) return false
     installingRef.current = key
-    setInstalling(key)
+    if (mountedRef.current) {
+      setInstalling(key)
+    }
     return true
   }, [])
 
   const setInstallStage = useCallback((key: Exclude<InstallingKey, null>) => {
     installingRef.current = key
-    setInstalling(key)
+    if (mountedRef.current) {
+      setInstalling(key)
+    }
   }, [])
 
   const endInstall = useCallback(() => {
     installingRef.current = null
-    setInstalling(null)
+    if (mountedRef.current) {
+      setInstalling(null)
+    }
   }, [])
 
   const close = () => {
@@ -79,6 +93,7 @@ export function ImportSkillDialog({ open, onOpenChange, onInstalled }: Props) {
   }
 
   const finishInstall = (skill: InstalledSkill) => {
+    if (!mountedRef.current) return
     setStatus({ kind: 'success', message: t('settings.skills.installSuccess', { name: skill.name }) })
     onInstalled?.()
     clearAutoCloseTimer()
@@ -89,6 +104,7 @@ export function ImportSkillDialog({ open, onOpenChange, onInstalled }: Props) {
   }
 
   const failInstall = (e: unknown, fallbackName?: string) => {
+    if (!mountedRef.current) return
     const fallback = t('settings.skills.installFailed', { name: fallbackName ?? t('library.type.skill') })
     const message = e instanceof Error && e.message ? e.message : fallback
     setStatus({ kind: 'error', message })
