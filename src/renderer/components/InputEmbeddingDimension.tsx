@@ -6,7 +6,7 @@ import { useProvider } from '@renderer/hooks/useProvider'
 import type { Model } from '@renderer/types'
 import { getErrorMessage } from '@renderer/utils'
 import { createUniqueModelId } from '@shared/data/types/model'
-import { memo, useCallback, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('DimensionsInput')
@@ -30,8 +30,28 @@ const InputEmbeddingDimension = ({
   const { t } = useTranslation()
   const { provider } = useProvider(model?.provider ?? '')
   const [loading, setLoading] = useState(false)
+  const mountedRef = useRef(true)
+  const dimensionRequestSeqRef = useRef(0)
 
   const disabled = useMemo(() => _disabled || !model || !provider, [_disabled, model, provider])
+  const uniqueModelId = useMemo(
+    () => (model && provider ? createUniqueModelId(provider.id, model.id) : undefined),
+    [model, provider]
+  )
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+      dimensionRequestSeqRef.current += 1
+    }
+  }, [])
+
+  useEffect(() => {
+    dimensionRequestSeqRef.current += 1
+    setLoading(false)
+  }, [uniqueModelId])
 
   const handleDimensionChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -54,12 +74,21 @@ const InputEmbeddingDimension = ({
       return
     }
 
+    if (!uniqueModelId) {
+      return
+    }
+
+    const requestSeq = ++dimensionRequestSeqRef.current
     setLoading(true)
     try {
       const { embeddings } = await window.api.ai.embedMany({
-        uniqueModelId: createUniqueModelId(provider.id, model.id),
+        uniqueModelId,
         values: ['test']
       })
+      if (!mountedRef.current || requestSeq !== dimensionRequestSeqRef.current) {
+        return
+      }
+
       const dimension = embeddings[0].length
       // for controlled input
       if (ref?.current) {
@@ -67,12 +96,16 @@ const InputEmbeddingDimension = ({
       }
       onChange?.(dimension)
     } catch (error) {
-      logger.error(t('message.error.get_embedding_dimensions'), error as Error)
-      window.toast.error(t('message.error.get_embedding_dimensions') + '\n' + getErrorMessage(error))
+      if (mountedRef.current && requestSeq === dimensionRequestSeqRef.current) {
+        logger.error(t('message.error.get_embedding_dimensions'), error as Error)
+        window.toast.error(t('message.error.get_embedding_dimensions') + '\n' + getErrorMessage(error))
+      }
     } finally {
-      setLoading(false)
+      if (mountedRef.current && requestSeq === dimensionRequestSeqRef.current) {
+        setLoading(false)
+      }
     }
-  }, [model, provider, t, onChange, ref])
+  }, [model, provider, uniqueModelId, t, onChange, ref])
 
   return (
     <div className="flex w-full" style={style}>
