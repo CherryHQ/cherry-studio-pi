@@ -1,7 +1,7 @@
 import { cacheService } from '@data/CacheService'
 import { useSharedCache } from '@data/hooks/useCache'
 import { useMultiplePreferences } from '@data/hooks/usePreference'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const API_GATEWAY_PREFERENCE_KEYS = {
@@ -33,6 +33,7 @@ export const useApiGateway = () => {
   // ready, so consumers (e.g. AgentPage) don't transiently read the default
   // `running=false` and flash a "server stopped" screen before Main's value arrives.
   const [apiGatewayLoading, setApiGatewayLoading] = useState(() => !cacheService.isSharedCacheReady())
+  const operationRef = useRef(false)
 
   useEffect(() => {
     if (cacheService.isSharedCacheReady()) {
@@ -47,9 +48,23 @@ export const useApiGateway = () => {
     [setApiGatewayConfig]
   )
 
-  const startApiGateway = useCallback(async () => {
-    if (apiGatewayLoading) return
+  const beginOperation = useCallback(() => {
+    if (operationRef.current || apiGatewayLoading) {
+      return false
+    }
+
+    operationRef.current = true
     setApiGatewayLoading(true)
+    return true
+  }, [apiGatewayLoading])
+
+  const finishOperation = useCallback(() => {
+    operationRef.current = false
+    setApiGatewayLoading(false)
+  }, [])
+
+  const startApiGateway = useCallback(async () => {
+    if (!beginOperation()) return
     try {
       const result = await window.api.apiGateway.start()
       if (result.success) {
@@ -61,13 +76,12 @@ export const useApiGateway = () => {
     } catch (error: any) {
       window.toast.error(t('apiGateway.messages.startError') + (error.message || error))
     } finally {
-      setApiGatewayLoading(false)
+      finishOperation()
     }
-  }, [apiGatewayLoading, setApiGatewayEnabled, t])
+  }, [beginOperation, finishOperation, setApiGatewayEnabled, t])
 
   const stopApiGateway = useCallback(async () => {
-    if (apiGatewayLoading) return
-    setApiGatewayLoading(true)
+    if (!beginOperation()) return
     try {
       const result = await window.api.apiGateway.stop()
       if (result.success) {
@@ -79,13 +93,12 @@ export const useApiGateway = () => {
     } catch (error: any) {
       window.toast.error(t('apiGateway.messages.stopError') + (error.message || error))
     } finally {
-      setApiGatewayLoading(false)
+      finishOperation()
     }
-  }, [apiGatewayLoading, setApiGatewayEnabled, t])
+  }, [beginOperation, finishOperation, setApiGatewayEnabled, t])
 
   const restartApiGateway = useCallback(async () => {
-    if (apiGatewayLoading) return
-    setApiGatewayLoading(true)
+    if (!beginOperation()) return
     try {
       const result = await window.api.apiGateway.restart()
       if (result.success) {
@@ -97,9 +110,9 @@ export const useApiGateway = () => {
     } catch (error) {
       window.toast.error(t('apiGateway.messages.restartFailed') + (error as Error).message)
     } finally {
-      setApiGatewayLoading(false)
+      finishOperation()
     }
-  }, [apiGatewayLoading, setApiGatewayEnabled, t])
+  }, [beginOperation, finishOperation, setApiGatewayEnabled, t])
 
   // Keep the UI toggle in sync when Main auto-starts the gateway (e.g. when
   // agents exist) while the persisted `enabled` flag is still false.

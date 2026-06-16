@@ -160,4 +160,39 @@ describe('useApiGateway', () => {
     expect(mockToast.error).toHaveBeenCalledWith(expect.stringContaining('apiGateway.messages.startError'))
     expect(mockToast.error).toHaveBeenCalledWith(expect.stringContaining('persist failed'))
   })
+
+  it('ignores concurrent gateway commands while an operation is in flight', async () => {
+    const startOperation = createDeferred<{ success: true }>()
+    const setApiGatewayConfig = vi.fn().mockResolvedValue(undefined)
+
+    mockUseMultiplePreferences.mockImplementation(() => [
+      {
+        apiKey: 'test-key',
+        enabled: false,
+        host: '127.0.0.1',
+        port: 23333
+      },
+      setApiGatewayConfig
+    ])
+    mockApiGateway.start.mockReturnValue(startOperation.promise)
+
+    const { result } = renderHook(() => useApiGateway())
+    let firstOperation!: Promise<void>
+    let secondOperation!: Promise<void>
+
+    act(() => {
+      firstOperation = result.current.startApiGateway()
+      secondOperation = result.current.startApiGateway()
+    })
+
+    expect(mockApiGateway.start).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      startOperation.resolve({ success: true })
+      await firstOperation
+      await secondOperation
+    })
+
+    expect(setApiGatewayConfig).toHaveBeenCalledTimes(1)
+  })
 })
