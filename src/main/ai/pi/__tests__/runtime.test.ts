@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   validateModelId: vi.fn()
 }))
 
-vi.mock('@main/apiServer/utils', () => ({
+vi.mock('@main/ai/modelValidation', () => ({
   validateModelId: mocks.validateModelId
 }))
 

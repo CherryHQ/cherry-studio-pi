@@ -12,9 +12,9 @@ import type {
 } from '@earendil-works/pi-ai'
 import { streamSimple } from '@earendil-works/pi-ai'
 import { loggerService } from '@logger'
+import { validateModelId } from '@main/ai/modelValidation'
 import { providerToAiSdkConfig } from '@main/ai/provider/config'
 import { resolveEffectiveEndpoint } from '@main/ai/provider/endpoint'
-import { validateModelId } from '@main/apiServer/utils'
 import { getAgentSessionHistoryWithStorageV2Recovery } from '@main/services/agents/AgentStorageV2ReadThrough'
 import type {
   AgentServiceInterface,
