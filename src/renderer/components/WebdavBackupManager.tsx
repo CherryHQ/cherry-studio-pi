@@ -15,7 +15,7 @@ import { formatFileSize } from '@renderer/utils'
 import dayjs from 'dayjs'
 import { ChevronLeft, ChevronRight, CircleAlert, RefreshCw, Trash2 } from 'lucide-react'
 import type { Key } from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface BackupFile {
@@ -65,6 +65,7 @@ export function WebdavBackupManager({
   const [deleting, setDeleting] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
+  const fetchSeqRef = useRef(0)
 
   const { webdavHost, webdavUser, webdavPass, webdavPath } = webdavConfig
 
@@ -74,6 +75,7 @@ export function WebdavBackupManager({
       return
     }
 
+    const fetchSeq = ++fetchSeqRef.current
     setLoading(true)
     try {
       const files = await window.api.backup.listWebdavFiles({
@@ -82,19 +84,33 @@ export function WebdavBackupManager({
         webdavPass,
         webdavPath
       } as WebdavConfig)
-      setBackupFiles(files)
+      if (fetchSeq === fetchSeqRef.current) {
+        setBackupFiles(files)
+      }
     } catch (error: any) {
-      window.toast.error(`${t('settings.data.webdav.backup.manager.fetch.error')}: ${error.message}`)
+      if (fetchSeq === fetchSeqRef.current) {
+        window.toast.error(`${t('settings.data.webdav.backup.manager.fetch.error')}: ${error.message}`)
+      }
     } finally {
-      setLoading(false)
+      if (fetchSeq === fetchSeqRef.current) {
+        setLoading(false)
+      }
     }
   }, [webdavHost, webdavUser, webdavPass, webdavPath, t])
 
   useEffect(() => {
-    if (visible) {
-      void fetchBackupFiles()
-      setSelectedRowKeys([])
-      setCurrentPage(1)
+    if (!visible) {
+      fetchSeqRef.current += 1
+      setLoading(false)
+      return
+    }
+
+    void fetchBackupFiles()
+    setSelectedRowKeys([])
+    setCurrentPage(1)
+
+    return () => {
+      fetchSeqRef.current += 1
     }
   }, [visible, fetchBackupFiles])
 
