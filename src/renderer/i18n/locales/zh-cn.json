@@ -841,6 +841,7 @@
     "messages": {
       "apiKeyCopied": "API 密钥已复制到剪贴板",
       "apiKeyRegenerated": "API 密钥已重新生成",
+      "invalidPort": "请输入 1000 到 65535 之间的端口号",
       "notEnabled": "API 网关未启用。",
       "operationFailed": "API 网关操作失败：",
       "restartError": "重启 API 网关失败：",

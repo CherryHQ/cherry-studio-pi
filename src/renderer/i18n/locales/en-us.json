@@ -841,6 +841,7 @@
     "messages": {
       "apiKeyCopied": "API Key copied to clipboard",
       "apiKeyRegenerated": "API Key regenerated",
+      "invalidPort": "Enter a port number between 1000 and 65535",
       "notEnabled": "The API Gateway is not enabled.",
       "operationFailed": "API Gateway operation failed: ",
       "restartError": "Failed to restart API Gateway: ",

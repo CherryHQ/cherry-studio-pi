@@ -7,6 +7,7 @@ import { API_SERVER_DEFAULTS } from '@shared/config/constant'
 import { Copy, ExternalLink, Play, RotateCcw, Server, Square, TriangleAlert } from 'lucide-react'
 import type React from 'react'
 import type { FC } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -31,6 +32,11 @@ const ApiGatewaySettings: FC = () => {
   const serverPort = apiGatewayConfig.port || API_SERVER_DEFAULTS.PORT
   const serverUrl = `http://${serverHost}:${serverPort}`
   const apiKey = apiGatewayConfig.apiKey || ''
+  const [portDraft, setPortDraft] = useState(() => String(serverPort))
+
+  useEffect(() => {
+    setPortDraft(String(serverPort))
+  }, [serverPort])
 
   const handleApiGatewayToggle = async (enabled: boolean) => {
     // `startApiGateway`/`stopApiGateway` already persist `enabled` on success and
@@ -72,13 +78,29 @@ const ApiGatewaySettings: FC = () => {
     }
   }
 
-  const handlePortChange = (value: string) => {
-    const port = Number.parseInt(value, 10) || API_SERVER_DEFAULTS.PORT
-    if (port >= 1000 && port <= 65535) {
-      void setApiGatewayConfig({ port }).catch(() => {
+  const commitPortChange = () => {
+    const normalizedPortDraft = portDraft.trim()
+    const port = Number(normalizedPortDraft)
+
+    if (!normalizedPortDraft || !Number.isInteger(port) || port < 1000 || port > 65535) {
+      setPortDraft(String(serverPort))
+      window.toast.error(t('apiGateway.messages.invalidPort'))
+      return
+    }
+
+    if (port === serverPort) {
+      setPortDraft(String(serverPort))
+      return
+    }
+
+    void setApiGatewayConfig({ port })
+      .then(() => {
+        setPortDraft(String(port))
+      })
+      .catch(() => {
+        setPortDraft(String(serverPort))
         window.toast.error(t('apiGateway.messages.operationFailed'))
       })
-    }
   }
 
   const openApiDocs = () => {
@@ -166,8 +188,17 @@ const ApiGatewaySettings: FC = () => {
                 type="number"
                 min={1000}
                 max={65535}
-                value={serverPort}
-                onChange={(event) => handlePortChange(event.target.value)}
+                value={portDraft}
+                onBlur={commitPortChange}
+                onChange={(event) => setPortDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.currentTarget.blur()
+                  } else if (event.key === 'Escape') {
+                    setPortDraft(String(serverPort))
+                    event.currentTarget.blur()
+                  }
+                }}
               />
             </SettingRow>
             <SettingDivider />
