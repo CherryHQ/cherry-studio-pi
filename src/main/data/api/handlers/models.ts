@@ -8,7 +8,9 @@
 
 import { modelService } from '@data/services/ModelService'
 import { providerRegistryService } from '@data/services/ProviderRegistryService'
+import { providerService } from '@data/services/ProviderService'
 import { loggerService } from '@logger'
+import { storageV2Service } from '@main/services/storageV2/StorageService'
 import { DataApiErrorFactory, ErrorCode, isDataApiError } from '@shared/data/api'
 import type { HandlersFor } from '@shared/data/api/apiTypes'
 import { SuccessStatus } from '@shared/data/api/apiTypes'
@@ -25,6 +27,38 @@ import {
 import { isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
 
 const logger = loggerService.withContext('DataApi:ModelHandlers')
+
+function getModelProviderId(model: { providerId?: unknown; id?: unknown }) {
+  if (typeof model.providerId === 'string' && model.providerId) {
+    return model.providerId
+  }
+
+  if (typeof model.id === 'string' && isUniqueModelId(model.id)) {
+    return parseUniqueModelId(model.id).providerId
+  }
+
+  return undefined
+}
+
+async function mirrorProviderModelsToStorageV2(providerId: string, providerModels?: unknown[]) {
+  try {
+    const provider = await providerService.getByProviderId(providerId)
+    const models = providerModels ?? (await modelService.list({ providerId }))
+    await storageV2Service.upsertProviderModels(provider as never, models)
+  } catch (error) {
+    logger.warn('Failed to mirror provider models to Storage v2', {
+      providerId,
+      error
+    })
+  }
+}
+
+async function mirrorChangedProviderModelsToStorageV2(providerIds: Iterable<string | undefined>) {
+  for (const providerId of new Set(providerIds)) {
+    if (!providerId) continue
+    await mirrorProviderModelsToStorageV2(providerId)
+  }
+}
 
 /**
  * Parse a UniqueModelId from the transport layer, raising a 422 validation
@@ -95,7 +129,9 @@ export const modelHandlers: HandlersFor<ModelSchemas> = {
       // collection-oriented create path with consistent transaction semantics.
       const parsed = CreateModelsSchema.parse(body)
       const items = await enrichCreateItems(parsed)
-      return await modelService.create(items)
+      const models = await modelService.create(items)
+      await mirrorChangedProviderModelsToStorageV2(models.map(getModelProviderId))
+      return models
     },
 
     PATCH: async ({ body }) => {
@@ -107,7 +143,9 @@ export const modelHandlers: HandlersFor<ModelSchemas> = {
         ...parseOrValidationError(item.uniqueModelId),
         patch: item.patch
       }))
-      return await modelService.bulkUpdate(items)
+      const models = await modelService.bulkUpdate(items)
+      await mirrorChangedProviderModelsToStorageV2(models.map(getModelProviderId))
+      return models
     }
   },
 
@@ -120,12 +158,15 @@ export const modelHandlers: HandlersFor<ModelSchemas> = {
     PATCH: async ({ params, body }) => {
       const { providerId, modelId } = parseOrValidationError(params.uniqueModelId)
       const parsed = UpdateModelSchema.parse(body)
-      return await modelService.update(providerId, modelId, parsed)
+      const model = await modelService.update(providerId, modelId, parsed)
+      await mirrorProviderModelsToStorageV2(providerId)
+      return model
     },
 
     DELETE: async ({ params }) => {
       const { providerId, modelId } = parseOrValidationError(params.uniqueModelId)
       await modelService.delete(providerId, modelId)
+      await mirrorProviderModelsToStorageV2(providerId)
       return undefined
     }
   },
@@ -157,6 +198,7 @@ export const modelHandlers: HandlersFor<ModelSchemas> = {
         toAdd: items,
         toRemove: parsed.toRemove
       })
+      await mirrorProviderModelsToStorageV2(params.providerId, models)
       // Override the default POST → 201: the response is the resulting
       // collection state for the provider, not a newly-created single resource.
       return { data: models, status: SuccessStatus.OK }

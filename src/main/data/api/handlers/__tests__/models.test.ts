@@ -12,6 +12,9 @@ const {
   deleteMock,
   createMock,
   bulkUpdateMock,
+  reconcileForProviderMock,
+  getProviderByIdMock,
+  upsertProviderModelsMock,
   lookupModelMock,
   resolveModelsMock,
   listProviderRegistryModelsMock,
@@ -23,6 +26,9 @@ const {
   deleteMock: vi.fn(),
   createMock: vi.fn(),
   bulkUpdateMock: vi.fn(),
+  reconcileForProviderMock: vi.fn(),
+  getProviderByIdMock: vi.fn(),
+  upsertProviderModelsMock: vi.fn(),
   lookupModelMock: vi.fn(),
   resolveModelsMock: vi.fn(),
   listProviderRegistryModelsMock: vi.fn(),
@@ -36,7 +42,20 @@ vi.mock('@data/services/ModelService', () => ({
     update: updateMock,
     delete: deleteMock,
     create: createMock,
-    bulkUpdate: bulkUpdateMock
+    bulkUpdate: bulkUpdateMock,
+    reconcileForProvider: reconcileForProviderMock
+  }
+}))
+
+vi.mock('@data/services/ProviderService', () => ({
+  providerService: {
+    getByProviderId: getProviderByIdMock
+  }
+}))
+
+vi.mock('@main/services/storageV2/StorageService', () => ({
+  storageV2Service: {
+    upsertProviderModels: upsertProviderModelsMock
   }
 }))
 
@@ -53,6 +72,17 @@ import { modelHandlers } from '../models'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  listMock.mockResolvedValue([])
+  getProviderByIdMock.mockImplementation(async (providerId: string) => ({
+    id: providerId,
+    name: providerId,
+    apiKeys: [],
+    authType: 'api-key',
+    apiFeatures: {},
+    settings: {},
+    isEnabled: true
+  }))
+  upsertProviderModelsMock.mockResolvedValue({ skippedSecret: false })
 })
 
 describe('Model handler validation', () => {
@@ -127,6 +157,8 @@ describe('/models', () => {
         registryData
       }
     ] satisfies CreateModelInput[])
+    expect(listMock).toHaveBeenCalledWith({ providerId: 'openai' })
+    expect(upsertProviderModelsMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'openai' }), [])
   })
 
   it('falls back to custom model creation when registry lookup returns NOT_FOUND', async () => {
@@ -193,6 +225,8 @@ describe('/models', () => {
         registryData: registryData2
       }
     ] satisfies CreateModelInput[])
+    expect(getProviderByIdMock).toHaveBeenCalledWith('openai')
+    expect(upsertProviderModelsMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'openai' }), [])
     expect(result).toEqual(created)
   })
 
@@ -253,6 +287,8 @@ describe('/models', () => {
     expect(bulkUpdateMock).toHaveBeenCalledWith([
       { providerId: 'cherryin', modelId: 'model-1', patch: { isEnabled: false } }
     ])
+    expect(listMock).toHaveBeenCalledWith({ providerId: 'cherryin' })
+    expect(upsertProviderModelsMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'cherryin' }), [])
     expect(result).toBe(updated)
   })
 })
@@ -280,6 +316,8 @@ describe('/models/:uniqueModelId*', () => {
     } as never)
 
     expect(updateMock).toHaveBeenCalledWith('qwen', 'qwen/qwen3-vl', { isEnabled: false })
+    expect(listMock).toHaveBeenCalledWith({ providerId: 'qwen' })
+    expect(upsertProviderModelsMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'qwen' }), [])
     expect(result).toBe(updated)
   })
   it('splits a slash-containing uniqueModelId at the first :: and forwards DELETE', async () => {
@@ -290,6 +328,8 @@ describe('/models/:uniqueModelId*', () => {
     } as never)
 
     expect(deleteMock).toHaveBeenCalledWith('fireworks', 'accounts/fireworks/models/deepseek-v3p2')
+    expect(listMock).toHaveBeenCalledWith({ providerId: 'fireworks' })
+    expect(upsertProviderModelsMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'fireworks' }), [])
     expect(result).toBeUndefined()
   })
 
@@ -393,6 +433,35 @@ describe('/providers/:providerId/models:resolve', () => {
     ).rejects.toThrow()
 
     expect(resolveModelsMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('/providers/:providerId/models:reconcile', () => {
+  it('mirrors reconciled provider models to Storage v2', async () => {
+    const registryData = { presetModel: { id: 'gpt-5', name: 'GPT-5' }, registryOverride: null }
+    const reconciled = [{ id: 'openai::gpt-5', providerId: 'openai', apiModelId: 'gpt-5' }]
+    lookupModelMock.mockResolvedValueOnce(registryData)
+    reconcileForProviderMock.mockResolvedValueOnce(reconciled)
+
+    const result = await modelHandlers['/providers/:providerId/models:reconcile'].POST({
+      params: { providerId: 'openai' },
+      body: {
+        toAdd: [{ providerId: 'openai', modelId: 'gpt-5' }],
+        toRemove: ['openai::gpt-4o']
+      }
+    } as never)
+
+    expect(reconcileForProviderMock).toHaveBeenCalledWith('openai', {
+      toAdd: [
+        {
+          dto: { providerId: 'openai', modelId: 'gpt-5' },
+          registryData
+        }
+      ],
+      toRemove: ['openai::gpt-4o']
+    })
+    expect(upsertProviderModelsMock).toHaveBeenCalledWith(expect.objectContaining({ id: 'openai' }), reconciled)
+    expect(result).toMatchObject({ data: reconciled, status: 200 })
   })
 })
 

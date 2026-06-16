@@ -1192,6 +1192,13 @@ export class StorageV2Service {
     })
   }
 
+  async upsertProviderModels(provider: Provider, models: unknown[], sortOrder?: number) {
+    return storageV2ProviderRepository.upsert({ ...(provider as any), models } as Provider, sortOrder, undefined, {
+      preserveExistingCredential: true,
+      preserveSortOrder: sortOrder === undefined
+    })
+  }
+
   async upsertProviderApiKeys(providerId: string, apiKeys: ProviderApiKeyEntry[]) {
     const normalizedApiKeys = apiKeys.flatMap((entry) => {
       const id = typeof entry.id === 'string' ? entry.id.trim() : ''

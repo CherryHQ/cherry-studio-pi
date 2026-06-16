@@ -587,6 +587,29 @@ describe('StorageV2Service', () => {
     })
   })
 
+  it('mirrors provider model lists while preserving credentials and existing provider order', async () => {
+    const provider = {
+      id: 'provider-1',
+      name: 'OpenAI',
+      presetProviderId: 'openai',
+      isEnabled: true,
+      apiKeys: [],
+      authType: 'api-key',
+      apiFeatures: {},
+      settings: {}
+    } as unknown as Provider
+    const models = [{ id: 'provider-1::gpt-4o', name: 'GPT-4o', providerId: 'provider-1', apiModelId: 'gpt-4o' }]
+
+    await expect(new StorageV2Service().upsertProviderModels(provider, models)).resolves.toEqual({
+      skippedSecret: false
+    })
+
+    expect(mocks.providerRepository.upsert).toHaveBeenCalledWith({ ...provider, models }, undefined, undefined, {
+      preserveExistingCredential: true,
+      preserveSortOrder: true
+    })
+  })
+
   it('updates provider auth config credentials without rewriting provider models', async () => {
     const authConfig = {
       type: 'oauth',
