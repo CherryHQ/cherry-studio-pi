@@ -1,6 +1,6 @@
+import { useTopViewClose } from '@renderer/components/Popups/useTopViewClose'
 import { TopView } from '@renderer/components/TopView'
 import { isMac } from '@renderer/config/constant'
-import { useTimer } from '@renderer/hooks/useTimer'
 import { Drawer } from 'antd'
 import { useState } from 'react'
 
@@ -12,11 +12,10 @@ interface Props {
 
 const PopupContainer = ({ resolve }: Props) => {
   const [open, setOpen] = useState(true)
-  const { setTimeoutTimer } = useTimer()
+  const close = useTopViewClose<void>({ resolve, setOpen, topViewKey: TopViewKey })
 
   const onClose = () => {
-    setOpen(false)
-    setTimeoutTimer('onClose', resolve, 300)
+    close()
   }
 
   AgentSidePanelDrawer.hide = onClose
@@ -57,15 +56,7 @@ export default class AgentSidePanelDrawer {
   }
   static show() {
     return new Promise<void>((resolve) => {
-      TopView.show(
-        <PopupContainer
-          resolve={() => {
-            resolve()
-            TopView.hide(TopViewKey)
-          }}
-        />,
-        TopViewKey
-      )
+      TopView.show(<PopupContainer resolve={resolve} />, TopViewKey)
     })
   }
 }
