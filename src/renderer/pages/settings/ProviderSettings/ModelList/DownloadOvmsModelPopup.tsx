@@ -3,7 +3,7 @@ import { loggerService } from '@logger'
 import { TopView } from '@renderer/components/TopView'
 import { useTimer } from '@renderer/hooks/useTimer'
 import type { Provider } from '@shared/data/types/provider'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import ProviderSettingsDrawer from '../primitives/ProviderSettingsDrawer'
@@ -93,7 +93,7 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
   const [open, setOpen] = useState(true)
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
-  const [cancelled, setCancelled] = useState(false)
+  const cancelledRef = useRef(false)
   const [formValues, setFormValues] = useState<FieldType>({
     modelId: '',
     modelName: '',
@@ -176,7 +176,7 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
     if (loading) {
       // Stop the download
       try {
-        setCancelled(true) // Mark as cancelled by user
+        cancelledRef.current = true
         logger.info('Stopping download...')
         await window.api.ovms.stopAddModel()
         stopFakeProgress(false)
@@ -206,7 +206,7 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
     }
     setError(null)
     setLoading(true)
-    setCancelled(false) // Reset cancelled state
+    cancelledRef.current = false
     startFakeProgress()
     try {
       const { modelName, modelId, modelSource, task } = values
@@ -223,17 +223,17 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
         resolve({})
       } else {
         stopFakeProgress(false) // Reset progress on error
-        logger.error(`Download failed, is it cancelled? ${cancelled}`)
+        logger.error(`Download failed, is it cancelled? ${cancelledRef.current}`)
         // Only show error if not cancelled by user
-        if (!cancelled) {
+        if (!cancelledRef.current) {
           setError(result.message)
         }
       }
     } catch (error: any) {
       stopFakeProgress(false) // Reset progress on error
-      logger.error(`Download crashed, is it cancelled? ${cancelled}`)
+      logger.error(`Download crashed, is it cancelled? ${cancelledRef.current}`)
       // Only show error if not cancelled by user
-      if (!cancelled) {
+      if (!cancelledRef.current) {
         setError(error.message)
       }
     } finally {
