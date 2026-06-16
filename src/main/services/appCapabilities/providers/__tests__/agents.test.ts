@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
     listByCursor: vi.fn(),
     createSession: vi.fn()
   },
+  agentWorkspaceService: {
+    findOrCreateByPath: vi.fn()
+  },
   agentTaskService: {
     listTasks: vi.fn(),
     listTasksAcrossAgents: vi.fn(),
@@ -30,6 +33,10 @@ vi.mock('@main/services/agents/AgentStorageV2ReadThrough', () => ({
 
 vi.mock('@data/services/AgentSessionService', () => ({
   agentSessionService: mocks.agentSessionService
+}))
+
+vi.mock('@data/services/AgentWorkspaceService', () => ({
+  agentWorkspaceService: mocks.agentWorkspaceService
 }))
 
 vi.mock('@data/services/AgentTaskService', () => ({
@@ -62,6 +69,7 @@ describe('agent app capabilities', () => {
     mocks.getAgentWithStorageV2Recovery.mockResolvedValue({ id: 'agent-1', name: 'Agent One' })
     mocks.agentSessionService.listByCursor.mockResolvedValue({ items: [], nextCursor: undefined })
     mocks.agentSessionService.createSession.mockResolvedValue({ id: 'session-1' })
+    mocks.agentWorkspaceService.findOrCreateByPath.mockResolvedValue({ id: 'workspace-1', path: '/tmp/work' })
     mocks.agentTaskService.listTasks.mockResolvedValue({ tasks: [], total: 0 })
     mocks.agentTaskService.listTasksAcrossAgents.mockResolvedValue({ tasks: [], total: 0 })
     mocks.agentTaskService.createTask.mockResolvedValue({ id: 'task-1' })
@@ -220,24 +228,40 @@ describe('agent app capabilities', () => {
     expect(mocks.listAgentsWithStorageV2Recovery).toHaveBeenCalledWith({ limit: 200 })
   })
 
-  it('normalizes agent creation defaults without changing the caller payload shape', async () => {
+  it('normalizes app agent creation input to the data API shape', async () => {
     await capability('agents.create').execute(
-      { name: ' Agent One ', model: ' model-1 ', type: ' claude-code ', sessionName: ' First task ' },
+      {
+        name: ' Agent One ',
+        model: ' model-1 ',
+        type: ' claude-code ',
+        sessionName: ' First task ',
+        plan_model: ' planner-1 ',
+        smallModel: ' small-1 ',
+        accessible_paths: [' /tmp/work ', ''],
+        mcps: [' docs ', 'docs'],
+        disabledTools: [' Bash ', 'Bash'],
+        configuration: { max_turns: 5 }
+      },
       { source: 'agent' }
     )
 
-    expect(mocks.createAgentWithStorageV2Recovery).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'Agent One',
-        model: 'model-1',
-        type: 'claude-code',
-        sessionName: ' First task '
-      })
-    )
+    expect(mocks.createAgentWithStorageV2Recovery).toHaveBeenCalledWith({
+      name: 'Agent One',
+      model: 'model-1',
+      type: 'claude-code',
+      description: undefined,
+      instructions: undefined,
+      planModel: 'planner-1',
+      smallModel: 'small-1',
+      mcps: ['docs'],
+      disabledTools: ['Bash'],
+      configuration: { max_turns: 5 }
+    })
+    expect(mocks.agentWorkspaceService.findOrCreateByPath).toHaveBeenCalledWith('/tmp/work')
     expect(mocks.agentSessionService.createSession).toHaveBeenCalledWith({
       agentId: 'agent-1',
       name: 'First task',
-      workspace: { type: 'system' }
+      workspace: { type: 'user', workspaceId: 'workspace-1' }
     })
   })
 

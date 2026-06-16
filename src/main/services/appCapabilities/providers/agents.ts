@@ -1,5 +1,6 @@
 import { agentSessionService } from '@data/services/AgentSessionService'
 import { agentTaskService } from '@data/services/AgentTaskService'
+import { agentWorkspaceService } from '@data/services/AgentWorkspaceService'
 import { modelsService } from '@main/apiServer/services/models'
 import {
   createAgentWithStorageV2Recovery,
@@ -49,6 +50,24 @@ function normalizeRequiredText(value: unknown, label: string) {
   const text = normalizeOptionalText(value)
   if (!text) throw new Error(`${label} is required`)
   return text
+}
+
+function normalizeOptionalTextArray(value: unknown) {
+  if (!Array.isArray(value)) return undefined
+  const items = value.map((item) => normalizeOptionalText(item)).filter((item): item is string => Boolean(item))
+  return items.length > 0 ? Array.from(new Set(items)) : undefined
+}
+
+function normalizeOptionalObject(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  return value as Record<string, unknown>
+}
+
+function normalizeAgentType(value: unknown) {
+  const type = normalizeOptionalText(value)
+  if (!type) return 'pi'
+  if (type === 'pi' || type === 'claude-code') return type
+  throw new Error(`Unsupported agent type: ${type}`)
 }
 
 function agentListOptions(input: any = {}) {
@@ -162,9 +181,13 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
           instructions: { type: 'string' },
           model: { type: 'string' },
           plan_model: { type: 'string' },
+          planModel: { type: 'string' },
           small_model: { type: 'string' },
+          smallModel: { type: 'string' },
           sessionName: { type: 'string', description: 'Optional default session name created with the agent' },
           accessible_paths: { type: 'array', items: { type: 'string' } },
+          mcps: { type: 'array', items: { type: 'string' } },
+          disabledTools: { type: 'array', items: { type: 'string' } },
           configuration: { type: 'object', additionalProperties: true }
         },
         required: ['name', 'model']
@@ -177,14 +200,27 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
         const name = normalizeRequiredText(input?.name, 'Agent name')
         const model = normalizeRequiredText(input?.model, 'Agent model')
         const sessionName = normalizeOptionalText(input?.sessionName) || 'Default session'
+        const accessiblePaths = normalizeOptionalTextArray(input?.accessible_paths)
+        const sessionWorkspace = accessiblePaths?.[0]
+          ? {
+              type: 'user' as const,
+              workspaceId: (await agentWorkspaceService.findOrCreateByPath(accessiblePaths[0])).id
+            }
+          : ({ type: 'system' } as const)
         const agent = await createAgentWithStorageV2Recovery({
-          ...input,
+          type: normalizeAgentType(input?.type),
           name,
+          description: normalizeOptionalText(input?.description),
+          instructions: normalizeOptionalText(input?.instructions),
           model,
-          type: normalizeOptionalText(input?.type) || 'pi'
+          planModel: normalizeOptionalText(input?.planModel ?? input?.plan_model),
+          smallModel: normalizeOptionalText(input?.smallModel ?? input?.small_model),
+          mcps: normalizeOptionalTextArray(input?.mcps),
+          disabledTools: normalizeOptionalTextArray(input?.disabledTools),
+          configuration: normalizeOptionalObject(input?.configuration)
         })
         const session = await agentSessionService
-          .createSession({ agentId: agent.id, name: sessionName, workspace: { type: 'system' } })
+          .createSession({ agentId: agent.id, name: sessionName, workspace: sessionWorkspace })
           .catch(() => null)
         return {
           ok: true,
