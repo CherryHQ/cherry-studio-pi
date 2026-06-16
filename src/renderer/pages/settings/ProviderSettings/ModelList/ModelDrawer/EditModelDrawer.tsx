@@ -99,6 +99,8 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
   const [maxInputTokens, setMaxInputTokens] = useState('')
   const [maxOutputTokens, setMaxOutputTokens] = useState('')
   const [endpointTypeTouched, setEndpointTypeTouched] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
 
   const mode: ModelDrawerMode = provider && isNewApiProvider(provider) ? 'new-api' : 'legacy'
   const apiModelId = useMemo(() => (model ? getModelApiId(model) : ''), [model])
@@ -234,15 +236,28 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
   }, [savedCaps])
 
   const saveModel = useCallback(async () => {
+    if (savingRef.current) {
+      return
+    }
+
     if (mode === 'new-api' && endpointTypes.length === 0) {
       setEndpointTypeTouched(true)
       return
     }
 
-    await handleUpdateModel(buildPatch())
-    setShowMoreSettings(false)
-    onClose()
-  }, [buildPatch, endpointTypes.length, handleUpdateModel, mode, onClose])
+    savingRef.current = true
+    setSaving(true)
+    try {
+      await handleUpdateModel(buildPatch())
+      setShowMoreSettings(false)
+      onClose()
+    } catch {
+      window.toast.error(t('settings.models.manage.operation_failed'))
+    } finally {
+      savingRef.current = false
+      setSaving(false)
+    }
+  }, [buildPatch, endpointTypes.length, handleUpdateModel, mode, onClose, t])
 
   const handleFormSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -288,10 +303,10 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
           {t('common.delete')}
         </Button>
       ) : null}
-      <Button variant="outline" onClick={onClose}>
+      <Button variant="outline" disabled={saving} onClick={onClose}>
         {t('common.cancel')}
       </Button>
-      <Button type="button" onClick={() => void saveModel()}>
+      <Button type="button" disabled={saving} loading={saving} onClick={() => void saveModel()}>
         <SaveIcon aria-hidden className="size-4 shrink-0 text-current" />
         {t('common.save')}
       </Button>

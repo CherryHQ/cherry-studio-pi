@@ -124,6 +124,20 @@ vi.mock('../../primitives/ProviderSettingsDrawer', () => ({
     ) : null
 }))
 
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
+}
+
 describe('Model drawers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -314,6 +328,92 @@ describe('Model drawers', () => {
     })
 
     expect(updateModelMock.mock.calls.length).toBeGreaterThan(callsBeforeSave)
+  })
+
+  it('keeps edit-model save disabled while updating and ignores duplicate clicks', async () => {
+    useProviderMock.mockReturnValue({
+      provider: { id: 'openai', name: 'OpenAI', isEnabled: true },
+      updateProvider: updateProviderMock
+    })
+    const runningUpdate = deferred<void>()
+    updateModelMock.mockReturnValueOnce(runningUpdate.promise)
+    const onClose = vi.fn()
+
+    render(
+      <EditModelDrawer
+        providerId="openai"
+        open
+        onClose={onClose}
+        model={
+          {
+            id: 'openai::claude-4-sonnet',
+            providerId: 'openai',
+            name: 'claude-4-sonnet',
+            group: 'Anthropic',
+            capabilities: [],
+            supportsStreaming: true,
+            pricing: {
+              input: { perMillionTokens: 0, currency: 'USD' },
+              output: { perMillionTokens: 0, currency: 'USD' }
+            }
+          } as any
+        }
+      />
+    )
+
+    const saveButton = screen.getByRole('button', { name: /common\.save/i })
+    await act(async () => {
+      fireEvent.click(saveButton)
+      fireEvent.click(saveButton)
+    })
+
+    expect(updateModelMock).toHaveBeenCalledTimes(1)
+    expect(saveButton).toBeDisabled()
+
+    await act(async () => {
+      runningUpdate.resolve()
+    })
+
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps edit-model drawer open and reports save failures', async () => {
+    useProviderMock.mockReturnValue({
+      provider: { id: 'openai', name: 'OpenAI', isEnabled: true },
+      updateProvider: updateProviderMock
+    })
+    updateModelMock.mockRejectedValueOnce(new Error('update failed'))
+    const onClose = vi.fn()
+
+    render(
+      <EditModelDrawer
+        providerId="openai"
+        open
+        onClose={onClose}
+        model={
+          {
+            id: 'openai::claude-4-sonnet',
+            providerId: 'openai',
+            name: 'claude-4-sonnet',
+            group: 'Anthropic',
+            capabilities: [],
+            supportsStreaming: true,
+            pricing: {
+              input: { perMillionTokens: 0, currency: 'USD' },
+              output: { perMillionTokens: 0, currency: 'USD' }
+            }
+          } as any
+        }
+      />
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /common\.save/i }))
+    })
+
+    expect(window.toast.error).toHaveBeenCalledWith('settings.models.manage.operation_failed')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByTestId('provider-settings-model-edit-drawer-content')).toBeInTheDocument()
   })
 
   it('writes cherryin endpoint type back through the edit drawer save path', async () => {
