@@ -26,8 +26,9 @@ import { useTranslation } from 'react-i18next'
 
 import EmojiPicker from '../EmojiPicker'
 import { TopView } from '../TopView'
+import { useTopViewClose } from './useTopViewClose'
 
-const CLOSE_ANIMATION_MS = 200
+const TopViewKey = 'UserPopup'
 
 interface Props {
   resolve: (data: any) => void
@@ -44,17 +45,11 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { t } = useTranslation()
   const avatar = useAvatar()
-
-  const closeDialog = () => {
-    setOpen(false)
-    window.setTimeout(() => {
-      resolve({})
-    }, CLOSE_ANIMATION_MS)
-  }
+  const closeDialog = useTopViewClose({ resolve, setOpen, topViewKey: TopViewKey })
 
   const onOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
-      closeDialog()
+      closeDialog({})
     }
   }
 
@@ -97,6 +92,8 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       window.toast.error(error.message)
     }
   }
+
+  UserPopup.hide = () => closeDialog({})
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -187,19 +184,11 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
 export default class UserPopup {
   static topviewId = 0
   static hide() {
-    TopView.hide('UserPopup')
+    TopView.hide(TopViewKey)
   }
   static show() {
     return new Promise<any>((resolve) => {
-      TopView.show(
-        <PopupContainer
-          resolve={(v) => {
-            resolve(v)
-            this.hide()
-          }}
-        />,
-        'UserPopup'
-      )
+      TopView.show(<PopupContainer resolve={resolve} />, TopViewKey)
     })
   }
 }

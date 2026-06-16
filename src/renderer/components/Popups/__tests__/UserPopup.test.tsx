@@ -1,5 +1,5 @@
 import { MockUseCacheUtils } from '@test-mocks/renderer/useCache'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import type React from 'react'
 import type ReactType from 'react'
 import type { ReactNode } from 'react'
@@ -138,6 +138,7 @@ describe('UserPopup', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.resetModules()
   })
 
@@ -149,5 +150,32 @@ describe('UserPopup', () => {
 
     expect(screen.getByTestId('avatar-image')).toHaveClass('object-cover')
     expect(screen.getByTestId('avatar-image')).toHaveAttribute('src', avatar)
+  })
+
+  it('settles only once when hidden repeatedly', async () => {
+    vi.useFakeTimers()
+    MockUseCacheUtils.setCacheValue('app.user.avatar', '🙂')
+    const { default: UserPopup } = await import('../UserPopup')
+    const settled = vi.fn()
+
+    void UserPopup.show().then(settled)
+    const rendered = mocks.TopView.show.mock.calls[0][0] as React.ReactNode
+    render(<>{rendered}</>)
+
+    await act(async () => {
+      UserPopup.hide()
+      UserPopup.hide()
+    })
+
+    expect(mocks.TopView.hide).not.toHaveBeenCalled()
+
+    await act(async () => {
+      vi.advanceTimersByTime(200)
+      await Promise.resolve()
+    })
+
+    expect(settled).toHaveBeenCalledTimes(1)
+    expect(mocks.TopView.hide).toHaveBeenCalledTimes(1)
+    expect(mocks.TopView.hide).toHaveBeenCalledWith('UserPopup')
   })
 })
