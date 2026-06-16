@@ -1,7 +1,7 @@
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, Input } from '@cherrystudio/ui'
 import { backupToWebdav } from '@renderer/services/BackupService'
 import dayjs from 'dayjs'
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface WebdavModalProps {
@@ -21,18 +21,28 @@ export function useWebdavBackupModal({ backupMethod }: { backupMethod?: typeof b
   const [customFileName, setCustomFileName] = useState('')
   const [isModalVisible, setIsModalVisible] = useState(false)
   const [backuping, setBackuping] = useState(false)
+  const backupingRef = useRef(false)
 
   const handleBackup = async () => {
+    if (backupingRef.current) {
+      return
+    }
+
+    backupingRef.current = true
     setBackuping(true)
     try {
       await (backupMethod ?? backupToWebdav)({ showMessage: true, customFileName })
     } finally {
+      backupingRef.current = false
       setBackuping(false)
       setIsModalVisible(false)
     }
   }
 
   const handleCancel = () => {
+    if (backupingRef.current) {
+      return
+    }
     setIsModalVisible(false)
   }
 
@@ -80,10 +90,10 @@ export function WebdavBackupModal({
           placeholder={customLabels?.filenamePlaceholder || t('settings.data.webdav.backup.modal.filename.placeholder')}
         />
         <DialogFooter>
-          <Button variant="outline" onClick={handleCancel}>
+          <Button variant="outline" onClick={handleCancel} disabled={backuping}>
             {t('common.cancel')}
           </Button>
-          <Button loading={backuping} onClick={handleBackup}>
+          <Button loading={backuping} disabled={backuping} onClick={handleBackup}>
             {t('common.confirm')}
           </Button>
         </DialogFooter>

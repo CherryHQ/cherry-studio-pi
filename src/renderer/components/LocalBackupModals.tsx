@@ -2,7 +2,7 @@ import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 import { loggerService } from '@logger'
 import { backupToLocal } from '@renderer/services/BackupService'
 import dayjs from 'dayjs'
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface LocalBackupModalProps {
@@ -38,7 +38,7 @@ export function LocalBackupModal({
           placeholder={t('settings.data.local.backup.modal.filename.placeholder')}
         />
         <DialogFooter>
-          <Button variant="outline" onClick={handleCancel}>
+          <Button variant="outline" onClick={handleCancel} disabled={backuping}>
             {t('common.cancel')}
           </Button>
           <Button disabled={backuping} onClick={handleBackup}>
@@ -55,8 +55,12 @@ export function useLocalBackupModal(localBackupDir: string | undefined) {
   const [isModalVisible, setIsModalVisible] = useState(false)
   const [backuping, setBackuping] = useState(false)
   const [customFileName, setCustomFileName] = useState('')
+  const backupingRef = useRef(false)
 
   const handleCancel = () => {
+    if (backupingRef.current) {
+      return
+    }
     setIsModalVisible(false)
   }
 
@@ -71,11 +75,16 @@ export function useLocalBackupModal(localBackupDir: string | undefined) {
   }, [])
 
   const handleBackup = async () => {
+    if (backupingRef.current) {
+      return
+    }
+
     if (!localBackupDir) {
       setIsModalVisible(false)
       return
     }
 
+    backupingRef.current = true
     setBackuping(true)
     try {
       await backupToLocal({
@@ -86,6 +95,7 @@ export function useLocalBackupModal(localBackupDir: string | undefined) {
     } catch (error) {
       logger.error('Backup failed:', error as Error)
     } finally {
+      backupingRef.current = false
       setBackuping(false)
     }
   }

@@ -26,18 +26,28 @@ export function useS3BackupModal() {
   const [customFileName, setCustomFileName] = useState('')
   const [isModalVisible, setIsModalVisible] = useState(false)
   const [backuping, setBackuping] = useState(false)
+  const backupingRef = useRef(false)
 
   const handleBackup = async () => {
+    if (backupingRef.current) {
+      return
+    }
+
+    backupingRef.current = true
     setBackuping(true)
     try {
       await backupToS3({ customFileName, showMessage: true })
     } finally {
+      backupingRef.current = false
       setBackuping(false)
       setIsModalVisible(false)
     }
   }
 
   const handleCancel = () => {
+    if (backupingRef.current) {
+      return
+    }
     setIsModalVisible(false)
   }
 
@@ -99,10 +109,10 @@ export function S3BackupModal({
           placeholder={t('settings.data.s3.backup.modal.filename.placeholder')}
         />
         <DialogFooter>
-          <Button variant="outline" onClick={handleCancel}>
+          <Button variant="outline" onClick={handleCancel} disabled={backuping}>
             {t('common.cancel')}
           </Button>
-          <Button onClick={handleBackup} loading={backuping}>
+          <Button onClick={handleBackup} loading={backuping} disabled={backuping}>
             {t('common.confirm')}
           </Button>
         </DialogFooter>
