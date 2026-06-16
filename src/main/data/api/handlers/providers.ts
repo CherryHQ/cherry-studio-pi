@@ -35,6 +35,19 @@ async function mirrorProviderMetadataToStorageV2(provider: unknown) {
   }
 }
 
+async function mirrorProviderOrderToStorageV2() {
+  try {
+    const providers = await providerService.list({})
+    await Promise.all(
+      providers.map((provider, index) => storageV2Service.upsertProviderMetadata(provider as never, index))
+    )
+  } catch (error) {
+    logger.warn('Failed to mirror provider order to Storage v2', {
+      error
+    })
+  }
+}
+
 async function mirrorProviderApiKeysToStorageV2(providerId: string, fallbackKeys?: ApiKeyEntry[]) {
   try {
     const keys = fallbackKeys ?? (await providerService.getApiKeys(providerId))
@@ -163,6 +176,7 @@ export const providerHandlers: HandlersFor<ProviderSchemas> = {
     PATCH: async ({ params, body }) => {
       const parsed = OrderRequestSchema.parse(body)
       await providerService.move(params.id, parsed)
+      await mirrorProviderOrderToStorageV2()
       return undefined
     }
   },
@@ -171,6 +185,7 @@ export const providerHandlers: HandlersFor<ProviderSchemas> = {
     PATCH: async ({ body }) => {
       const parsed = OrderBatchRequestSchema.parse(body)
       await providerService.reorder(parsed.moves)
+      await mirrorProviderOrderToStorageV2()
       return undefined
     }
   }

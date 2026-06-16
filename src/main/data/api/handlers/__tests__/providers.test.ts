@@ -358,13 +358,19 @@ describe('providerHandlers', () => {
   })
 
   describe('/providers/:id/order', () => {
-    it('delegates provider moves to providerService.move', async () => {
+    it('delegates provider moves to providerService.move and mirrors the resulting order', async () => {
+      const providers = [{ id: 'anthropic' }, { id: 'openai' }]
+      listMock.mockResolvedValueOnce(providers)
+
       await providerHandlers['/providers/:id/order'].PATCH({
         params: { id: 'openai' },
         body: { before: 'anthropic' }
       } as never)
 
       expect(moveMock).toHaveBeenCalledWith('openai', { before: 'anthropic' })
+      expect(listMock).toHaveBeenCalledWith({})
+      expect(upsertProviderMetadataMock).toHaveBeenCalledWith(providers[0], 0)
+      expect(upsertProviderMetadataMock).toHaveBeenCalledWith(providers[1], 1)
     })
 
     it('rejects invalid move anchors before calling the service', async () => {
@@ -380,14 +386,19 @@ describe('providerHandlers', () => {
   })
 
   describe('/providers/order:batch', () => {
-    it('delegates provider reorder batches to providerService.reorder', async () => {
+    it('delegates provider reorder batches and mirrors the resulting order', async () => {
       const moves = [{ id: 'openai', anchor: { position: 'first' as const } }]
+      const providers = [{ id: 'openai' }, { id: 'anthropic' }]
+      listMock.mockResolvedValueOnce(providers)
 
       await providerHandlers['/providers/order:batch'].PATCH({
         body: { moves }
       } as never)
 
       expect(reorderMock).toHaveBeenCalledWith(moves)
+      expect(listMock).toHaveBeenCalledWith({})
+      expect(upsertProviderMetadataMock).toHaveBeenCalledWith(providers[0], 0)
+      expect(upsertProviderMetadataMock).toHaveBeenCalledWith(providers[1], 1)
     })
 
     it('rejects empty reorder batches before calling the service', async () => {
