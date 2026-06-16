@@ -32,6 +32,7 @@ const InputEmbeddingDimension = ({
   const [loading, setLoading] = useState(false)
   const mountedRef = useRef(true)
   const dimensionRequestSeqRef = useRef(0)
+  const loadingRef = useRef(false)
 
   const disabled = useMemo(() => _disabled || !model || !provider, [_disabled, model, provider])
   const uniqueModelId = useMemo(
@@ -45,11 +46,13 @@ const InputEmbeddingDimension = ({
     return () => {
       mountedRef.current = false
       dimensionRequestSeqRef.current += 1
+      loadingRef.current = false
     }
   }, [])
 
   useEffect(() => {
     dimensionRequestSeqRef.current += 1
+    loadingRef.current = false
     setLoading(false)
   }, [uniqueModelId])
 
@@ -62,6 +65,10 @@ const InputEmbeddingDimension = ({
   )
 
   const handleFetchDimension = useCallback(async () => {
+    if (loadingRef.current) {
+      return
+    }
+
     if (!model) {
       logger.warn('Failed to get embedding dimensions: no model')
       window.toast.error(t('knowledge.embedding_model_required'))
@@ -79,6 +86,7 @@ const InputEmbeddingDimension = ({
     }
 
     const requestSeq = ++dimensionRequestSeqRef.current
+    loadingRef.current = true
     setLoading(true)
     try {
       const { embeddings } = await window.api.ai.embedMany({
@@ -102,6 +110,7 @@ const InputEmbeddingDimension = ({
       }
     } finally {
       if (mountedRef.current && requestSeq === dimensionRequestSeqRef.current) {
+        loadingRef.current = false
         setLoading(false)
       }
     }

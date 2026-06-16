@@ -141,6 +141,20 @@ Object.assign(window, {
   }
 })
 
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
+}
+
 describe('InputEmbeddingDimension', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -214,6 +228,26 @@ describe('InputEmbeddingDimension', () => {
           uniqueModelId: 'test-provider::test-model',
           values: ['test']
         })
+        expect(handleChange).toHaveBeenCalledWith(1536)
+      })
+    })
+
+    it('should ignore duplicate refresh clicks while dimension fetch is pending', async () => {
+      const runningFetch = deferred<{ embeddings: number[][] }>()
+      mocks.embedMany.mockReturnValueOnce(runningFetch.promise)
+      const handleChange = vi.fn()
+
+      render(<InputEmbeddingDimension model={mockModel} onChange={handleChange} />)
+
+      const refreshButton = getRefreshButton()
+      fireEvent.click(refreshButton)
+      fireEvent.click(refreshButton)
+
+      expect(mocks.embedMany).toHaveBeenCalledTimes(1)
+      expect(refreshButton).toBeDisabled()
+
+      runningFetch.resolve({ embeddings: [new Array(1536).fill(0)] })
+      await waitFor(() => {
         expect(handleChange).toHaveBeenCalledWith(1536)
       })
     })
