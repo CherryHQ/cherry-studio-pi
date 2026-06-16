@@ -172,6 +172,11 @@ const McpSettings: React.FC = () => {
   const [serverVersion, setServerVersion] = useState<string | null>(null)
   const [logModalOpen, setLogModalOpen] = useState(false)
   const [logs, setLogs] = useState<(McpServerLogEntry & { serverId?: string })[]>([])
+  const serverIdRef = useRef<string | undefined>(server?.id)
+  const promptsRequestSeqRef = useRef(0)
+  const resourcesRequestSeqRef = useRef(0)
+  const versionRequestSeqRef = useRef(0)
+  const logsRequestSeqRef = useRef(0)
 
   const { theme } = useTheme()
 
@@ -193,6 +198,21 @@ const McpSettings: React.FC = () => {
       }
     }
   }, [])
+
+  useEffect(() => {
+    serverIdRef.current = server?.id
+  }, [server?.id])
+
+  useEffect(() => {
+    promptsRequestSeqRef.current += 1
+    resourcesRequestSeqRef.current += 1
+    versionRequestSeqRef.current += 1
+    logsRequestSeqRef.current += 1
+    setPrompts([])
+    setResources([])
+    setServerVersion(null)
+    setLogs([])
+  }, [server?.id])
 
   // Initialize form values whenever the server changes
   useEffect(() => {
@@ -291,13 +311,19 @@ const McpSettings: React.FC = () => {
 
   const fetchPrompts = async () => {
     if (server?.isActive) {
-      const finishLoading = beginServerLoading(server.id)
+      const serverId = server.id
+      const requestSeq = ++promptsRequestSeqRef.current
+      const finishLoading = beginServerLoading(serverId)
       try {
-        const localPrompts = await window.api.mcp.listPrompts(server.id)
-        setPrompts(localPrompts)
+        const localPrompts = await window.api.mcp.listPrompts(serverId)
+        if (serverIdRef.current === serverId && requestSeq === promptsRequestSeqRef.current) {
+          setPrompts(localPrompts)
+        }
       } catch (error) {
         logger.error('Failed to list MCP prompts', error as Error)
-        setPrompts([])
+        if (serverIdRef.current === serverId && requestSeq === promptsRequestSeqRef.current) {
+          setPrompts([])
+        }
       } finally {
         finishLoading()
       }
@@ -306,13 +332,19 @@ const McpSettings: React.FC = () => {
 
   const fetchResources = async () => {
     if (server?.isActive) {
-      const finishLoading = beginServerLoading(server.id)
+      const serverId = server.id
+      const requestSeq = ++resourcesRequestSeqRef.current
+      const finishLoading = beginServerLoading(serverId)
       try {
-        const localResources = await window.api.mcp.listResources(server.id)
-        setResources(localResources)
+        const localResources = await window.api.mcp.listResources(serverId)
+        if (serverIdRef.current === serverId && requestSeq === resourcesRequestSeqRef.current) {
+          setResources(localResources)
+        }
       } catch (error) {
         logger.error('Failed to list MCP resources', error as Error)
-        setResources([])
+        if (serverIdRef.current === serverId && requestSeq === resourcesRequestSeqRef.current) {
+          setResources([])
+        }
       } finally {
         finishLoading()
       }
@@ -321,21 +353,31 @@ const McpSettings: React.FC = () => {
 
   const fetchServerVersion = async () => {
     if (server?.isActive) {
+      const serverId = server.id
+      const requestSeq = ++versionRequestSeqRef.current
       try {
-        const version = await window.api.mcp.getServerVersion(server.id)
-        setServerVersion(version)
+        const version = await window.api.mcp.getServerVersion(serverId)
+        if (serverIdRef.current === serverId && requestSeq === versionRequestSeqRef.current) {
+          setServerVersion(version)
+        }
       } catch (error) {
         logger.error('Failed to get MCP server version', error as Error)
-        setServerVersion(null)
+        if (serverIdRef.current === serverId && requestSeq === versionRequestSeqRef.current) {
+          setServerVersion(null)
+        }
       }
     }
   }
 
   const fetchServerLogs = async () => {
     if (!server) return
+    const serverId = server.id
+    const requestSeq = ++logsRequestSeqRef.current
     try {
-      const history = await window.api.mcp.getServerLogs(server.id)
-      setLogs(history)
+      const history = await window.api.mcp.getServerLogs(serverId)
+      if (serverIdRef.current === serverId && requestSeq === logsRequestSeqRef.current) {
+        setLogs(history)
+      }
     } catch (error) {
       logger.warn('Failed to load server logs', error as Error)
     }
@@ -356,10 +398,6 @@ const McpSettings: React.FC = () => {
     return () => {
       unsubscribe?.()
     }
-  }, [server?.id])
-
-  useEffect(() => {
-    setLogs([])
   }, [server?.id])
 
   useEffect(() => {
@@ -521,59 +559,81 @@ const McpSettings: React.FC = () => {
 
   const onToggleActive = async (active: boolean) => {
     if (!server) return
+    const initialServerId = server.id
     if (isFormChanged && active) {
       await onSave()
       return
     }
 
     const isValid = await form.trigger()
-    if (!isValid) {
+    if (!isValid || serverIdRef.current !== initialServerId) {
       return
     }
 
     let serverForUpdate = server
     if (active) {
       const trustedServer = await ensureServerTrusted(server)
-      if (!trustedServer) {
+      if (!trustedServer || serverIdRef.current !== initialServerId) {
         return
       }
       serverForUpdate = trustedServer
     }
 
-    const finishLoading = beginServerLoading(serverForUpdate.id)
+    const serverForUpdateId = serverForUpdate.id
+    const finishLoading = beginServerLoading(serverForUpdateId)
 
     try {
       if (active) {
         await updateMcpServer({ body: { isActive: true } })
         try {
-          await window.api.mcp.refreshTools(serverForUpdate.id)
+          await window.api.mcp.refreshTools(serverForUpdateId)
 
-          const localPrompts = await window.api.mcp.listPrompts(serverForUpdate.id)
-          setPrompts(localPrompts)
+          const promptsRequestSeq = ++promptsRequestSeqRef.current
+          const localPrompts = await window.api.mcp.listPrompts(serverForUpdateId)
+          if (serverIdRef.current === serverForUpdateId && promptsRequestSeq === promptsRequestSeqRef.current) {
+            setPrompts(localPrompts)
+          }
 
-          const localResources = await window.api.mcp.listResources(serverForUpdate.id)
-          setResources(localResources)
+          const resourcesRequestSeq = ++resourcesRequestSeqRef.current
+          const localResources = await window.api.mcp.listResources(serverForUpdateId)
+          if (serverIdRef.current === serverForUpdateId && resourcesRequestSeq === resourcesRequestSeqRef.current) {
+            setResources(localResources)
+          }
 
-          const version = await window.api.mcp.getServerVersion(serverForUpdate.id)
-          setServerVersion(version)
+          const versionRequestSeq = ++versionRequestSeqRef.current
+          const version = await window.api.mcp.getServerVersion(serverForUpdateId)
+          if (serverIdRef.current === serverForUpdateId && versionRequestSeq === versionRequestSeqRef.current) {
+            setServerVersion(version)
+          }
         } catch (error: any) {
-          window.modal.error({
-            title: t('settings.mcp.startError'),
-            content: formatMcpError(error as McpError),
-            centered: true
-          })
+          if (serverIdRef.current === serverForUpdateId) {
+            window.modal.error({
+              title: t('settings.mcp.startError'),
+              content: formatMcpError(error as McpError),
+              centered: true
+            })
+          }
         }
       } else {
         await updateMcpServer({ body: { isActive: false } })
-        await window.api.mcp.stopServer(serverForUpdate.id)
-        setServerVersion(null)
+        await window.api.mcp.stopServer(serverForUpdateId)
+        if (serverIdRef.current === serverForUpdateId) {
+          promptsRequestSeqRef.current += 1
+          resourcesRequestSeqRef.current += 1
+          versionRequestSeqRef.current += 1
+          setPrompts([])
+          setResources([])
+          setServerVersion(null)
+        }
       }
     } catch (error: any) {
-      window.modal.error({
-        title: active ? t('settings.mcp.startError') : t('settings.mcp.updateError'),
-        content: formatMcpError(error as McpError),
-        centered: true
-      })
+      if (serverIdRef.current === serverForUpdateId) {
+        window.modal.error({
+          title: active ? t('settings.mcp.startError') : t('settings.mcp.updateError'),
+          content: formatMcpError(error as McpError),
+          centered: true
+        })
+      }
     } finally {
       finishLoading()
     }
