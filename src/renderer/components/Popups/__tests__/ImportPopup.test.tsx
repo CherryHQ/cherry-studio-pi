@@ -154,6 +154,30 @@ describe('ImportPopup', () => {
     expect(mocks.TopView.hide).toHaveBeenCalledWith('ImportPopup')
   })
 
+  it('ignores duplicate import clicks while file selection is pending', async () => {
+    await showPopup()
+    let resolveOpen: (value: { content: string } | null) => void = () => {}
+    vi.mocked(window.api.file.open).mockReturnValue(
+      new Promise((resolve) => {
+        resolveOpen = resolve
+      })
+    )
+
+    await act(async () => {
+      const importButton = screen.getByText('import.chatgpt.button')
+      fireEvent.click(importButton)
+      fireEvent.click(importButton)
+      await Promise.resolve()
+    })
+
+    expect(window.api.file.open).toHaveBeenCalledOnce()
+
+    await act(async () => {
+      resolveOpen(null)
+      await Promise.resolve()
+    })
+  })
+
   it('resolves empty result on cancel', async () => {
     const { settled } = await showPopup()
 

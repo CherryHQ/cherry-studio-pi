@@ -10,7 +10,7 @@ import {
 } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import { importChatGPTConversations } from '@renderer/services/import'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { TopView } from '../TopView'
@@ -30,10 +30,16 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
   const [open, setOpen] = useState(true)
   const [selecting, setSelecting] = useState(false)
   const [importing, setImporting] = useState(false)
+  const operationRef = useRef(false)
   const { t } = useTranslation()
   const close = useTopViewClose<PopupResult>({ resolve, setOpen, topViewKey: TopViewKey })
 
   const onOk = async () => {
+    if (operationRef.current) {
+      return
+    }
+
+    operationRef.current = true
     setSelecting(true)
     try {
       // Select ChatGPT JSON file
@@ -71,12 +77,17 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       window.toast.error(t('import.chatgpt.error.unknown'))
       close({})
     } finally {
+      operationRef.current = false
       setSelecting(false)
       setImporting(false)
     }
   }
 
   const onCancel = () => {
+    if (operationRef.current) {
+      return
+    }
+
     close({})
   }
 
