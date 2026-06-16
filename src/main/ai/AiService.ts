@@ -601,6 +601,7 @@ export class AiService extends BaseService {
         controller.abort(new Error('Check model timeout'))
         reject(new Error('Check model timeout'))
       }, timeout)
+      timeoutHandle.unref?.()
     })
 
     const probeRequest = {

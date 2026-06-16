@@ -100,6 +100,7 @@ function sleepWithSignal(ms: number, signal: AbortSignal): Promise<void> {
       signal.removeEventListener('abort', onAbort)
       resolve()
     }, ms)
+    timeoutId.unref?.()
     const onAbort = () => {
       clearTimeout(timeoutId)
       signal.removeEventListener('abort', onAbort)
