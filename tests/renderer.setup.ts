@@ -306,8 +306,10 @@ vi.mock('@cherrystudio/ui', () => {
       ),
     ImagePreviewTrigger: ({ alt, item, ...props }) =>
       React.createElement('img', { ...props, alt: alt ?? item?.alt, src: item?.src }),
-    Dialog: ({ children, open, ...props }) =>
-      open ? React.createElement('div', { ...props, 'data-testid': 'dialog' }, children) : null,
+    Dialog: ({ children, open, onOpenChange, ...props }) => {
+      void onOpenChange
+      return open ? React.createElement('div', { ...props, 'data-testid': 'dialog' }, children) : null
+    },
     DialogContent: ({ children, ...props }) =>
       React.createElement('div', { ...props, 'data-testid': 'dialog-content' }, children),
     Divider: ({ children, ...props }) =>
