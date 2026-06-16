@@ -21,6 +21,20 @@ const mocks = vi.hoisted(() => ({
   useWebSearchApiKeyList: vi.fn()
 }))
 
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
+}
+
 vi.mock('react-i18next', async (importOriginal) => {
   const actual = await importOriginal<typeof ReactI18next>()
 
@@ -118,6 +132,26 @@ describe('WebSearchApiKeyList', () => {
     expect(toastErrorMock).not.toHaveBeenCalled()
   })
 
+  it('ignores duplicate save clicks while a key update is still in flight', async () => {
+    const runningUpdate = deferred<{ isValid: boolean }>()
+    updateListItemMock.mockReturnValueOnce(runningUpdate.promise)
+    render(<WebSearchApiKeyList providerId="tavily" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.edit' }))
+    fireEvent.change(screen.getByPlaceholderText('settings.provider.api.key.new_key.placeholder'), {
+      target: { value: 'key-b' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }))
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }))
+
+    expect(updateListItemMock).toHaveBeenCalledTimes(1)
+
+    runningUpdate.resolve({ isValid: true })
+    await waitFor(() =>
+      expect(screen.queryByPlaceholderText('settings.provider.api.key.new_key.placeholder')).toBeNull()
+    )
+  })
+
   it('shows a save-failed toast when deleting a key rejects', async () => {
     removeListItemMock.mockRejectedValueOnce(new Error('persist failed'))
     render(<WebSearchApiKeyList providerId="tavily" />)
@@ -127,6 +161,20 @@ describe('WebSearchApiKeyList', () => {
     await waitFor(() => {
       expect(toastErrorMock).toHaveBeenCalledWith('settings.tool.websearch.errors.save_failed')
     })
+  })
+
+  it('ignores duplicate delete clicks while confirmation is still open', async () => {
+    const runningConfirmation = deferred<boolean>()
+    confirmMock.mockReturnValueOnce(runningConfirmation.promise)
+    render(<WebSearchApiKeyList providerId="tavily" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'common.delete' }))
+
+    expect(confirmMock).toHaveBeenCalledTimes(1)
+
+    runningConfirmation.resolve(false)
+    await waitFor(() => expect(removeListItemMock).not.toHaveBeenCalled())
   })
 
   it('restores the previous value when editing is cancelled', () => {
