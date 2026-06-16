@@ -89,6 +89,23 @@ describe('navigate protocol handler', () => {
     expect(windowManagerMock.getWindowsByType).toHaveBeenCalledTimes(2)
   })
 
+  it('does not keep the process alive while waiting for a retry', () => {
+    const unref = vi.fn()
+    const timer = { unref } as unknown as ReturnType<typeof setTimeout>
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockReturnValue(timer)
+
+    try {
+      windowManagerMock.getWindowsByType.mockReturnValue([])
+
+      handleNavigateProtocolUrl(new URL('cherrystudio://navigate/agents'))
+
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1000)
+      expect(unref).toHaveBeenCalledTimes(1)
+    } finally {
+      setTimeoutSpy.mockRestore()
+    }
+  })
+
   it('drops the navigation after MAX_NAVIGATE_RETRY_ATTEMPTS retries when the main window never appears', async () => {
     // T7: pin the retry cap. Initial call + 30 retries = 31 getWindowsByType
     // calls, then the cap fires the warn-drop. A regression that lost the

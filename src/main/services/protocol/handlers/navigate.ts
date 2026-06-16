@@ -25,6 +25,11 @@ const isAllowedRoute = (path: string): boolean =>
 
 const MAX_NAVIGATE_RETRY_ATTEMPTS = 30
 
+function scheduleNavigateRetry(url: URL, retryAttempt: number) {
+  const retryTimer = setTimeout(() => handleNavigateProtocolUrl(url, retryAttempt), 1000)
+  retryTimer.unref?.()
+}
+
 /**
  * Handle cherrystudio://navigate/<path> deep links.
  *
@@ -63,7 +68,7 @@ export function handleNavigateProtocolUrl(url: URL, retryAttempt = 0) {
       }
 
       logger.warn('Main window not available, retrying in 1s', { retryAttempt: retryAttempt + 1 })
-      setTimeout(() => handleNavigateProtocolUrl(url, retryAttempt + 1), 1000)
+      scheduleNavigateRetry(url, retryAttempt + 1)
       return
     }
 
@@ -77,7 +82,7 @@ export function handleNavigateProtocolUrl(url: URL, retryAttempt = 0) {
         }
 
         logger.warn('window.navigate not available yet, retrying in 1s', { retryAttempt: retryAttempt + 1 })
-        setTimeout(() => handleNavigateProtocolUrl(url, retryAttempt + 1), 1000)
+        scheduleNavigateRetry(url, retryAttempt + 1)
         return
       }
 
