@@ -25,9 +25,10 @@
 import { streamDispatchCoordinator } from '@renderer/transport/streamDispatchCoordinator'
 import type { FileMetadata } from '@renderer/types'
 import type { CherryMessagePart, CherryUIMessage } from '@shared/data/types/message'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 interface PendingGroup {
+  topicId: string
   localId: string
   messages: CherryUIMessage[]
   joinIds?: { userMessageId?: string; placeholderIds?: string[] }
@@ -77,12 +78,11 @@ function buildAssistantPlaceholder(parentId: string): CherryUIMessage {
 export function usePendingMessages(topicId: string, uiMessages: CherryUIMessage[]): UsePendingMessagesResult {
   const [groups, setGroups] = useState<PendingGroup[]>([])
 
-  // Reset on topic switch — pending is per-topic and never crosses.
-  const prevTopicRef = useRef(topicId)
-  if (prevTopicRef.current !== topicId) {
-    prevTopicRef.current = topicId
-    if (groups.length > 0) setGroups([])
-  }
+  // Reset on topic switch — pending is per-topic and never crosses. The render path below also
+  // filters by topicId so a switch cannot show stale bubbles for even one frame before this effect.
+  useEffect(() => {
+    setGroups((prev) => (prev.length === 0 ? prev : prev.filter((group) => group.topicId === topicId)))
+  }, [topicId])
 
   useEffect(() => {
     const off = streamDispatchCoordinator.subscribe(topicId, (result) => {
@@ -111,17 +111,21 @@ export function usePendingMessages(topicId: string, uiMessages: CherryUIMessage[
     return off
   }, [topicId])
 
-  const addPending = useCallback((input: AddPendingInput) => {
-    const user = buildUserMessage(input)
-    const messages = input.withAssistantPlaceholder ? [user, buildAssistantPlaceholder(user.id)] : [user]
-    setGroups((prev) => [...prev, { localId: user.id, messages }])
-  }, [])
+  const addPending = useCallback(
+    (input: AddPendingInput) => {
+      const user = buildUserMessage(input)
+      const messages = input.withAssistantPlaceholder ? [user, buildAssistantPlaceholder(user.id)] : [user]
+      setGroups((prev) => [...prev, { topicId, localId: user.id, messages }])
+    },
+    [topicId]
+  )
 
   const pendingMessages = useMemo<CherryUIMessage[]>(() => {
     if (groups.length === 0) return []
     const dbIds = new Set(uiMessages.map((m) => m.id))
     const out: CherryUIMessage[] = []
     for (const group of groups) {
+      if (group.topicId !== topicId) continue
       const join = group.joinIds
       const claimed =
         !!join &&
@@ -130,7 +134,7 @@ export function usePendingMessages(topicId: string, uiMessages: CherryUIMessage[
       if (!claimed) out.push(...group.messages)
     }
     return out
-  }, [groups, uiMessages])
+  }, [groups, topicId, uiMessages])
 
   // Prune claimed groups so the array can't grow unbounded across a session.
   useEffect(() => {
@@ -138,6 +142,7 @@ export function usePendingMessages(topicId: string, uiMessages: CherryUIMessage[
       if (prev.length === 0) return prev
       const dbIds = new Set(uiMessages.map((m) => m.id))
       const kept = prev.filter((g) => {
+        if (g.topicId !== topicId) return false
         const join = g.joinIds
         if (!join) return true
         const claimed =
@@ -147,7 +152,7 @@ export function usePendingMessages(topicId: string, uiMessages: CherryUIMessage[
       })
       return kept.length === prev.length ? prev : kept
     })
-  }, [uiMessages])
+  }, [topicId, uiMessages])
 
   return { pendingMessages, addPending }
 }

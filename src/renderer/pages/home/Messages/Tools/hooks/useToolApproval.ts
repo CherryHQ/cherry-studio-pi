@@ -3,7 +3,7 @@ import { useToolApprovalRespond } from '@renderer/hooks/ToolApprovalContext'
 import { useMcpServerMutations, useMcpServers } from '@renderer/hooks/useMcpServer'
 import { usePartsMap } from '@renderer/pages/home/Messages/Blocks'
 import type { McpTool, McpToolResponse, NormalToolResponse } from '@renderer/types'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { APPROVAL_REQUESTED, APPROVAL_RESPONDED, findToolPartByCallId } from '../toolResponse'
@@ -72,19 +72,16 @@ export function useToolApproval(
   // Optimistic submit flag — bridges the visible gap between click and the
   // arrival of the `approval-responded` / `input-available` chunk from main
   // (~15-30 ms IPC + state-transition round-trip). Without it the buttons
-  // appear "frozen" right after click. Reset whenever the underlying call
-  // identity changes so a new approval card starts in the pending state.
-  const [optimisticSubmitted, setOptimisticSubmitted] = useState(false)
-  const lastApprovalIdRef = useRef<string | undefined>(undefined)
-  if (lastApprovalIdRef.current !== match?.approvalId) {
-    lastApprovalIdRef.current = match?.approvalId
-    if (optimisticSubmitted) setOptimisticSubmitted(false)
-  }
+  // appear "frozen" right after click. Key it by approval id so a new approval
+  // card starts pending without a render-phase state reset.
+  const [optimisticApprovalId, setOptimisticApprovalId] = useState<string | null>(null)
+  const optimisticSubmitted = optimisticApprovalId === match?.approvalId
 
   const respond = useCallback(
     async (approved: boolean) => {
       if (!match?.approvalId || !respondToolApproval) return
-      setOptimisticSubmitted(true)
+      const approvalId = match.approvalId
+      setOptimisticApprovalId(approvalId)
       try {
         await respondToolApproval({
           match,
@@ -92,7 +89,7 @@ export function useToolApproval(
           reason: approved ? undefined : t('message.tools.denied', 'User denied tool execution')
         })
       } catch (error) {
-        setOptimisticSubmitted(false)
+        setOptimisticApprovalId((current) => (current === approvalId ? null : current))
         logger.error('Tool approval response failed', error as Error)
         window.toast?.error?.(t('message.tools.approvalError', 'Failed to send approval'))
       }

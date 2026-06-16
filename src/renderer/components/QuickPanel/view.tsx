@@ -20,6 +20,8 @@ import type {
 
 const ITEM_HEIGHT = 31
 
+type IndexAction = { type: 'set'; value: number } | { type: 'clamp'; maxIndex: number }
+
 interface Props {
   setInputText: React.Dispatch<React.SetStateAction<string>>
 }
@@ -71,13 +73,15 @@ export const QuickPanelView: React.FC<Props> = ({ setInputText }) => {
   const filterFn = ctx.filterFn || defaultFilterFn
   const sortFn = ctx.sortFn || defaultSortFn
   // 处理搜索，过滤列表（始终保留 alwaysVisible 项在顶部）
-  const list = useMemo(() => {
+  const listState = useMemo(() => {
     // Reset stale state when panel fully closes (both isVisible false AND symbol cleared)
     if (!ctx.isVisible && !ctx.symbol) {
-      prevSymbolRef.current = ''
-      prevSearchTextRef.current = ''
-      setIndex(-1)
-      return []
+      return {
+        list: [] as QuickPanelListItem[],
+        indexAction: { type: 'set', value: -1 } satisfies IndexAction,
+        nextSearchText: '',
+        nextSymbol: ''
+      }
     }
 
     const baseList = (ctx.list || []).filter((item) => !item.hidden)
@@ -85,24 +89,18 @@ export const QuickPanelView: React.FC<Props> = ({ setInputText }) => {
     if (ctx.manageListExternally) {
       const combinedLength = baseList.length
       const isSymbolChanged = prevSymbolRef.current !== ctx.symbol
-      if (isSymbolChanged) {
-        const maxIndex = combinedLength > 0 ? combinedLength - 1 : -1
-        const desiredIndex =
-          typeof ctx.defaultIndex === 'number' ? Math.min(Math.max(ctx.defaultIndex, -1), maxIndex) : -1
-        setIndex(desiredIndex)
-      } else {
-        setIndex((prevIndex) => {
-          if (prevIndex >= combinedLength) {
-            return combinedLength > 0 ? combinedLength - 1 : -1
-          }
-          return prevIndex
-        })
+      const maxIndex = combinedLength > 0 ? combinedLength - 1 : -1
+      const desiredIndex =
+        typeof ctx.defaultIndex === 'number' ? Math.min(Math.max(ctx.defaultIndex, -1), maxIndex) : -1
+
+      return {
+        list: baseList,
+        indexAction: isSymbolChanged
+          ? ({ type: 'set', value: desiredIndex } satisfies IndexAction)
+          : ({ type: 'clamp', maxIndex } satisfies IndexAction),
+        nextSearchText: '',
+        nextSymbol: ctx.symbol
       }
-
-      prevSearchTextRef.current = ''
-      prevSymbolRef.current = ctx.symbol
-
-      return baseList
     }
 
     const _searchText = searchText.replace(/^[/@]/, '')
@@ -128,34 +126,50 @@ export const QuickPanelView: React.FC<Props> = ({ setInputText }) => {
     // 只有在搜索文本变化或面板符号变化时才重置index
     const isSearchChanged = prevSearchTextRef.current !== searchText
     const isSymbolChanged = prevSymbolRef.current !== ctx.symbol
+    const combinedLength = pinnedItems.length + sortedNormalItems.length
+    const maxIndex = combinedLength > 0 ? combinedLength - 1 : -1
 
+    let indexAction: IndexAction
     if (isSearchChanged || isSymbolChanged) {
-      const combinedLength = pinnedItems.length + sortedNormalItems.length
       if (isSymbolChanged) {
-        const maxIndex = combinedLength > 0 ? combinedLength - 1 : -1
         const desiredIndex =
           typeof ctx.defaultIndex === 'number' ? Math.min(Math.max(ctx.defaultIndex, -1), maxIndex) : -1
-        setIndex(desiredIndex)
+        indexAction = { type: 'set', value: desiredIndex }
       } else {
-        setIndex(-1) // 搜索文本变化时不默认高亮
+        indexAction = { type: 'set', value: -1 } // 搜索文本变化时不默认高亮
       }
     } else {
       // 如果当前index超出范围，调整到有效范围内
-      setIndex((prevIndex) => {
-        const combinedLength = pinnedItems.length + sortedNormalItems.length
-        if (prevIndex >= combinedLength) {
-          return combinedLength > 0 ? combinedLength - 1 : -1
-        }
-        return prevIndex
-      })
+      indexAction = { type: 'clamp', maxIndex }
     }
 
-    prevSearchTextRef.current = searchText
-    prevSymbolRef.current = ctx.symbol
-
     // 固定项置顶 + 排序后的普通项
-    return [...pinnedItems, ...sortedNormalItems]
+    return {
+      list: [...pinnedItems, ...sortedNormalItems],
+      indexAction,
+      nextSearchText: searchText,
+      nextSymbol: ctx.symbol
+    }
   }, [ctx.isVisible, ctx.symbol, ctx.manageListExternally, ctx.list, ctx.defaultIndex, searchText, filterFn, sortFn])
+  const list = listState.list
+
+  useEffect(() => {
+    prevSearchTextRef.current = listState.nextSearchText
+    prevSymbolRef.current = listState.nextSymbol
+
+    const { indexAction } = listState
+    if (indexAction.type === 'set') {
+      setIndex((prevIndex) => (prevIndex === indexAction.value ? prevIndex : indexAction.value))
+      return
+    }
+
+    setIndex((prevIndex) => {
+      if (prevIndex > indexAction.maxIndex) {
+        return indexAction.maxIndex
+      }
+      return prevIndex
+    })
+  }, [listState])
 
   const canForwardAndBackward = useMemo(() => {
     return list.some((item) => item.isMenu) || historyPanel.length > 0
