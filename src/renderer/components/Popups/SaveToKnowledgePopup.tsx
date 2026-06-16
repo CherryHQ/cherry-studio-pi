@@ -137,6 +137,8 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
   const [hasInitialized, setHasInitialized] = useState(false)
   const [contentStats, setContentStats] = useState<ContentStats | null>(null)
   const resolvedRef = useRef(false)
+  const mountedRef = useRef(true)
+  const analysisRequestSeqRef = useRef(0)
   const { bases } = useKnowledgeBases()
   const { submit: submitKnowledgeItems } = useAddKnowledgeItems(selectedBaseId || '')
   const { t } = useTranslation()
@@ -144,11 +146,24 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
   const isTopicMode = source?.type === 'topic'
   const isNoteMode = source?.type === 'note'
 
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+      analysisRequestSeqRef.current += 1
+    }
+  }, [])
+
   // 异步分析内容统计
   useEffect(() => {
+    const requestSeq = ++analysisRequestSeqRef.current
+
     const analyze = async () => {
       if (isNoteMode) {
-        setAnalysisLoading(false)
+        if (mountedRef.current && requestSeq === analysisRequestSeqRef.current) {
+          setAnalysisLoading(false)
+        }
         return
       }
 
@@ -156,26 +171,36 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
       setContentStats(null)
       try {
         const stats = isTopicMode ? await analyzeTopicContent(source?.data) : analyzeMessageContent(source?.data)
-        setContentStats(stats)
+        if (mountedRef.current && requestSeq === analysisRequestSeqRef.current) {
+          setContentStats(stats)
+        }
       } catch (error) {
         logger.error('analyze content failed:', error as Error)
-        setContentStats({
-          text: 0,
-          code: 0,
-          thinking: 0,
-          images: 0,
-          files: 0,
-          tools: 0,
-          citations: 0,
-          translations: 0,
-          errors: 0,
-          ...(isTopicMode && { messages: 0 })
-        })
+        if (mountedRef.current && requestSeq === analysisRequestSeqRef.current) {
+          setContentStats({
+            text: 0,
+            code: 0,
+            thinking: 0,
+            images: 0,
+            files: 0,
+            tools: 0,
+            citations: 0,
+            translations: 0,
+            errors: 0,
+            ...(isTopicMode && { messages: 0 })
+          })
+        }
       } finally {
-        setAnalysisLoading(false)
+        if (mountedRef.current && requestSeq === analysisRequestSeqRef.current) {
+          setAnalysisLoading(false)
+        }
       }
     }
     void analyze()
+
+    return () => {
+      analysisRequestSeqRef.current += 1
+    }
   }, [source, isTopicMode, isNoteMode])
 
   // 生成内容类型选项
@@ -287,6 +312,7 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
   }
 
   const onOk = async () => {
+    if (resolvedRef.current) return
     if (!formState.canSubmit) return
 
     setLoading(true)
@@ -396,6 +422,10 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
 
       resolveAfterClose({ success: true, savedCount })
     } catch (error) {
+      if (resolvedRef.current) {
+        return
+      }
+
       logger.error('save failed:', error as Error)
 
       // Provide more specific error messages
@@ -414,7 +444,9 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
       }
 
       window.toast.error(errorMessage)
-      setLoading(false)
+      if (mountedRef.current) {
+        setLoading(false)
+      }
     }
   }
 
