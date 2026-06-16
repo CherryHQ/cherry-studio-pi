@@ -259,7 +259,18 @@ describe('AgentSessionInputbar', () => {
 
     fireEvent.click(screen.getByTestId('agent-session-inputbar'))
 
-    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ text: 'hello' }, { body: expect.any(Object) }))
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(
+        { text: 'hello' },
+        {
+          body: expect.objectContaining({
+            agentId: 'agent-1',
+            sessionId: 'session-1',
+            userMessageParts: [{ type: 'text', text: 'hello' }]
+          })
+        }
+      )
+    )
     expect(window.toast.error).not.toHaveBeenCalledWith('code.model_required')
   })
 

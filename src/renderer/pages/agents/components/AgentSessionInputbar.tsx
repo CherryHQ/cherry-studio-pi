@@ -393,7 +393,16 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
         messageText = text ? `${text}\n\nAttached files:\n${filePaths}` : `Attached files:\n${filePaths}`
       }
 
-      await chatSendMessage({ text: messageText }, { body: { agentId, sessionId } })
+      await chatSendMessage(
+        { text: messageText },
+        {
+          body: {
+            agentId,
+            sessionId,
+            userMessageParts: [{ type: 'text', text: messageText }]
+          }
+        }
+      )
 
       // Emit event to trigger scroll to bottom in AgentSessionMessages
       void EventEmitter.emit(EVENT_NAMES.SEND_MESSAGE, { topicId: sessionTopicId })
