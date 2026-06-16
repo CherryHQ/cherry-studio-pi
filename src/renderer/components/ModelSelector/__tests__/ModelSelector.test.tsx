@@ -418,4 +418,23 @@ describe('ModelSelector', () => {
       window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeSelectors)
     }
   })
+
+  it('broadcasts a shared close event when unmounted', () => {
+    mockUseModelSelectorData.mockReturnValue(makeData())
+    const closeSelectors = vi.fn()
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeSelectors)
+
+    try {
+      const { unmount } = render(
+        <ModelSelector multiple={false} trigger={<button type="button">open</button>} onSelect={vi.fn()} />
+      )
+
+      unmount()
+
+      expect(closeSelectors).toHaveBeenCalledTimes(1)
+      expect((closeSelectors.mock.calls[0][0] as CustomEvent).detail.sourceId).toBeTruthy()
+    } finally {
+      window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeSelectors)
+    }
+  })
 })

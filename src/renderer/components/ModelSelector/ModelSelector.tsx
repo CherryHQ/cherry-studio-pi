@@ -332,6 +332,12 @@ export function ModelSelector(props: ModelSelectorProps) {
   const multiSelectMode = multiple ? (multiSelectModeProp ?? internalMultiSelectMode) : false
   const triggerNode = isValidElement(trigger) ? trigger : <span>{trigger}</span>
 
+  useEffect(() => {
+    return () => {
+      requestCloseResourceSelectors(selectorId)
+    }
+  }, [selectorId])
+
   const setOpen = useCallback(
     (nextOpen: boolean) => {
       if (nextOpen) {
