@@ -463,6 +463,50 @@ describe('StorageV2ProviderRepository', () => {
     )
   })
 
+  it('redacts sensitive provider extra headers from provider config metadata', async () => {
+    const { client, execute } = createMockClient()
+    vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
+    vi.spyOn(storageV2Database, 'withTransaction').mockImplementation(async (_client, fn) => fn())
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(client)
+
+    await new StorageV2ProviderRepository().upsert(
+      {
+        id: 'provider-1',
+        type: 'openai',
+        name: 'OpenAI',
+        settings: {
+          extraHeaders: {
+            Authorization: 'Bearer header-secret',
+            Cookie: 'session=secret',
+            'X-Trace': 'trace-id'
+          }
+        },
+        models: []
+      } as any,
+      0,
+      {
+        extraHeaders: 'storage-v2://secret/provider/provider-1/extraHeaders'
+      }
+    )
+
+    const providerInsert = execute.mock.calls.find(
+      ([input]) => typeof input !== 'string' && input.sql.includes('INSERT INTO providers')
+    )
+    if (!providerInsert) throw new Error('Expected provider insert call')
+    const providerConfigJson = (providerInsert[0] as { args?: unknown[] }).args?.[6]
+    expect(JSON.stringify(providerConfigJson)).not.toContain('Bearer header-secret')
+    expect(JSON.stringify(providerConfigJson)).not.toContain('session=secret')
+    expect(JSON.parse(String(providerConfigJson))).toEqual(
+      expect.objectContaining({
+        settings: {
+          extraHeaders: {
+            'X-Trace': 'trace-id'
+          }
+        }
+      })
+    )
+  })
+
   it('preserves existing model rows during metadata-only provider mirrors', async () => {
     const { client, execute } = createMockClient()
     vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)

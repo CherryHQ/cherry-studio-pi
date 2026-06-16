@@ -126,6 +126,7 @@ const PROVIDER_AUTH_CONFIG_SECRET_KEYS = [
   'credentials',
   'token'
 ] as const
+const SENSITIVE_HEADER_NAME_PATTERN = /(authorization|cookie|token|secret|api[-_]?key|x[-_].*key)/i
 
 export type StorageV2ConversationImport = {
   id: string
@@ -281,6 +282,12 @@ function stripProviderConfig(provider: Provider): Record<string, unknown> {
   if (Object.hasOwn(config, 'authConfig')) {
     config.authConfig = redactProviderAuthConfig(config.authConfig)
   }
+  if (Object.hasOwn(config, 'settings')) {
+    config.settings = redactProviderSettings(config.settings)
+  }
+  if (Object.hasOwn(config, 'providerSettings')) {
+    config.providerSettings = redactProviderSettings(config.providerSettings)
+  }
   return config
 }
 
@@ -295,6 +302,22 @@ function redactProviderAuthConfig(value: unknown): unknown {
   }
 
   return authConfig
+}
+
+function redactProviderSettings(value: unknown): unknown {
+  if (!isRecord(value)) return value
+
+  const settings = { ...value }
+  if (!isRecord(settings.extraHeaders)) return settings
+
+  const extraHeaders = { ...settings.extraHeaders }
+  for (const headerName of Object.keys(extraHeaders)) {
+    if (SENSITIVE_HEADER_NAME_PATTERN.test(headerName)) {
+      delete extraHeaders[headerName]
+    }
+  }
+  settings.extraHeaders = extraHeaders
+  return settings
 }
 
 function getProviderStorageType(provider: Provider) {

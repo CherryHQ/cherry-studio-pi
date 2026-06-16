@@ -72,6 +72,8 @@ const MCP_PROVIDER_TOKEN_KEYS = new Set([
   'ai302_token',
   'bailian_token'
 ])
+const PROVIDER_EXTRA_HEADERS_CREDENTIAL_KIND = 'extraHeaders'
+const STORAGE_V2_SECRET_REF_PREFIX = 'storage-v2://secret/'
 
 function cloneRecord(value: unknown): Record<string, any> {
   if (!value || typeof value !== 'object') return {}
@@ -117,6 +119,25 @@ function makeStorageV2SecretRef(scope: string, ownerId: string, kind: string) {
 
 function isNonEmptyString(value: string | undefined): value is string {
   return typeof value === 'string' && value.length > 0
+}
+
+function normalizeProviderCredentialRefs(
+  credentialRef?: StorageV2ProviderCredentialRefInput
+): StorageV2ProviderCredentialRefs {
+  if (!credentialRef) return {}
+
+  if (typeof credentialRef === 'string') {
+    return credentialRef.trim() ? { apiKey: credentialRef } : {}
+  }
+
+  const refs: StorageV2ProviderCredentialRefs = {}
+  for (const [credentialKind, secretRef] of Object.entries(credentialRef)) {
+    const kind = credentialKind.trim()
+    if (!kind || typeof secretRef !== 'string' || !secretRef.trim()) continue
+    refs[kind] = secretRef
+  }
+
+  return refs
 }
 
 type ProviderApiKeyEntry = {
@@ -199,8 +220,115 @@ function parseProviderAuthConfigSecret(secret: string): AuthConfig | null {
   }
 }
 
+function parseProviderExtraHeadersSecret(secret: string): Record<string, string> | null {
+  try {
+    const parsed = JSON.parse(secret) as unknown
+    if (!isRecord(parsed)) return null
+
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        (entry): entry is [string, string] =>
+          typeof entry[0] === 'string' &&
+          entry[0].trim().length > 0 &&
+          typeof entry[1] === 'string' &&
+          entry[1].trim().length > 0
+      )
+    )
+  } catch {
+    return null
+  }
+}
+
 function isSensitiveHeaderName(headerName: string) {
   return /(authorization|cookie|token|secret|api[-_]?key|x[-_].*key)/i.test(headerName)
+}
+
+function getProviderExtraHeaders(provider: Provider): Record<string, string> | null {
+  const settings = (provider as unknown as { settings?: unknown }).settings
+  if (!isRecord(settings) || !isRecord(settings.extraHeaders)) return null
+
+  return Object.fromEntries(
+    Object.entries(settings.extraHeaders).filter(
+      (entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string'
+    )
+  )
+}
+
+function hasProviderExtraHeadersField(provider: Provider) {
+  const settings = (provider as unknown as { settings?: unknown }).settings
+  return isRecord(settings) && Object.hasOwn(settings, 'extraHeaders')
+}
+
+function getProviderSensitiveExtraHeaders(provider: Provider) {
+  const headers = getProviderExtraHeaders(provider)
+  if (!headers) return {}
+
+  return Object.fromEntries(
+    Object.entries(headers).filter(
+      ([headerName, headerValue]) =>
+        isSensitiveHeaderName(headerName) &&
+        headerValue.trim() &&
+        !headerValue.trim().startsWith(STORAGE_V2_SECRET_REF_PREFIX)
+    )
+  )
+}
+
+function stripProviderSensitiveExtraHeaders(provider: Provider, sensitiveHeaders: Record<string, string>) {
+  const sensitiveHeaderNames = new Set(Object.keys(sensitiveHeaders))
+  if (sensitiveHeaderNames.size === 0) return provider
+
+  const providerLike = provider as unknown as Record<string, any>
+  const settings = isRecord(providerLike.settings) ? { ...providerLike.settings } : {}
+  const extraHeaders = isRecord(settings.extraHeaders) ? { ...settings.extraHeaders } : {}
+  for (const headerName of sensitiveHeaderNames) {
+    delete extraHeaders[headerName]
+  }
+
+  return {
+    ...providerLike,
+    settings: {
+      ...settings,
+      extraHeaders
+    }
+  } as unknown as Provider
+}
+
+function mergeClearCredentialKinds(
+  options: { clearCredentialKinds?: string[]; [key: string]: unknown } | undefined,
+  kinds: string[]
+): { clearCredentialKinds?: string[] } {
+  if (kinds.length === 0) return {}
+  return {
+    clearCredentialKinds: Array.from(new Set([...(options?.clearCredentialKinds ?? []), ...kinds]))
+  }
+}
+
+async function prepareProviderExtraHeaderCredentials(provider: Provider): Promise<{
+  provider: Provider
+  credentialRefs: StorageV2ProviderCredentialRefs
+  clearCredentialKinds: string[]
+}> {
+  const sensitiveHeaders = getProviderSensitiveExtraHeaders(provider)
+  const providerForStorage = stripProviderSensitiveExtraHeaders(provider, sensitiveHeaders)
+  const credentialRefs: StorageV2ProviderCredentialRefs = {}
+  const clearCredentialKinds: string[] = []
+
+  if (Object.keys(sensitiveHeaders).length > 0) {
+    credentialRefs[PROVIDER_EXTRA_HEADERS_CREDENTIAL_KIND] = await storageV2SecretVaultService.setSecret(
+      'provider',
+      provider.id,
+      PROVIDER_EXTRA_HEADERS_CREDENTIAL_KIND,
+      JSON.stringify(sensitiveHeaders)
+    )
+  } else if (hasProviderExtraHeadersField(provider)) {
+    clearCredentialKinds.push(PROVIDER_EXTRA_HEADERS_CREDENTIAL_KIND)
+  }
+
+  return {
+    provider: providerForStorage,
+    credentialRefs,
+    clearCredentialKinds
+  }
 }
 
 function countStorageV2StatsRecords(counts: Record<string, number>) {
@@ -942,6 +1070,25 @@ export class StorageV2Service {
           if (storedAuthConfigRef && !restoredAuthConfig) {
             missingSecretCount++
           }
+
+          const storedExtraHeadersRef = providerCredentialRefs.extraHeaders
+          if (storedExtraHeadersRef) {
+            const extraHeadersSecret = await storageV2SecretVaultService.getSecret(storedExtraHeadersRef)
+            const extraHeaders = extraHeadersSecret ? parseProviderExtraHeadersSecret(extraHeadersSecret) : null
+            if (extraHeaders) {
+              const settings = isRecord(snapshot.settings) ? { ...snapshot.settings } : {}
+              const currentHeaders = isRecord(settings.extraHeaders) ? settings.extraHeaders : {}
+              snapshot.settings = {
+                ...settings,
+                extraHeaders: {
+                  ...currentHeaders,
+                  ...extraHeaders
+                }
+              }
+            } else {
+              missingSecretCount++
+            }
+          }
         }
 
         return snapshot
@@ -1133,9 +1280,9 @@ export class StorageV2Service {
     options: { clearCredential?: boolean; preserveExistingCredential?: boolean } = {}
   ) {
     let nextCredentialRef = credentialRef
+    const credentialRefs = normalizeProviderCredentialRefs(nextCredentialRef)
 
     if (!nextCredentialRef) {
-      const credentialRefs: StorageV2ProviderCredentialRefs = {}
       const providerApiKeys = getProviderApiKeyEntries(provider)
       const authConfig = getProviderAuthConfig(provider)
 
@@ -1178,28 +1325,46 @@ export class StorageV2Service {
 
       nextCredentialRef = Object.keys(credentialRefs).length > 0 ? credentialRefs : undefined
     }
+    const extraHeaders = await prepareProviderExtraHeaderCredentials(provider)
+    Object.assign(credentialRefs, extraHeaders.credentialRefs)
+    if (
+      Object.keys(extraHeaders.credentialRefs).length > 0 ||
+      (nextCredentialRef && typeof nextCredentialRef !== 'string')
+    ) {
+      nextCredentialRef = Object.keys(credentialRefs).length > 0 ? credentialRefs : undefined
+    }
 
-    const upsertOptions = { ...options }
+    const upsertOptions = {
+      ...options,
+      ...mergeClearCredentialKinds(options, extraHeaders.clearCredentialKinds)
+    }
     if (options.clearCredential === true) {
       upsertOptions.clearCredential = true
     }
     return Object.keys(upsertOptions).length > 0
-      ? storageV2ProviderRepository.upsert(provider, sortOrder, nextCredentialRef, upsertOptions)
-      : storageV2ProviderRepository.upsert(provider, sortOrder, nextCredentialRef)
+      ? storageV2ProviderRepository.upsert(extraHeaders.provider, sortOrder, nextCredentialRef, upsertOptions)
+      : storageV2ProviderRepository.upsert(extraHeaders.provider, sortOrder, nextCredentialRef)
   }
 
   async upsertProviderMetadata(provider: Provider, sortOrder?: number) {
-    return storageV2ProviderRepository.upsert(provider, sortOrder, undefined, {
+    const extraHeaders = await prepareProviderExtraHeaderCredentials(provider)
+    const credentialRefs = Object.keys(extraHeaders.credentialRefs).length > 0 ? extraHeaders.credentialRefs : undefined
+    return storageV2ProviderRepository.upsert(extraHeaders.provider, sortOrder, credentialRefs, {
       preserveExistingCredential: true,
       preserveModels: true,
-      preserveSortOrder: sortOrder === undefined
+      preserveSortOrder: sortOrder === undefined,
+      ...mergeClearCredentialKinds({}, extraHeaders.clearCredentialKinds)
     })
   }
 
   async upsertProviderModels(provider: Provider, models: unknown[], sortOrder?: number) {
-    return storageV2ProviderRepository.upsert({ ...(provider as any), models } as Provider, sortOrder, undefined, {
+    const providerWithModels = { ...(provider as any), models } as Provider
+    const extraHeaders = await prepareProviderExtraHeaderCredentials(providerWithModels)
+    const credentialRefs = Object.keys(extraHeaders.credentialRefs).length > 0 ? extraHeaders.credentialRefs : undefined
+    return storageV2ProviderRepository.upsert(extraHeaders.provider, sortOrder, credentialRefs, {
       preserveExistingCredential: true,
-      preserveSortOrder: sortOrder === undefined
+      preserveSortOrder: sortOrder === undefined,
+      ...mergeClearCredentialKinds({}, extraHeaders.clearCredentialKinds)
     })
   }
 

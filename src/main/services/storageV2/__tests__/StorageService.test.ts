@@ -475,6 +475,83 @@ describe('StorageV2Service', () => {
     })
   })
 
+  it('stores sensitive provider extra headers in the secret vault before upserting provider metadata', async () => {
+    const provider = {
+      id: 'provider-1',
+      name: 'OpenAI',
+      presetProviderId: 'openai',
+      isEnabled: true,
+      endpointConfigs: {
+        'openai-chat-completions': { baseUrl: 'https://api.openai.com/v1' }
+      },
+      apiKeys: [],
+      authType: 'api-key',
+      apiFeatures: {},
+      settings: {
+        extraHeaders: {
+          Authorization: 'Bearer header-secret',
+          'X-Trace': 'trace-id'
+        }
+      }
+    } as unknown as Provider
+    mocks.secretVault.setSecret.mockResolvedValue('storage-v2://secret/provider/provider-1/extraHeaders')
+
+    await expect(new StorageV2Service().upsertProviderMetadata(provider, 4)).resolves.toEqual({ skippedSecret: false })
+
+    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith(
+      'provider',
+      'provider-1',
+      'extraHeaders',
+      JSON.stringify({ Authorization: 'Bearer header-secret' })
+    )
+    expect(mocks.providerRepository.upsert).toHaveBeenCalledWith(
+      {
+        ...provider,
+        settings: {
+          extraHeaders: {
+            'X-Trace': 'trace-id'
+          }
+        }
+      },
+      4,
+      {
+        extraHeaders: 'storage-v2://secret/provider/provider-1/extraHeaders'
+      },
+      {
+        preserveExistingCredential: true,
+        preserveModels: true,
+        preserveSortOrder: false
+      }
+    )
+  })
+
+  it('clears provider extra header credential refs when sensitive headers are removed', async () => {
+    const provider = {
+      id: 'provider-1',
+      name: 'OpenAI',
+      presetProviderId: 'openai',
+      isEnabled: true,
+      apiKeys: [],
+      authType: 'api-key',
+      apiFeatures: {},
+      settings: {
+        extraHeaders: {
+          'X-Trace': 'trace-id'
+        }
+      }
+    } as unknown as Provider
+
+    await expect(new StorageV2Service().upsertProviderMetadata(provider, 4)).resolves.toEqual({ skippedSecret: false })
+
+    expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
+    expect(mocks.providerRepository.upsert).toHaveBeenCalledWith(provider, 4, undefined, {
+      clearCredentialKinds: ['extraHeaders'],
+      preserveExistingCredential: true,
+      preserveModels: true,
+      preserveSortOrder: false
+    })
+  })
+
   it('does not upsert provider metadata with plaintext credentials when the secret vault write fails', async () => {
     const provider: Provider = {
       id: 'provider-1',
@@ -1015,6 +1092,60 @@ describe('StorageV2Service', () => {
     )
     expect(snapshot.metadata.missingSecretCount).toBe(0)
     expect(mocks.secretVault.getSecret).toHaveBeenCalledWith('storage-v2://secret/provider/bedrock/authConfig')
+  })
+
+  it('restores provider extra headers from credential refs in core snapshots', async () => {
+    mocks.providerRepository.list.mockResolvedValue([
+      {
+        id: 'openai',
+        name: 'OpenAI',
+        type: 'openai',
+        apiHost: 'https://api.openai.com',
+        models: [],
+        config: {
+          settings: {
+            extraHeaders: {
+              'X-Trace': 'trace-id'
+            }
+          }
+        }
+      }
+    ])
+    mocks.providerRepository.listCredentialRefs.mockResolvedValue(
+      new Map([
+        [
+          'openai',
+          {
+            extraHeaders: 'storage-v2://secret/provider/openai/extraHeaders'
+          }
+        ]
+      ])
+    )
+    mocks.secretVault.getSecret.mockImplementation(async (secretRef: string) => {
+      if (secretRef === 'storage-v2://secret/provider/openai/extraHeaders') {
+        return JSON.stringify({
+          Authorization: 'Bearer restored'
+        })
+      }
+      return null
+    })
+
+    const snapshot = await new StorageV2Service().getCoreSnapshot({ includeSecrets: true })
+    const providers = snapshot.llm.providers as Array<Record<string, unknown>>
+
+    expect(providers[0]).toEqual(
+      expect.objectContaining({
+        id: 'openai',
+        settings: {
+          extraHeaders: {
+            'X-Trace': 'trace-id',
+            Authorization: 'Bearer restored'
+          }
+        }
+      })
+    )
+    expect(snapshot.metadata.missingSecretCount).toBe(0)
+    expect(mocks.secretVault.getSecret).toHaveBeenCalledWith('storage-v2://secret/provider/openai/extraHeaders')
   })
 
   it('omits localStorage MCP provider tokens when exporting without secrets', async () => {
