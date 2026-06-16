@@ -63,6 +63,20 @@ vi.mock('../../primitives/ProviderSettingsDrawer', () => ({
     ) : null
 }))
 
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
+}
+
 describe('HealthCheckDrawer', () => {
   it('keeps single-key checks valid when the API key list shrinks', async () => {
     const onStart = vi.fn().mockResolvedValue(undefined)
@@ -93,5 +107,34 @@ describe('HealthCheckDrawer', () => {
         timeout: 15000
       })
     )
+  })
+
+  it('ignores duplicate start clicks while a health check is still starting', async () => {
+    const runningCheck = deferred<void>()
+    const onStart = vi.fn().mockReturnValue(runningCheck.promise)
+
+    render(
+      <HealthCheckDrawer
+        open
+        title="check"
+        apiKeys={['sk-a']}
+        isChecking={false}
+        modelStatuses={[]}
+        onClose={vi.fn()}
+        onResetRun={vi.fn()}
+        onStart={onStart}
+      />
+    )
+
+    const startButton = screen.getByRole('button', { name: 'settings.models.check.start' })
+    fireEvent.click(startButton)
+    fireEvent.click(startButton)
+
+    expect(onStart).toHaveBeenCalledTimes(1)
+
+    runningCheck.resolve()
+    await waitFor(() => {
+      expect(onStart).toHaveBeenCalledTimes(1)
+    })
   })
 })
