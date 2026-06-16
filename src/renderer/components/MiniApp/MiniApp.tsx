@@ -10,6 +10,7 @@ import { useTabs } from '@renderer/hooks/useTabs'
 import { ErrorCode, isDataApiError, toDataApiError } from '@shared/data/api'
 import type { MiniApp } from '@shared/data/types/miniApp'
 import type { FC, KeyboardEvent } from 'react'
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface Props {
@@ -42,6 +43,11 @@ const MiniApp: FC<Props> = ({ app, onClick, size = 60, isLast, variant = 'defaul
   const isActive = miniAppShow && currentMiniAppId === app.appId
   const isOpened = openedKeepAliveMiniApps.some((item) => item.appId === app.appId)
   const { isTopNavbar } = useNavbarPosition()
+  const openedKeepAliveMiniAppsRef = useRef(openedKeepAliveMiniApps)
+
+  useEffect(() => {
+    openedKeepAliveMiniAppsRef.current = openedKeepAliveMiniApps
+  }, [openedKeepAliveMiniApps])
 
   // Calculate display name
   const displayName = isLast ? t('settings.miniApps.custom.title') : app.nameKey ? t(app.nameKey) : app.name
@@ -95,7 +101,7 @@ const MiniApp: FC<Props> = ({ app, onClick, size = 60, isLast, variant = 'defaul
   const handleHide = () => {
     updateAppStatus(app.appId, 'disabled')
       .then(() => {
-        setOpenedKeepAliveMiniApps(openedKeepAliveMiniApps.filter((item) => item.appId !== app.appId))
+        setOpenedKeepAliveMiniApps(openedKeepAliveMiniAppsRef.current.filter((item) => item.appId !== app.appId))
       })
       .catch(reportFailure('miniApp.hide_failed'))
   }
