@@ -10,6 +10,7 @@ import {
 import { type ReactElement, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { closeTransientResourceSelectors } from './resourceSelectorEvents'
 import { ResourceSelectorShell, type ResourceSelectorShellItem } from './ResourceSelectorShell'
 import { useCreatedAtSort } from './useCreatedAtSort'
 
@@ -130,9 +131,11 @@ export function AssistantSelector(props: AssistantSelectorProps) {
     isPinActionDisabled,
     ...(openTab && {
       onEditItem: (id: string) => {
+        closeTransientResourceSelectors()
         openTab(buildLibraryRouteUrl(buildLibraryEditSearch('assistant', id)), { forceNew: true })
       },
       onCreateNew: () => {
+        closeTransientResourceSelectors()
         openTab(buildLibraryRouteUrl(buildLibraryCreateSearch('assistant')), { forceNew: true })
       }
     }),

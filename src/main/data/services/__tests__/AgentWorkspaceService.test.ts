@@ -155,6 +155,23 @@ describe('AgentWorkspaceService', () => {
     expect((await stat(workspace.path)).isDirectory()).toBe(true)
   })
 
+  it('reuses an existing system workspace row for the same managed session path', async () => {
+    const first = await dbh.db.transaction((tx) =>
+      agentWorkspaceService.createSystemWorkspaceForSessionTx(tx, { sessionId: 'session-system-idempotent' })
+    )
+    const second = await dbh.db.transaction((tx) =>
+      agentWorkspaceService.createSystemWorkspaceForSessionTx(tx, { sessionId: 'session-system-idempotent' })
+    )
+
+    expect(second).toMatchObject({
+      id: first.id,
+      path: first.path,
+      type: 'system'
+    })
+    const rows = await dbh.db.select().from(agentWorkspaceTable).where(eq(agentWorkspaceTable.path, first.path))
+    expect(rows).toHaveLength(1)
+  })
+
   it('translates findOrCreateByPathTx unique races to conflict errors', async () => {
     const workspacePathValue = workspacePath('race')
     await findOrCreateWorkspace(workspacePathValue)

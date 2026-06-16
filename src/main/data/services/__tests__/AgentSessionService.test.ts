@@ -537,6 +537,34 @@ describe('AgentSessionService', () => {
     expect(row.workspaceId).toBe(repaired?.workspaceId)
   })
 
+  it('repairs a corrupt session by reusing an existing managed system workspace path', async () => {
+    const existingWorkspace = await dbh.db.transaction((tx) =>
+      agentWorkspaceService.createSystemWorkspaceForSessionTx(tx, { sessionId: 'corrupt-session-existing-path' })
+    )
+    await dbh.client.execute('PRAGMA foreign_keys = OFF')
+    try {
+      await dbh.db.insert(agentSessionTable).values({
+        id: 'corrupt-session-existing-path',
+        agentId: 'agent-session-test',
+        name: 'Corrupt with existing system workspace',
+        workspaceId: 'missing-workspace',
+        orderKey: 'a0'
+      })
+    } finally {
+      await dbh.client.execute('PRAGMA foreign_keys = ON')
+    }
+
+    const repaired = await agentSessionService.getById('corrupt-session-existing-path')
+
+    expect(repaired.workspaceId).toBe(existingWorkspace.id)
+    expect(repaired.workspace?.path).toBe(existingWorkspace.path)
+    const rows = await dbh.db
+      .select()
+      .from(agentWorkspaceTable)
+      .where(eq(agentWorkspaceTable.path, existingWorkspace.path))
+    expect(rows).toHaveLength(1)
+  })
+
   it('deletes a backing system workspace row when deleting its session', async () => {
     const session = await agentSessionService.create({
       agentId: 'agent-session-test',

@@ -147,6 +147,19 @@ export class AgentWorkspaceService {
       path.join(application.getPath('feature.agents.workspaces'), input.sessionId)
     )
     await fs.promises.mkdir(workspacePath, { recursive: true })
+
+    const [existing] = await tx
+      .select()
+      .from(agentWorkspaceTable)
+      .where(eq(agentWorkspaceTable.path, workspacePath))
+      .limit(1)
+    if (existing) {
+      if (AgentWorkspaceTypeSchema.parse(existing.type) === AGENT_WORKSPACE_TYPE.SYSTEM) {
+        return rowToAgentWorkspace(existing)
+      }
+      throw DataApiErrorFactory.conflict(`System workspace path '${workspacePath}' is already user-owned`, 'Workspace')
+    }
+
     const row = await withSqliteErrors(
       () =>
         insertWithOrderKey(
