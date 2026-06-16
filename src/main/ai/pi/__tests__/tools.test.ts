@@ -875,6 +875,33 @@ exit 1
     }
   })
 
+  it('applies default timeouts to stalled AppCallCapability calls', async () => {
+    vi.useFakeTimers()
+    let capturedSignal: AbortSignal | undefined
+
+    try {
+      vi.mocked(appCapabilityService.call).mockImplementationOnce(async (_id, _input, context) => {
+        capturedSignal = context?.signal
+        return new Promise(() => {})
+      })
+
+      const call = getTool('AppCallCapability', tmpDir, [tmpDir])
+      const pendingResult = call.execute('app-call-default-timeout', {
+        id: 'settings.read',
+        input: {}
+      })
+
+      await vi.advanceTimersByTimeAsync(5_000)
+      const result = await pendingResult
+
+      expect(capturedSignal?.aborted).toBe(true)
+      expect(result.details).toMatchObject({ isError: true })
+      expect(resultText(result)).toContain('AppCallCapability settings.read timed out after 5000ms')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('compacts large AppCallCapability results before returning them to the agent', async () => {
     vi.mocked(appCapabilityService.call).mockResolvedValueOnce({
       ok: true,

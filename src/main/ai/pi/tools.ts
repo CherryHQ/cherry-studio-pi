@@ -28,8 +28,74 @@ const MAX_TOOL_PREVIEW_ARRAY_ITEMS = 100
 const MAX_TOOL_PREVIEW_OBJECT_KEYS = 100
 const MIN_APP_CAPABILITY_TIMEOUT_MS = 100
 const MAX_APP_CAPABILITY_TIMEOUT_MS = 10 * 60 * 1000
+const FAST_APP_CAPABILITY_TIMEOUT_MS = 5_000
+const DEFAULT_APP_CAPABILITY_TIMEOUT_MS = 30_000
+const MEDIUM_APP_CAPABILITY_TIMEOUT_MS = 60_000
 const BASH_TIMEOUT_MS = 120_000
 const BASH_MAX_BUFFER = 1024 * 1024
+
+const FAST_APP_CAPABILITY_IDS = new Set([
+  'agents.get',
+  'agents.list',
+  'agents.models.list',
+  'agents.sessions.list',
+  'agents.tasks.list',
+  'app.navigate',
+  'dataSync.status.get',
+  'dataSync.webdav.config.get',
+  'mcp.servers.list',
+  'mcp.tools.list',
+  'paintings.history.list',
+  'paintings.open',
+  'paintings.providers.list',
+  'settings.open',
+  'settings.read',
+  'settings.sections.list',
+  'settings.value.get',
+  'settings.value.set',
+  'storage.assistants.list',
+  'storage.conversations.list',
+  'storage.dataRoot.get',
+  'storage.files.list',
+  'storage.health.check',
+  'storage.messages.list',
+  'storage.providers.list',
+  'storage.stats.get'
+])
+
+const MEDIUM_APP_CAPABILITY_IDS = new Set([
+  'agents.create',
+  'agents.session.create',
+  'agents.task.create',
+  'dataSync.webdav.config.set',
+  'dataSync.webdav.diagnose',
+  'dataSync.webdav.directories.list',
+  'knowledge.bases.list',
+  'notes.create',
+  'notes.delete',
+  'notes.list',
+  'notes.read',
+  'notes.search',
+  'notes.write',
+  'paintings.defaultProvider.set',
+  'paintings.image.generate',
+  'storage.backup.overview',
+  'storage.backup.validate',
+  'storage.file.get'
+])
+
+const LONG_APP_CAPABILITY_IDS = new Set([
+  'dataSync.snapshot.restoreLatest',
+  'dataSync.sync.now',
+  'knowledge.base.create',
+  'knowledge.base.reset',
+  'knowledge.item.add',
+  'knowledge.search',
+  'mcp.tool.call',
+  'storage.backup.create',
+  'storage.backup.restore',
+  'storage.snapshot.create'
+])
 
 type ToolResultDetails = Record<string, unknown>
 type ToolParams = Record<string, any>
@@ -755,6 +821,17 @@ const normalizeAppCapabilityTimeoutMs = (value: unknown) => {
   return Math.min(Math.max(Math.floor(numeric), MIN_APP_CAPABILITY_TIMEOUT_MS), MAX_APP_CAPABILITY_TIMEOUT_MS)
 }
 
+const defaultAppCapabilityTimeoutMs = (id: unknown) => {
+  const capabilityId = String(id ?? '').trim()
+  if (LONG_APP_CAPABILITY_IDS.has(capabilityId)) return MAX_APP_CAPABILITY_TIMEOUT_MS
+  if (MEDIUM_APP_CAPABILITY_IDS.has(capabilityId)) return MEDIUM_APP_CAPABILITY_TIMEOUT_MS
+  if (FAST_APP_CAPABILITY_IDS.has(capabilityId)) return FAST_APP_CAPABILITY_TIMEOUT_MS
+  return DEFAULT_APP_CAPABILITY_TIMEOUT_MS
+}
+
+const resolveAppCapabilityTimeoutMs = (id: unknown, value: unknown) =>
+  normalizeAppCapabilityTimeoutMs(value) ?? defaultAppCapabilityTimeoutMs(id)
+
 const createLinkedAbortSignal = (
   parentSignal: AbortSignal | undefined,
   timeoutMs: number | undefined,
@@ -1271,7 +1348,7 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
         timeoutMs: {
           type: 'number',
           description:
-            'Optional maximum duration in milliseconds. Use a small timeout for instant settings/navigation calls; leave unset for long-running backup or sync operations.'
+            'Optional maximum duration in milliseconds. Leave unset to use built-in defaults: short for settings/navigation, longer for backup, sync, knowledge, or MCP calls.'
         }
       },
       required: ['id']
@@ -1280,7 +1357,7 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
       return safeExecute('AppCallCapability', async () => {
         const input = params as ToolParams
         const appCapabilityService = await getAppCapabilityService()
-        const timeoutMs = normalizeAppCapabilityTimeoutMs(input.timeoutMs)
+        const timeoutMs = resolveAppCapabilityTimeoutMs(input.id, input.timeoutMs)
         const timeoutMessage = `AppCallCapability ${String(input.id ?? '(empty)')} timed out after ${timeoutMs}ms`
         const linkedAbort = createLinkedAbortSignal(signal, timeoutMs, timeoutMessage)
         const result = await runWithAbortSignal(
