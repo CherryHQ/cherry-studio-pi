@@ -37,6 +37,8 @@ const logger = loggerService.withContext('useTopic')
 // ─── Tier 1: pure / non-React helpers ─────────────────────────────────────
 
 const EMPTY_TOPICS: readonly Topic[] = Object.freeze([])
+const TOPIC_NEWLY_RENAMED_TTL_MS = 700
+const newlyRenamedTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 /**
  * Map a DataApi topic entity into the renderer {@link RendererTopic} shape.
@@ -95,16 +97,27 @@ export const finishTopicRenaming = (topicId: string) => {
 
   // 2. 立即添加到 newlyRenamedTopics
   const currentNewlyRenamed = cacheService.get('topic.newly_renamed') ?? []
-  cacheService.set('topic.newly_renamed', [...currentNewlyRenamed, topicId])
+  if (!currentNewlyRenamed.includes(topicId)) {
+    cacheService.set('topic.newly_renamed', [...currentNewlyRenamed, topicId])
+  }
 
   // 3. 延迟从 newlyRenamedTopics 移除
-  setTimeout(() => {
+  const currentTimer = newlyRenamedTimers.get(topicId)
+  if (currentTimer) {
+    clearTimeout(currentTimer)
+  }
+
+  const timer = setTimeout(() => {
+    newlyRenamedTimers.delete(topicId)
     const current = cacheService.get('topic.newly_renamed') ?? []
     cacheService.set(
       'topic.newly_renamed',
       current.filter((id) => id !== topicId)
     )
-  }, 700)
+  }, TOPIC_NEWLY_RENAMED_TTL_MS)
+
+  ;(timer as { unref?: () => void }).unref?.()
+  newlyRenamedTimers.set(topicId, timer)
 }
 
 // Per-page size for `getTopicMessages`. Consumers (export, knowledge
