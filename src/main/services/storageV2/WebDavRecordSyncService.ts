@@ -205,8 +205,7 @@ const FIRST_JOIN_DEFER_LOCAL_ONLY_ENTITY_TYPES = new Set<StorageV2SyncEntityType
   'scheduled_task',
   'settings',
   'skill',
-  'sync_tombstone',
-  'task_run_log'
+  'sync_tombstone'
 ])
 const TOMBSTONE_PHYSICAL_DELETE_TARGETS = {
   provider_credential: {
@@ -691,6 +690,42 @@ function hasLocalRecordChangedSinceSync(lastHash: string | null | undefined, val
 
 function shouldDeferLocalOnlyFirstJoinRecord(record: LocalRecord) {
   return FIRST_JOIN_DEFER_LOCAL_ONLY_ENTITY_TYPES.has(record.table.entityType)
+}
+
+function collectFirstJoinRequiredUploadIds(localRecords: readonly LocalRecord[]) {
+  const localById = new Map(localRecords.map((record) => [record.id, record]))
+  const requiredIds = new Set<string>()
+
+  for (const record of localRecords) {
+    if (record.table.entityType !== 'task_run_log') continue
+
+    const taskId = typeof record.row.task_id === 'string' ? record.row.task_id : ''
+    if (taskId) {
+      const scheduledTaskId = recordId('scheduled_task', [taskId])
+      if (localById.has(scheduledTaskId)) requiredIds.add(scheduledTaskId)
+    }
+  }
+
+  let changed = true
+  while (changed) {
+    changed = false
+
+    for (const id of Array.from(requiredIds)) {
+      const record = localById.get(id)
+      if (!record || record.table.entityType !== 'scheduled_task') continue
+
+      const agentId = typeof record.row.agent_id === 'string' ? record.row.agent_id : ''
+      if (!agentId) continue
+
+      const requiredAgentId = recordId('agent', [agentId])
+      if (!localById.has(requiredAgentId) || requiredIds.has(requiredAgentId)) continue
+
+      requiredIds.add(requiredAgentId)
+      changed = true
+    }
+  }
+
+  return requiredIds
 }
 
 function filterSecretsByReferencedIds(
@@ -2527,6 +2562,7 @@ export class StorageV2WebDavRecordSyncService {
     const localRecords = await this.listLocalRecords(dbClient)
     options.assertActive?.()
     const localById = new Map(localRecords.map((record) => [record.id, record]))
+    const firstJoinRequiredUploadIds = collectFirstJoinRequiredUploadIds(localRecords)
     const initialBundleMeta = manifest.bundle
     const remoteBundle = await this.readRecordBundle(client, basePath, manifest)
     options.assertActive?.()
@@ -2575,7 +2611,12 @@ export class StorageV2WebDavRecordSyncService {
           continue
         }
 
-        if (options.preferRemoteOnFirstJoin === true && !lastHash && shouldDeferLocalOnlyFirstJoinRecord(localRecord)) {
+        if (
+          options.preferRemoteOnFirstJoin === true &&
+          !lastHash &&
+          shouldDeferLocalOnlyFirstJoinRecord(localRecord) &&
+          !firstJoinRequiredUploadIds.has(localRecord.id)
+        ) {
           stageRecordSyncState(id, deferredLocalRecordHash(localRecord.valueHash))
           summary.storageSkipped += 1
           continue

@@ -72,7 +72,24 @@ function closeTransientLibraryOverlays() {
   requestCloseResourceSelectors()
   if (typeof document === 'undefined') return
 
-  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }))
+  const escapeEventInit: KeyboardEventInit = { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }
+  document.dispatchEvent(new KeyboardEvent('keydown', escapeEventInit))
+  window.dispatchEvent(new KeyboardEvent('keydown', escapeEventInit))
+}
+
+function scheduleCloseTransientLibraryOverlays() {
+  closeTransientLibraryOverlays()
+
+  if (typeof window === 'undefined') return undefined
+
+  queueMicrotask(closeTransientLibraryOverlays)
+  const frame = window.requestAnimationFrame(closeTransientLibraryOverlays)
+  const timer = window.setTimeout(closeTransientLibraryOverlays, 50)
+
+  return () => {
+    window.cancelAnimationFrame(frame)
+    window.clearTimeout(timer)
+  }
 }
 
 export default function LibraryPage() {
@@ -231,6 +248,12 @@ export default function LibraryPage() {
       )
     }
   }, [allResources, routeAction, routeResourceId, routeResourceType])
+
+  useEffect(() => {
+    if (configView.type === 'list') return undefined
+
+    return scheduleCloseTransientLibraryOverlays()
+  }, [configView.type])
 
   const handleEdit = useCallback((r: ResourceItem) => {
     if (r.type === 'assistant') {

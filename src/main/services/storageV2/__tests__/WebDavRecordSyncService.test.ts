@@ -1174,6 +1174,69 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(bundle.records[recordId].row).not.toHaveProperty('id')
   })
 
+  it('uploads append-only task run logs even when first joining an existing sync space', async () => {
+    mocks.dbClient.execute.mockImplementation(async (input: string | { sql: string }) => {
+      const sql = typeof input === 'string' ? input : input.sql
+      if (sql.includes('SELECT * FROM task_run_logs')) {
+        return {
+          rows: [
+            {
+              id: 1,
+              task_id: 'task-first-join',
+              session_id: 'session-first-join',
+              run_at: '2026-05-29T12:10:00.000Z',
+              duration_ms: 456,
+              status: 'success',
+              result_json: '{"joined":true}',
+              error: null,
+              version: 1
+            }
+          ]
+        }
+      }
+      if (sql.includes('SELECT value_json FROM sync_state')) return { rows: [] }
+      if (sql.includes('INSERT INTO sync_state')) return { rows: [] }
+      return { rows: [] }
+    })
+
+    const result = await new StorageV2WebDavRecordSyncService([taskRunLogTable]).sync(
+      mocks.webdav as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {}
+      },
+      {
+        preferRemoteOnFirstJoin: true
+      }
+    )
+    const recordId = 'task_run_log:task-first-join:2026-05-29T12%3A10%3A00.000Z'
+
+    expect(result.summary.storageUploaded).toBe(1)
+    expect(result.manifest.records[recordId]).toMatchObject({
+      entityType: 'task_run_log',
+      idValues: ['task-first-join', '2026-05-29T12:10:00.000Z']
+    })
+    expect(result.syncStates).toEqual(
+      expect.arrayContaining([
+        {
+          id: recordId,
+          valueHash: hashJson({
+            task_id: 'task-first-join',
+            session_id: 'session-first-join',
+            run_at: '2026-05-29T12:10:00.000Z',
+            duration_ms: 456,
+            status: 'success',
+            result_json: '{"joined":true}',
+            error: null,
+            version: 1
+          })
+        }
+      ])
+    )
+  })
+
   it('imports remote task run logs without overwriting a different local autoincrement row', async () => {
     const remoteRow = {
       task_id: 'remote-task',

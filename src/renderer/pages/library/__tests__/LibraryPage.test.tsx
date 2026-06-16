@@ -1,7 +1,7 @@
 import { RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { ComponentProps, ComponentType, ReactNode } from 'react'
+import { type ComponentProps, type ComponentType, type ReactNode, useEffect, useRef, useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { RESOURCE_TYPE_ORDER } from '../constants'
@@ -205,6 +205,25 @@ vi.mock('../editor/prompt/PromptConfigPage', () => ({
   )
 }))
 
+function StickyTransientOverlayProbe({ closeAfterEvents = 1 }: { closeAfterEvents?: number }) {
+  const [open, setOpen] = useState(true)
+  const closeEventCountRef = useRef(0)
+
+  useEffect(() => {
+    const close = () => {
+      closeEventCountRef.current += 1
+      if (closeEventCountRef.current >= closeAfterEvents) {
+        setOpen(false)
+      }
+    }
+
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, close)
+    return () => window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, close)
+  }, [closeAfterEvents])
+
+  return open ? <div data-testid="sticky-transient-overlay">sticky selector</div> : null
+}
+
 describe('LibraryPage create flow', () => {
   beforeEach(() => {
     allResourcesMock.length = 0
@@ -258,7 +277,7 @@ describe('LibraryPage create flow', () => {
     try {
       await user.click(screen.getByRole('button', { name: 'create agent' }))
       expect(screen.getByTestId('agent-create-page')).toBeInTheDocument()
-      expect(closeResourceSelectors).toHaveBeenCalledTimes(1)
+      expect(closeResourceSelectors).toHaveBeenCalled()
 
       await user.click(screen.getByRole('button', { name: 'finish agent create' }))
 
@@ -268,10 +287,28 @@ describe('LibraryPage create flow', () => {
       expect(screen.queryByTestId('agent-edit-page')).not.toBeInTheDocument()
       expect(refetchSpy).toHaveBeenCalledTimes(1)
       expect(navigateMock).toHaveBeenCalledWith({ to: '/app/agents', replace: true })
-      expect(closeResourceSelectors).toHaveBeenCalledTimes(2)
+      expect(closeResourceSelectors.mock.calls.length).toBeGreaterThanOrEqual(2)
     } finally {
       window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
     }
+  })
+
+  it('keeps closing transient selectors after the agent create dialog mounts', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <>
+        <StickyTransientOverlayProbe closeAfterEvents={2} />
+        <LibraryPage />
+      </>
+    )
+
+    await user.click(screen.getByRole('button', { name: 'create agent' }))
+
+    expect(screen.getByTestId('agent-create-page')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByTestId('sticky-transient-overlay')).not.toBeInTheDocument()
+    })
   })
 
   it('closes transient resource selectors when cancelling agent creation', async () => {
@@ -290,7 +327,7 @@ describe('LibraryPage create flow', () => {
       await waitFor(() => {
         expect(screen.getByTestId('resource-grid')).toBeInTheDocument()
       })
-      expect(closeResourceSelectors).toHaveBeenCalledTimes(2)
+      expect(closeResourceSelectors.mock.calls.length).toBeGreaterThanOrEqual(2)
     } finally {
       window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
     }
@@ -382,7 +419,7 @@ describe('LibraryPage create flow', () => {
       render(<LibraryPage />)
 
       expect(screen.getByTestId('agent-create-page')).toBeInTheDocument()
-      expect(closeResourceSelectors).toHaveBeenCalledTimes(1)
+      expect(closeResourceSelectors).toHaveBeenCalled()
     } finally {
       window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
     }
