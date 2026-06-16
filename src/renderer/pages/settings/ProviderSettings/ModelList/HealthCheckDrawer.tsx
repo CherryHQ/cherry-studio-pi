@@ -107,6 +107,10 @@ export default function HealthCheckDrawer({
     setTimeoutSeconds(15)
   }, [open])
 
+  useEffect(() => {
+    setSelectedKeyIndex((current) => (apiKeys.length > 0 ? Math.min(current, apiKeys.length - 1) : 0))
+  }, [apiKeys.length])
+
   const hasMultipleKeys = apiKeys.length > 1
 
   const footer = !showPipeline ? (

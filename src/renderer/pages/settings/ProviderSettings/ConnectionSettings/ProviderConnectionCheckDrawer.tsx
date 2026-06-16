@@ -41,6 +41,10 @@ export default function ProviderConnectionCheckDrawer({
     setSelectedKeyIndex(0)
   }, [open, sortedModels])
 
+  useEffect(() => {
+    setSelectedKeyIndex((current) => (apiKeys.length > 0 ? Math.min(current, apiKeys.length - 1) : 0))
+  }, [apiKeys.length])
+
   const selectedModel = useMemo(
     () => sortedModels.find((item) => item.id === selectedModelId) ?? sortedModels[0],
     [selectedModelId, sortedModels]

@@ -6,7 +6,7 @@ import { SettingRow } from '@renderer/pages/settings'
 import { Col, Row, Slider } from 'antd'
 import { Popover } from 'antd'
 import type { FC } from 'react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const MessageGroupSettings: FC = () => {
@@ -15,6 +15,10 @@ const MessageGroupSettings: FC = () => {
   const { t } = useTranslation()
 
   const [gridColumnsValue, setGridColumnsValue] = useState(gridColumns)
+
+  useEffect(() => {
+    setGridColumnsValue(gridColumns)
+  }, [gridColumns])
 
   return (
     <Popover
