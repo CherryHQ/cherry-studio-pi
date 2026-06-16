@@ -87,6 +87,7 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
   const { isManageMode, selectedIds, searchText, exitManageMode, setSelectedIds, setSearchText } = manageState
   const [isSearchMode, setIsSearchMode] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const deleteSelectedRef = useRef(false)
 
   // Topics that can be selected (non-pinned, and filtered when in search mode)
   const selectableTopics = useMemo(() => {
@@ -115,7 +116,7 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
 
   // Handle delete selected topics
   const handleDeleteSelected = useCallback(async () => {
-    if (selectedIds.size === 0) return
+    if (selectedIds.size === 0 || deleteSelectedRef.current) return
 
     const remainingTopics = topics.filter((topic) => !selectedIds.has(topic.id))
     if (remainingTopics.length === 0) {
@@ -123,45 +124,50 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
       return
     }
 
-    const confirmed = await window.modal.confirm({
-      title: t('chat.topics.manage.delete.confirm.title'),
-      content: t('chat.topics.manage.delete.confirm.content', { count: selectedIds.size }),
-      centered: true,
-      okButtonProps: { danger: true }
-    })
+    deleteSelectedRef.current = true
+    try {
+      const confirmed = await window.modal.confirm({
+        title: t('chat.topics.manage.delete.confirm.title'),
+        content: t('chat.topics.manage.delete.confirm.content', { count: selectedIds.size }),
+        centered: true,
+        okButtonProps: { danger: true }
+      })
 
-    if (!confirmed) return
+      if (!confirmed) return
 
-    const idsArray = Array.from(selectedIds)
+      const idsArray = Array.from(selectedIds)
 
-    const results = await Promise.allSettled(idsArray.map((id) => deleteTopic(id).then(() => id)))
+      const results = await Promise.allSettled(idsArray.map((id) => deleteTopic(id).then(() => id)))
 
-    // Filter successful ids
-    const successfulIds = new Set(
-      results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map((r) => r.value)
-    )
-
-    const actualRemainingTopics = topics.filter((topic) => !successfulIds.has(topic.id))
-    updateTopics(actualRemainingTopics)
-
-    // Switch to first remaining topic if current topic was deleted
-    if (successfulIds.has(activeTopic.id) && actualRemainingTopics.length > 0) {
-      setActiveTopic(actualRemainingTopics[0])
-    }
-
-    if (successfulIds.size === idsArray.length) {
-      window.toast.success(t('chat.topics.manage.delete.success', { count: successfulIds.size }))
-    } else if (successfulIds.size > 0) {
-      window.toast.warning(
-        t('chat.topics.manage.delete.partial_success', {
-          successCount: successfulIds.size,
-          failedCount: idsArray.length - successfulIds.size
-        })
+      // Filter successful ids
+      const successfulIds = new Set(
+        results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map((r) => r.value)
       )
-    } else {
-      window.toast.error(t('chat.topics.manage.delete.error'))
+
+      const actualRemainingTopics = topics.filter((topic) => !successfulIds.has(topic.id))
+      updateTopics(actualRemainingTopics)
+
+      // Switch to first remaining topic if current topic was deleted
+      if (successfulIds.has(activeTopic.id) && actualRemainingTopics.length > 0) {
+        setActiveTopic(actualRemainingTopics[0])
+      }
+
+      if (successfulIds.size === idsArray.length) {
+        window.toast.success(t('chat.topics.manage.delete.success', { count: successfulIds.size }))
+      } else if (successfulIds.size > 0) {
+        window.toast.warning(
+          t('chat.topics.manage.delete.partial_success', {
+            successCount: successfulIds.size,
+            failedCount: idsArray.length - successfulIds.size
+          })
+        )
+      } else {
+        window.toast.error(t('chat.topics.manage.delete.error'))
+      }
+      exitManageMode()
+    } finally {
+      deleteSelectedRef.current = false
     }
-    exitManageMode()
   }, [selectedIds, topics, activeTopic.id, setActiveTopic, t, exitManageMode, updateTopics, deleteTopic])
 
   // Enter search mode
