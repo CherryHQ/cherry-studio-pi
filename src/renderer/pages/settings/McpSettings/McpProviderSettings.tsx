@@ -7,7 +7,7 @@ import type { McpServer } from '@renderer/types'
 import { cn } from '@renderer/utils/style'
 import { Check, Plus, SquareArrowOutUpRight } from 'lucide-react'
 import type React from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingsContentColumn } from '..'
@@ -27,23 +27,49 @@ const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => 
   const [token, setToken] = useState<string>('')
   const [availableServers, setAvailableServers] = useState<McpServer[]>([])
   const [searchText, setSearchText] = useState('')
+  const [addingServerIds, setAddingServerIds] = useState<Set<string>>(() => new Set())
+  const isMountedRef = useRef(true)
+  const providerKeyRef = useRef(provider.key)
+  const fetchingRef = useRef(false)
+  const loadRequestSeqRef = useRef(0)
+  const fetchRequestSeqRef = useRef(0)
+  const addingServerIdsRef = useRef<Set<string>>(new Set())
   const { t } = useTranslation()
 
   useEffect(() => {
+    isMountedRef.current = true
+    const addingServerIds = addingServerIdsRef.current
+
+    return () => {
+      isMountedRef.current = false
+      fetchingRef.current = false
+      addingServerIds.clear()
+    }
+  }, [])
+
+  useEffect(() => {
+    providerKeyRef.current = provider.key
     setToken(provider.getToken() || '')
+    fetchingRef.current = false
+    setIsFetching(false)
   }, [provider])
 
   // Load available servers from database when provider changes
   useEffect(() => {
     const loadServersFromDb = async () => {
+      const requestSeq = ++loadRequestSeqRef.current
       try {
         const dbKey = `mcp:provider:${provider.key}:servers`
         const setting = await db.settings.get(dbKey)
         const savedServers = setting?.value || []
-        setAvailableServers(savedServers)
+        if (isMountedRef.current && requestSeq === loadRequestSeqRef.current) {
+          setAvailableServers(savedServers)
+        }
       } catch (error) {
         logger.error('Failed to load servers from database', error as Error)
-        setAvailableServers([])
+        if (isMountedRef.current && requestSeq === loadRequestSeqRef.current) {
+          setAvailableServers([])
+        }
       }
     }
 
@@ -86,16 +112,30 @@ const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => 
   )
 
   const handleFetch = useCallback(async () => {
+    if (fetchingRef.current) {
+      return
+    }
+
     if (!token.trim()) {
       window.toast.error(t('settings.mcp.sync.tokenRequired', 'API Token is required'))
       return
     }
 
+    const requestSeq = ++fetchRequestSeqRef.current
+    const providerKey = provider.key
+    fetchingRef.current = true
     setIsFetching(true)
 
     try {
       provider.saveToken(token)
       const result = await provider.syncServers(token)
+      if (
+        !isMountedRef.current ||
+        requestSeq !== fetchRequestSeqRef.current ||
+        providerKeyRef.current !== providerKey
+      ) {
+        return
+      }
 
       if (result.success) {
         const servers = result.allServers
@@ -111,11 +151,44 @@ const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => 
       }
     } catch (error: any) {
       logger.error('Failed to fetch MCP servers', error)
-      window.toast.error(`${t('settings.mcp.sync.error')}: ${error.message}`)
+      if (isMountedRef.current && requestSeq === fetchRequestSeqRef.current && providerKeyRef.current === providerKey) {
+        window.toast.error(`${t('settings.mcp.sync.error')}: ${error.message}`)
+      }
     } finally {
-      setIsFetching(false)
+      if (requestSeq === fetchRequestSeqRef.current) {
+        fetchingRef.current = false
+        if (isMountedRef.current && providerKeyRef.current === providerKey) {
+          setIsFetching(false)
+        }
+      }
     }
   }, [provider, t, token])
+
+  const handleAddServer = useCallback(
+    async (server: McpServer, isAlreadyAdded: boolean) => {
+      if (isAlreadyAdded || addingServerIdsRef.current.has(server.id)) {
+        return
+      }
+
+      addingServerIdsRef.current.add(server.id)
+      if (isMountedRef.current) {
+        setAddingServerIds(new Set(addingServerIdsRef.current))
+      }
+
+      try {
+        await addMcpServer(toCreateMcpServerDto(server))
+        window.toast.success(t('settings.mcp.addSuccess'))
+      } catch {
+        window.toast.error(t('settings.mcp.addError'))
+      } finally {
+        addingServerIdsRef.current.delete(server.id)
+        if (isMountedRef.current) {
+          setAddingServerIds(new Set(addingServerIdsRef.current))
+        }
+      }
+    },
+    [addMcpServer, t]
+  )
 
   const isFetchDisabled = !token
   return (
@@ -143,6 +216,7 @@ const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => 
         <Button
           onClick={handleFetch}
           disabled={isFetching || isFetchDisabled}
+          loading={isFetching}
           className="h-8 shrink-0 rounded-lg px-3 text-xs shadow-none">
           {t('settings.mcp.fetch.button', 'Fetch Servers')}
         </Button>
@@ -200,22 +274,15 @@ const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => 
                 </div>
                 {(() => {
                   const isAlreadyAdded = existingServers.some((existing) => isSameMcpServerCandidate(existing, server))
+                  const isAdding = addingServerIds.has(server.id)
                   return (
                     <Button
-                      disabled={isAlreadyAdded}
+                      disabled={isAlreadyAdded || isAdding}
+                      loading={isAdding}
                       variant="ghost"
                       size="icon-sm"
                       className="ml-2.5 size-7 min-h-7 shadow-none"
-                      onClick={async () => {
-                        if (!isAlreadyAdded) {
-                          try {
-                            await addMcpServer(toCreateMcpServerDto(server))
-                            window.toast.success(t('settings.mcp.addSuccess'))
-                          } catch {
-                            window.toast.error(t('settings.mcp.addError'))
-                          }
-                        }
-                      }}>
+                      onClick={() => void handleAddServer(server, isAlreadyAdded)}>
                       {isAlreadyAdded ? <Check size={12} /> : <Plus size={12} />}
                     </Button>
                   )
