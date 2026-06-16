@@ -138,6 +138,8 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
   const [contentStats, setContentStats] = useState<ContentStats | null>(null)
   const resolvedRef = useRef(false)
   const mountedRef = useRef(true)
+  const closeTimerRef = useRef<number | null>(null)
+  const pendingResolveRef = useRef<{ result: SaveResult | null } | null>(null)
   const analysisRequestSeqRef = useRef(0)
   const savingRef = useRef(false)
   const { bases } = useKnowledgeBases()
@@ -153,8 +155,17 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
     return () => {
       mountedRef.current = false
       analysisRequestSeqRef.current += 1
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current)
+        closeTimerRef.current = null
+      }
+      if (pendingResolveRef.current) {
+        const pending = pendingResolveRef.current
+        pendingResolveRef.current = null
+        resolve(pending.result)
+      }
     }
-  }, [])
+  }, [resolve])
 
   // 异步分析内容统计
   useEffect(() => {
@@ -306,9 +317,13 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
     if (resolvedRef.current) return
 
     resolvedRef.current = true
+    pendingResolveRef.current = { result }
     setOpen(false)
-    window.setTimeout(() => {
-      resolve(result)
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null
+      const pending = pendingResolveRef.current
+      pendingResolveRef.current = null
+      resolve(pending?.result ?? result)
     }, CLOSE_ANIMATION_MS)
   }
 
