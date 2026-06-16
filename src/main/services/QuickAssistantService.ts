@@ -559,6 +559,7 @@ export class QuickAssistantService extends BaseService implements Activatable {
         this.stopPostUnpinFocusPoll()
       }
     }, POST_UNPIN_FOCUS_POLL_INTERVAL_MS)
+    this.postUnpinFocusPollTimer.unref?.()
   }
 
   private stopPostUnpinFocusPoll() {
