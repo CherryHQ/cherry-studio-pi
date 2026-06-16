@@ -21,6 +21,25 @@ const DEFAULT_TAB: Tab = {
   isDormant: false
 }
 
+function normalizeLegacyRouteUrl(url: string): string {
+  if (url === '/agents') return '/app/agents'
+  if (url.startsWith('/agents?') || url.startsWith('/agents#')) return `/app${url}`
+  if (!url.startsWith('/agents/')) return url
+
+  const queryStart = url.search(/[?#]/)
+  const suffix = queryStart >= 0 ? url.slice(queryStart) : ''
+  return `/app/agents${suffix}`
+}
+
+function normalizeTabRoute(tab: Tab): Tab {
+  if (tab.type !== 'route') return tab
+
+  const url = normalizeLegacyRouteUrl(tab.url)
+  return url === tab.url
+    ? tab
+    : { ...tab, url, title: shouldAutoLocalizeRouteTitle(url) ? getDefaultRouteTitle(url) : tab.title }
+}
+
 function withLocalizedRouteTitle(tab: Tab): Tab {
   if (tab.type !== 'route') return tab
   // Only auto-localize routes whose titles come from route defaults.
@@ -32,7 +51,7 @@ function withLocalizedRouteTitle(tab: Tab): Tab {
 }
 
 function sanitizeUserTabs(tabs: Tab[] | undefined): Tab[] {
-  return (tabs ?? []).filter((tab) => tab.id !== DEFAULT_TAB.id)
+  return (tabs ?? []).filter((tab) => tab.id !== DEFAULT_TAB.id).map(normalizeTabRoute)
 }
 
 /**
@@ -202,14 +221,18 @@ export function TabsProvider({ children }: { children: ReactNode }) {
     (id: string, updates: Partial<Tab>) => {
       const tab = tabs.find((t) => t.id === id)
       if (!tab) return
-      if (id === activeTabId && updates.url && updates.url !== tab.url) {
+      const normalizedUpdates =
+        tab.type === 'route' && typeof updates.url === 'string'
+          ? { ...updates, url: normalizeLegacyRouteUrl(updates.url) }
+          : updates
+      if (id === activeTabId && normalizedUpdates.url && normalizedUpdates.url !== tab.url) {
         requestCloseResourceSelectors()
       }
 
       if (tab.isPinned) {
-        setPinnedTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
+        setPinnedTabs((prev) => prev.map((t) => (t.id === id ? normalizeTabRoute({ ...t, ...normalizedUpdates }) : t)))
       } else {
-        setNormalTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)))
+        setNormalTabs((prev) => prev.map((t) => (t.id === id ? normalizeTabRoute({ ...t, ...normalizedUpdates }) : t)))
       }
     },
     [activeTabId, tabs, setPinnedTabs]
@@ -254,11 +277,11 @@ export function TabsProvider({ children }: { children: ReactNode }) {
       }
       requestCloseResourceSelectors()
 
-      const newTab: Tab = {
+      const newTab: Tab = normalizeTabRoute({
         ...tab,
         lastAccessTime: Date.now(),
         isDormant: false
-      }
+      })
 
       if (tab.isPinned) {
         setPinnedTabs((prev) => [...prev, newTab])
@@ -322,9 +345,10 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   const openTab = useCallback(
     (url: string, options: OpenTabOptions = {}) => {
       const { forceNew = false, title, type = 'route', id, icon } = options
+      const normalizedUrl = type === 'route' ? normalizeLegacyRouteUrl(url) : url
 
       if (!forceNew) {
-        const existingTab = tabs.find((t) => t.type === type && t.url === url)
+        const existingTab = tabs.find((t) => t.type === type && t.url === normalizedUrl)
         if (existingTab) {
           setActiveTab(existingTab.id)
           return existingTab.id
@@ -334,8 +358,8 @@ export function TabsProvider({ children }: { children: ReactNode }) {
       const newTab: Tab = {
         id: id || uuid(),
         type,
-        url,
-        title: title || getDefaultRouteTitle(url),
+        url: normalizedUrl,
+        title: title || getDefaultRouteTitle(normalizedUrl),
         icon,
         lastAccessTime: Date.now(),
         isDormant: false
@@ -439,11 +463,11 @@ export function TabsProvider({ children }: { children: ReactNode }) {
       }
 
       // Restore tab with updated timestamp
-      const restoredTab: Tab = {
+      const restoredTab: Tab = normalizeTabRoute({
         ...tabData,
         lastAccessTime: Date.now(),
         isDormant: false
-      }
+      })
 
       // Add to appropriate storage
       if (restoredTab.isPinned) {

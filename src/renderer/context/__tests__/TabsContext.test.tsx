@@ -62,6 +62,7 @@ function TabsProbe() {
   const homeTab = tabs.find((tab) => tab.id === 'home')
   const paintingsTab = tabs.find((tab) => tab.id === 'paintings-tab')
   const customTab = tabs.find((tab) => tab.id === 'mini-app-tab')
+  const rawAgentTab = tabs.find((tab) => tab.id === 'raw-agent-tab')
 
   return (
     <>
@@ -70,6 +71,7 @@ function TabsProbe() {
       <div data-testid="home-tab-title">{homeTab?.title}</div>
       <div data-testid="paintings-tab-title">{paintingsTab?.title}</div>
       <div data-testid="custom-tab-title">{customTab?.title}</div>
+      <div data-testid="raw-agent-tab-url">{rawAgentTab?.url}</div>
       <button
         type="button"
         onClick={() =>
@@ -117,6 +119,9 @@ function TabsProbe() {
           ])
         }>
         Set raw tabs with home
+      </button>
+      <button type="button" onClick={() => openTab('/agents', { id: 'legacy-agent-tab' })}>
+        Open legacy agents tab
       </button>
       <button
         type="button"
@@ -200,6 +205,20 @@ describe('TabsContext language refresh', () => {
 
     expect(screen.getByTestId('tab-count')).toHaveTextContent('2')
     expect(screen.getByTestId('home-tab-title')).toHaveTextContent('Home')
+  })
+
+  it('normalizes legacy agent tab routes to the current app route', () => {
+    render(
+      <TabsProvider>
+        <TabsProbe />
+      </TabsProvider>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set raw tabs with home' }))
+    expect(screen.getByTestId('raw-agent-tab-url')).toHaveTextContent('/app/agents')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open legacy agents tab' }))
+    expect(screen.getByTestId('tab-count')).toHaveTextContent('2')
   })
 
   it('falls back to the home tab when replacing tabs removes the active tab', () => {
