@@ -3614,6 +3614,13 @@ describe('AppDataSyncService', () => {
     const timeoutExpectation = expect(sync).rejects.toThrow('同步超过 1 秒仍未完成')
     await vi.advanceTimersByTimeAsync(1001)
     await timeoutExpectation
+    expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith(
+      'last-sync-summary',
+      expect.objectContaining({
+        status: 'failed',
+        error: expect.stringContaining('同步超过 1 秒仍未完成')
+      })
+    )
     await expect(service.getStatus()).resolves.toEqual(
       expect.objectContaining({
         syncing: false,

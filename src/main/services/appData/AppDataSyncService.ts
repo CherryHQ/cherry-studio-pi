@@ -208,6 +208,7 @@ type SyncRunContext = {
   maxRuntimeMs: number
   aborted: boolean
   abortReason: string | null
+  failureRecorded: boolean
 }
 
 export type DataSyncRemoteDirectory = {
@@ -1146,7 +1147,8 @@ export class AppDataSyncService {
       deadlineAt: startedAt + maxRuntimeMs,
       maxRuntimeMs,
       aborted: false,
-      abortReason: null
+      abortReason: null,
+      failureRecorded: false
     }
   }
 
@@ -1212,7 +1214,18 @@ export class AppDataSyncService {
     }
   }
 
-  private clearExpiredInFlightSync(now = Date.now()) {
+  private async recordSyncRunFailureOnce(context: SyncRunContext, reason: string) {
+    if (context.failureRecorded) return
+
+    context.failureRecorded = true
+    try {
+      await this.recordSyncFailure(reason, { preserveLastSummary: true })
+    } catch (error) {
+      logger.warn('Failed to record data sync deadline failure', error as Error)
+    }
+  }
+
+  private async clearExpiredInFlightSync(now = Date.now()) {
     const context = this.syncRunContext
     if (!context || (!this.syncInFlight && !this.syncBackgroundInFlight)) return false
     if (!context.aborted && now < context.deadlineAt) return false
@@ -1221,6 +1234,7 @@ export class AppDataSyncService {
     if (!context.aborted) {
       this.abortSyncRun(context, reason)
     }
+    await this.recordSyncRunFailureOnce(context, reason)
 
     logger.warn('Clearing expired local data sync in-flight state', {
       startedAt: context.startedAt,
@@ -3957,7 +3971,7 @@ export class AppDataSyncService {
   async syncNow(config: WebDavConfig): Promise<DataSyncSummary> {
     const normalizedConfig = this.normalizeSyncWebDavConfig(config)
 
-    this.clearExpiredInFlightSync()
+    await this.clearExpiredInFlightSync()
     if (this.syncInFlight || this.syncBackgroundInFlight) {
       throw new Error(DATA_SYNC_ALREADY_RUNNING_ERROR)
     }
@@ -4001,7 +4015,7 @@ export class AppDataSyncService {
         this.clearSyncStartedAtIfIdle()
       }
       if (context.aborted) {
-        this.clearExpiredInFlightSync()
+        await this.clearExpiredInFlightSync()
       }
     }
   }
@@ -4406,7 +4420,7 @@ export class AppDataSyncService {
   }
 
   async getStatus() {
-    this.clearExpiredInFlightSync()
+    await this.clearExpiredInFlightSync()
     const db = await getAppDataDatabase()
     const storageDeviceId = await storageV2AppDataKvMirrorService.getSyncState<string>('device-id')
     const lastSummary =
