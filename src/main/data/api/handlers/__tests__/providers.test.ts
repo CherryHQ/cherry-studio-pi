@@ -239,7 +239,8 @@ describe('providerHandlers', () => {
 
     it('replaces API keys through the dedicated api-keys resource', async () => {
       const keys = [{ id: 'key-a', key: 'sk-a', isEnabled: true }]
-      replaceApiKeysMock.mockResolvedValueOnce({ id: 'openai', apiKeys: [{ id: 'key-a', isEnabled: true }] })
+      const updated = { id: 'openai', apiKeys: [{ id: 'key-a', isEnabled: true }] }
+      replaceApiKeysMock.mockResolvedValueOnce(updated)
 
       await providerHandlers['/providers/:providerId/api-keys'].PUT({
         params: { providerId: 'openai' },
@@ -247,6 +248,7 @@ describe('providerHandlers', () => {
       } as never)
 
       expect(replaceApiKeysMock).toHaveBeenCalledWith('openai', keys)
+      expect(upsertProviderMetadataMock).toHaveBeenCalledWith(updated)
       expect(getApiKeysMock).not.toHaveBeenCalled()
       expect(upsertProviderApiKeysMock).toHaveBeenCalledWith('openai', keys)
     })
@@ -262,6 +264,7 @@ describe('providerHandlers', () => {
       } as never)
 
       expect(addApiKeyMock).toHaveBeenCalledWith('openai', 'sk-a', 'Primary')
+      expect(upsertProviderMetadataMock).toHaveBeenCalledWith(updated)
       expect(getApiKeysMock).toHaveBeenCalledWith('openai')
       expect(upsertProviderApiKeysMock).toHaveBeenCalledWith('openai', [
         { id: 'key-a', key: 'sk-a', label: 'Primary', isEnabled: true }
@@ -318,6 +321,7 @@ describe('providerHandlers', () => {
       } as never)
 
       expect(updateApiKeyMock).toHaveBeenCalledWith('openai', 'key-a', { key: 'sk-new', isEnabled: false })
+      expect(upsertProviderMetadataMock).toHaveBeenCalledWith(updated)
       expect(getApiKeysMock).toHaveBeenCalledWith('openai')
       expect(upsertProviderApiKeysMock).toHaveBeenCalledWith('openai', [
         { id: 'key-a', key: 'sk-new', isEnabled: false }
@@ -346,6 +350,7 @@ describe('providerHandlers', () => {
       } as never)
 
       expect(deleteApiKeyMock).toHaveBeenCalledWith('openai', 'key-a')
+      expect(upsertProviderMetadataMock).toHaveBeenCalledWith(updated)
       expect(getApiKeysMock).toHaveBeenCalledWith('openai')
       expect(upsertProviderApiKeysMock).toHaveBeenCalledWith('openai', [])
       expect(result).toBe(updated)

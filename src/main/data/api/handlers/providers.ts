@@ -122,6 +122,7 @@ export const providerHandlers: HandlersFor<ProviderSchemas> = {
     POST: async ({ params, body }) => {
       const parsed = AddProviderApiKeySchema.parse(body)
       const provider = await providerService.addApiKey(params.providerId, parsed.key, parsed.label)
+      await mirrorProviderMetadataToStorageV2(provider)
       await mirrorProviderApiKeysToStorageV2(params.providerId)
       return provider
     },
@@ -129,6 +130,7 @@ export const providerHandlers: HandlersFor<ProviderSchemas> = {
     PUT: async ({ params, body }) => {
       const parsed = ReplaceProviderApiKeysSchema.parse(body)
       const provider = await providerService.replaceApiKeys(params.providerId, parsed.keys)
+      await mirrorProviderMetadataToStorageV2(provider)
       await mirrorProviderApiKeysToStorageV2(params.providerId, parsed.keys)
       return provider
     }
@@ -144,12 +146,14 @@ export const providerHandlers: HandlersFor<ProviderSchemas> = {
     PATCH: async ({ params, body }) => {
       const parsed = UpdateApiKeySchema.parse(body)
       const provider = await providerService.updateApiKey(params.providerId, params.keyId, parsed)
+      await mirrorProviderMetadataToStorageV2(provider)
       await mirrorProviderApiKeysToStorageV2(params.providerId)
       return provider
     },
 
     DELETE: async ({ params }) => {
       const provider = await providerService.deleteApiKey(params.providerId, params.keyId)
+      await mirrorProviderMetadataToStorageV2(provider)
       await mirrorProviderApiKeysToStorageV2(params.providerId)
       return provider
     }
