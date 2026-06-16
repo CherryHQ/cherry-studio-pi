@@ -1,3 +1,4 @@
+import { RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
@@ -434,6 +435,19 @@ describe('AgentConfigPage', () => {
       })
     )
     expect(onCreated).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes transient resource selectors when the dialog create wizard opens', async () => {
+    const closeResourceSelectors = vi.fn()
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+
+    try {
+      render(<AgentConfigPage onBack={vi.fn()} onCreated={vi.fn()} presentation="dialog" />)
+
+      await waitFor(() => expect(closeResourceSelectors).toHaveBeenCalled())
+    } finally {
+      window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+    }
   })
 
   it('hides the permission section when autonomous mode is enabled', async () => {

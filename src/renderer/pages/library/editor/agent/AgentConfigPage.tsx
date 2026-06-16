@@ -1,10 +1,11 @@
 import { Button, DialogHeader, DialogTitle, Switch } from '@cherrystudio/ui'
+import { scheduleCloseTransientResourceSelectors } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { cacheService } from '@renderer/data/CacheService'
 import { useAgentTools } from '@renderer/hooks/agents/useAgentTools'
 import { getErrorMessage } from '@renderer/utils/error'
 import { Check, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
 import type { FC } from 'react'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useAgentCreateCompanionMutations, useAgentMutations, useAgentMutationsById } from '../../adapters/agentAdapter'
@@ -96,6 +97,12 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated, presentation = '
   // Safe empty-string id in create mode — `useMutation` builds the path at
   // call-time and we only invoke the edit mutations in edit mode.
   const { updateAgent } = useAgentMutationsById(editAgent?.id ?? '')
+
+  useEffect(() => {
+    if (!isDialogCreate) return undefined
+
+    return scheduleCloseTransientResourceSelectors()
+  }, [isDialogCreate])
 
   const initialForm = useMemo(() => buildInitialAgentFormState(editAgent), [editAgent])
 
