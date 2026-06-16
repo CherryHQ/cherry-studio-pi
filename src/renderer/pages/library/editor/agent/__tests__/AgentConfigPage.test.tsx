@@ -321,6 +321,43 @@ describe('AgentConfigPage', () => {
     expect(cacheSetMock).toHaveBeenCalledWith('agent.active_session_id', 'session-workspace')
   })
 
+  it('falls back to a system session when the selected workspace session cannot be created', async () => {
+    const user = userEvent.setup()
+    createWorkspaceByPathMock.mockResolvedValueOnce({ id: 'workspace-fallback', path: '/Users/me/project' })
+    createAgentMock.mockResolvedValueOnce(createAgent({ id: 'created-workspace-fallback', name: 'Created Agent' }))
+    createInitialSessionMock.mockRejectedValueOnce(new Error('workspace session failed')).mockResolvedValueOnce({
+      id: 'session-system-fallback',
+      agentId: 'created-workspace-fallback',
+      name: 'common.unnamed',
+      workspaceId: null,
+      workspace: null,
+      orderKey: 'a0',
+      createdAt: '2026-05-06T00:00:00.000Z',
+      updatedAt: '2026-05-06T00:00:00.000Z'
+    })
+
+    render(<AgentConfigPage onBack={vi.fn()} onCreated={vi.fn()} />)
+
+    await user.click(screen.getByRole('button', { name: 'basic' }))
+    await user.click(screen.getByRole('button', { name: 'set basic' }))
+    await user.click(screen.getByRole('button', { name: 'workspace' }))
+    await user.click(screen.getByRole('button', { name: 'set workspace' }))
+    await user.click(screen.getByRole('button', { name: 'save' }))
+
+    await waitFor(() => expect(createInitialSessionMock).toHaveBeenCalledTimes(2))
+    expect(createInitialSessionMock).toHaveBeenNthCalledWith(1, {
+      agentId: 'created-workspace-fallback',
+      name: 'common.unnamed',
+      workspace: { type: 'user', workspaceId: 'workspace-fallback' }
+    })
+    expect(createInitialSessionMock).toHaveBeenNthCalledWith(2, {
+      agentId: 'created-workspace-fallback',
+      name: 'common.unnamed',
+      workspace: { type: 'system' }
+    })
+    expect(cacheSetMock).toHaveBeenCalledWith('agent.active_session_id', 'session-system-fallback')
+  })
+
   it('does not create the agent when the selected workspace cannot be created', async () => {
     const user = userEvent.setup()
     createWorkspaceByPathMock.mockResolvedValueOnce(undefined)

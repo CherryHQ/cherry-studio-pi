@@ -110,11 +110,22 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated, presentation = '
           throw new Error(t('agent.session.workspace.create_failed'))
         }
         const created = await createAgent(intent.payload)
-        const initialSession = await createInitialSession({
+        const initialSessionRequest = {
           agentId: created.id,
           name: t('common.unnamed'),
-          workspace: workspace ? { type: 'user', workspaceId: workspace.id } : { type: 'system' }
-        }).catch((error) => {
+          workspace: workspace ? ({ type: 'user', workspaceId: workspace.id } as const) : ({ type: 'system' } as const)
+        }
+        const initialSession = await createInitialSession(initialSessionRequest).catch(async (error) => {
+          if (workspace) {
+            const fallbackSession = await createInitialSession({
+              agentId: created.id,
+              name: t('common.unnamed'),
+              workspace: { type: 'system' }
+            }).catch(() => null)
+            if (fallbackSession) {
+              return fallbackSession
+            }
+          }
           window.toast?.error({
             title: t('agent.session.create.error.failed'),
             description: getErrorMessage(error)
