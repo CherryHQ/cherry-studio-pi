@@ -386,7 +386,6 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
       // Clear text and files after successful send
       setText('')
       setFiles([])
-      setTimeoutTimer('agentSession_sendMessage', () => setText(''), 500)
       focusTextarea()
     } catch (error) {
       logger.warn('Failed to send message:', error as Error)
@@ -401,7 +400,6 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
     model,
     setText,
     setFiles,
-    setTimeoutTimer,
     text,
     files,
     focusTextarea,

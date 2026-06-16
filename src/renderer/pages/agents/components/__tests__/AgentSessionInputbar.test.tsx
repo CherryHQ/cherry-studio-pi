@@ -1,15 +1,21 @@
 import type { InputbarCoreProps } from '@renderer/pages/home/Inputbar/components/InputbarCore'
 import { allFilesExt } from '@shared/config/constant'
-import { render, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AgentSessionInputbar from '../AgentSessionInputbar'
 
-const { inputbarSnapshots } = vi.hoisted(() => ({
+const { cacheServiceMock, inputbarSnapshots, setTimeoutTimerMock } = vi.hoisted(() => ({
+  cacheServiceMock: {
+    deleteCasual: vi.fn(),
+    getCasual: vi.fn(),
+    setCasual: vi.fn()
+  },
   inputbarSnapshots: [] as Array<{
     supportedExts: string[]
     couldAddImageFile: boolean
-  }>
+  }>,
+  setTimeoutTimerMock: vi.fn()
 }))
 
 vi.mock('react-i18next', () => ({
@@ -29,11 +35,7 @@ vi.mock('@logger', () => ({
 }))
 
 vi.mock('@data/CacheService', () => ({
-  cacheService: {
-    deleteCasual: vi.fn(),
-    getCasual: vi.fn(),
-    setCasual: vi.fn()
-  }
+  cacheService: cacheServiceMock
 }))
 
 vi.mock('@data/hooks/usePreference', () => ({
@@ -89,7 +91,7 @@ vi.mock('@renderer/hooks/useModel', () => ({
 
 vi.mock('@renderer/hooks/useTimer', () => ({
   useTimer: () => ({
-    setTimeoutTimer: (_key: string, fn: () => void) => fn()
+    setTimeoutTimer: setTimeoutTimerMock
   })
 }))
 
@@ -107,15 +109,29 @@ vi.mock('@renderer/pages/home/Inputbar/components/InputbarCore', async () => {
         supportedExts: props.supportedExts,
         couldAddImageFile: state.couldAddImageFile
       })
-      return <div data-testid="agent-session-inputbar" />
+      return (
+        <button type="button" data-testid="agent-session-inputbar" onClick={props.handleSendMessage}>
+          send
+        </button>
+      )
     }
   }
 })
 
 describe('AgentSessionInputbar', () => {
-  it('does not restrict attachments by the selected model capability', async () => {
+  beforeEach(() => {
     inputbarSnapshots.length = 0
+    cacheServiceMock.deleteCasual.mockReset()
+    cacheServiceMock.getCasual.mockReset()
+    cacheServiceMock.setCasual.mockReset()
+    setTimeoutTimerMock.mockReset()
+    setTimeoutTimerMock.mockImplementation((_key: string, fn: () => void) => fn())
+    ;(window as any).toast = {
+      error: vi.fn()
+    }
+  })
 
+  it('does not restrict attachments by the selected model capability', async () => {
     render(
       <AgentSessionInputbar
         agentId="agent-1"
@@ -131,5 +147,25 @@ describe('AgentSessionInputbar', () => {
     })
 
     expect(inputbarSnapshots.at(-1)?.supportedExts).toEqual([allFilesExt])
+  })
+
+  it('does not schedule a delayed draft clear after sending', async () => {
+    cacheServiceMock.getCasual.mockReturnValue('hello')
+    const sendMessage = vi.fn().mockResolvedValue(undefined)
+
+    render(
+      <AgentSessionInputbar
+        agentId="agent-1"
+        sessionId="session-1"
+        sendMessage={sendMessage}
+        stop={vi.fn()}
+        isStreaming={false}
+      />
+    )
+
+    fireEvent.click(screen.getByTestId('agent-session-inputbar'))
+
+    await waitFor(() => expect(sendMessage).toHaveBeenCalled())
+    expect(setTimeoutTimerMock).not.toHaveBeenCalledWith('agentSession_sendMessage', expect.any(Function), 500)
   })
 })
