@@ -4,6 +4,7 @@ import type { Assistant, Provider } from '@types'
 import { configManager } from '../ConfigManager'
 import { storageV2AgentDbMirrorService } from './AgentDbMirrorService'
 import { storageV2BackupService } from './BackupService'
+import { storageV2DataApiAgentRuntimeMirrorService } from './DataApiAgentRuntimeMirrorService'
 import { storageV2DataRootService } from './DataRootService'
 import { storageV2FileLegacyProjectionService } from './FileLegacyProjectionService'
 import { storageV2KnowledgeMirrorService } from './KnowledgeMirrorService'
@@ -612,6 +613,7 @@ export class StorageV2Service {
   private async flushPendingRuntimeMirrors() {
     await configManager.flushPendingStorageV2ConfigStrict()
     await configManager.mirrorAllToStorageV2()
+    await storageV2DataApiAgentRuntimeMirrorService.flushStrict()
     await storageV2AgentDbMirrorService.flushStrict()
     await storageV2KnowledgeMirrorService.flushStrict()
   }
