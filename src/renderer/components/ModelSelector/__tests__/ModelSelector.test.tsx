@@ -105,11 +105,19 @@ vi.mock('@cherrystudio/ui', async () => {
     PopoverContent: ({
       children,
       ...props
-    }: HTMLAttributes<HTMLDivElement> & { side?: string; align?: string; sideOffset?: number }) => {
-      const { side, align, sideOffset, ...contentProps } = props
+    }: HTMLAttributes<HTMLDivElement> & {
+      side?: string
+      align?: string
+      sideOffset?: number
+      hideWhenDetached?: boolean
+      onCloseAutoFocus?: (event: Event) => void
+    }) => {
+      const { side, align, sideOffset, hideWhenDetached, onCloseAutoFocus, ...contentProps } = props
       void side
       void align
       void sideOffset
+      void hideWhenDetached
+      void onCloseAutoFocus
 
       const context = React.use(PopoverContext)
       if (!context?.open) return null
