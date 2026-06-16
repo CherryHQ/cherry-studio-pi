@@ -26,7 +26,7 @@ import {
   FileType as FileTypeIcon
 } from 'lucide-react'
 import type { FC } from 'react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -43,6 +43,7 @@ const FilesPage: FC = () => {
   const [sortField, setSortField] = useState<SortField>('created_at')
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([])
+  const deleteOperationRef = useRef(false)
 
   useEffect(() => {
     setSelectedFileIds([])
@@ -67,29 +68,54 @@ const FilesPage: FC = () => {
 
   const sortedFiles = files ? sortFiles(files, sortField, sortOrder) : []
 
+  const handleSingleDelete = useCallback(
+    async (fileId: string) => {
+      if (deleteOperationRef.current) {
+        return
+      }
+
+      deleteOperationRef.current = true
+      try {
+        await handleDelete(fileId, t)
+      } finally {
+        deleteOperationRef.current = false
+      }
+    },
+    [t]
+  )
+
   const handleBatchDelete = async () => {
-    const selectedFiles = await Promise.all(selectedFileIds.map((id) => FileManager.getFile(id)))
-    const validFiles = selectedFiles.filter((file) => file !== null && file !== undefined)
-
-    const paintings = store.getState().paintings
-    const paintingsFiles = Object.values(paintings)
-      .flat()
-      .filter((painting) => painting?.files?.length > 0)
-      .flatMap((painting) => painting.files)
-
-    const filesInPaintings = validFiles.filter((file) => paintingsFiles.some((p) => p.id === file.id))
-
-    if (filesInPaintings.length > 0) {
-      window.modal.warning({
-        content: t('files.delete.paintings.warning'),
-        centered: true
-      })
+    if (selectedFileIds.length === 0 || deleteOperationRef.current) {
       return
     }
 
-    await Promise.all(selectedFileIds.map((fileId) => handleDelete(fileId, t)))
+    deleteOperationRef.current = true
+    try {
+      const selectedFiles = await Promise.all(selectedFileIds.map((id) => FileManager.getFile(id)))
+      const validFiles = selectedFiles.filter((file) => file !== null && file !== undefined)
 
-    setSelectedFileIds([])
+      const paintings = store.getState().paintings
+      const paintingsFiles = Object.values(paintings)
+        .flat()
+        .filter((painting) => painting?.files?.length > 0)
+        .flatMap((painting) => painting.files)
+
+      const filesInPaintings = validFiles.filter((file) => paintingsFiles.some((p) => p.id === file.id))
+
+      if (filesInPaintings.length > 0) {
+        window.modal.warning({
+          content: t('files.delete.paintings.warning'),
+          centered: true
+        })
+        return
+      }
+
+      await Promise.all(selectedFileIds.map((fileId) => handleDelete(fileId, t)))
+
+      setSelectedFileIds([])
+    } finally {
+      deleteOperationRef.current = false
+    }
   }
 
   const handleSelectFile = (fileId: string, checked: boolean) => {
@@ -137,7 +163,7 @@ const FilesPage: FC = () => {
             description={t('files.delete.content')}
             okText={t('common.confirm')}
             cancelText={t('common.cancel')}
-            onConfirm={() => handleDelete(file.id, t)}
+            onConfirm={() => handleSingleDelete(file.id)}
             placement="left"
             icon={<ExclamationCircleOutlined style={{ color: 'red' }} />}>
             <Button variant="ghost">
