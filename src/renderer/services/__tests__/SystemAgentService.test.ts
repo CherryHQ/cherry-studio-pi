@@ -17,6 +17,8 @@ vi.mock('@renderer/i18n', () => ({
 
 import { handleSystemAgentEvent, initSystemAgentErrorTriggers } from '../SystemAgentService'
 
+const errorTriggerStateKey = '__CHERRY_STUDIO_PI_SYSTEM_AGENT_ERROR_TRIGGER_STATE__'
+
 describe('SystemAgentService', () => {
   let originalApi: unknown
 
@@ -44,10 +46,28 @@ describe('SystemAgentService', () => {
   })
 
   it('registers global error triggers only once', () => {
-    const addEventListener = vi.spyOn(window, 'addEventListener')
+    const addEventListener = vi.spyOn(window, 'addEventListener').mockImplementation(() => undefined)
 
     initSystemAgentErrorTriggers()
     initSystemAgentErrorTriggers()
+
+    expect(addEventListener.mock.calls.filter(([event]) => event === 'error')).toHaveLength(1)
+    expect(addEventListener.mock.calls.filter(([event]) => event === 'unhandledrejection')).toHaveLength(1)
+
+    addEventListener.mockRestore()
+  })
+
+  it('keeps the global error trigger guard across module reloads', async () => {
+    delete (globalThis as Record<string, unknown>)[errorTriggerStateKey]
+    const addEventListener = vi.spyOn(window, 'addEventListener').mockImplementation(() => undefined)
+
+    vi.resetModules()
+    const firstModule = await import('../SystemAgentService')
+    firstModule.initSystemAgentErrorTriggers()
+
+    vi.resetModules()
+    const secondModule = await import('../SystemAgentService')
+    secondModule.initSystemAgentErrorTriggers()
 
     expect(addEventListener.mock.calls.filter(([event]) => event === 'error')).toHaveLength(1)
     expect(addEventListener.mock.calls.filter(([event]) => event === 'unhandledrejection')).toHaveLength(1)

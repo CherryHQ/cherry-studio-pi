@@ -4,22 +4,39 @@ import { getFileExtension, isSupportedFile } from '@renderer/utils'
 import { allFilesExt } from '@shared/config/constant'
 
 const logger = loggerService.withContext('PasteService')
+const PASTE_SERVICE_STATE_KEY = '__CHERRY_STUDIO_PI_PASTE_SERVICE_STATE__'
 
 // Track last focused component
 type ComponentType = 'inputbar' | 'messageEditor' | 'TranslatePage' | null
-let lastFocusedComponent: ComponentType = 'inputbar' // Default to inputbar
 
 // 处理函数类型
 type PasteHandler = (event: ClipboardEvent) => Promise<boolean>
+type PasteHandlers = Partial<Record<Exclude<ComponentType, null>, PasteHandler>>
+
+type PasteServiceState = {
+  handlers: PasteHandlers
+  initialized: boolean
+  lastFocusedComponent: ComponentType
+}
+
+type PasteServiceGlobal = typeof globalThis & {
+  [PASTE_SERVICE_STATE_KEY]?: PasteServiceState
+}
+
+function getPasteServiceState() {
+  const globalState = globalThis as PasteServiceGlobal
+  globalState[PASTE_SERVICE_STATE_KEY] ??= {
+    handlers: {},
+    initialized: false,
+    lastFocusedComponent: 'inputbar'
+  }
+  return globalState[PASTE_SERVICE_STATE_KEY]
+}
+
+const pasteServiceState = getPasteServiceState()
 
 // 处理函数存储
-const handlers: {
-  inputbar?: PasteHandler
-  messageEditor?: PasteHandler
-} = {}
-
-// 初始化标志
-let isInitialized = false
+const handlers = pasteServiceState.handlers
 
 /**
  * 处理粘贴事件的通用服务
@@ -125,14 +142,14 @@ export const handlePaste = async (
  * 设置最后聚焦的组件
  */
 export const setLastFocusedComponent = (component: ComponentType) => {
-  lastFocusedComponent = component
+  pasteServiceState.lastFocusedComponent = component
 }
 
 /**
  * 获取最后聚焦的组件
  */
 export const getLastFocusedComponent = (): ComponentType => {
-  return lastFocusedComponent
+  return pasteServiceState.lastFocusedComponent
 }
 
 /**
@@ -140,14 +157,14 @@ export const getLastFocusedComponent = (): ComponentType => {
  * 应用启动时只调用一次
  */
 export const init = () => {
-  if (isInitialized) return
+  if (pasteServiceState.initialized) return
 
   // 添加全局粘贴事件监听
   document.addEventListener('paste', async (event) => {
     await handleGlobalPaste(event)
   })
 
-  isInitialized = true
+  pasteServiceState.initialized = true
   logger.verbose('Global paste handler initialized')
 }
 
@@ -188,8 +205,8 @@ const handleGlobalPaste = async (event: ClipboardEvent): Promise<boolean> => {
   }
 
   // 根据最后聚焦的组件调用相应处理程序
-  if (lastFocusedComponent && handlers[lastFocusedComponent]) {
-    const handler = handlers[lastFocusedComponent]
+  if (pasteServiceState.lastFocusedComponent && handlers[pasteServiceState.lastFocusedComponent]) {
+    const handler = handlers[pasteServiceState.lastFocusedComponent]
     if (handler) {
       return await handler(event)
     }

@@ -5,8 +5,7 @@ const logger = loggerService.withContext('SystemAgentService')
 const EVENT_DEDUP_MS = 30_000
 const MAX_EVENT_DEDUP_MS = 10 * 60_000
 const MAX_RECENT_EVENTS = 200
-const recentEvents = new Map<string, number>()
-let errorTriggersInitialized = false
+const SYSTEM_AGENT_ERROR_TRIGGER_STATE_KEY = '__CHERRY_STUDIO_PI_SYSTEM_AGENT_ERROR_TRIGGER_STATE__'
 
 type SystemAgentEventInput = {
   type?: 'error' | 'event'
@@ -25,6 +24,27 @@ type ReportOptions = {
   dedupe?: boolean
   dedupeMs?: number
 }
+
+type SystemAgentErrorTriggerState = {
+  errorTriggersInitialized: boolean
+  recentEvents: Map<string, number>
+}
+
+type SystemAgentErrorTriggerGlobal = typeof globalThis & {
+  [SYSTEM_AGENT_ERROR_TRIGGER_STATE_KEY]?: SystemAgentErrorTriggerState
+}
+
+function getSystemAgentErrorTriggerState() {
+  const globalState = globalThis as SystemAgentErrorTriggerGlobal
+  globalState[SYSTEM_AGENT_ERROR_TRIGGER_STATE_KEY] ??= {
+    errorTriggersInitialized: false,
+    recentEvents: new Map<string, number>()
+  }
+  return globalState[SYSTEM_AGENT_ERROR_TRIGGER_STATE_KEY]
+}
+
+const systemAgentErrorTriggerState = getSystemAgentErrorTriggerState()
+const recentEvents = systemAgentErrorTriggerState.recentEvents
 
 function errorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message
@@ -112,8 +132,8 @@ export function reportErrorToSystemAgent(
 }
 
 export function initSystemAgentErrorTriggers() {
-  if (errorTriggersInitialized) return
-  errorTriggersInitialized = true
+  if (systemAgentErrorTriggerState.errorTriggersInitialized) return
+  systemAgentErrorTriggerState.errorTriggersInitialized = true
 
   window.addEventListener('error', (event) => {
     void reportErrorToSystemAgent(event.error || event.message, {
