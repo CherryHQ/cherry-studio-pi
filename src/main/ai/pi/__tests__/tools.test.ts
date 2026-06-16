@@ -820,6 +820,33 @@ exit 1
     expect(resultText(result)).toContain('https://[redacted]@example.test')
   })
 
+  it('redacts secrets from returned app capability error results', async () => {
+    vi.mocked(appCapabilityService.call).mockResolvedValueOnce({
+      ok: false,
+      isError: true,
+      summary: 'Failed with apiKey=sk-secret-token',
+      error: 'Authorization: Bearer bearer-secret at https://user:pass@example.test',
+      warnings: ['password=plain-secret']
+    })
+
+    const call = getTool('AppCallCapability', tmpDir, [tmpDir])
+    const result = await call.execute('app-call-returned-secret-error', {
+      id: 'settings.read',
+      input: {}
+    })
+    const serialized = JSON.stringify(result)
+
+    expect(result.details).toMatchObject({ isError: true })
+    expect(serialized).not.toContain('sk-secret-token')
+    expect(serialized).not.toContain('bearer-secret')
+    expect(serialized).not.toContain('user:pass')
+    expect(serialized).not.toContain('plain-secret')
+    expect(resultText(result)).toContain('apiKey=[redacted]')
+    expect(resultText(result)).toContain('Authorization: Bearer [redacted]')
+    expect(resultText(result)).toContain('https://[redacted]@example.test')
+    expect(resultText(result)).toContain('password=[redacted]')
+  })
+
   it('times out stalled AppCallCapability calls and aborts the app capability signal', async () => {
     vi.useFakeTimers()
     let capturedSignal: AbortSignal | undefined

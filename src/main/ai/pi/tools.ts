@@ -489,12 +489,47 @@ const previewToolValue = (value: unknown, maxChars: number, space?: number) => {
   return stringifyToolValuePreview(value, maxChars, space)
 }
 
+const TOOL_ERROR_SECRET_PATTERNS: Array<[RegExp, string]> = [
+  [/((?:Authorization)\s*:\s*(?:Bearer|Basic)\s+)([^\s'",;]+)/gi, '$1[redacted]'],
+  [
+    /((?:api[-_]?key|apiKeys|private[-_]?key|token|secret|pass(?:word|phrase)?|passwd|cookie)\s*[=:]\s*['"]?)([^\s'",;]+)/gi,
+    '$1[redacted]'
+  ],
+  [/\b(https?:\/\/)([^/\s:@]+):([^/\s@]+)@/gi, '$1[redacted]@']
+]
+
+const redactToolErrorText = (text: string) => {
+  return TOOL_ERROR_SECRET_PATTERNS.reduce(
+    (current, [pattern, replacement]) => current.replace(pattern, replacement),
+    text
+  )
+}
+
+const redactAppCapabilityResultTextFields = (result: any) => {
+  if (!result || typeof result !== 'object') return result
+
+  return {
+    ...result,
+    ...(typeof result.summary === 'string' ? { summary: redactToolErrorText(result.summary) } : {}),
+    ...(typeof result.error === 'string' ? { error: redactToolErrorText(result.error) } : {}),
+    ...(Array.isArray(result.warnings)
+      ? {
+          warnings: result.warnings.map((warning: unknown) =>
+            typeof warning === 'string' ? redactToolErrorText(warning) : warning
+          )
+        }
+      : {})
+  }
+}
+
 const compactAppCapabilityResult = (result: any, maxChars: number) => {
+  const safeResult = redactAppCapabilityResultTextFields(result)
+
   try {
-    const preview = previewToolValue(result, maxChars, 2)
+    const preview = previewToolValue(safeResult, maxChars, 2)
     if (!preview.truncated) {
       return {
-        result,
+        result: safeResult,
         text: preview.text,
         truncated: false
       }
@@ -503,14 +538,14 @@ const compactAppCapabilityResult = (result: any, maxChars: number) => {
     // Fall through to the compacted path for exotic values with throwing getters.
   }
 
-  const dataPreview = result?.data === undefined ? undefined : previewToolValue(result.data, maxChars, 2)
+  const dataPreview = safeResult?.data === undefined ? undefined : previewToolValue(safeResult.data, maxChars, 2)
   const compacted = {
-    ok: result?.ok === true,
-    isError: result?.isError === true,
-    summary: result?.summary,
-    error: result?.error,
-    warnings: result?.warnings,
-    artifacts: result?.artifacts,
+    ok: safeResult?.ok === true,
+    isError: safeResult?.isError === true,
+    summary: safeResult?.summary,
+    error: safeResult?.error,
+    warnings: safeResult?.warnings,
+    artifacts: safeResult?.artifacts,
     ...(dataPreview
       ? {
           dataPreview: dataPreview.text,
@@ -534,22 +569,6 @@ const compactAppCapabilityResult = (result: any, maxChars: number) => {
       truncated: true
     }
   }
-}
-
-const TOOL_ERROR_SECRET_PATTERNS: Array<[RegExp, string]> = [
-  [/((?:Authorization)\s*:\s*(?:Bearer|Basic)\s+)([^\s'",;]+)/gi, '$1[redacted]'],
-  [
-    /((?:api[-_]?key|apiKeys|private[-_]?key|token|secret|pass(?:word|phrase)?|passwd|cookie)\s*[=:]\s*['"]?)([^\s'",;]+)/gi,
-    '$1[redacted]'
-  ],
-  [/\b(https?:\/\/)([^/\s:@]+):([^/\s@]+)@/gi, '$1[redacted]@']
-]
-
-const redactToolErrorText = (text: string) => {
-  return TOOL_ERROR_SECRET_PATTERNS.reduce(
-    (current, [pattern, replacement]) => current.replace(pattern, replacement),
-    text
-  )
 }
 
 const compactError = (error: unknown) => {
