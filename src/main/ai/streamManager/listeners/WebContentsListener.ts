@@ -88,6 +88,7 @@ export class WebContentsListener implements StreamListener {
       this.pending = next
       this.pendingStartedAt = performance.now()
       this.flushTimer = setTimeout(() => this.flushPending(), COALESCE_WINDOW_MS)
+      this.flushTimer.unref?.()
       return
     }
 

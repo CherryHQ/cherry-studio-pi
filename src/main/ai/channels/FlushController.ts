@@ -50,6 +50,14 @@ export class FlushController {
     }
   }
 
+  private schedulePendingFlush(delayMs: number): void {
+    this.pendingFlushTimer = setTimeout(() => {
+      this.pendingFlushTimer = null
+      this.flushScheduled()
+    }, delayMs)
+    this.pendingFlushTimer.unref?.()
+  }
+
   /** Wait for any in-progress flush to finish. */
   waitForFlush(): Promise<void> {
     if (!this.flushInProgress) return Promise.resolve()
@@ -85,10 +93,7 @@ export class FlushController {
       // schedule an immediate follow-up flush.
       if (this.needsReflush && !this._completed && !this.pendingFlushTimer) {
         this.needsReflush = false
-        this.pendingFlushTimer = setTimeout(() => {
-          this.pendingFlushTimer = null
-          this.flushScheduled()
-        }, 0)
+        this.schedulePendingFlush(0)
       }
     }
   }
@@ -114,20 +119,14 @@ export class FlushController {
         // After a long gap, batch briefly so the first visible update
         // contains meaningful text rather than just 1-2 characters.
         this.lastUpdateTime = now
-        this.pendingFlushTimer = setTimeout(() => {
-          this.pendingFlushTimer = null
-          this.flushScheduled()
-        }, BATCH_AFTER_GAP_MS)
+        this.schedulePendingFlush(BATCH_AFTER_GAP_MS)
       } else {
         await this.flush()
       }
     } else if (!this.pendingFlushTimer) {
       // Inside throttle window — schedule a deferred flush
       const delay = throttleMs - elapsed
-      this.pendingFlushTimer = setTimeout(() => {
-        this.pendingFlushTimer = null
-        this.flushScheduled()
-      }, delay)
+      this.schedulePendingFlush(delay)
     }
   }
 
