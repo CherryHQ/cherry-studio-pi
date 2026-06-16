@@ -13,7 +13,7 @@ import {
 import { backupToS3 } from '@renderer/services/BackupService'
 import { formatFileSize } from '@renderer/utils'
 import dayjs from 'dayjs'
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface BackupFile {
@@ -133,6 +133,7 @@ export function useS3RestoreModal({
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [backupFiles, setBackupFiles] = useState<BackupFile[]>([])
+  const listSeqRef = useRef(0)
   const { t } = useTranslation()
 
   const showRestoreModal = useCallback(async () => {
@@ -141,6 +142,9 @@ export function useS3RestoreModal({
       return
     }
 
+    const listSeq = ++listSeqRef.current
+    setSelectedFile(null)
+    setBackupFiles([])
     setIsRestoreModalVisible(true)
     setLoadingFiles(true)
     try {
@@ -156,11 +160,17 @@ export function useS3RestoreModal({
         maxBackups: 0,
         skipBackupFile: false
       })
-      setBackupFiles(files)
+      if (listSeq === listSeqRef.current) {
+        setBackupFiles(files)
+      }
     } catch (error: any) {
-      window.toast.error(t('settings.data.s3.manager.files.fetch.error', { message: error.message }))
+      if (listSeq === listSeqRef.current) {
+        window.toast.error(t('settings.data.s3.manager.files.fetch.error', { message: error.message }))
+      }
     } finally {
-      setLoadingFiles(false)
+      if (listSeq === listSeqRef.current) {
+        setLoadingFiles(false)
+      }
     }
   }, [endpoint, region, bucket, accessKeyId, secretAccessKey, root, t])
 
@@ -206,6 +216,8 @@ export function useS3RestoreModal({
   }, [selectedFile, endpoint, region, bucket, accessKeyId, secretAccessKey, root, t])
 
   const handleCancel = () => {
+    listSeqRef.current += 1
+    setLoadingFiles(false)
     setIsRestoreModalVisible(false)
   }
 
