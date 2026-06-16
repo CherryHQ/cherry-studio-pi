@@ -2,6 +2,7 @@ import { loggerService } from '@logger'
 import { DatabaseManager } from '@main/services/agents/database/DatabaseManager'
 
 import { storageV2AgentLegacyProjectionService } from './AgentLegacyProjectionService'
+import { storageV2DataApiAgentRuntimeMirrorService } from './DataApiAgentRuntimeMirrorService'
 import { storageV2LegacyAgentDbImportService } from './LegacyAgentDbImportService'
 import { storageV2Database } from './StorageV2Database'
 
@@ -136,6 +137,7 @@ export class StorageV2AgentRuntimeRecoveryService {
       }
 
       const report = await storageV2AgentLegacyProjectionService.projectToLegacyRuntime()
+      await storageV2DataApiAgentRuntimeMirrorService.projectStorageToDataApiRuntime()
       logger.info('Recovered legacy agent runtime from Storage v2', {
         reason,
         agentDbPath: report.agentDbPath,

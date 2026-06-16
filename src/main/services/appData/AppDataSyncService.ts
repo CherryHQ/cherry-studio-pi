@@ -15,6 +15,7 @@ import { storageV2AgentLegacyProjectionService } from '@main/services/storageV2/
 import { storageV2AppDataKvMirrorService } from '@main/services/storageV2/AppDataKvMirrorService'
 import { storageV2AppDataLegacyProjectionService } from '@main/services/storageV2/AppDataLegacyProjectionService'
 import { storageV2AppDataRuntimeRecoveryService } from '@main/services/storageV2/AppDataRuntimeRecoveryService'
+import { storageV2DataApiAgentRuntimeMirrorService } from '@main/services/storageV2/DataApiAgentRuntimeMirrorService'
 import { storageV2DataRootService } from '@main/services/storageV2/DataRootService'
 import { storageV2FileLegacyProjectionService } from '@main/services/storageV2/FileLegacyProjectionService'
 import { pruneManagedLegacyProjectionArchives } from '@main/services/storageV2/LegacyProjectionArchiveCleanup'
@@ -3605,6 +3606,7 @@ export class AppDataSyncService {
 
     if ([...entityTypes].some((entityType) => AGENT_RUNTIME_ENTITY_TYPES.has(entityType))) {
       await storageV2AgentLegacyProjectionService.projectToLegacyRuntime({ archiveRoot })
+      await storageV2DataApiAgentRuntimeMirrorService.projectStorageToDataApiRuntime()
       projected = true
     }
 

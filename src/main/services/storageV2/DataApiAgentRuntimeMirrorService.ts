@@ -1,4 +1,10 @@
+import { randomUUID } from 'node:crypto'
+import fs from 'node:fs/promises'
+import path from 'node:path'
+
 import { application } from '@application'
+import type { DbOrTx } from '@data/db/types'
+import { generateOrderKeySequence } from '@data/services/utils/orderKey'
 import { loggerService } from '@logger'
 import { encodeStorageV2CompositeEntityId } from '@main/services/storageV2/SyncEntityId'
 import { sql } from 'drizzle-orm'
@@ -118,6 +124,77 @@ type DataApiTaskSubscriptionRow = {
   task_id: string
 }
 
+type StorageAgentRow = {
+  id: string
+  type: string
+  name: string
+  description: string | null
+  instructions: string | null
+  model_id: string | null
+  plan_model_id: string | null
+  small_model_id: string | null
+  mcps_json: unknown
+  configuration_json: unknown
+  sort_order: number | string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+type StorageSessionRow = {
+  id: string
+  agent_id: string
+  name: string
+  inherited_config_json: unknown
+  current_config_json: unknown
+  sort_order: number | string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+type StorageMessageRow = {
+  id: string
+  session_id: string
+  role: string
+  status: string | null
+  model_id: string | null
+  token_usage_json: unknown
+  metadata_json: unknown
+  created_at: string | null
+  updated_at: string | null
+}
+
+type StorageMessageBlockRow = {
+  id: string
+  message_id: string
+  type: string
+  text: string | null
+  payload_json: unknown
+  ordinal: number | string | null
+}
+
+type StorageSkillRow = {
+  id: string
+  name: string
+  description: string | null
+  folder_name: string
+  source: string
+  source_url: string | null
+  namespace: string | null
+  author: string | null
+  tags_json: unknown
+  content_hash: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+type StorageAgentSkillRow = {
+  agent_id: string
+  skill_id: string
+  enabled: number | boolean | null
+  created_at: string | null
+  updated_at: string | null
+}
+
 function parseJson<T>(value: unknown, fallback: T): T {
   if (value == null || value === '') return fallback
   if (typeof value !== 'string') return value as T
@@ -147,8 +224,29 @@ function toIsoTimestamp(value: unknown, fallback = new Date().toISOString()) {
   return fallback
 }
 
+function toEpochMs(value: unknown, fallback = Date.now()) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const numeric = Number(value)
+    if (Number.isFinite(numeric) && value.length >= 10) return numeric
+
+    const parsed = Date.parse(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return fallback
+}
+
 function asBoolean(value: unknown) {
   return value === true || value === 1 || value === '1'
+}
+
+function optionalString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null
+}
+
+function firstString(value: unknown): string | null {
+  const array = asStringArray(value)
+  return array[0] ?? null
 }
 
 function asStringArray(value: unknown): string[] {
@@ -222,6 +320,86 @@ async function getVersion(client: Awaited<ReturnType<typeof storageV2Database.ge
 export class StorageV2DataApiAgentRuntimeMirrorService {
   async flushStrict(): Promise<void> {
     await this.mirrorNow()
+  }
+
+  async projectStorageToDataApiRuntime(): Promise<void> {
+    const storageClient = await storageV2Database.getClient()
+    const [agentsResult, sessionsResult, messagesResult, blocksResult, skillsResult, agentSkillsResult] =
+      await Promise.all([
+        storageClient.execute(`
+          SELECT id, type, name, description, instructions, model_id, plan_model_id, small_model_id,
+                 mcps_json, configuration_json, sort_order, created_at, updated_at
+          FROM agents
+          WHERE deleted_at IS NULL
+          ORDER BY sort_order ASC, created_at ASC, id ASC
+        `),
+        storageClient.execute(`
+          SELECT id, agent_id, name, inherited_config_json, current_config_json,
+                 sort_order, created_at, updated_at
+          FROM agent_sessions
+          WHERE deleted_at IS NULL
+          ORDER BY agent_id ASC, sort_order ASC, created_at ASC, id ASC
+        `),
+        storageClient.execute(`
+          SELECT m.id, c.session_id, m.role, m.status, m.model_id, m.token_usage_json,
+                 m.metadata_json, m.created_at, m.updated_at
+          FROM messages m
+          INNER JOIN conversations c ON c.id = m.conversation_id
+          WHERE c.kind = 'agent_session'
+            AND c.deleted_at IS NULL
+            AND m.deleted_at IS NULL
+          ORDER BY c.session_id ASC, m.created_at ASC, m.id ASC
+        `),
+        storageClient.execute(`
+          SELECT b.id, b.message_id, b.type, b.text, b.payload_json, b.ordinal
+          FROM message_blocks b
+          INNER JOIN messages m ON m.id = b.message_id
+          INNER JOIN conversations c ON c.id = m.conversation_id
+          WHERE c.kind = 'agent_session'
+            AND c.deleted_at IS NULL
+            AND m.deleted_at IS NULL
+            AND b.deleted_at IS NULL
+          ORDER BY b.message_id ASC, b.ordinal ASC, b.created_at ASC, b.id ASC
+        `),
+        storageClient.execute(`
+          SELECT id, name, description, folder_name, source, source_url, namespace, author,
+                 tags_json, content_hash, created_at, updated_at
+          FROM skills
+          WHERE deleted_at IS NULL
+          ORDER BY name ASC, id ASC
+        `),
+        storageClient.execute(`
+          SELECT agent_id, skill_id, enabled, created_at, updated_at
+          FROM agent_skills
+          ORDER BY agent_id ASC, skill_id ASC
+        `)
+      ])
+
+    const agents = agentsResult.rows as unknown as StorageAgentRow[]
+    const sessions = sessionsResult.rows as unknown as StorageSessionRow[]
+    const messages = messagesResult.rows as unknown as StorageMessageRow[]
+    const blocks = blocksResult.rows as unknown as StorageMessageBlockRow[]
+    const skills = skillsResult.rows as unknown as StorageSkillRow[]
+    const agentSkills = agentSkillsResult.rows as unknown as StorageAgentSkillRow[]
+
+    if (
+      agents.length === 0 &&
+      sessions.length === 0 &&
+      messages.length === 0 &&
+      skills.length === 0 &&
+      agentSkills.length === 0
+    ) {
+      return
+    }
+
+    await this.projectRowsToDataApi({ agents, sessions, messages, blocks, skills, agentSkills })
+    logger.info('Projected Storage v2 agent runtime to DataApi tables', {
+      agentCount: agents.length,
+      sessionCount: sessions.length,
+      messageCount: messages.length,
+      skillCount: skills.length,
+      agentSkillCount: agentSkills.length
+    })
   }
 
   private async mirrorNow(): Promise<void> {
@@ -359,6 +537,306 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
       channelCount: channels.length,
       taskCount: taskRows.length
     })
+  }
+
+  private async projectRowsToDataApi(input: {
+    agents: StorageAgentRow[]
+    sessions: StorageSessionRow[]
+    messages: StorageMessageRow[]
+    blocks: StorageMessageBlockRow[]
+    skills: StorageSkillRow[]
+    agentSkills: StorageAgentSkillRow[]
+  }) {
+    const dbService = application.get('DbService')
+    const agentOrderKeys = generateOrderKeySequence(input.agents.length)
+    const sessionOrderKeysById = this.buildSessionOrderKeys(input.sessions)
+    const messageBlocksById = this.groupMessageBlocks(input.blocks)
+    const agentIds = new Set(input.agents.map((agent) => agent.id))
+    const sessionIds = new Set(
+      input.sessions.filter((session) => agentIds.has(session.agent_id)).map((session) => session.id)
+    )
+    const skillIds = new Set(input.skills.map((skill) => skill.id))
+
+    await dbService.withWriteTx(async (tx) => {
+      const modelRows = (await tx.all(sql`SELECT id FROM user_model`)) as Array<{ id: string }>
+      const modelIds = new Set(modelRows.map((row) => row.id))
+
+      for (const [index, agent] of input.agents.entries()) {
+        await this.projectAgentTx(tx, agent, agentOrderKeys[index] ?? agentOrderKeys.at(-1) ?? 'a0', modelIds)
+      }
+
+      for (const skill of input.skills) {
+        await this.projectSkillTx(tx, skill)
+      }
+
+      for (const session of input.sessions) {
+        if (!agentIds.has(session.agent_id)) continue
+        await this.projectSessionTx(tx, session, sessionOrderKeysById.get(session.id) ?? 'a0')
+      }
+
+      for (const message of input.messages) {
+        if (!sessionIds.has(message.session_id)) continue
+        await this.projectMessageTx(tx, message, messageBlocksById.get(message.id) ?? [], modelIds)
+      }
+
+      for (const row of input.agentSkills) {
+        if (!agentIds.has(row.agent_id) || !skillIds.has(row.skill_id)) continue
+        await this.projectAgentSkillTx(tx, row)
+      }
+    })
+  }
+
+  private buildSessionOrderKeys(sessions: StorageSessionRow[]) {
+    const sessionsByAgent = new Map<string, StorageSessionRow[]>()
+    for (const session of sessions) {
+      const rows = sessionsByAgent.get(session.agent_id) ?? []
+      rows.push(session)
+      sessionsByAgent.set(session.agent_id, rows)
+    }
+
+    const orderKeys = new Map<string, string>()
+    for (const rows of sessionsByAgent.values()) {
+      const keys = generateOrderKeySequence(rows.length)
+      rows.forEach((row, index) => {
+        orderKeys.set(row.id, keys[index] ?? keys.at(-1) ?? 'a0')
+      })
+    }
+    return orderKeys
+  }
+
+  private groupMessageBlocks(blocks: StorageMessageBlockRow[]) {
+    const blocksById = new Map<string, StorageMessageBlockRow[]>()
+    for (const block of blocks) {
+      const rows = blocksById.get(block.message_id) ?? []
+      rows.push(block)
+      blocksById.set(block.message_id, rows)
+    }
+    return blocksById
+  }
+
+  private async projectAgentTx(
+    tx: DbOrTx,
+    agent: StorageAgentRow,
+    orderKey: string,
+    modelIds: Set<string>
+  ): Promise<void> {
+    const configuration = asRecord(agent.configuration_json)
+    const disabledTools = asStringArray(configuration.disabledTools)
+    const createdAt = toEpochMs(agent.created_at)
+    const updatedAt = toEpochMs(agent.updated_at, createdAt)
+
+    await tx.run(sql`
+      INSERT INTO agent (
+        id, type, name, description, instructions, model, plan_model, small_model,
+        mcps, disabled_tools, configuration, order_key, created_at, updated_at, deleted_at
+      )
+      VALUES (
+        ${agent.id},
+        ${agent.type || 'pi'},
+        ${agent.name || agent.id},
+        ${agent.description ?? ''},
+        ${agent.instructions ?? 'You are a helpful assistant.'},
+        ${this.modelOrNull(agent.model_id, modelIds)},
+        ${this.modelOrNull(agent.plan_model_id, modelIds)},
+        ${this.modelOrNull(agent.small_model_id, modelIds)},
+        ${toJson(asStringArray(agent.mcps_json))},
+        ${toJson(disabledTools)},
+        ${toJson(configuration)},
+        ${orderKey},
+        ${createdAt},
+        ${updatedAt},
+        NULL
+      )
+      ON CONFLICT(id) DO UPDATE SET
+        type = excluded.type,
+        name = excluded.name,
+        description = excluded.description,
+        instructions = excluded.instructions,
+        model = excluded.model,
+        plan_model = excluded.plan_model,
+        small_model = excluded.small_model,
+        mcps = excluded.mcps,
+        disabled_tools = excluded.disabled_tools,
+        configuration = excluded.configuration,
+        order_key = excluded.order_key,
+        updated_at = excluded.updated_at,
+        deleted_at = NULL
+    `)
+  }
+
+  private async projectSkillTx(tx: DbOrTx, skill: StorageSkillRow): Promise<void> {
+    const createdAt = toEpochMs(skill.created_at)
+    const updatedAt = toEpochMs(skill.updated_at, createdAt)
+    await tx.run(sql`
+      INSERT INTO agent_global_skill (
+        id, name, description, folder_name, source, source_url, namespace, author,
+        tags, content_hash, is_enabled, created_at, updated_at
+      )
+      VALUES (
+        ${skill.id},
+        ${skill.name || skill.id},
+        ${skill.description},
+        ${skill.folder_name || skill.id},
+        ${skill.source || 'local'},
+        ${skill.source_url},
+        ${skill.namespace},
+        ${skill.author},
+        ${toJson(asStringArray(skill.tags_json))},
+        ${skill.content_hash ?? ''},
+        0,
+        ${createdAt},
+        ${updatedAt}
+      )
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        description = excluded.description,
+        folder_name = excluded.folder_name,
+        source = excluded.source,
+        source_url = excluded.source_url,
+        namespace = excluded.namespace,
+        author = excluded.author,
+        tags = excluded.tags,
+        content_hash = excluded.content_hash,
+        updated_at = excluded.updated_at
+    `)
+  }
+
+  private async projectSessionTx(tx: DbOrTx, session: StorageSessionRow, orderKey: string): Promise<void> {
+    const currentConfig = asRecord(session.current_config_json)
+    const inheritedConfig = asRecord(session.inherited_config_json)
+    const configuration = asRecord(currentConfig.configuration ?? inheritedConfig)
+    const workspacePath =
+      optionalString(currentConfig.workspacePath) ??
+      firstString(currentConfig.accessiblePaths) ??
+      firstString(currentConfig.accessible_paths)
+    const workspaceId = await this.ensureWorkspaceTx(tx, session.id, workspacePath)
+    const createdAt = toEpochMs(session.created_at)
+    const updatedAt = toEpochMs(session.updated_at, createdAt)
+
+    await tx.run(sql`
+      INSERT INTO agent_session (
+        id, agent_id, name, description, workspace_id, trace_id, order_key, created_at, updated_at
+      )
+      VALUES (
+        ${session.id},
+        ${session.agent_id},
+        ${session.name || session.id},
+        ${optionalString(currentConfig.description) ?? ''},
+        ${workspaceId},
+        ${optionalString(configuration.traceId)},
+        ${orderKey},
+        ${createdAt},
+        ${updatedAt}
+      )
+      ON CONFLICT(id) DO UPDATE SET
+        agent_id = excluded.agent_id,
+        name = excluded.name,
+        description = excluded.description,
+        workspace_id = excluded.workspace_id,
+        trace_id = excluded.trace_id,
+        order_key = excluded.order_key,
+        updated_at = excluded.updated_at
+    `)
+  }
+
+  private async ensureWorkspaceTx(tx: DbOrTx, sessionId: string, workspacePath: string | null): Promise<string> {
+    const systemRoot = application.getPath('feature.agents.workspaces')
+    const resolvedPath = workspacePath ?? path.join(systemRoot, sessionId)
+    const [existing] = (await tx.all(sql`
+      SELECT id FROM agent_workspace WHERE path = ${resolvedPath} LIMIT 1
+    `)) as Array<{ id: string }>
+    if (existing?.id) return existing.id
+
+    await fs.mkdir(resolvedPath, { recursive: true }).catch(() => undefined)
+    const id = randomUUID()
+    const type = resolvedPath.startsWith(systemRoot) ? 'system' : 'user'
+    const [orderKey] = generateOrderKeySequence(1)
+    await tx.run(sql`
+      INSERT INTO agent_workspace (id, name, path, type, order_key, created_at, updated_at)
+      VALUES (
+        ${id},
+        ${path.basename(resolvedPath) || resolvedPath},
+        ${resolvedPath},
+        ${type},
+        ${orderKey ?? 'a0'},
+        ${Date.now()},
+        ${Date.now()}
+      )
+    `)
+    return id
+  }
+
+  private async projectMessageTx(
+    tx: DbOrTx,
+    message: StorageMessageRow,
+    blocks: StorageMessageBlockRow[],
+    modelIds: Set<string>
+  ): Promise<void> {
+    const metadata = asRecord(message.metadata_json)
+    const metadataData = metadata.data
+    const parts = blocks.map((block) => {
+      const payload = asRecord(block.payload_json)
+      return Object.keys(payload).length > 0
+        ? payload
+        : {
+            type: block.type || 'text',
+            text: block.text ?? ''
+          }
+    })
+    const data =
+      metadataData && typeof metadataData === 'object' && !Array.isArray(metadataData) ? metadataData : { parts }
+    const createdAt = toEpochMs(message.created_at)
+    const updatedAt = toEpochMs(message.updated_at, createdAt)
+
+    await tx.run(sql`
+      INSERT INTO agent_session_message (
+        id, session_id, role, data, status, model_id, model_snapshot, stats,
+        runtime_resume_token, created_at, updated_at
+      )
+      VALUES (
+        ${message.id},
+        ${message.session_id},
+        ${message.role || 'assistant'},
+        ${toJson(data)},
+        ${message.status ?? 'success'},
+        ${this.modelOrNull(message.model_id, modelIds)},
+        ${toJson(metadata.modelSnapshot ?? null)},
+        ${toJson(parseJson(message.token_usage_json, null))},
+        ${optionalString(metadata.runtimeResumeToken)},
+        ${createdAt},
+        ${updatedAt}
+      )
+      ON CONFLICT(id) DO UPDATE SET
+        session_id = excluded.session_id,
+        role = excluded.role,
+        data = excluded.data,
+        status = excluded.status,
+        model_id = excluded.model_id,
+        model_snapshot = excluded.model_snapshot,
+        stats = excluded.stats,
+        runtime_resume_token = excluded.runtime_resume_token,
+        updated_at = excluded.updated_at
+    `)
+  }
+
+  private async projectAgentSkillTx(tx: DbOrTx, row: StorageAgentSkillRow): Promise<void> {
+    await tx.run(sql`
+      INSERT INTO agent_skill (agent_id, skill_id, is_enabled, created_at, updated_at)
+      VALUES (
+        ${row.agent_id},
+        ${row.skill_id},
+        ${asBoolean(row.enabled) ? 1 : 0},
+        ${toEpochMs(row.created_at)},
+        ${toEpochMs(row.updated_at)}
+      )
+      ON CONFLICT(agent_id, skill_id) DO UPDATE SET
+        is_enabled = excluded.is_enabled,
+        updated_at = excluded.updated_at
+    `)
+  }
+
+  private modelOrNull(modelId: string | null | undefined, modelIds: Set<string>) {
+    return modelId && modelIds.has(modelId) ? modelId : null
   }
 
   private async mirrorAgents(agents: DataApiAgentRow[]) {

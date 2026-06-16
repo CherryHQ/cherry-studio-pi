@@ -4,8 +4,17 @@ const mocks = vi.hoisted(() => ({
   db: {
     all: vi.fn()
   },
+  tx: {
+    all: vi.fn(),
+    run: vi.fn()
+  },
+  dbService: {
+    getDb: vi.fn(),
+    withWriteTx: vi.fn()
+  },
   application: {
-    get: vi.fn()
+    get: vi.fn(),
+    getPath: vi.fn()
   },
   agentRuntimeWrite: {
     upsertAgent: vi.fn(),
@@ -54,7 +63,12 @@ import { StorageV2DataApiAgentRuntimeMirrorService } from '../DataApiAgentRuntim
 describe('StorageV2DataApiAgentRuntimeMirrorService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.application.get.mockReturnValue({ getDb: () => mocks.db })
+    mocks.dbService.getDb.mockReturnValue(mocks.db)
+    mocks.dbService.withWriteTx.mockImplementation(async (fn: (tx: typeof mocks.tx) => Promise<unknown>) =>
+      fn(mocks.tx)
+    )
+    mocks.application.get.mockReturnValue(mocks.dbService)
+    mocks.application.getPath.mockReturnValue('/tmp/cherry-studio-pi-agent-workspaces')
     mocks.storageDatabase.getClient.mockResolvedValue(mocks.storageClient)
     mocks.storageDatabase.withTransaction.mockImplementation(async (_client: unknown, fn: () => Promise<void>) => fn())
     mocks.storageClient.execute.mockResolvedValue({
@@ -63,6 +77,8 @@ describe('StorageV2DataApiAgentRuntimeMirrorService', () => {
       columns: [],
       columnTypes: []
     })
+    mocks.tx.all.mockResolvedValue([])
+    mocks.tx.run.mockResolvedValue(undefined)
   })
 
   it('mirrors DataApi agent runtime rows into Storage v2', async () => {
@@ -248,5 +264,106 @@ describe('StorageV2DataApiAgentRuntimeMirrorService', () => {
       }),
       ['channel-1']
     )
+  })
+
+  it('projects synced Storage v2 agent runtime rows back into DataApi tables', async () => {
+    mocks.storageClient.execute
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'agent-1',
+            type: 'pi',
+            name: 'Agent',
+            description: 'desc',
+            instructions: 'be useful',
+            model_id: 'openai::gpt-4o',
+            plan_model_id: null,
+            small_model_id: null,
+            mcps_json: JSON.stringify(['filesystem']),
+            configuration_json: JSON.stringify({ permission_mode: 'bypassPermissions', disabledTools: ['Shell'] }),
+            sort_order: 0,
+            created_at: '1970-01-01T00:00:01.000Z',
+            updated_at: '1970-01-01T00:00:02.000Z'
+          }
+        ]
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'session-1',
+            agent_id: 'agent-1',
+            name: 'Session',
+            inherited_config_json: JSON.stringify({}),
+            current_config_json: JSON.stringify({ workspacePath: '/tmp/workspace', description: 'session desc' }),
+            sort_order: 0,
+            created_at: '1970-01-01T00:00:01.000Z',
+            updated_at: '1970-01-01T00:00:02.000Z'
+          }
+        ]
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'message-1',
+            session_id: 'session-1',
+            role: 'assistant',
+            status: 'success',
+            model_id: 'openai::gpt-4o',
+            token_usage_json: JSON.stringify({ completion_tokens: 1 }),
+            metadata_json: JSON.stringify({ runtimeResumeToken: 'resume-1' }),
+            created_at: '1970-01-01T00:00:01.000Z',
+            updated_at: '1970-01-01T00:00:02.000Z'
+          }
+        ]
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'message-1:block:0',
+            message_id: 'message-1',
+            type: 'text',
+            text: 'hello',
+            payload_json: JSON.stringify({ type: 'text', text: 'hello' }),
+            ordinal: 0
+          }
+        ]
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'skill-1',
+            name: 'Skill',
+            description: 'skill desc',
+            folder_name: 'skill',
+            source: 'local',
+            source_url: null,
+            namespace: null,
+            author: null,
+            tags_json: JSON.stringify(['agent']),
+            content_hash: 'hash',
+            created_at: '1970-01-01T00:00:01.000Z',
+            updated_at: '1970-01-01T00:00:02.000Z'
+          }
+        ]
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            agent_id: 'agent-1',
+            skill_id: 'skill-1',
+            enabled: 1,
+            created_at: '1970-01-01T00:00:01.000Z',
+            updated_at: '1970-01-01T00:00:02.000Z'
+          }
+        ]
+      })
+
+    mocks.tx.all.mockResolvedValueOnce([{ id: 'openai::gpt-4o' }]).mockResolvedValueOnce([{ id: 'workspace-1' }])
+
+    await new StorageV2DataApiAgentRuntimeMirrorService().projectStorageToDataApiRuntime()
+
+    expect(mocks.dbService.withWriteTx).toHaveBeenCalledTimes(1)
+    expect(mocks.application.getPath).toHaveBeenCalledWith('feature.agents.workspaces')
+    expect(mocks.tx.run).toHaveBeenCalledTimes(5)
   })
 })
