@@ -1,5 +1,6 @@
 import { type Model, MODEL_CAPABILITY } from '@shared/data/types/model'
 import {
+  findTokenLimit,
   inferEmbeddingFromModelId,
   inferFunctionCallingFromModelId,
   inferImageGenerationFromModelId,
@@ -94,6 +95,8 @@ describe('shared model capability helpers', () => {
   it.each([
     'claude-3.7-sonnet',
     'claude-sonnet-4-5',
+    'claude-fable-5',
+    'anthropic.claude-fable-5-v1:0',
     'gemini-2.5-flash',
     'gemini-3-pro-preview',
     'gpt-5.1',
@@ -127,6 +130,8 @@ describe('shared model capability helpers', () => {
     'doubao-seed-2.0',
     'gemma4:31b',
     'kimi-k2.6-preview',
+    'kimi-k2.7-code',
+    'MiniMax-M3',
     'mistral-small-latest'
   ])('infers vision capability for %s', (modelId) => {
     expect(inferVisionFromModelId(modelId)).toBe(true)
@@ -136,6 +141,13 @@ describe('shared model capability helpers', () => {
     'does not infer vision capability for %s',
     (modelId) => {
       expect(inferVisionFromModelId(modelId)).toBe(false)
+    }
+  )
+
+  it.each(['claude-opus-4-7', 'claude-opus-4-8', 'anthropic.claude-opus-4-8-v1:0', 'claude-opus-4-10'])(
+    'infers Claude Opus 4.7+ thinking token limit for %s',
+    (modelId) => {
+      expect(findTokenLimit(modelId)).toEqual({ min: 1024, max: 128_000 })
     }
   )
 

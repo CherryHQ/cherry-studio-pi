@@ -349,6 +349,34 @@ export const isClaude47SeriesModel = (model: Model): boolean => {
   return /(?:anthropic\.)?claude-opus-4[.-]7(?:[@\-:][\w\-:]+)?$/i.test(id)
 }
 
+function matchesModelIdOrName(model: Model, predicate: (id: string) => boolean): boolean {
+  if (predicate(getLowerBaseModelName(getRawModelId(model), '/'))) return true
+  return model.name ? predicate(getLowerBaseModelName(model.name, '/')) : false
+}
+
+function isClaudeOpus47OrNewerModel(model: Model | undefined | null): boolean {
+  if (!model) return false
+  return matchesModelIdOrName(model, (id) => {
+    const match = id.match(/^(?:anthropic\.)?claude-(opus|fable)-(\d+)(?:[.-](\d{1,2}))?(?:[@\-:][\w\-:]+)?$/i)
+    if (!match) return false
+    const family = match[1].toLowerCase()
+    const major = Number(match[2])
+    const minor = match[3] ? Number(match[3]) : 0
+    if (family === 'fable') return major >= 5
+    return major > 4 || (major === 4 && minor >= 7)
+  })
+}
+
+export const isSupportAdaptiveThinkingClaudeModel = (model: Model | undefined | null): boolean =>
+  isClaudeOpus47OrNewerModel(model)
+
+export const isClaudeModelRejectsTemperature = (model: Model | undefined | null): boolean =>
+  isClaudeOpus47OrNewerModel(model)
+
+export const isClaudeModelRejectsTopP = (model: Model | undefined | null): boolean => isClaudeOpus47OrNewerModel(model)
+
+export const isClaudeModelRejectsTopK = (model: Model | undefined | null): boolean => isClaudeOpus47OrNewerModel(model)
+
 /** Check if model is a Gemma 4 model hosted on Gemini API (supports thinking mode but no hard-off). */
 export const isHostedGemma4ThinkingModel = (model: Model): boolean => {
   if (model.providerId !== 'gemini') return false
@@ -492,6 +520,16 @@ export const isSupportedThinkingTokenMiMoModel = (model: Model): boolean =>
  */
 export const isSupportedThinkingTokenKimiModel = (model: Model): boolean =>
   isKimiModel(model) && isSupportedThinkingTokenModel(model)
+
+export const isKimiK27CodeModel = (model: Model | undefined | null): boolean => {
+  if (!model) return false
+  return matchesModelIdOrName(model, (id) => /^kimi-k2\.7-code(?:-[\w-]+)?$/i.test(id))
+}
+
+export const isMiniMaxM3Model = (model: Model | undefined | null): boolean => {
+  if (!model) return false
+  return matchesModelIdOrName(model, (id) => /^(?:minimax(?:ai)?[/-])?minimax-m3(?:-[\w-]+)?$/i.test(id))
+}
 
 const isDeepSeekV4PlusId = (id: string): boolean =>
   /deepseek-v(?:[4-9]\d*|[1-9]\d{1,})(?:\.\d+)?(?:-[\w]+)*(?=$|[:/])/i.test(id)
@@ -822,7 +860,10 @@ const THINKING_TOKEN_MAP: Record<string, { min: number; max: number }> = {
   'qwen-max-latest$': { min: 0, max: 81_920 },
   '^qwen3\\.[5-9]': { min: 0, max: 81_920 },
   'qwen3-(?!max).*$': { min: 1024, max: 38_912 },
-  '(?:anthropic\\.)?claude-opus-4[.-]7(?:[@\\-:][\\w\\-:]+)?$': { min: 1024, max: 128_000 },
+  '(?:anthropic\\.)?claude-opus-(?:4[.-](?:[7-9]|[1-9]\\d)|[5-9]\\d*(?:[.-]\\d+)?)(?:[@\\-:][\\w\\-:]+)?$': {
+    min: 1024,
+    max: 128_000
+  },
   '(?:anthropic\\.)?claude-opus-4[.-]6(?:[@\\-:][\\w\\-:]+)?$': { min: 1024, max: 128_000 },
   '(?:anthropic\\.)?claude-(:?sonnet|haiku)-4[.-]6.*(?:-v\\d+:\\d+)?$': { min: 1024, max: 64_000 },
   '(?:anthropic\\.)?claude-(:?haiku|sonnet|opus)-4[.-]5.*(?:-v\\d+:\\d+)?$': { min: 1024, max: 64_000 },
@@ -877,7 +918,8 @@ function inferClaudeReasoningFromId(id: string): boolean {
     id.includes('claude-3.7-sonnet') ||
     id.includes('claude-sonnet-4') ||
     id.includes('claude-opus-4') ||
-    id.includes('claude-haiku-4')
+    id.includes('claude-haiku-4') ||
+    /claude-fable-(?:[5-9]|\d{2,})(?:[.-]\d+)?/.test(id)
   )
 }
 
@@ -1012,7 +1054,7 @@ const visionAllowedModels = [
   'o3(?:-[\\w-]+)?',
   'o4(?:-[\\w-]+)?',
   'deepseek-vl(?:[\\w-]+)?',
-  'kimi-k2\\.[56](?:-[\\w-]+)?',
+  'kimi-k2\\.(?:[56]|7-code)(?:-[\\w-]+)?',
   'kimi-latest',
   'gemma-?[3-4](?:[-.\\w]+)?',
   'doubao-seed-1[.-][68](?:-[\\w-]+)?',
@@ -1030,6 +1072,7 @@ const visionAllowedModels = [
   'mistral-medium-(2508|latest)',
   'mistral-small-(2506|2603|latest)',
   'mimo-v2\\.5(?!-)',
+  'minimax-m3(?:-[\\w-]+)?',
   'mimo-v2-omni(?:-[\\w-]+)?',
   'glm-5v-turbo'
 ]

@@ -35,7 +35,7 @@ export function initSessionUserAgent() {
     const language = application.get('PreferenceService').get('app.language')
     const headers = {
       ...details.requestHeaders,
-      'User-Agent': details.url.includes('google.com') ? originUA : newUA,
+      'User-Agent': details.url.includes('gemini.google.com') || !details.url.includes('google.com') ? newUA : originUA,
       'Accept-Language': `${language}, en;q=0.9, *;q=0.5`
     }
     cb({ requestHeaders: headers })

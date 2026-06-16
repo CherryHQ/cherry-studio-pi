@@ -1747,6 +1747,7 @@
     "copy_failed": "Copiere eșuată",
     "current": "Curent",
     "cut": "Decupează",
+    "decline": "Refuză",
     "default": "Implicit",
     "delete": "Șterge",
     "delete_confirm": "Ești sigur că vrei să ștergi?",
@@ -1928,6 +1929,7 @@
     "detail": "Detalii eroare",
     "details": "Detalii",
     "diagnosis": {
+      "abnormal_finish": "Răspunsul s-a încheiat anormal, încearcă din nou sau schimbă modelul",
       "ai_button": "Diagnostic IA",
       "ai_done": "Diagnosticat",
       "ai_loading": "Se diagnostichează",
@@ -1943,6 +1945,7 @@
       "model_conflict": "Modelul de diagnostic este identic cu modelul cu eroare",
       "network": "Nu se poate conecta la server, verificați setările de rețea sau proxy",
       "ocr": "Motorul OCR nu este inițializat, verificați setările OCR",
+      "output_truncated": "Răspunsul a atins lungimea maximă și a fost trunchiat",
       "parse": "IA a returnat un răspuns invalid, vă rugăm să reîncercați sau să schimbați modelul",
       "payload": "Conținutul cererii este prea mare, reduceți dimensiunea fișierului sau a textului.",
       "proxy": "Eroare de proxy sau certificat SSL, verificați setările de proxy și de rețea",
@@ -3179,6 +3182,10 @@
       "completed": "Finalizat",
       "error": "A apărut o eroare",
       "groupHeader": "{{count}} apeluri de instrumente",
+      "groupHeaderMessages": "{{count}} mesaje",
+      "groupHeaderThinking": "{{count}} gânduri",
+      "groupHeaderWithDetails": "{{toolCount}} apeluri de instrumente · {{thinkingCount}} gânduri · {{messageCount}} mesaje",
+      "groupHeaderWithMessages": "{{toolCount}} apeluri de instrumente · {{messageCount}} mesaje",
       "invoking": "Se invocă",
       "labels": {
         "bash": "Bash",
@@ -3660,6 +3667,12 @@
     "title": "Ollama"
   },
   "onboarding": {
+    "privacy": {
+      "accept_and_continue": "Acceptă și continuă",
+      "notice": "Continuând, confirmi că ai citit și ești de acord cu",
+      "period": ".",
+      "policy": "Politica de confidențialitate"
+    },
     "select_model": {
       "change_later": "Poți schimba oricând asta din setări.",
       "start": "Începe",
@@ -4165,6 +4178,14 @@
     "source": "Vezi codul sursă",
     "zoom_in": "Mărește",
     "zoom_out": "Micșorează"
+  },
+  "privacy_policy": {
+    "title": "Politica de confidențialitate"
+  },
+  "privacy_policy_update": {
+    "description_before_link": "Am actualizat politica de confidențialitate. Te rugăm să consulți cea mai recentă ",
+    "policy": "Politica de confidențialitate",
+    "title": "Politica de confidențialitate a fost actualizată"
   },
   "prompts": {
     "explanation": "Explică-mi acest concept",

@@ -7,6 +7,9 @@ import {
   isAnthropicModel as sharedIsAnthropicModel,
   isClaude46SeriesModel as sharedIsClaude46SeriesModel,
   isClaude47SeriesModel as sharedIsClaude47SeriesModel,
+  isClaudeModelRejectsTemperature as sharedIsClaudeModelRejectsTemperature,
+  isClaudeModelRejectsTopK as sharedIsClaudeModelRejectsTopK,
+  isClaudeModelRejectsTopP as sharedIsClaudeModelRejectsTopP,
   isDeepSeekModel as sharedIsDeepSeekModel,
   isGemini3FlashModel as sharedIsGemini3FlashModel,
   isGemini3Model as sharedIsGemini3Model,
@@ -22,6 +25,7 @@ import {
   isMoonshotModel as sharedIsMoonshotModel,
   isNotSupportSystemMessageModel as sharedIsNotSupportSystemMessageModel,
   isNotSupportTextDeltaModel as sharedIsNotSupportTextDeltaModel,
+  isSupportAdaptiveThinkingClaudeModel as sharedIsSupportAdaptiveThinkingClaudeModel,
   isSupportFlexServiceTierModel as sharedIsSupportFlexServiceTierModel,
   isZhipuModel as sharedIsZhipuModel
 } from '@shared/utils/model'
@@ -102,6 +106,18 @@ export const isClaude46SeriesModel = (model: Model | undefined | null): boolean 
 
 export const isClaude47SeriesModel = (model: Model | undefined | null): boolean =>
   model ? sharedIsClaude47SeriesModel(model) : false
+
+export const isSupportAdaptiveThinkingClaudeModel = (model: Model | undefined | null): boolean =>
+  model ? sharedIsSupportAdaptiveThinkingClaudeModel(model) : false
+
+export const isClaudeModelRejectsTemperature = (model: Model | undefined | null): boolean =>
+  model ? sharedIsClaudeModelRejectsTemperature(model) : false
+
+export const isClaudeModelRejectsTopP = (model: Model | undefined | null): boolean =>
+  model ? sharedIsClaudeModelRejectsTopP(model) : false
+
+export const isClaudeModelRejectsTopK = (model: Model | undefined | null): boolean =>
+  model ? sharedIsClaudeModelRejectsTopK(model) : false
 
 export const isMaxTemperatureOneModel = (model: Model): boolean => sharedIsMaxTemperatureOneModel(model)
 

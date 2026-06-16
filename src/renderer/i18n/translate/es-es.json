@@ -1747,6 +1747,7 @@
     "copy_failed": "Error al copiar",
     "current": "Actual",
     "cut": "Cortar",
+    "decline": "Rechazar",
     "default": "Predeterminado",
     "delete": "Eliminar",
     "delete_confirm": "¿Está seguro de que desea eliminarlo?",
@@ -1928,6 +1929,7 @@
     "detail": "Detalles del error",
     "details": "Detalles",
     "diagnosis": {
+      "abnormal_finish": "La respuesta finalizó de forma anómala, vuelve a intentarlo o cambia de modelo",
       "ai_button": "Diagnóstico IA",
       "ai_done": "Diagnosticado",
       "ai_loading": "Diagnosticando",
@@ -1943,6 +1945,7 @@
       "model_conflict": "El modelo de diagnóstico es el mismo que el modelo con error",
       "network": "No se puede conectar al servidor, verifica la configuración de red o proxy",
       "ocr": "Motor OCR no inicializado, verifica la configuración de OCR",
+      "output_truncated": "La respuesta alcanzó la longitud máxima y se truncó",
       "parse": "La IA devolvió una respuesta inválida; por favor, reintenta o cambia de modelo.",
       "payload": "Contenido de la solicitud demasiado grande, por favor reduce el tamaño del archivo o del texto",
       "proxy": "Error de proxy o de certificado SSL, verifique la configuración del proxy y de la red",
@@ -3179,6 +3182,10 @@
       "completed": "Completado",
       "error": "Se ha producido un error",
       "groupHeader": "{{count}} llamadas a herramientas",
+      "groupHeaderMessages": "{{count}} mensajes",
+      "groupHeaderThinking": "{{count}} pensamientos",
+      "groupHeaderWithDetails": "{{toolCount}} llamadas a herramientas · {{thinkingCount}} pensamientos · {{messageCount}} mensajes",
+      "groupHeaderWithMessages": "{{toolCount}} llamadas a herramientas · {{messageCount}} mensajes",
       "invoking": "En llamada",
       "labels": {
         "bash": "Bash",
@@ -3660,6 +3667,12 @@
     "title": "Ollama"
   },
   "onboarding": {
+    "privacy": {
+      "accept_and_continue": "Aceptar y continuar",
+      "notice": "Al continuar, confirmas que has leído y aceptas el",
+      "period": ".",
+      "policy": "Política de Privacidad"
+    },
     "select_model": {
       "change_later": "Puedes cambiar esto en cualquier momento desde la configuración.",
       "start": "Comenzar",
@@ -4165,6 +4178,14 @@
     "source": "Ver código fuente",
     "zoom_in": "ampliar",
     "zoom_out": "reducir"
+  },
+  "privacy_policy": {
+    "title": "Política de privacidad"
+  },
+  "privacy_policy_update": {
+    "description_before_link": "Hemos actualizado la política de privacidad. Revisa la última ",
+    "policy": "Política de privacidad",
+    "title": "Política de privacidad actualizada"
   },
   "prompts": {
     "explanation": "Ayúdame a explicar este concepto",

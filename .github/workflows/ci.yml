@@ -14,6 +14,7 @@ on:
       - main
       - develop
       - v2
+      - v1
     types: [ready_for_review, synchronize, opened]
 
 jobs:

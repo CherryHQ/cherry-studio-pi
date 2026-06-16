@@ -35,6 +35,7 @@ import {
 } from './listModels/vertex'
 import {
   AIHubMixModelsResponseSchema,
+  AnthropicModelsResponseSchema,
   CopilotModelsResponseSchema,
   GeminiModelsResponseSchema,
   GitHubModelsResponseSchema,
@@ -195,6 +196,52 @@ const geminiFetcher: ModelFetcher = {
   }
 }
 
+const anthropicFetcher: ModelFetcher = {
+  match: (p) => p.id === SystemProviderIds.anthropic,
+  fetch: async (provider, signal) => {
+    const baseUrl = formatApiHost(getBaseUrl(provider, ENDPOINT_TYPE.ANTHROPIC_MESSAGES))
+    const apiKey = await providerService.getRotatedApiKey(provider.id)
+    const headers = {
+      ...defaultAppHeaders(),
+      ...(apiKey ? { 'x-api-key': apiKey } : {}),
+      'anthropic-version': '2023-06-01',
+      ...provider.settings?.extraHeaders
+    }
+    const models: z.infer<typeof AnthropicModelsResponseSchema>['data'] = []
+    let afterId: string | undefined
+    const seenCursors = new Set<string>()
+
+    do {
+      const searchParams = new URLSearchParams({ limit: '1000' })
+      if (afterId) searchParams.set('after_id', afterId)
+      const response = await getFromApi({
+        url: `${baseUrl}/models?${searchParams.toString()}`,
+        headers,
+        responseSchema: AnthropicModelsResponseSchema,
+        abortSignal: signal
+      })
+      models.push(...response.data)
+      const nextAfterId = response.has_more && response.last_id ? response.last_id : undefined
+      if (nextAfterId && seenCursors.has(nextAfterId)) {
+        logger.warn('Stopping Anthropic model pagination due to repeated cursor', {
+          providerId: provider.id,
+          cursor: nextAfterId
+        })
+        break
+      }
+      if (nextAfterId) seenCursors.add(nextAfterId)
+      afterId = nextAfterId
+    } while (afterId)
+
+    return dedup(models, (m) => m.id).map((m) =>
+      toModel(m.id, provider, {
+        name: m.display_name || m.id,
+        ownedBy: 'anthropic'
+      })
+    )
+  }
+}
+
 /** Vertex AI: paginate `publishers/{publisher}/models` for each default publisher
  *  (google, openai, meta, qwen, deepseek-ai, moonshotai, zai-org), then filter the
  *  union down to model families we actually run. Misconfigured providers and
@@ -213,6 +260,7 @@ const vertexFetcher: ModelFetcher = {
         try {
           const publisherModels: z.infer<typeof VertexPublisherModelsResponseSchema>['publisherModels'] = []
           let pageToken: string | undefined
+          const seenTokens = new Set<string>()
           do {
             const searchParams = new URLSearchParams({
               pageSize: '100',
@@ -226,7 +274,17 @@ const vertexFetcher: ModelFetcher = {
               abortSignal: signal
             })
             publisherModels.push(...response.publisherModels)
-            pageToken = response.nextPageToken
+            const nextToken = response.nextPageToken
+            if (nextToken && seenTokens.has(nextToken)) {
+              logger.warn('Stopping Vertex model pagination due to repeated cursor', {
+                providerId: provider.id,
+                publisher,
+                cursor: nextToken
+              })
+              break
+            }
+            if (nextToken) seenTokens.add(nextToken)
+            pageToken = nextToken
           } while (pageToken)
           return publisherModels
         } catch (error) {
@@ -519,6 +577,7 @@ const fetchers: ModelFetcher[] = [
   aiHubMixFetcher,
   ollamaFetcher,
   geminiFetcher,
+  anthropicFetcher,
   vertexFetcher,
   githubFetcher,
   copilotFetcher,
@@ -531,7 +590,7 @@ const fetchers: ModelFetcher[] = [
   openAICompatibleFetcher // always-match fallback, must be last
 ]
 
-const UNSUPPORTED_PROVIDERS = new Set<string>([SystemProviderIds['aws-bedrock'], SystemProviderIds.anthropic])
+const UNSUPPORTED_PROVIDERS = new Set<string>([SystemProviderIds['aws-bedrock']])
 
 function isUnsupported(provider: Provider): boolean {
   return UNSUPPORTED_PROVIDERS.has(provider.id) || provider.presetProviderId === 'vertex-anthropic'

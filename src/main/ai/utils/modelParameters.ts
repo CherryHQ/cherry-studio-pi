@@ -11,10 +11,13 @@ import type { Provider } from '@shared/data/types/provider'
 import type { AiSdkParam } from '@shared/types/aiSdk'
 import {
   isClaude46SeriesModel,
-  isClaude47SeriesModel,
+  isClaudeModelRejectsTemperature,
+  isClaudeModelRejectsTopK,
+  isClaudeModelRejectsTopP,
   isClaudeReasoningModel,
   isGemini3Model,
   isMaxTemperatureOneModel,
+  isSupportAdaptiveThinkingClaudeModel,
   isSupportedFlexServiceTier,
   isSupportedThinkingTokenClaudeModel,
   isSupportTemperatureModel,
@@ -37,7 +40,7 @@ export function getTemperature(assistant: Assistant, model: Model): number | und
   const enableTemperature = assistant.settings?.enableTemperature ?? DEFAULT_ASSISTANT_SETTINGS.enableTemperature
   if (!enableTemperature) return undefined
 
-  if (isClaude47SeriesModel(model)) {
+  if (isClaudeModelRejectsTemperature(model)) {
     logger.info(`Model ${model.id} rejects sampling parameters, disabling temperature`)
     return undefined
   }
@@ -81,7 +84,7 @@ export function getTopP(assistant: Assistant, model: Model): number | undefined 
   const enableTopP = assistant.settings?.enableTopP ?? DEFAULT_ASSISTANT_SETTINGS.enableTopP
   if (!enableTopP) return undefined
 
-  if (isClaude47SeriesModel(model)) {
+  if (isClaudeModelRejectsTopP(model)) {
     logger.info(`Model ${model.id} rejects sampling parameters, disabling topP`)
     return undefined
   }
@@ -124,7 +127,7 @@ export function filterStandardParams(
     return rest
   }
 
-  if (isClaude47SeriesModel(model) && 'topK' in standardParams) {
+  if (isClaudeModelRejectsTopK(model) && 'topK' in standardParams) {
     const { topK, ...rest } = standardParams
     logger.info(`Model ${model.id} rejects sampling parameters, dropping topK=${topK} from custom params`)
     return rest
@@ -152,7 +155,7 @@ export function getMaxTokens(assistant: Assistant, model: Model, provider: Provi
   if (
     isSupportedThinkingTokenClaudeModel(model) &&
     !isClaude46SeriesModel(model) &&
-    !isClaude47SeriesModel(model) &&
+    !isSupportAdaptiveThinkingClaudeModel(model) &&
     isAnthropicLike
   ) {
     const reasoningEffort = assistant.settings?.reasoning_effort

@@ -133,6 +133,8 @@ const HeaderContainer = styled.div`
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  max-width: 100%;
   font-size: 13px;
   padding: 8px 12px;
   background: var(--color-background);
@@ -146,8 +148,25 @@ const LabelContainer = styled.div`
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 14px;
+  width: 100%;
+  max-width: 100%;
+  font-size: 13px;
+  line-height: 14px;
   min-width: 0;
+  height: 38px;
+
+  .tool-name {
+    gap: 0 !important;
+    line-height: 14px;
+  }
+
+  .tool-icon {
+    width: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
 `
 
 const ToolName = styled(Flex)`
@@ -172,10 +191,12 @@ const Description = styled.span`
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
-  flex: 1;
+  flex: 0 1 auto;
   max-width: 300px;
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;
+  text-align: left;
 `
 
 const Stats = styled.span`
@@ -282,7 +303,7 @@ const ToolHeader: FC<ToolHeaderProps> = ({
 
   return (
     <Container>
-      <ToolName align="center" gap={6}>
+      <ToolName className="tool-name" align="center" gap={6}>
         <span className="tool-icon">{propIcon || getAgentToolIcon(toolName)}</span>
         <span className="name">{getAgentToolLabel(toolName, t)}</span>
       </ToolName>
