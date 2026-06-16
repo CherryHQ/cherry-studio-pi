@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { TopView } from '../TopView'
+import { useTopViewClose } from './useTopViewClose'
 
 type PromptTextAreaProps = Omit<
   ComponentProps<typeof Textarea.Input>,
@@ -27,7 +28,7 @@ interface PromptPopupShowParams {
 }
 
 interface Props extends PromptPopupShowParams {
-  resolve: (value: any) => void
+  resolve: (value: string | null) => void
 }
 
 const PromptPopupContainer: React.FC<Props> = ({
@@ -41,9 +42,9 @@ const PromptPopupContainer: React.FC<Props> = ({
 }) => {
   const [value, setValue] = useState(defaultValue)
   const [open, setOpen] = useState(true)
-  const resolvedRef = useRef(false)
   const textAreaRef = useRef<HTMLTextAreaElement>(null)
   const { t } = useTranslation()
+  const close = useTopViewClose<string | null>({ resolve, setOpen, topViewKey: TopViewKey })
   const {
     allowClear = true,
     className,
@@ -59,7 +60,7 @@ const PromptPopupContainer: React.FC<Props> = ({
   useEffect(() => {
     if (!open) return
 
-    window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       const textArea = textAreaRef.current
       if (!textArea) return
 
@@ -67,23 +68,16 @@ const PromptPopupContainer: React.FC<Props> = ({
       const length = textArea.value.length
       textArea.setSelectionRange(length, length)
     })
+
+    return () => window.clearTimeout(timer)
   }, [open])
 
-  const settle = (result: string | null) => {
-    if (resolvedRef.current) return
-
-    resolvedRef.current = true
-    resolve(result)
-    setOpen(false)
-    window.setTimeout(() => TopView.hide(TopViewKey), 200)
-  }
-
   const onOk = () => {
-    settle(value)
+    close(value)
   }
 
   const onCancel = () => {
-    settle(null)
+    close(null)
   }
 
   const onOpenChange = (nextOpen: boolean) => {
@@ -170,9 +164,9 @@ export default class PromptPopup {
   static hide() {
     TopView.hide(TopViewKey)
   }
-  static show(props: PromptPopupShowParams) {
-    return new Promise<string>((resolve) => {
-      TopView.show(<PromptPopupContainer {...props} resolve={resolve} />, 'PromptPopup')
+  static show(props: PromptPopupShowParams): Promise<string | null> {
+    return new Promise<string | null>((resolve) => {
+      TopView.show(<PromptPopupContainer {...props} resolve={resolve} />, TopViewKey)
     })
   }
 }
