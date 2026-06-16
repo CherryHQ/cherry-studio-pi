@@ -6185,6 +6185,7 @@
           "placeholder": "Optional e.g. GPT-4",
           "tooltip": "Optional e.g. GPT-4"
         },
+        "provider_enable_failed": "The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors.",
         "supported_text_delta": {
           "label": "Support incremental text output",
           "tooltip": "The model returns text incrementally, rather than all at once. Enabled by default, if the model does not support it, please disable this option"

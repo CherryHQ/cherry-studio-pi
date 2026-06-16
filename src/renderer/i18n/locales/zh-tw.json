@@ -6185,6 +6185,7 @@
           "placeholder": "選填，例如 GPT-4",
           "tooltip": "例如 GPT-4"
         },
+        "provider_enable_failed": "模型已新增，但服務商啟用失敗。請先啟用該服務商，否則這些模型不會出現在對話或智能體的模型選擇器中。",
         "supported_text_delta": {
           "label": "支援增量文字輸出",
           "tooltip": "模型每次回傳文字增量，而不是一次性回傳所有文字，預設開啟，如果模型不支援，請關閉"

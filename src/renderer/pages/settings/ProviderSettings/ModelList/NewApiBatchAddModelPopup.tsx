@@ -98,7 +98,18 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
       }
     })
     await createModels(dtos)
-    await enableProviderWhenModelsAvailable(provider, updateProvider, dtos.length, 'manual_batch_add_model')
+    if (!provider.isEnabled) {
+      const enabled = await enableProviderWhenModelsAvailable(
+        provider,
+        updateProvider,
+        dtos.length,
+        'manual_batch_add_model'
+      )
+      if (!enabled) {
+        window.toast.error(t('settings.models.add.provider_enable_failed'))
+        return false
+      }
+    }
     return true
   }
 

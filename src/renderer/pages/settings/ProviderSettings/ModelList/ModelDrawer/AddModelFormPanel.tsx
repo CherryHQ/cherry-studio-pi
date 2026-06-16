@@ -57,6 +57,23 @@ export default function AddModelFormPanel({
 
   const mode: ModelDrawerMode = provider && isNewApiProvider(provider) ? 'new-api' : 'legacy'
 
+  const ensureAddedModelsVisible = useCallback(
+    async (modelCount: number) => {
+      if (!provider || provider.isEnabled || modelCount <= 0) {
+        return true
+      }
+
+      const enabled = await enableProviderWhenModelsAvailable(provider, updateProvider, modelCount, 'manual_add_model')
+      if (!enabled) {
+        window.toast.error(t('settings.models.add.provider_enable_failed'))
+        return false
+      }
+
+      return true
+    },
+    [provider, t, updateProvider]
+  )
+
   useEffect(() => {
     setFormState(getInitialAddModelFormState(prefill, ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS))
     setEndpointTypeTouched(false)
@@ -143,8 +160,9 @@ export default function AddModelFormPanel({
         }
 
         if (addedCount > 0) {
-          await enableProviderWhenModelsAvailable(provider, updateProvider, addedCount, 'manual_add_model')
-          onSuccess()
+          if (await ensureAddedModelsVisible(addedCount)) {
+            onSuccess()
+          }
         }
         return
       }
@@ -155,8 +173,9 @@ export default function AddModelFormPanel({
           modelId: normalizedId
         })
       ) {
-        await enableProviderWhenModelsAvailable(provider, updateProvider, 1, 'manual_add_model')
-        onSuccess()
+        if (await ensureAddedModelsVisible(1)) {
+          onSuccess()
+        }
       }
     } catch {
       window.toast.error(t('settings.models.manage.operation_failed'))
@@ -164,7 +183,7 @@ export default function AddModelFormPanel({
       submittingRef.current = false
       setIsSubmitting(false)
     }
-  }, [addSingleModel, formState, mode, onSuccess, provider, t, updateProvider])
+  }, [addSingleModel, ensureAddedModelsVisible, formState, mode, onSuccess, t])
 
   const handleFormSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {

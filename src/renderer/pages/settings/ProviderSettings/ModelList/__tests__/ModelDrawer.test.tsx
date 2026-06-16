@@ -191,6 +191,33 @@ describe('Model drawers', () => {
     expect(updateProviderMock).toHaveBeenCalledWith({ isEnabled: true })
   })
 
+  it('keeps the add drawer open when the provider cannot be enabled after adding models', async () => {
+    useProviderMock.mockReturnValue({
+      provider: { id: 'openai', name: 'OpenAI', isEnabled: false },
+      updateProvider: updateProviderMock
+    })
+    updateProviderMock.mockRejectedValueOnce(new Error('enable failed'))
+    const onClose = vi.fn()
+
+    render(<AddModelDrawer providerId="openai" open prefill={null} onClose={onClose} />)
+
+    fireEvent.change(screen.getByLabelText('settings.models.add.model_id.label'), {
+      target: { value: 'alpha-model' }
+    })
+
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId('provider-settings-model-add-drawer-content'))
+    })
+
+    expect(createModelMock).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: 'openai', modelId: 'alpha-model' })
+    )
+    expect(updateProviderMock).toHaveBeenCalledWith({ isEnabled: true })
+    expect(window.toast.error).toHaveBeenCalledWith('settings.models.add.provider_enable_failed')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByTestId('provider-settings-model-add-drawer-content')).toBeInTheDocument()
+  })
+
   it('renders the new-api add drawer with the shared select surface and keeps endpoint type in create payload', async () => {
     useProviderMock.mockReturnValue({
       provider: { id: 'new-api', name: 'New API', isEnabled: true },
