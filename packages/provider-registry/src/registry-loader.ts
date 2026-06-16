@@ -85,6 +85,7 @@ export class RegistryLoader {
   private touch(): void {
     if (this.idleTimer) clearTimeout(this.idleTimer)
     this.idleTimer = setTimeout(() => this.invalidate(), this.idleTtlMs)
+    this.idleTimer.unref?.()
   }
 
   /** Load and cache models.json. Returns models array. */
