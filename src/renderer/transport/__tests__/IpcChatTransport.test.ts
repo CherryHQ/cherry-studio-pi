@@ -174,7 +174,7 @@ describe('IpcChatTransport', () => {
     await expect(reader.read()).rejects.toThrow('Something went wrong')
   })
 
-  it('shows workspace dispatch failures as toast and closes the stream', async () => {
+  it('shows workspace dispatch failures as toast and errors the stream', async () => {
     mock.mockApi.streamOpen.mockResolvedValue({
       mode: 'blocked',
       reason: 'agent-session-workspace',
@@ -184,11 +184,11 @@ describe('IpcChatTransport', () => {
     const stream = await transport.sendMessages(baseOptions)
     const reader = stream.getReader()
 
-    await expect(reader.read()).resolves.toMatchObject({ done: true })
+    await expect(reader.read()).rejects.toThrow('Workspace path for session session-1 is not accessible: /missing')
     expect(window.toast.error).toHaveBeenCalledWith('Workspace path for session session-1 is not accessible: /missing')
   })
 
-  it('shows agent preflight dispatch failures as toast and closes the stream', async () => {
+  it('shows agent preflight dispatch failures as toast and errors the stream', async () => {
     mock.mockApi.streamOpen.mockResolvedValue({
       mode: 'blocked',
       reason: 'agent-session-preflight',
@@ -198,7 +198,7 @@ describe('IpcChatTransport', () => {
     const stream = await transport.sendMessages(baseOptions)
     const reader = stream.getReader()
 
-    await expect(reader.read()).resolves.toMatchObject({ done: true })
+    await expect(reader.read()).rejects.toThrow('Agent agent-1 has no model configured')
     expect(window.toast.error).toHaveBeenCalledWith('Agent agent-1 has no model configured')
   })
 

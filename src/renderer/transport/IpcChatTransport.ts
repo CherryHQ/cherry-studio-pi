@@ -158,7 +158,9 @@ export class IpcChatTransport implements ChatTransport<CherryUIMessage> {
         unsubscribers.push(
           streamDispatchCoordinator.subscribe(topicId, (result) => {
             if (result.ok) {
-              if (result.ack.mode === 'blocked') closeStream()
+              if (result.ack.mode === 'blocked') {
+                errorStream(new Error(result.ack.message))
+              }
               return
             }
             errorStream(result.error)

@@ -216,6 +216,7 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
   // Own the open state so we can reset search on close without relying on the caller being
   // controlled. When `openProp` is set the caller wins; otherwise we track it ourselves.
   const [internalOpen, setInternalOpen] = useState(false)
+  const [selectorEpoch, setSelectorEpoch] = useState(0)
   const selectorId = useId()
   const open = openProp ?? internalOpen
   const mountedRef = useRef(true)
@@ -228,6 +229,10 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
 
   const forceClose = useCallback(() => {
     if (!mountedRef.current) return
+    // Radix keeps popover content mounted while the close animation runs. Resource selectors often
+    // launch modal/router transitions immediately after closing; remounting the selector tears down
+    // the old portal synchronously so it cannot linger above the next surface.
+    setSelectorEpoch((epoch) => epoch + 1)
     if (openProp === undefined) setInternalOpen(false)
     onOpenChangeProp?.(false)
   }, [openProp, onOpenChangeProp])
@@ -579,6 +584,7 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
   return (
     <>
       <EntitySelector
+        key={selectorEpoch}
         trigger={trigger}
         open={open}
         onOpenChange={handleOpenChange}

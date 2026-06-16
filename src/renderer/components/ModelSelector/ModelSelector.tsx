@@ -291,6 +291,7 @@ export function ModelSelector(props: ModelSelectorProps) {
   // `emitSelection` / `normalizeSelectedIdsFromValue`).
   const multiple = props.multiple
   const [internalOpen, setInternalOpen] = useState(false)
+  const [selectorEpoch, setSelectorEpoch] = useState(0)
   const [internalMultiSelectMode, setInternalMultiSelectMode] = useState(defaultMultiSelectMode)
   const [searchText, setSearchText] = useState('')
   const deferredSearchText = useDeferredValue(searchText)
@@ -354,6 +355,7 @@ export function ModelSelector(props: ModelSelectorProps) {
   useEffect(() => {
     const handleForceClose = (event: Event) => {
       if (getResourceSelectorForceCloseSource(event) === selectorId) return
+      setSelectorEpoch((epoch) => epoch + 1)
       setOpen(false)
     }
     window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, handleForceClose)
@@ -678,7 +680,7 @@ export function ModelSelector(props: ModelSelectorProps) {
   )
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover key={selectorEpoch} open={open} onOpenChange={setOpen}>
       {shortcut ? <ShortcutBinding shortcut={shortcut} onTrigger={handleShortcut} /> : null}
       <PopoverTrigger asChild>{triggerNode}</PopoverTrigger>
       <PopoverContent
