@@ -15,7 +15,7 @@ import { getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { getTextFromParts } from '@renderer/utils/messageUtils/partsHelpers'
 import type { MultiModelMessageStyle } from '@shared/data/preference/preferenceTypes'
 import type { FC } from 'react'
-import { memo } from 'react'
+import { memo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -40,6 +40,8 @@ const MessageGroupMenuBar: FC<Props> = ({
 }) => {
   const { t } = useTranslation()
   const partsMap = usePartsMap()
+  const deleteConfirmRef = useRef(false)
+  const deleteRunningRef = useRef(false)
 
   const v2Chat = useV2Chat()
 
@@ -47,6 +49,16 @@ const MessageGroupMenuBar: FC<Props> = ({
     const askId = messages[0]?.askId
     if (!askId) return
 
+    if (deleteConfirmRef.current || deleteRunningRef.current) {
+      return
+    }
+
+    const clearDeleteGuard = () => {
+      if (deleteRunningRef.current) return
+      deleteConfirmRef.current = false
+    }
+
+    deleteConfirmRef.current = true
     window.modal.confirm({
       title: t('message.group.delete.title'),
       content: t('message.group.delete.content'),
@@ -55,7 +67,20 @@ const MessageGroupMenuBar: FC<Props> = ({
         danger: true
       },
       okText: t('common.delete'),
-      onOk: () => v2Chat?.deleteMessageGroup(askId)
+      onCancel: clearDeleteGuard,
+      onOk: async () => {
+        if (deleteRunningRef.current) {
+          return
+        }
+
+        deleteRunningRef.current = true
+        try {
+          await v2Chat?.deleteMessageGroup(askId)
+        } finally {
+          deleteRunningRef.current = false
+          deleteConfirmRef.current = false
+        }
+      }
     })
   }
 
