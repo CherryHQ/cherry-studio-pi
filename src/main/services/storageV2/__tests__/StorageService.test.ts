@@ -26,6 +26,9 @@ const mocks = vi.hoisted(() => ({
   legacyAgentDbImportService: {
     importSnapshot: vi.fn()
   },
+  knowledgeMirrorService: {
+    flushStrict: vi.fn()
+  },
   legacyAppDbImportService: {
     importSnapshot: vi.fn()
   },
@@ -111,6 +114,10 @@ vi.mock('../FileLegacyProjectionService', () => ({
   storageV2FileLegacyProjectionService: mocks.fileProjectionService
 }))
 
+vi.mock('../KnowledgeMirrorService', () => ({
+  storageV2KnowledgeMirrorService: mocks.knowledgeMirrorService
+}))
+
 vi.mock('../LegacyAgentDbImportService', () => ({
   storageV2LegacyAgentDbImportService: mocks.legacyAgentDbImportService
 }))
@@ -165,6 +172,7 @@ describe('StorageV2Service', () => {
     mocks.configManager.flushPendingStorageV2ConfigStrict.mockResolvedValue(undefined)
     mocks.configManager.mirrorAllToStorageV2.mockResolvedValue({ mirroredCount: 0 })
     mocks.agentDbMirrorService.flushStrict.mockResolvedValue(undefined)
+    mocks.knowledgeMirrorService.flushStrict.mockResolvedValue({ baseCount: 0, itemCount: 0 })
     mocks.providerRepository.list.mockResolvedValue([])
     mocks.providerRepository.listCredentialRefs.mockResolvedValue(new Map())
     mocks.providerRepository.upsert.mockResolvedValue({ skippedSecret: false })
@@ -214,6 +222,7 @@ describe('StorageV2Service', () => {
     expect(mocks.configManager.flushPendingStorageV2ConfigStrict).toHaveBeenCalledTimes(1)
     expect(mocks.configManager.mirrorAllToStorageV2).toHaveBeenCalledTimes(1)
     expect(mocks.agentDbMirrorService.flushStrict).toHaveBeenCalledTimes(1)
+    expect(mocks.knowledgeMirrorService.flushStrict).toHaveBeenCalledTimes(1)
     expect(mocks.database.createSnapshot).toHaveBeenCalledWith('manual')
   })
 

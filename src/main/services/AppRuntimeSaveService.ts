@@ -3,6 +3,7 @@ import type { BrowserWindow } from 'electron'
 
 import { configManager } from './ConfigManager'
 import { storageV2AgentDbMirrorService } from './storageV2/AgentDbMirrorService'
+import { storageV2KnowledgeMirrorService } from './storageV2/KnowledgeMirrorService'
 
 const logger = loggerService.withContext('AppRuntimeSaveService')
 
@@ -10,6 +11,7 @@ export async function flushMainStorageV2RuntimeMirrors() {
   await configManager.flushPendingStorageV2ConfigStrict()
   await configManager.mirrorAllToStorageV2()
   await storageV2AgentDbMirrorService.flushStrict()
+  await storageV2KnowledgeMirrorService.flushStrict()
 }
 
 export async function requestRendererSaveData(_window: BrowserWindow | null | undefined, _timeoutMs?: number) {

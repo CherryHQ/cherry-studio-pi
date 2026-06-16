@@ -6,6 +6,7 @@ import { storageV2AgentDbMirrorService } from './AgentDbMirrorService'
 import { storageV2BackupService } from './BackupService'
 import { storageV2DataRootService } from './DataRootService'
 import { storageV2FileLegacyProjectionService } from './FileLegacyProjectionService'
+import { storageV2KnowledgeMirrorService } from './KnowledgeMirrorService'
 import { storageV2LegacyAgentDbImportService } from './LegacyAgentDbImportService'
 import { storageV2LegacyAppDbImportService } from './LegacyAppDbImportService'
 import { type StorageV2LegacyDexieImportOptions, storageV2LegacyDexieImportService } from './LegacyDexieImportService'
@@ -612,6 +613,7 @@ export class StorageV2Service {
     await configManager.flushPendingStorageV2ConfigStrict()
     await configManager.mirrorAllToStorageV2()
     await storageV2AgentDbMirrorService.flushStrict()
+    await storageV2KnowledgeMirrorService.flushStrict()
   }
 
   getDataRoot() {

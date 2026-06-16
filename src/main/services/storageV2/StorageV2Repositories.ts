@@ -522,6 +522,11 @@ function getKnowledgeItemSourceUri(item: Record<string, any>): string | null {
   return null
 }
 
+function storageV2SqlValueEquals(current: unknown, next: unknown): boolean {
+  const normalize = (value: unknown) => (value == null ? null : String(value))
+  return normalize(current) === normalize(next)
+}
+
 function normalizeLegacyFileType(value: unknown): string | null {
   return typeof value === 'string' && LEGACY_FILE_TYPES.has(value) ? value : null
 }
@@ -2000,36 +2005,64 @@ export class StorageV2KnowledgeRepository {
         const updatedAt = toIsoTimestamp(base.updated_at, createdAt)
         const baseSnapshot = cloneJsonValue(base)
         baseSnapshot.items = []
+        const baseSettingsJson = toJson(baseSnapshot)
+        const baseModelId = getKnowledgeBaseModelId(base)
+        const baseEmbeddingModelId = getKnowledgeBaseEmbeddingModelId(base)
+        const baseRerankModelId = getKnowledgeBaseRerankModelId(base)
         activeBaseIds.add(baseId)
 
-        await client.execute({
+        const existingBase = await client.execute({
           sql: `
-            INSERT INTO knowledge_bases (
-              id, name, model_id, embedding_model_id, rerank_model_id, settings_json,
-              created_at, updated_at, deleted_at, version
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
-            ON CONFLICT(id) DO UPDATE SET
-              name = excluded.name,
-              model_id = excluded.model_id,
-              embedding_model_id = excluded.embedding_model_id,
-              rerank_model_id = excluded.rerank_model_id,
-              settings_json = excluded.settings_json,
-              updated_at = excluded.updated_at,
-              deleted_at = NULL,
-              version = knowledge_bases.version + 1
+            SELECT name, model_id, embedding_model_id, rerank_model_id, settings_json,
+                   created_at, updated_at, deleted_at
+            FROM knowledge_bases
+            WHERE id = ?
           `,
-          args: [
-            baseId,
-            base.name ?? baseId,
-            getKnowledgeBaseModelId(base),
-            getKnowledgeBaseEmbeddingModelId(base),
-            getKnowledgeBaseRerankModelId(base),
-            toJson(baseSnapshot),
-            createdAt,
-            updatedAt
-          ]
+          args: [baseId]
         })
+        const existingBaseRow = existingBase.rows[0]
+        const nextBaseName = base.name ?? baseId
+        const baseChanged =
+          !existingBaseRow ||
+          existingBaseRow.deleted_at != null ||
+          !storageV2SqlValueEquals(existingBaseRow.name, nextBaseName) ||
+          !storageV2SqlValueEquals(existingBaseRow.model_id, baseModelId) ||
+          !storageV2SqlValueEquals(existingBaseRow.embedding_model_id, baseEmbeddingModelId) ||
+          !storageV2SqlValueEquals(existingBaseRow.rerank_model_id, baseRerankModelId) ||
+          !storageV2SqlValueEquals(existingBaseRow.settings_json, baseSettingsJson) ||
+          !storageV2SqlValueEquals(existingBaseRow.created_at, createdAt) ||
+          !storageV2SqlValueEquals(existingBaseRow.updated_at, updatedAt)
+
+        if (baseChanged) {
+          await client.execute({
+            sql: `
+              INSERT INTO knowledge_bases (
+                id, name, model_id, embedding_model_id, rerank_model_id, settings_json,
+                created_at, updated_at, deleted_at, version
+              )
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
+              ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                model_id = excluded.model_id,
+                embedding_model_id = excluded.embedding_model_id,
+                rerank_model_id = excluded.rerank_model_id,
+                settings_json = excluded.settings_json,
+                updated_at = excluded.updated_at,
+                deleted_at = NULL,
+                version = knowledge_bases.version + 1
+            `,
+            args: [
+              baseId,
+              nextBaseName,
+              baseModelId,
+              baseEmbeddingModelId,
+              baseRerankModelId,
+              baseSettingsJson,
+              createdAt,
+              updatedAt
+            ]
+          })
+        }
 
         const activeItemIds = new Set<string>()
         activeItemIdsByBase.set(baseId, activeItemIds)
@@ -2038,68 +2071,101 @@ export class StorageV2KnowledgeRepository {
           const itemId = typeof item.id === 'string' && item.id ? item.id : `${baseId}:knowledge-item:${itemIndex}`
           const itemCreatedAt = toIsoTimestamp(item.created_at, createdAt)
           const itemUpdatedAt = toIsoTimestamp(item.updated_at, itemCreatedAt)
+          const itemSourceType = typeof item.type === 'string' ? item.type : 'unknown'
+          const itemSourceUri = getKnowledgeItemSourceUri(item)
+          const itemFileId = getKnowledgeItemFileId(item)
+          const itemContentHash = typeof item.uniqueId === 'string' ? item.uniqueId : null
+          const itemStatus = typeof item.processingStatus === 'string' ? item.processingStatus : 'completed'
+          const itemMetadataJson = toJson(item)
           activeItemIds.add(itemId)
           itemCount++
 
-          await client.execute({
+          const existingItem = await client.execute({
             sql: `
-            INSERT INTO knowledge_items (
-              id, knowledge_base_id, source_type, source_uri, file_id, content_hash,
-              status, metadata_json, created_at, updated_at, deleted_at, version
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
-            ON CONFLICT(id) DO UPDATE SET
-              knowledge_base_id = excluded.knowledge_base_id,
-              source_type = excluded.source_type,
-              source_uri = excluded.source_uri,
-              file_id = excluded.file_id,
-              content_hash = excluded.content_hash,
-              status = excluded.status,
-              metadata_json = excluded.metadata_json,
-              updated_at = excluded.updated_at,
-              deleted_at = NULL,
-              version = knowledge_items.version + 1
-          `,
-            args: [
-              itemId,
-              baseId,
-              typeof item.type === 'string' ? item.type : 'unknown',
-              getKnowledgeItemSourceUri(item),
-              getKnowledgeItemFileId(item),
-              typeof item.uniqueId === 'string' ? item.uniqueId : null,
-              typeof item.processingStatus === 'string' ? item.processingStatus : 'completed',
-              toJson(item),
-              itemCreatedAt,
-              itemUpdatedAt
-            ]
+              SELECT knowledge_base_id, source_type, source_uri, file_id, content_hash,
+                     status, metadata_json, created_at, updated_at, deleted_at
+              FROM knowledge_items
+              WHERE id = ?
+            `,
+            args: [itemId]
           })
+          const existingItemRow = existingItem.rows[0]
+          const itemChanged =
+            !existingItemRow ||
+            existingItemRow.deleted_at != null ||
+            !storageV2SqlValueEquals(existingItemRow.knowledge_base_id, baseId) ||
+            !storageV2SqlValueEquals(existingItemRow.source_type, itemSourceType) ||
+            !storageV2SqlValueEquals(existingItemRow.source_uri, itemSourceUri) ||
+            !storageV2SqlValueEquals(existingItemRow.file_id, itemFileId) ||
+            !storageV2SqlValueEquals(existingItemRow.content_hash, itemContentHash) ||
+            !storageV2SqlValueEquals(existingItemRow.status, itemStatus) ||
+            !storageV2SqlValueEquals(existingItemRow.metadata_json, itemMetadataJson) ||
+            !storageV2SqlValueEquals(existingItemRow.created_at, itemCreatedAt) ||
+            !storageV2SqlValueEquals(existingItemRow.updated_at, itemUpdatedAt)
 
-          await storageV2SyncLogService.recordChange({
-            client,
-            entityType: 'knowledge_item',
-            entityId: itemId,
-            payload: {
-              id: itemId,
-              knowledgeBaseId: baseId,
-              sourceType: typeof item.type === 'string' ? item.type : 'unknown',
-              fileId: getKnowledgeItemFileId(item),
-              status: typeof item.processingStatus === 'string' ? item.processingStatus : 'completed'
-            },
-            version: await getVersion(client, 'knowledge_items', itemId)
-          })
+          if (itemChanged) {
+            await client.execute({
+              sql: `
+              INSERT INTO knowledge_items (
+                id, knowledge_base_id, source_type, source_uri, file_id, content_hash,
+                status, metadata_json, created_at, updated_at, deleted_at, version
+              )
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1)
+              ON CONFLICT(id) DO UPDATE SET
+                knowledge_base_id = excluded.knowledge_base_id,
+                source_type = excluded.source_type,
+                source_uri = excluded.source_uri,
+                file_id = excluded.file_id,
+                content_hash = excluded.content_hash,
+                status = excluded.status,
+                metadata_json = excluded.metadata_json,
+                updated_at = excluded.updated_at,
+                deleted_at = NULL,
+                version = knowledge_items.version + 1
+            `,
+              args: [
+                itemId,
+                baseId,
+                itemSourceType,
+                itemSourceUri,
+                itemFileId,
+                itemContentHash,
+                itemStatus,
+                itemMetadataJson,
+                itemCreatedAt,
+                itemUpdatedAt
+              ]
+            })
+
+            await storageV2SyncLogService.recordChange({
+              client,
+              entityType: 'knowledge_item',
+              entityId: itemId,
+              payload: {
+                id: itemId,
+                knowledgeBaseId: baseId,
+                sourceType: itemSourceType,
+                fileId: itemFileId,
+                status: itemStatus
+              },
+              version: await getVersion(client, 'knowledge_items', itemId)
+            })
+          }
         }
 
-        await storageV2SyncLogService.recordChange({
-          client,
-          entityType: 'knowledge_base',
-          entityId: baseId,
-          payload: {
-            id: baseId,
-            name: base.name ?? baseId,
-            itemCount: activeItemIds.size
-          },
-          version: await getVersion(client, 'knowledge_bases', baseId)
-        })
+        if (baseChanged) {
+          await storageV2SyncLogService.recordChange({
+            client,
+            entityType: 'knowledge_base',
+            entityId: baseId,
+            payload: {
+              id: baseId,
+              name: nextBaseName,
+              itemCount: activeItemIds.size
+            },
+            version: await getVersion(client, 'knowledge_bases', baseId)
+          })
+        }
       }
 
       if (!pruneMissing) {

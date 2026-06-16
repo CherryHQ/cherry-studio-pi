@@ -43,6 +43,9 @@ const mocks = vi.hoisted(() => ({
     commitRecordSyncStates: vi.fn(),
     pruneRemoteArtifacts: vi.fn()
   },
+  runtimeFlush: {
+    flushMainStorageV2RuntimeMirrors: vi.fn()
+  },
   powerSaveBlocker: {
     runWithBlocker: vi.fn(async (_reason: string, task: () => Promise<unknown>) => task())
   },
@@ -96,6 +99,10 @@ vi.mock('@application', () => ({
 
 vi.mock('@main/services/BackupManager', () => ({
   default: vi.fn(() => mocks.backupManager)
+}))
+
+vi.mock('@main/services/AppRuntimeSaveService', () => ({
+  flushMainStorageV2RuntimeMirrors: mocks.runtimeFlush.flushMainStorageV2RuntimeMirrors
 }))
 
 vi.mock('@main/services/memory/MemoryService', () => ({
@@ -408,6 +415,7 @@ describe('AppDataSyncService', () => {
     mocks.runtimeProjection.projectFiles.mockResolvedValue({ projectedFileCount: 0 })
     mocks.runtimeProjection.projectAppData.mockResolvedValue({ projectedRecordCount: 0 })
     mocks.dataRoot.ensureDataRoot.mockReturnValue({ dataRoot: '/tmp/cherry-studio-pi-data-root' })
+    mocks.runtimeFlush.flushMainStorageV2RuntimeMirrors.mockResolvedValue(undefined)
     mocks.storageRecordSync.sync.mockResolvedValue({
       manifest: { version: 1, records: {}, blobs: {} },
       syncStates: [],
@@ -689,6 +697,10 @@ describe('AppDataSyncService', () => {
       'data-sync.webdav',
       expect.any(Function),
       expect.objectContaining({ detail: '/remote-root' })
+    )
+    expect(mocks.runtimeFlush.flushMainStorageV2RuntimeMirrors).toHaveBeenCalledTimes(1)
+    expect(mocks.runtimeFlush.flushMainStorageV2RuntimeMirrors.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.storageRecordSync.sync.mock.invocationCallOrder[0]
     )
   })
 

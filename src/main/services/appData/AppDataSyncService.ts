@@ -7,6 +7,7 @@ import { gunzipSync, gzipSync } from 'node:zlib'
 import { application } from '@application'
 import { createClient as createLibsqlClient } from '@libsql/client'
 import { loggerService } from '@logger'
+import { flushMainStorageV2RuntimeMirrors } from '@main/services/AppRuntimeSaveService'
 import BackupManager from '@main/services/BackupManager'
 import MemoryService from '@main/services/memory/MemoryService'
 import { powerSaveBlockerService } from '@main/services/PowerSaveBlockerService'
@@ -4246,6 +4247,9 @@ export class AppDataSyncService {
           stageSyncState(`record:${id}:hash`, winner.valueHash)
         }
       }
+
+      this.assertSyncRunActive(context, '刷新本地 Storage v2 数据')
+      await flushMainStorageV2RuntimeMirrors()
 
       this.assertSyncRunActive(context, '同步 Storage v2 数据')
       const storageSync = await storageV2WebDavRecordSyncService.sync(client, basePath, manifest.storageV2, {

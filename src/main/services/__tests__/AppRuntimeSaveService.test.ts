@@ -5,7 +5,10 @@ const mocks = vi.hoisted(() => ({
     flushPendingStorageV2ConfigStrict: vi.fn(),
     mirrorAllToStorageV2: vi.fn()
   },
-  mirror: {
+  agentMirror: {
+    flushStrict: vi.fn()
+  },
+  knowledgeMirror: {
     flushStrict: vi.fn()
   }
 }))
@@ -15,7 +18,11 @@ vi.mock('../ConfigManager', () => ({
 }))
 
 vi.mock('../storageV2/AgentDbMirrorService', () => ({
-  storageV2AgentDbMirrorService: mocks.mirror
+  storageV2AgentDbMirrorService: mocks.agentMirror
+}))
+
+vi.mock('../storageV2/KnowledgeMirrorService', () => ({
+  storageV2KnowledgeMirrorService: mocks.knowledgeMirror
 }))
 
 function createWindow() {
@@ -33,7 +40,8 @@ describe('AppRuntimeSaveService', () => {
     vi.clearAllMocks()
     mocks.configManager.flushPendingStorageV2ConfigStrict.mockResolvedValue(undefined)
     mocks.configManager.mirrorAllToStorageV2.mockResolvedValue(undefined)
-    mocks.mirror.flushStrict.mockResolvedValue(undefined)
+    mocks.agentMirror.flushStrict.mockResolvedValue(undefined)
+    mocks.knowledgeMirror.flushStrict.mockResolvedValue({ baseCount: 0, itemCount: 0 })
   })
 
   it('strictly flushes main runtime mirrors in order', async () => {
@@ -43,12 +51,16 @@ describe('AppRuntimeSaveService', () => {
 
     expect(mocks.configManager.flushPendingStorageV2ConfigStrict).toHaveBeenCalledTimes(1)
     expect(mocks.configManager.mirrorAllToStorageV2).toHaveBeenCalledTimes(1)
-    expect(mocks.mirror.flushStrict).toHaveBeenCalledTimes(1)
+    expect(mocks.agentMirror.flushStrict).toHaveBeenCalledTimes(1)
+    expect(mocks.knowledgeMirror.flushStrict).toHaveBeenCalledTimes(1)
     expect(mocks.configManager.flushPendingStorageV2ConfigStrict.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.configManager.mirrorAllToStorageV2.mock.invocationCallOrder[0]
     )
     expect(mocks.configManager.mirrorAllToStorageV2.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.mirror.flushStrict.mock.invocationCallOrder[0]
+      mocks.agentMirror.flushStrict.mock.invocationCallOrder[0]
+    )
+    expect(mocks.agentMirror.flushStrict.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.knowledgeMirror.flushStrict.mock.invocationCallOrder[0]
     )
   })
 

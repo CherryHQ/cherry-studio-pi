@@ -806,4 +806,49 @@ describe('StorageV2KnowledgeRepository', () => {
       'jina::rerank'
     ])
   })
+
+  it('skips unchanged knowledge imports so runtime mirror flushes do not create fake conflicts', async () => {
+    const base = {
+      id: 'base-1',
+      name: 'Docs',
+      embeddingModelId: 'openai::text-embedding-3-small',
+      items: [],
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:01.000Z'
+    }
+    const settingsJson = JSON.stringify({ ...base, items: [] })
+    const execute = vi.fn(async (input: string | { sql: string; args?: unknown[] }) => {
+      const sql = typeof input === 'string' ? input : input.sql
+
+      if (sql.includes('FROM knowledge_bases') && sql.includes('WHERE id = ?')) {
+        return {
+          rows: [
+            {
+              name: 'Docs',
+              model_id: 'openai::text-embedding-3-small',
+              embedding_model_id: 'openai::text-embedding-3-small',
+              rerank_model_id: null,
+              settings_json: settingsJson,
+              created_at: '2026-01-01T00:00:00.000Z',
+              updated_at: '2026-01-01T00:00:01.000Z',
+              deleted_at: null
+            }
+          ],
+          columns: [],
+          columnTypes: []
+        }
+      }
+
+      return { rows: [], columns: [], columnTypes: [] }
+    })
+    const recordChange = vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
+    vi.spyOn(storageV2Database, 'withTransaction').mockImplementation(async (_client, fn) => fn())
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue({ execute } as unknown as Client)
+
+    await new StorageV2KnowledgeRepository().importBases([base], { pruneMissing: false })
+
+    const executedSql = execute.mock.calls.map(([input]) => (typeof input === 'string' ? input : input.sql))
+    expect(executedSql.some((sql) => sql.includes('INSERT INTO knowledge_bases'))).toBe(false)
+    expect(recordChange).not.toHaveBeenCalled()
+  })
 })
