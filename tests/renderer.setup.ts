@@ -546,12 +546,25 @@ vi.mock('@cherrystudio/ui', () => {
       React.createElement('div', { ...props, 'data-testid': 'avatar-fallback' }, children),
     EmojiAvatar: ({ children, ...props }) =>
       React.createElement('div', { ...props, 'data-testid': 'emoji-avatar' }, children),
-    Switch: ({ isSelected, onValueChange, ...props }) =>
+    Switch: ({
+      checked,
+      classNames: _classNames,
+      isSelected,
+      loading,
+      onCheckedChange,
+      onValueChange,
+      size: _size,
+      ...props
+    }) =>
       React.createElement('input', {
         ...props,
         type: 'checkbox',
-        checked: isSelected,
-        onChange: (e) => onValueChange?.(e.target.checked),
+        checked: checked ?? isSelected,
+        disabled: props.disabled || loading,
+        onChange: (e) => {
+          onCheckedChange?.(e.target.checked)
+          onValueChange?.(e.target.checked)
+        },
         'data-testid': 'switch'
       }),
     // Popover primitives — Radix-style trigger / content split
