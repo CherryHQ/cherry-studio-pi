@@ -29,6 +29,7 @@ import {
 import { flushSync } from 'react-dom'
 
 import {
+  getModalSurfaceElements,
   getResourceSelectorForceCloseSource,
   requestCloseResourceSelectors,
   RESOURCE_SELECTOR_FORCE_CLOSE_EVENT
@@ -187,11 +188,6 @@ const SORT_ICON_DEFAULTS = {
 const ITEM_ACTION_BUTTON_CLASS =
   'flex size-5 shrink-0 items-center justify-center text-muted-foreground/15 opacity-0 transition-all hover:text-muted-foreground/40 group-hover:opacity-100'
 const DEFAULT_ITEM_ACTION_ICON = <Bolt size={13} />
-
-function getModalSurfaceElements(): Element[] {
-  if (typeof document === 'undefined') return []
-  return Array.from(document.querySelectorAll('[data-slot="dialog-content"], [role="dialog"], [aria-modal="true"]'))
-}
 
 export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props: ResourceSelectorShellProps<T>) {
   const {

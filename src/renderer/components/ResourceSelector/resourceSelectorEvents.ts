@@ -15,6 +15,11 @@ export function requestCloseResourceSelectors(sourceId?: string) {
   window.dispatchEvent(new CustomEvent(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, { detail: { sourceId } }))
 }
 
+export function getModalSurfaceElements(): Element[] {
+  if (typeof document === 'undefined') return []
+  return Array.from(document.querySelectorAll('[data-slot="dialog-content"], [role="dialog"], [aria-modal="true"]'))
+}
+
 export function closeTransientResourceSelectors() {
   requestCloseResourceSelectors()
   if (typeof document === 'undefined') return

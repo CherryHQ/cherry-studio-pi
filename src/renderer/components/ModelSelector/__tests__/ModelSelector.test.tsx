@@ -431,6 +431,25 @@ describe('ModelSelector', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
+  it('closes when a new dialog surface appears while open', async () => {
+    mockUseModelSelectorData.mockReturnValue(makeData())
+
+    render(<ModelSelector multiple={false} trigger={<button type="button">open</button>} onSelect={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'open' }))
+    expect(screen.getByTestId('model-selector-content')).toBeInTheDocument()
+
+    const dialogContent = document.createElement('div')
+    dialogContent.setAttribute('data-slot', 'dialog-content')
+    document.body.appendChild(dialogContent)
+
+    try {
+      await waitFor(() => expect(screen.queryByTestId('model-selector-content')).not.toBeInTheDocument())
+    } finally {
+      dialogContent.remove()
+    }
+  })
+
   it('broadcasts a shared close event before opening without closing itself', () => {
     mockUseModelSelectorData.mockReturnValue(makeData())
     const closeSelectors = vi.fn()
