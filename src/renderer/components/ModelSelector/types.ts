@@ -107,6 +107,7 @@ export interface UseModelSelectorDataResult {
   listItems: FlatListItem[]
   modelItems: ModelSelectorModelItem[]
   pinnedIds: readonly UniqueModelId[]
+  refetchModelCatalog: () => Promise<unknown>
   refetchPinnedModels: () => Promise<unknown>
   resetTags: () => void
   resolvedSelectedModelIds: UniqueModelId[]

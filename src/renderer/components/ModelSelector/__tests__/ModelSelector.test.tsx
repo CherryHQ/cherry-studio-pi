@@ -245,6 +245,7 @@ function makeData(overrides: Partial<UseModelSelectorDataResult> = {}): UseModel
     listItems,
     modelItems: [itemA, itemB],
     pinnedIds: [],
+    refetchModelCatalog: vi.fn(async () => undefined),
     refetchPinnedModels: vi.fn(),
     resetTags: vi.fn(),
     resolvedSelectedModelIds: [],
@@ -296,6 +297,17 @@ describe('ModelSelector', () => {
       modelId: 'openai::gpt-4'
     })
     expect(togglePin).toHaveBeenCalledWith('openai::gpt-4')
+  })
+
+  it('refreshes the provider and model catalog when opened', async () => {
+    const refetchModelCatalog = vi.fn(async () => undefined)
+    const refetchPinnedModels = vi.fn(async () => undefined)
+    mockUseModelSelectorData.mockReturnValue(makeData({ refetchModelCatalog, refetchPinnedModels }))
+
+    render(<ModelSelector open multiple={false} trigger={<button type="button">open</button>} onSelect={vi.fn()} />)
+
+    expect(refetchModelCatalog).toHaveBeenCalledTimes(1)
+    expect(refetchPinnedModels).toHaveBeenCalledTimes(1)
   })
 
   it('keeps keyboard focus stable when multi-select value changes while open', async () => {

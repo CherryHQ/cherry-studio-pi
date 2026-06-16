@@ -1,5 +1,8 @@
 import { Button } from '@cherrystudio/ui'
-import { requestCloseResourceSelectors } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
+import {
+  closeTransientResourceSelectors,
+  scheduleCloseTransientResourceSelectors
+} from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { useUpdateSession } from '@renderer/hooks/agents/useSession'
 import { useAgentWorkspaceMutations } from '@renderer/hooks/agents/useWorkspace'
 import { cn } from '@renderer/utils'
@@ -11,13 +14,6 @@ import { useTranslation } from 'react-i18next'
 
 type WorkspaceSelectorProps = {
   session: AgentSessionEntity
-}
-
-function closeTransientSelectors() {
-  requestCloseResourceSelectors()
-  if (typeof document === 'undefined') return
-
-  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }))
 }
 
 const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
@@ -35,7 +31,7 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
 
   const handleSelectWorkspace = async () => {
     if (selecting) return
-    closeTransientSelectors()
+    const cancelScheduledClose = scheduleCloseTransientResourceSelectors()
     setSelecting(true)
     try {
       const selectedPath = await window.api.file.selectFolder({
@@ -62,6 +58,7 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
         description: getErrorMessage(error)
       })
     } finally {
+      cancelScheduledClose?.()
       setSelecting(false)
     }
   }
@@ -81,11 +78,11 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
         }}
         onPointerDown={(event) => {
           event.stopPropagation()
-          closeTransientSelectors()
+          closeTransientResourceSelectors()
         }}
         onMouseDown={(event) => {
           event.stopPropagation()
-          closeTransientSelectors()
+          closeTransientResourceSelectors()
         }}
         aria-label={`${actionLabel}: ${workspaceLabel}`}
         className={cn(

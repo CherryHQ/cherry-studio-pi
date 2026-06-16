@@ -1,5 +1,8 @@
 import { Alert, Button, Dialog, DialogContent } from '@cherrystudio/ui'
-import { requestCloseResourceSelectors } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
+import {
+  closeTransientResourceSelectors,
+  scheduleCloseTransientResourceSelectors
+} from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { useEnsureTags, useTagList } from '@renderer/hooks/useTags'
 import type { InstalledSkill } from '@shared/data/types/agent'
 import type { Assistant } from '@shared/data/types/assistant'
@@ -66,30 +69,6 @@ function buildTags(resources: ResourceItem[], backendTags: Tag[], filterType?: R
       color: colorByName.get(name) ?? DEFAULT_TAG_COLOR,
       count
     }))
-}
-
-function closeTransientLibraryOverlays() {
-  requestCloseResourceSelectors()
-  if (typeof document === 'undefined') return
-
-  const escapeEventInit: KeyboardEventInit = { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }
-  document.dispatchEvent(new KeyboardEvent('keydown', escapeEventInit))
-  window.dispatchEvent(new KeyboardEvent('keydown', escapeEventInit))
-}
-
-function scheduleCloseTransientLibraryOverlays() {
-  closeTransientLibraryOverlays()
-
-  if (typeof window === 'undefined') return undefined
-
-  queueMicrotask(closeTransientLibraryOverlays)
-  const frame = window.requestAnimationFrame(closeTransientLibraryOverlays)
-  const timer = window.setTimeout(closeTransientLibraryOverlays, 50)
-
-  return () => {
-    window.cancelAnimationFrame(frame)
-    window.clearTimeout(timer)
-  }
 }
 
 export default function LibraryPage() {
@@ -172,18 +151,18 @@ export default function LibraryPage() {
   }, [navigate, routeAction, routeResourceType, sidebarFilter.resourceType])
 
   const handleBackToList = useCallback(() => {
-    closeTransientLibraryOverlays()
+    closeTransientResourceSelectors()
     setConfigView({ type: 'list' })
     clearRouteActionSearch()
   }, [clearRouteActionSearch])
   const handleCreated = useCallback(() => {
-    closeTransientLibraryOverlays()
+    closeTransientResourceSelectors()
     refetch()
     setConfigView({ type: 'list' })
     clearRouteActionSearch()
   }, [clearRouteActionSearch, refetch])
   const handleAgentCreated = useCallback(() => {
-    closeTransientLibraryOverlays()
+    closeTransientResourceSelectors()
     refetch()
     setConfigView({ type: 'list' })
     void navigate({ to: '/app/agents', replace: true })
@@ -210,7 +189,7 @@ export default function LibraryPage() {
   useEffect(() => {
     if (routeAction !== 'create' || !routeResourceType) return
 
-    closeTransientLibraryOverlays()
+    closeTransientResourceSelectors()
 
     if (routeResourceType === 'assistant') {
       setConfigView((prev) => (prev.type === 'assistant-create' ? prev : { type: 'assistant-create' }))
@@ -224,7 +203,7 @@ export default function LibraryPage() {
   useEffect(() => {
     if (routeAction !== 'edit' || !routeResourceType || !routeResourceId) return
 
-    closeTransientLibraryOverlays()
+    closeTransientResourceSelectors()
 
     const resource = allResources.find((r) => r.type === routeResourceType && r.id === routeResourceId)
     if (!resource) return
@@ -252,7 +231,7 @@ export default function LibraryPage() {
   useEffect(() => {
     if (configView.type === 'list') return undefined
 
-    return scheduleCloseTransientLibraryOverlays()
+    return scheduleCloseTransientResourceSelectors()
   }, [configView.type])
 
   const handleEdit = useCallback((r: ResourceItem) => {
@@ -348,7 +327,7 @@ export default function LibraryPage() {
   )
 
   const handleCreate = useCallback((type: ResourceType) => {
-    closeTransientLibraryOverlays()
+    closeTransientResourceSelectors()
 
     if (type === 'assistant') {
       // Mirror the agent create flow: enter the form first, then POST only

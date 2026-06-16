@@ -153,9 +153,11 @@ describe('WorkspaceSelector', () => {
     const success = vi.fn()
     const error = vi.fn()
     const closeResourceSelectors = vi.fn()
-    const closeTransientPopovers = vi.fn()
+    const closeDocumentPopovers = vi.fn()
+    const closeWindowPopovers = vi.fn()
     window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
-    document.addEventListener('keydown', closeTransientPopovers)
+    document.addEventListener('keydown', closeDocumentPopovers)
+    window.addEventListener('keydown', closeWindowPopovers)
 
     const restoreWindow = installWindowMocks({ selectFolder, success, error })
 
@@ -165,11 +167,13 @@ describe('WorkspaceSelector', () => {
       await user.click(screen.getByRole('button', { name: /agent\.session\.workspace\.select/ }))
 
       expect(closeResourceSelectors).toHaveBeenCalled()
-      expect(closeTransientPopovers).toHaveBeenCalledWith(expect.objectContaining({ key: 'Escape', code: 'Escape' }))
+      expect(closeDocumentPopovers).toHaveBeenCalledWith(expect.objectContaining({ key: 'Escape', code: 'Escape' }))
+      expect(closeWindowPopovers).toHaveBeenCalledWith(expect.objectContaining({ key: 'Escape', code: 'Escape' }))
       expect(selectFolder).toHaveBeenCalledTimes(1)
     } finally {
       window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
-      document.removeEventListener('keydown', closeTransientPopovers)
+      document.removeEventListener('keydown', closeDocumentPopovers)
+      window.removeEventListener('keydown', closeWindowPopovers)
       restoreWindow()
     }
   })

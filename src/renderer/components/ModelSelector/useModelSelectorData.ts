@@ -75,8 +75,8 @@ export function useModelSelectorData({
   showPinnedModels = true,
   prioritizedProviderIds = []
 }: UseModelSelectorDataOptions): UseModelSelectorDataResult {
-  const { providers, isLoading: isProvidersLoading } = useProviders({ enabled: true })
-  const { models, isLoading: isModelsLoading } = useModels({ enabled: true })
+  const { providers, isLoading: isProvidersLoading, refetch: refetchProviders } = useProviders({ enabled: true })
+  const { models, isLoading: isModelsLoading, refetch: refetchModels } = useModels({ enabled: true })
   const {
     isLoading: isPinsLoading,
     isRefreshing: isPinsRefreshing,
@@ -86,6 +86,11 @@ export function useModelSelectorData({
     togglePin
   } = usePins('model')
   const { tagSelection, selectedTags, tagFilter, toggleTag, resetTags } = useModelTagFilter()
+
+  const refetchModelCatalog = useCallback(
+    async () => Promise.all([refetchProviders(), refetchModels()]),
+    [refetchModels, refetchProviders]
+  )
 
   const pinnedIds = useMemo(() => rawPinnedIds.filter(isUniqueModelId), [rawPinnedIds])
   const availableProviders = providers
@@ -298,6 +303,7 @@ export function useModelSelectorData({
     listItems,
     modelItems,
     pinnedIds,
+    refetchModelCatalog,
     refetchPinnedModels,
     resetTags,
     resolvedSelectedModelIds,

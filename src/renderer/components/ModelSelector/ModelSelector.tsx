@@ -390,6 +390,7 @@ export function ModelSelector(props: ModelSelectorProps) {
     isPinActionDisabled,
     listItems,
     modelItems,
+    refetchModelCatalog,
     refetchPinnedModels,
     resetTags,
     resolvedSelectedModelIds,
@@ -570,10 +571,15 @@ export function ModelSelector(props: ModelSelectorProps) {
   }, [open])
 
   useEffect(() => {
-    if (open && showPinnedModels) {
+    if (!open) {
+      return
+    }
+
+    void refetchModelCatalog()
+    if (showPinnedModels) {
       void refetchPinnedModels()
     }
-  }, [open, refetchPinnedModels, showPinnedModels])
+  }, [open, refetchModelCatalog, refetchPinnedModels, showPinnedModels])
 
   useEffect(() => {
     if (!open) {

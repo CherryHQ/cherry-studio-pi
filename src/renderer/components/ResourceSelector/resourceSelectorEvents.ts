@@ -14,3 +14,27 @@ export function requestCloseResourceSelectors(sourceId?: string) {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, { detail: { sourceId } }))
 }
+
+export function closeTransientResourceSelectors() {
+  requestCloseResourceSelectors()
+  if (typeof document === 'undefined') return
+
+  const escapeEventInit: KeyboardEventInit = { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }
+  document.dispatchEvent(new KeyboardEvent('keydown', escapeEventInit))
+  window.dispatchEvent(new KeyboardEvent('keydown', escapeEventInit))
+}
+
+export function scheduleCloseTransientResourceSelectors() {
+  closeTransientResourceSelectors()
+
+  if (typeof window === 'undefined') return undefined
+
+  window.queueMicrotask(closeTransientResourceSelectors)
+  const frame = window.requestAnimationFrame(closeTransientResourceSelectors)
+  const timer = window.setTimeout(closeTransientResourceSelectors, 50)
+
+  return () => {
+    window.cancelAnimationFrame(frame)
+    window.clearTimeout(timer)
+  }
+}
