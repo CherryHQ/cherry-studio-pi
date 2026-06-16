@@ -4,7 +4,7 @@ import { loggerService } from '@logger'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { formatErrorMessage, formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { FC } from 'react'
-import { useCallback } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -25,6 +25,8 @@ const YuqueSettings: FC = () => {
   const [yuqueToken, setYuqueToken] = usePreference('data.integration.yuque.token')
   const [yuqueUrl, setYuqueUrl] = usePreference('data.integration.yuque.url')
   const [, setYuqueRepoId] = usePreference('data.integration.yuque.repo_id')
+  const [checkingConnection, setCheckingConnection] = useState(false)
+  const checkingConnectionRef = useRef(false)
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
@@ -42,16 +44,21 @@ const YuqueSettings: FC = () => {
   }
 
   const handleYuqueConnectionCheck = async () => {
-    if (!yuqueToken) {
-      window.toast.error(t('settings.data.yuque.check.empty_token'))
+    if (checkingConnectionRef.current) {
       return
     }
-    if (!yuqueUrl) {
-      window.toast.error(t('settings.data.yuque.check.empty_repo_url'))
-      return
-    }
-
     try {
+      if (!yuqueToken) {
+        window.toast.error(t('settings.data.yuque.check.empty_token'))
+        return
+      }
+      if (!yuqueUrl) {
+        window.toast.error(t('settings.data.yuque.check.empty_repo_url'))
+        return
+      }
+
+      checkingConnectionRef.current = true
+      setCheckingConnection(true)
       const response = await fetch('https://www.yuque.com/api/v2/hello', {
         signal: AbortSignal.timeout(INTEGRATION_CHECK_TIMEOUT_MS),
         headers: {
@@ -85,6 +92,9 @@ const YuqueSettings: FC = () => {
     } catch (error) {
       logger.error('Failed to check Yuque connection', error as Error)
       window.toast.error(formatErrorMessage(error) || t('settings.data.yuque.check.fail'))
+    } finally {
+      checkingConnectionRef.current = false
+      setCheckingConnection(false)
     }
   }
 
@@ -133,7 +143,12 @@ const YuqueSettings: FC = () => {
               placeholder={t('settings.data.yuque.token_placeholder')}
               style={{ width: '100%' }}
             />
-            <Button onClick={handleYuqueConnectionCheck} variant="outline" className="h-9 shrink-0">
+            <Button
+              onClick={handleYuqueConnectionCheck}
+              variant="outline"
+              className="h-9 shrink-0"
+              disabled={checkingConnection}
+              loading={checkingConnection}>
               {t('settings.data.yuque.check.button')}
             </Button>
           </RowFlex>

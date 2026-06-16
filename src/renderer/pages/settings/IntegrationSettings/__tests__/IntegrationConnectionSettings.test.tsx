@@ -3,10 +3,13 @@ import type React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import JoplinSettings from '../JoplinSettings'
+import NotionSettings from '../NotionSettings'
 import SiyuanSettings from '../SiyuanSettings'
+import YuqueSettings from '../YuqueSettings'
 
 const mocks = vi.hoisted(() => ({
   preferences: {} as Record<string, unknown>,
+  notionRetrieve: vi.fn(),
   setPreference: vi.fn()
 }))
 
@@ -55,6 +58,14 @@ vi.mock('@logger', () => ({
   }
 }))
 
+vi.mock('@notionhq/client', () => ({
+  Client: vi.fn(() => ({
+    databases: {
+      retrieve: mocks.notionRetrieve
+    }
+  }))
+}))
+
 vi.mock('@renderer/context/ThemeProvider', () => ({
   useTheme: () => ({ theme: 'light' })
 }))
@@ -97,6 +108,7 @@ describe('integration connection settings', () => {
     vi.clearAllMocks()
     mocks.preferences = {}
     mocks.setPreference.mockResolvedValue(undefined)
+    mocks.notionRetrieve.mockReset()
     Object.defineProperty(window, 'toast', {
       configurable: true,
       value: {
@@ -156,5 +168,61 @@ describe('integration connection settings', () => {
     await waitFor(() => {
       expect(window.toast.success).toHaveBeenCalledWith('settings.data.siyuan.check.success')
     })
+  })
+
+  it('prevents duplicate Notion connection checks while a check is pending', async () => {
+    const runningCheck = deferred<unknown>()
+    mocks.notionRetrieve.mockReturnValueOnce(runningCheck.promise)
+    mocks.preferences = {
+      'data.integration.notion.api_key': 'secret_token',
+      'data.integration.notion.database_id': 'database_id'
+    }
+
+    render(<NotionSettings />)
+
+    const checkButton = screen.getByRole('button', { name: 'settings.data.notion.check.button' })
+    fireEvent.click(checkButton)
+    fireEvent.click(checkButton)
+
+    expect(mocks.notionRetrieve).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(checkButton).toBeDisabled())
+
+    runningCheck.resolve({ id: 'database_id' })
+    await waitFor(() => {
+      expect(window.toast.success).toHaveBeenCalledWith('settings.data.notion.check.success')
+    })
+  })
+
+  it('prevents duplicate Yuque connection checks while a check is pending', async () => {
+    const runningFetch = deferred<Response>()
+    global.fetch = vi
+      .fn()
+      .mockReturnValueOnce(runningFetch.promise)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ data: { id: 1 } })
+      } as unknown as Response)
+    mocks.preferences = {
+      'data.integration.yuque.token': 'token',
+      'data.integration.yuque.url': 'https://www.yuque.com/cherry/studio'
+    }
+
+    render(<YuqueSettings />)
+
+    const checkButton = screen.getByRole('button', { name: 'settings.data.yuque.check.button' })
+    fireEvent.click(checkButton)
+    fireEvent.click(checkButton)
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(checkButton).toBeDisabled())
+
+    runningFetch.resolve({
+      ok: true,
+      json: vi.fn().mockResolvedValue({})
+    } as unknown as Response)
+    await waitFor(() => {
+      expect(window.toast.success).toHaveBeenCalledWith('settings.data.yuque.check.success')
+    })
+    expect(fetch).toHaveBeenCalledTimes(2)
   })
 })

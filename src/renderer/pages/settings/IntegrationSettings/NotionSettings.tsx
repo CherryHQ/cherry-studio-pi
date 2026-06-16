@@ -5,7 +5,7 @@ import { Client } from '@notionhq/client'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { formatErrorMessage, formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { FC } from 'react'
-import { useCallback } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -20,6 +20,8 @@ const NotionSettings: FC = () => {
 
   const { t } = useTranslation()
   const { theme } = useTheme()
+  const [checkingConnection, setCheckingConnection] = useState(false)
+  const checkingConnectionRef = useRef(false)
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
@@ -41,16 +43,21 @@ const NotionSettings: FC = () => {
   }
 
   const handleNotionConnectionCheck = async () => {
-    if (!notionApiKey?.trim()) {
-      window.toast.error(t('settings.data.notion.check.empty_api_key'))
+    if (checkingConnectionRef.current) {
       return
     }
-    if (!notionDatabaseID?.trim()) {
-      window.toast.error(t('settings.data.notion.check.empty_database_id'))
-      return
-    }
-
     try {
+      if (!notionApiKey?.trim()) {
+        window.toast.error(t('settings.data.notion.check.empty_api_key'))
+        return
+      }
+      if (!notionDatabaseID?.trim()) {
+        window.toast.error(t('settings.data.notion.check.empty_database_id'))
+        return
+      }
+
+      checkingConnectionRef.current = true
+      setCheckingConnection(true)
       const notion = new Client({ auth: notionApiKey })
       const result = await notion.databases.retrieve({
         database_id: notionDatabaseID
@@ -64,6 +71,9 @@ const NotionSettings: FC = () => {
     } catch (error) {
       logger.error('Failed to check Notion connection', error as Error)
       window.toast.error(formatErrorMessage(error) || t('settings.data.notion.check.error'))
+    } finally {
+      checkingConnectionRef.current = false
+      setCheckingConnection(false)
     }
   }
 
@@ -128,7 +138,12 @@ const NotionSettings: FC = () => {
               placeholder={t('settings.data.notion.api_key_placeholder')}
               style={{ width: '100%' }}
             />
-            <Button onClick={handleNotionConnectionCheck} variant="outline" className="h-9 shrink-0">
+            <Button
+              onClick={handleNotionConnectionCheck}
+              variant="outline"
+              className="h-9 shrink-0"
+              disabled={checkingConnection}
+              loading={checkingConnection}>
               {t('settings.data.notion.check.button')}
             </Button>
           </RowFlex>
