@@ -15,6 +15,13 @@ describe('isDangerExt', () => {
     expect(isDangerExt('Exe')).toBe(true)
   })
 
+  it('normalizes leading dots and surrounding whitespace', () => {
+    expect(isDangerExt('.exe')).toBe(true)
+    expect(isDangerExt(' .SVG ')).toBe(true)
+    expect(isDangerExt('..desktop')).toBe(true)
+    expect(isDangerExt('.')).toBe(false)
+  })
+
   it('matches every category from the policy list', () => {
     const samples = ['sh', 'exe', 'bat', 'cmd', 'lnk', 'app', 'desktop', 'jar', 'svg', 'dmg', 'pkg']
     for (const ext of samples) {
@@ -85,6 +92,7 @@ describe('toSafeFileUrl', () => {
 
   it('returns the dirname URL for dangerous extensions', () => {
     expect(toSafeFileUrl('/foo/bar/payload.exe' as FilePath, 'exe')).toBe('file:///foo/bar')
+    expect(toSafeFileUrl('/foo/bar/payload.exe' as FilePath, '.exe')).toBe('file:///foo/bar')
     expect(toSafeFileUrl('/foo/bar/icon.svg' as FilePath, 'svg')).toBe('file:///foo/bar')
   })
 

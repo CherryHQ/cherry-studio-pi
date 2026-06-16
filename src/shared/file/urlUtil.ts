@@ -109,7 +109,8 @@ const DANGEROUS_EXTS = new Set([
  */
 export function isDangerExt(ext: string | null): boolean {
   if (!ext) return false
-  return DANGEROUS_EXTS.has(ext.toLowerCase())
+  const normalized = ext.trim().replace(/^\.+/, '').toLowerCase()
+  return normalized.length > 0 && DANGEROUS_EXTS.has(normalized)
 }
 
 // ─── Path formatting ───
