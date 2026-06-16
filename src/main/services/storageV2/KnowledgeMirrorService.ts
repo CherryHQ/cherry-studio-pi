@@ -101,11 +101,21 @@ export class StorageV2KnowledgeMirrorService {
     return application.get('DbService').getDb()
   }
 
-  async flushStrict(): Promise<{ baseCount: number; itemCount: number }> {
+  async flushStrict(options: { allowEmptyPrune?: boolean } = {}): Promise<{ baseCount: number; itemCount: number }> {
     const baseRows = await this.db
       .select()
       .from(knowledgeBaseTable)
       .orderBy(asc(knowledgeBaseTable.createdAt), asc(knowledgeBaseTable.id))
+
+    if (baseRows.length === 0 && !options.allowEmptyPrune) {
+      const existingBases = await storageV2KnowledgeRepository.listBases()
+      if (existingBases.length > 0) {
+        logger.warn('Skipped empty knowledge mirror prune because Storage v2 still has knowledge bases', {
+          existingBaseCount: existingBases.length
+        })
+      }
+      return { baseCount: 0, itemCount: 0 }
+    }
 
     const baseIds = baseRows.map((row) => row.id)
     const itemRows =
@@ -140,9 +150,9 @@ export class StorageV2KnowledgeMirrorService {
     }
   }
 
-  async flushBestEffort(reason: string): Promise<void> {
+  async flushBestEffort(reason: string, options: { allowEmptyPrune?: boolean } = {}): Promise<void> {
     try {
-      await this.flushStrict()
+      await this.flushStrict(options)
     } catch (error) {
       logger.warn('Failed to mirror knowledge database to Storage v2', {
         reason,

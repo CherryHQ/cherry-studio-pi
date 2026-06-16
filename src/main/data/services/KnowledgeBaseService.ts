@@ -8,6 +8,7 @@ import { application } from '@application'
 import { fileRefTable } from '@data/db/schemas/file'
 import { knowledgeBaseTable, knowledgeItemTable } from '@data/db/schemas/knowledge'
 import { loggerService } from '@logger'
+import { storageV2KnowledgeMirrorService } from '@main/services/storageV2/KnowledgeMirrorService'
 import { DataApiErrorFactory } from '@shared/data/api'
 import type { OffsetPaginationResponse } from '@shared/data/api/apiTypes'
 import type {
@@ -204,6 +205,7 @@ export class KnowledgeBaseService {
     })
 
     logger.info('Created knowledge base', { id: row.id, name: row.name })
+    await storageV2KnowledgeMirrorService.flushBestEffort('knowledge-base-create')
     return rowToKnowledgeBase(row)
   }
 
@@ -279,6 +281,7 @@ export class KnowledgeBaseService {
     })
 
     logger.info('Updated knowledge base', { id, changes: Object.keys(dto) })
+    await storageV2KnowledgeMirrorService.flushBestEffort('knowledge-base-update')
     return rowToKnowledgeBase(row)
   }
 
@@ -301,6 +304,7 @@ export class KnowledgeBaseService {
     })
 
     logger.info('Deleted knowledge base', { id })
+    await storageV2KnowledgeMirrorService.flushBestEffort('knowledge-base-delete', { allowEmptyPrune: true })
   }
 }
 

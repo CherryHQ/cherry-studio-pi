@@ -2,7 +2,6 @@ import { fileEntryTable, fileRefTable } from '@data/db/schemas/file'
 import { knowledgeBaseTable, knowledgeItemTable } from '@data/db/schemas/knowledge'
 import { userModelTable } from '@data/db/schemas/userModel'
 import { userProviderTable } from '@data/db/schemas/userProvider'
-import { KnowledgeBaseService } from '@data/services/KnowledgeBaseService'
 import { generateOrderKeySequence } from '@data/services/utils/orderKey'
 import { ErrorCode } from '@shared/data/api'
 import type { FileEntryId } from '@shared/data/types/file'
@@ -11,7 +10,17 @@ import { type CreateKnowledgeBaseDto, KNOWLEDGE_BASE_ERROR_MISSING_EMBEDDING_MOD
 import { createUniqueModelId } from '@shared/data/types/model'
 import { setupTestDatabase } from '@test-helpers/db'
 import { eq } from 'drizzle-orm'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const mirrorMocks = vi.hoisted(() => ({
+  flushBestEffort: vi.fn()
+}))
+
+vi.mock('@main/services/storageV2/KnowledgeMirrorService', () => ({
+  storageV2KnowledgeMirrorService: mirrorMocks
+}))
+
+import { KnowledgeBaseService } from '@data/services/KnowledgeBaseService'
 
 const KNOWLEDGE_BASE_ID = '11111111-1111-4111-8111-111111111111'
 const SECOND_KNOWLEDGE_BASE_ID = '22222222-2222-4222-8222-222222222222'
@@ -35,6 +44,8 @@ describe('KnowledgeBaseService', () => {
   let service: KnowledgeBaseService
 
   beforeEach(async () => {
+    vi.clearAllMocks()
+    mirrorMocks.flushBestEffort.mockResolvedValue(undefined)
     service = new KnowledgeBaseService()
     await seedUserProvidersAndModelsForKb()
   })
