@@ -189,10 +189,12 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
   const [fileTreeData, setFileTreeData] = useState<TreeSelectOption[]>([])
   const [selectedVault, setSelectedVault] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(false)
+  const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [exportReasoning, setExportReasoning] = useState(false)
   const vaultRequestSeqRef = useRef(0)
   const filesRequestSeqRef = useRef(0)
+  const exportingRef = useRef(false)
 
   useEffect(() => {
     if (files.length > 0) {
@@ -296,10 +298,17 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
   }, [selectedVault])
 
   const handleOk = async () => {
+    if (exportingRef.current) {
+      return
+    }
+
     if (!selectedVault) {
       setError(i18n.t('chat.topics.export.obsidian_no_vault_selected'))
       return
     }
+    exportingRef.current = true
+    setExporting(true)
+    let didResolve = false
     try {
       let markdown = ''
       if (rawContent) {
@@ -330,10 +339,16 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
         vault: selectedVault
       })
       setOpen(false)
+      didResolve = true
       resolve(true)
     } catch (error) {
       logger.error('Failed to prepare Obsidian export:', error as Error)
       window.toast.error(i18n.t('chat.topics.export.obsidian_export_failed'))
+    } finally {
+      exportingRef.current = false
+      if (!didResolve) {
+        setExporting(false)
+      }
     }
   }
 
@@ -343,6 +358,10 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
   }, [open])
 
   const handleCancel = () => {
+    if (exportingRef.current) {
+      return
+    }
+
     setOpen(false)
     resolve(false)
   }
@@ -380,7 +399,7 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
   }
 
   const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) {
+    if (!nextOpen && !exportingRef.current) {
       handleCancel()
     }
   }
@@ -533,10 +552,10 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
           )}
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={handleCancel}>
+          <Button type="button" variant="outline" disabled={exporting} onClick={handleCancel}>
             {i18n.t('common.cancel')}
           </Button>
-          <Button type="button" disabled={vaults.length === 0 || loading || !!error} onClick={handleOk}>
+          <Button type="button" disabled={vaults.length === 0 || loading || exporting || !!error} onClick={handleOk}>
             {i18n.t('chat.topics.export.obsidian_btn')}
           </Button>
         </DialogFooter>
