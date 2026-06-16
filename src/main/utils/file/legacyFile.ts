@@ -25,6 +25,13 @@ import { summarizeTextForLog } from '../logging'
 
 const logger = loggerService.withContext('Utils:File')
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms)
+    timer.unref?.()
+  })
+}
+
 // 创建文件类型映射表，提高查找效率
 const fileTypeMap = new Map<string, FileType>()
 
@@ -301,7 +308,7 @@ export async function writeWithLock(
         }
       }
 
-      await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
+      await sleep(retryDelayMs)
     }
   }
 }

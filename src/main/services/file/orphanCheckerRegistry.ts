@@ -60,6 +60,13 @@ const SQLITE_INARRAY_CHUNK = 500
 /** One transient-busy retry — SQLITE_BUSY at startup is realistic when other services are also writing. */
 const BUSY_RETRY_DELAY_MS = 50
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms)
+    timer.unref?.()
+  })
+}
+
 export const knowledgeItemChecker: SourceTypeChecker<'knowledge_item'> = {
   sourceType: 'knowledge_item',
   checkExists: async (sourceIds) => {
@@ -117,7 +124,7 @@ async function runWithBusyRetry<T>(op: () => Promise<T>): Promise<T> {
   } catch (err) {
     if ((err as { code?: string }).code !== 'SQLITE_BUSY') throw err
     logger.warn('orphan-sweep: SQLITE_BUSY, retrying once', { delayMs: BUSY_RETRY_DELAY_MS })
-    await new Promise((resolve) => setTimeout(resolve, BUSY_RETRY_DELAY_MS))
+    await sleep(BUSY_RETRY_DELAY_MS)
     try {
       return await op()
     } catch (retryErr) {
