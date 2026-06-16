@@ -1,4 +1,5 @@
 import { Tooltip } from '@cherrystudio/ui'
+import { loggerService } from '@logger'
 import { ActionIconButton } from '@renderer/components/Buttons'
 import type { QuickPanelListItem } from '@renderer/components/QuickPanel'
 import { QuickPanelReservedSymbol, useQuickPanel } from '@renderer/components/QuickPanel'
@@ -21,6 +22,8 @@ import { CircleX, Hammer, Plus, Sparkles } from 'lucide-react'
 import type { FC } from 'react'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+
+import { listMcpCatalogItems, type McpCatalogLogger } from './mcpCatalogItems'
 
 interface Props {
   assistantId: string
@@ -115,6 +118,10 @@ const circleXIcon = <CircleX />
 const sparklesIcon = <Sparkles />
 const hammerIcon18 = <Hammer size={18} />
 const sparklesIcon18 = <Sparkles size={18} />
+const logger = loggerService.withContext('McpToolsButton')
+const catalogLogger: McpCatalogLogger = {
+  warn: (message, context) => logger.warn(message, context ?? {})
+}
 
 const McpToolsButton: FC<Props> = ({ quickPanel, setInputValue, resizeTextArea, assistantId }) => {
   const { mcpServers: activedMcpServers } = useMcpServers({ isActive: true })
@@ -409,9 +416,13 @@ const McpToolsButton: FC<Props> = ({ quickPanel, setInputValue, resizeTextArea, 
     let cancelled = false
 
     const fetchPrompts = async () => {
-      const results = await Promise.all(activedMcpServers.map((server) => window.api.mcp.listPrompts(server.id)))
+      const results = await listMcpCatalogItems<McpPrompt>(
+        activedMcpServers,
+        (serverId) => window.api.mcp.listPrompts(serverId),
+        { kind: 'prompts', logger: catalogLogger }
+      )
       if (!cancelled) {
-        setPrompts(results.flat())
+        setPrompts(results)
       }
     }
 
@@ -493,9 +504,13 @@ const McpToolsButton: FC<Props> = ({ quickPanel, setInputValue, resizeTextArea, 
     let cancelled = false
 
     const fetchResources = async () => {
-      const results = await Promise.all(activedMcpServers.map((server) => window.api.mcp.listResources(server.id)))
+      const results = await listMcpCatalogItems<McpResource>(
+        activedMcpServers,
+        (serverId) => window.api.mcp.listResources(serverId),
+        { kind: 'resources', logger: catalogLogger }
+      )
       if (!cancelled) {
-        setResources(results.flat())
+        setResources(results)
       }
     }
 
