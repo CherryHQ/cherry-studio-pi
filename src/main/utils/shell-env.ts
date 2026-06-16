@@ -232,6 +232,7 @@ function getLoginShellEnvironment(): Promise<Record<string, string>> {
       child.kill()
       rejectOnce(new Error(errorMessage))
     }, SHELL_ENV_TIMEOUT_MS)
+    timeoutId.unref?.()
 
     child.stdout.on('data', (data) => {
       output += data.toString()

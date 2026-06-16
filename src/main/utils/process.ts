@@ -116,6 +116,7 @@ export async function findCommandInShellEnv(
         logger.debug(`Timeout checking command '${command}' on Windows`)
         safeResolve(null)
       }, COMMAND_LOOKUP_TIMEOUT_MS)
+      timeoutId.unref?.()
 
       child.stdout.on('data', (data) => {
         if (output.length < MAX_OUTPUT_SIZE) {
@@ -167,6 +168,7 @@ export async function findCommandInShellEnv(
         logger.debug(`Timeout checking command '${command}'`)
         safeResolve(null)
       }, COMMAND_LOOKUP_TIMEOUT_MS)
+      timeoutId.unref?.()
 
       child.stdout.on('data', (data) => {
         if (output.length < MAX_OUTPUT_SIZE) {
@@ -493,6 +495,7 @@ export async function executeCommand(
         child.kill('SIGKILL')
         reject(new Error(`Command timed out after ${options.timeout}ms`))
       }, options.timeout)
+      timeoutId.unref?.()
     }
 
     child.on('error', (err) => {
