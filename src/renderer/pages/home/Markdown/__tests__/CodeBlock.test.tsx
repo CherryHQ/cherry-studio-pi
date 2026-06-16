@@ -1,3 +1,4 @@
+import type * as RendererConstantModule from '@renderer/config/constant'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -36,11 +37,16 @@ vi.mock('@renderer/services/EventService', () => ({
   EventEmitter: mocks.EventEmitter
 }))
 
-vi.mock('@renderer/config/constant', () => ({
-  get isWin() {
-    return mocks.isWin
+vi.mock('@renderer/config/constant', async (importOriginal) => {
+  const actual = await importOriginal<typeof RendererConstantModule>()
+
+  return {
+    ...actual,
+    get isWin() {
+      return mocks.isWin
+    }
   }
-}))
+})
 
 vi.mock('@renderer/utils/markdown', () => ({
   getCodeBlockId: mocks.getCodeBlockId,
