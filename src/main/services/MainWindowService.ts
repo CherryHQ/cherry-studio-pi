@@ -610,9 +610,10 @@ export class MainWindowService extends BaseService {
 
       const mainWindow = this.mainWindow
       if (mainWindow && !mainWindow.isDestroyed()) {
-        setTimeout(() => {
+        const quoteTimer = setTimeout(() => {
           mainWindow.webContents.send(IpcChannel.App_QuoteToMain, text)
         }, 100)
+        quoteTimer.unref?.()
       }
     } catch (error) {
       logger.error('Failed to quote to main window:', error as Error)

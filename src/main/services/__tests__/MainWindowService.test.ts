@@ -130,6 +130,7 @@ interface MockBrowserWindow extends EventEmitter {
   setFullScreen: ReturnType<typeof vi.fn>
   webContents: {
     reload: ReturnType<typeof vi.fn>
+    send: ReturnType<typeof vi.fn>
     on: ReturnType<typeof vi.fn>
     setWindowOpenHandler: ReturnType<typeof vi.fn>
     setZoomFactor: ReturnType<typeof vi.fn>
@@ -156,6 +157,7 @@ function createMockWindow(): MockBrowserWindow {
   win.setFullScreen = vi.fn()
   win.webContents = {
     reload: vi.fn(),
+    send: vi.fn(),
     // capture render-process-gone listener for crash-recovery tests
     on: vi.fn(),
     setWindowOpenHandler: vi.fn(),
@@ -431,6 +433,27 @@ describe('MainWindowService', () => {
 
       expect(windowManagerMock.behavior.setMacShowInDockByType).toHaveBeenCalledWith('main', false)
       expect(win.hide).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('quoteToMainWindow', () => {
+    it('does not keep the process alive while waiting to send quoted text', () => {
+      const unref = vi.fn()
+      const timeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((_callback, timeout) => {
+        expect(timeout).toBe(100)
+        return { unref } as unknown as ReturnType<typeof setTimeout>
+      }) as typeof setTimeout)
+      ;(svc as any).mainWindow = win
+
+      try {
+        svc.quoteToMainWindow('hello')
+
+        expect(timeoutSpy).toHaveBeenCalledTimes(1)
+        expect(unref).toHaveBeenCalledTimes(1)
+        expect(win.webContents.send).not.toHaveBeenCalled()
+      } finally {
+        timeoutSpy.mockRestore()
+      }
     })
   })
 
