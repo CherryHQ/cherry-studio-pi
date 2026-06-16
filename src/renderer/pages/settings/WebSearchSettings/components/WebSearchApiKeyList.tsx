@@ -30,9 +30,17 @@ const WebSearchApiKeyItem: FC<WebSearchApiKeyItemProps> = ({ item, onUpdate, onR
   const [editValue, setEditValue] = useState(item.key)
   const [saving, setSaving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const mountedRef = useRef(true)
   const savingRef = useRef(false)
   const persist = useWebSearchPersist()
   const hasUnsavedChanges = editValue.trim() !== item.key.trim()
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     if (isEditing) {
@@ -56,7 +64,9 @@ const WebSearchApiKeyItem: FC<WebSearchApiKeyItemProps> = ({ item, onUpdate, onR
       await action()
     } finally {
       savingRef.current = false
-      setSaving(false)
+      if (mountedRef.current) {
+        setSaving(false)
+      }
     }
   }
 
@@ -72,7 +82,9 @@ const WebSearchApiKeyItem: FC<WebSearchApiKeyItemProps> = ({ item, onUpdate, onR
         return
       }
 
-      setIsEditing(false)
+      if (mountedRef.current) {
+        setIsEditing(false)
+      }
     })
   }
 
@@ -253,6 +265,16 @@ const PopupContainer: FC<PopupProps> = ({ providerId, title, resolve }) => {
   const [open, setOpen] = useState(true)
   const { t } = useTranslation()
   const resolvedRef = useRef(false)
+  const closeTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current)
+        closeTimerRef.current = null
+      }
+    }
+  }, [])
 
   const closePopup = () => {
     if (resolvedRef.current) {
@@ -261,7 +283,8 @@ const PopupContainer: FC<PopupProps> = ({ providerId, title, resolve }) => {
 
     resolvedRef.current = true
     setOpen(false)
-    window.setTimeout(() => {
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = null
       resolve(null)
       TopView.hide(TopViewKey)
     }, 200)
