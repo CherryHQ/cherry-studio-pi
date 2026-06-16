@@ -182,13 +182,15 @@ vi.mock('../editor/agent/AgentConfigPage', () => ({
   }: {
     agent?: { id: string }
     onBack?: () => void
-    onCreated?: (created: { id: string }) => void
+    onCreated?: (created: { id: string }, result?: { initialSessionId: string | null }) => void
   }) => (
     <div data-testid={agent ? 'agent-edit-page' : 'agent-create-page'}>
       <button type="button" onClick={() => onBack?.()}>
         cancel agent create
       </button>
-      <button type="button" onClick={() => onCreated?.({ id: 'agent-created' })}>
+      <button
+        type="button"
+        onClick={() => onCreated?.({ id: 'agent-created' }, { initialSessionId: 'session-created' })}>
         finish agent create
       </button>
     </div>
@@ -286,7 +288,11 @@ describe('LibraryPage create flow', () => {
       })
       expect(screen.queryByTestId('agent-edit-page')).not.toBeInTheDocument()
       expect(refetchSpy).toHaveBeenCalledTimes(1)
-      expect(navigateMock).toHaveBeenCalledWith({ to: '/app/agents', replace: true })
+      expect(navigateMock).toHaveBeenCalledWith({
+        to: '/app/agents',
+        search: { sessionId: 'session-created' },
+        replace: true
+      })
       expect(closeResourceSelectors.mock.calls.length).toBeGreaterThanOrEqual(2)
     } finally {
       window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)

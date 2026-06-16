@@ -5,12 +5,14 @@ import { ErrorBoundary } from '@renderer/components/ErrorBoundary'
 import { useCommandHandler } from '@renderer/features/command'
 import { useAgents } from '@renderer/hooks/agents/useAgent'
 import { useAgentSessionInitializer } from '@renderer/hooks/agents/useAgentSessionInitializer'
+import { useAgentSessionRouteSeed } from '@renderer/hooks/agents/useAgentSessionRouteSeed'
 import { useNavbarPosition } from '@renderer/hooks/useNavbar'
 import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import { cn } from '@renderer/utils'
 import { MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, SECOND_MIN_WINDOW_WIDTH } from '@shared/config/constant'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { AnimatePresence, motion } from 'motion/react'
 import type { PropsWithChildren } from 'react'
 import { useEffect } from 'react'
@@ -31,9 +33,18 @@ const AgentPage = () => {
   const { topicPosition } = useSettings()
   const { agents } = useAgents()
   const { t } = useTranslation()
+  const navigate = useNavigate()
+  const routeSearch = useSearch({ strict: false }) as Record<string, unknown>
+  const seededSessionId = useAgentSessionRouteSeed(routeSearch.sessionId)
 
   // Seed `agent.active_session_id` to the most-recent session when nothing is set.
   useAgentSessionInitializer()
+
+  useEffect(() => {
+    if (!seededSessionId) return
+
+    void navigate({ to: '/app/agents', search: {}, replace: true })
+  }, [navigate, seededSessionId])
 
   useCommandHandler('app.sidebar.toggle', () => {
     if (topicPosition === 'left') {

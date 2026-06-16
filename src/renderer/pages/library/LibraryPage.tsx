@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next'
 import { useAssistantMutations } from './adapters/assistantAdapter'
 import { DEFAULT_TAG_COLOR, getRandomTagColor, RESOURCE_TYPE_ORDER } from './constants'
 import SkillDetailPage from './detail/skill/SkillDetailPage'
-import AgentConfigPage from './editor/agent/AgentConfigPage'
+import AgentConfigPage, { type AgentCreateResult } from './editor/agent/AgentConfigPage'
 import AssistantConfigPage from './editor/assistant/AssistantConfigPage'
 import { serializeAssistantForExport } from './editor/assistant/transfer'
 import PromptConfigPage from './editor/prompt/PromptConfigPage'
@@ -161,12 +161,20 @@ export default function LibraryPage() {
     setConfigView({ type: 'list' })
     clearRouteActionSearch()
   }, [clearRouteActionSearch, refetch])
-  const handleAgentCreated = useCallback(() => {
-    closeTransientResourceSelectors()
-    refetch()
-    setConfigView({ type: 'list' })
-    void navigate({ to: '/app/agents', replace: true })
-  }, [navigate, refetch])
+  const handleAgentCreated = useCallback(
+    (_created: AgentDetail, result?: AgentCreateResult) => {
+      closeTransientResourceSelectors()
+      refetch()
+      setConfigView({ type: 'list' })
+      const sessionId = result?.initialSessionId?.trim()
+      void navigate({
+        to: '/app/agents',
+        ...(sessionId ? { search: { sessionId } } : {}),
+        replace: true
+      })
+    },
+    [navigate, refetch]
+  )
 
   useEffect(() => {
     if (!routeResourceType) return

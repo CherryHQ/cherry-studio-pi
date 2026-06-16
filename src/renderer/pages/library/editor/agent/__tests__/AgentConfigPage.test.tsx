@@ -227,9 +227,10 @@ describe('AgentConfigPage', () => {
 
   it('creates an agent with the disabled tool and MCP bindings', async () => {
     const user = userEvent.setup()
+    const onCreated = vi.fn()
     createAgentMock.mockResolvedValueOnce(createAgent({ id: 'created-1', name: 'Created Agent' }))
 
-    render(<AgentConfigPage onBack={vi.fn()} onCreated={vi.fn()} />)
+    render(<AgentConfigPage onBack={vi.fn()} onCreated={onCreated} />)
 
     await user.click(screen.getByRole('button', { name: 'basic' }))
     await user.click(screen.getByRole('button', { name: 'set basic' }))
@@ -253,6 +254,9 @@ describe('AgentConfigPage', () => {
       workspace: { type: 'system' }
     })
     expect(cacheSetMock).toHaveBeenCalledWith('agent.active_session_id', 'session-created')
+    expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ id: 'created-1' }), {
+      initialSessionId: 'session-created'
+    })
   })
 
   it('finishes agent creation without duplicating the agent when initial session creation fails', async () => {
@@ -283,7 +287,9 @@ describe('AgentConfigPage', () => {
         description: 'session failed'
       })
       expect(onCreated).toHaveBeenCalledTimes(1)
-      expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ id: 'created-session-fail' }))
+      expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ id: 'created-session-fail' }), {
+        initialSessionId: null
+      })
     } finally {
       Object.defineProperty(window, 'toast', { configurable: true, value: originalToast })
     }

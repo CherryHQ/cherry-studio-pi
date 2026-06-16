@@ -41,11 +41,15 @@ interface Props {
    * Called once the create flow lands a new agent on the server so the
    * parent can return to list mode and refetch the latest collection.
    */
-  onCreated?: (created: AgentDetail) => void
+  onCreated?: (created: AgentDetail, result?: AgentCreateResult) => void
   presentation?: 'page' | 'dialog'
 }
 
 const CREATE_AGENT_STEP_IDS: AgentConfigSection[] = ['mode', 'basic', 'workspace', 'prompt', 'tools']
+
+export type AgentCreateResult = {
+  initialSessionId: string | null
+}
 
 // Stub used by the Tools tab in create mode so `agent.id` reads are safe.
 // Skills still require a persisted agent id; tool and MCP draft changes are
@@ -135,7 +139,7 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated, presentation = '
         if (initialSession?.id) {
           cacheService.set('agent.active_session_id', initialSession.id)
         }
-        onCreated?.(created)
+        onCreated?.(created, { initialSessionId: initialSession?.id ?? null })
         // Even though the page returns to the list right after create, keep
         // the canonical row here so the save state machine completes against
         // backend-normalized data before the parent unmounts this editor.
