@@ -56,6 +56,12 @@ function countPendingRows(source: Map<StorageV2DexieTableName, Set<string>>) {
   return Array.from(source.values()).reduce((total, rowIds) => total + rowIds.size, 0)
 }
 
+function unrefTimer(timer: ReturnType<typeof setTimeout>) {
+  if (typeof timer === 'object' && timer && 'unref' in timer && typeof timer.unref === 'function') {
+    timer.unref()
+  }
+}
+
 class StorageV2DexieTableMirrorService {
   private installed = false
   private timer: ReturnType<typeof setTimeout> | null = null
@@ -216,6 +222,7 @@ class StorageV2DexieTableMirrorService {
       this.timer = null
       void this.flush()
     }, debounceMs)
+    unrefTimer(this.timer)
   }
 
   private hasPendingWork() {
