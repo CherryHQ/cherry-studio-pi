@@ -35,6 +35,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
   const versionRequestSeqRef = useRef(0)
   const toggleActiveRef = useRef(false)
   const deleteRef = useRef(false)
+  const deleteRunningRef = useRef(false)
   const runtimeStatus = useMcpRuntimeStatus(server.id, server.isActive)
 
   const updateServerBody = useCallback((body: UpdateMcpServerDto) => updateMcpServer({ body }), [updateMcpServer])
@@ -132,8 +133,13 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
     }
 
     try {
-      if (deleteRef.current) {
+      if (deleteRef.current || deleteRunningRef.current) {
         return
+      }
+
+      const clearDeleteGuard = () => {
+        if (deleteRunningRef.current) return
+        deleteRef.current = false
       }
 
       deleteRef.current = true
@@ -141,10 +147,13 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
         title: t('settings.mcp.deleteServer'),
         content: t('settings.mcp.deleteServerConfirm'),
         centered: true,
-        onCancel: () => {
-          deleteRef.current = false
-        },
+        onCancel: clearDeleteGuard,
         onOk: async () => {
+          if (deleteRunningRef.current) {
+            return
+          }
+
+          deleteRunningRef.current = true
           setDeleting(true)
           try {
             await window.api.mcp.removeServer(server.id)
@@ -155,11 +164,13 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
             throw error
           } finally {
             setDeleting(false)
+            deleteRunningRef.current = false
             deleteRef.current = false
           }
         }
       })
     } catch (error: any) {
+      deleteRunningRef.current = false
       deleteRef.current = false
       showDeleteError(error)
     }

@@ -43,7 +43,7 @@ import { useMcpServerTrust } from '@renderer/hooks/useMcpServerTrust'
 import McpDescription from '@renderer/pages/settings/McpSettings/McpDescription'
 import type { McpPrompt, McpResource, McpTool } from '@renderer/types'
 import { parseKeyValueString } from '@renderer/utils/env'
-import { formatMcpError } from '@renderer/utils/error'
+import { formatErrorMessage, formatMcpError } from '@renderer/utils/error'
 import { cn } from '@renderer/utils/style'
 import type { McpServerLogEntry } from '@shared/config/types'
 import type { UpdateMcpServerDto } from '@shared/data/api/schemas/mcpServers'
@@ -184,6 +184,8 @@ const McpSettings: React.FC = () => {
   const resourcesRequestSeqRef = useRef(0)
   const versionRequestSeqRef = useRef(0)
   const logsRequestSeqRef = useRef(0)
+  const deleteConfirmRef = useRef(false)
+  const deleteRunningRef = useRef(false)
 
   const { theme } = useTheme()
 
@@ -537,21 +539,51 @@ const McpSettings: React.FC = () => {
 
   const onDeleteMcpServer = useCallback(
     async (serverToDelete: McpServer) => {
+      const showDeleteError = (error: unknown) => {
+        window.toast.error(`${t('settings.mcp.deleteError')}: ${formatErrorMessage(error)}`)
+      }
+
       try {
+        if (deleteConfirmRef.current || deleteRunningRef.current) {
+          return
+        }
+
+        const clearDeleteGuard = () => {
+          if (deleteRunningRef.current) return
+          deleteConfirmRef.current = false
+        }
+
+        deleteConfirmRef.current = true
         window.modal.confirm({
           title: t('settings.mcp.deleteServer'),
           content: t('settings.mcp.deleteServerConfirm'),
           centered: true,
           okButtonProps: { danger: true },
+          onCancel: clearDeleteGuard,
           onOk: async () => {
-            await window.api.mcp.removeServer(serverToDelete.id)
-            await deleteMcpServer({})
-            window.toast.success(t('settings.mcp.deleteSuccess'))
-            void navigate({ to: '/settings/mcp' })
+            if (deleteRunningRef.current) {
+              return
+            }
+
+            deleteRunningRef.current = true
+            try {
+              await window.api.mcp.removeServer(serverToDelete.id)
+              await deleteMcpServer({})
+              window.toast.success(t('settings.mcp.deleteSuccess'))
+              void navigate({ to: '/settings/mcp' })
+            } catch (error) {
+              showDeleteError(error)
+              throw error
+            } finally {
+              deleteRunningRef.current = false
+              deleteConfirmRef.current = false
+            }
           }
         })
       } catch (error: any) {
-        window.toast.error(`${t('settings.mcp.deleteError')}: ${error.message}`)
+        deleteRunningRef.current = false
+        deleteConfirmRef.current = false
+        showDeleteError(error)
       }
     },
 
