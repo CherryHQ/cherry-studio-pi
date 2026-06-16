@@ -3,7 +3,7 @@ import { cn } from '@cherrystudio/ui/lib/utils'
 import { loggerService } from '@logger'
 import { TopView } from '@renderer/components/TopView'
 import type { CSSProperties, ReactNode } from 'react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useTopViewClose } from './useTopViewClose'
@@ -86,6 +86,8 @@ const PopupContainer: React.FC<Props> = ({
   ...rest
 }) => {
   const [open, setOpen] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
   const { t } = useTranslation()
   const close = useTopViewClose({ afterClose: rest.afterClose, resolve, setOpen, topViewKey: TopViewKey })
 
@@ -94,26 +96,43 @@ const PopupContainer: React.FC<Props> = ({
   }
 
   const onOk = async () => {
+    if (submittingRef.current) {
+      return
+    }
+
+    submittingRef.current = true
+    setSubmitting(true)
+    let shouldClose = false
     try {
       const result = await handleOk?.()
       if (result === false) {
         return
       }
+      shouldClose = true
     } catch (error) {
       logger.error('GeneralPopup onOk handler failed:', error as Error)
       return
+    } finally {
+      submittingRef.current = false
+      if (!shouldClose) {
+        setSubmitting(false)
+      }
     }
 
     settle({})
   }
 
   const onCancel = () => {
+    if (submittingRef.current) {
+      return
+    }
+
     handleCancel?.()
     settle({})
   }
 
   const onOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) {
+    if (!nextOpen && !submittingRef.current) {
       onCancel()
     }
   }
@@ -150,7 +169,7 @@ const PopupContainer: React.FC<Props> = ({
             <DialogFooter>
               <Button
                 variant="outline"
-                disabled={cancelButtonProps?.disabled}
+                disabled={cancelButtonProps?.disabled || submitting}
                 className={cancelButtonProps?.className}
                 style={cancelButtonProps?.style}
                 onClick={onCancel}>
@@ -158,7 +177,8 @@ const PopupContainer: React.FC<Props> = ({
               </Button>
               <Button
                 variant={okButtonProps?.danger ? 'destructive' : 'default'}
-                disabled={okButtonProps?.disabled}
+                disabled={okButtonProps?.disabled || submitting}
+                loading={submitting}
                 className={okButtonProps?.className}
                 style={okButtonProps?.style}
                 onClick={onOk}>
