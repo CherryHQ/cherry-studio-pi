@@ -12,6 +12,7 @@ import {
 } from '@cherrystudio/ui'
 import { backupToS3 } from '@renderer/services/BackupService'
 import { formatFileSize } from '@renderer/utils'
+import { runExclusiveOperation } from '@renderer/utils/exclusiveOperation'
 import dayjs from 'dayjs'
 import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -144,6 +145,7 @@ export function useS3RestoreModal({
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [backupFiles, setBackupFiles] = useState<BackupFile[]>([])
   const listSeqRef = useRef(0)
+  const restoringRef = useRef(false)
   const { t } = useTranslation()
 
   const showRestoreModal = useCallback(async () => {
@@ -199,33 +201,39 @@ export function useS3RestoreModal({
       cancelText: t('settings.data.s3.restore.confirm.cancel'),
       centered: true,
       onOk: async () => {
-        setRestoring(true)
-        try {
-          await window.api.backup.restoreFromS3({
-            endpoint,
-            region,
-            bucket,
-            accessKeyId,
-            secretAccessKey,
-            root,
-            fileName: selectedFile,
-            autoSync: false,
-            syncInterval: 0,
-            maxBackups: 0,
-            skipBackupFile: false
-          })
-          window.toast.success(t('message.restore.success'))
-          setIsRestoreModalVisible(false)
-        } catch (error: any) {
-          window.toast.error(t('settings.data.s3.restore.error', { message: error.message }))
-        } finally {
-          setRestoring(false)
-        }
+        await runExclusiveOperation(restoringRef, async () => {
+          setRestoring(true)
+          try {
+            await window.api.backup.restoreFromS3({
+              endpoint,
+              region,
+              bucket,
+              accessKeyId,
+              secretAccessKey,
+              root,
+              fileName: selectedFile,
+              autoSync: false,
+              syncInterval: 0,
+              maxBackups: 0,
+              skipBackupFile: false
+            })
+            window.toast.success(t('message.restore.success'))
+            setIsRestoreModalVisible(false)
+          } catch (error: any) {
+            window.toast.error(t('settings.data.s3.restore.error', { message: error.message }))
+          } finally {
+            setRestoring(false)
+          }
+        })
       }
     })
   }, [selectedFile, endpoint, region, bucket, accessKeyId, secretAccessKey, root, t])
 
   const handleCancel = () => {
+    if (restoringRef.current) {
+      return
+    }
+
     listSeqRef.current += 1
     setLoadingFiles(false)
     setIsRestoreModalVisible(false)
@@ -289,10 +297,10 @@ export function S3RestoreModal({
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={handleCancel}>
+          <Button variant="outline" onClick={handleCancel} disabled={restoring}>
             {t('common.cancel')}
           </Button>
-          <Button onClick={handleRestore} loading={restoring}>
+          <Button onClick={handleRestore} loading={restoring} disabled={restoring}>
             {t('common.confirm')}
           </Button>
         </DialogFooter>

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useLocalBackupModal } from '../LocalBackupModals'
-import { useS3BackupModal } from '../S3Modals'
+import { useS3BackupModal, useS3RestoreModal } from '../S3Modals'
 import { useWebdavBackupModal } from '../WebdavModals'
 
 const mocks = vi.hoisted(() => ({
@@ -24,6 +24,16 @@ vi.mock('@renderer/services/BackupService', () => ({
   backupToLocal: (...args: unknown[]) => mocks.backupToLocal(...args),
   backupToS3: (...args: unknown[]) => mocks.backupToS3(...args),
   backupToWebdav: (...args: unknown[]) => mocks.backupToWebdav(...args)
+}))
+
+vi.mock('react-i18next', () => ({
+  initReactI18next: {
+    type: '3rdParty',
+    init: vi.fn()
+  },
+  useTranslation: () => ({
+    t: (key: string) => key
+  })
 }))
 
 type Deferred<T> = {
@@ -53,9 +63,50 @@ function renderHookHarness(getAction: () => () => Promise<void>): () => Promise<
   return () => action()
 }
 
+function renderS3RestoreHarness(): () => ReturnType<typeof useS3RestoreModal> {
+  let restoreModal: ReturnType<typeof useS3RestoreModal>
+
+  function Harness(): ReactNode {
+    restoreModal = useS3RestoreModal({
+      endpoint: 'http://127.0.0.1:9000',
+      region: 'local',
+      bucket: 'backups',
+      accessKeyId: 'access',
+      secretAccessKey: 'secret'
+    })
+    return null
+  }
+
+  render(<Harness />)
+
+  return () => restoreModal
+}
+
 describe('backup modals', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: {
+        error: vi.fn(),
+        success: vi.fn()
+      }
+    })
+    Object.defineProperty(window, 'modal', {
+      configurable: true,
+      value: {
+        confirm: vi.fn()
+      }
+    })
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        backup: {
+          restoreFromS3: vi.fn()
+        }
+      }
+    })
   })
 
   it('prevents duplicate local backups while one backup is pending', async () => {
@@ -109,6 +160,33 @@ describe('backup modals', () => {
     await act(async () => {
       runningBackup.resolve()
       await runningBackup.promise
+    })
+  })
+
+  it('prevents duplicate S3 restores while one restore is pending', async () => {
+    const runningRestore = deferred<void>()
+    vi.mocked(window.api.backup.restoreFromS3).mockReturnValueOnce(runningRestore.promise)
+    const getRestoreModal = renderS3RestoreHarness()
+
+    await act(async () => {
+      getRestoreModal().setSelectedFile('backup.zip')
+    })
+
+    await act(async () => {
+      await getRestoreModal().handleRestore()
+    })
+
+    const onOk = vi.mocked(window.modal.confirm).mock.calls[0][0].onOk!
+    await act(async () => {
+      void onOk()
+      void onOk()
+    })
+
+    expect(window.api.backup.restoreFromS3).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      runningRestore.resolve()
+      await runningRestore.promise
     })
   })
 })
