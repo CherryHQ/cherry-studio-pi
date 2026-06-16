@@ -13,7 +13,7 @@ import { getBackupProgressLabelKey } from '@renderer/i18n/label'
 import { backup, backupToLanTransfer } from '@renderer/services/BackupService'
 import { getErrorMessage } from '@renderer/utils/error'
 import { IpcChannel } from '@shared/IpcChannel'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { TopView } from '../TopView'
@@ -37,6 +37,8 @@ interface ProgressData {
 const PopupContainer: React.FC<Props> = ({ resolve, backupType = 'direct' }) => {
   const [open, setOpen] = useState(true)
   const [progressData, setProgressData] = useState<ProgressData>()
+  const [running, setRunning] = useState(false)
+  const runningRef = useRef(false)
   const { t } = useTranslation()
   const [skipBackupFile] = usePreference('data.backup.general.skip_backup_file')
   const close = useTopViewClose({ resolve, setOpen, topViewKey: TopViewKey })
@@ -52,22 +54,39 @@ const PopupContainer: React.FC<Props> = ({ resolve, backupType = 'direct' }) => 
   }, [])
 
   const onOk = async () => {
+    if (runningRef.current) {
+      return
+    }
+
     logger.debug(`skipBackupFile: ${skipBackupFile}, backupType: ${backupType}`)
 
+    runningRef.current = true
+    setRunning(true)
+    let didClose = false
     try {
       if (backupType === 'lan-transfer') {
         await backupToLanTransfer()
       } else {
         await backup(skipBackupFile)
       }
+      didClose = true
       close({})
     } catch (error) {
       logger.error('Backup failed:', error as Error)
       window.toast.error(`${t('message.backup.failed')}: ${getErrorMessage(error)}`)
+    } finally {
+      runningRef.current = false
+      if (!didClose) {
+        setRunning(false)
+      }
     }
   }
 
   const onCancel = () => {
+    if (runningRef.current) {
+      return
+    }
+
     close({})
   }
 
@@ -92,7 +111,7 @@ const PopupContainer: React.FC<Props> = ({ resolve, backupType = 'direct' }) => 
   const content = isLanTransferMode ? t('settings.data.export_to_phone.file.content') : t('backup.content')
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onCancel()}>
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && !runningRef.current && onCancel()}>
       <DialogContent className="sm:max-w-[520px]" onPointerDownOutside={(event) => event.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
@@ -111,10 +130,10 @@ const PopupContainer: React.FC<Props> = ({ resolve, backupType = 'direct' }) => 
           </div>
         )}
         <DialogFooter>
-          <Button variant="outline" disabled={isDisabled} onClick={onCancel}>
+          <Button variant="outline" disabled={isDisabled || running} onClick={onCancel}>
             {t('common.cancel')}
           </Button>
-          <Button disabled={isDisabled} onClick={onOk}>
+          <Button disabled={isDisabled || running} loading={running} onClick={onOk}>
             {okText}
           </Button>
         </DialogFooter>

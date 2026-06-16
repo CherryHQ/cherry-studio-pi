@@ -10,7 +10,7 @@ import {
 import { getRestoreProgressLabelKey } from '@renderer/i18n/label'
 import { restore } from '@renderer/services/BackupService'
 import { IpcChannel } from '@shared/IpcChannel'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { TopView } from '../TopView'
@@ -29,6 +29,8 @@ interface ProgressData {
 const PopupContainer: React.FC<Props> = ({ resolve }) => {
   const [open, setOpen] = useState(true)
   const [progressData, setProgressData] = useState<ProgressData>()
+  const [running, setRunning] = useState(false)
+  const runningRef = useRef(false)
   const { t } = useTranslation()
   const close = useTopViewClose({ resolve, setOpen, topViewKey: TopViewKey })
 
@@ -43,11 +45,30 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
   }, [])
 
   const onOk = async () => {
-    await restore()
-    close({})
+    if (runningRef.current) {
+      return
+    }
+
+    runningRef.current = true
+    setRunning(true)
+    let didClose = false
+    try {
+      await restore()
+      didClose = true
+      close({})
+    } finally {
+      runningRef.current = false
+      if (!didClose) {
+        setRunning(false)
+      }
+    }
   }
 
   const onCancel = () => {
+    if (runningRef.current) {
+      return
+    }
+
     close({})
   }
 
@@ -67,7 +88,7 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
   const isDisabled = progressData ? progressData.stage !== 'completed' : false
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onCancel()}>
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && !runningRef.current && onCancel()}>
       <DialogContent className="sm:max-w-[520px]" onPointerDownOutside={(event) => event.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{t('restore.title')}</DialogTitle>
@@ -86,10 +107,10 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
           </div>
         )}
         <DialogFooter>
-          <Button variant="outline" disabled={isDisabled} onClick={onCancel}>
+          <Button variant="outline" disabled={isDisabled || running} onClick={onCancel}>
             {t('common.cancel')}
           </Button>
-          <Button disabled={isDisabled} onClick={onOk}>
+          <Button disabled={isDisabled || running} loading={running} onClick={onOk}>
             {t('restore.confirm.button')}
           </Button>
         </DialogFooter>
