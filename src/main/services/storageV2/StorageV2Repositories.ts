@@ -112,6 +112,7 @@ export type StorageV2ProviderUpsertOptions = {
   clearCredentialKinds?: string[]
   preserveExistingCredential?: boolean
   preserveModels?: boolean
+  preserveSortOrder?: boolean
 }
 
 export type StorageV2ProviderCredentialRefs = Record<string, string>
@@ -810,7 +811,7 @@ export class StorageV2SettingsRepository {
 export class StorageV2ProviderRepository {
   async upsert(
     provider: Provider,
-    sortOrder = 0,
+    sortOrder?: number,
     credentialRef?: StorageV2ProviderCredentialRefInput,
     options: StorageV2ProviderUpsertOptions = {}
   ): Promise<{ skippedSecret: boolean }> {
@@ -821,6 +822,8 @@ export class StorageV2ProviderRepository {
     const modelIds = models.map((model) => getProviderModelRowId(provider.id, model.id))
     const credentialRefs = normalizeProviderCredentialRefs(credentialRef)
     const preserveModels = options.preserveModels === true
+    const preserveSortOrder = options.preserveSortOrder === true
+    const nextSortOrder = typeof sortOrder === 'number' && Number.isFinite(sortOrder) ? sortOrder : 0
 
     await withTransaction(client, async () => {
       await client.execute({
@@ -834,7 +837,7 @@ export class StorageV2ProviderRepository {
             name = excluded.name,
             api_host = excluded.api_host,
             enabled = excluded.enabled,
-            sort_order = excluded.sort_order,
+            sort_order = ${preserveSortOrder ? 'providers.sort_order' : 'excluded.sort_order'},
             config_json = excluded.config_json,
             updated_at = excluded.updated_at,
             deleted_at = NULL,
@@ -846,7 +849,7 @@ export class StorageV2ProviderRepository {
           provider.name,
           getProviderStorageApiHost(provider),
           getProviderStorageEnabled(provider) ? 1 : 0,
-          sortOrder,
+          nextSortOrder,
           toJson(config),
           timestamp,
           timestamp

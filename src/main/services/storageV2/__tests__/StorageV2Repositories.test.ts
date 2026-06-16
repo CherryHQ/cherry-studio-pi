@@ -455,6 +455,31 @@ describe('StorageV2ProviderRepository', () => {
     ).toBe(false)
   })
 
+  it('preserves existing provider sort order during unordered metadata-only mirrors', async () => {
+    const { client, execute } = createMockClient()
+    vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
+    vi.spyOn(storageV2Database, 'withTransaction').mockImplementation(async (_client, fn) => fn())
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(client)
+
+    await new StorageV2ProviderRepository().upsert(
+      {
+        id: 'provider-1',
+        presetProviderId: 'openai',
+        name: 'OpenAI',
+        isEnabled: true
+      } as any,
+      undefined,
+      undefined,
+      { preserveModels: true, preserveSortOrder: true }
+    )
+
+    const providerInsert = execute.mock.calls.find(
+      ([input]) => typeof input !== 'string' && input.sql.includes('INSERT INTO providers')
+    )
+    expect((providerInsert?.[0] as { sql?: string }).sql).toContain('sort_order = providers.sort_order')
+    expect((providerInsert?.[0] as { args?: unknown[] }).args?.[5]).toBe(0)
+  })
+
   it('clears provider api key list credential refs without rewriting provider metadata', async () => {
     const { client, execute } = createMockClient()
     const recordChange = vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)

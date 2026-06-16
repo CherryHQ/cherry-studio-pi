@@ -1187,7 +1187,8 @@ export class StorageV2Service {
   async upsertProviderMetadata(provider: Provider, sortOrder?: number) {
     return storageV2ProviderRepository.upsert(provider, sortOrder, undefined, {
       preserveExistingCredential: true,
-      preserveModels: true
+      preserveModels: true,
+      preserveSortOrder: sortOrder === undefined
     })
   }
 

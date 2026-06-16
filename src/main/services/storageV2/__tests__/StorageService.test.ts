@@ -561,7 +561,29 @@ describe('StorageV2Service', () => {
 
     expect(mocks.providerRepository.upsert).toHaveBeenCalledWith(provider, 4, undefined, {
       preserveExistingCredential: true,
-      preserveModels: true
+      preserveModels: true,
+      preserveSortOrder: false
+    })
+  })
+
+  it('preserves provider sort order during metadata mirrors when no explicit order is provided', async () => {
+    const provider = {
+      id: 'provider-1',
+      name: 'OpenAI',
+      presetProviderId: 'openai',
+      isEnabled: true,
+      apiKeys: [],
+      authType: 'api-key',
+      apiFeatures: {},
+      settings: {}
+    } as unknown as Provider
+
+    await expect(new StorageV2Service().upsertProviderMetadata(provider)).resolves.toEqual({ skippedSecret: false })
+
+    expect(mocks.providerRepository.upsert).toHaveBeenCalledWith(provider, undefined, undefined, {
+      preserveExistingCredential: true,
+      preserveModels: true,
+      preserveSortOrder: true
     })
   })
 
