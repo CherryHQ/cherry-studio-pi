@@ -19,6 +19,7 @@ const EnvironmentDependenciesSettings: FC = () => {
   const mountedRef = useRef(true)
   const statusRequestSeqRef = useRef(0)
   const actionRequestSeqRef = useRef(0)
+  const actionInFlightRef = useRef(false)
 
   const loadStatus = useCallback(async () => {
     const requestSeq = ++statusRequestSeqRef.current
@@ -40,6 +41,11 @@ const EnvironmentDependenciesSettings: FC = () => {
   }, [])
 
   const runAction = async (action: string, fn: () => Promise<EnvironmentDependenciesStatus>, successKey: string) => {
+    if (actionInFlightRef.current) {
+      return
+    }
+
+    actionInFlightRef.current = true
     const requestSeq = ++actionRequestSeqRef.current
     setActiveAction(action)
     try {
@@ -55,6 +61,9 @@ const EnvironmentDependenciesSettings: FC = () => {
     } finally {
       if (mountedRef.current && requestSeq === actionRequestSeqRef.current) {
         setActiveAction(undefined)
+      }
+      if (requestSeq === actionRequestSeqRef.current) {
+        actionInFlightRef.current = false
       }
     }
   }
@@ -98,6 +107,7 @@ const EnvironmentDependenciesSettings: FC = () => {
             <Button
               type="primary"
               icon={<Download size={15} />}
+              disabled={Boolean(activeAction) && activeAction !== 'install'}
               loading={activeAction === 'install'}
               onClick={() =>
                 runAction('install', window.api.environmentDependencies.install, 'settings.environment.installSuccess')
@@ -106,6 +116,7 @@ const EnvironmentDependenciesSettings: FC = () => {
             </Button>
             <Popconfirm
               title={t('settings.environment.uninstallConfirm')}
+              disabled={Boolean(activeAction) && activeAction !== 'uninstall'}
               onConfirm={() =>
                 runAction(
                   'uninstall',
@@ -113,7 +124,11 @@ const EnvironmentDependenciesSettings: FC = () => {
                   'settings.environment.uninstallSuccess'
                 )
               }>
-              <Button danger icon={<Trash2 size={15} />} loading={activeAction === 'uninstall'}>
+              <Button
+                danger
+                icon={<Trash2 size={15} />}
+                disabled={Boolean(activeAction) && activeAction !== 'uninstall'}
+                loading={activeAction === 'uninstall'}>
                 {t('settings.environment.uninstall')}
               </Button>
             </Popconfirm>
@@ -124,7 +139,11 @@ const EnvironmentDependenciesSettings: FC = () => {
       <SettingGroup theme={theme}>
         <HeaderRow>
           <SettingTitle>{t('settings.environment.dependencies')}</SettingTitle>
-          <Button icon={<RefreshCw size={15} />} onClick={loadStatus} loading={loading}>
+          <Button
+            icon={<RefreshCw size={15} />}
+            onClick={loadStatus}
+            loading={loading}
+            disabled={Boolean(activeAction)}>
             {t('settings.environment.refresh')}
           </Button>
         </HeaderRow>
@@ -142,6 +161,7 @@ const EnvironmentDependenciesSettings: FC = () => {
                   <Button
                     size="small"
                     icon={<Download size={13} />}
+                    disabled={Boolean(activeAction) && activeAction !== 'uv'}
                     loading={activeAction === 'uv'}
                     onClick={() =>
                       runAction(
@@ -157,6 +177,7 @@ const EnvironmentDependenciesSettings: FC = () => {
                   <Button
                     size="small"
                     icon={<Download size={13} />}
+                    disabled={Boolean(activeAction) && activeAction !== 'bun'}
                     loading={activeAction === 'bun'}
                     onClick={() =>
                       runAction(
