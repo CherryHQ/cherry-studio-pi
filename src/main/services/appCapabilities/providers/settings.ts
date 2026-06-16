@@ -263,6 +263,8 @@ export async function persistSettingValue(keyPath: string, value: unknown) {
         RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE,
         { type: action, payload: value },
         {
+          checkTimeoutMs: SETTINGS_RENDERER_BRIDGE_CHECK_TIMEOUT_MS,
+          timeoutMs: SETTINGS_RENDERER_BRIDGE_CALL_TIMEOUT_MS,
           timeoutMessage: '写入设置超时'
         }
       )

@@ -327,6 +327,31 @@ describe('settings app capabilities', () => {
     expect(mocks.preferenceService.set).not.toHaveBeenCalled()
   })
 
+  it('rejects hung runtime-only setting updates with the fast settings bridge timeout', async () => {
+    vi.useFakeTimers()
+    try {
+      mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation((script: string) => {
+        if (script.includes('typeof')) return Promise.resolve(true)
+        if (script.includes(RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE)) return new Promise(() => undefined)
+        return Promise.resolve(undefined)
+      })
+
+      const update = capability('settings.value.set').execute(
+        { path: 'showAssistants', value: false },
+        { source: 'agent' }
+      )
+      const expectation = expect(update).rejects.toThrow('Failed to write runtime setting: 写入设置超时')
+
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(1_500)
+      await expectation
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(mocks.preferenceService.set).not.toHaveBeenCalled()
+  })
+
   it('updates preference-backed assistant list click behavior', async () => {
     const result = await capability('settings.value.set').execute(
       { path: 'clickAssistantToShowTopic', value: true },
