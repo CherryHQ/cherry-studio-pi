@@ -77,6 +77,7 @@ export class ChannelMessageHandler {
         existing.resolvers.push({ resolve, reject })
         clearTimeout(existing.timer)
         existing.timer = setTimeout(() => this.flushBatch(batchKey), MESSAGE_BATCH_DELAY_MS)
+        existing.timer.unref?.()
         logger.debug('Message appended to pending batch', {
           batchKey,
           batchSize: existing.messages.length
@@ -91,6 +92,7 @@ export class ChannelMessageHandler {
         timer: setTimeout(() => this.flushBatch(batchKey), MESSAGE_BATCH_DELAY_MS),
         resolvers: [{ resolve, reject }]
       }
+      batch.timer.unref?.()
       this.pendingBatches.set(batchKey, batch)
     })
   }
@@ -272,6 +274,7 @@ export class ChannelMessageHandler {
         () => adapter.sendTypingIndicator(message.chatId).catch(() => {}),
         TYPING_INTERVAL_MS
       )
+      typingInterval.unref?.()
 
       try {
         // Delivery (streaming updates + the sanitized finalize) is owned by the
@@ -331,6 +334,7 @@ export class ChannelMessageHandler {
             () => adapter.sendTypingIndicator(command.chatId).catch(() => {}),
             TYPING_INTERVAL_MS
           )
+          typingInterval.unref?.()
           try {
             const response = await this.collectStreamResponse(
               session,
