@@ -4,6 +4,7 @@ import path from 'node:path'
 
 import { application } from '@application'
 import type { DbOrTx } from '@data/db/types'
+import { pinService } from '@data/services/PinService'
 import { generateOrderKeySequence } from '@data/services/utils/orderKey'
 import { loggerService } from '@logger'
 import { encodeStorageV2CompositeEntityId } from '@main/services/storageV2/SyncEntityId'
@@ -241,6 +242,15 @@ type StorageChannelTaskSubscriptionRow = {
   task_id: string
 }
 
+type StorageDeletedAgentRuntimeRows = {
+  agentIds: string[]
+  sessionIds: string[]
+  messageIds: string[]
+  skillIds: string[]
+  channelIds: string[]
+  taskIds: string[]
+}
+
 function parseJson<T>(value: unknown, fallback: T): T {
   if (value == null || value === '') return fallback
   if (typeof value !== 'string') return value as T
@@ -308,6 +318,12 @@ function optionalString(value: unknown): string | null {
 function firstString(value: unknown): string | null {
   const array = asStringArray(value)
   return array[0] ?? null
+}
+
+function uniqueStrings(rows: Array<{ id: unknown }>): string[] {
+  return Array.from(
+    new Set(rows.map((row) => row.id).filter((id): id is string => typeof id === 'string' && id.length > 0))
+  )
 }
 
 function asStringArray(value: unknown): string[] {
@@ -394,7 +410,13 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
       agentSkillsResult,
       channelsResult,
       tasksResult,
-      channelTaskSubscriptionsResult
+      channelTaskSubscriptionsResult,
+      deletedAgentsResult,
+      deletedSessionsResult,
+      deletedMessagesResult,
+      deletedSkillsResult,
+      deletedChannelsResult,
+      deletedTasksResult
     ] = await Promise.all([
       storageClient.execute(`
           SELECT id, type, name, description, instructions, model_id, plan_model_id, small_model_id,
@@ -461,6 +483,38 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
           SELECT channel_id, task_id
           FROM channel_task_subscriptions
           ORDER BY channel_id ASC, task_id ASC
+        `),
+      storageClient.execute(`
+          SELECT id
+          FROM agents
+          WHERE deleted_at IS NOT NULL
+        `),
+      storageClient.execute(`
+          SELECT id
+          FROM agent_sessions
+          WHERE deleted_at IS NOT NULL
+        `),
+      storageClient.execute(`
+          SELECT m.id
+          FROM messages m
+          INNER JOIN conversations c ON c.id = m.conversation_id
+          WHERE c.kind = 'agent_session'
+            AND m.deleted_at IS NOT NULL
+        `),
+      storageClient.execute(`
+          SELECT id
+          FROM skills
+          WHERE deleted_at IS NOT NULL
+        `),
+      storageClient.execute(`
+          SELECT id
+          FROM channels
+          WHERE deleted_at IS NOT NULL
+        `),
+      storageClient.execute(`
+          SELECT id
+          FROM scheduled_tasks
+          WHERE deleted_at IS NOT NULL
         `)
     ])
 
@@ -474,6 +528,21 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
     const tasks = tasksResult.rows as unknown as StorageScheduledTaskRow[]
     const channelTaskSubscriptions =
       channelTaskSubscriptionsResult.rows as unknown as StorageChannelTaskSubscriptionRow[]
+    const deleted: StorageDeletedAgentRuntimeRows = {
+      agentIds: uniqueStrings(deletedAgentsResult.rows as unknown as Array<{ id: unknown }>),
+      sessionIds: uniqueStrings(deletedSessionsResult.rows as unknown as Array<{ id: unknown }>),
+      messageIds: uniqueStrings(deletedMessagesResult.rows as unknown as Array<{ id: unknown }>),
+      skillIds: uniqueStrings(deletedSkillsResult.rows as unknown as Array<{ id: unknown }>),
+      channelIds: uniqueStrings(deletedChannelsResult.rows as unknown as Array<{ id: unknown }>),
+      taskIds: uniqueStrings(deletedTasksResult.rows as unknown as Array<{ id: unknown }>)
+    }
+    const deletedCount =
+      deleted.agentIds.length +
+      deleted.sessionIds.length +
+      deleted.messageIds.length +
+      deleted.skillIds.length +
+      deleted.channelIds.length +
+      deleted.taskIds.length
 
     if (
       agents.length === 0 &&
@@ -483,7 +552,8 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
       agentSkills.length === 0 &&
       channels.length === 0 &&
       tasks.length === 0 &&
-      channelTaskSubscriptions.length === 0
+      channelTaskSubscriptions.length === 0 &&
+      deletedCount === 0
     ) {
       return
     }
@@ -497,7 +567,8 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
       agentSkills,
       channels,
       tasks,
-      channelTaskSubscriptions
+      channelTaskSubscriptions,
+      deleted
     })
     logger.info('Projected Storage v2 agent runtime to DataApi tables', {
       agentCount: agents.length,
@@ -507,7 +578,8 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
       agentSkillCount: agentSkills.length,
       channelCount: channels.length,
       taskCount: tasks.length,
-      channelTaskSubscriptionCount: channelTaskSubscriptions.length
+      channelTaskSubscriptionCount: channelTaskSubscriptions.length,
+      deletedCount
     })
   }
 
@@ -658,6 +730,7 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
     channels: StorageChannelRow[]
     tasks: StorageScheduledTaskRow[]
     channelTaskSubscriptions: StorageChannelTaskSubscriptionRow[]
+    deleted: StorageDeletedAgentRuntimeRows
   }) {
     const dbService = application.get('DbService')
     const agentOrderKeys = generateOrderKeySequence(input.agents.length)
@@ -677,6 +750,8 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
       const modelRows = (await tx.all(sql`SELECT id FROM user_model`)) as Array<{ id: string }>
       const modelIds = new Set(modelRows.map((row) => row.id))
 
+      await this.projectDeletedRowsTx(tx, input.deleted)
+
       for (const [index, agent] of input.agents.entries()) {
         await this.projectAgentTx(tx, agent, agentOrderKeys[index] ?? agentOrderKeys.at(-1) ?? 'a0', modelIds)
       }
@@ -695,10 +770,7 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
         await this.projectMessageTx(tx, message, messageBlocksById.get(message.id) ?? [], modelIds)
       }
 
-      for (const row of input.agentSkills) {
-        if (!agentIds.has(row.agent_id) || !skillIds.has(row.skill_id)) continue
-        await this.projectAgentSkillTx(tx, row)
-      }
+      await this.replaceAgentSkillsTx(tx, input.agentSkills, agentIds, skillIds)
 
       for (const channel of input.channels) {
         await this.projectChannelTx(tx, channel, agentIds, sessionIds)
@@ -709,10 +781,7 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
         await this.projectScheduledTaskTx(tx, task)
       }
 
-      for (const row of input.channelTaskSubscriptions) {
-        if (!channelIds.has(row.channel_id) || !taskIds.has(row.task_id)) continue
-        await this.projectChannelTaskSubscriptionTx(tx, row)
-      }
+      await this.replaceChannelTaskSubscriptionsTx(tx, input.channelTaskSubscriptions, channelIds, taskIds)
     })
   }
 
@@ -742,6 +811,78 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
       blocksById.set(block.message_id, rows)
     }
     return blocksById
+  }
+
+  private idListSql(ids: readonly string[]) {
+    return sql.join(
+      ids.map((id) => sql`${id}`),
+      sql`, `
+    )
+  }
+
+  private async projectDeletedRowsTx(tx: DbOrTx, deleted: StorageDeletedAgentRuntimeRows): Promise<void> {
+    if (deleted.messageIds.length > 0) {
+      await tx.run(sql`
+        DELETE FROM agent_session_message
+        WHERE id IN (${this.idListSql(deleted.messageIds)})
+      `)
+    }
+
+    if (deleted.sessionIds.length > 0) {
+      const sessionIds = this.idListSql(deleted.sessionIds)
+      const workspaceRows = (await tx.all(sql`
+        SELECT w.id
+        FROM agent_session s
+        INNER JOIN agent_workspace w ON w.id = s.workspace_id
+        WHERE s.id IN (${sessionIds}) AND w.type = 'system'
+      `)) as Array<{ id: string }>
+      const workspaceIds = uniqueStrings(workspaceRows)
+
+      await pinService.purgeForEntitiesTx(tx, 'session', deleted.sessionIds)
+      await tx.run(sql`
+        DELETE FROM agent_session
+        WHERE id IN (${sessionIds})
+      `)
+      if (workspaceIds.length > 0) {
+        await tx.run(sql`
+          DELETE FROM agent_workspace
+          WHERE id IN (${this.idListSql(workspaceIds)})
+        `)
+      }
+    }
+
+    if (deleted.channelIds.length > 0) {
+      await tx.run(sql`
+        DELETE FROM agent_channel
+        WHERE id IN (${this.idListSql(deleted.channelIds)})
+      `)
+    }
+
+    if (deleted.taskIds.length > 0) {
+      await tx.run(sql`
+        DELETE FROM agent_channel_task
+        WHERE task_id IN (${this.idListSql(deleted.taskIds)})
+      `)
+      await tx.run(sql`
+        DELETE FROM job_schedule
+        WHERE id IN (${this.idListSql(deleted.taskIds)})
+      `)
+    }
+
+    if (deleted.skillIds.length > 0) {
+      await tx.run(sql`
+        DELETE FROM agent_global_skill
+        WHERE id IN (${this.idListSql(deleted.skillIds)})
+      `)
+    }
+
+    if (deleted.agentIds.length > 0) {
+      await pinService.purgeForEntitiesTx(tx, 'agent', deleted.agentIds)
+      await tx.run(sql`
+        DELETE FROM agent
+        WHERE id IN (${this.idListSql(deleted.agentIds)})
+      `)
+    }
   }
 
   private async projectAgentTx(
@@ -965,6 +1106,19 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
     `)
   }
 
+  private async replaceAgentSkillsTx(
+    tx: DbOrTx,
+    rows: StorageAgentSkillRow[],
+    agentIds: Set<string>,
+    skillIds: Set<string>
+  ): Promise<void> {
+    await tx.run(sql`DELETE FROM agent_skill`)
+    for (const row of rows) {
+      if (!agentIds.has(row.agent_id) || !skillIds.has(row.skill_id)) continue
+      await this.projectAgentSkillTx(tx, row)
+    }
+  }
+
   private async projectChannelTx(
     tx: DbOrTx,
     channel: StorageChannelRow,
@@ -1069,6 +1223,19 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
       VALUES (${row.channel_id}, ${row.task_id})
       ON CONFLICT(channel_id, task_id) DO NOTHING
     `)
+  }
+
+  private async replaceChannelTaskSubscriptionsTx(
+    tx: DbOrTx,
+    rows: StorageChannelTaskSubscriptionRow[],
+    channelIds: Set<string>,
+    taskIds: Set<string>
+  ): Promise<void> {
+    await tx.run(sql`DELETE FROM agent_channel_task`)
+    for (const row of rows) {
+      if (!channelIds.has(row.channel_id) || !taskIds.has(row.task_id)) continue
+      await this.projectChannelTaskSubscriptionTx(tx, row)
+    }
   }
 
   private buildTaskTrigger(task: StorageScheduledTaskRow) {

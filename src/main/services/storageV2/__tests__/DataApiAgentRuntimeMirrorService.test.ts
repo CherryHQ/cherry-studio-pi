@@ -421,6 +421,6 @@ describe('StorageV2DataApiAgentRuntimeMirrorService', () => {
     expect(mocks.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     expect(mocks.application.getPath).toHaveBeenCalledWith('feature.agents.workspaces')
     expect(mocks.secretVault.getSecret).toHaveBeenCalledWith('storage-v2://secret/channel/channel-1/bot_token')
-    expect(mocks.tx.run).toHaveBeenCalledTimes(8)
+    expect(mocks.tx.run).toHaveBeenCalledTimes(10)
   })
 })
