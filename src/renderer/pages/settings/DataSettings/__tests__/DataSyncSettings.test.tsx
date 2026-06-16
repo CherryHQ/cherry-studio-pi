@@ -73,6 +73,12 @@ function syncButton() {
   return button!
 }
 
+function buttonByText(text: string) {
+  const button = screen.getByText(text).closest('button')
+  expect(button).toBeTruthy()
+  return button!
+}
+
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
   let reject!: (reason?: unknown) => void
@@ -223,6 +229,20 @@ describe('DataSyncSettings', () => {
     fireEvent.click(screen.getByText('settings.data.data_sync.refresh_status'))
 
     await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+  })
+
+  it('disables sync actions and remote browsing until WebDAV credentials are complete', async () => {
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.change(screen.getByPlaceholderText('settings.data.data_sync.username_placeholder'), {
+      target: { value: '' }
+    })
+
+    expect(syncButton()).toBeDisabled()
+    expect(buttonByText('settings.data.data_sync.diagnose')).toBeDisabled()
+    expect(buttonByText('settings.data.data_sync.restore_latest')).toBeDisabled()
+    expect(buttonByText('settings.data.data_sync.remote_path_browse')).toBeDisabled()
   })
 
   it('ignores stale status refresh responses that arrive after a newer status request', async () => {

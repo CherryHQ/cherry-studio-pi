@@ -391,6 +391,11 @@ const DataSyncSettings: FC = () => {
   }
 
   const syncInProgress = syncing || runtimeSyncing || Boolean(status?.syncing)
+  const webDavConfigComplete = Boolean(webdavHost.trim() && webdavUser.trim() && webdavPass)
+
+  const warnWebDavConfigRequired = () => {
+    window.toast.warning(t('settings.data.data_sync.toast.webdav_required'))
+  }
 
   useEffect(() => {
     void refreshStatus().catch(() => undefined)
@@ -417,8 +422,8 @@ const DataSyncSettings: FC = () => {
   }, [refreshStatus, syncInProgress])
 
   const syncNow = async () => {
-    if (!webdavHost) {
-      window.toast.warning(t('settings.data.data_sync.toast.webdav_required'))
+    if (!webDavConfigComplete) {
+      warnWebDavConfigRequired()
       return
     }
 
@@ -486,8 +491,8 @@ const DataSyncSettings: FC = () => {
   }
 
   const restoreLatestSnapshot = () => {
-    if (!webdavHost) {
-      window.toast.warning(t('settings.data.data_sync.toast.webdav_required'))
+    if (!webDavConfigComplete) {
+      warnWebDavConfigRequired()
       return
     }
 
@@ -545,8 +550,8 @@ const DataSyncSettings: FC = () => {
   }
 
   const diagnoseNow = async () => {
-    if (!webdavHost) {
-      window.toast.warning(t('settings.data.data_sync.toast.webdav_required'))
+    if (!webDavConfigComplete) {
+      warnWebDavConfigRequired()
       return
     }
 
@@ -605,7 +610,6 @@ const DataSyncSettings: FC = () => {
 
   const summary = status?.lastSummary
   const effectiveSyncPath = getEffectiveSyncPath(webdavPath)
-  const webDavConfigComplete = Boolean(webdavHost.trim() && webdavUser.trim() && webdavPass)
 
   const loadRemoteDirectories = async (path: string, configOverride?: ReturnType<typeof normalizeWebDavConfig>) => {
     const requestSeq = ++directoryLoadSeqRef.current
@@ -681,8 +685,8 @@ const DataSyncSettings: FC = () => {
   }
 
   const openDirectoryBrowser = () => {
-    if (!webdavHost) {
-      window.toast.warning(t('settings.data.data_sync.toast.webdav_required'))
+    if (!webDavConfigComplete) {
+      warnWebDavConfigRequired()
       return
     }
 
@@ -808,7 +812,7 @@ const DataSyncSettings: FC = () => {
             value={normalizeRemotePathInput(webdavPath)}
             style={{ width: 280 }}
           />
-          <Button icon={<FolderOpenOutlined />} disabled={!webdavHost} onClick={openDirectoryBrowser}>
+          <Button icon={<FolderOpenOutlined />} disabled={!webDavConfigComplete} onClick={openDirectoryBrowser}>
             {t('settings.data.data_sync.remote_path_browse')}
           </Button>
         </HStack>
@@ -875,21 +879,21 @@ const DataSyncSettings: FC = () => {
             type="primary"
             icon={<SyncOutlined spin={syncInProgress} />}
             loading={syncInProgress}
-            disabled={!webdavHost || syncInProgress || restoring || diagnosing}
+            disabled={!webDavConfigComplete || syncInProgress || restoring || diagnosing}
             onClick={syncNow}>
             {t('settings.data.data_sync.sync')}
           </Button>
           <Button
             icon={<BugOutlined />}
             loading={diagnosing}
-            disabled={!webdavHost || syncInProgress || restoring}
+            disabled={!webDavConfigComplete || syncInProgress || restoring}
             onClick={diagnoseNow}>
             {t('settings.data.data_sync.diagnose')}
           </Button>
           <Button
             icon={<ReloadOutlined />}
             loading={restoring}
-            disabled={!webdavHost || syncInProgress || diagnosing}
+            disabled={!webDavConfigComplete || syncInProgress || diagnosing}
             onClick={restoreLatestSnapshot}>
             {t('settings.data.data_sync.restore_latest')}
           </Button>
