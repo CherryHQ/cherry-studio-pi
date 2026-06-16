@@ -16,7 +16,8 @@ const mocks = vi.hoisted(() => ({
   browserWindowFromWebContents: vi.fn(),
   showOpenDialog: vi.fn(),
   showSaveDialogSync: vi.fn(),
-  netFetch: vi.fn()
+  netFetch: vi.fn(),
+  chokidarWatch: vi.fn()
 }))
 
 let fs: typeof NodeFs
@@ -53,6 +54,12 @@ vi.mock('electron', () => ({
   },
   shell: {
     openPath: vi.fn()
+  }
+}))
+
+vi.mock('chokidar', () => ({
+  default: {
+    watch: mocks.chokidarWatch
   }
 }))
 
@@ -115,6 +122,26 @@ function mockOversizedDownloadStreamResponse(): Response {
   } as Response
 }
 
+function createMockWatcher() {
+  const handlers = new Map<string, Array<(...args: any[]) => void>>()
+  const watcher = {
+    on: vi.fn((eventName: string, handler: (...args: any[]) => void) => {
+      handlers.set(eventName, [...(handlers.get(eventName) ?? []), handler])
+      return watcher
+    }),
+    close: vi.fn().mockResolvedValue(undefined)
+  }
+
+  return {
+    watcher,
+    emit(eventName: string, ...args: any[]) {
+      for (const handler of handlers.get(eventName) ?? []) {
+        handler(...args)
+      }
+    }
+  }
+}
+
 describe('FileStorage Storage v2 upload flow', () => {
   beforeEach(async () => {
     vi.resetModules()
@@ -132,9 +159,11 @@ describe('FileStorage Storage v2 upload flow', () => {
     mocks.browserWindowFromWebContents.mockReset()
     mocks.showOpenDialog.mockReset()
     mocks.netFetch.mockReset()
+    mocks.chokidarWatch.mockReset()
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     fs.rmSync(mocks.dirs.root, { recursive: true, force: true })
   })
 
@@ -349,6 +378,47 @@ describe('FileStorage Storage v2 upload flow', () => {
     const { fileStorage } = await import('../FileStorage')
 
     await expect(fileStorage.open(undefined as never, {})).rejects.toThrow('dialog unavailable')
+  })
+
+  it('coalesces repeated recoverable watcher errors into one restart timer', async () => {
+    vi.useFakeTimers()
+    const firstWatcher = createMockWatcher()
+    mocks.chokidarWatch.mockReturnValue(firstWatcher.watcher)
+    const sender = { isDestroyed: vi.fn(() => false), send: vi.fn() }
+    const { fileStorage } = await import('../FileStorage')
+
+    await fileStorage.startFileWatcher({ sender } as never, mocks.dirs.notes, {
+      retryDelayMs: 1000
+    })
+
+    firstWatcher.emit('error', new Error('ENOSPC: too many files watched'))
+    firstWatcher.emit('error', new Error('EMFILE: too many open files'))
+
+    expect(vi.getTimerCount()).toBe(1)
+    expect(mocks.chokidarWatch).toHaveBeenCalledTimes(1)
+
+    await fileStorage.stopFileWatcher()
+  })
+
+  it('cancels a pending watcher restart when the watcher stops', async () => {
+    vi.useFakeTimers()
+    const firstWatcher = createMockWatcher()
+    mocks.chokidarWatch.mockReturnValue(firstWatcher.watcher)
+    const sender = { isDestroyed: vi.fn(() => false), send: vi.fn() }
+    const { fileStorage } = await import('../FileStorage')
+
+    await fileStorage.startFileWatcher({ sender } as never, mocks.dirs.notes, {
+      retryDelayMs: 1000
+    })
+
+    firstWatcher.emit('error', new Error('ENOSPC: too many files watched'))
+    expect(vi.getTimerCount()).toBe(1)
+
+    await fileStorage.stopFileWatcher()
+
+    expect(vi.getTimerCount()).toBe(0)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(mocks.chokidarWatch).toHaveBeenCalledTimes(1)
   })
 
   it('returns false when image save is canceled', async () => {

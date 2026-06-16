@@ -168,6 +168,7 @@ class FileStorage {
   private watcherSender?: Electron.WebContents
   private currentWatchPath?: string
   private debounceTimer?: NodeJS.Timeout
+  private watcherRetryTimer?: NodeJS.Timeout
   private watcherConfig: Required<FileWatcherConfig> = DEFAULT_WATCHER_CONFIG
   private isPaused = false
   private ensuredDirectories = new Set<string>()
@@ -1974,18 +1975,28 @@ class FileStorage {
     const isRetryable = retryableErrors.some((code) => error.message.includes(code))
 
     if (isRetryable && this.currentWatchPath && this.watcherSender && !this.watcherSender.isDestroyed()) {
+      if (this.watcherRetryTimer) {
+        logger.debug('File watcher restart already scheduled', { error: error.message })
+        return
+      }
+
+      const retryPath = this.currentWatchPath
+      const retryConfig = this.watcherConfig
+
       logger.warn('Attempting restart due to recoverable error', { error: error.message })
 
-      setTimeout(async () => {
+      this.watcherRetryTimer = setTimeout(async () => {
+        this.watcherRetryTimer = undefined
         try {
-          if (this.currentWatchPath && this.watcherSender && !this.watcherSender.isDestroyed()) {
+          if (this.currentWatchPath === retryPath && this.watcherSender && !this.watcherSender.isDestroyed()) {
             const mockEvent = { sender: this.watcherSender } as Electron.IpcMainInvokeEvent
-            await this.startFileWatcher(mockEvent, this.currentWatchPath, this.watcherConfig)
+            await this.startFileWatcher(mockEvent, retryPath, retryConfig)
           }
         } catch (retryError) {
           logger.error('Restart failed', retryError as Error)
         }
       }, this.watcherConfig.retryDelayMs)
+      this.watcherRetryTimer.unref?.()
     }
   }
 
@@ -1995,6 +2006,10 @@ class FileStorage {
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer)
       this.debounceTimer = undefined
+    }
+    if (this.watcherRetryTimer) {
+      clearTimeout(this.watcherRetryTimer)
+      this.watcherRetryTimer = undefined
     }
   }
 
