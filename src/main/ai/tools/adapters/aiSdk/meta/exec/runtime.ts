@@ -75,6 +75,7 @@ export function runExec(code: string, ctx: ExecRuntimeContext): Promise<ExecResu
         )
       })()
     }, EXECUTION_TIMEOUT_MS)
+    timeoutId.unref?.()
     const worker = new Worker(execWorkerSource, { eval: true })
 
     const addLog = (entry: string) => {

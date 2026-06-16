@@ -61,6 +61,7 @@ function makeRunSignal(
     () => timeoutController.abort(new Error(`Task timed out after ${timeoutMinutes} minute(s)`)),
     timeoutMinutes * 60_000
   )
+  timer.unref?.()
   const signal = AbortSignal.any([outerSignal, timeoutController.signal])
   return { signal, dispose: () => clearTimeout(timer) }
 }
