@@ -3,7 +3,7 @@ import { cacheService } from '@renderer/data/CacheService'
 import { useAgent } from '@renderer/hooks/agents/useAgent'
 import { type CreateSessionForm, useSessions } from '@renderer/hooks/agents/useSession'
 import type { AgentSessionWorkspaceSource } from '@shared/data/api/schemas/agentWorkspaces'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('useCreateDefaultSession')
@@ -16,9 +16,18 @@ export const useCreateDefaultSession = (agentId: string | null, workspace: Agent
   const { createSession } = useSessions(agentId)
   const { t } = useTranslation()
   const [creatingSession, setCreatingSession] = useState(false)
+  const mountedRef = useRef(true)
+  const creatingSessionRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const createDefaultSession = useCallback(async () => {
-    if (!agentId || !agent || !workspace || creatingSession) {
+    if (!agentId || !agent || !workspace || creatingSessionRef.current) {
       return null
     }
 
@@ -27,6 +36,7 @@ export const useCreateDefaultSession = (agentId: string | null, workspace: Agent
       return null
     }
 
+    creatingSessionRef.current = true
     setCreatingSession(true)
     try {
       const session = {
@@ -45,9 +55,12 @@ export const useCreateDefaultSession = (agentId: string | null, workspace: Agent
       logger.error('Error creating default session:', error as Error)
       return null
     } finally {
-      setCreatingSession(false)
+      creatingSessionRef.current = false
+      if (mountedRef.current) {
+        setCreatingSession(false)
+      }
     }
-  }, [agentId, agent, workspace, createSession, creatingSession, t])
+  }, [agentId, agent, workspace, createSession, t])
 
   return {
     createDefaultSession,

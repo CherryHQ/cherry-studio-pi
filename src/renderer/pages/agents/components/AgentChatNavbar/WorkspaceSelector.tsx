@@ -9,7 +9,7 @@ import { cn } from '@renderer/utils'
 import { getErrorMessage } from '@renderer/utils/error'
 import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
 import { FolderOpen } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 type WorkspaceSelectorProps = {
@@ -19,9 +19,17 @@ type WorkspaceSelectorProps = {
 const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
   const { t } = useTranslation()
   const [selecting, setSelecting] = useState(false)
+  const mountedRef = useRef(true)
   const selectingRef = useRef(false)
   const { createWorkspaceByPath } = useAgentWorkspaceMutations()
   const { updateSession } = useUpdateSession(session.agentId)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const workspacePath = session.workspace?.path
 
@@ -53,16 +61,22 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
         { showSuccessToast: false }
       )
       if (!updated) return
-      window.toast.success(t('agent.session.workspace.updated'))
+      if (mountedRef.current) {
+        window.toast.success(t('agent.session.workspace.updated'))
+      }
     } catch (error) {
-      window.toast.error({
-        title: t('agent.session.workspace.select_failed'),
-        description: getErrorMessage(error)
-      })
+      if (mountedRef.current) {
+        window.toast.error({
+          title: t('agent.session.workspace.select_failed'),
+          description: getErrorMessage(error)
+        })
+      }
     } finally {
       cancelScheduledClose?.()
       selectingRef.current = false
-      setSelecting(false)
+      if (mountedRef.current) {
+        setSelecting(false)
+      }
     }
   }
 

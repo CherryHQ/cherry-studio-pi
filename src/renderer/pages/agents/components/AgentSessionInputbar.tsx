@@ -225,7 +225,15 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
 
   const { setTimeoutTimer } = useTimer()
   const sessionTopicId = buildAgentSessionTopicId(sessionId)
+  const mountedRef = useRef(true)
   const sendInFlightRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   // Agent sessions pass file paths to the runtime and let the agent choose tools
   // to inspect them, so attachments must not be gated by model modality.
@@ -391,12 +399,16 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
       void EventEmitter.emit(EVENT_NAMES.SEND_MESSAGE, { topicId: sessionTopicId })
 
       // Clear text and files after successful send
-      setText('')
-      setFiles([])
-      focusTextarea()
+      if (mountedRef.current) {
+        setText('')
+        setFiles([])
+        focusTextarea()
+      }
     } catch (error) {
       logger.warn('Failed to send message:', error as Error)
-      window.toast.error(t('chat.input.send_failed'))
+      if (mountedRef.current) {
+        window.toast.error(t('chat.input.send_failed'))
+      }
     } finally {
       sendInFlightRef.current = false
     }
