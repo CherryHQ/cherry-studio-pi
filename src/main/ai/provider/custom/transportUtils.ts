@@ -40,6 +40,7 @@ export function waitWithSignal(delayMs: number, signal?: AbortSignal): Promise<v
       signal?.removeEventListener('abort', onAbort)
       resolve()
     }, delayMs)
+    timer.unref?.()
     const onAbort = () => {
       clearTimeout(timer)
       signal?.removeEventListener('abort', onAbort)
