@@ -254,7 +254,7 @@ export function recordStorageV2MigrationRun(input: {
 }
 
 export async function createStorageV2Snapshot(reason?: string) {
-  await flushStorageV2RuntimeMirrors()
+  await prepareStorageV2ForDataSync()
   return window.api.storageV2.createSnapshot(reason)
 }
 
@@ -566,7 +566,7 @@ export function getStorageV2RuntimeMirrorStatus(): StorageV2RuntimeMirrorStatus 
 }
 
 export async function createStorageV2Backup(reason?: string) {
-  await flushStorageV2RuntimeMirrors()
+  await prepareStorageV2ForDataSync()
   return window.api.storageV2.createBackup(reason)
 }
 
@@ -575,7 +575,7 @@ export function validateStorageV2Backup(backupPath: string): Promise<StorageV2Ba
 }
 
 export async function restoreStorageV2Backup(backupPath: string): Promise<StorageV2RestoreBackupResult> {
-  await flushStorageV2RuntimeMirrors()
+  await prepareStorageV2ForDataSync()
 
   const result = await window.api.storageV2.restoreBackup(backupPath)
 

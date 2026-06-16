@@ -1,18 +1,103 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  agentMirrorFlush: vi.fn(),
+  agentMirrorGetStatus: vi.fn(),
+  agentMirrorSuspend: vi.fn(),
+  conversationMirrorFlush: vi.fn(),
+  conversationMirrorGetStatus: vi.fn(),
+  conversationMirrorSuspend: vi.fn(),
+  createBackup: vi.fn(),
+  createSnapshot: vi.fn(),
+  dexieSettingsMirrorFlush: vi.fn(),
+  dexieSettingsMirrorGetStatus: vi.fn(),
+  dexieSettingsMirrorSuspend: vi.fn(),
+  dexieTableMirrorFlush: vi.fn(),
+  dexieTableMirrorGetStatus: vi.fn(),
+  dexieTableMirrorSuspend: vi.fn(),
+  fileMirrorFlush: vi.fn(),
+  fileMirrorGetStatus: vi.fn(),
+  fileMirrorSuspend: vi.fn(),
   filesToArray: vi.fn(),
   getState: vi.fn(),
+  importLegacyAgentDb: vi.fn(),
+  importLegacyAppDb: vi.fn(),
+  importLegacyDexieSnapshot: vi.fn(),
+  importLegacyReduxSnapshot: vi.fn(),
   knowledgeNotesToArray: vi.fn(),
+  localStorageGetSnapshot: vi.fn(),
+  localStorageGetStatus: vi.fn(),
+  localStorageMirrorFlush: vi.fn(),
+  localStorageSuspend: vi.fn(),
   messageBlocksAnyOf: vi.fn(),
   messageBlocksToArray: vi.fn(),
   messageBlocksWhere: vi.fn(),
   quickPhrasesToArray: vi.fn(),
+  reduxMirrorFlush: vi.fn(),
+  reduxMirrorGetStatus: vi.fn(),
+  reduxMirrorSuspend: vi.fn(),
+  restoreBackup: vi.fn(),
   settingsToArray: vi.fn(),
   topicsGet: vi.fn(),
   topicsToArray: vi.fn(),
   translateHistoryToArray: vi.fn(),
   translateLanguagesToArray: vi.fn()
+}))
+
+vi.mock('../StorageV2AgentMirrorService', () => ({
+  storageV2AgentMirrorService: {
+    flushStrict: mocks.agentMirrorFlush,
+    getStatus: mocks.agentMirrorGetStatus,
+    suspendUntilReload: mocks.agentMirrorSuspend
+  }
+}))
+
+vi.mock('../StorageV2ConversationMirrorService', () => ({
+  storageV2ConversationMirrorService: {
+    flushStrict: mocks.conversationMirrorFlush,
+    getStatus: mocks.conversationMirrorGetStatus,
+    suspendUntilReload: mocks.conversationMirrorSuspend
+  }
+}))
+
+vi.mock('../StorageV2DexieSettingsMirrorService', () => ({
+  storageV2DexieSettingsMirrorService: {
+    flushStrict: mocks.dexieSettingsMirrorFlush,
+    getStatus: mocks.dexieSettingsMirrorGetStatus,
+    suspendUntilReload: mocks.dexieSettingsMirrorSuspend
+  }
+}))
+
+vi.mock('../StorageV2DexieTableMirrorService', () => ({
+  STORAGE_V2_DEXIE_TABLE_NAMES: ['settings'] as const,
+  storageV2DexieTableMirrorService: {
+    flushStrict: mocks.dexieTableMirrorFlush,
+    getStatus: mocks.dexieTableMirrorGetStatus,
+    suspendUntilReload: mocks.dexieTableMirrorSuspend
+  }
+}))
+
+vi.mock('../StorageV2FileMirrorService', () => ({
+  storageV2FileMirrorService: {
+    flushStrict: mocks.fileMirrorFlush,
+    getStatus: mocks.fileMirrorGetStatus,
+    suspendUntilReload: mocks.fileMirrorSuspend
+  }
+}))
+
+vi.mock('../StorageV2LocalStorageSnapshot', () => ({
+  flushStorageV2LocalStorageMirrorStrict: mocks.localStorageMirrorFlush,
+  getStorageV2LocalStorageMirrorStatus: mocks.localStorageGetStatus,
+  getStorageV2LocalStorageSnapshot: mocks.localStorageGetSnapshot,
+  suspendStorageV2LocalStorageMirrorUntilReload: mocks.localStorageSuspend
+}))
+
+vi.mock('../StorageV2MirrorService', () => ({
+  storageV2MirrorService: {
+    flushStrict: mocks.reduxMirrorFlush,
+    getStatus: mocks.reduxMirrorGetStatus,
+    suspendUntilReload: mocks.reduxMirrorSuspend
+  }
 }))
 
 vi.mock('@renderer/databases', () => ({
@@ -55,17 +140,92 @@ describe('StorageV2Service legacy Dexie snapshots', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
+    vi.stubGlobal('window', {
+      api: {
+        storageV2: {
+          createBackup: mocks.createBackup,
+          createSnapshot: mocks.createSnapshot,
+          importLegacyAgentDb: mocks.importLegacyAgentDb,
+          importLegacyAppDb: mocks.importLegacyAppDb,
+          importLegacyDexieSnapshot: mocks.importLegacyDexieSnapshot,
+          importLegacyReduxSnapshot: mocks.importLegacyReduxSnapshot,
+          restoreBackup: mocks.restoreBackup
+        }
+      }
+    })
+    mocks.agentMirrorFlush.mockResolvedValue(undefined)
+    mocks.agentMirrorGetStatus.mockReturnValue({ id: 'agent', pendingCount: 0, inflight: false, suspended: false })
+    mocks.conversationMirrorFlush.mockResolvedValue(undefined)
+    mocks.conversationMirrorGetStatus.mockReturnValue({
+      id: 'conversation',
+      pendingCount: 0,
+      inflight: false,
+      suspended: false
+    })
+    mocks.createBackup.mockResolvedValue({ path: '/tmp/backup' })
+    mocks.createSnapshot.mockResolvedValue({ path: '/tmp/snapshot' })
+    mocks.dexieSettingsMirrorFlush.mockResolvedValue(undefined)
+    mocks.dexieSettingsMirrorGetStatus.mockReturnValue({
+      id: 'dexie-settings',
+      pendingCount: 0,
+      inflight: false,
+      suspended: false
+    })
+    mocks.dexieTableMirrorFlush.mockResolvedValue(undefined)
+    mocks.dexieTableMirrorGetStatus.mockReturnValue({
+      id: 'dexie-table',
+      pendingCount: 0,
+      inflight: false,
+      suspended: false
+    })
+    mocks.fileMirrorFlush.mockResolvedValue(undefined)
+    mocks.fileMirrorGetStatus.mockReturnValue({ id: 'file', pendingCount: 0, inflight: false, suspended: false })
     mocks.filesToArray.mockResolvedValue([])
+    mocks.importLegacyAgentDb.mockResolvedValue({})
+    mocks.importLegacyAppDb.mockResolvedValue({})
+    mocks.importLegacyDexieSnapshot.mockResolvedValue({})
+    mocks.importLegacyReduxSnapshot.mockResolvedValue({})
     mocks.knowledgeNotesToArray.mockResolvedValue([])
+    mocks.localStorageGetSnapshot.mockReturnValue({})
+    mocks.localStorageGetStatus.mockReturnValue({
+      id: 'local-storage',
+      pendingCount: 0,
+      inflight: false,
+      suspended: false
+    })
+    mocks.localStorageMirrorFlush.mockResolvedValue(undefined)
     mocks.messageBlocksToArray.mockResolvedValue([{ id: 'block-1', messageId: 'message-1', type: 'main_text' }])
     mocks.messageBlocksAnyOf.mockReturnValue({ toArray: mocks.messageBlocksToArray })
     mocks.messageBlocksWhere.mockReturnValue({ anyOf: mocks.messageBlocksAnyOf })
     mocks.quickPhrasesToArray.mockResolvedValue([])
+    mocks.reduxMirrorFlush.mockResolvedValue(undefined)
+    mocks.reduxMirrorGetStatus.mockReturnValue({ id: 'redux', pendingCount: 0, inflight: false, suspended: false })
+    mocks.restoreBackup.mockResolvedValue({ requiresRestart: true })
     mocks.settingsToArray.mockResolvedValue([])
     mocks.topicsToArray.mockResolvedValue([])
     mocks.translateHistoryToArray.mockResolvedValue([])
     mocks.translateLanguagesToArray.mockResolvedValue([])
     mocks.getState.mockReturnValue({
+      backup: {},
+      codeTools: {},
+      copilot: {},
+      inputTools: {},
+      knowledge: {},
+      llm: {},
+      mcp: {},
+      memory: {},
+      minapps: {},
+      note: {},
+      nutstore: {},
+      ocr: {},
+      openclaw: {},
+      paintings: {},
+      preprocess: {},
+      selectionStore: {},
+      settings: {},
+      shortcuts: {},
+      translate: {},
+      websearch: {},
       assistants: {
         defaultAssistant: {
           id: 'default-assistant',
@@ -89,7 +249,8 @@ describe('StorageV2Service legacy Dexie snapshots', () => {
               }
             ]
           }
-        ]
+        ],
+        presets: []
       }
     })
   })
@@ -141,5 +302,34 @@ describe('StorageV2Service legacy Dexie snapshots', () => {
         messages: []
       })
     )
+  })
+
+  it('prepares the full runtime snapshot before local backup, snapshot, and restore operations', async () => {
+    const { createStorageV2Backup, createStorageV2Snapshot, restoreStorageV2Backup } = await import(
+      '../StorageV2Service'
+    )
+
+    await createStorageV2Backup('manual')
+    await createStorageV2Snapshot('diagnostic')
+    await restoreStorageV2Backup('/tmp/backup')
+
+    expect(mocks.importLegacyReduxSnapshot).toHaveBeenCalledTimes(3)
+    expect(mocks.importLegacyDexieSnapshot).toHaveBeenCalledTimes(3)
+    expect(mocks.importLegacyAgentDb).toHaveBeenCalledTimes(3)
+    expect(mocks.importLegacyAppDb).toHaveBeenCalledTimes(3)
+    expect(mocks.createBackup).toHaveBeenCalledWith('manual')
+    expect(mocks.createSnapshot).toHaveBeenCalledWith('diagnostic')
+    expect(mocks.restoreBackup).toHaveBeenCalledWith('/tmp/backup')
+    expect(mocks.importLegacyAppDb.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.createBackup.mock.invocationCallOrder[0]
+    )
+    expect(mocks.importLegacyAppDb.mock.invocationCallOrder[1]).toBeLessThan(
+      mocks.createSnapshot.mock.invocationCallOrder[0]
+    )
+    expect(mocks.importLegacyAppDb.mock.invocationCallOrder[2]).toBeLessThan(
+      mocks.restoreBackup.mock.invocationCallOrder[0]
+    )
+    expect(mocks.reduxMirrorSuspend).toHaveBeenCalledTimes(1)
+    expect(mocks.agentMirrorSuspend).toHaveBeenCalledTimes(1)
   })
 })

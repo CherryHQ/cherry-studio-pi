@@ -1,10 +1,15 @@
+import { loggerService } from '@logger'
 import { storageV2Service } from '@main/services/storageV2/StorageService'
+import { RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE } from '@shared/dataSyncBridge'
 
+import { callRendererBridge, getBridgeErrorMessage } from '../rendererBridge'
 import type { AppCapabilityDefinition } from '../types'
 import { okResult, sanitizeForAgent } from '../utils'
 
+const logger = loggerService.withContext('AppCapability:Storage')
 const DEFAULT_AGENT_LIST_LIMIT = 50
 const MAX_AGENT_LIST_LIMIT = 200
+const RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS = 5 * 60_000
 
 function normalizeListLimit(value: unknown) {
   const parsed =
@@ -42,6 +47,20 @@ function agentListOptions(input: any = {}) {
   return {
     limit: normalizeListLimit(input?.limit),
     offset: normalizeOffset(input?.offset)
+  }
+}
+
+async function prepareRendererStorageV2ForStorageOperation(operation: string) {
+  try {
+    await callRendererBridge<void>(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE, undefined, {
+      timeoutMs: RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS,
+      timeoutMessage: `Timed out preparing local data before ${operation}`
+    })
+  } catch (error) {
+    logger.warn('Renderer Storage v2 preparation bridge is unavailable; continuing with persisted Storage v2 data', {
+      operation,
+      error: getBridgeErrorMessage(error)
+    })
   }
 }
 
@@ -98,6 +117,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       tags: ['storage', 'backup', 'local', 'data'],
       examples: ['Create a local backup', 'Back up my data before changing settings'],
       execute: async (input: any) => {
+        await prepareRendererStorageV2ForStorageOperation('backup')
         const backup = await storageV2Service.createBackup(normalizeOptionalText(input?.reason) || 'agent-request')
         return {
           ok: true,
@@ -167,6 +187,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
             validation: sanitizeForAgent(await storageV2Service.validateBackup(backupPath))
           })
         }
+        await prepareRendererStorageV2ForStorageOperation('restore')
         return okResult('Backup restored', sanitizeForAgent(await storageV2Service.restoreBackup(backupPath)))
       }
     },
@@ -185,8 +206,13 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       risk: 'write',
       permissions: ['storage.snapshot.write'],
       tags: ['storage', 'snapshot', 'database'],
-      execute: async (input: any) =>
-        okResult('Storage snapshot created', sanitizeForAgent(await storageV2Service.createSnapshot(input?.reason)))
+      execute: async (input: any) => {
+        await prepareRendererStorageV2ForStorageOperation('snapshot')
+        return okResult(
+          'Storage snapshot created',
+          sanitizeForAgent(await storageV2Service.createSnapshot(input?.reason))
+        )
+      }
     },
     {
       id: 'storage.providers.list',

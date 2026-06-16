@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  callRendererBridge: vi.fn(),
   storageV2Service: {
+    createSnapshot: vi.fn(),
     createBackup: vi.fn(),
     validateBackup: vi.fn(),
     restoreBackup: vi.fn(),
@@ -11,6 +13,11 @@ const mocks = vi.hoisted(() => ({
     listFiles: vi.fn(),
     getFile: vi.fn()
   }
+}))
+
+vi.mock('../../rendererBridge', () => ({
+  callRendererBridge: mocks.callRendererBridge,
+  getBridgeErrorMessage: (error: unknown) => (error instanceof Error ? error.message : String(error))
 }))
 
 vi.mock('@main/services/storageV2/StorageService', () => ({
@@ -37,6 +44,8 @@ function capability(id: string) {
 describe('storage app capabilities', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.callRendererBridge.mockResolvedValue(undefined)
+    mocks.storageV2Service.createSnapshot.mockResolvedValue({ path: '/tmp/snapshot' })
     mocks.storageV2Service.createBackup.mockResolvedValue({ path: '/tmp/backup', metadata: {} })
     mocks.storageV2Service.validateBackup.mockResolvedValue({ ok: true })
     mocks.storageV2Service.restoreBackup.mockResolvedValue({ ok: true })
@@ -109,6 +118,26 @@ describe('storage app capabilities', () => {
     expect(mocks.storageV2Service.validateBackup).toHaveBeenCalledWith('/tmp/backup')
     expect(mocks.storageV2Service.validateBackup).toHaveBeenCalledTimes(2)
     expect(mocks.storageV2Service.restoreBackup).not.toHaveBeenCalled()
+  })
+
+  it('prepares renderer runtime data before agent-triggered snapshots, backups, and restores', async () => {
+    await capability('storage.snapshot.create').execute({ reason: 'before-test' }, { source: 'agent' })
+    await capability('storage.backup.create').execute({ reason: 'agent request' }, { source: 'agent' })
+    await capability('storage.backup.restore').execute({ backupPath: '/tmp/backup' }, { source: 'agent' })
+
+    expect(mocks.callRendererBridge).toHaveBeenCalledTimes(3)
+    expect(mocks.storageV2Service.createSnapshot).toHaveBeenCalledWith('before-test')
+    expect(mocks.storageV2Service.createBackup).toHaveBeenCalledWith('agent request')
+    expect(mocks.storageV2Service.restoreBackup).toHaveBeenCalledWith('/tmp/backup')
+    expect(mocks.callRendererBridge.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.storageV2Service.createSnapshot.mock.invocationCallOrder[0]
+    )
+    expect(mocks.callRendererBridge.mock.invocationCallOrder[1]).toBeLessThan(
+      mocks.storageV2Service.createBackup.mock.invocationCallOrder[0]
+    )
+    expect(mocks.callRendererBridge.mock.invocationCallOrder[2]).toBeLessThan(
+      mocks.storageV2Service.restoreBackup.mock.invocationCallOrder[0]
+    )
   })
 
   it('rejects empty required storage identifiers before calling services', async () => {
