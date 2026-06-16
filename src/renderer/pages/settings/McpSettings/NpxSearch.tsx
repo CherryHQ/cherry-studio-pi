@@ -33,6 +33,22 @@ const NpxSearch: FC = () => {
   const { addMcpServer, mcpServers } = useMcpServers()
   const mountedRef = useRef(true)
   const searchRequestSeqRef = useRef(0)
+  const addingPackagesRef = useRef<Set<string>>(new Set())
+  const [addingPackages, setAddingPackages] = useState<Set<string>>(() => new Set())
+
+  const setPackageAdding = useCallback((packageName: string, adding: boolean) => {
+    const nextPackages = new Set(addingPackagesRef.current)
+    if (adding) {
+      nextPackages.add(packageName)
+    } else {
+      nextPackages.delete(packageName)
+    }
+
+    addingPackagesRef.current = nextPackages
+    if (mountedRef.current) {
+      setAddingPackages(nextPackages)
+    }
+  }, [])
 
   // Add new function to handle npm scope search
   const handleNpmSearch = useCallback(
@@ -111,6 +127,39 @@ const NpxSearch: FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const handleAddPackage = useCallback(
+    async (record: SearchResult) => {
+      const packageName = record.fullName || record.name
+
+      if (addingPackagesRef.current.has(packageName) || mcpServers.some((server) => server.name === record.name)) {
+        return
+      }
+
+      setPackageAdding(packageName, true)
+
+      const newServer = {
+        name: record.name,
+        description: `${record.description}\n\n${t('settings.mcp.npx_list.usage')}: ${record.usage}\n${t('settings.mcp.npx_list.npm')}: ${record.npmLink}`,
+        command: 'npx',
+        args: record.configSample?.args ?? ['-y', record.fullName],
+        env: record.configSample?.env,
+        isActive: false,
+        type: record.type,
+        searchKey: record.fullName
+      }
+
+      try {
+        await addMcpServer(newServer)
+        window.toast.success(t('settings.mcp.addSuccess'))
+      } catch {
+        window.toast.error(t('settings.mcp.addError'))
+      } finally {
+        setPackageAdding(packageName, false)
+      }
+    },
+    [addMcpServer, mcpServers, setPackageAdding, t]
+  )
+
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-2 pt-5">
       <Center>
@@ -156,6 +205,8 @@ const NpxSearch: FC = () => {
         <div className="mx-auto flex w-full max-w-300 flex-1 flex-col gap-2 overflow-y-auto pr-1">
           {searchResults?.map((record) => {
             const isInstalled = mcpServers.some((server) => server.name === record.name)
+            const packageName = record.fullName || record.name
+            const isAdding = addingPackages.has(packageName)
             return (
               <div
                 key={record.name}
@@ -167,30 +218,9 @@ const NpxSearch: FC = () => {
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      onClick={async () => {
-                        if (isInstalled) {
-                          return
-                        }
-
-                        const newServer = {
-                          name: record.name,
-                          description: `${record.description}\n\n${t('settings.mcp.npx_list.usage')}: ${record.usage}\n${t('settings.mcp.npx_list.npm')}: ${record.npmLink}`,
-                          command: 'npx',
-                          args: record.configSample?.args ?? ['-y', record.fullName],
-                          env: record.configSample?.env,
-                          isActive: false,
-                          type: record.type,
-                          searchKey: record.fullName
-                        }
-
-                        try {
-                          await addMcpServer(newServer)
-                          window.toast.success(t('settings.mcp.addSuccess'))
-                        } catch {
-                          window.toast.error(t('settings.mcp.addError'))
-                        }
-                      }}
-                      disabled={isInstalled}>
+                      onClick={() => void handleAddPackage(record)}
+                      disabled={isInstalled || isAdding}
+                      loading={isAdding}>
                       {isInstalled ? <Check size={14} className="text-primary" /> : <Plus size={14} />}
                     </Button>
                   </Flex>

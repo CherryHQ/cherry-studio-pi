@@ -41,6 +41,9 @@ const McpServersList: FC = () => {
   const [modalType, setModalType] = useState<ImportMethod>('json')
   const [isEditing, setIsEditing] = useState(false)
   const [filter, setFilter] = useState<'all' | 'enabled' | 'disabled' | 'stdio' | 'sse' | 'builtin'>('all')
+  const [manualAdding, setManualAdding] = useState(false)
+  const mountedRef = useRef(true)
+  const manualAddRef = useRef(false)
 
   const [searchText, _setSearchText] = useState('')
 
@@ -78,6 +81,13 @@ const McpServersList: FC = () => {
 
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
   // 简单的滚动位置记忆
   useEffect(() => {
     // 恢复滚动位置
@@ -99,17 +109,33 @@ const McpServersList: FC = () => {
   }, [])
 
   const onAddMcpServer = useCallback(async () => {
-    const newServer = await addMcpServer({
-      name: t('settings.mcp.newServer'),
-      description: '',
-      baseUrl: '',
-      command: '',
-      args: [],
-      env: {},
-      isActive: false
-    })
-    void navigate({ to: `/settings/mcp/settings/${newServer.id}` })
-    window.toast.success(t('settings.mcp.addSuccess'))
+    if (manualAddRef.current) {
+      return
+    }
+
+    manualAddRef.current = true
+    setManualAdding(true)
+
+    try {
+      const newServer = await addMcpServer({
+        name: t('settings.mcp.newServer'),
+        description: '',
+        baseUrl: '',
+        command: '',
+        args: [],
+        env: {},
+        isActive: false
+      })
+      void navigate({ to: `/settings/mcp/settings/${newServer.id}` })
+      window.toast.success(t('settings.mcp.addSuccess'))
+    } catch {
+      window.toast.error(t('settings.mcp.addError'))
+    } finally {
+      manualAddRef.current = false
+      if (mountedRef.current) {
+        setManualAdding(false)
+      }
+    }
   }, [addMcpServer, navigate, t])
 
   const handleAddServerSuccess = useCallback(
@@ -165,7 +191,12 @@ const McpServersList: FC = () => {
             </Button>
             <Popover open={isAddMenuOpen} onOpenChange={setIsAddMenuOpen}>
               <PopoverTrigger asChild>
-                <Button variant="secondary" size="sm" className="rounded-lg text-xs shadow-none">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="rounded-lg text-xs shadow-none"
+                  disabled={manualAdding}
+                  loading={manualAdding}>
                   <Plus size={15} />
                   {t('common.add')}
                 </Button>

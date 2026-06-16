@@ -32,6 +32,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
   const [loading, setLoading] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [version, setVersion] = useState<string | null>(null)
+  const mountedRef = useRef(true)
   const versionRequestSeqRef = useRef(0)
   const toggleActiveRef = useRef(false)
   const deleteRef = useRef(false)
@@ -42,6 +43,13 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
 
   const { ensureServerTrusted } = useMcpServerTrust(updateServerBody)
   const { t } = useTranslation()
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   // Fetch version for active servers
   const getServerVersion = useCallback(async (s: Pick<McpServer, 'id' | 'isActive'>) => {
@@ -56,12 +64,12 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
     if (server.isActive) {
       void getServerVersion({ id: server.id, isActive: server.isActive })
         .then((nextVersion) => {
-          if (!cancelled && requestSeq === versionRequestSeqRef.current) {
+          if (!cancelled && mountedRef.current && requestSeq === versionRequestSeqRef.current) {
             setVersion(nextVersion)
           }
         })
         .catch(() => {
-          if (!cancelled && requestSeq === versionRequestSeqRef.current) {
+          if (!cancelled && mountedRef.current && requestSeq === versionRequestSeqRef.current) {
             setVersion(null)
           }
         })
@@ -96,31 +104,39 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
           try {
             const requestSeq = ++versionRequestSeqRef.current
             const nextVersion = await getServerVersion({ ...serverForUpdate, isActive: true })
-            if (requestSeq === versionRequestSeqRef.current) {
+            if (mountedRef.current && requestSeq === versionRequestSeqRef.current) {
               setVersion(nextVersion)
             }
             await window.api.mcp.refreshTools(serverForUpdate.id)
           } catch (error: any) {
-            window.modal.error({
-              title: t('settings.mcp.startError'),
-              content: formatMcpError(error),
-              centered: true
-            })
+            if (mountedRef.current) {
+              window.modal.error({
+                title: t('settings.mcp.startError'),
+                content: formatMcpError(error),
+                centered: true
+              })
+            }
           }
         } else {
           await updateMcpServer({ body: { isActive: false } })
           await window.api.mcp.stopServer(serverForUpdate.id)
           versionRequestSeqRef.current++
-          setVersion(null)
+          if (mountedRef.current) {
+            setVersion(null)
+          }
         }
       } catch (error: any) {
-        window.modal.error({
-          title: active ? t('settings.mcp.startError') : t('settings.mcp.updateError'),
-          content: formatMcpError(error),
-          centered: true
-        })
+        if (mountedRef.current) {
+          window.modal.error({
+            title: active ? t('settings.mcp.startError') : t('settings.mcp.updateError'),
+            content: formatMcpError(error),
+            centered: true
+          })
+        }
       } finally {
-        setLoading(false)
+        if (mountedRef.current) {
+          setLoading(false)
+        }
         toggleActiveRef.current = false
       }
     },
@@ -154,7 +170,9 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
           }
 
           deleteRunningRef.current = true
-          setDeleting(true)
+          if (mountedRef.current) {
+            setDeleting(true)
+          }
           try {
             await window.api.mcp.removeServer(server.id)
             await deleteMcpServer({})
@@ -163,7 +181,9 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
             showDeleteError(error)
             throw error
           } finally {
-            setDeleting(false)
+            if (mountedRef.current) {
+              setDeleting(false)
+            }
             deleteRunningRef.current = false
             deleteRef.current = false
           }
