@@ -8,7 +8,7 @@ import { FILE_TYPE } from '@renderer/types'
 import { formatFileSize } from '@renderer/utils'
 import { t } from 'i18next'
 import { CircleAlert } from 'lucide-react'
-import React, { memo, useCallback } from 'react'
+import React, { memo, useCallback, useRef } from 'react'
 
 import FileItem from './FileItem'
 
@@ -29,6 +29,43 @@ interface FileItemProps {
 
 const FileList: React.FC<FileItemProps> = ({ id, list, files }) => {
   const estimateSize = useCallback(() => 75, [])
+  const deleteConfirmFileIdsRef = useRef(new Set<string>())
+  const deleteRunningFileIdsRef = useRef(new Set<string>())
+
+  const confirmDeleteFile = useCallback((fileId: string) => {
+    if (deleteConfirmFileIdsRef.current.has(fileId) || deleteRunningFileIdsRef.current.has(fileId)) {
+      return
+    }
+
+    const clearDeleteGuard = () => {
+      if (deleteRunningFileIdsRef.current.has(fileId)) return
+      deleteConfirmFileIdsRef.current.delete(fileId)
+    }
+
+    deleteConfirmFileIdsRef.current.add(fileId)
+    window.modal.confirm({
+      title: t('files.delete.title'),
+      content: t('files.delete.content'),
+      okText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      centered: true,
+      onCancel: clearDeleteGuard,
+      onOk: async () => {
+        if (deleteRunningFileIdsRef.current.has(fileId)) {
+          return
+        }
+
+        deleteRunningFileIdsRef.current.add(fileId)
+        try {
+          await handleDelete(fileId, t)
+        } finally {
+          deleteRunningFileIdsRef.current.delete(fileId)
+          deleteConfirmFileIdsRef.current.delete(fileId)
+        }
+      },
+      icon: <CircleAlert className="size-4 text-red-500" />
+    })
+  }, [])
 
   if (id === FILE_TYPE.IMAGE && files?.length && files?.length > 0) {
     const previewItems = files.map((file) => ({
@@ -69,17 +106,7 @@ const FileList: React.FC<FileItemProps> = ({ id, list, files }) => {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
-                  window.modal.confirm({
-                    title: t('files.delete.title'),
-                    content: t('files.delete.content'),
-                    okText: t('common.confirm'),
-                    cancelText: t('common.cancel'),
-                    centered: true,
-                    onOk: () => {
-                      void handleDelete(file.id, t)
-                    },
-                    icon: <CircleAlert className="size-4 text-red-500" />
-                  })
+                  confirmDeleteFile(file.id)
                 }}>
                 <DeleteIcon size={14} className="lucide-custom" />
               </button>
