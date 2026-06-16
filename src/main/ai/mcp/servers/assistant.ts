@@ -382,6 +382,7 @@ class AssistantServer {
         const testUrl = apiHost.startsWith('http') ? apiHost : `https://${apiHost}`
         const controller = new AbortController()
         const timeout = setTimeout(() => controller.abort(), 10000)
+        timeout.unref?.()
         let response: Response
         try {
           response = await fetch(testUrl, {
@@ -657,6 +658,7 @@ class AssistantServer {
       const currentVersion = app.getVersion()
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 5000)
+      timeout.unref?.()
 
       let response: Response
       try {

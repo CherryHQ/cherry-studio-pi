@@ -663,6 +663,7 @@ export class McpRuntimeService extends BaseService {
             getServerLogger(server).warn(`OAuth flow timed out`)
             void callbackServer.close()
           }, 300000) // 5 minutes timeout
+          timeoutId.unref?.()
 
           try {
             // Wait for the authorization code
