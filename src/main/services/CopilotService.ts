@@ -511,7 +511,10 @@ class CopilotService {
    * 辅助方法：延迟执行
    */
   private delay = (ms: number): Promise<void> => {
-    return new Promise((resolve) => setTimeout(resolve, ms))
+    return new Promise((resolve) => {
+      const timer = setTimeout(resolve, ms)
+      timer.unref?.()
+    })
   }
 }
 

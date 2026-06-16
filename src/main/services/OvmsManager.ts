@@ -87,6 +87,13 @@ function runPowerShellCommand(command: string) {
   return execFileCapture(powershellExecutable(), ['-NoProfile', '-NonInteractive', '-Command', command])
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms)
+    timer.unref?.()
+  })
+}
+
 function runBatchFileDetached(filePath: string, cwd: string, onError: (error: Error) => void) {
   if (process.platform === 'win32') {
     execFile('cmd.exe', ['/d', '/s', '/c', `"${filePath}"`], { cwd, windowsHide: true }, (error) => {
@@ -273,7 +280,7 @@ export class OvmsManager extends BaseService {
         }
 
         // Wait 300ms before checking again
-        await new Promise((resolve) => setTimeout(resolve, 300))
+        await sleep(300)
       }
 
       logger.warn(`Process with PID ${pid} did not disappear within timeout`)

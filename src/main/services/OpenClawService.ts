@@ -72,6 +72,13 @@ export function parseWindowsNetstatListeningPids(output: string, port: number): 
   return [...pids]
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms)
+    timer.unref?.()
+  })
+}
+
 const OPENCLAW_CONFIG_DIR = path.join(os.homedir(), '.openclaw')
 const OPENCLAW_CONFIG_PATH = path.join(OPENCLAW_CONFIG_DIR, 'openclaw.json')
 const OPENCLAW_CONFIG_BAK_PATH = path.join(OPENCLAW_CONFIG_DIR, 'openclaw.json.bak')
@@ -552,7 +559,7 @@ export class OpenClawService extends BaseService {
     let lastError = ''
 
     while (Date.now() - startTime < maxWaitMs) {
-      await new Promise((r) => setTimeout(r, pollIntervalMs))
+      await sleep(pollIntervalMs)
       pollCount++
 
       // Check if the process crashed early
@@ -646,7 +653,7 @@ export class OpenClawService extends BaseService {
       }
       if (i < maxRetries - 1) {
         logger.debug(`Gateway still running after stop, retrying check (${i + 1}/${maxRetries})...`)
-        await new Promise((r) => setTimeout(r, intervalMs))
+        await sleep(intervalMs)
       }
     }
     return true

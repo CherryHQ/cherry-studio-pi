@@ -1364,7 +1364,7 @@ export class SelectionService extends BaseService implements Activatable {
     }
 
     // unset everything
-    setTimeout(() => {
+    const resetWorkspaceTimer = setTimeout(() => {
       if (actionWindow.isDestroyed()) return
       actionWindow.setVisibleOnAllWorkspaces(false, {
         visibleOnFullScreen: true,
@@ -1377,6 +1377,7 @@ export class SelectionService extends BaseService implements Activatable {
       // regain the focus when all the works done
       actionWindow.focus()
     }, 50)
+    resetWorkspaceTimer.unref?.()
   }
 
   /**

@@ -301,7 +301,10 @@ export class DbService extends BaseService {
         logger.warn('withWriteTx: SQLITE_BUSY, retrying once', {
           delayMs: WRITE_BUSY_RETRY_DELAY_MS
         })
-        await new Promise((resolve) => setTimeout(resolve, WRITE_BUSY_RETRY_DELAY_MS))
+        await new Promise<void>((resolve) => {
+          const retryTimer = setTimeout(resolve, WRITE_BUSY_RETRY_DELAY_MS)
+          retryTimer.unref?.()
+        })
         return await this.db.transaction(fn)
       }
     } finally {
