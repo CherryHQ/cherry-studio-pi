@@ -483,6 +483,7 @@ export class CodeCliService extends BaseService {
       },
       5 * 60 * 1000
     ) // 5 minutes timeout
+    timer.unref?.()
 
     this.openCodeCleanupTimers.set(configPath, timer)
   }
@@ -1384,7 +1385,8 @@ export class CodeCliService extends BaseService {
           }
         }
 
-        setTimeout(cleanup, 60 * 1000)
+        const cleanupTimer = setTimeout(cleanup, 60 * 1000)
+        cleanupTimer.unref?.()
 
         break
       }
