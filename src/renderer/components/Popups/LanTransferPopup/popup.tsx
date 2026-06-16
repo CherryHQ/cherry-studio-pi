@@ -40,6 +40,7 @@ export const PopupContainer: FC<PopupContainerProps> = ({ resolve }) => {
     if (resolvedRef.current) return
     resolvedRef.current = true
     closeTimerRef.current = setTimeout(() => {
+      closeTimerRef.current = null
       resolve({})
     }, CLOSE_ANIMATION_MS)
   }, [resolve])
@@ -61,11 +62,17 @@ export const PopupContainer: FC<PopupContainerProps> = ({ resolve }) => {
 
   useEffect(() => {
     return () => {
+      const hadPendingClose = closeTimerRef.current !== null
       if (closeTimerRef.current) {
         clearTimeout(closeTimerRef.current)
+        closeTimerRef.current = null
+      }
+      if (!resolvedRef.current || hadPendingClose) {
+        resolvedRef.current = true
+        resolve({})
       }
     }
-  }, [])
+  }, [resolve])
 
   return (
     <Dialog open={state.open} onOpenChange={onOpenChange}>
