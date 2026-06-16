@@ -15,7 +15,7 @@ import type { NotesTreeNode } from '@renderer/types/note'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { exportNote } from '@renderer/utils/export'
 import { Edit3, FilePlus, FileSearch, Folder, FolderOpen, Sparkles, Star, StarOff, UploadIcon } from 'lucide-react'
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('UseNotesMenu')
@@ -46,6 +46,8 @@ export const useNotesMenu = ({
 }: UseNotesMenuProps) => {
   const { t } = useTranslation()
   const { bases } = useKnowledgeBases()
+  const deleteConfirmNodeIdsRef = useRef(new Set<string>())
+  const deletingNodeIdsRef = useRef(new Set<string>())
   const [exportMenuOptions] = useMultiplePreferences({
     docx: 'data.export.menus.docx',
     image: 'data.export.menus.image',
@@ -109,18 +111,39 @@ export const useNotesMenu = ({
 
   const handleDeleteNodeWrapper = useCallback(
     (node: NotesTreeNode) => {
+      if (deleteConfirmNodeIdsRef.current.has(node.id) || deletingNodeIdsRef.current.has(node.id)) {
+        return
+      }
+
       const confirmText =
         node.type === 'folder'
           ? t('notes.delete_folder_confirm', { name: node.name })
           : t('notes.delete_note_confirm', { name: node.name })
 
+      const clearDeleteGuard = () => {
+        if (deletingNodeIdsRef.current.has(node.id)) return
+        deleteConfirmNodeIdsRef.current.delete(node.id)
+      }
+
+      deleteConfirmNodeIdsRef.current.add(node.id)
       window.modal.confirm({
         title: t('notes.delete'),
         content: confirmText,
         centered: true,
         okButtonProps: { danger: true },
-        onOk: () => {
-          onDeleteNode(node.id)
+        onCancel: clearDeleteGuard,
+        onOk: async () => {
+          if (deletingNodeIdsRef.current.has(node.id)) {
+            return
+          }
+
+          deletingNodeIdsRef.current.add(node.id)
+          try {
+            await Promise.resolve(onDeleteNode(node.id))
+          } finally {
+            deletingNodeIdsRef.current.delete(node.id)
+            deleteConfirmNodeIdsRef.current.delete(node.id)
+          }
         }
       })
     },
