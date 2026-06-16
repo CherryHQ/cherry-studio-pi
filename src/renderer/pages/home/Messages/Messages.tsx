@@ -77,6 +77,8 @@ const Messages: React.FC<MessagesProps> = ({
   const messageElements = useRef<Map<string, HTMLElement>>(new Map())
   const messagesRef = useRef<Message[]>(messages)
   const partsMapRef = useRef(partsMap)
+  const clearConfirmRef = useRef(false)
+  const clearRunningRef = useRef(false)
 
   useEffect(() => {
     messagesRef.current = messages
@@ -130,11 +132,34 @@ const Messages: React.FC<MessagesProps> = ({
     const unsubscribes = [
       EventEmitter.on(EVENT_NAMES.SEND_MESSAGE, scrollToBottom),
       EventEmitter.on(EVENT_NAMES.CLEAR_MESSAGES, async (data: Topic) => {
+        if (clearConfirmRef.current || clearRunningRef.current) {
+          return
+        }
+
+        const clearGuard = () => {
+          if (clearRunningRef.current) return
+          clearConfirmRef.current = false
+        }
+
+        clearConfirmRef.current = true
         window.modal.confirm({
           title: t('chat.input.clear.title'),
           content: t('chat.input.clear.content'),
           centered: true,
-          onOk: () => clearTopic(data)
+          onCancel: clearGuard,
+          onOk: async () => {
+            if (clearRunningRef.current) {
+              return
+            }
+
+            clearRunningRef.current = true
+            try {
+              await clearTopic(data)
+            } finally {
+              clearRunningRef.current = false
+              clearConfirmRef.current = false
+            }
+          }
         })
       }),
       EventEmitter.on(EVENT_NAMES.COPY_TOPIC_IMAGE, async () => {

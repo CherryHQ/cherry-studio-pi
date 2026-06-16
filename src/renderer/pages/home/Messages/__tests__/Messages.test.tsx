@@ -6,10 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   cancelAnimationFrame: vi.fn(),
   captureScrollableAsBlob: vi.fn(),
+  clearTopicMessages: vi.fn(),
   clipboardWrite: vi.fn(),
   clipboardWriteText: vi.fn(),
   getGroupedMessages: vi.fn(() => ({})),
   requestAnimationFrame: vi.fn(() => 42),
+  modalConfirm: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
   usePreference: vi.fn((key: string) => [key === 'chat.message.navigation_mode' ? 'none' : false]),
@@ -68,7 +70,7 @@ vi.mock('@renderer/hooks/useTimer', () => ({
 
 vi.mock('@renderer/hooks/V2ChatContext', () => ({
   useV2Chat: () => ({
-    clearTopicMessages: vi.fn()
+    clearTopicMessages: mocks.clearTopicMessages
   })
 }))
 
@@ -163,6 +165,14 @@ vi.mock('react-i18next', () => ({
 
 const { default: Messages } = await import('../Messages')
 
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
 describe('Messages', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -180,6 +190,12 @@ describe('Messages', () => {
       value: {
         error: mocks.toastError,
         success: mocks.toastSuccess
+      }
+    })
+    Object.defineProperty(window, 'modal', {
+      configurable: true,
+      value: {
+        confirm: mocks.modalConfirm
       }
     })
     vi.stubGlobal(
@@ -244,5 +260,29 @@ describe('Messages', () => {
 
     expect(mocks.toastError).toHaveBeenCalledWith('common.copy_failed: image clipboard unavailable')
     expect(mocks.clipboardWrite).toHaveBeenCalled()
+  })
+
+  it('prevents duplicate clear-topic confirmations and operations', async () => {
+    const runningClear = deferred<void>()
+    mocks.clearTopicMessages.mockReturnValue(runningClear.promise)
+    const topic = { id: 'topic-1', assistantId: 'assistant-1', name: 'Topic' } as Topic
+
+    render(<Messages topic={topic} messages={[]} onComponentUpdate={vi.fn()} />)
+
+    const eventCalls = mocks.eventOn.mock.calls as unknown as Array<[string, (...args: unknown[]) => unknown]>
+    const eventHandler = eventCalls.find(([eventName]) => eventName === 'clear-messages')?.[1]
+
+    await eventHandler?.(topic)
+    await eventHandler?.(topic)
+
+    expect(mocks.modalConfirm).toHaveBeenCalledTimes(1)
+    const options = mocks.modalConfirm.mock.calls[0][0]
+
+    const firstClear = options.onOk()
+    const secondClear = options.onOk()
+    expect(mocks.clearTopicMessages).toHaveBeenCalledTimes(1)
+
+    runningClear.resolve(undefined)
+    await Promise.all([firstClear, secondClear])
   })
 })
