@@ -54,6 +54,7 @@ vi.mock('react-i18next', async (importOriginal) => {
 })
 
 import { AssistantSelector } from '../AssistantSelector'
+import { RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '../resourceSelectorEvents'
 
 const ALPHA_ASSISTANT_ID = '11111111-1111-4111-8111-111111111111'
 const BETA_ASSISTANT_ID = '22222222-2222-4222-8222-222222222222'
@@ -200,5 +201,26 @@ describe('AssistantSelector library navigation', () => {
     await waitFor(() =>
       expect(openTabMock).toHaveBeenCalledWith('/app/library?resourceType=assistant&action=create', { forceNew: true })
     )
+  })
+
+  it('keeps closing transient selectors when opening the assistant create flow', async () => {
+    const closeResourceSelectors = vi.fn()
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+
+    try {
+      renderSelector()
+      openPopover()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Create assistant' }))
+
+      await waitFor(() => {
+        expect(openTabMock).toHaveBeenCalledWith('/app/library?resourceType=assistant&action=create', {
+          forceNew: true
+        })
+      })
+      expect(closeResourceSelectors.mock.calls.length).toBeGreaterThanOrEqual(2)
+    } finally {
+      window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+    }
   })
 })

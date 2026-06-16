@@ -233,6 +233,25 @@ describe('AgentSelector', () => {
     )
   })
 
+  it('keeps closing transient selectors when opening the agent create flow', async () => {
+    const closeResourceSelectors = vi.fn()
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+
+    try {
+      renderSelector()
+      openPopover()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+
+      await waitFor(() => {
+        expect(openTabMock).toHaveBeenCalledWith('/app/library?resourceType=agent&action=create', { forceNew: true })
+      })
+      expect(closeResourceSelectors.mock.calls.length).toBeGreaterThanOrEqual(2)
+    } finally {
+      window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+    }
+  })
+
   it('broadcasts selector close when unmounted so stale portals cannot linger', () => {
     const closeResourceSelectors = vi.fn()
     const { unmount } = render(
