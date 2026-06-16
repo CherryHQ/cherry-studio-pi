@@ -108,6 +108,8 @@ const EnvironmentDependencies: FC<EnvironmentDependenciesProps> = ({ mini = fals
   const checkBinariesTimerRef = useRef<NodeJS.Timeout>(undefined)
   const hasShownCheckBinariesErrorRef = useRef(false)
   const isMountedRef = useRef(true)
+  const installingUvRef = useRef(false)
+  const installingBunRef = useRef(false)
 
   useEffect(() => {
     isMountedRef.current = true
@@ -143,17 +145,25 @@ const EnvironmentDependencies: FC<EnvironmentDependenciesProps> = ({ mini = fals
   }, [setIsUvInstalled, setIsBunInstalled, t])
 
   const installUV = async () => {
+    if (installingUvRef.current) {
+      return
+    }
+
+    installingUvRef.current = true
+    setIsInstallingUv(true)
     try {
-      setIsInstallingUv(true)
       await window.api.installUVBinary()
       if (isMountedRef.current) {
-        setIsInstallingUv(false)
         setIsUvInstalled(true)
       }
     } catch (error) {
       logger.error('Failed to install UV binary', error as Error)
       if (isMountedRef.current) {
         window.toast.error(`${t('settings.mcp.installError')}: ${formatErrorMessage(error)}`)
+      }
+    } finally {
+      installingUvRef.current = false
+      if (isMountedRef.current) {
         setIsInstallingUv(false)
       }
     }
@@ -165,17 +175,25 @@ const EnvironmentDependencies: FC<EnvironmentDependenciesProps> = ({ mini = fals
   }
 
   const installBun = async () => {
+    if (installingBunRef.current) {
+      return
+    }
+
+    installingBunRef.current = true
+    setIsInstallingBun(true)
     try {
-      setIsInstallingBun(true)
       await window.api.installBunBinary()
       if (isMountedRef.current) {
-        setIsInstallingBun(false)
         setIsBunInstalled(true)
       }
     } catch (error) {
       logger.error('Failed to install Bun binary', error as Error)
       if (isMountedRef.current) {
         window.toast.error(`${t('settings.mcp.installError')}: ${formatErrorMessage(error)}`)
+      }
+    } finally {
+      installingBunRef.current = false
+      if (isMountedRef.current) {
         setIsInstallingBun(false)
       }
     }
