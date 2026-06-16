@@ -13,6 +13,12 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { getProviderDisplayName } from '../utils'
 
+vi.mock('@renderer/i18n', () => ({
+  default: {
+    t: (key: string) => key
+  }
+}))
+
 vi.mock('@renderer/i18n/label', () => ({
   getProviderLabelKey: (id: string) => `Label(${id})`
 }))
