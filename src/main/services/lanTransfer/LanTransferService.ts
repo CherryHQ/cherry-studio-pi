@@ -448,6 +448,7 @@ export class LanTransferService extends BaseService {
         socket.removeAllListeners()
         resolve()
       }, DISCONNECT_TIMEOUT_MS)
+      timeout.unref?.()
 
       socket.once('close', () => {
         clearTimeout(timeout)
@@ -493,6 +494,7 @@ export class LanTransferService extends BaseService {
       logger.warn('Global transfer timeout exceeded, aborting transfer', { transferId, fileName })
       abortTransfer(this.activeTransfer, globalTimeoutError)
     }, LAN_TRANSFER_GLOBAL_TIMEOUT_MS)
+    globalTimeoutHandle.unref?.()
 
     try {
       const result = await this.performFileTransfer(filePath, transferId, fileName)

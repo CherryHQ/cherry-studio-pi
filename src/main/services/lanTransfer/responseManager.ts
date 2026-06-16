@@ -49,6 +49,7 @@ export class ResponseManager {
       reject(error)
       this.onTimeout?.()
     }, timeoutMs)
+    timeoutHandle.unref?.()
 
     const pending: PendingResponse = {
       type,
