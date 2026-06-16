@@ -189,7 +189,9 @@ export default function ProviderCustomHeaderDrawer({ providerId, open, onClose }
   const [addEndpointOpen, setAddEndpointOpen] = useState(false)
   const [headersUiMode, setHeadersUiMode] = useState<HeadersUiMode>('list')
   const [jsonDraft, setJsonDraft] = useState('')
+  const [saving, setSaving] = useState(false)
   const wasOpenRef = useRef(false)
+  const savingRef = useRef(false)
 
   useEffect(() => {
     const justOpened = open && !wasOpenRef.current
@@ -209,6 +211,8 @@ export default function ProviderCustomHeaderDrawer({ providerId, open, onClose }
     setRows(headersObjectToRows(sourceHeaders))
     setJsonDraft(JSON.stringify(sourceHeaders, null, 2))
     setHeadersUiMode('list')
+    savingRef.current = false
+    setSaving(false)
   }, [open, sourceHeaders, endpointTypes, provider?.endpointConfigs])
 
   const syncListToJson = useCallback(() => {
@@ -238,7 +242,7 @@ export default function ProviderCustomHeaderDrawer({ providerId, open, onClose }
   }, [applyJsonToRowsOrToast, headersUiMode, syncListToJson])
 
   const handleSave = useCallback(async () => {
-    if (!provider) return
+    if (!provider || savingRef.current) return
 
     // Validate the primary baseUrl — non-empty + URL-shape, unless this is
     // Vertex (whose primary endpoint is account-managed, no URL needed).
@@ -271,16 +275,27 @@ export default function ProviderCustomHeaderDrawer({ providerId, open, onClose }
       parsedHeaders = rowsToHeadersObject(rows)
     }
 
+    savingRef.current = true
+    setSaving(true)
+    let didSave = false
     try {
       await updateProvider({
         endpointConfigs: nextEndpointConfigs,
         providerSettings: { ...provider.settings, extraHeaders: parsedHeaders }
       })
+      didSave = true
     } catch (error) {
       // Surface the failure and keep the drawer open so the user can retry
       // instead of silently losing their edits.
       logger.error('Failed to save provider request config', error as Error, { providerId })
       window.toast.error(t('settings.provider.save_failed'))
+      return
+    } finally {
+      savingRef.current = false
+      setSaving(false)
+    }
+
+    if (!didSave) {
       return
     }
 
@@ -315,10 +330,10 @@ export default function ProviderCustomHeaderDrawer({ providerId, open, onClose }
 
   const footer = (
     <ProviderActions className={drawerClasses.footer}>
-      <Button type="button" variant="outline" onClick={onClose}>
+      <Button type="button" variant="outline" disabled={saving} onClick={onClose}>
         {t('common.cancel')}
       </Button>
-      <Button type="button" onClick={() => void handleSave()}>
+      <Button type="button" disabled={saving} loading={saving} onClick={() => void handleSave()}>
         {t('common.save')}
       </Button>
     </ProviderActions>
