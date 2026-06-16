@@ -139,6 +139,7 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
   const resolvedRef = useRef(false)
   const mountedRef = useRef(true)
   const analysisRequestSeqRef = useRef(0)
+  const savingRef = useRef(false)
   const { bases } = useKnowledgeBases()
   const { submit: submitKnowledgeItems } = useAddKnowledgeItems(selectedBaseId || '')
   const { t } = useTranslation()
@@ -313,8 +314,10 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
 
   const onOk = async () => {
     if (resolvedRef.current) return
+    if (savingRef.current) return
     if (!formState.canSubmit) return
 
+    savingRef.current = true
     setLoading(true)
     let savedCount = 0
 
@@ -447,10 +450,12 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
       if (mountedRef.current) {
         setLoading(false)
       }
+      savingRef.current = false
     }
   }
 
   const onCancel = () => {
+    if (savingRef.current) return
     resolveAfterClose(null)
   }
 
@@ -569,7 +574,7 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
         </DialogHeader>
         {uiState.type === 'form' ? renderFormContent() : renderEmptyState()}
         <DialogFooter>
-          <Button variant="outline" onClick={onCancel}>
+          <Button variant="outline" onClick={onCancel} disabled={loading}>
             {t('common.cancel')}
           </Button>
           <Button onClick={onOk} loading={loading} disabled={!formState.canSubmit || analysisLoading}>

@@ -2,7 +2,7 @@ import { useKnowledgeBases } from '@renderer/hooks/useKnowledgeBase'
 import { useAddKnowledgeItems } from '@renderer/hooks/useKnowledgeItems'
 import type { FileMetadata } from '@renderer/types'
 import type { Message } from '@renderer/types/newMessage'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -177,5 +177,28 @@ describe('SaveToKnowledgePopup', () => {
     expect(mocks.toast.warning).toHaveBeenCalledWith('chat.save.knowledge.error.file_partial_failed:{"count":1}')
 
     await expect(promise).resolves.toEqual({ success: true, savedCount: 1 })
+  })
+
+  it('ignores duplicate save clicks while submission is pending', async () => {
+    let resolveSubmit: () => void = () => {}
+    mocks.submitKnowledgeItems.mockReturnValue(
+      new Promise<void>((resolve) => {
+        resolveSubmit = resolve
+      })
+    )
+
+    const { promise } = await renderPopup(createMessageWithFiles([createFile('/tmp/ok.pdf', 'ok')]))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'common.save' })).not.toBeDisabled())
+    const saveButton = screen.getByRole('button', { name: 'common.save' })
+    fireEvent.click(saveButton)
+    fireEvent.click(saveButton)
+
+    await waitFor(() => expect(mocks.submitKnowledgeItems).toHaveBeenCalledTimes(1))
+
+    await act(async () => {
+      resolveSubmit()
+      await promise
+    })
   })
 })
