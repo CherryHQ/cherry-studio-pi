@@ -255,7 +255,9 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
       // state instead of auto-seeding a fresh topic.
       if (topic.id === activeTopic.id && topics.length > 1) {
         const index = findIndex(topics, (t) => t.id === topic.id)
-        setActiveTopic(topics[index + 1 === topics.length ? index - 1 : index + 1])
+        if (index !== -1) {
+          setActiveTopic(topics[index + 1 === topics.length ? index - 1 : index + 1])
+        }
       }
       setDeletingTopicId(null)
     },
