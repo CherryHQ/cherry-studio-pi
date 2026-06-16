@@ -10,6 +10,7 @@ const useModelsMock = vi.fn()
 const createModelMock = vi.fn()
 const deleteModelMock = vi.fn()
 const updateModelMock = vi.fn()
+const updateProviderMock = vi.fn()
 
 vi.mock('react-i18next', async (importOriginal) => {
   const actual = await importOriginal<object>()
@@ -134,11 +135,13 @@ describe('Model drawers', () => {
     ;(window as any).modal = { confirm: vi.fn() }
 
     useModelsMock.mockReturnValue({ models: [] })
+    updateProviderMock.mockResolvedValue(undefined)
   })
 
   it('renders the legacy add drawer without the inner panel shell and submits through the local drawer form', async () => {
     useProviderMock.mockReturnValue({
-      provider: { id: 'openai', name: 'OpenAI' }
+      provider: { id: 'openai', name: 'OpenAI', isEnabled: false },
+      updateProvider: updateProviderMock
     })
 
     render(<AddModelDrawer providerId="openai" open prefill={null} onClose={vi.fn()} />)
@@ -171,11 +174,13 @@ describe('Model drawers', () => {
         endpointTypes: undefined
       })
     )
+    expect(updateProviderMock).toHaveBeenCalledWith({ isEnabled: true })
   })
 
   it('renders the new-api add drawer with the shared select surface and keeps endpoint type in create payload', async () => {
     useProviderMock.mockReturnValue({
-      provider: { id: 'new-api', name: 'New API' }
+      provider: { id: 'new-api', name: 'New API', isEnabled: true },
+      updateProvider: updateProviderMock
     })
 
     render(<AddModelDrawer providerId="new-api" open prefill={null} onClose={vi.fn()} />)
@@ -201,7 +206,8 @@ describe('Model drawers', () => {
 
   it('keeps the add-model submit disabled while creating and shows an error toast on failure', async () => {
     useProviderMock.mockReturnValue({
-      provider: { id: 'openai', name: 'OpenAI' }
+      provider: { id: 'openai', name: 'OpenAI', isEnabled: false },
+      updateProvider: updateProviderMock
     })
     let rejectCreate!: (error: Error) => void
     createModelMock.mockReturnValue(
@@ -233,7 +239,8 @@ describe('Model drawers', () => {
 
   it('loads edit values, expands more settings, and keeps save plus auto-save on the existing mutation path', async () => {
     useProviderMock.mockReturnValue({
-      provider: { id: 'openai', name: 'OpenAI' }
+      provider: { id: 'openai', name: 'OpenAI', isEnabled: true },
+      updateProvider: updateProviderMock
     })
 
     render(
@@ -311,7 +318,8 @@ describe('Model drawers', () => {
 
   it('writes cherryin endpoint type back through the edit drawer save path', async () => {
     useProviderMock.mockReturnValue({
-      provider: { id: 'cherryin', name: 'CherryIN' }
+      provider: { id: 'cherryin', name: 'CherryIN', isEnabled: true },
+      updateProvider: updateProviderMock
     })
 
     render(
@@ -352,7 +360,8 @@ describe('Model drawers', () => {
 
   it('shows delete only for disabled models and deletes after confirmation', async () => {
     useProviderMock.mockReturnValue({
-      provider: { id: 'openai', name: 'OpenAI' }
+      provider: { id: 'openai', name: 'OpenAI', isEnabled: true },
+      updateProvider: updateProviderMock
     })
 
     const onClose = vi.fn()
@@ -395,7 +404,8 @@ describe('Model drawers', () => {
 
   it('does not show delete action for enabled models', () => {
     useProviderMock.mockReturnValue({
-      provider: { id: 'openai', name: 'OpenAI' }
+      provider: { id: 'openai', name: 'OpenAI', isEnabled: true },
+      updateProvider: updateProviderMock
     })
 
     render(

@@ -15,6 +15,7 @@ import {
 import { loggerService } from '@logger'
 import { TopView } from '@renderer/components/TopView'
 import { useModelMutations, useModels } from '@renderer/hooks/useModel'
+import { useProviderMutations } from '@renderer/hooks/useProvider'
 import type { CreateModelDto } from '@shared/data/api/schemas/models'
 import type { Model } from '@shared/data/types/model'
 import { ENDPOINT_TYPE, type EndpointType } from '@shared/data/types/model'
@@ -23,6 +24,7 @@ import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { drawerClasses } from '../primitives/ProviderSettingsPrimitives'
+import { enableProviderWhenModelsAvailable } from '../utils/providerEnablement'
 import { MODEL_ENDPOINT_OPTIONS } from './ModelDrawer/helpers'
 import { getProviderModelApiId } from './utils'
 
@@ -50,6 +52,7 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
   const [endpointType, setEndpointType] = useState<EndpointType>(ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS)
   const [submitting, setSubmitting] = useState(false)
   const { createModels } = useModelMutations()
+  const { updateProvider } = useProviderMutations(provider.id)
   const { models: existingModels } = useModels({ providerId: provider.id })
   const { t } = useTranslation()
 
@@ -89,6 +92,7 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
       }
     })
     await createModels(dtos)
+    await enableProviderWhenModelsAvailable(provider, updateProvider, dtos.length, 'manual_batch_add_model')
     return true
   }
 

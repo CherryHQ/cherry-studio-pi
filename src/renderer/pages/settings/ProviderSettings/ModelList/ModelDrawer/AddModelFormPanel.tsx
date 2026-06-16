@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next'
 import ProviderActions from '../../primitives/ProviderActions'
 import ProviderSection from '../../primitives/ProviderSection'
 import { drawerClasses } from '../../primitives/ProviderSettingsPrimitives'
+import { enableProviderWhenModelsAvailable } from '../../utils/providerEnablement'
 import { getInitialAddModelFormState, splitModelIds } from './helpers'
 import { ModelBasicFields } from './ModelBasicFields'
 import { ModelContextWindowFields } from './ModelContextWindowFields'
@@ -43,7 +44,7 @@ export default function AddModelFormPanel({
   'data-testid': dataTestId = 'provider-settings-model-add-drawer-content'
 }: AddModelFormPanelProps) {
   const { t } = useTranslation()
-  const { provider } = useProvider(providerId)
+  const { provider, updateProvider } = useProvider(providerId)
   const { models } = useModels({ providerId })
   const { createModel } = useModelMutations()
   const [formState, setFormState] = useState<ModelBasicFormState>(() =>
@@ -140,6 +141,7 @@ export default function AddModelFormPanel({
         }
 
         if (addedCount > 0) {
+          await enableProviderWhenModelsAvailable(provider, updateProvider, addedCount, 'manual_add_model')
           onSuccess()
         }
         return
@@ -151,6 +153,7 @@ export default function AddModelFormPanel({
           modelId: normalizedId
         })
       ) {
+        await enableProviderWhenModelsAvailable(provider, updateProvider, 1, 'manual_add_model')
         onSuccess()
       }
     } catch {
@@ -158,7 +161,7 @@ export default function AddModelFormPanel({
     } finally {
       setIsSubmitting(false)
     }
-  }, [addSingleModel, formState, isSubmitting, mode, onSuccess, t])
+  }, [addSingleModel, formState, isSubmitting, mode, onSuccess, provider, t, updateProvider])
 
   const handleFormSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
