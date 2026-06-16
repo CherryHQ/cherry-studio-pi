@@ -6,7 +6,7 @@ import type { FileMetadata } from '@renderer/types'
 import { filterSupportedFiles } from '@renderer/utils/file'
 import { Paperclip, Upload } from 'lucide-react'
 import type { Dispatch, FC, SetStateAction } from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface Props {
@@ -21,35 +21,39 @@ interface Props {
 const AttachmentButton: FC<Props> = ({ quickPanel, couldAddImageFile, extensions, files, setFiles, disabled }) => {
   const { t } = useTranslation()
   const { open: openQuickPanelPanel } = useQuickPanel()
-  const [selecting, setSelecting] = useState<boolean>(false)
+  const selectingRef = useRef(false)
 
   const openFileSelectDialog = useCallback(async () => {
-    if (selecting) {
+    if (selectingRef.current) {
       return
     }
     // when the number of extensions is greater than 20, use *.* to avoid selecting window lag
     const useAllFiles = extensions.length > 20
 
-    setSelecting(true)
-    const _files = await window.api.file.select({
-      properties: ['openFile', 'multiSelections'],
-      filters: [
-        {
-          name: 'Files',
-          extensions: useAllFiles ? ['*'] : extensions.map((i) => i.replace('.', ''))
-        }
-      ]
-    })
-    setSelecting(false)
+    selectingRef.current = true
+    try {
+      const _files = await window.api.file.select({
+        properties: ['openFile', 'multiSelections'],
+        filters: [
+          {
+            name: 'Files',
+            extensions: useAllFiles ? ['*'] : extensions.map((i) => i.replace('.', ''))
+          }
+        ]
+      })
 
-    if (_files) {
-      if (!useAllFiles) {
-        setFiles([...files, ..._files])
+      if (!_files) {
         return
       }
+
+      if (!useAllFiles) {
+        setFiles((currentFiles) => [...currentFiles, ..._files])
+        return
+      }
+
       const supportedFiles = await filterSupportedFiles(_files, extensions)
       if (supportedFiles.length > 0) {
-        setFiles([...files, ...supportedFiles])
+        setFiles((currentFiles) => [...currentFiles, ...supportedFiles])
       }
 
       if (supportedFiles.length !== _files.length) {
@@ -59,8 +63,10 @@ const AttachmentButton: FC<Props> = ({ quickPanel, couldAddImageFile, extensions
           })
         )
       }
+    } finally {
+      selectingRef.current = false
     }
-  }, [extensions, files, selecting, setFiles, t])
+  }, [extensions, setFiles, t])
 
   // NOTE: Attaching a knowledge-base file to the chat input is temporarily
   // disconnected. It previously bridged a v2 knowledge item into the legacy

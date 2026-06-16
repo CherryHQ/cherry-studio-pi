@@ -304,9 +304,9 @@ const InputbarInner: FC<InputbarInnerProps> = ({ setActiveTopic, topic, actionsR
 
   const handleRemoveModel = useCallback(
     (modelToRemove: Model) => {
-      setMentionedModels(mentionedModels.filter((current) => current.id !== modelToRemove.id))
+      setMentionedModels((currentModels) => currentModels.filter((current) => current.id !== modelToRemove.id))
     },
-    [mentionedModels, setMentionedModels]
+    [setMentionedModels]
   )
 
   const handleRemoveKnowledgeBase = useCallback(
