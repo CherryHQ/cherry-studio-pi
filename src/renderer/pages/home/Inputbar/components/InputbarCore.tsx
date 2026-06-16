@@ -78,6 +78,30 @@ const TextareaStyle: CSSProperties = {
   padding: '6px 15px 0px'
 }
 
+function shouldRestoreInputbarFocus(activeElement: Element | null): boolean {
+  if (!(activeElement instanceof HTMLElement)) {
+    return true
+  }
+
+  if (activeElement === document.body || activeElement === document.documentElement) {
+    return true
+  }
+
+  if (activeElement.closest('.ant-modal, [role="dialog"], [data-radix-popper-content-wrapper]')) {
+    return false
+  }
+
+  if (
+    activeElement.matches(
+      'button, input, select, textarea, [contenteditable="true"], [role="button"], [role="combobox"], [role="textbox"]'
+    )
+  ) {
+    return false
+  }
+
+  return true
+}
+
 /**
  * InputbarCore - 核心输入栏组件
  *
@@ -543,7 +567,7 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
 
   useEffect(() => {
     const onFocus = () => {
-      if (document.activeElement?.closest('.ant-modal')) {
+      if (!shouldRestoreInputbarFocus(document.activeElement)) {
         return
       }
 

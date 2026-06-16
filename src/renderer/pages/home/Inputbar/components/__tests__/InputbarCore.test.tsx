@@ -13,6 +13,14 @@ const cacheMock = vi.hoisted(() => ({
   values: new Map<string, unknown>()
 }))
 
+const pasteServiceMock = vi.hoisted(() => ({
+  getLastFocusedComponent: vi.fn(),
+  init: vi.fn(),
+  registerHandler: vi.fn(),
+  setLastFocusedComponent: vi.fn(),
+  unregisterHandler: vi.fn()
+}))
+
 vi.mock('@ant-design/icons', async () => {
   const React = await import('react')
   return {
@@ -139,17 +147,12 @@ vi.mock('@renderer/pages/home/Inputbar/hooks/usePasteHandler', () => ({
 }))
 
 vi.mock('@renderer/services/PasteService', () => ({
-  default: {
-    getLastFocusedComponent: vi.fn(),
-    init: vi.fn(),
-    registerHandler: vi.fn(),
-    setLastFocusedComponent: vi.fn(),
-    unregisterHandler: vi.fn()
-  }
+  default: pasteServiceMock
 }))
 
-function renderInputbar(scope: TopicType.Chat | TopicType.Session) {
+function renderInputbar(scope: TopicType.Chat | TopicType.Session, overrides: { focusTextarea?: () => void } = {}) {
   const textareaRef: React.RefObject<TextAreaRef | null> = { current: null }
+  const focusTextarea = overrides.focusTextarea ?? vi.fn()
   const actions = {
     resizeTextArea: vi.fn(),
     addNewTopic: vi.fn(),
@@ -168,7 +171,7 @@ function renderInputbar(scope: TopicType.Chat | TopicType.Session) {
         onTextChange={vi.fn()}
         textareaRef={textareaRef}
         resizeTextArea={vi.fn()}
-        focusTextarea={vi.fn()}
+        focusTextarea={focusTextarea}
         height={undefined}
         onHeightChange={vi.fn()}
         supportedExts={[]}
@@ -180,7 +183,8 @@ function renderInputbar(scope: TopicType.Chat | TopicType.Session) {
 
   return {
     textarea: screen.getByRole('textbox'),
-    sendButton: screen.getByRole('button', { name: 'send' })
+    sendButton: screen.getByRole('button', { name: 'send' }),
+    focusTextarea
   }
 }
 
@@ -188,6 +192,7 @@ describe('InputbarCore', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     cacheMock.values.clear()
+    pasteServiceMock.getLastFocusedComponent.mockReturnValue('inputbar')
   })
 
   it('keeps the chat textarea editable when web search state is stale', () => {
@@ -207,5 +212,22 @@ describe('InputbarCore', () => {
 
     expect(textarea).not.toBeDisabled()
     expect(sendButton).not.toBeDisabled()
+  })
+
+  it('does not steal focus from an active selector input when the window refocuses', () => {
+    const focusTextarea = vi.fn()
+    renderInputbar(TopicType.Chat, { focusTextarea })
+    const selectorInput = document.createElement('input')
+    document.body.append(selectorInput)
+
+    try {
+      selectorInput.focus()
+      window.dispatchEvent(new Event('focus'))
+
+      expect(focusTextarea).not.toHaveBeenCalled()
+      expect(document.activeElement).toBe(selectorInput)
+    } finally {
+      selectorInput.remove()
+    }
   })
 })
