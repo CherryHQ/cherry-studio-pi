@@ -118,19 +118,28 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
   )
 
   const handleDelete = useCallback(() => {
+    const showDeleteError = (error: unknown) => {
+      window.toast.error(`${t('settings.mcp.deleteError')}: ${formatErrorMessage(error)}`)
+    }
+
     try {
       window.modal.confirm({
         title: t('settings.mcp.deleteServer'),
         content: t('settings.mcp.deleteServerConfirm'),
         centered: true,
         onOk: async () => {
-          await window.api.mcp.removeServer(server.id)
-          await deleteMcpServer({})
-          window.toast.success(t('settings.mcp.deleteSuccess'))
+          try {
+            await window.api.mcp.removeServer(server.id)
+            await deleteMcpServer({})
+            window.toast.success(t('settings.mcp.deleteSuccess'))
+          } catch (error) {
+            showDeleteError(error)
+            throw error
+          }
         }
       })
     } catch (error: any) {
-      window.toast.error(`${t('settings.mcp.deleteError')}: ${error.message}`)
+      showDeleteError(error)
     }
   }, [server, deleteMcpServer, t])
 
