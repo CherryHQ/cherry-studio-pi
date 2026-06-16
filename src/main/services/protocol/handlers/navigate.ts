@@ -1,27 +1,10 @@
 import { application } from '@application'
 import { loggerService } from '@logger'
 import { WindowType } from '@main/core/window/types'
+import { isAllowedInAppRoute, normalizeInAppRoute } from '@main/services/navigation/AppRouteNormalizer'
 import { normalizeSettingsPath } from '@shared/data/types/settingsPath'
 
 const logger = loggerService.withContext('ProtocolService:navigate')
-
-const ALLOWED_ROUTE_PREFIXES = [
-  '/settings',
-  '/agents',
-  '/knowledge',
-  '/openclaw',
-  '/paintings',
-  '/translate',
-  '/files',
-  '/notes',
-  '/apps',
-  '/code',
-  '/store',
-  '/launchpad'
-]
-
-const isAllowedRoute = (path: string): boolean =>
-  ALLOWED_ROUTE_PREFIXES.some((route) => path === route || path.startsWith(`${route}/`))
 
 const MAX_NAVIGATE_RETRY_ATTEMPTS = 30
 
@@ -40,16 +23,12 @@ function scheduleNavigateRetry(url: URL, retryAttempt: number) {
  */
 export function handleNavigateProtocolUrl(url: URL, retryAttempt = 0) {
   const targetPath = url.pathname || '/'
-  const normalizedPath = targetPath.startsWith('/') ? targetPath : `/${targetPath}`
+  const fullPath = normalizeInAppRoute(`${targetPath}${url.search || ''}`)
 
-  if (!isAllowedRoute(normalizedPath)) {
-    logger.warn(`Blocked navigation to disallowed route: ${normalizedPath}`)
+  if (!isAllowedInAppRoute(fullPath)) {
+    logger.warn(`Blocked navigation to disallowed route: ${fullPath}`)
     return
   }
-
-  // Preserve query parameters from the URL
-  const queryString = url.search || ''
-  const fullPath = `${normalizedPath}${queryString}`
 
   logger.debug('handleNavigateProtocolUrl', { path: fullPath })
 

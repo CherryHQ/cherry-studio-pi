@@ -72,7 +72,7 @@ describe('navigate protocol handler', () => {
     expect(executeJavaScript).toHaveBeenNthCalledWith(1, `typeof window.navigate === 'function'`)
     expect(executeJavaScript).toHaveBeenNthCalledWith(
       2,
-      `window.navigate({ to: ${JSON.stringify("/agents?x=');attackerCode();//")} })`
+      `window.navigate({ to: ${JSON.stringify("/app/agents?x=');attackerCode();//")} })`
     )
   })
 
@@ -128,7 +128,7 @@ describe('navigate protocol handler', () => {
 
     expect(loggerMock.warn).toHaveBeenCalledWith(
       'Main window not available, dropping navigation URL after retry limit',
-      expect.objectContaining({ path: '/agents' })
+      expect.objectContaining({ path: '/app/agents' })
     )
   })
 
@@ -146,7 +146,7 @@ describe('navigate protocol handler', () => {
 
     expect(loggerMock.warn).toHaveBeenCalledWith(
       'window.navigate not available, dropping navigation URL after retry limit',
-      expect.objectContaining({ path: '/agents' })
+      expect.objectContaining({ path: '/app/agents' })
     )
   })
 })

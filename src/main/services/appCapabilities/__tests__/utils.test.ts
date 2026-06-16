@@ -210,9 +210,12 @@ describe('app capability utils', () => {
   it('normalizes and validates application routes', () => {
     expect(normalizeAppRoute('settings/data')).toBe('/settings/data')
     expect(normalizeAppRoute('  settings/data  ')).toBe('/settings/data')
+    expect(normalizeAppRoute('/agents/session-1')).toBe('/app/agents?sessionId=session-1')
+    expect(normalizeAppRoute('/paintings/openai')).toBe('/app/paintings/openai')
     expect(normalizeAppRoute('   ')).toBe('/')
     expect(isAllowedAppRoute('/settings/data')).toBe(true)
     expect(isAllowedAppRoute('/agents/session-1')).toBe(true)
+    expect(isAllowedAppRoute('/app/agents')).toBe(true)
     expect(isAllowedAppRoute('/settings-malicious')).toBe(false)
     expect(isAllowedAppRoute('https://example.com')).toBe(false)
   })
@@ -222,7 +225,7 @@ describe('app capability utils', () => {
 
     await navigateApp('settings/data')
 
-    expect(mocks.executeJavaScript).toHaveBeenCalledWith('window.navigate("/settings/data")')
+    expect(mocks.executeJavaScript).toHaveBeenCalledWith('window.navigate({ to: "/settings/data" })')
     expect(mocks.showMainWindow).toHaveBeenCalledTimes(1)
   })
 

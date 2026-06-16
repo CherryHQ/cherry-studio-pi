@@ -3,11 +3,11 @@ import path from 'node:path'
 import { application } from '@application'
 import { isMac } from '@main/core/platform'
 import { WindowType } from '@main/core/window/types'
+import { isAllowedInAppRoute, normalizeInAppRoute } from '@main/services/navigation/AppRouteNormalizer'
 import { isPathInside } from '@main/utils/file'
 
 const SENSITIVE_KEY_PATTERN = /api[-_]?key|private[-_]?key|token|secret|pass|password|authorization|cookie/i
 const CIRCULAR_REFERENCE_PLACEHOLDER = '[Circular]'
-const NAVIGATION_ROUTE_PREFIXES = ['/', '/settings', '/knowledge', '/paintings', '/notes', '/agents']
 const MAX_AGENT_STRING_CHARS = 8_000
 const MAX_AGENT_ARRAY_ITEMS = 200
 const MAX_AGENT_OBJECT_KEYS = 200
@@ -129,12 +129,10 @@ export const pickPath = (value: any, keyPath = '') => {
 }
 
 export const normalizeAppRoute = (route: string) => {
-  const raw = String(route || '/').trim()
-  return raw.startsWith('/') ? raw : `/${raw}`
+  return normalizeInAppRoute(route)
 }
 
-export const isAllowedAppRoute = (route: string) =>
-  NAVIGATION_ROUTE_PREFIXES.some((prefix) => route === prefix || route.startsWith(`${prefix}/`))
+export const isAllowedAppRoute = (route: string) => isAllowedInAppRoute(normalizeAppRoute(route))
 
 export const resolveInsideRoot = (root: string, input?: string, defaultExt?: string) => {
   const raw = (input || '').trim()
@@ -158,7 +156,7 @@ export const navigateApp = async (route: string) => {
   let timeout: ReturnType<typeof setTimeout> | undefined
   try {
     await Promise.race([
-      win.webContents.executeJavaScript(`window.navigate(${JSON.stringify(nextRoute)})`),
+      win.webContents.executeJavaScript(`window.navigate({ to: ${JSON.stringify(nextRoute)} })`),
       new Promise<never>((_, reject) => {
         timeout = setTimeout(
           () => reject(new Error(`Timed out navigating app route ${nextRoute} after ${NAVIGATION_TIMEOUT_MS}ms`)),
