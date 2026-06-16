@@ -1,3 +1,7 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -39,6 +43,23 @@ const WEB_DAV_RECORD_SYNC_SUPPORT_ENTITY_TYPES = [
   'sync_tombstone'
 ]
 
+const LOCAL_ONLY_STORAGE_V2_TABLES = [
+  'devices',
+  'migration_runs',
+  'storage_meta',
+  'sync_changes',
+  'sync_conflicts',
+  'sync_state'
+]
+
+function readStorageV2DatabaseSchemaTables() {
+  const currentDir = path.dirname(fileURLToPath(import.meta.url))
+  const databaseSource = fs.readFileSync(path.join(currentDir, '../StorageV2Database.ts'), 'utf-8')
+  const tableMatches = databaseSource.matchAll(/CREATE TABLE IF NOT EXISTS\s+([a-z_]+)/g)
+
+  return Array.from(tableMatches, (match) => match[1]).sort()
+}
+
 describe('Storage v2 sync policy', () => {
   it('defines stable device and conflict metadata for future account sync', () => {
     expect(STORAGE_V2_SYNC_POLICY_VERSION).toBe(1)
@@ -69,6 +90,15 @@ describe('Storage v2 sync policy', () => {
     for (const entityType of WEB_DAV_RECORD_SYNC_SUPPORT_ENTITY_TYPES) {
       expect(assertStorageV2SyncPolicy(entityType), entityType).toBeTruthy()
     }
+  })
+
+  it('requires every Storage v2 table to be explicitly synced or intentionally local-only', () => {
+    const schemaTables = readStorageV2DatabaseSchemaTables()
+    const syncedTables = listStorageV2SyncPolicies().map((policy) => policy.table)
+
+    expect(new Set(schemaTables).size).toBe(schemaTables.length)
+    expect(new Set(syncedTables).size).toBe(syncedTables.length)
+    expect(schemaTables).toEqual([...syncedTables, ...LOCAL_ONLY_STORAGE_V2_TABLES].sort())
   })
 
   it('pins version, updated_at, and deleted_at semantics for mutable rows', () => {
