@@ -4,7 +4,7 @@ import { ipcChatTransport } from '@renderer/transport/IpcChatTransport'
 import type { ActiveExecution } from '@shared/ai/transport'
 import type { CherryUIMessage } from '@shared/data/types/message'
 import type { ChatRequestOptions, FileUIPart } from 'ai'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 import { useTopicDbRefreshOnTerminal } from './useTopicStreamStatus'
 import { useTopicStreamStatus } from './useTopicStreamStatus'
@@ -33,16 +33,20 @@ export function useChatWithHistory(
   initialMessages: CherryUIMessage[],
   refresh: () => Promise<CherryUIMessage[]>
 ): UseChatWithHistoryResult {
-  const [chat] = useState<Chat<CherryUIMessage>>(
+  const initialMessagesRef = useRef(initialMessages)
+  initialMessagesRef.current = initialMessages
+
+  const chat = useMemo<Chat<CherryUIMessage>>(
     () =>
       new Chat<CherryUIMessage>({
         id: topicId,
         transport: ipcChatTransport,
-        messages: initialMessages,
+        messages: initialMessagesRef.current,
         onError: (streamError) => {
           logger.error('AI stream error', { topicId, streamError })
         }
-      })
+      }),
+    [topicId]
   )
 
   const {
@@ -117,14 +121,15 @@ export function useChatWithHistory(
   // re-attaches a stream that started while this window was unmounted /
   // reloading. Stays here (it's tightly coupled to `resumeActiveStream` and
   // chat-specific) rather than mingling with the generic invalidation gate.
-  const prevTopicStatusRef = useRef<typeof topicStreamStatus>(undefined)
+  const prevTopicStatusRef = useRef<{ topicId: string; status: typeof topicStreamStatus } | undefined>(undefined)
   useEffect(() => {
     const prev = prevTopicStatusRef.current
-    prevTopicStatusRef.current = topicStreamStatus
-    if (topicStreamStatus === 'pending' && prev !== 'pending') {
+    const prevStatus = prev?.topicId === topicId ? prev.status : undefined
+    prevTopicStatusRef.current = { topicId, status: topicStreamStatus }
+    if (topicStreamStatus === 'pending' && prevStatus !== 'pending') {
       resumeActiveStream('started-event')
     }
-  }, [resumeActiveStream, topicStreamStatus])
+  }, [resumeActiveStream, topicId, topicStreamStatus])
 
   useEffect(() => {
     const errorUnsub = window.api.ai.onStreamError((data) => {
