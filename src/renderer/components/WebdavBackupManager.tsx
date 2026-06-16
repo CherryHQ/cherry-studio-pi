@@ -12,6 +12,7 @@ import {
 } from '@cherrystudio/ui'
 import { restoreFromWebdav } from '@renderer/services/BackupService'
 import { formatFileSize } from '@renderer/utils'
+import { runExclusiveOperation } from '@renderer/utils/exclusiveOperation'
 import dayjs from 'dayjs'
 import { ChevronLeft, ChevronRight, CircleAlert, RefreshCw, Trash2 } from 'lucide-react'
 import type { Key } from 'react'
@@ -66,6 +67,7 @@ export function WebdavBackupManager({
   const [restoring, setRestoring] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const fetchSeqRef = useRef(0)
+  const operationRef = useRef(false)
 
   const { webdavHost, webdavUser, webdavPass, webdavPath } = webdavConfig
 
@@ -168,27 +170,29 @@ export function WebdavBackupManager({
       cancelText: t('common.cancel'),
       centered: true,
       onOk: async () => {
-        setDeleting(true)
-        try {
-          // 依次删除选中的文件
-          for (const key of selectedRowKeys) {
-            await window.api.backup.deleteWebdavFile(key.toString(), {
-              webdavHost,
-              webdavUser,
-              webdavPass,
-              webdavPath
-            } as WebdavConfig)
+        await runExclusiveOperation(operationRef, async () => {
+          setDeleting(true)
+          try {
+            // 依次删除选中的文件
+            for (const key of selectedRowKeys) {
+              await window.api.backup.deleteWebdavFile(key.toString(), {
+                webdavHost,
+                webdavUser,
+                webdavPass,
+                webdavPath
+              } as WebdavConfig)
+            }
+            window.toast.success(
+              t('settings.data.webdav.backup.manager.delete.success.multiple', { count: selectedRowKeys.length })
+            )
+            setSelectedRowKeys([])
+            await fetchBackupFiles()
+          } catch (error: any) {
+            window.toast.error(`${t('settings.data.webdav.backup.manager.delete.error')}: ${error.message}`)
+          } finally {
+            setDeleting(false)
           }
-          window.toast.success(
-            t('settings.data.webdav.backup.manager.delete.success.multiple', { count: selectedRowKeys.length })
-          )
-          setSelectedRowKeys([])
-          await fetchBackupFiles()
-        } catch (error: any) {
-          window.toast.error(`${t('settings.data.webdav.backup.manager.delete.error')}: ${error.message}`)
-        } finally {
-          setDeleting(false)
-        }
+        })
       }
     })
   }
@@ -207,21 +211,23 @@ export function WebdavBackupManager({
       cancelText: t('common.cancel'),
       centered: true,
       onOk: async () => {
-        setDeleting(true)
-        try {
-          await window.api.backup.deleteWebdavFile(fileName, {
-            webdavHost,
-            webdavUser,
-            webdavPass,
-            webdavPath
-          } as WebdavConfig)
-          window.toast.success(t('settings.data.webdav.backup.manager.delete.success.single'))
-          await fetchBackupFiles()
-        } catch (error: any) {
-          window.toast.error(`${t('settings.data.webdav.backup.manager.delete.error')}: ${error.message}`)
-        } finally {
-          setDeleting(false)
-        }
+        await runExclusiveOperation(operationRef, async () => {
+          setDeleting(true)
+          try {
+            await window.api.backup.deleteWebdavFile(fileName, {
+              webdavHost,
+              webdavUser,
+              webdavPass,
+              webdavPath
+            } as WebdavConfig)
+            window.toast.success(t('settings.data.webdav.backup.manager.delete.success.single'))
+            await fetchBackupFiles()
+          } catch (error: any) {
+            window.toast.error(`${t('settings.data.webdav.backup.manager.delete.error')}: ${error.message}`)
+          } finally {
+            setDeleting(false)
+          }
+        })
       }
     })
   }
@@ -240,16 +246,18 @@ export function WebdavBackupManager({
       cancelText: t('common.cancel'),
       centered: true,
       onOk: async () => {
-        setRestoring(true)
-        try {
-          await (restoreMethod || restoreFromWebdav)(fileName)
-          window.toast.success(t('settings.data.webdav.backup.manager.restore.success'))
-          onClose() // 关闭模态框
-        } catch (error: any) {
-          window.toast.error(`${t('settings.data.webdav.backup.manager.restore.error')}: ${error.message}`)
-        } finally {
-          setRestoring(false)
-        }
+        await runExclusiveOperation(operationRef, async () => {
+          setRestoring(true)
+          try {
+            await (restoreMethod || restoreFromWebdav)(fileName)
+            window.toast.success(t('settings.data.webdav.backup.manager.restore.success'))
+            onClose() // 关闭模态框
+          } catch (error: any) {
+            window.toast.error(`${t('settings.data.webdav.backup.manager.restore.error')}: ${error.message}`)
+          } finally {
+            setRestoring(false)
+          }
+        })
       }
     })
   }
@@ -304,7 +312,7 @@ export function WebdavBackupManager({
   ]
 
   return (
-    <Dialog open={visible} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={visible} onOpenChange={(open) => !open && !operationRef.current && onClose()}>
       <DialogContent className="sm:max-w-[800px]">
         <DialogHeader>
           <DialogTitle>{t('settings.data.webdav.backup.manager.title')}</DialogTitle>
@@ -356,7 +364,11 @@ export function WebdavBackupManager({
           )}
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={fetchBackupFiles} disabled={loading}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={fetchBackupFiles}
+            disabled={loading || deleting || restoring}>
             <RefreshCw className="size-4" />
             {t('settings.data.webdav.backup.manager.refresh')}
           </Button>
@@ -364,7 +376,7 @@ export function WebdavBackupManager({
             type="button"
             variant="destructive"
             onClick={handleDeleteSelected}
-            disabled={selectedRowKeys.length === 0 || deleting}>
+            disabled={selectedRowKeys.length === 0 || deleting || restoring}>
             <Trash2 className="size-4" />
             {t('settings.data.webdav.backup.manager.delete.selected')} ({selectedRowKeys.length})
           </Button>

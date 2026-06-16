@@ -13,6 +13,7 @@ import {
 import { restoreFromS3 } from '@renderer/services/BackupService'
 import type { S3Config } from '@renderer/types'
 import { formatFileSize } from '@renderer/utils'
+import { runExclusiveOperation } from '@renderer/utils/exclusiveOperation'
 import dayjs from 'dayjs'
 import { ChevronLeft, ChevronRight, CircleAlert, RefreshCw, Trash2 } from 'lucide-react'
 import type { Key } from 'react'
@@ -42,6 +43,7 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
   const [restoring, setRestoring] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const fetchSeqRef = useRef(0)
+  const operationRef = useRef(false)
   const { t } = useTranslation()
 
   const { endpoint, region, bucket, accessKeyId, secretAccessKey } = s3Config
@@ -151,31 +153,35 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
       cancelText: t('common.cancel'),
       centered: true,
       onOk: async () => {
-        setDeleting(true)
-        try {
-          // 依次删除选中的文件
-          for (const key of selectedRowKeys) {
-            await window.api.backup.deleteS3File(key.toString(), {
-              ...s3Config,
-              endpoint,
-              region,
-              bucket,
-              accessKeyId,
-              secretAccessKey,
-              skipBackupFile: false,
-              autoSync: false,
-              syncInterval: 0,
-              maxBackups: 0
-            })
+        await runExclusiveOperation(operationRef, async () => {
+          setDeleting(true)
+          try {
+            // 依次删除选中的文件
+            for (const key of selectedRowKeys) {
+              await window.api.backup.deleteS3File(key.toString(), {
+                ...s3Config,
+                endpoint,
+                region,
+                bucket,
+                accessKeyId,
+                secretAccessKey,
+                skipBackupFile: false,
+                autoSync: false,
+                syncInterval: 0,
+                maxBackups: 0
+              })
+            }
+            window.toast.success(
+              t('settings.data.s3.manager.delete.success.multiple', { count: selectedRowKeys.length })
+            )
+            setSelectedRowKeys([])
+            await fetchBackupFiles()
+          } catch (error: any) {
+            window.toast.error(t('settings.data.s3.manager.delete.error', { message: error.message }))
+          } finally {
+            setDeleting(false)
           }
-          window.toast.success(t('settings.data.s3.manager.delete.success.multiple', { count: selectedRowKeys.length }))
-          setSelectedRowKeys([])
-          await fetchBackupFiles()
-        } catch (error: any) {
-          window.toast.error(t('settings.data.s3.manager.delete.error', { message: error.message }))
-        } finally {
-          setDeleting(false)
-        }
+        })
       }
     })
   }
@@ -194,27 +200,29 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
       cancelText: t('common.cancel'),
       centered: true,
       onOk: async () => {
-        setDeleting(true)
-        try {
-          await window.api.backup.deleteS3File(fileName, {
-            ...s3Config,
-            endpoint,
-            region,
-            bucket,
-            accessKeyId,
-            secretAccessKey,
-            skipBackupFile: false,
-            autoSync: false,
-            syncInterval: 0,
-            maxBackups: 0
-          })
-          window.toast.success(t('settings.data.s3.manager.delete.success.single'))
-          await fetchBackupFiles()
-        } catch (error: any) {
-          window.toast.error(t('settings.data.s3.manager.delete.error', { message: error.message }))
-        } finally {
-          setDeleting(false)
-        }
+        await runExclusiveOperation(operationRef, async () => {
+          setDeleting(true)
+          try {
+            await window.api.backup.deleteS3File(fileName, {
+              ...s3Config,
+              endpoint,
+              region,
+              bucket,
+              accessKeyId,
+              secretAccessKey,
+              skipBackupFile: false,
+              autoSync: false,
+              syncInterval: 0,
+              maxBackups: 0
+            })
+            window.toast.success(t('settings.data.s3.manager.delete.success.single'))
+            await fetchBackupFiles()
+          } catch (error: any) {
+            window.toast.error(t('settings.data.s3.manager.delete.error', { message: error.message }))
+          } finally {
+            setDeleting(false)
+          }
+        })
       }
     })
   }
@@ -233,16 +241,18 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
       cancelText: t('settings.data.s3.restore.confirm.cancel'),
       centered: true,
       onOk: async () => {
-        setRestoring(true)
-        try {
-          await (restoreMethod || restoreFromS3)(fileName)
-          window.toast.success(t('settings.data.s3.restore.success'))
-          onClose() // 关闭模态框
-        } catch (error: any) {
-          window.toast.error(t('settings.data.s3.restore.error', { message: error.message }))
-        } finally {
-          setRestoring(false)
-        }
+        await runExclusiveOperation(operationRef, async () => {
+          setRestoring(true)
+          try {
+            await (restoreMethod || restoreFromS3)(fileName)
+            window.toast.success(t('settings.data.s3.restore.success'))
+            onClose() // 关闭模态框
+          } catch (error: any) {
+            window.toast.error(t('settings.data.s3.restore.error', { message: error.message }))
+          } finally {
+            setRestoring(false)
+          }
+        })
       }
     })
   }
@@ -297,7 +307,7 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
   ]
 
   return (
-    <Dialog open={visible} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={visible} onOpenChange={(open) => !open && !operationRef.current && onClose()}>
       <DialogContent className="sm:max-w-[800px]">
         <DialogHeader>
           <DialogTitle>{t('settings.data.s3.manager.title')}</DialogTitle>
@@ -349,7 +359,11 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
           )}
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={fetchBackupFiles} disabled={loading}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={fetchBackupFiles}
+            disabled={loading || deleting || restoring}>
             <RefreshCw className="size-4" />
             {t('settings.data.s3.manager.refresh')}
           </Button>
@@ -357,7 +371,7 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
             type="button"
             variant="destructive"
             onClick={handleDeleteSelected}
-            disabled={selectedRowKeys.length === 0 || deleting}>
+            disabled={selectedRowKeys.length === 0 || deleting || restoring}>
             <Trash2 className="size-4" />
             {t('settings.data.s3.manager.delete.selected', { count: selectedRowKeys.length })}
           </Button>
