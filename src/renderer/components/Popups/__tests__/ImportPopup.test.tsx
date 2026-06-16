@@ -18,34 +18,32 @@ vi.mock('@cherrystudio/ui', () => ({
       <div>{description}</div>
     </div>
   ),
-  Button: ({
-    children,
-    loading: _loading,
-    ...props
-  }: {
-    children?: ReactNode
-    loading?: boolean
-    [key: string]: unknown
-  }) => (
-    <button type="button" {...props}>
-      {children}
-    </button>
-  ),
+  Button: ({ children, loading, ...props }: { children?: ReactNode; loading?: boolean; [key: string]: unknown }) => {
+    void loading
+    return (
+      <button type="button" {...props}>
+        {children}
+      </button>
+    )
+  },
   Dialog: ({ children, open }: { children?: ReactNode; open?: boolean; onOpenChange?: (open: boolean) => void }) =>
     open ? <div data-testid="dialog">{children}</div> : null,
   DialogContent: ({
     children,
-    onPointerDownOutside: _onPointerDownOutside,
+    onPointerDownOutside,
     ...props
   }: {
     children?: ReactNode
     onPointerDownOutside?: unknown
     [key: string]: unknown
-  }) => (
-    <div data-testid="dialog-content" {...props}>
-      {children}
-    </div>
-  ),
+  }) => {
+    void onPointerDownOutside
+    return (
+      <div data-testid="dialog-content" {...props}>
+        {children}
+      </div>
+    )
+  },
   DialogFooter: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) => (
     <div data-testid="dialog-footer" {...props}>
       {children}
