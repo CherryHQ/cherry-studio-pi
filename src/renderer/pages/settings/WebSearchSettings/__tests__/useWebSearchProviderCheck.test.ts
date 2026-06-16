@@ -5,6 +5,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useWebSearchProviderCheck } from '../hooks/useWebSearchProviderCheck'
 
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
+}
+
 vi.mock('react-i18next', async (importOriginal) => {
   const actual = await importOriginal<typeof ReactI18next>()
 
@@ -86,6 +100,28 @@ describe('useWebSearchProviderCheck', () => {
     })
 
     expect(toastErrorMock).toHaveBeenCalledWith('settings.tool.websearch.check_failed: missing API key')
+  })
+
+  it('ignores duplicate provider checks while one is already running', async () => {
+    const runningCheck = deferred<{ results: unknown[] }>()
+    searchKeywordsMock.mockReturnValueOnce(runningCheck.promise)
+    const { result } = renderHook(() =>
+      useWebSearchProviderCheck({ provider: tavilyProvider, capability: 'searchKeywords' })
+    )
+
+    let firstCheck!: Promise<void>
+    let secondCheck!: Promise<void>
+    act(() => {
+      firstCheck = result.current.checkProvider()
+      secondCheck = result.current.checkProvider()
+    })
+
+    expect(searchKeywordsMock).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      runningCheck.resolve({ results: [] })
+      await Promise.all([firstCheck, secondCheck])
+    })
   })
 
   it('disables checks for zero-config fetch provider panels', () => {
