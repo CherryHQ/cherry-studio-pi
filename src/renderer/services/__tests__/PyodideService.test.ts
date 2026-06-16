@@ -115,6 +115,40 @@ describe('PyodideService', () => {
     expect(worker.terminated).toBe(true)
   })
 
+  it('does not keep the renderer process alive while Pyodide timeouts are pending', async () => {
+    const unref = vi.fn()
+    const timer = { unref } as unknown as ReturnType<typeof setTimeout>
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockReturnValue(timer)
+
+    const { pyodideService } = await import('../PyodideService')
+
+    const resultPromise = pyodideService.runScript('print("hello")', {}, 1_000)
+    await vi.dynamicImportSettled()
+
+    const worker = workerMock.MockPyodideWorker.instances[0]
+    expect(worker).toBeDefined()
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 30_000)
+
+    worker.emit({ type: 'initialized' })
+    await vi.dynamicImportSettled()
+
+    expect(worker.postedMessages).toHaveLength(1)
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1_000)
+    expect(unref).toHaveBeenCalledTimes(2)
+
+    const posted = worker.postedMessages[0] as { id: string }
+    worker.emit({
+      id: posted.id,
+      output: {
+        result: null,
+        text: 'hello',
+        error: null
+      }
+    })
+
+    await expect(resultPromise).resolves.toEqual({ text: 'hello', image: undefined })
+  })
+
   it('registers the Python execution IPC handler once and responds through IPC', async () => {
     let requestHandler:
       | ((

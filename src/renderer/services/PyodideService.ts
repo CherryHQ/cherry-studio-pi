@@ -15,6 +15,12 @@ const SERVICE_CONFIG = {
   }
 }
 
+function unrefTimer(timer: ReturnType<typeof setTimeout>) {
+  if (typeof timer === 'object' && timer && 'unref' in timer && typeof timer.unref === 'function') {
+    timer.unref()
+  }
+}
+
 // 定义结果类型接口
 export interface PyodideOutput {
   result: any
@@ -107,6 +113,7 @@ class PyodideService {
             this.initRetryCount++
             reject(new Error('Pyodide initialization timeout'))
           }, SERVICE_CONFIG.WORKER.REQUEST_TIMEOUT.INIT)
+          unrefTimer(timeoutRef.current)
 
           this.worker.addEventListener('message', initHandler)
         })
@@ -188,6 +195,7 @@ class PyodideService {
           this.rejectPendingRequests(timeoutError)
           reject(timeoutError)
         }, timeout)
+        unrefTimer(timeoutId)
 
         this.resolvers.set(id, {
           resolve: (output) => {
