@@ -676,6 +676,7 @@ export class OpenClawService extends BaseService {
         proc.kill('SIGKILL')
         resolve({ code: null, stdout, stderr })
       }, timeoutMs)
+      timeout.unref?.()
 
       proc.on('exit', (code) => {
         clearTimeout(timeout)
