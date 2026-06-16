@@ -254,6 +254,85 @@ describe('StorageV2ConversationMirrorService', () => {
     )
   })
 
+  it('hydrates block file metadata before direct message mirror writes', async () => {
+    const upsertConversation = vi.fn().mockResolvedValue(undefined)
+    const upsertMessage = vi.fn().mockResolvedValue(undefined)
+    const upsertMessageBlocks = vi.fn().mockResolvedValue(undefined)
+    const upsertFile = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          upsertConversation,
+          upsertMessage,
+          upsertMessageBlocks,
+          upsertFile
+        }
+      }
+    })
+
+    mocks.filesGet.mockResolvedValueOnce({
+      id: 'file-1',
+      name: 'full-file.pdf',
+      path: '/Users/me/full-file.pdf',
+      size: 1234
+    })
+
+    const state = {
+      assistants: {
+        assistants: [
+          {
+            id: 'assistant-1',
+            topics: [
+              {
+                id: 'topic-1',
+                assistantId: 'assistant-1',
+                name: 'Files',
+                createdAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                messages: []
+              }
+            ]
+          }
+        ]
+      }
+    }
+
+    const { storageV2ConversationMirrorService } = await import('../StorageV2ConversationMirrorService')
+
+    await storageV2ConversationMirrorService.upsertTopicMessageFirst(
+      'topic-1',
+      () => state,
+      {
+        id: 'message-1',
+        role: 'user',
+        assistantId: 'assistant-1',
+        topicId: 'topic-1',
+        blocks: ['block-1'],
+        createdAt: '2026-01-01T00:00:00.000Z'
+      } as any,
+      [
+        {
+          id: 'block-1',
+          messageId: 'message-1',
+          type: 'file',
+          file: {
+            id: 'file-1',
+            name: 'thin-file.pdf'
+          }
+        } as any
+      ]
+    )
+
+    expect(mocks.filesGet).toHaveBeenCalledWith('file-1')
+    expect(upsertFile).toHaveBeenCalledWith({
+      id: 'file-1',
+      name: 'full-file.pdf',
+      path: '/Users/me/full-file.pdf',
+      size: 1234
+    })
+  })
+
   it('does not keep the renderer process alive while debounce flushing conversation mirrors', async () => {
     const unref = vi.fn()
     const timer = { unref } as unknown as ReturnType<typeof setTimeout>

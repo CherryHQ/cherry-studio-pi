@@ -161,6 +161,17 @@ function collectFilesFromBlocks(blocks: MessageBlock[]) {
   return filesById
 }
 
+async function hydrateFilesFromDexie(files: Map<string, FileMetadata>) {
+  for (const fileId of files.keys()) {
+    const persistedFile = await db.files.get(fileId)
+    if (persistedFile) {
+      files.set(fileId, persistedFile)
+    }
+  }
+
+  return files
+}
+
 function getTopicTitle(topic: Omit<Topic, 'messages'> & { messages: [] }) {
   const title = (topic as Record<string, any>).title
   return typeof topic.name === 'string' ? topic.name : typeof title === 'string' ? title : undefined
@@ -366,12 +377,7 @@ class StorageV2ConversationMirrorService {
     }
     const files = collectFilesFromBlocks(conversation.blocks)
 
-    for (const fileId of files.keys()) {
-      const persistedFile = await db.files.get(fileId)
-      if (persistedFile) {
-        files.set(fileId, persistedFile)
-      }
-    }
+    await hydrateFilesFromDexie(files)
 
     await this.mirrorConversations(storageV2, [conversation], Array.from(files.values()))
 
@@ -448,7 +454,8 @@ class StorageV2ConversationMirrorService {
       await storageV2.upsertMessageBlocks(messageId, normalizedBlocks, {
         pruneMissing: Boolean(options.pruneMissingBlocks)
       })
-      await this.mirrorFiles(storageV2, Array.from(collectFilesFromBlocks(normalizedBlocks).values()))
+      const files = await hydrateFilesFromDexie(collectFilesFromBlocks(normalizedBlocks))
+      await this.mirrorFiles(storageV2, Array.from(files.values()))
     }
 
     notifyDataSyncLocalChange('conversation')
