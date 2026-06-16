@@ -52,6 +52,7 @@ export const useResourcePanel = (params: Params, role: 'button' | 'manager' = 'b
   const triggerInfoRef = useRef<ResourcePanelTriggerInfo | undefined>(undefined)
   const hasAttemptedLoadRef = useRef(false)
   const fileListRef = useRef<string[]>([])
+  const loadRequestSeqRef = useRef(0)
 
   const updateFileListState = useCallback(
     (nextFiles: string[]) => {
@@ -181,7 +182,7 @@ export const useResourcePanel = (params: Params, role: 'button' | 'manager' = 'b
    * Load files from accessible directories
    */
   const loadFiles = useCallback(
-    async (searchPattern: string = '.') => {
+    async (searchPattern: string = '.', requestSeq = ++loadRequestSeqRef.current) => {
       if (accessiblePaths.length === 0) {
         logger.warn('No accessible paths configured')
         return []
@@ -228,7 +229,9 @@ export const useResourcePanel = (params: Params, role: 'button' | 'manager' = 'b
         logger.error('Failed to load files', error as Error)
         return []
       } finally {
-        setIsLoading(false)
+        if (requestSeq === loadRequestSeqRef.current) {
+          setIsLoading(false)
+        }
       }
     },
     [accessiblePaths]
@@ -417,7 +420,11 @@ export const useResourcePanel = (params: Params, role: 'button' | 'manager' = 'b
       logger.debug('Search text changed', { searchText })
 
       const searchPattern = searchText.trim() || '.'
-      const newFiles = await loadFiles(searchPattern)
+      const requestSeq = ++loadRequestSeqRef.current
+      const newFiles = await loadFiles(searchPattern, requestSeq)
+      if (requestSeq !== loadRequestSeqRef.current) {
+        return
+      }
 
       updateFileListState(newFiles)
 
@@ -443,7 +450,11 @@ export const useResourcePanel = (params: Params, role: 'button' | 'manager' = 'b
       triggerInfoRef.current = normalizedTriggerInfo
 
       // Always load fresh files when opening the panel
-      const files = await loadFiles()
+      const requestSeq = ++loadRequestSeqRef.current
+      const files = await loadFiles('.', requestSeq)
+      if (requestSeq !== loadRequestSeqRef.current) {
+        return
+      }
       updateFileListState(files)
 
       const items = buildCategorizedList(files, enabledSkills, skillsLoading)
@@ -479,6 +490,8 @@ export const useResourcePanel = (params: Params, role: 'button' | 'manager' = 'b
             }
           }
           // Clear file list and reset state when panel closes
+          loadRequestSeqRef.current += 1
+          setIsLoading(false)
           updateFileListState([])
           hasAttemptedLoadRef.current = false
           triggerInfoRef.current = undefined
