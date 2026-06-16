@@ -111,6 +111,13 @@ const PipRegistry: Registry[] = [
   { name: '腾讯云', url: 'https://mirrors.cloud.tencent.com/pypi/simple/' }
 ]
 
+const getCommandRegistry = (command?: string): Registry[] | undefined => {
+  if (!command) return undefined
+  if (command.includes('uv') || command.includes('uvx')) return PipRegistry
+  if (command.includes('npx') || command.includes('bun') || command.includes('bunx')) return NpmRegistry
+  return undefined
+}
+
 type TabKey = 'settings' | 'description' | 'tools' | 'prompts' | 'resources'
 type McpTabItem = {
   key: TabKey
@@ -218,35 +225,20 @@ const McpSettings: React.FC = () => {
   useEffect(() => {
     if (!server) return
     const serverType: McpServer['type'] = server.type || (server.baseUrl ? 'sse' : 'stdio')
+    const commandRegistry = getCommandRegistry(server.command)
+    const commandSupportsRegistry = Boolean(commandRegistry)
     setServerType(serverType)
 
     // Set registry UI state based on command and registryUrl
-    if (server.command) {
-      handleCommandChange(server.command)
+    if (commandRegistry) {
+      setIsShowRegistry(true)
+      setRegistry(commandRegistry)
 
       // If there's a registryUrl, ensure registry UI is shown
       if (server.registryUrl) {
-        setIsShowRegistry(true)
-
-        // Determine registry type based on command
-        let currentRegistry: Registry[] = []
-        if (server.command.includes('uv') || server.command.includes('uvx')) {
-          currentRegistry = PipRegistry
-          setRegistry(PipRegistry)
-        } else if (
-          server.command.includes('npx') ||
-          server.command.includes('bun') ||
-          server.command.includes('bunx')
-        ) {
-          currentRegistry = NpmRegistry
-          setRegistry(NpmRegistry)
-        }
-
         // Check if the registryUrl is a custom URL (not in the predefined list)
         const isCustomRegistry =
-          currentRegistry.length > 0 &&
-          !currentRegistry.some((reg) => reg.url === server.registryUrl) &&
-          server.registryUrl !== '' // empty string is default
+          !commandRegistry.some((reg) => reg.url === server.registryUrl) && server.registryUrl !== '' // empty string is default
 
         if (isCustomRegistry) {
           // Set custom registry state
@@ -257,7 +249,15 @@ const McpSettings: React.FC = () => {
           setSelectedRegistryType('')
           setCustomRegistryUrl('')
         }
+      } else {
+        setSelectedRegistryType('')
+        setCustomRegistryUrl('')
       }
+    } else {
+      setIsShowRegistry(false)
+      setRegistry(undefined)
+      setSelectedRegistryType('')
+      setCustomRegistryUrl('')
     }
 
     form.reset({
@@ -266,7 +266,7 @@ const McpSettings: React.FC = () => {
       serverType: serverType,
       baseUrl: server.baseUrl || '',
       command: server.command || '',
-      registryUrl: server.registryUrl || '',
+      registryUrl: commandSupportsRegistry ? server.registryUrl || '' : '',
       isActive: server.isActive,
       longRunning: server.longRunning,
       timeout: server.timeout,
@@ -492,15 +492,16 @@ const McpSettings: React.FC = () => {
 
   // Watch for command field changes
   const handleCommandChange = (command: string) => {
-    if (command.includes('uv') || command.includes('uvx')) {
+    const commandRegistry = getCommandRegistry(command)
+    if (commandRegistry) {
       setIsShowRegistry(true)
-      setRegistry(PipRegistry)
-    } else if (command.includes('npx') || command.includes('bun') || command.includes('bunx')) {
-      setIsShowRegistry(true)
-      setRegistry(NpmRegistry)
+      setRegistry(commandRegistry)
     } else {
       setIsShowRegistry(false)
       setRegistry(undefined)
+      setSelectedRegistryType('')
+      setCustomRegistryUrl('')
+      form.setValue('registryUrl', '')
     }
   }
 
