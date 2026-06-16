@@ -2,7 +2,7 @@ import { Dialog, DialogContent } from '@cherrystudio/ui'
 import { useAddKnowledgeItems } from '@renderer/hooks/useKnowledgeItems'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { resolveKnowledgeFileData } from '@renderer/utils/knowledgeFileEntry'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useKnowledgePage } from '../KnowledgePageProvider'
@@ -54,6 +54,10 @@ const AddKnowledgeItemDialog = ({ open, onOpenChange }: AddKnowledgeItemDialogPr
   const [urlValue, setUrlValue] = useState('')
   const [submitErrorMessage, setSubmitErrorMessage] = useState('')
   const [isResolvingSubmit, setIsResolvingSubmit] = useState(false)
+  const mountedRef = useRef(true)
+  const openRef = useRef(open)
+  const directoryRequestSeqRef = useRef(0)
+  const submitRequestSeqRef = useRef(0)
   const { submit: submitKnowledgeItems, isSubmitting: isSubmittingItems } = useAddKnowledgeItems(selectedBaseId)
 
   const resetDialogState = useCallback(() => {
@@ -66,22 +70,43 @@ const AddKnowledgeItemDialog = ({ open, onOpenChange }: AddKnowledgeItemDialogPr
     setIsResolvingSubmit(false)
   }, [])
 
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+      directoryRequestSeqRef.current += 1
+      submitRequestSeqRef.current += 1
+    }
+  }, [])
+
+  useEffect(() => {
+    openRef.current = open
+    if (!open) {
+      directoryRequestSeqRef.current += 1
+      submitRequestSeqRef.current += 1
+    }
+  }, [open])
+
   const handleFileDrop = useCallback<DropzoneOnDrop>((acceptedFiles) => {
     setSubmitErrorMessage('')
     setSelectedFiles(acceptedFiles)
   }, [])
 
   const handleDirectorySelect = useCallback(async () => {
+    const requestSeq = ++directoryRequestSeqRef.current
     setSubmitErrorMessage('')
     let directoryPath: string | null = null
     try {
       directoryPath = await window.api.file.selectFolder()
     } catch (error) {
-      setSubmitErrorMessage(formatErrorMessageWithPrefix(error, t('common.error')))
+      if (mountedRef.current && openRef.current && requestSeq === directoryRequestSeqRef.current) {
+        setSubmitErrorMessage(formatErrorMessageWithPrefix(error, t('common.error')))
+      }
       return
     }
 
-    if (!directoryPath) {
+    if (!mountedRef.current || !openRef.current || requestSeq !== directoryRequestSeqRef.current || !directoryPath) {
       return
     }
 
@@ -141,6 +166,9 @@ const AddKnowledgeItemDialog = ({ open, onOpenChange }: AddKnowledgeItemDialogPr
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
       if (!nextOpen) {
+        openRef.current = false
+        directoryRequestSeqRef.current += 1
+        submitRequestSeqRef.current += 1
         resetDialogState()
       }
 
@@ -173,6 +201,7 @@ const AddKnowledgeItemDialog = ({ open, onOpenChange }: AddKnowledgeItemDialogPr
 
     setSubmitErrorMessage('')
     setIsResolvingSubmit(true)
+    const requestSeq = ++submitRequestSeqRef.current
 
     const submitPromise = (() => {
       if (activeSource === 'file') {
@@ -229,13 +258,19 @@ const AddKnowledgeItemDialog = ({ open, onOpenChange }: AddKnowledgeItemDialogPr
 
     void submitPromise
       .then(() => {
-        handleOpenChange(false)
+        if (mountedRef.current && openRef.current && requestSeq === submitRequestSeqRef.current) {
+          handleOpenChange(false)
+        }
       })
       .catch((error) => {
-        setSubmitErrorMessage(formatErrorMessageWithPrefix(error, t('knowledge.data_source.add_dialog.submit.error')))
+        if (mountedRef.current && openRef.current && requestSeq === submitRequestSeqRef.current) {
+          setSubmitErrorMessage(formatErrorMessageWithPrefix(error, t('knowledge.data_source.add_dialog.submit.error')))
+        }
       })
       .finally(() => {
-        setIsResolvingSubmit(false)
+        if (mountedRef.current && openRef.current && requestSeq === submitRequestSeqRef.current) {
+          setIsResolvingSubmit(false)
+        }
       })
   }, [
     activeSource,
