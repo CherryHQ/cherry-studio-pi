@@ -182,18 +182,31 @@ const SECRET_SYNC_KEY_CONTEXT = 'cherry-studio-pi:webdav-secret-sync:v1'
 const SECRET_SYNC_ENCRYPTION = 'cherry-webdav-secret-sync-aes-256-gcm' as const
 const GCM_IV_BYTE_LENGTH = 12
 const FIRST_JOIN_DEFER_LOCAL_ONLY_ENTITY_TYPES = new Set<StorageV2SyncEntityType>([
+  'agent',
+  'agent_session',
+  'agent_skill',
+  'agent_version',
   'assistant',
   'assistant_version',
+  'blob',
+  'channel',
+  'channel_task_subscription',
+  'conversation',
+  'file',
   'knowledge_base',
   'knowledge_item',
   'kv_record',
+  'message',
+  'message_block',
   'model',
   'profile',
   'provider',
   'provider_credential',
+  'scheduled_task',
   'settings',
   'skill',
-  'agent_skill'
+  'sync_tombstone',
+  'task_run_log'
 ])
 const TOMBSTONE_PHYSICAL_DELETE_TARGETS = {
   provider_credential: {

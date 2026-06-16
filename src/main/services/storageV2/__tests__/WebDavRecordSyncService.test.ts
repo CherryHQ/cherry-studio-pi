@@ -84,6 +84,15 @@ const skillTable = {
   versionColumn: 'version'
 } as const
 
+const agentTable = {
+  entityType: 'agent',
+  table: 'agents',
+  idColumns: ['id'],
+  updatedAtColumn: 'updated_at',
+  deletedAtColumn: 'deleted_at',
+  versionColumn: 'version'
+} as const
+
 const tombstoneTable = {
   entityType: 'sync_tombstone',
   table: 'sync_tombstones',
@@ -167,6 +176,19 @@ type SkillRow = {
   author: string | null
   tags_json: string | null
   content_hash: string | null
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  version: number
+}
+
+type AgentRow = {
+  id: string
+  type: string
+  name: string
+  description: string | null
+  model_id: string | null
+  workspace_path: string | null
   created_at: string
   updated_at: string
   deleted_at: string | null
@@ -380,6 +402,39 @@ function makeProviderCredentialDb(options: {
           state.tombstones = state.tombstones.filter(
             (row) => !(row.entity_type === entityType && row.entity_id === entityId)
           )
+          return { rows: [] }
+        }
+
+        return { rows: [] }
+      })
+    }
+  }
+}
+
+function makeAgentDb(rows: AgentRow[]) {
+  const state = {
+    rows: [...rows],
+    syncState: new Map<string, string>()
+  }
+
+  return {
+    state,
+    client: {
+      execute: vi.fn(async (input: string | { sql: string; args?: unknown[] }) => {
+        const sql = typeof input === 'string' ? input : input.sql
+        const args = typeof input === 'string' ? [] : (input.args ?? [])
+
+        if (sql.includes('SELECT * FROM agents')) {
+          return { rows: state.rows.map((row) => ({ ...row })) }
+        }
+
+        if (sql.includes('SELECT value_json FROM sync_state')) {
+          const value = state.syncState.get(String(args[0]))
+          return { rows: value ? [{ value_json: JSON.stringify(value) }] : [] }
+        }
+
+        if (sql.includes('INSERT INTO sync_state')) {
+          state.syncState.set(String(args[0]), JSON.parse(String(args[1])))
           return { rows: [] }
         }
 
@@ -2818,6 +2873,54 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(result.manifest.records['provider_credential:local-provider:apiKey']).toBeUndefined()
     expect(result.manifest.secrets).toBeNull()
     expect(mocks.secretVault.exportPlaintextSecrets).not.toHaveBeenCalled()
+  })
+
+  it('defers local-only agent records when first joining an existing sync space', async () => {
+    const agentRow: AgentRow = {
+      id: 'agent-local-default',
+      type: 'pi',
+      name: 'Local default agent',
+      description: null,
+      model_id: 'model-local',
+      workspace_path: '/local/workspace',
+      created_at: '2026-06-01T08:00:00.000Z',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      deleted_at: null,
+      version: 1
+    }
+    const db = makeAgentDb([agentRow])
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    const result = await new StorageV2WebDavRecordSyncService([agentTable]).sync(
+      mocks.webdav as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {}
+      },
+      {
+        preferRemoteOnFirstJoin: true
+      }
+    )
+
+    expect(result.summary.storageUploaded).toBe(0)
+    expect(result.summary.storageSkipped).toBe(1)
+    expect(result.manifest.records['agent:agent-local-default']).toBeUndefined()
+    expect(result.syncStates).toEqual(
+      expect.arrayContaining([
+        {
+          id: 'agent:agent-local-default',
+          valueHash: `deferred-local:${hashJson(agentRow)}`
+        }
+      ])
+    )
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(
+        ([filePath, contents]) =>
+          String(filePath).includes('/storage-v2/') && String(contents).includes('Local default agent')
+      )
+    ).toBe(false)
   })
 
   it('auto-resolves exact concurrent Storage v2 edits with a deterministic content tie-breaker', async () => {
