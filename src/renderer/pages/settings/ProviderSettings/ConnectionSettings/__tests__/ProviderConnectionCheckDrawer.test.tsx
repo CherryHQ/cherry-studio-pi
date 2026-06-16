@@ -1,6 +1,21 @@
 import ProviderConnectionCheckDrawer from '@renderer/pages/settings/ProviderSettings/ConnectionSettings/ProviderConnectionCheckDrawer'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+
+vi.mock('@cherrystudio/ui', () => ({
+  Button: ({ children, disabled, onClick }: any) => (
+    <button type="button" disabled={disabled} onClick={onClick}>
+      {children}
+    </button>
+  ),
+  RadioGroup: ({ children }: any) => <div>{children}</div>,
+  RadioGroupItem: ({ value }: any) => <span>{value}</span>,
+  SelectDropdown: ({ items, selectedId, renderSelected }: any) => {
+    const selected = items.find((item: { id: string }) => item.id === selectedId) ?? items[0]
+
+    return <div>{selected && renderSelected ? renderSelected(selected) : selected?.label}</div>
+  }
+}))
 
 vi.mock('../../primitives/ProviderSettingsDrawer', () => ({
   default: ({ children, footer, open }: any) =>
@@ -11,6 +26,20 @@ vi.mock('../../primitives/ProviderSettingsDrawer', () => ({
       </div>
     ) : null
 }))
+
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
+}
 
 describe('ProviderConnectionCheckDrawer', () => {
   const baseProps = {
@@ -54,5 +83,30 @@ describe('ProviderConnectionCheckDrawer', () => {
     } finally {
       consoleError.mockRestore()
     }
+  })
+
+  it('ignores duplicate start clicks while a connection check is still in flight', async () => {
+    const runningCheck = deferred<void>()
+    const onStart = vi.fn().mockReturnValue(runningCheck.promise)
+
+    render(
+      <ProviderConnectionCheckDrawer
+        {...baseProps}
+        models={[{ id: 'model-1', name: 'Model 1' }] as any}
+        apiKeys={['sk-test']}
+        onStart={onStart}
+      />
+    )
+
+    const startButton = screen.getByRole('button', { name: /Start|开始|settings\.models\.check\.start/ })
+    fireEvent.click(startButton)
+    fireEvent.click(startButton)
+
+    expect(onStart).toHaveBeenCalledTimes(1)
+
+    runningCheck.resolve()
+    await waitFor(() => {
+      expect(onStart).toHaveBeenCalledTimes(1)
+    })
   })
 })

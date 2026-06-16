@@ -2,7 +2,7 @@ import { Button, RadioGroup, RadioGroupItem, SelectDropdown } from '@cherrystudi
 import { maskApiKey } from '@renderer/utils/api'
 import type { Model } from '@shared/data/types/model'
 import { sortBy } from 'lodash'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import ProviderSettingsDrawer from '../primitives/ProviderSettingsDrawer'
@@ -31,6 +31,7 @@ export default function ProviderConnectionCheckDrawer({
   const sortedModels = useMemo(() => sortBy(models, 'name'), [models])
   const [selectedModelId, setSelectedModelId] = useState<string>('')
   const [selectedKeyIndex, setSelectedKeyIndex] = useState(0)
+  const startInFlightRef = useRef(false)
 
   useEffect(() => {
     if (!open) {
@@ -56,6 +57,18 @@ export default function ProviderConnectionCheckDrawer({
     onClose()
     onOpenModelHealthCheck?.()
   }
+  const handleStart = useCallback(async () => {
+    if (!selectedModel || !selectedApiKey || isSubmitting || startInFlightRef.current) {
+      return
+    }
+
+    startInFlightRef.current = true
+    try {
+      await onStart({ model: selectedModel, apiKey: selectedApiKey })
+    } finally {
+      startInFlightRef.current = false
+    }
+  }, [isSubmitting, onStart, selectedApiKey, selectedModel])
 
   const footer = (
     <div className={drawerClasses.splitFooter}>
@@ -71,9 +84,9 @@ export default function ProviderConnectionCheckDrawer({
           {t('common.cancel')}
         </Button>
         <Button
-          disabled={!selectedModel || !selectedApiKey}
+          disabled={!selectedModel || !selectedApiKey || isSubmitting}
           loading={isSubmitting || undefined}
-          onClick={() => selectedModel && void onStart({ model: selectedModel, apiKey: selectedApiKey })}>
+          onClick={() => void handleStart()}>
           {t('settings.models.check.start')}
         </Button>
       </div>
