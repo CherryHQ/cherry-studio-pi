@@ -208,6 +208,7 @@ export class TesseractRuntimeService extends BaseService {
       this.idleReleaseTimer = null
       void this.releaseWorkerIfIdle()
     }, TESSERACT_WORKER_IDLE_TIMEOUT_MS)
+    this.idleReleaseTimer.unref?.()
   }
 
   private clearIdleReleaseTimer(): void {
