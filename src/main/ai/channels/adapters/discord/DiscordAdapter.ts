@@ -398,7 +398,9 @@ class DiscordAdapter extends ChannelAdapter {
         this.heartbeatAcked = false
         this.sendHeartbeat()
       }, data.heartbeat_interval)
+      this.heartbeatTimer.unref?.()
     }, data.heartbeat_interval * jitter)
+    this.heartbeatJitterTimer.unref?.()
 
     // Identify or resume
     if (this.sessionId && this.lastSeq !== null) {
@@ -812,6 +814,7 @@ class DiscordAdapter extends ChannelAdapter {
         })
       }
     }, delay)
+    this.reconnectTimer.unref?.()
   }
 }
 
