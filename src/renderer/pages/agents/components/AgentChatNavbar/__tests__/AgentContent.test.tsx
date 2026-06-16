@@ -1,5 +1,5 @@
 import type { AgentEntity } from '@shared/data/types/agent'
-import type { Model } from '@shared/data/types/model'
+import type { Model, UniqueModelId } from '@shared/data/types/model'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactElement, ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -51,16 +51,19 @@ vi.mock('@renderer/components/ModelSelector', () => ({
   ModelSelector: ({
     onSelect,
     trigger,
+    selectionType,
     value
   }: {
-    onSelect?: (model: Model) => void
+    onSelect?: (modelId: UniqueModelId) => void
+    selectionType?: 'id' | 'model'
     trigger: ReactElement
-    value?: Model
+    value?: Model | UniqueModelId
   }) => (
     <div data-testid="model-selector-value">
-      {value?.id ?? 'none'}
+      {typeof value === 'string' ? value : (value?.id ?? 'none')}
+      {selectionType ? `:${selectionType}` : ''}
       {trigger}
-      <button type="button" onClick={() => onSelect?.(modelsMock[0])}>
+      <button type="button" onClick={() => onSelect?.(modelsMock[0]?.id)}>
         select mock model
       </button>
     </div>

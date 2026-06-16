@@ -30,11 +30,21 @@ export function scheduleCloseTransientResourceSelectors() {
   if (typeof window === 'undefined') return undefined
 
   window.queueMicrotask(closeTransientResourceSelectors)
-  const frame = window.requestAnimationFrame(closeTransientResourceSelectors)
-  const timer = window.setTimeout(closeTransientResourceSelectors, 50)
+  const frames: number[] = []
+  frames.push(window.requestAnimationFrame(closeTransientResourceSelectors))
+  frames.push(
+    window.requestAnimationFrame(() => {
+      frames.push(window.requestAnimationFrame(closeTransientResourceSelectors))
+    })
+  )
+  const timers = [
+    window.setTimeout(closeTransientResourceSelectors, 50),
+    window.setTimeout(closeTransientResourceSelectors, 150),
+    window.setTimeout(closeTransientResourceSelectors, 300)
+  ]
 
   return () => {
-    window.cancelAnimationFrame(frame)
-    window.clearTimeout(timer)
+    frames.forEach((frame) => window.cancelAnimationFrame(frame))
+    timers.forEach((timer) => window.clearTimeout(timer))
   }
 }

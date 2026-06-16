@@ -13,7 +13,7 @@ import { useNavbarPosition } from '@renderer/hooks/useNavbar'
 import { useProviderDisplayName } from '@renderer/hooks/useProvider'
 import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import type { AgentEntity } from '@shared/data/types/agent'
-import type { Model as SharedModel } from '@shared/data/types/model'
+import type { UniqueModelId } from '@shared/data/types/model'
 import { Menu, PanelLeftClose, PanelRightClose } from 'lucide-react'
 import { ChevronDown } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
@@ -48,6 +48,7 @@ const AgentContent = ({ activeAgent }: AgentContentProps) => {
     [activeAgent.model, models]
   )
   const providerName = useProviderDisplayName(currentSharedModel?.providerId)
+  const currentModelId = currentSharedModel?.id
 
   const handleAgentChange = useCallback(
     (nextAgentId: string | null) => {
@@ -60,9 +61,9 @@ const AgentContent = ({ activeAgent }: AgentContentProps) => {
   )
 
   const handleModelSelect = useCallback(
-    (model: SharedModel | undefined) => {
-      if (!model) return
-      void updateModel(activeAgent.id, model.id, { showSuccessToast: false }).catch(showSaveFailed)
+    (modelId: UniqueModelId | undefined) => {
+      if (!modelId) return
+      void updateModel(activeAgent.id, modelId, { showSuccessToast: false }).catch(showSaveFailed)
     },
     [activeAgent.id, showSaveFailed, updateModel]
   )
@@ -117,7 +118,8 @@ const AgentContent = ({ activeAgent }: AgentContentProps) => {
               <>
                 <ModelSelector
                   multiple={false}
-                  value={currentSharedModel}
+                  selectionType="id"
+                  value={currentModelId}
                   onSelect={handleModelSelect}
                   filter={modelFilter}
                   trigger={
