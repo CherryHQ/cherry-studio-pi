@@ -51,6 +51,7 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
   const resolvedRef = useRef(false)
   const [endpointType, setEndpointType] = useState<EndpointType>(ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS)
   const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
   const { createModels } = useModelMutations()
   const { updateProvider } = useProviderMutations(provider.id)
   const { models: existingModels } = useModels({ providerId: provider.id })
@@ -58,14 +59,19 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
 
   const closeWithResult = (data: any) => {
     if (resolvedRef.current) {
-      return
+      return false
     }
     resolvedRef.current = true
     setOpen(false)
     resolve(data)
+    return true
   }
 
   const onCancel = () => {
+    if (submittingRef.current) {
+      return
+    }
+
     closeWithResult({})
   }
 
@@ -97,6 +103,11 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
   }
 
   const onSubmit = async () => {
+    if (submittingRef.current) {
+      return
+    }
+
+    submittingRef.current = true
     try {
       setSubmitting(true)
       if (await onAddModel({ provider: provider.id, endpointType })) {
@@ -106,7 +117,10 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
       logger.error('Failed to batch add models', { providerId: provider.id, error })
       window.toast.error(t('settings.models.manage.sync_pull_failed'))
     } finally {
-      setSubmitting(false)
+      submittingRef.current = false
+      if (!resolvedRef.current) {
+        setSubmitting(false)
+      }
     }
   }
 
@@ -132,7 +146,10 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
             <label className="font-medium text-[13px] text-foreground/85">
               {t('settings.models.add.endpoint_type.label')}
             </label>
-            <Select value={endpointType} onValueChange={(value) => setEndpointType(value as EndpointType)}>
+            <Select
+              value={endpointType}
+              onValueChange={(value) => setEndpointType(value as EndpointType)}
+              disabled={submitting}>
               <SelectTrigger className={drawerClasses.selectTrigger}>
                 <SelectValue placeholder={t('settings.models.add.endpoint_type.placeholder')} />
               </SelectTrigger>
@@ -150,7 +167,7 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
           <Button variant="outline" onClick={onCancel} disabled={submitting}>
             {t('common.cancel')}
           </Button>
-          <Button disabled={submitting} onClick={() => void onSubmit()}>
+          <Button disabled={submitting} loading={submitting} onClick={() => void onSubmit()}>
             {t('settings.models.add.add_model')}
           </Button>
         </DialogFooter>
