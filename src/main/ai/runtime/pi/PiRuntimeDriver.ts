@@ -157,6 +157,7 @@ class PiRuntimeConnection implements AgentRuntimeConnection {
     if (!agent) throw new Error(`Agent not found: ${this.input.agentId}`)
 
     const workspacePath = resolvePiRuntimeWorkspacePath(session)
+    await ensureAgentSessionWorkspaceDirectory(session.id, workspacePath, { runtime: 'pi' })
 
     return {
       ...agent,

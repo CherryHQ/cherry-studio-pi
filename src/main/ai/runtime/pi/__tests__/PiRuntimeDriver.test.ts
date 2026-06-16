@@ -1,9 +1,14 @@
+import { EventEmitter } from 'node:events'
 import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import type { AgentSessionEntity, AgentSessionMessageEntity } from '@shared/data/api/schemas/agentSessions'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+const mocks = vi.hoisted(() => ({
+  piInvoke: vi.fn()
+}))
 
 vi.mock('@data/services/AgentService', () => ({
   agentService: { getAgent: vi.fn() }
@@ -15,7 +20,7 @@ vi.mock('@data/services/AgentSessionService', () => ({
 
 vi.mock('@main/ai/pi', () => ({
   default: class MockPiAgentService {
-    invoke = vi.fn()
+    invoke = mocks.piInvoke
   }
 }))
 
@@ -74,6 +79,7 @@ async function createTempRoot(): Promise<string> {
 afterEach(async () => {
   vi.mocked(agentService.getAgent).mockReset()
   vi.mocked(agentSessionService.getById).mockReset()
+  mocks.piInvoke.mockReset()
   if (originalStorageV2Root === undefined) {
     delete process.env.CHERRY_STUDIO_STORAGE_V2_ROOT
   } else {
@@ -145,5 +151,48 @@ describe('PiRuntimeDriver validateSession', () => {
     expect(
       (connection as unknown as { currentAbortController?: AbortController }).currentAbortController
     ).toBeUndefined()
+  })
+
+  it('re-ensures the workspace directory immediately before invoking Pi', async () => {
+    const driver = new PiRuntimeDriver()
+    const root = await createTempRoot()
+    process.env.CHERRY_STUDIO_STORAGE_V2_ROOT = root
+    const expectedWorkspacePath = path.join(root, 'Agents', 'system-sessions', 'session-1')
+    const stream = new EventEmitter() as EventEmitter & { sdkSessionId?: string }
+
+    vi.mocked(agentService.getAgent).mockResolvedValueOnce({
+      id: 'agent-1',
+      name: 'Agent',
+      type: 'pi',
+      model: 'openai::gpt-4.1'
+    } as never)
+    vi.mocked(agentSessionService.getById).mockResolvedValueOnce(createSession(null))
+    mocks.piInvoke.mockImplementationOnce(async (_prompt, session) => {
+      expect(session).toMatchObject({
+        id: 'session-1',
+        agentId: 'agent-1',
+        accessible_paths: [expectedWorkspacePath],
+        accessiblePaths: [expectedWorkspacePath]
+      })
+      expect((await stat(expectedWorkspacePath)).isDirectory()).toBe(true)
+      setTimeout(() => stream.emit('data', { type: 'complete' }), 0)
+      return stream
+    })
+
+    const connection = await driver.connect({
+      sessionId: 'session-1',
+      agentId: 'agent-1',
+      modelId: 'openai::gpt-4.1' as never
+    })
+
+    const iterator = connection.events[Symbol.asyncIterator]()
+    const nextEvent = iterator.next()
+    void connection.send({ message: createMessage() })
+
+    await expect(nextEvent).resolves.toMatchObject({
+      done: false,
+      value: { type: 'turn-complete' }
+    })
+    expect(mocks.piInvoke).toHaveBeenCalledTimes(1)
   })
 })
