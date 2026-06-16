@@ -80,6 +80,8 @@ const ShortcutSettings: FC = () => {
   const { theme } = useTheme()
   const { shortcuts, updatePreference } = useAllShortcuts()
   const recorderRefs = useRef<Record<string, HTMLButtonElement>>({})
+  const resetConfirmRef = useRef(false)
+  const resetOperationRef = useRef(false)
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [pendingKeys, setPendingKeys] = useState<ShortcutBinding>([])
   const [conflictLabel, setConflictLabel] = useState<string | null>(null)
@@ -290,10 +292,26 @@ const ShortcutSettings: FC = () => {
   }
 
   const handleResetAllShortcuts = () => {
+    if (resetConfirmRef.current || resetOperationRef.current) {
+      return
+    }
+
+    const clearResetGuard = () => {
+      if (resetOperationRef.current) return
+      resetConfirmRef.current = false
+    }
+
+    resetConfirmRef.current = true
     window.modal.confirm({
       title: t('settings.shortcuts.reset_defaults_confirm'),
       centered: true,
+      onCancel: clearResetGuard,
       onOk: async () => {
+        if (resetOperationRef.current) {
+          return
+        }
+
+        resetOperationRef.current = true
         const updates: Record<string, PreferenceShortcutType> = getAllShortcutDefaultPreferences()
 
         try {
@@ -302,6 +320,9 @@ const ShortcutSettings: FC = () => {
         } catch (error) {
           logger.error('Failed to reset all shortcuts to defaults', error as Error)
           window.toast.error(t('settings.shortcuts.reset_defaults_failed'))
+        } finally {
+          resetOperationRef.current = false
+          resetConfirmRef.current = false
         }
       }
     })

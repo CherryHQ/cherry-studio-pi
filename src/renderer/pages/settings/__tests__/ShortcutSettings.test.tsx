@@ -13,6 +13,7 @@ const shortcutsMock = vi.hoisted(() => ({
   updatePreference: vi.fn()
 }))
 
+const setMultipleMock = vi.hoisted(() => vi.fn())
 const setTimeoutTimerMock = vi.hoisted(() => vi.fn((_key: string, callback: () => void) => callback()))
 const clearTimeoutTimerMock = vi.hoisted(() => vi.fn())
 const registrationConflictMock = vi.hoisted(() => vi.fn(() => vi.fn()))
@@ -39,6 +40,13 @@ vi.mock('@renderer/config/constant', async (importOriginal) => {
     isMac: false
   }
 })
+
+vi.mock('@data/PreferenceService', () => ({
+  preferenceService: {
+    get: vi.fn().mockResolvedValue(undefined),
+    setMultiple: setMultipleMock
+  }
+}))
 
 vi.mock('@renderer/utils/style', () => ({
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' ')
@@ -161,11 +169,21 @@ const renderShortcutSettings = (onKeyDown?: React.KeyboardEventHandler<HTMLDivEl
     </div>
   )
 
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
 describe('ShortcutSettings shortcut recorder', () => {
   beforeEach(() => {
     shortcutsMock.shortcuts = [makeShortcut()]
     shortcutsMock.updatePreference.mockReset()
     shortcutsMock.updatePreference.mockResolvedValue(undefined)
+    setMultipleMock.mockReset()
+    setMultipleMock.mockResolvedValue(undefined)
     setTimeoutTimerMock.mockClear()
     clearTimeoutTimerMock.mockClear()
     registrationConflictMock.mockClear()
@@ -225,5 +243,27 @@ describe('ShortcutSettings shortcut recorder', () => {
     fireEvent.keyDown(recorder, { key: 'Process', code: 'KeyK', ctrlKey: true, bubbles: true })
 
     expect(shortcutsMock.updatePreference).not.toHaveBeenCalled()
+  })
+
+  it('prevents duplicate reset-default confirmations and writes', async () => {
+    const runningReset = deferred<void>()
+    setMultipleMock.mockReturnValueOnce(runningReset.promise)
+    renderShortcutSettings()
+
+    const resetButton = screen.getByText('settings.shortcuts.reset').closest('button')
+    expect(resetButton).not.toBeNull()
+
+    fireEvent.click(resetButton!)
+    fireEvent.click(resetButton!)
+
+    expect(window.modal.confirm).toHaveBeenCalledTimes(1)
+    const options = (window.modal.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0]
+
+    const firstReset = options.onOk()
+    const secondReset = options.onOk()
+    expect(setMultipleMock).toHaveBeenCalledTimes(1)
+
+    runningReset.resolve(undefined)
+    await Promise.all([firstReset, secondReset])
   })
 })
