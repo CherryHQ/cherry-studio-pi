@@ -91,6 +91,7 @@ describe('DataApiService', () => {
     expect(requestMock).toHaveBeenCalledTimes(2)
     expect(requestMock.mock.calls[0]?.[0]).toMatchObject({ method: 'GET', path: '/providers' })
     expect(requestMock.mock.calls[1]?.[0]).toMatchObject({ method: 'GET', path: '/providers' })
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('does not automatically retry retryable mutation failures', async () => {

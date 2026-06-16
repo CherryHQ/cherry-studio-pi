@@ -45,6 +45,17 @@ import type {
 const logger = loggerService.withContext('DataApiService')
 const DEFAULT_REQUEST_TIMEOUT_MS = 3000
 
+function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
+  timer.unref?.()
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms)
+    unrefTimer(timer)
+  })
+}
+
 function toSafeRequestLog(request: DataRequest) {
   return {
     id: request.id,
@@ -139,6 +150,7 @@ export class DataApiService implements ApiClient {
           timeoutHandle = setTimeout(() => {
             reject(DataApiErrorFactory.timeout(request.path, DEFAULT_REQUEST_TIMEOUT_MS, requestContext))
           }, DEFAULT_REQUEST_TIMEOUT_MS)
+          unrefTimer(timeoutHandle)
         })
       ])
     } finally {
@@ -199,10 +211,10 @@ export class DataApiService implements ApiClient {
         )
 
         // Calculate delay with exponential backoff
-        const delay =
+        const retryDelayMs =
           this.defaultRetryOptions.retryDelay * Math.pow(this.defaultRetryOptions.backoffMultiplier, retryCount)
 
-        await new Promise((resolve) => setTimeout(resolve, delay))
+        await delay(retryDelayMs)
 
         // Create new request with new ID for retry
         const retryRequest = { ...request, id: this.generateRequestId() }
