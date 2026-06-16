@@ -3,7 +3,13 @@ import { cn } from '@cherrystudio/ui/lib/utils'
 import { ModelSelector } from '@renderer/components/ModelSelector'
 import type { ModelSelectorFilter } from '@renderer/components/ModelSelector/types'
 import { useModels } from '@renderer/hooks/useModel'
-import { isUniqueModelId, type Model, type UniqueModelId } from '@shared/data/types/model'
+import {
+  isUniqueModelId,
+  type Model,
+  parseUniqueModelId,
+  UNIQUE_MODEL_ID_SEPARATOR,
+  type UniqueModelId
+} from '@shared/data/types/model'
 import { ChevronsUpDown, Trash2 } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -20,8 +26,37 @@ interface Props {
   onSelect: (modelId: UniqueModelId | null, model?: Model) => void
 }
 
-function buildModelsById(models: readonly Model[]): Map<UniqueModelId, Model> {
-  return new Map(models.map((model) => [model.id, model]))
+function getModelProviderId(model: Model): string | undefined {
+  const providerId = typeof model.providerId === 'string' ? model.providerId.trim() : ''
+  if (providerId) return providerId
+  return isUniqueModelId(model.id) ? parseUniqueModelId(model.id).providerId : undefined
+}
+
+function getModelRawId(model: Model): string {
+  const apiModelId = typeof model.apiModelId === 'string' ? model.apiModelId.trim() : ''
+  if (apiModelId) return apiModelId
+  return isUniqueModelId(model.id) ? parseUniqueModelId(model.id).modelId : model.id
+}
+
+export function buildModelsById(models: readonly Model[]): Map<string, Model> {
+  const modelsById = new Map<string, Model>()
+
+  for (const model of models) {
+    modelsById.set(model.id, model)
+  }
+
+  for (const model of models) {
+    const providerId = getModelProviderId(model)
+    const rawModelId = getModelRawId(model).trim()
+    if (!providerId || !rawModelId) continue
+
+    const apiAliasId = `${providerId}${UNIQUE_MODEL_ID_SEPARATOR}${rawModelId}`
+    if (!modelsById.has(apiAliasId)) {
+      modelsById.set(apiAliasId, model)
+    }
+  }
+
+  return modelsById
 }
 
 export function ModelSelectorField({ label, hint, value, allowClear = false, errorMessage, filter, onSelect }: Props) {
