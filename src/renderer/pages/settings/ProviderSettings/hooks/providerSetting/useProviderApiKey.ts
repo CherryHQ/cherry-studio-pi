@@ -125,6 +125,7 @@ export function useProviderApiKey(providerId: string) {
 
   const serverApiKey = useMemo(() => getEnabledApiKeyString(apiKeysData), [apiKeysData])
   const [value, setValue] = useState<ApiKeyValue>(() => createApiKeyValue(serverApiKey))
+  const mountedRef = useRef(true)
   const previousProviderIdRef = useRef(providerId)
   const valueRef = useRef(value)
   const saveApiKeyRef = useRef<(value: string) => Promise<void>>(async () => undefined)
@@ -141,6 +142,13 @@ export function useProviderApiKey(providerId: string) {
   )
 
   useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
     valueRef.current = value
   }, [value])
 
@@ -153,8 +161,10 @@ export function useProviderApiKey(providerId: string) {
       debounce((nextValue: string) => {
         void saveApiKeyRef.current(nextValue).catch((error) => {
           logger.error('Failed to save API keys', error as Error)
-          window.toast.error(i18n.t('settings.provider.api_key.save_failed'))
-          setValue((current) => ({ ...current, hasPendingSync: true }))
+          if (mountedRef.current) {
+            window.toast.error(i18n.t('settings.provider.api_key.save_failed'))
+            setValue((current) => ({ ...current, hasPendingSync: true }))
+          }
         })
       }, 150),
     []

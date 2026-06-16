@@ -68,7 +68,15 @@ export default function ProviderApiKeyListDrawer({ providerId, open, onClose }: 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState<DraftState | null>(null)
   const [saving, setSaving] = useState(false)
+  const mountedRef = useRef(true)
   const savingRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     if (!open) {
@@ -96,7 +104,9 @@ export default function ProviderApiKeyListDrawer({ providerId, open, onClose }: 
         return false
       } finally {
         savingRef.current = false
-        setSaving(false)
+        if (mountedRef.current) {
+          setSaving(false)
+        }
       }
     },
     [providerId, t, updateApiKeys]

@@ -31,7 +31,16 @@ export default function ProviderConnectionCheckDrawer({
   const sortedModels = useMemo(() => sortBy(models, 'name'), [models])
   const [selectedModelId, setSelectedModelId] = useState<string>('')
   const [selectedKeyIndex, setSelectedKeyIndex] = useState(0)
+  const [isStarting, setIsStarting] = useState(false)
+  const mountedRef = useRef(true)
   const startInFlightRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     if (!open) {
@@ -58,17 +67,21 @@ export default function ProviderConnectionCheckDrawer({
     onOpenModelHealthCheck?.()
   }
   const handleStart = useCallback(async () => {
-    if (!selectedModel || !selectedApiKey || isSubmitting || startInFlightRef.current) {
+    if (!selectedModel || !selectedApiKey || isSubmitting || isStarting || startInFlightRef.current) {
       return
     }
 
     startInFlightRef.current = true
+    setIsStarting(true)
     try {
       await onStart({ model: selectedModel, apiKey: selectedApiKey })
     } finally {
       startInFlightRef.current = false
+      if (mountedRef.current) {
+        setIsStarting(false)
+      }
     }
-  }, [isSubmitting, onStart, selectedApiKey, selectedModel])
+  }, [isStarting, isSubmitting, onStart, selectedApiKey, selectedModel])
 
   const footer = (
     <div className={drawerClasses.splitFooter}>
@@ -84,8 +97,8 @@ export default function ProviderConnectionCheckDrawer({
           {t('common.cancel')}
         </Button>
         <Button
-          disabled={!selectedModel || !selectedApiKey || isSubmitting}
-          loading={isSubmitting || undefined}
+          disabled={!selectedModel || !selectedApiKey || isSubmitting || isStarting}
+          loading={isSubmitting || isStarting || undefined}
           onClick={() => void handleStart()}>
           {t('settings.models.check.start')}
         </Button>

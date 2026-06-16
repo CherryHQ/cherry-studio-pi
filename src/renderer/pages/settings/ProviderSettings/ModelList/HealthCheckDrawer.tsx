@@ -54,9 +54,17 @@ export default function HealthCheckDrawer({
   const [isConcurrent, setIsConcurrent] = useState(true)
   const [timeoutSeconds, setTimeoutSeconds] = useState(15)
   const [isStarting, setIsStarting] = useState(false)
+  const mountedRef = useRef(true)
   const startInFlightRef = useRef(false)
 
   const showPipeline = modelStatuses.length > 0
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const progressStats = useMemo(() => {
     if (modelStatuses.length === 0) {
@@ -130,7 +138,9 @@ export default function HealthCheckDrawer({
       })
     } finally {
       startInFlightRef.current = false
-      setIsStarting(false)
+      if (mountedRef.current) {
+        setIsStarting(false)
+      }
     }
   }, [apiKeys, isChecking, isConcurrent, isStarting, keyCheckMode, onStart, selectedKeyIndex, timeoutSeconds])
 
