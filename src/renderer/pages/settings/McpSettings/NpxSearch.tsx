@@ -5,7 +5,7 @@ import type { McpServer } from '@renderer/types'
 import { getMcpConfigSampleFromReadme } from '@renderer/utils'
 import { Check, Plus } from 'lucide-react'
 import { npxFinder } from 'npx-scope-finder'
-import { type FC, useEffect, useState } from 'react'
+import { type FC, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface SearchResult {
@@ -31,67 +31,83 @@ const NpxSearch: FC = () => {
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchResults, setSearchResults] = useState<SearchResult[]>(_searchResults)
   const { addMcpServer, mcpServers } = useMcpServers()
-
-  _searchResults = searchResults
+  const mountedRef = useRef(true)
+  const searchRequestSeqRef = useRef(0)
 
   // Add new function to handle npm scope search
-  const handleNpmSearch = async (scopeOverride?: string) => {
-    const searchScope = scopeOverride || npmScope
+  const handleNpmSearch = useCallback(
+    async (scopeOverride?: string) => {
+      const searchScope = (scopeOverride || npmScope).trim()
 
-    if (!searchScope.trim()) {
-      window.toast.warning(t('settings.mcp.npx_list.scope_required'))
-      return
-    }
+      if (!searchScope) {
+        window.toast.warning(t('settings.mcp.npx_list.scope_required'))
+        return
+      }
 
-    if (searchLoading) {
-      return
-    }
+      const requestSeq = ++searchRequestSeqRef.current
+      setSearchLoading(true)
 
-    setSearchLoading(true)
-
-    try {
-      // Call npxFinder to search for packages
-      const packages = await npxFinder(searchScope)
-      // Map the packages to our desired format
-      const formattedResults: SearchResult[] = packages.map((pkg) => {
-        let configSample
-        if (pkg.original?.readme) {
-          configSample = getMcpConfigSampleFromReadme(pkg.original.readme)
+      try {
+        // Call npxFinder to search for packages
+        const packages = await npxFinder(searchScope)
+        if (!mountedRef.current || requestSeq !== searchRequestSeqRef.current) {
+          return
         }
 
-        return {
-          key: pkg.name,
-          name: pkg.name?.split('/')[1] || '',
-          description: pkg.description || 'No description available',
-          version: pkg.version || 'Latest',
-          usage: `npx ${pkg.name}`,
-          npmLink: pkg.links?.npm || `https://www.npmjs.com/package/${pkg.name}`,
-          fullName: pkg.name || '',
-          type: 'stdio',
-          configSample
+        // Map the packages to our desired format
+        const formattedResults: SearchResult[] = packages.map((pkg) => {
+          let configSample
+          if (pkg.original?.readme) {
+            configSample = getMcpConfigSampleFromReadme(pkg.original.readme)
+          }
+
+          return {
+            key: pkg.name,
+            name: pkg.name?.split('/')[1] || '',
+            description: pkg.description || 'No description available',
+            version: pkg.version || 'Latest',
+            usage: `npx ${pkg.name}`,
+            npmLink: pkg.links?.npm || `https://www.npmjs.com/package/${pkg.name}`,
+            fullName: pkg.name || '',
+            type: 'stdio',
+            configSample
+          }
+        })
+
+        setSearchResults(formattedResults)
+        _searchResults = formattedResults
+
+        if (formattedResults.length === 0) {
+          window.toast.info(t('settings.mcp.npx_list.no_packages'))
         }
-      })
+      } catch (error: unknown) {
+        if (!mountedRef.current || requestSeq !== searchRequestSeqRef.current) {
+          return
+        }
 
-      setSearchResults(formattedResults)
-
-      if (formattedResults.length === 0) {
-        window.toast.info(t('settings.mcp.npx_list.no_packages'))
+        setSearchResults([])
+        _searchResults = []
+        if (error instanceof Error) {
+          window.toast.error(`${t('settings.mcp.npx_list.search_error')}: ${error.message}`)
+        } else {
+          window.toast.error(t('settings.mcp.npx_list.search_error'))
+        }
+      } finally {
+        if (mountedRef.current && requestSeq === searchRequestSeqRef.current) {
+          setSearchLoading(false)
+        }
       }
-    } catch (error: unknown) {
-      setSearchResults([])
-      _searchResults = []
-      if (error instanceof Error) {
-        window.toast.error(`${t('settings.mcp.npx_list.search_error')}: ${error.message}`)
-      } else {
-        window.toast.error(t('settings.mcp.npx_list.search_error'))
-      }
-    } finally {
-      setSearchLoading(false)
-    }
-  }
+    },
+    [npmScope, t]
+  )
 
   useEffect(() => {
+    mountedRef.current = true
     void handleNpmSearch()
+    return () => {
+      mountedRef.current = false
+      searchRequestSeqRef.current += 1
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

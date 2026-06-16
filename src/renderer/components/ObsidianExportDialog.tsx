@@ -32,7 +32,7 @@ import {
   topicToMarkdown
 } from '@renderer/utils/export'
 import { XIcon } from 'lucide-react'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 const logger = loggerService.withContext('ObsidianExportDialog')
 
 interface FileInfo {
@@ -174,7 +174,7 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
   topic,
   rawContent
 }) => {
-  const [defaultObsidianVault, setDefaultObsidianVault] = usePreference('data.integration.obsidian.default_vault')
+  const [defaultObsidianVault] = usePreference('data.integration.obsidian.default_vault')
   const [state, setState] = useState({
     title,
     tags: obsidianTags || '',
@@ -191,6 +191,8 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
   const [exportReasoning, setExportReasoning] = useState(false)
+  const vaultRequestSeqRef = useRef(0)
+  const filesRequestSeqRef = useRef(0)
 
   useEffect(() => {
     if (files.length > 0) {
@@ -209,49 +211,87 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
   }, [files])
 
   useEffect(() => {
+    let isActive = true
+    const requestSeq = ++vaultRequestSeqRef.current
+
     const fetchVaults = async () => {
       try {
         setLoading(true)
         setError(null)
         const vaultsData = await window.api.obsidian.getVaults()
-        if (vaultsData.length === 0) {
-          setError(i18n.t('chat.topics.export.obsidian_no_vaults'))
-          setLoading(false)
+        if (!isActive || requestSeq !== vaultRequestSeqRef.current) {
           return
         }
+
+        if (vaultsData.length === 0) {
+          setVaults([])
+          setFiles([])
+          setSelectedVault('')
+          setError(i18n.t('chat.topics.export.obsidian_no_vaults'))
+          return
+        }
+
         setVaults(vaultsData)
         const vaultToUse = defaultObsidianVault || vaultsData[0]?.name
         if (vaultToUse) {
           setSelectedVault(vaultToUse)
-          const filesData = await window.api.obsidian.getFiles(vaultToUse)
-          setFiles(filesData)
         }
       } catch (error) {
-        logger.error('获取Obsidian Vault失败:', error as Error)
-        setError(i18n.t('chat.topics.export.obsidian_fetch_error'))
+        if (isActive && requestSeq === vaultRequestSeqRef.current) {
+          logger.error('获取Obsidian Vault失败:', error as Error)
+          setVaults([])
+          setFiles([])
+          setSelectedVault('')
+          setError(i18n.t('chat.topics.export.obsidian_fetch_error'))
+        }
       } finally {
-        setLoading(false)
-      }
-    }
-    void fetchVaults()
-  }, [defaultObsidianVault, setDefaultObsidianVault])
-
-  useEffect(() => {
-    if (selectedVault) {
-      const fetchFiles = async () => {
-        try {
-          setLoading(true)
-          setError(null)
-          const filesData = await window.api.obsidian.getFiles(selectedVault)
-          setFiles(filesData)
-        } catch (error) {
-          logger.error('获取Obsidian文件失败:', error as Error)
-          setError(i18n.t('chat.topics.export.obsidian_fetch_folders_error'))
-        } finally {
+        if (isActive && requestSeq === vaultRequestSeqRef.current) {
           setLoading(false)
         }
       }
-      void fetchFiles()
+    }
+    void fetchVaults()
+
+    return () => {
+      isActive = false
+      vaultRequestSeqRef.current += 1
+    }
+  }, [defaultObsidianVault])
+
+  useEffect(() => {
+    if (!selectedVault) {
+      setFiles([])
+      return
+    }
+
+    let isActive = true
+    const requestSeq = ++filesRequestSeqRef.current
+
+    const fetchFiles = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+        const filesData = await window.api.obsidian.getFiles(selectedVault)
+        if (isActive && requestSeq === filesRequestSeqRef.current) {
+          setFiles(filesData)
+        }
+      } catch (error) {
+        if (isActive && requestSeq === filesRequestSeqRef.current) {
+          logger.error('获取Obsidian文件失败:', error as Error)
+          setFiles([])
+          setError(i18n.t('chat.topics.export.obsidian_fetch_folders_error'))
+        }
+      } finally {
+        if (isActive && requestSeq === filesRequestSeqRef.current) {
+          setLoading(false)
+        }
+      }
+    }
+    void fetchFiles()
+
+    return () => {
+      isActive = false
+      filesRequestSeqRef.current += 1
     }
   }, [selectedVault])
 
