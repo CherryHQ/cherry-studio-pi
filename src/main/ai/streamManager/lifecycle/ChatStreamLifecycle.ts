@@ -50,6 +50,7 @@ export function createChatStreamLifecycle(gracePeriodMs: number): StreamLifecycl
     cleanup(stream, evict) {
       stream.expiresAt = Date.now() + gracePeriodMs
       stream.cleanupTimer = setTimeout(evict, gracePeriodMs)
+      stream.cleanupTimer.unref?.()
     }
   }
 }
