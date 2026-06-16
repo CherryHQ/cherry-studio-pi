@@ -1,7 +1,7 @@
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, Input } from '@cherrystudio/ui'
 import { backupToWebdav } from '@renderer/services/BackupService'
 import dayjs from 'dayjs'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface WebdavModalProps {
@@ -21,7 +21,15 @@ export function useWebdavBackupModal({ backupMethod }: { backupMethod?: typeof b
   const [customFileName, setCustomFileName] = useState('')
   const [isModalVisible, setIsModalVisible] = useState(false)
   const [backuping, setBackuping] = useState(false)
+  const mountedRef = useRef(true)
   const backupingRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const handleBackup = async () => {
     if (backupingRef.current) {
@@ -34,8 +42,10 @@ export function useWebdavBackupModal({ backupMethod }: { backupMethod?: typeof b
       await (backupMethod ?? backupToWebdav)({ showMessage: true, customFileName })
     } finally {
       backupingRef.current = false
-      setBackuping(false)
-      setIsModalVisible(false)
+      if (mountedRef.current) {
+        setBackuping(false)
+        setIsModalVisible(false)
+      }
     }
   }
 
@@ -52,6 +62,9 @@ export function useWebdavBackupModal({ backupMethod }: { backupMethod?: typeof b
     const hostname = await window.api.system.getHostname()
     const timestamp = dayjs().format('YYYYMMDDHHmmss')
     const defaultFileName = `cherry-studio-pi.${timestamp}.${hostname}.${deviceType}.zip`
+    if (!mountedRef.current) {
+      return
+    }
     setCustomFileName(defaultFileName)
     setIsModalVisible(true)
   }, [])

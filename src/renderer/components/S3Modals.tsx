@@ -14,7 +14,7 @@ import { backupToS3 } from '@renderer/services/BackupService'
 import { formatFileSize } from '@renderer/utils'
 import { runExclusiveOperation } from '@renderer/utils/exclusiveOperation'
 import dayjs from 'dayjs'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface BackupFile {
@@ -27,7 +27,15 @@ export function useS3BackupModal() {
   const [customFileName, setCustomFileName] = useState('')
   const [isModalVisible, setIsModalVisible] = useState(false)
   const [backuping, setBackuping] = useState(false)
+  const mountedRef = useRef(true)
   const backupingRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const handleBackup = async () => {
     if (backupingRef.current) {
@@ -40,8 +48,10 @@ export function useS3BackupModal() {
       await backupToS3({ customFileName, showMessage: true })
     } finally {
       backupingRef.current = false
-      setBackuping(false)
-      setIsModalVisible(false)
+      if (mountedRef.current) {
+        setBackuping(false)
+        setIsModalVisible(false)
+      }
     }
   }
 
@@ -58,6 +68,9 @@ export function useS3BackupModal() {
     const hostname = await window.api.system.getHostname()
     const timestamp = dayjs().format('YYYYMMDDHHmmss')
     const defaultFileName = `cherry-studio-pi.${timestamp}.${hostname}.${deviceType}.zip`
+    if (!mountedRef.current) {
+      return
+    }
     setCustomFileName(defaultFileName)
     setIsModalVisible(true)
   }, [])
@@ -144,9 +157,18 @@ export function useS3RestoreModal({
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [backupFiles, setBackupFiles] = useState<BackupFile[]>([])
+  const mountedRef = useRef(true)
   const listSeqRef = useRef(0)
   const restoringRef = useRef(false)
   const { t } = useTranslation()
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      listSeqRef.current += 1
+    }
+  }, [])
 
   const showRestoreModal = useCallback(async () => {
     if (!endpoint || !region || !bucket || !accessKeyId || !secretAccessKey) {
@@ -172,15 +194,15 @@ export function useS3RestoreModal({
         maxBackups: 0,
         skipBackupFile: false
       })
-      if (listSeq === listSeqRef.current) {
+      if (mountedRef.current && listSeq === listSeqRef.current) {
         setBackupFiles(files)
       }
     } catch (error: any) {
-      if (listSeq === listSeqRef.current) {
+      if (mountedRef.current && listSeq === listSeqRef.current) {
         window.toast.error(t('settings.data.s3.manager.files.fetch.error', { message: error.message }))
       }
     } finally {
-      if (listSeq === listSeqRef.current) {
+      if (mountedRef.current && listSeq === listSeqRef.current) {
         setLoadingFiles(false)
       }
     }
@@ -217,12 +239,18 @@ export function useS3RestoreModal({
               maxBackups: 0,
               skipBackupFile: false
             })
-            window.toast.success(t('message.restore.success'))
-            setIsRestoreModalVisible(false)
+            if (mountedRef.current) {
+              window.toast.success(t('message.restore.success'))
+              setIsRestoreModalVisible(false)
+            }
           } catch (error: any) {
-            window.toast.error(t('settings.data.s3.restore.error', { message: error.message }))
+            if (mountedRef.current) {
+              window.toast.error(t('settings.data.s3.restore.error', { message: error.message }))
+            }
           } finally {
-            setRestoring(false)
+            if (mountedRef.current) {
+              setRestoring(false)
+            }
           }
         })
       }
