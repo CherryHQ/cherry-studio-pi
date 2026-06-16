@@ -4,7 +4,7 @@ import type { EnvironmentDependenciesStatus, EnvironmentDependencyStatus } from 
 import { Button, Popconfirm, Space, Tag } from 'antd'
 import { Download, FolderOpen, RefreshCw, Trash2 } from 'lucide-react'
 import type { FC } from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -16,29 +16,58 @@ const EnvironmentDependenciesSettings: FC = () => {
   const [status, setStatus] = useState<EnvironmentDependenciesStatus>()
   const [loading, setLoading] = useState(true)
   const [activeAction, setActiveAction] = useState<string>()
+  const mountedRef = useRef(true)
+  const statusRequestSeqRef = useRef(0)
+  const actionRequestSeqRef = useRef(0)
 
   const loadStatus = useCallback(async () => {
+    const requestSeq = ++statusRequestSeqRef.current
     setLoading(true)
     try {
-      setStatus(await window.api.environmentDependencies.getStatus())
+      const nextStatus = await window.api.environmentDependencies.getStatus()
+      if (mountedRef.current && requestSeq === statusRequestSeqRef.current) {
+        setStatus(nextStatus)
+      }
     } catch (error: any) {
-      window.toast.error(error.message)
+      if (mountedRef.current && requestSeq === statusRequestSeqRef.current) {
+        window.toast.error(error.message)
+      }
     } finally {
-      setLoading(false)
+      if (mountedRef.current && requestSeq === statusRequestSeqRef.current) {
+        setLoading(false)
+      }
     }
   }, [])
 
   const runAction = async (action: string, fn: () => Promise<EnvironmentDependenciesStatus>, successKey: string) => {
+    const requestSeq = ++actionRequestSeqRef.current
     setActiveAction(action)
     try {
-      setStatus(await fn())
-      window.toast.success(t(successKey))
+      const nextStatus = await fn()
+      if (mountedRef.current && requestSeq === actionRequestSeqRef.current) {
+        setStatus(nextStatus)
+        window.toast.success(t(successKey))
+      }
     } catch (error: any) {
-      window.toast.error(error.message)
+      if (mountedRef.current && requestSeq === actionRequestSeqRef.current) {
+        window.toast.error(error.message)
+      }
     } finally {
-      setActiveAction(undefined)
+      if (mountedRef.current && requestSeq === actionRequestSeqRef.current) {
+        setActiveAction(undefined)
+      }
     }
   }
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+      statusRequestSeqRef.current += 1
+      actionRequestSeqRef.current += 1
+    }
+  }, [])
 
   useEffect(() => {
     void loadStatus()

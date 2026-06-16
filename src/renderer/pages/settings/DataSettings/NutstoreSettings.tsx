@@ -23,7 +23,7 @@ import { openHttpExternalUrl } from '@renderer/utils/openExternal'
 import { NUTSTORE_HOST } from '@shared/config/nutstore'
 import dayjs from 'dayjs'
 import type { FC } from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { type FileStat } from 'webdav'
 
@@ -47,6 +47,11 @@ const NutstoreSettings: FC = () => {
   const [nutstoreLoginLoading, setNutstoreLoginLoading] = useState(false)
   const [checkConnectionLoading, setCheckConnectionLoading] = useState(false)
   const [nsConnected, setNsConnected] = useState<boolean>(false)
+  const mountedRef = useRef(true)
+  const loginRequestSeqRef = useRef(0)
+  const decryptRequestSeqRef = useRef(0)
+  const connectionRequestSeqRef = useRef(0)
+  const pathRequestSeqRef = useRef(0)
 
   // const [syncInterval, setSyncInterval] = useState<number>(nutstoreSyncInterval)
   // const [nutSkipBackupFile, setNutSkipBackupFile] = useState<boolean>(nutstoreSkipBackupFile)
@@ -63,43 +68,83 @@ const NutstoreSettings: FC = () => {
     [t]
   )
 
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+      loginRequestSeqRef.current += 1
+      decryptRequestSeqRef.current += 1
+      connectionRequestSeqRef.current += 1
+      pathRequestSeqRef.current += 1
+    }
+  }, [])
+
   const handleClickNutstoreSSO = useCallback(async () => {
+    const requestSeq = ++loginRequestSeqRef.current
     setNutstoreLoginLoading(true)
     try {
       const ssoUrl = await window.api.nutstore.getSSOUrl()
+      if (!mountedRef.current || requestSeq !== loginRequestSeqRef.current) {
+        return
+      }
+
       if (!openHttpExternalUrl(ssoUrl)) {
         throw new Error('Invalid Nutstore SSO URL')
       }
       const nutstoreToken = await nutstoreSsoHandler()
+      if (!mountedRef.current || requestSeq !== loginRequestSeqRef.current) {
+        return
+      }
 
       await setNutstoreToken(nutstoreToken)
     } catch (error) {
-      const message =
-        error instanceof Error && error.message.includes('timed out')
-          ? t('error.request_timeout')
-          : t('settings.provider.oauth.error')
-      window.toast.error(message)
+      if (mountedRef.current && requestSeq === loginRequestSeqRef.current) {
+        const message =
+          error instanceof Error && error.message.includes('timed out')
+            ? t('error.request_timeout')
+            : t('settings.provider.oauth.error')
+        window.toast.error(message)
+      }
     } finally {
-      setNutstoreLoginLoading(false)
+      if (mountedRef.current && requestSeq === loginRequestSeqRef.current) {
+        setNutstoreLoginLoading(false)
+      }
     }
   }, [nutstoreSsoHandler, setNutstoreToken, t])
 
   useEffect(() => {
-    async function decryptTokenEffect() {
-      if (nutstoreToken) {
-        const decrypted = await window.api.nutstore.decryptToken(nutstoreToken)
+    const requestSeq = ++decryptRequestSeqRef.current
 
-        if (decrypted) {
-          setNutstoreUsername(decrypted.username)
-          setNutstorePass(decrypted.access_token)
-          if (!nutstorePath) {
-            void setNutstorePath('/cherry-studio-pi').catch(showSaveFailed)
-            // setStoragePath('/cherry-studio-pi')
-          }
+    async function decryptTokenEffect() {
+      if (!nutstoreToken) {
+        setNutstoreUsername(undefined)
+        setNutstorePass(undefined)
+        return
+      }
+
+      const decrypted = await window.api.nutstore.decryptToken(nutstoreToken)
+      if (!mountedRef.current || requestSeq !== decryptRequestSeqRef.current) {
+        return
+      }
+
+      if (decrypted) {
+        setNutstoreUsername(decrypted.username)
+        setNutstorePass(decrypted.access_token)
+        if (!nutstorePath) {
+          void setNutstorePath('/cherry-studio-pi').catch(showSaveFailed)
+          // setStoragePath('/cherry-studio-pi')
         }
+      } else {
+        setNutstoreUsername(undefined)
+        setNutstorePass(undefined)
       }
     }
     void decryptTokenEffect()
+
+    return () => {
+      decryptRequestSeqRef.current += 1
+    }
   }, [nutstoreToken, setNutstorePath, nutstorePath, showSaveFailed])
 
   const handleLayout = useCallback(async () => {
@@ -122,9 +167,13 @@ const NutstoreSettings: FC = () => {
 
   const handleCheckConnection = async () => {
     if (!nutstoreToken) return
+    const requestSeq = ++connectionRequestSeqRef.current
     setCheckConnectionLoading(true)
     try {
       const isConnectedToNutstore = await checkConnection()
+      if (!mountedRef.current || requestSeq !== connectionRequestSeqRef.current) {
+        return
+      }
 
       window.toast[isConnectedToNutstore ? 'success' : 'error']({
         timeout: 2000,
@@ -135,12 +184,24 @@ const NutstoreSettings: FC = () => {
 
       setNsConnected(isConnectedToNutstore)
 
-      setTimeoutTimer('handleCheckConnection', () => setNsConnected(false), 3000)
+      setTimeoutTimer(
+        'handleCheckConnection',
+        () => {
+          if (mountedRef.current && requestSeq === connectionRequestSeqRef.current) {
+            setNsConnected(false)
+          }
+        },
+        3000
+      )
     } catch (error) {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('settings.data.nutstore.checkConnection.fail')))
-      setNsConnected(false)
+      if (mountedRef.current && requestSeq === connectionRequestSeqRef.current) {
+        window.toast.error(formatErrorMessageWithPrefix(error, t('settings.data.nutstore.checkConnection.fail')))
+        setNsConnected(false)
+      }
     } finally {
-      setCheckConnectionLoading(false)
+      if (mountedRef.current && requestSeq === connectionRequestSeqRef.current) {
+        setCheckConnectionLoading(false)
+      }
     }
   }
 
@@ -177,9 +238,10 @@ const NutstoreSettings: FC = () => {
       return
     }
 
+    const requestSeq = ++pathRequestSeqRef.current
     const result = await window.api.nutstore.decryptToken(nutstoreToken)
 
-    if (!result) {
+    if (!mountedRef.current || requestSeq !== pathRequestSeqRef.current || !result) {
       return
     }
 
@@ -195,7 +257,7 @@ const NutstoreSettings: FC = () => {
       }
     })
 
-    if (!targetPath) {
+    if (!mountedRef.current || requestSeq !== pathRequestSeqRef.current || !targetPath) {
       return
     }
 
