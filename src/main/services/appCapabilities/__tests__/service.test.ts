@@ -27,6 +27,16 @@ vi.mock('../providers', () => ({
       risk: 'read',
       execute: executeCapability
     })
+    registry.register({
+      id: 'settings.value.set',
+      domain: 'settings',
+      kind: 'command',
+      title: 'Set setting',
+      description: 'Set one setting',
+      inputSchema: { type: 'object', properties: {} },
+      risk: 'write',
+      execute: executeCapability
+    })
   })
 }))
 
@@ -44,6 +54,21 @@ describe('AppCapabilityService', () => {
       { scope: 'all' },
       expect.objectContaining({ source: 'agent', dryRun: true })
     )
+  })
+
+  it('blocks dry-run calls for side-effecting capabilities that do not support dry run', async () => {
+    executeCapability.mockClear()
+    const service = new AppCapabilityService()
+
+    const result = await service.call('settings.value.set', { path: 'theme', value: 'dark' }, { dryRun: true })
+
+    expect(result).toEqual({
+      ok: false,
+      isError: true,
+      summary: 'Capability does not support dry run: settings.value.set',
+      error: 'Capability does not support dry run: settings.value.set'
+    })
+    expect(executeCapability).not.toHaveBeenCalled()
   })
 
   it('returns a normal error result for invalid capability ids', async () => {

@@ -72,6 +72,16 @@ export class AppCapabilityService {
       }
     }
 
+    if (context.dryRun === true && capability.risk !== 'read' && capability.supportsDryRun !== true) {
+      const message = `Capability does not support dry run: ${displayCapabilityId}`
+      return {
+        ok: false,
+        isError: true,
+        summary: message,
+        error: message
+      }
+    }
+
     try {
       logger.info('Calling app capability', {
         id: capabilityId,
