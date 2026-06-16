@@ -26,6 +26,9 @@ const mocks = vi.hoisted(() => ({
     upsertMessage: vi.fn(),
     upsertMessageBlocks: vi.fn()
   },
+  secretVault: {
+    getSecret: vi.fn()
+  },
   storageClient: {
     execute: vi.fn()
   },
@@ -48,6 +51,10 @@ vi.mock('../AgentRuntimeWriteService', () => ({
 
 vi.mock('../StorageV2Repositories', () => ({
   storageV2ConversationRepository: mocks.conversationRepository
+}))
+
+vi.mock('../SecretVaultService', () => ({
+  storageV2SecretVaultService: mocks.secretVault
 }))
 
 vi.mock('../StorageV2Database', () => ({
@@ -77,6 +84,7 @@ describe('StorageV2DataApiAgentRuntimeMirrorService', () => {
       columns: [],
       columnTypes: []
     })
+    mocks.secretVault.getSecret.mockResolvedValue('secret-token')
     mocks.tx.all.mockResolvedValue([])
     mocks.tx.run.mockResolvedValue(undefined)
   })
@@ -357,6 +365,54 @@ describe('StorageV2DataApiAgentRuntimeMirrorService', () => {
           }
         ]
       })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'channel-1',
+            type: 'telegram',
+            name: 'Telegram',
+            agent_id: 'agent-1',
+            session_id: 'session-1',
+            config_json: JSON.stringify({
+              type: 'telegram',
+              bot_token_secret_ref: 'storage-v2://secret/channel/channel-1/bot_token',
+              workspace: { type: 'system' }
+            }),
+            is_active: 1,
+            active_chat_ids_json: JSON.stringify(['chat-1']),
+            permission_mode: 'bypassPermissions',
+            created_at: '1970-01-01T00:00:01.000Z',
+            updated_at: '1970-01-01T00:00:02.000Z'
+          }
+        ]
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'task-1',
+            agent_id: 'agent-1',
+            name: 'Daily task',
+            prompt: 'summarize',
+            schedule_type: 'interval',
+            schedule_value: '60000',
+            timeout_minutes: 5,
+            next_run: '1970-01-01T00:00:03.000Z',
+            last_run: null,
+            last_result: null,
+            status: 'active',
+            created_at: '1970-01-01T00:00:01.000Z',
+            updated_at: '1970-01-01T00:00:02.000Z'
+          }
+        ]
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            channel_id: 'channel-1',
+            task_id: 'task-1'
+          }
+        ]
+      })
 
     mocks.tx.all.mockResolvedValueOnce([{ id: 'openai::gpt-4o' }]).mockResolvedValueOnce([{ id: 'workspace-1' }])
 
@@ -364,6 +420,7 @@ describe('StorageV2DataApiAgentRuntimeMirrorService', () => {
 
     expect(mocks.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     expect(mocks.application.getPath).toHaveBeenCalledWith('feature.agents.workspaces')
-    expect(mocks.tx.run).toHaveBeenCalledTimes(5)
+    expect(mocks.secretVault.getSecret).toHaveBeenCalledWith('storage-v2://secret/channel/channel-1/bot_token')
+    expect(mocks.tx.run).toHaveBeenCalledTimes(8)
   })
 })

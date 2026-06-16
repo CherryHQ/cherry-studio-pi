@@ -10,11 +10,22 @@ import { encodeStorageV2CompositeEntityId } from '@main/services/storageV2/SyncE
 import { sql } from 'drizzle-orm'
 
 import { storageV2AgentRuntimeWriteService } from './AgentRuntimeWriteService'
+import { storageV2SecretVaultService } from './SecretVaultService'
 import { storageV2Database } from './StorageV2Database'
 import { storageV2ConversationRepository } from './StorageV2Repositories'
 import { storageV2SyncLogService } from './SyncLogService'
 
 const logger = loggerService.withContext('StorageV2DataApiAgentRuntimeMirrorService')
+const CHANNEL_SECRET_KEYS = [
+  'app_secret',
+  'app_token',
+  'bot_token',
+  'client_secret',
+  'encrypt_key',
+  'verification_token'
+] as const
+const SUPPORTED_CHANNEL_TYPES = new Set(['telegram', 'feishu', 'qq', 'wechat', 'discord', 'slack'])
+const SUPPORTED_PERMISSION_MODES = new Set(['default', 'acceptEdits', 'bypassPermissions', 'plan'])
 
 type DataApiAgentRow = {
   id: string
@@ -195,6 +206,41 @@ type StorageAgentSkillRow = {
   updated_at: string | null
 }
 
+type StorageChannelRow = {
+  id: string
+  type: string
+  name: string
+  agent_id: string | null
+  session_id: string | null
+  config_json: unknown
+  is_active: number | boolean | null
+  active_chat_ids_json: unknown
+  permission_mode: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+type StorageScheduledTaskRow = {
+  id: string
+  agent_id: string
+  name: string
+  prompt: string
+  schedule_type: string
+  schedule_value: string
+  timeout_minutes: number | string | null
+  next_run: string | null
+  last_run: string | null
+  last_result: string | null
+  status: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+type StorageChannelTaskSubscriptionRow = {
+  channel_id: string
+  task_id: string
+}
+
 function parseJson<T>(value: unknown, fallback: T): T {
   if (value == null || value === '') return fallback
   if (typeof value !== 'string') return value as T
@@ -232,6 +278,21 @@ function toEpochMs(value: unknown, fallback = Date.now()) {
 
     const parsed = Date.parse(value)
     if (Number.isFinite(parsed)) return parsed
+  }
+  return fallback
+}
+
+function toEpochMsOrNull(value: unknown): number | null {
+  if (value == null || value === '') return null
+  const parsed = toEpochMs(value, Number.NaN)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function toInteger(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value)
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return Math.trunc(parsed)
   }
   return fallback
 }
@@ -324,23 +385,32 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
 
   async projectStorageToDataApiRuntime(): Promise<void> {
     const storageClient = await storageV2Database.getClient()
-    const [agentsResult, sessionsResult, messagesResult, blocksResult, skillsResult, agentSkillsResult] =
-      await Promise.all([
-        storageClient.execute(`
+    const [
+      agentsResult,
+      sessionsResult,
+      messagesResult,
+      blocksResult,
+      skillsResult,
+      agentSkillsResult,
+      channelsResult,
+      tasksResult,
+      channelTaskSubscriptionsResult
+    ] = await Promise.all([
+      storageClient.execute(`
           SELECT id, type, name, description, instructions, model_id, plan_model_id, small_model_id,
                  mcps_json, configuration_json, sort_order, created_at, updated_at
           FROM agents
           WHERE deleted_at IS NULL
           ORDER BY sort_order ASC, created_at ASC, id ASC
         `),
-        storageClient.execute(`
+      storageClient.execute(`
           SELECT id, agent_id, name, inherited_config_json, current_config_json,
                  sort_order, created_at, updated_at
           FROM agent_sessions
           WHERE deleted_at IS NULL
           ORDER BY agent_id ASC, sort_order ASC, created_at ASC, id ASC
         `),
-        storageClient.execute(`
+      storageClient.execute(`
           SELECT m.id, c.session_id, m.role, m.status, m.model_id, m.token_usage_json,
                  m.metadata_json, m.created_at, m.updated_at
           FROM messages m
@@ -350,7 +420,7 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
             AND m.deleted_at IS NULL
           ORDER BY c.session_id ASC, m.created_at ASC, m.id ASC
         `),
-        storageClient.execute(`
+      storageClient.execute(`
           SELECT b.id, b.message_id, b.type, b.text, b.payload_json, b.ordinal
           FROM message_blocks b
           INNER JOIN messages m ON m.id = b.message_id
@@ -361,19 +431,38 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
             AND b.deleted_at IS NULL
           ORDER BY b.message_id ASC, b.ordinal ASC, b.created_at ASC, b.id ASC
         `),
-        storageClient.execute(`
+      storageClient.execute(`
           SELECT id, name, description, folder_name, source, source_url, namespace, author,
                  tags_json, content_hash, created_at, updated_at
           FROM skills
           WHERE deleted_at IS NULL
           ORDER BY name ASC, id ASC
         `),
-        storageClient.execute(`
+      storageClient.execute(`
           SELECT agent_id, skill_id, enabled, created_at, updated_at
           FROM agent_skills
           ORDER BY agent_id ASC, skill_id ASC
+        `),
+      storageClient.execute(`
+          SELECT id, type, name, agent_id, session_id, config_json, is_active,
+                 active_chat_ids_json, permission_mode, created_at, updated_at
+          FROM channels
+          WHERE deleted_at IS NULL
+          ORDER BY created_at ASC, id ASC
+        `),
+      storageClient.execute(`
+          SELECT id, agent_id, name, prompt, schedule_type, schedule_value, timeout_minutes,
+                 next_run, last_run, last_result, status, created_at, updated_at
+          FROM scheduled_tasks
+          WHERE deleted_at IS NULL
+          ORDER BY next_run ASC, created_at ASC, id ASC
+        `),
+      storageClient.execute(`
+          SELECT channel_id, task_id
+          FROM channel_task_subscriptions
+          ORDER BY channel_id ASC, task_id ASC
         `)
-      ])
+    ])
 
     const agents = agentsResult.rows as unknown as StorageAgentRow[]
     const sessions = sessionsResult.rows as unknown as StorageSessionRow[]
@@ -381,24 +470,44 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
     const blocks = blocksResult.rows as unknown as StorageMessageBlockRow[]
     const skills = skillsResult.rows as unknown as StorageSkillRow[]
     const agentSkills = agentSkillsResult.rows as unknown as StorageAgentSkillRow[]
+    const channels = channelsResult.rows as unknown as StorageChannelRow[]
+    const tasks = tasksResult.rows as unknown as StorageScheduledTaskRow[]
+    const channelTaskSubscriptions =
+      channelTaskSubscriptionsResult.rows as unknown as StorageChannelTaskSubscriptionRow[]
 
     if (
       agents.length === 0 &&
       sessions.length === 0 &&
       messages.length === 0 &&
       skills.length === 0 &&
-      agentSkills.length === 0
+      agentSkills.length === 0 &&
+      channels.length === 0 &&
+      tasks.length === 0 &&
+      channelTaskSubscriptions.length === 0
     ) {
       return
     }
 
-    await this.projectRowsToDataApi({ agents, sessions, messages, blocks, skills, agentSkills })
+    await this.projectRowsToDataApi({
+      agents,
+      sessions,
+      messages,
+      blocks,
+      skills,
+      agentSkills,
+      channels,
+      tasks,
+      channelTaskSubscriptions
+    })
     logger.info('Projected Storage v2 agent runtime to DataApi tables', {
       agentCount: agents.length,
       sessionCount: sessions.length,
       messageCount: messages.length,
       skillCount: skills.length,
-      agentSkillCount: agentSkills.length
+      agentSkillCount: agentSkills.length,
+      channelCount: channels.length,
+      taskCount: tasks.length,
+      channelTaskSubscriptionCount: channelTaskSubscriptions.length
     })
   }
 
@@ -546,6 +655,9 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
     blocks: StorageMessageBlockRow[]
     skills: StorageSkillRow[]
     agentSkills: StorageAgentSkillRow[]
+    channels: StorageChannelRow[]
+    tasks: StorageScheduledTaskRow[]
+    channelTaskSubscriptions: StorageChannelTaskSubscriptionRow[]
   }) {
     const dbService = application.get('DbService')
     const agentOrderKeys = generateOrderKeySequence(input.agents.length)
@@ -556,6 +668,10 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
       input.sessions.filter((session) => agentIds.has(session.agent_id)).map((session) => session.id)
     )
     const skillIds = new Set(input.skills.map((skill) => skill.id))
+    const taskIds = new Set(input.tasks.filter((task) => agentIds.has(task.agent_id)).map((task) => task.id))
+    const channelIds = new Set(
+      input.channels.filter((channel) => SUPPORTED_CHANNEL_TYPES.has(channel.type)).map((channel) => channel.id)
+    )
 
     await dbService.withWriteTx(async (tx) => {
       const modelRows = (await tx.all(sql`SELECT id FROM user_model`)) as Array<{ id: string }>
@@ -582,6 +698,20 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
       for (const row of input.agentSkills) {
         if (!agentIds.has(row.agent_id) || !skillIds.has(row.skill_id)) continue
         await this.projectAgentSkillTx(tx, row)
+      }
+
+      for (const channel of input.channels) {
+        await this.projectChannelTx(tx, channel, agentIds, sessionIds)
+      }
+
+      for (const task of input.tasks) {
+        if (!agentIds.has(task.agent_id)) continue
+        await this.projectScheduledTaskTx(tx, task)
+      }
+
+      for (const row of input.channelTaskSubscriptions) {
+        if (!channelIds.has(row.channel_id) || !taskIds.has(row.task_id)) continue
+        await this.projectChannelTaskSubscriptionTx(tx, row)
       }
     })
   }
@@ -833,6 +963,158 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
         is_enabled = excluded.is_enabled,
         updated_at = excluded.updated_at
     `)
+  }
+
+  private async projectChannelTx(
+    tx: DbOrTx,
+    channel: StorageChannelRow,
+    agentIds: Set<string>,
+    sessionIds: Set<string>
+  ): Promise<void> {
+    if (!SUPPORTED_CHANNEL_TYPES.has(channel.type)) return
+
+    const restoredConfig = await this.restoreChannelConfig(channel)
+    const workspace = asRecord(restoredConfig.workspace)
+    delete restoredConfig.workspace
+    delete restoredConfig.type
+
+    const permissionMode =
+      channel.permission_mode && SUPPORTED_PERMISSION_MODES.has(channel.permission_mode)
+        ? channel.permission_mode
+        : null
+    const createdAt = toEpochMs(channel.created_at)
+    const updatedAt = toEpochMs(channel.updated_at, createdAt)
+
+    await tx.run(sql`
+      INSERT INTO agent_channel (
+        id, type, name, agent_id, session_id, workspace, config, is_active,
+        active_chat_ids, permission_mode, created_at, updated_at
+      )
+      VALUES (
+        ${channel.id},
+        ${channel.type},
+        ${channel.name || channel.type},
+        ${channel.agent_id && agentIds.has(channel.agent_id) ? channel.agent_id : null},
+        ${channel.session_id && sessionIds.has(channel.session_id) ? channel.session_id : null},
+        ${toJson(Object.keys(workspace).length > 0 ? workspace : { type: 'system' })},
+        ${toJson(restoredConfig)},
+        ${asBoolean(channel.is_active) ? 1 : 0},
+        ${toJson(asStringArray(channel.active_chat_ids_json))},
+        ${permissionMode},
+        ${createdAt},
+        ${updatedAt}
+      )
+      ON CONFLICT(id) DO UPDATE SET
+        type = excluded.type,
+        name = excluded.name,
+        agent_id = excluded.agent_id,
+        session_id = excluded.session_id,
+        workspace = excluded.workspace,
+        config = excluded.config,
+        is_active = excluded.is_active,
+        active_chat_ids = excluded.active_chat_ids,
+        permission_mode = excluded.permission_mode,
+        updated_at = excluded.updated_at
+    `)
+  }
+
+  private async projectScheduledTaskTx(tx: DbOrTx, task: StorageScheduledTaskRow): Promise<void> {
+    const createdAt = toEpochMs(task.created_at)
+    const updatedAt = toEpochMs(task.updated_at, createdAt)
+    const timeoutMinutes = Math.max(1, toInteger(task.timeout_minutes, 2))
+
+    await tx.run(sql`
+      INSERT INTO job_schedule (
+        id, type, name, trigger, job_input_template, enabled,
+        next_run, last_run, catch_up_policy, metadata, created_at, updated_at
+      )
+      VALUES (
+        ${task.id},
+        'agent.task',
+        ${task.name || task.id},
+        ${toJson(this.buildTaskTrigger(task))},
+        ${toJson({
+          agentId: task.agent_id,
+          prompt: task.prompt || '',
+          timeoutMinutes,
+          workspace: { type: 'system' }
+        })},
+        ${task.status === 'paused' ? 0 : 1},
+        ${toEpochMsOrNull(task.next_run)},
+        ${toEpochMsOrNull(task.last_run)},
+        ${toJson({ kind: 'skip-missed' })},
+        ${toJson({
+          storageV2Status: task.status ?? 'active',
+          lastResult: parseJson(task.last_result, null)
+        })},
+        ${createdAt},
+        ${updatedAt}
+      )
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        trigger = excluded.trigger,
+        job_input_template = excluded.job_input_template,
+        enabled = excluded.enabled,
+        next_run = excluded.next_run,
+        last_run = excluded.last_run,
+        catch_up_policy = excluded.catch_up_policy,
+        metadata = excluded.metadata,
+        updated_at = excluded.updated_at
+    `)
+  }
+
+  private async projectChannelTaskSubscriptionTx(tx: DbOrTx, row: StorageChannelTaskSubscriptionRow): Promise<void> {
+    await tx.run(sql`
+      INSERT INTO agent_channel_task (channel_id, task_id)
+      VALUES (${row.channel_id}, ${row.task_id})
+      ON CONFLICT(channel_id, task_id) DO NOTHING
+    `)
+  }
+
+  private buildTaskTrigger(task: StorageScheduledTaskRow) {
+    if (task.schedule_type === 'cron' && task.schedule_value) {
+      return {
+        kind: 'cron',
+        expr: task.schedule_value
+      }
+    }
+
+    if (task.schedule_type === 'interval') {
+      const ms = toInteger(task.schedule_value, 60_000)
+      return {
+        kind: 'interval',
+        ms: Math.max(1, ms)
+      }
+    }
+
+    return {
+      kind: 'once',
+      at: toEpochMsOrNull(task.schedule_value) ?? Date.now()
+    }
+  }
+
+  private async restoreChannelConfig(channel: StorageChannelRow): Promise<Record<string, unknown>> {
+    const config = asRecord(channel.config_json)
+    const restoredConfig = { ...config }
+
+    for (const key of CHANNEL_SECRET_KEYS) {
+      const refKey = `${key}_secret_ref`
+      const secretRef = restoredConfig[refKey]
+      if (typeof secretRef !== 'string' || !secretRef) continue
+
+      const secret = await storageV2SecretVaultService.getSecret(secretRef)
+      if (secret) {
+        restoredConfig[key] = secret
+      } else {
+        logger.warn('Missing Storage v2 channel secret during DataApi projection', {
+          channelId: channel.id,
+          secretKey: key
+        })
+      }
+      delete restoredConfig[refKey]
+    }
+
+    return restoredConfig
   }
 
   private modelOrNull(modelId: string | null | undefined, modelIds: Set<string>) {
