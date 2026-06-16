@@ -30,8 +30,11 @@ interface McpServerCardProps {
 const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEdit }) => {
   const { updateMcpServer, deleteMcpServer } = useMcpServerMutations(server.id)
   const [loading, setLoading] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [version, setVersion] = useState<string | null>(null)
   const versionRequestSeqRef = useRef(0)
+  const toggleActiveRef = useRef(false)
+  const deleteRef = useRef(false)
   const runtimeStatus = useMcpRuntimeStatus(server.id, server.isActive)
 
   const updateServerBody = useCallback((body: UpdateMcpServerDto) => updateMcpServer({ body }), [updateMcpServer])
@@ -72,16 +75,21 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
 
   const handleToggleActive = useCallback(
     async (active: boolean) => {
-      let serverForUpdate = server
-      if (active) {
-        const trustedServer = await ensureServerTrusted(server)
-        if (!trustedServer) return
-        serverForUpdate = trustedServer
+      if (toggleActiveRef.current) {
+        return
       }
 
+      toggleActiveRef.current = true
       setLoading(true)
-      logger.debug('toggle activate', { serverId: serverForUpdate.id, active })
       try {
+        let serverForUpdate = server
+        if (active) {
+          const trustedServer = await ensureServerTrusted(server)
+          if (!trustedServer) return
+          serverForUpdate = trustedServer
+        }
+
+        logger.debug('toggle activate', { serverId: serverForUpdate.id, active })
         if (active) {
           await updateMcpServer({ body: { isActive: true } })
           try {
@@ -112,6 +120,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
         })
       } finally {
         setLoading(false)
+        toggleActiveRef.current = false
       }
     },
     [server, ensureServerTrusted, getServerVersion, updateMcpServer, t]
@@ -123,11 +132,20 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
     }
 
     try {
+      if (deleteRef.current) {
+        return
+      }
+
+      deleteRef.current = true
       window.modal.confirm({
         title: t('settings.mcp.deleteServer'),
         content: t('settings.mcp.deleteServerConfirm'),
         centered: true,
+        onCancel: () => {
+          deleteRef.current = false
+        },
         onOk: async () => {
+          setDeleting(true)
           try {
             await window.api.mcp.removeServer(server.id)
             await deleteMcpServer({})
@@ -135,10 +153,14 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
           } catch (error) {
             showDeleteError(error)
             throw error
+          } finally {
+            setDeleting(false)
+            deleteRef.current = false
           }
         }
       })
     } catch (error: any) {
+      deleteRef.current = false
       showDeleteError(error)
     }
   }, [server, deleteMcpServer, t])
@@ -184,7 +206,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
     [handleDelete]
   )
 
-  const isLoading = loading
+  const isLoading = loading || deleting
 
   const Fallback = useCallback(
     (props: FallbackProps) => {
@@ -224,7 +246,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
                   <CircleXIcon size={16} />
                 </Tooltip>
               </Button>
-              <Button variant="destructive" size="sm" onClick={handleDeleteClick}>
+              <Button variant="destructive" size="sm" onClick={handleDeleteClick} disabled={isLoading}>
                 <Tooltip content={t('common.delete')}>
                   <DeleteIcon size={16} />
                 </Tooltip>
@@ -234,7 +256,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
         />
       )
     },
-    [handleDeleteClick, t]
+    [handleDeleteClick, isLoading, t]
   )
 
   return (
@@ -286,7 +308,8 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
               size="icon-sm"
               variant="ghost"
               className="size-7 rounded-md text-muted-foreground shadow-none hover:text-destructive"
-              onClick={handleDeleteClick}>
+              onClick={handleDeleteClick}
+              disabled={isLoading}>
               <DeleteIcon size={14} className="lucide-custom" />
             </Button>
           )}
