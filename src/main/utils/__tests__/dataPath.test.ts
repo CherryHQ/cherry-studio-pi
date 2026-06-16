@@ -293,3 +293,71 @@ describe('getDataPath', () => {
     expect(getDefaultDataPath()).toBe('/mock/appData/Cherry Studio Pi/Data')
   })
 })
+
+describe('debounce', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.clearAllMocks()
+  })
+
+  it('runs once at the end of the debounce window by default', async () => {
+    vi.useFakeTimers()
+    try {
+      const { debounce } = await import('../index')
+      const fn = vi.fn()
+      const debounced = debounce(fn, 100)
+
+      debounced('a')
+      debounced('b')
+      await vi.advanceTimersByTimeAsync(99)
+      expect(fn).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(1)
+      expect(fn).toHaveBeenCalledTimes(1)
+      expect(fn).toHaveBeenCalledWith('b')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('runs immediately only on the leading edge when immediate is enabled', async () => {
+    vi.useFakeTimers()
+    try {
+      const { debounce } = await import('../index')
+      const fn = vi.fn()
+      const debounced = debounce(fn, 100, true)
+
+      debounced('a')
+      debounced('b')
+      expect(fn).toHaveBeenCalledTimes(1)
+      expect(fn).toHaveBeenCalledWith('a')
+
+      await vi.advanceTimersByTimeAsync(100)
+      debounced('c')
+      expect(fn).toHaveBeenCalledTimes(2)
+      expect(fn).toHaveBeenLastCalledWith('c')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not keep the process alive for pending debounce work', async () => {
+    const unref = vi.fn()
+    const timeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((_callback, timeout) => {
+      expect(timeout).toBe(100)
+      return { unref } as unknown as ReturnType<typeof setTimeout>
+    }) as typeof setTimeout)
+
+    try {
+      const { debounce } = await import('../index')
+      const debounced = debounce(vi.fn(), 100)
+
+      debounced()
+
+      expect(timeoutSpy).toHaveBeenCalledTimes(1)
+      expect(unref).toHaveBeenCalledTimes(1)
+    } finally {
+      timeoutSpy.mockRestore()
+    }
+  })
+})

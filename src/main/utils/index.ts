@@ -192,11 +192,17 @@ export function getInstanceName(baseURL: string) {
 export function debounce(func: (...args: any[]) => void, wait: number, immediate: boolean = false) {
   let timeout: NodeJS.Timeout | null = null
   return function (...args: any[]) {
+    const callNow = immediate && timeout === null
     if (timeout) clearTimeout(timeout)
-    if (immediate) {
+    timeout = setTimeout(() => {
+      timeout = null
+      if (!immediate) {
+        func(...args)
+      }
+    }, wait)
+    timeout.unref?.()
+    if (callNow) {
       func(...args)
-    } else {
-      timeout = setTimeout(() => func(...args), wait)
     }
   }
 }
