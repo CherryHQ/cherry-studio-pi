@@ -6,7 +6,7 @@ import { useAppUpdateState } from '@renderer/hooks/useAppUpdate'
 // [v2] Removed: Redux persistor flush is no longer needed after v2 data refactoring
 // import { handleSaveData } from '@renderer/store'
 import type { ReleaseNoteInfo, UpdateInfo } from 'builder-util-runtime'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Markdown from 'react-markdown'
 
@@ -24,6 +24,7 @@ const PopupContainer: React.FC<Props> = ({ releaseInfo, resolve }) => {
   const { t } = useTranslation()
   const [open, setOpen] = useState(true)
   const [isInstalling, setIsInstalling] = useState(false)
+  const installingRef = useRef(false)
   const { updateAppUpdateState } = useAppUpdateState()
   const close = useTopViewClose({ resolve, setOpen, topViewKey: TopViewKey })
   useEffect(() => {
@@ -33,35 +34,54 @@ const PopupContainer: React.FC<Props> = ({ releaseInfo, resolve }) => {
   }, [releaseInfo])
 
   const closePopup = () => {
+    if (installingRef.current) {
+      return
+    }
+
     close({})
   }
 
   const handleInstall = async () => {
+    if (installingRef.current) {
+      return
+    }
+
+    installingRef.current = true
     setIsInstalling(true)
     try {
       // [v2] Removed: Redux persistor flush is no longer needed after v2 data refactoring
       // await handleSaveData()
       await window.api.quitAndInstall()
-      closePopup()
+      installingRef.current = false
+      close({})
     } catch (error) {
       logger.error('Failed to save data before update', error as Error)
+      installingRef.current = false
       setIsInstalling(false)
       window.toast.error(t('update.saveDataError'))
     }
   }
 
   const onCancel = () => {
+    if (installingRef.current) {
+      return
+    }
+
     updateAppUpdateState({ manualCheck: false })
     closePopup()
   }
 
   const onIgnore = () => {
+    if (installingRef.current) {
+      return
+    }
+
     updateAppUpdateState({ ignore: true, manualCheck: false })
     closePopup()
   }
 
   const onOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) {
+    if (!nextOpen && !installingRef.current) {
       onCancel()
     }
   }
@@ -97,7 +117,7 @@ const PopupContainer: React.FC<Props> = ({ releaseInfo, resolve }) => {
           <Button variant="outline" onClick={onIgnore} disabled={isInstalling}>
             {t('update.later')}
           </Button>
-          <Button onClick={handleInstall} loading={isInstalling}>
+          <Button onClick={handleInstall} loading={isInstalling} disabled={isInstalling}>
             {t('update.install')}
           </Button>
         </DialogFooter>
