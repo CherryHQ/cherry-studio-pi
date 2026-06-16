@@ -17,6 +17,9 @@ import { importLegacyDexieToStorageV2, suspendStorageV2RuntimeMirrorsUntilReload
 const logger = loggerService.withContext('BackupService')
 const STORAGE_V2_AUTO_HYDRATE_SETTING_KEY = 'storage_v2.runtime.auto_hydrate'
 const MANAGED_BACKUP_FILE_NAME_PATTERN = /^cherry-studio(?:-pi)?\.\d{12,14}(?:\..+)?\.zip$/
+let resetConfirmOpen = false
+let resetDoubleConfirmOpen = false
+let resetOperationRunning = false
 
 function isManagedBackupFileName(fileName: string) {
   return MANAGED_BACKUP_FILE_NAME_PATTERN.test(fileName)
@@ -265,6 +268,17 @@ export async function restore() {
 }
 
 export async function reset() {
+  if (resetConfirmOpen || resetOperationRunning) {
+    return
+  }
+
+  const clearResetConfirmState = () => {
+    if (resetOperationRunning) return
+    resetConfirmOpen = false
+    resetDoubleConfirmOpen = false
+  }
+
+  resetConfirmOpen = true
   window.modal.confirm({
     title: i18n.t('common.warning'),
     content: i18n.t('message.reset.confirm.content'),
@@ -272,12 +286,24 @@ export async function reset() {
     okButtonProps: {
       danger: true
     },
+    onCancel: clearResetConfirmState,
     onOk: async () => {
+      if (resetDoubleConfirmOpen || resetOperationRunning) {
+        return
+      }
+
+      resetDoubleConfirmOpen = true
       window.modal.confirm({
         title: i18n.t('message.reset.double.confirm.title'),
         content: i18n.t('message.reset.double.confirm.content'),
         centered: true,
+        onCancel: clearResetConfirmState,
         onOk: async () => {
+          if (resetOperationRunning) {
+            return
+          }
+
+          resetOperationRunning = true
           try {
             await window.api.resetData()
             suspendStorageV2RuntimeMirrorsUntilReload()
@@ -288,6 +314,10 @@ export async function reset() {
           } catch (error) {
             logger.error('reset: Error resetting app data:', error as Error)
             window.toast.error(i18n.t('notes.settings.data.reset_failed'))
+          } finally {
+            resetOperationRunning = false
+            resetConfirmOpen = false
+            resetDoubleConfirmOpen = false
           }
         }
       })

@@ -101,6 +101,16 @@ import {
   stopAutoSync
 } from '../BackupService'
 
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
 describe('BackupService legacy restore', () => {
   let originalApi: unknown
   let originalModal: unknown
@@ -367,6 +377,37 @@ describe('BackupService legacy restore', () => {
     expect(tableClear).not.toHaveBeenCalled()
     expect(mocks.suspendStorageV2RuntimeMirrorsUntilReload).not.toHaveBeenCalled()
     expect(window.toast.error).toHaveBeenCalledWith('notes.settings.data.reset_failed')
+  })
+
+  it('prevents duplicate factory reset confirmations and operations', async () => {
+    const runningReset = deferred()
+    vi.mocked(window.api.resetData).mockReturnValue(runningReset.promise)
+
+    await reset()
+    await reset()
+
+    let confirmCalls = vi.mocked(window.modal.confirm).mock.calls
+    expect(confirmCalls).toHaveLength(1)
+
+    await confirmCalls[0][0].onOk?.()
+    await confirmCalls[0][0].onOk?.()
+
+    confirmCalls = vi.mocked(window.modal.confirm).mock.calls
+    expect(confirmCalls).toHaveLength(2)
+
+    const firstReset = confirmCalls[1][0].onOk?.()
+    const secondReset = confirmCalls[1][0].onOk?.()
+    expect(window.api.resetData).toHaveBeenCalledTimes(1)
+
+    runningReset.resolve()
+    await Promise.all([firstReset, secondReset])
+
+    expect(window.toast.success).toHaveBeenCalledWith('message.reset.success')
+
+    await reset()
+    confirmCalls = vi.mocked(window.modal.confirm).mock.calls
+    expect(confirmCalls).toHaveLength(3)
+    confirmCalls[2][0].onCancel?.()
   })
 
   it('only deletes current-device managed WebDAV backups during cleanup', async () => {
