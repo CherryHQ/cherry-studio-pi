@@ -158,11 +158,6 @@ export default defineConfig({
       ]
     },
     testTimeout: 20000,
-    pool: 'threads',
-    poolOptions: {
-      threads: {
-        singleThread: false
-      }
-    }
+    pool: 'threads'
   }
 })
