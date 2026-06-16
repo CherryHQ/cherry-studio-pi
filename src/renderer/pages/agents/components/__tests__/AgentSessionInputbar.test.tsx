@@ -5,7 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AgentSessionInputbar from '../AgentSessionInputbar'
 
-const { cacheServiceMock, inputbarSnapshots, setTimeoutTimerMock } = vi.hoisted(() => ({
+const { agentState, cacheServiceMock, inputbarSnapshots, modelState, setTimeoutTimerMock } = vi.hoisted(() => ({
+  agentState: {
+    model: 'openai::gpt-4.1' as string | null
+  },
   cacheServiceMock: {
     deleteCasual: vi.fn(),
     getCasual: vi.fn(),
@@ -15,6 +18,16 @@ const { cacheServiceMock, inputbarSnapshots, setTimeoutTimerMock } = vi.hoisted(
     supportedExts: string[]
     couldAddImageFile: boolean
   }>,
+  modelState: {
+    models: [
+      {
+        id: 'openai::gpt-4.1',
+        providerId: 'openai',
+        name: 'GPT 4.1',
+        capabilities: []
+      }
+    ] as Array<Record<string, unknown>>
+  },
   setTimeoutTimerMock: vi.fn()
 }))
 
@@ -58,7 +71,7 @@ vi.mock('@renderer/hooks/agents/useAgent', () => ({
       id: 'agent-1',
       type: 'pi',
       name: 'Agent',
-      model: 'openai::gpt-4.1',
+      model: agentState.model,
       instructions: '',
       configuration: {}
     }
@@ -78,14 +91,7 @@ vi.mock('@renderer/hooks/agents/useSession', () => ({
 
 vi.mock('@renderer/hooks/useModel', () => ({
   useModels: () => ({
-    models: [
-      {
-        id: 'openai::gpt-4.1',
-        providerId: 'openai',
-        name: 'GPT 4.1',
-        capabilities: []
-      }
-    ]
+    models: modelState.models
   })
 }))
 
@@ -120,7 +126,16 @@ vi.mock('@renderer/pages/home/Inputbar/components/InputbarCore', async () => {
 
 describe('AgentSessionInputbar', () => {
   beforeEach(() => {
+    agentState.model = 'openai::gpt-4.1'
     inputbarSnapshots.length = 0
+    modelState.models = [
+      {
+        id: 'openai::gpt-4.1',
+        providerId: 'openai',
+        name: 'GPT 4.1',
+        capabilities: []
+      }
+    ]
     cacheServiceMock.deleteCasual.mockReset()
     cacheServiceMock.getCasual.mockReset()
     cacheServiceMock.setCasual.mockReset()
@@ -167,5 +182,26 @@ describe('AgentSessionInputbar', () => {
 
     await waitFor(() => expect(sendMessage).toHaveBeenCalled())
     expect(setTimeoutTimerMock).not.toHaveBeenCalledWith('agentSession_sendMessage', expect.any(Function), 500)
+  })
+
+  it('allows sending when the agent stores a model id that is not in the local model list yet', async () => {
+    cacheServiceMock.getCasual.mockReturnValue('hello')
+    modelState.models = []
+    const sendMessage = vi.fn().mockResolvedValue(undefined)
+
+    render(
+      <AgentSessionInputbar
+        agentId="agent-1"
+        sessionId="session-1"
+        sendMessage={sendMessage}
+        stop={vi.fn()}
+        isStreaming={false}
+      />
+    )
+
+    fireEvent.click(screen.getByTestId('agent-session-inputbar'))
+
+    await waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ text: 'hello' }, { body: expect.any(Object) }))
+    expect(window.toast.error).not.toHaveBeenCalledWith('code.model_required')
   })
 })

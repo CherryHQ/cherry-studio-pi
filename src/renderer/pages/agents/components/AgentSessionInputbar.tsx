@@ -363,7 +363,7 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
       return
     }
 
-    if (!model) {
+    if (!model && !agentBase?.model?.trim()) {
       window.toast.error(t('code.model_required'))
       return
     }
@@ -397,6 +397,7 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
     sessionId,
     sessionTopicId,
     chatSendMessage,
+    agentBase?.model,
     model,
     setText,
     setFiles,
