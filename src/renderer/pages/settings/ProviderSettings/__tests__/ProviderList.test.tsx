@@ -117,6 +117,16 @@ vi.mock('../ProviderList/ProviderEditorDrawer', () => ({
   default: ({ open }: any) => <div data-testid="provider-editor-drawer" data-open={open ? 'true' : 'false'} />
 }))
 
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
 describe('ProviderList', () => {
   const providers = [
     {
@@ -367,6 +377,25 @@ describe('ProviderList', () => {
     await options.onOk()
 
     expect(deleteProviderMock).toHaveBeenCalledWith('openai')
+  })
+
+  it('prevents duplicate provider delete confirmations and operations', async () => {
+    const runningDelete = deferred()
+    deleteProviderMock.mockReturnValueOnce(runningDelete.promise)
+    render(<ProviderList selectedProviderId="openai" onSelectProvider={vi.fn()} />)
+
+    fireEvent.click(screen.getByTestId('provider-list-delete-openai'))
+    fireEvent.click(screen.getByTestId('provider-list-delete-openai'))
+
+    expect(window.modal.confirm).toHaveBeenCalledTimes(1)
+    const options = (window.modal.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0]
+
+    const firstDelete = options.onOk()
+    const secondDelete = options.onOk()
+    expect(deleteProviderMock).toHaveBeenCalledTimes(1)
+
+    runningDelete.resolve()
+    await Promise.all([firstDelete, secondDelete])
   })
 
   it('keeps failed provider deletion visible and reports the error', async () => {
