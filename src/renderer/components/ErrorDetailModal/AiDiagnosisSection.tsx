@@ -77,6 +77,7 @@ const AiDiagnosisSectionWithStatus = memo(
     const [result, setResult] = useState<DiagnosisResult | null>(cachedDiagnosis ?? null)
     const [diagError, setDiagError] = useState<string>('')
     const cancelledRef = useRef(false)
+    const runningRef = useRef(false)
 
     useEffect(() => {
       cancelledRef.current = false
@@ -94,7 +95,8 @@ const AiDiagnosisSectionWithStatus = memo(
     }, [])
 
     const runDiagnosis = useCallback(async () => {
-      if (!error) return
+      if (!error || runningRef.current) return
+      runningRef.current = true
       cancelledRef.current = false
       onStatusChange('loading')
       setDiagError('')
@@ -110,6 +112,8 @@ const AiDiagnosisSectionWithStatus = memo(
         if (cancelledRef.current) return
         setDiagError(err instanceof Error ? err.message : 'Diagnosis failed')
         onStatusChange('error')
+      } finally {
+        runningRef.current = false
       }
     }, [error, i18n.language, onStatusChange, diagnosisContext, blockId])
 
