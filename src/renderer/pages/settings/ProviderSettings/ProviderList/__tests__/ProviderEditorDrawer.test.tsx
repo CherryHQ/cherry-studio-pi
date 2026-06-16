@@ -106,6 +106,50 @@ describe('ProviderEditorDrawer', () => {
     expect(callArg?.presetProviderId).toBeUndefined()
   })
 
+  it('guards duplicate submit and close while a provider create is pending', async () => {
+    const onClose = vi.fn()
+    let resolveSubmit: () => void = () => {}
+    const onSubmit = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSubmit = resolve
+        })
+    )
+
+    render(
+      <ProviderEditorDrawer
+        open
+        mode={{ kind: 'create-custom' }}
+        initialLogo={undefined}
+        onClose={onClose}
+        onSubmit={onSubmit}
+      />
+    )
+
+    fireEvent.change(screen.getByPlaceholderText('settings.provider.add.name.placeholder'), {
+      target: { value: 'My Custom' }
+    })
+    fireEvent.change(screen.getByPlaceholderText('settings.provider.base_url.placeholder'), {
+      target: { value: 'https://api.example.com' }
+    })
+
+    const submitButton = screen.getByRole('button', { name: 'button.add' })
+    fireEvent.click(submitButton)
+    fireEvent.click(submitButton)
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(submitButton).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }))
+    expect(onClose).not.toHaveBeenCalled()
+
+    resolveSubmit()
+    await waitFor(() => expect(submitButton).not.toBeDisabled())
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   it('uses a duplicate-specific submit label when mode is duplicate', () => {
     render(
       <ProviderEditorDrawer

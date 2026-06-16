@@ -99,6 +99,7 @@ export default function ProviderEditorDrawer({
   const [logoDirty, setLogoDirty] = useState(false)
   const [logoPickerOpen, setLogoPickerOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const submittingRef = useRef(false)
   const previousOpenRef = useRef(false)
 
   const editingProvider = mode?.kind === 'edit' ? mode.provider : null
@@ -255,9 +256,14 @@ export default function ProviderEditorDrawer({
   })()
 
   const handleSubmit = async () => {
+    if (submittingRef.current) {
+      return
+    }
+
     const payload = buildSubmit()
     if (!payload) return
 
+    submittingRef.current = true
     setIsSubmitting(true)
     try {
       await onSubmit(payload)
@@ -265,8 +271,17 @@ export default function ProviderEditorDrawer({
       logger.error('Provider editor submit failed', error as Error)
       window.toast.error(t('settings.provider.save_failed'))
     } finally {
+      submittingRef.current = false
       setIsSubmitting(false)
     }
+  }
+
+  const handleClose = () => {
+    if (submittingRef.current) {
+      return
+    }
+
+    onClose()
   }
 
   const title = (() => {
@@ -289,7 +304,7 @@ export default function ProviderEditorDrawer({
 
   const footer = (
     <div className="flex items-center justify-end gap-2">
-      <Button variant="outline" onClick={onClose}>
+      <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
         {t('common.cancel')}
       </Button>
       <Button disabled={!submittable || isSubmitting} loading={isSubmitting} onClick={() => void handleSubmit()}>
@@ -299,7 +314,7 @@ export default function ProviderEditorDrawer({
   )
 
   return (
-    <ProviderSettingsDrawer open={open} onClose={onClose} title={title} footer={footer}>
+    <ProviderSettingsDrawer open={open} onClose={handleClose} title={title} footer={footer}>
       <div className="flex flex-col gap-5">
         {duplicateSource && duplicateSource.presetProviderId && <DuplicateHeader source={duplicateSource} />}
 

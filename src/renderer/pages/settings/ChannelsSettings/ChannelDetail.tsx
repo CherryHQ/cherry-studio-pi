@@ -417,6 +417,8 @@ const ChannelDetail: FC<ChannelDetailProps> = ({ channelDef }) => {
 
   // Log modal
   const [logChannel, setLogChannel] = useState<{ id: string; name: string } | null>(null)
+  const [isAddingChannel, setIsAddingChannel] = useState(false)
+  const addPendingRef = useRef(false)
   const workspaceSource = SYSTEM_CHANNEL_WORKSPACE_SOURCE
 
   // Fetch initial statuses + subscribe to real-time changes
@@ -446,16 +448,27 @@ const ChannelDetail: FC<ChannelDetailProps> = ({ channelDef }) => {
   }, [mutate])
 
   const handleAdd = useCallback(async () => {
-    const existingCount = channels?.length ?? 0
-    const newChannel = await createChannel({
-      type: channelDef.type,
-      name: existingCount > 0 ? `${channelDef.name} ${existingCount + 1}` : channelDef.name,
-      workspace: workspaceSource,
-      config: channelDef.defaultConfig,
-      isActive: true
-    } as never)
-    if (newChannel) {
-      setEditingChannelId(newChannel.id)
+    if (addPendingRef.current || !channelDef.available) {
+      return
+    }
+
+    addPendingRef.current = true
+    setIsAddingChannel(true)
+    try {
+      const existingCount = channels?.length ?? 0
+      const newChannel = await createChannel({
+        type: channelDef.type,
+        name: existingCount > 0 ? `${channelDef.name} ${existingCount + 1}` : channelDef.name,
+        workspace: workspaceSource,
+        config: channelDef.defaultConfig,
+        isActive: true
+      } as never)
+      if (newChannel) {
+        setEditingChannelId(newChannel.id)
+      }
+    } finally {
+      addPendingRef.current = false
+      setIsAddingChannel(false)
     }
   }, [channels?.length, createChannel, channelDef, workspaceSource])
 
@@ -515,7 +528,7 @@ const ChannelDetail: FC<ChannelDetailProps> = ({ channelDef }) => {
               {channelDef.available ? t(channelDef.description) : t('agent.cherryClaw.channels.comingSoon')}
             </p>
           </div>
-          <Button size="sm" disabled={!channelDef.available} variant="outline" onClick={handleAdd}>
+          <Button size="sm" disabled={!channelDef.available || isAddingChannel} variant="outline" onClick={handleAdd}>
             <Plus className="size-4" />
             {t('agent.cherryClaw.channels.add')}
           </Button>
