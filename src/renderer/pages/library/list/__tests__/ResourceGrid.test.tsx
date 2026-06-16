@@ -216,6 +216,46 @@ describe('ResourceGrid empty state copy', () => {
   })
 })
 
+describe('ResourceGrid tag toolbar', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: {
+        error: vi.fn()
+      }
+    })
+  })
+
+  it('blocks duplicate tag creation while the first request is pending', async () => {
+    const user = userEvent.setup()
+    const pendingAdd = createDeferred<void>()
+    const onAddTag = vi.fn().mockReturnValueOnce(pendingAdd.promise)
+
+    renderResourceGrid({
+      onAddTag,
+      tags: [{ id: 'tag-alpha', name: 'alpha', color: '#111111', count: 1 }]
+    })
+
+    await user.click(screen.getByRole('button', { name: /library\.toolbar\.tag_button/ }))
+    const tagInput = screen.getByPlaceholderText('library.toolbar.add_tag_placeholder')
+    await user.type(tagInput, 'beta')
+    const addButton = tagInput.parentElement?.querySelector('button') as HTMLButtonElement
+
+    await user.click(addButton)
+    await user.click(addButton)
+
+    expect(onAddTag).toHaveBeenCalledTimes(1)
+    expect(onAddTag).toHaveBeenCalledWith('beta')
+    expect(addButton).toBeDisabled()
+
+    pendingAdd.resolve()
+    await waitFor(() => {
+      expect(screen.queryByPlaceholderText('library.toolbar.add_tag_placeholder')).not.toBeInTheDocument()
+    })
+  })
+})
+
 describe('FixedCardMenu tag binding', () => {
   beforeEach(() => {
     ensureTagsMock.mockReset()

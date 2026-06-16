@@ -116,6 +116,7 @@ export const ResourceGrid: FC<Props> = ({
   const [showAddTag, setShowAddTag] = useState(false)
   const [newTagName, setNewTagName] = useState('')
   const [addingTag, setAddingTag] = useState(false)
+  const addingTagRef = useRef(false)
   const [addingPresetKeys, setAddingPresetKeys] = useState<Set<string>>(new Set())
   const showingAssistantCatalogPresets =
     Boolean(assistantCatalog) && assistantCatalog?.activeTab !== ASSISTANT_CATALOG_MY_TAB
@@ -134,7 +135,8 @@ export const ResourceGrid: FC<Props> = ({
 
   const handleAddTag = async () => {
     const trimmed = newTagName.trim()
-    if (!trimmed || addingTag) return
+    if (!trimmed || addingTagRef.current) return
+    addingTagRef.current = true
     setAddingTag(true)
     try {
       await onAddTag(trimmed)
@@ -147,6 +149,7 @@ export const ResourceGrid: FC<Props> = ({
         name: trimmed
       })
     } finally {
+      addingTagRef.current = false
       setAddingTag(false)
     }
   }
