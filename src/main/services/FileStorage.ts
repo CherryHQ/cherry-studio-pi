@@ -1932,6 +1932,7 @@ class FileStorage {
         this.notifyChange(eventType, filePath)
         this.debounceTimer = undefined
       }, this.watcherConfig.debounceMs)
+      this.debounceTimer.unref?.()
     }
   }
 

@@ -400,6 +400,36 @@ describe('FileStorage Storage v2 upload flow', () => {
     await fileStorage.stopFileWatcher()
   })
 
+  it('does not keep the process alive while debouncing file watcher changes', async () => {
+    const firstWatcher = createMockWatcher()
+    mocks.chokidarWatch.mockReturnValue(firstWatcher.watcher)
+    const sender = { isDestroyed: vi.fn(() => false), send: vi.fn() }
+    const unref = vi.fn()
+    const timer = { unref } as unknown as NodeJS.Timeout
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockReturnValue(timer)
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout').mockImplementation(() => undefined)
+
+    try {
+      const { fileStorage } = await import('../FileStorage')
+
+      await fileStorage.startFileWatcher({ sender } as never, mocks.dirs.notes, {
+        debounceMs: 250
+      })
+
+      firstWatcher.emit('add', path.join(mocks.dirs.notes, 'draft.md'))
+
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 250)
+      expect(unref).toHaveBeenCalledTimes(1)
+
+      await fileStorage.stopFileWatcher()
+
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(timer)
+    } finally {
+      setTimeoutSpy.mockRestore()
+      clearTimeoutSpy.mockRestore()
+    }
+  })
+
   it('cancels a pending watcher restart when the watcher stops', async () => {
     vi.useFakeTimers()
     const firstWatcher = createMockWatcher()
