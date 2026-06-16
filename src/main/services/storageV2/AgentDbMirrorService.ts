@@ -25,6 +25,7 @@ class StorageV2AgentDbMirrorService {
       this.timer = null
       void this.flush()
     }, debounceMs)
+    this.timer.unref?.()
   }
 
   async flush() {
@@ -83,6 +84,7 @@ class StorageV2AgentDbMirrorService {
       this.timer = null
       void this.flush()
     }, DEFAULT_DEBOUNCE_MS)
+    this.timer.unref?.()
   }
 }
 

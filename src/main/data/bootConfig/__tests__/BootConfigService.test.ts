@@ -113,6 +113,25 @@ describe('BootConfigService', () => {
       expect(mockFs.writeFileSync).toHaveBeenCalledWith(TEMP_PATH, expect.any(String), 'utf-8')
       expect(mockRenameSync).toHaveBeenCalledWith(TEMP_PATH, CONFIG_PATH)
     })
+
+    it('does not keep the process alive while waiting to save', async () => {
+      mockFs.existsSync.mockReturnValue(false)
+      const unref = vi.fn()
+      const timer = { unref } as unknown as ReturnType<typeof setTimeout>
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockReturnValue(timer)
+
+      try {
+        const service = await createService()
+        service.set('app.disable_hardware_acceleration', true)
+
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 500)
+        expect(unref).toHaveBeenCalledTimes(1)
+
+        service.flush()
+      } finally {
+        setTimeoutSpy.mockRestore()
+      }
+    })
   })
 
   // ---------- flush ----------

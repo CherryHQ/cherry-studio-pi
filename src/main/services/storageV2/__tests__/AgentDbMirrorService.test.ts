@@ -64,4 +64,32 @@ describe('StorageV2AgentDbMirrorService', () => {
       vi.useRealTimers()
     }
   })
+
+  it('does not keep the process alive while waiting to mirror or retry', async () => {
+    const importSnapshot = vi
+      .spyOn(storageV2LegacyAgentDbImportService, 'importSnapshot')
+      .mockRejectedValueOnce(new Error('storage locked'))
+      .mockResolvedValueOnce({} as any)
+    const timers = [
+      { unref: vi.fn() } as unknown as ReturnType<typeof setTimeout>,
+      { unref: vi.fn() } as unknown as ReturnType<typeof setTimeout>
+    ]
+    const setTimeoutSpy = vi
+      .spyOn(globalThis, 'setTimeout')
+      .mockImplementation(() => timers.shift() ?? ({ unref: vi.fn() } as unknown as ReturnType<typeof setTimeout>))
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout').mockImplementation(() => undefined)
+
+    storageV2AgentDbMirrorService.schedule(3000)
+    await storageV2AgentDbMirrorService.flush()
+
+    expect(importSnapshot).toHaveBeenCalledTimes(1)
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(2)
+    expect((setTimeoutSpy.mock.results[0].value as NodeJS.Timeout).unref).toHaveBeenCalledTimes(1)
+    expect((setTimeoutSpy.mock.results[1].value as NodeJS.Timeout).unref).toHaveBeenCalledTimes(1)
+
+    await storageV2AgentDbMirrorService.flush()
+
+    expect(importSnapshot).toHaveBeenCalledTimes(2)
+    expect(clearTimeoutSpy).toHaveBeenCalled()
+  })
 })
