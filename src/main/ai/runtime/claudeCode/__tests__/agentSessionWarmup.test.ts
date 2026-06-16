@@ -50,7 +50,14 @@ describe('buildClaudeCodeQueryRequestForAgentSession resume-token precedence', (
     mocks.getSessionById.mockResolvedValue({ id: 'session-1', agentId: 'agent-1' })
     mocks.getAgent.mockResolvedValue({ id: 'agent-1', model: 'provider-1::model-1' })
     mocks.getProviderByProviderId.mockResolvedValue({ id: 'provider-1', endpointConfigs: undefined })
-    mocks.getModelByKey.mockResolvedValue({ id: 'model-1', apiModelId: 'claude-sonnet' })
+    mocks.getModelByKey.mockResolvedValue({
+      id: 'provider-1::model-1',
+      providerId: 'provider-1',
+      name: 'Claude Sonnet',
+      apiModelId: 'claude-sonnet',
+      isEnabled: true,
+      isHidden: false
+    })
     mocks.resolveEffectiveEndpoint.mockReturnValue({ baseUrl: 'https://api.example.com' })
     mocks.getRotatedApiKey.mockResolvedValue('api-key')
     // settingsBuilder receives `lastAgentSessionId` and reflects it as `resume`;

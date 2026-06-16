@@ -25,11 +25,11 @@ import type {
 import { agentChannelService as channelService } from '@data/services/AgentChannelService'
 import { agentService } from '@data/services/AgentService'
 import { mcpServerService } from '@data/services/McpServerService'
-import { modelService } from '@data/services/ModelService'
 import { providerService } from '@data/services/ProviderService'
 import { loggerService } from '@logger'
 import { isProvisioned, provisionBuiltinAgent } from '@main/ai/agents/builtin/BuiltinAgentProvisioner'
 import { PromptBuilder } from '@main/ai/agents/cherryclaw/prompt'
+import { getAgentRuntimeApiModelId, resolveAgentRuntimeModel } from '@main/ai/agentSession/modelResolution'
 import AssistantServer from '@main/ai/mcp/servers/assistant'
 import CherryBuiltinToolsServer from '@main/ai/mcp/servers/cherryBuiltinTools'
 import ClawServer from '@main/ai/mcp/servers/claw'
@@ -62,7 +62,6 @@ import type { AgentEntity } from '@shared/data/api/schemas/agents'
 import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
 import { AGENT_WORKSPACE_TYPE, type AgentSessionWorkspaceSource } from '@shared/data/api/schemas/agentWorkspaces'
 import type { McpServer } from '@shared/data/types/mcpServer'
-import { parseUniqueModelId } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
 import type { CherryToolMeta } from '@shared/data/types/uiParts'
 import type { McpTool } from '@types'
@@ -450,19 +449,11 @@ async function buildEnvironment(
   // API key and base URL are injected by the agent-session runtime query builder.
   // This function only builds agent-specific env vars.
 
-  // agent.model is UniqueModelId ("providerId::modelId"). DB lookup for
-  // apiModelId, fall back to raw if missing.
   if (!agent.model) {
     throw new Error(`buildEnvironment: agent ${agent.id} has no model`)
   }
-  const { providerId, modelId: rawModelId } = parseUniqueModelId(agent.model)
-  let apiModelId = rawModelId
-  try {
-    const model = await modelService.getByKey(providerId, rawModelId)
-    apiModelId = model.apiModelId ?? rawModelId
-  } catch {
-    // Model not in model table — use raw ID (common for agent-specific models)
-  }
+  const model = await resolveAgentRuntimeModel(agent)
+  const apiModelId = getAgentRuntimeApiModelId(model)
 
   const env: Record<string, string | undefined> = {
     ...loginShellEnv,

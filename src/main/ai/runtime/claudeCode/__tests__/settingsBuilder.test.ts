@@ -170,7 +170,14 @@ describe('buildClaudeCodeSessionSettings', () => {
       allowedTools: [],
       configuration: {}
     })
-    mocks.modelGetByKey.mockResolvedValue({ apiModelId: 'claude-api' })
+    mocks.modelGetByKey.mockResolvedValue({
+      id: 'anthropic::claude-sonnet',
+      providerId: 'anthropic',
+      name: 'Claude Sonnet',
+      apiModelId: 'claude-api',
+      isEnabled: true,
+      isHidden: false
+    })
     mocks.findBySessionId.mockResolvedValue(null)
     mocks.createToolPolicySnapshot.mockResolvedValue({
       resolve: vi.fn(),

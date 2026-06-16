@@ -7,10 +7,11 @@
 import { agentService } from '@data/services/AgentService'
 import { agentSessionMessageService } from '@data/services/AgentSessionMessageService'
 import { agentSessionService } from '@data/services/AgentSessionService'
+import { resolveAgentRuntimeModel } from '@main/ai/agentSession/modelResolution'
 import { application } from '@main/core/application'
 import type { AgentSessionMessageEntity } from '@shared/data/api/schemas/agentSessions'
 import type { CherryUIMessage } from '@shared/data/types/message'
-import { isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
+import { parseUniqueModelId } from '@shared/data/types/model'
 import type { UIMessage } from 'ai'
 import { v7 as uuidv7 } from 'uuid'
 
@@ -21,6 +22,7 @@ import { runtimeDriverRegistry } from '../../runtime'
 import type { StreamListener } from '../types'
 import type { ChatContextProvider, PreparedDispatch } from './ChatContextProvider'
 import type { MainDispatchRequest } from './dispatch'
+import { createModelSnapshot } from './modelSnapshot'
 
 function toReservedAgentUIMessage(row: AgentSessionMessageEntity): CherryUIMessage {
   return {
@@ -60,10 +62,7 @@ export class AgentChatContextProvider implements ChatContextProvider {
     const agentId = session.agentId
     const agent = await agentService.getAgent(agentId)
     if (!agent) throw new Error(`Agent not found for session ${sessionId}: ${agentId}`)
-    if (!agent.model) throw new Error(`Agent ${agent.id} has no model configured`)
-    if (!isUniqueModelId(agent.model)) {
-      throw new Error(`Agent ${agent.id} has invalid model id "${agent.model}"; expected "providerId::modelId"`)
-    }
+    const model = await resolveAgentRuntimeModel(agent)
 
     const driver = runtimeDriverRegistry.getAgentSessionDriver(agent.type)
     if (!driver) {
@@ -71,9 +70,9 @@ export class AgentChatContextProvider implements ChatContextProvider {
     }
     await driver.validateSession(session)
 
-    const uniqueModelId = agent.model
-    const { providerId, modelId: rawModelId } = parseUniqueModelId(uniqueModelId)
-    const modelSnapshot = { id: rawModelId, name: agent.modelName ?? rawModelId, provider: providerId }
+    const uniqueModelId = model.id
+    const { modelId: rawModelId } = parseUniqueModelId(uniqueModelId)
+    const modelSnapshot = createModelSnapshot(model)
 
     const userMessageId = uuidv7()
     const userMessageParts = req.userMessageParts ?? []

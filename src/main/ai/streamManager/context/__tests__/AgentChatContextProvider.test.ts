@@ -1,4 +1,5 @@
 import type { AiStreamOpenRequest } from '@shared/ai/transport'
+import type { Model, UniqueModelId } from '@shared/data/types/model'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AGENT_SESSION_IDLE_TIMEOUT_MS } from '../../../agentSession/constants'
@@ -7,6 +8,8 @@ import type { StreamListener } from '../../types'
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   getAgent: vi.fn(),
+  getModelByKey: vi.fn(),
+  listModels: vi.fn(),
   saveMessage: vi.fn(),
   saveMessages: vi.fn(),
   maybeRenameAgentSession: vi.fn(),
@@ -24,6 +27,10 @@ vi.mock('@data/services/AgentSessionService', () => ({
 
 vi.mock('@data/services/AgentService', () => ({
   agentService: { getAgent: mocks.getAgent }
+}))
+
+vi.mock('@data/services/ModelService', () => ({
+  modelService: { getByKey: mocks.getModelByKey, list: mocks.listModels }
 }))
 
 vi.mock('@data/services/AgentSessionMessageService', () => ({
@@ -64,6 +71,22 @@ function openReq(overrides: Partial<AiStreamOpenRequest> = {}): AiStreamOpenRequ
   } as AiStreamOpenRequest
 }
 
+function makeModel(id: UniqueModelId, overrides: Partial<Model> = {}): Model {
+  const providerId = id.split('::')[0]
+  const rawModelId = id.split('::')[1]
+  return {
+    id,
+    providerId,
+    name: rawModelId,
+    apiModelId: rawModelId,
+    capabilities: [],
+    supportsStreaming: true,
+    isEnabled: true,
+    isHidden: false,
+    ...overrides
+  } as Model
+}
+
 describe('AgentChatContextProvider', () => {
   let provider: InstanceType<typeof AgentChatContextProvider>
 
@@ -86,6 +109,12 @@ describe('AgentChatContextProvider', () => {
       model: 'anthropic::claude-sonnet',
       modelName: 'Claude Sonnet'
     })
+    mocks.getModelByKey.mockResolvedValue(
+      makeModel('anthropic::claude-sonnet', { name: 'Claude Sonnet', apiModelId: 'claude-sonnet' })
+    )
+    mocks.listModels.mockResolvedValue([
+      makeModel('anthropic::claude-sonnet', { name: 'Claude Sonnet', apiModelId: 'claude-sonnet' })
+    ])
     mocks.saveMessage.mockImplementation(async ({ sessionId, message }) => ({
       id: message.id,
       sessionId,
@@ -260,16 +289,90 @@ describe('AgentChatContextProvider', () => {
     expect(mocks.saveMessages).not.toHaveBeenCalled()
   })
 
-  it('rejects malformed agent model ids before writing messages or opening runtime turns', async () => {
+  it('resolves legacy raw agent model ids before opening runtime turns', async () => {
     mocks.getAgent.mockResolvedValue({
       id: 'agent-1',
       type: 'claude-code',
       model: 'claude-sonnet',
       modelName: 'Claude Sonnet'
     })
+    mocks.getModelByKey.mockRejectedValue(new Error('not found'))
+    mocks.listModels.mockResolvedValue([
+      makeModel('anthropic::claude-sonnet', { name: 'Claude Sonnet', apiModelId: 'claude-sonnet' })
+    ])
+
+    const prepared = await provider.prepareDispatch(makeSubscriber(), openReq())
+
+    expect(mocks.runtimeValidateSession).toHaveBeenCalledOnce()
+    expect(prepared.models[0].modelId).toBe('anthropic::claude-sonnet')
+    expect(mocks.runtimeBeginTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ modelId: 'anthropic::claude-sonnet' })
+    )
+  })
+
+  it('resolves provider-scoped API model aliases before opening runtime turns', async () => {
+    mocks.getAgent.mockResolvedValue({
+      id: 'agent-1',
+      type: 'claude-code',
+      model: 'deepseek::deepseek-chat',
+      modelName: 'DeepSeek Chat'
+    })
+    mocks.getModelByKey.mockRejectedValue(new Error('not found'))
+    mocks.listModels.mockResolvedValue([
+      makeModel('deepseek::deepseek-chat-internal', { name: 'DeepSeek Chat', apiModelId: 'deepseek-chat' })
+    ])
+
+    const prepared = await provider.prepareDispatch(makeSubscriber(), openReq())
+
+    expect(mocks.listModels).toHaveBeenCalledWith({ providerId: 'deepseek' })
+    expect(prepared.models[0].modelId).toBe('deepseek::deepseek-chat-internal')
+    expect(prepared.reservedMessages).toEqual([
+      expect.objectContaining({ role: 'user' }),
+      expect.objectContaining({
+        role: 'assistant',
+        metadata: expect.objectContaining({
+          modelSnapshot: {
+            id: 'deepseek-chat',
+            name: 'DeepSeek Chat',
+            provider: 'deepseek'
+          }
+        })
+      })
+    ])
+  })
+
+  it('rejects unresolved agent model ids before writing messages or opening runtime turns', async () => {
+    mocks.getAgent.mockResolvedValue({
+      id: 'agent-1',
+      type: 'claude-code',
+      model: 'missing-model',
+      modelName: 'Missing Model'
+    })
+    mocks.listModels.mockResolvedValue([])
 
     await expect(provider.prepareDispatch(makeSubscriber(), openReq())).rejects.toThrow(
-      'Agent agent-1 has invalid model id "claude-sonnet"; expected "providerId::modelId"'
+      'Agent agent-1 model "missing-model" is not registered in user_model'
+    )
+    expect(mocks.runtimeValidateSession).not.toHaveBeenCalled()
+    expect(mocks.saveMessage).not.toHaveBeenCalled()
+    expect(mocks.saveMessages).not.toHaveBeenCalled()
+    expect(mocks.runtimeBeginTurn).not.toHaveBeenCalled()
+  })
+
+  it('rejects ambiguous legacy raw model ids before writing messages or opening runtime turns', async () => {
+    mocks.getAgent.mockResolvedValue({
+      id: 'agent-1',
+      type: 'claude-code',
+      model: 'same-model',
+      modelName: 'Same Model'
+    })
+    mocks.listModels.mockResolvedValue([
+      makeModel('openai::same-model', { apiModelId: 'same-model' }),
+      makeModel('anthropic::same-model', { apiModelId: 'same-model' })
+    ])
+
+    await expect(provider.prepareDispatch(makeSubscriber(), openReq())).rejects.toThrow(
+      'Agent agent-1 model "same-model" is ambiguous'
     )
     expect(mocks.runtimeValidateSession).not.toHaveBeenCalled()
     expect(mocks.saveMessage).not.toHaveBeenCalled()
