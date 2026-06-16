@@ -35,7 +35,10 @@ export const useApiGateway = () => {
   const [apiGatewayLoading, setApiGatewayLoading] = useState(() => !cacheService.isSharedCacheReady())
 
   useEffect(() => {
-    if (cacheService.isSharedCacheReady()) return
+    if (cacheService.isSharedCacheReady()) {
+      setApiGatewayLoading(false)
+      return
+    }
     return cacheService.onSharedCacheReady(() => setApiGatewayLoading(false))
   }, [])
 

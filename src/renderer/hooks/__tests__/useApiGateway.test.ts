@@ -1,3 +1,5 @@
+import { cacheService } from '@data/CacheService'
+import { MockCacheUtils } from '@test-mocks/renderer/CacheService'
 import { MockUseCacheUtils } from '@test-mocks/renderer/useCache'
 import { mockUseMultiplePreferences } from '@test-mocks/renderer/usePreference'
 import { act, renderHook, waitFor } from '@testing-library/react'
@@ -57,9 +59,21 @@ const setWindowApi = () => {
 describe('useApiGateway', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    MockCacheUtils.resetMocks()
     MockUseCacheUtils.resetMocks()
     MockUseCacheUtils.setSharedCacheValue('feature.api_gateway.running', false)
     setWindowApi()
+  })
+
+  it('clears initial loading if shared cache becomes ready before the effect subscribes', async () => {
+    vi.mocked(cacheService.isSharedCacheReady).mockReturnValueOnce(false).mockReturnValue(true)
+
+    const { result } = renderHook(() => useApiGateway())
+
+    await waitFor(() => {
+      expect(result.current.apiGatewayLoading).toBe(false)
+    })
+    expect(cacheService.onSharedCacheReady).not.toHaveBeenCalled()
   })
 
   it.each([
