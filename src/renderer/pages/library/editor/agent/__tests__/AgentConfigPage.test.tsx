@@ -255,6 +255,40 @@ describe('AgentConfigPage', () => {
     expect(cacheSetMock).toHaveBeenCalledWith('agent.active_session_id', 'session-created')
   })
 
+  it('finishes agent creation without duplicating the agent when initial session creation fails', async () => {
+    const user = userEvent.setup()
+    const onCreated = vi.fn()
+    const toastError = vi.fn()
+    const originalToast = window.toast
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: { ...originalToast, error: toastError }
+    })
+
+    createAgentMock.mockResolvedValueOnce(createAgent({ id: 'created-session-fail', name: 'Created Agent' }))
+    createInitialSessionMock.mockRejectedValueOnce(new Error('session failed'))
+
+    try {
+      render(<AgentConfigPage onBack={vi.fn()} onCreated={onCreated} />)
+
+      await user.click(screen.getByRole('button', { name: 'basic' }))
+      await user.click(screen.getByRole('button', { name: 'set basic' }))
+      await user.click(screen.getByRole('button', { name: 'save' }))
+
+      await waitFor(() => expect(createAgentMock).toHaveBeenCalledTimes(1))
+      expect(createInitialSessionMock).toHaveBeenCalledTimes(1)
+      expect(cacheSetMock).not.toHaveBeenCalled()
+      expect(toastError).toHaveBeenCalledWith({
+        title: 'agent.session.create.error.failed',
+        description: 'session failed'
+      })
+      expect(onCreated).toHaveBeenCalledTimes(1)
+      expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ id: 'created-session-fail' }))
+    } finally {
+      Object.defineProperty(window, 'toast', { configurable: true, value: originalToast })
+    }
+  })
+
   it('uses the selected workspace for the initial session during creation', async () => {
     const user = userEvent.setup()
     createWorkspaceByPathMock.mockResolvedValueOnce({ id: 'workspace-1', path: '/Users/me/project' })

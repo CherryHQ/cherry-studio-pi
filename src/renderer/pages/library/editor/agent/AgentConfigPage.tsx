@@ -1,6 +1,7 @@
 import { Button, DialogHeader, DialogTitle, Switch } from '@cherrystudio/ui'
 import { cacheService } from '@renderer/data/CacheService'
 import { useAgentTools } from '@renderer/hooks/agents/useAgentTools'
+import { getErrorMessage } from '@renderer/utils/error'
 import { Check, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react'
 import type { FC } from 'react'
 import { useCallback, useMemo, useState } from 'react'
@@ -113,8 +114,16 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated, presentation = '
           agentId: created.id,
           name: t('common.unnamed'),
           workspace: workspace ? { type: 'user', workspaceId: workspace.id } : { type: 'system' }
+        }).catch((error) => {
+          window.toast?.error({
+            title: t('agent.session.create.error.failed'),
+            description: getErrorMessage(error)
+          })
+          return null
         })
-        cacheService.set('agent.active_session_id', initialSession.id)
+        if (initialSession?.id) {
+          cacheService.set('agent.active_session_id', initialSession.id)
+        }
         onCreated?.(created)
         // Even though the page returns to the list right after create, keep
         // the canonical row here so the save state machine completes against
