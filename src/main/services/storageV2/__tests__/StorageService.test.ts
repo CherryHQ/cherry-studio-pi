@@ -63,7 +63,8 @@ const mocks = vi.hoisted(() => ({
     delete: vi.fn(),
     list: vi.fn(),
     listCredentialRefs: vi.fn(),
-    upsert: vi.fn()
+    upsert: vi.fn(),
+    upsertCredentials: vi.fn()
   },
   assistantRepository: {
     delete: vi.fn(),
@@ -167,6 +168,7 @@ describe('StorageV2Service', () => {
     mocks.providerRepository.list.mockResolvedValue([])
     mocks.providerRepository.listCredentialRefs.mockResolvedValue(new Map())
     mocks.providerRepository.upsert.mockResolvedValue({ skippedSecret: false })
+    mocks.providerRepository.upsertCredentials.mockResolvedValue(undefined)
     mocks.providerRepository.delete.mockResolvedValue({ deleted: true })
     mocks.assistantRepository.list.mockResolvedValue([])
     mocks.assistantRepository.upsert.mockResolvedValue(undefined)
@@ -380,11 +382,45 @@ describe('StorageV2Service', () => {
     await expect(new StorageV2Service().upsertProvider(provider, 2)).resolves.toEqual({ skippedSecret: false })
 
     expect(mocks.secretVault.setSecret).toHaveBeenCalledWith('provider', 'provider-1', 'apiKey', 'sk-test')
-    expect(mocks.providerRepository.upsert).toHaveBeenCalledWith(
-      provider,
-      2,
-      'storage-v2://secret/provider/provider-1/apiKey'
+    expect(mocks.providerRepository.upsert).toHaveBeenCalledWith(provider, 2, {
+      apiKey: 'storage-v2://secret/provider/provider-1/apiKey'
+    })
+  })
+
+  it('stores provider API key lists in the secret vault before upserting provider metadata', async () => {
+    const provider = {
+      id: 'provider-1',
+      type: 'openai',
+      name: 'OpenAI',
+      apiHost: 'https://api.openai.com',
+      models: [],
+      apiKeys: [
+        { id: 'key-a', key: 'sk-a', label: 'Primary', isEnabled: false },
+        { id: 'key-b', key: 'sk-b', isEnabled: true }
+      ]
+    } as unknown as Provider
+    mocks.secretVault.setSecret.mockImplementation(async (_scope, _ownerId, kind) =>
+      kind === 'apiKeys'
+        ? 'storage-v2://secret/provider/provider-1/apiKeys'
+        : 'storage-v2://secret/provider/provider-1/apiKey'
     )
+
+    await expect(new StorageV2Service().upsertProvider(provider, 2)).resolves.toEqual({ skippedSecret: false })
+
+    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith(
+      'provider',
+      'provider-1',
+      'apiKeys',
+      JSON.stringify([
+        { id: 'key-a', key: 'sk-a', label: 'Primary', isEnabled: false },
+        { id: 'key-b', key: 'sk-b', isEnabled: true }
+      ])
+    )
+    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith('provider', 'provider-1', 'apiKey', 'sk-b')
+    expect(mocks.providerRepository.upsert).toHaveBeenCalledWith(provider, 2, {
+      apiKeys: 'storage-v2://secret/provider/provider-1/apiKeys',
+      apiKey: 'storage-v2://secret/provider/provider-1/apiKey'
+    })
   })
 
   it('does not upsert provider metadata with plaintext credentials when the secret vault write fails', async () => {
@@ -443,6 +479,41 @@ describe('StorageV2Service', () => {
     ).resolves.toEqual({ skippedSecret: false })
     expect(mocks.providerRepository.upsert).toHaveBeenLastCalledWith(provider, 2, undefined, {
       clearCredential: true
+    })
+  })
+
+  it('updates provider API key credentials without rewriting provider models', async () => {
+    const keys = [
+      { id: 'key-a', key: 'sk-a', isEnabled: false },
+      { id: 'key-b', key: 'sk-b', label: 'Primary', isEnabled: true }
+    ]
+    mocks.secretVault.setSecret.mockImplementation(async (_scope, _ownerId, kind) =>
+      kind === 'apiKeys'
+        ? 'storage-v2://secret/provider/provider-1/apiKeys'
+        : 'storage-v2://secret/provider/provider-1/apiKey'
+    )
+
+    await expect(new StorageV2Service().upsertProviderApiKeys('provider-1', keys)).resolves.toBeUndefined()
+
+    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith('provider', 'provider-1', 'apiKeys', JSON.stringify(keys))
+    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith('provider', 'provider-1', 'apiKey', 'sk-b')
+    expect(mocks.providerRepository.upsertCredentials).toHaveBeenCalledWith(
+      'provider-1',
+      {
+        apiKeys: 'storage-v2://secret/provider/provider-1/apiKeys',
+        apiKey: 'storage-v2://secret/provider/provider-1/apiKey'
+      },
+      undefined
+    )
+    expect(mocks.providerRepository.upsert).not.toHaveBeenCalled()
+  })
+
+  it('clears provider API key credential refs when the key list becomes empty', async () => {
+    await expect(new StorageV2Service().upsertProviderApiKeys('provider-1', [])).resolves.toBeUndefined()
+
+    expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
+    expect(mocks.providerRepository.upsertCredentials).toHaveBeenCalledWith('provider-1', undefined, {
+      clearCredentialKinds: ['apiKey', 'apiKeys']
     })
   })
 
@@ -692,6 +763,56 @@ describe('StorageV2Service', () => {
     )
     expect(snapshot.metadata.missingSecretCount).toBe(0)
     expect(mocks.secretVault.getSecret).toHaveBeenCalledWith('storage-v2://secret/provider/openai/apiKey')
+  })
+
+  it('restores provider API key lists from credential refs in core snapshots', async () => {
+    mocks.providerRepository.list.mockResolvedValue([
+      {
+        id: 'openai',
+        name: 'OpenAI',
+        type: 'openai',
+        apiHost: 'https://api.openai.com',
+        models: [],
+        config: {
+          apiKeys: [{ id: 'key-a', isEnabled: true }]
+        }
+      }
+    ])
+    mocks.providerRepository.listCredentialRefs.mockResolvedValue(
+      new Map([
+        [
+          'openai',
+          {
+            apiKeys: 'storage-v2://secret/provider/openai/apiKeys'
+          }
+        ]
+      ])
+    )
+    mocks.secretVault.getSecret.mockImplementation(async (secretRef: string) => {
+      if (secretRef === 'storage-v2://secret/provider/openai/apiKeys') {
+        return JSON.stringify([
+          { id: 'key-a', key: 'sk-a', isEnabled: false },
+          { id: 'key-b', key: 'sk-b', label: 'Primary', isEnabled: true }
+        ])
+      }
+      return null
+    })
+
+    const snapshot = await new StorageV2Service().getCoreSnapshot({ includeSecrets: true })
+    const providers = snapshot.llm.providers as Provider[]
+
+    expect(providers[0]).toEqual(
+      expect.objectContaining({
+        id: 'openai',
+        apiKey: 'sk-b',
+        apiKeys: [
+          { id: 'key-a', key: 'sk-a', isEnabled: false },
+          { id: 'key-b', key: 'sk-b', label: 'Primary', isEnabled: true }
+        ]
+      })
+    )
+    expect(snapshot.metadata.missingSecretCount).toBe(0)
+    expect(mocks.secretVault.getSecret).toHaveBeenCalledWith('storage-v2://secret/provider/openai/apiKeys')
   })
 
   it('omits localStorage MCP provider tokens when exporting without secrets', async () => {

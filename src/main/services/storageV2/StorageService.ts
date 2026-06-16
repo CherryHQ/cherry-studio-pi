@@ -27,6 +27,8 @@ import {
   storageV2KnowledgeRepository,
   type StorageV2ListOptions,
   type StorageV2MessageBlocksUpsertOptions,
+  type StorageV2ProviderCredentialRefInput,
+  type StorageV2ProviderCredentialRefs,
   storageV2ProviderRepository,
   storageV2SettingsRepository
 } from './StorageV2Repositories'
@@ -112,6 +114,69 @@ function makeStorageV2SecretRef(scope: string, ownerId: string, kind: string) {
 
 function isNonEmptyString(value: string | undefined): value is string {
   return typeof value === 'string' && value.length > 0
+}
+
+type ProviderApiKeyEntry = {
+  id: string
+  key: string
+  label?: string
+  isEnabled: boolean
+}
+
+function getProviderApiKeyEntries(provider: Provider): ProviderApiKeyEntry[] {
+  const apiKeys = (provider as unknown as { apiKeys?: unknown }).apiKeys
+  if (!Array.isArray(apiKeys)) {
+    return []
+  }
+
+  return apiKeys.flatMap((entry) => {
+    if (!isRecord(entry)) return []
+
+    const id = typeof entry.id === 'string' ? entry.id.trim() : ''
+    const key = typeof entry.key === 'string' ? entry.key.trim() : ''
+    if (!id || !key) return []
+
+    return [
+      {
+        id,
+        key,
+        ...(typeof entry.label === 'string' && entry.label ? { label: entry.label } : {}),
+        isEnabled: entry.isEnabled === true
+      }
+    ]
+  })
+}
+
+function selectProviderLegacyApiKey(apiKeys: ProviderApiKeyEntry[]) {
+  return apiKeys.find((entry) => entry.isEnabled)?.key ?? apiKeys[0]?.key ?? ''
+}
+
+function parseProviderApiKeyEntriesSecret(secret: string): ProviderApiKeyEntry[] | null {
+  try {
+    const parsed = JSON.parse(secret) as unknown
+    if (!Array.isArray(parsed)) return null
+
+    const apiKeys = parsed.flatMap((entry) => {
+      if (!isRecord(entry)) return []
+
+      const id = typeof entry.id === 'string' ? entry.id.trim() : ''
+      const key = typeof entry.key === 'string' ? entry.key.trim() : ''
+      if (!id || !key) return []
+
+      return [
+        {
+          id,
+          key,
+          ...(typeof entry.label === 'string' && entry.label ? { label: entry.label } : {}),
+          isEnabled: entry.isEnabled === true
+        }
+      ]
+    })
+
+    return apiKeys.length === parsed.length ? apiKeys : null
+  } catch {
+    return null
+  }
 }
 
 function isSensitiveHeaderName(headerName: string) {
@@ -792,7 +857,30 @@ export class StorageV2Service {
         })
 
         if (includeSecrets) {
-          const storedApiKeyRef = credentialRefsByProvider.get(provider.id)?.apiKey
+          const providerCredentialRefs = credentialRefsByProvider.get(provider.id) ?? {}
+          const storedApiKeysRef = providerCredentialRefs.apiKeys
+          const fallbackApiKeysRef = makeStorageV2SecretRef('provider', provider.id, 'apiKeys')
+          const apiKeysRefs = Array.from(new Set([storedApiKeysRef, fallbackApiKeysRef].filter(isNonEmptyString)))
+          let restoredApiKeys = false
+
+          for (const apiKeysRef of apiKeysRefs) {
+            const apiKeysSecret = await storageV2SecretVaultService.getSecret(apiKeysRef)
+            if (!apiKeysSecret) continue
+
+            const apiKeys = parseProviderApiKeyEntriesSecret(apiKeysSecret)
+            if (apiKeys) {
+              snapshot.apiKeys = apiKeys
+              snapshot.apiKey = selectProviderLegacyApiKey(apiKeys)
+              restoredApiKeys = true
+              break
+            }
+          }
+
+          if (storedApiKeysRef && !restoredApiKeys) {
+            missingSecretCount++
+          }
+
+          const storedApiKeyRef = providerCredentialRefs.apiKey
           const fallbackApiKeyRef = makeStorageV2SecretRef('provider', provider.id, 'apiKey')
           const apiKeyRefs = Array.from(new Set([storedApiKeyRef, fallbackApiKeyRef].filter(isNonEmptyString)))
           let restoredApiKey = false
@@ -996,14 +1084,46 @@ export class StorageV2Service {
   async upsertProvider(
     provider: Provider,
     sortOrder?: number,
-    credentialRef?: string,
+    credentialRef?: StorageV2ProviderCredentialRefInput,
     options: { clearCredential?: boolean; preserveExistingCredential?: boolean } = {}
   ) {
-    const nextCredentialRef =
-      credentialRef ??
-      (provider.apiKey
-        ? await storageV2SecretVaultService.setSecret('provider', provider.id, 'apiKey', provider.apiKey)
-        : undefined)
+    let nextCredentialRef = credentialRef
+
+    if (!nextCredentialRef) {
+      const credentialRefs: StorageV2ProviderCredentialRefs = {}
+      const providerApiKeys = getProviderApiKeyEntries(provider)
+
+      if (provider.apiKey) {
+        credentialRefs.apiKey = await storageV2SecretVaultService.setSecret(
+          'provider',
+          provider.id,
+          'apiKey',
+          provider.apiKey
+        )
+      }
+
+      if (providerApiKeys.length > 0) {
+        credentialRefs.apiKeys = await storageV2SecretVaultService.setSecret(
+          'provider',
+          provider.id,
+          'apiKeys',
+          JSON.stringify(providerApiKeys)
+        )
+
+        const legacyApiKey = selectProviderLegacyApiKey(providerApiKeys)
+        if (legacyApiKey && !credentialRefs.apiKey) {
+          credentialRefs.apiKey = await storageV2SecretVaultService.setSecret(
+            'provider',
+            provider.id,
+            'apiKey',
+            legacyApiKey
+          )
+        }
+      }
+
+      nextCredentialRef = Object.keys(credentialRefs).length > 0 ? credentialRefs : undefined
+    }
+
     const upsertOptions = { ...options }
     if (options.clearCredential === true) {
       upsertOptions.clearCredential = true
@@ -1011,6 +1131,49 @@ export class StorageV2Service {
     return Object.keys(upsertOptions).length > 0
       ? storageV2ProviderRepository.upsert(provider, sortOrder, nextCredentialRef, upsertOptions)
       : storageV2ProviderRepository.upsert(provider, sortOrder, nextCredentialRef)
+  }
+
+  async upsertProviderApiKeys(providerId: string, apiKeys: ProviderApiKeyEntry[]) {
+    const normalizedApiKeys = apiKeys.flatMap((entry) => {
+      const id = typeof entry.id === 'string' ? entry.id.trim() : ''
+      const key = typeof entry.key === 'string' ? entry.key.trim() : ''
+      if (!id || !key) return []
+
+      return [
+        {
+          id,
+          key,
+          ...(typeof entry.label === 'string' && entry.label ? { label: entry.label } : {}),
+          isEnabled: entry.isEnabled === true
+        }
+      ]
+    })
+
+    if (normalizedApiKeys.length === 0) {
+      return storageV2ProviderRepository.upsertCredentials(providerId, undefined, {
+        clearCredentialKinds: ['apiKey', 'apiKeys']
+      })
+    }
+
+    const apiKeysRef = await storageV2SecretVaultService.setSecret(
+      'provider',
+      providerId,
+      'apiKeys',
+      JSON.stringify(normalizedApiKeys)
+    )
+    const legacyApiKey = selectProviderLegacyApiKey(normalizedApiKeys)
+    const apiKeyRef = legacyApiKey
+      ? await storageV2SecretVaultService.setSecret('provider', providerId, 'apiKey', legacyApiKey)
+      : undefined
+
+    return storageV2ProviderRepository.upsertCredentials(
+      providerId,
+      {
+        apiKeys: apiKeysRef,
+        ...(apiKeyRef ? { apiKey: apiKeyRef } : {})
+      },
+      apiKeyRef ? undefined : { clearCredentialKinds: ['apiKey'] }
+    )
   }
 
   async deleteProvider(providerId: string) {

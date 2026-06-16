@@ -109,8 +109,12 @@ type StoredMessage = {
 
 export type StorageV2ProviderUpsertOptions = {
   clearCredential?: boolean
+  clearCredentialKinds?: string[]
   preserveExistingCredential?: boolean
 }
+
+export type StorageV2ProviderCredentialRefs = Record<string, string>
+export type StorageV2ProviderCredentialRefInput = string | StorageV2ProviderCredentialRefs
 
 const LEGACY_FILE_TYPES = new Set(['image', 'video', 'audio', 'text', 'document', 'other'])
 
@@ -257,7 +261,103 @@ function stripProviderConfig(provider: Provider): Record<string, unknown> {
   delete config.apiKey
   delete config.models
   delete config.isAnthropicModel
+  if (Array.isArray(config.apiKeys)) {
+    config.apiKeys = config.apiKeys.map((entry) => {
+      if (!isRecord(entry)) return entry
+      const redactedEntry = { ...entry }
+      delete redactedEntry.key
+      return redactedEntry
+    })
+  }
   return config
+}
+
+function normalizeProviderCredentialRefs(
+  credentialRef?: StorageV2ProviderCredentialRefInput
+): StorageV2ProviderCredentialRefs {
+  if (!credentialRef) return {}
+
+  if (typeof credentialRef === 'string') {
+    return credentialRef.trim() ? { apiKey: credentialRef } : {}
+  }
+
+  const refs: StorageV2ProviderCredentialRefs = {}
+  for (const [credentialKind, secretRef] of Object.entries(credentialRef)) {
+    const kind = credentialKind.trim()
+    if (!kind || typeof secretRef !== 'string' || !secretRef.trim()) continue
+    refs[kind] = secretRef
+  }
+
+  return refs
+}
+
+function providerHasPlaintextApiKeyList(provider: Provider): boolean {
+  const apiKeys = (provider as unknown as { apiKeys?: unknown }).apiKeys
+  return (
+    Array.isArray(apiKeys) && apiKeys.some((entry) => isRecord(entry) && typeof entry.key === 'string' && entry.key)
+  )
+}
+
+async function upsertProviderCredentialRefs(
+  client: Client,
+  providerId: string,
+  credentialRefs: StorageV2ProviderCredentialRefs,
+  options: StorageV2ProviderUpsertOptions,
+  timestamp: string
+) {
+  const credentialKindsToClear = new Set(options.clearCredentialKinds ?? [])
+  if (options.clearCredential === true) {
+    credentialKindsToClear.add('apiKey')
+  }
+
+  for (const credentialKind of Object.keys(credentialRefs)) {
+    credentialKindsToClear.delete(credentialKind)
+  }
+
+  for (const [credentialKind, secretRef] of Object.entries(credentialRefs)) {
+    await client.execute({
+      sql: `
+        INSERT INTO provider_credentials (provider_id, credential_kind, secret_ref, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(provider_id, credential_kind) DO UPDATE SET
+          secret_ref = excluded.secret_ref,
+          updated_at = excluded.updated_at
+      `,
+      args: [providerId, credentialKind, secretRef, timestamp]
+    })
+    await storageV2SyncLogService.recordChange({
+      client,
+      entityType: 'provider_credential',
+      entityId: encodeStorageV2CompositeEntityId([providerId, credentialKind]),
+      payload: {
+        providerId,
+        credentialKind,
+        secretRef
+      },
+      version: 1
+    })
+  }
+
+  for (const credentialKind of credentialKindsToClear) {
+    const normalizedKind = credentialKind.trim()
+    if (!normalizedKind) continue
+
+    await client.execute({
+      sql: 'DELETE FROM provider_credentials WHERE provider_id = ? AND credential_kind = ?',
+      args: [providerId, normalizedKind]
+    })
+    await storageV2SyncLogService.recordChange({
+      client,
+      entityType: 'provider_credential',
+      entityId: encodeStorageV2CompositeEntityId([providerId, normalizedKind]),
+      operation: 'delete',
+      payload: {
+        providerId,
+        credentialKind: normalizedKind
+      },
+      version: 1
+    })
+  }
 }
 
 function getProviderModelRowId(providerId: string, modelId: string) {
@@ -648,7 +748,7 @@ export class StorageV2ProviderRepository {
   async upsert(
     provider: Provider,
     sortOrder = 0,
-    credentialRef?: string,
+    credentialRef?: StorageV2ProviderCredentialRefInput,
     options: StorageV2ProviderUpsertOptions = {}
   ): Promise<{ skippedSecret: boolean }> {
     const client = await storageV2Database.getClient()
@@ -656,7 +756,7 @@ export class StorageV2ProviderRepository {
     const config = stripProviderConfig(provider)
     const models = normalizeProviderModels(provider)
     const modelIds = models.map((model) => getProviderModelRowId(provider.id, model.id))
-    const shouldClearCredential = options.clearCredential === true
+    const credentialRefs = normalizeProviderCredentialRefs(credentialRef)
 
     await withTransaction(client, async () => {
       await client.execute({
@@ -742,34 +842,7 @@ export class StorageV2ProviderRepository {
         })
       }
 
-      if (credentialRef) {
-        await client.execute({
-          sql: `
-            INSERT INTO provider_credentials (provider_id, credential_kind, secret_ref, updated_at)
-            VALUES (?, 'apiKey', ?, ?)
-            ON CONFLICT(provider_id, credential_kind) DO UPDATE SET
-              secret_ref = excluded.secret_ref,
-              updated_at = excluded.updated_at
-          `,
-          args: [provider.id, credentialRef, timestamp]
-        })
-      } else if (shouldClearCredential) {
-        await client.execute({
-          sql: "DELETE FROM provider_credentials WHERE provider_id = ? AND credential_kind = 'apiKey'",
-          args: [provider.id]
-        })
-        await storageV2SyncLogService.recordChange({
-          client,
-          entityType: 'provider_credential',
-          entityId: encodeStorageV2CompositeEntityId([provider.id, 'apiKey']),
-          operation: 'delete',
-          payload: {
-            providerId: provider.id,
-            credentialKind: 'apiKey'
-          },
-          version: 1
-        })
-      }
+      await upsertProviderCredentialRefs(client, provider.id, credentialRefs, options, timestamp)
 
       await storageV2SyncLogService.recordChange({
         client,
@@ -778,15 +851,31 @@ export class StorageV2ProviderRepository {
         payload: {
           provider: config,
           modelCount: models.length,
-          hasCredentialRef: Boolean(credentialRef)
+          hasCredentialRef: Object.keys(credentialRefs).length > 0
         },
         version: await getVersion(client, 'providers', provider.id)
       })
     })
 
     return {
-      skippedSecret: Boolean(provider.apiKey && !credentialRef)
+      skippedSecret:
+        Boolean(provider.apiKey && !credentialRefs.apiKey) ||
+        (providerHasPlaintextApiKeyList(provider) && !credentialRefs.apiKeys)
     }
+  }
+
+  async upsertCredentials(
+    providerId: string,
+    credentialRef?: StorageV2ProviderCredentialRefInput,
+    options: StorageV2ProviderUpsertOptions = {}
+  ): Promise<void> {
+    const client = await storageV2Database.getClient()
+    const timestamp = now()
+    const credentialRefs = normalizeProviderCredentialRefs(credentialRef)
+
+    await withTransaction(client, async () => {
+      await upsertProviderCredentialRefs(client, providerId, credentialRefs, options, timestamp)
+    })
   }
 
   async list(): Promise<StoredProvider[]> {
@@ -866,6 +955,12 @@ export class StorageV2ProviderRepository {
       })
       const existingVersion = Number(existingResult.rows[0]?.version ?? 0)
       deleted = existingVersion > 0
+      const credentialKindResult = await client.execute({
+        sql: 'SELECT credential_kind FROM provider_credentials WHERE provider_id = ?',
+        args: [providerId]
+      })
+      const credentialKinds = new Set(credentialKindResult.rows.map((row) => String(row.credential_kind)))
+      credentialKinds.add('apiKey')
 
       await client.execute({
         sql: `
@@ -887,18 +982,20 @@ export class StorageV2ProviderRepository {
         sql: 'DELETE FROM provider_credentials WHERE provider_id = ?',
         args: [providerId]
       })
-      await storageV2SyncLogService.recordChange({
-        client,
-        entityType: 'provider_credential',
-        entityId: encodeStorageV2CompositeEntityId([providerId, 'apiKey']),
-        operation: 'delete',
-        payload: {
-          providerId,
-          credentialKind: 'apiKey',
-          deletedAt
-        },
-        version: existingVersion > 0 ? existingVersion + 1 : 1
-      })
+      for (const credentialKind of credentialKinds) {
+        await storageV2SyncLogService.recordChange({
+          client,
+          entityType: 'provider_credential',
+          entityId: encodeStorageV2CompositeEntityId([providerId, credentialKind]),
+          operation: 'delete',
+          payload: {
+            providerId,
+            credentialKind,
+            deletedAt
+          },
+          version: existingVersion > 0 ? existingVersion + 1 : 1
+        })
+      }
       await storageV2SyncLogService.recordChange({
         client,
         entityType: 'provider',

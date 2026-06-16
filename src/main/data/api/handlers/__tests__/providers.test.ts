@@ -12,6 +12,7 @@ const {
   getAuthConfigMock,
   updateApiKeyMock,
   deleteApiKeyMock,
+  upsertProviderApiKeysMock,
   moveMock,
   reorderMock
 } = vi.hoisted(() => ({
@@ -26,6 +27,7 @@ const {
   getAuthConfigMock: vi.fn(),
   updateApiKeyMock: vi.fn(),
   deleteApiKeyMock: vi.fn(),
+  upsertProviderApiKeysMock: vi.fn(),
   moveMock: vi.fn(),
   reorderMock: vi.fn()
 }))
@@ -48,11 +50,18 @@ vi.mock('@data/services/ProviderService', () => ({
   }
 }))
 
+vi.mock('@main/services/storageV2/StorageService', () => ({
+  storageV2Service: {
+    upsertProviderApiKeys: upsertProviderApiKeysMock
+  }
+}))
+
 import { providerHandlers } from '../providers'
 
 describe('providerHandlers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    upsertProviderApiKeysMock.mockResolvedValue(undefined)
   })
 
   describe('/providers', () => {
@@ -174,11 +183,14 @@ describe('providerHandlers', () => {
       } as never)
 
       expect(replaceApiKeysMock).toHaveBeenCalledWith('openai', keys)
+      expect(getApiKeysMock).not.toHaveBeenCalled()
+      expect(upsertProviderApiKeysMock).toHaveBeenCalledWith('openai', keys)
     })
 
     it('adds one API key with an optional label', async () => {
       const updated = { id: 'openai', apiKeys: [{ id: 'key-a', key: 'sk-a', label: 'Primary', isEnabled: true }] }
       addApiKeyMock.mockResolvedValueOnce(updated)
+      getApiKeysMock.mockResolvedValueOnce([{ id: 'key-a', key: 'sk-a', label: 'Primary', isEnabled: true }])
 
       const result = await providerHandlers['/providers/:providerId/api-keys'].POST({
         params: { providerId: 'openai' },
@@ -186,6 +198,10 @@ describe('providerHandlers', () => {
       } as never)
 
       expect(addApiKeyMock).toHaveBeenCalledWith('openai', 'sk-a', 'Primary')
+      expect(getApiKeysMock).toHaveBeenCalledWith('openai')
+      expect(upsertProviderApiKeysMock).toHaveBeenCalledWith('openai', [
+        { id: 'key-a', key: 'sk-a', label: 'Primary', isEnabled: true }
+      ])
       expect(result).toBe(updated)
     })
 
@@ -230,6 +246,7 @@ describe('providerHandlers', () => {
     it('updates one API key by ID', async () => {
       const updated = { id: 'openai', apiKeys: [{ id: 'key-a', key: 'sk-new', isEnabled: false }] }
       updateApiKeyMock.mockResolvedValueOnce(updated)
+      getApiKeysMock.mockResolvedValueOnce([{ id: 'key-a', key: 'sk-new', isEnabled: false }])
 
       const result = await providerHandlers['/providers/:providerId/api-keys/:keyId'].PATCH({
         params: { providerId: 'openai', keyId: 'key-a' },
@@ -237,6 +254,10 @@ describe('providerHandlers', () => {
       } as never)
 
       expect(updateApiKeyMock).toHaveBeenCalledWith('openai', 'key-a', { key: 'sk-new', isEnabled: false })
+      expect(getApiKeysMock).toHaveBeenCalledWith('openai')
+      expect(upsertProviderApiKeysMock).toHaveBeenCalledWith('openai', [
+        { id: 'key-a', key: 'sk-new', isEnabled: false }
+      ])
       expect(result).toBe(updated)
     })
 
@@ -254,12 +275,15 @@ describe('providerHandlers', () => {
     it('deletes one API key by ID', async () => {
       const updated = { id: 'openai', apiKeys: [] }
       deleteApiKeyMock.mockResolvedValueOnce(updated)
+      getApiKeysMock.mockResolvedValueOnce([])
 
       const result = await providerHandlers['/providers/:providerId/api-keys/:keyId'].DELETE({
         params: { providerId: 'openai', keyId: 'key-a' }
       } as never)
 
       expect(deleteApiKeyMock).toHaveBeenCalledWith('openai', 'key-a')
+      expect(getApiKeysMock).toHaveBeenCalledWith('openai')
+      expect(upsertProviderApiKeysMock).toHaveBeenCalledWith('openai', [])
       expect(result).toBe(updated)
     })
   })

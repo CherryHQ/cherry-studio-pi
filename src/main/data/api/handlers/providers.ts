@@ -7,6 +7,8 @@
  */
 
 import { providerService } from '@data/services/ProviderService'
+import { loggerService } from '@logger'
+import { storageV2Service } from '@main/services/storageV2/StorageService'
 import type { HandlersFor } from '@shared/data/api/apiTypes'
 import { OrderBatchRequestSchema, OrderRequestSchema } from '@shared/data/api/schemas/_endpointHelpers'
 import {
@@ -19,6 +21,21 @@ import {
   UpdateApiKeySchema,
   UpdateProviderSchema
 } from '@shared/data/api/schemas/providers'
+import type { ApiKeyEntry } from '@shared/data/types/provider'
+
+const logger = loggerService.withContext('DataApi:ProviderHandlers')
+
+async function mirrorProviderApiKeysToStorageV2(providerId: string, fallbackKeys?: ApiKeyEntry[]) {
+  try {
+    const keys = fallbackKeys ?? (await providerService.getApiKeys(providerId))
+    await storageV2Service.upsertProviderApiKeys(providerId, keys)
+  } catch (error) {
+    logger.warn('Failed to mirror provider API keys to Storage v2', {
+      providerId,
+      error
+    })
+  }
+}
 
 export const providerHandlers: HandlersFor<ProviderSchemas> = {
   '/providers': {
@@ -58,12 +75,16 @@ export const providerHandlers: HandlersFor<ProviderSchemas> = {
 
     POST: async ({ params, body }) => {
       const parsed = AddProviderApiKeySchema.parse(body)
-      return await providerService.addApiKey(params.providerId, parsed.key, parsed.label)
+      const provider = await providerService.addApiKey(params.providerId, parsed.key, parsed.label)
+      await mirrorProviderApiKeysToStorageV2(params.providerId)
+      return provider
     },
 
     PUT: async ({ params, body }) => {
       const parsed = ReplaceProviderApiKeysSchema.parse(body)
-      return await providerService.replaceApiKeys(params.providerId, parsed.keys)
+      const provider = await providerService.replaceApiKeys(params.providerId, parsed.keys)
+      await mirrorProviderApiKeysToStorageV2(params.providerId, parsed.keys)
+      return provider
     }
   },
 
@@ -76,11 +97,15 @@ export const providerHandlers: HandlersFor<ProviderSchemas> = {
   '/providers/:providerId/api-keys/:keyId': {
     PATCH: async ({ params, body }) => {
       const parsed = UpdateApiKeySchema.parse(body)
-      return providerService.updateApiKey(params.providerId, params.keyId, parsed)
+      const provider = await providerService.updateApiKey(params.providerId, params.keyId, parsed)
+      await mirrorProviderApiKeysToStorageV2(params.providerId)
+      return provider
     },
 
     DELETE: async ({ params }) => {
-      return providerService.deleteApiKey(params.providerId, params.keyId)
+      const provider = await providerService.deleteApiKey(params.providerId, params.keyId)
+      await mirrorProviderApiKeysToStorageV2(params.providerId)
+      return provider
     }
   },
 

@@ -321,6 +321,85 @@ describe('StorageV2ProviderRepository', () => {
     )
   })
 
+  it('stores provider api key list credential refs without leaking plaintext keys into provider config', async () => {
+    const { client, execute } = createMockClient()
+    const recordChange = vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
+    vi.spyOn(storageV2Database, 'withTransaction').mockImplementation(async (_client, fn) => fn())
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(client)
+
+    const result = await new StorageV2ProviderRepository().upsert(
+      {
+        id: 'provider-1',
+        type: 'openai',
+        name: 'OpenAI',
+        apiKeys: [{ id: 'key-a', key: 'sk-a', isEnabled: true }],
+        models: []
+      } as any,
+      0,
+      {
+        apiKeys: 'storage-v2://secret/provider/provider-1/apiKeys',
+        apiKey: 'storage-v2://secret/provider/provider-1/apiKey'
+      }
+    )
+
+    expect(result.skippedSecret).toBe(false)
+    const providerInsert = execute.mock.calls.find(
+      ([input]) => typeof input !== 'string' && input.sql.includes('INSERT INTO providers')
+    )
+    expect(providerInsert).toBeDefined()
+    const providerConfigJson = (providerInsert?.[0] as { args?: unknown[] }).args?.[6]
+    expect(JSON.stringify(providerConfigJson)).not.toContain('sk-a')
+    expect(JSON.parse(String(providerConfigJson))).toEqual(
+      expect.objectContaining({
+        apiKeys: [{ id: 'key-a', isEnabled: true }]
+      })
+    )
+    expect(
+      execute.mock.calls.some(
+        ([input]) =>
+          typeof input !== 'string' &&
+          input.sql.includes('INSERT INTO provider_credentials') &&
+          input.args?.[1] === 'apiKeys' &&
+          input.args?.[2] === 'storage-v2://secret/provider/provider-1/apiKeys'
+      )
+    ).toBe(true)
+    expect(recordChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: 'provider_credential',
+        entityId: encodeStorageV2CompositeEntityId(['provider-1', 'apiKeys'])
+      })
+    )
+  })
+
+  it('clears provider api key list credential refs without rewriting provider metadata', async () => {
+    const { client, execute } = createMockClient()
+    const recordChange = vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
+    vi.spyOn(storageV2Database, 'withTransaction').mockImplementation(async (_client, fn) => fn())
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(client)
+
+    await expect(
+      new StorageV2ProviderRepository().upsertCredentials('provider-1', undefined, {
+        clearCredentialKinds: ['apiKey', 'apiKeys']
+      })
+    ).resolves.toBeUndefined()
+
+    expect(
+      execute.mock.calls.some(([input]) => typeof input !== 'string' && input.sql.includes('INSERT INTO providers'))
+    ).toBe(false)
+    expect(
+      execute.mock.calls.filter(
+        ([input]) => typeof input !== 'string' && input.sql.includes('DELETE FROM provider_credentials')
+      )
+    ).toHaveLength(2)
+    expect(recordChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: 'provider_credential',
+        entityId: encodeStorageV2CompositeEntityId(['provider-1', 'apiKeys']),
+        operation: 'delete'
+      })
+    )
+  })
+
   it('records provider credential tombstones when deleting a provider', async () => {
     const { client, execute } = createMockClient()
     const recordChange = vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
