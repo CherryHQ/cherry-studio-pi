@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
@@ -33,6 +33,20 @@ vi.mock('@cherrystudio/ui', () => ({
   FieldLabel: ({ children }: { children: ReactNode }) => <span>{children}</span>,
   Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>
 }))
+
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function createDeferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
+}
 
 function createForm(overrides: Partial<AgentFormState> = {}): AgentFormState {
   return {
@@ -101,5 +115,37 @@ describe('WorkspaceSection', () => {
     await user.click(screen.getByRole('button', { name: 'library.config.agent.field.workspace.clear' }))
 
     expect(onChange).toHaveBeenCalledWith({ workspacePath: '' })
+  })
+
+  it('ignores duplicate workspace selections while the folder picker is open', async () => {
+    const onChange = vi.fn()
+    const originalApi = window.api
+    const selectFolderDeferred = createDeferred<string | null>()
+    const selectFolder = vi.fn().mockReturnValue(selectFolderDeferred.promise)
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        ...originalApi,
+        file: {
+          ...originalApi?.file,
+          selectFolder
+        }
+      }
+    })
+
+    try {
+      render(<WorkspaceSection form={createForm()} onChange={onChange} />)
+
+      const button = screen.getByRole('button', { name: 'library.config.agent.field.workspace.select' })
+      fireEvent.click(button)
+      fireEvent.click(button)
+
+      expect(selectFolder).toHaveBeenCalledTimes(1)
+
+      selectFolderDeferred.resolve(null)
+      await waitFor(() => expect(button).not.toBeDisabled())
+    } finally {
+      Object.defineProperty(window, 'api', { configurable: true, value: originalApi })
+    }
   })
 })

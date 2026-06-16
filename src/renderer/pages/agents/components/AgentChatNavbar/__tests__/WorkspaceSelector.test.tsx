@@ -1,6 +1,6 @@
 import { RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -11,6 +11,20 @@ const { createWorkspaceByPathMock, updateSessionMock } = vi.hoisted(() => ({
   createWorkspaceByPathMock: vi.fn(),
   updateSessionMock: vi.fn()
 }))
+
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function createDeferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
+}
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -174,6 +188,29 @@ describe('WorkspaceSelector', () => {
       window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
       document.removeEventListener('keydown', closeDocumentPopovers)
       window.removeEventListener('keydown', closeWindowPopovers)
+      restoreWindow()
+    }
+  })
+
+  it('ignores duplicate workspace selections while the folder picker is open', async () => {
+    const selectFolderDeferred = createDeferred<string | null>()
+    const selectFolder = vi.fn().mockReturnValue(selectFolderDeferred.promise)
+    const success = vi.fn()
+    const error = vi.fn()
+    const restoreWindow = installWindowMocks({ selectFolder, success, error })
+
+    try {
+      render(<WorkspaceSelector session={createSession()} />)
+
+      const button = screen.getByRole('button', { name: /agent\.session\.workspace\.select/ })
+      fireEvent.click(button)
+      fireEvent.click(button)
+
+      expect(selectFolder).toHaveBeenCalledTimes(1)
+
+      selectFolderDeferred.resolve(null)
+      await waitFor(() => expect(button).not.toBeDisabled())
+    } finally {
       restoreWindow()
     }
   })

@@ -9,7 +9,7 @@ import { cn } from '@renderer/utils'
 import { getErrorMessage } from '@renderer/utils/error'
 import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
 import { FolderOpen } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 type WorkspaceSelectorProps = {
@@ -19,6 +19,7 @@ type WorkspaceSelectorProps = {
 const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
   const { t } = useTranslation()
   const [selecting, setSelecting] = useState(false)
+  const selectingRef = useRef(false)
   const { createWorkspaceByPath } = useAgentWorkspaceMutations()
   const { updateSession } = useUpdateSession(session.agentId)
 
@@ -30,7 +31,8 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
   const actionLabel = session.workspace ? t('agent.session.workspace.change') : t('agent.session.workspace.select')
 
   const handleSelectWorkspace = async () => {
-    if (selecting) return
+    if (selectingRef.current) return
+    selectingRef.current = true
     const cancelScheduledClose = scheduleCloseTransientResourceSelectors()
     setSelecting(true)
     try {
@@ -59,6 +61,7 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
       })
     } finally {
       cancelScheduledClose?.()
+      selectingRef.current = false
       setSelecting(false)
     }
   }

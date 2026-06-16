@@ -2,7 +2,7 @@ import { Button, Field, FieldContent } from '@cherrystudio/ui'
 import { getErrorMessage } from '@renderer/utils/error'
 import { FolderOpen, FolderPlus, X } from 'lucide-react'
 import type { FC } from 'react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { FieldHeader } from '../../FieldHeader'
@@ -16,6 +16,7 @@ interface Props {
 export const WorkspaceField: FC<Props> = ({ form, onChange }) => {
   const { t } = useTranslation()
   const [selecting, setSelecting] = useState(false)
+  const selectingRef = useRef(false)
 
   const hasValue = Boolean(form.workspacePath)
   const displayValue = form.workspacePath || t('library.config.agent.field.workspace.auto')
@@ -24,7 +25,8 @@ export const WorkspaceField: FC<Props> = ({ form, onChange }) => {
   )
 
   const handleSelect = async () => {
-    if (selecting) return
+    if (selectingRef.current) return
+    selectingRef.current = true
     setSelecting(true)
     try {
       const selected = await window.api.file.selectFolder({
@@ -40,6 +42,7 @@ export const WorkspaceField: FC<Props> = ({ form, onChange }) => {
         description: getErrorMessage(error)
       })
     } finally {
+      selectingRef.current = false
       setSelecting(false)
     }
   }
