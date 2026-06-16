@@ -397,6 +397,30 @@ describe('useModelSelectorData', () => {
     expect(result.current.modelItems.map((m) => m.modelId)).toEqual(['openai::gpt-4'])
   })
 
+  it('does not re-run caller filters when rendering pinned rows', () => {
+    const filter = vi.fn((model: Model) => model.capabilities.includes(MODEL_CAPABILITY.REASONING))
+
+    wireDeps({
+      providers: [makeProvider('openai')],
+      models: [
+        makeModel('gpt-4', 'openai', { capabilities: [MODEL_CAPABILITY.REASONING] }),
+        makeModel('gpt-3.5', 'openai')
+      ],
+      pinnedIds: ['openai::gpt-4']
+    })
+
+    const { result } = renderHook(() =>
+      useModelSelectorData({
+        searchText: '',
+        filter
+      })
+    )
+
+    expect(result.current.modelItems.map((m) => m.modelId)).toEqual(['openai::gpt-4'])
+    expect(result.current.modelItems[0].isPinned).toBe(true)
+    expect(filter).toHaveBeenCalledTimes(2)
+  })
+
   it('passes provider context to caller-provided filters', () => {
     wireDeps({
       providers: [
