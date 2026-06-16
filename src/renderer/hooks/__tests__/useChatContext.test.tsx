@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   deleteMessage: vi.fn(),
   fileSave: vi.fn(),
   loggerError: vi.fn(),
+  modalConfirm: vi.fn(),
   setMultiSelectMode: vi.fn(),
   setSelectedMessageIds: vi.fn(),
   toastError: vi.fn(),
@@ -66,6 +67,14 @@ vi.mock('react-i18next', () => ({
   })
 }))
 
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
+
 describe('useChatContextProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -75,6 +84,12 @@ describe('useChatContextProvider', () => {
         file: {
           save: mocks.fileSave
         }
+      }
+    })
+    Object.defineProperty(window, 'modal', {
+      configurable: true,
+      value: {
+        confirm: mocks.modalConfirm
       }
     })
     Object.defineProperty(window, 'toast', {
@@ -126,5 +141,31 @@ describe('useChatContextProvider', () => {
     expect(mocks.toastSuccess).not.toHaveBeenCalled()
     expect(mocks.setMultiSelectMode).not.toHaveBeenCalled()
     expect(mocks.setSelectedMessageIds).not.toHaveBeenCalled()
+  })
+
+  it('prevents duplicate selected message delete confirmations and operations', async () => {
+    const runningDelete = deferred<void>()
+    mocks.deleteMessage.mockReturnValue(runningDelete.promise)
+
+    const { result } = renderHook(() => useChatContextProvider({ id: 'topic-1' } as any))
+
+    await act(async () => {
+      await result.current.handleMultiSelectAction('delete', ['m1', 'm2'])
+      await result.current.handleMultiSelectAction('delete', ['m1', 'm2'])
+    })
+
+    expect(mocks.modalConfirm).toHaveBeenCalledTimes(1)
+    const options = mocks.modalConfirm.mock.calls[0][0]
+
+    const firstDelete = options.onOk()
+    const secondDelete = options.onOk()
+    expect(mocks.deleteMessage).toHaveBeenCalledTimes(2)
+
+    runningDelete.resolve(undefined)
+    await Promise.all([firstDelete, secondDelete])
+
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('message.delete.success')
+    expect(mocks.setMultiSelectMode).toHaveBeenCalledWith(false)
+    expect(mocks.setSelectedMessageIds).toHaveBeenCalledWith([])
   })
 })

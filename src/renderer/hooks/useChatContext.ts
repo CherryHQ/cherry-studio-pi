@@ -6,7 +6,7 @@ import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import type { Topic } from '@renderer/types'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { getTextFromParts } from '@renderer/utils/messageUtils/partsHelpers'
-import { createContext, use, useCallback, useEffect, useState } from 'react'
+import { createContext, use, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('useChatContext')
@@ -54,6 +54,8 @@ export const useChatContextProvider = (activeTopic: Topic): ChatContextValue => 
   const [selectedMessageIds, setSelectedMessageIds] = useCache('chat.selected_message_ids')
 
   const [messageRefs, setMessageRefs] = useState<Map<string, HTMLElement>>(new Map())
+  const deleteConfirmRef = useRef(false)
+  const deleteRunningRef = useRef(false)
 
   const handleToggleMultiSelectMode = useCallback(
     (value: boolean) => {
@@ -122,12 +124,28 @@ export const useChatContextProvider = (activeTopic: Topic): ChatContextValue => 
 
       switch (actionType) {
         case 'delete':
+          if (deleteConfirmRef.current || deleteRunningRef.current) {
+            return
+          }
+
+          const clearDeleteGuard = () => {
+            if (deleteRunningRef.current) return
+            deleteConfirmRef.current = false
+          }
+
+          deleteConfirmRef.current = true
           window.modal.confirm({
             title: t('message.delete.confirm.title'),
             content: t('message.delete.confirm.content', { count: messageIds.length }),
             okButtonProps: { danger: true },
             centered: true,
+            onCancel: clearDeleteGuard,
             onOk: async () => {
+              if (deleteRunningRef.current) {
+                return
+              }
+
+              deleteRunningRef.current = true
               try {
                 await Promise.all(messageIds.map((messageId) => v2?.deleteMessage(messageId)))
                 window.toast.success(t('message.delete.success'))
@@ -135,6 +153,9 @@ export const useChatContextProvider = (activeTopic: Topic): ChatContextValue => 
               } catch (error) {
                 logger.error('Failed to delete messages:', error as Error)
                 window.toast.error(t('message.delete.failed'))
+              } finally {
+                deleteRunningRef.current = false
+                deleteConfirmRef.current = false
               }
             }
           })
