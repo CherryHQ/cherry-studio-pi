@@ -207,6 +207,7 @@ class TelegramAdapter extends ChannelAdapter {
       this.stabilityTimer = null
       if (!this.shouldStop && this.bot === bot) this.reconnectAttempts = 0
     }, this.stabilityResetMs)
+    this.stabilityTimer.unref?.()
   }
 
   private clearStabilityTimer(): void {
@@ -238,6 +239,7 @@ class TelegramAdapter extends ChannelAdapter {
         this.scheduleReconnect()
       })
     }, delay)
+    this.reconnectTimer.unref?.()
   }
 
   private clearReconnectTimer(): void {

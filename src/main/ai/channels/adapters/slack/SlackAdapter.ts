@@ -296,6 +296,7 @@ class SlackAdapter extends ChannelAdapter {
             ws.ping()
           }
         }, 30_000)
+        this.pingTimer.unref?.()
       })
 
       ws.on('message', (data: Buffer) => {
@@ -692,6 +693,7 @@ class SlackAdapter extends ChannelAdapter {
         })
       }
     }, delay)
+    this.reconnectTimer.unref?.()
   }
 }
 
