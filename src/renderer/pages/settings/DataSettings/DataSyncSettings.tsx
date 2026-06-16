@@ -248,8 +248,15 @@ const DataSyncSettings: FC = () => {
   const statusRefreshSeqRef = useRef(0)
   const statusRefreshLoadingSeqRef = useRef(0)
   const directoryLoadSeqRef = useRef(0)
+  const diagnosisSeqRef = useRef(0)
   const statusRefreshFeedbackRef = useRef({ t, webdavHost, webdavPath })
   statusRefreshFeedbackRef.current = { t, webdavHost, webdavPath }
+
+  useEffect(() => {
+    return () => {
+      diagnosisSeqRef.current += 1
+    }
+  }, [])
 
   useEffect(() => {
     setWebdavHost(dataSyncWebdavHost)
@@ -546,12 +553,15 @@ const DataSyncSettings: FC = () => {
     const config = trySaveWebDavConfig()
     if (!config) return
 
+    const requestSeq = ++diagnosisSeqRef.current
+    const isLatestRequest = () => requestSeq === diagnosisSeqRef.current
     setDiagnosing(true)
     try {
       const [writeCheck, nextStatus] = await Promise.all([
         window.api.dataSync.checkWriteAccess(config),
         window.api.dataSync.getStatus()
       ])
+      if (!isLatestRequest()) return
 
       const nextDiagnosis: DiagnosisState = {
         ok: true,
@@ -565,6 +575,8 @@ const DataSyncSettings: FC = () => {
       setStatus(nextStatus)
       window.toast.success(t('settings.data.data_sync.toast.diagnose_success'))
     } catch (error) {
+      if (!isLatestRequest()) return
+
       const message = getErrorMessage(error)
       setDiagnosis({
         ok: false,
@@ -585,7 +597,9 @@ const DataSyncSettings: FC = () => {
         { showToast: true }
       )
     } finally {
-      setDiagnosing(false)
+      if (isLatestRequest()) {
+        setDiagnosing(false)
+      }
     }
   }
 
