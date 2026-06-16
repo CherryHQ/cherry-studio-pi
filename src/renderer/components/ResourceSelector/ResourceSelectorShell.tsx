@@ -366,6 +366,9 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
         } else {
           ;(props.onChange as (v: string[]) => void)(ids)
         }
+        if (!multiEnabled) {
+          closeAllSelectors()
+        }
       } else {
         const id = typeof next === 'string' ? next : (next[0] ?? null)
         if (isItemType) {
@@ -374,9 +377,10 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
         } else {
           ;(props.onChange as (v: string | null) => void)(id)
         }
+        closeAllSelectors()
       }
     },
-    [isMulti, isItemType, items, props.onChange]
+    [isMulti, isItemType, items, props.onChange, multiEnabled, closeAllSelectors]
   )
 
   const togglePin = useCallback(

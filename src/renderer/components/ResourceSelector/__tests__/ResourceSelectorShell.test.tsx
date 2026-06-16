@@ -10,6 +10,7 @@ vi.mock('@cherrystudio/ui', async (importOriginal) => {
   return actual
 })
 
+import { RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '../resourceSelectorEvents'
 import {
   ResourceSelectorShell,
   type ResourceSelectorShellItem,
@@ -205,6 +206,33 @@ describe('ResourceSelectorShell', () => {
       openPopover()
       clickRowByName('Beta')
       expect(onChange).toHaveBeenCalledWith('2')
+    })
+
+    it('single selection broadcasts a force-close event', () => {
+      const closeListener = vi.fn()
+      window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeListener)
+
+      render(
+        <ResourceSelectorShell
+          trigger={<button type="button">Open</button>}
+          items={ITEMS}
+          pinnedIds={[]}
+          onTogglePin={vi.fn()}
+          labels={LABELS}
+          value={null}
+          onChange={vi.fn()}
+        />
+      )
+
+      openPopover()
+      clickRowByName('Beta')
+
+      expect(closeListener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detail: expect.objectContaining({ sourceId: expect.any(String) })
+        })
+      )
+      window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeListener)
     })
 
     it('single + item: onChange fires the full item object on row click', () => {
