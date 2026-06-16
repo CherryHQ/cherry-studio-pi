@@ -22,8 +22,13 @@ vi.mock('@renderer/hooks/useMiniApps', () => ({
 }))
 
 vi.mock('@cherrystudio/ui', () => ({
-  Button: ({ children, onClick, disabled }: React.PropsWithChildren<{ onClick?: () => void; disabled?: boolean }>) => (
-    <button type="button" onClick={onClick} disabled={disabled}>
+  Button: ({
+    children,
+    loading,
+    onClick,
+    disabled
+  }: React.PropsWithChildren<{ loading?: boolean; onClick?: () => void; disabled?: boolean }>) => (
+    <button type="button" onClick={onClick} disabled={disabled || loading}>
       {children}
     </button>
   ),
@@ -74,6 +79,20 @@ beforeEach(() => {
   }
 })
 
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
+}
+
 describe('NewMiniAppPanel', () => {
   it('renders nothing when closed', () => {
     render(<NewMiniAppPanel open={false} onClose={vi.fn()} />)
@@ -111,6 +130,38 @@ describe('NewMiniAppPanel', () => {
         bordered: false,
         supportedRegions: ['CN', 'Global']
       })
+    })
+  })
+
+  it('ignores duplicate save clicks and blocks close while creating', async () => {
+    const runningCreate = deferred<void>()
+    const onClose = vi.fn()
+    mocks.createCustomMiniApp.mockReturnValueOnce(runningCreate.promise)
+
+    render(<NewMiniAppPanel open={true} onClose={onClose} />)
+    fireEvent.change(screen.getByPlaceholderText('settings.miniApps.custom.id_placeholder'), {
+      target: { value: 'custom-app' }
+    })
+    fireEvent.change(screen.getByPlaceholderText('settings.miniApps.custom.name_placeholder'), {
+      target: { value: 'My App' }
+    })
+    fireEvent.change(screen.getByPlaceholderText('settings.miniApps.custom.url_placeholder'), {
+      target: { value: 'https://my.app' }
+    })
+
+    const saveBtn = screen.getByRole('button', { name: /common\.save/ })
+    fireEvent.click(saveBtn)
+    fireEvent.click(saveBtn)
+
+    expect(mocks.createCustomMiniApp).toHaveBeenCalledTimes(1)
+    expect(saveBtn).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: /common\.cancel/ }))
+    expect(onClose).not.toHaveBeenCalled()
+
+    runningCreate.resolve()
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalledTimes(1)
     })
   })
 

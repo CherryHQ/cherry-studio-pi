@@ -36,6 +36,7 @@ const NewMiniAppPanel: FC<Props> = ({ open, onClose }) => {
   const [logo, setLogo] = useState('')
   const [logoUrl, setLogoUrl] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const submittingRef = useRef(false)
 
   const reset = () => {
     setId('')
@@ -45,7 +46,11 @@ const NewMiniAppPanel: FC<Props> = ({ open, onClose }) => {
     setLogoUrl('')
   }
 
-  const handleClose = () => {
+  const handleClose = (force = false) => {
+    if (submittingRef.current && !force) {
+      return
+    }
+
     reset()
     onClose()
   }
@@ -81,7 +86,15 @@ const NewMiniAppPanel: FC<Props> = ({ open, onClose }) => {
   }
 
   const handleSubmit = async () => {
+    if (submittingRef.current) {
+      return
+    }
+
     const trimmedId = id.trim()
+    if (!trimmedId || !name.trim() || !url.trim()) {
+      return
+    }
+
     if (PRESETS_MINI_APPS.some((app) => app.id === trimmedId)) {
       window.toast.error(t('settings.miniApps.custom.conflicting_ids', { ids: trimmedId }))
       return
@@ -90,6 +103,7 @@ const NewMiniAppPanel: FC<Props> = ({ open, onClose }) => {
       window.toast.error(t('settings.miniApps.custom.duplicate_ids', { ids: trimmedId }))
       return
     }
+    submittingRef.current = true
     setSubmitting(true)
     try {
       await createCustomMiniApp({
@@ -101,11 +115,12 @@ const NewMiniAppPanel: FC<Props> = ({ open, onClose }) => {
         supportedRegions: ['CN', 'Global']
       })
       window.toast.success(t('settings.miniApps.custom.save_success'))
-      handleClose()
+      handleClose(true)
     } catch (error) {
       window.toast.error(t('settings.miniApps.custom.save_error'))
       logger.error('Failed to save custom mini app:', error as Error)
     } finally {
+      submittingRef.current = false
       setSubmitting(false)
     }
   }
@@ -191,7 +206,9 @@ const NewMiniAppPanel: FC<Props> = ({ open, onClose }) => {
 
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline">{t('common.cancel')}</Button>
+            <Button variant="outline" disabled={submitting}>
+              {t('common.cancel')}
+            </Button>
           </DialogClose>
           <Button onClick={handleSubmit} disabled={!canSubmit} loading={submitting}>
             {t('common.save')}
