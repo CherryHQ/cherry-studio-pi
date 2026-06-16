@@ -1150,6 +1150,11 @@ describe('AppDataSyncService', () => {
 
     await new AppDataSyncService().restoreLatestSnapshot(config)
 
+    expect(mocks.powerSaveBlocker.runWithBlocker).toHaveBeenCalledWith(
+      'data-sync.snapshot-restore',
+      expect.any(Function),
+      expect.objectContaining({ detail: '/remote-root' })
+    )
     expect(mocks.webdav.getFileContents).toHaveBeenCalledWith('/remote-root/sync/v1/backups/local-device.zip', {
       format: 'binary'
     })

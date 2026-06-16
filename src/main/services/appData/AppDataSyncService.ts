@@ -3921,54 +3921,62 @@ export class AppDataSyncService {
   async restoreLatestSnapshot(config: WebDavConfig) {
     const normalizedConfig = this.normalizeSyncWebDavConfig(config)
 
-    const { client, basePath } = this.createWebDavClient(normalizedConfig)
-    const manifestPath = path.posix.join(basePath, 'manifest.json')
-    const manifest = this.normalizeManifest(
-      await this.readJson<RemoteManifest>(client, manifestPath, {
-        throwOnInvalidJson: true,
-        maxBytes: REMOTE_MANIFEST_MAX_BYTES,
-        label: '远端同步状态 manifest.json'
-      })
+    return powerSaveBlockerService.runWithBlocker(
+      'data-sync.snapshot-restore',
+      async () => {
+        const { client, basePath } = this.createWebDavClient(normalizedConfig)
+        const manifestPath = path.posix.join(basePath, 'manifest.json')
+        const manifest = this.normalizeManifest(
+          await this.readJson<RemoteManifest>(client, manifestPath, {
+            throwOnInvalidJson: true,
+            maxBytes: REMOTE_MANIFEST_MAX_BYTES,
+            label: '远端同步状态 manifest.json'
+          })
+        )
+        const snapshot = selectLatestRemoteSnapshot(manifest)
+
+        if (!snapshot) {
+          throw new Error('No remote data snapshot is available')
+        }
+
+        const remotePath = path.posix.join(basePath, normalizeRemoteSnapshotPath(snapshot.path))
+        if (snapshot.byteSize > REMOTE_SNAPSHOT_MAX_BYTES) {
+          throw new RemoteSyncSizeLimitError(
+            `远端安全快照过大（${snapshot.byteSize} 字节，限制 ${REMOTE_SNAPSHOT_MAX_BYTES} 字节）。为避免长时间下载或占用过多内存，本次恢复已停止。`
+          )
+        }
+        await this.assertRemoteFileWithinByteLimit(client, remotePath, '远端安全快照', REMOTE_SNAPSHOT_MAX_BYTES)
+
+        const backupContents = await runWebDavOperation(
+          `downloading data sync snapshot ${remotePath}`,
+          () => client.getFileContents(remotePath, { format: 'binary' }),
+          { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
+        )
+        const backupBuffer = bufferFromRemote(backupContents)
+        if (backupBuffer.byteLength !== snapshot.byteSize) {
+          throw new Error('远端安全快照大小不匹配。为避免恢复损坏数据，本次恢复已停止。')
+        }
+        if (snapshot.checksum && sha256Buffer(backupBuffer) !== snapshot.checksum) {
+          throw new Error('远端安全快照校验失败。为避免恢复损坏数据，本次恢复已停止。')
+        }
+        const localBackupPath = path.join(
+          getSystemTempDir(),
+          'cherry-studio-pi-data-sync',
+          safeSnapshotRestoreFileName(snapshot)
+        )
+        await fsp.mkdir(path.dirname(localBackupPath), { recursive: true })
+        await fsp.writeFile(localBackupPath, backupBuffer)
+
+        try {
+          return await this.backupManager.restore(undefined as unknown as Electron.IpcMainInvokeEvent, localBackupPath)
+        } finally {
+          await fsp.rm(localBackupPath, { force: true }).catch(() => undefined)
+        }
+      },
+      {
+        detail: normalizedConfig.webdavPath
+      }
     )
-    const snapshot = selectLatestRemoteSnapshot(manifest)
-
-    if (!snapshot) {
-      throw new Error('No remote data snapshot is available')
-    }
-
-    const remotePath = path.posix.join(basePath, normalizeRemoteSnapshotPath(snapshot.path))
-    if (snapshot.byteSize > REMOTE_SNAPSHOT_MAX_BYTES) {
-      throw new RemoteSyncSizeLimitError(
-        `远端安全快照过大（${snapshot.byteSize} 字节，限制 ${REMOTE_SNAPSHOT_MAX_BYTES} 字节）。为避免长时间下载或占用过多内存，本次恢复已停止。`
-      )
-    }
-    await this.assertRemoteFileWithinByteLimit(client, remotePath, '远端安全快照', REMOTE_SNAPSHOT_MAX_BYTES)
-
-    const backupContents = await runWebDavOperation(
-      `downloading data sync snapshot ${remotePath}`,
-      () => client.getFileContents(remotePath, { format: 'binary' }),
-      { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
-    )
-    const backupBuffer = bufferFromRemote(backupContents)
-    if (backupBuffer.byteLength !== snapshot.byteSize) {
-      throw new Error('远端安全快照大小不匹配。为避免恢复损坏数据，本次恢复已停止。')
-    }
-    if (snapshot.checksum && sha256Buffer(backupBuffer) !== snapshot.checksum) {
-      throw new Error('远端安全快照校验失败。为避免恢复损坏数据，本次恢复已停止。')
-    }
-    const localBackupPath = path.join(
-      getSystemTempDir(),
-      'cherry-studio-pi-data-sync',
-      safeSnapshotRestoreFileName(snapshot)
-    )
-    await fsp.mkdir(path.dirname(localBackupPath), { recursive: true })
-    await fsp.writeFile(localBackupPath, backupBuffer)
-
-    try {
-      return await this.backupManager.restore(undefined as unknown as Electron.IpcMainInvokeEvent, localBackupPath)
-    } finally {
-      await fsp.rm(localBackupPath, { force: true }).catch(() => undefined)
-    }
   }
 
   async syncNow(config: WebDavConfig): Promise<DataSyncSummary> {
