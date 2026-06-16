@@ -68,6 +68,15 @@ const providerCredentialTable = {
   updatedAtColumn: 'updated_at'
 } as const
 
+const providerTable = {
+  entityType: 'provider',
+  table: 'providers',
+  idColumns: ['id'],
+  updatedAtColumn: 'updated_at',
+  deletedAtColumn: 'deleted_at',
+  versionColumn: 'version'
+} as const
+
 const agentSkillTable = {
   entityType: 'agent_skill',
   table: 'agent_skills',
@@ -155,6 +164,20 @@ type ProviderCredentialRow = {
   secret_ref: string
   updated_at: string
   updated_by_device_id: string | null
+}
+
+type ProviderRow = {
+  id: string
+  type: string
+  name: string
+  api_host: string | null
+  enabled: number
+  sort_order: number
+  config_json: string | null
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  version: number
 }
 
 type AgentSkillRow = {
@@ -402,6 +425,39 @@ function makeProviderCredentialDb(options: {
           state.tombstones = state.tombstones.filter(
             (row) => !(row.entity_type === entityType && row.entity_id === entityId)
           )
+          return { rows: [] }
+        }
+
+        return { rows: [] }
+      })
+    }
+  }
+}
+
+function makeProviderDb(rows: ProviderRow[]) {
+  const state = {
+    rows: [...rows],
+    syncState: new Map<string, string>()
+  }
+
+  return {
+    state,
+    client: {
+      execute: vi.fn(async (input: string | { sql: string; args?: unknown[] }) => {
+        const sql = typeof input === 'string' ? input : input.sql
+        const args = typeof input === 'string' ? [] : (input.args ?? [])
+
+        if (sql.includes('SELECT * FROM providers')) {
+          return { rows: state.rows.map((row) => ({ ...row })) }
+        }
+
+        if (sql.includes('SELECT value_json FROM sync_state')) {
+          const value = state.syncState.get(String(args[0]))
+          return { rows: value ? [{ value_json: JSON.stringify(value) }] : [] }
+        }
+
+        if (sql.includes('INSERT INTO sync_state')) {
+          state.syncState.set(String(args[0]), JSON.parse(String(args[1])))
           return { rows: [] }
         }
 
@@ -1391,6 +1447,48 @@ describe('StorageV2WebDavRecordSyncService', () => {
       expect.stringMatching(/\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/),
       expect.stringContaining('"key": "theme"'),
       { overwrite: false }
+    )
+  })
+
+  it('does not publish provider rows that still contain plaintext credential fields', async () => {
+    const remote = makeSharedWebDavStore()
+    const db = makeProviderDb([
+      {
+        id: 'provider-1',
+        type: 'openai',
+        name: 'OpenAI',
+        api_host: 'https://api.openai.com',
+        enabled: 1,
+        sort_order: 0,
+        config_json: JSON.stringify({
+          id: 'provider-1',
+          type: 'openai',
+          name: 'OpenAI',
+          apiKeys: [{ id: 'primary', key: 'sk-plaintext', isEnabled: true }],
+          authConfig: {
+            type: 'oauth',
+            accessToken: 'oauth-access-token'
+          }
+        }),
+        created_at: '2026-06-01T08:00:00.000Z',
+        updated_at: '2026-06-01T08:00:00.000Z',
+        deleted_at: null,
+        version: 1
+      }
+    ])
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([providerTable]).sync(remote.client as any, '/remote-root/sync/v1', null, {
+        skipWriteAccessProbe: true
+      })
+    ).rejects.toThrow('仍包含明文敏感字段')
+
+    expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
+    expect(remote.client.putFileContents).not.toHaveBeenCalledWith(
+      expect.stringMatching(/\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/),
+      expect.anything(),
+      expect.anything()
     )
   })
 

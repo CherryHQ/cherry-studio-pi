@@ -119,6 +119,13 @@ export type StorageV2ProviderCredentialRefs = Record<string, string>
 export type StorageV2ProviderCredentialRefInput = string | StorageV2ProviderCredentialRefs
 
 const LEGACY_FILE_TYPES = new Set(['image', 'video', 'audio', 'text', 'document', 'other'])
+const PROVIDER_AUTH_CONFIG_SECRET_KEYS = [
+  'accessToken',
+  'refreshToken',
+  'secretAccessKey',
+  'credentials',
+  'token'
+] as const
 
 export type StorageV2ConversationImport = {
   id: string
@@ -281,15 +288,10 @@ function redactProviderAuthConfig(value: unknown): unknown {
   if (!isRecord(value)) return value
 
   const authConfig = { ...value }
-  if (authConfig.type === 'oauth') {
-    delete authConfig.accessToken
-    delete authConfig.refreshToken
-  }
-  if (authConfig.type === 'iam-aws') {
-    delete authConfig.secretAccessKey
-  }
-  if (authConfig.type === 'iam-gcp') {
-    delete authConfig.credentials
+  for (const key of PROVIDER_AUTH_CONFIG_SECRET_KEYS) {
+    if (Object.hasOwn(authConfig, key)) {
+      delete authConfig[key]
+    }
   }
 
   return authConfig

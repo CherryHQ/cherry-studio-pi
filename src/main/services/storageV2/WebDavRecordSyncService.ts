@@ -10,7 +10,11 @@ import { runWebDavOperation, WebDavOperationError } from '@main/services/WebDavR
 import type { WebDAVClient } from 'webdav'
 
 import { storageV2DataRootService } from './DataRootService'
-import { collectStorageV2SecretRefsFromValue, scanStorageV2SecretReferences } from './SecretRefIntegrity'
+import {
+  collectStorageV2SecretRefsFromValue,
+  scanStorageV2SecretReferences,
+  STORAGE_V2_SECRET_REF_PREFIX
+} from './SecretRefIntegrity'
 import { type StorageV2PlaintextSecretVaultEntry, storageV2SecretVaultService } from './SecretVaultService'
 import { storageV2Database } from './StorageV2Database'
 import {
@@ -231,6 +235,16 @@ class RemoteSyncSizeLimitError extends Error {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
+}
+
+function parseJsonCell(value: unknown): unknown {
+  if (typeof value !== 'string' || !value.trim()) return value
+
+  try {
+    return JSON.parse(value)
+  } catch {
+    return value
+  }
 }
 
 const STORAGE_V2_SYNC_TABLE_OVERRIDES = {
@@ -740,6 +754,46 @@ function formatLimitedList(values: Iterable<string>, limit = 8) {
   const visible = list.slice(0, limit)
   const suffix = list.length > visible.length ? ` 等 ${list.length} 项` : ''
   return `${visible.join('、')}${suffix}`
+}
+
+function isPlaintextSecretPayload(value: unknown) {
+  if (value == null) return false
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return Boolean(trimmed && !trimmed.startsWith(STORAGE_V2_SECRET_REF_PREFIX))
+  }
+  if (Array.isArray(value)) return value.length > 0
+  if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length > 0
+  return false
+}
+
+function collectProviderPlaintextSecretPaths(row: Record<string, InValue>) {
+  const config = parseJsonCell(row.config_json)
+  if (!isPlainRecord(config)) return []
+
+  const paths: string[] = []
+  if (isPlaintextSecretPayload(config.apiKey)) {
+    paths.push('config_json.apiKey')
+  }
+
+  if (Array.isArray(config.apiKeys)) {
+    config.apiKeys.forEach((entry, index) => {
+      if (isPlainRecord(entry) && isPlaintextSecretPayload(entry.key)) {
+        paths.push(`config_json.apiKeys[${index}].key`)
+      }
+    })
+  }
+
+  const authConfig = config.authConfig
+  if (isPlainRecord(authConfig)) {
+    for (const key of ['accessToken', 'refreshToken', 'secretAccessKey', 'credentials', 'token']) {
+      if (isPlaintextSecretPayload(authConfig[key])) {
+        paths.push(`config_json.authConfig.${key}`)
+      }
+    }
+  }
+
+  return paths
 }
 
 function configuredRemoteArtifactCleanupMaxFiles() {
@@ -1415,6 +1469,15 @@ export class StorageV2WebDavRecordSyncService {
         const updatedAt = table.updatedAtColumn ? parseTime(row[table.updatedAtColumn]) : 0
         const version = table.versionColumn ? Number(row[table.versionColumn] ?? 1) : 1
 
+        const plaintextProviderSecretPaths =
+          table.entityType === 'provider' ? collectProviderPlaintextSecretPaths(row) : []
+        if (plaintextProviderSecretPaths.length > 0) {
+          throw new Error(
+            `同步数据失败：服务商 ${idValues[0]} 的 Storage v2 配置仍包含明文敏感字段：${formatLimitedList(
+              plaintextProviderSecretPaths
+            )}。请重新保存这个服务商配置，让密钥进入本地安全密钥库后再同步。`
+          )
+        }
         this.assertRecordRowWithinSyncBudget(table.entityType, row)
         records.push({
           id: recordId(table.entityType, idValues),

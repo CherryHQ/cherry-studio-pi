@@ -421,6 +421,48 @@ describe('StorageV2ProviderRepository', () => {
     ).toBe(true)
   })
 
+  it('redacts generic auth tokens from provider config metadata', async () => {
+    const { client, execute } = createMockClient()
+    vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
+    vi.spyOn(storageV2Database, 'withTransaction').mockImplementation(async (_client, fn) => fn())
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(client)
+
+    await new StorageV2ProviderRepository().upsert(
+      {
+        id: 'provider-1',
+        type: 'custom',
+        name: 'Custom',
+        authConfig: {
+          type: 'bearer',
+          token: 'plain-bearer-token',
+          accessToken: 'plain-access-token',
+          refreshToken: 'plain-refresh-token'
+        },
+        models: []
+      } as any,
+      0,
+      {
+        authConfig: 'storage-v2://secret/provider/provider-1/authConfig'
+      }
+    )
+
+    const providerInsert = execute.mock.calls.find(
+      ([input]) => typeof input !== 'string' && input.sql.includes('INSERT INTO providers')
+    )
+    if (!providerInsert) throw new Error('Expected provider insert call')
+    const providerConfigJson = (providerInsert[0] as { args?: unknown[] }).args?.[6]
+    expect(JSON.stringify(providerConfigJson)).not.toContain('plain-bearer-token')
+    expect(JSON.stringify(providerConfigJson)).not.toContain('plain-access-token')
+    expect(JSON.stringify(providerConfigJson)).not.toContain('plain-refresh-token')
+    expect(JSON.parse(String(providerConfigJson))).toEqual(
+      expect.objectContaining({
+        authConfig: {
+          type: 'bearer'
+        }
+      })
+    )
+  })
+
   it('preserves existing model rows during metadata-only provider mirrors', async () => {
     const { client, execute } = createMockClient()
     vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
