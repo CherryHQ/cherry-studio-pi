@@ -3,7 +3,7 @@ import MarkdownEditor from '@renderer/components/MarkdownEditor'
 import { TopView } from '@renderer/components/TopView'
 import { useProvider } from '@renderer/hooks/useProvider'
 import type { FC } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import ProviderSettingsDrawer from './primitives/ProviderSettingsDrawer'
@@ -24,6 +24,8 @@ const PopupContainer: FC<Props> = ({ providerId, resolve }) => {
   const [notes, setNotes] = useState<string>(provider?.settings?.notes || '')
   const [edited, setEdited] = useState(false)
   const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
+  const resolvedRef = useRef(false)
 
   useEffect(() => {
     if (edited) {
@@ -34,29 +36,43 @@ const PopupContainer: FC<Props> = ({ providerId, resolve }) => {
   }, [edited, provider?.settings?.notes])
 
   const handleSave = async () => {
+    if (savingRef.current || !provider) {
+      return
+    }
+
+    savingRef.current = true
     setSaving(true)
     try {
-      await updateProvider({ providerSettings: { ...provider?.settings, notes } })
+      await updateProvider({ providerSettings: { ...provider.settings, notes } })
       setOpen(false)
+      resolvedRef.current = true
       resolve({})
     } catch {
       window.toast.error(t('blocks.edit.save.failed.label'))
     } finally {
-      setSaving(false)
+      savingRef.current = false
+      if (!resolvedRef.current) {
+        setSaving(false)
+      }
     }
   }
 
   const onCancel = () => {
+    if (savingRef.current || resolvedRef.current) {
+      return
+    }
+
+    resolvedRef.current = true
     setOpen(false)
     resolve({})
   }
 
   const footer = (
     <div className={drawerClasses.footer}>
-      <Button variant="outline" onClick={onCancel}>
+      <Button variant="outline" disabled={saving} onClick={onCancel}>
         {t('common.cancel')}
       </Button>
-      <Button loading={saving} disabled={saving} onClick={() => void handleSave()}>
+      <Button loading={saving} disabled={saving || !provider} onClick={() => void handleSave()}>
         {t('common.save')}
       </Button>
     </div>

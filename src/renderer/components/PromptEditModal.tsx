@@ -10,7 +10,7 @@ import {
 } from '@cherrystudio/ui'
 import type { Prompt } from '@shared/data/types/prompt'
 import { PROMPT_CONTENT_MAX, PROMPT_TITLE_MAX } from '@shared/data/types/prompt'
-import { type FC, useCallback, useEffect, useState } from 'react'
+import { type FC, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface FormData {
@@ -30,6 +30,7 @@ const PromptEditModal: FC<PromptEditModalProps> = ({ open, prompt, saving, onSav
   const { t } = useTranslation()
   const [formData, setFormData] = useState<FormData>({ title: '', content: '' })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const submittingRef = useRef(false)
 
   const isEdit = !!prompt
   const trimmedTitleLength = formData.title.trim().length
@@ -47,15 +48,17 @@ const PromptEditModal: FC<PromptEditModalProps> = ({ open, prompt, saving, onSav
         content: prompt?.content ?? ''
       })
     } else {
+      submittingRef.current = false
       setIsSubmitting(false)
     }
   }, [open, prompt])
 
   const handleOk = useCallback(async () => {
-    if (!canSave) {
+    if (submittingRef.current || !canSave) {
       return
     }
 
+    submittingRef.current = true
     try {
       setIsSubmitting(true)
       await onSave({
@@ -65,13 +68,14 @@ const PromptEditModal: FC<PromptEditModalProps> = ({ open, prompt, saving, onSav
     } catch {
       // Parent mutation handlers surface the error; keep the modal usable.
     } finally {
+      submittingRef.current = false
       setIsSubmitting(false)
     }
   }, [canSave, formData, onSave])
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
-      if (!nextOpen) {
+      if (!nextOpen && !submittingRef.current) {
         onCancel()
       }
     },
