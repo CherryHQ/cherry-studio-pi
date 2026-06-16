@@ -307,9 +307,11 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
         window.toast.error(message)
         return
       }
-      if (topic.id === activeTopic?.id) {
+      if (topic.id === activeTopic?.id && topics.length > 1) {
         const index = findIndex(topics, (t) => t.id === topic.id)
-        setActiveTopic(topics[index + 1 === topics.length ? index - 1 : index + 1])
+        if (index !== -1) {
+          setActiveTopic(topics[index + 1 === topics.length ? index - 1 : index + 1])
+        }
       }
     },
     [topics, removeTopic, setActiveTopic, activeTopic, t]
