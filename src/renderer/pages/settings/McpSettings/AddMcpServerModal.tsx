@@ -28,7 +28,7 @@ import { formatZodError } from '@renderer/utils/error'
 import type { CreateMcpServerDto } from '@shared/data/api/schemas/mcpServers'
 import { UploadIcon } from 'lucide-react'
 import type { FC } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import * as z from 'zod'
@@ -102,6 +102,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
   const [fontSize] = usePreference('chat.message.font_size')
   const { activeCmTheme } = useCodeStyle()
   const [loading, setLoading] = useState(false)
+  const loadingRef = useRef(false)
   const [importMethod, setImportMethod] = useState<'json' | 'dxt' | 'mcpb'>(initialImportMethod)
   const [packageFile, setPackageFile] = useState<File | null>(null)
   const { setTimeoutTimer } = useTimer()
@@ -183,6 +184,11 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
   }
 
   const handleOk = async (jsonValues?: JsonFieldType) => {
+    if (loadingRef.current) {
+      return
+    }
+
+    loadingRef.current = true
     try {
       setLoading(true)
 
@@ -337,11 +343,16 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
         void updateServerConnectivityState(createdServer, true)
       }
     } finally {
+      loadingRef.current = false
       setLoading(false)
     }
   }
 
   const handleClose = () => {
+    if (loadingRef.current) {
+      return
+    }
+
     form.reset({ serverConfig: '' })
     setPackageFile(null)
     setImportMethod(initialImportMethod)
@@ -434,7 +445,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
           </div>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={handleClose} disabled={loading}>
             {t('common.cancel')}
           </Button>
           {importMethod === 'json' ? (
