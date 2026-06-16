@@ -5,6 +5,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AgentSessionInputbar from '../AgentSessionInputbar'
 
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function createDeferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
+}
+
 const { agentState, cacheServiceMock, inputbarSnapshots, inputbarToolModelIds, modelState, setTimeoutTimerMock } =
   vi.hoisted(() => ({
     agentState: {
@@ -247,6 +261,30 @@ describe('AgentSessionInputbar', () => {
 
     await waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ text: 'hello' }, { body: expect.any(Object) }))
     expect(window.toast.error).not.toHaveBeenCalledWith('code.model_required')
+  })
+
+  it('ignores duplicate sends while a send request is still in flight', async () => {
+    cacheServiceMock.getCasual.mockReturnValue('hello')
+    const sendDeferred = createDeferred<void>()
+    const sendMessage = vi.fn().mockReturnValue(sendDeferred.promise)
+
+    render(
+      <AgentSessionInputbar
+        agentId="agent-1"
+        sessionId="session-1"
+        sendMessage={sendMessage}
+        stop={vi.fn()}
+        isStreaming={false}
+      />
+    )
+
+    fireEvent.click(screen.getByTestId('agent-session-inputbar'))
+    fireEvent.click(screen.getByTestId('agent-session-inputbar'))
+
+    expect(sendMessage).toHaveBeenCalledTimes(1)
+
+    sendDeferred.resolve()
+    await waitFor(() => expect(screen.getByTestId('agent-session-text')).toHaveTextContent(''))
   })
 
   it('keeps input tools mounted from the saved agent model while the model catalog is empty', async () => {

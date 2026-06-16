@@ -225,6 +225,7 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
 
   const { setTimeoutTimer } = useTimer()
   const sessionTopicId = buildAgentSessionTopicId(sessionId)
+  const sendInFlightRef = useRef(false)
 
   // Agent sessions pass file paths to the runtime and let the agent choose tools
   // to inspect them, so attachments must not be gated by model modality.
@@ -360,6 +361,10 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
   }, [chatStop, sessionTopicId])
 
   const sendMessage = useCallback(async () => {
+    if (sendInFlightRef.current) {
+      return
+    }
+
     if (sendDisabled) {
       return
     }
@@ -371,6 +376,7 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
 
     logger.info('Starting to send message')
 
+    sendInFlightRef.current = true
     try {
       // For agent sessions, append file paths to the text content instead of uploading files
       let messageText = text
@@ -391,6 +397,8 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
     } catch (error) {
       logger.warn('Failed to send message:', error as Error)
       window.toast.error(t('chat.input.send_failed'))
+    } finally {
+      sendInFlightRef.current = false
     }
   }, [
     sendDisabled,
