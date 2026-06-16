@@ -257,7 +257,7 @@ describe('StorageV2ProviderRepository', () => {
     vi.restoreAllMocks()
   })
 
-  it('removes stale provider credentials when a new api key cannot be stored', async () => {
+  it('preserves provider credentials when a new api key cannot be stored', async () => {
     const { client, execute } = createMockClient()
     const recordChange = vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
     vi.spyOn(storageV2Database, 'withTransaction').mockImplementation(async (_client, fn) => fn())
@@ -279,8 +279,8 @@ describe('StorageV2ProviderRepository', () => {
           input.sql.includes('DELETE FROM provider_credentials') &&
           input.args?.[0] === 'provider-1'
       )
-    ).toBe(true)
-    expect(recordChange).toHaveBeenCalledWith(
+    ).toBe(false)
+    expect(recordChange).not.toHaveBeenCalledWith(
       expect.objectContaining({
         entityType: 'provider_credential',
         entityId: encodeStorageV2CompositeEntityId(['provider-1', 'apiKey']),

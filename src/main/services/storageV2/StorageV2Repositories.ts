@@ -656,9 +656,7 @@ export class StorageV2ProviderRepository {
     const config = stripProviderConfig(provider)
     const models = normalizeProviderModels(provider)
     const modelIds = models.map((model) => getProviderModelRowId(provider.id, model.id))
-    const shouldClearCredential =
-      options.clearCredential === true ||
-      Boolean(provider.apiKey && !credentialRef && !options.preserveExistingCredential)
+    const shouldClearCredential = options.clearCredential === true
 
     await withTransaction(client, async () => {
       await client.execute({
