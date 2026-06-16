@@ -57,7 +57,6 @@ const MessageGroup = ({ messages, topic, registerMessageElement }: Props) => {
       (getMessageUiFromCache(messages[0]?.id).multiModelMessageStyle as MultiModelMessageStyle) ||
       multiModelMessageStyleSetting
   )
-  const [selectedIndex, setSelectedIndex] = useState(messageLength - 1)
 
   const multiModelMessageStyle = useMemo(
     () => (messageLength < 2 ? 'fold' : _multiModelMessageStyle),
@@ -131,10 +130,8 @@ const MessageGroup = ({ messages, topic, registerMessageElement }: Props) => {
       // 查找对应的消息在当前消息组中的索引
       const targetIndex = messages.findIndex((msg) => msg.id === messageId)
 
-      // 如果找到消息且不是当前选中的索引，则切换标签
-      if (targetIndex !== -1 && targetIndex !== selectedIndex) {
-        setSelectedIndex(targetIndex)
-
+      // 如果找到消息且不是当前选中的消息，则切换标签
+      if (targetIndex !== -1 && messages[targetIndex]?.id !== selectedMessageId) {
         // 使用setSelectedMessage函数来切换标签，这是处理foldSelected的关键
         const targetMessage = messages[targetIndex]
         if (targetMessage) {
@@ -151,7 +148,7 @@ const MessageGroup = ({ messages, topic, registerMessageElement }: Props) => {
       document.removeEventListener('flow-navigate-to-message', handleFlowNavigate as EventListener)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, selectedIndex, isGrouped, messageLength])
+  }, [messages, selectedMessageId, isGrouped, messageLength])
 
   // 添加对LOCATE_MESSAGE事件的监听
   useEffect(() => {

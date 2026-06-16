@@ -295,6 +295,22 @@ describe('MessageGroup', () => {
     expect(horizontalGroup.scrollLeft).toBe(160)
   })
 
+  it('selects the requested branch from flow navigation even when the initial index points elsewhere', () => {
+    const messages = [createMessage('msg-1', 0, 'horizontal'), createMessage('msg-2', 1, 'horizontal')]
+    const topic = { id: 'topic-1' } as Topic
+
+    render(<MessageGroup messages={messages} topic={topic} />)
+
+    fireEvent(
+      document,
+      new CustomEvent('flow-navigate-to-message', {
+        detail: { messageId: 'msg-2' }
+      })
+    )
+
+    expect(mocks.setTimeoutTimer).toHaveBeenCalledWith('setSelectedMessage', expect.any(Function), 200)
+  })
+
   it('preserves visible content overflow for non-horizontal layouts', () => {
     mocks.preferenceValues.multiModelMessageStyle = 'vertical'
 
