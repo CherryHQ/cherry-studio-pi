@@ -1,16 +1,16 @@
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
+import { useTopViewClose } from '@renderer/components/Popups/useTopViewClose'
 import { TopView } from '@renderer/components/TopView'
 import { useAppUpdateState } from '@renderer/hooks/useAppUpdate'
 // [v2] Removed: Redux persistor flush is no longer needed after v2 data refactoring
 // import { handleSaveData } from '@renderer/store'
 import type { ReleaseNoteInfo, UpdateInfo } from 'builder-util-runtime'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Markdown from 'react-markdown'
 
 const logger = loggerService.withContext('UpdateDialog')
-const CLOSE_ANIMATION_MS = 200
 
 interface ShowParams {
   releaseInfo: UpdateInfo | null
@@ -24,8 +24,8 @@ const PopupContainer: React.FC<Props> = ({ releaseInfo, resolve }) => {
   const { t } = useTranslation()
   const [open, setOpen] = useState(true)
   const [isInstalling, setIsInstalling] = useState(false)
-  const resolvedRef = useRef(false)
   const { updateAppUpdateState } = useAppUpdateState()
+  const close = useTopViewClose({ resolve, setOpen, topViewKey: TopViewKey })
   useEffect(() => {
     if (releaseInfo) {
       logger.info('Update dialog opened', { version: releaseInfo.version })
@@ -33,10 +33,7 @@ const PopupContainer: React.FC<Props> = ({ releaseInfo, resolve }) => {
   }, [releaseInfo])
 
   const closePopup = () => {
-    if (resolvedRef.current) return
-    resolvedRef.current = true
-    setOpen(false)
-    window.setTimeout(() => resolve({}), CLOSE_ANIMATION_MS)
+    close({})
   }
 
   const handleInstall = async () => {
@@ -118,16 +115,7 @@ export default class UpdateDialogPopup {
   }
   static show(props: ShowParams) {
     return new Promise<any>((resolve) => {
-      TopView.show(
-        <PopupContainer
-          {...props}
-          resolve={(v) => {
-            resolve(v)
-            TopView.hide(TopViewKey)
-          }}
-        />,
-        TopViewKey
-      )
+      TopView.show(<PopupContainer {...props} resolve={resolve} />, TopViewKey)
     })
   }
 }

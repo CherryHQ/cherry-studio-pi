@@ -4,12 +4,11 @@ import { TopView } from '@renderer/components/TopView'
 import type { Message } from '@renderer/types'
 import type { MessageBlock } from '@renderer/types/newMessage'
 import type { CherryMessagePart } from '@shared/data/types/message'
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import CodeEditor from '../CodeEditor'
-
-const CLOSE_ANIMATION_MS = 200
+import { useTopViewClose } from './useTopViewClose'
 
 interface ShowParams {
   title: string
@@ -25,20 +24,11 @@ interface Props extends ShowParams {
 const InspectMessagePopupContainer: React.FC<Props> = ({ title, message, blocks, parts, resolve }) => {
   const [enableDeveloperMode] = usePreference('app.developer_mode.enabled')
   const [open, setOpen] = useState(true)
-  const resolvedRef = useRef(false)
   const { t } = useTranslation()
-
-  const resolveAfterClose = () => {
-    if (resolvedRef.current) return
-    resolvedRef.current = true
-    window.setTimeout(() => {
-      resolve({})
-    }, CLOSE_ANIMATION_MS)
-  }
+  const close = useTopViewClose({ resolve, setOpen, topViewKey: TopViewKey })
 
   const closePopup = () => {
-    setOpen(false)
-    resolveAfterClose()
+    close({})
   }
 
   const onOpenChange = (next: boolean) => {
@@ -92,16 +82,7 @@ export default class InspectMessagePopup {
   }
   static show(props: ShowParams) {
     return new Promise<any>((resolve) => {
-      TopView.show(
-        <InspectMessagePopupContainer
-          {...props}
-          resolve={(v) => {
-            resolve(v)
-            TopView.hide(TopViewKey)
-          }}
-        />,
-        TopViewKey
-      )
+      TopView.show(<InspectMessagePopupContainer {...props} resolve={resolve} />, TopViewKey)
     })
   }
 }
