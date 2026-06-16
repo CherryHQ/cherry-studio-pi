@@ -11,6 +11,7 @@ import { agentChannelService } from '@data/services/AgentChannelService'
 import { jobScheduleService } from '@data/services/JobScheduleService'
 import { jobService } from '@data/services/JobService'
 import { loggerService } from '@logger'
+import { storageV2AgentRuntimeTombstoneService } from '@main/services/storageV2/AgentRuntimeTombstoneService'
 import { DataApiErrorFactory } from '@shared/data/api'
 import type { ListOptions } from '@shared/data/api/apiTypes'
 import type {
@@ -223,6 +224,9 @@ export class AgentTaskService {
     const deleted = await application.get('JobManager').unregisterJobScheduleById(taskId)
     if (deleted) {
       logger.info('Task deleted', { taskId, agentId })
+      await storageV2AgentRuntimeTombstoneService.tombstoneTask(taskId).catch((error) => {
+        logger.warn('Failed to tombstone deleted agent task in Storage v2', { taskId, agentId, error })
+      })
     }
     return deleted
   }

@@ -11,9 +11,13 @@ import { agentWorkspaceTable } from '@data/db/schemas/agentWorkspace'
 import type { DbOrTx } from '@data/db/types'
 import { agentService } from '@data/services/AgentService'
 import { timestampToISO } from '@data/services/utils/rowMappers'
+import { loggerService } from '@logger'
+import { storageV2AgentRuntimeTombstoneService } from '@main/services/storageV2/AgentRuntimeTombstoneService'
 import { DataApiErrorFactory } from '@shared/data/api'
 import type { InstalledSkill, ListSkillsQuery } from '@shared/data/api/schemas/skills'
 import { and, asc, eq, or, type SQL, sql } from 'drizzle-orm'
+
+const logger = loggerService.withContext('AgentGlobalSkillService')
 
 /**
  * DataApi service for the `agent_global_skill` and `agent_skill` join tables.
@@ -116,6 +120,9 @@ export class AgentGlobalSkillService {
   /** Hard delete a global-skill row. FK cascades remove the agent_skill join rows. */
   async deleteById(id: string): Promise<void> {
     await application.get('DbService').withWriteTx((tx) => this.deleteByIdTx(tx, id))
+    await storageV2AgentRuntimeTombstoneService.tombstoneSkill(id).catch((error) => {
+      logger.warn('Failed to tombstone deleted agent skill in Storage v2', { skillId: id, error })
+    })
   }
 
   async deleteByIdTx(tx: DbOrTx, id: string): Promise<void> {

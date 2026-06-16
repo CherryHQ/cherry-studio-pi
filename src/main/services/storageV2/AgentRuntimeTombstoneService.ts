@@ -50,16 +50,24 @@ export class StorageV2AgentRuntimeTombstoneService {
   }
 
   async tombstoneSessionMessage(messageId: number | string) {
-    const id = `agent-message:${messageId}`
+    const idCandidates = this.getSessionMessageStorageIds(messageId)
     const client = await storageV2Database.getClient()
     const deletedAt = now()
 
     await storageV2Database.withTransaction(client, async () => {
-      const existingResult = await client.execute({
-        sql: 'SELECT conversation_id, version FROM messages WHERE id = ? AND deleted_at IS NULL',
-        args: [id]
-      })
-      const existing = existingResult.rows[0] as Record<string, unknown> | undefined
+      let id = idCandidates[0]
+      let existing: Record<string, unknown> | undefined
+      for (const candidateId of idCandidates) {
+        const existingResult = await client.execute({
+          sql: 'SELECT id, conversation_id, version FROM messages WHERE id = ? AND deleted_at IS NULL',
+          args: [candidateId]
+        })
+        existing = existingResult.rows[0] as Record<string, unknown> | undefined
+        if (existing) {
+          id = text(existing.id) ?? candidateId
+          break
+        }
+      }
       const conversationId = text(existing?.conversation_id)
       const existingVersion = Number(existing?.version ?? 0)
       const blocksResult = await client.execute({
@@ -107,6 +115,17 @@ export class StorageV2AgentRuntimeTombstoneService {
         version: existingVersion > 0 ? existingVersion + 1 : 1
       })
     })
+  }
+
+  private getSessionMessageStorageIds(messageId: number | string) {
+    const rawId = String(messageId)
+    if (rawId.startsWith('agent-message:')) return [rawId]
+
+    const legacyId = `agent-message:${rawId}`
+    if (typeof messageId === 'number' || /^\d+$/.test(rawId)) {
+      return [legacyId, rawId]
+    }
+    return [rawId, legacyId]
   }
 
   private async tombstoneEntity(table: AgentRuntimeEntityTable, entityId: string) {

@@ -8,6 +8,7 @@ import {
 import type { DbOrTx } from '@data/db/types'
 import { nullsToUndefined, timestampToISO } from '@data/services/utils/rowMappers'
 import { loggerService } from '@logger'
+import { storageV2AgentRuntimeTombstoneService } from '@main/services/storageV2/AgentRuntimeTombstoneService'
 import { DataApiErrorFactory } from '@shared/data/api'
 import type { AgentChannelEntity, CreateAgentChannelDto } from '@shared/data/api/schemas/agentChannels'
 import type { AgentSessionWorkspaceSource } from '@shared/data/api/schemas/agentWorkspaces'
@@ -151,6 +152,9 @@ export class AgentChannelService {
     )
     if (result.length > 0) {
       logger.info('Channel deleted', { channelId: id })
+      await storageV2AgentRuntimeTombstoneService.tombstoneChannel(id).catch((error) => {
+        logger.warn('Failed to tombstone deleted agent channel in Storage v2', { channelId: id, error })
+      })
     }
     return result.length > 0
   }

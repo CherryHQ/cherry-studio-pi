@@ -9,6 +9,7 @@ import { applyMoves, insertWithOrderKey } from '@data/services/utils/orderKey'
 import { nullsToUndefined, timestampToISO } from '@data/services/utils/rowMappers'
 import { loggerService } from '@logger'
 import { Emitter, type Event } from '@main/core/lifecycle'
+import { storageV2AgentRuntimeTombstoneService } from '@main/services/storageV2/AgentRuntimeTombstoneService'
 import { DataApiErrorFactory } from '@shared/data/api'
 import type { ListOptions } from '@shared/data/api/apiTypes'
 import type { OrderRequest } from '@shared/data/api/schemas/_endpointHelpers'
@@ -315,6 +316,9 @@ export class AgentService {
     const deleted = result.rowsAffected > 0
     if (deleted) {
       this._onAgentDeleted.fire({ agentId: id })
+      await storageV2AgentRuntimeTombstoneService.tombstoneAgent(id).catch((error) => {
+        logger.warn('Failed to tombstone deleted agent in Storage v2', { agentId: id, error })
+      })
     }
     return deleted
   }

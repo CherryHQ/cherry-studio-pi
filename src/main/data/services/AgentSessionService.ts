@@ -10,6 +10,7 @@ import { agentWorkspaceService, rowToAgentWorkspace } from '@data/services/Agent
 import { pinService } from '@data/services/PinService'
 import { timestampToISO } from '@data/services/utils/rowMappers'
 import { loggerService } from '@logger'
+import { storageV2AgentRuntimeTombstoneService } from '@main/services/storageV2/AgentRuntimeTombstoneService'
 import { DataApiErrorFactory } from '@shared/data/api'
 import type { CursorPaginationResponse } from '@shared/data/api/apiTypes'
 import type { OrderRequest } from '@shared/data/api/schemas/_endpointHelpers'
@@ -369,6 +370,7 @@ export class AgentSessionService {
 
   async delete(id: string): Promise<void> {
     await application.get('DbService').withWriteTx((tx) => this.deleteTx(tx, id))
+    await this.tombstoneSessionsBestEffort([id], 'delete-session')
   }
 
   async deleteTx(tx: DbOrTx, id: string): Promise<void> {
@@ -398,15 +400,18 @@ export class AgentSessionService {
     })
 
     logger.info('Deleted sessions', { count: deletedIds.length })
+    await this.tombstoneSessionsBestEffort(deletedIds, 'delete-sessions')
     return { deletedIds }
   }
 
   async deleteWorkspaceCascade(workspaceId: string): Promise<void> {
-    await application.get('DbService').withWriteTx(async (tx) => {
+    const deletedIds = await application.get('DbService').withWriteTx(async (tx) => {
       await agentWorkspaceService.getRowByIdTx(tx, workspaceId)
-      await this.deleteByWorkspaceTx(tx, workspaceId)
+      const deletedSessionIds = await this.deleteByWorkspaceTx(tx, workspaceId)
       await agentWorkspaceService.deleteByIdTx(tx, workspaceId)
+      return deletedSessionIds
     })
+    await this.tombstoneSessionsBestEffort(deletedIds, 'delete-workspace-cascade')
   }
 
   async deleteByWorkspaceTx(tx: DbOrTx, workspaceId: string): Promise<string[]> {
@@ -438,7 +443,18 @@ export class AgentSessionService {
     })
 
     logger.info('Deleted agent sessions', { agentId, count: deletedIds.length })
+    await this.tombstoneSessionsBestEffort(deletedIds, 'delete-agent-sessions')
     return { deletedIds }
+  }
+
+  private async tombstoneSessionsBestEffort(sessionIds: readonly string[], reason: string): Promise<void> {
+    await Promise.all(
+      Array.from(new Set(sessionIds)).map((sessionId) =>
+        storageV2AgentRuntimeTombstoneService.tombstoneSession(sessionId).catch((error) => {
+          logger.warn('Failed to tombstone deleted agent session in Storage v2', { sessionId, reason, error })
+        })
+      )
+    )
   }
 
   private async cascadeDeleteSessionRowsTx(tx: DbOrTx, rows: JoinedSessionRow[]): Promise<string[]> {

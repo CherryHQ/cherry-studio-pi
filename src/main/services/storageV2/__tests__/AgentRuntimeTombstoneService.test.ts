@@ -153,4 +153,34 @@ describe('StorageV2AgentRuntimeTombstoneService', () => {
       })
     )
   })
+
+  it('tombstones current DataApi agent session messages by raw id', async () => {
+    mocks.client.execute
+      .mockResolvedValueOnce({
+        rows: [{ id: 'message-uuid', conversation_id: 'agent-session:session-1', version: 7 }],
+        columns: [],
+        columnTypes: []
+      })
+      .mockResolvedValueOnce({ rows: [{ id: 'message-uuid:block:0', version: 3 }], columns: [], columnTypes: [] })
+      .mockResolvedValueOnce({ rows: [], columns: [], columnTypes: [] })
+      .mockResolvedValueOnce({ rows: [], columns: [], columnTypes: [] })
+
+    await new StorageV2AgentRuntimeTombstoneService().tombstoneSessionMessage('message-uuid')
+
+    expect(mocks.client.execute).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        sql: expect.stringContaining('FROM messages'),
+        args: ['message-uuid']
+      })
+    )
+    expect(mocks.recordChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: 'message',
+        entityId: 'message-uuid',
+        operation: 'delete',
+        version: 8
+      })
+    )
+  })
 })

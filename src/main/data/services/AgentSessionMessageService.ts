@@ -9,6 +9,7 @@ import { defaultHandlersFor, withSqliteErrors } from '@data/db/sqliteErrors'
 import type { DbOrTx } from '@data/db/types'
 import { timestampToISO } from '@data/services/utils/rowMappers'
 import { loggerService } from '@logger'
+import { storageV2AgentRuntimeTombstoneService } from '@main/services/storageV2/AgentRuntimeTombstoneService'
 import { DataApiErrorFactory } from '@shared/data/api'
 import type { CursorPaginationResponse } from '@shared/data/api/apiTypes'
 import type {
@@ -195,6 +196,13 @@ export class AgentSessionMessageService {
     if (result.rowsAffected === 0) {
       throw DataApiErrorFactory.notFound('Message', messageId)
     }
+    await storageV2AgentRuntimeTombstoneService.tombstoneSessionMessage(messageId).catch((error) => {
+      logger.warn('Failed to tombstone deleted agent session message in Storage v2', {
+        sessionId,
+        messageId,
+        error
+      })
+    })
   }
 
   async deleteSessionMessageTx(tx: DbOrTx, sessionId: string, messageId: string): Promise<{ rowsAffected: number }> {
