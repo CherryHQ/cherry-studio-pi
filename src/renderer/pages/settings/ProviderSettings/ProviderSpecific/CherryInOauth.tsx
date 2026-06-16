@@ -7,7 +7,7 @@ import { oauthWithCherryIn } from '@renderer/utils/oauth'
 import { openHttpExternalUrl } from '@renderer/utils/openExternal'
 import { hasApiKeys } from '@shared/utils/provider'
 import type { FC } from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('CherryInOauth')
@@ -57,10 +57,15 @@ const CherryInOauth: FC<CherryInOauthProps> = ({ providerId }) => {
   } = useProviderAuthConfig(providerId)
   const { t } = useTranslation()
 
+  const [isLoggingIn, setIsLoggingIn] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false)
   const [isLoadingData, setIsLoadingData] = useState(false)
   const [balanceInfo, setBalanceInfo] = useState<BalanceInfo | null>(null)
   const [oauthTokenOverride, setOauthTokenOverride] = useState<boolean | null>(null)
+  const loginRef = useRef(false)
+  const logoutConfirmRef = useRef(false)
+  const logoutOperationRef = useRef(false)
 
   const hasKeys = provider ? hasApiKeys(provider) : false
   const remoteHasOAuthToken = authConfig?.type === 'oauth' && Boolean(authConfig.accessToken)
@@ -95,6 +100,12 @@ const CherryInOauth: FC<CherryInOauthProps> = ({ providerId }) => {
   }, [oauthTokenOverride, remoteHasOAuthToken])
 
   const handleOAuthLogin = useCallback(async () => {
+    if (loginRef.current) {
+      return
+    }
+
+    loginRef.current = true
+    setIsLoggingIn(true)
     try {
       await oauthWithCherryIn(
         async (apiKeys: string) => {
@@ -119,44 +130,71 @@ const CherryInOauth: FC<CherryInOauthProps> = ({ providerId }) => {
     } catch (error) {
       logger.error('OAuth error:', error as Error)
       window.toast.error(t('settings.provider.oauth.error'))
+    } finally {
+      loginRef.current = false
+      setIsLoggingIn(false)
     }
   }, [addApiKey, fetchData, refetchAuthConfig, t, updateProvider])
 
   const handleLogout = useCallback(() => {
-    window.modal.confirm({
-      title: t('settings.provider.oauth.logout'),
-      content: t('settings.provider.oauth.logout_confirm'),
-      centered: true,
-      onOk: async () => {
-        setIsLoggingOut(true)
+    if (logoutConfirmRef.current || logoutOperationRef.current) {
+      return
+    }
 
-        try {
-          await window.api.cherryin.logout(CHERRYIN_OAUTH_SERVER)
-          setOauthTokenOverride(false)
-          setBalanceInfo(null)
-
-          void Promise.resolve(refetchAuthConfig()).catch((error) => {
-            logger.warn('Failed to refetch CherryIN auth config after logout:', error as Error)
-          })
-
-          const oauthKeys = provider?.apiKeys.filter((key) => key.label === 'OAuth') ?? []
-          const deleteResults = await Promise.allSettled(oauthKeys.map((key) => deleteApiKey(key.id)))
-          const rejectedDeletes = deleteResults.filter((result) => result.status === 'rejected')
-          if (rejectedDeletes.length > 0) {
-            logger.warn(`Failed to delete ${rejectedDeletes.length} CherryIN OAuth key(s) after logout`)
-            window.toast.warning(t('settings.provider.oauth.logout_warning'))
+    logoutConfirmRef.current = true
+    setIsLogoutConfirmOpen(true)
+    try {
+      window.modal.confirm({
+        title: t('settings.provider.oauth.logout'),
+        content: t('settings.provider.oauth.logout_confirm'),
+        centered: true,
+        onCancel: () => {
+          logoutConfirmRef.current = false
+          setIsLogoutConfirmOpen(false)
+        },
+        onOk: async () => {
+          if (logoutOperationRef.current) {
             return
           }
 
-          window.toast.success(t('settings.provider.oauth.logout_success'))
-        } catch (error) {
-          logger.error('Logout error:', error as Error)
-          window.toast.warning(t('settings.provider.oauth.logout_warning'))
-        } finally {
-          setIsLoggingOut(false)
+          logoutOperationRef.current = true
+          setIsLoggingOut(true)
+
+          try {
+            await window.api.cherryin.logout(CHERRYIN_OAUTH_SERVER)
+            setOauthTokenOverride(false)
+            setBalanceInfo(null)
+
+            void Promise.resolve(refetchAuthConfig()).catch((error) => {
+              logger.warn('Failed to refetch CherryIN auth config after logout:', error as Error)
+            })
+
+            const oauthKeys = provider?.apiKeys.filter((key) => key.label === 'OAuth') ?? []
+            const deleteResults = await Promise.allSettled(oauthKeys.map((key) => deleteApiKey(key.id)))
+            const rejectedDeletes = deleteResults.filter((result) => result.status === 'rejected')
+            if (rejectedDeletes.length > 0) {
+              logger.warn(`Failed to delete ${rejectedDeletes.length} CherryIN OAuth key(s) after logout`)
+              window.toast.warning(t('settings.provider.oauth.logout_warning'))
+              return
+            }
+
+            window.toast.success(t('settings.provider.oauth.logout_success'))
+          } catch (error) {
+            logger.error('Logout error:', error as Error)
+            window.toast.warning(t('settings.provider.oauth.logout_warning'))
+          } finally {
+            logoutOperationRef.current = false
+            logoutConfirmRef.current = false
+            setIsLoggingOut(false)
+            setIsLogoutConfirmOpen(false)
+          }
         }
-      }
-    })
+      })
+    } catch (error) {
+      logoutConfirmRef.current = false
+      setIsLogoutConfirmOpen(false)
+      throw error
+    }
   }, [deleteApiKey, provider?.apiKeys, refetchAuthConfig, t])
 
   const handleTopup = useCallback(() => {
@@ -193,7 +231,7 @@ const CherryInOauth: FC<CherryInOauthProps> = ({ providerId }) => {
                 <div className={oauthCardClasses.loggedInEmail}>{t('settings.provider.oauth.cherryIn.tagline')}</div>
               </div>
             </div>
-            <Button variant="emphasis" onClick={handleOAuthLogin}>
+            <Button variant="emphasis" onClick={handleOAuthLogin} disabled={isLoggingIn} loading={isLoggingIn}>
               {t('settings.provider.oauth.cherryIn.login_button')}
             </Button>
           </div>
@@ -240,8 +278,9 @@ const CherryInOauth: FC<CherryInOauthProps> = ({ providerId }) => {
             </Button>
             <Button
               className={oauthCardClasses.logoutCompact}
-              disabled={isLoggingOut}
+              disabled={isLoggingOut || isLogoutConfirmOpen}
               onClick={handleLogout}
+              loading={isLoggingOut}
               variant="ghost">
               {t('settings.provider.oauth.logout')}
             </Button>

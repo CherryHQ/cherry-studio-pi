@@ -1,3 +1,4 @@
+import { oauthWithCherryIn } from '@renderer/utils/oauth'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -5,6 +6,15 @@ import CherryInOauth from '../ProviderSpecific/CherryInOauth'
 
 const useProviderMock = vi.fn()
 const useProviderAuthConfigMock = vi.fn()
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
+}
 
 vi.mock('@renderer/hooks/useProvider', () => ({
   useProvider: (...args: any[]) => useProviderMock(...args),
@@ -159,6 +169,40 @@ describe('CherryInOauth', () => {
     expect(tagline.compareDocumentPosition(loginButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  it('prevents duplicate CherryIN OAuth login flows while one login is pending', async () => {
+    const runningLogin = deferred<string>()
+    vi.mocked(oauthWithCherryIn).mockReturnValueOnce(runningLogin.promise)
+    useProviderMock.mockReturnValue({
+      provider: {
+        id: 'cherryin',
+        name: 'CherryIN',
+        apiKeys: [],
+        isEnabled: true
+      },
+      updateProvider: vi.fn(),
+      addApiKey: vi.fn(),
+      deleteApiKey: vi.fn()
+    })
+    useProviderAuthConfigMock.mockReturnValue({
+      data: null,
+      isLoading: false,
+      refetch: vi.fn()
+    })
+
+    render(<CherryInOauth providerId="cherryin" />)
+
+    const loginButton = screen.getByRole('button', { name: /CherryIN|授权/i })
+    fireEvent.click(loginButton)
+    fireEvent.click(loginButton)
+
+    expect(oauthWithCherryIn).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      runningLogin.resolve('oauth-key')
+      await runningLogin.promise
+    })
+  })
+
   it('logs out and removes every OAuth-labelled key after confirmation', async () => {
     const deleteApiKey = vi.fn().mockResolvedValue(undefined)
     const refetchAuthConfig = vi.fn().mockResolvedValue(undefined)
@@ -205,6 +249,54 @@ describe('CherryInOauth', () => {
     expect(deleteApiKey).toHaveBeenNthCalledWith(2, 'oauth-2')
     expect(window.toast.success).toHaveBeenCalled()
     expect(window.toast.warning).not.toHaveBeenCalled()
+  })
+
+  it('prevents duplicate CherryIN OAuth logout confirmations and operations', async () => {
+    const runningLogout = deferred<void>()
+    window.api.cherryin.logout = vi.fn().mockReturnValueOnce(runningLogout.promise)
+    const deleteApiKey = vi.fn().mockResolvedValue(undefined)
+
+    useProviderMock.mockReturnValue({
+      provider: {
+        id: 'cherryin',
+        name: 'CherryIN',
+        apiKeys: [{ id: 'oauth-1', label: 'OAuth', isEnabled: true }],
+        isEnabled: true
+      },
+      updateProvider: vi.fn(),
+      addApiKey: vi.fn(),
+      deleteApiKey
+    })
+    useProviderAuthConfigMock.mockReturnValue({
+      data: {
+        type: 'oauth',
+        clientId: 'client-id',
+        accessToken: 'oauth-access',
+        refreshToken: 'oauth-refresh'
+      },
+      isLoading: false,
+      refetch: vi.fn()
+    })
+
+    render(<CherryInOauth providerId="cherryin" />)
+
+    fireEvent.click(screen.getByRole('button', { name: /退出登录|Logout/i }))
+    fireEvent.click(screen.getByRole('button', { name: /退出登录|Logout/i }))
+
+    expect(window.modal.confirm).toHaveBeenCalledTimes(1)
+
+    const options = (window.modal.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    await act(async () => {
+      void options.onOk()
+      void options.onOk()
+    })
+
+    expect(window.api.cherryin.logout).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      runningLogout.resolve()
+      await runningLogout.promise
+    })
   })
 
   it('shows a warning instead of success when OAuth key cleanup partially fails', async () => {
