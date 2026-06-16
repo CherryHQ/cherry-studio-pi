@@ -346,8 +346,8 @@ describe('StorageV2ProviderRepository', () => {
     const providerInsert = execute.mock.calls.find(
       ([input]) => typeof input !== 'string' && input.sql.includes('INSERT INTO providers')
     )
-    expect(providerInsert).toBeDefined()
-    const providerConfigJson = (providerInsert?.[0] as { args?: unknown[] }).args?.[6]
+    if (!providerInsert) throw new Error('Expected provider insert call')
+    const providerConfigJson = (providerInsert[0] as { args?: unknown[] }).args?.[6]
     expect(JSON.stringify(providerConfigJson)).not.toContain('sk-a')
     expect(JSON.parse(String(providerConfigJson))).toEqual(
       expect.objectContaining({
@@ -399,7 +399,8 @@ describe('StorageV2ProviderRepository', () => {
     const providerInsert = execute.mock.calls.find(
       ([input]) => typeof input !== 'string' && input.sql.includes('INSERT INTO providers')
     )
-    const providerConfigJson = (providerInsert?.[0] as { args?: unknown[] }).args?.[6]
+    if (!providerInsert) throw new Error('Expected provider insert call')
+    const providerConfigJson = (providerInsert[0] as { args?: unknown[] }).args?.[6]
     expect(JSON.stringify(providerConfigJson)).not.toContain('sk-secret')
     expect(JSON.parse(String(providerConfigJson))).toEqual(
       expect.objectContaining({
@@ -444,7 +445,8 @@ describe('StorageV2ProviderRepository', () => {
     const providerInsert = execute.mock.calls.find(
       ([input]) => typeof input !== 'string' && input.sql.includes('INSERT INTO providers')
     )
-    expect((providerInsert?.[0] as { args?: unknown[] }).args).toEqual(
+    if (!providerInsert) throw new Error('Expected provider insert call')
+    expect((providerInsert[0] as { args?: unknown[] }).args).toEqual(
       expect.arrayContaining(['provider-1', 'openai', 'OpenAI', 'https://api.openai.com/v1', 0, 3])
     )
     expect(
@@ -476,8 +478,9 @@ describe('StorageV2ProviderRepository', () => {
     const providerInsert = execute.mock.calls.find(
       ([input]) => typeof input !== 'string' && input.sql.includes('INSERT INTO providers')
     )
-    expect((providerInsert?.[0] as { sql?: string }).sql).toContain('sort_order = providers.sort_order')
-    expect((providerInsert?.[0] as { args?: unknown[] }).args?.[5]).toBe(0)
+    if (!providerInsert) throw new Error('Expected provider insert call')
+    expect((providerInsert[0] as { sql?: string }).sql).toContain('sort_order = providers.sort_order')
+    expect((providerInsert[0] as { args?: unknown[] }).args?.[5]).toBe(0)
   })
 
   it('clears provider api key list credential refs without rewriting provider metadata', async () => {
