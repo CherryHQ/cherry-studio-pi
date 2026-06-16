@@ -83,7 +83,7 @@ const Inputbar: FC<Props> = ({ setActiveTopic, topic, onSend: onSendProp }) => {
     toggleExpanded: () => {}
   })
 
-  const [initialMentionedModels] = useState(() => getValidatedCachedModels(topic.assistantId))
+  const initialMentionedModels = useMemo(() => getValidatedCachedModels(topic.assistantId), [topic.assistantId])
 
   const initialState = useMemo(
     () => ({
@@ -99,6 +99,7 @@ const Inputbar: FC<Props> = ({ setActiveTopic, topic, onSend: onSendProp }) => {
 
   return (
     <InputbarToolsProvider
+      key={topic.assistantId ?? 'no-assistant'}
       initialState={initialState}
       actions={{
         resizeTextArea: () => actionsRef.current.resizeTextArea(),
