@@ -71,7 +71,6 @@ jobs:
           echo 'pnpm add @cherrystudio/ai-core@snapshot' >> $GITHUB_STEP_SUMMARY
           echo 'pnpm add @cherrystudio/ai-sdk-provider@snapshot' >> $GITHUB_STEP_SUMMARY
           echo 'pnpm add @cherrystudio/extension-table-plus@snapshot' >> $GITHUB_STEP_SUMMARY
-          echo 'pnpm add @cherrystudio/provider-registry@snapshot' >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
         env:
           BRANCH: ${{ github.event.inputs.branch }}
