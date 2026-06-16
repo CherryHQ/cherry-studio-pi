@@ -745,11 +745,10 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
     const channelIds = new Set(
       input.channels.filter((channel) => SUPPORTED_CHANNEL_TYPES.has(channel.type)).map((channel) => channel.id)
     )
+    const modelRows = (await dbService.getDb().all(sql`SELECT id FROM user_model`)) as Array<{ id: string }>
+    const modelIds = new Set(modelRows.map((row) => row.id))
 
     await dbService.withWriteTx(async (tx) => {
-      const modelRows = (await tx.all(sql`SELECT id FROM user_model`)) as Array<{ id: string }>
-      const modelIds = new Set(modelRows.map((row) => row.id))
-
       await this.projectDeletedRowsTx(tx, input.deleted)
 
       for (const [index, agent] of input.agents.entries()) {
@@ -830,25 +829,21 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
 
     if (deleted.sessionIds.length > 0) {
       const sessionIds = this.idListSql(deleted.sessionIds)
-      const workspaceRows = (await tx.all(sql`
-        SELECT w.id
-        FROM agent_session s
-        INNER JOIN agent_workspace w ON w.id = s.workspace_id
-        WHERE s.id IN (${sessionIds}) AND w.type = 'system'
-      `)) as Array<{ id: string }>
-      const workspaceIds = uniqueStrings(workspaceRows)
 
       await pinService.purgeForEntitiesTx(tx, 'session', deleted.sessionIds)
+      await tx.run(sql`
+        DELETE FROM agent_workspace
+        WHERE type = 'system'
+          AND id IN (
+            SELECT workspace_id
+            FROM agent_session
+            WHERE id IN (${sessionIds})
+          )
+      `)
       await tx.run(sql`
         DELETE FROM agent_session
         WHERE id IN (${sessionIds})
       `)
-      if (workspaceIds.length > 0) {
-        await tx.run(sql`
-          DELETE FROM agent_workspace
-          WHERE id IN (${this.idListSql(workspaceIds)})
-        `)
-      }
     }
 
     if (deleted.channelIds.length > 0) {

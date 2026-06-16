@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   agentMirror: {
     flushStrict: vi.fn()
   },
+  dataApiAgentMirror: {
+    flushStrict: vi.fn()
+  },
   knowledgeMirror: {
     flushStrict: vi.fn()
   }
@@ -19,6 +22,10 @@ vi.mock('../ConfigManager', () => ({
 
 vi.mock('../storageV2/AgentDbMirrorService', () => ({
   storageV2AgentDbMirrorService: mocks.agentMirror
+}))
+
+vi.mock('../storageV2/DataApiAgentRuntimeMirrorService', () => ({
+  storageV2DataApiAgentRuntimeMirrorService: mocks.dataApiAgentMirror
 }))
 
 vi.mock('../storageV2/KnowledgeMirrorService', () => ({
@@ -40,6 +47,7 @@ describe('AppRuntimeSaveService', () => {
     vi.clearAllMocks()
     mocks.configManager.flushPendingStorageV2ConfigStrict.mockResolvedValue(undefined)
     mocks.configManager.mirrorAllToStorageV2.mockResolvedValue(undefined)
+    mocks.dataApiAgentMirror.flushStrict.mockResolvedValue(undefined)
     mocks.agentMirror.flushStrict.mockResolvedValue(undefined)
     mocks.knowledgeMirror.flushStrict.mockResolvedValue({ baseCount: 0, itemCount: 0 })
   })
@@ -51,12 +59,16 @@ describe('AppRuntimeSaveService', () => {
 
     expect(mocks.configManager.flushPendingStorageV2ConfigStrict).toHaveBeenCalledTimes(1)
     expect(mocks.configManager.mirrorAllToStorageV2).toHaveBeenCalledTimes(1)
+    expect(mocks.dataApiAgentMirror.flushStrict).toHaveBeenCalledTimes(1)
     expect(mocks.agentMirror.flushStrict).toHaveBeenCalledTimes(1)
     expect(mocks.knowledgeMirror.flushStrict).toHaveBeenCalledTimes(1)
     expect(mocks.configManager.flushPendingStorageV2ConfigStrict.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.configManager.mirrorAllToStorageV2.mock.invocationCallOrder[0]
     )
     expect(mocks.configManager.mirrorAllToStorageV2.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.dataApiAgentMirror.flushStrict.mock.invocationCallOrder[0]
+    )
+    expect(mocks.dataApiAgentMirror.flushStrict.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.agentMirror.flushStrict.mock.invocationCallOrder[0]
     )
     expect(mocks.agentMirror.flushStrict.mock.invocationCallOrder[0]).toBeLessThan(

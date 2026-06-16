@@ -414,13 +414,13 @@ describe('StorageV2DataApiAgentRuntimeMirrorService', () => {
         ]
       })
 
-    mocks.tx.all.mockResolvedValueOnce([{ id: 'openai::gpt-4o' }]).mockResolvedValueOnce([{ id: 'workspace-1' }])
+    mocks.db.all.mockResolvedValueOnce([{ id: 'openai::gpt-4o' }])
 
     await new StorageV2DataApiAgentRuntimeMirrorService().projectStorageToDataApiRuntime()
 
     expect(mocks.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     expect(mocks.application.getPath).toHaveBeenCalledWith('feature.agents.workspaces')
     expect(mocks.secretVault.getSecret).toHaveBeenCalledWith('storage-v2://secret/channel/channel-1/bot_token')
-    expect(mocks.tx.run).toHaveBeenCalledTimes(10)
+    expect(mocks.tx.run).toHaveBeenCalledTimes(11)
   })
 })

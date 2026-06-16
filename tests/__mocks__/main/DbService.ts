@@ -11,6 +11,7 @@ const defaultMockDb = {
   insert: vi.fn(),
   update: vi.fn(),
   delete: vi.fn(),
+  all: vi.fn(async () => []),
   run: vi.fn(),
   transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(defaultMockDb))
 }

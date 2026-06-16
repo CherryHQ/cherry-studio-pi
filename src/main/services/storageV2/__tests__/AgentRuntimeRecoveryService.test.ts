@@ -1,6 +1,12 @@
 import { DatabaseManager } from '@main/services/agents/database/DatabaseManager'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+vi.mock('../DataApiAgentRuntimeMirrorService', () => ({
+  storageV2DataApiAgentRuntimeMirrorService: {
+    projectStorageToDataApiRuntime: vi.fn().mockResolvedValue(undefined)
+  }
+}))
+
 import { storageV2AgentLegacyProjectionService } from '../AgentLegacyProjectionService'
 import { StorageV2AgentRuntimeRecoveryService } from '../AgentRuntimeRecoveryService'
 import { storageV2LegacyAgentDbImportService } from '../LegacyAgentDbImportService'

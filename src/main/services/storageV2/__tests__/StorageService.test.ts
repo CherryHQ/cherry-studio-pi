@@ -7,6 +7,9 @@ const mocks = vi.hoisted(() => ({
     flush: vi.fn(),
     flushStrict: vi.fn()
   },
+  dataApiAgentMirrorService: {
+    flushStrict: vi.fn()
+  },
   backupService: {
     createBackup: vi.fn(),
     getBackupOverview: vi.fn(),
@@ -98,6 +101,10 @@ vi.mock('../AgentDbMirrorService', () => ({
   storageV2AgentDbMirrorService: mocks.agentDbMirrorService
 }))
 
+vi.mock('../DataApiAgentRuntimeMirrorService', () => ({
+  storageV2DataApiAgentRuntimeMirrorService: mocks.dataApiAgentMirrorService
+}))
+
 vi.mock('../BackupService', () => ({
   storageV2BackupService: mocks.backupService
 }))
@@ -171,6 +178,7 @@ describe('StorageV2Service', () => {
     mocks.settingsRepository.list.mockResolvedValue([])
     mocks.configManager.flushPendingStorageV2ConfigStrict.mockResolvedValue(undefined)
     mocks.configManager.mirrorAllToStorageV2.mockResolvedValue({ mirroredCount: 0 })
+    mocks.dataApiAgentMirrorService.flushStrict.mockResolvedValue(undefined)
     mocks.agentDbMirrorService.flushStrict.mockResolvedValue(undefined)
     mocks.knowledgeMirrorService.flushStrict.mockResolvedValue({ baseCount: 0, itemCount: 0 })
     mocks.providerRepository.list.mockResolvedValue([])
@@ -221,6 +229,7 @@ describe('StorageV2Service', () => {
 
     expect(mocks.configManager.flushPendingStorageV2ConfigStrict).toHaveBeenCalledTimes(1)
     expect(mocks.configManager.mirrorAllToStorageV2).toHaveBeenCalledTimes(1)
+    expect(mocks.dataApiAgentMirrorService.flushStrict).toHaveBeenCalledTimes(1)
     expect(mocks.agentDbMirrorService.flushStrict).toHaveBeenCalledTimes(1)
     expect(mocks.knowledgeMirrorService.flushStrict).toHaveBeenCalledTimes(1)
     expect(mocks.database.createSnapshot).toHaveBeenCalledWith('manual')
