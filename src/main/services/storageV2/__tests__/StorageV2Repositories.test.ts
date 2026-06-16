@@ -371,6 +371,90 @@ describe('StorageV2ProviderRepository', () => {
     )
   })
 
+  it('stores provider auth config refs without leaking plaintext auth secrets into provider config', async () => {
+    const { client, execute } = createMockClient()
+    vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
+    vi.spyOn(storageV2Database, 'withTransaction').mockImplementation(async (_client, fn) => fn())
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(client)
+
+    await new StorageV2ProviderRepository().upsert(
+      {
+        id: 'provider-1',
+        type: 'bedrock',
+        name: 'Bedrock',
+        authConfig: {
+          type: 'iam-aws',
+          region: 'us-east-1',
+          accessKeyId: 'ak',
+          secretAccessKey: 'sk-secret'
+        },
+        models: []
+      } as any,
+      0,
+      {
+        authConfig: 'storage-v2://secret/provider/provider-1/authConfig'
+      }
+    )
+
+    const providerInsert = execute.mock.calls.find(
+      ([input]) => typeof input !== 'string' && input.sql.includes('INSERT INTO providers')
+    )
+    const providerConfigJson = (providerInsert?.[0] as { args?: unknown[] }).args?.[6]
+    expect(JSON.stringify(providerConfigJson)).not.toContain('sk-secret')
+    expect(JSON.parse(String(providerConfigJson))).toEqual(
+      expect.objectContaining({
+        authConfig: {
+          type: 'iam-aws',
+          region: 'us-east-1',
+          accessKeyId: 'ak'
+        }
+      })
+    )
+    expect(
+      execute.mock.calls.some(
+        ([input]) =>
+          typeof input !== 'string' &&
+          input.sql.includes('INSERT INTO provider_credentials') &&
+          input.args?.[1] === 'authConfig'
+      )
+    ).toBe(true)
+  })
+
+  it('preserves existing model rows during metadata-only provider mirrors', async () => {
+    const { client, execute } = createMockClient()
+    vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
+    vi.spyOn(storageV2Database, 'withTransaction').mockImplementation(async (_client, fn) => fn())
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(client)
+
+    await new StorageV2ProviderRepository().upsert(
+      {
+        id: 'provider-1',
+        presetProviderId: 'openai',
+        name: 'OpenAI',
+        endpointConfigs: {
+          'openai-chat-completions': { baseUrl: 'https://api.openai.com/v1' }
+        },
+        isEnabled: false
+      } as any,
+      3,
+      undefined,
+      { preserveModels: true }
+    )
+
+    const providerInsert = execute.mock.calls.find(
+      ([input]) => typeof input !== 'string' && input.sql.includes('INSERT INTO providers')
+    )
+    expect((providerInsert?.[0] as { args?: unknown[] }).args).toEqual(
+      expect.arrayContaining(['provider-1', 'openai', 'OpenAI', 'https://api.openai.com/v1', 0, 3])
+    )
+    expect(
+      execute.mock.calls.some(
+        ([input]) =>
+          typeof input !== 'string' && (input.sql.includes('UPDATE models') || input.sql.includes('INSERT INTO models'))
+      )
+    ).toBe(false)
+  })
+
   it('clears provider api key list credential refs without rewriting provider metadata', async () => {
     const { client, execute } = createMockClient()
     const recordChange = vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)

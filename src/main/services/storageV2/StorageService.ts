@@ -1,3 +1,4 @@
+import { type AuthConfig, AuthConfigSchema } from '@shared/data/types/provider'
 import type { Assistant, Provider } from '@types'
 
 import { configManager } from '../ConfigManager'
@@ -174,6 +175,23 @@ function parseProviderApiKeyEntriesSecret(secret: string): ProviderApiKeyEntry[]
     })
 
     return apiKeys.length === parsed.length ? apiKeys : null
+  } catch {
+    return null
+  }
+}
+
+function normalizeProviderAuthConfig(value: unknown): AuthConfig | null {
+  const parsed = AuthConfigSchema.safeParse(value)
+  return parsed.success ? parsed.data : null
+}
+
+function getProviderAuthConfig(provider: Provider): AuthConfig | null {
+  return normalizeProviderAuthConfig((provider as unknown as { authConfig?: unknown }).authConfig)
+}
+
+function parseProviderAuthConfigSecret(secret: string): AuthConfig | null {
+  try {
+    return normalizeProviderAuthConfig(JSON.parse(secret) as unknown)
   } catch {
     return null
   }
@@ -897,6 +915,29 @@ export class StorageV2Service {
           if (storedApiKeyRef && !restoredApiKey) {
             missingSecretCount++
           }
+
+          const storedAuthConfigRef = providerCredentialRefs.authConfig
+          const fallbackAuthConfigRef = makeStorageV2SecretRef('provider', provider.id, 'authConfig')
+          const authConfigRefs = Array.from(
+            new Set([storedAuthConfigRef, fallbackAuthConfigRef].filter(isNonEmptyString))
+          )
+          let restoredAuthConfig = false
+
+          for (const authConfigRef of authConfigRefs) {
+            const authConfigSecret = await storageV2SecretVaultService.getSecret(authConfigRef)
+            if (!authConfigSecret) continue
+
+            const authConfig = parseProviderAuthConfigSecret(authConfigSecret)
+            if (authConfig) {
+              snapshot.authConfig = authConfig
+              restoredAuthConfig = true
+              break
+            }
+          }
+
+          if (storedAuthConfigRef && !restoredAuthConfig) {
+            missingSecretCount++
+          }
         }
 
         return snapshot
@@ -1092,6 +1133,7 @@ export class StorageV2Service {
     if (!nextCredentialRef) {
       const credentialRefs: StorageV2ProviderCredentialRefs = {}
       const providerApiKeys = getProviderApiKeyEntries(provider)
+      const authConfig = getProviderAuthConfig(provider)
 
       if (provider.apiKey) {
         credentialRefs.apiKey = await storageV2SecretVaultService.setSecret(
@@ -1121,6 +1163,15 @@ export class StorageV2Service {
         }
       }
 
+      if (authConfig) {
+        credentialRefs.authConfig = await storageV2SecretVaultService.setSecret(
+          'provider',
+          provider.id,
+          'authConfig',
+          JSON.stringify(authConfig)
+        )
+      }
+
       nextCredentialRef = Object.keys(credentialRefs).length > 0 ? credentialRefs : undefined
     }
 
@@ -1131,6 +1182,13 @@ export class StorageV2Service {
     return Object.keys(upsertOptions).length > 0
       ? storageV2ProviderRepository.upsert(provider, sortOrder, nextCredentialRef, upsertOptions)
       : storageV2ProviderRepository.upsert(provider, sortOrder, nextCredentialRef)
+  }
+
+  async upsertProviderMetadata(provider: Provider, sortOrder?: number) {
+    return storageV2ProviderRepository.upsert(provider, sortOrder, undefined, {
+      preserveExistingCredential: true,
+      preserveModels: true
+    })
   }
 
   async upsertProviderApiKeys(providerId: string, apiKeys: ProviderApiKeyEntry[]) {
@@ -1174,6 +1232,26 @@ export class StorageV2Service {
       },
       apiKeyRef ? undefined : { clearCredentialKinds: ['apiKey'] }
     )
+  }
+
+  async upsertProviderAuthConfig(providerId: string, authConfig: AuthConfig | null | undefined) {
+    const normalizedAuthConfig = normalizeProviderAuthConfig(authConfig)
+    if (!normalizedAuthConfig) {
+      return storageV2ProviderRepository.upsertCredentials(providerId, undefined, {
+        clearCredentialKinds: ['authConfig']
+      })
+    }
+
+    const authConfigRef = await storageV2SecretVaultService.setSecret(
+      'provider',
+      providerId,
+      'authConfig',
+      JSON.stringify(normalizedAuthConfig)
+    )
+
+    return storageV2ProviderRepository.upsertCredentials(providerId, {
+      authConfig: authConfigRef
+    })
   }
 
   async deleteProvider(providerId: string) {

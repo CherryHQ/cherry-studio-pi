@@ -21,9 +21,19 @@ import {
   UpdateApiKeySchema,
   UpdateProviderSchema
 } from '@shared/data/api/schemas/providers'
-import type { ApiKeyEntry } from '@shared/data/types/provider'
+import type { ApiKeyEntry, AuthConfig } from '@shared/data/types/provider'
 
 const logger = loggerService.withContext('DataApi:ProviderHandlers')
+
+async function mirrorProviderMetadataToStorageV2(provider: unknown) {
+  try {
+    await storageV2Service.upsertProviderMetadata(provider as never)
+  } catch (error) {
+    logger.warn('Failed to mirror provider metadata to Storage v2', {
+      error
+    })
+  }
+}
 
 async function mirrorProviderApiKeysToStorageV2(providerId: string, fallbackKeys?: ApiKeyEntry[]) {
   try {
@@ -31,6 +41,28 @@ async function mirrorProviderApiKeysToStorageV2(providerId: string, fallbackKeys
     await storageV2Service.upsertProviderApiKeys(providerId, keys)
   } catch (error) {
     logger.warn('Failed to mirror provider API keys to Storage v2', {
+      providerId,
+      error
+    })
+  }
+}
+
+async function mirrorProviderAuthConfigToStorageV2(providerId: string, authConfig: AuthConfig | null | undefined) {
+  try {
+    await storageV2Service.upsertProviderAuthConfig(providerId, authConfig)
+  } catch (error) {
+    logger.warn('Failed to mirror provider auth config to Storage v2', {
+      providerId,
+      error
+    })
+  }
+}
+
+async function deleteProviderFromStorageV2(providerId: string) {
+  try {
+    await storageV2Service.deleteProvider(providerId)
+  } catch (error) {
+    logger.warn('Failed to delete provider from Storage v2', {
       providerId,
       error
     })
@@ -46,7 +78,15 @@ export const providerHandlers: HandlersFor<ProviderSchemas> = {
 
     POST: async ({ body }) => {
       const parsed = CreateProviderSchema.parse(body)
-      return await providerService.create(parsed)
+      const provider = await providerService.create(parsed)
+      await mirrorProviderMetadataToStorageV2(provider)
+      if (parsed.apiKeys && parsed.apiKeys.length > 0) {
+        await mirrorProviderApiKeysToStorageV2(provider.id, parsed.apiKeys)
+      }
+      if (parsed.authConfig) {
+        await mirrorProviderAuthConfigToStorageV2(provider.id, parsed.authConfig)
+      }
+      return provider
     }
   },
 
@@ -57,11 +97,17 @@ export const providerHandlers: HandlersFor<ProviderSchemas> = {
 
     PATCH: async ({ params, body }) => {
       const parsed = UpdateProviderSchema.parse(body)
-      return await providerService.update(params.providerId, parsed)
+      const provider = await providerService.update(params.providerId, parsed)
+      await mirrorProviderMetadataToStorageV2(provider)
+      if (parsed.authConfig !== undefined) {
+        await mirrorProviderAuthConfigToStorageV2(params.providerId, parsed.authConfig)
+      }
+      return provider
     },
 
     DELETE: async ({ params }) => {
       await providerService.delete(params.providerId)
+      await deleteProviderFromStorageV2(params.providerId)
       return undefined
     }
   },

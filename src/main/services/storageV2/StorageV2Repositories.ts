@@ -111,6 +111,7 @@ export type StorageV2ProviderUpsertOptions = {
   clearCredential?: boolean
   clearCredentialKinds?: string[]
   preserveExistingCredential?: boolean
+  preserveModels?: boolean
 }
 
 export type StorageV2ProviderCredentialRefs = Record<string, string>
@@ -269,7 +270,69 @@ function stripProviderConfig(provider: Provider): Record<string, unknown> {
       return redactedEntry
     })
   }
+  if (Object.hasOwn(config, 'authConfig')) {
+    config.authConfig = redactProviderAuthConfig(config.authConfig)
+  }
   return config
+}
+
+function redactProviderAuthConfig(value: unknown): unknown {
+  if (!isRecord(value)) return value
+
+  const authConfig = { ...value }
+  if (authConfig.type === 'oauth') {
+    delete authConfig.accessToken
+    delete authConfig.refreshToken
+  }
+  if (authConfig.type === 'iam-aws') {
+    delete authConfig.secretAccessKey
+  }
+  if (authConfig.type === 'iam-gcp') {
+    delete authConfig.credentials
+  }
+
+  return authConfig
+}
+
+function getProviderStorageType(provider: Provider) {
+  const candidate =
+    (provider as unknown as { type?: unknown; presetProviderId?: unknown }).type ??
+    (provider as unknown as { presetProviderId?: unknown }).presetProviderId ??
+    provider.id
+  return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : provider.id
+}
+
+function getProviderStorageApiHost(provider: Provider) {
+  if (provider.apiHost) return provider.apiHost
+
+  const providerLike = provider as unknown as {
+    defaultChatEndpoint?: unknown
+    endpointConfigs?: Record<string, { baseUrl?: unknown }> | null
+  }
+  const endpointConfigs = providerLike.endpointConfigs
+  if (!endpointConfigs || typeof endpointConfigs !== 'object') return null
+
+  const preferredEndpoint =
+    typeof providerLike.defaultChatEndpoint === 'string' ? endpointConfigs[providerLike.defaultChatEndpoint] : null
+  const preferredBaseUrl = preferredEndpoint?.baseUrl
+  if (typeof preferredBaseUrl === 'string' && preferredBaseUrl.trim()) {
+    return preferredBaseUrl.trim()
+  }
+
+  for (const endpointConfig of Object.values(endpointConfigs)) {
+    if (typeof endpointConfig?.baseUrl === 'string' && endpointConfig.baseUrl.trim()) {
+      return endpointConfig.baseUrl.trim()
+    }
+  }
+
+  return null
+}
+
+function getProviderStorageEnabled(provider: Provider) {
+  const providerLike = provider as unknown as { enabled?: unknown; isEnabled?: unknown }
+  if (typeof providerLike.enabled === 'boolean') return providerLike.enabled
+  if (typeof providerLike.isEnabled === 'boolean') return providerLike.isEnabled
+  return true
 }
 
 function normalizeProviderCredentialRefs(
@@ -757,6 +820,7 @@ export class StorageV2ProviderRepository {
     const models = normalizeProviderModels(provider)
     const modelIds = models.map((model) => getProviderModelRowId(provider.id, model.id))
     const credentialRefs = normalizeProviderCredentialRefs(credentialRef)
+    const preserveModels = options.preserveModels === true
 
     await withTransaction(client, async () => {
       await client.execute({
@@ -778,10 +842,10 @@ export class StorageV2ProviderRepository {
         `,
         args: [
           provider.id,
-          provider.type,
+          getProviderStorageType(provider),
           provider.name,
-          provider.apiHost || null,
-          provider.enabled === false ? 0 : 1,
+          getProviderStorageApiHost(provider),
+          getProviderStorageEnabled(provider) ? 1 : 0,
           sortOrder,
           toJson(config),
           timestamp,
@@ -789,7 +853,9 @@ export class StorageV2ProviderRepository {
         ]
       })
 
-      if (modelIds.length > 0) {
+      if (preserveModels) {
+        // Metadata-only mirrors from the data-api provider shape do not carry the model catalog.
+      } else if (modelIds.length > 0) {
         await client.execute({
           sql: `
             UPDATE models
@@ -809,37 +875,39 @@ export class StorageV2ProviderRepository {
         })
       }
 
-      for (const [modelIndex, model] of models.entries()) {
-        await client.execute({
-          sql: `
-            INSERT INTO models (
-              id, provider_id, name, group_name, capabilities_json, config_json, enabled, sort_order,
-              created_at, updated_at, deleted_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, NULL)
-            ON CONFLICT(id) DO UPDATE SET
-              provider_id = excluded.provider_id,
-              name = excluded.name,
-              group_name = excluded.group_name,
-              capabilities_json = excluded.capabilities_json,
-              config_json = excluded.config_json,
-              enabled = excluded.enabled,
-              sort_order = excluded.sort_order,
-              updated_at = excluded.updated_at,
-              deleted_at = NULL
-          `,
-          args: [
-            getProviderModelRowId(provider.id, model.id),
-            provider.id,
-            model.name || model.id,
-            model.group || null,
-            toJson(model.capabilities ?? model.type ?? null),
-            toJson(model),
-            modelIndex,
-            timestamp,
-            timestamp
-          ]
-        })
+      if (!preserveModels) {
+        for (const [modelIndex, model] of models.entries()) {
+          await client.execute({
+            sql: `
+              INSERT INTO models (
+                id, provider_id, name, group_name, capabilities_json, config_json, enabled, sort_order,
+                created_at, updated_at, deleted_at
+              )
+              VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, NULL)
+              ON CONFLICT(id) DO UPDATE SET
+                provider_id = excluded.provider_id,
+                name = excluded.name,
+                group_name = excluded.group_name,
+                capabilities_json = excluded.capabilities_json,
+                config_json = excluded.config_json,
+                enabled = excluded.enabled,
+                sort_order = excluded.sort_order,
+                updated_at = excluded.updated_at,
+                deleted_at = NULL
+            `,
+            args: [
+              getProviderModelRowId(provider.id, model.id),
+              provider.id,
+              model.name || model.id,
+              model.group || null,
+              toJson(model.capabilities ?? model.type ?? null),
+              toJson(model),
+              modelIndex,
+              timestamp,
+              timestamp
+            ]
+          })
+        }
       }
 
       await upsertProviderCredentialRefs(client, provider.id, credentialRefs, options, timestamp)

@@ -423,6 +423,40 @@ describe('StorageV2Service', () => {
     })
   })
 
+  it('stores provider auth config in the secret vault before upserting provider metadata', async () => {
+    const provider = {
+      id: 'provider-1',
+      type: 'bedrock',
+      name: 'Bedrock',
+      apiHost: '',
+      models: [],
+      authConfig: {
+        type: 'iam-aws',
+        region: 'us-east-1',
+        accessKeyId: 'ak',
+        secretAccessKey: 'sk-secret'
+      }
+    } as unknown as Provider
+    mocks.secretVault.setSecret.mockResolvedValue('storage-v2://secret/provider/provider-1/authConfig')
+
+    await expect(new StorageV2Service().upsertProvider(provider, 2)).resolves.toEqual({ skippedSecret: false })
+
+    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith(
+      'provider',
+      'provider-1',
+      'authConfig',
+      JSON.stringify({
+        type: 'iam-aws',
+        region: 'us-east-1',
+        accessKeyId: 'ak',
+        secretAccessKey: 'sk-secret'
+      })
+    )
+    expect(mocks.providerRepository.upsert).toHaveBeenCalledWith(provider, 2, {
+      authConfig: 'storage-v2://secret/provider/provider-1/authConfig'
+    })
+  })
+
   it('does not upsert provider metadata with plaintext credentials when the secret vault write fails', async () => {
     const provider: Provider = {
       id: 'provider-1',
@@ -506,6 +540,58 @@ describe('StorageV2Service', () => {
       undefined
     )
     expect(mocks.providerRepository.upsert).not.toHaveBeenCalled()
+  })
+
+  it('updates provider metadata without pruning model rows', async () => {
+    const provider = {
+      id: 'provider-1',
+      name: 'OpenAI',
+      presetProviderId: 'openai',
+      isEnabled: true,
+      endpointConfigs: {
+        'openai-chat-completions': { baseUrl: 'https://api.openai.com/v1' }
+      },
+      apiKeys: [],
+      authType: 'api-key',
+      apiFeatures: {},
+      settings: {}
+    } as unknown as Provider
+
+    await expect(new StorageV2Service().upsertProviderMetadata(provider, 4)).resolves.toEqual({ skippedSecret: false })
+
+    expect(mocks.providerRepository.upsert).toHaveBeenCalledWith(provider, 4, undefined, {
+      preserveExistingCredential: true,
+      preserveModels: true
+    })
+  })
+
+  it('updates provider auth config credentials without rewriting provider models', async () => {
+    const authConfig = {
+      type: 'oauth',
+      clientId: 'client-id',
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt: 1760000000000
+    } as const
+    mocks.secretVault.setSecret.mockResolvedValue('storage-v2://secret/provider/provider-1/authConfig')
+
+    await expect(new StorageV2Service().upsertProviderAuthConfig('provider-1', authConfig)).resolves.toBeUndefined()
+
+    expect(mocks.secretVault.setSecret).toHaveBeenCalledWith('provider', 'provider-1', 'authConfig', expect.any(String))
+    expect(JSON.parse(mocks.secretVault.setSecret.mock.calls[0][3])).toEqual(authConfig)
+    expect(mocks.providerRepository.upsertCredentials).toHaveBeenCalledWith('provider-1', {
+      authConfig: 'storage-v2://secret/provider/provider-1/authConfig'
+    })
+    expect(mocks.providerRepository.upsert).not.toHaveBeenCalled()
+  })
+
+  it('clears provider auth config credential refs when auth config is empty', async () => {
+    await expect(new StorageV2Service().upsertProviderAuthConfig('provider-1', null)).resolves.toBeUndefined()
+
+    expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
+    expect(mocks.providerRepository.upsertCredentials).toHaveBeenCalledWith('provider-1', undefined, {
+      clearCredentialKinds: ['authConfig']
+    })
   })
 
   it('clears provider API key credential refs when the key list becomes empty', async () => {
@@ -813,6 +899,59 @@ describe('StorageV2Service', () => {
     )
     expect(snapshot.metadata.missingSecretCount).toBe(0)
     expect(mocks.secretVault.getSecret).toHaveBeenCalledWith('storage-v2://secret/provider/openai/apiKeys')
+  })
+
+  it('restores provider auth config from credential refs in core snapshots', async () => {
+    mocks.providerRepository.list.mockResolvedValue([
+      {
+        id: 'bedrock',
+        name: 'Bedrock',
+        type: 'bedrock',
+        apiHost: '',
+        models: [],
+        config: {
+          authConfig: { type: 'iam-aws', region: 'us-east-1', accessKeyId: 'ak' }
+        }
+      }
+    ])
+    mocks.providerRepository.listCredentialRefs.mockResolvedValue(
+      new Map([
+        [
+          'bedrock',
+          {
+            authConfig: 'storage-v2://secret/provider/bedrock/authConfig'
+          }
+        ]
+      ])
+    )
+    mocks.secretVault.getSecret.mockImplementation(async (secretRef: string) => {
+      if (secretRef === 'storage-v2://secret/provider/bedrock/authConfig') {
+        return JSON.stringify({
+          type: 'iam-aws',
+          region: 'us-east-1',
+          accessKeyId: 'ak',
+          secretAccessKey: 'sk-secret'
+        })
+      }
+      return null
+    })
+
+    const snapshot = await new StorageV2Service().getCoreSnapshot({ includeSecrets: true })
+    const providers = snapshot.llm.providers as Array<Record<string, unknown>>
+
+    expect(providers[0]).toEqual(
+      expect.objectContaining({
+        id: 'bedrock',
+        authConfig: {
+          type: 'iam-aws',
+          region: 'us-east-1',
+          accessKeyId: 'ak',
+          secretAccessKey: 'sk-secret'
+        }
+      })
+    )
+    expect(snapshot.metadata.missingSecretCount).toBe(0)
+    expect(mocks.secretVault.getSecret).toHaveBeenCalledWith('storage-v2://secret/provider/bedrock/authConfig')
   })
 
   it('omits localStorage MCP provider tokens when exporting without secrets', async () => {
