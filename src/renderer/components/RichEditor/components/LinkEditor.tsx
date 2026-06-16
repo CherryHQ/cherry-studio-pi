@@ -50,11 +50,15 @@ const LinkEditor: React.FC<LinkEditorProps> = ({
 
   // Auto-focus href input when dialog opens
   useEffect(() => {
-    if (visible && hrefInputRef.current) {
-      setTimeout(() => {
-        hrefInputRef.current?.focus()
-      }, 100)
+    if (!visible || !hrefInputRef.current) {
+      return undefined
     }
+
+    const focusTimer = window.setTimeout(() => {
+      hrefInputRef.current?.focus()
+    }, 100)
+
+    return () => window.clearTimeout(focusTimer)
   }, [visible])
 
   // Handle clicks outside to close
@@ -72,11 +76,12 @@ const LinkEditor: React.FC<LinkEditorProps> = ({
       onCancel()
     }
 
-    setTimeout(() => {
+    const listenerTimer = window.setTimeout(() => {
       document.addEventListener('mousedown', handleClickOutside)
     }, 100)
 
     return () => {
+      window.clearTimeout(listenerTimer)
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [visible, onCancel])
