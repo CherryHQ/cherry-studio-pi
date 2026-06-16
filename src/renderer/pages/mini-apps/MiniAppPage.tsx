@@ -57,6 +57,14 @@ const MiniAppPage: FC = () => {
   const [isReady, setIsReady] = useState<boolean>(() => (appId ? getWebviewLoaded(appId) : false))
   const [currentUrl, setCurrentUrl] = useState<string | null>(app?.url ?? null)
 
+  useEffect(() => {
+    setIsReady(appId ? getWebviewLoaded(appId) : false)
+  }, [appId])
+
+  useEffect(() => {
+    setCurrentUrl(app?.url ?? null)
+  }, [app?.appId, app?.url])
+
   // Get the webview element from the pool (avoid re-running on openedKeepAliveMiniApps.length changes)
   const webviewCleanupRef = useRef<(() => void) | null>(null)
 
