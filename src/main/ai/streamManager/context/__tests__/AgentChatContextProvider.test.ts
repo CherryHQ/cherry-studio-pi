@@ -132,6 +132,7 @@ describe('AgentChatContextProvider', () => {
       turnId: 'turn-1'
     })
     mocks.runtimeIsSessionBusy.mockReturnValue(false)
+    mocks.runtimeEnqueueUserMessage.mockReturnValue(true)
   })
 
   it('prepares fresh agent-session dispatch through the long-lived runtime service', async () => {
@@ -215,6 +216,37 @@ describe('AgentChatContextProvider', () => {
       })
     ])
     expect(prepared.listeners).toEqual([subscriber])
+  })
+
+  it('falls back to a fresh turn when a busy runtime disappears before enqueue', async () => {
+    const subscriber = makeSubscriber()
+    mocks.runtimeIsSessionBusy.mockReturnValue(true)
+    mocks.runtimeEnqueueUserMessage.mockReturnValue(false)
+
+    const prepared = await provider.prepareDispatch(subscriber, openReq())
+
+    expect(mocks.saveMessage).toHaveBeenCalledTimes(2)
+    expect(mocks.saveMessages).not.toHaveBeenCalled()
+    expect(mocks.runtimeEnqueueUserMessage).toHaveBeenCalledOnce()
+    expect(mocks.runtimeBeginTurn).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      topicId: 'agent-session:session-1',
+      agentId: 'agent-1',
+      agentType: 'claude-code',
+      modelId: 'anthropic::claude-sonnet',
+      assistantMessageId: prepared.models[0].request.messageId,
+      userMessage: expect.objectContaining({ id: prepared.userMessageId, role: 'user', sessionId: 'session-1' }),
+      traceId: expect.stringMatching(/^[0-9a-f]{32}$/)
+    })
+    expect(prepared.models).toHaveLength(1)
+    expect(prepared.reservedMessages).toEqual([
+      expect.objectContaining({ id: prepared.userMessageId, role: 'user' }),
+      expect.objectContaining({
+        id: prepared.models[0].request.messageId,
+        role: 'assistant',
+        metadata: expect.objectContaining({ status: 'pending', modelId: 'anthropic::claude-sonnet' })
+      })
+    ])
   })
 
   it('rejects agent sessions without a registered runtime driver', async () => {

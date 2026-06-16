@@ -361,9 +361,9 @@ export class AgentSessionRuntimeService extends BaseService {
     })
   }
 
-  enqueueUserMessage(sessionId: string, message: AgentSessionMessageEntity): void {
+  enqueueUserMessage(sessionId: string, message: AgentSessionMessageEntity): boolean {
     const entry = this.entries.get(sessionId)
-    if (!entry) return
+    if (!entry) return false
 
     entry.status = 'active'
     this.clearIdleTimer(entry)
@@ -373,13 +373,14 @@ export class AgentSessionRuntimeService extends BaseService {
     // hook): the steer is folded into the current turn — no new turn, no queue entry. If the turn
     // ends before it's injected, the connection emits `steer-undelivered` and we queue it below.
     if (turn && !turn.terminalStatus && entry.connection?.redirect?.({ message, systemReminder: true })) {
-      return
+      return true
     }
 
     // No live turn (or backend can't steer) → queue as the next turn, wrapped in a steer system-reminder.
     entry.pendingTurns.push(message)
     ;(entry.steerMessageIds ??= new Set()).add(message.id)
     if (!turn || turn.terminalStatus) this.scheduleNextTurn(entry)
+    return true
   }
 
   markTurnTerminal(sessionId: string, status: AgentSessionRuntimeTerminalStatus): void {

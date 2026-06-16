@@ -98,7 +98,10 @@ export class AgentChatContextProvider implements ChatContextProvider {
     // `AiStreamManager.hasLiveStream`: the latter is false during the inter-turn drain window
     // (the settled stream is terminal-in-grace) while the entry is mid-transition, so trusting it
     // would take the begin branch and clobber the in-flight drain's `currentTurn` / `pendingTurns`.
-    if (application.get('AgentSessionRuntimeService').isSessionBusy(sessionId)) {
+    const runtimeService = application.get('AgentSessionRuntimeService')
+    let savedExistingUserMessage: AgentSessionMessageEntity | undefined
+
+    if (runtimeService.isSessionBusy(sessionId)) {
       // Follow-up to an in-flight session: persist the user row, hand the message to the
       // runtime so it opens the next turn (interrupt → re-dispatch), and attach
       // the new subscriber. No new placeholder/model — that would orphan a row.
@@ -112,16 +115,21 @@ export class AgentChatContextProvider implements ChatContextProvider {
         }
       })
 
-      application.get('AgentSessionRuntimeService').enqueueUserMessage(sessionId, userMessage)
-
-      return {
-        topicId: req.topicId,
-        models: [],
-        userMessageId,
-        reservedMessages: [toReservedAgentUIMessage(savedUserMessage)],
-        listeners: [subscriber],
-        isMultiModel: false
+      if (runtimeService.enqueueUserMessage(sessionId, savedUserMessage)) {
+        return {
+          topicId: req.topicId,
+          models: [],
+          userMessageId,
+          reservedMessages: [toReservedAgentUIMessage(savedUserMessage)],
+          listeners: [subscriber],
+          isMultiModel: false
+        }
       }
+
+      // The runtime can be torn down in the narrow window between the busy check and enqueue
+      // (idle TTL, agent deletion, shutdown). Reuse the already-persisted user row and fall back to
+      // a normal fresh turn so the saved message still receives an assistant response.
+      savedExistingUserMessage = savedUserMessage
     }
 
     const assistantMessageId = uuidv7()
@@ -144,26 +152,35 @@ export class AgentChatContextProvider implements ChatContextProvider {
     )
     const traceId = turnTrace.traceId
 
-    // Atomic user + pending-assistant write so `useAgentSessionParts` observes both at once.
-    const savedMessages = await agentSessionMessageService.saveMessages({
-      sessionId,
-      messages: [
-        {
-          id: userMessageId,
-          role: 'user',
-          status: 'success',
-          data: { parts: userMessageParts }
-        },
-        {
-          id: assistantMessageId,
-          role: 'assistant',
-          status: 'pending',
-          data: { parts: [] },
-          modelId: uniqueModelId,
-          modelSnapshot
-        }
-      ]
-    })
+    const assistantMessageInput = {
+      id: assistantMessageId,
+      role: 'assistant' as const,
+      status: 'pending' as const,
+      data: { parts: [] },
+      modelId: uniqueModelId,
+      modelSnapshot
+    }
+    const savedMessages = savedExistingUserMessage
+      ? [
+          savedExistingUserMessage,
+          await agentSessionMessageService.saveMessage({
+            sessionId,
+            message: assistantMessageInput
+          })
+        ]
+      : // Atomic user + pending-assistant write so `useAgentSessionParts` observes both at once.
+        await agentSessionMessageService.saveMessages({
+          sessionId,
+          messages: [
+            {
+              id: userMessageId,
+              role: 'user',
+              status: 'success',
+              data: { parts: userMessageParts }
+            },
+            assistantMessageInput
+          ]
+        })
 
     // Author the turn span's input/identity here (where the agent + user message live).
     applyTurnInputAttributes(turnTrace.rootSpan, {
@@ -174,14 +191,14 @@ export class AgentChatContextProvider implements ChatContextProvider {
       agentName: agent.name
     })
 
-    const runtime = application.get('AgentSessionRuntimeService').beginTurn({
+    const runtime = runtimeService.beginTurn({
       sessionId,
       topicId: req.topicId,
       agentId,
       agentType: agent.type,
       modelId: uniqueModelId,
       assistantMessageId,
-      userMessage,
+      userMessage: savedExistingUserMessage ?? userMessage,
       traceId
     })
 
