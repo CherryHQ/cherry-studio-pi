@@ -254,6 +254,24 @@ describe('StorageV2ConversationMirrorService', () => {
     )
   })
 
+  it('does not keep the renderer process alive while debounce flushing conversation mirrors', async () => {
+    const unref = vi.fn()
+    const timer = { unref } as unknown as ReturnType<typeof setTimeout>
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockReturnValue(timer)
+    const state = {
+      assistants: {
+        assistants: []
+      }
+    }
+
+    const { storageV2ConversationMirrorService } = await import('../StorageV2ConversationMirrorService')
+
+    storageV2ConversationMirrorService.scheduleTopic('topic-1', () => state, 1000)
+
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1000)
+    expect(unref).toHaveBeenCalledTimes(1)
+  })
+
   it('preserves destructive flush semantics when a mirror retry is queued', async () => {
     const syncConversation = vi.fn().mockRejectedValueOnce(new Error('storage busy')).mockResolvedValue({
       messageCount: 0,

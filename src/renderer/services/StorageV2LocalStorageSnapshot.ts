@@ -7,6 +7,7 @@ import {
 import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
 import { getRendererStorageV2Api } from './StorageV2RendererApi'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
+import { unrefTimer } from './StorageV2TimerUtils'
 
 const logger = loggerService.withContext('StorageV2LocalStorageSnapshot')
 
@@ -150,6 +151,7 @@ export function scheduleStorageV2LocalStorageMirror(debounceMs = DEFAULT_LOCAL_S
     localStorageMirrorTimer = null
     void flushStorageV2LocalStorageMirror()
   }, debounceMs)
+  unrefTimer(localStorageMirrorTimer)
 }
 
 export async function flushStorageV2LocalStorageMirror() {
@@ -275,4 +277,5 @@ function scheduleLocalStorageMirrorRetry() {
     localStorageMirrorRetryTimer = null
     void flushStorageV2LocalStorageMirror()
   }, LOCAL_STORAGE_MIRROR_RETRY_MS)
+  unrefTimer(localStorageMirrorRetryTimer)
 }

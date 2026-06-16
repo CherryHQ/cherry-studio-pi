@@ -133,6 +133,19 @@ describe('StorageV2MirrorService', () => {
     })
   })
 
+  it('does not keep the renderer process alive while debounce flushing Redux mirrors', async () => {
+    const unref = vi.fn()
+    const timer = { unref } as unknown as ReturnType<typeof setTimeout>
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockReturnValue(timer)
+
+    const { storageV2MirrorService } = await import('../StorageV2MirrorService')
+
+    storageV2MirrorService.scheduleStartupMirror(createState)
+
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1200)
+    expect(unref).toHaveBeenCalledTimes(1)
+  })
+
   it('does not prune Storage v2 with an empty startup runtime snapshot', async () => {
     const { storageV2MirrorService } = await import('../StorageV2MirrorService')
 

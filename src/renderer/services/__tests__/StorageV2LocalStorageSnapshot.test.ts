@@ -359,6 +359,28 @@ describe('StorageV2LocalStorageSnapshot', () => {
     )
   })
 
+  it('does not keep the renderer process alive while debounce flushing durable localStorage mirrors', async () => {
+    const unref = vi.fn()
+    const timer = { unref } as unknown as ReturnType<typeof setTimeout>
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockReturnValue(timer)
+    const importLegacyReduxSnapshot = vi.fn().mockResolvedValue({ dryRun: false })
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          importLegacyReduxSnapshot
+        }
+      }
+    })
+
+    scheduleStorageV2LocalStorageMirror(1000)
+
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1000)
+    expect(unref).toHaveBeenCalledTimes(1)
+
+    await flushStorageV2LocalStorageMirror()
+  })
+
   it('does not keep retrying after a durable localStorage write fails during renderer teardown', async () => {
     vi.useFakeTimers()
     const originalWindow = globalThis.window

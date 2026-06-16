@@ -7,6 +7,7 @@ import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
 import { fetchStorageV2TopicMessages } from './StorageV2ConversationHydrationService'
 import { getRendererStorageV2Api, type RendererStorageV2Api } from './StorageV2RendererApi'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
+import { unrefTimer } from './StorageV2TimerUtils'
 
 const logger = loggerService.withContext('StorageV2ConversationMirrorService')
 
@@ -557,6 +558,7 @@ class StorageV2ConversationMirrorService {
       this.timer = null
       void this.flush()
     }, debounceMs)
+    unrefTimer(this.timer)
   }
 
   private hasPendingWork() {

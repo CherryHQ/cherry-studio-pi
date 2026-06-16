@@ -20,6 +20,19 @@ describe('StorageV2AgentMirrorService', () => {
     })
   })
 
+  it('does not keep the renderer process alive while debounce flushing agent database mirrors', async () => {
+    const unref = vi.fn()
+    const timer = { unref } as unknown as ReturnType<typeof setTimeout>
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockReturnValue(timer)
+
+    const { storageV2AgentMirrorService } = await import('../StorageV2AgentMirrorService')
+
+    storageV2AgentMirrorService.schedule(1000)
+
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1000)
+    expect(unref).toHaveBeenCalledTimes(1)
+  })
+
   it('rejects strict flushes when the agent database mirror is still pending after failure', async () => {
     const importLegacyAgentDb = vi.fn().mockRejectedValue(new Error('agents.db locked'))
     Object.defineProperty(window, 'api', {

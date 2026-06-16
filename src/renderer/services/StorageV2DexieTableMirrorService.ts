@@ -4,6 +4,7 @@ import db from '@renderer/databases'
 import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
 import { getRendererStorageV2Api, type RendererStorageV2Api } from './StorageV2RendererApi'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
+import { unrefTimer } from './StorageV2TimerUtils'
 
 const logger = loggerService.withContext('StorageV2DexieTableMirrorService')
 
@@ -54,12 +55,6 @@ function clonePendingMap(source: Map<StorageV2DexieTableName, Set<string>>) {
 
 function countPendingRows(source: Map<StorageV2DexieTableName, Set<string>>) {
   return Array.from(source.values()).reduce((total, rowIds) => total + rowIds.size, 0)
-}
-
-function unrefTimer(timer: ReturnType<typeof setTimeout>) {
-  if (typeof timer === 'object' && timer && 'unref' in timer && typeof timer.unref === 'function') {
-    timer.unref()
-  }
 }
 
 class StorageV2DexieTableMirrorService {

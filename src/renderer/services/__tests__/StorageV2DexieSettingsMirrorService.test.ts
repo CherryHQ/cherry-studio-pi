@@ -98,6 +98,19 @@ describe('StorageV2DexieSettingsMirrorService', () => {
     expect(setSetting).toHaveBeenCalledWith('dexie.settings.translate:target:language', 'ja-JP', 'dexie-settings')
   })
 
+  it('does not keep the renderer process alive while debounce flushing Dexie settings mirrors', async () => {
+    const unref = vi.fn()
+    const timer = { unref } as unknown as ReturnType<typeof setTimeout>
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockReturnValue(timer)
+
+    const { storageV2DexieSettingsMirrorService } = await import('../StorageV2DexieSettingsMirrorService')
+
+    storageV2DexieSettingsMirrorService.scheduleSetting('language', 1000)
+
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1000)
+    expect(unref).toHaveBeenCalledTimes(1)
+  })
+
   it('delays retry after a transient Storage v2 settings mirror failure', async () => {
     const setSetting = vi.fn().mockRejectedValueOnce(new Error('storage busy')).mockResolvedValueOnce(undefined)
     Object.defineProperty(window, 'api', {

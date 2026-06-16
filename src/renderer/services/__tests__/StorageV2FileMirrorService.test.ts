@@ -101,6 +101,19 @@ describe('StorageV2FileMirrorService', () => {
     expect(deleteFile).toHaveBeenCalledWith('missing-file')
   })
 
+  it('does not keep the renderer process alive while debounce flushing file mirrors', async () => {
+    const unref = vi.fn()
+    const timer = { unref } as unknown as ReturnType<typeof setTimeout>
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockReturnValue(timer)
+
+    const { storageV2FileMirrorService } = await import('../StorageV2FileMirrorService')
+
+    storageV2FileMirrorService.scheduleFile('file-1', 1000)
+
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1000)
+    expect(unref).toHaveBeenCalledTimes(1)
+  })
+
   it('retries failed file mirrors on a timer', async () => {
     const file = {
       id: 'file-retry',

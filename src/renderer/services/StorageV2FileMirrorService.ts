@@ -4,6 +4,7 @@ import db from '@renderer/databases'
 import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
 import { getRendererStorageV2Api, type RendererStorageV2Api } from './StorageV2RendererApi'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
+import { unrefTimer } from './StorageV2TimerUtils'
 
 const logger = loggerService.withContext('StorageV2FileMirrorService')
 
@@ -99,6 +100,7 @@ class StorageV2FileMirrorService {
       this.timer = null
       void this.flush()
     }, debounceMs)
+    unrefTimer(this.timer)
   }
 
   private async mirrorPendingNow(storageV2: RendererStorageV2Api) {

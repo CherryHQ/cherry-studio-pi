@@ -3,6 +3,7 @@ import { loggerService } from '@logger'
 import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
 import { getRendererStorageV2Api, type RendererStorageV2Api } from './StorageV2RendererApi'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
+import { unrefTimer } from './StorageV2TimerUtils'
 
 const logger = loggerService.withContext('StorageV2AgentMirrorService')
 
@@ -28,6 +29,7 @@ class StorageV2AgentMirrorService {
       this.timer = null
       void this.flush()
     }, debounceMs)
+    unrefTimer(this.timer)
   }
 
   async flush() {
