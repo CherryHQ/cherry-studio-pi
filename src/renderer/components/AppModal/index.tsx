@@ -152,12 +152,22 @@ function AppModalItem({
   const icon = getIcon(type, props.icon)
   const showOkButton = shouldShowOkButton(props)
   const showCancelButton = shouldShowCancelButton(type, props)
+  const confirmingRef = useRef(false)
 
   const handleCancel = useCallback(() => {
+    if (confirmingRef.current || item.loading) {
+      return
+    }
+
     close(item.id, false, props.onCancel)
-  }, [close, item.id, props.onCancel])
+  }, [close, item.id, item.loading, props.onCancel])
 
   const handleConfirm = useCallback(async () => {
+    if (confirmingRef.current) {
+      return
+    }
+
+    confirmingRef.current = true
     updateLoading(item.id, true)
     try {
       await props.onOk?.()
@@ -165,6 +175,7 @@ function AppModalItem({
     } catch (error) {
       logger.error('Modal onOk failed', error as Error)
       window.toast.error({ title: i18n.t('common.error'), description: formatErrorMessage(error) })
+      confirmingRef.current = false
       updateLoading(item.id, false)
     }
   }, [close, item.id, props, updateLoading])
@@ -223,7 +234,7 @@ function AppModalItem({
               <Button
                 variant={props.okButtonProps?.danger ? 'destructive' : 'default'}
                 onClick={handleConfirm}
-                disabled={props.okButtonProps?.disabled}
+                disabled={props.okButtonProps?.disabled || item.loading}
                 loading={item.loading}
                 loadingIcon={<Loader2 className="size-4 animate-spin" />}
                 className={props.okButtonProps?.className}

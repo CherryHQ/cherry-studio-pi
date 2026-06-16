@@ -112,6 +112,46 @@ describe('AppModalProvider', () => {
     await expect(confirmed!).resolves.toBe(false)
   })
 
+  it('does not run onOk more than once while confirmation is pending', async () => {
+    const user = userEvent.setup()
+    const modal = await renderModalProvider()
+    let resolveOk: () => void = () => {}
+    const onOk = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveOk = resolve
+        })
+    )
+
+    let confirmed: ReturnType<AppModalApi['confirm']>
+    act(() => {
+      confirmed = modal.confirm({
+        title: 'Upload backup',
+        content: 'This may take a while.',
+        okText: 'Upload',
+        cancelText: 'Cancel',
+        onOk
+      })
+    })
+
+    const okButton = await screen.findByRole('button', { name: 'Upload' })
+    await act(async () => {
+      await user.dblClick(okButton)
+    })
+
+    await waitFor(() => {
+      expect(onOk).toHaveBeenCalledOnce()
+    })
+    expect(screen.getByRole('button', { name: 'Upload' })).toBeDisabled()
+
+    await act(async () => {
+      resolveOk()
+      await Promise.resolve()
+    })
+
+    await expect(confirmed!).resolves.toBe(true)
+  })
+
   it('resolves confirm as false when cancelled', async () => {
     const user = userEvent.setup()
     const modal = await renderModalProvider()
