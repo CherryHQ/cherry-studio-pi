@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { Modal } from 'antd'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import DataSyncSettings from '../DataSyncSettings'
@@ -404,6 +405,44 @@ describe('DataSyncSettings', () => {
     await waitFor(() =>
       expect(mocks.toast.success).toHaveBeenCalledWith('settings.data.data_sync.toast.diagnose_success')
     )
+  })
+
+  it('prevents duplicate latest snapshot restore confirmations and operations', async () => {
+    const runningRestore = deferred<void>()
+    mocks.restoreLatestSnapshot.mockReturnValueOnce(runningRestore.promise)
+    let confirmOptions: { onOk?: () => unknown | Promise<unknown> } = {}
+    const confirmSpy = vi.spyOn(Modal, 'confirm').mockImplementation((options) => {
+      confirmOptions = options
+      return {
+        destroy: vi.fn(),
+        update: vi.fn()
+      } as ReturnType<typeof Modal.confirm>
+    })
+
+    try {
+      render(<DataSyncSettings />)
+      await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+      fireEvent.click(buttonByText('settings.data.data_sync.restore_latest'))
+      fireEvent.click(buttonByText('settings.data.data_sync.restore_latest'))
+
+      expect(confirmSpy).toHaveBeenCalledTimes(1)
+      expect(confirmOptions.onOk).toBeTypeOf('function')
+
+      await act(async () => {
+        void confirmOptions.onOk?.()
+        void confirmOptions.onOk?.()
+      })
+
+      expect(mocks.restoreLatestSnapshot).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        runningRestore.resolve()
+        await runningRestore.promise
+      })
+    } finally {
+      confirmSpy.mockRestore()
+    }
   })
 
   it('splits a pasted WebDAV account block in the URL field into host username and password', async () => {

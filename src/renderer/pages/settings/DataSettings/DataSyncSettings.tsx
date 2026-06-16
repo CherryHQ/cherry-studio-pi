@@ -251,6 +251,7 @@ const DataSyncSettings: FC = () => {
   const diagnosisSeqRef = useRef(0)
   const syncNowRef = useRef(false)
   const restoreSnapshotRef = useRef(false)
+  const restoreSnapshotOperationRef = useRef(false)
   const diagnosisRef = useRef(false)
   const statusRefreshFeedbackRef = useRef({ t, webdavHost, webdavPath })
   statusRefreshFeedbackRef.current = { t, webdavHost, webdavPath }
@@ -504,7 +505,7 @@ const DataSyncSettings: FC = () => {
     const config = trySaveWebDavConfig()
     if (!config) return
 
-    if (restoreSnapshotRef.current) {
+    if (restoreSnapshotRef.current || restoreSnapshotOperationRef.current) {
       return
     }
 
@@ -518,6 +519,11 @@ const DataSyncSettings: FC = () => {
         restoreSnapshotRef.current = false
       },
       onOk: async () => {
+        if (restoreSnapshotOperationRef.current) {
+          return
+        }
+
+        restoreSnapshotOperationRef.current = true
         setRestoring(true)
         try {
           await window.api.dataSync.restoreLatestSnapshot(config)
@@ -538,6 +544,7 @@ const DataSyncSettings: FC = () => {
           )
         } finally {
           setRestoring(false)
+          restoreSnapshotOperationRef.current = false
           restoreSnapshotRef.current = false
         }
       }
