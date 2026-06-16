@@ -334,6 +334,28 @@ describe('useModelSelectorData', () => {
     expect(result.current.resolvedSelectedModelIds).toEqual(['openai::gpt-4'])
   })
 
+  it('resolves apiModelId aliases to the current catalog model for selection state', () => {
+    wireDeps({
+      providers: [makeProvider('deepseek')],
+      models: [makeModel('deepseek-chat-internal', 'deepseek', { apiModelId: 'deepseek-chat' })]
+    })
+
+    const { result } = renderHook(() =>
+      useModelSelectorData({
+        searchText: '',
+        selectedModelIds: ['deepseek::deepseek-chat']
+      })
+    )
+
+    expect(result.current.selectableModelsById.get('deepseek::deepseek-chat')?.id).toBe(
+      'deepseek::deepseek-chat-internal'
+    )
+    expect(result.current.resolvedSelectedModelIds).toEqual(['deepseek::deepseek-chat-internal'])
+    expect(
+      result.current.modelItems.find((item) => item.modelId === 'deepseek::deepseek-chat-internal')?.isSelected
+    ).toBe(true)
+  })
+
   it('maxSelectedCount only affects which rows render as selected, not resolvedSelectedModelIds', () => {
     wireDeps({
       providers: [makeProvider('openai')],

@@ -51,6 +51,29 @@ function getModelIdentifier(model: Model) {
   return getRawModelId(model)
 }
 
+function getModelAliasId(model: Model): UniqueModelId | undefined {
+  const rawModelId = getRawModelId(model).trim()
+  if (!model.providerId || !rawModelId) return undefined
+  return `${model.providerId}::${rawModelId}`
+}
+
+function buildSelectableModelsById(models: Model[]) {
+  const selectableModelsById = new Map<UniqueModelId, Model>()
+
+  for (const model of models) {
+    selectableModelsById.set(model.id, model)
+  }
+
+  for (const model of models) {
+    const aliasId = getModelAliasId(model)
+    if (aliasId && !selectableModelsById.has(aliasId)) {
+      selectableModelsById.set(aliasId, model)
+    }
+  }
+
+  return selectableModelsById
+}
+
 function sortProvidersByPriority(providers: Provider[], prioritizedProviderIds: string[]) {
   if (prioritizedProviderIds.length === 0) {
     return providers
@@ -134,8 +157,7 @@ export function useModelSelectorData({
   }, [modelsByProvider])
 
   const selectableModelsById = useMemo(() => {
-    const entries = [...modelsByProvider.values()].flat().map((model) => [model.id, model] as const)
-    return new Map(entries)
+    return buildSelectableModelsById([...modelsByProvider.values()].flat())
   }, [modelsByProvider])
 
   // 只做去重 + 剔除不可选的脏 ID，不做数量截断。
@@ -145,12 +167,13 @@ export function useModelSelectorData({
     const seen = new Set<UniqueModelId>()
 
     for (const modelId of selectedModelIds) {
-      if (seen.has(modelId) || !selectableModelsById.has(modelId)) {
+      const model = selectableModelsById.get(modelId)
+      if (!model || seen.has(model.id)) {
         continue
       }
 
-      seen.add(modelId)
-      nextSelectedIds.push(modelId)
+      seen.add(model.id)
+      nextSelectedIds.push(model.id)
     }
 
     return nextSelectedIds
