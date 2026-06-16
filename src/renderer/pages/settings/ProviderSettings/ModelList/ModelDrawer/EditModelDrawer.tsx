@@ -101,6 +101,8 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
   const [endpointTypeTouched, setEndpointTypeTouched] = useState(false)
   const [saving, setSaving] = useState(false)
   const savingRef = useRef(false)
+  const deleteConfirmRef = useRef(false)
+  const deleteRunningRef = useRef(false)
 
   const mode: ModelDrawerMode = provider && isNewApiProvider(provider) ? 'new-api' : 'legacy'
   const apiModelId = useMemo(() => (model ? getModelApiId(model) : ''), [model])
@@ -268,22 +270,38 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
   )
 
   const handleDeleteModel = useCallback(async () => {
-    if (!model) {
+    if (!model || deleteConfirmRef.current || deleteRunningRef.current) {
       return
     }
 
     const modelId = getModelApiId(model)
+    const clearDeleteGuard = () => {
+      if (deleteRunningRef.current) return
+      deleteConfirmRef.current = false
+    }
 
+    deleteConfirmRef.current = true
     window.modal.confirm({
       title: t('common.delete_confirm'),
       content: t('settings.models.manage.remove_model'),
       okButtonProps: { danger: true },
       okText: t('common.delete'),
       centered: true,
+      onCancel: clearDeleteGuard,
       onOk: async () => {
-        await deleteModel(model.providerId ?? providerId, modelId)
-        window.toast.success(t('common.delete_success'))
-        onClose()
+        if (deleteRunningRef.current) {
+          return
+        }
+
+        deleteRunningRef.current = true
+        try {
+          await deleteModel(model.providerId ?? providerId, modelId)
+          window.toast.success(t('common.delete_success'))
+          onClose()
+        } finally {
+          deleteRunningRef.current = false
+          deleteConfirmRef.current = false
+        }
       }
     })
   }, [deleteModel, model, onClose, providerId, t])

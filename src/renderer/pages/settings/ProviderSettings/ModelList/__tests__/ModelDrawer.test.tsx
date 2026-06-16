@@ -502,6 +502,55 @@ describe('Model drawers', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
+  it('prevents duplicate model delete confirmations and operations', async () => {
+    useProviderMock.mockReturnValue({
+      provider: { id: 'openai', name: 'OpenAI', isEnabled: true },
+      updateProvider: updateProviderMock
+    })
+    const runningDelete = deferred<void>()
+    deleteModelMock.mockReturnValueOnce(runningDelete.promise)
+    const onClose = vi.fn()
+
+    render(
+      <EditModelDrawer
+        providerId="openai"
+        open
+        onClose={onClose}
+        model={
+          {
+            id: 'openai::claude-4-sonnet',
+            providerId: 'openai',
+            name: 'claude-4-sonnet',
+            group: 'Anthropic',
+            capabilities: [],
+            isEnabled: false,
+            supportsStreaming: true,
+            pricing: {
+              input: { perMillionTokens: 0, currency: 'USD' },
+              output: { perMillionTokens: 0, currency: 'USD' }
+            }
+          } as any
+        }
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /common\.delete/i }))
+    fireEvent.click(screen.getByRole('button', { name: /common\.delete/i }))
+
+    expect(window.modal.confirm).toHaveBeenCalledTimes(1)
+    const options = (window.modal.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0]
+
+    const firstDelete = options.onOk()
+    const secondDelete = options.onOk()
+    expect(deleteModelMock).toHaveBeenCalledTimes(1)
+
+    runningDelete.resolve(undefined)
+    await Promise.all([firstDelete, secondDelete])
+
+    expect(window.toast.success).toHaveBeenCalledTimes(1)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   it('does not show delete action for enabled models', () => {
     useProviderMock.mockReturnValue({
       provider: { id: 'openai', name: 'OpenAI', isEnabled: true },
