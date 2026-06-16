@@ -55,6 +55,7 @@ vi.mock('@renderer/data/hooks/useCache', () => {
   }
 })
 
+import { RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '../../components/ResourceSelector/resourceSelectorEvents'
 import { TabsProvider, useTabsContext } from '../TabsContext'
 
 function TabsProbe() {
@@ -219,6 +220,26 @@ describe('TabsContext language refresh', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open legacy agents tab' }))
     expect(screen.getByTestId('tab-count')).toHaveTextContent('2')
+  })
+
+  it('closes transient selectors before opening a new tab', () => {
+    const closeSelectors = vi.fn()
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeSelectors)
+
+    try {
+      render(
+        <TabsProvider>
+          <TabsProbe />
+        </TabsProvider>
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Open paintings tab' }))
+
+      expect(closeSelectors).toHaveBeenCalledTimes(1)
+      expect(screen.getByTestId('active-tab-id')).toHaveTextContent('paintings-tab')
+    } finally {
+      window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeSelectors)
+    }
   })
 
   it('falls back to the home tab when replacing tabs removes the active tab', () => {

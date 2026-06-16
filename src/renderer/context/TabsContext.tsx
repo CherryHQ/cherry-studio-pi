@@ -1,5 +1,5 @@
 import { loggerService } from '@logger'
-import { requestCloseResourceSelectors } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
+import { closeTransientResourceSelectors } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { usePersistCache } from '@renderer/data/hooks/useCache'
 import { TabLruManager } from '@renderer/services/TabLruManager'
 import { uuid } from '@renderer/utils'
@@ -8,6 +8,7 @@ import type { Tab, TabSavedState, TabType } from '@shared/data/cache/cacheValueT
 import { IpcChannel } from '@shared/IpcChannel'
 import type { ReactNode } from 'react'
 import { createContext, use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('TabsContext')
@@ -52,6 +53,15 @@ function withLocalizedRouteTitle(tab: Tab): Tab {
 
 function sanitizeUserTabs(tabs: Tab[] | undefined): Tab[] {
   return (tabs ?? []).filter((tab) => tab.id !== DEFAULT_TAB.id).map(normalizeTabRoute)
+}
+
+function closeTransientSurfacesBeforeTabChange() {
+  // KeepAlive tabs are hidden with React Activity. If a resource selector portal
+  // is still closing when the old tab becomes hidden, it can remain attached to
+  // document.body and float over the newly active tab. Flush the close event
+  // synchronously before changing tab visibility.
+  // eslint-disable-next-line @eslint-react/dom/no-flush-sync -- close body portals before hiding the current Activity tab.
+  flushSync(closeTransientResourceSelectors)
 }
 
 /**
@@ -226,7 +236,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
           ? { ...updates, url: normalizeLegacyRouteUrl(updates.url) }
           : updates
       if (id === activeTabId && normalizedUpdates.url && normalizedUpdates.url !== tab.url) {
-        requestCloseResourceSelectors()
+        closeTransientSurfacesBeforeTabChange()
       }
 
       if (tab.isPinned) {
@@ -244,7 +254,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
 
       const targetTab = tabs.find((t) => t.id === id)
       if (!targetTab) return
-      requestCloseResourceSelectors()
+      closeTransientSurfacesBeforeTabChange()
 
       // If a dormant tab was awakened, log it
       if (targetTab.isDormant) {
@@ -275,7 +285,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         setActiveTab(tab.id)
         return
       }
-      requestCloseResourceSelectors()
+      closeTransientSurfacesBeforeTabChange()
 
       const newTab: Tab = normalizeTabRoute({
         ...tab,
@@ -310,7 +320,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         newActiveId = nextTab ? nextTab.id : ''
       }
       if (newActiveId !== activeTabId) {
-        requestCloseResourceSelectors()
+        closeTransientSurfacesBeforeTabChange()
       }
 
       if (tab.isPinned) {
@@ -461,6 +471,8 @@ export function TabsProvider({ children }: { children: ReactNode }) {
         logger.info('Tab already exists, activating', { tabId: tabData.id })
         return
       }
+
+      closeTransientSurfacesBeforeTabChange()
 
       // Restore tab with updated timestamp
       const restoredTab: Tab = normalizeTabRoute({
