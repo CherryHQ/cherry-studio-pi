@@ -7,6 +7,7 @@ const updateApiKeysMock = vi.fn().mockResolvedValue(undefined)
 const useProviderMock = vi.fn()
 const useProviderApiKeysMock = vi.fn()
 const useProviderMutationsMock = vi.fn()
+const updateProviderMock = vi.fn().mockResolvedValue(undefined)
 
 let apiKeysData:
   | {
@@ -41,7 +42,8 @@ describe('useProviderApiKey', () => {
       data: apiKeysData
     }))
     useProviderMutationsMock.mockReturnValue({
-      updateApiKeys: updateApiKeysMock
+      updateApiKeys: updateApiKeysMock,
+      updateProvider: updateProviderMock
     })
   })
 
@@ -157,6 +159,47 @@ describe('useProviderApiKey', () => {
     })
 
     expect(updateApiKeysMock).toHaveBeenCalledWith([{ id: expect.any(String), key: 'sk-now', isEnabled: true }])
+  })
+
+  it('auto-enables a disabled provider after saving an enabled API key', async () => {
+    useProviderMock.mockReturnValue({
+      provider: { id: 'openai', isEnabled: false }
+    })
+    const { result } = renderHook(() => useProviderApiKey('openai'))
+
+    act(() => {
+      result.current.setInputApiKey('sk-enabled')
+    })
+
+    await act(async () => {
+      vi.runAllTimers()
+      await Promise.resolve()
+    })
+
+    expect(updateApiKeysMock).toHaveBeenCalledWith([{ id: expect.any(String), key: 'sk-enabled', isEnabled: true }])
+    expect(updateProviderMock).toHaveBeenCalledWith({ isEnabled: true })
+  })
+
+  it('does not auto-enable a disabled provider when the enabled key input is empty', async () => {
+    useProviderMock.mockReturnValue({
+      provider: { id: 'openai', isEnabled: false }
+    })
+    apiKeysData = {
+      keys: [{ id: 'k1', key: 'sk-existing', isEnabled: true }]
+    }
+    const { result } = renderHook(() => useProviderApiKey('openai'))
+
+    act(() => {
+      result.current.setInputApiKey('')
+    })
+
+    await act(async () => {
+      vi.runAllTimers()
+      await Promise.resolve()
+    })
+
+    expect(updateApiKeysMock).toHaveBeenCalledWith([])
+    expect(updateProviderMock).not.toHaveBeenCalled()
   })
 
   it('keeps api key input local to each store', () => {
