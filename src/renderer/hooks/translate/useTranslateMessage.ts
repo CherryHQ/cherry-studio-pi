@@ -161,8 +161,9 @@ export function useTranslateMessage(messageId: string): UseTranslateMessageResul
     const active = activeRef.current
     if (!active) return
     void window.api.ai.streamAbort({ topicId: active.streamId }).catch(() => {})
-    // onStreamError / onStreamDone (status: 'paused') will clear the overlay.
-  }, [])
+    setOverlay?.(messageId, null)
+    teardown(active.streamId)
+  }, [messageId, setOverlay, teardown])
 
   return { translate, cancel }
 }
