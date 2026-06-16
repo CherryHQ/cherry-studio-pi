@@ -4,6 +4,7 @@ import fs from 'node:fs'
 // satisfies @typescript-eslint/consistent-type-imports (which forbids
 // inline `import()` type annotations).
 import type * as PathRegistryModule from '@main/core/paths/pathRegistry'
+import { app as electronApp } from 'electron'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('node:fs', async () => {
@@ -254,5 +255,69 @@ describe('Application quit lifecycle hooks', () => {
     ;(app as any).runWillQuitHandlers()
 
     expect(handler).not.toHaveBeenCalled()
+  })
+})
+
+describe('Application shutdown force-exit timers', () => {
+  const app = Application.getInstance()
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    ;(app as any).isShuttingDown = false
+    ;(electronApp as any).exit = vi.fn()
+    ;(electronApp as any).on = vi.fn()
+  })
+
+  it('unrefs force-exit timers installed by signal handlers', async () => {
+    const unref = vi.fn()
+    const timer = { unref }
+    const onSpy = vi.spyOn(process, 'on').mockImplementation(() => process)
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(() => timer as never)
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout').mockImplementation(() => undefined)
+    const shutdownSpy = vi.spyOn(app, 'shutdown').mockResolvedValue(undefined)
+
+    ;(app as any).setupSignalHandlers()
+
+    const sigintHandler = onSpy.mock.calls.find(([signal]) => signal === 'SIGINT')?.[1] as
+      | (() => Promise<void>)
+      | undefined
+    expect(sigintHandler).toBeDefined()
+
+    await sigintHandler?.()
+
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), Application.SHUTDOWN_TIMEOUT_MS)
+    expect(unref).toHaveBeenCalledTimes(1)
+    expect(shutdownSpy).toHaveBeenCalledTimes(1)
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(timer)
+    expect((electronApp as any).exit).toHaveBeenCalledWith(0)
+  })
+
+  it('unrefs the will-quit force-exit timer', async () => {
+    const unref = vi.fn()
+    const timer = { unref }
+    const event = { preventDefault: vi.fn() }
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(() => timer as never)
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout').mockImplementation(() => undefined)
+    const shutdownSpy = vi.spyOn(app, 'shutdown').mockResolvedValue(undefined)
+
+    ;(app as any).setupQuitHandlers()
+
+    const willQuitHandler = vi
+      .mocked((electronApp as any).on)
+      .mock.calls.find(([eventName]) => eventName === 'will-quit')?.[1] as
+      | ((quitEvent: { preventDefault: () => void }) => void)
+      | undefined
+    expect(willQuitHandler).toBeDefined()
+
+    willQuitHandler?.(event)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(event.preventDefault).toHaveBeenCalledTimes(1)
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), Application.SHUTDOWN_TIMEOUT_MS)
+    expect(unref).toHaveBeenCalledTimes(1)
+    expect(shutdownSpy).toHaveBeenCalledTimes(1)
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(timer)
+    expect((electronApp as any).exit).toHaveBeenCalledWith(0)
   })
 })

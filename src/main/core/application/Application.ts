@@ -395,6 +395,7 @@ export class Application {
 
     process.on('SIGINT', async () => {
       const timer = setTimeout(forceExit, Application.SHUTDOWN_TIMEOUT_MS)
+      timer.unref?.()
       try {
         await this.shutdown()
       } catch (error) {
@@ -407,6 +408,7 @@ export class Application {
 
     process.on('SIGTERM', async () => {
       const timer = setTimeout(forceExit, Application.SHUTDOWN_TIMEOUT_MS)
+      timer.unref?.()
       try {
         await this.shutdown()
       } catch (error) {
@@ -448,6 +450,7 @@ export class Application {
         logger.warn('Forced exit after shutdown timeout (will-quit)')
         process.exit(1)
       }, Application.SHUTDOWN_TIMEOUT_MS)
+      timer.unref?.()
 
       this.shutdown()
         .catch((err) => logger.error('Error during shutdown:', err as Error))
