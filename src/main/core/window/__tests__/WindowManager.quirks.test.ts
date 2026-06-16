@@ -363,6 +363,25 @@ describe('WindowManager quirks — applyQuirks monkey-patching', () => {
       expect(bystanderId).toBeTruthy()
     })
 
+    it('does not keep the process alive while waiting to restore focusability', () => {
+      const bystanderId = wm.open('plain' as never)
+      wm.open('toolbar' as never)
+      const toolbar = createdWindows[1]
+      const unref = vi.fn()
+      const timer = { unref } as unknown as ReturnType<typeof setTimeout>
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockReturnValue(timer)
+
+      try {
+        toolbar.hide()
+
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 50)
+        expect(unref).toHaveBeenCalledTimes(1)
+        expect(bystanderId).toBeTruthy()
+      } finally {
+        setTimeoutSpy.mockRestore()
+      }
+    })
+
     it('skips the guard for already-destroyed or invisible bystanders', () => {
       // Bystander destroyed → skip
       wm.open('plain' as never)

@@ -134,11 +134,12 @@ function beginMacFocusGuard(): BrowserWindow[] {
 
 // set them back to focusable after 50ms
 function endMacFocusGuard(focusableWindows: BrowserWindow[]): void {
-  setTimeout(() => {
+  const restoreTimer = setTimeout(() => {
     for (const window of focusableWindows) {
       if (!window.isDestroyed()) {
         window.setFocusable(true)
       }
     }
   }, 50)
+  restoreTimer.unref?.()
 }
