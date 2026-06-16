@@ -65,6 +65,7 @@ const PopupContainer: React.FC<Props> = ({
   const [textValue, setTextValue] = useState(text)
   const [isTranslating, setIsTranslating] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const translatingRef = useRef(false)
   const [targetLanguage] = usePreference('chat.input.translate.target_language')
   const [showTranslateConfirm] = usePreference('chat.input.translate.show_confirm')
   const { languages } = useLanguages()
@@ -82,6 +83,7 @@ const PopupContainer: React.FC<Props> = ({
   useEffect(() => {
     return () => {
       isMounted.current = false
+      translatingRef.current = false
     }
   }, [])
 
@@ -127,22 +129,25 @@ const PopupContainer: React.FC<Props> = ({
   }, [open])
 
   const handleTranslate = async () => {
-    if (!textValue.trim() || isTranslating) return
+    if (!textValue.trim() || translatingRef.current) return
 
-    if (showTranslateConfirm) {
-      const confirmed = await window?.modal?.confirm({
-        title: t('translate.confirm.title'),
-        content: t('translate.confirm.content'),
-        centered: true
-      })
-      if (!confirmed) return
-    }
-
-    if (isMounted.current) {
-      setIsTranslating(true)
-    }
-
+    translatingRef.current = true
+    let didStartTranslating = false
     try {
+      if (showTranslateConfirm) {
+        const confirmed = await window?.modal?.confirm({
+          title: t('translate.confirm.title'),
+          content: t('translate.confirm.content'),
+          centered: true
+        })
+        if (!confirmed) return
+      }
+
+      if (isMounted.current) {
+        didStartTranslating = true
+        setIsTranslating(true)
+      }
+
       const targetVo = languages?.find((l) => l.langCode === targetLanguage)
       const translatedText = await translateText(textValue, targetVo ?? targetLanguage)
       if (isMounted.current) {
@@ -152,7 +157,8 @@ const PopupContainer: React.FC<Props> = ({
       logger.error('Translation failed:', error as Error)
       window.toast.error(formatErrorMessageWithPrefix(error, t('translate.error.failed')))
     } finally {
-      if (isMounted.current) {
+      translatingRef.current = false
+      if (didStartTranslating && isMounted.current) {
         setIsTranslating(false)
       }
     }
