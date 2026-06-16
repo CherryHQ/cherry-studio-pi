@@ -275,6 +275,23 @@ describe('agent app capabilities', () => {
     )
   })
 
+  it('returns a warning when the default agent session cannot be created', async () => {
+    mocks.agentSessionService.createSession.mockRejectedValueOnce(new Error('workspace unavailable'))
+
+    const result = await capability('agents.create').execute(
+      { name: 'Agent One', model: 'model-1' },
+      { source: 'agent' }
+    )
+
+    expect(result.ok).toBe(true)
+    expect(result.summary).toContain('Default session could not be created')
+    expect(result.data).toMatchObject({
+      agent: { id: 'agent-1', name: 'Agent One' },
+      defaultSession: null,
+      warnings: ['Default session could not be created: workspace unavailable']
+    })
+  })
+
   it('rejects empty required agent inputs before calling services', async () => {
     await expect(
       capability('agents.create').execute({ name: '   ', model: 'model-1' }, { source: 'agent' })

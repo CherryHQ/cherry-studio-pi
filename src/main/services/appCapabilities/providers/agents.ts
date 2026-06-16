@@ -102,6 +102,20 @@ async function listAgentTasks(input: any = {}) {
   })
 }
 
+async function createDefaultAgentSession(
+  agentId: string,
+  name: string,
+  workspace: { type: 'system' } | { type: 'user'; workspaceId: string }
+) {
+  try {
+    const session = await agentSessionService.createSession({ agentId, name, workspace })
+    return { session, warning: undefined }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return { session: null, warning: `Default session could not be created: ${message}` }
+  }
+}
+
 export function createAgentCapabilities(): AppCapabilityDefinition[] {
   return [
     {
@@ -219,13 +233,15 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
           disabledTools: normalizeOptionalTextArray(input?.disabledTools),
           configuration: normalizeOptionalObject(input?.configuration)
         })
-        const session = await agentSessionService
-          .createSession({ agentId: agent.id, name: sessionName, workspace: sessionWorkspace })
-          .catch(() => null)
+        const { session, warning } = await createDefaultAgentSession(agent.id, sessionName, sessionWorkspace)
         return {
           ok: true,
-          summary: `Agent created: ${agent.name}`,
-          data: sanitizeForAgent({ agent, defaultSession: session })
+          summary: warning ? `Agent created: ${agent.name}; ${warning}` : `Agent created: ${agent.name}`,
+          data: sanitizeForAgent({
+            agent,
+            defaultSession: session,
+            ...(warning ? { warnings: [warning] } : {})
+          })
         }
       }
     },
