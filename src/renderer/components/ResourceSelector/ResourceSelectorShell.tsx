@@ -216,7 +216,6 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
   // Own the open state so we can reset search on close without relying on the caller being
   // controlled. When `openProp` is set the caller wins; otherwise we track it ourselves.
   const [internalOpen, setInternalOpen] = useState(false)
-  const [portalContainer, setPortalContainer] = useState<HTMLSpanElement | null>(null)
   const selectorId = useId()
   const open = openProp ?? internalOpen
   const mountedRef = useRef(true)
@@ -579,7 +578,6 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
 
   return (
     <>
-      <span ref={setPortalContainer} data-resource-selector-portal="" />
       <EntitySelector
         trigger={trigger}
         open={open}
@@ -635,7 +633,6 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
         footer={footer}
         popoverContentProps={{
           className: 'min-w-[280px] border-border/60',
-          container: portalContainer,
           hideWhenDetached: true
         }}
       />
