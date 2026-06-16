@@ -1,13 +1,14 @@
 import type { AgentEntity } from '@shared/data/types/agent'
 import type { Model } from '@shared/data/types/model'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactElement, ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AgentContent from '../AgentContent'
 
-const { modelsMock, updateModelMock, updateSessionMock } = vi.hoisted(() => ({
+const { modelsMock, showSaveFailedMock, updateModelMock, updateSessionMock } = vi.hoisted(() => ({
   modelsMock: [] as Model[],
+  showSaveFailedMock: vi.fn(),
   updateModelMock: vi.fn(),
   updateSessionMock: vi.fn()
 }))
@@ -47,10 +48,21 @@ vi.mock('@renderer/components/HorizontalScrollContainer', () => ({
 }))
 
 vi.mock('@renderer/components/ModelSelector', () => ({
-  ModelSelector: ({ trigger, value }: { trigger: ReactElement; value?: Model }) => (
+  ModelSelector: ({
+    onSelect,
+    trigger,
+    value
+  }: {
+    onSelect?: (model: Model) => void
+    trigger: ReactElement
+    value?: Model
+  }) => (
     <div data-testid="model-selector-value">
       {value?.id ?? 'none'}
       {trigger}
+      <button type="button" onClick={() => onSelect?.(modelsMock[0])}>
+        select mock model
+      </button>
     </div>
   )
 }))
@@ -97,7 +109,7 @@ vi.mock('@renderer/hooks/useProvider', () => ({
 }))
 
 vi.mock('@renderer/hooks/useSaveFailedToast', () => ({
-  useSaveFailedToast: () => vi.fn()
+  useSaveFailedToast: () => showSaveFailedMock
 }))
 
 vi.mock('../AgentLabel', () => ({
@@ -137,6 +149,7 @@ function createAgent(overrides: Partial<AgentEntity> = {}): AgentEntity {
 describe('AgentContent', () => {
   beforeEach(() => {
     modelsMock.length = 0
+    showSaveFailedMock.mockReset()
     updateModelMock.mockReset()
     updateSessionMock.mockReset()
   })
@@ -165,5 +178,32 @@ describe('AgentContent', () => {
 
     expect(screen.getByTestId('model-selector-value')).toHaveTextContent('deepseek::deepseek-chat')
     expect(screen.getByTestId('model-selector-value')).toHaveTextContent('deepseek-chat | Provider deepseek')
+  })
+
+  it('surfaces model update failures instead of leaving an unhandled rejection', async () => {
+    const error = new Error('save failed')
+    updateModelMock.mockRejectedValueOnce(error)
+    modelsMock.push({
+      id: 'deepseek::deepseek-chat',
+      providerId: 'deepseek',
+      provider: 'deepseek',
+      apiModelId: 'deepseek-chat',
+      name: 'DeepSeek Chat',
+      capabilities: [],
+      supportsStreaming: true,
+      isEnabled: true,
+      isHidden: false
+    } as Model)
+
+    render(<AgentContent activeAgent={createAgent()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'select mock model' }))
+
+    await waitFor(() =>
+      expect(updateModelMock).toHaveBeenCalledWith('agent-1', 'deepseek::deepseek-chat', {
+        showSuccessToast: false
+      })
+    )
+    expect(showSaveFailedMock).toHaveBeenCalledWith(error)
   })
 })

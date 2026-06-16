@@ -50,19 +50,21 @@ const AgentContent = ({ activeAgent }: AgentContentProps) => {
   const providerName = useProviderDisplayName(currentSharedModel?.providerId)
 
   const handleAgentChange = useCallback(
-    async (nextAgentId: string | null) => {
+    (nextAgentId: string | null) => {
       if (!nextAgentId || !activeSession || nextAgentId === activeAgent.id) return
-      await updateSession({ id: activeSession.id, agentId: nextAgentId }, { showSuccessToast: false })
+      void updateSession({ id: activeSession.id, agentId: nextAgentId }, { showSuccessToast: false }).catch(
+        showSaveFailed
+      )
     },
-    [activeAgent.id, activeSession, updateSession]
+    [activeAgent.id, activeSession, showSaveFailed, updateSession]
   )
 
   const handleModelSelect = useCallback(
     (model: SharedModel | undefined) => {
       if (!model) return
-      void updateModel(activeAgent.id, model.id, { showSuccessToast: false })
+      void updateModel(activeAgent.id, model.id, { showSuccessToast: false }).catch(showSaveFailed)
     },
-    [activeAgent.id, updateModel]
+    [activeAgent.id, showSaveFailed, updateModel]
   )
 
   return (
