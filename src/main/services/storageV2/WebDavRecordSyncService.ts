@@ -10,6 +10,7 @@ import { runWebDavOperation, WebDavOperationError } from '@main/services/WebDavR
 import type { WebDAVClient } from 'webdav'
 
 import { storageV2DataRootService } from './DataRootService'
+import { isProviderAuthConfigSecretKey, isSensitiveHeaderName } from './SecretFieldDetection'
 import {
   collectStorageV2SecretRefsFromValue,
   scanStorageV2SecretReferences,
@@ -35,7 +36,6 @@ const MAX_SYNC_SECRET_BUNDLE_JSON_BYTES = 8 * 1024 * 1024
 const MAX_SYNC_SECRET_COUNT = 10_000
 const DATA_SYNC_CLEANUP_MAX_FILES_ENV = 'CHERRY_STUDIO_DATA_SYNC_CLEANUP_MAX_FILES'
 const DEFAULT_REMOTE_ARTIFACT_CLEANUP_MAX_FILES = 20_000
-const SENSITIVE_HEADER_NAME_PATTERN = /(authorization|cookie|token|secret|api[-_]?key|x[-_].*key)/i
 
 type StorageV2SyncTable = {
   entityType: StorageV2SyncEntityType
@@ -787,8 +787,8 @@ function collectProviderPlaintextSecretPaths(row: Record<string, InValue>) {
 
   const authConfig = config.authConfig
   if (isPlainRecord(authConfig)) {
-    for (const key of ['accessToken', 'refreshToken', 'secretAccessKey', 'credentials', 'token']) {
-      if (isPlaintextSecretPayload(authConfig[key])) {
+    for (const [key, value] of Object.entries(authConfig)) {
+      if (isProviderAuthConfigSecretKey(key) && isPlaintextSecretPayload(value)) {
         paths.push(`config_json.authConfig.${key}`)
       }
     }
@@ -804,7 +804,7 @@ function collectProviderPlaintextHeaderPaths(value: unknown, pathPrefix: string,
   if (!isPlainRecord(value) || !isPlainRecord(value.extraHeaders)) return
 
   for (const [headerName, headerValue] of Object.entries(value.extraHeaders)) {
-    if (SENSITIVE_HEADER_NAME_PATTERN.test(headerName) && isPlaintextSecretPayload(headerValue)) {
+    if (isSensitiveHeaderName(headerName) && isPlaintextSecretPayload(headerValue)) {
       paths.push(`${pathPrefix}.extraHeaders.${headerName}`)
     }
   }

@@ -490,6 +490,8 @@ describe('StorageV2Service', () => {
       settings: {
         extraHeaders: {
           Authorization: 'Bearer header-secret',
+          'Access-Key': 'access-header-secret',
+          Credential: 'credential-header-secret',
           'X-Trace': 'trace-id'
         }
       }
@@ -502,7 +504,11 @@ describe('StorageV2Service', () => {
       'provider',
       'provider-1',
       'extraHeaders',
-      JSON.stringify({ Authorization: 'Bearer header-secret' })
+      JSON.stringify({
+        Authorization: 'Bearer header-secret',
+        'Access-Key': 'access-header-secret',
+        Credential: 'credential-header-secret'
+      })
     )
     expect(mocks.providerRepository.upsert).toHaveBeenCalledWith(
       {

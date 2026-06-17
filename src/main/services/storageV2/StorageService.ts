@@ -15,6 +15,7 @@ import { type StorageV2LegacyImportOptions, storageV2LegacyReduxImportService } 
 import { listStorageV2LegacyRuntimePolicies, storageV2LegacyRuntimeCleanupService } from './LegacyRuntimeCleanupService'
 import { storageV2MigrationAuditService } from './MigrationAuditService'
 import { type StorageV2MigrationRunInput, storageV2MigrationRunService } from './MigrationRunService'
+import { isSensitiveHeaderName, isStorageV2SecretRefValue } from './SecretFieldDetection'
 import { storageV2SecretVaultService } from './SecretVaultService'
 import { STORAGE_V2_FLAT_SETTINGS_SECRET_FIELDS } from './SettingsSecretFields'
 import { storageV2StatisticsService } from './StatisticsService'
@@ -73,7 +74,6 @@ const MCP_PROVIDER_TOKEN_KEYS = new Set([
   'bailian_token'
 ])
 const PROVIDER_EXTRA_HEADERS_CREDENTIAL_KIND = 'extraHeaders'
-const STORAGE_V2_SECRET_REF_PREFIX = 'storage-v2://secret/'
 
 function cloneRecord(value: unknown): Record<string, any> {
   if (!value || typeof value !== 'object') return {}
@@ -239,10 +239,6 @@ function parseProviderExtraHeadersSecret(secret: string): Record<string, string>
   }
 }
 
-function isSensitiveHeaderName(headerName: string) {
-  return /(authorization|cookie|token|secret|api[-_]?key|x[-_].*key)/i.test(headerName)
-}
-
 function getProviderExtraHeaders(provider: Provider): Record<string, string> | null {
   const settings = (provider as unknown as { settings?: unknown }).settings
   if (!isRecord(settings) || !isRecord(settings.extraHeaders)) return null
@@ -266,9 +262,7 @@ function getProviderSensitiveExtraHeaders(provider: Provider) {
   return Object.fromEntries(
     Object.entries(headers).filter(
       ([headerName, headerValue]) =>
-        isSensitiveHeaderName(headerName) &&
-        headerValue.trim() &&
-        !headerValue.trim().startsWith(STORAGE_V2_SECRET_REF_PREFIX)
+        isSensitiveHeaderName(headerName) && headerValue.trim() && !isStorageV2SecretRefValue(headerValue)
     )
   )
 }

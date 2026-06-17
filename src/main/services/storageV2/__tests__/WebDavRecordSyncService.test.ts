@@ -1492,6 +1492,44 @@ describe('StorageV2WebDavRecordSyncService', () => {
     )
   })
 
+  it('does not publish provider rows that still contain generic plaintext auth secrets', async () => {
+    const remote = makeSharedWebDavStore()
+    const db = makeProviderDb([
+      {
+        id: 'provider-1',
+        type: 'custom',
+        name: 'Custom',
+        api_host: 'https://api.example.com',
+        enabled: 1,
+        sort_order: 0,
+        config_json: JSON.stringify({
+          id: 'provider-1',
+          type: 'custom',
+          name: 'Custom',
+          authConfig: {
+            type: 'custom',
+            privateKey: 'plaintext-private-key',
+            password: 'plaintext-password',
+            accessKeyId: 'non-secret-id'
+          }
+        }),
+        created_at: '2026-06-01T08:00:00.000Z',
+        updated_at: '2026-06-01T08:00:00.000Z',
+        deleted_at: null,
+        version: 1
+      }
+    ])
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([providerTable]).sync(remote.client as any, '/remote-root/sync/v1', null, {
+        skipWriteAccessProbe: true
+      })
+    ).rejects.toThrow('config_json.authConfig.privateKey')
+
+    expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
+  })
+
   it('does not publish provider rows that still contain plaintext sensitive extra headers', async () => {
     const remote = makeSharedWebDavStore()
     const db = makeProviderDb([
@@ -1508,7 +1546,8 @@ describe('StorageV2WebDavRecordSyncService', () => {
           name: 'OpenAI',
           settings: {
             extraHeaders: {
-              Authorization: 'Bearer plaintext-header',
+              'Access-Key': 'plaintext-access-key',
+              Credential: 'plaintext-credential',
               'X-Trace': 'trace-id'
             }
           }

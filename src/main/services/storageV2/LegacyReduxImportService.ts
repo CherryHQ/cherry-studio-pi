@@ -4,6 +4,7 @@ import {
 } from '@shared/data/cache/cacheSchemas'
 import type { Assistant, Provider } from '@types'
 
+import { isSensitiveHeaderName } from './SecretFieldDetection'
 import { storageV2SecretVaultService } from './SecretVaultService'
 import { getStorageV2FlatSettingsSecretField } from './SettingsSecretFields'
 import {
@@ -842,10 +843,6 @@ async function sanitizeCodeToolsState(value: unknown, options: SecretSanitizerOp
     secretCandidateCount,
     importedSecretCount
   }
-}
-
-function isSensitiveHeaderName(headerName: string) {
-  return /(authorization|cookie|token|secret|api[-_]?key|x[-_].*key)/i.test(headerName)
 }
 
 async function sanitizeCopilotState(value: unknown, options: SecretSanitizerOptions): Promise<SecretSanitizerResult> {

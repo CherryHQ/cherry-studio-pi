@@ -384,4 +384,41 @@ describe('StorageV2LegacyReduxImportService', () => {
       { preserveExistingCredential: true }
     )
   })
+
+  it('stores Copilot credential-like default headers as secret refs', async () => {
+    mocks.secretVault.setSecret.mockImplementation(
+      async (scope: string, ownerId: string, kind: string) => `storage-v2://secret/${scope}/${ownerId}/${kind}`
+    )
+
+    const report = await new StorageV2LegacyReduxImportService().importSnapshot(
+      {
+        redux: {
+          copilot: {
+            defaultHeaders: {
+              'Access-Key': 'access-header-secret',
+              Credential: 'credential-header-secret',
+              'X-Trace': 'trace-id'
+            }
+          }
+        }
+      },
+      { dryRun: false }
+    )
+
+    expect(report.secretCandidateCount).toBe(2)
+    expect(report.importedSecretCount).toBe(2)
+    expect(mocks.settingsRepository.set).toHaveBeenCalledWith(
+      'redux.copilot',
+      {
+        defaultHeaders: {
+          'X-Trace': 'trace-id'
+        },
+        defaultHeaderSecretRefs: {
+          'Access-Key': 'storage-v2://secret/copilot/defaultHeaders/Access-Key',
+          Credential: 'storage-v2://secret/copilot/defaultHeaders/Credential'
+        }
+      },
+      'redux'
+    )
+  })
 })

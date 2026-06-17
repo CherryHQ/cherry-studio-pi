@@ -7,6 +7,7 @@ import { createUniqueModelId, isUniqueModelId, parseUniqueModelId } from '@share
 import type { Assistant, Model, Provider } from '@types'
 
 import { storageV2DataRootService } from './DataRootService'
+import { isProviderAuthConfigSecretKey, isSensitiveHeaderName } from './SecretFieldDetection'
 import { storageV2Database } from './StorageV2Database'
 import { encodeStorageV2CompositeEntityId } from './SyncEntityId'
 import { storageV2SyncLogService } from './SyncLogService'
@@ -119,15 +120,6 @@ export type StorageV2ProviderCredentialRefs = Record<string, string>
 export type StorageV2ProviderCredentialRefInput = string | StorageV2ProviderCredentialRefs
 
 const LEGACY_FILE_TYPES = new Set(['image', 'video', 'audio', 'text', 'document', 'other'])
-const PROVIDER_AUTH_CONFIG_SECRET_KEYS = [
-  'accessToken',
-  'refreshToken',
-  'secretAccessKey',
-  'credentials',
-  'token'
-] as const
-const SENSITIVE_HEADER_NAME_PATTERN = /(authorization|cookie|token|secret|api[-_]?key|x[-_].*key)/i
-
 export type StorageV2ConversationImport = {
   id: string
   kind?: string
@@ -295,8 +287,8 @@ function redactProviderAuthConfig(value: unknown): unknown {
   if (!isRecord(value)) return value
 
   const authConfig = { ...value }
-  for (const key of PROVIDER_AUTH_CONFIG_SECRET_KEYS) {
-    if (Object.hasOwn(authConfig, key)) {
+  for (const key of Object.keys(authConfig)) {
+    if (isProviderAuthConfigSecretKey(key)) {
       delete authConfig[key]
     }
   }
@@ -312,7 +304,7 @@ function redactProviderSettings(value: unknown): unknown {
 
   const extraHeaders = { ...settings.extraHeaders }
   for (const headerName of Object.keys(extraHeaders)) {
-    if (SENSITIVE_HEADER_NAME_PATTERN.test(headerName)) {
+    if (isSensitiveHeaderName(headerName)) {
       delete extraHeaders[headerName]
     }
   }

@@ -436,7 +436,9 @@ describe('StorageV2ProviderRepository', () => {
           type: 'bearer',
           token: 'plain-bearer-token',
           accessToken: 'plain-access-token',
-          refreshToken: 'plain-refresh-token'
+          refreshToken: 'plain-refresh-token',
+          privateKey: 'plain-private-key',
+          password: 'plain-password'
         },
         models: []
       } as any,
@@ -454,6 +456,8 @@ describe('StorageV2ProviderRepository', () => {
     expect(JSON.stringify(providerConfigJson)).not.toContain('plain-bearer-token')
     expect(JSON.stringify(providerConfigJson)).not.toContain('plain-access-token')
     expect(JSON.stringify(providerConfigJson)).not.toContain('plain-refresh-token')
+    expect(JSON.stringify(providerConfigJson)).not.toContain('plain-private-key')
+    expect(JSON.stringify(providerConfigJson)).not.toContain('plain-password')
     expect(JSON.parse(String(providerConfigJson))).toEqual(
       expect.objectContaining({
         authConfig: {
@@ -478,6 +482,8 @@ describe('StorageV2ProviderRepository', () => {
           extraHeaders: {
             Authorization: 'Bearer header-secret',
             Cookie: 'session=secret',
+            'Access-Key': 'access-header-secret',
+            Credential: 'credential-header-secret',
             'X-Trace': 'trace-id'
           }
         },
@@ -496,6 +502,8 @@ describe('StorageV2ProviderRepository', () => {
     const providerConfigJson = (providerInsert[0] as { args?: unknown[] }).args?.[6]
     expect(JSON.stringify(providerConfigJson)).not.toContain('Bearer header-secret')
     expect(JSON.stringify(providerConfigJson)).not.toContain('session=secret')
+    expect(JSON.stringify(providerConfigJson)).not.toContain('access-header-secret')
+    expect(JSON.stringify(providerConfigJson)).not.toContain('credential-header-secret')
     expect(JSON.parse(String(providerConfigJson))).toEqual(
       expect.objectContaining({
         settings: {
