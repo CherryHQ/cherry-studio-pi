@@ -51,6 +51,7 @@ import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'reac
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingsContentColumn, SettingTitle } from '.'
+import { getAgentSessionNavigationTarget } from './taskNavigation'
 
 const logger = loggerService.withContext('TasksSettings')
 const SYSTEM_TASK_WORKSPACE_SOURCE = { type: 'system' as const } satisfies CreateTaskRequest['workspace']
@@ -507,8 +508,11 @@ const TaskLogsInline: FC<{ taskId: string; agentId: string }> = ({ taskId, agent
 
   const navigateToSession = useCallback(
     (sessionId: string) => {
-      cacheService.set('agent.active_session_id', sessionId)
-      void navigate({ to: '/app/chat' })
+      const target = getAgentSessionNavigationTarget(sessionId)
+      if (!target) return
+
+      cacheService.set('agent.active_session_id', target.search.sessionId)
+      void navigate({ to: target.to, search: target.search })
     },
     [navigate]
   )
