@@ -14,9 +14,10 @@ then run the release helper with a one-shot confirmation for the exact tag:
 CHERRY_STUDIO_PI_RELEASE_CONFIRM=v1.9.7 pnpm release patch push
 ```
 
-The `CHERRY_STUDIO_PI_RELEASE_CONFIRM` value must match the tag the helper is about to create. Reusing the same
-confirmation cannot push a second patch release, because the next computed tag changes and the helper exits before
-modifying files.
+The `CHERRY_STUDIO_PI_RELEASE_CONFIRM` value must match the tag the helper is about to create. The helper requires
+this confirmation even when `push` is omitted, so it cannot leave behind accidental local version commits or tags.
+Reusing the same confirmation cannot create a second patch release, because the next computed tag changes and the
+helper exits before modifying files.
 
 Avoid direct `git tag && git push` unless you intentionally bypass the local guard. Release tag pushes must use an
 annotated tag, and tag pushes always build all platforms:

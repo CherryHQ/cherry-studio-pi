@@ -106,20 +106,16 @@ function normalizeReleaseConfirmation(value) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function assertReleasePushConfirmed({ shouldPush, version, env = process.env }) {
-  if (!shouldPush) {
-    return
-  }
-
+function assertReleaseBumpConfirmed({ version, env = process.env }) {
   const expectedTag = `v${version}`
   const actualConfirmation = normalizeReleaseConfirmation(env[RELEASE_PUSH_CONFIRM_ENV])
 
   if (actualConfirmation !== expectedTag) {
     throw new Error(
       [
-        `Refusing to push release ${expectedTag} without an exact confirmation.`,
-        `Set ${RELEASE_PUSH_CONFIRM_ENV}=${expectedTag} for this one release run only.`,
-        'This guard prevents accidental repeated patch releases from a stale command or automation loop.'
+        `Refusing to create release ${expectedTag} without an exact confirmation.`,
+        `Set ${RELEASE_PUSH_CONFIRM_ENV}=${expectedTag} for this one release bump only.`,
+        'This guard prevents accidental local tags, pushed tags, or repeated patch releases from a stale command.'
       ].join(' ')
     )
   }
@@ -142,7 +138,7 @@ function runVersion(args = process.argv.slice(2)) {
 
   const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'))
   const { baseVersion, nextVersion } = resolveNextVersion(packageJson.version, versionType)
-  assertReleasePushConfirmed({ shouldPush, version: nextVersion })
+  assertReleaseBumpConfirmed({ version: nextVersion })
 
   // 更新版本
   exec(getPnpmExecutable(), ['version', nextVersion, '--no-git-tag-version'])
@@ -186,7 +182,7 @@ exports._internal = {
   selectKnownVersions,
   resolveNextVersion,
   assertCleanGitWorktree,
-  assertReleasePushConfirmed,
+  assertReleaseBumpConfirmed,
   getPushCommands,
   getPushInstructions,
   runVersion
