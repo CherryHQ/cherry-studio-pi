@@ -4,8 +4,8 @@ The `Release` workflow builds Cherry Studio Pi installers for macOS, Windows, an
 
 ## Trigger
 
-Prefer running it manually from **Actions -> Release -> Run workflow** and provide a tag such as `v1.9.7`.
-Manual runs can build `all`, `mac`, `windows`, or `linux`.
+Prefer running it manually from **Actions -> Release -> Run workflow**. Provide a tag such as `v1.9.7` and type the
+same value into `confirm_tag`. Manual runs can build `all`, `mac`, `windows`, or `linux`.
 
 If you need to create the next patch tag locally, first preview the next version from the current highest remote tag,
 then run the release helper with a one-shot confirmation for the exact tag:
@@ -18,8 +18,13 @@ The `CHERRY_STUDIO_PI_RELEASE_CONFIRM` value must match the tag the helper is ab
 confirmation cannot push a second patch release, because the next computed tag changes and the helper exits before
 modifying files.
 
-Avoid direct `git tag && git push` unless you intentionally bypass the local guard. Tag pushes always build all
-platforms.
+Avoid direct `git tag && git push` unless you intentionally bypass the local guard. Release tag pushes must use an
+annotated tag, and tag pushes always build all platforms:
+
+```bash
+git tag -a v1.9.7 -m "Version 1.9.7"
+git push origin v1.9.7
+```
 
 ## Output
 

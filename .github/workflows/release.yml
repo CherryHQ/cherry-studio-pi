@@ -11,6 +11,11 @@ on:
         required: true
         default: "v1.9.7"
         type: string
+      confirm_tag:
+        description: "Type the same release tag again to confirm"
+        required: true
+        default: ""
+        type: string
       platform:
         description: "Platform to build"
         required: true
@@ -65,8 +70,16 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             TAG="${{ github.event.inputs.tag }}"
+            CONFIRM_TAG="${{ github.event.inputs.confirm_tag }}"
             DRAFT="${{ inputs.draft }}"
             PRERELEASE="${{ inputs.prerelease }}"
+
+            if [ "$CONFIRM_TAG" != "$TAG" ]; then
+              echo "Release tag confirmation mismatch."
+              echo "tag=$TAG"
+              echo "confirm_tag=$CONFIRM_TAG"
+              exit 1
+            fi
           else
             TAG="${GITHUB_REF_NAME}"
             DRAFT="false"
@@ -100,8 +113,20 @@ jobs:
           else
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git tag "$TAG"
+            git tag -a "$TAG" -m "Version ${{ steps.release.outputs.version }}"
             git push origin "$TAG"
+          fi
+
+      - name: Validate release tag object
+        shell: bash
+        run: |
+          TAG="${{ steps.release.outputs.tag }}"
+          TAG_TYPE="$(git cat-file -t "$TAG" 2>/dev/null || true)"
+
+          if [ "$TAG_TYPE" != "tag" ]; then
+            echo "Refusing to release $TAG because it is not an annotated tag."
+            echo "Create release tags through scripts/version.js or use: git tag -a $TAG -m \"Version ${{ steps.release.outputs.version }}\""
+            exit 1
           fi
 
   build:
