@@ -1,7 +1,7 @@
 import { loggerService } from '@logger'
 import { modelService } from '@main/data/services/ModelService'
 import { providerService } from '@main/data/services/ProviderService'
-import { type Model, parseUniqueModelId, type UniqueModelId } from '@shared/data/types/model'
+import { isUniqueModelId, type Model, parseUniqueModelId, type UniqueModelId } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
 
 const logger = loggerService.withContext('ModelValidation')
@@ -10,6 +10,70 @@ export interface ModelValidationError {
   type: 'invalid_format' | 'provider_not_found' | 'model_not_available'
   message: string
   code: string
+}
+
+function getRuntimeApiModelId(model: Model): string {
+  const apiModelId = typeof model.apiModelId === 'string' ? model.apiModelId.trim() : ''
+  if (apiModelId) return apiModelId
+
+  return isUniqueModelId(model.id) ? parseUniqueModelId(model.id).modelId : model.id
+}
+
+function selectSingleModelMatch(
+  providerId: string,
+  requestedModelId: string,
+  storedModelId: UniqueModelId,
+  models: Model[]
+) {
+  if (models.length === 0) return undefined
+
+  const exactMatches = models.filter((candidate) => candidate.id === storedModelId)
+  if (exactMatches.length === 1) return exactMatches[0]
+
+  const runnableMatches = models.filter((candidate) => candidate.isEnabled !== false && candidate.isHidden !== true)
+  if (runnableMatches.length === 1) return runnableMatches[0]
+
+  if (models.length === 1) return models[0]
+
+  logger.warn('Ambiguous model validation alias match', {
+    providerId,
+    requestedModelId,
+    candidates: models.map((candidate) => ({
+      id: candidate.id,
+      apiModelId: candidate.apiModelId,
+      isEnabled: candidate.isEnabled,
+      isHidden: candidate.isHidden
+    }))
+  })
+  return undefined
+}
+
+async function resolveModelForValidation(
+  providerId: string,
+  requestedModelId: string,
+  storedModelId: UniqueModelId
+): Promise<Model | undefined> {
+  try {
+    return (await modelService.getByKey(providerId, requestedModelId)) as unknown as Model
+  } catch (directLookupError) {
+    try {
+      const providerModels = (await modelService.list({ providerId })) as unknown as Model[]
+      const matches = providerModels.filter(
+        (candidate) => candidate.id === storedModelId || getRuntimeApiModelId(candidate) === requestedModelId
+      )
+      const resolved = selectSingleModelMatch(providerId, requestedModelId, storedModelId, matches)
+      if (resolved) return resolved
+    } catch (fallbackLookupError) {
+      logger.warn('Failed to resolve provider models for validation fallback', {
+        providerId,
+        requestedModelId,
+        fallbackLookupError
+      })
+    }
+
+    logger.warn('Failed to resolve model for validation', { providerId, requestedModelId, directLookupError })
+    return undefined
+  }
 }
 
 export async function validateModelId(model: string): Promise<{
@@ -80,12 +144,7 @@ export async function validateModelId(model: string): Promise<{
     }
   }
 
-  let resolvedModel: Model | undefined
-  try {
-    resolvedModel = (await modelService.getByKey(providerId, modelId)) as unknown as Model
-  } catch (error) {
-    logger.warn('Failed to resolve model for validation', { providerId, modelId, error })
-  }
+  const resolvedModel = await resolveModelForValidation(providerId, modelId, model as UniqueModelId)
 
   if (
     !resolvedModel ||
@@ -102,5 +161,5 @@ export async function validateModelId(model: string): Promise<{
     }
   }
 
-  return { valid: true, provider, model: resolvedModel, modelId }
+  return { valid: true, provider, model: resolvedModel, modelId: getRuntimeApiModelId(resolvedModel) }
 }
