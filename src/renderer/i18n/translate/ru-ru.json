@@ -796,7 +796,6 @@
   },
   "apiGateway": {
     "actions": {
-      "copy": "Копировать",
       "regenerate": "Перегенерировать",
       "restart": {
         "button": "Перезапустить",
@@ -809,7 +808,6 @@
       "title": "Авторизация"
     },
     "authHeaderText": "Использовать в заголовке авторизации:",
-    "configuration": "Конфигурация",
     "description": "Предоставляет возможности ИИ Cherry Studio Pi через HTTP API, совместимые с OpenAI",
     "documentation": {
       "title": "Документация API"
@@ -823,11 +821,9 @@
       },
       "port": {
         "description": "TCP порт для HTTP сервера (1000-65535)",
-        "helpText": "Остановите сервер для изменения порта",
         "label": "Порт"
       },
       "url": {
-        "copyTooltip": "Копировать URL",
         "label": "URL"
       }
     },
@@ -843,8 +839,7 @@
       "startError": "Не удалось запустить API сервер: ",
       "startSuccess": "API сервер успешно запущен",
       "stopError": "Не удалось остановить API сервер: ",
-      "stopSuccess": "API сервер успешно остановлен",
-      "urlCopied": "URL сервера скопирован в буфер обмена"
+      "stopSuccess": "API сервер успешно остановлен"
     },
     "status": {
       "running": "Работает",

@@ -796,7 +796,6 @@
   },
   "apiGateway": {
     "actions": {
-      "copy": "コピー",
       "regenerate": "再生成",
       "restart": {
         "button": "再起動",
@@ -809,7 +808,6 @@
       "title": "認証ヘッダー"
     },
     "authHeaderText": "認証ヘッダーで使用：",
-    "configuration": "設定",
     "description": "OpenAI 互換の HTTP API を通じて Cherry Studio の AI 機能を公開します",
     "documentation": {
       "title": "API ドキュメント"
@@ -823,11 +821,9 @@
       },
       "port": {
         "description": "HTTP サーバーの TCP ポート番号 (1000-65535)",
-        "helpText": "ポートを変更するにはサーバーを停止してください",
         "label": "ポート"
       },
       "url": {
-        "copyTooltip": "URL をコピー",
         "label": "URL"
       }
     },
@@ -843,8 +839,7 @@
       "startError": "API サーバーの開始に失敗しました：",
       "startSuccess": "API サーバーが正常に開始されました",
       "stopError": "API サーバーの停止に失敗しました：",
-      "stopSuccess": "API サーバーが正常に停止されました",
-      "urlCopied": "サーバー URL がクリップボードにコピーされました"
+      "stopSuccess": "API サーバーが正常に停止されました"
     },
     "status": {
       "running": "実行中",

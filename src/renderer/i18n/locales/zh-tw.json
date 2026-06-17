@@ -793,7 +793,6 @@
   },
   "apiGateway": {
     "actions": {
-      "copy": "複製",
       "regenerate": "重新產生",
       "restart": {
         "button": "重新啟動",
@@ -806,7 +805,6 @@
       "title": "授權標頭"
     },
     "authHeaderText": "在授權標頭中使用：",
-    "configuration": "設定",
     "description": "透過 OpenAI 和 Anthropic 相容的 HTTP API 公開 Cherry Studio Pi 的 AI 功能",
     "documentation": {
       "title": "API 文件"
@@ -820,11 +818,9 @@
       },
       "port": {
         "description": "閘道的 TCP 連接埠 (1000-65535)",
-        "helpText": "停止閘道以變更連接埠",
         "label": "連接埠"
       },
       "url": {
-        "copyTooltip": "複製 URL",
         "label": "URL"
       }
     },
@@ -840,8 +836,7 @@
       "startError": "啟動 API 閘道失敗：",
       "startSuccess": "API 閘道啟動成功",
       "stopError": "停止 API 閘道失敗：",
-      "stopSuccess": "API 閘道停止成功",
-      "urlCopied": "閘道 URL 已複製到剪貼簿"
+      "stopSuccess": "API 閘道停止成功"
     },
     "status": {
       "running": "執行中",
