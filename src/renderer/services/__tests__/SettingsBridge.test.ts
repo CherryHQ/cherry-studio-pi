@@ -71,13 +71,13 @@ describe('SettingsBridge', () => {
     registerSettingsBridge()
 
     const call = bridgeWindow()[RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE]?.({
-      type: 'settings/setTheme',
-      payload: 'dark'
+      type: 'settings/setDefaultPaintingProvider',
+      payload: 'openai'
     })
 
     expect(mocks.dispatch).toHaveBeenCalledWith({
-      type: 'settings/setTheme',
-      payload: 'dark'
+      type: 'settings/setDefaultPaintingProvider',
+      payload: 'openai'
     })
     expect(mocks.handleSaveData).toHaveBeenCalledTimes(1)
 
@@ -91,6 +91,7 @@ describe('SettingsBridge', () => {
     mocks.getState.mockReturnValue({
       settings: {
         theme: 'dark',
+        defaultPaintingProvider: 'openai',
         fontSize: 14
       }
     })
@@ -98,6 +99,7 @@ describe('SettingsBridge', () => {
 
     await expect(call).resolves.toEqual({
       theme: 'dark',
+      defaultPaintingProvider: 'openai',
       fontSize: 14
     })
     expect(resolved).toBe(true)
@@ -112,6 +114,20 @@ describe('SettingsBridge', () => {
         payload: 'model-1'
       })
     ).rejects.toThrow('Invalid settings action')
+
+    expect(mocks.dispatch).not.toHaveBeenCalled()
+    expect(mocks.handleSaveData).not.toHaveBeenCalled()
+  })
+
+  it('rejects unsupported settings actions instead of silently dispatching a no-op', async () => {
+    registerSettingsBridge()
+
+    await expect(
+      bridgeWindow()[RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE]?.({
+        type: 'settings/setTheme',
+        payload: 'dark'
+      })
+    ).rejects.toThrow('Unsupported settings action: settings/setTheme')
 
     expect(mocks.dispatch).not.toHaveBeenCalled()
     expect(mocks.handleSaveData).not.toHaveBeenCalled()

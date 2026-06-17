@@ -1121,4 +1121,8 @@ export const {
   setApiServerApiKey
 } = settingsSlice.actions
 
+export const settingsActionTypes = new Set(
+  Object.values(settingsSlice.actions).map((actionCreator) => actionCreator.type)
+)
+
 export default settingsSlice.reducer

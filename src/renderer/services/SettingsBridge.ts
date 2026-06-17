@@ -1,4 +1,5 @@
 import store, { handleSaveData } from '@renderer/store'
+import { settingsActionTypes } from '@renderer/store/settings'
 import {
   RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE,
   RENDERER_GET_SETTINGS_BRIDGE,
@@ -20,6 +21,9 @@ export function registerSettingsBridge() {
   bridgeWindow[RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE] = async (action) => {
     if (!action || typeof action.type !== 'string' || !action.type.startsWith('settings/')) {
       throw new Error('Invalid settings action')
+    }
+    if (!settingsActionTypes.has(action.type)) {
+      throw new Error(`Unsupported settings action: ${action.type}`)
     }
     store.dispatch(action as never)
     await handleSaveData()

@@ -313,7 +313,7 @@ describe('settings app capabilities', () => {
     })
   })
 
-  it('rejects runtime-only setting updates when the renderer runtime dispatch fails', async () => {
+  it('rejects unsupported runtime-only setting updates before dispatching', async () => {
     mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation(async (script: string) => {
       if (script.includes('typeof')) return true
       if (script.includes(RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE)) throw new Error('renderer asleep')
@@ -322,12 +322,13 @@ describe('settings app capabilities', () => {
 
     await expect(
       capability('settings.value.set').execute({ path: 'showAssistants', value: false }, { source: 'agent' })
-    ).rejects.toThrow('Failed to write runtime setting: renderer asleep')
+    ).rejects.toThrow('Unsupported setting path: showAssistants')
 
     expect(mocks.preferenceService.set).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
 
-  it('rejects hung runtime-only setting updates with the fast settings bridge timeout', async () => {
+  it('keeps preference-backed updates when runtime refresh times out', async () => {
     vi.useFakeTimers()
     try {
       mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation((script: string) => {
@@ -337,19 +338,24 @@ describe('settings app capabilities', () => {
       })
 
       const update = capability('settings.value.set').execute(
-        { path: 'showAssistants', value: false },
+        { path: 'defaultPaintingProvider', value: 'ppio' },
         { source: 'agent' }
       )
-      const expectation = expect(update).rejects.toThrow('Failed to write runtime setting: 写入设置超时')
 
       await vi.advanceTimersByTimeAsync(0)
       await vi.advanceTimersByTimeAsync(1_500)
-      await expectation
+      await expect(update).resolves.toMatchObject({
+        ok: true,
+        data: {
+          path: 'defaultPaintingProvider',
+          value: 'ppio'
+        }
+      })
     } finally {
       vi.useRealTimers()
     }
 
-    expect(mocks.preferenceService.set).not.toHaveBeenCalled()
+    expect(mocks.preferenceService.set).toHaveBeenCalledWith('feature.paintings.default_provider', 'ppio')
   })
 
   it('updates preference-backed assistant list click behavior', async () => {
@@ -359,23 +365,21 @@ describe('settings app capabilities', () => {
     )
 
     expect(mocks.preferenceService.set).toHaveBeenCalledWith('assistant.click_to_show_topic', true)
-    expect(findSettingsDispatchScript()).toContain('"type":"settings/setClickAssistantToShowTopic"')
-    expect(findSettingsDispatchScript()).toContain('"payload":true')
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
     expect(result.data).toEqual({
       path: 'clickAssistantToShowTopic',
       value: true
     })
   })
 
-  it('persists migrated settings through the preference service before dispatching legacy actions', async () => {
+  it('persists migrated settings through the preference service without dispatching inactive legacy actions', async () => {
     const result = await capability('settings.value.set').execute(
       { path: 'theme', value: 'light' },
       { source: 'agent' }
     )
 
     expect(mocks.preferenceService.set).toHaveBeenCalledWith('ui.theme_mode', 'light')
-    expect(findSettingsDispatchScript()).toContain('"type":"settings/setTheme"')
-    expect(findSettingsDispatchScript()).toContain('"payload":"light"')
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
     expect(result.data).toEqual({
       path: 'theme',
       value: 'light'
@@ -389,8 +393,7 @@ describe('settings app capabilities', () => {
     )
 
     expect(mocks.preferenceService.set).toHaveBeenCalledWith('data.backup.webdav.pass', 'new-dav-secret')
-    expect(findSettingsDispatchScript()).toContain('"type":"settings/setWebdavPass"')
-    expect(findSettingsDispatchScript()).toContain('"payload":"new-dav-secret"')
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
     expect(result.data).toEqual({
       path: 'webdavPass',
       value: '[redacted]'
