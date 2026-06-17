@@ -88,6 +88,42 @@ describe('version script', () => {
     expect(getPushInstructions('1.9.35')).toContain('git push origin v1.9.35')
   })
 
+  it('requires an exact one-shot confirmation before pushing a release tag', () => {
+    const { assertReleasePushConfirmed } = loadInternal()
+
+    expect(() =>
+      assertReleasePushConfirmed({
+        shouldPush: false,
+        version: '1.9.59',
+        env: {}
+      })
+    ).not.toThrow()
+
+    expect(() =>
+      assertReleasePushConfirmed({
+        shouldPush: true,
+        version: '1.9.59',
+        env: {}
+      })
+    ).toThrow('CHERRY_STUDIO_PI_RELEASE_CONFIRM=v1.9.59')
+
+    expect(() =>
+      assertReleasePushConfirmed({
+        shouldPush: true,
+        version: '1.9.59',
+        env: { CHERRY_STUDIO_PI_RELEASE_CONFIRM: 'v1.9.59' }
+      })
+    ).not.toThrow()
+
+    expect(() =>
+      assertReleasePushConfirmed({
+        shouldPush: true,
+        version: '1.9.60',
+        env: { CHERRY_STUDIO_PI_RELEASE_CONFIRM: 'v1.9.59' }
+      })
+    ).toThrow('CHERRY_STUDIO_PI_RELEASE_CONFIRM=v1.9.60')
+  })
+
   it('rejects release bumps from a dirty working tree', () => {
     const { assertCleanGitWorktree } = loadInternal()
 

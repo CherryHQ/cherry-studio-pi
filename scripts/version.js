@@ -2,6 +2,8 @@ const { execFileSync } = require('child_process')
 const fs = require('fs')
 const semver = require('semver')
 
+const RELEASE_PUSH_CONFIRM_ENV = 'CHERRY_STUDIO_PI_RELEASE_CONFIRM'
+
 // 执行命令并返回输出
 function exec(command, args) {
   return execFileSync(command, args, { encoding: 'utf8' }).trim()
@@ -100,6 +102,29 @@ function assertCleanGitWorktree(statusOutput = exec('git', ['status', '--porcela
   }
 }
 
+function normalizeReleaseConfirmation(value) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function assertReleasePushConfirmed({ shouldPush, version, env = process.env }) {
+  if (!shouldPush) {
+    return
+  }
+
+  const expectedTag = `v${version}`
+  const actualConfirmation = normalizeReleaseConfirmation(env[RELEASE_PUSH_CONFIRM_ENV])
+
+  if (actualConfirmation !== expectedTag) {
+    throw new Error(
+      [
+        `Refusing to push release ${expectedTag} without an exact confirmation.`,
+        `Set ${RELEASE_PUSH_CONFIRM_ENV}=${expectedTag} for this one release run only.`,
+        'This guard prevents accidental repeated patch releases from a stale command or automation loop.'
+      ].join(' ')
+    )
+  }
+}
+
 function getPushCommands(version) {
   return [
     ['git', ['push']],
@@ -117,6 +142,7 @@ function runVersion(args = process.argv.slice(2)) {
 
   const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'))
   const { baseVersion, nextVersion } = resolveNextVersion(packageJson.version, versionType)
+  assertReleasePushConfirmed({ shouldPush, version: nextVersion })
 
   // 更新版本
   exec(getPnpmExecutable(), ['version', nextVersion, '--no-git-tag-version'])
@@ -160,6 +186,7 @@ exports._internal = {
   selectKnownVersions,
   resolveNextVersion,
   assertCleanGitWorktree,
+  assertReleasePushConfirmed,
   getPushCommands,
   getPushInstructions,
   runVersion
