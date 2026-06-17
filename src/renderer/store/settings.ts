@@ -1121,7 +1121,7 @@ export const {
   setApiServerApiKey
 } = settingsSlice.actions
 
-export const settingsActionTypes = new Set(
+export const settingsActionTypes: ReadonlySet<string> = new Set(
   Object.values(settingsSlice.actions).map((actionCreator) => actionCreator.type)
 )
 
