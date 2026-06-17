@@ -34,6 +34,26 @@ import viVN from './translate/vi-vn.json'
 
 const logger = loggerService.withContext('I18N')
 
+const pendingTranslationPrefix = /^\[to be translated\]:?/
+
+export function stripPendingTranslationPrefix<T>(value: T): T {
+  if (typeof value === 'string') {
+    return value.replace(pendingTranslationPrefix, '') as T
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => stripPendingTranslationPrefix(item)) as T
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, stripPendingTranslationPrefix(entry)])
+    ) as T
+  }
+
+  return value
+}
+
 const resources = Object.fromEntries(
   [
     ['en-US', enUS],
@@ -48,7 +68,7 @@ const resources = Object.fromEntries(
     ['pt-PT', ptPT],
     ['ro-RO', roRO],
     ['vi-VN', viVN]
-  ].map(([locale, translation]) => [locale, { translation }])
+  ].map(([locale, translation]) => [locale, { translation: stripPendingTranslationPrefix(translation) }])
 )
 
 export const getLanguage = async () => {
