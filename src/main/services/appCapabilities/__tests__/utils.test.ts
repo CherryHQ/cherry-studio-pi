@@ -49,6 +49,11 @@ describe('app capability utils', () => {
         authToken: {
           value: 'nested secret should not be traversed'
         },
+        credentials: {
+          username: 'hidden-user',
+          password: 'hidden-password'
+        },
+        accessKeyId: 'ak-example',
         cookieJar: ['session-secret'],
         privateKey: '-----BEGIN PRIVATE KEY-----',
         private_key: '-----BEGIN PRIVATE KEY-----',
@@ -62,6 +67,8 @@ describe('app capability utils', () => {
       apiKey: '[redacted]',
       authorization: '[redacted]',
       authToken: '[redacted]',
+      credentials: '[redacted]',
+      accessKeyId: '[redacted]',
       cookieJar: '[redacted]',
       privateKey: '[redacted]',
       private_key: '[redacted]',
@@ -93,6 +100,35 @@ describe('app capability utils', () => {
     expect(sanitizeForAgent({ first: shared, second: shared })).toEqual({
       first: { value: 'same' },
       second: { value: 'same' }
+    })
+  })
+
+  it('serializes Map and Set values without dropping their contents', () => {
+    expect(
+      sanitizeForAgent({
+        refs: new Map<string, unknown>([
+          ['visible', 'value'],
+          ['apiKey', 'sk-secret'],
+          ['nested', new Set(['one', 'two'])]
+        ])
+      })
+    ).toEqual({
+      refs: {
+        __type: 'Map',
+        size: 3,
+        entries: [
+          ['visible', 'value'],
+          ['apiKey', '[redacted]'],
+          [
+            'nested',
+            {
+              __type: 'Set',
+              size: 2,
+              values: ['one', 'two']
+            }
+          ]
+        ]
+      }
     })
   })
 
@@ -157,6 +193,20 @@ describe('app capability utils', () => {
     expect(sanitized.items.at(-1)).toBe('[...truncated 5 items...]')
     expect(Object.keys(sanitized.object)).toHaveLength(201)
     expect(sanitized.object.__truncatedKeys).toBe(5)
+  })
+
+  it('bounds Map and Set values before returning them to agents', () => {
+    const sanitized = sanitizeForAgent({
+      map: new Map(Array.from({ length: 205 }, (_, index) => [`key${index}`, index])),
+      set: new Set(Array.from({ length: 205 }, (_, index) => index))
+    }) as any
+
+    expect(sanitized.map.size).toBe(205)
+    expect(sanitized.map.entries).toHaveLength(200)
+    expect(sanitized.map.__truncatedEntries).toBe(5)
+    expect(sanitized.set.size).toBe(205)
+    expect(sanitized.set.values).toHaveLength(200)
+    expect(sanitized.set.__truncatedValues).toBe(5)
   })
 
   it('does not read object properties beyond the agent key limit', () => {

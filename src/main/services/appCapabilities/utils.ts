@@ -6,7 +6,8 @@ import { WindowType } from '@main/core/window/types'
 import { isAllowedInAppRoute, normalizeInAppRoute } from '@main/services/navigation/AppRouteNormalizer'
 import { isPathInside } from '@main/utils/file'
 
-const SENSITIVE_KEY_PATTERN = /api[-_]?key|private[-_]?key|token|secret|pass|password|authorization|cookie/i
+const SENSITIVE_KEY_PATTERN =
+  /api[-_]?key|private[-_]?key|access[-_]?key|token|secret|pass|password|authorization|credential|cookie/i
 const CIRCULAR_REFERENCE_PLACEHOLDER = '[Circular]'
 const MAX_AGENT_STRING_CHARS = 8_000
 const MAX_AGENT_ARRAY_ITEMS = 200
@@ -79,6 +80,53 @@ function sanitizeJsonValue(value: unknown, key: string, seen: WeakSet<object>, d
 
   seen.add(value)
   try {
+    if (value instanceof Map) {
+      const entries: unknown[] = []
+      let visitedItems = 0
+      let truncatedItems = 0
+      for (const [mapKey, mapValue] of value.entries()) {
+        if (visitedItems >= MAX_AGENT_ARRAY_ITEMS) {
+          truncatedItems += 1
+          continue
+        }
+        visitedItems += 1
+
+        const keyForRedaction = typeof mapKey === 'string' ? mapKey : ''
+        entries.push([
+          sanitizeJsonValue(mapKey, 'key', seen, depth + 1) ?? null,
+          sanitizeJsonValue(mapValue, keyForRedaction, seen, depth + 1) ?? null
+        ])
+      }
+
+      return {
+        __type: 'Map',
+        size: value.size,
+        entries,
+        ...(truncatedItems > 0 ? { __truncatedEntries: truncatedItems } : {})
+      }
+    }
+
+    if (value instanceof Set) {
+      const values: unknown[] = []
+      let visitedItems = 0
+      let truncatedItems = 0
+      for (const setValue of value.values()) {
+        if (visitedItems >= MAX_AGENT_ARRAY_ITEMS) {
+          truncatedItems += 1
+          continue
+        }
+        visitedItems += 1
+        values.push(sanitizeJsonValue(setValue, '', seen, depth + 1) ?? null)
+      }
+
+      return {
+        __type: 'Set',
+        size: value.size,
+        values,
+        ...(truncatedItems > 0 ? { __truncatedValues: truncatedItems } : {})
+      }
+    }
+
     if (Array.isArray(value)) {
       const items = value
         .slice(0, MAX_AGENT_ARRAY_ITEMS)
