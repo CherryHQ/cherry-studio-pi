@@ -25,7 +25,7 @@ export function notifyMainProcessDataSyncLocalChange(
   }
 
   for (const browserWindow of browserWindows) {
-    if (browserWindow.isDestroyed()) continue
+    if (browserWindow.isDestroyed() || browserWindow.webContents.isDestroyed?.()) continue
 
     try {
       browserWindow.webContents.send(IpcChannel.DataSync_LocalStorageV2Changed, message)

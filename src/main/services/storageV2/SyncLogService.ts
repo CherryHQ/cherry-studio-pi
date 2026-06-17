@@ -37,14 +37,23 @@ function toJson(value: unknown) {
 }
 
 function broadcastStorageV2LocalChange(payload: StorageV2LocalChangePayload) {
+  let browserWindows: BrowserWindow[]
   try {
-    for (const browserWindow of BrowserWindow.getAllWindows()) {
-      if (!browserWindow.isDestroyed()) {
-        browserWindow.webContents.send(IpcChannel.DataSync_LocalStorageV2Changed, payload)
-      }
-    }
+    browserWindows = BrowserWindow.getAllWindows()
   } catch {
-    // Sync triggers are best-effort; storage writes must not fail because a window is unavailable.
+    return
+  }
+
+  for (const browserWindow of browserWindows) {
+    if (browserWindow.isDestroyed() || browserWindow.webContents.isDestroyed?.()) {
+      continue
+    }
+
+    try {
+      browserWindow.webContents.send(IpcChannel.DataSync_LocalStorageV2Changed, payload)
+    } catch {
+      // Sync triggers are best-effort; storage writes must not fail because a window is unavailable.
+    }
   }
 }
 

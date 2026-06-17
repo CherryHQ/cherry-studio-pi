@@ -2,14 +2,6 @@ import type { Client } from '@libsql/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const electronMocks = vi.hoisted(() => ({
-  browserWindows: [
-    {
-      isDestroyed: vi.fn(() => false),
-      webContents: {
-        send: vi.fn()
-      }
-    }
-  ],
   getAllWindows: vi.fn()
 }))
 
@@ -23,6 +15,16 @@ import { IpcChannel } from '@shared/IpcChannel'
 
 import { StorageV2SyncLogService } from '../SyncLogService'
 import { getStorageV2SyncPolicy } from '../SyncPolicy'
+
+function createWindow(send = vi.fn(), destroyed = false, webContentsDestroyed = false) {
+  return {
+    isDestroyed: vi.fn(() => destroyed),
+    webContents: {
+      send,
+      isDestroyed: vi.fn(() => webContentsDestroyed)
+    }
+  }
+}
 
 function createClient() {
   const execute = vi.fn(async (input: string | { sql: string; args?: unknown[] }) => {
@@ -42,7 +44,7 @@ function createClient() {
 describe('StorageV2SyncLogService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    electronMocks.getAllWindows.mockReturnValue(electronMocks.browserWindows)
+    electronMocks.getAllWindows.mockReturnValue([createWindow()])
   })
 
   it('declares sync policies for Storage v2 entities carried by WebDAV record sync', () => {
@@ -107,7 +109,8 @@ describe('StorageV2SyncLogService', () => {
       version: 2
     })
 
-    expect(electronMocks.browserWindows[0].webContents.send).toHaveBeenCalledWith(
+    const [window] = electronMocks.getAllWindows.mock.results[0].value
+    expect(window.webContents.send).toHaveBeenCalledWith(
       IpcChannel.DataSync_LocalStorageV2Changed,
       expect.objectContaining({
         entityType: 'agent',
@@ -116,6 +119,55 @@ describe('StorageV2SyncLogService', () => {
         version: 2,
         deviceId: 'device-1',
         changedAt: expect.any(String)
+      })
+    )
+  })
+
+  it('continues broadcasting local changes when one window send fails', async () => {
+    const failingSend = vi.fn(() => {
+      throw new Error('send failed')
+    })
+    const healthySend = vi.fn()
+    electronMocks.getAllWindows.mockReturnValue([createWindow(failingSend), createWindow(healthySend)])
+    const { client } = createClient()
+
+    await new StorageV2SyncLogService().recordChange({
+      client,
+      entityType: 'agent',
+      entityId: 'agent-2'
+    })
+
+    expect(failingSend).toHaveBeenCalledTimes(1)
+    expect(healthySend).toHaveBeenCalledWith(
+      IpcChannel.DataSync_LocalStorageV2Changed,
+      expect.objectContaining({
+        entityType: 'agent',
+        entityId: 'agent-2'
+      })
+    )
+  })
+
+  it('skips windows whose webContents has already been destroyed', async () => {
+    const destroyedWebContentsSend = vi.fn()
+    const healthySend = vi.fn()
+    electronMocks.getAllWindows.mockReturnValue([
+      createWindow(destroyedWebContentsSend, false, true),
+      createWindow(healthySend)
+    ])
+    const { client } = createClient()
+
+    await new StorageV2SyncLogService().recordChange({
+      client,
+      entityType: 'agent',
+      entityId: 'agent-3'
+    })
+
+    expect(destroyedWebContentsSend).not.toHaveBeenCalled()
+    expect(healthySend).toHaveBeenCalledWith(
+      IpcChannel.DataSync_LocalStorageV2Changed,
+      expect.objectContaining({
+        entityType: 'agent',
+        entityId: 'agent-3'
       })
     )
   })
