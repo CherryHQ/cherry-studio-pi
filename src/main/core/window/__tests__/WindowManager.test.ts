@@ -63,6 +63,7 @@ interface MockBrowserWindow {
   webContents: {
     send: ReturnType<typeof vi.fn>
     isCrashed: ReturnType<typeof vi.fn>
+    isDestroyed: ReturnType<typeof vi.fn>
     setWindowOpenHandler: ReturnType<typeof vi.fn>
     on: ReturnType<typeof vi.fn>
     getURL: ReturnType<typeof vi.fn>
@@ -128,6 +129,7 @@ function createMockBrowserWindow(): MockBrowserWindow {
     webContents: {
       send: vi.fn(),
       isCrashed: vi.fn(() => false),
+      isDestroyed: vi.fn(() => false),
       setWindowOpenHandler: vi.fn(),
       on: vi.fn(),
       getURL: vi.fn(() => '')
@@ -1604,6 +1606,41 @@ describe('WindowManager', () => {
       wm.broadcast('test-channel')
 
       expect(createdWindows[0].webContents.send).not.toHaveBeenCalled()
+    })
+
+    it('skips windows whose webContents is already destroyed', () => {
+      wm.open('default' as never)
+      createdWindows[0].webContents.isDestroyed.mockReturnValue(true)
+
+      wm.broadcast('test-channel')
+
+      expect(createdWindows[0].webContents.send).not.toHaveBeenCalled()
+    })
+
+    it('continues broadcasting when one window send fails', () => {
+      wm.open('default' as never)
+      wm.open('singleton' as never)
+      createdWindows[0].webContents.send.mockImplementation(() => {
+        throw new Error('send failed')
+      })
+
+      expect(() => wm.broadcast('test-channel', 'data')).not.toThrow()
+
+      expect(createdWindows[0].webContents.send).toHaveBeenCalledWith('test-channel', 'data')
+      expect(createdWindows[1].webContents.send).toHaveBeenCalledWith('test-channel', 'data')
+    })
+
+    it('continues broadcastToType when one target send fails', () => {
+      wm.open('default' as never)
+      wm.open('default' as never)
+      createdWindows[0].webContents.send.mockImplementation(() => {
+        throw new Error('send failed')
+      })
+
+      expect(() => wm.broadcastToType('default' as never, 'test-channel', 'data')).not.toThrow()
+
+      expect(createdWindows[0].webContents.send).toHaveBeenCalledWith('test-channel', 'data')
+      expect(createdWindows[1].webContents.send).toHaveBeenCalledWith('test-channel', 'data')
     })
   })
 

@@ -634,8 +634,18 @@ export class WindowManager extends BaseService {
    */
   public broadcast(channel: string, ...args: unknown[]): void {
     for (const managed of this.windows.values()) {
-      if (!managed.window.isDestroyed()) {
+      if (managed.window.isDestroyed() || managed.window.webContents.isDestroyed?.()) {
+        continue
+      }
+
+      try {
         managed.window.webContents.send(channel, ...args)
+      } catch (error) {
+        logger.warn('Failed to broadcast IPC message to renderer window', {
+          channel,
+          windowId: managed.id,
+          error
+        })
       }
     }
   }
@@ -648,8 +658,19 @@ export class WindowManager extends BaseService {
     if (!windowIds) return
     for (const id of windowIds) {
       const managed = this.windows.get(id)
-      if (managed && !managed.window.isDestroyed()) {
+      if (!managed || managed.window.isDestroyed() || managed.window.webContents.isDestroyed?.()) {
+        continue
+      }
+
+      try {
         managed.window.webContents.send(channel, ...args)
+      } catch (error) {
+        logger.warn('Failed to broadcast IPC message to renderer window type', {
+          channel,
+          windowId: managed.id,
+          type,
+          error
+        })
       }
     }
   }

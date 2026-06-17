@@ -46,7 +46,7 @@ beforeEach(() => {
   BaseService.resetInstances()
   windowManager = {
     getWindowIdByWebContents: vi.fn(() => 'win-7'),
-    getWindow: vi.fn(() => ({ isDestroyed: () => false, webContents: { send: sendSpy } })),
+    getWindow: vi.fn(() => ({ isDestroyed: () => false, webContents: { send: sendSpy, isDestroyed: () => false } })),
     broadcast: vi.fn()
   }
   appGetMock.mockImplementation((name: string) => {
@@ -179,7 +179,22 @@ describe('IpcApiService event sending', () => {
     // synchronous but the 'closed' handler that unregisters runs a tick later, so a
     // directed send in that gap would hit a destroyed webContents and throw. Match the
     // WindowManager.broadcast "skips destroyed" contract.
-    windowManager.getWindow.mockReturnValue({ isDestroyed: () => true, webContents: { send: sendSpy } })
+    windowManager.getWindow.mockReturnValue({
+      isDestroyed: () => true,
+      webContents: { send: sendSpy, isDestroyed: () => false }
+    })
+    const svc = makeService()
+    expect(() =>
+      (svc.send as unknown as (id: string, e: string, p: unknown) => void)('win-dying', 'window.resized', {})
+    ).not.toThrow()
+    expect(sendSpy).not.toHaveBeenCalled()
+  })
+
+  it('send() is a no-op when webContents is destroyed but the window is still registered', () => {
+    windowManager.getWindow.mockReturnValue({
+      isDestroyed: () => false,
+      webContents: { send: sendSpy, isDestroyed: () => true }
+    })
     const svc = makeService()
     expect(() =>
       (svc.send as unknown as (id: string, e: string, p: unknown) => void)('win-dying', 'window.resized', {})

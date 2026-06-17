@@ -1,8 +1,11 @@
 import { application } from '@application'
+import { loggerService } from '@logger'
 import { BaseService, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
 import { ThemeMode } from '@shared/data/preference/preferenceTypes'
 import { IpcChannel } from '@shared/IpcChannel'
 import { BrowserWindow, nativeTheme } from 'electron'
+
+const logger = loggerService.withContext('ThemeService')
 
 @Injectable('ThemeService')
 @ServicePhase(Phase.WhenReady)
@@ -33,11 +36,18 @@ export class ThemeService extends BaseService {
   }
 
   private themeUpdatedHandler() {
-    BrowserWindow.getAllWindows().forEach((win) => {
-      win.webContents.send(
-        IpcChannel.NativeThemeUpdated,
-        nativeTheme.shouldUseDarkColors ? ThemeMode.dark : ThemeMode.light
-      )
-    })
+    const themeMode = nativeTheme.shouldUseDarkColors ? ThemeMode.dark : ThemeMode.light
+
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed() || win.webContents.isDestroyed?.()) {
+        continue
+      }
+
+      try {
+        win.webContents.send(IpcChannel.NativeThemeUpdated, themeMode)
+      } catch (error) {
+        logger.warn('Failed to notify renderer window about native theme update', error as Error)
+      }
+    }
   }
 }

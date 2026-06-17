@@ -104,8 +104,10 @@ export class IpcApiService extends BaseService {
    */
   send<E extends IpcEventName>(windowId: WindowId, event: E, payload: EventPayload<E>): void {
     const window = application.get('WindowManager').getWindow(windowId)
-    if (window && !window.isDestroyed()) {
-      window.webContents.send(IpcChannel.IpcApi_Event, event, payload)
+    if (!window || window.isDestroyed() || window.webContents.isDestroyed?.()) {
+      return
     }
+
+    window.webContents.send(IpcChannel.IpcApi_Event, event, payload)
   }
 }
