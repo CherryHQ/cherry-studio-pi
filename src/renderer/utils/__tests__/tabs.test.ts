@@ -13,4 +13,8 @@ describe('tabs utils', () => {
     expect(getTabBaseId(getTabIdFromPath('/'))).toBe('home')
     expect(getTabBaseId(getTabIdFromPath('/agents'))).toBe('agents')
   })
+
+  it('falls back to home when a persisted tab path is not a valid URL', () => {
+    expect(getTabIdFromPath('http://[broken')).toBe('home')
+  })
 })

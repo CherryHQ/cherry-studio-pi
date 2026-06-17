@@ -1,6 +1,12 @@
 export const TAB_INSTANCE_PARAM = 'tab'
 
-export const parseTabUrl = (path: string) => new URL(path || '/', 'app://perry')
+export const parseTabUrl = (path: string) => {
+  try {
+    return new URL(path || '/', 'app://perry')
+  } catch {
+    return new URL('/', 'app://perry')
+  }
+}
 
 export const getTabBaseIdFromPath = (path: string): string => {
   const { pathname } = parseTabUrl(path)

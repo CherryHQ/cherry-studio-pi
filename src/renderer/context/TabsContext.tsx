@@ -51,8 +51,24 @@ function withLocalizedRouteTitle(tab: Tab): Tab {
   return { ...tab, title: getDefaultRouteTitle(tab.url) }
 }
 
-function sanitizeUserTabs(tabs: Tab[] | undefined): Tab[] {
-  return (tabs ?? []).filter((tab) => tab.id !== DEFAULT_TAB.id).map(normalizeTabRoute)
+function isValidCachedTab(value: unknown): value is Tab {
+  if (!value || typeof value !== 'object') return false
+
+  const tab = value as Partial<Tab>
+  return typeof tab.id === 'string' && tab.id.trim().length > 0 && typeof tab.url === 'string'
+}
+
+function sanitizeUserTabs(tabs: unknown): Tab[] {
+  if (!Array.isArray(tabs)) return []
+
+  return tabs
+    .filter(isValidCachedTab)
+    .filter((tab) => tab.id !== DEFAULT_TAB.id)
+    .map(normalizeTabRoute)
+}
+
+function hasPersistedPinnedHomeTab(tabs: unknown): boolean {
+  return Array.isArray(tabs) && tabs.some((tab) => isValidCachedTab(tab) && tab.id === DEFAULT_TAB.id)
 }
 
 function closeTransientSurfacesBeforeTabChange() {
@@ -179,7 +195,7 @@ export function TabsProvider({ children }: { children: ReactNode }) {
   }, [pinnedUserTabs, normalUserTabs, i18n.language])
 
   useEffect(() => {
-    if ((pinnedTabs ?? []).some((tab) => tab.id === DEFAULT_TAB.id)) {
+    if (hasPersistedPinnedHomeTab(pinnedTabs)) {
       setPinnedTabsRaw(pinnedUserTabs)
     }
   }, [pinnedTabs, pinnedUserTabs, setPinnedTabsRaw])

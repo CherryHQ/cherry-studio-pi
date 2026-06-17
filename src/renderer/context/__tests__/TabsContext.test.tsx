@@ -285,6 +285,46 @@ describe('TabsContext language refresh', () => {
     })
   })
 
+  it('ignores corrupted persisted pinned tabs instead of failing the tab shell render', () => {
+    cacheState.pinnedTabs = {
+      id: 'bad-cache-shape',
+      type: 'route',
+      url: '/app/paintings'
+    } as unknown as unknown[]
+
+    render(
+      <TabsProvider>
+        <TabsProbe />
+      </TabsProvider>
+    )
+
+    expect(screen.getByTestId('tab-count')).toHaveTextContent('1')
+    expect(screen.getByTestId('home-tab-title')).toHaveTextContent('Home')
+
+    cacheState.pinnedTabs = [
+      { id: '', type: 'route', url: '/app/paintings' },
+      { id: 'missing-url', type: 'route' },
+      {
+        id: 'valid-pinned',
+        type: 'route',
+        url: '/app/paintings',
+        title: 'Paintings',
+        lastAccessTime: 1,
+        isDormant: false,
+        isPinned: true
+      }
+    ] as unknown[]
+
+    cleanup()
+    render(
+      <TabsProvider>
+        <TabsProbe />
+      </TabsProvider>
+    )
+
+    expect(screen.getByTestId('tab-count')).toHaveTextContent('2')
+  })
+
   it('does not allow the implicit home tab to be pinned', () => {
     render(
       <TabsProvider>
