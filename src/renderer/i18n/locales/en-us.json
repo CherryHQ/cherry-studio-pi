@@ -854,7 +854,10 @@
       "running": "Running",
       "stopped": "Stopped"
     },
-    "title": "API Gateway"
+    "title": "API Gateway",
+    "warning": {
+      "stopped": "API Gateway is currently stopped. Start it only when you want external apps, scripts, or local clients to call Cherry Studio Pi through its OpenAI- and Anthropic-compatible APIs."
+    }
   },
   "appMenu": {
     "about": "About",

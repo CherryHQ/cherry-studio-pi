@@ -134,7 +134,7 @@ const ApiGatewaySettings: FC = () => {
         {!apiGatewayRunning && (
           <WarningBanner>
             <TriangleAlert className="size-4 shrink-0 text-warning" />
-            <span>{t('agent.warning.enable_server')}</span>
+            <span>{t('apiGateway.warning.stopped')}</span>
           </WarningBanner>
         )}
         <StatusCard $running={apiGatewayRunning}>

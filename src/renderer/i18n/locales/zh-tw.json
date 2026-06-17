@@ -854,7 +854,10 @@
       "running": "執行中",
       "stopped": "已停止"
     },
-    "title": "API 閘道"
+    "title": "API 閘道",
+    "warning": {
+      "stopped": "API 閘道目前未執行。只有當你需要外部應用程式、腳本或本機用戶端透過 OpenAI 和 Anthropic 相容 API 呼叫 Cherry Studio Pi 時，才需要啟動它。"
+    }
   },
   "appMenu": {
     "about": "關於",

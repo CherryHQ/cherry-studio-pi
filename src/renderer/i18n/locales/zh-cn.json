@@ -854,7 +854,10 @@
       "running": "运行中",
       "stopped": "已停止"
     },
-    "title": "API 网关"
+    "title": "API 网关",
+    "warning": {
+      "stopped": "API 网关当前未运行。只有当你需要外部应用、脚本或本地客户端通过 OpenAI 和 Anthropic 兼容 API 调用 Cherry Studio Pi 时，才需要启动它。"
+    }
   },
   "appMenu": {
     "about": "关于",
