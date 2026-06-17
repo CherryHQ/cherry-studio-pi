@@ -43,6 +43,9 @@ concurrency:
 jobs:
   prepare:
     name: Prepare release metadata
+    # A manual run can create and push the missing release tag from this workflow.
+    # That tag push would otherwise trigger a second full Release run for the same tag.
+    if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.release.outputs.tag }}
