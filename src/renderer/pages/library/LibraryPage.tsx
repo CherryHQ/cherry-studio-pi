@@ -243,6 +243,8 @@ export default function LibraryPage() {
   }, [configView.type])
 
   const handleEdit = useCallback((r: ResourceItem) => {
+    closeTransientResourceSelectors()
+
     if (r.type === 'assistant') {
       setConfigView({ type: 'assistant-edit', assistant: r.raw })
     } else if (r.type === 'agent') {
@@ -289,6 +291,7 @@ export default function LibraryPage() {
   )
 
   const handlePreviewAssistantPreset = useCallback((preset: AssistantCatalogPreset) => {
+    closeTransientResourceSelectors()
     setPreviewAssistantPreset(preset)
   }, [])
 
@@ -314,7 +317,10 @@ export default function LibraryPage() {
     [previewAssistantPresetAdding]
   )
 
-  const handleDelete = useCallback((r: ResourceItem) => setDeleteConfirm(r), [])
+  const handleDelete = useCallback((r: ResourceItem) => {
+    closeTransientResourceSelectors()
+    setDeleteConfirm(r)
+  }, [])
 
   const handleExport = useCallback(
     async (r: ResourceItem) => {
@@ -353,6 +359,11 @@ export default function LibraryPage() {
     } else if (type === 'prompt') {
       setConfigView({ type: 'prompt-create' })
     }
+  }, [])
+
+  const handleImportAssistant = useCallback(() => {
+    closeTransientResourceSelectors()
+    setAssistantImportOpen(true)
   }, [])
 
   const handleAssistantTabChange = useCallback((tabId: string) => {
@@ -526,7 +537,7 @@ export default function LibraryPage() {
               void handleExport(resource)
             }}
             onCreate={handleCreate}
-            onImportAssistant={() => setAssistantImportOpen(true)}
+            onImportAssistant={handleImportAssistant}
             tags={scopedTags}
             activeTag={activeTag}
             onTagFilter={setActiveTag}

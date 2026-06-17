@@ -120,10 +120,13 @@ vi.mock('../list/ResourceGrid', () => ({
     activeResourceType,
     assistantCatalog,
     onDuplicate,
+    onEdit,
+    onDelete,
     onSearchChange,
     resources,
     search,
-    onCreate
+    onCreate,
+    onImportAssistant
   }: {
     activeResourceType: 'assistant' | 'agent' | 'skill' | 'prompt'
     assistantCatalog?: {
@@ -131,8 +134,11 @@ vi.mock('../list/ResourceGrid', () => ({
       onTabChange: (tabId: string) => void
     }
     onDuplicate: (resource: any) => void
+    onEdit: (resource: any) => void
+    onDelete: (resource: any) => void
     onSearchChange: (value: string) => void
     onCreate: (type: 'assistant' | 'agent' | 'skill' | 'prompt') => void
+    onImportAssistant: () => void
     resources: any[]
     search: string
   }) => (
@@ -153,6 +159,15 @@ vi.mock('../list/ResourceGrid', () => ({
       </button>
       <button type="button" disabled={!resources[0]} onClick={() => onDuplicate(resources[0])}>
         duplicate first
+      </button>
+      <button type="button" disabled={!resources[0]} onClick={() => onEdit(resources[0])}>
+        edit first
+      </button>
+      <button type="button" disabled={!resources[0]} onClick={() => onDelete(resources[0])}>
+        delete first
+      </button>
+      <button type="button" onClick={onImportAssistant}>
+        import assistant
       </button>
     </div>
   )
@@ -334,6 +349,41 @@ describe('LibraryPage create flow', () => {
         expect(screen.getByTestId('resource-grid')).toBeInTheDocument()
       })
       expect(closeResourceSelectors.mock.calls.length).toBeGreaterThanOrEqual(2)
+    } finally {
+      window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+    }
+  })
+
+  it('closes transient resource selectors before opening secondary library surfaces', async () => {
+    const user = userEvent.setup()
+    const closeResourceSelectors = vi.fn()
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+    allResourcesMock.push({
+      id: 'assistant-for-actions',
+      type: 'assistant',
+      name: 'Assistant for actions',
+      description: '',
+      avatar: '💬',
+      tags: [],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+      raw: { id: 'assistant-for-actions', name: 'Assistant for actions', tags: [] }
+    })
+
+    try {
+      render(<LibraryPage />)
+
+      await user.click(screen.getByRole('button', { name: 'import assistant' }))
+      expect(closeResourceSelectors).toHaveBeenCalledTimes(1)
+
+      await user.click(screen.getByRole('button', { name: 'delete first' }))
+      expect(closeResourceSelectors).toHaveBeenCalledTimes(2)
+
+      await user.click(screen.getByRole('button', { name: 'edit first' }))
+      await waitFor(() => {
+        expect(screen.getByTestId('assistant-edit-page')).toBeInTheDocument()
+      })
+      expect(closeResourceSelectors.mock.calls.length).toBeGreaterThanOrEqual(3)
     } finally {
       window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
     }
