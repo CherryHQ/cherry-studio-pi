@@ -41,4 +41,24 @@ describe('DropdownMenuContent', () => {
       portalContainer.remove()
     }
   })
+
+  it('keeps the legacy container prop working for existing callers', () => {
+    const portalContainer = document.createElement('div')
+    document.body.appendChild(portalContainer)
+
+    try {
+      render(
+        <DropdownMenu open>
+          <DropdownMenuTrigger>Open</DropdownMenuTrigger>
+          <DropdownMenuContent container={portalContainer}>
+            <DropdownMenuItem>Item</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )
+
+      expect(portalContainer).toContainElement(screen.getByText('Item'))
+    } finally {
+      portalContainer.remove()
+    }
+  })
 })

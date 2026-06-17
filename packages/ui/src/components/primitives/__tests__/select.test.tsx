@@ -43,4 +43,26 @@ describe('SelectContent', () => {
       portalContainer.remove()
     }
   })
+
+  it('keeps the legacy container prop working for existing callers', () => {
+    const portalContainer = document.createElement('div')
+    document.body.appendChild(portalContainer)
+
+    try {
+      render(
+        <Select open value="alpha">
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent container={portalContainer} data-testid="content">
+            <SelectItem value="alpha">Alpha</SelectItem>
+          </SelectContent>
+        </Select>
+      )
+
+      expect(portalContainer).toContainElement(screen.getByTestId('content'))
+    } finally {
+      portalContainer.remove()
+    }
+  })
 })

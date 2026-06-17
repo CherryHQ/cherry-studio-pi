@@ -25,12 +25,20 @@ function DropdownMenuTrigger({ ...props }: React.ComponentProps<typeof DropdownM
 }
 
 type DropdownMenuContentProps = React.ComponentProps<typeof DropdownMenuPrimitive.Content> & {
+  /** @deprecated Use portalContainer. Kept for existing Cherry Studio Pi callers. */
+  container?: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>['container']
   portalContainer?: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>['container']
 }
 
-function DropdownMenuContent({ className, sideOffset = 4, portalContainer, ...props }: DropdownMenuContentProps) {
+function DropdownMenuContent({
+  className,
+  sideOffset = 4,
+  container,
+  portalContainer,
+  ...props
+}: DropdownMenuContentProps) {
   return (
-    <DropdownMenuPortal container={portalContainer}>
+    <DropdownMenuPortal container={portalContainer ?? container}>
       <DropdownMenuPrimitive.Content
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
