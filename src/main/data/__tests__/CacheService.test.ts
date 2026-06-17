@@ -205,7 +205,7 @@ describe('CacheService subscription', () => {
 
     it('skips broadcast and fire when value deep-equals existing', async () => {
       const { BrowserWindow } = (await import('electron')) as any
-      const webContents = { send: vi.fn() }
+      const webContents = { send: vi.fn(), isDestroyed: vi.fn(() => false) }
       BrowserWindow.getAllWindows.mockReturnValue([{ isDestroyed: () => false, id: 99, webContents }])
 
       const cb = vi.fn()
@@ -216,6 +216,44 @@ describe('CacheService subscription', () => {
       service.setShared(SHARED_EXACT, 'api-key-1') // same value
       expect(cb).not.toHaveBeenCalled()
       expect(webContents.send).not.toHaveBeenCalled()
+    })
+
+    it('continues cache sync broadcast when one renderer window send fails', async () => {
+      const { BrowserWindow } = (await import('electron')) as any
+      const failingSend = vi.fn(() => {
+        throw new Error('send failed')
+      })
+      const healthySend = vi.fn()
+      BrowserWindow.getAllWindows.mockReturnValue([
+        { isDestroyed: () => false, id: 98, webContents: { send: failingSend, isDestroyed: () => false } },
+        { isDestroyed: () => false, id: 99, webContents: { send: healthySend, isDestroyed: () => false } }
+      ])
+
+      service.setShared(SHARED_EXACT, 'api-key-1')
+
+      expect(failingSend).toHaveBeenCalledTimes(1)
+      expect(healthySend).toHaveBeenCalledWith(
+        IpcChannel.Cache_Sync,
+        expect.objectContaining({ type: 'shared', key: SHARED_EXACT, value: 'api-key-1' })
+      )
+    })
+
+    it('skips cache sync broadcast to destroyed webContents', async () => {
+      const { BrowserWindow } = (await import('electron')) as any
+      const destroyedWebContentsSend = vi.fn()
+      const healthySend = vi.fn()
+      BrowserWindow.getAllWindows.mockReturnValue([
+        { isDestroyed: () => false, id: 98, webContents: { send: destroyedWebContentsSend, isDestroyed: () => true } },
+        { isDestroyed: () => false, id: 99, webContents: { send: healthySend, isDestroyed: () => false } }
+      ])
+
+      service.setShared(SHARED_EXACT, 'api-key-2')
+
+      expect(destroyedWebContentsSend).not.toHaveBeenCalled()
+      expect(healthySend).toHaveBeenCalledWith(
+        IpcChannel.Cache_Sync,
+        expect.objectContaining({ type: 'shared', key: SHARED_EXACT, value: 'api-key-2' })
+      )
     })
 
     it('fires when IPC Cache_Sync arrives from renderer', () => {

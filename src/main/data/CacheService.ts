@@ -480,8 +480,14 @@ export class CacheService extends BaseService {
   private broadcastSync(message: CacheSyncMessage, senderWindowId?: number): void {
     const windows = BrowserWindow.getAllWindows()
     for (const window of windows) {
-      if (!window.isDestroyed() && window.id !== senderWindowId) {
+      if (window.isDestroyed() || window.webContents.isDestroyed?.() || window.id === senderWindowId) {
+        continue
+      }
+
+      try {
         window.webContents.send(IpcChannel.Cache_Sync, message)
+      } catch (error) {
+        logger.warn('Failed to broadcast cache sync message to renderer window', error as Error)
       }
     }
   }
