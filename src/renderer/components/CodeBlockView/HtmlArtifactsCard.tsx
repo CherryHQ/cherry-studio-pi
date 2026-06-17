@@ -41,7 +41,8 @@ const HtmlArtifactsCard: FC<Props> = ({ html, onSave, isStreaming = false }) => 
   const handleDownload = async () => {
     const fileName = `${getFileNameFromHtmlTitle(title) || 'html-artifact'}.html`
     try {
-      await window.api.file.save(fileName, htmlContent)
+      const savedPath = await window.api.file.save(fileName, htmlContent)
+      if (!savedPath) return
       window.toast.success(t('message.download.success'))
     } catch (error) {
       logger.error('Failed to download HTML artifact', error as Error)

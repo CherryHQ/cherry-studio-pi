@@ -7,6 +7,7 @@ import type { StreamListener } from '../../types'
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
+  ensureTraceId: vi.fn(),
   getAgent: vi.fn(),
   getModelByKey: vi.fn(),
   listModels: vi.fn(),
@@ -14,7 +15,6 @@ const mocks = vi.hoisted(() => ({
   saveMessages: vi.fn(),
   maybeRenameAgentSession: vi.fn(),
   applicationGet: vi.fn(),
-  traceStorageSetTopicId: vi.fn(),
   runtimeBeginTurn: vi.fn(),
   runtimeEnqueueUserMessage: vi.fn(),
   runtimeIsSessionBusy: vi.fn(),
@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@data/services/AgentSessionService', () => ({
-  agentSessionService: { getById: mocks.getSession }
+  agentSessionService: { getById: mocks.getSession, ensureTraceId: mocks.ensureTraceId }
 }))
 
 vi.mock('@data/services/AgentService', () => ({
@@ -103,6 +103,7 @@ describe('AgentChatContextProvider', () => {
       listAvailableTools: vi.fn().mockResolvedValue([])
     })
     mocks.getSession.mockResolvedValue({ id: 'session-1', agentId: 'agent-1', workspace: { path: '/tmp' } })
+    mocks.ensureTraceId.mockResolvedValue('a'.repeat(32))
     mocks.getAgent.mockResolvedValue({
       id: 'agent-1',
       type: 'claude-code',
@@ -146,7 +147,6 @@ describe('AgentChatContextProvider', () => {
       }))
     )
     mocks.applicationGet.mockImplementation((name: string) => {
-      if (name === 'TraceStorageService') return { setTopicId: mocks.traceStorageSetTopicId }
       if (name === 'AgentSessionRuntimeService') {
         return {
           beginTurn: mocks.runtimeBeginTurn,
@@ -213,7 +213,7 @@ describe('AgentChatContextProvider', () => {
       modelId: 'anthropic::claude-sonnet',
       assistantMessageId: prepared.models[0].request.messageId,
       userMessage: expect.objectContaining({ id: prepared.userMessageId, role: 'user', sessionId: 'session-1' }),
-      traceId: expect.stringMatching(/^[0-9a-f]{32}$/)
+      traceId: 'a'.repeat(32)
     })
     expect(prepared.listeners).toEqual([
       subscriber,

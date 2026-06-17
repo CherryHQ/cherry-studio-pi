@@ -163,6 +163,11 @@ const DEFAULT_DIRECTORY_LIST_OPTIONS: Required<DirectoryListOptions> = {
   fuzzy: true
 }
 
+function resolveHomeRelativeFilePath(filePath: string): string {
+  if (!filePath.startsWith('~/') && !filePath.startsWith('~\\')) return filePath
+  return path.join(application.getPath('sys.home'), filePath.slice(2))
+}
+
 class FileStorage {
   private watcher?: FSWatcher
   private watcherSender?: Electron.WebContents
@@ -968,7 +973,7 @@ class FileStorage {
   }
 
   public openPath = async (_: Electron.IpcMainInvokeEvent, path: string): Promise<void> => {
-    await openPathInShell(path)
+    await openPathInShell(resolveHomeRelativeFilePath(path))
   }
 
   /**
@@ -1549,7 +1554,7 @@ class FileStorage {
     fileName: string,
     content: string,
     options?: SaveDialogOptions
-  ): Promise<string> => {
+  ): Promise<string | null> => {
     try {
       const result: SaveDialogReturnValue = await dialog.showSaveDialog({
         title: t('dialog.save_file'),
@@ -1557,13 +1562,11 @@ class FileStorage {
         ...options
       })
 
-      if (result.canceled) {
-        return Promise.reject(new Error('User canceled the save dialog'))
+      if (result.canceled || !result.filePath) {
+        return null
       }
 
-      if (!result.canceled && result.filePath) {
-        writeFileSync(result.filePath, content, { encoding: 'utf-8' })
-      }
+      writeFileSync(result.filePath, content, { encoding: 'utf-8' })
 
       return result.filePath
     } catch (err: any) {
@@ -2084,13 +2087,14 @@ class FileStorage {
   }
 
   public showInFolder = async (_: Electron.IpcMainInvokeEvent, path: string): Promise<void> => {
-    if (!fs.existsSync(path)) {
-      const msg = `File or folder does not exist: ${path}`
+    const resolvedPath = resolveHomeRelativeFilePath(path)
+    if (!fs.existsSync(resolvedPath)) {
+      const msg = `File or folder does not exist: ${resolvedPath}`
       logger.error(msg)
       throw new Error(msg)
     }
     try {
-      shell.showItemInFolder(path)
+      shell.showItemInFolder(resolvedPath)
     } catch (error) {
       logger.error('Failed to show item in folder:', error as Error)
     }

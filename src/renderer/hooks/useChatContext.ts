@@ -168,9 +168,11 @@ export const useChatContextProvider = (activeTopic: Topic): ChatContextValue => 
           if (contentToSave) {
             const fileName = `chat_export_${new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-')}.md`
             try {
-              await window.api.file.save(fileName, contentToSave)
-              window.toast.success(t('message.save.success.title'))
-              handleToggleMultiSelectMode(false)
+              const savedPath = await window.api.file.save(fileName, contentToSave)
+              if (savedPath) {
+                window.toast.success(t('message.save.success.title'))
+                handleToggleMultiSelectMode(false)
+              }
             } catch (error) {
               logger.error('Failed to save selected messages:', error as Error)
               window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))

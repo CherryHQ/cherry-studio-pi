@@ -3,9 +3,9 @@ import { usePreference } from '@data/hooks/usePreference'
 import { APP_NAME, AppLogo } from '@renderer/config/env'
 import useAvatar from '@renderer/hooks/useAvatar'
 import { useTabs } from '@renderer/hooks/useTabs'
-import { getSidebarIconLabelKey } from '@renderer/i18n/label'
+import { getSidebarFavoriteLabelKey } from '@renderer/i18n/label'
 import { getDefaultRouteTitle } from '@renderer/utils/routeTitle'
-import type { SidebarIcon as SidebarIconType } from '@shared/data/preference/preferenceTypes'
+import type { SidebarFavorite as SidebarFavoriteType } from '@shared/data/preference/preferenceTypes'
 import {
   Code,
   FileSearch,
@@ -31,7 +31,7 @@ import type { SidebarMenuItem, SidebarUser } from '../Sidebar/types'
 const APP_LOGO = <img src={AppLogo} alt={APP_NAME} className="h-9 w-9 rounded-lg" draggable={false} />
 const noop = () => {}
 
-const routePrefixMap: Record<SidebarIconType, string> = {
+const routePrefixMap: Record<SidebarFavoriteType, string> = {
   assistants: '/app/chat',
   agents: '/app/agents',
   store: '/app/library',
@@ -45,7 +45,7 @@ const routePrefixMap: Record<SidebarIconType, string> = {
   openclaw: '/app/openclaw'
 }
 
-const iconMap: Record<SidebarIconType, SidebarMenuItem['icon']> = {
+const iconMap: Record<SidebarFavoriteType, SidebarMenuItem['icon']> = {
   assistants: MessageCircle,
   agents: MousePointerClick,
   store: Sparkle,
@@ -59,12 +59,12 @@ const iconMap: Record<SidebarIconType, SidebarMenuItem['icon']> = {
   openclaw: OpenClawSidebarIcon
 }
 
-function getMenuPath(icon: SidebarIconType): string {
-  return routePrefixMap[icon] || ''
+function getMenuPath(favorite: SidebarFavoriteType): string {
+  return routePrefixMap[favorite] || ''
 }
 
-function resolveActiveItem(pathname: string): SidebarIconType | '' {
-  const match = (Object.entries(routePrefixMap) as Array<[SidebarIconType, string]>).find(
+function resolveActiveItem(pathname: string): SidebarFavoriteType | '' {
+  const match = (Object.entries(routePrefixMap) as Array<[SidebarFavoriteType, string]>).find(
     ([, prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`)
   )
   return match?.[0] || ''
@@ -73,7 +73,7 @@ function resolveActiveItem(pathname: string): SidebarIconType | '' {
 export default function Sidebar({ ref }: { ref?: Ref<HTMLDivElement | null> }) {
   const { t } = useTranslation()
   const [userName] = usePreference('app.user.name')
-  const [visibleSidebarIcons, setVisibleSidebarIcons] = usePreference('ui.sidebar.icons.visible')
+  const [sidebarFavorites, setSidebarFavorites] = usePreference('ui.sidebar.favorites')
   const { activeTab, updateTab, openTab } = useTabs()
 
   // Sidebar width — persisted across restarts. Dragging through the
@@ -117,55 +117,51 @@ export default function Sidebar({ ref }: { ref?: Ref<HTMLDivElement | null> }) {
   const [hoverVisible, setHoverVisible] = useState(false)
   const layout = getSidebarLayout(activeSidebarWidth)
 
-  const normalizedVisibleSidebarIcons = useMemo<SidebarIconType[]>(() => {
-    if (visibleSidebarIcons.includes('agents')) {
-      return visibleSidebarIcons
+  const normalizedSidebarFavorites = useMemo<SidebarFavoriteType[]>(() => {
+    if (sidebarFavorites.includes('agents')) {
+      return sidebarFavorites
     }
 
-    const assistantsIndex = visibleSidebarIcons.indexOf('assistants')
+    const assistantsIndex = sidebarFavorites.indexOf('assistants')
     if (assistantsIndex === -1) {
-      return ['agents', ...visibleSidebarIcons]
+      return ['agents', ...sidebarFavorites]
     }
 
-    return [
-      ...visibleSidebarIcons.slice(0, assistantsIndex + 1),
-      'agents',
-      ...visibleSidebarIcons.slice(assistantsIndex + 1)
-    ]
-  }, [visibleSidebarIcons])
+    return [...sidebarFavorites.slice(0, assistantsIndex + 1), 'agents', ...sidebarFavorites.slice(assistantsIndex + 1)]
+  }, [sidebarFavorites])
 
   useEffect(() => {
-    if (visibleSidebarIcons.includes('agents')) return
-    void setVisibleSidebarIcons(normalizedVisibleSidebarIcons)
-  }, [normalizedVisibleSidebarIcons, setVisibleSidebarIcons, visibleSidebarIcons])
+    if (sidebarFavorites.includes('agents')) return
+    void setSidebarFavorites(normalizedSidebarFavorites)
+  }, [normalizedSidebarFavorites, setSidebarFavorites, sidebarFavorites])
 
   // Menu items
   const pathname = activeTab?.url || '/'
 
   const items = useMemo<SidebarMenuItem[]>(
     () =>
-      normalizedVisibleSidebarIcons.flatMap((icon) => {
-        const path = getMenuPath(icon)
-        const Icon = iconMap[icon]
+      normalizedSidebarFavorites.flatMap((favorite) => {
+        const path = getMenuPath(favorite)
+        const Icon = iconMap[favorite]
         if (!path || !Icon) {
           return []
         }
         return [
           {
-            id: icon,
-            label: t(getSidebarIconLabelKey(icon)),
+            id: favorite,
+            label: t(getSidebarFavoriteLabelKey(favorite)),
             icon: Icon
           }
         ]
       }),
-    [normalizedVisibleSidebarIcons, t]
+    [normalizedSidebarFavorites, t]
   )
 
   const activeItem = resolveActiveItem(pathname)
 
   const handleNavigate = useCallback(
     async (menuItemId: string) => {
-      const menuId = menuItemId as SidebarIconType
+      const menuId = menuItemId as SidebarFavoriteType
       const path = getMenuPath(menuId)
       if (!path) return
 

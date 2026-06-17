@@ -43,7 +43,9 @@ async function resolveUniqueStoredModel(agentId: string, storedModelId: UniqueMo
   return selectSingleModelMatch(agentId, storedModelId, matches)
 }
 
-export async function resolveAgentRuntimeModel(agent: Pick<AgentEntity, 'id' | 'model'>): Promise<Model> {
+export async function resolveAgentRuntimeModel(
+  agent: Pick<AgentEntity, 'id'> & { model?: string | null }
+): Promise<Model> {
   const storedModelId = agent.model?.trim()
   if (!storedModelId) {
     throw new Error(`Agent ${agent.id} has no model configured`)
