@@ -10,7 +10,7 @@ import type { Prompt } from '@shared/data/types/prompt'
 import type { Tag } from '@shared/data/types/tag'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { AnimatePresence, motion } from 'motion/react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useAssistantMutations } from './adapters/assistantAdapter'
@@ -90,6 +90,7 @@ export default function LibraryPage() {
   const [activeAssistantCatalogTab, setActiveAssistantCatalogTab] = useState(ASSISTANT_CATALOG_MY_TAB)
   const [previewAssistantPreset, setPreviewAssistantPreset] = useState<AssistantCatalogPreset | null>(null)
   const [previewAssistantPresetAdding, setPreviewAssistantPresetAdding] = useState(false)
+  const ignoreNextAgentCreateDismissRef = useRef(false)
 
   const activeResourceType = sidebarFilter.resourceType
   const isAssistantLibrary = activeResourceType === 'assistant'
@@ -151,6 +152,7 @@ export default function LibraryPage() {
   }, [navigate, routeAction, routeResourceType, sidebarFilter.resourceType])
 
   const handleBackToList = useCallback(() => {
+    ignoreNextAgentCreateDismissRef.current = false
     closeTransientResourceSelectors()
     setConfigView({ type: 'list' })
     clearRouteActionSearch()
@@ -163,6 +165,7 @@ export default function LibraryPage() {
   }, [clearRouteActionSearch, refetch])
   const handleAgentCreated = useCallback(
     (_created: AgentDetail, result?: AgentCreateResult) => {
+      ignoreNextAgentCreateDismissRef.current = true
       closeTransientResourceSelectors()
       refetch()
       setConfigView({ type: 'list' })
@@ -202,6 +205,7 @@ export default function LibraryPage() {
     if (routeResourceType === 'assistant') {
       setConfigView((prev) => (prev.type === 'assistant-create' ? prev : { type: 'assistant-create' }))
     } else if (routeResourceType === 'agent') {
+      ignoreNextAgentCreateDismissRef.current = false
       setConfigView((prev) => (prev.type === 'agent-create' ? prev : { type: 'agent-create' }))
     } else if (routeResourceType === 'prompt') {
       setConfigView((prev) => (prev.type === 'prompt-create' ? prev : { type: 'prompt-create' }))
@@ -350,6 +354,7 @@ export default function LibraryPage() {
     } else if (type === 'agent') {
       // Defer DB write until the user saves in the config page. This
       // avoids leaving half-configured agent rows behind if the user navigates away.
+      ignoreNextAgentCreateDismissRef.current = false
       setConfigView({ type: 'agent-create' })
     } else if (type === 'skill') {
       // Skill install lives in a dialog (mirrors ImportAssistantDialog) so the
@@ -554,7 +559,19 @@ export default function LibraryPage() {
       </div>
 
       <DeleteConfirmDialog resource={deleteConfirm} onClose={() => setDeleteConfirm(null)} />
-      <Dialog open={configView.type === 'agent-create'} onOpenChange={(open) => !open && handleBackToList()}>
+      <Dialog
+        open={configView.type === 'agent-create'}
+        onOpenChange={(open) => {
+          if (open) {
+            ignoreNextAgentCreateDismissRef.current = false
+            return
+          }
+          if (ignoreNextAgentCreateDismissRef.current) {
+            ignoreNextAgentCreateDismissRef.current = false
+            return
+          }
+          handleBackToList()
+        }}>
         <DialogContent
           aria-describedby={undefined}
           className="w-[min(920px,calc(100vw-2rem))] max-w-none overflow-hidden rounded-xl p-0 sm:max-w-[920px]">
