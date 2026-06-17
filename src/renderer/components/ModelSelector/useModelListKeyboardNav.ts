@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { type RefObject, useEffect } from 'react'
 
 interface KeyboardNavigableItem {
   key: string
@@ -12,6 +12,7 @@ interface UseModelListKeyboardNavOptions<TItem extends KeyboardNavigableItem> {
   onFocusItem: (key: string) => void
   onSelectItem: (item: TItem) => void
   pageSize?: number
+  eventScopeRef?: RefObject<HTMLElement | null>
 }
 
 export function useModelListKeyboardNav<TItem extends KeyboardNavigableItem>({
@@ -21,7 +22,8 @@ export function useModelListKeyboardNav<TItem extends KeyboardNavigableItem>({
   onClose,
   onFocusItem,
   onSelectItem,
-  pageSize = 12
+  pageSize = 12,
+  eventScopeRef
 }: UseModelListKeyboardNavOptions<TItem>) {
   useEffect(() => {
     if (!open || items.length === 0) {
@@ -29,6 +31,11 @@ export function useModelListKeyboardNav<TItem extends KeyboardNavigableItem>({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      const eventScope = eventScopeRef?.current
+      if (eventScope && event.target instanceof Node && !eventScope.contains(event.target)) {
+        return
+      }
+
       if (event.isComposing) {
         return
       }
@@ -74,5 +81,5 @@ export function useModelListKeyboardNav<TItem extends KeyboardNavigableItem>({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [focusedItemKey, items, onClose, onFocusItem, onSelectItem, open, pageSize])
+  }, [eventScopeRef, focusedItemKey, items, onClose, onFocusItem, onSelectItem, open, pageSize])
 }

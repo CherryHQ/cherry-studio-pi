@@ -27,6 +27,7 @@ function PopoverContent({
   forceMount,
   container,
   portalContainer,
+  ref,
   ...props
 }: PopoverContentProps) {
   const defaultPortalContainer = usePortalContainer()
@@ -36,6 +37,7 @@ function PopoverContent({
       forceMount={forceMount}
       container={portalContainer ?? container ?? defaultPortalContainer ?? undefined}>
       <PopoverPrimitive.Content
+        ref={ref}
         data-slot="popover-content"
         align={align}
         sideOffset={sideOffset}

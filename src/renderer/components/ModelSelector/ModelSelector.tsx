@@ -304,6 +304,7 @@ export function ModelSelector(props: ModelSelectorProps) {
     startTransition(() => _setFocusedItemKey(key))
   }, [])
   const inputRef = useRef<HTMLInputElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<DynamicVirtualListRef>(null)
   const skipNextFocusScroll = useRef(false)
   const focusScrollFrameRef = useRef<number | null>(null)
@@ -586,6 +587,7 @@ export function ModelSelector(props: ModelSelectorProps) {
     onClose: handleClose,
     onFocusItem: focusItem,
     onSelectItem: handleSelectItem,
+    eventScopeRef: contentRef,
     pageSize: normalizedListVisibleCount
   })
 
@@ -729,6 +731,7 @@ export function ModelSelector(props: ModelSelectorProps) {
       {shortcut ? <ShortcutBinding shortcut={shortcut} onTrigger={handleShortcut} /> : null}
       <PopoverTrigger asChild>{triggerNode}</PopoverTrigger>
       <PopoverContent
+        ref={contentRef}
         side={side}
         align={align}
         sideOffset={sideOffset}

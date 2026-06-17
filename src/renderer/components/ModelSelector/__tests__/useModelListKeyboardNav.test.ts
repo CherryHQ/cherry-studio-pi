@@ -13,6 +13,7 @@
  */
 
 import { renderHook } from '@testing-library/react'
+import { type RefObject } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { useModelListKeyboardNav } from '../useModelListKeyboardNav'
@@ -34,6 +35,7 @@ interface RenderOptions {
   items?: Item[]
   focusedItemKey?: string
   pageSize?: number
+  eventScopeRef?: RefObject<HTMLElement | null>
 }
 
 function renderNav(options: RenderOptions = {}) {
@@ -49,7 +51,8 @@ function renderNav(options: RenderOptions = {}) {
       onClose,
       onFocusItem,
       onSelectItem,
-      pageSize: options.pageSize
+      pageSize: options.pageSize,
+      eventScopeRef: options.eventScopeRef
     })
   )
 
@@ -177,6 +180,50 @@ describe('useModelListKeyboardNav', () => {
       expect(onFocusItem).not.toHaveBeenCalled()
       expect(onSelectItem).not.toHaveBeenCalled()
       expect(onClose).not.toHaveBeenCalled()
+    })
+
+    it('ignores navigation keys dispatched outside the configured event scope', () => {
+      const scope = document.createElement('div')
+      const outsideInput = document.createElement('input')
+      document.body.append(scope, outsideInput)
+
+      try {
+        const { onFocusItem, onSelectItem, onClose } = renderNav({
+          focusedItemKey: 'item-1',
+          eventScopeRef: { current: scope }
+        })
+
+        outsideInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+        outsideInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+        outsideInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }))
+
+        expect(onFocusItem).not.toHaveBeenCalled()
+        expect(onSelectItem).not.toHaveBeenCalled()
+        expect(onClose).not.toHaveBeenCalled()
+      } finally {
+        scope.remove()
+        outsideInput.remove()
+      }
+    })
+
+    it('handles navigation keys dispatched inside the configured event scope', () => {
+      const scope = document.createElement('div')
+      const searchInput = document.createElement('input')
+      scope.append(searchInput)
+      document.body.append(scope)
+
+      try {
+        const { onSelectItem } = renderNav({
+          focusedItemKey: 'item-1',
+          eventScopeRef: { current: scope }
+        })
+
+        searchInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+
+        expect(onSelectItem).toHaveBeenCalledWith({ key: 'item-1' })
+      } finally {
+        scope.remove()
+      }
     })
   })
 })
