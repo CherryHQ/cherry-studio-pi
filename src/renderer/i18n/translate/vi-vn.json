@@ -792,13 +792,6 @@
       "error": {
         "failed": "Không thể cập nhật tác nhân"
       }
-    },
-    "warning": {
-      "enable_and_start": "Kích hoạt & Khởi động",
-      "enable_server": "Kích hoạt API Server để sử dụng các agent.",
-      "enable_server_description": "Máy chủ API phải được bật để các tác nhân hoạt động. Bạn có thể bật nó trực tiếp hoặc cấu hình trong phần cài đặt.",
-      "server_not_running": "Máy chủ API đã được kích hoạt nhưng không đang chạy. Vui lòng kiểm tra cấu hình máy chủ.",
-      "server_not_running_description": "Máy chủ API cần được chạy để các tác nhân hoạt động. Bạn có thể khởi động nó trực tiếp hoặc kiểm tra cài đặt."
     }
   },
   "apiGateway": {
