@@ -131,19 +131,17 @@ function assertReleaseBumpConfirmed({ version, env = process.env }) {
   }
 }
 
-function getPushCommands(version) {
-  return [
-    ['git', ['push']],
-    ['git', ['push', 'origin', `v${version}`]]
-  ]
-}
-
 function getPushInstructions(version) {
-  return `Changes are committed locally. Use "git push && git push origin v${version}" to push to remote.`
+  return [
+    `Changes are committed locally and tagged as v${version}.`,
+    'Push the commit and tag only when you are ready to expose the tag to CI/history:',
+    `git push && git push origin v${version}`,
+    'Publishing installers is a separate manual GitHub Actions -> Release workflow step.'
+  ].join('\n')
 }
 
 function runVersion(args = process.argv.slice(2)) {
-  const { shouldPush, versionType } = parseVersionArgs(args)
+  const { versionType } = parseVersionArgs(args)
   assertCleanGitWorktree()
 
   const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'))
@@ -164,15 +162,7 @@ function runVersion(args = process.argv.slice(2)) {
 
   console.log(`Version bumped from ${baseVersion} to ${newVersion}`)
 
-  if (shouldPush) {
-    console.log('Pushing to remote...')
-    for (const [command, commandArgs] of getPushCommands(newVersion)) {
-      exec(command, commandArgs)
-    }
-    console.log('Pushed to remote.')
-  } else {
-    console.log(getPushInstructions(newVersion))
-  }
+  console.log(getPushInstructions(newVersion))
 }
 
 if (require.main === module) {
@@ -193,7 +183,6 @@ exports._internal = {
   resolveNextVersion,
   assertCleanGitWorktree,
   assertReleaseBumpConfirmed,
-  getPushCommands,
   getPushInstructions,
   runVersion
 }

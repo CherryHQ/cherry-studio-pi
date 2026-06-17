@@ -84,14 +84,11 @@ describe('version script', () => {
     expect(selectKnownVersions('1.9.33', [], ['1.9.34'])).toEqual(['1.9.33', '1.9.34'])
   })
 
-  it('pushes only the newly created release tag', () => {
-    const { getPushCommands, getPushInstructions } = loadInternal()
+  it('prints manual push instructions without publishing installers', () => {
+    const { getPushInstructions } = loadInternal()
 
-    expect(getPushCommands('1.9.35')).toEqual([
-      ['git', ['push']],
-      ['git', ['push', 'origin', 'v1.9.35']]
-    ])
     expect(getPushInstructions('1.9.35')).toContain('git push origin v1.9.35')
+    expect(getPushInstructions('1.9.35')).toContain('separate manual GitHub Actions -> Release workflow')
   })
 
   it('requires an exact one-shot confirmation before creating a release tag', () => {
