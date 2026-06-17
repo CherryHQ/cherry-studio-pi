@@ -87,6 +87,12 @@ export interface AgentSessionRuntimeDriver extends AiRuntimeDriver {
    * this before `connect()` instead of hard-coding driver-specific guards.
    */
   validateSession(session: AgentSessionEntity): void | Promise<void>
+  /**
+   * Resolve the concrete filesystem workspace this driver will expose to the
+   * runtime. Hosts use this for pre-run side effects such as persisting channel
+   * attachments without assuming every runtime stores the path on session.workspace.
+   */
+  resolveWorkspacePath?(session: AgentSessionEntity): string | undefined | Promise<string | undefined>
   /** Enumerate the tools this driver exposes for the given MCP server set. */
   listAvailableTools(mcpIds: string[]): Promise<Tool[]>
   connect(input: AgentRuntimeConnectInput): Promise<AgentRuntimeConnection>

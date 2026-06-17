@@ -1,3 +1,7 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+
 import { agentChannelService as channelService } from '@data/services/AgentChannelService'
 import { agentService } from '@data/services/AgentService'
 import { agentSessionService } from '@data/services/AgentSessionService'
@@ -39,11 +43,16 @@ vi.mock('@application', async () => {
   return mockApplicationFactory({ AiStreamManager: { abort: mockStreamAbort } } as never)
 })
 
-const { mockPrepareClaudeCodeWorkspaceDirectory } = vi.hoisted(() => ({
-  mockPrepareClaudeCodeWorkspaceDirectory: vi.fn()
+const { mockValidateAgentSession, mockResolveWorkspacePath, mockGetAgentSessionDriver } = vi.hoisted(() => ({
+  mockValidateAgentSession: vi.fn(),
+  mockResolveWorkspacePath: vi.fn(),
+  mockGetAgentSessionDriver: vi.fn()
 }))
-vi.mock('@main/ai/runtime/claudeCode/settingsBuilder', () => ({
-  prepareClaudeCodeWorkspaceDirectory: mockPrepareClaudeCodeWorkspaceDirectory
+vi.mock('@main/ai/runtime/registry', () => ({
+  runtimeDriverRegistry: {
+    register: vi.fn(),
+    getAgentSessionDriver: mockGetAgentSessionDriver
+  }
 }))
 
 vi.mock('@data/services/AgentService', () => ({
@@ -131,6 +140,14 @@ function createMockAdapter(overrides: Record<string, unknown> = {}) {
   return adapter
 }
 
+const tempRoots: string[] = []
+
+async function createTempRoot(): Promise<string> {
+  const root = await mkdtemp(path.join(tmpdir(), 'channel-agent-workspace-'))
+  tempRoots.push(root)
+  return root
+}
+
 /**
  * Helper: call handleIncoming and advance fake timers so the debounce fires,
  * then await the returned promise to wait for processing to complete.
@@ -167,17 +184,28 @@ describe('ChannelMessageHandler', () => {
     // Restore default agent mock after clearing mocks
     vi.mocked(agentService.getAgent).mockResolvedValue({
       id: 'agent-1',
+      type: 'claude-code',
       configuration: {},
       model: 'openai::gpt-4'
     } as any)
-    mockPrepareClaudeCodeWorkspaceDirectory.mockReset()
-    mockPrepareClaudeCodeWorkspaceDirectory.mockResolvedValue(undefined)
+    mockValidateAgentSession.mockReset()
+    mockValidateAgentSession.mockResolvedValue(undefined)
+    mockGetAgentSessionDriver.mockReset()
+    mockResolveWorkspacePath.mockReset()
+    mockResolveWorkspacePath.mockImplementation(
+      (session: { workspace?: { path?: string } | null }) => session.workspace?.path
+    )
+    mockGetAgentSessionDriver.mockReturnValue({
+      validateSession: mockValidateAgentSession,
+      resolveWorkspacePath: mockResolveWorkspacePath
+    })
     // Clear session tracker to ensure clean state
     channelMessageHandler.clearSessionTracker('agent-1')
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.useRealTimers()
+    await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
   })
 
   it('collectStreamResponse accumulates text across turns and sends via adapter', async () => {
@@ -248,6 +276,51 @@ describe('ChannelMessageHandler', () => {
 
     // Restore the identity default so later tests are unaffected.
     vi.mocked(sanitizeChannelOutput).mockImplementation((text: string) => ({ text, redacted: false }))
+  })
+
+  it('validates attachment workspaces through the selected agent runtime driver', async () => {
+    const adapter = createMockAdapter()
+    const workspacePath = await createTempRoot()
+    const session = {
+      id: 'session-1',
+      agentId: 'agent-1',
+      agentType: 'pi',
+      model: 'openai::gpt-4',
+      workspace: null,
+      configuration: {}
+    }
+
+    vi.mocked(agentService.getAgent).mockResolvedValueOnce({
+      id: 'agent-1',
+      type: 'pi',
+      configuration: {},
+      model: 'openai::gpt-4'
+    } as any)
+    mockResolveWorkspacePath.mockReturnValueOnce(workspacePath)
+    vi.mocked(agentSessionService.create).mockResolvedValueOnce(session as any)
+    simulateStream([{ type: 'text-delta', delta: 'OK' }])
+
+    await handleIncomingAndFlush(adapter, {
+      chatId: 'chat-1',
+      userId: 'user-1',
+      userName: 'User',
+      text: 'Hi',
+      images: [{ data: 'aGVsbG8=', media_type: 'image/png' }]
+    })
+
+    expect(mockGetAgentSessionDriver).toHaveBeenCalledWith('pi')
+    expect(mockValidateAgentSession).toHaveBeenCalledWith(expect.objectContaining({ id: 'session-1' }))
+    expect(mockResolveWorkspacePath).toHaveBeenCalledWith(expect.objectContaining({ id: 'session-1' }))
+    expect(mockStartAgentSessionRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userParts: [
+          {
+            type: 'text',
+            text: expect.stringContaining(path.join(workspacePath, '.cherry-studio-pi', 'channel-images'))
+          }
+        ]
+      })
+    )
   })
 
   // stream-context-5: a workspace error is thrown before streaming starts, so onStreamError

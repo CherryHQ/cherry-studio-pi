@@ -8,7 +8,7 @@ import { agentSessionService } from '@data/services/AgentSessionService'
 import { loggerService } from '@logger'
 import { buildAgentSessionTopicId } from '@main/ai/agentSession/topic'
 import { isAgentSessionWorkspaceError } from '@main/ai/runtime/agentSessionWorkspace'
-import { prepareClaudeCodeWorkspaceDirectory } from '@main/ai/runtime/claudeCode/settingsBuilder'
+import { runtimeDriverRegistry } from '@main/ai/runtime/registry'
 import { ChannelAdapterListener, type StreamListener } from '@main/ai/streamManager'
 import { startAgentSessionRun } from '@main/ai/streamManager/api/startAgentSessionRun'
 import { application } from '@main/core/application'
@@ -199,11 +199,16 @@ export class ChannelMessageHandler {
       // session.configuration in-place; with config now living on agent, this
       // override needs to flow as a per-dispatch option instead. Tracked separately.
 
-      const workDir = session.workspace?.path
+      let workDir = session.workspace?.path
       const hasAttachments = !!(message.images?.length || message.files?.length)
       if (hasAttachments) {
         try {
-          await prepareClaudeCodeWorkspaceDirectory(session)
+          const driver = runtimeDriverRegistry.getAgentSessionDriver(agent.type)
+          if (!driver) {
+            throw new Error(`Unsupported agent runtime type: ${agent.type}`)
+          }
+          await driver.validateSession(session)
+          workDir = (await driver.resolveWorkspacePath?.(session)) ?? workDir
         } catch (error) {
           if (isAgentSessionWorkspaceError(error)) {
             await adapter.sendMessage(message.chatId, error.message).catch(() => {})

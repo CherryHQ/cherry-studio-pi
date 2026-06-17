@@ -25,7 +25,7 @@ const logger = loggerService.withContext('PiRuntimeDriver')
 
 const PI_SYSTEM_WORKSPACE_DIR = 'system-sessions'
 
-function resolvePiRuntimeWorkspacePath(session: Pick<AgentSessionEntity, 'id' | 'workspace'>): string {
+export function resolvePiRuntimeWorkspacePath(session: Pick<AgentSessionEntity, 'id' | 'workspace'>): string {
   return session.workspace?.path ?? path.join(getDataPath('Agents'), PI_SYSTEM_WORKSPACE_DIR, session.id)
 }
 
@@ -207,6 +207,10 @@ export class PiRuntimeDriver implements AgentSessionRuntimeDriver {
   async validateSession(session: AgentSessionEntity): Promise<void> {
     const cwd = resolvePiRuntimeWorkspacePath(session)
     await ensureAgentSessionWorkspaceDirectory(session.id, cwd, { runtime: 'pi' })
+  }
+
+  resolveWorkspacePath(session: AgentSessionEntity): string {
+    return resolvePiRuntimeWorkspacePath(session)
   }
 
   async listAvailableTools(mcpIds: string[]): Promise<Tool[]> {

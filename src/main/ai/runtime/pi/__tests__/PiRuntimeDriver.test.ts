@@ -93,10 +93,13 @@ describe('PiRuntimeDriver validateSession', () => {
     const driver = new PiRuntimeDriver()
     const root = await createTempRoot()
     process.env.CHERRY_STUDIO_STORAGE_V2_ROOT = root
+    const session = createSession(null)
 
-    await driver.validateSession(createSession(null))
+    await driver.validateSession(session)
 
-    expect((await stat(path.join(root, 'Agents', 'system-sessions', 'session-1'))).isDirectory()).toBe(true)
+    const expectedPath = path.join(root, 'Agents', 'system-sessions', 'session-1')
+    expect(driver.resolveWorkspacePath(session)).toBe(expectedPath)
+    expect((await stat(expectedPath)).isDirectory()).toBe(true)
   })
 
   it('creates a missing workspace directory before running Pi agent sessions', async () => {

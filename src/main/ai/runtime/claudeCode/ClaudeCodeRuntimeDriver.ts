@@ -474,6 +474,10 @@ export class ClaudeCodeRuntimeDriver implements AgentSessionRuntimeDriver {
     await prepareClaudeCodeWorkspaceDirectory(session)
   }
 
+  resolveWorkspacePath(session: AgentSessionEntity): string | undefined {
+    return session.workspace?.path
+  }
+
   async listAvailableTools(mcpIds: string[]): Promise<Tool[]> {
     const catalog = await listClaudeAgentToolDescriptors({ mcps: mcpIds })
     const policy = buildClaudeToolPolicy({})
