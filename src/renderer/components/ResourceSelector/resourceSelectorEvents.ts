@@ -20,6 +20,18 @@ export function getModalSurfaceElements(): Element[] {
   return Array.from(document.querySelectorAll('[data-slot="dialog-content"], [role="dialog"], [aria-modal="true"]'))
 }
 
+function isHiddenModalSurface(element: Element) {
+  if (!(element instanceof HTMLElement)) return false
+  if (element.hidden || element.getAttribute('aria-hidden') === 'true') return true
+
+  const style = typeof window !== 'undefined' ? window.getComputedStyle(element) : undefined
+  return style?.display === 'none' || style?.visibility === 'hidden'
+}
+
+export function getActiveModalSurfaceElements(): Element[] {
+  return getModalSurfaceElements().filter((element) => !isHiddenModalSurface(element))
+}
+
 export function closeTransientResourceSelectors() {
   requestCloseResourceSelectors()
   if (typeof document === 'undefined') return

@@ -177,6 +177,36 @@ describe('ResourceSelectorShell', () => {
       }
     })
 
+    it('closes when a pre-mounted hidden dialog surface becomes visible', async () => {
+      const dialogContent = document.createElement('div')
+      dialogContent.setAttribute('data-slot', 'dialog-content')
+      dialogContent.hidden = true
+      document.body.appendChild(dialogContent)
+
+      try {
+        render(
+          <ResourceSelectorShell
+            trigger={<button type="button">Open</button>}
+            items={ITEMS}
+            pinnedIds={[]}
+            onTogglePin={vi.fn()}
+            labels={LABELS}
+            value={null}
+            onChange={vi.fn()}
+          />
+        )
+
+        openPopover()
+        expect(screen.getByPlaceholderText('Search')).toBeInTheDocument()
+
+        dialogContent.hidden = false
+
+        await waitFor(() => expect(screen.queryByPlaceholderText('Search')).not.toBeInTheDocument())
+      } finally {
+        dialogContent.remove()
+      }
+    })
+
     it('closes another open selector before opening the next selector', () => {
       const firstLabels = { ...LABELS, searchPlaceholder: 'Search first' }
       const secondLabels = { ...LABELS, searchPlaceholder: 'Search second' }

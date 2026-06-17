@@ -8,15 +8,18 @@ import AgentSessionInputbar from '../AgentSessionInputbar'
 type Deferred<T> = {
   promise: Promise<T>
   resolve: (value: T) => void
+  reject: (reason?: unknown) => void
 }
 
 function createDeferred<T>(): Deferred<T> {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((promiseResolve) => {
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
     resolve = promiseResolve
+    reject = promiseReject
   })
 
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 const { agentState, cacheServiceMock, inputbarSnapshots, inputbarToolModelIds, modelState, setTimeoutTimerMock } =
@@ -296,6 +299,51 @@ describe('AgentSessionInputbar', () => {
 
     sendDeferred.resolve()
     await waitFor(() => expect(screen.getByTestId('agent-session-text')).toHaveTextContent(''))
+  })
+
+  it('clears the draft immediately while an agent send is still running', async () => {
+    cacheServiceMock.getCasual.mockReturnValue('hello')
+    const sendDeferred = createDeferred<void>()
+    const sendMessage = vi.fn().mockReturnValue(sendDeferred.promise)
+
+    render(
+      <AgentSessionInputbar
+        agentId="agent-1"
+        sessionId="session-1"
+        sendMessage={sendMessage}
+        stop={vi.fn()}
+        isStreaming={false}
+      />
+    )
+
+    expect(screen.getByTestId('agent-session-text')).toHaveTextContent('hello')
+
+    fireEvent.click(screen.getByTestId('agent-session-inputbar'))
+
+    await waitFor(() => expect(screen.getByTestId('agent-session-text')).toHaveTextContent(''))
+    expect(sendMessage).toHaveBeenCalledTimes(1)
+
+    sendDeferred.resolve()
+  })
+
+  it('restores the draft when an agent send fails before the stream starts', async () => {
+    cacheServiceMock.getCasual.mockReturnValue('hello')
+    const sendMessage = vi.fn().mockRejectedValue(new Error('preflight failed'))
+
+    render(
+      <AgentSessionInputbar
+        agentId="agent-1"
+        sessionId="session-1"
+        sendMessage={sendMessage}
+        stop={vi.fn()}
+        isStreaming={false}
+      />
+    )
+
+    fireEvent.click(screen.getByTestId('agent-session-inputbar'))
+
+    await waitFor(() => expect(screen.getByTestId('agent-session-text')).toHaveTextContent('hello'))
+    expect(window.toast.error).toHaveBeenCalledWith('chat.input.send_failed')
   })
 
   it('keeps input tools mounted from the saved agent model while the model catalog is empty', async () => {

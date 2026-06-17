@@ -385,12 +385,19 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
     logger.info('Starting to send message')
 
     sendInFlightRef.current = true
+    const textToSend = text
+    const filesToSend = files
+    setText('')
+    setFiles([])
+    setTimeoutTimer('agentSession_sendMessage_resize', () => resizeTextArea(), 0)
+    focusTextarea()
+
     try {
       // For agent sessions, append file paths to the text content instead of uploading files
-      let messageText = text
-      if (files.length > 0) {
-        const filePaths = files.map((file) => file.path).join('\n')
-        messageText = text ? `${text}\n\nAttached files:\n${filePaths}` : `Attached files:\n${filePaths}`
+      let messageText = textToSend
+      if (filesToSend.length > 0) {
+        const filePaths = filesToSend.map((file) => file.path).join('\n')
+        messageText = textToSend ? `${textToSend}\n\nAttached files:\n${filePaths}` : `Attached files:\n${filePaths}`
       }
 
       await chatSendMessage(
@@ -407,15 +414,15 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
       // Emit event to trigger scroll to bottom in AgentSessionMessages
       void EventEmitter.emit(EVENT_NAMES.SEND_MESSAGE, { topicId: sessionTopicId })
 
-      // Clear text and files after successful send
       if (mountedRef.current) {
-        setText('')
-        setFiles([])
         focusTextarea()
       }
     } catch (error) {
       logger.warn('Failed to send message:', error as Error)
       if (mountedRef.current) {
+        setText(textToSend)
+        setFiles(filesToSend)
+        setTimeoutTimer('agentSession_restoreFailedMessage', () => resizeTextArea(), 0)
         window.toast.error(t('chat.input.send_failed'))
       }
     } finally {
@@ -434,6 +441,8 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
     text,
     files,
     focusTextarea,
+    resizeTextArea,
+    setTimeoutTimer,
     t
   ])
 

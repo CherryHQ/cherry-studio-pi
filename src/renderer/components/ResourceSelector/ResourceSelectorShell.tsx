@@ -29,7 +29,7 @@ import {
 import { flushSync } from 'react-dom'
 
 import {
-  getModalSurfaceElements,
+  getActiveModalSurfaceElements,
   getResourceSelectorForceCloseSource,
   requestCloseResourceSelectors,
   RESOURCE_SELECTOR_FORCE_CLOSE_EVENT
@@ -255,11 +255,11 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
   useEffect(() => {
     if (!open || typeof document === 'undefined' || typeof MutationObserver === 'undefined') return undefined
 
-    const knownSurfaces = new WeakSet(getModalSurfaceElements())
+    const knownSurfaces = new WeakSet(getActiveModalSurfaceElements())
     let closed = false
     const closeIfNewModalSurfaceAppears = () => {
       if (closed) return
-      const hasNewModalSurface = getModalSurfaceElements().some((element) => !knownSurfaces.has(element))
+      const hasNewModalSurface = getActiveModalSurfaceElements().some((element) => !knownSurfaces.has(element))
       if (!hasNewModalSurface) return
 
       closed = true
@@ -270,7 +270,7 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['aria-modal', 'data-slot', 'role']
+      attributeFilter: ['aria-hidden', 'aria-modal', 'class', 'data-slot', 'hidden', 'role', 'style']
     })
     window.queueMicrotask(closeIfNewModalSurfaceAppears)
 
