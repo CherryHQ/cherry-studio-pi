@@ -66,8 +66,14 @@ export async function buildClaudeCodeQueryRequestForAgentSession(
 function resolveAnthropicBaseUrl(provider: Provider, baseUrl: string) {
   // Claude SDK manages API versioning itself — ANTHROPIC_BASE_URL must not include /v1.
   const anthropicEndpointUrl = provider.endpointConfigs?.[ENDPOINT_TYPE.ANTHROPIC_MESSAGES]?.baseUrl
-  const rawBaseUrl = anthropicEndpointUrl || baseUrl
+  const legacyAnthropicApiHost = getLegacyAnthropicApiHost(provider)
+  const rawBaseUrl = anthropicEndpointUrl || legacyAnthropicApiHost || baseUrl
   return rawBaseUrl ? formatApiHost(rawBaseUrl, false) : undefined
+}
+
+function getLegacyAnthropicApiHost(provider: Provider): string {
+  const value = (provider as Provider & { anthropicApiHost?: unknown }).anthropicApiHost
+  return typeof value === 'string' ? value.trim() : ''
 }
 
 function mergeRuntimeSettings(

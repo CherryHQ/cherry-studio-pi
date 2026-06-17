@@ -94,4 +94,21 @@ describe('buildClaudeCodeQueryRequestForAgentSession resume-token precedence', (
     expect(request?.options.resume).toBeUndefined()
     expect(mocks.getLastRuntimeResumeToken).toHaveBeenCalledWith('session-1')
   })
+
+  it('uses the legacy anthropicApiHost when the model endpoint resolves to the OpenAI host', async () => {
+    mocks.getProviderByProviderId.mockResolvedValue({
+      id: 'deepseek',
+      endpointConfigs: undefined,
+      anthropicApiHost: ' https://api.deepseek.com/anthropic/ '
+    })
+    mocks.resolveEffectiveEndpoint.mockReturnValue({ baseUrl: 'https://api.deepseek.com/v1' })
+
+    const request = await buildClaudeCodeQueryRequestForAgentSession('session-1')
+
+    expect(request?.settings.env).toMatchObject({
+      ANTHROPIC_API_KEY: 'api-key',
+      ANTHROPIC_AUTH_TOKEN: 'api-key',
+      ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic'
+    })
+  })
 })
