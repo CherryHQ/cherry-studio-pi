@@ -28,7 +28,7 @@
     "build:linux:arm64": "dotenv npm run build && electron-builder --linux --arm64 --publish never",
     "build:linux:x64": "dotenv npm run build && electron-builder --linux --x64 --publish never",
     "release": "node scripts/version.js",
-    "publish": "pnpm build:check && pnpm release patch push",
+    "publish": "node scripts/guard-local-publish.js",
     "publish:artifacts": "cd packages/artifacts && npm publish && cd -",
     "analyze:renderer": "VISUALIZER_RENDERER=true pnpm build",
     "analyze:main": "VISUALIZER_MAIN=true pnpm build",

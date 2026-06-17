@@ -1,9 +1,6 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       tag:
@@ -42,15 +39,15 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+  group: release-${{ github.event.inputs.tag }}
   cancel-in-progress: false
 
 jobs:
   prepare:
     name: Prepare release metadata
-    # A manual run can create and push the missing release tag from this workflow.
-    # That tag push would otherwise trigger a second full Release run for the same tag.
-    if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
+    # Releases are intentionally manual-only. Pushing a tag must not publish a
+    # GitHub Release; this keeps version bumps and public releases as separate,
+    # explicit actions.
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.release.outputs.tag }}
@@ -68,22 +65,16 @@ jobs:
         id: release
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ github.event.inputs.tag }}"
-            CONFIRM_TAG="${{ github.event.inputs.confirm_tag }}"
-            DRAFT="${{ inputs.draft }}"
-            PRERELEASE="${{ inputs.prerelease }}"
+          TAG="${{ github.event.inputs.tag }}"
+          CONFIRM_TAG="${{ github.event.inputs.confirm_tag }}"
+          DRAFT="${{ inputs.draft }}"
+          PRERELEASE="${{ inputs.prerelease }}"
 
-            if [ "$CONFIRM_TAG" != "$TAG" ]; then
-              echo "Release tag confirmation mismatch."
-              echo "tag=$TAG"
-              echo "confirm_tag=$CONFIRM_TAG"
-              exit 1
-            fi
-          else
-            TAG="${GITHUB_REF_NAME}"
-            DRAFT="false"
-            PRERELEASE="false"
+          if [ "$CONFIRM_TAG" != "$TAG" ]; then
+            echo "Release tag confirmation mismatch."
+            echo "tag=$TAG"
+            echo "confirm_tag=$CONFIRM_TAG"
+            exit 1
           fi
 
           if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
@@ -103,7 +94,6 @@ jobs:
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
 
       - name: Create manual tag if needed
-        if: github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           TAG="${{ steps.release.outputs.tag }}"
@@ -137,7 +127,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event_name == 'push' && '[{"platform":"mac","os":"macos-latest","build":"npm run build && pnpm exec electron-builder --mac --arm64 --x64 --publish never"},{"platform":"windows","os":"windows-2022","build":"npm run build && pnpm exec electron-builder --win --x64 --arm64 --publish never"},{"platform":"linux","os":"ubuntu-latest","build":"npm run build && pnpm exec electron-builder --linux --x64 --arm64 --publish never"}]' || github.event.inputs.platform == 'all' && '[{"platform":"mac","os":"macos-latest","build":"npm run build && pnpm exec electron-builder --mac --arm64 --x64 --publish never"},{"platform":"windows","os":"windows-2022","build":"npm run build && pnpm exec electron-builder --win --x64 --arm64 --publish never"},{"platform":"linux","os":"ubuntu-latest","build":"npm run build && pnpm exec electron-builder --linux --x64 --arm64 --publish never"}]' || github.event.inputs.platform == 'mac' && '[{"platform":"mac","os":"macos-latest","build":"npm run build && pnpm exec electron-builder --mac --arm64 --x64 --publish never"}]' || github.event.inputs.platform == 'windows' && '[{"platform":"windows","os":"windows-2022","build":"npm run build && pnpm exec electron-builder --win --x64 --arm64 --publish never"}]' || github.event.inputs.platform == 'linux' && '[{"platform":"linux","os":"ubuntu-latest","build":"npm run build && pnpm exec electron-builder --linux --x64 --arm64 --publish never"}]' || '[]') }}
+        include: ${{ fromJSON(github.event.inputs.platform == 'all' && '[{"platform":"mac","os":"macos-latest","build":"npm run build && pnpm exec electron-builder --mac --arm64 --x64 --publish never"},{"platform":"windows","os":"windows-2022","build":"npm run build && pnpm exec electron-builder --win --x64 --arm64 --publish never"},{"platform":"linux","os":"ubuntu-latest","build":"npm run build && pnpm exec electron-builder --linux --x64 --arm64 --publish never"}]' || github.event.inputs.platform == 'mac' && '[{"platform":"mac","os":"macos-latest","build":"npm run build && pnpm exec electron-builder --mac --arm64 --x64 --publish never"}]' || github.event.inputs.platform == 'windows' && '[{"platform":"windows","os":"windows-2022","build":"npm run build && pnpm exec electron-builder --win --x64 --arm64 --publish never"}]' || github.event.inputs.platform == 'linux' && '[{"platform":"linux","os":"ubuntu-latest","build":"npm run build && pnpm exec electron-builder --linux --x64 --arm64 --publish never"}]' || '[]') }}
 
     steps:
       - name: Check out release tag

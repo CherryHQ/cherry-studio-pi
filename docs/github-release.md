@@ -4,14 +4,17 @@ The `Release` workflow builds Cherry Studio Pi installers for macOS, Windows, an
 
 ## Trigger
 
-Prefer running it manually from **Actions -> Release -> Run workflow**. Provide a tag such as `v1.9.7` and type the
-same value into `confirm_tag`. Manual runs can build `all`, `mac`, `windows`, or `linux`.
+Run it manually from **Actions -> Release -> Run workflow**. Provide a tag such as `v1.9.7` and type the same value
+into `confirm_tag`. Manual runs can build `all`, `mac`, `windows`, or `linux`.
+
+Pushing a tag no longer publishes a GitHub Release. This repository keeps version/tag preparation and public release
+publishing as separate actions so one local command cannot accidentally create multiple public releases.
 
 If you need to create the next patch tag locally, first preview the next version from the current highest remote tag,
-then run the release helper with a one-shot confirmation for the exact tag:
+then run the release helper with a one-shot confirmation for the exact tag. Do not pass `push`:
 
 ```bash
-CHERRY_STUDIO_PI_RELEASE_CONFIRM=v1.9.7 pnpm release patch push
+CHERRY_STUDIO_PI_RELEASE_CONFIRM=v1.9.7 pnpm release patch
 ```
 
 The `CHERRY_STUDIO_PI_RELEASE_CONFIRM` value must match the tag the helper is about to create. The helper requires
@@ -19,13 +22,15 @@ this confirmation even when `push` is omitted, so it cannot leave behind acciden
 Reusing the same confirmation cannot create a second patch release, because the next computed tag changes and the
 helper exits before modifying files.
 
-Avoid direct `git tag && git push` unless you intentionally bypass the local guard. Release tag pushes must use an
-annotated tag, and tag pushes always build all platforms:
+Avoid direct `git tag && git push` unless you intentionally bypass the local guard. Release tags must use annotated
+tags, but pushing a tag alone does not build or publish installers:
 
 ```bash
 git tag -a v1.9.7 -m "Version 1.9.7"
 git push origin v1.9.7
 ```
+
+After the tag exists, publish exactly once through the manual `Release` workflow using the same `tag` and `confirm_tag`.
 
 ## Output
 

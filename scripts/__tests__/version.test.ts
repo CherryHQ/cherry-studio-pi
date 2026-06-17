@@ -14,7 +14,13 @@ describe('version script', () => {
     const { parseVersionArgs } = loadInternal()
 
     expect(parseVersionArgs([])).toEqual({ shouldPush: false, versionType: 'patch' })
-    expect(parseVersionArgs(['minor', 'push'])).toEqual({ shouldPush: true, versionType: 'minor' })
+    expect(parseVersionArgs(['minor'])).toEqual({ shouldPush: false, versionType: 'minor' })
+  })
+
+  it('rejects local release tag pushes', () => {
+    const { parseVersionArgs } = loadInternal()
+
+    expect(() => parseVersionArgs(['minor', 'push'])).toThrow('Local release tag pushing is disabled')
   })
 
   it('rejects unsupported version bump types', () => {

@@ -17,6 +17,16 @@ function parseVersionArgs(args) {
   const versionType = args[0] || 'patch'
   const shouldPush = args.includes('push')
 
+  if (shouldPush) {
+    throw new Error(
+      [
+        'Local release tag pushing is disabled.',
+        'Create or reuse the exact release tag through the GitHub Actions Release workflow instead.',
+        'This prevents one local command from accidentally publishing multiple GitHub Releases.'
+      ].join(' ')
+    )
+  }
+
   // 验证版本类型
   if (!['patch', 'minor', 'major'].includes(versionType)) {
     throw new Error('Invalid version type. Use patch, minor, or major.')
