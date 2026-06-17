@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next'
 import AgentChat from './AgentChat'
 import AgentNavbar from './AgentNavbar'
 import AgentSidePanel from './AgentSidePanel'
+import AgentSidePanelDrawer from './components/AgentSidePanelDrawer'
 import { AgentEmpty } from './components/status'
 
 const logger = loggerService.withContext('AgentPage')
@@ -75,6 +76,18 @@ const AgentPage = () => {
       })
     }
   }, [showSidebar])
+
+  useEffect(() => {
+    if (showSidebar) {
+      AgentSidePanelDrawer.hide()
+    }
+  }, [showSidebar])
+
+  useEffect(() => {
+    return () => {
+      AgentSidePanelDrawer.hide()
+    }
+  }, [])
 
   if (agents && agents.length === 0) {
     return (

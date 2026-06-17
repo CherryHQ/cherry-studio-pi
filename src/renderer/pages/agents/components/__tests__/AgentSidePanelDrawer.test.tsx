@@ -32,6 +32,22 @@ describe('AgentSidePanelDrawer', () => {
     await expect(shown).resolves.toBeUndefined()
   })
 
+  it('keeps repeated show calls idempotent while the drawer is active', async () => {
+    const { default: AgentSidePanelDrawer } = await import('../AgentSidePanelDrawer')
+
+    const first = AgentSidePanelDrawer.show()
+    const second = AgentSidePanelDrawer.show()
+
+    expect(first).toBe(second)
+    expect(mocks.topView.show).toHaveBeenCalledTimes(1)
+
+    const [element] = mocks.topView.show.mock.calls[0]
+    ;(element as ReactElement<{ resolve: () => void }>).props.resolve()
+
+    await expect(first).resolves.toBeUndefined()
+    await expect(second).resolves.toBeUndefined()
+  })
+
   it('hides the stable TopView key before the drawer component mounts', async () => {
     const { default: AgentSidePanelDrawer } = await import('../AgentSidePanelDrawer')
 
@@ -39,5 +55,28 @@ describe('AgentSidePanelDrawer', () => {
 
     expect(mocks.topView.hide).toHaveBeenCalledTimes(1)
     expect(mocks.topView.hide).toHaveBeenCalledWith('AgentSidePanelDrawer')
+  })
+
+  it('settles a pending show promise if hidden before the drawer mounts', async () => {
+    const { default: AgentSidePanelDrawer } = await import('../AgentSidePanelDrawer')
+
+    const shown = AgentSidePanelDrawer.show()
+    AgentSidePanelDrawer.hide()
+
+    await expect(shown).resolves.toBeUndefined()
+    expect(mocks.topView.hide).toHaveBeenCalledWith('AgentSidePanelDrawer')
+  })
+
+  it('uses the mounted close handler when available', async () => {
+    const { default: AgentSidePanelDrawer } = await import('../AgentSidePanelDrawer')
+    const close = vi.fn()
+
+    AgentSidePanelDrawer.registerCloseHandler(close)
+    AgentSidePanelDrawer.hide()
+
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(mocks.topView.hide).not.toHaveBeenCalled()
+
+    AgentSidePanelDrawer.unregisterCloseHandler(close)
   })
 })
