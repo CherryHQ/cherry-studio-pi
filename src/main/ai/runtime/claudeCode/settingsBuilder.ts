@@ -55,7 +55,7 @@ import {
   SOUL_MODE_DISALLOWED_TOOLS
 } from '@shared/ai/claudecode/constants'
 import { toCamelCase } from '@shared/ai/tools/mcpToolName'
-import { APP_NAME } from '@shared/config/constant'
+import { API_SERVER_DEFAULTS, APP_NAME } from '@shared/config/constant'
 import { languageEnglishNameMap } from '@shared/config/languages'
 import type { AgentEntity } from '@shared/data/api/schemas/agents'
 import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
@@ -440,9 +440,10 @@ async function buildEnvironment(
   const loginShellEnv = await getLoginShellEnvironment()
   const customGitBashPath = isWin ? autoDiscoverGitBash() : null
   const bunPath = await getBinaryPath('bun')
+  const apiGatewayCliEnv = await buildApiGatewayCliEnvironment()
 
-  // API key and base URL are injected by the agent-session runtime query builder.
-  // This function only builds agent-specific env vars.
+  // Anthropic provider credentials are injected by the agent-session runtime query builder.
+  // The app API Gateway credentials below are for bundled Cherry Studio Pi CLI skills.
 
   if (!agent.model) {
     throw new Error(`buildEnvironment: agent ${agent.id} has no model`)
@@ -482,6 +483,7 @@ async function buildEnvironment(
     ENABLE_TOOL_SEARCH: 'auto',
     CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
     CHERRY_STUDIO_BUN_PATH: bunPath,
+    ...apiGatewayCliEnv,
     ...(customGitBashPath ? { CLAUDE_CODE_GIT_BASH_PATH: customGitBashPath } : {})
   }
 
@@ -505,6 +507,10 @@ async function buildEnvironment(
       'CHERRY_STUDIO_NODE_PROXY_RULES',
       'CHERRY_STUDIO_NODE_PROXY_BYPASS_RULES',
       'CHERRY_STUDIO_BUN_PATH',
+      'CHERRY_STUDIO_API_BASE',
+      'CHERRY_STUDIO_API_KEY',
+      'PERRY_STUDIO_API_BASE',
+      'PERRY_STUDIO_API_KEY',
       'NODE_OPTIONS',
       '__PROTO__',
       'CONSTRUCTOR',
@@ -520,6 +526,46 @@ async function buildEnvironment(
   }
 
   return env
+}
+
+async function buildApiGatewayCliEnvironment(): Promise<Record<string, string>> {
+  try {
+    const apiGatewayService = application.get('ApiGatewayService')
+    const apiKey = await apiGatewayService.ensureValidApiKey()
+    const config = apiGatewayService.getCurrentConfig()
+    const host = normalizeApiGatewayCliHost(config.host)
+    const port = normalizeApiGatewayCliPort(config.port)
+    const baseUrl = `http://${formatHostForUrl(host)}:${port}`
+
+    return {
+      PERRY_STUDIO_API_KEY: apiKey,
+      PERRY_STUDIO_API_BASE: baseUrl,
+      CHERRY_STUDIO_API_KEY: apiKey,
+      CHERRY_STUDIO_API_BASE: baseUrl
+    }
+  } catch (error) {
+    logger.warn('Failed to prepare Cherry Studio Pi CLI environment', { error })
+    return {}
+  }
+}
+
+function normalizeApiGatewayCliHost(host: unknown): string {
+  const rawHost = typeof host === 'string' && host.trim() ? host.trim() : API_SERVER_DEFAULTS.HOST
+  const unbracketedHost = rawHost.replace(/^\[(.*)]$/, '$1')
+
+  if (unbracketedHost === '0.0.0.0') return '127.0.0.1'
+  if (unbracketedHost === '::') return '::1'
+
+  return unbracketedHost
+}
+
+function normalizeApiGatewayCliPort(port: unknown): number {
+  const parsedPort = typeof port === 'number' ? port : Number(port)
+  return Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65535 ? parsedPort : API_SERVER_DEFAULTS.PORT
+}
+
+function formatHostForUrl(host: string): string {
+  return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
 }
 
 async function discoverPlugins(cwd: string, agentId: string): Promise<SdkPluginConfig[] | undefined> {

@@ -17,7 +17,9 @@ const mocks = vi.hoisted(() => ({
   getPathStatus: vi.fn(),
   getAppLanguage: vi.fn(),
   resolveRequire: vi.fn(),
-  loggerWarn: vi.fn()
+  loggerWarn: vi.fn(),
+  apiGatewayEnsureValidApiKey: vi.fn(),
+  apiGatewayGetCurrentConfig: vi.fn()
 }))
 
 vi.mock('node:module', async (importOriginal) => {
@@ -190,6 +192,12 @@ describe('buildClaudeCodeSessionSettings', () => {
       if (name === 'PreferenceService') {
         return { get: vi.fn(() => undefined) }
       }
+      if (name === 'ApiGatewayService') {
+        return {
+          ensureValidApiKey: mocks.apiGatewayEnsureValidApiKey,
+          getCurrentConfig: mocks.apiGatewayGetCurrentConfig
+        }
+      }
       if (name === 'McpCatalogService') {
         return { listTools: vi.fn(async () => []) }
       }
@@ -202,6 +210,8 @@ describe('buildClaudeCodeSessionSettings', () => {
     mocks.getPathStatus.mockResolvedValue({ ok: true, kind: 'directory' })
     mocks.getAppLanguage.mockReturnValue('en-US')
     mocks.reconcileAgentSkills.mockResolvedValue(undefined)
+    mocks.apiGatewayEnsureValidApiKey.mockResolvedValue('cs-sk-agent-cli')
+    mocks.apiGatewayGetCurrentConfig.mockReturnValue({ host: '0.0.0.0', port: 24444, apiKey: 'cs-sk-agent-cli' })
   })
 
   it('reconciles enabled skills into the session workspace before returning settings', async () => {
@@ -261,6 +271,62 @@ describe('buildClaudeCodeSessionSettings', () => {
       ANTHROPIC_MODEL: 'claude-sonnet-api',
       ANTHROPIC_DEFAULT_SONNET_MODEL: 'claude-sonnet-api',
       ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-haiku'
+    })
+  })
+
+  it('injects API Gateway env vars for bundled Cherry Studio Pi CLI skills', async () => {
+    const session = {
+      id: 'session-1',
+      agentId: 'agent-1',
+      workspace: { type: 'user', path: '/workspace/project' }
+    }
+
+    const settings = await buildClaudeCodeSessionSettings(session as never, {} as never)
+
+    expect(mocks.apiGatewayEnsureValidApiKey).toHaveBeenCalled()
+    expect(settings.env).toMatchObject({
+      PERRY_STUDIO_API_KEY: 'cs-sk-agent-cli',
+      PERRY_STUDIO_API_BASE: 'http://127.0.0.1:24444',
+      CHERRY_STUDIO_API_KEY: 'cs-sk-agent-cli',
+      CHERRY_STUDIO_API_BASE: 'http://127.0.0.1:24444'
+    })
+  })
+
+  it('blocks user env vars from overriding bundled Cherry Studio Pi CLI credentials', async () => {
+    mocks.getAgent.mockResolvedValue({
+      id: 'agent-1',
+      type: 'claude-code',
+      instructions: 'Follow instructions.',
+      model: 'anthropic::claude-sonnet',
+      planModel: 'anthropic::claude-sonnet',
+      smallModel: 'anthropic::claude-haiku',
+      mcps: [],
+      allowedTools: [],
+      configuration: {
+        env_vars: {
+          PERRY_STUDIO_API_KEY: 'user-key',
+          PERRY_STUDIO_API_BASE: 'http://malicious.invalid',
+          CHERRY_STUDIO_API_KEY: 'legacy-user-key',
+          CHERRY_STUDIO_API_BASE: 'http://legacy-malicious.invalid'
+        }
+      }
+    })
+    const session = {
+      id: 'session-1',
+      agentId: 'agent-1',
+      workspace: { type: 'user', path: '/workspace/project' }
+    }
+
+    const settings = await buildClaudeCodeSessionSettings(session as never, {} as never)
+
+    expect(settings.env).toMatchObject({
+      PERRY_STUDIO_API_KEY: 'cs-sk-agent-cli',
+      PERRY_STUDIO_API_BASE: 'http://127.0.0.1:24444',
+      CHERRY_STUDIO_API_KEY: 'cs-sk-agent-cli',
+      CHERRY_STUDIO_API_BASE: 'http://127.0.0.1:24444'
+    })
+    expect(mocks.loggerWarn).toHaveBeenCalledWith('Blocked user env var override', {
+      key: 'PERRY_STUDIO_API_KEY'
     })
   })
 
