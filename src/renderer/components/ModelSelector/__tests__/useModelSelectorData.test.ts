@@ -269,6 +269,42 @@ describe('useModelSelectorData', () => {
     expect(pinnedRows.map((row) => row.modelId)).toEqual(['openai::gpt-4'])
   })
 
+  it('normalizes pinned apiModelId aliases to canonical model ids before rendering', () => {
+    wireDeps({
+      providers: [makeProvider('deepseek')],
+      models: [
+        makeModel('deepseek-chat-internal', 'deepseek', {
+          apiModelId: 'deepseek-chat',
+          name: 'DeepSeek Chat'
+        })
+      ],
+      pinnedIds: ['deepseek::deepseek-chat']
+    })
+
+    const { result } = renderHook(() => useModelSelectorData({ searchText: '' }))
+
+    const pinnedRows = result.current.modelItems.filter((item) => item.isPinned)
+    const providerRows = result.current.modelItems.filter((item) => item.provider.id === 'deepseek' && !item.isPinned)
+
+    expect(result.current.pinnedIds).toEqual(['deepseek::deepseek-chat-internal'])
+    expect(pinnedRows.map((row) => row.modelId)).toEqual(['deepseek::deepseek-chat-internal'])
+    expect(providerRows).toHaveLength(0)
+  })
+
+  it('dedupes pinned canonical ids when both canonical and alias ids are stored', () => {
+    wireDeps({
+      providers: [makeProvider('deepseek')],
+      models: [makeModel('deepseek-chat-internal', 'deepseek', { apiModelId: 'deepseek-chat' })],
+      pinnedIds: ['deepseek::deepseek-chat', 'deepseek::deepseek-chat-internal']
+    })
+
+    const { result } = renderHook(() => useModelSelectorData({ searchText: '' }))
+
+    const pinnedRows = result.current.modelItems.filter((item) => item.isPinned)
+    expect(result.current.pinnedIds).toEqual(['deepseek::deepseek-chat-internal'])
+    expect(pinnedRows).toHaveLength(1)
+  })
+
   it('collapses pinned group back into provider group while searching', () => {
     wireDeps({
       providers: [makeProvider('openai')],

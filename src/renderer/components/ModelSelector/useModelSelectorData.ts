@@ -74,6 +74,30 @@ function buildSelectableModelsById(models: Model[]) {
   return selectableModelsById
 }
 
+function resolvePinnedModelIds(
+  rawPinnedIds: readonly string[],
+  selectableModelsById: ReadonlyMap<UniqueModelId, Model>
+) {
+  const pinnedIds: UniqueModelId[] = []
+  const seen = new Set<UniqueModelId>()
+
+  for (const rawPinnedId of rawPinnedIds) {
+    if (!isUniqueModelId(rawPinnedId)) {
+      continue
+    }
+
+    const model = selectableModelsById.get(rawPinnedId)
+    if (!model || seen.has(model.id)) {
+      continue
+    }
+
+    seen.add(model.id)
+    pinnedIds.push(model.id)
+  }
+
+  return pinnedIds
+}
+
 function sortProvidersByPriority(providers: Provider[], prioritizedProviderIds: string[]) {
   if (prioritizedProviderIds.length === 0) {
     return providers
@@ -115,7 +139,6 @@ export function useModelSelectorData({
     [refetchModels, refetchProviders]
   )
 
-  const pinnedIds = useMemo(() => rawPinnedIds.filter(isUniqueModelId), [rawPinnedIds])
   const availableProviders = useMemo(() => providers.filter((provider) => provider.isEnabled), [providers])
   const availableModels = useMemo(
     () => models.filter((model) => model.isEnabled !== false && model.isHidden !== true),
@@ -162,6 +185,11 @@ export function useModelSelectorData({
   const selectableModelsById = useMemo(() => {
     return buildSelectableModelsById([...modelsByProvider.values()].flat())
   }, [modelsByProvider])
+
+  const pinnedIds = useMemo(
+    () => resolvePinnedModelIds(rawPinnedIds, selectableModelsById),
+    [rawPinnedIds, selectableModelsById]
+  )
 
   // 只做去重 + 剔除不可选的脏 ID，不做数量截断。
   // 截断只影响 UI 的"显示为选中"态，不能让截断污染到对外回传的业务数据。
