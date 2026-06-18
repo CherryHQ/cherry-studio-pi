@@ -211,6 +211,12 @@ function getWillNavigateListener(
   return call[1]
 }
 
+function getWindowOpenHandler(win: MockBrowserWindow): (details: { url: string }) => { action: string } {
+  const call = win.webContents.setWindowOpenHandler.mock.calls[0]
+  if (!call) throw new Error('window open handler not registered')
+  return call[0]
+}
+
 function makeCloseEvent() {
   return { preventDefault: vi.fn() }
 }
@@ -229,9 +235,13 @@ describe('MainWindowService', () => {
     applicationMock.isQuitting = false
     applicationMock.quit.mockReset()
     applicationMock.forceExit.mockReset()
+    applicationMock.getPath.mockImplementation((key: string, filename?: string) =>
+      filename ? `/mock/${key}/${filename}` : `/mock/${key}`
+    )
     windowManagerMock.behavior.setMacShowInDockByType.mockReset()
     windowManagerMock.open.mockReset()
     loggerMock.error.mockReset()
+    loggerMock.warn.mockReset()
 
     svc = new MainWindowService()
     win = createMockWindow()
@@ -284,6 +294,33 @@ describe('MainWindowService', () => {
 
       expect(event.preventDefault).toHaveBeenCalledTimes(1)
       expect(shell.openExternal).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('webContents popup guard', () => {
+    it('opens files from the internal file storage URL bridge', () => {
+      attachWebContentsHandlers(svc, win)
+      const handler = getWindowOpenHandler(win)
+
+      const result = handler({ url: 'http://file/report.pdf' })
+
+      expect(result).toEqual({ action: 'deny' })
+      expect(shell.openPath).toHaveBeenCalledWith('/mock/feature.files.data/report.pdf')
+      expect(loggerMock.warn).not.toHaveBeenCalledWith(expect.stringContaining('Blocked path traversal attempt'))
+    })
+
+    it('blocks file storage URL traversal into prefix sibling directories', () => {
+      applicationMock.getPath.mockImplementation((key: string, filename?: string) =>
+        filename ? `/mock/${key}/${filename}` : `/mock/${key}/Files`
+      )
+      attachWebContentsHandlers(svc, win)
+      const handler = getWindowOpenHandler(win)
+
+      const result = handler({ url: 'http://file/../FilesBackup/report.pdf' })
+
+      expect(result).toEqual({ action: 'deny' })
+      expect(shell.openPath).not.toHaveBeenCalled()
+      expect(loggerMock.warn).toHaveBeenCalledWith('Blocked path traversal attempt: ../FilesBackup/report.pdf')
     })
   })
 

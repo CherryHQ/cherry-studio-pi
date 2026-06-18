@@ -15,6 +15,7 @@ import path, { join } from 'path'
 
 import iconPath from '../../../build/icon.png?asset'
 import { isSafeExternalUrl } from '../utils/externalUrlSafety'
+import { isPathInside } from '../utils/file/path'
 import { isLocalViteDevServerUrl } from '../utils/localDevServerUrl'
 import { summarizeUrlForLog } from '../utils/logging'
 import { openExternalUrl } from '../utils/openExternal'
@@ -422,7 +423,7 @@ export class MainWindowService extends BaseService {
         const storageDir = application.getPath('feature.files.data')
         const filePath = path.resolve(storageDir, fileName)
         // Prevent path traversal: ensure resolved path is within storageDir
-        if (!filePath.startsWith(path.resolve(storageDir) + path.sep)) {
+        if (!isPathInside(filePath, storageDir)) {
           logger.warn(`Blocked path traversal attempt: ${fileName}`)
         } else {
           openPathInShellAndLog(filePath, 'main window file URL')
