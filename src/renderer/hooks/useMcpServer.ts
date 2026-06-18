@@ -1,3 +1,4 @@
+import { dataApiService } from '@data/DataApiService'
 import { useMutation, useQuery } from '@data/hooks/useDataApi'
 import { loggerService } from '@logger'
 import NavigationService from '@renderer/services/NavigationService'
@@ -7,11 +8,23 @@ import type { CreateMcpServerDto, ListMcpServersQuery } from '@shared/data/api/s
 import type { McpServer } from '@shared/data/types/mcpServer'
 import { IpcChannel } from '@shared/IpcChannel'
 import { useCallback, useMemo } from 'react'
+import { mutate as mutateSWRCache } from 'swr'
 
 const MCP_ADD_SERVER_LISTENER_KEY = '__CHERRY_STUDIO_PI_MCP_ADD_SERVER_LISTENER__'
+const logger = loggerService.withContext('useMcpServer')
 
 type McpAddServerListenerGlobal = typeof globalThis & {
   [MCP_ADD_SERVER_LISTENER_KEY]?: boolean
+}
+
+async function installProtocolMcpServer(server: CreateMcpServerDto): Promise<void> {
+  try {
+    const created = await dataApiService.post('/mcp-servers', { body: server })
+    await mutateSWRCache((key) => Array.isArray(key) && key[0] === '/mcp-servers')
+    void NavigationService.navigate?.({ to: `/settings/mcp/settings/${created.id}` })
+  } catch (error) {
+    logger.warn('Failed to install MCP server from protocol', error as Error)
+  }
 }
 
 /**
@@ -28,8 +41,8 @@ export function registerMcpAddServerNavigationListener() {
   if (globalState[MCP_ADD_SERVER_LISTENER_KEY]) return
 
   globalState[MCP_ADD_SERVER_LISTENER_KEY] = true
-  ipcRenderer.on(IpcChannel.Mcp_AddServer, (_event, server: { id: string }) => {
-    void NavigationService.navigate?.({ to: `/settings/mcp/settings/${server.id}` })
+  ipcRenderer.on(IpcChannel.Mcp_AddServer, (_event, server: CreateMcpServerDto) => {
+    void installProtocolMcpServer(server)
   })
 }
 
@@ -57,7 +70,7 @@ export const useMcpServers = (query?: ListMcpServersQuery) => {
     (reorderedList: McpServer[]) => {
       void mutate(data ? { ...data, items: reorderedList } : undefined, false)
       reorderTrigger({ body: { orderedIds: reorderedList.map((s) => s.id) } }).catch((error) => {
-        loggerService.withContext('useMcpServer').warn('Failed to reorder MCP servers, reverting', error as Error)
+        logger.warn('Failed to reorder MCP servers, reverting', error as Error)
         void mutate()
       })
     },

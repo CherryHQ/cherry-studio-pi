@@ -2,11 +2,38 @@ import { application } from '@application'
 import { loggerService } from '@logger'
 import { WindowType } from '@main/core/window/types'
 import { summarizeObjectShapeForLog, summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
-import { nanoid } from '@reduxjs/toolkit'
-import type { McpServer } from '@shared/data/types/mcpServer'
+import { type CreateMcpServerDto, CreateMcpServerSchema } from '@shared/data/api/schemas/mcpServers'
 import { IpcChannel } from '@shared/IpcChannel'
 
 const logger = loggerService.withContext('ProtocolService:mcpInstall')
+const MCP_SERVER_FALLBACK_NAME = 'MCP Server'
+
+const MCP_SERVER_IMPORT_FIELDS = [
+  'name',
+  'type',
+  'description',
+  'baseUrl',
+  'command',
+  'registryUrl',
+  'args',
+  'env',
+  'headers',
+  'provider',
+  'providerUrl',
+  'logoUrl',
+  'tags',
+  'longRunning',
+  'timeout',
+  'dxtVersion',
+  'dxtPath',
+  'reference',
+  'searchKey',
+  'configSample',
+  'disabledTools',
+  'disabledAutoApproveTools',
+  'shouldConfig',
+  'sortOrder'
+] as const
 
 function decodeQueryComponentPreservingPlus(value: string) {
   try {
@@ -36,30 +63,82 @@ function normalizeBase64Payload(value: string) {
   return value.replaceAll('_', '+').replaceAll('-', '/')
 }
 
-function installMcpServer(server: McpServer) {
-  const now = Date.now()
-
-  const payload: McpServer = {
-    ...server,
-    id: server.id ?? nanoid(),
-    installSource: 'protocol',
-    isTrusted: false,
-    isActive: false,
-    trustedAt: undefined,
-    installedAt: server.installedAt ?? now
-  }
-
-  application.get('WindowManager').broadcastToType(WindowType.Main, IpcChannel.Mcp_AddServer, payload)
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function installMcpServers(servers: Record<string, McpServer>) {
-  for (const name in servers) {
-    const server = servers[name]
-    if (!server.name) {
-      server.name = name
-    }
-    installMcpServer(server)
+function firstNonEmptyString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value !== 'string') continue
+    const trimmed = value.trim()
+    if (trimmed) return trimmed
   }
+  return undefined
+}
+
+function summarizeValidationIssues(error: { issues: Array<{ path: PropertyKey[]; code: string }> }) {
+  return error.issues.map((issue) => ({
+    path: issue.path.map(String).join('.'),
+    code: issue.code
+  }))
+}
+
+function normalizeProtocolMcpServer(input: unknown, fallbackName?: string, installedAt = Date.now()) {
+  if (!isRecord(input)) {
+    logger.warn('Skipping invalid MCP protocol server entry: expected object')
+    return null
+  }
+
+  const candidate: Record<string, unknown> = {}
+  for (const field of MCP_SERVER_IMPORT_FIELDS) {
+    if (input[field] !== undefined) {
+      candidate[field] = input[field]
+    }
+  }
+
+  candidate.name =
+    firstNonEmptyString(candidate.name, fallbackName, input.command, input.baseUrl, input.url) ??
+    MCP_SERVER_FALLBACK_NAME
+  candidate.installSource = 'protocol'
+  candidate.isTrusted = false
+  candidate.isActive = false
+  candidate.installedAt = installedAt
+
+  const parsed = CreateMcpServerSchema.safeParse(candidate)
+  if (!parsed.success) {
+    logger.warn('Skipping invalid MCP protocol server entry', {
+      name: firstNonEmptyString(candidate.name),
+      issues: summarizeValidationIssues(parsed.error)
+    })
+    return null
+  }
+
+  return parsed.data
+}
+
+function collectProtocolMcpServers(jsonConfig: unknown): CreateMcpServerDto[] {
+  const installedAt = Date.now()
+
+  if (isRecord(jsonConfig) && isRecord(jsonConfig.mcpServers)) {
+    return Object.entries(jsonConfig.mcpServers).flatMap(([name, server]) => {
+      const normalized = normalizeProtocolMcpServer(server, name, installedAt)
+      return normalized ? [normalized] : []
+    })
+  }
+
+  if (Array.isArray(jsonConfig)) {
+    return jsonConfig.flatMap((server) => {
+      const normalized = normalizeProtocolMcpServer(server, undefined, installedAt)
+      return normalized ? [normalized] : []
+    })
+  }
+
+  const normalized = normalizeProtocolMcpServer(jsonConfig, undefined, installedAt)
+  return normalized ? [normalized] : []
+}
+
+function installMcpServer(server: CreateMcpServerDto) {
+  application.get('WindowManager').broadcastToType(WindowType.Main, IpcChannel.Mcp_AddServer, server)
 }
 
 export function handleMcpProtocolUrl(url: URL) {
@@ -82,22 +161,24 @@ export function handleMcpProtocolUrl(url: URL) {
       const data = getProtocolQueryParam(url.search, 'servers')
 
       if (data) {
-        const stringify = Buffer.from(normalizeBase64Payload(data), 'base64').toString('utf8')
-        logger.debug('install MCP servers from protocol', { payload: summarizeTextForLog(stringify) })
-        const jsonConfig = JSON.parse(stringify)
-        logger.debug('install MCP servers from protocol parsed config', {
-          payload: summarizeObjectShapeForLog(jsonConfig)
-        })
+        try {
+          const stringify = Buffer.from(normalizeBase64Payload(data), 'base64').toString('utf8')
+          logger.debug('install MCP servers from protocol', { payload: summarizeTextForLog(stringify) })
+          const jsonConfig = JSON.parse(stringify)
+          logger.debug('install MCP servers from protocol parsed config', {
+            payload: summarizeObjectShapeForLog(jsonConfig)
+          })
 
-        // support both {mcpServers: [servers]}, [servers] and {server}
-        if (jsonConfig.mcpServers) {
-          installMcpServers(jsonConfig.mcpServers)
-        } else if (Array.isArray(jsonConfig)) {
-          for (const server of jsonConfig) {
+          const servers = collectProtocolMcpServers(jsonConfig)
+          for (const server of servers) {
             installMcpServer(server)
           }
-        } else {
-          installMcpServer(jsonConfig)
+
+          if (servers.length === 0) {
+            logger.warn('MCP protocol install payload contained no valid servers')
+          }
+        } catch (error) {
+          logger.error('Failed to parse MCP protocol install payload', error as Error)
         }
       }
 

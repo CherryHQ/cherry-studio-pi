@@ -9,7 +9,8 @@ const { applicationMock, loggerMock, mainWindowServiceMock, windowManagerMock } 
   }
   const loggerMock = {
     debug: vi.fn(),
-    error: vi.fn()
+    error: vi.fn(),
+    warn: vi.fn()
   }
   const applicationMock = {
     get: vi.fn((name: string) => {
@@ -28,10 +29,6 @@ vi.mock('@logger', () => ({
   loggerService: {
     withContext: () => loggerMock
   }
-}))
-
-vi.mock('@reduxjs/toolkit', () => ({
-  nanoid: vi.fn(() => 'server-id')
 }))
 
 import { handleMcpProtocolUrl } from '../mcpInstall'
@@ -60,6 +57,16 @@ describe('mcpInstall protocol handler', () => {
 
     expect(windowManagerMock.broadcastToType).toHaveBeenCalled()
     expect(mainWindowServiceMock.showMainWindow).toHaveBeenCalled()
+    expect(windowManagerMock.broadcastToType.mock.calls[0][2]).toEqual(
+      expect.objectContaining({
+        name: 'privateServer',
+        command: 'npx',
+        installSource: 'protocol',
+        isTrusted: false,
+        isActive: false
+      })
+    )
+    expect(windowManagerMock.broadcastToType.mock.calls[0][2]).not.toHaveProperty('id')
 
     const logs = JSON.stringify(loggerMock.debug.mock.calls)
     expect(logs).toContain('install MCP servers from protocol')
@@ -86,6 +93,7 @@ describe('mcpInstall protocol handler', () => {
       expect.anything(),
       expect.anything(),
       expect.objectContaining({
+        name: 'privateServer',
         env: {
           API_KEY: 'sk-\u{1FAE0}'
         }
@@ -109,10 +117,36 @@ describe('mcpInstall protocol handler', () => {
       expect.anything(),
       expect.anything(),
       expect.objectContaining({
+        name: 'privateServer',
         command: 'npx',
         args: ['-y', '@modelcontextprotocol/server-everything']
       })
     )
+  })
+
+  it('does not throw or broadcast malformed MCP install payloads', () => {
+    expect(() => handleMcpProtocolUrl(new URL('cherrystudio://mcp/install?servers=not-json'))).not.toThrow()
+
+    expect(windowManagerMock.broadcastToType).not.toHaveBeenCalled()
+    expect(mainWindowServiceMock.showMainWindow).toHaveBeenCalled()
+    expect(loggerMock.error).toHaveBeenCalledWith('Failed to parse MCP protocol install payload', expect.any(Error))
+  })
+
+  it('skips invalid MCP server entries without dropping valid entries', () => {
+    const payload = [null, 'bad', { name: 'valid-server', command: 'npx' }]
+
+    handleMcpProtocolUrl(new URL(`cherrystudio://mcp/install?servers=${toBase64(payload)}`))
+
+    expect(windowManagerMock.broadcastToType).toHaveBeenCalledTimes(1)
+    expect(windowManagerMock.broadcastToType).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        name: 'valid-server',
+        command: 'npx'
+      })
+    )
+    expect(loggerMock.warn).toHaveBeenCalledWith('Skipping invalid MCP protocol server entry: expected object')
   })
 
   it('logs unknown MCP protocol URLs without raw query payloads', () => {
