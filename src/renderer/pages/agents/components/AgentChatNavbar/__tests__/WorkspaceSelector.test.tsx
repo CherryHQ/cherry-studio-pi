@@ -161,7 +161,7 @@ describe('WorkspaceSelector', () => {
     }
   })
 
-  it('closes lingering resource selector popovers before opening the folder picker', async () => {
+  it('closes lingering resource selector popovers before opening the folder picker without faking keyboard input', async () => {
     const user = userEvent.setup()
     const selectFolder = vi.fn().mockResolvedValue(null)
     const success = vi.fn()
@@ -181,8 +181,8 @@ describe('WorkspaceSelector', () => {
       await user.click(screen.getByRole('button', { name: /agent\.session\.workspace\.select/ }))
 
       expect(closeResourceSelectors).toHaveBeenCalled()
-      expect(closeDocumentPopovers).toHaveBeenCalledWith(expect.objectContaining({ key: 'Escape', code: 'Escape' }))
-      expect(closeWindowPopovers).toHaveBeenCalledWith(expect.objectContaining({ key: 'Escape', code: 'Escape' }))
+      expect(closeDocumentPopovers).not.toHaveBeenCalled()
+      expect(closeWindowPopovers).not.toHaveBeenCalled()
       expect(selectFolder).toHaveBeenCalledTimes(1)
     } finally {
       window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)

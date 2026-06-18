@@ -34,11 +34,6 @@ export function getActiveModalSurfaceElements(): Element[] {
 
 export function closeTransientResourceSelectors() {
   requestCloseResourceSelectors()
-  if (typeof document === 'undefined') return
-
-  const escapeEventInit: KeyboardEventInit = { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }
-  document.dispatchEvent(new KeyboardEvent('keydown', escapeEventInit))
-  window.dispatchEvent(new KeyboardEvent('keydown', escapeEventInit))
 }
 
 export function scheduleCloseTransientResourceSelectors() {
