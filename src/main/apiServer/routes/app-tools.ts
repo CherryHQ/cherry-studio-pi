@@ -148,6 +148,27 @@ function normalizePaintingProviderId(value: unknown) {
   return provider
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+}
+
+function resolveCapabilityCallBody(body: unknown) {
+  if (!isRecord(body)) {
+    return { input: {}, dryRun: false }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, 'input')) {
+    return { input: body.input ?? {}, dryRun: body.dryRun === true }
+  }
+
+  const keys = Object.keys(body)
+  const hasOnlyControlFields = keys.length > 0 && keys.every((key) => key === 'dryRun')
+  return {
+    input: hasOnlyControlFields ? {} : body,
+    dryRun: body.dryRun === true
+  }
+}
+
 async function resolveNoteDeletePath(root: string, input?: string) {
   const target = resolveNotePath(root, input)
   if (path.extname(target) || (await fs.stat(target).catch(() => null))) {
@@ -370,9 +391,10 @@ appToolsRouter.get('/capabilities/search', (req, res, next) => {
 
 appToolsRouter.post('/capabilities/:id/call', async (req, res, next) => {
   try {
-    const result = await appCapabilityService.call(req.params.id, req.body?.input ?? req.body ?? {}, {
+    const { input, dryRun } = resolveCapabilityCallBody(req.body)
+    const result = await appCapabilityService.call(req.params.id, input, {
       source: 'api',
-      dryRun: req.body?.dryRun === true
+      dryRun
     })
     res.status(result.ok ? 200 : 400).json(result)
   } catch (error) {
@@ -419,8 +441,9 @@ appToolsRouter.patch('/settings/value', async (req, res, next) => {
 appToolsRouter.post('/settings/open', async (req, res, next) => {
   try {
     const section = SETTINGS_SECTIONS.find((item) => item.id === req.body?.section || item.route === req.body?.route)
-    await navigate(section?.route || req.body?.route || '/settings/provider')
-    res.json({ ok: true, route: section?.route || req.body?.route })
+    const route = section?.route || req.body?.route || '/settings/provider'
+    await navigate(route)
+    res.json({ ok: true, route })
   } catch (error) {
     next(error)
   }

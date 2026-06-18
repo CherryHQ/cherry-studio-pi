@@ -9,6 +9,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   notesRoot: '',
   notifyDataSyncLocalChange: vi.fn(),
+  appCapabilityService: {
+    list: vi.fn(() => []),
+    search: vi.fn(() => []),
+    call: vi.fn()
+  },
+  mainWindow: {
+    isDestroyed: vi.fn(() => false),
+    webContents: {
+      executeJavaScript: vi.fn()
+    }
+  },
+  windowManager: {
+    getWindowsByType: vi.fn()
+  },
   preferenceService: {
     get: vi.fn()
   },
@@ -21,7 +35,7 @@ vi.mock('@application', () => ({
   application: {
     get: vi.fn((name: string) => {
       if (name === 'PreferenceService') return mocks.preferenceService
-      if (name === 'WindowManager') return { getWindowsByType: vi.fn(() => []) }
+      if (name === 'WindowManager') return mocks.windowManager
       if (name === 'MainWindowService') return { showMainWindow: vi.fn() }
       throw new Error(`Unexpected service: ${name}`)
     })
@@ -48,11 +62,7 @@ vi.mock('@main/core/window/types', () => ({
 }))
 
 vi.mock('@main/services/appCapabilities', () => ({
-  appCapabilityService: {
-    list: vi.fn(() => []),
-    search: vi.fn(() => []),
-    call: vi.fn()
-  }
+  appCapabilityService: mocks.appCapabilityService
 }))
 
 vi.mock('@main/services/appCapabilities/providers/paintings', () => ({
@@ -122,6 +132,18 @@ describe('app tools notes routes', () => {
       return undefined
     })
     mocks.notifyDataSyncLocalChange.mockReset()
+    mocks.appCapabilityService.list.mockReset()
+    mocks.appCapabilityService.list.mockReturnValue([])
+    mocks.appCapabilityService.search.mockReset()
+    mocks.appCapabilityService.search.mockReturnValue([])
+    mocks.appCapabilityService.call.mockReset()
+    mocks.appCapabilityService.call.mockResolvedValue({ ok: true, summary: 'called' })
+    mocks.windowManager.getWindowsByType.mockReset()
+    mocks.windowManager.getWindowsByType.mockReturnValue([])
+    mocks.mainWindow.isDestroyed.mockReset()
+    mocks.mainWindow.isDestroyed.mockReturnValue(false)
+    mocks.mainWindow.webContents.executeJavaScript.mockReset()
+    mocks.mainWindow.webContents.executeJavaScript.mockResolvedValue(undefined)
     mocks.isSupportedSettingPath.mockReset()
     mocks.isSupportedSettingPath.mockReturnValue(false)
     mocks.persistSettingValue.mockReset()
@@ -257,6 +279,55 @@ describe('app tools settings routes', () => {
       json: { ok: true, path: 'showTopics', value: false }
     })
     expect(mocks.persistSettingValue).toHaveBeenCalledWith('showTopics', false)
+  })
+
+  it('returns the default settings route when opening settings without a body route', async () => {
+    mocks.windowManager.getWindowsByType.mockReturnValue([mocks.mainWindow])
+
+    const result = await requestAppTools('POST', '/settings/open', {})
+
+    expect(result).toEqual({
+      status: 200,
+      json: { ok: true, route: '/settings/provider' }
+    })
+    expect(mocks.mainWindow.webContents.executeJavaScript).toHaveBeenCalledWith('window.navigate("/settings/provider")')
+  })
+})
+
+describe('app tools capability call routes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.appCapabilityService.call.mockResolvedValue({ ok: true, summary: 'called' })
+  })
+
+  it('keeps wrapped dry-run flags out of capability input payloads', async () => {
+    const result = await requestAppTools('POST', '/capabilities/dataSync.sync.now/call', { dryRun: true })
+
+    expect(result).toEqual({
+      status: 200,
+      json: { ok: true, summary: 'called' }
+    })
+    expect(mocks.appCapabilityService.call).toHaveBeenCalledWith(
+      'dataSync.sync.now',
+      {},
+      {
+        source: 'api',
+        dryRun: true
+      }
+    )
+  })
+
+  it('preserves legacy raw body capability inputs for API clients', async () => {
+    await requestAppTools('POST', '/capabilities/settings.value.get/call', { path: 'theme' })
+
+    expect(mocks.appCapabilityService.call).toHaveBeenCalledWith(
+      'settings.value.get',
+      { path: 'theme' },
+      {
+        source: 'api',
+        dryRun: false
+      }
+    )
   })
 })
 
