@@ -469,6 +469,36 @@ describe('knowledge app capabilities', () => {
     expect((result.data as any).id).toBe('metadata-kb')
   })
 
+  it('preserves explicit knowledge base metadata timestamps and items', async () => {
+    const result = await capability('knowledge.base.create').execute(
+      {
+        id: 'metadata-kb',
+        name: 'Metadata Knowledge',
+        model: { id: 'embed-model', provider: 'shared-provider', name: 'Embed Model', group: 'shared-provider' },
+        created_at: 0,
+        items: [{ id: 'item-1', type: 'note', content: 'hello' }],
+        initialize: false
+      },
+      { source: 'agent' }
+    )
+
+    expect(mocks.storageV2KnowledgeRepository.importBases).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          id: 'metadata-kb',
+          created_at: 0,
+          items: [{ id: 'item-1', type: 'note', content: 'hello' }]
+        })
+      ],
+      { pruneMissing: false }
+    )
+    expect(result.data as any).toMatchObject({
+      id: 'metadata-kb',
+      created_at: 0,
+      items: [{ id: 'item-1', type: 'note', content: 'hello' }]
+    })
+  })
+
   it('normalizes knowledge add and reset base ids before calling services', async () => {
     const base = {
       id: 'kb-1',
@@ -522,6 +552,39 @@ describe('knowledge app capabilities', () => {
         { source: 'agent' }
       )
     ).rejects.toThrow('Knowledge base id must be a string')
+    await expect(
+      capability('knowledge.base.create').execute(
+        {
+          name: 'Knowledge One',
+          model: { id: 'embed-model', provider: 'shared-provider' },
+          items: { id: 'item-1' },
+          initialize: false
+        },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Knowledge base items must be an array')
+    await expect(
+      capability('knowledge.base.create').execute(
+        {
+          name: 'Knowledge One',
+          model: { id: 'embed-model', provider: 'shared-provider' },
+          items: [null],
+          initialize: false
+        },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Knowledge item is required')
+    await expect(
+      capability('knowledge.base.create').execute(
+        {
+          name: 'Knowledge One',
+          model: { id: 'embed-model', provider: 'shared-provider' },
+          created_at: { value: Date.now() },
+          initialize: false
+        },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Knowledge base created_at must be a finite number or valid date string')
 
     expect(mocks.storageV2KnowledgeRepository.importBases).not.toHaveBeenCalled()
     expect(mocks.knowledgeService.createBase).not.toHaveBeenCalled()

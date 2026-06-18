@@ -90,6 +90,24 @@ function normalizeKnowledgeItem(value: unknown) {
   return value as KnowledgeItem
 }
 
+function normalizeKnowledgeItems(value: unknown) {
+  if (value === null || typeof value === 'undefined') return []
+  if (!Array.isArray(value)) throw new Error('Knowledge base items must be an array')
+  return value.map((item) => normalizeKnowledgeItem(item))
+}
+
+function normalizeOptionalTimestamp(value: unknown, label: string, fallback: number) {
+  if (value === null || typeof value === 'undefined') return fallback
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return fallback
+    const parsed = Date.parse(trimmed)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  throw new Error(`${label} must be a finite number or valid date string`)
+}
+
 function normalizeKnowledgeModel(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('Knowledge base model is required')
@@ -387,13 +405,15 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         const id = normalizeOptionalText(input?.id, 'Knowledge base id') || `kb_${uuidv4()}`
         const name = normalizeRequiredText(input?.name, 'Knowledge base name')
         const model = normalizeKnowledgeModel(input?.model)
+        const items = normalizeKnowledgeItems(input?.items)
+        const createdAt = normalizeOptionalTimestamp(input?.created_at, 'Knowledge base created_at', now)
         const base = {
           ...input,
           id,
           name,
           model,
-          items: Array.isArray(input?.items) ? input.items : [],
-          created_at: input?.created_at || now,
+          items,
+          created_at: createdAt,
           updated_at: now
         } as KnowledgeBase
 
