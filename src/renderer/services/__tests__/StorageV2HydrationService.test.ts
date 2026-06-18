@@ -294,6 +294,52 @@ describe('StorageV2HydrationService', () => {
     expect(target.flush).toHaveBeenCalled()
   })
 
+  it('continues hydrating runtime state when language localStorage write is blocked', async () => {
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Blocked', 'SecurityError')
+    })
+    mocks.getStorageV2CoreSnapshot.mockResolvedValue({
+      generatedAt: '2026-01-01T00:00:00.000Z',
+      settings: { language: 'zh-CN' },
+      llm: {
+        providers: [
+          {
+            id: 'openai',
+            name: 'OpenAI'
+          }
+        ]
+      },
+      assistants: { assistants: [] },
+      redux: {},
+      localStorage: {},
+      metadata: {
+        includeSecrets: true,
+        settingCount: 1,
+        providerCount: 1,
+        assistantCount: 0,
+        topicCount: 0,
+        reduxSliceCount: 0,
+        missingSecretCount: 0
+      }
+    })
+    const target = { dispatch: vi.fn(), flush: vi.fn() }
+
+    await expect(maybeHydrateRuntimeCacheFromStorageV2(target)).resolves.toEqual({
+      hydrated: true,
+      snapshot: expect.objectContaining({
+        settings: { language: 'zh-CN' }
+      })
+    })
+
+    expect(setItemSpy).toHaveBeenCalledWith('language', 'zh-CN')
+    expect(target.dispatch).toHaveBeenCalledWith({
+      type: 'settings/hydrate',
+      payload: { language: 'zh-CN' },
+      meta: { fromSync: true }
+    })
+    expect(target.flush).toHaveBeenCalled()
+  })
+
   it('does not treat localStorage token clear markers alone as recoverable runtime data', async () => {
     mocks.getStorageV2CoreSnapshot.mockResolvedValue({
       generatedAt: '2026-01-01T00:00:00.000Z',

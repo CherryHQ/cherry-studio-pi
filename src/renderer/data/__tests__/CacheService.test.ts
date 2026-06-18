@@ -244,5 +244,25 @@ describe('renderer CacheService equality semantics', () => {
         }
       ])
     })
+
+    it('falls back to defaults when localStorage read and cleanup are blocked', async () => {
+      vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+        throw new DOMException('Blocked', 'SecurityError')
+      })
+      const removeItemSpy = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+        throw new DOMException('Blocked', 'SecurityError')
+      })
+
+      const service = await createService()
+
+      expect(service.getPersist('ui.sidebar.width')).toBe(50)
+      expect(removeItemSpy).toHaveBeenCalledWith(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY)
+      expect(broadcastSync).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'persist',
+          key: RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY
+        })
+      )
+    })
   })
 })

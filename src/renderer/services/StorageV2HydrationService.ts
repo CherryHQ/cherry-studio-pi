@@ -158,6 +158,20 @@ function dispatchRuntimeHydrationAction(
   target.dispatch(markRuntimeHydrationActionFromSync(action))
 }
 
+function safeSetLocalStorageItem(key: string, value: string): boolean {
+  if (typeof localStorage === 'undefined') {
+    return false
+  }
+
+  try {
+    localStorage.setItem(key, value)
+    return true
+  } catch (error) {
+    logger.warn(`Skipped localStorage write for ${key} during Storage v2 hydration`, error as Error)
+    return false
+  }
+}
+
 function hasSnapshotEntries(value: unknown): boolean {
   return isRecord(value) && Object.keys(value).length > 0
 }
@@ -213,8 +227,8 @@ async function getRuntimeSnapshot() {
 async function applyRuntimeSnapshot(snapshot: StorageV2CoreSnapshot, target: RuntimeHydrationTarget) {
   if (snapshot.settings) {
     dispatchRuntimeHydrationAction(target, hydrateSettingsState(snapshot.settings))
-    if (typeof snapshot.settings.language === 'string' && typeof localStorage !== 'undefined') {
-      localStorage.setItem('language', snapshot.settings.language)
+    if (typeof snapshot.settings.language === 'string') {
+      safeSetLocalStorageItem('language', snapshot.settings.language)
     }
   }
 

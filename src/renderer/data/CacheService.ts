@@ -45,6 +45,20 @@ import { notifyStorageV2MirroredLocalStorageKeyChanged } from '../services/Stora
 
 const logger = loggerService.withContext('CacheService')
 
+function safeRemoveLocalStorageItem(key: string): boolean {
+  if (typeof localStorage === 'undefined') {
+    return false
+  }
+
+  try {
+    localStorage.removeItem(key)
+    return true
+  } catch (error) {
+    logger.warn(`Failed to remove localStorage item ${key}`, error as Error)
+    return false
+  }
+}
+
 /**
  * Renderer process cache service
  *
@@ -1007,8 +1021,9 @@ export class CacheService {
       logger.debug('Loaded persist cache from localStorage with defaults')
     } catch (error) {
       logger.error('Failed to load persist cache:', error as Error)
-      localStorage.removeItem(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY)
-      notifyStorageV2MirroredLocalStorageKeyChanged(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY)
+      if (safeRemoveLocalStorageItem(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY)) {
+        notifyStorageV2MirroredLocalStorageKeyChanged(RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY)
+      }
       // Fallback to defaults only
       logger.debug('Fallback to default persist cache values')
     }
