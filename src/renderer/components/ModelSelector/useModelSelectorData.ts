@@ -139,6 +139,7 @@ export function useModelSelectorData({
     [refetchModels, refetchProviders]
   )
 
+  const searchKeywords = useMemo(() => searchText.trim(), [searchText])
   const availableProviders = useMemo(() => providers.filter((provider) => provider.isEnabled), [providers])
   const availableModels = useMemo(
     () => models.filter((model) => model.isEnabled !== false && model.isHidden !== true),
@@ -223,11 +224,11 @@ export function useModelSelectorData({
     (provider: Provider) => {
       const providerModels = modelsByProvider.get(provider.id) ?? []
 
-      if (searchText.trim()) {
+      if (searchKeywords) {
         const providerDisplayName = getProviderDisplayName(provider)
         return sortBy(
           providerModels.flatMap((model) => {
-            const searchScore = getModelSearchScore(searchText, model, provider, providerDisplayName)
+            const searchScore = getModelSearchScore(searchKeywords, model, provider, providerDisplayName)
             return searchScore === null ? [] : [{ model, searchScore }]
           }),
           ['searchScore', 'model.group', 'model.name']
@@ -236,7 +237,7 @@ export function useModelSelectorData({
 
       return sortModels(providerModels)
     },
-    [modelsByProvider, searchText]
+    [modelsByProvider, searchKeywords]
   )
 
   const createModelItem = useCallback(
@@ -280,7 +281,7 @@ export function useModelSelectorData({
       [...tagFilteredModelsByProvider.values()].flatMap((models) => models.map((model) => model.id))
     )
 
-    if (searchText.length === 0 && showPinnedModels && pinnedIdSet.size > 0) {
+    if (!searchKeywords && showPinnedModels && pinnedIdSet.size > 0) {
       const pinnedItems = pinnedIds.flatMap((modelId) => {
         const model = selectableModelsById.get(modelId)
         const provider = model ? providerById.get(model.providerId) : undefined
@@ -306,7 +307,7 @@ export function useModelSelectorData({
 
     sortedProviders.forEach((provider) => {
       const filteredModels = (tagFilteredModelsByProvider.get(provider.id) ?? []).filter(
-        (model) => !showPinnedModels || searchText.length > 0 || !pinnedIdSet.has(model.id)
+        (model) => !showPinnedModels || Boolean(searchKeywords) || !pinnedIdSet.has(model.id)
       )
 
       if (filteredModels.length === 0) {
@@ -341,7 +342,7 @@ export function useModelSelectorData({
     pinnedIds,
     selectableModelsById,
     searchFilter,
-    searchText.length,
+    searchKeywords,
     showPinnedModels,
     showTagFilter,
     sortedProviders,

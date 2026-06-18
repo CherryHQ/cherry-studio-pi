@@ -319,6 +319,20 @@ describe('useModelSelectorData', () => {
     expect(result.current.modelItems.map((m) => m.modelId).sort()).toEqual(['openai::gpt-3.5', 'openai::gpt-4'])
   })
 
+  it('treats whitespace-only search as empty so pinned grouping stays stable', () => {
+    wireDeps({
+      providers: [makeProvider('openai')],
+      models: [makeModel('gpt-4', 'openai'), makeModel('gpt-3.5', 'openai')],
+      pinnedIds: ['openai::gpt-4']
+    })
+
+    const { result } = renderHook(() => useModelSelectorData({ searchText: '   ' }))
+
+    expect(result.current.listItems.some((i) => i.key === 'pinned-group')).toBe(true)
+    const providerRows = result.current.modelItems.filter((item) => item.provider.id === 'openai' && !item.isPinned)
+    expect(providerRows.map((row) => row.modelId)).toEqual(['openai::gpt-3.5'])
+  })
+
   it('filters models by search text against name, id, provider name', () => {
     wireDeps({
       providers: [makeProvider('openai'), makeProvider('anthropic')],
@@ -326,6 +340,17 @@ describe('useModelSelectorData', () => {
     })
 
     const { result } = renderHook(() => useModelSelectorData({ searchText: 'claude' }))
+
+    expect(result.current.modelItems.map((m) => m.modelId)).toEqual(['anthropic::claude-3'])
+  })
+
+  it('trims search text before matching models', () => {
+    wireDeps({
+      providers: [makeProvider('openai'), makeProvider('anthropic')],
+      models: [makeModel('gpt-4', 'openai'), makeModel('claude-3', 'anthropic', { name: 'Claude 3' })]
+    })
+
+    const { result } = renderHook(() => useModelSelectorData({ searchText: '  claude  ' }))
 
     expect(result.current.modelItems.map((m) => m.modelId)).toEqual(['anthropic::claude-3'])
   })
