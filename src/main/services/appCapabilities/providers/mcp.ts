@@ -31,7 +31,8 @@ function normalizeRequiredText(value: unknown, label: string) {
 }
 
 function normalizeToolParams(value: unknown) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  if (value === null || typeof value === 'undefined') return {}
+  if (typeof value !== 'object' || Array.isArray(value)) throw new Error('MCP tool params must be an object')
   return value as Record<string, unknown>
 }
 

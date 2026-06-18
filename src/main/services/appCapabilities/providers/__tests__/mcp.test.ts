@@ -182,12 +182,20 @@ describe('mcp app capabilities', () => {
     expect(mocks.mcpService.callToolById).toHaveBeenCalledWith('server__tool_1', { value: 'hello' }, 'tool-call-1')
   })
 
-  it('rejects empty MCP tool ids and ignores non-object params', async () => {
+  it('rejects empty MCP tool ids and invalid params before calling tools', async () => {
     await expect(
       capability('mcp.tool.call').execute({ toolId: '   ', params: { value: 'hello' } }, { source: 'agent' })
     ).rejects.toThrow('MCP tool id is required')
 
-    await capability('mcp.tool.call').execute({ toolId: 'server__tool_1', params: 'bad' }, { source: 'agent' })
+    await expect(
+      capability('mcp.tool.call').execute({ toolId: 'server__tool_1', params: 'bad' }, { source: 'agent' })
+    ).rejects.toThrow('MCP tool params must be an object')
+
+    await expect(
+      capability('mcp.tool.call').execute({ toolId: 'server__tool_1', params: [] }, { source: 'agent' })
+    ).rejects.toThrow('MCP tool params must be an object')
+
+    await capability('mcp.tool.call').execute({ toolId: 'server__tool_1' }, { source: 'agent' })
 
     expect(mocks.mcpService.callToolById).toHaveBeenCalledTimes(1)
     expect(mocks.mcpService.callToolById).toHaveBeenCalledWith('server__tool_1', {}, undefined)
