@@ -136,7 +136,10 @@ jobs:
             echo "::error::Release tag $TAG does not exist."
             echo "Create it with the guarded version helper first:"
             echo "  CHERRY_STUDIO_PI_RELEASE_CONFIRM=$TAG pnpm release patch"
-            echo "  git push && git push origin $TAG"
+            echo "Push the version commit first:"
+            echo "  git push"
+            echo "Push the annotated tag only after confirming this release should be published:"
+            echo "  git push origin $TAG"
             exit 1
           fi
 

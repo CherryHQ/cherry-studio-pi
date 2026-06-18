@@ -66,6 +66,13 @@ describe('release workflow safety', () => {
     )
   })
 
+  it('does not suggest chained version commit and tag pushes', () => {
+    expect(workflow).toContain('Push the version commit first:')
+    expect(workflow).toContain('Push the annotated tag only after confirming this release should be published:')
+    expect(workflow).not.toContain('git push && git push origin')
+    expect(prepareReleaseSkill).not.toContain('git push && git push origin')
+  })
+
   it('keeps the release preparation skill aligned with manual one-shot publishing', () => {
     expect(prepareReleaseSkill).toContain('publish exactly once through the manual GitHub Actions Release workflow')
     expect(prepareReleaseSkill).toContain('Never publish a second release for the same user request')
