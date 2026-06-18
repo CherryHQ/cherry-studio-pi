@@ -17,6 +17,10 @@ export interface UploadResult {
   folderCount: number
 }
 
+type FileWithPath = File & {
+  path?: string
+}
+
 /**
  * Adapter — project the `DirectoryTreeBuilder` snapshot into the legacy
  * `NotesTreeNode[]` shape that the Notes sidebar / drag-drop / merge logic
@@ -230,10 +234,9 @@ export async function uploadNotes(files: File[], targetPath: string): Promise<Up
     const filePaths: string[] = []
 
     for (const file of files) {
-      // @ts-ignore - webkitRelativePath exists on File objects from directory uploads
-      if (file.path) {
-        // @ts-ignore - Electron File objects have .path property
-        filePaths.push(file.path)
+      const filePath = (file as FileWithPath).path
+      if (filePath) {
+        filePaths.push(filePath)
       } else {
         // For browser File API, we'd need to use FileReader and create temp files
         // For now, fall back to the old method for these cases

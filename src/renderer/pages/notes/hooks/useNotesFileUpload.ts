@@ -5,6 +5,11 @@ interface UseNotesFileUploadProps {
   setIsDragOverSidebar: (isDragOver: boolean) => void
 }
 
+type DirectoryInputElement = HTMLInputElement & {
+  directory?: boolean
+  webkitdirectory: boolean
+}
+
 export const useNotesFileUpload = ({ onUploadFiles, setIsDragOverSidebar }: UseNotesFileUploadProps) => {
   const handleDropFiles = useCallback(
     async (e: React.DragEvent) => {
@@ -84,11 +89,9 @@ export const useNotesFileUpload = ({ onUploadFiles, setIsDragOverSidebar }: UseN
   }, [onUploadFiles])
 
   const handleSelectFolder = useCallback(() => {
-    const folderInput = document.createElement('input')
+    const folderInput = document.createElement('input') as DirectoryInputElement
     folderInput.type = 'file'
-    // @ts-ignore - webkitdirectory is a non-standard attribute
     folderInput.webkitdirectory = true
-    // @ts-ignore - directory is a non-standard attribute
     folderInput.directory = true
     folderInput.multiple = true
 
