@@ -253,7 +253,19 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
           small_model: { type: 'string' },
           smallModel: { type: 'string' },
           sessionName: { type: 'string', description: 'Optional default session name created with the agent' },
-          accessible_paths: { type: 'array', items: { type: 'string' } },
+          workspacePath: {
+            type: 'string',
+            description: 'Optional workspace path for the initial agent session'
+          },
+          workspace_path: {
+            type: 'string',
+            description: 'Alias for workspacePath'
+          },
+          accessible_paths: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Legacy alias; the first path is used as the initial session workspace'
+          },
           mcps: { type: 'array', items: { type: 'string' } },
           disabledTools: { type: 'array', items: { type: 'string' } },
           configuration: { type: 'object', additionalProperties: true }
@@ -273,6 +285,10 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
           'Accessible paths',
           'Accessible path'
         )
+        const workspacePath = normalizeOptionalText(
+          input?.workspacePath ?? input?.workspace_path,
+          'Agent workspace path'
+        )
         const type = normalizeAgentType(input?.type)
         const description = normalizeOptionalText(input?.description, 'Agent description')
         const instructions = normalizeOptionalText(input?.instructions, 'Agent instructions')
@@ -281,10 +297,11 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
         const mcps = normalizeOptionalTextArray(input?.mcps, 'MCP server ids', 'MCP server id')
         const disabledTools = normalizeOptionalTextArray(input?.disabledTools, 'Disabled tools', 'Disabled tool')
         const configuration = normalizeOptionalObject(input?.configuration, 'Agent configuration')
-        const sessionWorkspace = accessiblePaths?.[0]
+        const initialWorkspacePath = workspacePath ?? accessiblePaths?.[0]
+        const sessionWorkspace = initialWorkspacePath
           ? {
               type: 'user' as const,
-              workspaceId: (await agentWorkspaceService.findOrCreateByPath(accessiblePaths[0])).id
+              workspaceId: (await agentWorkspaceService.findOrCreateByPath(initialWorkspacePath)).id
             }
           : ({ type: 'system' } as const)
         const agent = await createAgentWithStorageV2Recovery({

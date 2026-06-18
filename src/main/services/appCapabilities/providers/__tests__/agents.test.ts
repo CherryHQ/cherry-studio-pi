@@ -332,6 +332,38 @@ describe('agent app capabilities', () => {
     })
   })
 
+  it('accepts UI-style workspacePath when creating an initial agent session', async () => {
+    await capability('agents.create').execute(
+      {
+        name: 'Agent One',
+        model: 'model-1',
+        workspacePath: ' /Users/me/project '
+      },
+      { source: 'agent' }
+    )
+
+    expect(mocks.agentWorkspaceService.findOrCreateByPath).toHaveBeenCalledWith('/Users/me/project')
+    expect(mocks.agentSessionService.createSession).toHaveBeenCalledWith({
+      agentId: 'agent-1',
+      name: 'Default session',
+      workspace: { type: 'user', workspaceId: 'workspace-1' }
+    })
+  })
+
+  it('prefers workspacePath over the legacy accessible_paths workspace alias', async () => {
+    await capability('agents.create').execute(
+      {
+        name: 'Agent One',
+        model: 'model-1',
+        workspacePath: ' /Users/me/primary ',
+        accessible_paths: [' /Users/me/legacy ']
+      },
+      { source: 'agent' }
+    )
+
+    expect(mocks.agentWorkspaceService.findOrCreateByPath).toHaveBeenCalledWith('/Users/me/primary')
+  })
+
   it('defaults app-created agents to the Pi runtime', async () => {
     await capability('agents.create').execute({ name: ' Agent One ', model: ' model-1 ' }, { source: 'agent' })
 
@@ -449,6 +481,12 @@ describe('agent app capabilities', () => {
         { source: 'agent' }
       )
     ).rejects.toThrow('Accessible path must be a string')
+    await expect(
+      capability('agents.create').execute(
+        { name: 'Agent One', model: 'model-1', workspacePath: { path: '/tmp/work' } },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Agent workspace path must be a string')
     await expect(
       capability('agents.create').execute({ name: 'Agent One', model: 'model-1', mcps: [false] }, { source: 'agent' })
     ).rejects.toThrow('MCP server id must be a string')
