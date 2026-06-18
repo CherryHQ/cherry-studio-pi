@@ -32,6 +32,7 @@ const { readMarkdownFromResponseZip, readMarkdownFromZipFile } = await import('.
 
 describe('fileProcessing result persistence utils', () => {
   beforeEach(() => {
+    delete process.env.CHERRY_STUDIO_FILE_PROCESSING_RESULT_ZIP_MAX_BYTES
     vi.clearAllMocks()
     closeMock.mockResolvedValue(undefined)
     entryDataMock.mockResolvedValue(Buffer.from('# output'))
@@ -144,6 +145,29 @@ describe('fileProcessing result persistence utils', () => {
       recursive: true,
       force: true
     })
+  })
+
+  it('rejects oversized response zips from content-length before writing temp files', async () => {
+    process.env.CHERRY_STUDIO_FILE_PROCESSING_RESULT_ZIP_MAX_BYTES = '4'
+    const mkdirSpy = vi.spyOn(fs, 'mkdir').mockResolvedValue(undefined)
+    const mkdtempSpy = vi.spyOn(fs, 'mkdtemp').mockResolvedValue('/tmp/file-processing/file-processing-result-abc')
+    const response = new Response('zip-binary', {
+      headers: {
+        'content-length': '5'
+      }
+    })
+
+    await expect(
+      readMarkdownFromResponseZip({
+        response,
+        tempDir: '/tmp/file-processing'
+      })
+    ).rejects.toThrow('Result zip is too large')
+
+    expect(mkdirSpy).not.toHaveBeenCalled()
+    expect(mkdtempSpy).not.toHaveBeenCalled()
+    expect(createWriteStreamMock).not.toHaveBeenCalled()
+    expect(pipelineMock).not.toHaveBeenCalled()
   })
 
   it('rejects response zips without a body', async () => {

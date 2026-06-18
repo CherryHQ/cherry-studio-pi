@@ -1,13 +1,16 @@
 import { createWriteStream } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { Readable } from 'node:stream'
+import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
 import { loggerService } from '@logger'
+import { MB } from '@shared/config/constant'
 import StreamZip from 'node-stream-zip'
 
 const logger = loggerService.withContext('FileProcessingResultPersistence')
+const DEFAULT_RESULT_ZIP_MAX_BYTES = 512 * MB
+const RESULT_ZIP_MAX_BYTES_ENV = 'CHERRY_STUDIO_FILE_PROCESSING_RESULT_ZIP_MAX_BYTES'
 
 type PersistenceCleanupContext = {
   tempDownloadDir?: string
@@ -35,6 +38,36 @@ function normalizeEntryPath(entryName: string): string {
   }
 
   return normalizedPath
+}
+
+function configuredResultZipMaxBytes(): number {
+  const value = Number.parseInt(process.env[RESULT_ZIP_MAX_BYTES_ENV] ?? '', 10)
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_RESULT_ZIP_MAX_BYTES
+}
+
+function parseContentLength(value: string | null): number | null {
+  if (!value) return null
+
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+}
+
+function createZipSizeLimitTransform(maxBytes: number): Transform {
+  let totalBytes = 0
+
+  return new Transform({
+    transform(chunk: Buffer | string | Uint8Array, encoding, callback) {
+      const byteLength = typeof chunk === 'string' ? Buffer.byteLength(chunk, encoding) : chunk.byteLength
+      totalBytes += byteLength
+
+      if (totalBytes > maxBytes) {
+        callback(new Error(`Result zip is too large (${totalBytes} bytes, limit ${maxBytes} bytes)`))
+        return
+      }
+
+      callback(null, chunk)
+    }
+  })
 }
 
 export async function readMarkdownFromZipFile(zipFilePath: string): Promise<Uint8Array> {
@@ -75,19 +108,26 @@ export async function readMarkdownFromResponseZip(options: {
   tempDir: string
   signal?: AbortSignal
 }): Promise<Uint8Array> {
+  if (!options.response.body) {
+    throw new Error('Result download response body is empty')
+  }
+
+  const maxBytes = configuredResultZipMaxBytes()
+  const contentLength = parseContentLength(options.response.headers.get('content-length'))
+  if (contentLength !== null && contentLength > maxBytes) {
+    throw new Error(`Result zip is too large (${contentLength} bytes, limit ${maxBytes} bytes)`)
+  }
+
   await fs.mkdir(options.tempDir, { recursive: true })
 
   const tempDownloadDir = await fs.mkdtemp(path.join(options.tempDir, 'file-processing-result-'))
   const zipFilePath = path.join(tempDownloadDir, 'result.zip')
 
   try {
-    if (!options.response.body) {
-      throw new Error('Result download response body is empty')
-    }
-
     const responseStream = Readable.fromWeb(options.response.body as any)
-    await pipeline(responseStream, createWriteStream(zipFilePath), { signal: options.signal })
-
+    await pipeline(responseStream, createZipSizeLimitTransform(maxBytes), createWriteStream(zipFilePath), {
+      signal: options.signal
+    })
     return await readMarkdownFromZipFile(zipFilePath)
   } finally {
     await warnIfCleanupFails(() => fs.rm(tempDownloadDir, { recursive: true, force: true }), {
