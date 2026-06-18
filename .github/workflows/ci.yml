@@ -254,6 +254,8 @@ jobs:
 
   notify:
     runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 5
     needs: [basic-checks, general-test, render-test]
     if: always() && (needs.basic-checks.result == 'failure' || needs.general-test.result == 'failure' || needs.render-test.result == 'failure') && github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
