@@ -29,6 +29,7 @@ const MAX_NOTES_LIST_SCAN_ENTRIES = 5_000
 const MAX_NOTES_LIST_DEPTH = 10
 const DEFAULT_NOTE_READ_MAX_BYTES = 512 * 1024
 const MAX_NOTE_READ_MAX_BYTES = 2 * 1024 * 1024
+const PAINTING_PROVIDER_ID_PATTERN = /^[A-Za-z0-9_-]+$/
 
 const SETTINGS_SECTIONS = [
   ['provider', 'Provider', '/settings/provider'],
@@ -136,6 +137,15 @@ function normalizeNoteContent(value: unknown) {
     }
   }
   return String(value)
+}
+
+function normalizePaintingProviderId(value: unknown) {
+  const provider = typeof value === 'string' ? value.trim() : ''
+  if (!provider) return ''
+  if (!PAINTING_PROVIDER_ID_PATTERN.test(provider)) {
+    throw new Error('Painting provider must be a route-safe provider id')
+  }
+  return provider
 }
 
 async function resolveNoteDeletePath(root: string, input?: string) {
@@ -571,7 +581,7 @@ appToolsRouter.get('/paintings', async (req, res, next) => {
 
 appToolsRouter.patch('/paintings/default-provider', async (req, res, next) => {
   try {
-    const provider = String(req.body?.provider ?? '').trim()
+    const provider = normalizePaintingProviderId(req.body?.provider)
     if (!provider) {
       res.status(400).json({ error: 'Painting provider is required' })
       return

@@ -259,3 +259,32 @@ describe('app tools settings routes', () => {
     expect(mocks.persistSettingValue).toHaveBeenCalledWith('showTopics', false)
   })
 })
+
+describe('app tools painting routes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.persistSettingValue.mockResolvedValue(undefined)
+  })
+
+  it('rejects route-unsafe default painting provider ids', async () => {
+    const result = await requestAppTools('PATCH', '/paintings/default-provider', {
+      provider: '../settings/data'
+    })
+
+    expect(result.status).toBe(500)
+    expect(result.json.error).toContain('Painting provider must be a route-safe provider id')
+    expect(mocks.persistSettingValue).not.toHaveBeenCalled()
+  })
+
+  it('persists valid default painting provider ids', async () => {
+    const result = await requestAppTools('PATCH', '/paintings/default-provider', {
+      provider: ' openai_image_generate '
+    })
+
+    expect(result).toEqual({
+      status: 200,
+      json: { ok: true, defaultProvider: 'openai_image_generate' }
+    })
+    expect(mocks.persistSettingValue).toHaveBeenCalledWith('defaultPaintingProvider', 'openai_image_generate')
+  })
+})
