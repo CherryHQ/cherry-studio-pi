@@ -355,6 +355,10 @@ appToolsRouter.patch('/settings/value', async (req, res, next) => {
       res.status(400).json({ error: `Unsupported setting path: ${keyPath}` })
       return
     }
+    if (!Object.prototype.hasOwnProperty.call(req.body ?? {}, 'value')) {
+      res.status(400).json({ error: 'Setting value is required' })
+      return
+    }
     await persistSettingValue(normalizedPath, value)
     res.json({ ok: true, path: normalizedPath, value: sanitizeForAgent(value) })
   } catch (error) {

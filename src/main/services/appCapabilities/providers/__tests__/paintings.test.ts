@@ -259,6 +259,24 @@ describe('painting app capabilities', () => {
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
 
+  it('rejects route-unsafe painting provider ids before navigation or persistence', async () => {
+    await expect(
+      capability('paintings.defaultProvider.set').execute({ provider: '../settings/data' }, { source: 'agent' })
+    ).rejects.toThrow('Painting provider must be a route-safe provider id')
+    await expect(
+      capability('paintings.open').execute({ provider: 'openai?tab=settings' }, { source: 'agent' })
+    ).rejects.toThrow('Painting provider must be a route-safe provider id')
+    await expect(
+      capability('paintings.image.generate').execute(
+        { prompt: 'draw a cat', provider: 'openai/../../settings' },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Painting provider must be a route-safe provider id')
+
+    expect(mocks.preferenceService.set).not.toHaveBeenCalled()
+    expect(mocks.navigateApp).not.toHaveBeenCalled()
+  })
+
   it('normalizes painting provider routes before opening', async () => {
     const result = await capability('paintings.open').execute({ provider: ' openai ' }, { source: 'agent' })
 

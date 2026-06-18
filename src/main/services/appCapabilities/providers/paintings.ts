@@ -26,6 +26,7 @@ const MAX_RAW_PAINTING_STRING_CHARS = 2_000
 const MAX_RAW_PAINTING_ARRAY_ITEMS = 20
 const MAX_RAW_PAINTING_DEPTH = 4
 const RENDERER_STORE_FALLBACK_TIMEOUT_MS = 1_000
+const PAINTING_PROVIDER_ROUTE_SEGMENT_PATTERN = /^[A-Za-z0-9_-]+$/
 
 function normalizeListLimit(value: unknown) {
   const parsed =
@@ -53,6 +54,15 @@ function normalizeRequiredText(value: unknown, label: string) {
   const text = normalizeOptionalText(value)
   if (!text) throw new Error(`${label} is required`)
   return text
+}
+
+function normalizeProviderRouteSegment(value: unknown) {
+  const provider = normalizeOptionalText(value)
+  if (!provider) return ''
+  if (!PAINTING_PROVIDER_ROUTE_SEGMENT_PATTERN.test(provider)) {
+    throw new Error('Painting provider must be a route-safe provider id')
+  }
+  return provider
 }
 
 function truncateText(value: unknown, maxChars = MAX_PAINTING_PROMPT_CHARS) {
@@ -232,7 +242,7 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       permissions: ['paintings.write'],
       tags: ['paintings', 'settings', 'provider'],
       execute: async (input: any) => {
-        const provider = String(input?.provider ?? '').trim()
+        const provider = normalizeProviderRouteSegment(input?.provider)
         if (!provider) throw new Error('Painting provider is required')
         await persistSettingValue('defaultPaintingProvider', provider)
         return okResult('Default painting provider updated', { defaultProvider: provider })
@@ -253,8 +263,8 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['paintings', 'image', 'drawing', 'open'],
       execute: async (input: any) => {
-        const inputProvider = typeof input?.provider === 'string' ? input.provider.trim() : ''
-        const provider = inputProvider || (await readDefaultPaintingProvider())
+        const inputProvider = normalizeProviderRouteSegment(input?.provider)
+        const provider = inputProvider || normalizeProviderRouteSegment(await readDefaultPaintingProvider())
         const route = provider ? `/paintings/${provider}` : '/paintings'
         await navigateApp(route)
         return okResult('Painting workspace opened', { route })
@@ -283,8 +293,8 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       tags: ['paintings', 'image', 'generate', 'drawing'],
       execute: async (input: any) => {
         const prompt = normalizeRequiredText(input?.prompt, 'Painting prompt')
-        const inputProvider = normalizeOptionalText(input?.provider)
-        const provider = inputProvider || (await readDefaultPaintingProvider())
+        const inputProvider = normalizeProviderRouteSegment(input?.provider)
+        const provider = inputProvider || normalizeProviderRouteSegment(await readDefaultPaintingProvider())
         const route = provider ? `/paintings/${provider}` : '/paintings'
         await navigateApp(route)
         return {

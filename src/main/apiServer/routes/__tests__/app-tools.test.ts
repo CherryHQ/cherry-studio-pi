@@ -11,7 +11,10 @@ const mocks = vi.hoisted(() => ({
   notifyDataSyncLocalChange: vi.fn(),
   preferenceService: {
     get: vi.fn()
-  }
+  },
+  isSupportedSettingPath: vi.fn(),
+  persistSettingValue: vi.fn(),
+  readSettingsForAgent: vi.fn(async () => ({}))
 }))
 
 vi.mock('@application', () => ({
@@ -58,9 +61,9 @@ vi.mock('@main/services/appCapabilities/providers/paintings', () => ({
 }))
 
 vi.mock('@main/services/appCapabilities/providers/settings', () => ({
-  isSupportedSettingPath: vi.fn(() => false),
-  persistSettingValue: vi.fn(),
-  readSettingsForAgent: vi.fn(async () => ({}))
+  isSupportedSettingPath: mocks.isSupportedSettingPath,
+  persistSettingValue: mocks.persistSettingValue,
+  readSettingsForAgent: mocks.readSettingsForAgent
 }))
 
 vi.mock('@main/services/appCapabilities/rendererBridge', () => ({
@@ -119,6 +122,12 @@ describe('app tools notes routes', () => {
       return undefined
     })
     mocks.notifyDataSyncLocalChange.mockReset()
+    mocks.isSupportedSettingPath.mockReset()
+    mocks.isSupportedSettingPath.mockReturnValue(false)
+    mocks.persistSettingValue.mockReset()
+    mocks.persistSettingValue.mockResolvedValue(undefined)
+    mocks.readSettingsForAgent.mockReset()
+    mocks.readSettingsForAgent.mockResolvedValue({})
   })
 
   afterEach(async () => {
@@ -181,5 +190,33 @@ describe('app tools notes routes', () => {
       json: { ok: true, path: notePath }
     })
     expect(await fs.readFile(notePath, 'utf8')).toBe('false')
+  })
+})
+
+describe('app tools settings routes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.isSupportedSettingPath.mockReturnValue(true)
+    mocks.persistSettingValue.mockResolvedValue(undefined)
+  })
+
+  it('rejects missing setting values without writing undefined', async () => {
+    const result = await requestAppTools('PATCH', '/settings/value', { path: 'theme' })
+
+    expect(result).toEqual({
+      status: 400,
+      json: { error: 'Setting value is required' }
+    })
+    expect(mocks.persistSettingValue).not.toHaveBeenCalled()
+  })
+
+  it('keeps falsy setting values valid', async () => {
+    const result = await requestAppTools('PATCH', '/settings/value', { path: 'showTopics', value: false })
+
+    expect(result).toEqual({
+      status: 200,
+      json: { ok: true, path: 'showTopics', value: false }
+    })
+    expect(mocks.persistSettingValue).toHaveBeenCalledWith('showTopics', false)
   })
 })
