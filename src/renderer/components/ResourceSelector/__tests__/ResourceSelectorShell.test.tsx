@@ -3,12 +3,22 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { useState } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
+const loggerErrorMock = vi.hoisted(() => vi.fn())
+
 // Global renderer setup stubs @cherrystudio/ui with only a handful of components; the selector
 // needs the real EntitySelector/Checkbox/Separator, so we restore the actual module here.
 vi.mock('@cherrystudio/ui', async (importOriginal) => {
   const actual = await importOriginal<typeof CherryStudioUi>()
   return actual
 })
+
+vi.mock('@logger', () => ({
+  loggerService: {
+    withContext: () => ({
+      error: loggerErrorMock
+    })
+  }
+}))
 
 import { RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '../resourceSelectorEvents'
 import {
@@ -582,6 +592,31 @@ describe('ResourceSelectorShell', () => {
       // Pin icon is a <button aria-label="Unpin"> inside the pinned row.
       fireEvent.click(screen.getByRole('button', { name: 'Unpin' }))
       expect(onTogglePin).toHaveBeenCalledWith('1')
+      expect(onChange).not.toHaveBeenCalled()
+    })
+
+    it('catches async pin failures from the shell-level handler', async () => {
+      const onTogglePin = vi.fn().mockRejectedValueOnce(new Error('pin failed'))
+      const onChange = vi.fn()
+      render(
+        <ResourceSelectorShell
+          trigger={<button type="button">Open</button>}
+          items={ITEMS}
+          pinnedIds={['1']}
+          onTogglePin={onTogglePin}
+          onEditItem={vi.fn()}
+          onCreateNew={vi.fn()}
+          labels={LABELS}
+          value={null}
+          onChange={onChange}
+        />
+      )
+      openPopover()
+      fireEvent.click(screen.getByRole('button', { name: 'Unpin' }))
+
+      await waitFor(() =>
+        expect(loggerErrorMock).toHaveBeenCalledWith('Failed to toggle resource pin', expect.any(Error), { id: '1' })
+      )
       expect(onChange).not.toHaveBeenCalled()
     })
   })

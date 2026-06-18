@@ -11,6 +11,7 @@ import {
   type EntitySelectorSection,
   Separator
 } from '@cherrystudio/ui'
+import { loggerService } from '@logger'
 import { cn } from '@renderer/utils'
 import { ArrowDown, ArrowUp, Bolt, Check, ChevronRight, Pencil, Pin, Plus } from 'lucide-react'
 import {
@@ -188,6 +189,7 @@ const SORT_ICON_DEFAULTS = {
 const ITEM_ACTION_BUTTON_CLASS =
   'flex size-5 shrink-0 items-center justify-center text-muted-foreground/15 opacity-0 transition-all hover:text-muted-foreground/40 group-hover:opacity-100'
 const DEFAULT_ITEM_ACTION_ICON = <Bolt size={13} />
+const logger = loggerService.withContext('ResourceSelectorShell')
 
 export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props: ResourceSelectorShellProps<T>) {
   const {
@@ -416,7 +418,13 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
   const togglePin = useCallback(
     (id: string) => {
       if (isPinActionDisabled) return
-      void onTogglePin(id)
+      try {
+        void Promise.resolve(onTogglePin(id)).catch((error: unknown) => {
+          logger.error('Failed to toggle resource pin', error as Error, { id })
+        })
+      } catch (error) {
+        logger.error('Failed to toggle resource pin', error as Error, { id })
+      }
     },
     [onTogglePin, isPinActionDisabled]
   )
