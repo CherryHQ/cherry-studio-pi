@@ -81,6 +81,25 @@ export default class WebDav {
     return remoteFilePath
   }
 
+  private resolveRemoteDirectoryPath(directoryPath: string) {
+    const normalizedDirectoryPath = String(directoryPath || '')
+      .trim()
+      .replace(/\\/g, '/')
+    if (!normalizedDirectoryPath || normalizedDirectoryPath.includes('\0')) {
+      throw new Error('Invalid WebDAV directory path')
+    }
+
+    const remoteDirectoryPath = path.posix.normalize(
+      normalizedDirectoryPath.startsWith('/')
+        ? normalizedDirectoryPath
+        : path.posix.join(this.webdavPath, normalizedDirectoryPath)
+    )
+    if (!isRemotePathInside(remoteDirectoryPath, this.webdavPath)) {
+      throw new Error('WebDAV directory path is outside the configured directory')
+    }
+    return remoteDirectoryPath
+  }
+
   private async ensureRemoteDirectory(dirPath: string) {
     if (!this.instance) {
       throw new Error('WebDAV client not initialized')
@@ -175,13 +194,15 @@ export default class WebDav {
     }
   }
 
-  public createDirectory = async (path: string, options?: CreateDirectoryOptions) => {
+  public createDirectory = async (directoryPath: string, options?: CreateDirectoryOptions) => {
     if (!this.instance) {
       throw new Error('WebDAV client not initialized')
     }
 
+    const remoteDirectoryPath = this.resolveRemoteDirectoryPath(directoryPath)
+
     try {
-      return await this.instance.createDirectory(path, options)
+      return await this.instance.createDirectory(remoteDirectoryPath, options)
     } catch (error) {
       logger.error('Error creating directory on WebDAV:', error as Error)
       throw error

@@ -139,6 +139,31 @@ describe('WebDav', () => {
     expect(mocks.client.deleteFile).not.toHaveBeenCalled()
   })
 
+  it('keeps explicit directory creation inside the configured WebDAV directory', async () => {
+    mocks.client.createDirectory.mockResolvedValue(true)
+
+    const webdav = new WebDav({
+      webdavHost: 'http://192.168.1.100:8080',
+      webdavUser: 'webdav',
+      webdavPass: 'test-webdav-password',
+      webdavPath: '/Cherry Studio Pi'
+    })
+
+    await expect(webdav.createDirectory('manual/nested', { recursive: true })).resolves.toBe(true)
+    await expect(webdav.createDirectory('/Cherry Studio Pi/manual/absolute', { recursive: true })).resolves.toBe(true)
+    await expect(webdav.createDirectory('/Other App/manual', { recursive: true })).rejects.toThrow(
+      'WebDAV directory path is outside the configured directory'
+    )
+
+    expect(mocks.client.createDirectory).toHaveBeenNthCalledWith(1, '/Cherry Studio Pi/manual/nested', {
+      recursive: true
+    })
+    expect(mocks.client.createDirectory).toHaveBeenNthCalledWith(2, '/Cherry Studio Pi/manual/absolute', {
+      recursive: true
+    })
+    expect(mocks.client.createDirectory).toHaveBeenCalledTimes(2)
+  })
+
   it('checks and creates the configured WebDAV directory instead of probing the server root', async () => {
     mocks.client.exists.mockResolvedValueOnce(false)
     mocks.client.createDirectory.mockResolvedValueOnce(true)
