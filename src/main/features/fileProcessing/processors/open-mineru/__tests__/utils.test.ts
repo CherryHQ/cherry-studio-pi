@@ -90,4 +90,52 @@ describe('open-mineru utils', () => {
     )
     expect(destroyMock).toHaveBeenCalled()
   })
+
+  it('accepts application zip responses with content-type parameters', async () => {
+    vi.spyOn(fs, 'stat').mockResolvedValue({ size: 1024 } as never)
+    fetchMock.mockResolvedValueOnce(
+      new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          'content-type': 'application/zip; charset=binary'
+        }
+      })
+    )
+
+    await expect(
+      executeTask({
+        apiHost: 'http://127.0.0.1:8000',
+        file: {
+          path: '/tmp/file.pdf',
+          name: 'file',
+          ext: 'pdf'
+        }
+      } as never)
+    ).resolves.toBeInstanceOf(Response)
+  })
+
+  it('still rejects non-zip Open MinerU responses', async () => {
+    vi.spyOn(fs, 'stat').mockResolvedValue({ size: 1024 } as never)
+    fetchMock.mockResolvedValueOnce(
+      new Response('{"error":"not zip"}', {
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          'content-type': 'application/json'
+        }
+      })
+    )
+
+    await expect(
+      executeTask({
+        apiHost: 'http://127.0.0.1:8000',
+        file: {
+          path: '/tmp/file.pdf',
+          name: 'file',
+          ext: 'pdf'
+        }
+      } as never)
+    ).rejects.toThrow('Open MinerU returned unexpected content-type: application/json')
+  })
 })

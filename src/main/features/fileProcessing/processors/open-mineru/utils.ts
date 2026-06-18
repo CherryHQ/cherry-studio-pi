@@ -9,6 +9,10 @@ import type { PreparedOpenMineruContext } from './types'
 
 const OPEN_MINERU_MAX_FILE_SIZE = 200 * MB
 
+function isApplicationZipContentType(contentType: string | null): boolean {
+  return contentType?.split(';', 1)[0]?.trim().toLowerCase() === 'application/zip'
+}
+
 export async function executeTask(context: PreparedOpenMineruContext): Promise<Response> {
   const endpoint = `${context.apiHost}/file_parse`
   const stat = await fs.stat(context.file.path)
@@ -45,12 +49,10 @@ export async function executeTask(context: PreparedOpenMineruContext): Promise<R
 
     const contentType = response.headers.get('content-type')
 
-    // Intentional contract check:
-    // when `response_format_zip=true`, this adapter only accepts an exact
-    // `application/zip` response. We fail fast on any other content-type
-    // instead of broadening compatibility implicitly, so provider contract
-    // changes stay explicit and visible.
-    if (contentType !== 'application/zip') {
+    // Intentional contract check: when `response_format_zip=true`, this
+    // adapter only accepts the `application/zip` media type. Parameters such as
+    // `charset=binary` are harmless, but different media types stay explicit.
+    if (!isApplicationZipContentType(contentType)) {
       throw new Error(`Open MinerU returned unexpected content-type: ${contentType}`)
     }
 
