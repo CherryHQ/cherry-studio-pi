@@ -771,6 +771,81 @@ describe('AppDataSyncService', () => {
     }
   })
 
+  it('does not overlap slow remote lock renewals', async () => {
+    vi.useFakeTimers()
+    const pendingStorageSync = deferred<{
+      manifest: { version: 1; records: Record<string, never>; blobs: Record<string, never> }
+      syncStates: never[]
+      summary: {
+        storageUploaded: number
+        storageDownloaded: number
+        storageDeleted: number
+        storageConflicts: number
+        storageResolvedConflicts: number
+        storageSkipped: number
+        blobUploaded: number
+        blobDownloaded: number
+        secretUploaded: number
+        secretDownloaded: number
+      }
+    }>()
+    const pendingRenewal = deferred<boolean>()
+    const defaultPutFileContents = mocks.webdav.putFileContents.getMockImplementation()
+    let renewalWrites = 0
+
+    mocks.storageRecordSync.sync.mockReturnValueOnce(pendingStorageSync.promise)
+    mocks.webdav.putFileContents.mockImplementation(async (filePath: string, contents: unknown, options?: any) => {
+      if (String(filePath).includes('/.sync.locks/') && options?.overwrite === true) {
+        renewalWrites += 1
+        if (renewalWrites === 1) {
+          return pendingRenewal.promise
+        }
+      }
+
+      return defaultPutFileContents?.(filePath, contents, options)
+    })
+
+    try {
+      const service = new AppDataSyncService()
+      const sync = service.syncNow(config)
+
+      await vi.waitFor(() => expect(mocks.storageRecordSync.sync).toHaveBeenCalledTimes(1))
+
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(renewalWrites).toBe(1)
+
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(renewalWrites).toBe(1)
+
+      pendingRenewal.resolve(true)
+      await vi.waitFor(() => expect(renewalWrites).toBe(1))
+
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(renewalWrites).toBe(2)
+
+      pendingStorageSync.resolve({
+        manifest: { version: 1, records: {}, blobs: {} },
+        syncStates: [],
+        summary: {
+          storageUploaded: 0,
+          storageDownloaded: 0,
+          storageDeleted: 0,
+          storageConflicts: 0,
+          storageResolvedConflicts: 0,
+          storageSkipped: 0,
+          blobUploaded: 0,
+          blobDownloaded: 0,
+          secretUploaded: 0,
+          secretDownloaded: 0
+        }
+      })
+
+      await expect(sync).resolves.toEqual(expect.objectContaining({ status: 'success' }))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('rejects active remote file locks before mutating records', async () => {
     const now = Date.now()
     mocks.remoteFiles.set(

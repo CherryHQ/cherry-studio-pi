@@ -2226,6 +2226,7 @@ export class AppDataSyncService {
     let stopped = false
     let renewalError: unknown = null
     let interval: ReturnType<typeof setInterval> | null = null
+    let renewing: Promise<void> | null = null
     if (!lock || lock.type !== 'file') {
       return {
         stop: () => undefined,
@@ -2275,10 +2276,16 @@ export class AppDataSyncService {
       }
     }
 
+    const runRenew = () => {
+      if (stopped || renewing) return
+
+      renewing = renew().finally(() => {
+        renewing = null
+      })
+    }
+
     interval = setInterval(() => {
-      if (!stopped) {
-        void renew()
-      }
+      runRenew()
     }, REMOTE_SYNC_LOCK_RENEW_INTERVAL_MS)
     if (typeof interval === 'object' && interval && 'unref' in interval && typeof interval.unref === 'function') {
       interval.unref()
