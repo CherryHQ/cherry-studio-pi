@@ -216,6 +216,16 @@ describe('agent app capabilities', () => {
     expect(mocks.agentTaskService.createTask).toHaveBeenCalledWith('agent-1', { title: 'Check sync' })
   })
 
+  it('does not advertise unsupported session-level model or instruction fields', () => {
+    const properties = capability('agents.session.create').inputSchema.properties ?? {}
+
+    expect(properties).toHaveProperty('agentId')
+    expect(properties).toHaveProperty('name')
+    expect(properties).toHaveProperty('description')
+    expect(properties).not.toHaveProperty('model')
+    expect(properties).not.toHaveProperty('instructions')
+  })
+
   it('treats blank optional agent filters as omitted', async () => {
     await capability('agents.sessions.list').execute({ agentId: '   ', cursor: '   ' }, { source: 'agent' })
     await capability('agents.tasks.list').execute({ agentId: '   ' }, { source: 'agent' })

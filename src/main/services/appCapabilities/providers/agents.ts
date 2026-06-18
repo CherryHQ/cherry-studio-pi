@@ -284,9 +284,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
         properties: {
           agentId: { type: 'string' },
           name: { type: 'string' },
-          description: { type: 'string' },
-          instructions: { type: 'string' },
-          model: { type: 'string' }
+          description: { type: 'string' }
         },
         required: ['agentId']
       },
