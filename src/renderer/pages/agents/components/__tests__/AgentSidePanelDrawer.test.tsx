@@ -2,10 +2,15 @@ import { isValidElement, type ReactElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  closeTransientResourceSelectors: vi.fn(),
   topView: {
     show: vi.fn(),
     hide: vi.fn()
   }
+}))
+
+vi.mock('@renderer/components/ResourceSelector/resourceSelectorEvents', () => ({
+  closeTransientResourceSelectors: mocks.closeTransientResourceSelectors
 }))
 
 vi.mock('@renderer/components/TopView', () => ({
@@ -23,6 +28,7 @@ describe('AgentSidePanelDrawer', () => {
 
     const shown = AgentSidePanelDrawer.show()
 
+    expect(mocks.closeTransientResourceSelectors).toHaveBeenCalledTimes(1)
     expect(mocks.topView.show).toHaveBeenCalledTimes(1)
     const [element, key] = mocks.topView.show.mock.calls[0]
     expect(key).toBe('AgentSidePanelDrawer')
@@ -53,6 +59,7 @@ describe('AgentSidePanelDrawer', () => {
 
     AgentSidePanelDrawer.hide()
 
+    expect(mocks.closeTransientResourceSelectors).toHaveBeenCalledTimes(1)
     expect(mocks.topView.hide).toHaveBeenCalledTimes(1)
     expect(mocks.topView.hide).toHaveBeenCalledWith('AgentSidePanelDrawer')
   })
@@ -61,8 +68,10 @@ describe('AgentSidePanelDrawer', () => {
     const { default: AgentSidePanelDrawer } = await import('../AgentSidePanelDrawer')
 
     const shown = AgentSidePanelDrawer.show()
+    mocks.closeTransientResourceSelectors.mockClear()
     AgentSidePanelDrawer.hide()
 
+    expect(mocks.closeTransientResourceSelectors).toHaveBeenCalledTimes(1)
     await expect(shown).resolves.toBeUndefined()
     expect(mocks.topView.hide).toHaveBeenCalledWith('AgentSidePanelDrawer')
   })
@@ -74,6 +83,7 @@ describe('AgentSidePanelDrawer', () => {
     AgentSidePanelDrawer.registerCloseHandler(close)
     AgentSidePanelDrawer.hide()
 
+    expect(mocks.closeTransientResourceSelectors).toHaveBeenCalledTimes(1)
     expect(close).toHaveBeenCalledTimes(1)
     expect(mocks.topView.hide).not.toHaveBeenCalled()
 

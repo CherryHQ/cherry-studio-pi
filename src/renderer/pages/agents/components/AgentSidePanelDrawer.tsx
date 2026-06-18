@@ -1,4 +1,5 @@
 import { useTopViewClose } from '@renderer/components/Popups/useTopViewClose'
+import { closeTransientResourceSelectors } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { TopView } from '@renderer/components/TopView'
 import { isMac } from '@renderer/config/constant'
 import { Drawer } from 'antd'
@@ -82,6 +83,7 @@ export default class AgentSidePanelDrawer {
   }
 
   static hide() {
+    closeTransientResourceSelectors()
     if (AgentSidePanelDrawer.closeHandler) {
       AgentSidePanelDrawer.closeHandler()
       return
@@ -93,6 +95,7 @@ export default class AgentSidePanelDrawer {
   }
 
   static show() {
+    closeTransientResourceSelectors()
     if (AgentSidePanelDrawer.activePromise) {
       return AgentSidePanelDrawer.activePromise
     }
