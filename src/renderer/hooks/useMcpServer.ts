@@ -19,6 +19,8 @@ type McpAddServerListenerGlobal = typeof globalThis & {
  * The listener is module-scoped, so guard it for renderer tests and Vite HMR.
  */
 export function registerMcpAddServerNavigationListener() {
+  if (typeof window === 'undefined') return
+
   const ipcRenderer = window.electron?.ipcRenderer
   if (!ipcRenderer) return
 

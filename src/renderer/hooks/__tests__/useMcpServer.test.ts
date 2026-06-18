@@ -74,4 +74,16 @@ describe('useMcpServer module listener', () => {
 
     expect(onMock).not.toHaveBeenCalled()
   })
+
+  it('does not crash when imported without a browser window', async () => {
+    vi.stubGlobal('window', undefined)
+
+    try {
+      await expect(import('../useMcpServer')).resolves.toBeTruthy()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+
+    expect(onMock).not.toHaveBeenCalled()
+  })
 })
