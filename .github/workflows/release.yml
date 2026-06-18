@@ -215,7 +215,6 @@ jobs:
 
           const recent = releases
             .filter((release) => release.tagName !== currentTag)
-            .filter((release) => !release.isDraft)
             .map((release) => ({
               ...release,
               timestamp: Date.parse(release.publishedAt || release.createdAt)
@@ -225,9 +224,10 @@ jobs:
 
           if (recent) {
             const releasedAt = new Date(recent.timestamp).toISOString()
-            console.error(`::error::Recent release ${recent.tagName} was published at ${releasedAt}.`)
+            const releaseState = recent.isDraft ? 'draft release' : 'release'
+            console.error(`::error::Recent ${releaseState} ${recent.tagName} was created at ${releasedAt}.`)
             console.error(
-              `Refusing to publish ${currentTag} within ${windowMinutes} minutes of another release. ` +
+              `Refusing to publish ${currentTag} within ${windowMinutes} minutes of another release or draft. ` +
                 'If this is an intentional urgent hotfix, rerun the workflow with allow_close_release=true.'
             )
             process.exit(1)

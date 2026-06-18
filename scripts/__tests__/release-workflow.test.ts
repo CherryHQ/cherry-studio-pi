@@ -55,9 +55,12 @@ describe('release workflow safety', () => {
     expect(workflow).not.toContain('group: release-${{ github.event.inputs.tag }}')
   })
 
-  it('blocks rapid consecutive public releases unless explicitly allowed', () => {
+  it('blocks rapid consecutive releases and drafts unless explicitly allowed', () => {
     expect(workflow).toContain('allow_close_release:')
     expect(workflow).toContain('CLOSE_RELEASE_WINDOW_MINUTES=120')
-    expect(workflow).toContain('Refusing to publish ${currentTag} within ${windowMinutes} minutes')
+    expect(workflow).not.toContain('.filter((release) => !release.isDraft)')
+    expect(workflow).toContain(
+      'Refusing to publish ${currentTag} within ${windowMinutes} minutes of another release or draft'
+    )
   })
 })
