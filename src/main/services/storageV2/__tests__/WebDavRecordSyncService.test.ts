@@ -48,6 +48,7 @@ vi.mock('../SecretVaultService', () => ({
   storageV2SecretVaultService: mocks.secretVault
 }))
 
+import { WebDavOperationError } from '../../WebDavRetry'
 import { storageV2Database } from '../StorageV2Database'
 import { encodeStorageV2CompositeEntityId } from '../SyncEntityId'
 import { StorageV2WebDavRecordSyncService } from '../WebDavRecordSyncService'
@@ -2710,6 +2711,40 @@ describe('StorageV2WebDavRecordSyncService', () => {
     ).rejects.toThrow('远端 Storage v2 同步旧文件数量过多')
 
     expect(remote.files.has('/remote-root/sync/v1/storage-v2/bundle/stale.json')).toBe(true)
+  })
+
+  it('treats a concurrently missing Storage v2 artifact directory as empty during cleanup', async () => {
+    const remote = makeSharedWebDavStore()
+    remote.files.set('/remote-root/sync/v1/storage-v2/bundle/stale.json', JSON.stringify({ stale: true }))
+    remote.client.getDirectoryContents.mockImplementation(async (filePath: string) => {
+      if (filePath === '/remote-root/sync/v1/storage-v2/bundle') {
+        throw new WebDavOperationError(`listing Storage v2 artifact directory ${filePath}`, { status: 404 })
+      }
+      return []
+    })
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([settingsTable]).pruneRemoteArtifacts(
+        remote.client as any,
+        '/remote-root/sync/v1',
+        {
+          version: 1,
+          records: {},
+          blobs: {},
+          bundle: {
+            version: 1,
+            path: 'storage-v2/bundle/current.json',
+            valueHash: 'current-hash',
+            recordCount: 0,
+            blobCount: 0,
+            updatedAt: Date.parse('2026-05-29T12:00:00.000Z')
+          },
+          secrets: null
+        }
+      )
+    ).resolves.toBeUndefined()
+
+    expect(remote.client.getDirectoryContents).toHaveBeenCalledWith('/remote-root/sync/v1/storage-v2/bundle')
   })
 
   it('prefers remote Storage v2 rows and keeps a recovery audit when a device has no prior sync baseline', async () => {

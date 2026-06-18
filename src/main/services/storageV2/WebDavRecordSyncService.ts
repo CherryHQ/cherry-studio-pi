@@ -1114,7 +1114,10 @@ export class StorageV2WebDavRecordSyncService {
       `listing Storage v2 artifact directory ${dirPath}`,
       () => client.getDirectoryContents(dirPath),
       { logger }
-    )
+    ).catch((error) => {
+      if (error instanceof WebDavOperationError && error.status === 404) return []
+      throw error
+    })
     const entries = Array.isArray(contents)
       ? contents
       : Array.isArray((contents as { data?: unknown } | null)?.data)
