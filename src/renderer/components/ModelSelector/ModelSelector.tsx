@@ -296,6 +296,7 @@ export function ModelSelector(props: ModelSelectorProps) {
   const [internalMultiSelectMode, setInternalMultiSelectMode] = useState(defaultMultiSelectMode)
   const [searchText, setSearchText] = useState('')
   const deferredSearchText = useDeferredValue(searchText)
+  const deferredSearchKeywords = useMemo(() => deferredSearchText.trim(), [deferredSearchText])
   const [focusedItemKey, _setFocusedItemKey] = useState('')
   const selectorId = useId()
   // 用 startTransition 包裹：滚动时虚拟列表内部可能已进入 layout lifecycle（flushSync），
@@ -650,14 +651,14 @@ export function ModelSelector(props: ModelSelectorProps) {
     }
 
     const targetKey =
-      deferredSearchText || selectedTagsKey.length > 0
+      deferredSearchKeywords || selectedTagsKey.length > 0
         ? currentModelItems[0]?.key
         : (currentModelItems.find((item) => item.isSelected)?.key ?? currentModelItems[0]?.key)
 
     if (targetKey) {
       focusItem(targetKey)
     }
-  }, [deferredSearchText, focusItem, isLoading, open, selectedTagsKey])
+  }, [deferredSearchKeywords, focusItem, isLoading, open, selectedTagsKey])
 
   const rowRenderer = useCallback(
     (item: FlatListItem) => {

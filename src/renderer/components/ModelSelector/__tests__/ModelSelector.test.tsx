@@ -367,6 +367,37 @@ describe('ModelSelector', () => {
     expect(mockScrollToIndex).not.toHaveBeenCalled()
   })
 
+  it('treats whitespace search as empty when choosing the focused row', async () => {
+    const unselectedFirst = makeModelItem('openai::gpt-4' as UniqueModelId)
+    const selectedSecond = makeModelItem('openai::gpt-3.5' as UniqueModelId, { isSelected: true })
+    mockUseModelSelectorData.mockReturnValue(
+      makeData({
+        listItems: [unselectedFirst, selectedSecond],
+        modelItems: [unselectedFirst, selectedSecond],
+        resolvedSelectedModelIds: ['openai::gpt-3.5' as UniqueModelId]
+      })
+    )
+
+    render(
+      <ModelSelector
+        open
+        multiple={false}
+        value={selectedSecond.model}
+        trigger={<button type="button">open</button>}
+        onSelect={vi.fn()}
+      />
+    )
+
+    await waitFor(() => expect(mockScrollToIndex).toHaveBeenCalledWith(1, { align: 'auto' }))
+    mockScrollToIndex.mockClear()
+
+    fireEvent.change(screen.getByTestId('model-selector-search'), { target: { value: '   ' } })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(mockScrollToIndex).not.toHaveBeenCalled()
+    expect(mockScrollToIndex).not.toHaveBeenCalledWith(0, { align: 'auto' })
+  })
+
   it('navigates from provider settings without selecting a model', async () => {
     mockUseModelSelectorData.mockReturnValue(makeData())
     const onSelect = vi.fn()
