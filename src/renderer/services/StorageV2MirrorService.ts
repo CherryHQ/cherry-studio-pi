@@ -324,6 +324,7 @@ class StorageV2MirrorService {
       this.timer = null
       void this.flush()
     }, DEFAULT_DEBOUNCE_MS)
+    unrefTimer(this.timer)
   }
 
   private hasStrictPendingWork() {

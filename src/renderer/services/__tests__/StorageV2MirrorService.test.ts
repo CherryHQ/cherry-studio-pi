@@ -146,6 +146,21 @@ describe('StorageV2MirrorService', () => {
     expect(unref).toHaveBeenCalledTimes(1)
   })
 
+  it('does not keep the renderer process alive while retrying failed Redux mirrors', async () => {
+    importLegacyReduxSnapshot.mockRejectedValueOnce(new Error('ipc unavailable'))
+    const unref = vi.fn()
+    const timer = { unref } as unknown as ReturnType<typeof setTimeout>
+    vi.spyOn(globalThis, 'setTimeout').mockReturnValue(timer)
+
+    const { storageV2MirrorService } = await import('../StorageV2MirrorService')
+
+    storageV2MirrorService.scheduleStartupMirror(createState)
+    await storageV2MirrorService.flush()
+
+    expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
+    expect(unref).toHaveBeenCalledTimes(2)
+  })
+
   it('does not prune Storage v2 with an empty startup runtime snapshot', async () => {
     const { storageV2MirrorService } = await import('../StorageV2MirrorService')
 
