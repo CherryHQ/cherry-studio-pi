@@ -8,10 +8,35 @@ const FAILED_FAVICON_CACHE_PREFIX = 'failed_favicon_'
 // 失败URL的缓存时间 (24小时)
 const FAILED_FAVICON_CACHE_DURATION = 24 * 60 * 60 * 1000
 
+const getCachedValue = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key)
+  } catch (error) {
+    logger.warn(`Failed to read favicon cache for ${key}`, error as Error)
+    return null
+  }
+}
+
+const setCachedValue = (key: string, value: string): void => {
+  try {
+    localStorage.setItem(key, value)
+  } catch (error) {
+    logger.warn(`Failed to write favicon cache for ${key}`, error as Error)
+  }
+}
+
+const removeCachedValue = (key: string): void => {
+  try {
+    localStorage.removeItem(key)
+  } catch (error) {
+    logger.warn(`Failed to remove favicon cache for ${key}`, error as Error)
+  }
+}
+
 // 检查URL是否在失败缓存中
 const isUrlFailedRecently = (url: string): boolean => {
   const cacheKey = `${FAILED_FAVICON_CACHE_PREFIX}${url}`
-  const cachedTimestamp = localStorage.getItem(cacheKey)
+  const cachedTimestamp = getCachedValue(cacheKey)
 
   if (!cachedTimestamp) return false
 
@@ -24,14 +49,14 @@ const isUrlFailedRecently = (url: string): boolean => {
   }
 
   // 清除过期的缓存
-  localStorage.removeItem(cacheKey)
+  removeCachedValue(cacheKey)
   return false
 }
 
 // 记录失败的URL到缓存
 const markUrlAsFailed = (url: string): void => {
   const cacheKey = `${FAILED_FAVICON_CACHE_PREFIX}${url}`
-  localStorage.setItem(cacheKey, Date.now().toString())
+  setCachedValue(cacheKey, Date.now().toString())
 }
 
 // FallbackFavicon component that tries multiple favicon sources

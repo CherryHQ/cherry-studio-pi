@@ -6,7 +6,8 @@ import FallbackFavicon from '../FallbackFavicon'
 vi.mock('@logger', () => ({
   loggerService: {
     withContext: () => ({
-      error: vi.fn()
+      error: vi.fn(),
+      warn: vi.fn()
     })
   }
 }))
@@ -19,6 +20,7 @@ describe('FallbackFavicon', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
+    vi.restoreAllMocks()
     localStorage.clear()
   })
 
@@ -91,5 +93,35 @@ describe('FallbackFavicon', () => {
     unmount()
 
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('continues probing favicons when localStorage cache access is blocked', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('Blocked', 'SecurityError')
+    })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Blocked', 'SecurityError')
+    })
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new DOMException('Blocked', 'SecurityError')
+    })
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      const target = String(url)
+      if (target.startsWith('https://icon.horse/')) {
+        return { ok: false, status: 404 }
+      }
+
+      return { ok: true, status: 200 }
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<FallbackFavicon hostname="example.com" alt="Example" />)
+
+    await waitFor(() =>
+      expect(screen.getByRole('img', { name: 'Example' })).toHaveAttribute(
+        'src',
+        'https://favicon.splitbee.io/?url=example.com'
+      )
+    )
   })
 })
