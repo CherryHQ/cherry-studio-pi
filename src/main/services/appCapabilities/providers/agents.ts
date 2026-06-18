@@ -147,9 +147,7 @@ async function listAgentTasks(input: any = {}) {
     })
   }
 
-  const { agents } = await listAgentsWithStorageV2Recovery({ limit: MAX_AGENT_CAPABILITY_LIST_LIMIT })
   return await agentTaskService.listTasksAcrossAgents({
-    agentIds: agents.map((agent) => agent.id),
     includeHeartbeat: options.includeHeartbeat,
     limit: options.limit ?? DEFAULT_AGENT_CAPABILITY_LIST_LIMIT,
     offset: options.offset

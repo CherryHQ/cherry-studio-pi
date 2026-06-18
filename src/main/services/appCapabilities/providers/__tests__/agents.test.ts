@@ -76,9 +76,7 @@ describe('agent app capabilities', () => {
   })
 
   it('defaults agent list capabilities to bounded pages', async () => {
-    mocks.listAgentsWithStorageV2Recovery
-      .mockResolvedValueOnce({ agents: [], total: 0 })
-      .mockResolvedValueOnce({ agents: [{ id: 'agent-1' }], total: 1 })
+    mocks.listAgentsWithStorageV2Recovery.mockResolvedValueOnce({ agents: [], total: 0 })
 
     await capability('agents.models.list').execute({}, { source: 'agent' })
     await capability('agents.list').execute({}, { source: 'agent' })
@@ -92,9 +90,8 @@ describe('agent app capabilities', () => {
       limit: 50,
       cursor: undefined
     })
-    expect(mocks.listAgentsWithStorageV2Recovery).toHaveBeenCalledWith({ limit: 200 })
+    expect(mocks.listAgentsWithStorageV2Recovery).toHaveBeenCalledTimes(1)
     expect(mocks.agentTaskService.listTasksAcrossAgents).toHaveBeenCalledWith({
-      agentIds: ['agent-1'],
       includeHeartbeat: undefined,
       limit: 50,
       offset: undefined
@@ -183,7 +180,6 @@ describe('agent app capabilities', () => {
       offset: undefined
     })
     expect(mocks.agentTaskService.listTasksAcrossAgents).toHaveBeenCalledWith({
-      agentIds: [],
       includeHeartbeat: true,
       limit: 10,
       offset: undefined
@@ -213,11 +209,7 @@ describe('agent app capabilities', () => {
     expect(mocks.agentTaskService.listTasksAcrossAgents).not.toHaveBeenCalled()
   })
 
-  it('paginates all agent tasks after merging tasks from each agent', async () => {
-    mocks.listAgentsWithStorageV2Recovery.mockResolvedValueOnce({
-      agents: [{ id: 'agent-a' }, { id: 'agent-b' }],
-      total: 2
-    })
+  it('delegates all-agent task pagination to task storage without prefetching agents', async () => {
     mocks.agentTaskService.listTasksAcrossAgents.mockResolvedValueOnce({
       total: 3,
       tasks: [{ id: 'mid-b', createdAt: '2026-06-02T00:00:00.000Z' }]
@@ -225,8 +217,8 @@ describe('agent app capabilities', () => {
 
     const result = await capability('agents.tasks.list').execute({ limit: 1, offset: 1 }, { source: 'agent' })
 
+    expect(mocks.listAgentsWithStorageV2Recovery).not.toHaveBeenCalled()
     expect(mocks.agentTaskService.listTasksAcrossAgents).toHaveBeenCalledWith({
-      agentIds: ['agent-a', 'agent-b'],
       includeHeartbeat: undefined,
       limit: 1,
       offset: 1
@@ -292,7 +284,11 @@ describe('agent app capabilities', () => {
       limit: 50,
       cursor: undefined
     })
-    expect(mocks.listAgentsWithStorageV2Recovery).toHaveBeenCalledWith({ limit: 200 })
+    expect(mocks.agentTaskService.listTasksAcrossAgents).toHaveBeenCalledWith({
+      includeHeartbeat: undefined,
+      limit: 50,
+      offset: undefined
+    })
   })
 
   it('normalizes app agent creation input to the data API shape', async () => {
