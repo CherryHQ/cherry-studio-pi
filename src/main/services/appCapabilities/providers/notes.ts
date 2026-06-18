@@ -34,15 +34,14 @@ async function getNotesRoot() {
   return path.resolve(noteState?.notesPath || getNotesDir())
 }
 
-function normalizeOptionalText(value: unknown, fallback = '') {
+function normalizeOptionalText(value: unknown, label = 'Value', fallback = '') {
   if (typeof value === 'string') return value.trim()
   if (value === null || typeof value === 'undefined') return fallback
-  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return String(value).trim()
-  return fallback
+  throw new Error(`${label} must be a string`)
 }
 
 function normalizeRequiredText(value: unknown, label: string) {
-  const text = normalizeOptionalText(value)
+  const text = normalizeOptionalText(value, label)
   if (!text) throw new Error(`${label} is required`)
   return text
 }
@@ -365,8 +364,9 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['notes', 'read', 'markdown'],
       execute: async (input: any) => {
+        const notePath = normalizeRequiredText(input?.path, 'Note path')
         const root = await getNotesRoot()
-        const filePath = resolveInsideRoot(root, normalizeRequiredText(input?.path, 'Note path'), '.md')
+        const filePath = resolveInsideRoot(root, notePath, '.md')
         await assertResolvedInsideNotesRoot(root, filePath)
         return okResult('Note read', {
           path: filePath,
@@ -391,10 +391,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['notes', 'search', 'markdown'],
       execute: async (input: any) => {
-        const query = String(input?.query || '')
-          .trim()
-          .toLowerCase()
-        if (!query) throw new Error('Missing search query')
+        const query = normalizeRequiredText(input?.query, 'Note search query').toLowerCase()
 
         const root = await getNotesRoot()
         const limit = normalizeSearchLimit(input?.limit)
@@ -451,14 +448,17 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['filesystem.write'],
       tags: ['notes', 'create', 'markdown'],
       execute: async (input: any) => {
+        const parentInput = normalizeOptionalText(input?.parent, 'Note parent')
+        const nameInput = normalizeOptionalText(input?.name, 'Note name', 'Untitled') || 'Untitled'
+        const content = normalizeNoteContent(input?.content)
         const root = await getNotesRoot()
-        const parent = resolveInsideRoot(root, normalizeOptionalText(input?.parent))
+        const parent = resolveInsideRoot(root, parentInput)
         await assertResolvedInsideNotesRoot(root, parent, 'Note parent')
         await fs.mkdir(parent, { recursive: true })
-        const safeName = getName(parent, normalizeOptionalText(input?.name, 'Untitled') || 'Untitled', true)
+        const safeName = getName(parent, nameInput, true)
         const filePath = path.join(parent, `${safeName}.md`)
         await assertResolvedInsideNotesRoot(root, filePath)
-        await fs.writeFile(filePath, normalizeNoteContent(input?.content), 'utf8')
+        await fs.writeFile(filePath, content, 'utf8')
         notifyMainProcessDataSyncLocalChange('file', { source: 'app-capability.notes.create', path: filePath })
         return {
           ok: true,
@@ -489,13 +489,15 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any) => {
         const inputObject = input && typeof input === 'object' ? input : {}
         if (!Object.prototype.hasOwnProperty.call(inputObject, 'content')) throw new Error('Note content is required')
+        const notePath = normalizeRequiredText(input?.path, 'Note path')
+        const content = normalizeNoteContent(inputObject.content)
         const root = await getNotesRoot()
-        const filePath = resolveInsideRoot(root, normalizeRequiredText(input?.path, 'Note path'), '.md')
+        const filePath = resolveInsideRoot(root, notePath, '.md')
         await assertResolvedInsideNotesRoot(root, filePath)
         const parent = path.dirname(filePath)
         await assertResolvedInsideNotesRoot(root, parent, 'Note parent')
         await fs.mkdir(parent, { recursive: true })
-        await fs.writeFile(filePath, normalizeNoteContent(inputObject.content), 'utf8')
+        await fs.writeFile(filePath, content, 'utf8')
         notifyMainProcessDataSyncLocalChange('file', { source: 'app-capability.notes.write', path: filePath })
         return okResult('Note written', { path: filePath })
       }
@@ -519,8 +521,9 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       supportsDryRun: true,
       tags: ['notes', 'delete'],
       execute: async (input: any, context) => {
+        const notePath = normalizeRequiredText(input?.path, 'Note path')
         const root = await getNotesRoot()
-        const target = await resolveNoteDeleteTarget(root, normalizeRequiredText(input?.path, 'Note path'))
+        const target = await resolveNoteDeleteTarget(root, notePath)
         assertNotNotesRoot(root, target)
         await assertResolvedInsideNotesRoot(root, target)
         if (context.dryRun) return okResult('Note delete dry run completed', { path: target })
