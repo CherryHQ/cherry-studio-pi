@@ -98,7 +98,20 @@ export class PythonService extends BaseService {
       })
 
       const request: PythonExecutionRequest = { id: requestId, script, context, timeout }
-      application.get('WindowManager').broadcastToType(WindowType.Main, IpcChannel.Python_ExecutionRequest, request)
+      try {
+        application.get('WindowManager').broadcastToType(WindowType.Main, IpcChannel.Python_ExecutionRequest, request)
+      } catch (error) {
+        const pending = this.pendingRequests.get(requestId)
+        this.pendingRequests.delete(requestId)
+        const sendError = new Error(
+          `Failed to send Python execution request: ${error instanceof Error ? error.message : String(error)}`
+        )
+        if (pending) {
+          pending.reject(sendError)
+        } else {
+          reject(sendError)
+        }
+      }
     })
   }
 }
