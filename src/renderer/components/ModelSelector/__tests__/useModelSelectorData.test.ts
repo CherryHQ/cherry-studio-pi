@@ -118,6 +118,23 @@ describe('useModelSelectorData', () => {
     expect(result.current.selectableModelsById.has('anthropic::claude-3')).toBe(false)
   })
 
+  it('defensively drops disabled or hidden models even if the models query returns them', () => {
+    wireDeps({
+      providers: [makeProvider('openai')],
+      models: [
+        makeModel('gpt-4', 'openai'),
+        makeModel('disabled', 'openai', { isEnabled: false }),
+        makeModel('hidden', 'openai', { isHidden: true })
+      ]
+    })
+
+    const { result } = renderHook(() => useModelSelectorData({ searchText: '' }))
+
+    expect(result.current.modelItems.map((m) => m.modelId)).toEqual(['openai::gpt-4'])
+    expect(result.current.selectableModelsById.has('openai::disabled')).toBe(false)
+    expect(result.current.selectableModelsById.has('openai::hidden')).toBe(false)
+  })
+
   it('renders malformed legacy model ids without crashing the selector', () => {
     const model = {
       ...makeModel('placeholder', 'openai'),

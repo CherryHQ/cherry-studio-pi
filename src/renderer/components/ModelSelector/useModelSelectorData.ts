@@ -117,7 +117,10 @@ export function useModelSelectorData({
 
   const pinnedIds = useMemo(() => rawPinnedIds.filter(isUniqueModelId), [rawPinnedIds])
   const availableProviders = useMemo(() => providers.filter((provider) => provider.isEnabled), [providers])
-  const availableModels = models
+  const availableModels = useMemo(
+    () => models.filter((model) => model.isEnabled !== false && model.isHidden !== true),
+    [models]
+  )
 
   const sortedProviders = useMemo(
     () => sortProvidersByPriority(availableProviders, prioritizedProviderIds),
