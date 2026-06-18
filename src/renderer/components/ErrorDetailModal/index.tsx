@@ -163,13 +163,25 @@ const AiSdkErrorBase = memo(({ error }: { error: SerializedAiSdkError }) => {
   const cause = error.cause
 
   useEffect(() => {
+    let cancelled = false
+    const setHighlightedStringSafely = (value: string) => {
+      if (!cancelled) {
+        setHighlightedString(value)
+      }
+    }
+    const setIsTruncatedSafely = (value: boolean) => {
+      if (!cancelled) {
+        setIsTruncated(value)
+      }
+    }
+
     const highlight = async () => {
       try {
         const { content: truncatedCause, truncated, isLikelyBase64 } = truncateLargeData(cause || '', tRef.current)
-        setIsTruncated(truncated)
+        setIsTruncatedSafely(truncated)
 
         if (isLikelyBase64) {
-          setHighlightedString(escapeHtmlText(truncatedCause))
+          setHighlightedStringSafely(escapeHtmlText(truncatedCause))
           return
         }
 
@@ -177,17 +189,20 @@ const AiSdkErrorBase = memo(({ error }: { error: SerializedAiSdkError }) => {
           const parsed = JSON.parse(truncatedCause || '{}')
           const formatted = JSON.stringify(parsed, null, 2)
           const result = await highlightCode(formatted, 'json')
-          setHighlightedString(sanitizeHtml(result))
+          setHighlightedStringSafely(sanitizeHtml(result))
         } catch {
-          setHighlightedString(escapeHtmlText(truncatedCause || ''))
+          setHighlightedStringSafely(escapeHtmlText(truncatedCause || ''))
         }
       } catch {
-        setHighlightedString(escapeHtmlText(cause || ''))
+        setHighlightedStringSafely(escapeHtmlText(cause || ''))
       }
     }
     const timer = setTimeout(highlight, 0)
 
-    return () => clearTimeout(timer)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   }, [highlightCode, cause])
 
   return (
