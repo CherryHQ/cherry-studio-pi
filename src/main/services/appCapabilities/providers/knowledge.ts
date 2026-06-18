@@ -608,7 +608,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'write',
       permissions: ['knowledge.write'],
-      sideEffects: ['database.write', 'model.call'],
+      sideEffects: ['database.write', 'filesystem.read', 'filesystem.write', 'model.call', 'network'],
       tags: ['knowledge', 'rag', 'add', 'ingest'],
       execute: async (input: any) => {
         const baseId = normalizeRequiredText(input?.baseId, 'Knowledge base id')
@@ -637,7 +637,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'destructive',
       permissions: ['knowledge.reset'],
-      sideEffects: ['database.write'],
+      sideEffects: ['database.write', 'filesystem.read', 'model.call', 'network'],
       supportsDryRun: true,
       tags: ['knowledge', 'rag', 'reset'],
       execute: async (input: any, context) => {

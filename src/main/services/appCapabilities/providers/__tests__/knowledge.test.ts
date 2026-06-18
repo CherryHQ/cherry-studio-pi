@@ -114,6 +114,25 @@ describe('knowledge app capabilities', () => {
     mocks.storageV2SecretVaultService.getSecret.mockResolvedValue('')
   })
 
+  it('declares broad side effects for ingestion and reindexing capabilities', () => {
+    expect(capability('knowledge.item.add')).toMatchObject({
+      risk: 'write',
+      permissions: ['knowledge.write'],
+      sideEffects: expect.arrayContaining([
+        'database.write',
+        'filesystem.read',
+        'filesystem.write',
+        'model.call',
+        'network'
+      ])
+    })
+    expect(capability('knowledge.base.reset')).toMatchObject({
+      risk: 'destructive',
+      permissions: ['knowledge.reset'],
+      sideEffects: expect.arrayContaining(['database.write', 'filesystem.read', 'model.call', 'network'])
+    })
+  })
+
   it('lists knowledge bases from Storage v2 with lightweight item summaries by default', async () => {
     const bases = [
       {
