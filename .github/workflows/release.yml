@@ -49,7 +49,10 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.event.inputs.tag }}
+  # Serialize all app releases for this repository, even when tags differ.
+  # This lets the recent-release guard see the previous run before validating
+  # the next one, preventing accidental rapid multi-version publishing.
+  group: app-release-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:

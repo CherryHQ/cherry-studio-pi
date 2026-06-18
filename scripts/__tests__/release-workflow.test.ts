@@ -43,4 +43,9 @@ describe('release workflow safety', () => {
     expect(workflow).toContain('Refusing to rebuild or overwrite an existing release')
     expect(workflow).toContain('overwrite_files: ${{ needs.prepare.outputs.replace_existing }}')
   })
+
+  it('serializes app releases across different tags', () => {
+    expect(workflow).toContain('group: app-release-${{ github.repository }}')
+    expect(workflow).not.toContain('group: release-${{ github.event.inputs.tag }}')
+  })
 })
