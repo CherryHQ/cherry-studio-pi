@@ -1,8 +1,7 @@
 import { IpcChannel } from '@shared/IpcChannel'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { dataApiPostMock, loggerWarnMock, navigateMock, swrMutateMock } = vi.hoisted(() => ({
-  dataApiPostMock: vi.fn(),
+const { loggerWarnMock, navigateMock, swrMutateMock } = vi.hoisted(() => ({
   loggerWarnMock: vi.fn(),
   navigateMock: vi.fn(),
   swrMutateMock: vi.fn()
@@ -11,12 +10,6 @@ const { dataApiPostMock, loggerWarnMock, navigateMock, swrMutateMock } = vi.hois
 vi.mock('@data/hooks/useDataApi', () => ({
   useMutation: () => ({ trigger: vi.fn() }),
   useQuery: () => ({ data: undefined, isLoading: false, mutate: vi.fn() })
-}))
-
-vi.mock('@data/DataApiService', () => ({
-  dataApiService: {
-    post: dataApiPostMock
-  }
 }))
 
 vi.mock('@logger', () => ({
@@ -41,22 +34,23 @@ const listenerKey = '__CHERRY_STUDIO_PI_MCP_ADD_SERVER_LISTENER__'
 
 describe('useMcpServer module listener', () => {
   const onMock = vi.fn()
-  let addServerHandler: ((_event: unknown, server: { name: string; command?: string }) => void) | undefined
+  let addServerHandler: ((_event: unknown, server: { id?: string; name: string; command?: string }) => void) | undefined
 
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
-    dataApiPostMock.mockResolvedValue({ id: 'created-server-1' })
     swrMutateMock.mockResolvedValue(undefined)
     delete (globalThis as Record<string, unknown>)[listenerKey]
     addServerHandler = undefined
 
-    onMock.mockImplementation((channel: string, handler: (_event: unknown, server: { name: string }) => void) => {
-      if (channel === IpcChannel.Mcp_AddServer) {
-        addServerHandler = handler
+    onMock.mockImplementation(
+      (channel: string, handler: (_event: unknown, server: { id?: string; name: string }) => void) => {
+        if (channel === IpcChannel.Mcp_AddServer) {
+          addServerHandler = handler
+        }
+        return vi.fn()
       }
-      return vi.fn()
-    })
+    )
 
     Object.defineProperty(window, 'electron', {
       configurable: true,
@@ -83,12 +77,9 @@ describe('useMcpServer module listener', () => {
     expect(onMock).toHaveBeenCalledTimes(1)
     expect(onMock).toHaveBeenCalledWith(IpcChannel.Mcp_AddServer, expect.any(Function))
 
-    const server = { name: 'server-1', command: 'npx' }
+    const server = { id: 'created-server-1', name: 'server-1', command: 'npx' }
     addServerHandler?.(null, server)
 
-    await vi.waitFor(() => {
-      expect(dataApiPostMock).toHaveBeenCalledWith('/mcp-servers', { body: server })
-    })
     expect(swrMutateMock).toHaveBeenCalledWith(expect.any(Function))
     await vi.waitFor(() => {
       expect(navigateMock).toHaveBeenCalledTimes(1)
@@ -96,18 +87,32 @@ describe('useMcpServer module listener', () => {
     })
   })
 
-  it('logs protocol install failures instead of navigating to a non-existent server', async () => {
-    dataApiPostMock.mockRejectedValueOnce(new Error('create failed'))
+  it('still opens the installed server details when cache refresh fails', async () => {
+    swrMutateMock.mockRejectedValueOnce(new Error('refresh failed'))
 
+    const module = await import('../useMcpServer')
+    module.registerMcpAddServerNavigationListener()
+
+    addServerHandler?.(null, { id: 'created-server-1', name: 'server-1', command: 'npx' })
+
+    await vi.waitFor(() => {
+      expect(loggerWarnMock).toHaveBeenCalledWith(
+        'Failed to refresh MCP servers after protocol install',
+        expect.any(Error)
+      )
+    })
+    expect(navigateMock).toHaveBeenCalledWith({ to: '/settings/mcp/settings/created-server-1' })
+  })
+
+  it('ignores malformed protocol install events without a server id', async () => {
     const module = await import('../useMcpServer')
     module.registerMcpAddServerNavigationListener()
 
     addServerHandler?.(null, { name: 'server-1', command: 'npx' })
 
-    await vi.waitFor(() => {
-      expect(loggerWarnMock).toHaveBeenCalledWith('Failed to install MCP server from protocol', expect.any(Error))
-    })
+    expect(swrMutateMock).not.toHaveBeenCalled()
     expect(navigateMock).not.toHaveBeenCalled()
+    expect(loggerWarnMock).toHaveBeenCalledWith('Ignoring MCP protocol install event without a server id')
   })
 
   it('does not crash in non-electron renderer test environments', async () => {

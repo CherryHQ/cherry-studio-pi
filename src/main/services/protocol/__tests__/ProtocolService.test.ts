@@ -170,6 +170,8 @@ describe('ProtocolService', () => {
     windowManagerMock.getWindow.mockReturnValue(protocolWindowMock)
     windowManagerMock.getWindowIdByWebContents.mockReturnValue('window-1')
     windowManagerMock.onWindowDestroyed.mockReturnValue({ dispose: vi.fn() })
+    handlersMock.handleMcpProtocolUrl.mockResolvedValue(undefined)
+    handlersMock.handleProvidersProtocolUrl.mockResolvedValue(undefined)
     service = new ProtocolService()
   })
 
@@ -219,6 +221,17 @@ describe('ProtocolService', () => {
 
     await vi.waitFor(() => {
       expect(loggerMock.error).toHaveBeenCalledWith('Failed to handle providers protocol URL', error)
+    })
+  })
+
+  it('logs asynchronous MCP handler failures', async () => {
+    const error = new Error('failed')
+    handlersMock.handleMcpProtocolUrl.mockRejectedValueOnce(error)
+
+    ;(service as any).handleProtocolUrl('cherrystudio://mcp/install?servers=abc')
+
+    await vi.waitFor(() => {
+      expect(loggerMock.error).toHaveBeenCalledWith('Failed to handle MCP protocol URL', error)
     })
   })
 

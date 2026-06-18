@@ -37,6 +37,12 @@ describe('release workflow safety', () => {
     )
   })
 
+  it('requires an explicit repeated tag confirmation for manual publishing', () => {
+    expect(workflow).toContain('confirm_tag:')
+    expect(workflow).toContain('CONFIRM_TAG="${{ github.event.inputs.confirm_tag }}"')
+    expect(workflow).toContain('Release tag confirmation mismatch')
+  })
+
   it('refuses to overwrite an existing release unless explicitly requested', () => {
     expect(workflow).toContain('replace_existing:')
     expect(workflow).toContain('gh release view "$TAG"')
@@ -47,5 +53,11 @@ describe('release workflow safety', () => {
   it('serializes app releases across different tags', () => {
     expect(workflow).toContain('group: app-release-${{ github.repository }}')
     expect(workflow).not.toContain('group: release-${{ github.event.inputs.tag }}')
+  })
+
+  it('blocks rapid consecutive public releases unless explicitly allowed', () => {
+    expect(workflow).toContain('allow_close_release:')
+    expect(workflow).toContain('CLOSE_RELEASE_WINDOW_MINUTES=120')
+    expect(workflow).toContain('Refusing to publish ${currentTag} within ${windowMinutes} minutes')
   })
 })

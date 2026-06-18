@@ -1,8 +1,10 @@
 import { application } from '@application'
+import { mcpServerService } from '@data/services/McpServerService'
 import { loggerService } from '@logger'
 import { WindowType } from '@main/core/window/types'
 import { summarizeObjectShapeForLog, summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
 import { type CreateMcpServerDto, CreateMcpServerSchema } from '@shared/data/api/schemas/mcpServers'
+import type { McpServer } from '@shared/data/types/mcpServer'
 import { IpcChannel } from '@shared/IpcChannel'
 
 const logger = loggerService.withContext('ProtocolService:mcpInstall')
@@ -83,6 +85,17 @@ function summarizeValidationIssues(error: { issues: Array<{ path: PropertyKey[];
   }))
 }
 
+function summarizeInstallError(error: unknown) {
+  if (!isRecord(error)) {
+    return { type: typeof error }
+  }
+
+  return {
+    type: error.constructor?.name ?? typeof error,
+    code: firstNonEmptyString(error.code, error.name)
+  }
+}
+
 function normalizeProtocolMcpServer(input: unknown, fallbackName?: string, installedAt = Date.now()) {
   if (!isRecord(input)) {
     logger.warn('Skipping invalid MCP protocol server entry: expected object')
@@ -137,11 +150,25 @@ function collectProtocolMcpServers(jsonConfig: unknown): CreateMcpServerDto[] {
   return normalized ? [normalized] : []
 }
 
-function installMcpServer(server: CreateMcpServerDto) {
+function notifyInstalledMcpServer(server: McpServer) {
   application.get('WindowManager').broadcastToType(WindowType.Main, IpcChannel.Mcp_AddServer, server)
 }
 
-export function handleMcpProtocolUrl(url: URL) {
+async function installMcpServer(server: CreateMcpServerDto): Promise<McpServer | null> {
+  try {
+    const created = await mcpServerService.create(server)
+    notifyInstalledMcpServer(created)
+    return created
+  } catch (error) {
+    logger.error('Failed to install MCP server from protocol', {
+      name: server.name,
+      error: summarizeInstallError(error)
+    })
+    return null
+  }
+}
+
+export async function handleMcpProtocolUrl(url: URL) {
   switch (url.pathname) {
     case '/install': {
       // jsonConfig example:
@@ -171,7 +198,7 @@ export function handleMcpProtocolUrl(url: URL) {
 
           const servers = collectProtocolMcpServers(jsonConfig)
           for (const server of servers) {
-            installMcpServer(server)
+            await installMcpServer(server)
           }
 
           if (servers.length === 0) {

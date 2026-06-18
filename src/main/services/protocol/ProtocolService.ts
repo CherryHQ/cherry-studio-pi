@@ -195,7 +195,9 @@ export class ProtocolService extends BaseService {
 
       switch (host) {
         case 'mcp':
-          handleMcpProtocolUrl(urlObj)
+          handleMcpProtocolUrl(urlObj).catch((error) =>
+            logger.error('Failed to handle MCP protocol URL', error as Error)
+          )
           return
         case 'providers':
           handleProvidersProtocolUrl(urlObj).catch((error) =>

@@ -1,4 +1,3 @@
-import { dataApiService } from '@data/DataApiService'
 import { useMutation, useQuery } from '@data/hooks/useDataApi'
 import { loggerService } from '@logger'
 import NavigationService from '@renderer/services/NavigationService'
@@ -17,14 +16,16 @@ type McpAddServerListenerGlobal = typeof globalThis & {
   [MCP_ADD_SERVER_LISTENER_KEY]?: boolean
 }
 
-async function installProtocolMcpServer(server: CreateMcpServerDto): Promise<void> {
-  try {
-    const created = await dataApiService.post('/mcp-servers', { body: server })
-    await mutateSWRCache((key) => Array.isArray(key) && key[0] === '/mcp-servers')
-    void NavigationService.navigate?.({ to: `/settings/mcp/settings/${created.id}` })
-  } catch (error) {
-    logger.warn('Failed to install MCP server from protocol', error as Error)
+function handleProtocolMcpServerInstalled(server: McpServer): void {
+  if (!server?.id) {
+    logger.warn('Ignoring MCP protocol install event without a server id')
+    return
   }
+
+  void mutateSWRCache((key) => Array.isArray(key) && key[0] === '/mcp-servers').catch((error) => {
+    logger.warn('Failed to refresh MCP servers after protocol install', error as Error)
+  })
+  void NavigationService.navigate?.({ to: `/settings/mcp/settings/${server.id}` })
 }
 
 /**
@@ -41,8 +42,8 @@ export function registerMcpAddServerNavigationListener() {
   if (globalState[MCP_ADD_SERVER_LISTENER_KEY]) return
 
   globalState[MCP_ADD_SERVER_LISTENER_KEY] = true
-  ipcRenderer.on(IpcChannel.Mcp_AddServer, (_event, server: CreateMcpServerDto) => {
-    void installProtocolMcpServer(server)
+  ipcRenderer.on(IpcChannel.Mcp_AddServer, (_event, server: McpServer) => {
+    handleProtocolMcpServerInstalled(server)
   })
 }
 
