@@ -32,6 +32,11 @@ export function getResourcePath() {
   return resourcePath
 }
 
+function isPathInsideOrSame(parentPath: string, candidatePath: string) {
+  const relative = path.relative(parentPath, candidatePath)
+  return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative))
+}
+
 export function toAsarUnpackedPath(filePath: string): string {
   if (!app.isPackaged) {
     return filePath
@@ -47,12 +52,13 @@ export function toAsarUnpackedPath(filePath: string): string {
     return unpackedAppPath
   }
 
-  const appPathPrefix = `${appPath}${path.sep}`
-  if (!filePath.startsWith(appPathPrefix)) {
+  const resolvedAppPath = path.resolve(appPath)
+  const resolvedFilePath = path.resolve(filePath)
+  if (!isPathInsideOrSame(resolvedAppPath, resolvedFilePath)) {
     return filePath
   }
 
-  return path.join(unpackedAppPath, path.relative(appPath, filePath))
+  return path.join(unpackedAppPath, path.relative(resolvedAppPath, resolvedFilePath))
 }
 
 function readJson<T>(filePath: string): T | null {

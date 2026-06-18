@@ -62,6 +62,20 @@ describe('getDataPath', () => {
     expect(getResourcePath()).toBe('/Applications/Cherry Studio Pi.app/Contents/Resources/app.asar.unpacked/resources')
   })
 
+  it('only rewrites packaged app paths that stay inside app.asar', async () => {
+    mocks.isPackaged = true
+    mocks.getAppPath.mockReturnValue('/Applications/Cherry Studio Pi.app/Contents/Resources/app.asar')
+
+    const { toAsarUnpackedPath } = await import('../index')
+
+    expect(toAsarUnpackedPath('/Applications/Cherry Studio Pi.app/Contents/Resources/app.asar/resources/cli')).toBe(
+      '/Applications/Cherry Studio Pi.app/Contents/Resources/app.asar.unpacked/resources/cli'
+    )
+
+    const escapedPath = '/Applications/Cherry Studio Pi.app/Contents/Resources/app.asar/resources/../../outside'
+    expect(toAsarUnpackedPath(escapedPath)).toBe(escapedPath)
+  })
+
   it('uses the active configured data root for runtime paths', async () => {
     const configPath = '/mock/home/.cherrystudio/config/config.json'
     const configuredRoot = '/mock/stable/Data'
