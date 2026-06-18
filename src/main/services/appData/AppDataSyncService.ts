@@ -2261,6 +2261,7 @@ export class AppDataSyncService {
           () => client.putFileContents(lock.path, JSON.stringify(renewedLock, null, 2), { overwrite: true }),
           { logger }
         )
+        renewalError = null
       } catch (error) {
         renewalError = error
         logger.warn('Failed to renew remote data sync lock', error as Error)
