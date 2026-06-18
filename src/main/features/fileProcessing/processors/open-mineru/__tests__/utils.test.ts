@@ -138,4 +138,27 @@ describe('open-mineru utils', () => {
       } as never)
     ).rejects.toThrow('Open MinerU returned unexpected content-type: application/json')
   })
+
+  it('truncates oversized provider error bodies before exposing request failures', async () => {
+    vi.spyOn(fs, 'stat').mockResolvedValue({ size: 1024 } as never)
+    fetchMock.mockResolvedValueOnce(
+      new Response('x'.repeat(5000), {
+        status: 502,
+        statusText: 'Bad Gateway'
+      })
+    )
+
+    await expect(
+      executeTask({
+        apiHost: 'http://127.0.0.1:8000',
+        file: {
+          path: '/tmp/file.pdf',
+          name: 'file',
+          ext: 'pdf'
+        }
+      } as never)
+    ).rejects.toThrow('[truncated]')
+
+    expect(destroyMock).toHaveBeenCalled()
+  })
 })

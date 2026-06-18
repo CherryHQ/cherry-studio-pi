@@ -5,6 +5,7 @@ import { MB } from '@shared/config/constant'
 import { net } from 'electron'
 import FormData from 'form-data'
 
+import { readResponseBodyPreview } from '../../utils/httpError'
 import type { PreparedOpenMineruContext } from './types'
 
 const OPEN_MINERU_MAX_FILE_SIZE = 200 * MB
@@ -43,7 +44,7 @@ export async function executeTask(context: PreparedOpenMineruContext): Promise<R
     } as any)
 
     if (!response.ok) {
-      const message = await response.text()
+      const message = await readResponseBodyPreview(response)
       throw new Error(`Open MinerU request failed: ${response.status} ${response.statusText} ${message}`)
     }
 

@@ -4,6 +4,7 @@ import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
 import { GB } from '@shared/config/constant'
 import { net } from 'electron'
 
+import { readResponseBodyPreview } from '../../utils/httpError'
 import type {
   Doc2xExportStatusResponse,
   Doc2xParseStatusResponse,
@@ -32,7 +33,7 @@ export async function createUploadTask(context: PreparedDoc2xStartContext): Prom
   })
 
   if (!response.ok) {
-    const message = await response.text()
+    const message = await readResponseBodyPreview(response)
     throw new Error(`Doc2x preupload request failed: ${response.status} ${response.statusText} ${message}`)
   }
 
@@ -73,7 +74,7 @@ export async function uploadFile(
     } as any)
 
     if (!response.ok) {
-      const message = await response.text()
+      const message = await readResponseBodyPreview(response)
       throw new Error(`Doc2x file upload failed: ${response.status} ${response.statusText} ${message}`)
     }
   } finally {
@@ -96,7 +97,7 @@ export async function getParseStatus(
   })
 
   if (!response.ok) {
-    const message = await response.text()
+    const message = await readResponseBodyPreview(response)
     throw new Error(`Doc2x parse status request failed: ${response.status} ${response.statusText} ${message}`)
   }
 
@@ -125,7 +126,7 @@ export async function triggerExportTask(
   })
 
   if (!response.ok) {
-    const message = await response.text()
+    const message = await readResponseBodyPreview(response)
     throw new Error(`Doc2x export trigger request failed: ${response.status} ${response.statusText} ${message}`)
   }
 
@@ -147,7 +148,7 @@ export async function getExportResult(
   })
 
   if (!response.ok) {
-    const message = await response.text()
+    const message = await readResponseBodyPreview(response)
     throw new Error(`Doc2x export result request failed: ${response.status} ${response.statusText} ${message}`)
   }
 

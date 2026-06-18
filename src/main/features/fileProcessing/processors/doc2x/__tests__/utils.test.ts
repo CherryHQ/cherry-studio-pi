@@ -110,6 +110,26 @@ describe('doc2x utils', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('truncates oversized provider error bodies before exposing upload failures', async () => {
+    vi.spyOn(fs.promises, 'stat').mockResolvedValue({ size: 1024 } as never)
+    fetchMock.mockResolvedValueOnce(
+      new Response('x'.repeat(5000), {
+        status: 500,
+        statusText: 'Internal Server Error'
+      })
+    )
+
+    await expect(
+      uploadFile(
+        '/tmp/file.pdf',
+        'https://doc2x-pdf.oss-cn-beijing.aliyuncs.com/tmp/task-1.pdf?X-Amz-Signature=abc',
+        'https://v2.doc2x.noedgeai.com'
+      )
+    ).rejects.toThrow('[truncated]')
+
+    expect(destroyMock).toHaveBeenCalled()
+  })
+
   it('maps document-to-markdown parse and export poll states', async () => {
     getParseStatusMock.mockResolvedValueOnce({
       code: 'success',

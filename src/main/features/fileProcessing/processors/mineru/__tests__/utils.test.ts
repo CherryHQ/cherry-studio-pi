@@ -190,6 +190,29 @@ describe('mineru utils', () => {
     )
   })
 
+  it('truncates oversized provider error bodies before exposing upload failures', async () => {
+    vi.spyOn(fs, 'stat').mockResolvedValue({ size: 1024 } as never)
+    fetchMock.mockResolvedValueOnce(
+      new Response('x'.repeat(5000), {
+        status: 502,
+        statusText: 'Bad Gateway'
+      })
+    )
+
+    await expect(
+      uploadFile(
+        {
+          path: '/tmp/file.pdf'
+        } as never,
+        'https://mineru.oss-cn-shanghai.aliyuncs.com/api-upload/task-1.pdf?Expires=1&Signature=abc',
+        'https://mineru.net',
+        { Authorization: 'Bearer secret' }
+      )
+    ).rejects.toThrow('[truncated]')
+
+    expect(destroyMock).toHaveBeenCalled()
+  })
+
   it('maps batch poll results and rejects completed results without full_zip_url', () => {
     expect(buildPollResult(undefined, 'https://mineru.net')).toEqual({
       status: 'processing',

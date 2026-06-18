@@ -6,6 +6,7 @@ import { MB } from '@shared/config/constant'
 import type { FileInfo } from '@shared/file/types'
 import { net } from 'electron'
 
+import { readResponseBodyPreview } from '../../utils/httpError'
 import {
   MineruApiResponseSchema,
   MineruBatchUploadDataSchema,
@@ -45,7 +46,7 @@ export async function createUploadTask(context: PreparedMineruStartContext): Pro
   })
 
   if (!response.ok) {
-    const message = await response.text()
+    const message = await readResponseBodyPreview(response)
     throw new Error(`Mineru batch upload URL request failed: ${response.status} ${response.statusText} ${message}`)
   }
 
@@ -89,7 +90,7 @@ export async function uploadFile(
     } as any)
 
     if (!response.ok) {
-      const message = await response.text()
+      const message = await readResponseBodyPreview(response)
       throw new Error(`Mineru file upload failed: ${response.status} ${response.statusText} ${message}`)
     }
   } finally {
@@ -112,7 +113,7 @@ export async function getBatchResult(
   })
 
   if (!response.ok) {
-    const message = await response.text()
+    const message = await readResponseBodyPreview(response)
     throw new Error(`Mineru batch result request failed: ${response.status} ${response.statusText} ${message}`)
   }
 
