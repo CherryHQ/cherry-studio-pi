@@ -45,10 +45,11 @@ concurrency:
 jobs:
   prepare:
     name: Prepare release metadata
-    if: github.repository == 'CherryHQ/cherry-studio-pi'
+    if: github.repository == 'CherryHQ/cherry-studio-pi' && github.event_name == 'workflow_dispatch'
     # Releases are intentionally manual-only. Pushing a tag must not publish a
     # GitHub Release; this keeps version bumps and public releases as separate,
-    # explicit actions.
+    # explicit actions. Keep the event guard above even if a future upstream
+    # merge reintroduces a tag push trigger.
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.release.outputs.tag }}
