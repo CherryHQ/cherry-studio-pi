@@ -116,6 +116,16 @@ export class AppCapabilityService {
       }
       return sanitizeResultForSource(result, context.source ?? 'system')
     } catch (error) {
+      if (context.signal?.aborted) {
+        const message = abortReasonMessage(context.signal)
+        return {
+          ok: false,
+          isError: true,
+          summary: `${capabilityId} aborted: ${message}`,
+          error: message
+        }
+      }
+
       const message = error instanceof Error ? error.message : String(error)
       logger.warn('App capability failed', { id: capabilityId, error: message })
       return {

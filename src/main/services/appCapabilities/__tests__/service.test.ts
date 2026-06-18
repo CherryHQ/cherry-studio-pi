@@ -117,6 +117,25 @@ describe('AppCapabilityService', () => {
     expect(executeCapability).toHaveBeenCalledTimes(1)
   })
 
+  it('reports aborted when capability execution throws after the signal aborts', async () => {
+    executeCapability.mockClear()
+    const service = new AppCapabilityService()
+    const controller = new AbortController()
+    executeCapability.mockImplementationOnce(async () => {
+      controller.abort(new Error('system timeout'))
+      throw new Error('provider noticed abort')
+    })
+
+    await expect(service.call('settings.read', {}, { source: 'agent', signal: controller.signal })).resolves.toEqual({
+      ok: false,
+      isError: true,
+      summary: 'settings.read aborted: system timeout',
+      error: 'system timeout'
+    })
+
+    expect(executeCapability).toHaveBeenCalledTimes(1)
+  })
+
   it('sanitizes agent capability results at the service boundary', async () => {
     executeCapability.mockReset()
     executeCapability.mockResolvedValueOnce({
