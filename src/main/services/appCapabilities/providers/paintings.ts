@@ -250,6 +250,7 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'write',
       permissions: ['paintings.write'],
+      sideEffects: ['settings.write'],
       tags: ['paintings', 'settings', 'provider'],
       execute: async (input: any) => {
         const provider = normalizeProviderRouteSegment(input?.provider)

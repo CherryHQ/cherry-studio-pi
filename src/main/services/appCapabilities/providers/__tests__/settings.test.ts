@@ -295,6 +295,13 @@ describe('settings app capabilities', () => {
     })
   })
 
+  it('declares setting writes as side-effecting operations', () => {
+    expect(capability('settings.value.set')).toMatchObject({
+      permissions: ['settings.write'],
+      sideEffects: ['settings.write']
+    })
+  })
+
   it('normalizes setting update paths before dispatching', async () => {
     const result = await capability('settings.value.set').execute(
       { path: ' apiServer.port ', value: 23334 },

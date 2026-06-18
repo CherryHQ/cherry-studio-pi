@@ -122,6 +122,13 @@ describe('storage app capabilities', () => {
     expect(mocks.storageV2Service.restoreBackup).not.toHaveBeenCalled()
   })
 
+  it('declares storage snapshot creation as a local data side effect', () => {
+    expect(capability('storage.snapshot.create')).toMatchObject({
+      permissions: ['storage.snapshot.write'],
+      sideEffects: ['database.write', 'filesystem.write']
+    })
+  })
+
   it('prepares renderer runtime data before agent-triggered snapshots, backups, and restores', async () => {
     await capability('storage.snapshot.create').execute({ reason: 'before-test' }, { source: 'agent' })
     await capability('storage.backup.create').execute({ reason: 'agent request' }, { source: 'agent' })

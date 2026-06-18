@@ -327,6 +327,7 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'write',
       permissions: ['settings.write'],
+      sideEffects: ['settings.write'],
       tags: ['settings', 'preferences', 'update', 'write'],
       examples: ['Change language', 'Set theme', 'Set default painting provider', 'Enable API server'],
       execute: async (input: any) => {

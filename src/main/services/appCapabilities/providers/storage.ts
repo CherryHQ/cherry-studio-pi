@@ -202,6 +202,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'write',
       permissions: ['storage.snapshot.write'],
+      sideEffects: ['database.write', 'filesystem.write'],
       tags: ['storage', 'snapshot', 'database'],
       execute: async (input: any) => {
         const reason = normalizeOptionalText(input?.reason, 'Snapshot reason') || 'agent-request'

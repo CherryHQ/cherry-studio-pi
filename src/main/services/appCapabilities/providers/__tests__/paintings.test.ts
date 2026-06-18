@@ -300,6 +300,13 @@ describe('painting app capabilities', () => {
     expect(result.data).toEqual({ defaultProvider: 'openai' })
   })
 
+  it('declares painting provider updates as setting side effects', () => {
+    expect(capability('paintings.defaultProvider.set')).toMatchObject({
+      permissions: ['paintings.write'],
+      sideEffects: ['settings.write']
+    })
+  })
+
   it('rejects empty painting provider updates', async () => {
     await expect(
       capability('paintings.defaultProvider.set').execute({ provider: '   ' }, { source: 'agent' })
