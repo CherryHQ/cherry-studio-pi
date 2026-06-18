@@ -2235,7 +2235,7 @@ export class AppDataSyncService {
     let renewing: Promise<void> | null = null
     if (!lock || lock.type !== 'file') {
       return {
-        stop: () => undefined,
+        stop: async () => undefined,
         getError: () => renewalError
       }
     }
@@ -2253,6 +2253,7 @@ export class AppDataSyncService {
         if (expiresAt <= now) {
           throw this.abortSyncRun(context, this.formatSyncDeadlineExceededMessage(context, '续租远端同步锁'))
         }
+        if (stopped) return
 
         const renewedLock: RemoteSyncLock = {
           ...remoteLock,
@@ -2298,11 +2299,16 @@ export class AppDataSyncService {
     }
 
     return {
-      stop: () => {
+      stop: async () => {
         stopped = true
         if (interval) {
           clearInterval(interval)
           interval = null
+        }
+        if (renewing) {
+          await renewing.catch((error) => {
+            logger.warn('Remote data sync lock renewal failed while stopping', error as Error)
+          })
         }
       },
       getError: () => renewalError
@@ -4421,7 +4427,7 @@ export class AppDataSyncService {
 
       return summary
     } finally {
-      lockRenewal.stop()
+      await lockRenewal.stop()
       await this.releaseRemoteLock(client, remoteLock)
     }
   }
