@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
+import { application } from '@application'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { installBuiltinSkills } from '../builtinSkills'
@@ -45,6 +46,9 @@ const globalSkillsPath = '/mock/feature.agents.skills'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(application.getPath).mockImplementation((key: string, filename?: string) =>
+    filename ? `/mock/${key}/${filename}` : `/mock/${key}`
+  )
   mockSyncBuiltinSkill.mockResolvedValue(undefined)
 })
 
@@ -76,7 +80,7 @@ describe('installBuiltinSkills', () => {
     expect(fs.cp).toHaveBeenCalledWith(
       path.join(resourceSkillsPath, 'my-skill'),
       path.join(globalSkillsPath, 'my-skill'),
-      { recursive: true }
+      { recursive: true, verbatimSymlinks: true }
     )
     expect(fs.writeFile).toHaveBeenCalledWith(path.join(globalSkillsPath, 'my-skill', '.version'), '2.0.0', 'utf-8')
     // Per-agent symlinks are handled by SkillService, not here
@@ -110,7 +114,7 @@ describe('installBuiltinSkills', () => {
     expect(fs.cp).toHaveBeenCalledWith(
       path.join(resourceSkillsPath, 'my-skill'),
       path.join(globalSkillsPath, 'my-skill'),
-      { recursive: true }
+      { recursive: true, verbatimSymlinks: true }
     )
     expect(fs.writeFile).toHaveBeenCalledWith(path.join(globalSkillsPath, 'my-skill', '.version'), '2.0.0', 'utf-8')
     expect(mockSyncBuiltinSkill).toHaveBeenCalledWith('my-skill', path.join(globalSkillsPath, 'my-skill'), true)
@@ -128,6 +132,28 @@ describe('installBuiltinSkills', () => {
     expect(fs.mkdir).not.toHaveBeenCalled()
     expect(fs.cp).not.toHaveBeenCalled()
     expect(mockSyncBuiltinSkill).not.toHaveBeenCalled()
+  })
+
+  it('should accept a configured skills root with a trailing separator', async () => {
+    vi.mocked(application.getPath).mockImplementation((key: string, filename?: string) => {
+      const base = key === 'feature.agents.skills' ? `${globalSkillsPath}${path.sep}` : `/mock/${key}`
+      return filename ? path.join(base, filename) : base
+    })
+    vi.mocked(fs.access).mockResolvedValueOnce(undefined)
+    vi.mocked(fs.readdir).mockResolvedValueOnce([{ name: 'my-skill', isDirectory: () => true }] as any)
+    vi.mocked(fs.readFile).mockRejectedValueOnce(new Error('ENOENT'))
+    vi.mocked(fs.mkdir).mockResolvedValue(undefined as any)
+    vi.mocked(fs.cp).mockResolvedValue(undefined)
+    vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+
+    await installBuiltinSkills()
+
+    expect(fs.cp).toHaveBeenCalledWith(
+      path.join(resourceSkillsPath, 'my-skill'),
+      path.join(globalSkillsPath, 'my-skill'),
+      { recursive: true, verbatimSymlinks: true }
+    )
+    expect(mockSyncBuiltinSkill).toHaveBeenCalledWith('my-skill', path.join(globalSkillsPath, 'my-skill'), true)
   })
 
   it('should skip non-directory entries', async () => {

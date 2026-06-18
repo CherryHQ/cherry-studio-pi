@@ -12,6 +12,11 @@ const logger = loggerService.withContext('builtinSkills')
 
 const VERSION_FILE = '.version'
 
+function isPathInsideDirectory(parentPath: string, childPath: string): boolean {
+  const relative = path.relative(parentPath, childPath)
+  return Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative)
+}
+
 /**
  * Copy built-in skills from app resources to the global skills storage
  * directory and register them in the `skills` DB table.
@@ -32,7 +37,7 @@ const VERSION_FILE = '.version'
 // TODO: v2-backup
 export async function installBuiltinSkills(): Promise<void> {
   const resourceSkillsPath = toAsarUnpackedPath(application.getPath('feature.agents.skills.builtin'))
-  const globalSkillsPath = application.getPath('feature.agents.skills')
+  const globalSkillsPath = path.resolve(application.getPath('feature.agents.skills'))
   const appVersion = app.getVersion()
 
   try {
@@ -44,8 +49,8 @@ export async function installBuiltinSkills(): Promise<void> {
   const entries = await fs.readdir(resourceSkillsPath, { withFileTypes: true })
   const dirs = entries.filter((e) => {
     if (!e.isDirectory()) return false
-    const destPath = path.join(globalSkillsPath, e.name)
-    return destPath.startsWith(globalSkillsPath + path.sep)
+    const destPath = path.resolve(globalSkillsPath, e.name)
+    return isPathInsideDirectory(globalSkillsPath, destPath)
   })
 
   let installed = 0
@@ -57,7 +62,7 @@ export async function installBuiltinSkills(): Promise<void> {
 
     if (filesUpdated) {
       await fs.mkdir(destPath, { recursive: true })
-      await fs.cp(path.join(resourceSkillsPath, entry.name), destPath, { recursive: true })
+      await fs.cp(path.join(resourceSkillsPath, entry.name), destPath, { recursive: true, verbatimSymlinks: true })
       await fs.writeFile(path.join(destPath, VERSION_FILE), appVersion, 'utf-8')
       installed++
     }
