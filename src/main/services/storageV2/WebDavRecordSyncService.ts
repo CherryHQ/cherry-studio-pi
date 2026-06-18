@@ -37,6 +37,17 @@ const MAX_SYNC_SECRET_COUNT = 10_000
 const DATA_SYNC_CLEANUP_MAX_FILES_ENV = 'CHERRY_STUDIO_DATA_SYNC_CLEANUP_MAX_FILES'
 const DEFAULT_REMOTE_ARTIFACT_CLEANUP_MAX_FILES = 20_000
 
+function remoteDirectoryEntryPath(entry: { filename?: string; basename?: string }, currentPath: string) {
+  if (typeof entry.filename === 'string' && entry.filename.trim()) {
+    const filename = entry.filename.trim()
+    return path.posix.isAbsolute(filename) ? filename : path.posix.join(currentPath, filename)
+  }
+  if (typeof entry.basename === 'string' && entry.basename.trim()) {
+    return path.posix.join(currentPath, entry.basename)
+  }
+  return null
+}
+
 type StorageV2SyncTable = {
   entityType: StorageV2SyncEntityType
   table: string
@@ -1130,7 +1141,7 @@ export class StorageV2WebDavRecordSyncService {
 
     for (const entry of entries as Array<{ filename?: string; basename?: string; type?: string }>) {
       options.assertActive?.()
-      const filename = entry.filename || path.posix.join(dirPath, entry.basename || '')
+      const filename = remoteDirectoryEntryPath(entry, dirPath)
       if (!filename || filename === dirPath) continue
       const normalizedFilename = path.posix.normalize(filename)
       if (normalizedFilename !== normalizedDirPath && !normalizedFilename.startsWith(`${normalizedDirPath}/`)) continue

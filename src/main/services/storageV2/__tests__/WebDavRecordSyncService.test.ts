@@ -2683,6 +2683,51 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(remote.files.has('/remote-root/sync/v1/storage-v2/secrets/old.json')).toBe(false)
   })
 
+  it('prunes stale Storage v2 artifacts when WebDAV returns relative filenames', async () => {
+    const remote = makeSharedWebDavStore()
+    remote.files.set('/remote-root/sync/v1/storage-v2/bundle/current.json', JSON.stringify({ current: true }))
+    remote.files.set('/remote-root/sync/v1/storage-v2/bundle/stale.json', JSON.stringify({ stale: true }))
+    remote.client.getDirectoryContents.mockImplementation(async (filePath: string) => {
+      if (filePath === '/remote-root/sync/v1/storage-v2/bundle') {
+        return [
+          {
+            filename: 'current.json',
+            basename: '',
+            type: 'file'
+          },
+          {
+            filename: 'stale.json',
+            basename: '',
+            type: 'file'
+          }
+        ]
+      }
+      return []
+    })
+
+    await new StorageV2WebDavRecordSyncService([settingsTable]).pruneRemoteArtifacts(
+      remote.client as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        records: {},
+        blobs: {},
+        bundle: {
+          version: 1,
+          path: 'storage-v2/bundle/current.json',
+          valueHash: 'current-hash',
+          recordCount: 0,
+          blobCount: 0,
+          updatedAt: Date.parse('2026-05-29T12:00:00.000Z')
+        },
+        secrets: null
+      }
+    )
+
+    expect(remote.files.has('/remote-root/sync/v1/storage-v2/bundle/current.json')).toBe(true)
+    expect(remote.files.has('/remote-root/sync/v1/storage-v2/bundle/stale.json')).toBe(false)
+  })
+
   it('fails visibly when stale Storage v2 cleanup exceeds the remote file budget', async () => {
     process.env.CHERRY_STUDIO_DATA_SYNC_CLEANUP_MAX_FILES = '1'
     const remote = makeSharedWebDavStore()

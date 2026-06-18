@@ -533,6 +533,53 @@ describe('AppDataSyncService', () => {
     })
   })
 
+  it('skips malformed WebDAV directory entries without breaking setup browsing', async () => {
+    mocks.webdav.getDirectoryContents.mockResolvedValueOnce([
+      {
+        type: 'directory',
+        basename: '',
+        filename: '',
+        lastmod: '2026-05-29T00:00:00.000Z'
+      },
+      {
+        type: 'directory',
+        basename: 'Valid',
+        filename: '/remote-root/Valid',
+        lastmod: '2026-05-29T00:00:00.000Z'
+      }
+    ])
+
+    const result = await new AppDataSyncService().listRemoteDirectories(config, '/remote-root')
+
+    expect(result.directories).toEqual([
+      {
+        name: 'Valid',
+        path: '/remote-root/Valid',
+        modifiedAt: '2026-05-29T00:00:00.000Z'
+      }
+    ])
+  })
+
+  it('resolves relative WebDAV directory filenames against the browsed path', async () => {
+    mocks.webdav.getDirectoryContents.mockResolvedValueOnce([
+      {
+        type: 'directory',
+        filename: 'Relative',
+        lastmod: '2026-05-29T00:00:00.000Z'
+      }
+    ])
+
+    const result = await new AppDataSyncService().listRemoteDirectories(config, '/remote-root')
+
+    expect(result.directories).toEqual([
+      {
+        name: 'Relative',
+        path: '/remote-root/Relative',
+        modifiedAt: '2026-05-29T00:00:00.000Z'
+      }
+    ])
+  })
+
   it('splits pasted WebDAV credentials before creating the setup browser client', async () => {
     await new AppDataSyncService().listRemoteDirectories(
       {
@@ -3216,6 +3263,38 @@ describe('AppDataSyncService', () => {
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/.cherry-studio-pi-storage-write-test-stale.tmp')).toBe(false)
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/records/settings/stale-hash.json')).toBe(false)
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/backups/old-device-snapshot.zip')).toBe(false)
+  })
+
+  it('prunes stale app-data records when WebDAV returns relative filenames', async () => {
+    mockDirectoryContentsFromRemoteFiles()
+    mocks.remoteFiles.set('/remote-root/sync/v1/records/settings/theme.json', JSON.stringify(remoteRecord))
+    mocks.remoteFiles.set('/remote-root/sync/v1/records/settings/stale-hash.json', JSON.stringify({ stale: true }))
+    const listRemoteFiles = mocks.webdav.getDirectoryContents.getMockImplementation()
+    mocks.webdav.getDirectoryContents.mockImplementation(async (dirPath: string) => {
+      if (dirPath === '/remote-root/sync/v1/records/settings') {
+        return [
+          {
+            type: 'file',
+            filename: 'theme.json',
+            lastmod: '2026-06-01T00:00:00.000Z'
+          },
+          {
+            type: 'file',
+            filename: 'stale-hash.json',
+            lastmod: '2026-06-01T00:00:00.000Z'
+          }
+        ]
+      }
+
+      return listRemoteFiles?.(dirPath) ?? []
+    })
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.status).toBe('success')
+    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/records/settings/stale-hash.json')
+    expect(mocks.webdav.deleteFile).not.toHaveBeenCalledWith('/remote-root/sync/v1/records/settings/theme.json')
+    expect(mocks.remoteFiles.has('/remote-root/sync/v1/records/settings/stale-hash.json')).toBe(false)
   })
 
   it('does not delete root temp cleanup entries outside the sync root', async () => {

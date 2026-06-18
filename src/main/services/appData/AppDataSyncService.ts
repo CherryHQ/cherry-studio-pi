@@ -480,6 +480,17 @@ function normalizeDirectoryContents(contents: unknown): FileStat[] {
   return Array.isArray(detailedData) ? (detailedData as FileStat[]) : []
 }
 
+function remoteDirectoryEntryPath(entry: FileStat, currentPath: string) {
+  if (typeof entry.filename === 'string' && entry.filename.trim()) {
+    const filename = entry.filename.trim()
+    return path.posix.isAbsolute(filename) ? filename : path.posix.join(currentPath, filename)
+  }
+  if (typeof entry.basename === 'string' && entry.basename.trim()) {
+    return path.posix.join(currentPath, entry.basename)
+  }
+  return null
+}
+
 function makeManifest(): RemoteManifest {
   return {
     version: 1,
@@ -1572,7 +1583,7 @@ export class AppDataSyncService {
 
     for (const entry of entries) {
       options.context && this.assertSyncRunActive(options.context, '清理远端旧文件')
-      const filename = entry.filename || path.posix.join(dirPath, entry.basename || '')
+      const filename = remoteDirectoryEntryPath(entry, dirPath)
       if (!filename || filename === dirPath) continue
       const normalizedFilename = path.posix.normalize(filename)
       if (normalizedFilename !== normalizedDirPath && !normalizedFilename.startsWith(`${normalizedDirPath}/`)) continue
@@ -1982,7 +1993,7 @@ export class AppDataSyncService {
     const normalizedLockDir = path.posix.normalize(lockDir).replace(/\/+$/g, '')
 
     for (const entry of fileEntries) {
-      const filename = entry.filename || path.posix.join(lockDir, entry.basename || '')
+      const filename = remoteDirectoryEntryPath(entry, lockDir)
       if (!filename || !filename.endsWith('.json')) continue
       const lockPath = path.posix.normalize(filename)
       if (!lockPath.startsWith(`${normalizedLockDir}/`)) continue
@@ -2382,8 +2393,17 @@ export class AppDataSyncService {
       parentPath: parentDirectoryPath(currentPath),
       directories: contents
         .filter((entry) => entry.type === 'directory')
-        .map((entry) => {
-          const entryPath = normalizeWebDavDirectoryPath(entry.filename || path.posix.join(currentPath, entry.basename))
+        .flatMap((entry) => {
+          const rawEntryPath = remoteDirectoryEntryPath(entry, currentPath)
+          if (!rawEntryPath) {
+            logger.warn('Skipped WebDAV directory entry without filename or basename', {
+              currentPath,
+              entryType: entry.type
+            })
+            return []
+          }
+
+          const entryPath = normalizeWebDavDirectoryPath(rawEntryPath)
           return {
             name: entry.basename || path.posix.basename(entryPath) || entryPath,
             path: entryPath,
