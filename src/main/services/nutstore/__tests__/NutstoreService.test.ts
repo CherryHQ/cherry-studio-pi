@@ -80,6 +80,14 @@ describe('NutstoreService', () => {
     )
   })
 
+  it('does not strip server base from sibling-prefix hrefs', async () => {
+    vi.mocked(net.fetch).mockResolvedValue(propfindResponse({ itemHref: '/dav2/file.txt' }))
+
+    const contents = await getDirectoryContents('token', '/folder')
+
+    expect(contents[0]?.filename).toBe('/dav2/file.txt')
+  })
+
   it('stops directory pagination when a next link points to an already visited page', async () => {
     vi.mocked(net.fetch).mockResolvedValue(propfindResponse({ link: '<https://nutstore.test/dav/folder>; rel="next"' }))
 

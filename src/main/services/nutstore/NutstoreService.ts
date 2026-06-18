@@ -181,13 +181,22 @@ function isFileStat(value: FileStat | null): value is FileStat {
   return value !== null
 }
 
+function stripServerBaseFromHref(serverBase: string, href: string) {
+  if (serverBase === '/') return href
+
+  const normalizedBase = serverBase.endsWith('/') ? serverBase.slice(0, -1) : serverBase
+  if (href === normalizedBase) return ''
+  if (href.startsWith(`${normalizedBase}/`)) return href.slice(normalizedBase.length)
+  return href
+}
+
 function convertToFileStat(serverBase: string, item: WebDAVResponseItem): FileStat | null {
   if (!item.href) return null
 
   const props = selectPropStat(item.propstat)?.prop ?? {}
   const isDir = !isNil(props.resourcetype?.collection)
   const href = safeDecodeURIComponent(item.href)
-  const relativeHref = serverBase === '/' || !href.startsWith(serverBase) ? href : href.slice(serverBase.length)
+  const relativeHref = stripServerBaseFromHref(serverBase, href)
   const filename = serverBase === '/' ? href : path.posix.join('/', relativeHref)
   const size = props.getcontentlength ? parseInt(props.getcontentlength, 10) : 0
 
