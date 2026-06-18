@@ -79,6 +79,10 @@ export interface GitignorePredicate {
   (absPath: string): boolean
 }
 
+export function normalizeGitignoreRootPath(rootPath: string): string {
+  return rootPath.replace(/\\/g, '/').replace(/\/+$/, '') || '/'
+}
+
 /**
  * Build a predicate from `${rootPath}/.gitignore`.
  *
@@ -97,10 +101,10 @@ export interface GitignorePredicate {
  * loop rather than block startup with a sync read.
  */
 export async function loadGitignorePredicate(rootPath: string): Promise<GitignorePredicate | null> {
-  const normalizedRoot = rootPath.replace(/\\/g, '/').replace(/\/+$/, '')
+  const normalizedRoot = normalizeGitignoreRootPath(rootPath)
   let raw: string | null = null
   try {
-    raw = await readFile(path.join(normalizedRoot, '.gitignore'), 'utf8')
+    raw = await readFile(path.join(rootPath || normalizedRoot, '.gitignore'), 'utf8')
   } catch (err) {
     // ENOENT = no `.gitignore` at all, which is expected and benign.
     // EACCES / EIO / other = the file exists but we couldn't read it;

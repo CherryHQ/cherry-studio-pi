@@ -6,6 +6,7 @@ import type { TreeMutationEvent } from '@shared/file/types'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { createDirectoryTree, type DirectoryTreeBuilder, isTreePathSameOrChild } from '../builder'
+import { normalizeGitignoreRootPath } from '../gitignore'
 
 const waitForEvent = (
   builder: DirectoryTreeBuilder,
@@ -38,6 +39,13 @@ describe('isTreePathSameOrChild', () => {
     expect(isTreePathSameOrChild('/Users/me/a.md', '/')).toBe(true)
     expect(isTreePathSameOrChild('C:/Users/me/a.md', 'C:/')).toBe(true)
     expect(isTreePathSameOrChild('C:/Users/me/a.md', 'D:/')).toBe(false)
+  })
+})
+
+describe('normalizeGitignoreRootPath', () => {
+  it('preserves the filesystem root instead of trimming it to an empty path', () => {
+    expect(normalizeGitignoreRootPath('/')).toBe('/')
+    expect(normalizeGitignoreRootPath('/Users/me/Notes/')).toBe('/Users/me/Notes')
   })
 })
 
