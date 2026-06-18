@@ -327,6 +327,35 @@ describe('data sync app capabilities', () => {
     ).toBe(false)
   })
 
+  it('rejects invalid WebDAV text field shapes before saving settings', async () => {
+    for (const [field, value, message] of [
+      ['webdavHost', true, 'WebDAV host must be a string'],
+      ['webdavUser', 123, 'WebDAV username must be a string'],
+      ['webdavPass', { secret: 'value' }, 'WebDAV password must be a string'],
+      ['webdavPath', ['sync-root'], 'WebDAV path must be a string']
+    ] as const) {
+      await expect(
+        capability('dataSync.webdav.config.set').execute(
+          {
+            webdavHost: 'dav.example.com',
+            webdavUser: 'user',
+            webdavPass: 'secret',
+            [field]: value
+          },
+          { source: 'agent' }
+        )
+      ).rejects.toThrow(message)
+    }
+
+    expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.setSetting).not.toHaveBeenCalled()
+    expect(
+      mocks.browserWindows[0].webContents.executeJavaScript.mock.calls.some(([script]) =>
+        String(script).startsWith(`window[${JSON.stringify(RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE)}](`)
+      )
+    ).toBe(false)
+  })
+
   it('declares dry-run support for write capabilities that implement dry-run branches', () => {
     expect(capability('dataSync.webdav.config.set').supportsDryRun).toBe(true)
     expect(capability('dataSync.webdav.diagnose').supportsDryRun).toBe(true)
@@ -373,6 +402,14 @@ describe('data sync app capabilities', () => {
       },
       '/folder/child'
     )
+  })
+
+  it('rejects invalid remote directory path shapes before WebDAV requests', async () => {
+    await expect(
+      capability('dataSync.webdav.directories.list').execute({ remotePath: ['team'] }, { source: 'agent' })
+    ).rejects.toThrow('Remote path must be a string')
+
+    expect(mocks.appDataSyncService.listRemoteDirectories).not.toHaveBeenCalled()
   })
 
   it('diagnoses WebDAV write access outside dry runs', async () => {

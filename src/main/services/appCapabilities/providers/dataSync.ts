@@ -148,19 +148,26 @@ function hasOwnInput(input: any, key: string) {
   return Object.prototype.hasOwnProperty.call(input ?? {}, key)
 }
 
-function normalizeInputText(value: unknown, fallback = '', options: { trim?: boolean } = {}) {
+const WEBDAV_INPUT_LABELS: Partial<Record<keyof WebDavConfig, string>> = {
+  webdavHost: 'WebDAV host',
+  webdavUser: 'WebDAV username',
+  webdavPass: 'WebDAV password',
+  webdavPath: 'WebDAV path'
+}
+
+function normalizeInputText(value: unknown, fallback = '', options: { trim?: boolean; label?: string } = {}) {
   const trim = options.trim ?? true
   if (value === null || typeof value === 'undefined') return fallback
-  if (typeof value === 'string') return trim ? value.trim() : value
-  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
-    const text = String(value)
-    return trim ? text.trim() : text
+  if (typeof value !== 'string') {
+    throw new Error(`${options.label ?? 'Value'} must be a string`)
   }
-  return ''
+  return trim ? value.trim() : value
 }
 
 function resolveInputText(input: any, key: keyof WebDavConfig, fallback = '') {
-  return hasOwnInput(input, key) ? normalizeInputText(input?.[key], fallback, { trim: key !== 'webdavPass' }) : fallback
+  return hasOwnInput(input, key)
+    ? normalizeInputText(input?.[key], fallback, { trim: key !== 'webdavPass', label: WEBDAV_INPUT_LABELS[key] ?? key })
+    : fallback
 }
 
 async function resolveWebDavConfig(
@@ -206,7 +213,7 @@ function normalizeRemotePath(value?: string) {
 }
 
 function normalizeDirectoryPath(value: unknown, fallback = '/') {
-  const trimmed = normalizeInputText(value, fallback) || fallback
+  const trimmed = normalizeInputText(value, fallback, { label: 'Remote path' }) || fallback
   let normalized = trimmed.replace(/\\/g, '/').replace(/\/+/g, '/')
   if (!normalized.startsWith('/')) normalized = `/${normalized}`
   if (normalized.length > 1) normalized = normalized.replace(/\/+$/g, '')
