@@ -9,6 +9,9 @@ permissions:
 
 jobs:
   dispatch-docs-update:
+    # This workflow belongs to upstream Cherry Studio. Cherry Studio Pi releases
+    # must not update the main Cherry Studio download docs with Pi version tags.
+    if: github.repository == 'CherryHQ/cherry-studio'
     runs-on: ubuntu-latest
     steps:
       - name: Get Release Tag from Event
