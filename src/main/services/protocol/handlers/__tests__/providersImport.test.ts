@@ -80,6 +80,28 @@ describe('providersImport protocol handler', () => {
     expect(parseProvidersImportData(payload)).toBe(JSON.stringify({ id: 'tokenflux' }))
   })
 
+  it('preserves apostrophes and parentheses in standard JSON payload strings', () => {
+    const config = {
+      id: 'custom',
+      name: "Bob's Provider (prod)",
+      apiKey: "sk-live-it's-real-(primary)"
+    }
+    const payload = Buffer.from(JSON.stringify(config), 'utf-8').toString('base64')
+
+    expect(parseProvidersImportData(payload)).toBe(JSON.stringify(config))
+  })
+
+  it('parses legacy single-quoted strings without stripping value characters', () => {
+    const payload = Buffer.from("({'id':'tokenflux','name':'Bob\\'s Provider (prod)'})", 'utf-8').toString('base64')
+
+    expect(parseProvidersImportData(payload)).toBe(
+      JSON.stringify({
+        id: 'tokenflux',
+        name: "Bob's Provider (prod)"
+      })
+    )
+  })
+
   it('logs unknown provider protocol URLs without raw query payloads', async () => {
     await handleProvidersProtocolUrl(new URL('cherrystudio://providers/unknown?data=sk-secret-token#raw-secret'))
 
