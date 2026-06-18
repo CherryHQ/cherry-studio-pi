@@ -539,6 +539,26 @@ describe('DataSyncSettings', () => {
     expect(mocks.reportErrorToSystemAgent).not.toHaveBeenCalled()
   })
 
+  it('renders incomplete legacy sync summaries with zero-count fallbacks', async () => {
+    mocks.getStatus.mockResolvedValueOnce({
+      ...idleStatus(),
+      lastSummary: {
+        status: 'failed',
+        error: 'legacy failure',
+        lastSyncAt: 1780058147577
+      }
+    })
+
+    render(<DataSyncSettings />)
+
+    const result = await screen.findByTestId('data-sync-last-result')
+
+    expect(result.textContent).toContain('legacy failure')
+    expect(result.textContent).not.toContain('undefined')
+    expect(result.textContent).toContain('settings.data.data_sync.summary.uploaded:{"count":0}')
+    expect(result.textContent).toContain('settings.data.data_sync.storage.records:{"uploaded":0,"downloaded":0}')
+  })
+
   it('keeps long sync result details inside a wrapping summary layout', async () => {
     const longRemotePath = `/dav/${'very-long-directory-name/'.repeat(16)}sync/v1`
     const longError = `WebDAV returned a very long provider message: ${'permission-denied-'.repeat(20)}`

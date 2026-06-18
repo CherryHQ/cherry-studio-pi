@@ -148,6 +148,10 @@ function getErrorMessage(error: unknown) {
   return String(error)
 }
 
+function summaryCount(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
 function isDataSyncAlreadyRunningError(error: unknown) {
   return /Data sync is already running|已有数据同步正在进行|同步正在进行/i.test(getErrorMessage(error))
 }
@@ -996,47 +1000,51 @@ const DataSyncSettings: FC = () => {
               )}
               <div data-testid="data-sync-last-result-metrics" style={lastResultMetricGridStyle}>
                 <Typography.Text type="secondary" style={lastResultTextStyle}>
-                  {t('settings.data.data_sync.summary.uploaded', { count: summary.uploaded })}
+                  {t('settings.data.data_sync.summary.uploaded', { count: summaryCount(summary.uploaded) })}
                 </Typography.Text>
                 <Typography.Text type="secondary" style={lastResultTextStyle}>
-                  {t('settings.data.data_sync.summary.downloaded', { count: summary.downloaded })}
+                  {t('settings.data.data_sync.summary.downloaded', { count: summaryCount(summary.downloaded) })}
                 </Typography.Text>
                 <Typography.Text type="secondary" style={lastResultTextStyle}>
-                  {t('settings.data.data_sync.summary.deleted', { count: summary.deleted })}
+                  {t('settings.data.data_sync.summary.deleted', { count: summaryCount(summary.deleted) })}
                 </Typography.Text>
-                <Typography.Text type={summary.conflicts ? 'warning' : 'secondary'} style={lastResultTextStyle}>
-                  {t('settings.data.data_sync.summary.conflicts', { count: summary.conflicts })}
+                <Typography.Text
+                  type={summaryCount(summary.conflicts) ? 'warning' : 'secondary'}
+                  style={lastResultTextStyle}>
+                  {t('settings.data.data_sync.summary.conflicts', { count: summaryCount(summary.conflicts) })}
                 </Typography.Text>
                 <Typography.Text type="secondary" style={lastResultTextStyle}>
                   {t('settings.data.data_sync.summary.resolved_conflicts', {
-                    count: summary.resolvedConflicts ?? 0
+                    count: summaryCount(summary.resolvedConflicts)
                   })}
                 </Typography.Text>
                 <Typography.Text type="secondary" style={lastResultTextStyle}>
                   {t('settings.data.data_sync.storage.records', {
-                    uploaded: summary.storageUploaded ?? 0,
-                    downloaded: summary.storageDownloaded ?? 0
+                    uploaded: summaryCount(summary.storageUploaded),
+                    downloaded: summaryCount(summary.storageDownloaded)
                   })}
                 </Typography.Text>
                 <Typography.Text type="secondary" style={lastResultTextStyle}>
                   {t('settings.data.data_sync.storage.blobs', {
-                    uploaded: summary.blobUploaded ?? 0,
-                    downloaded: summary.blobDownloaded ?? 0
+                    uploaded: summaryCount(summary.blobUploaded),
+                    downloaded: summaryCount(summary.blobDownloaded)
                   })}
                 </Typography.Text>
-                <Typography.Text type={summary.storageConflicts ? 'warning' : 'secondary'} style={lastResultTextStyle}>
-                  {t('settings.data.data_sync.storage.conflicts', { count: summary.storageConflicts ?? 0 })}
+                <Typography.Text
+                  type={summaryCount(summary.storageConflicts) ? 'warning' : 'secondary'}
+                  style={lastResultTextStyle}>
+                  {t('settings.data.data_sync.storage.conflicts', { count: summaryCount(summary.storageConflicts) })}
                 </Typography.Text>
                 <Typography.Text type="secondary" style={lastResultTextStyle}>
                   {t('settings.data.data_sync.storage.resolved_conflicts', {
-                    count: summary.storageResolvedConflicts ?? 0
+                    count: summaryCount(summary.storageResolvedConflicts)
                   })}
                 </Typography.Text>
                 {summary.snapshotUploaded && (
                   <Typography.Text type="secondary" style={lastResultTextStyle}>
                     {t('settings.data.data_sync.snapshot.uploaded', {
                       file: summary.snapshotFileName || '-',
-                      size: formatBytes(summary.snapshotBytes ?? 0)
+                      size: formatBytes(summaryCount(summary.snapshotBytes))
                     })}
                   </Typography.Text>
                 )}
@@ -1048,7 +1056,7 @@ const DataSyncSettings: FC = () => {
                       style={lastResultTextStyle}>
                       {t('settings.data.data_sync.snapshot.join_safety', {
                         file: summary.joinSafetySnapshotFileName || '-',
-                        size: formatBytes(summary.joinSafetySnapshotBytes ?? 0)
+                        size: formatBytes(summaryCount(summary.joinSafetySnapshotBytes))
                       })}
                     </Typography.Text>
                     {summary.joinSafetySnapshotPath && (
