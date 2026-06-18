@@ -148,6 +148,10 @@ function dirnameOf(p: string): string {
   return p.slice(0, i)
 }
 
+function isFilesystemRootPath(p: string): boolean {
+  return p === '/' || /^[A-Za-z]:\/$/.test(p)
+}
+
 export interface TreeNodeInit {
   /** Absolute, forward-slash path. */
   readonly path: string
@@ -338,7 +342,15 @@ export class TreeDir extends TreeNode {
     const normalized = target.replace(/\\/g, '/')
     if (normalized === this._path) return this
     let rel: string
-    if (normalized.startsWith(`${this._path}/`)) {
+    if (isFilesystemRootPath(this._path)) {
+      if (normalized.startsWith(this._path)) {
+        rel = normalized.slice(this._path.length)
+      } else if (normalized.startsWith('/')) {
+        return null
+      } else {
+        rel = normalized
+      }
+    } else if (normalized.startsWith(`${this._path}/`)) {
       rel = normalized.slice(this._path.length + 1)
     } else if (normalized.startsWith('/')) {
       return null

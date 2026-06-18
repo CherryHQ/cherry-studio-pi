@@ -83,6 +83,27 @@ describe('TreeDir', () => {
     expect(root.nodeFromPath('sub/missing')).toBeNull()
   })
 
+  it('nodeFromPath resolves descendants when the tree root is a filesystem root', () => {
+    const posixRoot = new TreeDirRoot('/')
+    const posixSub = new TreeDir({ path: '/sub' })
+    const posixLeaf = new TreeFile({ path: '/sub/leaf.md' })
+    posixRoot.attachChild(posixSub)
+    posixSub.attachChild(posixLeaf)
+
+    expect(posixRoot.nodeFromPath('/sub/leaf.md')).toBe(posixLeaf)
+    expect(posixRoot.nodeFromPath('sub/leaf.md')).toBe(posixLeaf)
+
+    const windowsRoot = new TreeDirRoot('C:/')
+    const windowsSub = new TreeDir({ path: 'C:/sub' })
+    const windowsLeaf = new TreeFile({ path: 'C:/sub/leaf.md' })
+    windowsRoot.attachChild(windowsSub)
+    windowsSub.attachChild(windowsLeaf)
+
+    expect(windowsRoot.nodeFromPath('C:\\sub\\leaf.md')).toBe(windowsLeaf)
+    expect(windowsRoot.nodeFromPath('sub/leaf.md')).toBe(windowsLeaf)
+    expect(windowsRoot.nodeFromPath('/sub/leaf.md')).toBeNull()
+  })
+
   it('renaming a directory cascades to descendants and repoints both _children maps', () => {
     const root = new TreeDirRoot('/root')
     const sub = new TreeDir({ path: '/root/old' })
