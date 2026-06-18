@@ -442,6 +442,7 @@ const DataSyncSettings: FC = () => {
 
     let latestStatus: SyncStatus | null = null
     let completedSummary: SyncSummary | null = null
+    let keepSyncingWhenStatusUnknown = false
     syncNowRef.current = true
     setSyncing(true)
     try {
@@ -449,6 +450,7 @@ const DataSyncSettings: FC = () => {
       if (!summary) {
         const nextStatus = await refreshStatus().catch(() => null)
         latestStatus = nextStatus
+        keepSyncingWhenStatusUnknown = true
         window.toast.info(t('settings.data.data_sync.toast.sync_running'))
         return
       }
@@ -468,7 +470,8 @@ const DataSyncSettings: FC = () => {
     } catch (error) {
       latestStatus = await refreshStatus().catch(() => null)
       if (isDataSyncAlreadyRunningError(error)) {
-        setSyncing(isSyncing(latestStatus))
+        keepSyncingWhenStatusUnknown = true
+        setSyncing(latestStatus ? isSyncing(latestStatus) : true)
         window.toast.info(t('settings.data.data_sync.toast.sync_running'))
         return
       }
@@ -491,7 +494,7 @@ const DataSyncSettings: FC = () => {
         latestStatus = await refreshStatus().catch(() => null)
       }
 
-      setSyncing(isSyncing(latestStatus))
+      setSyncing(latestStatus ? isSyncing(latestStatus) : keepSyncingWhenStatusUnknown)
       syncNowRef.current = false
     }
   }

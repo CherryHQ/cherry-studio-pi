@@ -307,6 +307,20 @@ describe('DataSyncSettings', () => {
     expect(mocks.toast.error).not.toHaveBeenCalled()
   })
 
+  it('keeps the sync button busy when a null sync summary cannot be refreshed', async () => {
+    mocks.getStatus.mockResolvedValueOnce(idleStatus()).mockRejectedValue(new Error('status unavailable'))
+
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(syncButton())
+
+    await waitFor(() => expect(mocks.syncAppDataNow).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mocks.toast.info).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_running'))
+    await waitFor(() => expect(syncButton()).toHaveClass('ant-btn-loading'))
+    expect(mocks.toast.success).not.toHaveBeenCalled()
+  })
+
   it('keeps the sync button busy for a null sync summary only while refreshed status is still syncing', async () => {
     mocks.getStatus.mockResolvedValueOnce(idleStatus()).mockResolvedValueOnce(runningStatus())
 
@@ -330,6 +344,22 @@ describe('DataSyncSettings', () => {
 
     await waitFor(() => expect(mocks.toast.info).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_running'))
     await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+    expect(mocks.toast.success).not.toHaveBeenCalled()
+    expect(mocks.toast.error).not.toHaveBeenCalled()
+    expect(mocks.reportErrorToSystemAgent).not.toHaveBeenCalled()
+  })
+
+  it('keeps the sync button busy when an already-running response cannot be refreshed', async () => {
+    mocks.getStatus.mockResolvedValueOnce(idleStatus()).mockRejectedValue(new Error('status unavailable'))
+    mocks.syncAppDataNow.mockRejectedValueOnce(new Error('同步数据失败：已有数据同步正在进行，请等待本次同步完成。'))
+
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(syncButton())
+
+    await waitFor(() => expect(mocks.toast.info).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_running'))
+    await waitFor(() => expect(syncButton()).toHaveClass('ant-btn-loading'))
     expect(mocks.toast.success).not.toHaveBeenCalled()
     expect(mocks.toast.error).not.toHaveBeenCalled()
     expect(mocks.reportErrorToSystemAgent).not.toHaveBeenCalled()
