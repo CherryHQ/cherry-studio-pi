@@ -1,22 +1,23 @@
 ---
 name: prepare-release
-description: Prepare a new release by collecting commits, generating bilingual release notes, updating version files, and creating a release branch with PR. Use when asked to prepare/create a release, bump version, or run `/prepare-release`.
+description: Prepare a Cherry Studio Pi release by collecting commits, generating bilingual release notes, and preparing the version commit/tag. Use when asked to prepare/create a release, bump version, or run `/prepare-release`.
 ---
 
 # Prepare Release
 
-Automate the Cherry Studio release workflow: collect changes → generate bilingual release notes → update files → create release branch + PR → trigger CI/CD.
+Prepare the Cherry Studio Pi release workflow: collect changes -> generate bilingual release notes -> update files -> create exactly one version commit and annotated tag -> publish exactly once through the manual GitHub Actions Release workflow.
+
+Cherry Studio Pi release publishing is intentionally manual-only. An ordinary bug-fix commit/push must not publish installers, push release tags, or dispatch the Release workflow. If the user asks to fix a bug after a release, fix it and push code only; do not publish another release unless the user explicitly asks for another release in a new message.
 
 ## Arguments
 
 Parse the version intent from the user's message. Accept any of these forms:
 - Bump type keyword: `patch`, `minor`, `major`
-- Exact version: `x.y.z` or `x.y.z-pre.N` (e.g. `1.8.0`, `1.8.0-beta.1`, `1.8.0-rc.1`)
 - Natural language: "prepare a beta release", "bump to 1.8.0-rc.2", etc.
 
-Defaults to `patch` if no version is specified. Always echo the resolved target version back to the user before proceeding with any file edits.
+Defaults to `patch` if no version is specified. The guarded local helper currently accepts `patch`, `minor`, or `major`; exact versions require an explicit manual version-edit plan before any file changes. Always echo the resolved target version back to the user before proceeding with any file edits.
 
-- `--dry-run`: Preview only, do not create branch or PR.
+- `--dry-run`: Preview only, do not create a version commit, tag, or workflow dispatch.
 
 ## Workflow
 
@@ -29,7 +30,7 @@ Defaults to `patch` if no version is specified. Always echo the resolved target 
 2. Read current version from `package.json`.
 3. Compute the new version based on the argument:
    - `patch` / `minor` / `major`: bump from the current tag version.
-   - `x.y.z` or `x.y.z-pre.N`: use as-is after validating it is valid semver.
+   - Exact versions are not handled by `pnpm release`; stop and ask for confirmation before any manual exact-version edit.
 
 ### Step 2: Collect Commits
 
@@ -58,7 +59,7 @@ Using the collected commit information, generate release notes in **both English
 
 ```
 <!--LANG:en-->
-Cherry Studio {version} - {Brief English Title}
+Cherry Studio Pi {version} - {Brief English Title}
 
 ✨ New Features
 - [Component] Description
@@ -73,7 +74,7 @@ Cherry Studio {version} - {Brief English Title}
 - [Component] Description
 
 <!--LANG:zh-CN-->
-Cherry Studio {version} - {简短中文标题}
+Cherry Studio Pi {version} - {简短中文标题}
 
 ✨ 新功能
 - [组件] 描述
@@ -139,37 +140,31 @@ If `--dry-run` was specified, stop here.
 
 Otherwise, ask the user to confirm before proceeding to Step 6.
 
-### Step 6: Create Branch and PR
+### Step 6: Create Version Commit and Annotated Tag
 
-1. Create and push the release branch:
+1. Make sure the worktree is clean and the remote is `CherryHQ/cherry-studio-pi`.
+2. Create the version commit and annotated tag through the guarded helper:
    ```bash
-   git checkout -b release/v{version}
-   git add package.json electron-builder.yml
-   git commit -m "chore: release v{version}"
-   git push -u origin release/v{version}
+   CHERRY_STUDIO_PI_RELEASE_CONFIRM=v{version} pnpm release {patch|minor|major}
    ```
-2. Create the PR using the `gh-create-pr` skill. If the skill tool is unavailable, read `.agents/skills/gh-create-pr/SKILL.md` and follow it manually. In CI (non-interactive) mode, skip interactive confirmation steps and create the PR directly after filling the template.
-   - Use title: `chore: release v{version}`
-   - Use base branch: `main`
-   - When filling the PR template, incorporate:
-     - The generated release notes (English section only, for readability).
-     - A list of included commits.
-     - A review checklist:
-       - [ ] Review generated release notes in `electron-builder.yml`
-       - [ ] Verify version bump in `package.json`
-       - [ ] CI passes
-       - [ ] Merge to trigger release build
-3. Report the PR URL and next steps.
+   Use the exact target tag in `CHERRY_STUDIO_PI_RELEASE_CONFIRM`. Do not reuse an old confirmation value.
+3. Push the version commit and that exact tag only after checking the user really asked to publish this release:
+   ```bash
+   git push
+   git push origin v{version}
+   ```
+4. Publishing installers is a separate explicit action: run **Actions -> Release -> Run workflow** with `tag=v{version}` and `confirm_tag=v{version}`. Run it once for the user's release request.
 
 ## CI Trigger Chain
 
-Creating a PR from `release/v*` to `main` automatically triggers:
-- **`release.yml`**: Builds on macOS, Windows, Linux and creates a draft GitHub Release.
-- **`ci.yml`**: Runs lint, typecheck, and tests.
+- Pushing normal commits runs **`ci.yml`** only.
+- Pushing a tag does not publish installers.
+- **`release.yml`** is manual-only (`workflow_dispatch`) and requires matching `tag` and `confirm_tag`.
+- The Release workflow builds macOS, Windows, and Linux installers, then creates or updates one GitHub Release for the requested tag.
 
 ## Constraints
 
 - Always read `electron-builder.yml` before modifying it to understand the current format.
 - Never modify files other than `package.json` and `electron-builder.yml`.
-- Never push directly to `main`.
-- Always show the generated release notes to the user before creating the branch/PR (unless running in CI with no interactive user).
+- Never publish a second release for the same user request. If a follow-up fix is needed, make a normal commit/push and wait for a separate explicit release request.
+- Always show the generated release notes to the user before creating the version commit/tag (unless running in CI with no interactive user).

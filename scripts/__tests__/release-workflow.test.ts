@@ -26,6 +26,8 @@ function getWorkflowEventNames(workflow: string): string[] {
 describe('release workflow safety', () => {
   const workflowPath = path.resolve(process.cwd(), '.github/workflows/release.yml')
   const workflow = fs.readFileSync(workflowPath, 'utf8').replace(/\r\n/g, '\n')
+  const prepareReleaseSkillPath = path.resolve(process.cwd(), '.agents/skills/prepare-release/SKILL.md')
+  const prepareReleaseSkill = fs.readFileSync(prepareReleaseSkillPath, 'utf8').replace(/\r\n/g, '\n')
 
   it('keeps installer publishing manual-only', () => {
     expect(getWorkflowEventNames(workflow)).toEqual(['workflow_dispatch'])
@@ -62,5 +64,13 @@ describe('release workflow safety', () => {
     expect(workflow).toContain(
       'Refusing to publish ${currentTag} within ${windowMinutes} minutes of another release or draft'
     )
+  })
+
+  it('keeps the release preparation skill aligned with manual one-shot publishing', () => {
+    expect(prepareReleaseSkill).toContain('publish exactly once through the manual GitHub Actions Release workflow')
+    expect(prepareReleaseSkill).toContain('Never publish a second release for the same user request')
+    expect(prepareReleaseSkill).toContain('**`release.yml`** is manual-only')
+    expect(prepareReleaseSkill).not.toContain('Merge to trigger release build')
+    expect(prepareReleaseSkill).not.toContain('automatically triggers:\n- **`release.yml`**')
   })
 })
