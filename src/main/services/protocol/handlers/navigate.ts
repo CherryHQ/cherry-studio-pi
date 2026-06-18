@@ -13,6 +13,16 @@ function scheduleNavigateRetry(url: URL, retryAttempt: number) {
   retryTimer.unref?.()
 }
 
+function retryOrDropNavigate(url: URL, retryAttempt: number, path: string, reason: string) {
+  if (retryAttempt >= MAX_NAVIGATE_RETRY_ATTEMPTS) {
+    logger.warn(`${reason}, dropping navigation URL after retry limit`, { path })
+    return
+  }
+
+  logger.warn(`${reason}, retrying in 1s`, { retryAttempt: retryAttempt + 1 })
+  scheduleNavigateRetry(url, retryAttempt + 1)
+}
+
 /**
  * Handle cherrystudio://navigate/<path> deep links.
  *
@@ -41,30 +51,29 @@ export function handleNavigateProtocolUrl(url: URL, retryAttempt = 0) {
     const mainWindow = application.get('WindowManager').getWindowsByType(WindowType.Main)[0]
 
     if (!mainWindow) {
-      if (retryAttempt >= MAX_NAVIGATE_RETRY_ATTEMPTS) {
-        logger.warn('Main window not available, dropping navigation URL after retry limit', { path: fullPath })
-        return
-      }
+      retryOrDropNavigate(url, retryAttempt, fullPath, 'Main window not available')
+      return
+    }
 
-      logger.warn('Main window not available, retrying in 1s', { retryAttempt: retryAttempt + 1 })
-      scheduleNavigateRetry(url, retryAttempt + 1)
+    let hasNavigate = false
+
+    try {
+      hasNavigate = await mainWindow.webContents.executeJavaScript(`typeof window.navigate === 'function'`)
+    } catch (error) {
+      logger.warn('Failed to inspect window.navigate for protocol navigation', {
+        path: fullPath,
+        error
+      })
+      retryOrDropNavigate(url, retryAttempt, fullPath, 'window.navigate inspection failed')
+      return
+    }
+
+    if (!hasNavigate) {
+      retryOrDropNavigate(url, retryAttempt, fullPath, 'window.navigate not available')
       return
     }
 
     try {
-      const hasNavigate = await mainWindow.webContents.executeJavaScript(`typeof window.navigate === 'function'`)
-
-      if (!hasNavigate) {
-        if (retryAttempt >= MAX_NAVIGATE_RETRY_ATTEMPTS) {
-          logger.warn('window.navigate not available, dropping navigation URL after retry limit', { path: fullPath })
-          return
-        }
-
-        logger.warn('window.navigate not available yet, retrying in 1s', { retryAttempt: retryAttempt + 1 })
-        scheduleNavigateRetry(url, retryAttempt + 1)
-        return
-      }
-
       await mainWindow.webContents.executeJavaScript(`window.navigate({ to: ${JSON.stringify(fullPath)} })`)
       // Always raise Main: Win/Linux used to rely on MainWindowService's
       // `second-instance` listener for this, but that listener now skips

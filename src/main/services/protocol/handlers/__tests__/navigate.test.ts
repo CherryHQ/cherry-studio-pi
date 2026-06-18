@@ -149,4 +149,27 @@ describe('navigate protocol handler', () => {
       expect.objectContaining({ path: '/app/agents' })
     )
   })
+
+  it('retries transient executeJavaScript failures while the main window is still loading', async () => {
+    vi.useFakeTimers()
+    const executeJavaScript = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('webContents is loading'))
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(undefined)
+    windowManagerMock.getWindowsByType.mockReturnValue([{ webContents: { executeJavaScript } }])
+
+    handleNavigateProtocolUrl(new URL('cherrystudio://navigate/agents'))
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      'Failed to inspect window.navigate for protocol navigation',
+      expect.objectContaining({ path: '/app/agents' })
+    )
+    expect(loggerMock.warn).toHaveBeenCalledWith('window.navigate inspection failed, retrying in 1s', {
+      retryAttempt: 1
+    })
+    expect(executeJavaScript).toHaveBeenCalledTimes(3)
+    expect(executeJavaScript).toHaveBeenNthCalledWith(3, `window.navigate({ to: "/app/agents" })`)
+  })
 })
