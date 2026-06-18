@@ -122,10 +122,24 @@ describe('storage app capabilities', () => {
     expect(mocks.storageV2Service.restoreBackup).not.toHaveBeenCalled()
   })
 
-  it('declares storage snapshot creation as a local data side effect', () => {
+  it('declares storage backup and snapshot capabilities with complete local data side effects', () => {
+    expect(capability('storage.backup.create')).toMatchObject({
+      permissions: ['storage.backup.write'],
+      sideEffects: expect.arrayContaining(['database.read', 'filesystem.read', 'filesystem.write'])
+    })
+    expect(capability('storage.backup.restore')).toMatchObject({
+      permissions: ['storage.backup.restore'],
+      sideEffects: expect.arrayContaining([
+        'database.read',
+        'database.write',
+        'filesystem.read',
+        'filesystem.write',
+        'filesystem.delete'
+      ])
+    })
     expect(capability('storage.snapshot.create')).toMatchObject({
       permissions: ['storage.snapshot.write'],
-      sideEffects: ['database.write', 'filesystem.write']
+      sideEffects: expect.arrayContaining(['database.read', 'database.write', 'filesystem.write'])
     })
   })
 

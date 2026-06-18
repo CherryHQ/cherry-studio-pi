@@ -109,7 +109,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'write',
       permissions: ['storage.backup.write'],
-      sideEffects: ['filesystem.write'],
+      sideEffects: ['database.read', 'filesystem.read', 'filesystem.write'],
       tags: ['storage', 'backup', 'local', 'data'],
       examples: ['Create a local backup', 'Back up my data before changing settings'],
       execute: async (input: any) => {
@@ -174,7 +174,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'destructive',
       permissions: ['storage.backup.restore'],
-      sideEffects: ['database.write', 'filesystem.write'],
+      sideEffects: ['database.read', 'database.write', 'filesystem.read', 'filesystem.write', 'filesystem.delete'],
       supportsDryRun: true,
       tags: ['storage', 'backup', 'restore'],
       execute: async (input: any, context) => {
@@ -202,7 +202,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'write',
       permissions: ['storage.snapshot.write'],
-      sideEffects: ['database.write', 'filesystem.write'],
+      sideEffects: ['database.read', 'database.write', 'filesystem.write'],
       tags: ['storage', 'snapshot', 'database'],
       execute: async (input: any) => {
         const reason = normalizeOptionalText(input?.reason, 'Snapshot reason') || 'agent-request'
