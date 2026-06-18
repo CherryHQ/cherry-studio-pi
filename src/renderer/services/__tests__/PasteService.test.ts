@@ -60,4 +60,34 @@ describe('PasteService', () => {
 
     addEventListener.mockRestore()
   })
+
+  it('does not route paste events from descendants of editable content through the global handler', async () => {
+    let pasteListener: ((event: ClipboardEvent) => Promise<void>) | undefined
+    const addEventListener = vi.spyOn(document, 'addEventListener').mockImplementation(((
+      event: string,
+      listener: EventListenerOrEventListenerObject
+    ) => {
+      if (event === 'paste' && typeof listener === 'function') {
+        pasteListener = listener as unknown as (event: ClipboardEvent) => Promise<void>
+      }
+    }) as typeof document.addEventListener)
+
+    const editor = document.createElement('div')
+    editor.setAttribute('contenteditable', 'true')
+    const nested = document.createElement('span')
+    editor.appendChild(nested)
+    document.body.appendChild(editor)
+
+    const pasteService = await import('../PasteService')
+    pasteService.init()
+    const inputbarHandler = vi.fn(async () => true)
+    pasteService.registerHandler('inputbar', inputbarHandler)
+
+    await pasteListener?.({ target: nested } as unknown as ClipboardEvent)
+
+    expect(inputbarHandler).not.toHaveBeenCalled()
+
+    editor.remove()
+    addEventListener.mockRestore()
+  })
 })

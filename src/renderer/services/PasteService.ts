@@ -38,6 +38,14 @@ const pasteServiceState = getPasteServiceState()
 // 处理函数存储
 const handlers = pasteServiceState.handlers
 
+function isEditablePasteTarget(target: EventTarget | Element | null | undefined) {
+  if (!(target instanceof Element)) return false
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return true
+  if (target instanceof HTMLElement && target.isContentEditable) return true
+
+  return Boolean(target.closest('input, textarea, [contenteditable="true"], [contenteditable="plaintext-only"]'))
+}
+
 /**
  * 处理粘贴事件的通用服务
  * 处理各种粘贴场景，包括文本和文件
@@ -194,13 +202,7 @@ export const unregisterHandler = (component: ComponentType) => {
  */
 const handleGlobalPaste = async (event: ClipboardEvent): Promise<boolean> => {
   // 如果当前有活动元素且是输入区域，不执行全局处理
-  const activeElement = document.activeElement
-  if (
-    activeElement &&
-    (activeElement.tagName === 'INPUT' ||
-      activeElement.tagName === 'TEXTAREA' ||
-      activeElement.getAttribute('contenteditable') === 'true')
-  ) {
+  if (isEditablePasteTarget(event.target) || isEditablePasteTarget(document.activeElement)) {
     return false
   }
 
