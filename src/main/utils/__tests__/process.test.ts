@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   autoDiscoverGitBash,
+  executeCommand,
   findCommandInShellEnv,
   findExecutable,
   findGitBash,
@@ -1176,6 +1177,29 @@ describe('runInstallScript', () => {
     mockChild.emit('close', 0)
 
     await expect(resultPromise).rejects.toThrow('Failed to run script install.js: spawn ENOENT')
+  })
+})
+
+describe('executeCommand', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('keeps the timeout failure when a killed command later closes successfully', async () => {
+    vi.useFakeTimers()
+    const mockChild = createMockChildProcess()
+    vi.mocked(spawn).mockReturnValue(mockChild as never)
+
+    const resultPromise = executeCommand('tool', ['--version'], { env: { PATH: '/usr/bin' }, timeout: 1000 })
+
+    vi.advanceTimersByTime(1000)
+    mockChild.emit('close', 0)
+
+    await expect(resultPromise).rejects.toThrow('Command timed out after 1000ms')
+    expect(mockChild.kill).toHaveBeenCalledWith('SIGKILL')
+
+    vi.useRealTimers()
   })
 })
 

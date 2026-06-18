@@ -499,6 +499,29 @@ export async function executeCommand(
     const child = crossPlatformSpawn(command, args, { env })
     let stdout = ''
     let stderr = ''
+    let settled = false
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+
+    const clearCommandTimeout = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+        timeoutId = undefined
+      }
+    }
+
+    const resolveOnce = (value: string) => {
+      if (settled) return
+      settled = true
+      clearCommandTimeout()
+      resolve(value)
+    }
+
+    const rejectOnce = (error: Error) => {
+      if (settled) return
+      settled = true
+      clearCommandTimeout()
+      reject(error)
+    }
 
     child.stdout?.on('data', (chunk) => {
       stdout += chunk.toString()
@@ -508,26 +531,23 @@ export async function executeCommand(
       stderr += chunk.toString()
     })
 
-    let timeoutId: ReturnType<typeof setTimeout> | undefined
     if (options?.timeout) {
       timeoutId = setTimeout(() => {
         child.kill('SIGKILL')
-        reject(new Error(`Command timed out after ${options.timeout}ms`))
+        rejectOnce(new Error(`Command timed out after ${options.timeout}ms`))
       }, options.timeout)
       timeoutId.unref?.()
     }
 
     child.on('error', (err) => {
-      if (timeoutId) clearTimeout(timeoutId)
-      reject(err)
+      rejectOnce(err)
     })
 
     child.on('close', (code) => {
-      if (timeoutId) clearTimeout(timeoutId)
       if (code === 0) {
-        resolve(options?.capture ? stdout : '')
+        resolveOnce(options?.capture ? stdout : '')
       } else {
-        reject(new Error(stderr || `Command failed with code ${code}`))
+        rejectOnce(new Error(stderr || `Command failed with code ${code}`))
       }
     })
   })
