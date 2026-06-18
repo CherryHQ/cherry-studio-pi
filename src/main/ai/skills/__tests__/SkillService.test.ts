@@ -8,7 +8,7 @@ import { agentGlobalSkillTable } from '@data/db/schemas/agentGlobalSkill'
 import { agentSkillTable } from '@data/db/schemas/agentSkill'
 import { agentGlobalSkillService } from '@data/services/AgentGlobalSkillService'
 import { loggerService } from '@logger'
-import { parseSkillMetadata } from '@main/utils/markdownParser'
+import { findSkillMdPath, parseSkillMetadata } from '@main/utils/markdownParser'
 import { setupTestDatabase } from '@test-helpers/db'
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -108,6 +108,34 @@ describe('SkillService', () => {
     it('rejects Windows-style traversal and null bytes before extraction', () => {
       expect(() => assertSkillZipEntriesWithin(['..\\escape.md'], extractRoot)).toThrow('Unsafe skill ZIP entry path')
       expect(() => assertSkillZipEntriesWithin(['safe\0name.md'], extractRoot)).toThrow('Unsafe skill ZIP entry path')
+    })
+  })
+
+  describe('resolveSkillDirectory', () => {
+    beforeEach(() => {
+      vi.mocked(findSkillMdPath).mockClear()
+    })
+
+    it('accepts explicit directories inside the cloned repository', async () => {
+      const skillService = new SkillService()
+      const repoDir = path.join(os.tmpdir(), 'skill-repo')
+      const skillDir = path.join(repoDir, 'skills', 'demo')
+      vi.mocked(findSkillMdPath).mockResolvedValueOnce(path.join(skillDir, 'SKILL.md'))
+
+      await expect((skillService as any).resolveSkillDirectory(repoDir, null, 'skills/demo')).resolves.toBe(skillDir)
+
+      expect(findSkillMdPath).toHaveBeenCalledWith(skillDir)
+    })
+
+    it('rejects explicit directories that escape the cloned repository', async () => {
+      const skillService = new SkillService()
+      const repoDir = path.join(os.tmpdir(), 'skill-repo')
+
+      await expect((skillService as any).resolveSkillDirectory(repoDir, null, '../outside')).rejects.toThrow(
+        'Invalid skill directory path outside repository'
+      )
+
+      expect(findSkillMdPath).not.toHaveBeenCalled()
     })
   })
 

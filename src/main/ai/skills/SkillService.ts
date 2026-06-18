@@ -53,6 +53,11 @@ export function assertSkillZipEntriesWithin(entryNames: string[], destDir: strin
   }
 }
 
+function isPathInsideOrSame(parentPath: string, candidatePath: string): boolean {
+  const relative = path.relative(path.resolve(parentPath), path.resolve(candidatePath))
+  return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative))
+}
+
 /**
  * Skill management service.
  *
@@ -787,6 +792,10 @@ export class SkillService {
   ): Promise<string> {
     if (directoryPath) {
       const resolved = path.resolve(repoDir, directoryPath)
+      if (!isPathInsideOrSame(repoDir, resolved)) {
+        throw new Error(`Invalid skill directory path outside repository: ${directoryPath}`)
+      }
+
       const skillMdPath = await findSkillMdPath(resolved)
       if (skillMdPath) return resolved
 
