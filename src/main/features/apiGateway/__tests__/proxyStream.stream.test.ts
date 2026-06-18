@@ -280,4 +280,20 @@ describe('processMessage (error & pause)', () => {
     expect(res.headers.get('Content-Type')).toBe('application/json')
     expect(mockAbort).toHaveBeenCalled()
   })
+
+  it('non-streaming: does not start the upstream stream when the request signal is already aborted', async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    const res = await processMessage({
+      params: { model: 'openai:gpt-4', messages: [] } as any,
+      inputFormat: 'openai',
+      outputFormat: 'openai',
+      signal: controller.signal
+    })
+
+    expect(mockStreamPrompt).not.toHaveBeenCalled()
+    expect(mockAbort).not.toHaveBeenCalled()
+    expect(await res.json()).toEqual({ done: true })
+  })
 })

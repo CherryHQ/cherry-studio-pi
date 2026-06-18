@@ -266,9 +266,15 @@ export async function processMessage(config: MessageConfig): Promise<Response> {
   })
 
   let aborted = false
+  let upstreamStarted = false
+  const abortUpstream = () => {
+    if (upstreamStarted) {
+      aiStreamManager.abort(streamId, 'gateway client disconnected')
+    }
+  }
   const onAbort = () => {
     aborted = true
-    aiStreamManager.abort(streamId, 'gateway client disconnected')
+    abortUpstream()
     resolveDone()
   }
   if (signal) {
@@ -303,14 +309,17 @@ export async function processMessage(config: MessageConfig): Promise<Response> {
   }
 
   try {
-    aiStreamManager.streamPrompt({
-      streamId,
-      uniqueModelId,
-      messages,
-      listener,
-      callOverrides,
-      idleTimeoutMs: GATEWAY_STREAM_IDLE_TIMEOUT_MS
-    })
+    if (!aborted) {
+      upstreamStarted = true
+      aiStreamManager.streamPrompt({
+        streamId,
+        uniqueModelId,
+        messages,
+        listener,
+        callOverrides,
+        idleTimeoutMs: GATEWAY_STREAM_IDLE_TIMEOUT_MS
+      })
+    }
 
     await done
 
