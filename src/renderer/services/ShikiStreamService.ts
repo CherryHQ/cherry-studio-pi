@@ -44,6 +44,39 @@ export type ShikiPreProperties = {
   tabindex: number
 }
 
+type HastElementLike = {
+  type: 'element'
+  properties?: Record<string, unknown> | null
+}
+
+function isHastElementLike(value: unknown): value is HastElementLike {
+  return Boolean(value && typeof value === 'object' && (value as { type?: unknown }).type === 'element')
+}
+
+function normalizeShikiPreProperties(properties: Record<string, unknown>): ShikiPreProperties {
+  const classValue = properties.class
+  const normalizedClass = Array.isArray(classValue)
+    ? classValue.filter((item): item is string => typeof item === 'string').join(' ')
+    : typeof classValue === 'string'
+      ? classValue
+      : ''
+
+  const style = typeof properties.style === 'string' ? properties.style : ''
+  const tabindexValue = properties.tabindex ?? properties.tabIndex
+  const tabindex =
+    typeof tabindexValue === 'number'
+      ? tabindexValue
+      : typeof tabindexValue === 'string'
+        ? Number.parseInt(tabindexValue, 10)
+        : 0
+
+  return {
+    class: normalizedClass,
+    style,
+    tabindex: Number.isFinite(tabindex) ? tabindex : 0
+  }
+}
+
 /**
  * 代码 chunk 高亮结果
  *
@@ -291,8 +324,12 @@ class ShikiStreamService {
       theme: loadedTheme
     })
 
-    // @ts-ignore hack
-    return hast.children[0].properties as ShikiPreProperties
+    const preElement = hast.children[0]
+    if (!isHastElementLike(preElement)) {
+      throw new Error('Unexpected Shiki HAST structure: missing pre element')
+    }
+
+    return normalizeShikiPreProperties(preElement.properties ?? {})
   }
 
   /**

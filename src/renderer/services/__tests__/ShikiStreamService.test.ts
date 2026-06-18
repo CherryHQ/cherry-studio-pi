@@ -227,6 +227,14 @@ describe('ShikiStreamService', () => {
       // @ts-ignore: access private
       expect(shikiStreamService.tokenizerCache.has(cacheKey)).toBe(false)
     })
+
+    it('should return normalized Shiki pre properties without unsafe casts', async () => {
+      const properties = await shikiStreamService.getShikiPreProperties(language, theme)
+
+      expect(properties.class).toContain('shiki')
+      expect(properties.style).toContain('background-color')
+      expect(properties.tabindex).toBeTypeOf('number')
+    })
   })
 
   describe('dispose', () => {
