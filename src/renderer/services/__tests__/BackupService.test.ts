@@ -188,9 +188,9 @@ describe('BackupService legacy restore', () => {
 
   afterEach(() => {
     stopAutoSync()
+    vi.restoreAllMocks()
     localStorage.clear()
     vi.useRealTimers()
-    vi.restoreAllMocks()
     Object.defineProperty(window, 'api', {
       configurable: true,
       value: originalApi
@@ -262,6 +262,39 @@ describe('BackupService legacy restore', () => {
       }),
       'storage-v2'
     )
+    expect(window.toast.success).toHaveBeenCalledWith('message.restore.success')
+  })
+
+  it('continues legacy restore when localStorage persist restore is blocked', async () => {
+    const localStorageSetItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Blocked', 'SecurityError')
+    })
+    const topicsTable = {
+      clear: vi.fn().mockResolvedValue(undefined),
+      bulkAdd: vi.fn().mockResolvedValue(undefined)
+    }
+    mocks.db.tables = [{ name: 'topics' }]
+    mocks.db.table.mockImplementation((tableName: string) => {
+      if (tableName === 'topics') return topicsTable
+      throw new Error(`Unexpected table ${tableName}`)
+    })
+
+    await handleData({
+      version: 2,
+      localStorage: {
+        'persist:cherry-studio': '{"settings":"{}"}'
+      },
+      indexedDB: {
+        topics: [{ id: 'topic-1', messages: [] }]
+      }
+    })
+
+    expect(localStorageSetItem).toHaveBeenCalledWith('persist:cherry-studio', '{"settings":"{}"}')
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      'handleData:v2: Failed to restore localStorage item persist:cherry-studio',
+      expect.objectContaining({ name: 'SecurityError' })
+    )
+    expect(topicsTable.bulkAdd).toHaveBeenCalledWith([{ id: 'topic-1', messages: [] }])
     expect(window.toast.success).toHaveBeenCalledWith('message.restore.success')
   })
 
@@ -377,6 +410,29 @@ describe('BackupService legacy restore', () => {
     expect(tableClear).not.toHaveBeenCalled()
     expect(mocks.suspendStorageV2RuntimeMirrorsUntilReload).not.toHaveBeenCalled()
     expect(window.toast.error).toHaveBeenCalledWith('notes.settings.data.reset_failed')
+  })
+
+  it('continues factory reset when renderer localStorage clear is blocked', async () => {
+    vi.spyOn(Storage.prototype, 'clear').mockImplementation(() => {
+      throw new DOMException('Blocked', 'SecurityError')
+    })
+    const tableClear = vi.fn().mockResolvedValue(undefined)
+    mocks.db.tables = [{ name: 'topics' }, { name: 'settings' }]
+    ;(mocks.db as any).topics = { clear: tableClear }
+    ;(mocks.db as any).settings = { clear: tableClear }
+
+    await reset()
+
+    const confirmCalls = vi.mocked(window.modal.confirm).mock.calls
+    await confirmCalls[0][0].onOk?.()
+    await confirmCalls[1][0].onOk?.()
+
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      'reset: Failed to clear localStorage',
+      expect.objectContaining({ name: 'SecurityError' })
+    )
+    expect(tableClear).toHaveBeenCalledTimes(2)
+    expect(window.toast.success).toHaveBeenCalledWith('message.reset.success')
   })
 
   it('prevents duplicate factory reset confirmations and operations', async () => {

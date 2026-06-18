@@ -91,6 +91,34 @@ function getLocalBackupSettings() {
   }
 }
 
+function safeClearLocalStorageForBackup(source: string): boolean {
+  if (typeof localStorage === 'undefined') {
+    return false
+  }
+
+  try {
+    localStorage.clear()
+    return true
+  } catch (error) {
+    logger.warn(`${source}: Failed to clear localStorage`, error as Error)
+    return false
+  }
+}
+
+function safeSetLocalStorageItemForBackup(source: string, key: string, value: string | undefined): boolean {
+  if (typeof localStorage === 'undefined' || value === undefined) {
+    return false
+  }
+
+  try {
+    localStorage.setItem(key, value)
+    return true
+  } catch (error) {
+    logger.warn(`${source}: Failed to restore localStorage item ${key}`, error as Error)
+    return false
+  }
+}
+
 async function disableStorageV2AutoHydrateAfterLegacyRestore() {
   try {
     await window.api.storageV2.setSetting(
@@ -307,7 +335,7 @@ export async function reset() {
           try {
             await window.api.resetData()
             suspendStorageV2RuntimeMirrorsUntilReload()
-            localStorage.clear()
+            safeClearLocalStorageForBackup('reset')
             await clearDatabase()
             window.toast.success(i18n.t('message.reset.success'))
             requestRelaunchAfterRestore('reset')
@@ -1086,7 +1114,11 @@ export async function handleData(data: Record<string, any>) {
       }
     }
 
-    localStorage.setItem('persist:cherry-studio', data.localStorage['persist:cherry-studio'])
+    safeSetLocalStorageItemForBackup(
+      'handleData:v1',
+      'persist:cherry-studio',
+      data.localStorage['persist:cherry-studio']
+    )
     await mirrorRestoredLegacyDexieToStorageV2()
     await disableStorageV2AutoHydrateAfterLegacyRestore()
     window.toast.success(i18n.t('message.restore.success'))
@@ -1096,7 +1128,11 @@ export async function handleData(data: Record<string, any>) {
 
   if (data.version >= 2) {
     suspendStorageV2RuntimeMirrorsUntilReload()
-    localStorage.setItem('persist:cherry-studio', data.localStorage['persist:cherry-studio'])
+    safeSetLocalStorageItemForBackup(
+      `handleData:v${data.version}`,
+      'persist:cherry-studio',
+      data.localStorage['persist:cherry-studio']
+    )
 
     // remove notes_tree from indexedDB
     if (data.indexedDB['notes_tree']) {
