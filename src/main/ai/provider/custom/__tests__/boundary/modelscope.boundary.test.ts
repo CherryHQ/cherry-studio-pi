@@ -3,7 +3,7 @@ import * as z from 'zod'
 
 import type { ImageGenerationSubmitInput } from '../../imageGenerationModel'
 import { createModelscopeTransport } from '../../modelscope/modelscopeTransport'
-import { captureImageRequest } from './captureRequest'
+import { captureImageRequest, submitWithResponse } from './captureRequest'
 
 /**
  * ModelScope request boundary — async submit to `/v1/images/generations`. Uses
@@ -65,5 +65,33 @@ describe('ModelScope request boundary', () => {
     expect(req.url).toBe(url)
     editBody.parse(req.body)
     expect(req.body).toMatchSnapshot()
+  })
+
+  it('rejects an async submit response that is missing task_id', async () => {
+    await expect(
+      submitWithResponse(
+        transport,
+        {
+          ...base,
+          modelId: 'MusePublic/489_ckpt_FLUX_1',
+          prompt: 'a fox'
+        } as ImageGenerationSubmitInput,
+        {}
+      )
+    ).rejects.toThrow('ModelScope async image generation response is missing task_id')
+  })
+
+  it('rejects an async submit response with a blank task_id', async () => {
+    await expect(
+      submitWithResponse(
+        transport,
+        {
+          ...base,
+          modelId: 'MusePublic/489_ckpt_FLUX_1',
+          prompt: 'a fox'
+        } as ImageGenerationSubmitInput,
+        { task_id: '   ' }
+      )
+    ).rejects.toThrow('ModelScope async image generation response is missing task_id')
   })
 })

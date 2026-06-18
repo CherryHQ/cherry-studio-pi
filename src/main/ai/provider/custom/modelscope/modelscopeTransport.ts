@@ -147,7 +147,12 @@ class ModelscopeTransport implements ImageGenerationTransport {
       extraHeaders: { 'X-ModelScope-Async-Mode': 'true' }
     })
 
-    return { taskId: response.task_id }
+    const taskId = typeof response.task_id === 'string' ? response.task_id.trim() : ''
+    if (!taskId) {
+      throw new Error('ModelScope async image generation response is missing task_id')
+    }
+
+    return { taskId }
   }
 
   async poll(

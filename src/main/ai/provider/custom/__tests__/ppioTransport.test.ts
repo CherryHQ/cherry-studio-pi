@@ -300,4 +300,46 @@ describe('PpioTransport', () => {
     })
     expect(result).toEqual({ taskId: 't-glm' })
   })
+
+  it('rejects an async submit response that is missing task_id', async () => {
+    const transport = createPpioTransport({ apiKey: 'token' })
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }))
+
+    await expect(
+      transport.submit({
+        modelId: 'glm-image',
+        prompt: 'a fox',
+        n: 1,
+        size: undefined,
+        seed: undefined,
+        files: undefined,
+        mask: undefined,
+        providerParams: {
+          model: 'glm-image',
+          modelDescriptor: { id: 'glm-image', endpoint: '/v3/async/glm-image', mode: 'ppio_draw' }
+        }
+      })
+    ).rejects.toThrow('PPIO async image generation response is missing task_id')
+  })
+
+  it('rejects an async submit response with a blank task_id', async () => {
+    const transport = createPpioTransport({ apiKey: 'token' })
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ task_id: '   ' }), { status: 200 }))
+
+    await expect(
+      transport.submit({
+        modelId: 'glm-image',
+        prompt: 'a fox',
+        n: 1,
+        size: undefined,
+        seed: undefined,
+        files: undefined,
+        mask: undefined,
+        providerParams: {
+          model: 'glm-image',
+          modelDescriptor: { id: 'glm-image', endpoint: '/v3/async/glm-image', mode: 'ppio_draw' }
+        }
+      })
+    ).rejects.toThrow('PPIO async image generation response is missing task_id')
+  })
 })

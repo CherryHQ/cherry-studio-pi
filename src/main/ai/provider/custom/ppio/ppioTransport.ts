@@ -212,12 +212,16 @@ class PpioTransport implements ImageGenerationTransport {
       timeout: 120000,
       signal: input.signal
     })
+    const taskId = typeof result.task_id === 'string' ? result.task_id.trim() : ''
+    if (!taskId) {
+      throw new Error('PPIO async image generation response is missing task_id')
+    }
     // Surface the async task id so the painting layer can record/resume it
     // (parity with the bespoke `onGenerationStateChange({ generationTaskId })`).
     if (typeof params.onSubmitTaskId === 'function') {
-      params.onSubmitTaskId(result.task_id)
+      params.onSubmitTaskId(taskId)
     }
-    return { taskId: result.task_id }
+    return { taskId }
   }
 
   private buildRequestParams(
