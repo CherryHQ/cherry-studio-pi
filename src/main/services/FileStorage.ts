@@ -10,6 +10,7 @@ import {
   scanDir
 } from '@main/utils/file'
 import { createAtomicWriteStream } from '@main/utils/file/fs'
+import { isPathInsideOrEqual } from '@main/utils/file/path'
 import { t } from '@main/utils/language'
 import { summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
 import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
@@ -1512,8 +1513,8 @@ class FileStorage {
 
       // Prevent selecting app data directories
       if (
-        normalizedPath.startsWith(filesDir) ||
-        normalizedPath.startsWith(appDataPath) ||
+        isPathInsideOrEqual(normalizedPath, filesDir) ||
+        isPathInsideOrEqual(normalizedPath, appDataPath) ||
         normalizedPath === currentNotesDir
       ) {
         logger.warn(`Invalid directory selection: ${normalizedPath} (app data directory)`)

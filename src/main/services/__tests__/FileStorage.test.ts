@@ -31,6 +31,8 @@ vi.mock('fs', async () => {
 
   return {
     default: actual,
+    accessSync: actual.accessSync,
+    constants: actual.constants,
     createWriteStream: vi.fn(actual.createWriteStream),
     promises: actual.promises,
     createReadStream: vi.fn(actual.createReadStream),
@@ -227,6 +229,21 @@ describe('FileStorage Storage v2 upload flow', () => {
     ).rejects.toThrow('storage locked')
 
     expect(fs.readdirSync(mocks.dirs.files)).toEqual([])
+  })
+
+  it('rejects the internal files directory when validating a notes directory', async () => {
+    const { fileStorage } = await import('../FileStorage')
+
+    await expect(fileStorage.validateNotesDirectory(undefined as never, mocks.dirs.files)).resolves.toBe(false)
+  })
+
+  it('does not reject notes directory candidates only because they share an internal directory prefix', async () => {
+    const siblingDir = `${mocks.dirs.files}Backup`
+    fs.mkdirSync(siblingDir, { recursive: true })
+
+    const { fileStorage } = await import('../FileStorage')
+
+    await expect(fileStorage.validateNotesDirectory(undefined as never, siblingDir)).resolves.toBe(true)
   })
 
   it('reuses the uploaded file hash while scanning same-size duplicate candidates', async () => {
