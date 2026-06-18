@@ -166,6 +166,7 @@ vi.mock('@main/utils/file', () => ({
   getNotesDir: () => mocks.notesDir
 }))
 
+import { WebDavOperationError } from '@main/services/WebDavRetry'
 import { createClient } from 'webdav'
 
 import { AppDataSyncService } from '../AppDataSyncService'
@@ -3185,6 +3186,27 @@ describe('AppDataSyncService', () => {
     expect(mocks.webdav.deleteFile).not.toHaveBeenCalledWith(outsideTempPath)
     expect(mocks.remoteFiles.has(insideTempPath)).toBe(false)
     expect(mocks.remoteFiles.has(outsideTempPath)).toBe(true)
+  })
+
+  it('treats a concurrently missing app-data artifact directory as empty during cleanup', async () => {
+    const stalePath = '/remote-root/sync/v1/records/settings/stale-hash.json'
+    mocks.remoteFiles.set('/remote-root/sync/v1/records/settings/theme.json', JSON.stringify(remoteRecord))
+    mocks.remoteFiles.set(stalePath, JSON.stringify({ stale: true }))
+    mockDirectoryContentsFromRemoteFiles()
+    const listRemoteFiles = mocks.webdav.getDirectoryContents.getMockImplementation()
+    mocks.webdav.getDirectoryContents.mockImplementation(async (dirPath: string) => {
+      if (dirPath === '/remote-root/sync/v1/records/settings') {
+        throw new WebDavOperationError(`listing remote artifact directory ${dirPath}`, { status: 404 })
+      }
+
+      return listRemoteFiles?.(dirPath) ?? []
+    })
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    expect(summary.status).toBe('success')
+    expect(mocks.webdav.getDirectoryContents).toHaveBeenCalledWith('/remote-root/sync/v1/records/settings')
+    expect(mocks.webdav.deleteFile).not.toHaveBeenCalledWith(stalePath)
   })
 
   it('fails visibly when stale app-data cleanup exceeds the remote file budget after publishing', async () => {

@@ -1553,11 +1553,17 @@ export class AppDataSyncService {
       throw error
     }
 
-    const contents = await runWebDavOperation(
-      `listing remote artifact directory ${dirPath}`,
-      () => client.getDirectoryContents(dirPath),
-      { logger }
-    )
+    let contents: unknown
+    try {
+      contents = await runWebDavOperation(
+        `listing remote artifact directory ${dirPath}`,
+        () => client.getDirectoryContents(dirPath),
+        { logger }
+      )
+    } catch (error) {
+      if (error instanceof WebDavOperationError && error.status === 404) return []
+      throw error
+    }
     const entries = normalizeDirectoryContents(contents)
     const files: string[] = []
     const normalizedDirPath = path.posix.normalize(dirPath).replace(/\/+$/g, '')
