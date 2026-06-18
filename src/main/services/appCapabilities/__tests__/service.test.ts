@@ -116,4 +116,58 @@ describe('AppCapabilityService', () => {
 
     expect(executeCapability).toHaveBeenCalledTimes(1)
   })
+
+  it('sanitizes agent capability results at the service boundary', async () => {
+    executeCapability.mockReset()
+    executeCapability.mockResolvedValueOnce({
+      ok: true,
+      summary: 'returned raw provider data',
+      data: {
+        apiKey: 'sk-secret',
+        nested: { password: 'hidden' },
+        text: 'x'.repeat(9_000)
+      },
+      warnings: ['w'.repeat(9_000)],
+      artifacts: [
+        {
+          type: 'debug',
+          metadata: {
+            token: 'sensitive-token',
+            visible: 'ok'
+          }
+        }
+      ]
+    } as any)
+    const service = new AppCapabilityService()
+
+    const result = await service.call('settings.read', {}, { source: 'agent' })
+
+    expect((result.data as any).apiKey).toBe('[redacted]')
+    expect((result.data as any).nested).toEqual({ password: '[redacted]' })
+    expect((result.data as any).text).toContain('[truncated 1000 chars]')
+    expect((result.data as any).text).not.toContain('x'.repeat(8_500))
+    expect(result.warnings?.[0]).toContain('[truncated 1000 chars]')
+    expect(result.artifacts?.[0].metadata).toEqual({
+      token: '[redacted]',
+      visible: 'ok'
+    })
+  })
+
+  it('does not sanitize non-agent capability results', async () => {
+    executeCapability.mockReset()
+    executeCapability.mockResolvedValueOnce({
+      ok: true,
+      summary: 'system result',
+      data: {
+        apiKey: 'sk-secret',
+        text: 'x'.repeat(9_000)
+      }
+    } as any)
+    const service = new AppCapabilityService()
+
+    const result = await service.call('settings.read', {}, { source: 'system' })
+
+    expect((result.data as any).apiKey).toBe('sk-secret')
+    expect((result.data as any).text).toHaveLength(9_000)
+  })
 })

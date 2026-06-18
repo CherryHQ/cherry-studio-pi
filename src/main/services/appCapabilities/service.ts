@@ -9,6 +9,7 @@ import type {
   AppCapabilityResult,
   AppCapabilitySearchOptions
 } from './types'
+import { sanitizeForAgent } from './utils'
 
 const logger = loggerService.withContext('AppCapabilityService')
 
@@ -17,6 +18,14 @@ function abortReasonMessage(signal: AbortSignal) {
   if (reason instanceof Error && reason.message) return reason.message
   if (typeof reason === 'string' && reason.trim()) return reason.trim()
   return 'Capability call aborted'
+}
+
+function sanitizeResultForSource<T>(
+  result: AppCapabilityResult<T>,
+  source: AppCapabilityContext['source']
+): AppCapabilityResult<T> {
+  if (source !== 'agent') return result
+  return sanitizeForAgent(result) as AppCapabilityResult<T>
 }
 
 export class AppCapabilityService {
@@ -105,7 +114,7 @@ export class AppCapabilityService {
           error: message
         }
       }
-      return result
+      return sanitizeResultForSource(result, context.source ?? 'system')
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       logger.warn('App capability failed', { id: capabilityId, error: message })
