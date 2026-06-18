@@ -437,6 +437,22 @@ describe('AgentConfigPage', () => {
     expect(onCreated).toHaveBeenCalledTimes(1)
   })
 
+  it('does not let dialog step tabs skip required basic fields', async () => {
+    const user = userEvent.setup()
+
+    render(<AgentConfigPage onBack={vi.fn()} onCreated={vi.fn()} presentation="dialog" />)
+
+    await user.click(screen.getByRole('button', { name: /library\.config\.agent\.section\.workspace\.label/ }))
+
+    expect(screen.getByRole('button', { name: 'set basic' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'set workspace' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'set basic' }))
+    await user.click(screen.getByRole('button', { name: /library\.config\.agent\.section\.workspace\.label/ }))
+
+    expect(screen.getByRole('button', { name: 'set workspace' })).toBeInTheDocument()
+  })
+
   it('closes transient resource selectors when the dialog create wizard opens', async () => {
     const closeResourceSelectors = vi.fn()
     window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)

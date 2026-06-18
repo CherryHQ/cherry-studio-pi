@@ -234,9 +234,23 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated, presentation = '
   )
 
   if (isDialogCreate) {
+    const basicCreateStepIndex = createSteps.findIndex((section) => section.id === 'basic')
+
     const goToCreateStep = (index: number) => {
       const nextSection = createSteps[index]
       if (nextSection) setActiveSection(nextSection.id)
+    }
+
+    const canEnterCreateStep = (index: number) => {
+      if (index <= activeCreateStepIndex) return true
+      if (basicCreateStepIndex === -1 || index <= basicCreateStepIndex) return true
+
+      if (createValidation && !createValidation.isValid) {
+        goToCreateStep(basicCreateStepIndex)
+        return false
+      }
+
+      return true
     }
 
     const goNext = () => {
@@ -265,7 +279,9 @@ const AgentConfigPage: FC<Props> = ({ agent, onBack, onCreated, presentation = '
                 <button
                   key={section.id}
                   type="button"
-                  onClick={() => goToCreateStep(index)}
+                  onClick={() => {
+                    if (canEnterCreateStep(index)) goToCreateStep(index)
+                  }}
                   className={`flex min-h-[54px] flex-col items-start justify-center rounded-xs border px-3 text-left transition-colors ${
                     active
                       ? 'border-primary/40 bg-primary/10 text-foreground'
