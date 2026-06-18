@@ -426,6 +426,18 @@ function readBackupOverviewEntry(backupPath: string): BackupOverviewEntry | null
   }
 }
 
+function readBackupOverviewEntries(backupRoot: string): BackupOverviewEntry[] {
+  try {
+    return fs
+      .readdirSync(backupRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => readBackupOverviewEntry(path.join(backupRoot, entry.name)))
+      .filter((entry): entry is BackupOverviewEntry => entry !== null)
+  } catch {
+    return []
+  }
+}
+
 function copyDirectoryIfExists(source: string, target: string) {
   if (!fs.existsSync(source)) return false
   fs.cpSync(source, target, {
@@ -522,15 +534,10 @@ export class StorageV2BackupService {
       }
     }
 
-    const backups = fs
-      .readdirSync(backupRoot, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => readBackupOverviewEntry(path.join(backupRoot, entry.name)))
-      .filter((entry): entry is BackupOverviewEntry => entry !== null)
-      .sort((left, right) => {
-        const timeDiff = getBackupTimeValue(right.createdAt) - getBackupTimeValue(left.createdAt)
-        return timeDiff !== 0 ? timeDiff : right.path.localeCompare(left.path)
-      })
+    const backups = readBackupOverviewEntries(backupRoot).sort((left, right) => {
+      const timeDiff = getBackupTimeValue(right.createdAt) - getBackupTimeValue(left.createdAt)
+      return timeDiff !== 0 ? timeDiff : right.path.localeCompare(left.path)
+    })
     const latestBackup = backups[0]
 
     return {

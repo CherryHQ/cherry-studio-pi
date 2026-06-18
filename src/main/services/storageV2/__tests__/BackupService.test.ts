@@ -382,6 +382,28 @@ describe('StorageV2BackupService.getBackupOverview', () => {
       latestBackupReason: 'new-test'
     })
   })
+
+  it('returns an empty overview when the backup root cannot be listed', async () => {
+    const backupRoot = path.join(dataRoot, 'backups')
+    const serviceFs = (fs as typeof fs & { default?: typeof fs }).default ?? fs
+    const realReaddirSync = serviceFs.readdirSync.bind(serviceFs)
+    vi.spyOn(serviceFs, 'readdirSync').mockImplementation(((target: fs.PathLike, options?: any) => {
+      if (String(target) === backupRoot) {
+        throw new Error('backup root permission denied')
+      }
+      return realReaddirSync(target, options)
+    }) as typeof fs.readdirSync)
+
+    const overview = await new StorageV2BackupService().getBackupOverview()
+
+    expect(overview).toEqual({
+      backupRoot,
+      backupCount: 0,
+      latestBackupPath: null,
+      latestBackupCreatedAt: null,
+      latestBackupReason: null
+    })
+  })
 })
 
 describe('StorageV2BackupService.validateBackup', () => {
