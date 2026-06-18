@@ -132,7 +132,11 @@ const createCustomFetch = (originalFetch?: FetchFunction): FetchFunction => {
   return async (url, options) => {
     const body = parseJsonObjectBody(options?.body)
 
-    if (Array.isArray(body?.tools) && body.tools.length === 0 && Object.hasOwn(body, 'tool_choice')) {
+    if (
+      Array.isArray(body?.tools) &&
+      body.tools.length === 0 &&
+      Object.prototype.hasOwnProperty.call(body, 'tool_choice')
+    ) {
       const nextBody = { ...body }
       delete nextBody.tool_choice
       return originalFetch
