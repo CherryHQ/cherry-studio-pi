@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { loggerService } from '@logger'
+import { isPathInsideOrEqual } from '@main/utils/file/path'
 
 import { storageV2DataRootService } from './storageV2/DataRootService'
 import { storageV2SecretVaultService } from './storageV2/SecretVaultService'
@@ -10,12 +11,6 @@ import { storageV2Database } from './storageV2/StorageV2Database'
 const logger = loggerService.withContext('AppDataMigrationService')
 
 const RESTORE_STAGING_DIR_NAMES = ['IndexedDB.restore', 'Local Storage.restore', 'Data.restore']
-
-function isSameOrInside(candidate: string, root: string): boolean {
-  const resolvedCandidate = path.resolve(candidate)
-  const resolvedRoot = path.resolve(root)
-  return resolvedCandidate === resolvedRoot || resolvedCandidate.startsWith(`${resolvedRoot}${path.sep}`)
-}
 
 async function pathExists(filePath: string): Promise<boolean> {
   try {
@@ -37,11 +32,14 @@ class AppDataMigrationService {
       throw new Error('New app data path cannot be the same as or nested with the current app data path')
     }
 
-    if (isSameOrInside(resolvedNewPath, activeDataRoot) || isSameOrInside(targetDataRoot, activeDataRoot)) {
+    if (isPathInsideOrEqual(resolvedNewPath, activeDataRoot) || isPathInsideOrEqual(targetDataRoot, activeDataRoot)) {
       throw new Error('New app data path cannot be inside the active Storage v2 data root')
     }
 
-    if (isSameOrInside(resolvedNewPath, resolvedOldPath) || isSameOrInside(resolvedOldPath, resolvedNewPath)) {
+    if (
+      isPathInsideOrEqual(resolvedNewPath, resolvedOldPath) ||
+      isPathInsideOrEqual(resolvedOldPath, resolvedNewPath)
+    ) {
       throw new Error('New app data path cannot be the same as or nested with the current app data path')
     }
 
@@ -53,7 +51,7 @@ class AppDataMigrationService {
 
     await fs.promises.cp(resolvedOldPath, resolvedNewPath, {
       recursive: true,
-      filter: (src) => !excludedRoots.some((excludedRoot) => isSameOrInside(src, excludedRoot))
+      filter: (src) => !excludedRoots.some((excludedRoot) => isPathInsideOrEqual(src, excludedRoot))
     })
 
     await this.copyActiveDataRoot(activeDataRoot, targetDataRoot)
