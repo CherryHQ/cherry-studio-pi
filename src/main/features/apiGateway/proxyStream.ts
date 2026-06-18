@@ -229,15 +229,29 @@ export async function processMessage(config: MessageConfig): Promise<Response> {
           }
         )
 
-        upstreamStarted = true
-        aiStreamManager.streamPrompt({
-          streamId,
-          uniqueModelId,
-          messages,
-          listener,
-          callOverrides,
-          idleTimeoutMs: GATEWAY_STREAM_IDLE_TIMEOUT_MS
-        })
+        try {
+          upstreamStarted = true
+          aiStreamManager.streamPrompt({
+            streamId,
+            uniqueModelId,
+            messages,
+            listener,
+            callOverrides,
+            idleTimeoutMs: GATEWAY_STREAM_IDLE_TIMEOUT_MS
+          })
+        } catch (error) {
+          upstreamStarted = false
+          logger.error('Error starting gateway streaming request', error as Error, { providerId, modelId })
+          onError?.(error)
+          if (!closed) {
+            try {
+              controller.enqueue(encoder.encode(buildStreamErrorFrame(outputFormat, error)))
+            } catch {
+              // already closed
+            }
+          }
+          safeClose()
+        }
       },
       cancel() {
         cleanupAbortListener()

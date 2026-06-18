@@ -187,6 +187,34 @@ describe('processMessage (streaming)', () => {
 })
 
 describe('processMessage (error & pause)', () => {
+  it('streaming: a synchronous stream start failure emits a dialect error frame and cleans up', async () => {
+    const controller = new AbortController()
+    const onError = vi.fn()
+    const removeSpy = vi.spyOn(controller.signal, 'removeEventListener')
+    mockStreamPrompt.mockImplementationOnce(() => {
+      throw new Error('stream start failed')
+    })
+
+    try {
+      const res = await processMessage({
+        params: { model: 'openai:gpt-4', stream: true, messages: [] } as any,
+        inputFormat: 'openai',
+        outputFormat: 'openai',
+        signal: controller.signal,
+        onError
+      })
+
+      const text = await readAll(res.body)
+      expect(text).toContain('"error"')
+      expect(text).toContain('Internal server error')
+      expect(text).not.toContain('stream start failed')
+      expect(onError).toHaveBeenCalledWith(expect.any(Error))
+      expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function))
+    } finally {
+      removeSpy.mockRestore()
+    }
+  })
+
   it('streaming: a terminal error emits a dialect error frame, not the raw SerializedError', async () => {
     const res = await processMessage({
       params: { model: 'openai:gpt-4', stream: true, messages: [] } as any,
