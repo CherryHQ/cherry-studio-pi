@@ -52,14 +52,16 @@ function normalizeRequiredText(value: unknown, label: string) {
   return text
 }
 
-function normalizeOptionalTextArray(value: unknown) {
-  if (!Array.isArray(value)) return undefined
+function normalizeOptionalTextArray(value: unknown, label: string) {
+  if (value === null || typeof value === 'undefined') return undefined
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array`)
   const items = value.map((item) => normalizeOptionalText(item)).filter((item): item is string => Boolean(item))
   return items.length > 0 ? Array.from(new Set(items)) : undefined
 }
 
-function normalizeOptionalObject(value: unknown) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+function normalizeOptionalObject(value: unknown, label: string) {
+  if (value === null || typeof value === 'undefined') return undefined
+  if (typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`)
   return value as Record<string, unknown>
 }
 
@@ -214,7 +216,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
         const name = normalizeRequiredText(input?.name, 'Agent name')
         const model = normalizeRequiredText(input?.model, 'Agent model')
         const sessionName = normalizeOptionalText(input?.sessionName) || 'Default session'
-        const accessiblePaths = normalizeOptionalTextArray(input?.accessible_paths)
+        const accessiblePaths = normalizeOptionalTextArray(input?.accessible_paths, 'Accessible paths')
         const sessionWorkspace = accessiblePaths?.[0]
           ? {
               type: 'user' as const,
@@ -229,9 +231,9 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
           model,
           planModel: normalizeOptionalText(input?.planModel ?? input?.plan_model),
           smallModel: normalizeOptionalText(input?.smallModel ?? input?.small_model),
-          mcps: normalizeOptionalTextArray(input?.mcps),
-          disabledTools: normalizeOptionalTextArray(input?.disabledTools),
-          configuration: normalizeOptionalObject(input?.configuration)
+          mcps: normalizeOptionalTextArray(input?.mcps, 'MCP server ids'),
+          disabledTools: normalizeOptionalTextArray(input?.disabledTools, 'Disabled tools'),
+          configuration: normalizeOptionalObject(input?.configuration, 'Agent configuration')
         })
         const { session, warning } = await createDefaultAgentSession(agent.id, sessionName, sessionWorkspace)
         return {

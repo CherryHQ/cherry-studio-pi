@@ -323,4 +323,32 @@ describe('agent app capabilities', () => {
     expect(mocks.getAgentWithStorageV2Recovery).not.toHaveBeenCalled()
     expect(mocks.agentTaskService.createTask).not.toHaveBeenCalled()
   })
+
+  it('rejects invalid optional agent creation fields before writing', async () => {
+    await expect(
+      capability('agents.create').execute(
+        { name: 'Agent One', model: 'model-1', accessible_paths: '/tmp/work' },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Accessible paths must be an array')
+    await expect(
+      capability('agents.create').execute({ name: 'Agent One', model: 'model-1', mcps: 'docs' }, { source: 'agent' })
+    ).rejects.toThrow('MCP server ids must be an array')
+    await expect(
+      capability('agents.create').execute(
+        { name: 'Agent One', model: 'model-1', disabledTools: 'Bash' },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Disabled tools must be an array')
+    await expect(
+      capability('agents.create').execute(
+        { name: 'Agent One', model: 'model-1', configuration: [] },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Agent configuration must be an object')
+
+    expect(mocks.agentWorkspaceService.findOrCreateByPath).not.toHaveBeenCalled()
+    expect(mocks.createAgentWithStorageV2Recovery).not.toHaveBeenCalled()
+    expect(mocks.agentSessionService.createSession).not.toHaveBeenCalled()
+  })
 })
