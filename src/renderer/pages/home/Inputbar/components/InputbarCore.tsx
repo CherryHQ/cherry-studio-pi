@@ -172,6 +172,7 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
   const spaceClickTimer = useRef<NodeJS.Timeout | null>(null)
   const startDragY = useRef<number>(0)
   const startHeight = useRef<number>(0)
+  const dragCleanupRef = useRef<(() => void) | null>(null)
   const { setTimeoutTimer } = useTimer()
 
   // 全局 QuickPanel Hook (用于控制面板显示状态)
@@ -518,6 +519,8 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
         return
       }
 
+      event.preventDefault()
+      dragCleanupRef.current?.()
       startDragY.current = event.clientY
       startHeight.current = textareaRef.current?.resizableTextArea?.textArea?.offsetHeight || 0
 
@@ -527,13 +530,21 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
         onHeightChange(newHeight)
       }
 
-      const handleMouseUp = () => {
+      const cleanupCurrentDrag = () => {
         document.removeEventListener('mousemove', handleMouseMove)
         document.removeEventListener('mouseup', handleMouseUp)
+        if (dragCleanupRef.current === cleanupCurrentDrag) {
+          dragCleanupRef.current = null
+        }
+      }
+
+      const handleMouseUp = () => {
+        cleanupCurrentDrag()
       }
 
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
+      dragCleanupRef.current = cleanupCurrentDrag
     },
     [config.enableDragDrop, onHeightChange, textareaRef]
   )
@@ -593,6 +604,7 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
 
   useEffect(() => {
     return () => {
+      dragCleanupRef.current?.()
       if (spaceClickTimer.current) {
         clearTimeout(spaceClickTimer.current)
       }

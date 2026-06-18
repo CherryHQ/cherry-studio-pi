@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 
 import { TopicType } from '@renderer/types'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import type { TextAreaRef } from 'antd/lib/input/TextArea'
 import React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -150,9 +150,13 @@ vi.mock('@renderer/services/PasteService', () => ({
   default: pasteServiceMock
 }))
 
-function renderInputbar(scope: TopicType.Chat | TopicType.Session, overrides: { focusTextarea?: () => void } = {}) {
+function renderInputbar(
+  scope: TopicType.Chat | TopicType.Session,
+  overrides: { focusTextarea?: () => void; onHeightChange?: (height: number) => void } = {}
+) {
   const textareaRef: React.RefObject<TextAreaRef | null> = { current: null }
   const focusTextarea = overrides.focusTextarea ?? vi.fn()
+  const onHeightChange = overrides.onHeightChange ?? vi.fn()
   const actions = {
     resizeTextArea: vi.fn(),
     addNewTopic: vi.fn(),
@@ -162,7 +166,7 @@ function renderInputbar(scope: TopicType.Chat | TopicType.Session, overrides: { 
     toggleExpanded: vi.fn()
   }
 
-  render(
+  const view = render(
     <InputbarToolsProvider initialState={{ files: [] }} actions={actions}>
       <InputbarCore
         scope={scope}
@@ -173,7 +177,7 @@ function renderInputbar(scope: TopicType.Chat | TopicType.Session, overrides: { 
         resizeTextArea={vi.fn()}
         focusTextarea={focusTextarea}
         height={undefined}
-        onHeightChange={vi.fn()}
+        onHeightChange={onHeightChange}
         supportedExts={[]}
         isLoading={false}
         handleSendMessage={vi.fn()}
@@ -184,7 +188,9 @@ function renderInputbar(scope: TopicType.Chat | TopicType.Session, overrides: { 
   return {
     textarea: screen.getByRole('textbox'),
     sendButton: screen.getByRole('button', { name: 'send' }),
-    focusTextarea
+    focusTextarea,
+    onHeightChange,
+    unmount: view.unmount
   }
 }
 
@@ -229,5 +235,23 @@ describe('InputbarCore', () => {
     } finally {
       selectorInput.remove()
     }
+  })
+
+  it('removes resize drag listeners when unmounted during a drag', () => {
+    const onHeightChange = vi.fn()
+    const { unmount } = renderInputbar(TopicType.Chat, { onHeightChange })
+    const dragHandle = screen.getByTestId('drag-handle-icon').parentElement
+    expect(dragHandle).toBeTruthy()
+
+    fireEvent.mouseDown(dragHandle!, { clientY: 120 })
+    fireEvent.mouseMove(document, { clientY: 80 })
+
+    expect(onHeightChange).toHaveBeenCalledTimes(1)
+
+    onHeightChange.mockClear()
+    unmount()
+    fireEvent.mouseMove(document, { clientY: 40 })
+
+    expect(onHeightChange).not.toHaveBeenCalled()
   })
 })
