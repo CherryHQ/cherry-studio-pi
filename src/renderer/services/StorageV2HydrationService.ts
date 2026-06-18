@@ -9,7 +9,7 @@ import { hydrateInputToolsState, type InputToolsState } from '@renderer/store/in
 import { hydrateKnowledgeState, type KnowledgeState } from '@renderer/store/knowledge'
 import { hydrateLlmState, type LlmState } from '@renderer/store/llm'
 import { hydrateMcpState } from '@renderer/store/mcp'
-import { hydrateMemoryState, type MemoryState } from '@renderer/store/memory'
+import { hydrateMemoryCurrentUserId, hydrateMemoryState, type MemoryState } from '@renderer/store/memory'
 import { hydrateMinAppsState, type MinAppsState } from '@renderer/store/minapps'
 import { hydrateNoteState, type NoteState } from '@renderer/store/note'
 import { hydrateNutstoreState, type NutstoreState } from '@renderer/store/nutstore'
@@ -43,6 +43,7 @@ type RuntimeHydrationTarget = {
       | ReturnType<typeof hydrateInputToolsState>
       | ReturnType<typeof hydrateKnowledgeState>
       | ReturnType<typeof hydrateLlmState>
+      | ReturnType<typeof hydrateMemoryCurrentUserId>
       | ReturnType<typeof hydrateMemoryState>
       | ReturnType<typeof hydrateMinAppsState>
       | ReturnType<typeof hydrateMcpState>
@@ -299,6 +300,10 @@ async function applyRuntimeSnapshot(snapshot: StorageV2CoreSnapshot, target: Run
 
   if (snapshot.localStorage) {
     applyStorageV2LocalStorageSnapshot(snapshot.localStorage)
+    const syncedMemoryUserId = snapshot.localStorage.durableValues?.memory_currentUserId
+    if (typeof syncedMemoryUserId === 'string' && syncedMemoryUserId) {
+      dispatchRuntimeHydrationAction(target, hydrateMemoryCurrentUserId(syncedMemoryUserId))
+    }
     cacheService.reloadPersistCacheFromStorage()
   }
 

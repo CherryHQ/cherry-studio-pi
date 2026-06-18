@@ -93,6 +93,7 @@ vi.mock('@renderer/store/mcp', () => ({
 }))
 
 vi.mock('@renderer/store/memory', () => ({
+  hydrateMemoryCurrentUserId: mocks.createHydrateAction('memory/hydrateCurrentUserId'),
   hydrateMemoryState: mocks.createHydrateAction('memory/hydrate')
 }))
 
@@ -363,6 +364,51 @@ describe('StorageV2HydrationService', () => {
 
     expect(localStorage.getItem('privacy-popup-accepted')).toBe('true')
     expect(mocks.reloadPersistCacheFromStorage).toHaveBeenCalledTimes(1)
+    expect(target.flush).toHaveBeenCalled()
+  })
+
+  it('hydrates the active memory user id from durable localStorage snapshots', async () => {
+    mocks.getStorageV2CoreSnapshot.mockResolvedValue({
+      generatedAt: '2026-01-01T00:00:00.000Z',
+      settings: {},
+      llm: { providers: [] },
+      assistants: { assistants: [] },
+      redux: {},
+      localStorage: {
+        durableValues: {
+          memory_currentUserId: 'synced-user'
+        },
+        mcpProviderTokens: {}
+      },
+      metadata: {
+        includeSecrets: true,
+        settingCount: 1,
+        providerCount: 0,
+        assistantCount: 0,
+        topicCount: 0,
+        reduxSliceCount: 0,
+        missingSecretCount: 0
+      }
+    })
+    const target = { dispatch: vi.fn(), flush: vi.fn() }
+
+    await expect(maybeHydrateRuntimeCacheFromStorageV2(target)).resolves.toEqual({
+      hydrated: true,
+      snapshot: expect.objectContaining({
+        localStorage: expect.objectContaining({
+          durableValues: {
+            memory_currentUserId: 'synced-user'
+          }
+        })
+      })
+    })
+
+    expect(localStorage.getItem('memory_currentUserId')).toBe('synced-user')
+    expect(target.dispatch).toHaveBeenCalledWith({
+      type: 'memory/hydrateCurrentUserId',
+      payload: 'synced-user',
+      meta: { fromSync: true }
+    })
     expect(target.flush).toHaveBeenCalled()
   })
 

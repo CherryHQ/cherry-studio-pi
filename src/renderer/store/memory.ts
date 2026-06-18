@@ -70,6 +70,9 @@ const memorySlice = createSlice({
         ...action.payload
       }
     },
+    hydrateMemoryCurrentUserId: (state, action: PayloadAction<string>) => {
+      state.currentUserId = action.payload || 'default-user'
+    },
     /**
      * Updates the memory configuration
      * @param state - Current memory state
@@ -120,7 +123,13 @@ const memorySlice = createSlice({
 })
 
 // Export action creators
-export const { hydrateMemoryState, updateMemoryConfig, setCurrentUserId, setGlobalMemoryEnabled } = memorySlice.actions
+export const {
+  hydrateMemoryState,
+  hydrateMemoryCurrentUserId,
+  updateMemoryConfig,
+  setCurrentUserId,
+  setGlobalMemoryEnabled
+} = memorySlice.actions
 
 // Export selectors
 export const { getMemoryConfig, getCurrentUserId, getGlobalMemoryEnabled } = memorySlice.selectors
