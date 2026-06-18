@@ -24,7 +24,7 @@ vi.mock('@main/core/platform', () => ({
   isMac: true
 }))
 
-import { isAllowedAppRoute, navigateApp, normalizeAppRoute, sanitizeForAgent } from '../utils'
+import { isAllowedAppRoute, isSensitiveAgentKey, navigateApp, normalizeAppRoute, sanitizeForAgent } from '../utils'
 
 describe('app capability utils', () => {
   beforeEach(() => {
@@ -55,6 +55,7 @@ describe('app capability utils', () => {
           password: 'hidden-password'
         },
         db_pass: 'hidden-pass',
+        webdavPass: 'hidden-webdav-pass',
         passphrase: 'hidden-passphrase',
         passwd: 'hidden-passwd',
         passcode: 'hidden-passcode',
@@ -79,6 +80,7 @@ describe('app capability utils', () => {
       authToken: '[redacted]',
       credentials: '[redacted]',
       db_pass: '[redacted]',
+      webdavPass: '[redacted]',
       passphrase: '[redacted]',
       passwd: '[redacted]',
       passcode: '[redacted]',
@@ -96,6 +98,17 @@ describe('app capability utils', () => {
         cookie: ''
       }
     })
+  })
+
+  it('detects sensitive keys without matching ordinary pass words', () => {
+    expect(isSensitiveAgentKey('webdavPass')).toBe(true)
+    expect(isSensitiveAgentKey('apiServer.apiKey')).toBe(true)
+    expect(isSensitiveAgentKey('serviceAccount.privateKey')).toBe(true)
+    expect(isSensitiveAgentKey('db_pass')).toBe(true)
+    expect(isSensitiveAgentKey('passage')).toBe(false)
+    expect(isSensitiveAgentKey('compass')).toBe(false)
+    expect(isSensitiveAgentKey('bypassReason')).toBe(false)
+    expect(isSensitiveAgentKey('passengerCount')).toBe(false)
   })
 
   it('serializes bigint values instead of throwing', () => {

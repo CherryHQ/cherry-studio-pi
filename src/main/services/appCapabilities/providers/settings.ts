@@ -5,7 +5,7 @@ import { RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE, RENDERER_GET_SETTINGS_BRIDGE 
 
 import { callRendererBridge, getBridgeErrorMessage } from '../rendererBridge'
 import type { AppCapabilityDefinition } from '../types'
-import { navigateApp, okResult, pickPath, sanitizeForAgent } from '../utils'
+import { isSensitiveAgentKey, navigateApp, okResult, pickPath, sanitizeForAgent } from '../utils'
 
 const logger = loggerService.withContext('AppCapability:Settings')
 const SETTINGS_RENDERER_BRIDGE_CHECK_TIMEOUT_MS = 800
@@ -38,7 +38,6 @@ export const SETTINGS_SETTERS: Record<string, string> = {
   'apiServer.apiKey': 'settings/setApiServerApiKey'
 }
 
-const SENSITIVE_SETTING_PATH_PATTERN = /api[-_]?key|private[-_]?key|token|secret|pass|password|authorization|cookie/i
 const PREFERENCE_SETTING_PATHS: Record<string, UnifiedPreferenceKeyType> = {
   assistantIconType: 'assistant.icon_type',
   autoCheckUpdate: 'app.dist.auto_update.enabled',
@@ -115,7 +114,7 @@ function assignPath(target: Record<string, any>, keyPath: string, value: unknown
 }
 
 function sanitizeSettingValueForAgent(keyPath: string, value: unknown) {
-  if (SENSITIVE_SETTING_PATH_PATTERN.test(keyPath)) {
+  if (isSensitiveAgentKey(keyPath)) {
     if (typeof value === 'string') return value ? '[redacted]' : value
     if (value === null || typeof value === 'undefined' || typeof value === 'boolean') return value
     return '[redacted]'
@@ -125,7 +124,7 @@ function sanitizeSettingValueForAgent(keyPath: string, value: unknown) {
 }
 
 function sanitizeSettingsForAgent(value: unknown, keyPath = ''): unknown {
-  if (keyPath && SENSITIVE_SETTING_PATH_PATTERN.test(keyPath)) {
+  if (keyPath && isSensitiveAgentKey(keyPath)) {
     return sanitizeSettingValueForAgent(keyPath, value)
   }
 

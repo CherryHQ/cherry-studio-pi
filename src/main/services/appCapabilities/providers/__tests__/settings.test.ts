@@ -41,6 +41,16 @@ vi.mock('@main/services/ReduxService', () => ({
 }))
 
 vi.mock('../../utils', () => ({
+  isSensitiveAgentKey: (key: string) => {
+    const normalized = key
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/[_./:\-\s]+/g, ' ')
+      .trim()
+      .toLowerCase()
+    return /\b(?:api keys?|private keys?|access keys?|tokens?|secrets?|passwords?|passwd|passphrases?|passcodes?|pass|authorizations?|credentials?|cookies?)\b/.test(
+      normalized
+    )
+  },
   navigateApp: mocks.navigateApp,
   okResult: (summary: string, data?: unknown) => ({
     ok: true,
@@ -78,6 +88,9 @@ describe('settings app capabilities', () => {
       serviceAccount: {
         privateKey: '-----BEGIN PRIVATE KEY-----'
       },
+      passage: 'visible passage',
+      compass: 'visible compass',
+      bypassReason: 'visible bypass reason',
       webdavPass: 'dav-secret'
     })
     mocks.reduxService.dispatch.mockResolvedValue(undefined)
@@ -96,6 +109,9 @@ describe('settings app capabilities', () => {
           serviceAccount: {
             privateKey: '-----BEGIN PRIVATE KEY-----'
           },
+          passage: 'visible passage',
+          compass: 'visible compass',
+          bypassReason: 'visible bypass reason',
           webdavPass: 'dav-secret'
         }
       }
@@ -215,6 +231,25 @@ describe('settings app capabilities', () => {
     })
   })
 
+  it('keeps non-secret setting paths containing pass visible', async () => {
+    const passage = await capability('settings.value.get').execute({ path: 'passage' }, { source: 'agent' })
+    const compass = await capability('settings.value.get').execute({ path: 'compass' }, { source: 'agent' })
+    const bypassReason = await capability('settings.value.get').execute({ path: 'bypassReason' }, { source: 'agent' })
+
+    expect(passage.data).toEqual({
+      path: 'passage',
+      value: 'visible passage'
+    })
+    expect(compass.data).toEqual({
+      path: 'compass',
+      value: 'visible compass'
+    })
+    expect(bypassReason.data).toEqual({
+      path: 'bypassReason',
+      value: 'visible bypass reason'
+    })
+  })
+
   it('redacts sensitive values when reading the full settings snapshot', async () => {
     const result = await capability('settings.read').execute({}, { source: 'agent' })
     const data = result.data as { settings: Record<string, unknown> }
@@ -227,6 +262,9 @@ describe('settings app capabilities', () => {
       serviceAccount: {
         privateKey: '[redacted]'
       },
+      passage: 'visible passage',
+      compass: 'visible compass',
+      bypassReason: 'visible bypass reason',
       webdavPass: '[redacted]',
       theme: 'system'
     })

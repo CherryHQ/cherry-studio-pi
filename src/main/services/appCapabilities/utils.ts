@@ -6,8 +6,9 @@ import { WindowType } from '@main/core/window/types'
 import { isAllowedInAppRoute, normalizeInAppRoute } from '@main/services/navigation/AppRouteNormalizer'
 import { isPathInside } from '@main/utils/file'
 
-const SENSITIVE_KEY_PATTERN =
-  /api[-_\s]?key|private[-_\s]?key|access[-_\s]?key|token|secret|password|passwd|passphrase|passcode|(?:^|[-_\s])pass(?:$|[-_\s])|authorization|credential|cookie/i
+const CAMEL_CASE_KEY_BOUNDARY_PATTERN = /([a-z0-9])([A-Z])/g
+const SENSITIVE_NORMALIZED_KEY_PATTERN =
+  /\b(?:api keys?|private keys?|access keys?|tokens?|secrets?|passwords?|passwd|passphrases?|passcodes?|pass|authorizations?|credentials?|cookies?)\b/
 const CIRCULAR_REFERENCE_PLACEHOLDER = '[Circular]'
 const MAX_AGENT_STRING_CHARS = 8_000
 const MAX_AGENT_ARRAY_ITEMS = 200
@@ -26,8 +27,17 @@ export const sanitizeForAgent = (value: unknown): unknown => {
   return sanitizeJsonValue(value, '', seen, 0)
 }
 
+export const isSensitiveAgentKey = (key: string): boolean => {
+  const normalized = key
+    .replace(CAMEL_CASE_KEY_BOUNDARY_PATTERN, '$1 $2')
+    .replace(/[_./:\-\s]+/g, ' ')
+    .trim()
+    .toLowerCase()
+  return normalized ? SENSITIVE_NORMALIZED_KEY_PATTERN.test(normalized) : false
+}
+
 function sanitizeJsonValue(value: unknown, key: string, seen: WeakSet<object>, depth: number): unknown {
-  if (SENSITIVE_KEY_PATTERN.test(key)) {
+  if (isSensitiveAgentKey(key)) {
     if (typeof value === 'string') return value ? '[redacted]' : value
     if (value === null || typeof value === 'undefined' || typeof value === 'boolean') return value
     return '[redacted]'
