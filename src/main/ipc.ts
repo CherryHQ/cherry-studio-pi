@@ -45,6 +45,7 @@ import { decrypt, encrypt } from './utils/aes'
 import { isSafeExternalUrl } from './utils/externalUrlSafety'
 import { hasWritePermission, isPathInside, untildify } from './utils/file'
 import { isNotEmptyDir, isPathInsideOrEqual } from './utils/file/path'
+import { getNewDataPathFromArgs } from './utils/launchArgs'
 import { summarizeUrlForLog } from './utils/logging'
 import { openPathInShell } from './utils/openPath'
 import { getCpuName, getDeviceType, getHostname } from './utils/system'
@@ -253,10 +254,7 @@ export async function registerIpc() {
   })
 
   ipcMain.handle(IpcChannel.App_GetDataPathFromArgs, () => {
-    return process.argv
-      .slice(1)
-      .find((arg) => arg.startsWith('--new-data-path='))
-      ?.split('--new-data-path=')[1]
+    return getNewDataPathFromArgs()
   })
 
   ipcMain.handle(IpcChannel.App_FlushAppData, async () => {
