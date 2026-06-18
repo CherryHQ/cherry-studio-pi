@@ -141,6 +141,33 @@ describe('useProviderEndpointActions', () => {
     expect(syncProviderModelsMock).toHaveBeenCalledWith()
   })
 
+  it('enables a disabled provider when endpoint background sync resolves models', async () => {
+    syncProviderModelsMock.mockResolvedValueOnce([{ id: 'openai::gpt-4o' }])
+
+    const { result } = renderHook(() =>
+      useProviderEndpointActions({
+        provider: { ...provider, isEnabled: false },
+        primaryEndpoint: ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS,
+        apiHost: 'https://proxy.example.com',
+        setApiHost: setApiHostMock,
+        providerApiHost: 'https://api.openai.com',
+        anthropicApiHost: '',
+        setAnthropicApiHost: setAnthropicApiHostMock,
+        apiVersion: '',
+        patchProvider: patchProviderMock,
+        syncProviderModels: syncProviderModelsMock
+      })
+    )
+
+    await act(async () => {
+      await result.current.commitApiHost()
+      await flushEndpointAction()
+    })
+
+    await flushEndpointAction()
+    expect(patchProviderMock).toHaveBeenCalledWith({ isEnabled: true })
+  })
+
   it('returns success when the background model sync fails after saving the host', async () => {
     syncProviderModelsMock.mockRejectedValueOnce(new Error('Invalid JSON response'))
 

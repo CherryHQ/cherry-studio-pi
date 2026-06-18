@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { PROVIDER_URLS } from '@renderer/config/providers'
+import { enableProviderWhenModelsAvailable } from '@renderer/pages/settings/ProviderSettings/utils/providerEnablement'
 import { validateApiHost } from '@renderer/utils'
 import { ErrorCode, isDataApiError, isSerializedDataApiError, toDataApiError } from '@shared/data/api'
 import { ENDPOINT_TYPE } from '@shared/data/types/model'
@@ -87,14 +88,23 @@ export function useProviderEndpointActions({
 
   const syncProviderModelsInBackground = useCallback(
     (nextProvider: Provider) => {
-      void syncProviderModels().catch((error) => {
-        logger.error('Silent provider model sync failed after endpoint update', {
-          providerId: nextProvider.id,
-          error
+      void syncProviderModels()
+        .then(async (syncedModels) => {
+          await enableProviderWhenModelsAvailable(
+            nextProvider,
+            patchProvider,
+            syncedModels.length,
+            'endpoint_background_sync'
+          )
         })
-      })
+        .catch((error) => {
+          logger.error('Silent provider model sync failed after endpoint update', {
+            providerId: nextProvider.id,
+            error
+          })
+        })
     },
-    [syncProviderModels]
+    [patchProvider, syncProviderModels]
   )
 
   const persistApiHostDraft = useCallback(
