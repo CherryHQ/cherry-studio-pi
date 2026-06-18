@@ -132,7 +132,9 @@ jobs:
 
           PACKAGE_JSON="$(mktemp)"
           git show "$TAG_COMMIT:package.json" > "$PACKAGE_JSON"
-          PACKAGE_VERSION="$(node -p "require(process.argv[1]).version" "$PACKAGE_JSON")"
+          PACKAGE_VERSION="$(
+            node -e 'const fs = require("fs"); console.log(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).version)' "$PACKAGE_JSON"
+          )"
           rm -f "$PACKAGE_JSON"
 
           if [ "$PACKAGE_VERSION" != "$VERSION" ]; then
