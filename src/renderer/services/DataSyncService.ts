@@ -415,14 +415,22 @@ function ensureMainProcessStorageV2ChangeSubscription() {
   if (typeof subscribe !== 'function') return
 
   storageV2LocalChangeUnsubscribe = subscribe((payload: unknown) => {
+    const reason = getMainProcessLocalChangeReason(payload)
     if (syncing) {
-      logger.debug('Ignored main-process Storage v2 local change while data sync is running', {
-        payload: summarizeObjectShapeForLog(payload, 1)
-      })
+      if (reason === 'file') {
+        localChangeDuringSync = true
+        logger.debug('Queued data sync after current sync because a main-process file changed', {
+          payload: summarizeObjectShapeForLog(payload, 1)
+        })
+      } else {
+        logger.debug('Ignored main-process Storage v2 local change while data sync is running', {
+          payload: summarizeObjectShapeForLog(payload, 1)
+        })
+      }
       return
     }
 
-    notifyDataSyncLocalChange(getMainProcessLocalChangeReason(payload))
+    notifyDataSyncLocalChange(reason)
   })
 }
 
