@@ -85,6 +85,46 @@ function isNotesRoot(root: string, target: string) {
   return path.resolve(root) === path.resolve(target)
 }
 
+function isPathInsideOrEqual(target: string, root: string) {
+  const relativePath = path.relative(path.resolve(root), path.resolve(target))
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath))
+}
+
+async function realpathOrResolvedPath(filePath: string) {
+  try {
+    return await fs.realpath(filePath)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return path.resolve(filePath)
+    throw error
+  }
+}
+
+async function resolveRealPathPreservingMissingSegments(filePath: string) {
+  const missingSegments: string[] = []
+  let current = path.resolve(filePath)
+
+  while (true) {
+    try {
+      return path.join(await fs.realpath(current), ...missingSegments.reverse())
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+
+    const parent = path.dirname(current)
+    if (parent === current) return path.resolve(filePath)
+    missingSegments.push(path.basename(current))
+    current = parent
+  }
+}
+
+async function assertResolvedInsideNotesRoot(root: string, target: string, label = 'Note path') {
+  const realRoot = await realpathOrResolvedPath(root)
+  const realTarget = await resolveRealPathPreservingMissingSegments(target)
+  if (!isPathInsideOrEqual(realTarget, realRoot)) {
+    throw new Error(`${label} resolves outside the notes root directory`)
+  }
+}
+
 function normalizeNoteContent(value: unknown) {
   if (typeof value === 'string') return value
   if (value === null || typeof value === 'undefined') return ''
@@ -398,6 +438,7 @@ appToolsRouter.get('/notes/read', async (req, res, next) => {
   try {
     const root = await getNotesRoot()
     const filePath = resolveNotePath(root, String(req.query.path || ''), true)
+    await assertResolvedInsideNotesRoot(root, filePath)
     const maxBytes = normalizePositiveInteger(req.query.maxBytes, DEFAULT_NOTE_READ_MAX_BYTES, MAX_NOTE_READ_MAX_BYTES)
     res.json({ path: filePath, ...(await readTextFilePreview(filePath, maxBytes)) })
   } catch (error) {
@@ -467,9 +508,11 @@ appToolsRouter.post('/notes', async (req, res, next) => {
   try {
     const root = await getNotesRoot()
     const parent = resolveNotePath(root, req.body?.parent || '')
+    await assertResolvedInsideNotesRoot(root, parent, 'Note parent')
     await fs.mkdir(parent, { recursive: true })
     const safeName = getName(parent, req.body?.name || 'Untitled', true)
     const filePath = path.join(parent, `${safeName}.md`)
+    await assertResolvedInsideNotesRoot(root, filePath)
     await fs.writeFile(filePath, normalizeNoteContent(req.body?.content), 'utf8')
     notifyMainProcessDataSyncLocalChange('file', { source: 'api.app-tools.notes.create', path: filePath })
     res.json({ ok: true, path: filePath, name: safeName })
@@ -482,6 +525,7 @@ appToolsRouter.put('/notes', async (req, res, next) => {
   try {
     const root = await getNotesRoot()
     const filePath = resolveNotePath(root, req.body?.path, true)
+    await assertResolvedInsideNotesRoot(root, filePath)
     await fs.writeFile(filePath, normalizeNoteContent(req.body?.content), 'utf8')
     notifyMainProcessDataSyncLocalChange('file', { source: 'api.app-tools.notes.write', path: filePath })
     res.json({ ok: true, path: filePath })
@@ -498,6 +542,7 @@ appToolsRouter.delete('/notes', async (req, res, next) => {
       res.status(400).json({ error: 'Cannot delete the notes root directory' })
       return
     }
+    await assertResolvedInsideNotesRoot(root, target)
     await fs.rm(target, { force: true, recursive: true })
     notifyMainProcessDataSyncLocalChange('file', { source: 'api.app-tools.notes.delete', path: target })
     res.json({ ok: true, path: target })

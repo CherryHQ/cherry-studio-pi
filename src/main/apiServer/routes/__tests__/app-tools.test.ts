@@ -191,6 +191,45 @@ describe('app tools notes routes', () => {
     })
     expect(await fs.readFile(notePath, 'utf8')).toBe('false')
   })
+
+  it('rejects note symlinks that resolve outside the notes root', async () => {
+    const outsideDir = `${tmpDir}-outside`
+    const outsideFile = path.join(outsideDir, 'secret.md')
+    const escapeFile = path.join(tmpDir, 'escape.md')
+    const escapeDir = path.join(tmpDir, 'linked-outside')
+    await fs.mkdir(outsideDir, { recursive: true })
+
+    try {
+      await fs.writeFile(outsideFile, 'outside\n', 'utf8')
+      await fs.symlink(outsideFile, escapeFile)
+      await fs.symlink(outsideDir, escapeDir, 'dir')
+
+      const read = await requestAppTools('GET', '/notes/read?path=escape')
+      const write = await requestAppTools('PUT', '/notes', {
+        path: 'escape',
+        content: 'overwrite'
+      })
+      const create = await requestAppTools('POST', '/notes', {
+        parent: 'linked-outside',
+        name: 'created',
+        content: 'created'
+      })
+      const remove = await requestAppTools('DELETE', '/notes?path=escape')
+
+      expect(read.status).toBe(500)
+      expect(read.json.error).toContain('Note path resolves outside the notes root directory')
+      expect(write.status).toBe(500)
+      expect(write.json.error).toContain('Note path resolves outside the notes root directory')
+      expect(create.status).toBe(500)
+      expect(create.json.error).toContain('Note parent resolves outside the notes root directory')
+      expect(remove.status).toBe(500)
+      expect(remove.json.error).toContain('Note path resolves outside the notes root directory')
+      expect(await fs.readFile(outsideFile, 'utf8')).toBe('outside\n')
+      await expect(fs.stat(path.join(outsideDir, 'created.md'))).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await fs.rm(outsideDir, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('app tools settings routes', () => {
