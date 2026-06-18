@@ -191,6 +191,17 @@ describe('painting app capabilities', () => {
     })
   })
 
+  it('rejects invalid painting history namespaces before reading renderer state', async () => {
+    await expect(
+      capability('paintings.history.list').execute({ namespace: ['siliconflow_paintings'] }, { source: 'agent' })
+    ).rejects.toThrow('Painting namespace must be a string')
+    await expect(
+      capability('paintings.history.list').execute({ namespace: 'missing_namespace' }, { source: 'agent' })
+    ).rejects.toThrow('Unsupported painting namespace: missing_namespace')
+
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
+  })
+
   it('returns raw painting history only when explicitly requested', async () => {
     const result = await capability('paintings.history.list').execute(
       { namespace: 'siliconflow_paintings', limit: 1, includeRaw: true },
@@ -272,6 +283,33 @@ describe('painting app capabilities', () => {
         { source: 'agent' }
       )
     ).rejects.toThrow('Painting provider must be a route-safe provider id')
+
+    expect(mocks.preferenceService.set).not.toHaveBeenCalled()
+    expect(mocks.navigateApp).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid painting text input shapes before persistence or navigation', async () => {
+    await expect(
+      capability('paintings.defaultProvider.set').execute({ provider: 123 }, { source: 'agent' })
+    ).rejects.toThrow('Painting provider must be a string')
+    await expect(capability('paintings.open').execute({ provider: true }, { source: 'agent' })).rejects.toThrow(
+      'Painting provider must be a string'
+    )
+    await expect(
+      capability('paintings.image.generate').execute({ prompt: 123, provider: 'openai' }, { source: 'agent' })
+    ).rejects.toThrow('Painting prompt must be a string')
+    await expect(
+      capability('paintings.image.generate').execute(
+        { prompt: 'draw a cat', provider: 'openai', model: ['gpt-image-1'] },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Painting model must be a string')
+    await expect(
+      capability('paintings.image.generate').execute(
+        { prompt: 'draw a cat', provider: 'openai', size: { value: '1024x1024' } },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Painting size must be a string')
 
     expect(mocks.preferenceService.set).not.toHaveBeenCalled()
     expect(mocks.navigateApp).not.toHaveBeenCalled()

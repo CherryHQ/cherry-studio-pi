@@ -43,26 +43,34 @@ function normalizeOffset(value: unknown) {
   return Math.max(0, safeOffset)
 }
 
-function normalizeOptionalText(value: unknown) {
+function normalizeOptionalText(value: unknown, label = 'Value') {
   if (typeof value === 'string') return value.trim()
   if (value === null || typeof value === 'undefined') return ''
-  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') return String(value).trim()
-  return ''
+  throw new Error(`${label} must be a string`)
 }
 
 function normalizeRequiredText(value: unknown, label: string) {
-  const text = normalizeOptionalText(value)
+  const text = normalizeOptionalText(value, label)
   if (!text) throw new Error(`${label} is required`)
   return text
 }
 
-function normalizeProviderRouteSegment(value: unknown) {
-  const provider = normalizeOptionalText(value)
+function normalizeProviderRouteSegment(value: unknown, label = 'Painting provider') {
+  const provider = normalizeOptionalText(value, label)
   if (!provider) return ''
   if (!PAINTING_PROVIDER_ROUTE_SEGMENT_PATTERN.test(provider)) {
     throw new Error('Painting provider must be a route-safe provider id')
   }
   return provider
+}
+
+function normalizePaintingNamespace(value: unknown) {
+  const namespace = normalizeOptionalText(value, 'Painting namespace')
+  if (!namespace) return ''
+  if (!PAINTING_NAMESPACES.includes(namespace)) {
+    throw new Error(`Unsupported painting namespace: ${namespace}`)
+  }
+  return namespace
 }
 
 function truncateText(value: unknown, maxChars = MAX_PAINTING_PROMPT_CHARS) {
@@ -145,7 +153,7 @@ function compactRawPainting(namespace: string, painting: any, index: number) {
 }
 
 export function listPaintingHistory(paintings: any, input: any) {
-  const namespace = String(input?.namespace || '').trim()
+  const namespace = normalizePaintingNamespace(input?.namespace)
   const includeRaw = input?.includeRaw === true
   const limit = normalizeListLimit(input?.limit)
   const offset = normalizeOffset(input?.offset)
@@ -218,6 +226,7 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['paintings', 'image', 'history'],
       execute: async (input: any) => {
+        normalizePaintingNamespace(input?.namespace)
         const paintings = await readRendererStoreValue<any>('state.paintings', {
           checkTimeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS,
           timeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS
@@ -295,6 +304,8 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
         const prompt = normalizeRequiredText(input?.prompt, 'Painting prompt')
         const inputProvider = normalizeProviderRouteSegment(input?.provider)
         const provider = inputProvider || normalizeProviderRouteSegment(await readDefaultPaintingProvider())
+        const model = normalizeOptionalText(input?.model, 'Painting model') || undefined
+        const size = normalizeOptionalText(input?.size, 'Painting size') || undefined
         const route = provider ? `/paintings/${provider}` : '/paintings'
         await navigateApp(route)
         return {
@@ -305,8 +316,8 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
             provider,
             route,
             prompt: truncateText(prompt),
-            model: normalizeOptionalText(input?.model) || undefined,
-            size: normalizeOptionalText(input?.size) || undefined
+            model,
+            size
           },
           warnings: ['Direct headless painting generation will be wired in the next provider bridge pass.']
         }
