@@ -6685,7 +6685,7 @@
         "logout_warning": "ローカルではログアウトしましたが、サーバートークンの失効に失敗した可能性があります",
         "official_website": "公式サイト",
         "provided_by": "提供",
-        "provided_by_suffix": "I’m ready—please provide the text you’d like translated into Japanese.",
+        "provided_by_suffix": "",
         "requests": "リクエスト",
         "topup": "チャージ",
         "usage_title": "使用",

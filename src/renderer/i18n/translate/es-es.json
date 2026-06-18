@@ -6685,7 +6685,7 @@
         "logout_warning": "Desconectado localmente, pero la revocación del token del servidor puede haber fallado",
         "official_website": "Sitio web oficial",
         "provided_by": "Proporcionado por",
-        "provided_by_suffix": "I’m ready—please provide the text you’d like translated into Spanish.",
+        "provided_by_suffix": "",
         "requests": "Solicitudes",
         "topup": "Recargar",
         "usage_title": "Uso",

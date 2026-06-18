@@ -6685,7 +6685,7 @@
         "logout_warning": "Lokal abgemeldet, aber die Server-Token-Widerrufung ist möglicherweise fehlgeschlagen",
         "official_website": "Offizielle Website",
         "provided_by": "Bereitgestellt von",
-        "provided_by_suffix": "I’m ready—please provide the text you’d like translated into German.",
+        "provided_by_suffix": "",
         "requests": "Anfragen",
         "topup": "Aufladen",
         "usage_title": "Verwendung",

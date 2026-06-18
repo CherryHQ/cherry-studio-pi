@@ -1,3 +1,4 @@
+import { loggerService } from '@logger'
 import { MARKDOWN_SOURCE_LINE_ATTR } from '@renderer/components/RichEditor/constants'
 import type { TurndownPlugin } from '@truto/turndown-plugin-gfm'
 import he from 'he'
@@ -6,6 +7,8 @@ import * as htmlparser2 from 'htmlparser2'
 import MarkdownIt from 'markdown-it'
 import striptags from 'striptags'
 import TurndownService from 'turndown'
+
+const logger = loggerService.withContext('MarkdownConverter')
 
 function escapeCustomTags(html: string) {
   let result = ''

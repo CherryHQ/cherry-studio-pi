@@ -6685,7 +6685,7 @@
         "logout_warning": "Вышел из системы локально, но отзыв токена на сервере, возможно, не удался",
         "official_website": "Официальный сайт",
         "provided_by": "Предоставлено",
-        "provided_by_suffix": "I’m ready—please provide the text you’d like translated into Russian.",
+        "provided_by_suffix": "",
         "requests": "Запросы",
         "topup": "Пополнить",
         "usage_title": "Использование",

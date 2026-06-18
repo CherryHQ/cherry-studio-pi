@@ -4559,8 +4559,8 @@
     "settings": {
       "actions": {
         "add_tooltip": {
-          "disabled": "Maximum nummer aangepaste acties bereikt ({{max}})",
-          "enabled": "Añadir Acción Personalizada"
+          "disabled": "Đã đạt số lượng hành động tùy chỉnh tối đa ({{max}})",
+          "enabled": "Thêm hành động tùy chỉnh"
         },
         "custom": "Hành động Tùy chỉnh",
         "delete_confirm": "Bạn có chắc chắn muốn xóa hành động tùy chỉnh này không?",
@@ -5991,7 +5991,7 @@
       },
       "grid_columns": "Cột hiển thị lưới tin nhắn",
       "grid_popover_trigger": {
-        "click": "Kliknout pro zobrazení",
+        "click": "Nhấp để hiển thị",
         "hover": "Di chuột để hiển thị",
         "label": "Kích hoạt chi tiết lưới"
       },
@@ -6000,13 +6000,13 @@
         "confirm_regenerate_message": "Xác nhận trước khi tạo lại tin nhắn",
         "enable_quick_triggers": "Kích hoạt các kích hoạt / và @",
         "paste_long_text_as_file": "Dán văn bản dài dưới dạng tệp",
-        "paste_long_text_threshold": "I’m ready—please provide the long text you’d like translated.",
+        "paste_long_text_threshold": "Độ dài văn bản dài khi dán",
         "send_shortcuts": "Gửi phím tắt",
         "show_estimated_tokens": "Hiển thị số token ước tính",
         "title": "Cài đặt đầu vào"
       },
       "markdown_rendering_input_message": "Tin nhắn nhập Markdown kết xuất",
-      "metrics": "{{time_first_token_millsec}}ms até o primeiro token | {{token_speed}} tok/seg",
+      "metrics": "{{time_first_token_millsec}}ms tới token đầu tiên | {{token_speed}} tok/giây",
       "model": {
         "title": "Cài đặt mô hình"
       },
@@ -6016,7 +6016,7 @@
         "label": "Thanh điều hướng",
         "none": ""
       },
-      "prompt": "Mostrar indicación",
+      "prompt": "Hiển thị lời nhắc",
       "show_message_outline": "Hiển thị dàn bộ tin nhắn",
       "title": "Cài đặt tin nhắn",
       "use_serif_font": "Dùng phông chữ có chân"
@@ -6685,7 +6685,7 @@
         "logout_warning": "Đã đăng xuất cục bộ, nhưng việc thu hồi mã thông báo từ máy chủ có thể đã thất bại",
         "official_website": "Trang web chính thức",
         "provided_by": "Được cung cấp bởi",
-        "provided_by_suffix": "I’m ready—please provide the text you’d like me to translate.",
+        "provided_by_suffix": "",
         "requests": "Yêu cầu",
         "topup": "Recarga",
         "usage_title": "Cách sử dụng",
@@ -7103,7 +7103,7 @@
         "value": {
           "help": "1~32 ký tự",
           "label": "Tên ngôn ngữ",
-          "placeholder": "I’m ready—please provide the English text you’d like translated."
+          "placeholder": "Tiếng Việt"
         }
       },
       "prompt": "Lời nhắc dịch thuật",
