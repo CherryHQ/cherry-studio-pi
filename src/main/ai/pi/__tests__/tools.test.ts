@@ -307,6 +307,54 @@ describe('Pi tools', () => {
     expect(resultText(result)).toContain('Host example')
   })
 
+  it('prompts before Bash commands read sensitive relative dotfiles', async () => {
+    const envFile = path.join(tmpDir, '.env')
+    await fs.writeFile(envFile, 'SECRET_TOKEN=abc123\n', 'utf8')
+
+    const bash = getTool('Bash', tmpDir, [tmpDir])
+    const result = await bash.execute('bash-sensitive-dotfile', {
+      command: 'cat .env'
+    })
+
+    expect(promptForToolApproval).toHaveBeenCalledWith(
+      'Bash',
+      expect.objectContaining({
+        command: 'cat .env',
+        requested_access: 'execute',
+        requested_paths: [envFile],
+        requested_folders: [tmpDir]
+      }),
+      expect.objectContaining({ toolCallId: 'bash-sensitive-dotfile' })
+    )
+    expect(result.details).toMatchObject({ exitCode: 0 })
+    expect(resultText(result)).toContain('SECRET_TOKEN=abc123')
+  })
+
+  it('prompts before Bash commands read sensitive relative dot-directories', async () => {
+    const sshDir = path.join(tmpDir, '.ssh')
+    const sshConfig = path.join(sshDir, 'config')
+    await fs.mkdir(sshDir, { recursive: true })
+    await fs.writeFile(sshConfig, 'Host sensitive\n', 'utf8')
+
+    const bash = getTool('Bash', tmpDir, [tmpDir])
+    const result = await bash.execute('bash-sensitive-dotdir', {
+      command: 'cat ./.ssh/config'
+    })
+
+    expect(promptForToolApproval).toHaveBeenCalledWith(
+      'Bash',
+      expect.objectContaining({
+        command: 'cat ./.ssh/config',
+        requested_access: 'execute',
+        requested_paths: [sshConfig],
+        requested_folders: [sshDir]
+      }),
+      expect.objectContaining({ toolCallId: 'bash-sensitive-dotdir' })
+    )
+    expect(result.details).toMatchObject({ exitCode: 0 })
+    expect(resultText(result)).toContain('Host sensitive')
+  })
+
   it('allows Bash commands that modify system SSL trust settings', async () => {
     const bash = getTool('Bash', tmpDir, [tmpDir])
     const fakeSecurity = path.join(tmpDir, 'security')

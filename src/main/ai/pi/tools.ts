@@ -680,7 +680,8 @@ const SENSITIVE_FILE_NAMES = new Set([
 ])
 const FILESYSTEM_BASH_COMMAND_PATTERN =
   /^\s*(?:cat|less|more|head|tail|sed|awk|grep|rg|find|ls|stat|wc|test|\[|mkdir|touch|rm|rmdir|cp|mv|ln|chmod|chown|du|tree)\b/
-const SHELL_PATH_PATTERN = /(?:^|[\s"'`=([{:;,])((?:~|\/)[^\s"'`()[\]{};|&<>$\\]+|\.\.\/[^\s"'`()[\]{};|&<>$\\]*)/g
+const SHELL_PATH_PATTERN =
+  /(?:^|[\s"'`=([{:;,])((?:~|\/)[^\s"'`()[\]{};|&<>$\\]+|\.{1,2}\/[^\s"'`()[\]{};|&<>$\\]*|\.[A-Za-z0-9_-][^\s"'`()[\]{};|&<>$\\]*)/g
 
 const isRecoverableBashFailure = (command: string, description: string | undefined) => {
   if (description && RECOVERABLE_BASH_DESCRIPTION_PATTERN.test(description)) return true
