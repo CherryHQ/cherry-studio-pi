@@ -294,7 +294,11 @@ export class ProtocolService extends BaseService {
     }
 
     let delivered = 0
-    for (const { createdAt: _createdAt, ...payload } of pending) {
+    for (const pendingPayload of pending) {
+      const payload: ProtocolDataPayload = {
+        url: pendingPayload.url,
+        params: pendingPayload.params
+      }
       window.webContents.send(IpcChannel.Protocol_Data, payload)
       delivered += 1
     }
