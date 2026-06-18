@@ -87,6 +87,38 @@ function canAutoRunWithoutApproval(capability: AppCapabilityDescriptor) {
   return capability.risk === 'read' || (capability.kind === 'query' && canDryRunWithoutApproval(capability))
 }
 
+function normalizeInputObject<T extends object>(input: T | unknown): Partial<T> {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {}
+  return input as Partial<T>
+}
+
+function normalizeOptionalText(value: unknown) {
+  if (typeof value === 'string') {
+    const text = value.trim()
+    return text || undefined
+  }
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    const text = String(value).trim()
+    return text || undefined
+  }
+  return undefined
+}
+
+function normalizePlanIntentInput(input: SystemAgentPlanIntentInput | unknown): SystemAgentPlanIntentInput {
+  return normalizeInputObject<SystemAgentPlanIntentInput>(input) as SystemAgentPlanIntentInput
+}
+
+function normalizeEventInput(input: SystemAgentEventInput | unknown): SystemAgentEventInput {
+  const objectInput = normalizeInputObject<SystemAgentEventInput>(input)
+  return {
+    ...objectInput,
+    type: objectInput.type === 'error' || objectInput.type === 'event' ? objectInput.type : undefined,
+    source: normalizeOptionalText(objectInput.source) ?? 'unknown',
+    message: normalizeOptionalText(objectInput.message),
+    domain: normalizeOptionalText(objectInput.domain)
+  }
+}
+
 function makeIntentQuery(input: SystemAgentPlanIntentInput) {
   return String(input.intent || input.query || '').trim()
 }
@@ -159,7 +191,8 @@ export class SystemAgentRuntimeService {
     return appCapabilityService.list(options)
   }
 
-  planIntent(input: SystemAgentPlanIntentInput): SystemAgentIntentPlan {
+  planIntent(rawInput: SystemAgentPlanIntentInput): SystemAgentIntentPlan {
+    const input = normalizePlanIntentInput(rawInput)
     const intent = makeIntentQuery(input)
     const capabilities = appCapabilityService.search({
       query: intent,
@@ -178,7 +211,9 @@ export class SystemAgentRuntimeService {
     }
   }
 
-  planEvent(input: SystemAgentEventInput, options: { includeSchemas?: boolean } = {}): SystemAgentEventPlan {
+  planEvent(rawInput: SystemAgentEventInput, rawOptions: { includeSchemas?: boolean } = {}): SystemAgentEventPlan {
+    const input = normalizeEventInput(rawInput)
+    const options = normalizeInputObject<{ includeSchemas?: boolean }>(rawOptions)
     const query = makeEventQuery(input)
     const capabilities = appCapabilityService.search({
       query,
@@ -196,7 +231,8 @@ export class SystemAgentRuntimeService {
     }
   }
 
-  async handleEvent(input: SystemAgentEventInput): Promise<SystemAgentHandledEvent> {
+  async handleEvent(rawInput: SystemAgentEventInput): Promise<SystemAgentHandledEvent> {
+    const input = normalizeEventInput(rawInput)
     const plan = this.planEvent(input, { includeSchemas: false })
     const autoRuns: SystemAgentAutoRun[] = []
 
@@ -243,8 +279,9 @@ export class SystemAgentRuntimeService {
   async callCapability<T = unknown>(
     id: string,
     input: unknown = {},
-    options: SystemAgentCapabilityCallOptions = {}
+    rawOptions: SystemAgentCapabilityCallOptions = {}
   ): Promise<AppCapabilityResult<T>> {
+    const options = normalizeInputObject<SystemAgentCapabilityCallOptions>(rawOptions)
     const capabilityId = String(id ?? '').trim()
     const displayCapabilityId = capabilityId || '(empty)'
     const capability = appCapabilityService.get(capabilityId, { includeHidden: true, includeSchemas: false })

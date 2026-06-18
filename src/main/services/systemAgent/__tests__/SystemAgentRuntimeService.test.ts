@@ -88,6 +88,52 @@ describe('SystemAgentRuntimeService', () => {
     expect(plan.recommended?.id).toBe('dataSync.sync.now')
   })
 
+  it('treats malformed planning inputs as empty events instead of throwing', async () => {
+    mocks.appCapabilityService.search.mockReturnValue([])
+
+    const service = new SystemAgentRuntimeService()
+    const intentPlan = service.planIntent(null as any)
+    const eventPlan = service.planEvent('bad-event' as any, null as any)
+    const handled = await service.handleEvent(null as any)
+
+    expect(intentPlan).toMatchObject({ intent: '', recommended: null })
+    expect(eventPlan).toMatchObject({
+      source: 'unknown',
+      query: 'event handle unknown',
+      recommended: null
+    })
+    expect(handled).toMatchObject({
+      source: 'unknown',
+      handled: false,
+      autoRuns: [],
+      blocked: []
+    })
+    expect(mocks.appCapabilityService.search).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        query: '',
+        includeSchemas: true,
+        limit: 8
+      })
+    )
+    expect(mocks.appCapabilityService.search).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        query: 'event handle unknown',
+        includeSchemas: true,
+        limit: 6
+      })
+    )
+    expect(mocks.appCapabilityService.search).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        query: 'event handle unknown',
+        includeSchemas: false,
+        limit: 6
+      })
+    )
+  })
+
   it('auto-runs the best safe capability for error events', async () => {
     const dryRunCommandCapability = {
       id: 'storage.backup.restore',
@@ -256,6 +302,25 @@ describe('SystemAgentRuntimeService', () => {
       'dataSync.sync.now',
       {},
       expect.objectContaining({ dryRun: true })
+    )
+  })
+
+  it('treats malformed direct call options as empty options', async () => {
+    mocks.appCapabilityService.get.mockReturnValueOnce({ ...writeCapability, risk: 'read' })
+    mocks.appCapabilityService.call.mockResolvedValueOnce({ ok: true, summary: 'done' })
+
+    const result = await new SystemAgentRuntimeService().callCapability('dataSync.status.get', {}, null as any)
+
+    expect(result).toEqual({ ok: true, summary: 'done' })
+    expect(mocks.appCapabilityService.call).toHaveBeenCalledWith(
+      'dataSync.status.get',
+      {},
+      {
+        source: 'system',
+        sessionId: undefined,
+        toolCallId: undefined,
+        dryRun: undefined
+      }
     )
   })
 
