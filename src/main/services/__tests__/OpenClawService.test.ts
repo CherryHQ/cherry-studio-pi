@@ -6,10 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   getOpenClawSymlinkState,
+  hasWindowsUserPathEntry,
   isManagedOpenClawSymlinkTarget,
   parseCurrentVersion,
   parseUpdateStatus,
-  parseWindowsNetstatListeningPids
+  parseWindowsNetstatListeningPids,
+  removeWindowsUserPathEntry
 } from '../OpenClawService'
 
 // --- Mocks for OpenClawService dependencies ---
@@ -93,6 +95,34 @@ describe('OpenClawService symlink safety', () => {
     expect(
       isManagedOpenClawSymlinkTarget('/tmp/bin/openclaw', '/tmp/cherry/bin/openclaw', '../other/bin/openclaw')
     ).toBe(false)
+  })
+})
+
+describe('OpenClawService Windows PATH safety', () => {
+  it('matches managed bin directories case-insensitively and ignores trailing separators', () => {
+    const currentPath = 'C:\\Windows\\System32;C:\\Users\\Cherry\\AppData\\Local\\CherryStudioPi\\bin\\;D:\\Tools'
+
+    expect(hasWindowsUserPathEntry(currentPath, 'c:\\users\\cherry\\appdata\\local\\cherrystudiopi\\bin')).toBe(true)
+    expect(hasWindowsUserPathEntry(currentPath, 'C:\\Users\\Cherry\\AppData\\Local\\OtherApp\\bin')).toBe(false)
+  })
+
+  it('removes only the managed OpenClaw bin directory from Windows user PATH', () => {
+    const currentPath =
+      'C:\\Windows\\System32;C:\\Users\\Cherry\\AppData\\Local\\CherryStudioPi\\bin;D:\\Tools;C:\\Users\\Cherry\\AppData\\Local\\CherryStudioPi\\bin\\'
+
+    expect(removeWindowsUserPathEntry(currentPath, 'c:\\users\\cherry\\appdata\\local\\cherrystudiopi\\bin')).toEqual({
+      nextPath: 'C:\\Windows\\System32;D:\\Tools',
+      changed: true
+    })
+  })
+
+  it('leaves unrelated Windows user PATH entries untouched when the managed bin is absent', () => {
+    const currentPath = 'C:\\Windows\\System32;D:\\Tools'
+
+    expect(removeWindowsUserPathEntry(currentPath, 'C:\\Users\\Cherry\\AppData\\Local\\CherryStudioPi\\bin')).toEqual({
+      nextPath: currentPath,
+      changed: false
+    })
   })
 })
 

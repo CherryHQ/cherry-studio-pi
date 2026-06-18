@@ -108,12 +108,44 @@ function setWindowsUserPath(value: string): void {
   })
 }
 
-function deleteWindowsUserPath(): void {
-  execFileSync('reg', ['delete', 'HKCU\\Environment', '/v', 'Path', '/f'], { stdio: 'ignore' })
-}
-
 function refreshWindowsPathEnvironment(): void {
   execFileSync('setx', ['OPENCLAW_PATH_REFRESH', ''], { stdio: 'ignore' })
+}
+
+function normalizeWindowsPathEntryForCompare(value: string): string {
+  const unquoted = value.trim().replace(/^"|"$/g, '')
+  if (!unquoted) return ''
+
+  const normalized = path.win32.normalize(unquoted)
+  const root = path.win32.parse(normalized).root
+  const withoutTrailingSeparator = normalized === root ? normalized : normalized.replace(/[\\/]+$/g, '')
+  return withoutTrailingSeparator.toLowerCase()
+}
+
+export function hasWindowsUserPathEntry(currentPath: string, entry: string): boolean {
+  const target = normalizeWindowsPathEntryForCompare(entry)
+  if (!target) return false
+
+  return currentPath.split(';').some((part) => normalizeWindowsPathEntryForCompare(part) === target)
+}
+
+export function removeWindowsUserPathEntry(currentPath: string, entry: string): { nextPath: string; changed: boolean } {
+  const target = normalizeWindowsPathEntryForCompare(entry)
+  if (!target) {
+    return { nextPath: currentPath, changed: false }
+  }
+
+  let changed = false
+  const nextParts = currentPath.split(';').filter((part) => {
+    const matches = normalizeWindowsPathEntryForCompare(part) === target
+    if (matches) changed = true
+    return !matches
+  })
+
+  return {
+    nextPath: nextParts.join(';'),
+    changed
+  }
 }
 
 export function isManagedOpenClawSymlinkTarget(
@@ -348,7 +380,7 @@ export class OpenClawService extends BaseService {
       const binDir = await getBinaryPath()
       try {
         const currentPath = queryWindowsUserPath()
-        if (!currentPath.split(';').some((p) => p.toLowerCase() === binDir.toLowerCase())) {
+        if (!hasWindowsUserPathEntry(currentPath, binDir)) {
           const newPath = currentPath ? `${currentPath};${binDir}` : binDir
           setWindowsUserPath(newPath)
           // Broadcast WM_SETTINGCHANGE so new shells pick up the change
@@ -387,13 +419,14 @@ export class OpenClawService extends BaseService {
       const binDir = await getBinaryPath()
       try {
         const currentPath = queryWindowsUserPath()
-        const parts = currentPath.split(';').filter((p) => p.toLowerCase() !== binDir.toLowerCase())
-        const newPath = parts.join(';')
-        if (newPath) {
-          setWindowsUserPath(newPath)
-        } else {
-          deleteWindowsUserPath()
+        const { nextPath, changed } = removeWindowsUserPathEntry(currentPath, binDir)
+        if (!changed) {
+          logger.info(`Skipped removing ${binDir} from user PATH because it was not present`)
+          return
         }
+
+        setWindowsUserPath(nextPath)
+        refreshWindowsPathEnvironment()
         logger.info(`Removed ${binDir} from user PATH`)
       } catch {
         logger.debug('No user PATH to clean up')
