@@ -44,7 +44,7 @@ import { calculateDirectorySize } from './utils'
 import { decrypt, encrypt } from './utils/aes'
 import { isSafeExternalUrl } from './utils/externalUrlSafety'
 import { hasWritePermission, isPathInside, untildify } from './utils/file'
-import { isNotEmptyDir } from './utils/file/path'
+import { isNotEmptyDir, isPathInsideOrEqual } from './utils/file/path'
 import { summarizeUrlForLog } from './utils/logging'
 import { openPathInShell } from './utils/openPath'
 import { getCpuName, getDeviceType, getHostname } from './utils/system'
@@ -281,7 +281,7 @@ export async function registerIpc() {
       await fs.promises.cp(oldPath, newPath, {
         recursive: true,
         filter: (src) => {
-          if (occupiedDirs.some((dir) => src.startsWith(path.resolve(dir)))) {
+          if (occupiedDirs.some((dir) => isPathInsideOrEqual(src, dir))) {
             return false
           }
           return true

@@ -10,7 +10,7 @@ vi.mock('@application', async () => {
   return mockApplicationFactory()
 })
 
-import { canWrite, isNotEmptyDir, isPathInside, isUnderInternalStorage } from '../path'
+import { canWrite, isNotEmptyDir, isPathInside, isPathInsideOrEqual, isUnderInternalStorage } from '../path'
 
 describe('isPathInside', () => {
   it('returns true when child is directly inside parent', () => {
@@ -69,6 +69,34 @@ describe('isUnderInternalStorage', () => {
   it('returns false for the feature.files.data dir itself (only strict descendants count)', () => {
     expect(isUnderInternalStorage('/mock/feature.files.data')).toBe(false)
   })
+})
+
+describe('isPathInsideOrEqual', () => {
+  it('returns true for the same path', () => {
+    expect(isPathInsideOrEqual('/foo/bar', '/foo/bar')).toBe(true)
+  })
+
+  it('returns true for nested paths', () => {
+    expect(isPathInsideOrEqual('/foo/bar/baz.txt', '/foo/bar')).toBe(true)
+  })
+
+  it('does not treat prefix-matching siblings as descendants', () => {
+    expect(isPathInsideOrEqual('/foo/database/cache.db', '/foo/data')).toBe(false)
+    expect(isPathInsideOrEqual('/foo/data-backup/cache.db', '/foo/data')).toBe(false)
+  })
+
+  it('handles traversal before comparing path boundaries', () => {
+    expect(isPathInsideOrEqual('/foo/data/../database/cache.db', '/foo/data')).toBe(false)
+    expect(isPathInsideOrEqual('/foo/data/../data/cache.db', '/foo/data')).toBe(true)
+  })
+
+  it.runIf(process.platform === 'darwin' || process.platform === 'win32')(
+    'matches case-insensitively on darwin / win32 (filesystem default)',
+    () => {
+      expect(isPathInsideOrEqual('/Users/me/Data', '/users/me/data')).toBe(true)
+      expect(isPathInsideOrEqual('/Users/me/Data/file.txt', '/users/me/data')).toBe(true)
+    }
+  )
 })
 
 describe('canWrite', () => {

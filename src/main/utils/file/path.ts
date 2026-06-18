@@ -51,6 +51,16 @@ export function isPathInside(child: string, parent: string): boolean {
   return rel.length > 0 && !rel.startsWith('..') && !path.isAbsolute(rel)
 }
 
+/** True iff `child` is `parent` itself or lives under `parent`. */
+export function isPathInsideOrEqual(child: string, parent: string): boolean {
+  const childResolved = path.resolve(child)
+  const parentResolved = path.resolve(parent)
+  const caseInsensitive = isMac || isWin
+  const a = caseInsensitive ? childResolved.toLowerCase() : childResolved
+  const b = caseInsensitive ? parentResolved.toLowerCase() : parentResolved
+  return a === b || isPathInside(childResolved, parentResolved)
+}
+
 /**
  * Guard: returns true iff `target` lives under `application.getPath('feature.files.data')`.
  *
