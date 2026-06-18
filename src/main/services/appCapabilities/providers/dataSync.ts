@@ -386,8 +386,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
           webdavPath: { type: 'string', description: 'Remote sync directory, for example /cherry-studio-pi' },
           autoSync: { type: 'boolean', description: 'Whether to enable automatic sync' },
           syncInterval: { type: 'number', description: 'Automatic sync interval in minutes' }
-        },
-        required: ['webdavHost']
+        }
       },
       risk: 'write',
       permissions: ['dataSync.settings.write'],
@@ -397,11 +396,11 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any, context) => {
         const config = await resolveWebDavConfig(input, { requireCredentials: true })
         if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
+        const syncInterval = normalizeSyncIntervalInput(input?.syncInterval)
         if (context.dryRun) {
           return okResult('WebDAV data sync config dry run completed', sanitizeForAgent(config))
         }
 
-        const syncInterval = normalizeSyncIntervalInput(input?.syncInterval)
         await persistWebDavConfig(config, {
           autoSync: typeof input?.autoSync === 'boolean' ? input.autoSync : undefined,
           syncInterval

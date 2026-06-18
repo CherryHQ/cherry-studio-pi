@@ -234,6 +234,27 @@ describe('data sync app capabilities', () => {
     expect(setCall?.[0]).toContain('"dataSyncSyncInterval":30')
   })
 
+  it('allows updating WebDAV sync options from stored config without requiring host in schema', async () => {
+    expect(capability('dataSync.webdav.config.set').inputSchema.required ?? []).not.toContain('webdavHost')
+
+    const result = await capability('dataSync.webdav.config.set').execute(
+      {
+        autoSync: false,
+        syncInterval: '45'
+      },
+      { source: 'agent' }
+    )
+
+    expect(result.ok).toBe(true)
+    expect(mocks.storageV2Service.setSetting).toHaveBeenCalledWith(
+      'settings.dataSyncWebdavHost',
+      'https://dav.example.com',
+      'settings'
+    )
+    expect(mocks.storageV2Service.setSetting).toHaveBeenCalledWith('settings.dataSyncAutoSync', false, 'settings')
+    expect(mocks.storageV2Service.setSetting).toHaveBeenCalledWith('settings.dataSyncSyncInterval', 45, 'settings')
+  })
+
   it('rejects invalid WebDAV sync intervals before saving settings', async () => {
     await expect(
       capability('dataSync.webdav.config.set').execute(
@@ -244,6 +265,23 @@ describe('data sync app capabilities', () => {
           syncInterval: Number.NaN
         },
         { source: 'agent' }
+      )
+    ).rejects.toThrow('Sync interval must be a finite number of minutes')
+
+    expect(mocks.storageV2Service.setSetting).not.toHaveBeenCalled()
+    expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
+  })
+
+  it('validates WebDAV sync intervals during dry runs before reporting success', async () => {
+    await expect(
+      capability('dataSync.webdav.config.set').execute(
+        {
+          webdavHost: 'dav.example.com',
+          webdavUser: 'user',
+          webdavPass: 'secret',
+          syncInterval: Number.NaN
+        },
+        { source: 'agent', dryRun: true }
       )
     ).rejects.toThrow('Sync interval must be a finite number of minutes')
 
