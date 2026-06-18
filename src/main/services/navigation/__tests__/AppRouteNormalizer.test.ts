@@ -26,4 +26,12 @@ describe('AppRouteNormalizer', () => {
     expect(isAllowedInAppRoute(normalizeInAppRoute('/agents-legacy'))).toBe(false)
     expect(isAllowedInAppRoute(normalizeInAppRoute('https://example.com'))).toBe(false)
   })
+
+  it('rejects traversal and encoded separators inside otherwise allowed routes', () => {
+    expect(isAllowedInAppRoute(normalizeInAppRoute('/paintings/../settings/data'))).toBe(false)
+    expect(isAllowedInAppRoute('/app/%2e%2e/settings')).toBe(false)
+    expect(isAllowedInAppRoute('/app/%2fsettings')).toBe(false)
+    expect(isAllowedInAppRoute('/app/%5csettings')).toBe(false)
+    expect(isAllowedInAppRoute('/app/%E0%A4%A')).toBe(false)
+  })
 })

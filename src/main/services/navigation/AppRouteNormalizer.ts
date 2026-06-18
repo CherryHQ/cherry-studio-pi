@@ -47,6 +47,31 @@ function addSuffixParam(suffix: string, key: string, value: string) {
   return `${query ? `?${query}` : ''}${hash}`
 }
 
+function hasUnsafePathSegment(pathname: string) {
+  for (const segment of pathname.split('/')) {
+    if (!segment) continue
+
+    let decodedSegment: string
+    try {
+      decodedSegment = decodeURIComponent(segment)
+    } catch {
+      return true
+    }
+
+    if (
+      decodedSegment === '.' ||
+      decodedSegment === '..' ||
+      decodedSegment.includes('/') ||
+      decodedSegment.includes('\\') ||
+      decodedSegment.includes('\0')
+    ) {
+      return true
+    }
+  }
+
+  return false
+}
+
 export function normalizeInAppRoute(route: string) {
   const raw = String(route || '/').trim()
   const input = raw.startsWith('/') ? raw : `/${raw}`
@@ -69,5 +94,6 @@ export function normalizeInAppRoute(route: string) {
 
 export function isAllowedInAppRoute(route: string) {
   const { pathname } = splitPathSuffix(route)
+  if (hasUnsafePathSegment(pathname)) return false
   return ALLOWED_ROUTE_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
 }
