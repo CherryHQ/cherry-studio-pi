@@ -63,6 +63,15 @@ import { initialState as shortcutsInitialState } from './shortcuts'
 import { defaultWebSearchProviders } from './websearch'
 const logger = loggerService.withContext('Migrate')
 
+function markOnboardingCompletedDuringMigration() {
+  try {
+    if (typeof localStorage === 'undefined') return
+    localStorage.setItem('onboarding-completed', 'true')
+  } catch (error) {
+    logger.warn('migrate 205 skipped onboarding completion localStorage marker', error as Error)
+  }
+}
+
 // Inlined verbatim from the deleted v1 `@renderer/utils/provider` — this v1
 // Redux-persist migration was its only remaining source consumer.
 const NOT_SUPPORT_ARRAY_CONTENT_PROVIDERS = [
@@ -3415,7 +3424,7 @@ const migrateConfig = {
   },
   '205': (state: RootState) => {
     try {
-      localStorage.setItem('onboarding-completed', 'true')
+      markOnboardingCompletedDuringMigration()
 
       // Add anthropicApiHost to lmstudio and ollama providers for CodeTools compatibility
       state.llm.providers.forEach((provider) => {
