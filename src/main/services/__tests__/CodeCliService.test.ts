@@ -8,6 +8,28 @@ const mocks = vi.hoisted(() => ({
   spawn: vi.fn()
 }))
 
+const originalPlatform = process.platform
+
+function setProcessPlatform(platform: NodeJS.Platform) {
+  Object.defineProperty(process, 'platform', {
+    configurable: true,
+    value: platform
+  })
+}
+
+function createChildProcessMock() {
+  const child = {
+    on: vi.fn(),
+    once: vi.fn(),
+    unref: vi.fn()
+  }
+
+  child.on.mockReturnValue(child)
+  child.once.mockReturnValue(child)
+
+  return child
+}
+
 vi.mock('@logger', () => ({
   loggerService: {
     withContext: () => ({
@@ -80,10 +102,13 @@ describe('CodeCliService', () => {
     vi.clearAllMocks()
     mocks.execAsync.mockResolvedValue({ stdout: '' })
     mocks.execFileAsync.mockResolvedValue({ stdout: '' })
+    mocks.spawn.mockReturnValue(createChildProcessMock())
+    setProcessPlatform(originalPlatform)
   })
 
   afterEach(() => {
     vi.useRealTimers()
+    setProcessPlatform(originalPlatform)
   })
 
   it('should extend BaseService', async () => {
@@ -197,6 +222,48 @@ describe('CodeCliService', () => {
         detached: true
       })
     )
+    const spawnedProcess = vi.mocked(spawn).mock.results[0].value
+    expect(spawnedProcess.once).toHaveBeenCalledWith('error', expect.any(Function))
+    expect(spawnedProcess.unref).toHaveBeenCalled()
+  })
+
+  it('continues Linux terminal probing when a terminal check emits an error', async () => {
+    setProcessPlatform('linux')
+    const { codeCliService } = await loadModules()
+    const { codeCLI } = await import('@shared/config/constant')
+    const fs = await import('node:fs')
+    const terminalProcess = createChildProcessMock()
+
+    vi.mocked(fs.default.existsSync).mockReturnValue(true)
+    mocks.spawn.mockImplementation((command: string, args?: string[]) => {
+      if (command !== 'which') {
+        return terminalProcess
+      }
+
+      const child = createChildProcessMock()
+      child.once.mockImplementation((event: string, handler: (...args: any[]) => void) => {
+        if (event === 'error' && args?.[0] === 'gnome-terminal') {
+          queueMicrotask(() => handler(new Error('which failed')))
+        }
+        if (event === 'close' && args?.[0] === 'konsole') {
+          queueMicrotask(() => handler(0))
+        }
+        return child
+      })
+      return child
+    })
+
+    await expect(
+      codeCliService.run({} as Electron.IpcMainInvokeEvent, codeCLI.openaiCodex, 'gpt-5', '/workspace', {}, {})
+    ).resolves.toMatchObject({
+      success: true,
+      command: expect.stringContaining('konsole')
+    })
+
+    expect(mocks.spawn).toHaveBeenCalledWith('which', ['gnome-terminal'], { stdio: 'pipe' })
+    expect(mocks.spawn).toHaveBeenCalledWith('which', ['konsole'], { stdio: 'pipe' })
+    expect(terminalProcess.once).toHaveBeenCalledWith('error', expect.any(Function))
+    expect(terminalProcess.unref).toHaveBeenCalled()
   })
 
   it('uses only the local qwen-code version before launch when auto update is disabled', async () => {

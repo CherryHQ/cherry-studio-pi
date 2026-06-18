@@ -1374,12 +1374,20 @@ export class CodeCliService extends BaseService {
             // Check if terminal exists
             const checkResult = spawn('which', [terminal], { stdio: 'pipe' })
             await new Promise((resolve) => {
-              checkResult.on('close', (code) => {
+              let settled = false
+              const settle = (code: number | null) => {
+                if (settled) return
+                settled = true
                 if (code === 0) {
                   foundTerminal = terminal
                 }
                 resolve(code)
+              }
+              checkResult.once('error', (error) => {
+                logger.debug(`Failed to check Linux terminal ${terminal}: ${error.message}`)
+                settle(-1)
               })
+              checkResult.once('close', settle)
             })
             if (foundTerminal === terminal) break
           } catch (error) {
@@ -1417,13 +1425,17 @@ export class CodeCliService extends BaseService {
       logger.debug(`Working directory: ${directory}`)
       logger.debug(`Process environment keys: ${Object.keys(processEnv)}`)
 
-      spawn(terminalCommand, terminalArgs, {
+      const terminalProcess = spawn(terminalCommand, terminalArgs, {
         detached: true,
         stdio: 'ignore',
         cwd: directory,
         env: processEnv,
         shell: isWin
       })
+      terminalProcess.once('error', (error) => {
+        logger.error(`Terminal process failed after launch: ${terminalCommand}`, error)
+      })
+      terminalProcess.unref()
 
       const successMessage = `Launched ${cliTool} in new terminal window`
       logger.info(successMessage)
