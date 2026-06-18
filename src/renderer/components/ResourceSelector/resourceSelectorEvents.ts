@@ -23,6 +23,7 @@ export function getModalSurfaceElements(): Element[] {
 function isHiddenModalSurface(element: Element) {
   if (!(element instanceof HTMLElement)) return false
   if (element.hidden || element.getAttribute('aria-hidden') === 'true') return true
+  if (element.getAttribute('data-state') === 'closed') return true
 
   const style = typeof window !== 'undefined' ? window.getComputedStyle(element) : undefined
   return style?.display === 'none' || style?.visibility === 'hidden'
