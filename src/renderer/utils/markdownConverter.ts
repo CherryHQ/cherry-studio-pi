@@ -1,4 +1,3 @@
-import { loggerService } from '@logger'
 import { MARKDOWN_SOURCE_LINE_ATTR } from '@renderer/components/RichEditor/constants'
 import type { TurndownPlugin } from '@truto/turndown-plugin-gfm'
 import he from 'he'
@@ -7,8 +6,6 @@ import * as htmlparser2 from 'htmlparser2'
 import MarkdownIt from 'markdown-it'
 import striptags from 'striptags'
 import TurndownService from 'turndown'
-
-const logger = loggerService.withContext('markdownConverter')
 
 function escapeCustomTags(html: string) {
   let result = ''
@@ -93,7 +90,6 @@ function injectLineNumber(token: any, openTag: string): string {
     // Insert data attribute before the first closing >
     // Handle both self-closing tags (e.g., <hr />) and opening tags (e.g., <p>)
     const result = openTag.replace(/(\s*\/?>)/, ` ${MARKDOWN_SOURCE_LINE_ATTR}="${startLine}"$1`)
-    logger.debug('injectLineNumber', { openTag, result, startLine, hasMap: !!token.map })
     return result
   }
   return openTag
