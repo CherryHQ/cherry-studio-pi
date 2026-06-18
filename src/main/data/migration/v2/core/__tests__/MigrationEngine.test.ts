@@ -51,6 +51,21 @@ function createTestMigrator(id: string, order: number, events: string[]) {
   }
 }
 
+function createMigrationStatusDb(status?: unknown) {
+  const get = vi.fn().mockResolvedValue(status)
+  const where = vi.fn(() => ({ get }))
+  const from = vi.fn(() => ({ where }))
+  const select = vi.fn(() => ({ from }))
+
+  return {
+    db: { select },
+    get,
+    where,
+    from,
+    select
+  }
+}
+
 describe('MigrationEngine', () => {
   let engine: MigrationEngine
 
@@ -68,6 +83,32 @@ describe('MigrationEngine', () => {
     vi.spyOn(engine as any, 'markCompleted').mockResolvedValue(undefined)
     vi.spyOn(engine as any, 'markFailed').mockResolvedValue(undefined)
     vi.spyOn(engine as any, 'cleanupTempFiles').mockResolvedValue(undefined)
+  })
+
+  it('marks a fresh install as completed and skips migration when no legacy data exists', async () => {
+    const { db } = createMigrationStatusDb()
+    ;(engine as any).migrationDb = {
+      getDb: vi.fn(() => db),
+      close: vi.fn()
+    }
+    vi.spyOn(engine as any, 'hasLegacyData').mockReturnValue(false)
+
+    await expect(engine.needsMigration()).resolves.toBe(false)
+
+    expect((engine as any).markCompleted).toHaveBeenCalledTimes(1)
+  })
+
+  it('requires migration when no status exists but legacy data is present', async () => {
+    const { db } = createMigrationStatusDb()
+    ;(engine as any).migrationDb = {
+      getDb: vi.fn(() => db),
+      close: vi.fn()
+    }
+    vi.spyOn(engine as any, 'hasLegacyData').mockReturnValue(true)
+
+    await expect(engine.needsMigration()).resolves.toBe(true)
+
+    expect((engine as any).markCompleted).not.toHaveBeenCalled()
   })
 
   it('resets every migrator before each run starts', async () => {
