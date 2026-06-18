@@ -11,7 +11,6 @@ import { reset } from '@renderer/services/BackupService'
 import type { AppInfo } from '@renderer/types'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { cn } from '@renderer/utils/style'
-import { occupiedDirs } from '@shared/config/constant'
 import { FolderInput, FolderOpen, FolderOutput, SaveIcon } from 'lucide-react'
 import type React from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -347,11 +346,7 @@ const BasicDataSettings: React.FC = () => {
 
     await new Promise((resolve) => setTimeoutTimer('startMigration_1', resolve, 2000))
 
-    const copyResult = await window.api.copy(
-      originalPath,
-      newPath,
-      occupiedDirs.map((dir) => originalPath + '/' + dir)
-    )
+    const copyResult = await window.api.copy(originalPath, newPath)
 
     if (progressInterval) {
       clearInterval(progressInterval)

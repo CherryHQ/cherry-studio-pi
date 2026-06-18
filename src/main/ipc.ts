@@ -44,11 +44,12 @@ import { calculateDirectorySize } from './utils'
 import { decrypt, encrypt } from './utils/aes'
 import { isSafeExternalUrl } from './utils/externalUrlSafety'
 import { hasWritePermission, isPathInside, untildify } from './utils/file'
-import { isNotEmptyDir, isPathInsideOrEqual } from './utils/file/path'
+import { isNotEmptyDir } from './utils/file/path'
 import { getNewDataPathFromArgs } from './utils/launchArgs'
 import { summarizeUrlForLog } from './utils/logging'
 import { openPathInShell } from './utils/openPath'
 import { getCpuName, getDeviceType, getHostname } from './utils/system'
+import { copyActiveUserDataDirectory } from './utils/userDataCopy'
 import { compress, decompress } from './utils/zip'
 
 const logger = loggerService.withContext('IPC')
@@ -274,16 +275,13 @@ export async function registerIpc() {
   })
 
   // Copy user data to new location
-  ipcMain.handle(IpcChannel.App_Copy, async (_, oldPath: string, newPath: string, occupiedDirs: string[] = []) => {
+  ipcMain.handle(IpcChannel.App_Copy, async (_, oldPath: string, newPath: string) => {
     try {
-      await fs.promises.cp(oldPath, newPath, {
-        recursive: true,
-        filter: (src) => {
-          if (occupiedDirs.some((dir) => isPathInsideOrEqual(src, dir))) {
-            return false
-          }
-          return true
-        }
+      await copyActiveUserDataDirectory({
+        sourcePath: oldPath,
+        targetPath: newPath,
+        currentUserDataPath: application.getPath('app.userdata'),
+        installPath: application.getPath('app.install')
       })
       return { success: true }
     } catch (error: any) {

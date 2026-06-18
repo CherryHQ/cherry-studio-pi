@@ -167,8 +167,7 @@ const api = {
     ipcRenderer.invoke(IpcChannel.App_IsPathInside, childPath, parentPath),
   setAppDataPath: (path: string) => ipcRenderer.invoke(IpcChannel.App_SetAppDataPath, path),
   getDataPathFromArgs: () => ipcRenderer.invoke(IpcChannel.App_GetDataPathFromArgs),
-  copy: (oldPath: string, newPath: string, occupiedDirs: string[] = []) =>
-    ipcRenderer.invoke(IpcChannel.App_Copy, oldPath, newPath, occupiedDirs),
+  copy: (oldPath: string, newPath: string) => ipcRenderer.invoke(IpcChannel.App_Copy, oldPath, newPath),
   quitAndInstall: () => ipcRenderer.invoke(IpcChannel.App_QuitAndInstall),
   application: {
     quit: (): Promise<void> => ipcRenderer.invoke(IpcChannel.Application_Quit),
