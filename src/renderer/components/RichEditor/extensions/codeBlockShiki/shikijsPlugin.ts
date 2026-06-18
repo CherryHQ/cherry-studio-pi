@@ -150,6 +150,8 @@ export function ShikiPlugin({
     view: (view) => {
       class ShikiPluginView implements PluginView {
         private highlighter: HighlighterGeneric<any, any> | null = null
+        private destroyed = false
+
         constructor() {
           void this.initDecorations()
         }
@@ -159,15 +161,27 @@ export function ShikiPlugin({
         }
 
         destroy() {
+          this.destroyed = true
           this.highlighter = null
           cachedHighlighter = null
         }
 
         async initDecorations() {
-          this.highlighter = await getHighlighter()
-          cachedHighlighter = this.highlighter
-          const tr = view.state.tr.setMeta('shikiHighlighterReady', true)
-          view.dispatch(tr)
+          try {
+            const highlighter = await getHighlighter()
+            if (this.destroyed) {
+              return
+            }
+
+            this.highlighter = highlighter
+            cachedHighlighter = highlighter
+            const tr = view.state.tr.setMeta('shikiHighlighterReady', true)
+            view.dispatch(tr)
+          } catch (error) {
+            if (!this.destroyed) {
+              logger.error('Error initializing Shiki highlighter:', error as Error)
+            }
+          }
         }
 
         async checkUndecoratedBlocks() {
@@ -220,7 +234,7 @@ export function ShikiPlugin({
 
             await Promise.all(tasks)
 
-            if (didLoadSomething) {
+            if (didLoadSomething && !this.destroyed) {
               const tr = view.state.tr.setMeta('shikiHighlighterReady', true)
               view.dispatch(tr)
             }
