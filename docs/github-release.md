@@ -4,11 +4,12 @@ The `Release` workflow builds Cherry Studio Pi installers for macOS, Windows, an
 
 ## Trigger
 
-Run it manually from **Actions -> Release -> Run workflow**. Provide a tag such as `v1.9.7` and type the same value
-into `confirm_tag`. Manual runs can build `all`, `mac`, `windows`, or `linux`.
+Run it manually from **Actions -> Release -> Run workflow**. Provide an existing annotated tag such as `v1.9.7` and
+type the same value into `confirm_tag`. Manual runs can build `all`, `mac`, `windows`, or `linux`.
 
-Pushing a tag no longer publishes a GitHub Release. This repository keeps version/tag preparation and public release
-publishing as separate actions so one local command cannot accidentally create multiple public releases.
+Pushing a tag no longer publishes a GitHub Release, and the `Release` workflow no longer creates tags on demand. This
+repository keeps version/tag preparation and public release publishing as separate actions so one local command or
+workflow dispatch cannot accidentally create multiple public releases.
 
 If you need to create the next patch tag locally, first preview the next version from the current highest remote tag,
 then run the release helper with a one-shot confirmation for the exact tag. Do not pass `push`:
@@ -31,9 +32,11 @@ git push origin v1.9.7
 ```
 
 After the tag exists, publish exactly once through the manual `Release` workflow using the same `tag` and `confirm_tag`.
-When a non-draft release finishes publishing its GitHub assets, that workflow serially dispatches the upgrade-config
-sync and GitCode mirror sync workflows. Those downstream workflows do not listen to GitHub release events directly, so
-one release request cannot also spawn a second event-triggered sync path.
+The workflow refuses to run if the tag is missing, if it is not annotated, if it is not on the default branch, or if the
+tagged commit's `package.json` version does not match the tag. When a non-draft release finishes publishing its GitHub
+assets, that workflow serially dispatches the upgrade-config sync and GitCode mirror sync workflows. Those downstream
+workflows do not listen to GitHub release events directly, so one release request cannot also spawn a second
+event-triggered sync path.
 
 ## Output
 
