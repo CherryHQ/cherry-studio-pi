@@ -90,6 +90,8 @@ const STORAGE_V2_OPENCLAW_OWNER = 'default'
 const STORAGE_V2_OPENCLAW_CONFIG_KIND = 'config'
 const STORAGE_V2_OPENCLAW_CONFIG_SETTING_KEY = 'openclaw.config'
 
+export type OpenClawSymlinkState = 'missing' | 'managed' | 'unmanaged'
+
 type OpenClawConfigStorageV2Setting = {
   configSecretRef?: string
   updatedAt?: string
@@ -112,6 +114,48 @@ function deleteWindowsUserPath(): void {
 
 function refreshWindowsPathEnvironment(): void {
   execFileSync('setx', ['OPENCLAW_PATH_REFRESH', ''], { stdio: 'ignore' })
+}
+
+export function isManagedOpenClawSymlinkTarget(
+  linkPath: string,
+  expectedBinaryPath: string,
+  rawTarget: string
+): boolean {
+  const resolvedTarget = path.resolve(path.dirname(linkPath), rawTarget)
+  return path.resolve(resolvedTarget) === path.resolve(expectedBinaryPath)
+}
+
+export function getOpenClawSymlinkState(linkPath: string, expectedBinaryPath: string): OpenClawSymlinkState {
+  let stat: fs.Stats
+  try {
+    stat = fs.lstatSync(linkPath)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return 'missing'
+    }
+    throw error
+  }
+
+  if (!stat.isSymbolicLink()) {
+    return 'unmanaged'
+  }
+
+  try {
+    return isManagedOpenClawSymlinkTarget(linkPath, expectedBinaryPath, fs.readlinkSync(linkPath))
+      ? 'managed'
+      : 'unmanaged'
+  } catch {
+    return 'unmanaged'
+  }
+}
+
+function removeManagedOpenClawSymlink(linkPath: string, expectedBinaryPath: string): boolean {
+  if (getOpenClawSymlinkState(linkPath, expectedBinaryPath) !== 'managed') {
+    return false
+  }
+
+  fs.unlinkSync(linkPath)
+  return true
 }
 
 function getWindowsListeningPids(port: number): string[] {
@@ -318,9 +362,14 @@ export class OpenClawService extends BaseService {
       }
     } else {
       try {
-        // Remove existing symlink or file at target path
-        if (fs.existsSync(SYMLINK_PATH)) {
-          fs.unlinkSync(SYMLINK_PATH)
+        const symlinkState = getOpenClawSymlinkState(SYMLINK_PATH, binaryPath)
+        if (symlinkState === 'unmanaged') {
+          logger.warn(`Skipped creating symlink because ${SYMLINK_PATH} is not managed by Cherry Studio Pi`)
+          return
+        }
+
+        if (removeManagedOpenClawSymlink(SYMLINK_PATH, binaryPath)) {
+          logger.info(`Removed existing managed symlink: ${SYMLINK_PATH}`)
         }
         fs.symlinkSync(binaryPath, SYMLINK_PATH)
         logger.info(`Created symlink: ${SYMLINK_PATH} -> ${binaryPath}`)
@@ -351,8 +400,14 @@ export class OpenClawService extends BaseService {
       }
     } else {
       try {
-        if (fs.existsSync(SYMLINK_PATH)) {
-          fs.unlinkSync(SYMLINK_PATH)
+        const binaryPath = await getBinaryPath('openclaw')
+        const symlinkState = getOpenClawSymlinkState(SYMLINK_PATH, binaryPath)
+        if (symlinkState === 'unmanaged') {
+          logger.warn(`Skipped removing unmanaged OpenClaw path: ${SYMLINK_PATH}`)
+          return
+        }
+
+        if (removeManagedOpenClawSymlink(SYMLINK_PATH, binaryPath)) {
           logger.info(`Removed symlink: ${SYMLINK_PATH}`)
         }
       } catch (err) {

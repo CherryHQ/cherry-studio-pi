@@ -1,6 +1,16 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { parseCurrentVersion, parseUpdateStatus, parseWindowsNetstatListeningPids } from '../OpenClawService'
+import {
+  getOpenClawSymlinkState,
+  isManagedOpenClawSymlinkTarget,
+  parseCurrentVersion,
+  parseUpdateStatus,
+  parseWindowsNetstatListeningPids
+} from '../OpenClawService'
 
 // --- Mocks for OpenClawService dependencies ---
 
@@ -74,6 +84,66 @@ async function createService() {
   const { OpenClawService } = await import('../OpenClawService')
   return new OpenClawService()
 }
+
+describe('OpenClawService symlink safety', () => {
+  it('normalizes relative symlink targets before comparing them to the managed binary', () => {
+    expect(
+      isManagedOpenClawSymlinkTarget('/tmp/bin/openclaw', '/tmp/cherry/bin/openclaw', '../cherry/bin/openclaw')
+    ).toBe(true)
+    expect(
+      isManagedOpenClawSymlinkTarget('/tmp/bin/openclaw', '/tmp/cherry/bin/openclaw', '../other/bin/openclaw')
+    ).toBe(false)
+  })
+})
+
+const describeSymlinkState = process.platform === 'win32' ? describe.skip : describe
+
+describeSymlinkState('OpenClawService filesystem symlink state', () => {
+  let tempDir = ''
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'openclaw-symlink-'))
+  })
+
+  afterEach(() => {
+    if (tempDir) {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('recognizes only symlinks that point to the managed OpenClaw binary', () => {
+    const managedDir = path.join(tempDir, 'managed-bin')
+    fs.mkdirSync(managedDir, { recursive: true })
+    const managedBinary = path.join(managedDir, 'openclaw')
+    fs.writeFileSync(managedBinary, '')
+
+    const linkPath = path.join(tempDir, 'openclaw')
+    fs.symlinkSync(path.relative(tempDir, managedBinary), linkPath)
+
+    expect(getOpenClawSymlinkState(linkPath, managedBinary)).toBe('managed')
+  })
+
+  it('treats regular files and unrelated symlinks as unmanaged', () => {
+    const managedBinary = path.join(tempDir, 'managed-openclaw')
+    fs.writeFileSync(managedBinary, '')
+
+    const regularPath = path.join(tempDir, 'regular-openclaw')
+    fs.writeFileSync(regularPath, 'user-owned')
+    expect(getOpenClawSymlinkState(regularPath, managedBinary)).toBe('unmanaged')
+
+    const otherBinary = path.join(tempDir, 'other-openclaw')
+    fs.writeFileSync(otherBinary, '')
+    const linkPath = path.join(tempDir, 'openclaw')
+    fs.symlinkSync(otherBinary, linkPath)
+    expect(getOpenClawSymlinkState(linkPath, managedBinary)).toBe('unmanaged')
+  })
+
+  it('reports missing links without following dangling symlink semantics', () => {
+    expect(getOpenClawSymlinkState(path.join(tempDir, 'missing-openclaw'), path.join(tempDir, 'managed'))).toBe(
+      'missing'
+    )
+  })
+})
 
 describe('OpenClawService gateway status state machine', () => {
   let service: Awaited<ReturnType<typeof createService>>
