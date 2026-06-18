@@ -301,6 +301,29 @@ describe('knowledge app capabilities', () => {
     expect((result.data as any).total).toBe(5)
   })
 
+  it('rejects unknown requested knowledge base ids before searching', async () => {
+    runtimeBases = [
+      {
+        id: 'kb-1',
+        name: 'Knowledge One',
+        model: { id: 'embed-model', provider: 'shared-provider' },
+        items: []
+      }
+    ]
+
+    await expect(
+      capability('knowledge.search').execute(
+        {
+          query: 'matched',
+          knowledge_base_ids: [' kb-1 ', 'missing-kb']
+        },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Knowledge base not found: missing-kb')
+
+    expect(mocks.knowledgeService.search).not.toHaveBeenCalled()
+  })
+
   it('bounds total knowledge search results returned to agents', async () => {
     const bases = Array.from({ length: 4 }, (_, index) => ({
       id: `kb-${index}`,

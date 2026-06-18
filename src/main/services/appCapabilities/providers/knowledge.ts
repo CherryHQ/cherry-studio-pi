@@ -477,6 +477,13 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         const resultLimit = normalizeKnowledgeSearchResultLimit(input?.result_limit)
         const bases = await listKnowledgeBases()
         const targetBases = ids?.length ? bases.filter((base) => ids.includes(base.id)) : bases
+        if (ids?.length) {
+          const foundIds = new Set(targetBases.map((base) => base.id))
+          const missingIds = ids.filter((id) => !foundIds.has(id))
+          if (missingIds.length > 0) {
+            throw new Error(`Knowledge base not found: ${missingIds.join(', ')}`)
+          }
+        }
         const resolveProviderConfig = createCachedProviderConfigResolver()
         const resultsPerBase = await mapWithConcurrency(targetBases, KNOWLEDGE_SEARCH_CONCURRENCY, async (base) => {
           try {
