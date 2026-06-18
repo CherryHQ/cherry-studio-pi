@@ -4,6 +4,7 @@ import {
   scheduleCloseTransientResourceSelectors
 } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { useEnsureTags, useTagList } from '@renderer/hooks/useTags'
+import AgentSidePanelDrawer from '@renderer/pages/agents/components/AgentSidePanelDrawer'
 import type { InstalledSkill } from '@shared/data/types/agent'
 import type { Assistant } from '@shared/data/types/assistant'
 import type { Prompt } from '@shared/data/types/prompt'
@@ -243,6 +244,7 @@ export default function LibraryPage() {
   useEffect(() => {
     if (configView.type === 'list') return undefined
 
+    AgentSidePanelDrawer.hide()
     return scheduleCloseTransientResourceSelectors()
   }, [configView.type])
 

@@ -20,7 +20,7 @@ const { createInternal, ensureExternal } = await import('../create')
 
 import type { FileManagerDeps } from '../../deps'
 
-function toReadableBytes(body: Uint8Array | string): Uint8Array<ArrayBuffer> {
+function toReadableBytes(body: Uint8Array | string): Uint8Array {
   if (typeof body === 'string') {
     return new TextEncoder().encode(body)
   }

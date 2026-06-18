@@ -26,7 +26,7 @@ import {
   write as fsWrite
 } from '../fs'
 
-function toReadableBytes(body: Uint8Array | string): Uint8Array<ArrayBuffer> {
+function toReadableBytes(body: Uint8Array | string): Uint8Array {
   if (typeof body === 'string') {
     return new TextEncoder().encode(body)
   }

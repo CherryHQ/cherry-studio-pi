@@ -15,6 +15,7 @@ const {
   refetchSpy,
   resourceLibraryOptionsMock,
   routeSearchMock,
+  hideAgentSidePanelDrawerMock,
   toastErrorMock
 } = vi.hoisted(() => ({
   allResourcesMock: [] as any[],
@@ -31,6 +32,7 @@ const {
   refetchSpy: vi.fn(),
   resourceLibraryOptionsMock: [] as any[],
   routeSearchMock: vi.fn(() => ({})),
+  hideAgentSidePanelDrawerMock: vi.fn(),
   toastErrorMock: vi.fn()
 }))
 
@@ -71,6 +73,12 @@ vi.mock('@renderer/hooks/useTags', () => ({
   useTagList: () => ({
     tags: []
   })
+}))
+
+vi.mock('@renderer/pages/agents/components/AgentSidePanelDrawer', () => ({
+  default: {
+    hide: hideAgentSidePanelDrawerMock
+  }
 }))
 
 vi.mock('../list/useAssistantPresetCatalog', () => ({
@@ -252,6 +260,7 @@ describe('LibraryPage create flow', () => {
     resourceLibraryOptionsMock.length = 0
     routeSearchMock.mockReset()
     routeSearchMock.mockReturnValue({})
+    hideAgentSidePanelDrawerMock.mockReset()
     toastErrorMock.mockReset()
     Object.defineProperty(window, 'toast', {
       configurable: true,
@@ -295,6 +304,7 @@ describe('LibraryPage create flow', () => {
       await user.click(screen.getByRole('button', { name: 'create agent' }))
       expect(screen.getByTestId('agent-create-page')).toBeInTheDocument()
       expect(closeResourceSelectors).toHaveBeenCalled()
+      expect(hideAgentSidePanelDrawerMock).toHaveBeenCalled()
 
       await user.click(screen.getByRole('button', { name: 'finish agent create' }))
 
@@ -327,6 +337,7 @@ describe('LibraryPage create flow', () => {
     await user.click(screen.getByRole('button', { name: 'create agent' }))
 
     expect(screen.getByTestId('agent-create-page')).toBeInTheDocument()
+    expect(hideAgentSidePanelDrawerMock).toHaveBeenCalled()
     await waitFor(() => {
       expect(screen.queryByTestId('sticky-transient-overlay')).not.toBeInTheDocument()
     })
@@ -476,6 +487,7 @@ describe('LibraryPage create flow', () => {
 
       expect(screen.getByTestId('agent-create-page')).toBeInTheDocument()
       expect(closeResourceSelectors).toHaveBeenCalled()
+      expect(hideAgentSidePanelDrawerMock).toHaveBeenCalled()
     } finally {
       window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
     }
