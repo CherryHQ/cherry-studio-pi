@@ -106,7 +106,8 @@ describe('storage app capabilities', () => {
     })
   })
 
-  it('normalizes backup paths and reasons before calling storage services', async () => {
+  it('normalizes backup paths, reasons, and snapshot reasons before calling storage services', async () => {
+    await capability('storage.snapshot.create').execute({ reason: '   ' }, { source: 'agent' })
     await capability('storage.backup.create').execute({ reason: ' agent request ' }, { source: 'agent' })
     await capability('storage.backup.validate').execute({ backupPath: ' /tmp/backup ' }, { source: 'agent' })
     await capability('storage.backup.restore').execute(
@@ -114,6 +115,7 @@ describe('storage app capabilities', () => {
       { source: 'agent', dryRun: true }
     )
 
+    expect(mocks.storageV2Service.createSnapshot).toHaveBeenCalledWith('agent-request')
     expect(mocks.storageV2Service.createBackup).toHaveBeenCalledWith('agent request')
     expect(mocks.storageV2Service.validateBackup).toHaveBeenCalledWith('/tmp/backup')
     expect(mocks.storageV2Service.validateBackup).toHaveBeenCalledTimes(2)

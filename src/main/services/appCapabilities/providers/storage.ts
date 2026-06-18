@@ -210,7 +210,9 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
         await prepareRendererStorageV2ForStorageOperation('snapshot')
         return okResult(
           'Storage snapshot created',
-          sanitizeForAgent(await storageV2Service.createSnapshot(input?.reason))
+          sanitizeForAgent(
+            await storageV2Service.createSnapshot(normalizeOptionalText(input?.reason) || 'agent-request')
+          )
         )
       }
     },
