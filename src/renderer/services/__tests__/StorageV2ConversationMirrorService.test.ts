@@ -333,6 +333,49 @@ describe('StorageV2ConversationMirrorService', () => {
     })
   })
 
+  it('hydrates block file metadata before direct message block mirror writes', async () => {
+    const upsertMessageBlocks = vi.fn().mockResolvedValue(undefined)
+    const upsertFile = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          upsertMessageBlocks,
+          upsertFile
+        }
+      }
+    })
+
+    mocks.filesGet.mockResolvedValueOnce({
+      id: 'file-1',
+      name: 'full-file.pdf',
+      path: '/Users/me/full-file.pdf',
+      size: 1234
+    })
+
+    const { storageV2ConversationMirrorService } = await import('../StorageV2ConversationMirrorService')
+
+    await storageV2ConversationMirrorService.upsertMessageBlocksFirst('message-1', [
+      {
+        id: 'block-1',
+        messageId: 'message-1',
+        type: 'file',
+        file: {
+          id: 'file-1',
+          name: 'thin-file.pdf'
+        }
+      } as any
+    ])
+
+    expect(mocks.filesGet).toHaveBeenCalledWith('file-1')
+    expect(upsertFile).toHaveBeenCalledWith({
+      id: 'file-1',
+      name: 'full-file.pdf',
+      path: '/Users/me/full-file.pdf',
+      size: 1234
+    })
+  })
+
   it('does not keep the renderer process alive while debounce flushing conversation mirrors', async () => {
     const unref = vi.fn()
     const timer = { unref } as unknown as ReturnType<typeof setTimeout>

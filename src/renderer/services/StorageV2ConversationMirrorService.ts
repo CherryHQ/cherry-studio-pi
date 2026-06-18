@@ -485,7 +485,8 @@ class StorageV2ConversationMirrorService {
     await storageV2.upsertMessageBlocks(messageId, normalizedBlocks, {
       pruneMissing: Boolean(options.pruneMissing)
     })
-    await this.mirrorFiles(storageV2, Array.from(collectFilesFromBlocks(normalizedBlocks).values()))
+    const files = await hydrateFilesFromDexie(collectFilesFromBlocks(normalizedBlocks))
+    await this.mirrorFiles(storageV2, Array.from(files.values()))
     notifyDataSyncLocalChange('conversation')
   }
 
