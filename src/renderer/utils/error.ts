@@ -62,16 +62,20 @@ export function formatErrorMessage(error: unknown): string {
     return formatAgentServerError(parseResult.data)
   }
   const detailedError = getErrorDetails(error)
-  delete detailedError?.headers
-  delete detailedError?.stack
-  delete detailedError?.request_id
+  if (detailedError && typeof detailedError === 'object') {
+    delete detailedError.headers
+    delete detailedError.stack
+    delete detailedError.request_id
+  }
 
   if (detailedError) {
-    const formattedJson = JSON.stringify(detailedError, null, 2)
+    const formattedJson = safeJsonStringify(detailedError, 2)
       .split('\n')
       .map((line) => `  ${line}`)
       .join('\n')
-    return detailedError.message ? detailedError.message : `Error Details:\n${formattedJson}`
+    const message =
+      detailedError && typeof detailedError === 'object' ? (detailedError as { message?: unknown }).message : undefined
+    return typeof message === 'string' && message ? message : `Error Details:\n${formattedJson}`
   } else {
     logger.warn('Get detailed error failed.')
     return ''
@@ -279,27 +283,35 @@ export function safeToString(value: unknown): string {
     return String(value)
   }
 
+  // 处理函数
+  if (typeof value === 'function') {
+    return value.toString()
+  }
+
   // 处理对象（包括数组）
   if (typeof value === 'object') {
-    // 处理函数
-    if (typeof value === 'function') {
-      return value.toString()
-    }
-    // 其他对象
-    try {
-      return JSON.stringify(value, getCircularReplacer())
-    } catch (err) {
-      return '[Unserializable: ' + err + ']'
-    }
+    return safeJsonStringify(value)
   }
 
   return String(value)
+}
+
+function safeJsonStringify(value: unknown, space?: number): string {
+  try {
+    return JSON.stringify(value, getCircularReplacer(), space) ?? String(value)
+  } catch (err) {
+    return '[Unserializable: ' + err + ']'
+  }
 }
 
 // 防止循环引用导致的 JSON.stringify 崩溃
 function getCircularReplacer() {
   const seen = new WeakSet()
   return (_key: string, value: unknown) => {
+    if (typeof value === 'bigint') {
+      return value.toString()
+    }
+
     if (typeof value === 'object' && value !== null) {
       if (seen.has(value)) {
         return '[Circular]'

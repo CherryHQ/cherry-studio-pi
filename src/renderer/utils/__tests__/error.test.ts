@@ -104,6 +104,30 @@ describe('error', () => {
       expect(result).toContain('"code": 500')
       expect(result).toContain('"status": "Internal Server Error"')
     })
+
+    it('should format objects containing BigInt values without throwing', () => {
+      const result = formatErrorMessage({
+        code: 500n,
+        status: 'Internal Server Error'
+      })
+
+      expect(result).toContain('Error Details:')
+      expect(result).toContain('"code": "500"')
+      expect(result).toContain('"status": "Internal Server Error"')
+    })
+
+    it('should format circular error details without throwing', () => {
+      const errorWithoutMessage: Record<string, unknown> = {
+        code: 'E_CIRCULAR'
+      }
+      errorWithoutMessage.self = errorWithoutMessage
+
+      const result = formatErrorMessage(errorWithoutMessage)
+
+      expect(result).toContain('Error Details:')
+      expect(result).toContain('"code": "E_CIRCULAR"')
+      expect(result).toContain('"self": "[Circular]"')
+    })
   })
 
   describe('serializeHealthCheckError', () => {
