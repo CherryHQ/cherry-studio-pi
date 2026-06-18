@@ -36,7 +36,16 @@ export async function findSkillMdPath(dirPath: string): Promise<string | null> {
  * Check if a directory entry is a directory or a symlink pointing to a directory
  * Follows symlinks to determine if they point to valid directories
  */
-async function isDirectoryOrSymlinkToDirectory(entry: fs.Dirent, parentDir: string): Promise<boolean> {
+function isPathInsideOrSame(parentPath: string, candidatePath: string): boolean {
+  const relative = path.relative(parentPath, candidatePath)
+  return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative))
+}
+
+async function isDirectoryOrSymlinkToDirectory(
+  entry: fs.Dirent,
+  parentDir: string,
+  basePath: string
+): Promise<boolean> {
   if (entry.isDirectory()) {
     return true
   }
@@ -44,7 +53,13 @@ async function isDirectoryOrSymlinkToDirectory(entry: fs.Dirent, parentDir: stri
     try {
       const fullPath = path.join(parentDir, entry.name)
       const stats = await fs.promises.stat(fullPath) // stat follows symlinks
-      return stats.isDirectory()
+      if (!stats.isDirectory()) return false
+
+      const [targetRealPath, baseRealPath] = await Promise.all([
+        fs.promises.realpath(fullPath),
+        fs.promises.realpath(basePath)
+      ])
+      return isPathInsideOrSame(baseRealPath, targetRealPath)
     } catch {
       // Broken symlink or permission error
       return false
@@ -268,7 +283,7 @@ export async function findAllSkillDirectories(
 
     for (const entry of entries) {
       // Support both directories and symlinks pointing to directories
-      if (await isDirectoryOrSymlinkToDirectory(entry, dirPath)) {
+      if (await isDirectoryOrSymlinkToDirectory(entry, dirPath, basePath)) {
         const subDirPath = path.join(dirPath, entry.name)
         const subResults = await findAllSkillDirectories(subDirPath, basePath, maxDepth, currentDepth + 1, seen)
         results.push(...subResults)
