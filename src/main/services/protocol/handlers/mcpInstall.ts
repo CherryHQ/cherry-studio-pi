@@ -8,6 +8,34 @@ import { IpcChannel } from '@shared/IpcChannel'
 
 const logger = loggerService.withContext('ProtocolService:mcpInstall')
 
+function decodeQueryComponentPreservingPlus(value: string) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+function getProtocolQueryParam(search: string, name: string) {
+  const query = search.startsWith('?') ? search.slice(1) : search
+  if (!query) return null
+
+  for (const pair of query.split('&')) {
+    const separatorIndex = pair.indexOf('=')
+    const rawName = separatorIndex >= 0 ? pair.slice(0, separatorIndex) : pair
+    if (decodeQueryComponentPreservingPlus(rawName) !== name) continue
+
+    const rawValue = separatorIndex >= 0 ? pair.slice(separatorIndex + 1) : ''
+    return decodeQueryComponentPreservingPlus(rawValue)
+  }
+
+  return null
+}
+
+function normalizeBase64Payload(value: string) {
+  return value.replaceAll('_', '+').replaceAll('-', '/')
+}
+
 function installMcpServer(server: McpServer) {
   const now = Date.now()
 
@@ -35,7 +63,6 @@ function installMcpServers(servers: Record<string, McpServer>) {
 }
 
 export function handleMcpProtocolUrl(url: URL) {
-  const params = new URLSearchParams(url.search)
   switch (url.pathname) {
     case '/install': {
       // jsonConfig example:
@@ -52,10 +79,10 @@ export function handleMcpProtocolUrl(url: URL) {
       // }
       // cherrystudio://mcp/install?servers={base64Encode(JSON.stringify(jsonConfig))}
 
-      const data = params.get('servers')
+      const data = getProtocolQueryParam(url.search, 'servers')
 
       if (data) {
-        const stringify = Buffer.from(data, 'base64').toString('utf8')
+        const stringify = Buffer.from(normalizeBase64Payload(data), 'base64').toString('utf8')
         logger.debug('install MCP servers from protocol', { payload: summarizeTextForLog(stringify) })
         const jsonConfig = JSON.parse(stringify)
         logger.debug('install MCP servers from protocol parsed config', {

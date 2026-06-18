@@ -37,6 +37,7 @@ vi.mock('@reduxjs/toolkit', () => ({
 import { handleMcpProtocolUrl } from '../mcpInstall'
 
 const toBase64 = (value: unknown) => Buffer.from(JSON.stringify(value), 'utf-8').toString('base64')
+const toUrlSafeBase64 = (value: unknown) => toBase64(value).replaceAll('+', '_').replaceAll('/', '-')
 
 describe('mcpInstall protocol handler', () => {
   beforeEach(() => {
@@ -63,6 +64,55 @@ describe('mcpInstall protocol handler', () => {
     const logs = JSON.stringify(loggerMock.debug.mock.calls)
     expect(logs).toContain('install MCP servers from protocol')
     expect(logs).not.toContain('sk-secret-token')
+  })
+
+  it('preserves standard base64 plus characters in the servers query parameter', () => {
+    const payload = {
+      mcpServers: {
+        privateServer: {
+          command: 'npx',
+          env: {
+            API_KEY: 'sk-\u{1FAE0}'
+          }
+        }
+      }
+    }
+    const data = toBase64(payload)
+
+    expect(data).toContain('+')
+    handleMcpProtocolUrl(new URL(`cherrystudio://mcp/install?servers=${data}`))
+
+    expect(windowManagerMock.broadcastToType).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        env: {
+          API_KEY: 'sk-\u{1FAE0}'
+        }
+      })
+    )
+  })
+
+  it('accepts URL-safe base64 MCP install payloads', () => {
+    const payload = {
+      mcpServers: {
+        privateServer: {
+          command: 'npx',
+          args: ['-y', '@modelcontextprotocol/server-everything']
+        }
+      }
+    }
+
+    handleMcpProtocolUrl(new URL(`cherrystudio://mcp/install?servers=${toUrlSafeBase64(payload)}`))
+
+    expect(windowManagerMock.broadcastToType).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-everything']
+      })
+    )
   })
 
   it('logs unknown MCP protocol URLs without raw query payloads', () => {
