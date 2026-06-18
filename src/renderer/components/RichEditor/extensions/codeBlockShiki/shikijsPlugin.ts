@@ -1,18 +1,25 @@
 import { loggerService } from '@logger'
-// Cache highlighter instance once initialized so that decoration computation can run synchronously.
-import type { HighlighterGeneric } from 'shiki/core'
-let cachedHighlighter: HighlighterGeneric<any, any> | null = null
 import { getHighlighter, loadLanguageIfNeeded, loadThemeIfNeeded } from '@renderer/utils/shiki'
 import { findChildren } from '@tiptap/core'
 import type { Node as ProsemirrorNode } from '@tiptap/pm/model'
 import type { PluginView } from '@tiptap/pm/state'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
+import type { HighlighterGeneric } from 'shiki/core'
 
 const logger = loggerService.withContext('RichEditor:CodeBlockShiki')
+// Cache highlighter instance once initialized so decoration computation can run synchronously.
+let cachedHighlighter: HighlighterGeneric<any, any> | null = null
 
 // Languages that should skip syntax highlighting entirely
 const SKIP_HIGHLIGHTING_LANGUAGES = new Set(['text', 'plain', 'plaintext', 'txt', '', null, undefined])
+
+function getStepRange(step: unknown): { from: number; to: number } | null {
+  const candidate = step as { from?: unknown; to?: unknown }
+  return typeof candidate.from === 'number' && typeof candidate.to === 'number'
+    ? { from: candidate.from, to: candidate.to }
+    : null
+}
 
 function getDecorations({
   doc,
@@ -121,21 +128,9 @@ export function ShikiPlugin({
             // (for example, a transaction that affects the entire document).
             // Such transactions can happen during collab syncing via y-prosemirror, for example.
             transaction.steps.some((step) => {
-              // @ts-ignore: ProseMirror step types are complex to type properly
-              return (
-                // @ts-ignore: ProseMirror step types are complex to type properly
-                step.from !== undefined &&
-                // @ts-ignore: ProseMirror step types are complex to type properly
-                step.to !== undefined &&
-                oldNodes.some((node) => {
-                  // @ts-ignore: ProseMirror step types are complex to type properly
-                  return (
-                    // @ts-ignore: ProseMirror step types are complex to type properly
-                    node.pos >= step.from &&
-                    // @ts-ignore: ProseMirror step types are complex to type properly
-                    node.pos + node.node.nodeSize <= step.to
-                  )
-                })
+              const range = getStepRange(step)
+              return Boolean(
+                range && oldNodes.some((node) => node.pos >= range.from && node.pos + node.node.nodeSize <= range.to)
               )
             }))
 

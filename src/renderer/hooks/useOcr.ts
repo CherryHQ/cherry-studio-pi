@@ -45,8 +45,8 @@ export const useOcr = () => {
         if (isImageFileMetadata(file)) {
           return ocrImage(file)
         } else {
-          // @ts-expect-error all types should be covered
-          throw new Error(t('ocr.file.not_supported', { type: file.type }))
+          const unsupportedFile = file as { type?: unknown }
+          throw new Error(t('ocr.file.not_supported', { type: String(unsupportedFile.type ?? 'unknown') }))
         }
       } catch (e) {
         logger.error('Failed to ocr.', e as Error)
