@@ -2,15 +2,33 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
+import { parse } from 'yaml'
+
+function getWorkflowEventNames(workflow: string): string[] {
+  const parsed = parse(workflow) as { on?: unknown } | null
+  const events = parsed?.on
+
+  if (typeof events === 'string') {
+    return [events]
+  }
+
+  if (Array.isArray(events)) {
+    return events.filter((event): event is string => typeof event === 'string')
+  }
+
+  if (events && typeof events === 'object') {
+    return Object.keys(events)
+  }
+
+  return []
+}
 
 describe('release workflow safety', () => {
   const workflowPath = path.resolve(process.cwd(), '.github/workflows/release.yml')
   const workflow = fs.readFileSync(workflowPath, 'utf8').replace(/\r\n/g, '\n')
 
   it('keeps installer publishing manual-only', () => {
-    expect(workflow).toMatch(/^\s*workflow_dispatch:\s*$/m)
-    expect(workflow).not.toMatch(/^\s*push\s*:\s*$/m)
-    expect(workflow).not.toMatch(/^\s*on\s*:\s*\[[^\]]*\bpush\b[^\]]*\]/m)
+    expect(getWorkflowEventNames(workflow)).toEqual(['workflow_dispatch'])
   })
 
   it('keeps the release job guarded against non-manual events', () => {
