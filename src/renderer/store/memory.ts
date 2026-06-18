@@ -39,12 +39,34 @@ const defaultMemoryConfig: MemoryConfig = {
   customUpdateMemoryPrompt: ''
 }
 
+const MEMORY_CURRENT_USER_ID_KEY = 'memory_currentUserId'
+const DEFAULT_MEMORY_USER_ID = 'default-user'
+
+function readPersistedCurrentUserId() {
+  try {
+    if (typeof localStorage === 'undefined') return DEFAULT_MEMORY_USER_ID
+    return localStorage.getItem(MEMORY_CURRENT_USER_ID_KEY) || DEFAULT_MEMORY_USER_ID
+  } catch {
+    return DEFAULT_MEMORY_USER_ID
+  }
+}
+
+function persistCurrentUserId(userId: string) {
+  try {
+    if (typeof localStorage === 'undefined') return
+    localStorage.setItem(MEMORY_CURRENT_USER_ID_KEY, userId)
+    notifyStorageV2MirroredLocalStorageKeyChanged(MEMORY_CURRENT_USER_ID_KEY)
+  } catch {
+    // Keep Redux usable when browser storage is unavailable or blocked.
+  }
+}
+
 /**
  * Initial state for the memory store
  */
 export const initialState: MemoryState = {
   memoryConfig: defaultMemoryConfig,
-  currentUserId: localStorage.getItem('memory_currentUserId') || 'default-user',
+  currentUserId: readPersistedCurrentUserId(),
   globalMemoryEnabled: false // Default to false
 }
 
@@ -88,8 +110,7 @@ const memorySlice = createSlice({
      */
     setCurrentUserId: (state, action: PayloadAction<string>) => {
       state.currentUserId = action.payload
-      localStorage.setItem('memory_currentUserId', action.payload)
-      notifyStorageV2MirroredLocalStorageKeyChanged('memory_currentUserId')
+      persistCurrentUserId(action.payload)
     },
     /**
      * Sets the global memory enabled state and persists it to localStorage
