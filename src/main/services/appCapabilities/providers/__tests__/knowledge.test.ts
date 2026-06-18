@@ -301,6 +301,21 @@ describe('knowledge app capabilities', () => {
     expect((result.data as any).total).toBe(5)
   })
 
+  it('rejects invalid knowledge search text inputs before reading or searching', async () => {
+    await expect(capability('knowledge.search').execute({ query: ['matched'] }, { source: 'agent' })).rejects.toThrow(
+      'Knowledge search query must be a string'
+    )
+    await expect(
+      capability('knowledge.search').execute({ query: 'matched', knowledge_base_ids: 'kb-1' }, { source: 'agent' })
+    ).rejects.toThrow('Knowledge base ids must be an array')
+    await expect(
+      capability('knowledge.search').execute({ query: 'matched', knowledge_base_ids: [123] }, { source: 'agent' })
+    ).rejects.toThrow('Knowledge base id must be a string')
+
+    expect(mocks.storageV2KnowledgeRepository.listBases).not.toHaveBeenCalled()
+    expect(mocks.knowledgeService.search).not.toHaveBeenCalled()
+  })
+
   it('rejects unknown requested knowledge base ids before searching', async () => {
     runtimeBases = [
       {
@@ -496,6 +511,17 @@ describe('knowledge app capabilities', () => {
     await expect(
       capability('knowledge.base.create').execute({ name: 'Knowledge One', model: [] }, { source: 'agent' })
     ).rejects.toThrow('Knowledge base model is required')
+    await expect(
+      capability('knowledge.base.create').execute(
+        {
+          id: 123,
+          name: 'Knowledge One',
+          model: { id: 'embed-model', provider: 'shared-provider' },
+          initialize: false
+        },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Knowledge base id must be a string')
 
     expect(mocks.storageV2KnowledgeRepository.importBases).not.toHaveBeenCalled()
     expect(mocks.knowledgeService.createBase).not.toHaveBeenCalled()
@@ -507,9 +533,15 @@ describe('knowledge app capabilities', () => {
     await expect(capability('knowledge.base.reset').execute({ baseId: '   ' }, { source: 'agent' })).rejects.toThrow(
       'Knowledge base id is required'
     )
+    await expect(capability('knowledge.base.reset').execute({ baseId: 123 }, { source: 'agent' })).rejects.toThrow(
+      'Knowledge base id must be a string'
+    )
     await expect(
       capability('knowledge.item.add').execute({ baseId: 'kb-1', item: [] }, { source: 'agent' })
     ).rejects.toThrow('Knowledge item is required')
+    await expect(
+      capability('knowledge.item.add').execute({ baseId: false, item: { id: 'item-1' } }, { source: 'agent' })
+    ).rejects.toThrow('Knowledge base id must be a string')
 
     expect(mocks.knowledgeService.addItems).not.toHaveBeenCalled()
     expect(mocks.knowledgeService.reindexItems).not.toHaveBeenCalled()

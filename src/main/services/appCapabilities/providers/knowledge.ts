@@ -58,29 +58,26 @@ function normalizeKnowledgeSearchResultLimit(value: unknown): number {
   return Math.max(1, Math.min(safeLimit, MAX_KNOWLEDGE_SEARCH_RESULT_LIMIT))
 }
 
-function normalizeOptionalText(value: unknown) {
+function normalizeOptionalText(value: unknown, label = 'Value') {
   if (typeof value === 'string') {
     const trimmed = value.trim()
     return trimmed || undefined
   }
   if (value === null || typeof value === 'undefined') return undefined
-  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
-    const trimmed = String(value).trim()
-    return trimmed || undefined
-  }
-  return undefined
+  throw new Error(`${label} must be a string`)
 }
 
 function normalizeRequiredText(value: unknown, label: string) {
-  const text = normalizeOptionalText(value)
+  const text = normalizeOptionalText(value, label)
   if (!text) throw new Error(`${label} is required`)
   return text
 }
 
 function normalizeKnowledgeBaseIds(value: unknown) {
-  if (!Array.isArray(value)) return undefined
+  if (value === null || typeof value === 'undefined') return undefined
+  if (!Array.isArray(value)) throw new Error('Knowledge base ids must be an array')
   const ids = value.flatMap((item) => {
-    const id = normalizeOptionalText(item)
+    const id = normalizeOptionalText(item, 'Knowledge base id')
     return id ? [id] : []
   })
   return [...new Set(ids)]
@@ -387,7 +384,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       tags: ['knowledge', 'rag', 'create'],
       execute: async (input: any) => {
         const now = Date.now()
-        const id = normalizeOptionalText(input?.id) || `kb_${uuidv4()}`
+        const id = normalizeOptionalText(input?.id, 'Knowledge base id') || `kb_${uuidv4()}`
         const name = normalizeRequiredText(input?.name, 'Knowledge base name')
         const model = normalizeKnowledgeModel(input?.model)
         const base = {
@@ -469,8 +466,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['knowledge', 'rag', 'search'],
       execute: async (input: any) => {
-        const query = String(input?.query || '').trim()
-        if (!query) throw new Error('Missing search query')
+        const query = normalizeRequiredText(input?.query, 'Knowledge search query')
 
         const ids = normalizeKnowledgeBaseIds(input?.knowledge_base_ids)
         const documentCount = normalizeKnowledgeSearchDocumentCount(input?.document_count)
