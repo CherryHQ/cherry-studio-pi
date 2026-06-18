@@ -274,8 +274,7 @@ export class SkillService {
     const skillRoot = this.getSkillStoragePath(skill.folderName)
     const filePath = path.resolve(skillRoot, filename)
 
-    // Prevent path traversal
-    if (!filePath.startsWith(skillRoot + path.sep) && filePath !== skillRoot) return null
+    if (!isPathInsideOrSame(skillRoot, filePath)) return null
 
     try {
       return await fs.promises.readFile(filePath, 'utf-8')

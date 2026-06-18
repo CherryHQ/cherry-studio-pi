@@ -153,6 +153,31 @@ describe('SkillService', () => {
     })
   })
 
+  describe('readFile', () => {
+    it('reads files under the skill directory and rejects traversal outside it', async () => {
+      const skillService = new SkillService()
+      const skillsRoot = await createTempDir('skill-read-root-')
+      const skillDir = path.join(skillsRoot, 'skill-one')
+      await seedSkills()
+      await fs.promises.mkdir(skillDir, { recursive: true })
+      await fs.promises.writeFile(path.join(skillDir, 'SKILL.md'), '# Skill One')
+      await fs.promises.writeFile(path.join(skillsRoot, 'outside.md'), '# Outside')
+      const getPathSpy = vi.spyOn(application, 'getPath').mockImplementation((key: string, filename?: string) => {
+        if (key === 'feature.agents.skills') {
+          return filename ? path.join(skillsRoot, filename) : skillsRoot
+        }
+        return filename ? `/mock/${key}/${filename}` : `/mock/${key}`
+      })
+
+      try {
+        await expect(skillService.readFile(SKILL_ID_1, 'SKILL.md')).resolves.toBe('# Skill One')
+        await expect(skillService.readFile(SKILL_ID_1, '../outside.md')).resolves.toBeNull()
+      } finally {
+        getPathSpy.mockRestore()
+      }
+    })
+  })
+
   describe('list', () => {
     it('returns empty array when no skills installed', async () => {
       const skillService = new SkillService()
