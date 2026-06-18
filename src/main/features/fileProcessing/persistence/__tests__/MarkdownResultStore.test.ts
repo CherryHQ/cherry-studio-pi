@@ -181,6 +181,34 @@ describe('MarkdownResultStore', () => {
     expect(atomicWriteFileMock).toHaveBeenCalledOnce()
   })
 
+  it.each(['application/zip; charset=binary', 'application/x-zip-compressed', 'application/octet-stream', null])(
+    'accepts zip-compatible remote result content-type %s',
+    async (contentType) => {
+      fetchMock.mockResolvedValueOnce(
+        new Response(new TextEncoder().encode('zip-binary'), {
+          status: 200,
+          statusText: 'OK',
+          headers: contentType ? { 'content-type': contentType } : undefined
+        })
+      )
+
+      await expect(
+        markdownResultStore.persistResultToPath({
+          jobId: 'job-1',
+          path: OUTPUT_PATH,
+          result: {
+            kind: 'remote-zip-url',
+            downloadUrl: 'https://cdn.example.com/results/task-1.zip',
+            configuredApiHost: 'https://api.example.com'
+          }
+        })
+      ).resolves.toBe(OUTPUT_PATH)
+
+      expect(readMarkdownFromResponseZipMock).toHaveBeenCalledOnce()
+      expect(atomicWriteFileMock).toHaveBeenCalledOnce()
+    }
+  )
+
   it('allows remote zip downloads from a trusted local apiHost', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response('zip-binary', {

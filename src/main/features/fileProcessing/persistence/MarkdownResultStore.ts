@@ -8,6 +8,11 @@ import { net } from 'electron'
 import { readMarkdownFromResponseZip } from './resultPersistence'
 
 const logger = loggerService.withContext('MarkdownResultStore')
+const ZIP_RESULT_CONTENT_TYPES = new Set([
+  'application/zip',
+  'application/x-zip-compressed',
+  'application/octet-stream'
+])
 
 export type MarkdownPersistencePayload =
   | {
@@ -69,7 +74,7 @@ class MarkdownResultStore {
         }
 
         const contentType = response.headers.get('content-type')
-        if (contentType !== 'application/zip') {
+        if (!isZipResultContentType(contentType)) {
           throw new Error(`Markdown result download returned unexpected content-type: ${contentType}`)
         }
 
@@ -88,6 +93,13 @@ class MarkdownResultStore {
 }
 
 export const markdownResultStore = new MarkdownResultStore()
+
+function isZipResultContentType(contentType: string | null): boolean {
+  if (!contentType) return true
+
+  const mediaType = contentType.split(';', 1)[0]?.trim().toLowerCase()
+  return Boolean(mediaType && ZIP_RESULT_CONTENT_TYPES.has(mediaType))
+}
 
 function getMarkdownPersistenceLogContext(options: {
   jobId: string
