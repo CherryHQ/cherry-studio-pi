@@ -397,7 +397,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'write',
       permissions: ['dataSync.settings.write'],
-      sideEffects: ['settings.write'],
+      sideEffects: ['database.write', 'settings.write'],
       supportsDryRun: true,
       tags: ['dataSync', 'sync', 'webdav', 'configure', 'settings'],
       execute: async (input: any, context) => {
@@ -467,7 +467,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'write',
       permissions: ['network.webdav.read', 'network.webdav.write'],
-      sideEffects: ['network.webdav.read', 'network.webdav.write'],
+      sideEffects: ['database.read', 'network.webdav.read', 'network.webdav.write'],
       supportsDryRun: true,
       tags: ['dataSync', 'sync', 'webdav', 'diagnose', 'troubleshoot', 'write-access'],
       execute: async (input: any, context) => {
@@ -513,7 +513,15 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'write',
       permissions: ['dataSync.write', 'network.webdav.write'],
-      sideEffects: ['database.write', 'network.webdav.write', 'filesystem.write'],
+      sideEffects: [
+        'database.read',
+        'database.write',
+        'filesystem.read',
+        'filesystem.write',
+        'network.webdav.read',
+        'network.webdav.write',
+        'settings.write'
+      ],
       supportsDryRun: true,
       tags: ['dataSync', 'sync', 'webdav', 'run'],
       examples: ['Sync my data now', 'Run WebDAV data sync'],
@@ -552,7 +560,15 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'destructive',
       permissions: ['dataSync.restore'],
-      sideEffects: ['database.write', 'filesystem.write', 'app.restart'],
+      sideEffects: [
+        'app.restart',
+        'database.read',
+        'database.write',
+        'filesystem.delete',
+        'filesystem.read',
+        'filesystem.write',
+        'network.webdav.read'
+      ],
       supportsDryRun: true,
       tags: ['dataSync', 'sync', 'webdav', 'restore', 'snapshot'],
       execute: async (input: any, context) => {

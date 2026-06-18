@@ -363,6 +363,41 @@ describe('data sync app capabilities', () => {
     expect(capability('dataSync.snapshot.restoreLatest').supportsDryRun).toBe(true)
   })
 
+  it('declares complete local and remote side effects for data sync write capabilities', () => {
+    expect(capability('dataSync.webdav.config.set')).toMatchObject({
+      permissions: ['dataSync.settings.write'],
+      sideEffects: expect.arrayContaining(['database.write', 'settings.write'])
+    })
+    expect(capability('dataSync.webdav.diagnose')).toMatchObject({
+      permissions: ['network.webdav.read', 'network.webdav.write'],
+      sideEffects: expect.arrayContaining(['database.read', 'network.webdav.read', 'network.webdav.write'])
+    })
+    expect(capability('dataSync.sync.now')).toMatchObject({
+      permissions: ['dataSync.write', 'network.webdav.write'],
+      sideEffects: expect.arrayContaining([
+        'database.read',
+        'database.write',
+        'filesystem.read',
+        'filesystem.write',
+        'network.webdav.read',
+        'network.webdav.write',
+        'settings.write'
+      ])
+    })
+    expect(capability('dataSync.snapshot.restoreLatest')).toMatchObject({
+      permissions: ['dataSync.restore'],
+      sideEffects: expect.arrayContaining([
+        'app.restart',
+        'database.read',
+        'database.write',
+        'filesystem.delete',
+        'filesystem.read',
+        'filesystem.write',
+        'network.webdav.read'
+      ])
+    })
+  })
+
   it('lists WebDAV directories using stored config by default', async () => {
     mocks.appDataSyncService.listRemoteDirectories.mockResolvedValueOnce({ path: '/', directories: [] })
 
