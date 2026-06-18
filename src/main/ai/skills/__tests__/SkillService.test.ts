@@ -19,7 +19,7 @@ vi.mock('@main/utils/markdownParser', () => ({
   findSkillMdPath: vi.fn()
 }))
 
-import { SkillService } from '../SkillService'
+import { assertSkillZipEntriesWithin, SkillService } from '../SkillService'
 
 const AGENT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const SKILL_ID_1 = '11111111-1111-4111-8111-111111111111'
@@ -82,6 +82,34 @@ describe('SkillService', () => {
       }
     ])
   }
+
+  describe('assertSkillZipEntriesWithin', () => {
+    const extractRoot = path.join(os.tmpdir(), 'skill-zip-extract')
+
+    it('allows files and directories inside the extraction root', () => {
+      expect(() =>
+        assertSkillZipEntriesWithin(['SKILL.md', 'assets/icon.png', 'references/guide.md'], extractRoot)
+      ).not.toThrow()
+    })
+
+    it('rejects entries that escape the extraction root', () => {
+      expect(() => assertSkillZipEntriesWithin(['../escape.md'], extractRoot)).toThrow('Unsafe skill ZIP entry path')
+      expect(() => assertSkillZipEntriesWithin(['nested/../../../escape.md'], extractRoot)).toThrow(
+        'Unsafe skill ZIP entry path'
+      )
+      expect(() =>
+        assertSkillZipEntriesWithin([path.join(path.dirname(extractRoot), 'outside.md')], extractRoot)
+      ).toThrow('Unsafe skill ZIP entry path')
+      expect(() => assertSkillZipEntriesWithin(['../skill-zip-extract-evil/file.md'], extractRoot)).toThrow(
+        'Unsafe skill ZIP entry path'
+      )
+    })
+
+    it('rejects Windows-style traversal and null bytes before extraction', () => {
+      expect(() => assertSkillZipEntriesWithin(['..\\escape.md'], extractRoot)).toThrow('Unsafe skill ZIP entry path')
+      expect(() => assertSkillZipEntriesWithin(['safe\0name.md'], extractRoot)).toThrow('Unsafe skill ZIP entry path')
+    })
+  })
 
   describe('list', () => {
     it('returns empty array when no skills installed', async () => {

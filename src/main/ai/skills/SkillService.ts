@@ -35,6 +35,24 @@ const MARKETPLACE_DETAIL_TIMEOUT_MS = 30_000
 const MARKETPLACE_DOWNLOAD_TIMEOUT_MS = 120_000
 const MARKETPLACE_REPORT_TIMEOUT_MS = 15_000
 
+export function assertSkillZipEntriesWithin(entryNames: string[], destDir: string): void {
+  const root = path.resolve(destDir)
+
+  for (const entryName of entryNames) {
+    if (entryName.includes('\0')) {
+      throw new Error(`Unsafe skill ZIP entry path: ${entryName}`)
+    }
+
+    const destination = path.resolve(root, entryName.replace(/\\/g, path.sep))
+    const relative = path.relative(root, destination)
+    if (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) {
+      continue
+    }
+
+    throw new Error(`Unsafe skill ZIP entry path: ${entryName}`)
+  }
+}
+
 /**
  * Skill management service.
  *
@@ -731,6 +749,8 @@ export class SkillService {
 
     try {
       const entries = await zip.entries()
+      assertSkillZipEntriesWithin(Object.keys(entries), destDir)
+
       let totalSize = 0
       let fileCount = 0
 
