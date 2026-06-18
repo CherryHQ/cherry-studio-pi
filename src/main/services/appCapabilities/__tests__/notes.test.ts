@@ -276,6 +276,38 @@ describe('notes app capabilities', () => {
     })
   })
 
+  it('rejects missing note write content without truncating the existing note', async () => {
+    const notePath = path.join(tmpDir, 'daily.md')
+    await fs.writeFile(notePath, 'keep me\n', 'utf8')
+    const writeFileSpy = vi.spyOn(fs, 'writeFile')
+
+    try {
+      await expect(getCapability('notes.write').execute({ path: 'daily' }, { source: 'agent' })).rejects.toThrow(
+        'Note content is required'
+      )
+
+      expect(writeFileSpy).not.toHaveBeenCalled()
+      expect(await fs.readFile(notePath, 'utf8')).toBe('keep me\n')
+      expect(mocks.notifyDataSyncLocalChange).not.toHaveBeenCalled()
+    } finally {
+      writeFileSpy.mockRestore()
+    }
+  })
+
+  it('allows explicit empty note content when overwriting notes', async () => {
+    const notePath = path.join(tmpDir, 'daily.md')
+    await fs.writeFile(notePath, 'clear me\n', 'utf8')
+
+    const result = await getCapability('notes.write').execute({ path: 'daily', content: '' }, { source: 'agent' })
+
+    expect(result.data).toEqual({ path: notePath })
+    expect(await fs.readFile(notePath, 'utf8')).toBe('')
+    expect(mocks.notifyDataSyncLocalChange).toHaveBeenCalledWith('file', {
+      source: 'app-capability.notes.write',
+      path: notePath
+    })
+  })
+
   it('notifies data sync after deleting a note', async () => {
     const notePath = path.join(tmpDir, 'daily.md')
     await fs.writeFile(notePath, 'today\n', 'utf8')

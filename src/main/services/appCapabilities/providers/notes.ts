@@ -487,13 +487,15 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['filesystem.write'],
       tags: ['notes', 'write', 'markdown'],
       execute: async (input: any) => {
+        const inputObject = input && typeof input === 'object' ? input : {}
+        if (!Object.prototype.hasOwnProperty.call(inputObject, 'content')) throw new Error('Note content is required')
         const root = await getNotesRoot()
         const filePath = resolveInsideRoot(root, normalizeRequiredText(input?.path, 'Note path'), '.md')
         await assertResolvedInsideNotesRoot(root, filePath)
         const parent = path.dirname(filePath)
         await assertResolvedInsideNotesRoot(root, parent, 'Note parent')
         await fs.mkdir(parent, { recursive: true })
-        await fs.writeFile(filePath, normalizeNoteContent(input?.content), 'utf8')
+        await fs.writeFile(filePath, normalizeNoteContent(inputObject.content), 'utf8')
         notifyMainProcessDataSyncLocalChange('file', { source: 'app-capability.notes.write', path: filePath })
         return okResult('Note written', { path: filePath })
       }
