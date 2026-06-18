@@ -141,6 +141,17 @@ describe('AppCapabilityRegistry', () => {
     ])
   })
 
+  it('treats malformed option objects as empty filters', () => {
+    const registry = new AppCapabilityRegistry()
+    registry.register(capability({ id: 'settings.visible' }))
+    registry.register(capability({ id: 'settings.hidden', hidden: true }))
+
+    expect(registry.list(null as any).map((item) => item.id)).toEqual(['settings.visible'])
+    expect(registry.search('settings' as any).map((item) => item.id)).toEqual(['settings.visible'])
+    expect(registry.search([] as any).map((item) => item.id)).toEqual(['settings.visible'])
+    expect(registry.getDescriptor('settings.hidden', null as any)).toBeUndefined()
+  })
+
   it('does not turn object search queries into object-shaped terms', () => {
     const registry = new AppCapabilityRegistry()
     registry.register(capability({ id: 'a.first', title: 'First capability' }))

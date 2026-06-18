@@ -86,18 +86,29 @@ const normalizeSearchQuery = (value: unknown) => {
   return ''
 }
 
-const normalizeListOptions = (options: AppCapabilityListOptions = {}): AppCapabilityListOptions => ({
-  domain: normalizeOptionalFilterText(options.domain),
-  risk: normalizeRiskFilter(options.risk),
-  includeHidden: options.includeHidden === true,
-  includeSchemas: options.includeSchemas === true
-})
+const normalizeOptionsObject = <T extends object>(options: T | unknown): Partial<T> => {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) return {}
+  return options as Partial<T>
+}
 
-const normalizeSearchOptions = (options: AppCapabilitySearchOptions = {}): AppCapabilitySearchOptions => ({
-  ...normalizeListOptions(options),
-  query: normalizeSearchQuery(options.query),
-  limit: normalizeSearchLimit(options.limit)
-})
+const normalizeListOptions = (options: AppCapabilityListOptions = {}): AppCapabilityListOptions => {
+  const input = normalizeOptionsObject<AppCapabilityListOptions>(options)
+  return {
+    domain: normalizeOptionalFilterText(input.domain),
+    risk: normalizeRiskFilter(input.risk),
+    includeHidden: input.includeHidden === true,
+    includeSchemas: input.includeSchemas === true
+  }
+}
+
+const normalizeSearchOptions = (options: AppCapabilitySearchOptions = {}): AppCapabilitySearchOptions => {
+  const input = normalizeOptionsObject<AppCapabilitySearchOptions>(options)
+  return {
+    ...normalizeListOptions(input),
+    query: normalizeSearchQuery(input.query),
+    limit: normalizeSearchLimit(input.limit)
+  }
+}
 
 type SearchIndexEntry = {
   capability: AppCapabilityDefinition
