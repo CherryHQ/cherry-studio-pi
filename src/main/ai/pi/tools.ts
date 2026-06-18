@@ -558,7 +558,7 @@ const previewToolValue = (value: unknown, maxChars: number, space?: number) => {
 const TOOL_ERROR_SECRET_PATTERNS: Array<[RegExp, string]> = [
   [/((?:Authorization)\s*:\s*(?:Bearer|Basic)\s+)([^\s'",;]+)/gi, '$1[redacted]'],
   [
-    /((?:api[-_]?key|apiKeys|private[-_]?key|token|secret|pass(?:word|phrase)?|passwd|cookie)\s*[=:]\s*['"]?)([^\s'",;]+)/gi,
+    /((?:^|[^A-Za-z0-9])(?:api[-_]?key|apiKeys|private[-_]?key|token|secret|password|passphrase|passwd|passcode|pass|cookie)\s*[=:]\s*['"]?)([^\s'",;]+)/gi,
     '$1[redacted]'
   ],
   [/\b(https?:\/\/)([^/\s:@]+):([^/\s@]+)@/gi, '$1[redacted]@']

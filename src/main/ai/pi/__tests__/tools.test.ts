@@ -895,6 +895,28 @@ exit 1
     expect(resultText(result)).toContain('password=[redacted]')
   })
 
+  it('keeps non-secret words containing pass visible in app capability errors', async () => {
+    vi.mocked(appCapabilityService.call).mockResolvedValueOnce({
+      ok: false,
+      isError: true,
+      summary: 'Failed near compass=north and passage=visible',
+      error: 'db_pass=plain-secret'
+    })
+
+    const call = getTool('AppCallCapability', tmpDir, [tmpDir])
+    const result = await call.execute('app-call-passage-error', {
+      id: 'settings.read',
+      input: {}
+    })
+    const serialized = JSON.stringify(result)
+
+    expect(result.details).toMatchObject({ isError: true })
+    expect(serialized).not.toContain('plain-secret')
+    expect(resultText(result)).toContain('compass=north')
+    expect(resultText(result)).toContain('passage=visible')
+    expect(resultText(result)).toContain('db_pass=[redacted]')
+  })
+
   it('times out stalled AppCallCapability calls and aborts the app capability signal', async () => {
     vi.useFakeTimers()
     let capturedSignal: AbortSignal | undefined
