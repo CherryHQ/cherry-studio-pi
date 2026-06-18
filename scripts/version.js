@@ -3,6 +3,7 @@ const fs = require('fs')
 const semver = require('semver')
 
 const RELEASE_PUSH_CONFIRM_ENV = 'CHERRY_STUDIO_PI_RELEASE_CONFIRM'
+const EXPECTED_RELEASE_REPOSITORY = 'CherryHQ/cherry-studio-pi'
 
 // 执行命令并返回输出
 function exec(command, args) {
@@ -11,6 +12,42 @@ function exec(command, args) {
 
 function getPnpmExecutable(platform = process.platform) {
   return platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+}
+
+function normalizeGitHubRepositorySlug(remoteUrl) {
+  const value = typeof remoteUrl === 'string' ? remoteUrl.trim() : ''
+  if (!value) return null
+
+  const scpLikeMatch = value.match(/^git@github\.com:(.+?)(?:\.git)?$/i)
+  if (scpLikeMatch) {
+    return scpLikeMatch[1].replace(/\.git$/i, '').toLowerCase()
+  }
+
+  try {
+    const parsed = new URL(value)
+    if (!/^github\.com$/i.test(parsed.hostname)) return null
+    return parsed.pathname
+      .replace(/^\/+/, '')
+      .replace(/\.git$/i, '')
+      .toLowerCase()
+  } catch {
+    return null
+  }
+}
+
+function assertCherryStudioPiOrigin(originUrl = exec('git', ['remote', 'get-url', 'origin'])) {
+  const actualRepository = normalizeGitHubRepositorySlug(originUrl)
+  const expectedRepository = EXPECTED_RELEASE_REPOSITORY.toLowerCase()
+
+  if (actualRepository !== expectedRepository) {
+    throw new Error(
+      [
+        `Refusing to bump a Cherry Studio Pi release outside ${EXPECTED_RELEASE_REPOSITORY}.`,
+        `Current origin is ${originUrl || 'unknown'}.`,
+        'This prevents accidentally creating Pi release tags in Cherry Studio or another checkout.'
+      ].join(' ')
+    )
+  }
 }
 
 function parseVersionArgs(args) {
@@ -143,6 +180,7 @@ function getPushInstructions(version) {
 function runVersion(args = process.argv.slice(2)) {
   const { versionType } = parseVersionArgs(args)
   assertCleanGitWorktree()
+  assertCherryStudioPiOrigin()
 
   const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'))
   const { baseVersion, nextVersion } = resolveNextVersion(packageJson.version, versionType)
@@ -176,6 +214,8 @@ if (require.main === module) {
 
 exports._internal = {
   getPnpmExecutable,
+  normalizeGitHubRepositorySlug,
+  assertCherryStudioPiOrigin,
   parseVersionArgs,
   extractVersionsFromGitRefs,
   getHighestVersion,

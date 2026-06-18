@@ -37,6 +37,31 @@ describe('version script', () => {
     expect(getPnpmExecutable('linux')).toBe('pnpm')
   })
 
+  it('normalizes supported GitHub remote URL shapes', () => {
+    const { normalizeGitHubRepositorySlug } = loadInternal()
+
+    expect(normalizeGitHubRepositorySlug('https://github.com/CherryHQ/cherry-studio-pi.git')).toBe(
+      'cherryhq/cherry-studio-pi'
+    )
+    expect(normalizeGitHubRepositorySlug('git@github.com:CherryHQ/cherry-studio-pi.git')).toBe(
+      'cherryhq/cherry-studio-pi'
+    )
+    expect(normalizeGitHubRepositorySlug('ssh://git@github.com/CherryHQ/cherry-studio-pi.git')).toBe(
+      'cherryhq/cherry-studio-pi'
+    )
+    expect(normalizeGitHubRepositorySlug('https://example.com/CherryHQ/cherry-studio-pi.git')).toBeNull()
+  })
+
+  it('refuses to bump Pi releases from the upstream Cherry Studio repository', () => {
+    const { assertCherryStudioPiOrigin } = loadInternal()
+
+    expect(() => assertCherryStudioPiOrigin('https://github.com/CherryHQ/cherry-studio-pi.git')).not.toThrow()
+    expect(() => assertCherryStudioPiOrigin('git@github.com:CherryHQ/cherry-studio-pi.git')).not.toThrow()
+    expect(() => assertCherryStudioPiOrigin('https://github.com/CherryHQ/cherry-studio.git')).toThrow(
+      'Refusing to bump a Cherry Studio Pi release outside CherryHQ/cherry-studio-pi'
+    )
+  })
+
   it('extracts semantic versions from local and remote git tag output', () => {
     const { extractVersionsFromGitRefs } = loadInternal()
 
