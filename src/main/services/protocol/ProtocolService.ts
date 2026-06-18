@@ -71,7 +71,7 @@ function buildSanitizedFallbackPayload(url: URL): ProtocolDataPayload {
 // open-url events to fire before our listener attaches. MainWindowService is resolved
 // at call time inside listener callbacks — safe because OS events fire post-bootstrap.
 export class ProtocolService extends BaseService {
-  private readonly protocolHostListeners = new Map<string, Set<string>>()
+  private readonly protocolHostListeners = new Map<string, Map<string, number>>()
   private readonly pendingProtocolPayloads = new Map<string, PendingProtocolDataPayload[]>()
 
   protected async onInit() {
@@ -131,8 +131,8 @@ export class ProtocolService extends BaseService {
         throw new Error('Protocol listener sender is not a managed window')
       }
 
-      const listeners = this.protocolHostListeners.get(normalizedHost) ?? new Set<string>()
-      listeners.add(windowId)
+      const listeners = this.protocolHostListeners.get(normalizedHost) ?? new Map<string, number>()
+      listeners.set(windowId, (listeners.get(windowId) ?? 0) + 1)
       this.protocolHostListeners.set(normalizedHost, listeners)
       const deliveredPending = this.flushPendingProtocolPayloads(normalizedHost, windowId)
       return { host: normalizedHost, deliveredPending }
@@ -149,11 +149,17 @@ export class ProtocolService extends BaseService {
   private removeProtocolHostListener(host: string, windowId: string): boolean {
     const listeners = this.protocolHostListeners.get(host)
     if (!listeners) return false
-    const removed = listeners.delete(windowId)
+    const count = listeners.get(windowId) ?? 0
+    if (count <= 0) return false
+    if (count === 1) {
+      listeners.delete(windowId)
+    } else {
+      listeners.set(windowId, count - 1)
+    }
     if (listeners.size === 0) {
       this.protocolHostListeners.delete(host)
     }
-    return removed
+    return true
   }
 
   private removeWindowProtocolHostListeners(windowId: string): void {
@@ -244,7 +250,7 @@ export class ProtocolService extends BaseService {
     const payload = buildProtocolPayload(url)
     let delivered = false
 
-    for (const windowId of [...listeners]) {
+    for (const windowId of [...listeners.keys()]) {
       const window = application.get('WindowManager').getWindow(windowId)
       if (!window || window.isDestroyed() || window.webContents.isDestroyed?.()) {
         listeners.delete(windowId)

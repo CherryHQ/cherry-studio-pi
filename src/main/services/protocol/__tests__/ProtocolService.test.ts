@@ -292,6 +292,33 @@ describe('ProtocolService', () => {
     expect(windowManagerMock.broadcast).not.toHaveBeenCalled()
   })
 
+  it('keeps a protocol host listener active until every registration is cleaned up', async () => {
+    await (service as any).onInit()
+    const register = ipcHandlers.get(IpcChannel.Protocol_RegisterHostListener)
+    const unregister = ipcHandlers.get(IpcChannel.Protocol_UnregisterHostListener)
+    if (!register || !unregister) throw new Error('protocol host handlers missing')
+
+    await register({ sender: {} }, 'ppio')
+    await register({ sender: {} }, 'ppio')
+    expect(await unregister({ sender: {} }, 'ppio')).toBe(true)
+
+    ;(service as any).handleProtocolUrl('cherrystudio://ppio/callback?code=abc')
+
+    expect(protocolWindowWebContentsMock.send).toHaveBeenCalledWith(IpcChannel.Protocol_Data, {
+      url: 'cherrystudio://ppio/callback?code=abc',
+      params: { code: 'abc' }
+    })
+    expect(windowManagerMock.broadcast).not.toHaveBeenCalled()
+
+    protocolWindowWebContentsMock.send.mockClear()
+    expect(await unregister({ sender: {} }, 'ppio')).toBe(true)
+
+    ;(service as any).handleProtocolUrl('cherrystudio://ppio/callback?code=def')
+
+    expect(protocolWindowWebContentsMock.send).not.toHaveBeenCalled()
+    expect(windowManagerMock.broadcast).not.toHaveBeenCalled()
+  })
+
   it('updates the AppImage desktop database without shell command construction', async () => {
     platformMock.isLinux = true
     process.env.APPIMAGE = '/mock/Cherry Studio Pi.AppImage'
