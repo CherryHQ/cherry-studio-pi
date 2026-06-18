@@ -339,21 +339,21 @@ const MigrationApp: React.FC = () => {
             )}
 
             {progress.stage === 'backup_required' && (
-              <InfoCard variant="warning">
+              <InfoCard>
                 <InfoTitle>{t('migration.backup_required.title')}</InfoTitle>
                 <InfoDescription>{t('migration.backup_required.description')}</InfoDescription>
               </InfoCard>
             )}
 
             {progress.stage === 'backup_progress' && (
-              <InfoCard variant="warning">
+              <InfoCard>
                 <InfoTitle>{t('migration.backup_progress.title')}</InfoTitle>
                 <InfoDescription>{t('migration.backup_progress.description')}</InfoDescription>
               </InfoCard>
             )}
 
             {progress.stage === 'backup_confirmed' && (
-              <InfoCard variant="success">
+              <InfoCard>
                 <InfoTitle>{t('migration.backup_confirmed.title')}</InfoTitle>
                 <InfoDescription>{t('migration.backup_confirmed.description')}</InfoDescription>
               </InfoCard>
@@ -380,7 +380,7 @@ const MigrationApp: React.FC = () => {
 
             {progress.stage === 'migration_completed' && (
               <div style={{ width: '100%', maxWidth: '600px', margin: '0 auto' }}>
-                <InfoCard variant="success">
+                <InfoCard>
                   <InfoTitle>{t('migration.migration_completed.title')}</InfoTitle>
                   <InfoDescription>{t('migration.migration_completed.description')}</InfoDescription>
                 </InfoCard>
@@ -391,7 +391,7 @@ const MigrationApp: React.FC = () => {
                   <MigratorProgressList migrators={progress.migrators} overallProgress={progress.overallProgress} />
                 </div>
                 {progress.warnings && progress.warnings.length > 0 && (
-                  <InfoCard variant="warning" style={{ marginTop: '16px' }}>
+                  <InfoCard style={{ marginTop: '16px' }}>
                     <InfoTitle>
                       {t('migration.migration_completed.warnings_title', { count: progress.warnings.length })}
                     </InfoTitle>
@@ -406,14 +406,14 @@ const MigrationApp: React.FC = () => {
             )}
 
             {progress.stage === 'completed' && (
-              <InfoCard variant="success">
+              <InfoCard>
                 <InfoTitle>{t('migration.completed.title')}</InfoTitle>
                 <InfoDescription>{t('migration.completed.description')}</InfoDescription>
               </InfoCard>
             )}
 
             {progress.stage === 'error' && (
-              <InfoCard variant="error">
+              <InfoCard>
                 <InfoTitle>{t('migration.error.title')}</InfoTitle>
                 <InfoDescription>
                   {t('migration.error.description')}
@@ -560,7 +560,7 @@ const InfoIcon = styled.div`
   margin-top: 12px;
 `
 
-const InfoCard = styled.div<{ variant?: 'info' | 'warning' | 'success' | 'error' }>`
+const InfoCard = styled.div`
   width: 100%;
 `
 
