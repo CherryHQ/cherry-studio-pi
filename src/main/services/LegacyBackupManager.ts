@@ -62,7 +62,17 @@ function assertZipEntriesWithin(entryNames: string[], baseDir: string): void {
   const root = path.resolve(baseDir)
 
   for (const name of entryNames) {
-    const target = path.resolve(baseDir, name)
+    const normalizedName = String(name ?? '').replace(/\\/g, '/')
+    if (
+      !normalizedName ||
+      normalizedName.includes('\0') ||
+      path.posix.isAbsolute(normalizedName) ||
+      path.win32.isAbsolute(name)
+    ) {
+      throw new Error(`Unsafe backup entry path: ${name}`)
+    }
+
+    const target = path.resolve(root, normalizedName.split('/').join(path.sep))
     if (target !== root && !target.startsWith(root + path.sep)) {
       throw new Error(`Unsafe backup entry path: ${name}`)
     }

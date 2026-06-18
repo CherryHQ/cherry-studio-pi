@@ -584,6 +584,26 @@ describe('BackupManager restore zip safety', () => {
     expect(close).toHaveBeenCalled()
     expect(fs.remove).toHaveBeenCalledWith('/tmp/cherry-studio-pi/backup/restore-random')
   })
+
+  it('rejects Windows-style zip traversal entries before extraction', async () => {
+    const extract = vi.fn()
+    const close = vi.fn().mockResolvedValue(undefined)
+    vi.mocked(StreamZip.async).mockImplementation(
+      () =>
+        ({
+          entries: vi.fn().mockResolvedValue({ '..\\evil.txt': { name: '..\\evil.txt' } }),
+          extract,
+          close
+        }) as never
+    )
+
+    await expect(backupManager.restore({} as Electron.IpcMainInvokeEvent, '/tmp/backup.zip')).rejects.toThrow(
+      'Unsafe backup entry path'
+    )
+
+    expect(extract).not.toHaveBeenCalled()
+    expect(close).toHaveBeenCalled()
+  })
 })
 
 describe('BackupManager.deleteLanTransferBackup - Security Tests', () => {
