@@ -1,3 +1,5 @@
+import { pathToFileURL } from 'node:url'
+
 import type * as PathModule from 'path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -583,6 +585,36 @@ describe('BackupManager restore zip safety', () => {
     expect(extract).not.toHaveBeenCalled()
     expect(close).toHaveBeenCalled()
     expect(fs.remove).toHaveBeenCalledWith('/tmp/cherry-studio-pi/backup/restore-random')
+  })
+
+  it('rejects non-local backup URL schemes before opening the zip', async () => {
+    await expect(
+      backupManager.restore({} as Electron.IpcMainInvokeEvent, 'https://example.com/backup.zip')
+    ).rejects.toThrow('Invalid backup path: URL schemes are not allowed')
+
+    expect(StreamZip.async).not.toHaveBeenCalled()
+    expect(fs.ensureDir).not.toHaveBeenCalled()
+  })
+
+  it('normalizes file URLs before opening the restore zip', async () => {
+    const extract = vi.fn()
+    const close = vi.fn().mockResolvedValue(undefined)
+    vi.mocked(StreamZip.async).mockImplementation(
+      () =>
+        ({
+          entries: vi.fn().mockResolvedValue({ '../evil.txt': { name: '../evil.txt' } }),
+          extract,
+          close
+        }) as never
+    )
+
+    await expect(
+      backupManager.restore({} as Electron.IpcMainInvokeEvent, pathToFileURL('/tmp/backup.zip').href)
+    ).rejects.toThrow('Unsafe backup entry path')
+
+    expect(StreamZip.async).toHaveBeenCalledWith({ file: '/tmp/backup.zip' })
+    expect(extract).not.toHaveBeenCalled()
+    expect(close).toHaveBeenCalled()
   })
 
   it('rejects Windows-style zip traversal entries before extraction', async () => {

@@ -15,6 +15,7 @@
  * --------------------------------------------------------------------------
  */
 import type { Stats } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 
 import { application } from '@application'
 import { loggerService } from '@logger'
@@ -57,6 +58,8 @@ interface ProgressData {
 
 const TEMP_APP_DIR = 'cherry-studio-pi'
 const LEGACY_TEMP_APP_DIR = 'cherry-studio'
+const URL_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/
+const WINDOWS_DRIVE_PATH_PATTERN = /^[a-zA-Z]:(?:[\\/]|$)/
 
 function assertZipEntriesWithin(entryNames: string[], baseDir: string): void {
   const root = path.resolve(baseDir)
@@ -77,6 +80,31 @@ function assertZipEntriesWithin(entryNames: string[], baseDir: string): void {
       throw new Error(`Unsafe backup entry path: ${name}`)
     }
   }
+}
+
+function normalizeLocalBackupPath(pathOrUrl: string): string {
+  if (typeof pathOrUrl !== 'string' || pathOrUrl.trim().length === 0) {
+    throw new Error('Invalid backup path: empty path')
+  }
+
+  if (pathOrUrl.includes('\0')) {
+    throw new Error('Invalid backup path: NUL bytes are not allowed')
+  }
+
+  const trimmedInput = pathOrUrl.trimStart()
+  if (trimmedInput.startsWith('file://')) {
+    const url = new URL(trimmedInput)
+    if (url.protocol !== 'file:') {
+      throw new Error('Invalid backup path: only file:// URLs are allowed')
+    }
+    return fileURLToPath(url)
+  }
+
+  if (URL_SCHEME_PATTERN.test(trimmedInput) && !WINDOWS_DRIVE_PATH_PATTERN.test(trimmedInput)) {
+    throw new Error('Invalid backup path: URL schemes are not allowed')
+  }
+
+  return pathOrUrl
 }
 
 export function sanitizeBackupFileName(fileName: string | null | undefined): string {
@@ -589,6 +617,7 @@ class BackupManager {
    * @returns For legacy backup: the data string from data.json. For direct backup: void (app will relaunch)
    */
   async restore(_: Electron.IpcMainInvokeEvent, backupPath: string): Promise<string | void> {
+    const normalizedBackupPath = normalizeLocalBackupPath(backupPath)
     const onProgress = this.onProgress(IpcChannel.RestoreProgress, true)
     const tempDir = await this.createTempWorkspace('restore-')
 
@@ -597,7 +626,7 @@ class BackupManager {
 
       logger.debug(`step 1: unzip backup file: ${tempDir}`)
 
-      const zip = new StreamZip.async({ file: backupPath })
+      const zip = new StreamZip.async({ file: normalizedBackupPath })
       onProgress({ stage: 'extracting', progress: 15, total: 100 })
       try {
         assertZipEntriesWithin(Object.keys(await zip.entries()), tempDir)
