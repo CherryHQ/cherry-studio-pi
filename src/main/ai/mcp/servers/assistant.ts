@@ -9,9 +9,9 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js'
 import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } from '@modelcontextprotocol/sdk/types.js'
 import { app } from 'electron'
 
+import { isSensitiveMcpDiagnosticKey } from './logging'
+
 const logger = loggerService.withContext('MCPServer:Assistant')
-const DIAGNOSTIC_SECRET_KEY_PATTERN =
-  /(api[-_]?key|apiKeys|private[-_]?key|token|secret|pass(word|phrase)?|passwd|authorization|cookie|webdavPass|webdavUser)/i
 const DIAGNOSTIC_SECRET_VALUE = '<redacted>'
 
 /**
@@ -34,14 +34,14 @@ export function redactAssistantDiagnosticText(text: string): string {
     .replace(
       /(["'])([^"']+)\1(\s*:\s*)(["'])([^"']*)\4/g,
       (match, quote: string, key: string, separator: string, valueQuote: string) =>
-        DIAGNOSTIC_SECRET_KEY_PATTERN.test(key)
+        isSensitiveMcpDiagnosticKey(key)
           ? `${quote}${key}${quote}${separator}${valueQuote}${DIAGNOSTIC_SECRET_VALUE}${valueQuote}`
           : match
     )
     .replace(
       /\b([A-Za-z][A-Za-z0-9_.-]*)(\s*[:=]\s*)(["']?)([^\s"',}]+)/g,
       (match, key: string, separator: string, quote: string) =>
-        DIAGNOSTIC_SECRET_KEY_PATTERN.test(key) ? `${key}${separator}${quote}${DIAGNOSTIC_SECRET_VALUE}${quote}` : match
+        isSensitiveMcpDiagnosticKey(key) ? `${key}${separator}${quote}${DIAGNOSTIC_SECRET_VALUE}${quote}` : match
     )
 }
 

@@ -93,4 +93,25 @@ describe('redactAssistantDiagnosticText', () => {
   it('preserves ordinary diagnostic text', () => {
     expect(redactAssistantDiagnosticText('status=ok provider=openai count=3')).toBe('status=ok provider=openai count=3')
   })
+
+  it('preserves ordinary pass and token metric diagnostic fields', () => {
+    const redacted = redactAssistantDiagnosticText(
+      [
+        'compass=north',
+        'passage=visible',
+        'bypassReason=local network',
+        'tokenCount=42',
+        'completionTokens=256',
+        'webdavPass=dav-secret'
+      ].join('\n')
+    )
+
+    expect(redacted).toContain('compass=north')
+    expect(redacted).toContain('passage=visible')
+    expect(redacted).toContain('bypassReason=local network')
+    expect(redacted).toContain('tokenCount=42')
+    expect(redacted).toContain('completionTokens=256')
+    expect(redacted).not.toContain('dav-secret')
+    expect(redacted).toContain('webdavPass=<redacted>')
+  })
 })
