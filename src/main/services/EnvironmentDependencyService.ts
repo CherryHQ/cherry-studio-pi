@@ -269,7 +269,7 @@ class EnvironmentDependencyService {
     const runtimeDir = path.join(binDir, 'perry-cli')
     if (!fs.existsSync(sourceDir)) return
     await fs.promises.rm(runtimeDir, { force: true, recursive: true })
-    await fs.promises.cp(sourceDir, runtimeDir, { recursive: true })
+    await fs.promises.cp(sourceDir, runtimeDir, { recursive: true, verbatimSymlinks: true })
 
     for (const name of MANAGED_CLI_TOOL_NAMES) {
       const scriptPath = path.join(runtimeDir, `${name}.js`)
