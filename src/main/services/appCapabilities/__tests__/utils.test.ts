@@ -59,6 +59,9 @@ describe('app capability utils', () => {
         passphrase: 'hidden-passphrase',
         passwd: 'hidden-passwd',
         passcode: 'hidden-passcode',
+        accessToken: 'hidden-access-token',
+        tokenCount: 42,
+        completionTokens: 256,
         accessKeyId: 'ak-example',
         cookieJar: ['session-secret'],
         privateKey: '-----BEGIN PRIVATE KEY-----',
@@ -84,6 +87,9 @@ describe('app capability utils', () => {
       passphrase: '[redacted]',
       passwd: '[redacted]',
       passcode: '[redacted]',
+      accessToken: '[redacted]',
+      tokenCount: 42,
+      completionTokens: 256,
       accessKeyId: '[redacted]',
       cookieJar: '[redacted]',
       privateKey: '[redacted]',
@@ -105,6 +111,11 @@ describe('app capability utils', () => {
     expect(isSensitiveAgentKey('apiServer.apiKey')).toBe(true)
     expect(isSensitiveAgentKey('serviceAccount.privateKey')).toBe(true)
     expect(isSensitiveAgentKey('db_pass')).toBe(true)
+    expect(isSensitiveAgentKey('authToken')).toBe(true)
+    expect(isSensitiveAgentKey('apiToken')).toBe(true)
+    expect(isSensitiveAgentKey('tokenCount')).toBe(false)
+    expect(isSensitiveAgentKey('completionTokens')).toBe(false)
+    expect(isSensitiveAgentKey('promptTokenCount')).toBe(false)
     expect(isSensitiveAgentKey('passage')).toBe(false)
     expect(isSensitiveAgentKey('compass')).toBe(false)
     expect(isSensitiveAgentKey('bypassReason')).toBe(false)

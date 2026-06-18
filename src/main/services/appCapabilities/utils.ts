@@ -7,6 +7,8 @@ import { isAllowedInAppRoute, normalizeInAppRoute } from '@main/services/navigat
 import { isPathInside } from '@main/utils/file'
 
 const CAMEL_CASE_KEY_BOUNDARY_PATTERN = /([a-z0-9])([A-Z])/g
+const TOKEN_METRIC_NORMALIZED_KEY_PATTERN =
+  /\b(?:token|tokens)\s+(?:count|counts|used|usage|total|prompt|completion|input|output|estimated|remaining|limit|limits)\b|^(?:total|prompt|completion|input|output|estimated|remaining|max)\s+tokens?\b/
 const SENSITIVE_NORMALIZED_KEY_PATTERN =
   /\b(?:api keys?|private keys?|access keys?|tokens?|secrets?|passwords?|passwd|passphrases?|passcodes?|pass|authorizations?|credentials?|cookies?)\b/
 const CIRCULAR_REFERENCE_PLACEHOLDER = '[Circular]'
@@ -33,7 +35,9 @@ export const isSensitiveAgentKey = (key: string): boolean => {
     .replace(/[_./:\-\s]+/g, ' ')
     .trim()
     .toLowerCase()
-  return normalized ? SENSITIVE_NORMALIZED_KEY_PATTERN.test(normalized) : false
+  if (!normalized) return false
+  if (TOKEN_METRIC_NORMALIZED_KEY_PATTERN.test(normalized)) return false
+  return SENSITIVE_NORMALIZED_KEY_PATTERN.test(normalized)
 }
 
 function sanitizeJsonValue(value: unknown, key: string, seen: WeakSet<object>, depth: number): unknown {

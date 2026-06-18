@@ -47,6 +47,13 @@ vi.mock('../../utils', () => ({
       .replace(/[_./:\-\s]+/g, ' ')
       .trim()
       .toLowerCase()
+    if (
+      /\b(?:token|tokens)\s+(?:count|counts|used|usage|total|prompt|completion|input|output|estimated|remaining|limit|limits)\b|^(?:total|prompt|completion|input|output|estimated|remaining|max)\s+tokens?\b/.test(
+        normalized
+      )
+    ) {
+      return false
+    }
     return /\b(?:api keys?|private keys?|access keys?|tokens?|secrets?|passwords?|passwd|passphrases?|passcodes?|pass|authorizations?|credentials?|cookies?)\b/.test(
       normalized
     )
