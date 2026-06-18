@@ -148,12 +148,26 @@ export async function processMessage(config: MessageConfig): Promise<Response> {
     // Streaming: stream the adapter's formatted SSE frames out of a ReadableStream.
     const encoder = new TextEncoder()
     let closed = false
+    let upstreamStarted = false
+    let removeAbortListener: (() => void) | null = null
+
+    const cleanupAbortListener = () => {
+      removeAbortListener?.()
+      removeAbortListener = null
+    }
+
+    const abortUpstream = () => {
+      if (upstreamStarted) {
+        aiStreamManager.abort(streamId, 'gateway client disconnected')
+      }
+    }
 
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         const safeClose = () => {
           if (closed) return
           closed = true
+          cleanupAbortListener()
           try {
             controller.close()
           } catch {
@@ -162,12 +176,16 @@ export async function processMessage(config: MessageConfig): Promise<Response> {
         }
 
         const onAbort = () => {
-          aiStreamManager.abort(streamId, 'gateway client disconnected')
+          abortUpstream()
           safeClose()
         }
         if (signal) {
-          if (signal.aborted) onAbort()
-          else signal.addEventListener('abort', onAbort, { once: true })
+          if (signal.aborted) {
+            safeClose()
+            return
+          }
+          signal.addEventListener('abort', onAbort, { once: true })
+          removeAbortListener = () => signal.removeEventListener('abort', onAbort)
         }
 
         const listener: StreamListener = new SseListener(
@@ -211,6 +229,7 @@ export async function processMessage(config: MessageConfig): Promise<Response> {
           }
         )
 
+        upstreamStarted = true
         aiStreamManager.streamPrompt({
           streamId,
           uniqueModelId,
@@ -221,8 +240,9 @@ export async function processMessage(config: MessageConfig): Promise<Response> {
         })
       },
       cancel() {
+        cleanupAbortListener()
         closed = true
-        aiStreamManager.abort(streamId, 'gateway client disconnected')
+        abortUpstream()
       }
     })
 

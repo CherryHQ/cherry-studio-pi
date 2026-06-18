@@ -117,6 +117,47 @@ describe('processMessage (streaming)', () => {
     await expect(readAll(res.body)).resolves.toBeTypeOf('string')
   })
 
+  it('does not start the upstream stream when the request signal is already aborted', async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    const res = await processMessage({
+      params: { model: 'openai:gpt-4', stream: true, messages: [] } as any,
+      inputFormat: 'openai',
+      outputFormat: 'openai',
+      signal: controller.signal
+    })
+
+    expect(mockStreamPrompt).not.toHaveBeenCalled()
+    expect(mockAbort).not.toHaveBeenCalled()
+    await expect(readAll(res.body)).resolves.toBe('')
+  })
+
+  it('removes the request abort listener when a streaming response completes', async () => {
+    const controller = new AbortController()
+    const addSpy = vi.spyOn(controller.signal, 'addEventListener')
+    const removeSpy = vi.spyOn(controller.signal, 'removeEventListener')
+
+    try {
+      const res = await processMessage({
+        params: { model: 'openai:gpt-4', stream: true, messages: [] } as any,
+        inputFormat: 'openai',
+        outputFormat: 'openai',
+        signal: controller.signal
+      })
+
+      expect(captured.listener).toBeDefined()
+      await captured.listener!.onDone({} as any)
+      await expect(readAll(res.body)).resolves.toContain('data: [DONE]')
+
+      expect(addSpy).toHaveBeenCalledWith('abort', expect.any(Function), { once: true })
+      expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function))
+    } finally {
+      addSpy.mockRestore()
+      removeSpy.mockRestore()
+    }
+  })
+
   it('returns JSON (not a stream) for non-streaming requests', async () => {
     const resPromise = processMessage({
       params: { model: 'openai:gpt-4', messages: [] } as any,
