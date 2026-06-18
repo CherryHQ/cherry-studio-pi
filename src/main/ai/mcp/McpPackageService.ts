@@ -49,6 +49,11 @@ export function assertZipEntriesWithin(entryNames: string[], baseDir: string): v
   }
 }
 
+export function isPathInsideDirectory(baseDir: string, targetPath: string): boolean {
+  const relative = path.relative(path.resolve(baseDir), path.resolve(targetPath))
+  return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative)
+}
+
 interface BaseMcpPackageManifest {
   name: string
   display_name?: string
@@ -589,7 +594,7 @@ export class McpPackageService extends BaseService {
       logger.debug(`${packageLabel} server extracted to: ${finalExtractDir}`)
 
       // Clean up the uploaded package file if it's in temp directory
-      if (filePath.startsWith(this.tempDir)) {
+      if (isPathInsideDirectory(this.tempDir, filePath)) {
         fs.unlinkSync(filePath)
       }
 

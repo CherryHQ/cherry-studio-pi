@@ -16,9 +16,14 @@ vi.mock('@main/services/FileStorage', () => ({
 }))
 
 const { application } = await import('@application')
-const { assertZipEntriesWithin, buildResolvedEnv, ensurePathWithin, validateArgs, validateCommand } = await import(
-  '../McpPackageService'
-)
+const {
+  assertZipEntriesWithin,
+  buildResolvedEnv,
+  ensurePathWithin,
+  isPathInsideDirectory,
+  validateArgs,
+  validateCommand
+} = await import('../McpPackageService')
 const { McpPackageService, validatePackageUploadPayload } = await import('../McpPackageService')
 
 describe('ensurePathWithin', () => {
@@ -124,6 +129,24 @@ describe('assertZipEntriesWithin', () => {
   testFn('rejects a sibling-prefix entry that is not actually nested', () => {
     // `/tmp/dxt_extract_evil` shares the base string prefix but is not within the base dir.
     expect(() => assertZipEntriesWithin(['../dxt_extract_evil/x'], baseDir)).toThrow('zip-slip')
+  })
+})
+
+describe('isPathInsideDirectory', () => {
+  it('accepts direct and nested descendants only', () => {
+    const baseDir = path.join(os.tmpdir(), 'mcp-upload-temp')
+
+    expect(isPathInsideDirectory(baseDir, path.join(baseDir, 'server.dxt'))).toBe(true)
+    expect(isPathInsideDirectory(baseDir, path.join(baseDir, 'nested', 'server.dxt'))).toBe(true)
+  })
+
+  it('rejects the base directory, parents, and prefix-similar siblings', () => {
+    const baseDir = path.join(os.tmpdir(), 'mcp-upload-temp')
+
+    expect(isPathInsideDirectory(baseDir, baseDir)).toBe(false)
+    expect(isPathInsideDirectory(baseDir, path.join(baseDir, '..', 'outside.dxt'))).toBe(false)
+    expect(isPathInsideDirectory(baseDir, `${baseDir}-evil`)).toBe(false)
+    expect(isPathInsideDirectory(baseDir, path.join(`${baseDir}-evil`, 'server.dxt'))).toBe(false)
   })
 })
 
