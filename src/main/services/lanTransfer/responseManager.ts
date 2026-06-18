@@ -46,7 +46,11 @@ export class ResponseManager {
     const responseKey = this.buildResponseKey(type, transferId, chunkIndex)
 
     // Clear any existing response with the same key
-    this.clearPendingResponse(responseKey)
+    const replaced = this.pendingResponses.get(responseKey)
+    if (replaced) {
+      this.clearPendingResponse(responseKey)
+      replaced.reject(new Error(`Replaced pending response for ${responseKey}`))
+    }
 
     const timeoutHandle = setTimeout(() => {
       this.clearPendingResponse(responseKey)

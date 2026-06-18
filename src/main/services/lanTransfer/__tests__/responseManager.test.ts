@@ -90,18 +90,19 @@ describe('ResponseManager', () => {
     })
 
     it('should replace existing response with same key', async () => {
-      const firstReject = vi.fn()
-      const secondResolve = vi.fn()
-      const secondReject = vi.fn()
+      const firstPromise = new Promise<unknown>((resolve, reject) => {
+        manager.waitForResponse('test', 5000, resolve, reject)
+      })
+      const secondPromise = new Promise<unknown>((resolve, reject) => {
+        manager.waitForResponse('test', 5000, resolve, reject)
+      })
 
-      manager.waitForResponse('test', 5000, vi.fn(), firstReject)
-      manager.waitForResponse('test', 5000, secondResolve, secondReject)
+      await expect(firstPromise).rejects.toThrow('Replaced pending response for test')
 
-      // First should be cleared (no rejection since it's replaced)
       const payload = { type: 'test' }
-      manager.tryResolve('test', payload)
+      expect(manager.tryResolve('test', payload)).toBe(true)
 
-      expect(secondResolve).toHaveBeenCalledWith(payload)
+      await expect(secondPromise).resolves.toEqual(payload)
     })
   })
 
