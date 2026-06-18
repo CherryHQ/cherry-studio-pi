@@ -19,7 +19,17 @@ vi.mock('@logger', () => ({
 }))
 
 vi.mock('@main/services/appCapabilities', () => ({
-  appCapabilityService: mocks.appCapabilityService
+  appCapabilityService: mocks.appCapabilityService,
+  sanitizeForAgent: (value: unknown) =>
+    JSON.parse(
+      JSON.stringify(value, (key, item) => {
+        if (/api[-_]?key|password|secret|token/i.test(key) && typeof item === 'string') {
+          return item ? '[redacted]' : item
+        }
+        if (typeof item === 'string' && item.length > 64) return `${item.slice(0, 32)}...[truncated]`
+        return item
+      })
+    )
 }))
 
 import { SystemAgentRuntimeService } from '../SystemAgentRuntimeService'
@@ -139,6 +149,46 @@ describe('SystemAgentRuntimeService', () => {
     expect(result.summary).toContain('dataSync.webdav.diagnose')
   })
 
+  it('sanitizes automatic capability results before returning them to the renderer', async () => {
+    const readCapability = {
+      id: 'settings.read',
+      domain: 'settings',
+      kind: 'query',
+      title: 'Read settings',
+      description: 'Read settings',
+      risk: 'read'
+    }
+    mocks.appCapabilityService.search.mockReturnValueOnce([readCapability])
+    mocks.appCapabilityService.call.mockResolvedValueOnce({
+      ok: true,
+      summary: 'raw settings',
+      data: {
+        apiKey: 'sk-secret',
+        text: 'x'.repeat(80)
+      }
+    })
+
+    const result = await new SystemAgentRuntimeService().handleEvent({
+      type: 'error',
+      source: 'settings',
+      domain: 'settings',
+      message: 'check settings'
+    })
+
+    expect(mocks.appCapabilityService.call).toHaveBeenCalledWith(
+      'settings.read',
+      {},
+      expect.objectContaining({ source: 'system' })
+    )
+    expect(result.autoRuns[0].result).toMatchObject({
+      ok: true,
+      data: {
+        apiKey: '[redacted]',
+        text: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx...[truncated]'
+      }
+    })
+  })
+
   it('times out automatic safe capability runs for system events', async () => {
     vi.useFakeTimers()
     const readCapability = {
@@ -234,6 +284,35 @@ describe('SystemAgentRuntimeService', () => {
         dryRun: undefined
       }
     )
+  })
+
+  it('sanitizes direct capability call results while preserving system call context', async () => {
+    mocks.appCapabilityService.get.mockReturnValueOnce({ ...writeCapability, risk: 'read' })
+    mocks.appCapabilityService.call.mockResolvedValueOnce({
+      ok: true,
+      summary: 'raw provider config',
+      data: {
+        password: 'dav-secret',
+        longValue: 'y'.repeat(80)
+      }
+    })
+
+    const result = await new SystemAgentRuntimeService().callCapability('dataSync.webdav.config.get')
+
+    expect(mocks.appCapabilityService.call).toHaveBeenCalledWith(
+      'dataSync.webdav.config.get',
+      {},
+      {
+        source: 'system',
+        sessionId: undefined,
+        toolCallId: undefined,
+        dryRun: undefined
+      }
+    )
+    expect(result.data).toEqual({
+      password: '[redacted]',
+      longValue: 'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy...[truncated]'
+    })
   })
 
   it('normalizes capability ids before approval checks and direct calls', async () => {

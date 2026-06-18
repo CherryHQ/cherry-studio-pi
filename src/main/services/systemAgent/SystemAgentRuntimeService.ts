@@ -13,7 +13,8 @@ import {
   type AppCapabilityResult,
   type AppCapabilityRisk,
   type AppCapabilitySearchOptions,
-  appCapabilityService
+  appCapabilityService,
+  sanitizeForAgent
 } from '@main/services/appCapabilities'
 
 const logger = loggerService.withContext('SystemAgentRuntimeService')
@@ -115,6 +116,10 @@ function normalizeCapabilityTimeoutMs(value: unknown) {
   )
 }
 
+function sanitizeSystemAgentCapabilityResult<T>(result: AppCapabilityResult<T>): AppCapabilityResult<T> {
+  return sanitizeForAgent(result) as AppCapabilityResult<T>
+}
+
 async function callAutoRunCapability(
   capability: AppCapabilityDescriptor,
   input: unknown
@@ -135,7 +140,7 @@ async function callAutoRunCapability(
   })
 
   try {
-    return await Promise.race([
+    const result = await Promise.race([
       appCapabilityService.call(capability.id, input, {
         source: 'system',
         dryRun: true,
@@ -143,6 +148,7 @@ async function callAutoRunCapability(
       }),
       timeoutResult
     ])
+    return sanitizeSystemAgentCapabilityResult(result)
   } finally {
     if (timeout) clearTimeout(timeout)
   }
@@ -309,7 +315,8 @@ export class SystemAgentRuntimeService {
 
     try {
       const call = appCapabilityService.call<T>(capabilityId, input, context)
-      return timeoutResult ? await Promise.race([call, timeoutResult]) : await call
+      const result = timeoutResult ? await Promise.race([call, timeoutResult]) : await call
+      return sanitizeSystemAgentCapabilityResult(result)
     } finally {
       if (timeout) clearTimeout(timeout)
     }
