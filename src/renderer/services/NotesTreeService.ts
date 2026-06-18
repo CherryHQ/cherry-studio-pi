@@ -1,7 +1,13 @@
 import type { NotesTreeNode } from '@renderer/types/note'
 
 export function normalizePathValue(path: string): string {
-  return path.replace(/\\/g, '/')
+  const normalized = path.replace(/\\/g, '/')
+
+  if (normalized === '/' || /^[A-Za-z]:\/$/.test(normalized)) {
+    return normalized
+  }
+
+  return normalized.replace(/\/+$/, '')
 }
 
 export function addUniquePath(list: string[], path: string): string[] {
@@ -13,10 +19,12 @@ export function removePathEntries(list: string[], path: string, deep: boolean): 
   const normalized = normalizePathValue(path)
   const prefix = `${normalized}/`
   return list.filter((item) => {
-    if (item === normalized) {
+    const normalizedItem = normalizePathValue(item)
+
+    if (normalizedItem === normalized) {
       return false
     }
-    return !(deep && item.startsWith(prefix))
+    return !(deep && normalizedItem.startsWith(prefix))
   })
 }
 
@@ -25,11 +33,13 @@ export function replacePathEntries(list: string[], oldPath: string, newPath: str
   const newNormalized = normalizePathValue(newPath)
   const prefix = `${oldNormalized}/`
   return list.map((item) => {
-    if (item === oldNormalized) {
+    const normalizedItem = normalizePathValue(item)
+
+    if (normalizedItem === oldNormalized) {
       return newNormalized
     }
-    if (deep && item.startsWith(prefix)) {
-      return `${newNormalized}${item.slice(oldNormalized.length)}`
+    if (deep && normalizedItem.startsWith(prefix)) {
+      return `${newNormalized}${normalizedItem.slice(oldNormalized.length)}`
     }
     return item
   })
@@ -51,12 +61,17 @@ export function findNode(tree: NotesTreeNode[], nodeId: string): NotesTreeNode |
 }
 
 export function findNodeByPath(tree: NotesTreeNode[], targetPath: string): NotesTreeNode | null {
+  const normalizedTargetPath = normalizePathValue(targetPath)
+
   for (const node of tree) {
-    if (node.treePath === targetPath || node.externalPath === targetPath) {
+    if (
+      normalizePathValue(node.treePath) === normalizedTargetPath ||
+      normalizePathValue(node.externalPath) === normalizedTargetPath
+    ) {
       return node
     }
     if (node.children) {
-      const found = findNodeByPath(node.children, targetPath)
+      const found = findNodeByPath(node.children, normalizedTargetPath)
       if (found) {
         return found
       }
