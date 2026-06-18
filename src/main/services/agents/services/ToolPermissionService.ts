@@ -111,7 +111,7 @@ const broadcastToRenderer = (
 ): boolean => {
   const mainWindow = application.get('WindowManager').getWindowsByType(WindowType.Main)[0]
 
-  if (!mainWindow) {
+  if (!mainWindow || mainWindow.isDestroyed?.() || mainWindow.webContents.isDestroyed?.()) {
     logger.warn('Unable to send agent tool permission payload because main window is unavailable', {
       channel,
       requestId: 'requestId' in payload ? payload.requestId : undefined
@@ -119,8 +119,17 @@ const broadcastToRenderer = (
     return false
   }
 
-  mainWindow.webContents.send(channel, payload)
-  return true
+  try {
+    mainWindow.webContents.send(channel, payload)
+    return true
+  } catch (error) {
+    logger.warn('Unable to send agent tool permission payload to renderer', {
+      channel,
+      requestId: 'requestId' in payload ? payload.requestId : undefined,
+      error: error instanceof Error ? error.message : String(error)
+    })
+    return false
+  }
 }
 
 const finalizeRequest = (

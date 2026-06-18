@@ -32,7 +32,9 @@ describe('ToolPermissionService', () => {
     vi.clearAllMocks()
     mocks.getWindowsByType.mockReturnValue([
       {
+        isDestroyed: vi.fn(() => false),
         webContents: {
+          isDestroyed: vi.fn(() => false),
           send: mocks.webContentsSend
         }
       }
@@ -77,5 +79,37 @@ describe('ToolPermissionService', () => {
       behavior: 'deny',
       message: 'Tool request aborted before user decision'
     })
+  })
+
+  it('settles permission prompts when the renderer window rejects IPC sends', async () => {
+    mocks.webContentsSend.mockImplementation(() => {
+      throw new Error('window is gone')
+    })
+
+    await expect(
+      promptForToolApproval(
+        'filesystem.read',
+        { path: '/tmp/project' },
+        {
+          toolCallId: 'tool-call-2',
+          timeoutMs: 12_345
+        }
+      )
+    ).resolves.toEqual({
+      behavior: 'deny',
+      message: 'Unable to request approval because the renderer window is unavailable'
+    })
+
+    expect(mocks.webContentsSend).toHaveBeenCalledWith(
+      IpcChannel.AgentToolPermission_Request,
+      expect.objectContaining({ toolCallId: 'tool-call-2' })
+    )
+    expect(mocks.webContentsSend).toHaveBeenCalledWith(
+      IpcChannel.AgentToolPermission_Result,
+      expect.objectContaining({
+        reason: 'no-window',
+        toolCallId: 'tool-call-2'
+      })
+    )
   })
 })
