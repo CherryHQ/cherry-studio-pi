@@ -21,6 +21,19 @@ interface Props {
   existingServers: McpServer[]
 }
 
+export function persistProviderTokenInput(
+  provider: Pick<ProviderConfig, 'clearToken' | 'saveToken'>,
+  value: string
+): string {
+  const normalizedToken = value.trim()
+  if (normalizedToken) {
+    provider.saveToken(normalizedToken)
+  } else {
+    provider.clearToken()
+  }
+  return normalizedToken
+}
+
 const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => {
   const { addMcpServer } = useMcpServers()
   const [isFetching, setIsFetching] = useState(false)
@@ -103,10 +116,7 @@ const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => 
   const handleTokenChange = useCallback(
     (value: string) => {
       setToken(value)
-      // Auto-save token when user types
-      if (value.trim()) {
-        provider.saveToken(value)
-      }
+      persistProviderTokenInput(provider, value)
     },
     [provider]
   )
@@ -116,7 +126,8 @@ const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => 
       return
     }
 
-    if (!token.trim()) {
+    const normalizedToken = token.trim()
+    if (!normalizedToken) {
       window.toast.error(t('settings.mcp.sync.tokenRequired', 'API Token is required'))
       return
     }
@@ -127,8 +138,8 @@ const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => 
     setIsFetching(true)
 
     try {
-      provider.saveToken(token)
-      const result = await provider.syncServers(token)
+      provider.saveToken(normalizedToken)
+      const result = await provider.syncServers(normalizedToken)
       if (
         !isMountedRef.current ||
         requestSeq !== fetchRequestSeqRef.current ||
@@ -190,7 +201,7 @@ const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => 
     [addMcpServer, t]
   )
 
-  const isFetchDisabled = !token
+  const isFetchDisabled = !token.trim()
   return (
     <DetailContainer>
       <ProviderHeader>
