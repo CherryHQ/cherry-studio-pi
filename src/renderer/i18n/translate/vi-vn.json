@@ -6667,27 +6667,27 @@
           "description": "Đăng nhập vào CherryIN bằng OAuth 2.0",
           "logged_in": "Đã đăng nhập qua OAuth",
           "login_button": "Ủy quyền với CherryIN",
-          "logout_button": "Keluar",
+          "logout_button": "Đăng xuất",
           "not_logged_in": "Chưa đăng nhập",
-          "register_account": "Create account",
-          "service_attribution": "This service is provided by <link>open.cherryin.ai</link>",
-          "tagline": "After you sign in, you can use all model services",
+          "register_account": "Tạo tài khoản",
+          "service_attribution": "Dịch vụ này được cung cấp bởi <link>open.cherryin.ai</link>",
+          "tagline": "Sau khi đăng nhập, bạn có thể sử dụng tất cả dịch vụ mô hình",
           "title": "Đăng nhập OAuth",
-          "use_api_key": "Use API key instead"
+          "use_api_key": "Sử dụng API Key thay thế"
         },
         "connect": "Kết nối {{provider}}",
         "description": "Dịch vụ này được cung cấp bởi <website>{{provider}}</website>",
-        "error": "Autentificación fallida",
+        "error": "Xác thực thất bại",
         "logged_in": "Đã đăng nhập",
-        "logout": "Logga ut",
+        "logout": "Đăng xuất",
         "logout_confirm": "Bạn có chắc chắn muốn đăng xuất?",
-        "logout_success": "Berhasil keluar",
+        "logout_success": "Đã đăng xuất thành công",
         "logout_warning": "Đã đăng xuất cục bộ, nhưng việc thu hồi mã thông báo từ máy chủ có thể đã thất bại",
         "official_website": "Trang web chính thức",
         "provided_by": "Được cung cấp bởi",
         "provided_by_suffix": "",
         "requests": "Yêu cầu",
-        "topup": "Recarga",
+        "topup": "Nạp tiền",
         "usage_title": "Cách sử dụng",
         "usage_unit": "tokens"
       },
@@ -7086,7 +7086,7 @@
           }
         },
         "langCode": {
-          "help": "[idioma+región] formato, [2-3 letras minúsculas]-[2-3 letras minúsculas]",
+          "help": "Định dạng [ngôn ngữ+khu vực], [2-3 chữ cái thường]-[2-3 chữ cái thường]",
           "label": "Mã ngôn ngữ",
           "placeholder": "en-us"
         },
@@ -7097,7 +7097,7 @@
         },
         "table": {
           "action": {
-            "title": "Operación"
+            "title": "Thao tác"
           }
         },
         "value": {
@@ -7112,12 +7112,12 @@
     "tray": {
       "onclose": "Thu nhỏ vào khay hệ thống khi đóng",
       "show": "Hiển thị biểu tượng khay",
-      "title": "Bandeja"
+      "title": "Khay hệ thống"
     },
     "use_system_title_bar": {
       "confirm": {
         "content": "Việc thay đổi kiểu thanh tiêu đề yêu cầu khởi động lại ứng dụng để có hiệu lực. Bạn có muốn khởi động lại ngay bây giờ không?",
-        "title": "Reinicio necesario"
+        "title": "Cần khởi động lại"
       },
       "title": "Sử dụng thanh tiêu đề hệ thống (Linux)"
     },

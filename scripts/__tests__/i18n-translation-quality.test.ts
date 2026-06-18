@@ -14,7 +14,12 @@ const FORBIDDEN_TRANSLATION_FRAGMENTS = [
   /Kliknout pro zobrazení/i,
   /Mostrar indicación/i,
   /até o primeiro token/i,
-  /tok\/seg/i
+  /tok\/seg/i,
+  /Autentificación fallida/i,
+  /Logga ut/i,
+  /Berhasil keluar/i,
+  /Reinicio necesario/i,
+  /Keluar/i
 ] as const
 
 function readTranslateFiles() {
