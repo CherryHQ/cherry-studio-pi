@@ -11,8 +11,15 @@ import {
   findExecutable,
   findGitBash,
   findViaMise,
+  runInstallScript,
   validateGitBashPath
 } from '../process'
+
+vi.mock('@application', () => ({
+  application: {
+    getPath: vi.fn(() => '/resources/scripts')
+  }
+}))
 
 // Mock configManager
 vi.mock('@main/services/ConfigManager', () => ({
@@ -1152,6 +1159,25 @@ function createMockChildProcess() {
   mockChild.kill = vi.fn()
   return mockChild
 }
+
+describe('runInstallScript', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(path.join).mockReturnValue('/resources/scripts/install.js')
+  })
+
+  it('rejects when the install script process fails to start', async () => {
+    const mockChild = createMockChildProcess()
+    vi.mocked(spawn).mockReturnValue(mockChild as never)
+
+    const resultPromise = runInstallScript('install.js')
+
+    mockChild.emit('error', new Error('spawn ENOENT'))
+    mockChild.emit('close', 0)
+
+    await expect(resultPromise).rejects.toThrow('Failed to run script install.js: spawn ENOENT')
+  })
+})
 
 describe('findCommandInShellEnv', () => {
   beforeEach(() => {

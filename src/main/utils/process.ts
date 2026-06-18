@@ -20,6 +20,19 @@ export function runInstallScript(scriptPath: string, extraEnv?: Record<string, s
   return new Promise<void>((resolve, reject) => {
     const installScriptPath = path.join(application.getPath('app.root.resources.scripts'), scriptPath)
     logger.info(`Running script at: ${installScriptPath}`)
+    let settled = false
+
+    const resolveOnce = () => {
+      if (settled) return
+      settled = true
+      resolve()
+    }
+
+    const rejectOnce = (error: Error) => {
+      if (settled) return
+      settled = true
+      reject(error)
+    }
 
     const nodeProcess = spawn(process.execPath, [installScriptPath], {
       env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', ...extraEnv }
@@ -33,13 +46,19 @@ export function runInstallScript(scriptPath: string, extraEnv?: Record<string, s
       logger.error('Script error', summarizeTextForLog(String(data)))
     })
 
+    nodeProcess.on('error', (error) => {
+      logger.error('Failed to start script process', error)
+      rejectOnce(new Error(`Failed to run script ${scriptPath}: ${error.message}`))
+    })
+
     nodeProcess.on('close', (code) => {
+      if (settled) return
       if (code === 0) {
         logger.debug('Script completed successfully')
-        resolve()
+        resolveOnce()
       } else {
         logger.warn(`Script exited with code ${code}`)
-        reject(new Error(`Process exited with code ${code}`))
+        rejectOnce(new Error(`Process exited with code ${code}`))
       }
     })
   })
