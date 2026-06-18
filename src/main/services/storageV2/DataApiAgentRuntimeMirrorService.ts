@@ -8,6 +8,7 @@ import { pinService } from '@data/services/PinService'
 import { generateOrderKeySequence } from '@data/services/utils/orderKey'
 import { loggerService } from '@logger'
 import { encodeStorageV2CompositeEntityId } from '@main/services/storageV2/SyncEntityId'
+import { isPathInsideOrEqual } from '@main/utils/file/path'
 import { sql } from 'drizzle-orm'
 
 import { storageV2AgentRuntimeWriteService } from './AgentRuntimeWriteService'
@@ -1015,7 +1016,7 @@ export class StorageV2DataApiAgentRuntimeMirrorService {
 
     await fs.mkdir(resolvedPath, { recursive: true }).catch(() => undefined)
     const id = randomUUID()
-    const type = resolvedPath.startsWith(systemRoot) ? 'system' : 'user'
+    const type = isPathInsideOrEqual(resolvedPath, systemRoot) ? 'system' : 'user'
     const [orderKey] = generateOrderKeySequence(1)
     await tx.run(sql`
       INSERT INTO agent_workspace (id, name, path, type, order_key, created_at, updated_at)

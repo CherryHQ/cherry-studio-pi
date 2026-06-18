@@ -67,6 +67,17 @@ vi.mock('../SyncLogService', () => ({
 
 import { StorageV2DataApiAgentRuntimeMirrorService } from '../DataApiAgentRuntimeMirrorService'
 
+function sqlText(query: { queryChunks?: unknown[] }) {
+  return (query.queryChunks ?? [])
+    .map((chunk) => {
+      if (chunk && typeof chunk === 'object' && Array.isArray((chunk as { value?: unknown }).value)) {
+        return (chunk as { value: unknown[] }).value.join('')
+      }
+      return ''
+    })
+    .join('')
+}
+
 describe('StorageV2DataApiAgentRuntimeMirrorService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -275,6 +286,8 @@ describe('StorageV2DataApiAgentRuntimeMirrorService', () => {
   })
 
   it('projects synced Storage v2 agent runtime rows back into DataApi tables', async () => {
+    const prefixSiblingWorkspace = '/tmp/cherry-studio-pi-agent-workspaces-custom/session-1'
+
     mocks.storageClient.execute
       .mockResolvedValueOnce({
         rows: [
@@ -302,7 +315,7 @@ describe('StorageV2DataApiAgentRuntimeMirrorService', () => {
             agent_id: 'agent-1',
             name: 'Session',
             inherited_config_json: JSON.stringify({}),
-            current_config_json: JSON.stringify({ workspacePath: '/tmp/workspace', description: 'session desc' }),
+            current_config_json: JSON.stringify({ workspacePath: prefixSiblingWorkspace, description: 'session desc' }),
             sort_order: 0,
             created_at: '1970-01-01T00:00:01.000Z',
             updated_at: '1970-01-01T00:00:02.000Z'
@@ -420,6 +433,13 @@ describe('StorageV2DataApiAgentRuntimeMirrorService', () => {
 
     expect(mocks.dbService.withWriteTx).toHaveBeenCalledTimes(1)
     expect(mocks.application.getPath).toHaveBeenCalledWith('feature.agents.workspaces')
+    const workspaceInsertCall = mocks.tx.run.mock.calls.find(([query]) =>
+      sqlText(query as { queryChunks?: unknown[] }).includes('INSERT INTO agent_workspace')
+    )
+    const workspaceInsertChunks = (workspaceInsertCall?.[0] as { queryChunks?: unknown[] } | undefined)?.queryChunks
+    expect(workspaceInsertChunks).toContain(prefixSiblingWorkspace)
+    expect(workspaceInsertChunks).toContain('user')
+    expect(workspaceInsertChunks).not.toContain('system')
     expect(mocks.secretVault.getSecret).toHaveBeenCalledWith('storage-v2://secret/channel/channel-1/bot_token')
     expect(mocks.tx.run).toHaveBeenCalledTimes(11)
   })
