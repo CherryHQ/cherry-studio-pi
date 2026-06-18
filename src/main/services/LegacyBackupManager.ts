@@ -292,6 +292,7 @@ class BackupManager {
 
       await new Promise<void>((resolve, reject) => {
         output.on('close', () => resolve())
+        output.on('error', reject)
         archive.on('error', reject)
         archive.on('warning', (err: any) => {
           if (err.code !== 'ENOENT') {
@@ -447,6 +448,7 @@ class BackupManager {
           onProgress({ stage: 'compressing', progress: 100, total: 100 })
           resolve()
         })
+        output.on('error', reject)
         archive.on('error', reject)
         archive.on('warning', (err: any) => {
           if (err.code !== 'ENOENT') {

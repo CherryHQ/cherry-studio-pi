@@ -144,6 +144,7 @@ vi.mock('node-stream-zip', () => ({
 }))
 
 // Import after mocks
+import archiver from 'archiver'
 import * as fs from 'fs-extra'
 import StreamZip from 'node-stream-zip'
 import * as path from 'path'
@@ -165,18 +166,31 @@ const createStats = (type: 'directory' | 'file' | 'symlink', size = 0) => ({
   isSymbolicLink: () => type === 'symlink'
 })
 
-function mockWriteStream() {
+function mockWriteStream(options: { finish?: boolean; error?: Error } = {}) {
   const stream = {
     write: vi.fn(),
     end: vi.fn(),
-    on: vi.fn((event: string, callback: () => void) => {
-      if (event === 'finish') {
+    on: vi.fn((event: string, callback: (error?: Error) => void) => {
+      if (event === 'finish' && options.finish !== false) {
         queueMicrotask(callback)
+      }
+      if (event === 'error' && options.error) {
+        queueMicrotask(() => callback(options.error))
       }
       return stream
     })
   }
   return stream
+}
+
+function mockArchive() {
+  const archive = {
+    on: vi.fn(() => archive),
+    pipe: vi.fn(() => archive),
+    directory: vi.fn(() => archive),
+    finalize: vi.fn(() => undefined)
+  }
+  return archive
 }
 
 describe('BackupManager direct backup metadata', () => {
@@ -222,6 +236,33 @@ describe('BackupManager temp workspace isolation', () => {
 
     expect(fs.ensureDir).toHaveBeenCalledWith('/tmp/cherry-studio-pi/backup')
     expect((fs as any).promises.mkdtemp).toHaveBeenCalledWith('/tmp/cherry-studio-pi/backup/backup-')
+  })
+})
+
+describe('BackupManager zip output failures', () => {
+  let backupManager: BackupManager
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    backupManager = new BackupManager()
+    vi.mocked(fs.ensureDir).mockResolvedValue(undefined as never)
+    vi.mocked((fs as any).promises.mkdtemp).mockResolvedValue('/tmp/cherry-studio-pi/backup/legacy-backup-random')
+    vi.mocked((fs as any).promises.mkdir).mockResolvedValue(undefined)
+    vi.mocked(fs.readdir).mockResolvedValue([] as never)
+    vi.mocked(fs.remove).mockResolvedValue(undefined as never)
+    vi.mocked(archiver).mockReturnValue(mockArchive() as never)
+  })
+
+  it('rejects and cleans the temp workspace when the zip output stream fails', async () => {
+    vi.mocked(fs.createWriteStream)
+      .mockReturnValueOnce(mockWriteStream() as never)
+      .mockReturnValueOnce(mockWriteStream({ finish: false, error: new Error('disk full') }) as never)
+
+    await expect(
+      backupManager.backupLegacy({} as Electron.IpcMainInvokeEvent, 'backup.zip', '{}', '/tmp/output', true)
+    ).rejects.toThrow('disk full')
+
+    expect(fs.remove).toHaveBeenCalledWith('/tmp/cherry-studio-pi/backup/legacy-backup-random')
   })
 })
 
