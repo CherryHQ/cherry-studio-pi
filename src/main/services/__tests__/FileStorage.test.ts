@@ -13,6 +13,10 @@ const mocks = vi.hoisted(() => ({
   storageV2FileRepository: {
     importFile: vi.fn()
   },
+  storageV2SettingsRepository: {
+    get: vi.fn(),
+    set: vi.fn()
+  },
   browserWindowFromWebContents: vi.fn(),
   showOpenDialog: vi.fn(),
   showSaveDialogSync: vi.fn(),
@@ -90,7 +94,8 @@ vi.mock('@main/utils/language', () => ({
 }))
 
 vi.mock('../storageV2/StorageV2Repositories', () => ({
-  storageV2FileRepository: mocks.storageV2FileRepository
+  storageV2FileRepository: mocks.storageV2FileRepository,
+  storageV2SettingsRepository: mocks.storageV2SettingsRepository
 }))
 
 function mockDownloadResponse(body: string, headers: Record<string, string> = {}, ok = true, status = 200): Response {
@@ -160,6 +165,8 @@ describe('FileStorage Storage v2 upload flow', () => {
     mocks.showOpenDialog.mockReset()
     mocks.netFetch.mockReset()
     mocks.chokidarWatch.mockReset()
+    mocks.storageV2SettingsRepository.get.mockResolvedValue(null)
+    mocks.storageV2SettingsRepository.set.mockResolvedValue({ key: 'minapps.custom' })
   })
 
   afterEach(() => {
@@ -296,6 +303,29 @@ describe('FileStorage Storage v2 upload flow', () => {
       'Unsafe stored file name'
     )
     expect(fs.readFileSync(outsidePath, 'utf8')).toBe('outside')
+  })
+
+  it('normalizes custom mini app writes before mirroring them to Storage v2', async () => {
+    const { fileStorage } = await import('../FileStorage')
+
+    await fileStorage.writeFileWithId(undefined as never, 'custom-minapps.json', '[{"id":"app-1"}]')
+
+    const filePath = path.join(mocks.dirs.files, 'custom-minapps.json')
+    expect(fs.readFileSync(filePath, 'utf8')).toBe(JSON.stringify([{ id: 'app-1' }], null, 2))
+    expect(mocks.storageV2SettingsRepository.set).toHaveBeenCalledWith('minapps.custom', [{ id: 'app-1' }], 'minapps')
+  })
+
+  it('rejects invalid custom mini app writes without corrupting the existing file', async () => {
+    const filePath = path.join(mocks.dirs.files, 'custom-minapps.json')
+    fs.writeFileSync(filePath, JSON.stringify([{ id: 'existing' }], null, 2))
+    const { fileStorage } = await import('../FileStorage')
+
+    await expect(
+      fileStorage.writeFileWithId(undefined as never, 'custom-minapps.json', '{"id":"not-array"}')
+    ).rejects.toThrow('JSON array')
+
+    expect(fs.readFileSync(filePath, 'utf8')).toBe(JSON.stringify([{ id: 'existing' }], null, 2))
+    expect(mocks.storageV2SettingsRepository.set).not.toHaveBeenCalled()
   })
 
   it('opens folder selection as a child of the invoking window', async () => {

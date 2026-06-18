@@ -1799,13 +1799,11 @@ class FileStorage {
         fs.mkdirSync(this.storageDir, { recursive: true })
       }
 
-      await fs.promises.writeFile(filePath, content, 'utf8')
       if (id === CUSTOM_MIN_APPS_FILE_NAME) {
-        await mirrorCustomMiniAppsContentToStorageV2(content).catch((error) => {
-          logger.warn('Failed to mirror custom mini apps write to Storage v2', {
-            error: error instanceof Error ? error.message : String(error)
-          })
-        })
+        await writeLegacyCustomMiniAppsFile(filePath, content)
+        await mirrorCustomMiniAppsContentToStorageV2(content)
+      } else {
+        await fs.promises.writeFile(filePath, content, 'utf8')
       }
       logger.debug('File written successfully', { filePath: summarizeTextForLog(filePath) })
     } catch (error) {
