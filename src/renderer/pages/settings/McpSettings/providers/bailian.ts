@@ -25,7 +25,7 @@ export const getBailianToken = (): string | null => {
 
 export const clearBailianToken = (): void => {
   localStorage.removeItem(TOKEN_STORAGE_KEY)
-  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY)
+  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY, { cleared: true })
 }
 
 export const hasBailianToken = (): boolean => {

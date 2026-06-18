@@ -24,7 +24,7 @@ export const getMcpRouterToken = (): string | null => {
 
 export const clearMcpRouterToken = (): void => {
   localStorage.removeItem(TOKEN_STORAGE_KEY)
-  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY)
+  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY, { cleared: true })
 }
 
 export const hasMcpRouterToken = (): boolean => {

@@ -66,6 +66,7 @@ describe('StorageV2LegacyReduxImportService', () => {
             ignoredEmpty: '',
             ignoredNonString: true
           },
+          mcpProviderTokenClearMode: 'explicit',
           mcpProviderTokens: {
             mcprouter_token: 'secret-token',
             unexpected_token: 'ignored-secret'
@@ -104,6 +105,11 @@ describe('StorageV2LegacyReduxImportService', () => {
     expect(mocks.settingsRepository.set).toHaveBeenCalledWith(
       'localStorage.clearedMcpProviderTokenKeys',
       ['modelscope_token'],
+      'localStorage'
+    )
+    expect(mocks.settingsRepository.set).toHaveBeenCalledWith(
+      'localStorage.mcpProviderTokenClearMode',
+      'explicit',
       'localStorage'
     )
     expect(report.secretCandidateCount).toBe(1)

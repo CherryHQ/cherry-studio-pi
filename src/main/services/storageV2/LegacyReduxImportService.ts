@@ -63,6 +63,7 @@ type LegacyReduxSnapshot = {
     | {
         clearedMcpProviderTokenKeys?: unknown
         durableValues?: unknown
+        mcpProviderTokenClearMode?: unknown
         mcpProviderTokens?: unknown
       }
     | string
@@ -532,6 +533,10 @@ function sanitizeClearedMcpProviderTokenKeys(value: unknown): string[] {
   return Array.from(
     new Set(value.filter((item): item is string => typeof item === 'string' && MCP_PROVIDER_TOKEN_KEYS.has(item)))
   )
+}
+
+function sanitizeMcpProviderTokenClearMode(value: unknown): 'explicit' | null {
+  return value === 'explicit' ? 'explicit' : null
 }
 
 type SecretSanitizerOptions = {
@@ -1192,6 +1197,15 @@ export class StorageV2LegacyReduxImportService {
         sanitizeClearedMcpProviderTokenKeys((localStorage as Record<string, unknown>).clearedMcpProviderTokenKeys),
         'localStorage'
       ])
+    }
+
+    if (Object.hasOwn(localStorage, 'mcpProviderTokenClearMode')) {
+      const clearMode = sanitizeMcpProviderTokenClearMode(
+        (localStorage as Record<string, unknown>).mcpProviderTokenClearMode
+      )
+      if (clearMode) {
+        settingsEntries.push(['localStorage.mcpProviderTokenClearMode', clearMode, 'localStorage'])
+      }
     }
 
     const providerSecretCandidateCount = providers.filter((provider) => Boolean(provider.apiKey)).length

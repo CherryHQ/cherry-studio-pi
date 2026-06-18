@@ -32,6 +32,7 @@ const MCP_PROVIDER_TOKEN_KEY_SET = new Set<string>(MCP_PROVIDER_TOKEN_KEYS)
 const DURABLE_LOCAL_STORAGE_KEY_SET = new Set<string>(DURABLE_LOCAL_STORAGE_KEYS)
 const DEFAULT_LOCAL_STORAGE_MIRROR_DEBOUNCE_MS = 0
 const LOCAL_STORAGE_MIRROR_RETRY_MS = 5000
+const MCP_PROVIDER_TOKEN_CLEAR_MODE = 'explicit'
 
 let localStorageMirrorTimer: ReturnType<typeof setTimeout> | null = null
 let localStorageMirrorRetryTimer: ReturnType<typeof setTimeout> | null = null
@@ -41,10 +42,12 @@ let lastLocalStorageMirrorSnapshotJson = ''
 let lastLocalStorageMirrorError: unknown = null
 let localStorageMirrorSuspended = false
 let localStorageMirrorPending = false
+const pendingClearedMcpProviderTokenKeys = new Set<string>()
 
 export type StorageV2LocalStorageSnapshot = {
   clearedMcpProviderTokenKeys: string[]
   durableValues: Record<string, string>
+  mcpProviderTokenClearMode?: typeof MCP_PROVIDER_TOKEN_CLEAR_MODE
   mcpProviderTokens: Record<string, string>
 }
 
@@ -57,12 +60,16 @@ function sanitizeDurableLocalStorageValue(key: string, value: unknown): string |
 }
 
 export function getStorageV2LocalStorageSnapshot(): StorageV2LocalStorageSnapshot {
-  const clearedMcpProviderTokenKeys: string[] = []
   const durableValues: Record<string, string> = {}
   const mcpProviderTokens: Record<string, string> = {}
 
   if (typeof localStorage === 'undefined') {
-    return { clearedMcpProviderTokenKeys, durableValues, mcpProviderTokens }
+    return {
+      clearedMcpProviderTokenKeys: [],
+      durableValues,
+      mcpProviderTokenClearMode: MCP_PROVIDER_TOKEN_CLEAR_MODE,
+      mcpProviderTokens
+    }
   }
 
   for (const key of DURABLE_LOCAL_STORAGE_KEYS) {
@@ -77,12 +84,19 @@ export function getStorageV2LocalStorageSnapshot(): StorageV2LocalStorageSnapsho
     const token = localStorage.getItem(key)
     if (token) {
       mcpProviderTokens[key] = token
-    } else {
-      clearedMcpProviderTokenKeys.push(key)
     }
   }
 
-  return { clearedMcpProviderTokenKeys, durableValues, mcpProviderTokens }
+  const clearedMcpProviderTokenKeys = MCP_PROVIDER_TOKEN_KEYS.filter(
+    (key) => pendingClearedMcpProviderTokenKeys.has(key) && !mcpProviderTokens[key]
+  )
+
+  return {
+    clearedMcpProviderTokenKeys,
+    durableValues,
+    mcpProviderTokenClearMode: MCP_PROVIDER_TOKEN_CLEAR_MODE,
+    mcpProviderTokens
+  }
 }
 
 export function applyStorageV2LocalStorageSnapshot(snapshot: Partial<StorageV2LocalStorageSnapshot>) {
@@ -97,7 +111,10 @@ export function applyStorageV2LocalStorageSnapshot(snapshot: Partial<StorageV2Lo
     }
   }
 
-  if (Array.isArray(snapshot.clearedMcpProviderTokenKeys)) {
+  if (
+    snapshot.mcpProviderTokenClearMode === MCP_PROVIDER_TOKEN_CLEAR_MODE &&
+    Array.isArray(snapshot.clearedMcpProviderTokenKeys)
+  ) {
     for (const key of snapshot.clearedMcpProviderTokenKeys) {
       if (MCP_PROVIDER_TOKEN_KEY_SET.has(key)) {
         localStorage.removeItem(key)
@@ -118,11 +135,19 @@ export function isStorageV2MirroredLocalStorageKey(key: string) {
 
 export function notifyStorageV2MirroredLocalStorageKeyChanged(
   key: string,
+  optionsOrDebounce: { cleared?: boolean } | number = {},
   debounceMs = DEFAULT_LOCAL_STORAGE_MIRROR_DEBOUNCE_MS
 ) {
   if (!isStorageV2MirroredLocalStorageKey(key)) return
 
-  scheduleStorageV2LocalStorageMirror(debounceMs)
+  const options = typeof optionsOrDebounce === 'number' ? {} : optionsOrDebounce
+  const resolvedDebounceMs = typeof optionsOrDebounce === 'number' ? optionsOrDebounce : debounceMs
+
+  if (options.cleared && MCP_PROVIDER_TOKEN_KEY_SET.has(key)) {
+    pendingClearedMcpProviderTokenKeys.add(key)
+  }
+
+  scheduleStorageV2LocalStorageMirror(resolvedDebounceMs)
 }
 
 export function scheduleStorageV2LocalStorageMirror(debounceMs = DEFAULT_LOCAL_STORAGE_MIRROR_DEBOUNCE_MS) {
@@ -201,6 +226,9 @@ export async function flushStorageV2LocalStorageMirror() {
       lastLocalStorageMirrorSnapshotJson = snapshotJson
       lastLocalStorageMirrorError = null
       localStorageMirrorPending = false
+      for (const key of snapshot.clearedMcpProviderTokenKeys) {
+        pendingClearedMcpProviderTokenKeys.delete(key)
+      }
       notifyDataSyncLocalChange('local-storage')
       logger.debug('Mirrored durable localStorage values to Storage v2')
     })

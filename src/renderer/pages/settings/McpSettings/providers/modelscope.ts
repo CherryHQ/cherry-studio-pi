@@ -23,7 +23,7 @@ export const getModelScopeToken = (): string | null => {
 
 export const clearModelScopeToken = (): void => {
   localStorage.removeItem(TOKEN_STORAGE_KEY)
-  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY)
+  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY, { cleared: true })
 }
 
 export const hasModelScopeToken = (): boolean => {

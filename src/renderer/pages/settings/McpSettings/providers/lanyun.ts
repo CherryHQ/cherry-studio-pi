@@ -25,7 +25,7 @@ export const getTokenLanYunToken = (): string | null => {
 
 export const clearTokenLanYunToken = (): void => {
   localStorage.removeItem(TOKEN_STORAGE_KEY)
-  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY)
+  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY, { cleared: true })
 }
 
 export const hasTokenLanYunToken = (): boolean => {

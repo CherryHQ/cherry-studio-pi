@@ -39,12 +39,13 @@ describe('StorageV2LocalStorageSnapshot', () => {
     localStorage.setItem('unrelated-cache-key', 'ignore-me')
 
     expect(getStorageV2LocalStorageSnapshot()).toEqual({
-      clearedMcpProviderTokenKeys: ['tokenLanyunToken', 'tokenflux_token', 'ai302_token', 'bailian_token'],
+      clearedMcpProviderTokenKeys: [],
       durableValues: {
         language: 'zh-CN',
         memory_currentUserId: 'user-1',
         'privacy-popup-accepted': 'true'
       },
+      mcpProviderTokenClearMode: 'explicit',
       mcpProviderTokens: {
         mcprouter_token: 'mcprouter-secret',
         modelscope_token: 'modelscope-secret'
@@ -103,6 +104,7 @@ describe('StorageV2LocalStorageSnapshot', () => {
         'onboarding-completed': 'true',
         unexpected_key: 'ignored'
       },
+      mcpProviderTokenClearMode: 'explicit',
       mcpProviderTokens: {
         ai302_token: 'ai302-secret',
         bailian_token: 'bailian-secret',
@@ -117,6 +119,18 @@ describe('StorageV2LocalStorageSnapshot', () => {
     expect(localStorage.getItem('ai302_token')).toBe('ai302-secret')
     expect(localStorage.getItem('bailian_token')).toBe('bailian-secret')
     expect(localStorage.getItem('unexpected_token')).toBeNull()
+  })
+
+  it('ignores legacy MCP provider token clear markers without an explicit clear mode', () => {
+    localStorage.setItem('mcprouter_token', 'keep-token')
+
+    applyStorageV2LocalStorageSnapshot({
+      clearedMcpProviderTokenKeys: ['mcprouter_token'],
+      durableValues: {},
+      mcpProviderTokens: {}
+    })
+
+    expect(localStorage.getItem('mcprouter_token')).toBe('keep-token')
   })
 
   it('restores renderer persist cache with schema whitelisting', () => {
@@ -177,16 +191,11 @@ describe('StorageV2LocalStorageSnapshot', () => {
     expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(
       {
         localStorage: {
-          clearedMcpProviderTokenKeys: [
-            'mcprouter_token',
-            'modelscope_token',
-            'tokenLanyunToken',
-            'tokenflux_token',
-            'ai302_token'
-          ],
+          clearedMcpProviderTokenKeys: [],
           durableValues: {
             'onboarding-completed': 'true'
           },
+          mcpProviderTokenClearMode: 'explicit',
           mcpProviderTokens: {
             bailian_token: 'bailian-secret'
           }
@@ -237,6 +246,34 @@ describe('StorageV2LocalStorageSnapshot', () => {
 
     await vi.waitFor(() => {
       expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('mirrors MCP provider token deletion only after an explicit clear notification', async () => {
+    const importLegacyReduxSnapshot = vi.fn().mockResolvedValue({ dryRun: false })
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          importLegacyReduxSnapshot
+        }
+      }
+    })
+
+    localStorage.setItem('mcprouter_token', 'secret')
+    localStorage.removeItem('mcprouter_token')
+    notifyStorageV2MirroredLocalStorageKeyChanged('mcprouter_token', { cleared: true })
+
+    await vi.waitFor(() => {
+      expect(importLegacyReduxSnapshot).toHaveBeenCalledWith(
+        {
+          localStorage: expect.objectContaining({
+            clearedMcpProviderTokenKeys: ['mcprouter_token'],
+            mcpProviderTokenClearMode: 'explicit'
+          })
+        },
+        { dryRun: false }
+      )
     })
   })
 

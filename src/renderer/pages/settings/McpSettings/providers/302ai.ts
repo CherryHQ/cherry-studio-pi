@@ -23,7 +23,7 @@ export const getAI302Token = (): string | null => {
 
 export const clearAI302Token = (): void => {
   localStorage.removeItem(TOKEN_STORAGE_KEY)
-  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY)
+  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY, { cleared: true })
 }
 
 export const hasAI302Token = (): boolean => {

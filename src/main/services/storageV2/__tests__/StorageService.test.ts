@@ -895,6 +895,14 @@ describe('StorageV2Service', () => {
         deletedAt: null
       },
       {
+        key: 'localStorage.mcpProviderTokenClearMode',
+        value: 'explicit',
+        scope: 'localStorage',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        version: 1,
+        deletedAt: null
+      },
+      {
         key: 'localStorage.mcpProviderTokens',
         value: {
           mcprouter_token: {
@@ -923,6 +931,7 @@ describe('StorageV2Service', () => {
       mcprouter_token: 'restored-token',
       modelscope_token: 'legacy-clear-token'
     })
+    expect(snapshot.localStorage.mcpProviderTokenClearMode).toBe('explicit')
     expect(snapshot.localStorage.clearedMcpProviderTokenKeys).toEqual(['ai302_token'])
     expect(snapshot.metadata.missingSecretCount).toBe(0)
     expect(mocks.secretVault.getSecret).toHaveBeenCalledWith(secretRef)
