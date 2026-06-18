@@ -90,6 +90,17 @@ const ALLOWED_ROUTES = [
   '/'
 ]
 
+export function isAllowedAssistantNavigationRoute(targetPath: string): boolean {
+  const normalizedPath = targetPath.startsWith('/') ? targetPath : `/${targetPath}`
+  const canonicalPath = normalizedPath.length > 1 ? normalizedPath.replace(/\/+$/g, '') : normalizedPath
+
+  return ALLOWED_ROUTES.some((route) => {
+    const canonicalRoute = route === '/' ? '/' : route.replace(/\/+$/g, '')
+    if (canonicalRoute === '/') return canonicalPath === '/'
+    return canonicalPath === canonicalRoute || canonicalPath.startsWith(`${canonicalRoute}/`)
+  })
+}
+
 const NAVIGATE_TOOL: Tool = {
   name: 'navigate',
   description:
@@ -202,7 +213,7 @@ class AssistantServer {
 
     const normalizedPath = targetPath.startsWith('/') ? targetPath : `/${targetPath}`
 
-    if (!ALLOWED_ROUTES.some((route) => normalizedPath === route || normalizedPath.startsWith(route))) {
+    if (!isAllowedAssistantNavigationRoute(normalizedPath)) {
       throw new McpError(ErrorCode.InvalidParams, `Blocked navigation to disallowed route: ${normalizedPath}`)
     }
 

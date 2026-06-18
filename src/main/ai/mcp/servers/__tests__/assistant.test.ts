@@ -5,7 +5,12 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { getAssistantTools, isBlockedSourceFile, redactAssistantDiagnosticText } from '../assistant'
+import {
+  getAssistantTools,
+  isAllowedAssistantNavigationRoute,
+  isBlockedSourceFile,
+  redactAssistantDiagnosticText
+} from '../assistant'
 
 describe('assistant MCP tool metadata', () => {
   it('uses Cherry Studio Pi in agent-facing tool descriptions', () => {
@@ -16,6 +21,22 @@ describe('assistant MCP tool metadata', () => {
     expect(descriptions).toContain('Cherry Studio Pi')
     expect(descriptions).not.toContain('Navigate Cherry Studio to')
     expect(descriptions).not.toContain('Read Cherry Studio runtime state')
+  })
+})
+
+describe('isAllowedAssistantNavigationRoute', () => {
+  it('allows the homepage and documented app route descendants', () => {
+    expect(isAllowedAssistantNavigationRoute('/')).toBe(true)
+    expect(isAllowedAssistantNavigationRoute('settings/provider')).toBe(true)
+    expect(isAllowedAssistantNavigationRoute('/settings/mcp/servers')).toBe(true)
+    expect(isAllowedAssistantNavigationRoute('/agents/session-1')).toBe(true)
+  })
+
+  it('rejects arbitrary routes and similar-prefix route names', () => {
+    expect(isAllowedAssistantNavigationRoute('/admin')).toBe(false)
+    expect(isAllowedAssistantNavigationRoute('/agents2')).toBe(false)
+    expect(isAllowedAssistantNavigationRoute('/settings-danger')).toBe(false)
+    expect(isAllowedAssistantNavigationRoute('/knowledgebase')).toBe(false)
   })
 })
 
