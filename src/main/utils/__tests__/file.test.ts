@@ -454,6 +454,19 @@ describe('file', () => {
         }
         return '/' + resolved.join('/')
       })
+      vi.mocked(path.normalize).mockImplementation((p) => p.replace(/\/+/g, '/'))
+      vi.mocked(path.relative).mockImplementation((from, to) => {
+        const fromParts = from.split('/').filter(Boolean)
+        const toParts = to.split('/').filter(Boolean)
+        let common = 0
+        while (common < fromParts.length && common < toParts.length && fromParts[common] === toParts[common]) {
+          common++
+        }
+        const up = Array(fromParts.length - common).fill('..')
+        const down = toParts.slice(common)
+        return [...up, ...down].join('/')
+      })
+      vi.mocked(path.isAbsolute).mockImplementation((p) => p.startsWith('/'))
       Object.defineProperty(path, 'sep', { value: '/', configurable: true })
     })
 
@@ -468,6 +481,7 @@ describe('file', () => {
         const [, relativePath] = args
         if (relativePath === '../etc/passwd') return '/etc/passwd'
         if (relativePath === '../sibling') return '/base/sibling'
+        if (relativePath === '../dir2/file.txt') return '/base/dir2/file.txt'
         return args.filter(Boolean).join('/')
       })
 
@@ -475,6 +489,9 @@ describe('file', () => {
         'Invalid file path: path traversal detected'
       )
       expect(() => resolveAndValidatePath('/base/dir', '../sibling')).toThrow(
+        'Invalid file path: path traversal detected'
+      )
+      expect(() => resolveAndValidatePath('/base/dir', '../dir2/file.txt')).toThrow(
         'Invalid file path: path traversal detected'
       )
     })

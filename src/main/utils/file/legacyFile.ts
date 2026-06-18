@@ -59,8 +59,7 @@ initFileTypeMap()
 export function resolveAndValidatePath(baseDir: string, relativePath: string): string {
   const resolvedBase = path.resolve(baseDir)
   const resolvedPath = path.resolve(baseDir, relativePath)
-  const separator = resolvedBase.endsWith(path.sep) ? '' : path.sep
-  if (!resolvedPath.startsWith(resolvedBase + separator)) {
+  if (resolvedPath === resolvedBase || !isPathInside(resolvedPath, resolvedBase)) {
     throw new Error('Invalid file path: path traversal detected')
   }
   return resolvedPath
