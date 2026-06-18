@@ -137,6 +137,28 @@ describe('renderer CacheService equality semantics', () => {
       service.setShared(key, { topic1: { status: 'done' } } as any)
       expect(broadcastSync).toHaveBeenCalledTimes(1)
     })
+
+    it('does not notify subscribers when main sync returns an equal object value', async () => {
+      const service = await createService()
+      await vi.waitFor(() => expect(service.isSharedCacheReady()).toBe(true))
+
+      const key = 'chat.web_search.active_searches'
+      service.setShared(key, { topic1: { status: 'running' } } as any)
+      const sub = vi.fn()
+      service.subscribe(key, sub)
+      sub.mockClear()
+
+      getAllShared.mockResolvedValueOnce({
+        [key]: {
+          value: { topic1: { status: 'running' } }
+        }
+      })
+
+      service.initialize()
+
+      await vi.waitFor(() => expect(getAllShared).toHaveBeenCalledTimes(2))
+      expect(sub).not.toHaveBeenCalled()
+    })
   })
 
   describe('setPersist', () => {

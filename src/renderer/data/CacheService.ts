@@ -910,7 +910,7 @@ export class CacheService {
         const existingEntry = this.sharedCache.get(key)
 
         // Compare value and expireAt to determine if update is needed
-        const valueChanged = !existingEntry || !Object.is(existingEntry.value, entry.value)
+        const valueChanged = !existingEntry || !isEqual(existingEntry.value, entry.value)
         const ttlChanged = !existingEntry || !Object.is(existingEntry.expireAt, entry.expireAt)
 
         if (valueChanged || ttlChanged) {
