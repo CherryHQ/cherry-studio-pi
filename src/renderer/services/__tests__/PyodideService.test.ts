@@ -6,6 +6,7 @@ const workerMock = vi.hoisted(() => {
     static instances: MockPyodideWorker[] = []
 
     onmessage: ((event: MessageEvent) => void) | null = null
+    onerror: ((event: ErrorEvent) => void) | null = null
     postedMessages: unknown[] = []
     terminated = false
     private listeners = new Set<(event: MessageEvent) => void>()
@@ -28,6 +29,8 @@ const workerMock = vi.hoisted(() => {
 
     terminate() {
       this.terminated = true
+      this.onmessage = null
+      this.onerror = null
       this.listeners.clear()
     }
 
@@ -41,6 +44,12 @@ const workerMock = vi.hoisted(() => {
 
     listenerCount() {
       return this.listeners.size
+    }
+
+    emitError(message: string) {
+      if (this.terminated) return
+
+      this.onerror?.({ message } as ErrorEvent)
     }
   }
 
@@ -95,6 +104,25 @@ describe('PyodideService', () => {
     expect(worker.listenerCount()).toBe(0)
   })
 
+  it('terminates the worker immediately when initialization emits an error', async () => {
+    const { pyodideService } = await import('../PyodideService')
+
+    const resultPromise = pyodideService.runScript('print("hello")')
+    await vi.dynamicImportSettled()
+
+    const worker = workerMock.MockPyodideWorker.instances[0]
+    expect(worker).toBeDefined()
+    expect(worker.listenerCount()).toBe(1)
+
+    worker.emitError('failed to boot')
+
+    await expect(resultPromise).resolves.toEqual({
+      text: 'Initialization failed: Pyodide worker error: failed to boot'
+    })
+    expect(worker.terminated).toBe(true)
+    expect(worker.listenerCount()).toBe(0)
+  })
+
   it('terminates the worker when Python execution times out', async () => {
     const { pyodideService } = await import('../PyodideService')
 
@@ -111,6 +139,26 @@ describe('PyodideService', () => {
 
     await expect(resultPromise).resolves.toEqual({
       text: 'Internal error: Python execution timed out'
+    })
+    expect(worker.terminated).toBe(true)
+  })
+
+  it('rejects a running Python execution immediately when the worker emits an error', async () => {
+    const { pyodideService } = await import('../PyodideService')
+
+    const resultPromise = pyodideService.runScript('print("hello")', {}, 10_000)
+    await vi.dynamicImportSettled()
+
+    const worker = workerMock.MockPyodideWorker.instances[0]
+    expect(worker).toBeDefined()
+    worker.emit({ type: 'initialized' })
+
+    await vi.waitFor(() => expect(worker.postedMessages).toHaveLength(1))
+
+    worker.emitError('runtime crashed')
+
+    await expect(resultPromise).resolves.toEqual({
+      text: 'Internal error: Pyodide worker error: runtime crashed'
     })
     expect(worker.terminated).toBe(true)
   })

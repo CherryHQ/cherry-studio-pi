@@ -52,10 +52,27 @@ class PyodideService {
 
   private terminateWorker(): void {
     if (this.worker) {
+      this.worker.onmessage = null
+      this.worker.onerror = null
       this.worker.terminate()
       this.worker = null
     }
     this.initPromise = null
+  }
+
+  private createWorkerError(event: ErrorEvent | Event): Error {
+    if ('message' in event && typeof event.message === 'string' && event.message.trim()) {
+      return new Error(`Pyodide worker error: ${event.message.trim()}`)
+    }
+
+    return new Error('Pyodide worker error')
+  }
+
+  private handleWorkerError(event: ErrorEvent | Event): void {
+    const error = this.createWorkerError(event)
+    logger.error('Pyodide worker failed', error)
+    this.terminateWorker()
+    this.rejectPendingRequests(error)
   }
 
   /**
@@ -90,28 +107,41 @@ class PyodideService {
           }
 
           // 设置初始化处理器
+          let settled = false
+          const failInitialization = (error: Error) => {
+            if (settled) return
+
+            settled = true
+            clearInitTimeout()
+            this.worker?.removeEventListener('message', initHandler)
+            this.terminateWorker()
+            this.initRetryCount++
+            reject(error)
+          }
+
           const initHandler = (event: MessageEvent) => {
             if (event.data?.type === 'initialized') {
+              settled = true
               clearInitTimeout()
               this.worker?.removeEventListener('message', initHandler)
+              if (this.worker) {
+                this.worker.onerror = this.handleWorkerError.bind(this)
+              }
               this.initRetryCount = 0
               this.initPromise = null
               resolve()
             } else if (event.data?.type === 'init-error') {
-              clearInitTimeout()
-              this.worker?.removeEventListener('message', initHandler)
-              this.terminateWorker()
-              this.initRetryCount++
-              reject(new Error(`Pyodide initialization failed: ${event.data.error}`))
+              failInitialization(new Error(`Pyodide initialization failed: ${event.data.error}`))
             }
+          }
+
+          this.worker.onerror = (event) => {
+            failInitialization(this.createWorkerError(event))
           }
 
           // 设置初始化超时
           timeoutRef.current = setTimeout(() => {
-            this.worker?.removeEventListener('message', initHandler)
-            this.terminateWorker()
-            this.initRetryCount++
-            reject(new Error('Pyodide initialization timeout'))
+            failInitialization(new Error('Pyodide initialization timeout'))
           }, SERVICE_CONFIG.WORKER.REQUEST_TIMEOUT.INIT)
           unrefTimer(timeoutRef.current)
 
