@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   getAgent: vi.fn(),
   getModelByKey: vi.fn(),
   listModels: vi.fn(),
+  resolveRegistryModels: vi.fn(),
   saveMessage: vi.fn(),
   saveMessages: vi.fn(),
   maybeRenameAgentSession: vi.fn(),
@@ -31,6 +32,10 @@ vi.mock('@data/services/AgentService', () => ({
 
 vi.mock('@data/services/ModelService', () => ({
   modelService: { getByKey: mocks.getModelByKey, list: mocks.listModels }
+}))
+
+vi.mock('@data/services/ProviderRegistryService', () => ({
+  providerRegistryService: { resolveModels: mocks.resolveRegistryModels }
 }))
 
 vi.mock('@data/services/AgentSessionMessageService', () => ({
@@ -116,6 +121,7 @@ describe('AgentChatContextProvider', () => {
     mocks.listModels.mockResolvedValue([
       makeModel('anthropic::claude-sonnet', { name: 'Claude Sonnet', apiModelId: 'claude-sonnet' })
     ])
+    mocks.resolveRegistryModels.mockResolvedValue([])
     mocks.saveMessage.mockImplementation(async ({ sessionId, message }) => ({
       id: message.id,
       sessionId,
@@ -339,6 +345,61 @@ describe('AgentChatContextProvider', () => {
         })
       })
     ])
+  })
+
+  it('falls back to provider registry models when a synced agent model has no local user_model rows yet', async () => {
+    mocks.getAgent.mockResolvedValue({
+      id: 'agent-1',
+      type: 'claude-code',
+      model: 'openai::gpt-4o',
+      modelName: 'GPT-4o'
+    })
+    mocks.getModelByKey.mockRejectedValue(new Error('not found'))
+    mocks.listModels.mockResolvedValue([])
+    mocks.resolveRegistryModels.mockResolvedValue([
+      makeModel('openai::gpt-4o', { name: 'GPT-4o', apiModelId: 'gpt-4o' })
+    ])
+
+    const prepared = await provider.prepareDispatch(makeSubscriber(), openReq())
+
+    expect(mocks.listModels).toHaveBeenCalledWith({ providerId: 'openai' })
+    expect(mocks.resolveRegistryModels).toHaveBeenCalledWith('openai', ['gpt-4o'])
+    expect(prepared.models[0].modelId).toBe('openai::gpt-4o')
+    expect(prepared.reservedMessages).toEqual([
+      expect.objectContaining({ role: 'user' }),
+      expect.objectContaining({
+        role: 'assistant',
+        metadata: expect.objectContaining({
+          modelSnapshot: {
+            id: 'gpt-4o',
+            name: 'GPT-4o',
+            provider: 'openai'
+          }
+        })
+      })
+    ])
+  })
+
+  it('does not resurrect a missing agent model when the provider already has local user_model rows', async () => {
+    mocks.getAgent.mockResolvedValue({
+      id: 'agent-1',
+      type: 'claude-code',
+      model: 'openai::gpt-4o',
+      modelName: 'GPT-4o'
+    })
+    mocks.getModelByKey.mockRejectedValue(new Error('not found'))
+    mocks.listModels.mockResolvedValue([makeModel('openai::gpt-4.1', { name: 'GPT 4.1', apiModelId: 'gpt-4.1' })])
+    mocks.resolveRegistryModels.mockResolvedValue([
+      makeModel('openai::gpt-4o', { name: 'GPT-4o', apiModelId: 'gpt-4o' })
+    ])
+
+    await expect(provider.prepareDispatch(makeSubscriber(), openReq())).rejects.toThrow(
+      'Agent agent-1 model "openai::gpt-4o" is not registered in user_model'
+    )
+    expect(mocks.resolveRegistryModels).not.toHaveBeenCalled()
+    expect(mocks.saveMessage).not.toHaveBeenCalled()
+    expect(mocks.saveMessages).not.toHaveBeenCalled()
+    expect(mocks.runtimeBeginTurn).not.toHaveBeenCalled()
   })
 
   it('rejects unresolved agent model ids before writing messages or opening runtime turns', async () => {

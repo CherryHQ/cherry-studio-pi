@@ -1,4 +1,5 @@
 import { modelService } from '@data/services/ModelService'
+import { providerRegistryService } from '@data/services/ProviderRegistryService'
 import type { AgentEntity } from '@shared/data/api/schemas/agents'
 import { isUniqueModelId, type Model, parseUniqueModelId, type UniqueModelId } from '@shared/data/types/model'
 
@@ -40,7 +41,17 @@ async function resolveUniqueStoredModel(agentId: string, storedModelId: UniqueMo
   const matches = providerModels.filter(
     (model) => model.id === storedModelId || getAgentRuntimeApiModelId(model) === modelId
   )
-  return selectSingleModelMatch(agentId, storedModelId, matches)
+  const registeredMatch = selectSingleModelMatch(agentId, storedModelId, matches)
+  if (registeredMatch) return registeredMatch
+
+  if (providerModels.length > 0) return null
+
+  // Match the renderer-side agent-session fallback: a synced/restored agent can
+  // briefly keep only `provider::model` while its user_model rows have not
+  // arrived yet. If the provider itself exists, the registry resolver returns a
+  // fully-shaped preset/custom model so the agent runtime can still start.
+  const registryModels = await providerRegistryService.resolveModels(providerId, [modelId])
+  return selectSingleModelMatch(agentId, storedModelId, registryModels)
 }
 
 export async function resolveAgentRuntimeModel(
