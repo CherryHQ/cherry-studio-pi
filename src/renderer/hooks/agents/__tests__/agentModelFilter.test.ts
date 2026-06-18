@@ -35,7 +35,7 @@ describe('agentModelFilter', () => {
     expect(
       isSelectableAgentModel(
         model({
-          id: 'text-embedding-3-large',
+          id: 'deepseek::text-embedding-3-large',
           name: 'Embedding',
           capabilities: [MODEL_CAPABILITY.EMBEDDING]
         }),
