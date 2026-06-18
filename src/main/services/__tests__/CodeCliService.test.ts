@@ -190,6 +190,7 @@ describe('CodeCliService', () => {
   })
 
   it('skips pre-launch version checks for installed tools when auto update is disabled', async () => {
+    setProcessPlatform('darwin')
     const { codeCliService } = await loadModules()
     const { codeCLI } = await import('@shared/config/constant')
     const fs = await import('node:fs')
@@ -239,6 +240,7 @@ describe('CodeCliService', () => {
   })
 
   it('reports immediate terminal spawn errors instead of returning a false success', async () => {
+    setProcessPlatform('darwin')
     const { codeCliService } = await loadModules()
     const { codeCLI } = await import('@shared/config/constant')
     const fs = await import('node:fs')
@@ -316,6 +318,7 @@ describe('CodeCliService', () => {
   })
 
   it('uses only the local qwen-code version before launch when auto update is disabled', async () => {
+    setProcessPlatform('darwin')
     const { codeCliService } = await loadModules()
     const { codeCLI } = await import('@shared/config/constant')
     const fs = await import('node:fs')
