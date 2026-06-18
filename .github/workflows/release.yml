@@ -38,6 +38,11 @@ on:
         required: true
         default: false
         type: boolean
+      allow_close_release:
+        description: "Allow publishing a different tag within 2 hours of the last release"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   actions: write
@@ -62,6 +67,7 @@ jobs:
       draft: ${{ steps.release.outputs.draft }}
       prerelease: ${{ steps.release.outputs.prerelease }}
       replace_existing: ${{ steps.release.outputs.replace_existing }}
+      allow_close_release: ${{ steps.release.outputs.allow_close_release }}
 
     steps:
       - name: Check out repository
@@ -78,6 +84,7 @@ jobs:
           DRAFT="${{ inputs.draft }}"
           PRERELEASE="${{ inputs.prerelease }}"
           REPLACE_EXISTING="${{ inputs.replace_existing }}"
+          ALLOW_CLOSE_RELEASE="${{ inputs.allow_close_release }}"
 
           if [ "$CONFIRM_TAG" != "$TAG" ]; then
             echo "Release tag confirmation mismatch."
@@ -102,6 +109,7 @@ jobs:
           echo "draft=$DRAFT" >> "$GITHUB_OUTPUT"
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
           echo "replace_existing=$REPLACE_EXISTING" >> "$GITHUB_OUTPUT"
+          echo "allow_close_release=$ALLOW_CLOSE_RELEASE" >> "$GITHUB_OUTPUT"
 
       - name: Validate release tag
         shell: bash
@@ -111,8 +119,10 @@ jobs:
           TAG="${{ steps.release.outputs.tag }}"
           VERSION="${{ steps.release.outputs.version }}"
           REPLACE_EXISTING="${{ steps.release.outputs.replace_existing }}"
+          ALLOW_CLOSE_RELEASE="${{ steps.release.outputs.allow_close_release }}"
           DEFAULT_BRANCH_NAME="${{ github.event.repository.default_branch }}"
           DEFAULT_BRANCH="origin/$DEFAULT_BRANCH_NAME"
+          CLOSE_RELEASE_WINDOW_MINUTES=120
 
           git fetch origin --tags --force
           if ! git rev-parse --verify "$DEFAULT_BRANCH" >/dev/null 2>&1; then
@@ -182,6 +192,46 @@ jobs:
             exit 1
           fi
           rm -f "$RELEASE_VIEW_ERROR" "$RELEASE_VIEW_JSON"
+
+          if [ "$ALLOW_CLOSE_RELEASE" != "true" ]; then
+            RECENT_RELEASES_JSON="$(mktemp)"
+            if ! gh release list --repo "${{ github.repository }}" --limit 10 --json tagName,name,createdAt,publishedAt,isDraft,isPrerelease > "$RECENT_RELEASES_JSON"; then
+              echo "::error::Unable to inspect recent GitHub Releases before publishing."
+              rm -f "$RECENT_RELEASES_JSON"
+              exit 1
+            fi
+
+            node - "$RECENT_RELEASES_JSON" "$TAG" "$CLOSE_RELEASE_WINDOW_MINUTES" <<'NODE'
+          const fs = require('node:fs')
+
+          const [file, currentTag, windowMinutesText] = process.argv.slice(2)
+          const windowMinutes = Number(windowMinutesText)
+          const windowMs = windowMinutes * 60 * 1000
+          const releases = JSON.parse(fs.readFileSync(file, 'utf8'))
+          const now = Date.now()
+
+          const recent = releases
+            .filter((release) => release.tagName !== currentTag)
+            .filter((release) => !release.isDraft)
+            .map((release) => ({
+              ...release,
+              timestamp: Date.parse(release.publishedAt || release.createdAt)
+            }))
+            .filter((release) => Number.isFinite(release.timestamp))
+            .find((release) => now - release.timestamp >= 0 && now - release.timestamp < windowMs)
+
+          if (recent) {
+            const releasedAt = new Date(recent.timestamp).toISOString()
+            console.error(`::error::Recent release ${recent.tagName} was published at ${releasedAt}.`)
+            console.error(
+              `Refusing to publish ${currentTag} within ${windowMinutes} minutes of another release. ` +
+                'If this is an intentional urgent hotfix, rerun the workflow with allow_close_release=true.'
+            )
+            process.exit(1)
+          }
+          NODE
+            rm -f "$RECENT_RELEASES_JSON"
+          fi
 
           echo "Validated release tag $TAG at $TAG_COMMIT for version $VERSION."
 
