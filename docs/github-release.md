@@ -31,6 +31,9 @@ git push origin v1.9.7
 ```
 
 After the tag exists, publish exactly once through the manual `Release` workflow using the same `tag` and `confirm_tag`.
+When a non-draft release finishes publishing its GitHub assets, that workflow serially dispatches the upgrade-config
+sync and GitCode mirror sync workflows. Those downstream workflows do not listen to GitHub release events directly, so
+one release request cannot also spawn a second event-triggered sync path.
 
 ## Output
 

@@ -19,16 +19,12 @@ Currently, AppUpdater directly queries the GitHub API to retrieve beta and rc up
 
 ## Automation Workflow
 
-The `x-files/app-upgrade-config/app-upgrade-config.json` file is synchronized by the [`Update App Upgrade Config`](../../.github/workflows/update-app-upgrade-config.yml) workflow. The workflow runs the [`scripts/update-app-upgrade-config.ts`](../../scripts/update-app-upgrade-config.ts) helper so that every release tag automatically updates the JSON in `x-files/app-upgrade-config`.
+The `x-files/app-upgrade-config/app-upgrade-config.json` file is synchronized by the [`Update App Upgrade Config`](../../.github/workflows/update-app-upgrade-config.yml) workflow. The main [`Release`](../../.github/workflows/release.yml) workflow dispatches it after release assets are uploaded, and it runs the [`scripts/update-app-upgrade-config.ts`](../../scripts/update-app-upgrade-config.ts) helper so that every published release tag updates the JSON in `x-files/app-upgrade-config`.
 
 ### Trigger Conditions
 
-- **Release events (`release: released/prereleased`)**  
-  - Draft releases are ignored.  
-  - When GitHub marks the release as _prerelease_, the tag must include `-beta`/`-rc` (with optional numeric suffix). Otherwise the workflow exits early.  
-  - When GitHub marks the release as stable, the tag must match the latest release returned by the GitHub API. This prevents out-of-order updates when publishing historical tags.  
-  - If the guard clauses pass, the version is tagged as `latest` or `beta/rc` based on its semantic suffix and propagated to the script through the `IS_PRERELEASE` flag.
 - **Manual dispatch (`workflow_dispatch`)**  
+  - The normal path is the main `Release` workflow, which dispatches this workflow once for non-draft releases after assets are uploaded. Direct manual runs are still available for repair/debug operations.
   - Required input: `tag` (e.g., `v2.0.1`). Optional input: `is_prerelease` (defaults to `false`).  
   - When `is_prerelease=true`, the tag must carry a beta/rc suffix, mirroring the automatic validation.  
   - Manual runs still download the latest release metadata so that the workflow knows whether the tag represents the newest stable version (for documentation inside the PR body).
@@ -220,7 +216,7 @@ interface ChannelConfig {
 
 ## Automation Workflow
 
-Starting from this change, `.github/workflows/update-app-upgrade-config.yml` listens to GitHub release events (published + prerelease). The workflow:
+Starting from this change, `.github/workflows/update-app-upgrade-config.yml` is dispatched by the main Release workflow after release assets are uploaded. This keeps release publishing and upgrade-config sync in one ordered path instead of also reacting to GitHub release events. The workflow:
 
 1. Checks out the default branch (for scripts) and the `x-files/app-upgrade-config` branch (where the config is hosted).
 2. Runs `pnpm tsx scripts/update-app-upgrade-config.ts --tag <tag> --config ../cs/app-upgrade-config.json` to regenerate the config directly inside the `x-files/app-upgrade-config` working tree.

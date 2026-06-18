@@ -1,10 +1,9 @@
 name: Update App Upgrade Config
 
 on:
-  release:
-    types:
-      - released
-      - prereleased
+  # The main Release workflow dispatches this after release assets are uploaded.
+  # Keeping this manual-only prevents one public release from also creating a
+  # second, event-triggered upgrade-config run.
   workflow_dispatch:
     inputs:
       tag:
@@ -23,19 +22,12 @@ permissions:
 jobs:
   update-config:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.release.draft == false)
 
     steps:
       - name: Check if should proceed
         id: check
         run: |
-          EVENT="${{ github.event_name }}"
-
-          if [ "$EVENT" = "workflow_dispatch" ]; then
-            TAG="${{ github.event.inputs.tag }}"
-          else
-            TAG="${{ github.event.release.tag_name }}"
-          fi
+          TAG="${{ github.event.inputs.tag }}"
 
           latest_tag=$(
             curl -L \
@@ -46,40 +38,23 @@ jobs:
               | jq -r '.tag_name'
           )
 
-          if [ "$EVENT" = "workflow_dispatch" ]; then
-            MANUAL_IS_PRERELEASE="${{ github.event.inputs.is_prerelease }}"
-            if [ -z "$MANUAL_IS_PRERELEASE" ]; then
-              MANUAL_IS_PRERELEASE="false"
-            fi
-            if [ "$MANUAL_IS_PRERELEASE" = "true" ]; then
-              if ! echo "$TAG" | grep -E '(-beta([.-][0-9]+)?|-rc([.-][0-9]+)?)' >/dev/null; then
-                echo "Manual prerelease flag set but tag $TAG lacks beta/rc suffix. Skipping." >&2
-                echo "should_run=false" >> "$GITHUB_OUTPUT"
-                echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
-                echo "latest_tag=$latest_tag" >> "$GITHUB_OUTPUT"
-                exit 0
-              fi
-            fi
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "is_prerelease=$MANUAL_IS_PRERELEASE" >> "$GITHUB_OUTPUT"
-            echo "latest_tag=$latest_tag" >> "$GITHUB_OUTPUT"
-            exit 0
+          MANUAL_IS_PRERELEASE="${{ github.event.inputs.is_prerelease }}"
+          if [ -z "$MANUAL_IS_PRERELEASE" ]; then
+            MANUAL_IS_PRERELEASE="false"
           fi
 
-          IS_PRERELEASE="${{ github.event.release.prerelease }}"
-
-          if [ "$IS_PRERELEASE" = "true" ]; then
+          if [ "$MANUAL_IS_PRERELEASE" = "true" ]; then
             if ! echo "$TAG" | grep -E '(-beta([.-][0-9]+)?|-rc([.-][0-9]+)?)' >/dev/null; then
-              echo "Release marked as prerelease but tag $TAG lacks beta/rc suffix. Skipping." >&2
+              echo "Manual prerelease flag set but tag $TAG lacks beta/rc suffix. Skipping." >&2
               echo "should_run=false" >> "$GITHUB_OUTPUT"
               echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
               echo "latest_tag=$latest_tag" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "is_prerelease=$MANUAL_IS_PRERELEASE" >> "$GITHUB_OUTPUT"
             echo "latest_tag=$latest_tag" >> "$GITHUB_OUTPUT"
-            echo "Release is prerelease, proceeding"
+            echo "Manual prerelease, proceeding"
             exit 0
           fi
 
@@ -99,31 +74,18 @@ jobs:
         id: meta
         if: steps.check.outputs.should_run == 'true'
         run: |
-          EVENT="${{ github.event_name }}"
           LATEST_TAG="${{ steps.check.outputs.latest_tag }}"
-          if [ "$EVENT" = "release" ]; then
-            TAG="${{ github.event.release.tag_name }}"
-            PRE="${{ github.event.release.prerelease }}"
-
-            if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" = "$TAG" ]; then
-              LATEST="true"
-            else
-              LATEST="false"
-            fi
-            TRIGGER="release"
-          else
-            TAG="${{ github.event.inputs.tag }}"
-            PRE="${{ github.event.inputs.is_prerelease }}"
-            if [ -z "$PRE" ]; then
-              PRE="false"
-            fi
-            if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" = "$TAG" ] && [ "$PRE" != "true" ]; then
-              LATEST="true"
-            else
-              LATEST="false"
-            fi
-            TRIGGER="manual"
+          TAG="${{ github.event.inputs.tag }}"
+          PRE="${{ github.event.inputs.is_prerelease }}"
+          if [ -z "$PRE" ]; then
+            PRE="false"
           fi
+          if [ -n "$LATEST_TAG" ] && [ "$LATEST_TAG" = "$TAG" ] && [ "$PRE" != "true" ]; then
+            LATEST="true"
+          else
+            LATEST="false"
+          fi
+          TRIGGER="manual"
 
           SAFE_TAG=$(echo "$TAG" | sed 's/[^A-Za-z0-9._-]/-/g')
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"

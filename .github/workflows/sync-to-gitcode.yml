@@ -1,8 +1,9 @@
 name: Sync Release to GitCode
 
 on:
-  release:
-    types: [published]
+  # The main Release workflow dispatches this after GitHub assets exist. Avoid
+  # also listening to release events, otherwise one public release can start a
+  # duplicate GitCode signing/sync run.
   workflow_dispatch:
     inputs:
       tag:
@@ -30,11 +31,7 @@ jobs:
         id: get-tag
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
-          else
-            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
-          fi
+          echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
 
       - name: Check out Git repository
         uses: actions/checkout@v6
@@ -188,7 +185,7 @@ jobs:
           fi
 
       - name: Dry run GitCode release sync
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
+        if: ${{ github.event.inputs.dry_run == 'true' }}
         shell: bash
         env:
           GITCODE_OWNER: ${{ vars.GITCODE_OWNER }}
@@ -223,7 +220,7 @@ jobs:
           find release-assets -maxdepth 1 -type f -print | sort
 
       - name: Create GitCode release and upload files
-        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.dry_run != 'true' }}
+        if: ${{ github.event.inputs.dry_run != 'true' }}
         shell: bash
         env:
           GITCODE_TOKEN: ${{ secrets.GITCODE_TOKEN }}
@@ -388,7 +385,7 @@ jobs:
     needs: [build-windows-signed, sync-to-gitcode]
     if: >-
       always() &&
-      (github.event_name != 'workflow_dispatch' || github.event.inputs.dry_run != 'true') &&
+      github.event.inputs.dry_run != 'true' &&
       (
         needs.build-windows-signed.result == 'failure' ||
         needs.build-windows-signed.result == 'cancelled' ||
