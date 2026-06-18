@@ -1,11 +1,11 @@
 import { loggerService } from '@logger'
 import { nanoid } from '@reduxjs/toolkit'
-import { notifyStorageV2MirroredLocalStorageKeyChanged } from '@renderer/services/StorageV2LocalStorageSnapshot'
 import type { McpServer } from '@renderer/types'
 import { APP_NAME } from '@shared/config/constant'
 import i18next from 'i18next'
 
 import { fetchWithProviderTimeout, getProviderSyncErrorDetails, getProviderSyncErrorMessage } from './request'
+import { clearMcpProviderToken, getMcpProviderToken, saveMcpProviderToken } from './tokenStorage'
 
 const logger = loggerService.withContext('McpRouterSyncUtils')
 
@@ -14,17 +14,15 @@ const TOKEN_STORAGE_KEY = 'mcprouter_token'
 export const McpROUTER_HOST = 'https://mcprouter.co'
 
 export const saveMcpRouterToken = (token: string): void => {
-  localStorage.setItem(TOKEN_STORAGE_KEY, token)
-  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY)
+  saveMcpProviderToken(TOKEN_STORAGE_KEY, token)
 }
 
 export const getMcpRouterToken = (): string | null => {
-  return localStorage.getItem(TOKEN_STORAGE_KEY)
+  return getMcpProviderToken(TOKEN_STORAGE_KEY)
 }
 
 export const clearMcpRouterToken = (): void => {
-  localStorage.removeItem(TOKEN_STORAGE_KEY)
-  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY, { cleared: true })
+  clearMcpProviderToken(TOKEN_STORAGE_KEY)
 }
 
 export const hasMcpRouterToken = (): boolean => {

@@ -1,10 +1,10 @@
 import { loggerService } from '@logger'
 import { nanoid } from '@reduxjs/toolkit'
-import { notifyStorageV2MirroredLocalStorageKeyChanged } from '@renderer/services/StorageV2LocalStorageSnapshot'
 import type { McpServer } from '@renderer/types'
 import i18next from 'i18next'
 
 import { fetchWithProviderTimeout, getProviderSyncErrorDetails, getProviderSyncErrorMessage } from './request'
+import { clearMcpProviderToken, getMcpProviderToken, saveMcpProviderToken } from './tokenStorage'
 
 const logger = loggerService.withContext('BailianSyncUtils')
 
@@ -14,18 +14,16 @@ const TOKEN_STORAGE_KEY = 'bailian_token'
 
 // Token 工具函数
 export const saveBailianToken = (token: string): void => {
-  localStorage.setItem(TOKEN_STORAGE_KEY, token)
-  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY)
+  saveMcpProviderToken(TOKEN_STORAGE_KEY, token)
 }
 
 export const getBailianToken = (): string | null => {
-  const token = localStorage.getItem(TOKEN_STORAGE_KEY)
+  const token = getMcpProviderToken(TOKEN_STORAGE_KEY)
   return token
 }
 
 export const clearBailianToken = (): void => {
-  localStorage.removeItem(TOKEN_STORAGE_KEY)
-  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY, { cleared: true })
+  clearMcpProviderToken(TOKEN_STORAGE_KEY)
 }
 
 export const hasBailianToken = (): boolean => {

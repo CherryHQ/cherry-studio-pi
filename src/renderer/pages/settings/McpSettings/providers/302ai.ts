@@ -1,10 +1,10 @@
 import { loggerService } from '@logger'
 import { nanoid } from '@reduxjs/toolkit'
-import { notifyStorageV2MirroredLocalStorageKeyChanged } from '@renderer/services/StorageV2LocalStorageSnapshot'
 import type { McpServer } from '@renderer/types'
 import i18next from 'i18next'
 
 import { fetchWithProviderTimeout, getProviderSyncErrorDetails, getProviderSyncErrorMessage } from './request'
+import { clearMcpProviderToken, getMcpProviderToken, saveMcpProviderToken } from './tokenStorage'
 
 const logger = loggerService.withContext('302ai')
 
@@ -13,17 +13,15 @@ const TOKEN_STORAGE_KEY = 'ai302_token'
 export const AI302_HOST = 'https://api.302.ai/mcp'
 
 export const saveAI302Token = (token: string): void => {
-  localStorage.setItem(TOKEN_STORAGE_KEY, token)
-  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY)
+  saveMcpProviderToken(TOKEN_STORAGE_KEY, token)
 }
 
 export const getAI302Token = (): string | null => {
-  return localStorage.getItem(TOKEN_STORAGE_KEY)
+  return getMcpProviderToken(TOKEN_STORAGE_KEY)
 }
 
 export const clearAI302Token = (): void => {
-  localStorage.removeItem(TOKEN_STORAGE_KEY)
-  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY, { cleared: true })
+  clearMcpProviderToken(TOKEN_STORAGE_KEY)
 }
 
 export const hasAI302Token = (): boolean => {

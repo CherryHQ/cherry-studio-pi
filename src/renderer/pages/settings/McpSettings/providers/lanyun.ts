@@ -1,10 +1,10 @@
 import { loggerService } from '@logger'
 import { getProviderLabelKey } from '@renderer/i18n/label'
-import { notifyStorageV2MirroredLocalStorageKeyChanged } from '@renderer/services/StorageV2LocalStorageSnapshot'
 import type { McpServer } from '@renderer/types'
 import i18next from 'i18next'
 
 import { fetchWithProviderTimeout, getProviderSyncErrorDetails, getProviderSyncErrorMessage } from './request'
+import { clearMcpProviderToken, getMcpProviderToken, saveMcpProviderToken } from './tokenStorage'
 
 const logger = loggerService.withContext('TokenLanYunSyncUtils')
 
@@ -15,17 +15,15 @@ export const LANYUN_MCP_HOST = TOKENLANYUN_HOST + '/mcp/manager/selectListByApiK
 export const LANYUN_KEY_HOST = TOKENLANYUN_HOST + '/#/manage/apiKey'
 
 export const saveTokenLanYunToken = (token: string): void => {
-  localStorage.setItem(TOKEN_STORAGE_KEY, token)
-  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY)
+  saveMcpProviderToken(TOKEN_STORAGE_KEY, token)
 }
 
 export const getTokenLanYunToken = (): string | null => {
-  return localStorage.getItem(TOKEN_STORAGE_KEY)
+  return getMcpProviderToken(TOKEN_STORAGE_KEY)
 }
 
 export const clearTokenLanYunToken = (): void => {
-  localStorage.removeItem(TOKEN_STORAGE_KEY)
-  notifyStorageV2MirroredLocalStorageKeyChanged(TOKEN_STORAGE_KEY, { cleared: true })
+  clearMcpProviderToken(TOKEN_STORAGE_KEY)
 }
 
 export const hasTokenLanYunToken = (): boolean => {
