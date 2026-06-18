@@ -638,6 +638,45 @@ export class CodeCliService extends BaseService {
     }
   }
 
+  private async waitForTerminalProcessStart(
+    terminalProcess: ReturnType<typeof spawn>,
+    terminalCommand: string,
+    timeoutMs = 750
+  ): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      let settled = false
+
+      const cleanup = () => {
+        clearTimeout(timer)
+        terminalProcess.off('spawn', onSpawn)
+        terminalProcess.off('error', onError)
+      }
+
+      const settle = (error?: Error) => {
+        if (settled) return
+        settled = true
+        cleanup()
+        if (error) {
+          reject(error)
+        } else {
+          resolve()
+        }
+      }
+
+      const onSpawn = () => settle()
+      const onError = (error: Error) => settle(error)
+
+      const timer = setTimeout(() => {
+        logger.debug(`Terminal process did not emit spawn within ${timeoutMs}ms: ${terminalCommand}`)
+        settle()
+      }, timeoutMs)
+      timer.unref?.()
+
+      terminalProcess.once('spawn', onSpawn)
+      terminalProcess.once('error', onError)
+    })
+  }
+
   /**
    * Get available terminals (with caching and parallel checking)
    */
@@ -1436,6 +1475,7 @@ export class CodeCliService extends BaseService {
         logger.error(`Terminal process failed after launch: ${terminalCommand}`, error)
       })
       terminalProcess.unref()
+      await this.waitForTerminalProcessStart(terminalProcess, terminalCommand)
 
       const successMessage = `Launched ${cliTool} in new terminal window`
       logger.info(successMessage)

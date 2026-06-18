@@ -17,15 +17,26 @@ function setProcessPlatform(platform: NodeJS.Platform) {
   })
 }
 
-function createChildProcessMock() {
+function createChildProcessMock(options: { startEvent?: 'spawn' | 'error' | 'none'; error?: Error } = {}) {
+  const startEvent = options.startEvent ?? 'spawn'
   const child = {
+    off: vi.fn(),
     on: vi.fn(),
     once: vi.fn(),
     unref: vi.fn()
   }
 
+  child.off.mockReturnValue(child)
   child.on.mockReturnValue(child)
-  child.once.mockReturnValue(child)
+  child.once.mockImplementation((event: string, handler: (...args: any[]) => void) => {
+    if (startEvent === 'spawn' && event === 'spawn') {
+      queueMicrotask(() => handler())
+    }
+    if (startEvent === 'error' && event === 'error') {
+      queueMicrotask(() => handler(options.error ?? new Error('spawn failed')))
+    }
+    return child
+  })
 
   return child
 }
@@ -225,6 +236,44 @@ describe('CodeCliService', () => {
     const spawnedProcess = vi.mocked(spawn).mock.results[0].value
     expect(spawnedProcess.once).toHaveBeenCalledWith('error', expect.any(Function))
     expect(spawnedProcess.unref).toHaveBeenCalled()
+  })
+
+  it('reports immediate terminal spawn errors instead of returning a false success', async () => {
+    const { codeCliService } = await loadModules()
+    const { codeCLI } = await import('@shared/config/constant')
+    const fs = await import('node:fs')
+    const terminalProcess = createChildProcessMock({ startEvent: 'error', error: new Error('terminal missing') })
+    const service = codeCliService as unknown as {
+      run: (
+        event: Electron.IpcMainInvokeEvent,
+        cliTool: string,
+        model: string,
+        directory: string,
+        env: Record<string, string>,
+        options?: { autoUpdateToLatest?: boolean; terminal?: string }
+      ) => Promise<unknown>
+      getTerminalConfig: ReturnType<typeof vi.fn>
+    }
+
+    vi.mocked(fs.default.existsSync).mockReturnValue(true)
+    mocks.spawn.mockReturnValue(terminalProcess)
+    service.getTerminalConfig = vi.fn(async () => ({
+      id: 'MissingTerminal',
+      name: 'Missing Terminal',
+      command: (_directory: string, fullCommand: string) => ({
+        command: 'missing-terminal',
+        args: [fullCommand]
+      })
+    }))
+
+    await expect(
+      service.run({} as Electron.IpcMainInvokeEvent, codeCLI.openaiCodex, 'gpt-5', '/workspace', {}, {})
+    ).resolves.toMatchObject({
+      success: false,
+      message: expect.stringContaining('terminal missing')
+    })
+
+    expect(terminalProcess.unref).toHaveBeenCalled()
   })
 
   it('continues Linux terminal probing when a terminal check emits an error', async () => {
