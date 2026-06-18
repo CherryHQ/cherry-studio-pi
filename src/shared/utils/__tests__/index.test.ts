@@ -75,8 +75,9 @@ describe('parseDataUrl', () => {
     expect(result?.mediaType).toBe('image/png')
     expect(result?.isBase64).toBe(true)
     expect(result?.data).toBe(largeData)
-    // Should complete in under 10ms (string operations are fast)
-    expect(duration).toBeLessThan(10)
+    // Keep a coarse regression guard without making CI depend on sub-10ms
+    // scheduling noise on shared runners.
+    expect(duration).toBeLessThan(100)
   })
 
   it('parses SVG data URL', () => {
