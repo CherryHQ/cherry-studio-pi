@@ -38,6 +38,11 @@ export class ResponseManager {
     chunkIndex?: number,
     abortSignal?: AbortSignal
   ): void {
+    if (abortSignal?.aborted) {
+      reject(this.getAbortError(abortSignal, `Aborted while waiting for ${type}`))
+      return
+    }
+
     const responseKey = this.buildResponseKey(type, transferId, chunkIndex)
 
     // Clear any existing response with the same key

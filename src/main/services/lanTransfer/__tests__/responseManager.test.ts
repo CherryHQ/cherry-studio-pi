@@ -77,6 +77,18 @@ describe('ResponseManager', () => {
       await expect(resolvePromise).rejects.toThrow('User cancelled')
     })
 
+    it('should reject immediately when abort signal is already aborted', async () => {
+      const abortController = new AbortController()
+      abortController.abort(new Error('Already cancelled'))
+
+      const resolvePromise = new Promise<unknown>((resolve, reject) => {
+        manager.waitForResponse('test', 10000, resolve, reject, undefined, undefined, abortController.signal)
+      })
+
+      await expect(resolvePromise).rejects.toThrow('Already cancelled')
+      expect(manager.tryResolve('test', { type: 'test' })).toBe(false)
+    })
+
     it('should replace existing response with same key', async () => {
       const firstReject = vi.fn()
       const secondResolve = vi.fn()
