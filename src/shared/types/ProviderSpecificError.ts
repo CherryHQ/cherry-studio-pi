@@ -2,11 +2,10 @@ import { AISDKError } from 'ai'
 
 const name = 'AI_ProviderSpecificError'
 const marker = `vercel.ai.error.${name}`
-const symbol = Symbol.for(marker)
+const symbol: unique symbol = Symbol.for(marker) as never
 
 export class ProviderSpecificError extends AISDKError {
-  // @ts-ignore
-  private readonly [symbol] = true // used in isInstance
+  readonly [symbol] = true // used in isInstance
 
   readonly provider: string
 

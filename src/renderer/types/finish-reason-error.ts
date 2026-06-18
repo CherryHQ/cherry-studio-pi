@@ -2,7 +2,7 @@ import { AISDKError, type FinishReason } from 'ai'
 
 const name = 'AI_FinishReasonError'
 const marker = `vercel.ai.error.${name}`
-const symbol = Symbol.for(marker)
+const symbol: unique symbol = Symbol.for(marker) as never
 
 /**
  * Raised when a streamed response ends with a finish reason that is not a clean
@@ -17,8 +17,7 @@ const symbol = Symbol.for(marker)
  * `ErrorDetailModal`; `errorClassifier` maps it to a diagnosis message. See #16072.
  */
 export class FinishReasonError extends AISDKError {
-  // @ts-ignore used in isInstance
-  private readonly [symbol] = true
+  readonly [symbol] = true
 
   /** Normalized AI SDK finish reason, e.g. 'content-filter' | 'length' | 'error' | 'other'. */
   readonly finishReason: FinishReason
