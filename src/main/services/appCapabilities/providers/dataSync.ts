@@ -213,6 +213,16 @@ function normalizeDirectoryPath(value: unknown, fallback = '/') {
   return normalized || '/'
 }
 
+function normalizeSyncIntervalInput(value: unknown) {
+  if (typeof value === 'undefined') return undefined
+  const parsed = typeof value === 'string' && !value.trim() ? undefined : Number(value)
+  if (typeof parsed === 'undefined') return undefined
+  if (!Number.isFinite(parsed)) throw new Error('Sync interval must be a finite number of minutes')
+  const interval = Math.trunc(parsed)
+  if (interval < 0) throw new Error('Sync interval cannot be negative')
+  return interval
+}
+
 async function runWebDavCapability<T>(
   action: string,
   fn: () => Promise<T>,
@@ -391,9 +401,10 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
           return okResult('WebDAV data sync config dry run completed', sanitizeForAgent(config))
         }
 
+        const syncInterval = normalizeSyncIntervalInput(input?.syncInterval)
         await persistWebDavConfig(config, {
           autoSync: typeof input?.autoSync === 'boolean' ? input.autoSync : undefined,
-          syncInterval: typeof input?.syncInterval === 'number' ? input.syncInterval : undefined
+          syncInterval
         })
         return okResult('WebDAV data sync config saved', sanitizeForAgent(config))
       }

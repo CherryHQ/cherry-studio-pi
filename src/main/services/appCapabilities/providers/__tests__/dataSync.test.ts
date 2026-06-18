@@ -215,6 +215,59 @@ describe('data sync app capabilities', () => {
     expect(setCall?.[0]).toContain('"dataSyncSyncInterval":30')
   })
 
+  it('normalizes numeric string WebDAV sync intervals before saving', async () => {
+    const result = await capability('dataSync.webdav.config.set').execute(
+      {
+        webdavHost: 'dav.example.com',
+        webdavUser: 'user',
+        webdavPass: 'secret',
+        syncInterval: '30.9'
+      },
+      { source: 'agent' }
+    )
+
+    const setCall = mocks.browserWindows[0].webContents.executeJavaScript.mock.calls.find(([script]) =>
+      String(script).startsWith(`window[${JSON.stringify(RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE)}](`)
+    )
+    expect(result.ok).toBe(true)
+    expect(mocks.storageV2Service.setSetting).toHaveBeenCalledWith('settings.dataSyncSyncInterval', 30, 'settings')
+    expect(setCall?.[0]).toContain('"dataSyncSyncInterval":30')
+  })
+
+  it('rejects invalid WebDAV sync intervals before saving settings', async () => {
+    await expect(
+      capability('dataSync.webdav.config.set').execute(
+        {
+          webdavHost: 'dav.example.com',
+          webdavUser: 'user',
+          webdavPass: 'secret',
+          syncInterval: Number.NaN
+        },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Sync interval must be a finite number of minutes')
+
+    expect(mocks.storageV2Service.setSetting).not.toHaveBeenCalled()
+    expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
+  })
+
+  it('rejects negative WebDAV sync intervals before saving settings', async () => {
+    await expect(
+      capability('dataSync.webdav.config.set').execute(
+        {
+          webdavHost: 'dav.example.com',
+          webdavUser: 'user',
+          webdavPass: 'secret',
+          syncInterval: -1
+        },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Sync interval cannot be negative')
+
+    expect(mocks.storageV2Service.setSetting).not.toHaveBeenCalled()
+    expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
+  })
+
   it('rejects saving WebDAV config without credentials', async () => {
     await expect(
       capability('dataSync.webdav.config.set').execute(
