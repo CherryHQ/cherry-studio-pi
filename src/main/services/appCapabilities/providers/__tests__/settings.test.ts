@@ -416,6 +416,15 @@ describe('settings app capabilities', () => {
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
 
+  it('rejects missing setting update values without writing undefined', async () => {
+    await expect(capability('settings.value.set').execute({ path: 'theme' }, { source: 'agent' })).rejects.toThrow(
+      'Setting value is required'
+    )
+
+    expect(mocks.preferenceService.set).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
+  })
+
   it('normalizes settings section and route inputs before opening', async () => {
     const bySection = await capability('settings.open').execute({ section: ' data ' }, { source: 'agent' })
 

@@ -303,13 +303,15 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       tags: ['settings', 'preferences', 'update', 'write'],
       examples: ['Change language', 'Set theme', 'Set default painting provider', 'Enable API server'],
       execute: async (input: any) => {
+        const inputObject = input && typeof input === 'object' ? input : {}
         const keyPath = String(input?.path ?? '').trim()
         if (!keyPath) throw new Error('Setting path is required')
+        if (!Object.prototype.hasOwnProperty.call(inputObject, 'value')) throw new Error('Setting value is required')
         if (!isSupportedSettingPath(keyPath)) throw new Error(`Unsupported setting path: ${keyPath}`)
-        await persistSettingValue(keyPath, input?.value)
+        await persistSettingValue(keyPath, inputObject.value)
         return okResult('Setting updated', {
           path: keyPath,
-          value: sanitizeSettingValueForAgent(keyPath, input?.value)
+          value: sanitizeSettingValueForAgent(keyPath, inputObject.value)
         })
       }
     },
