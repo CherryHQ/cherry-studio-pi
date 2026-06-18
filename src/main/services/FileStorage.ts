@@ -10,7 +10,7 @@ import {
   scanDir
 } from '@main/utils/file'
 import { createAtomicWriteStream } from '@main/utils/file/fs'
-import { isPathInsideOrEqual } from '@main/utils/file/path'
+import { isPathInside, isPathInsideOrEqual } from '@main/utils/file/path'
 import { t } from '@main/utils/language'
 import { summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
 import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
@@ -92,6 +92,46 @@ function parseContentLength(value: string | null): number | undefined {
 
   const parsed = Number.parseInt(value, 10)
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined
+}
+
+async function getConfiguredNotesRoot(): Promise<string> {
+  const configuredPath = await Promise.resolve()
+    .then(() => application.get('PreferenceService').get('feature.notes.path'))
+    .catch(() => '')
+
+  return path.resolve(
+    typeof configuredPath === 'string' && configuredPath.trim() ? configuredPath.trim() : getNotesDir()
+  )
+}
+
+async function assertExternalDeletionInsideNotesRoot(
+  targetPath: string,
+  expectedKind: 'file' | 'directory'
+): Promise<void> {
+  if (!targetPath || typeof targetPath !== 'string') {
+    throw new Error('External delete path is required')
+  }
+
+  const notesRoot = await getConfiguredNotesRoot()
+  const resolvedTarget = path.resolve(targetPath)
+
+  if (resolvedTarget === notesRoot || !isPathInside(resolvedTarget, notesRoot)) {
+    throw new Error('External delete path must be inside the configured notes directory')
+  }
+
+  const stats = await fs.promises.lstat(resolvedTarget).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') return null
+    throw error
+  })
+  if (!stats) return
+
+  if (expectedKind === 'file' && stats.isDirectory()) {
+    throw new Error('External file delete path points to a directory')
+  }
+
+  if (expectedKind === 'directory' && !stats.isDirectory()) {
+    throw new Error('External directory delete path points to a file')
+  }
 }
 
 /**
@@ -454,6 +494,7 @@ class FileStorage {
 
   public deleteExternalFile = async (_: Electron.IpcMainInvokeEvent, filePath: string): Promise<void> => {
     try {
+      await assertExternalDeletionInsideNotesRoot(filePath, 'file')
       if (!fs.existsSync(filePath)) {
         return
       }
@@ -468,6 +509,7 @@ class FileStorage {
 
   public deleteExternalDir = async (_: Electron.IpcMainInvokeEvent, dirPath: string): Promise<void> => {
     try {
+      await assertExternalDeletionInsideNotesRoot(dirPath, 'directory')
       if (!fs.existsSync(dirPath)) {
         return
       }

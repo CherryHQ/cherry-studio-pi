@@ -71,6 +71,17 @@ vi.mock('chokidar', () => ({
 
 vi.mock('@application', () => ({
   application: {
+    get: vi.fn((name: string) => {
+      if (name === 'PreferenceService') {
+        return {
+          get: vi.fn((key: string) => {
+            if (key === 'feature.notes.path') return mocks.dirs.notes
+            return undefined
+          })
+        }
+      }
+      throw new Error(`Unknown service: ${name}`)
+    }),
     getPath: vi.fn((name: string) => {
       if (name === 'feature.files.data') return mocks.dirs.files
       if (name === 'feature.notes.data') return mocks.dirs.notes
@@ -244,6 +255,51 @@ describe('FileStorage Storage v2 upload flow', () => {
     const { fileStorage } = await import('../FileStorage')
 
     await expect(fileStorage.validateNotesDirectory(undefined as never, siblingDir)).resolves.toBe(true)
+  })
+
+  it('allows external delete IPC only for files inside the configured notes directory', async () => {
+    const notePath = path.join(mocks.dirs.notes, 'daily.md')
+    const outsidePath = path.join(mocks.dirs.root, 'outside.md')
+    fs.writeFileSync(notePath, 'today')
+    fs.writeFileSync(outsidePath, 'outside')
+
+    const { fileStorage } = await import('../FileStorage')
+
+    await expect(fileStorage.deleteExternalFile(undefined as never, notePath)).resolves.toBeUndefined()
+    expect(fs.existsSync(notePath)).toBe(false)
+
+    await expect(fileStorage.deleteExternalFile(undefined as never, outsidePath)).rejects.toThrow(
+      'External delete path must be inside the configured notes directory'
+    )
+    expect(fs.readFileSync(outsidePath, 'utf8')).toBe('outside')
+  })
+
+  it('allows external directory delete IPC only for subdirectories inside the configured notes directory', async () => {
+    const noteDir = path.join(mocks.dirs.notes, 'project')
+    const outsideDir = path.join(mocks.dirs.root, 'outside-project')
+    fs.mkdirSync(noteDir, { recursive: true })
+    fs.writeFileSync(path.join(noteDir, 'plan.md'), 'plan')
+    fs.mkdirSync(outsideDir, { recursive: true })
+    fs.writeFileSync(path.join(outsideDir, 'keep.md'), 'keep')
+
+    const { fileStorage } = await import('../FileStorage')
+
+    await expect(fileStorage.deleteExternalDir(undefined as never, noteDir)).resolves.toBeUndefined()
+    expect(fs.existsSync(noteDir)).toBe(false)
+
+    await expect(fileStorage.deleteExternalDir(undefined as never, outsideDir)).rejects.toThrow(
+      'External delete path must be inside the configured notes directory'
+    )
+    expect(fs.readFileSync(path.join(outsideDir, 'keep.md'), 'utf8')).toBe('keep')
+  })
+
+  it('rejects attempts to delete the notes root through external delete IPC', async () => {
+    const { fileStorage } = await import('../FileStorage')
+
+    await expect(fileStorage.deleteExternalDir(undefined as never, mocks.dirs.notes)).rejects.toThrow(
+      'External delete path must be inside the configured notes directory'
+    )
+    expect(fs.existsSync(mocks.dirs.notes)).toBe(true)
   })
 
   it('reuses the uploaded file hash while scanning same-size duplicate candidates', async () => {
