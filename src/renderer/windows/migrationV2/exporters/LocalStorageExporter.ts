@@ -1,5 +1,7 @@
 import type { LocalStorageRecord } from '@shared/data/migration/v2/types'
 
+import { getLocalStorageKey, getLocalStorageLength, readLocalStorageItem } from './localStorageAccess'
+
 export class LocalStorageExporter {
   private exportPath: string
   private exportedCount = 0
@@ -10,21 +12,22 @@ export class LocalStorageExporter {
 
   async export(): Promise<string> {
     const records: LocalStorageRecord[] = []
+    const entryCount = getLocalStorageLength('LocalStorageExporter.export')
 
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)
+    for (let i = 0; i < entryCount; i++) {
+      const key = getLocalStorageKey('LocalStorageExporter.export', i)
       if (key === null) continue
 
-      const rawValue = localStorage.getItem(key)
+      const rawValue = readLocalStorageItem('LocalStorageExporter.export', key)
+      if (rawValue === null) continue
+
       let value: unknown = rawValue
 
       // Try to parse JSON values
-      if (rawValue !== null) {
-        try {
-          value = JSON.parse(rawValue)
-        } catch {
-          // Keep as string if not valid JSON
-        }
+      try {
+        value = JSON.parse(rawValue)
+      } catch {
+        // Keep as string if not valid JSON
       }
 
       records.push({ key, value })
@@ -44,7 +47,7 @@ export class LocalStorageExporter {
   }
 
   hasData(): boolean {
-    return localStorage.length > 0
+    return getLocalStorageLength('LocalStorageExporter.hasData') > 0
   }
 
   getEntryCount(): number {
