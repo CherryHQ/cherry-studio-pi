@@ -351,4 +351,64 @@ describe('agent app capabilities', () => {
     expect(mocks.createAgentWithStorageV2Recovery).not.toHaveBeenCalled()
     expect(mocks.agentSessionService.createSession).not.toHaveBeenCalled()
   })
+
+  it('rejects invalid agent text input shapes before side effects', async () => {
+    await expect(capability('agents.get').execute({ agentId: 123 }, { source: 'agent' })).rejects.toThrow(
+      'Agent id must be a string'
+    )
+    await expect(capability('agents.sessions.list').execute({ agentId: 123 }, { source: 'agent' })).rejects.toThrow(
+      'Agent id must be a string'
+    )
+    await expect(capability('agents.tasks.list').execute({ agentId: 123 }, { source: 'agent' })).rejects.toThrow(
+      'Agent id must be a string'
+    )
+    await expect(
+      capability('agents.session.create').execute({ agentId: 'agent-1', name: ['Research'] }, { source: 'agent' })
+    ).rejects.toThrow('Session name must be a string')
+    await expect(
+      capability('agents.session.create').execute(
+        { agentId: 'agent-1', description: { text: 'Explore docs' } },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Session description must be a string')
+    await expect(
+      capability('agents.task.create').execute({ agentId: false, task: { title: 'Check sync' } }, { source: 'agent' })
+    ).rejects.toThrow('Agent id must be a string')
+    await expect(
+      capability('agents.create').execute({ name: 123, model: 'model-1' }, { source: 'agent' })
+    ).rejects.toThrow('Agent name must be a string')
+    await expect(
+      capability('agents.create').execute({ name: 'Agent One', model: 123 }, { source: 'agent' })
+    ).rejects.toThrow('Agent model must be a string')
+    await expect(
+      capability('agents.create').execute(
+        { name: 'Agent One', model: 'model-1', type: 123, accessible_paths: ['/tmp/work'] },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Agent type must be a string')
+    await expect(
+      capability('agents.create').execute(
+        { name: 'Agent One', model: 'model-1', accessible_paths: [123] },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Accessible path must be a string')
+    await expect(
+      capability('agents.create').execute({ name: 'Agent One', model: 'model-1', mcps: [false] }, { source: 'agent' })
+    ).rejects.toThrow('MCP server id must be a string')
+    await expect(
+      capability('agents.create').execute(
+        { name: 'Agent One', model: 'model-1', disabledTools: [{ name: 'Bash' }] },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Disabled tool must be a string')
+
+    expect(mocks.getAgentWithStorageV2Recovery).not.toHaveBeenCalled()
+    expect(mocks.agentSessionService.listByCursor).not.toHaveBeenCalled()
+    expect(mocks.agentTaskService.listTasks).not.toHaveBeenCalled()
+    expect(mocks.agentTaskService.listTasksAcrossAgents).not.toHaveBeenCalled()
+    expect(mocks.agentTaskService.createTask).not.toHaveBeenCalled()
+    expect(mocks.agentWorkspaceService.findOrCreateByPath).not.toHaveBeenCalled()
+    expect(mocks.createAgentWithStorageV2Recovery).not.toHaveBeenCalled()
+    expect(mocks.agentSessionService.createSession).not.toHaveBeenCalled()
+  })
 })

@@ -33,29 +33,27 @@ function normalizeSortOrder(value: unknown) {
   return value === 'asc' || value === 'desc' ? value : undefined
 }
 
-function normalizeOptionalText(value: unknown) {
+function normalizeOptionalText(value: unknown, label = 'Value') {
   if (typeof value === 'string') {
     const trimmed = value.trim()
     return trimmed || undefined
   }
   if (value === null || typeof value === 'undefined') return undefined
-  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
-    const trimmed = String(value).trim()
-    return trimmed || undefined
-  }
-  return undefined
+  throw new Error(`${label} must be a string`)
 }
 
 function normalizeRequiredText(value: unknown, label: string) {
-  const text = normalizeOptionalText(value)
+  const text = normalizeOptionalText(value, label)
   if (!text) throw new Error(`${label} is required`)
   return text
 }
 
-function normalizeOptionalTextArray(value: unknown, label: string) {
+function normalizeOptionalTextArray(value: unknown, label: string, itemLabel: string) {
   if (value === null || typeof value === 'undefined') return undefined
   if (!Array.isArray(value)) throw new Error(`${label} must be an array`)
-  const items = value.map((item) => normalizeOptionalText(item)).filter((item): item is string => Boolean(item))
+  const items = value
+    .map((item) => normalizeOptionalText(item, itemLabel))
+    .filter((item): item is string => Boolean(item))
   return items.length > 0 ? Array.from(new Set(items)) : undefined
 }
 
@@ -66,7 +64,7 @@ function normalizeOptionalObject(value: unknown, label: string) {
 }
 
 function normalizeAgentType(value: unknown) {
-  const type = normalizeOptionalText(value)
+  const type = normalizeOptionalText(value, 'Agent type')
   if (!type) return 'pi'
   if (type === 'pi' || type === 'claude-code') return type
   throw new Error(`Unsupported agent type: ${type}`)
@@ -85,7 +83,7 @@ function agentListOptions(input: any = {}) {
 
 async function listAgentTasks(input: any = {}) {
   const options = agentListOptions(input)
-  const agentId = normalizeOptionalText(input?.agentId)
+  const agentId = normalizeOptionalText(input?.agentId, 'Agent id')
 
   if (agentId) {
     return agentTaskService.listTasks(agentId, {
@@ -215,8 +213,20 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any) => {
         const name = normalizeRequiredText(input?.name, 'Agent name')
         const model = normalizeRequiredText(input?.model, 'Agent model')
-        const sessionName = normalizeOptionalText(input?.sessionName) || 'Default session'
-        const accessiblePaths = normalizeOptionalTextArray(input?.accessible_paths, 'Accessible paths')
+        const sessionName = normalizeOptionalText(input?.sessionName, 'Agent session name') || 'Default session'
+        const accessiblePaths = normalizeOptionalTextArray(
+          input?.accessible_paths,
+          'Accessible paths',
+          'Accessible path'
+        )
+        const type = normalizeAgentType(input?.type)
+        const description = normalizeOptionalText(input?.description, 'Agent description')
+        const instructions = normalizeOptionalText(input?.instructions, 'Agent instructions')
+        const planModel = normalizeOptionalText(input?.planModel ?? input?.plan_model, 'Agent plan model')
+        const smallModel = normalizeOptionalText(input?.smallModel ?? input?.small_model, 'Agent small model')
+        const mcps = normalizeOptionalTextArray(input?.mcps, 'MCP server ids', 'MCP server id')
+        const disabledTools = normalizeOptionalTextArray(input?.disabledTools, 'Disabled tools', 'Disabled tool')
+        const configuration = normalizeOptionalObject(input?.configuration, 'Agent configuration')
         const sessionWorkspace = accessiblePaths?.[0]
           ? {
               type: 'user' as const,
@@ -224,16 +234,16 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
             }
           : ({ type: 'system' } as const)
         const agent = await createAgentWithStorageV2Recovery({
-          type: normalizeAgentType(input?.type),
+          type,
           name,
-          description: normalizeOptionalText(input?.description),
-          instructions: normalizeOptionalText(input?.instructions),
+          description,
+          instructions,
           model,
-          planModel: normalizeOptionalText(input?.planModel ?? input?.plan_model),
-          smallModel: normalizeOptionalText(input?.smallModel ?? input?.small_model),
-          mcps: normalizeOptionalTextArray(input?.mcps, 'MCP server ids'),
-          disabledTools: normalizeOptionalTextArray(input?.disabledTools, 'Disabled tools'),
-          configuration: normalizeOptionalObject(input?.configuration, 'Agent configuration')
+          planModel,
+          smallModel,
+          mcps,
+          disabledTools,
+          configuration
         })
         const { session, warning } = await createDefaultAgentSession(agent.id, sessionName, sessionWorkspace)
         return {
@@ -268,9 +278,9 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
           'Agent sessions listed',
           sanitizeForAgent(
             await agentSessionService.listByCursor({
-              agentId: normalizeOptionalText(input?.agentId),
+              agentId: normalizeOptionalText(input?.agentId, 'Agent id'),
               limit: normalizeListLimit(input?.limit),
-              cursor: normalizeOptionalText(input?.cursor)
+              cursor: normalizeOptionalText(input?.cursor, 'Agent session cursor')
             })
           )
         )
@@ -298,8 +308,8 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
         const { agentId, ...sessionInput } = input ?? {}
         const session = await agentSessionService.createSession({
           agentId: normalizeRequiredText(agentId, 'Agent id'),
-          name: normalizeOptionalText(sessionInput.name) || 'New session',
-          description: normalizeOptionalText(sessionInput.description),
+          name: normalizeOptionalText(sessionInput.name, 'Session name') || 'New session',
+          description: normalizeOptionalText(sessionInput.description, 'Session description'),
           workspace: { type: 'system' }
         })
         return okResult('Agent session created', sanitizeForAgent(session))
