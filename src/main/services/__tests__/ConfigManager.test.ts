@@ -211,4 +211,31 @@ describe('ConfigManager Storage v2 mirror', () => {
     expect(mocks.settingsRepository.set).toHaveBeenCalledTimes(1)
     expect(mocks.settingsRepository.set).toHaveBeenCalledWith('config.testChannel', 'latest', 'config')
   })
+
+  it('reports config mirror failures in input order even when writes settle out of order', async () => {
+    mocks.storeData.tray = true
+    mocks.storeData.testChannel = 'latest'
+    let rejectTray!: (error: Error) => void
+    mocks.settingsRepository.set.mockImplementation(async (key: string) => {
+      if (key === 'config.tray') {
+        return new Promise((_resolve, reject) => {
+          rejectTray = reject
+        })
+      }
+      if (key === 'config.testChannel') {
+        throw new Error('channel failed')
+      }
+      return undefined
+    })
+    const manager = new ConfigManager()
+
+    const mirrorPromise = manager.mirrorAllToStorageV2()
+
+    await vi.waitFor(() => {
+      expect(mocks.settingsRepository.set).toHaveBeenCalledTimes(2)
+    })
+    rejectTray(new Error('tray failed'))
+
+    await expect(mirrorPromise).rejects.toThrow('first failed key: tray')
+  })
 })

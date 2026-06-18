@@ -460,21 +460,21 @@ export class ConfigManager {
   }
 
   private async mirrorEntriesToStorageV2(entries: StorageV2ConfigEntry[]) {
-    const mirroredKeys: string[] = []
-    const failures: StorageV2ConfigMirrorFailure[] = []
-
-    await Promise.all(
+    const results = await Promise.all(
       entries.map(async ([key, value]) => {
         try {
           await this.setStorageV2Config(key, value)
-          mirroredKeys.push(key)
+          return { status: 'mirrored' as const, key }
         } catch (error) {
-          failures.push({ key, value, error })
+          return { status: 'failed' as const, failure: { key, value, error } }
         }
       })
     )
 
-    return { mirroredKeys, failures }
+    return {
+      mirroredKeys: results.flatMap((result) => (result.status === 'mirrored' ? [result.key] : [])),
+      failures: results.flatMap((result) => (result.status === 'failed' ? [result.failure] : []))
+    }
   }
 
   private scheduleStorageV2ConfigRetry() {
