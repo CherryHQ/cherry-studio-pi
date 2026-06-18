@@ -100,9 +100,22 @@ describe('useModelSelectorData', () => {
 
     const { result } = renderHook(() => useModelSelectorData({ searchText: '' }))
 
+    expect(mockUseProvidersFn).toHaveBeenCalledWith({ enabled: true })
     const groups = result.current.listItems.filter((i) => i.type === 'group')
     expect(groups.map((g) => g.key)).toEqual(['provider-openai', 'provider-anthropic'])
     expect(result.current.modelItems).toHaveLength(3)
+  })
+
+  it('defensively drops models whose provider is disabled even if the provider query returns it', () => {
+    wireDeps({
+      providers: [makeProvider('openai'), makeProvider('anthropic', { isEnabled: false })],
+      models: [makeModel('gpt-4', 'openai'), makeModel('claude-3', 'anthropic')]
+    })
+
+    const { result } = renderHook(() => useModelSelectorData({ searchText: '' }))
+
+    expect(result.current.modelItems.map((m) => m.modelId)).toEqual(['openai::gpt-4'])
+    expect(result.current.selectableModelsById.has('anthropic::claude-3')).toBe(false)
   })
 
   it('renders malformed legacy model ids without crashing the selector', () => {
