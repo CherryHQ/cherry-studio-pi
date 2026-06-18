@@ -110,6 +110,46 @@ describe('AppCapabilityRegistry', () => {
     )
   })
 
+  it('only includes hidden capabilities for a strict boolean includeHidden flag', () => {
+    const registry = new AppCapabilityRegistry()
+    registry.register(capability({ id: 'settings.visible' }))
+    registry.register(capability({ id: 'settings.hidden', hidden: true }))
+
+    expect(registry.list({ includeHidden: 'true' as any }).map((item) => item.id)).toEqual(['settings.visible'])
+    expect(registry.search({ query: 'settings', includeHidden: 'true' as any }).map((item) => item.id)).toEqual([
+      'settings.visible'
+    ])
+    expect(registry.getDescriptor('settings.hidden', { includeHidden: 'true' as any })).toBeUndefined()
+
+    expect(registry.list({ includeHidden: true }).map((item) => item.id)).toEqual([
+      'settings.hidden',
+      'settings.visible'
+    ])
+  })
+
+  it('normalizes list and search option filters before matching capabilities', () => {
+    const registry = new AppCapabilityRegistry()
+    registry.register(capability({ id: 'settings.read' }))
+    registry.register(capability({ id: 'storage.backup.create', domain: 'storage', risk: 'write' }))
+
+    expect(registry.list({ domain: ' storage ', risk: 'write' }).map((item) => item.id)).toEqual([
+      'storage.backup.create'
+    ])
+    expect(registry.list({ domain: ['storage'] as any, risk: 'side-effect' as any }).map((item) => item.id)).toEqual([
+      'settings.read',
+      'storage.backup.create'
+    ])
+  })
+
+  it('does not turn object search queries into object-shaped terms', () => {
+    const registry = new AppCapabilityRegistry()
+    registry.register(capability({ id: 'a.first', title: 'First capability' }))
+    registry.register(capability({ id: 'object.viewer', title: 'Object viewer' }))
+    registry.register(capability({ id: 'settings.read' }))
+
+    expect(registry.search({ query: { text: 'object' } as any, limit: 1 }).map((item) => item.id)).toEqual(['a.first'])
+  })
+
   it('expands common Chinese product intents before scoring', () => {
     const registry = new AppCapabilityRegistry()
     registry.register(capability({ id: 'settings.read' }))

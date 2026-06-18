@@ -2,12 +2,14 @@ import type {
   AppCapabilityDefinition,
   AppCapabilityDescriptor,
   AppCapabilityListOptions,
+  AppCapabilityRisk,
   AppCapabilitySearchOptions
 } from './types'
 
 const normalize = (value: string) => value.toLowerCase().replace(/[_./:-]+/g, ' ')
 const DEFAULT_SEARCH_LIMIT = 8
 const MAX_SEARCH_LIMIT = 50
+const VALID_RISKS = new Set<AppCapabilityRisk>(['read', 'write', 'destructive', 'external'])
 
 const tokenize = (value: string) =>
   normalize(value)
@@ -65,6 +67,38 @@ const normalizeSearchLimit = (value: unknown) => {
   return Math.max(1, Math.min(safeLimit, MAX_SEARCH_LIMIT))
 }
 
+const normalizeOptionalFilterText = (value: unknown) => {
+  if (typeof value !== 'string') return undefined
+  const text = value.trim()
+  return text || undefined
+}
+
+const normalizeRiskFilter = (value: unknown) => {
+  return VALID_RISKS.has(value as AppCapabilityRisk) ? (value as AppCapabilityRisk) : undefined
+}
+
+const normalizeSearchQuery = (value: unknown) => {
+  if (value === null || typeof value === 'undefined') return ''
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return String(value).trim()
+  }
+  return ''
+}
+
+const normalizeListOptions = (options: AppCapabilityListOptions = {}): AppCapabilityListOptions => ({
+  domain: normalizeOptionalFilterText(options.domain),
+  risk: normalizeRiskFilter(options.risk),
+  includeHidden: options.includeHidden === true,
+  includeSchemas: options.includeSchemas === true
+})
+
+const normalizeSearchOptions = (options: AppCapabilitySearchOptions = {}): AppCapabilitySearchOptions => ({
+  ...normalizeListOptions(options),
+  query: normalizeSearchQuery(options.query),
+  limit: normalizeSearchLimit(options.limit)
+})
+
 type SearchIndexEntry = {
   capability: AppCapabilityDefinition
   fields: Array<readonly [normalized: string, weight: number]>
@@ -93,30 +127,33 @@ export class AppCapabilityRegistry {
   }
 
   getDescriptor(id: string, options: Pick<AppCapabilityListOptions, 'includeHidden' | 'includeSchemas'> = {}) {
+    const normalizedOptions = normalizeListOptions(options)
     const capability = this.capabilities.get(id)
     if (!capability) return undefined
-    if (!options.includeHidden && capability.hidden) return undefined
-    return this.toDescriptor(capability, options.includeSchemas === true)
+    if (!normalizedOptions.includeHidden && capability.hidden) return undefined
+    return this.toDescriptor(capability, normalizedOptions.includeSchemas === true)
   }
 
   list(options: AppCapabilityListOptions = {}): AppCapabilityDescriptor[] {
-    return this.sortedCapabilities(options).map((capability) =>
-      this.toDescriptor(capability, options.includeSchemas === true)
+    const normalizedOptions = normalizeListOptions(options)
+    return this.sortedCapabilities(normalizedOptions).map((capability) =>
+      this.toDescriptor(capability, normalizedOptions.includeSchemas === true)
     )
   }
 
   search(options: AppCapabilitySearchOptions = {}): AppCapabilityDescriptor[] {
-    const query = String(options.query ?? '').trim()
-    const limit = normalizeSearchLimit(options.limit)
+    const normalizedOptions = normalizeSearchOptions(options)
+    const query = normalizedOptions.query ?? ''
+    const limit = normalizedOptions.limit ?? DEFAULT_SEARCH_LIMIT
     if (!query) {
-      return this.sortedCapabilities(options)
+      return this.sortedCapabilities(normalizedOptions)
         .slice(0, limit)
-        .map((capability) => this.toDescriptor(capability, options.includeSchemas === true))
+        .map((capability) => this.toDescriptor(capability, normalizedOptions.includeSchemas === true))
     }
 
     const terms = expandQueryTerms(query)
     return Array.from(this.searchIndex.values())
-      .filter((entry) => this.matchesListOptions(entry.capability, options))
+      .filter((entry) => this.matchesListOptions(entry.capability, normalizedOptions))
       .map((entry) => ({
         capability: entry.capability,
         score: this.score(entry, terms)
@@ -124,7 +161,7 @@ export class AppCapabilityRegistry {
       .filter((item) => item.score > 0)
       .sort((a, b) => b.score - a.score || a.capability.id.localeCompare(b.capability.id))
       .slice(0, limit)
-      .map((item) => this.toDescriptor(item.capability, options.includeSchemas === true))
+      .map((item) => this.toDescriptor(item.capability, normalizedOptions.includeSchemas === true))
   }
 
   private sortedCapabilities(options: AppCapabilityListOptions): AppCapabilityDefinition[] {
