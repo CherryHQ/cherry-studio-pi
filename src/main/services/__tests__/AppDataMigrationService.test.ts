@@ -92,6 +92,10 @@ describe('AppDataMigrationService', () => {
     fs.writeFileSync(path.join(oldPath, 'Data.restore', 'stale.db'), 'stale')
     fs.mkdirSync(path.join(oldPath, 'logs'), { recursive: true })
     fs.writeFileSync(path.join(oldPath, 'logs', 'app.log'), 'log')
+    fs.mkdirSync(path.join(oldPath, 'Network'), { recursive: true })
+    fs.writeFileSync(path.join(oldPath, 'Network', 'Cookies'), 'cookies')
+    fs.mkdirSync(path.join(oldPath, 'Partitions', 'webview', 'Network'), { recursive: true })
+    fs.writeFileSync(path.join(oldPath, 'Partitions', 'webview', 'Network', 'Cookies'), 'webview cookies')
     fs.mkdirSync(path.join(oldPath, 'logs2'), { recursive: true })
     fs.writeFileSync(path.join(oldPath, 'logs2', 'keep.log'), 'keep')
 
@@ -102,13 +106,15 @@ describe('AppDataMigrationService', () => {
       createdAt: '2026-01-01T00:00:00.000Z'
     })
 
-    await service.copyUserData(oldPath, newPath, [path.join(oldPath, 'logs')])
+    await service.copyUserData(oldPath, newPath)
 
     expect(fs.readFileSync(path.join(newPath, 'Data', 'main.db'), 'utf-8')).toBe('snapshot-main-db')
     expect(fs.existsSync(path.join(newPath, 'Data', 'main.db-wal'))).toBe(false)
     expect(fs.existsSync(path.join(newPath, 'Data', 'main.db-shm'))).toBe(false)
     expect(fs.existsSync(path.join(newPath, 'Data.restore'))).toBe(false)
     expect(fs.existsSync(path.join(newPath, 'logs'))).toBe(false)
+    expect(fs.existsSync(path.join(newPath, 'Network'))).toBe(false)
+    expect(fs.existsSync(path.join(newPath, 'Partitions', 'webview', 'Network'))).toBe(false)
     expect(fs.readFileSync(path.join(newPath, 'logs2', 'keep.log'), 'utf-8')).toBe('keep')
     expect(fs.readFileSync(path.join(newPath, 'IndexedDB', 'db.leveldb'), 'utf-8')).toBe('indexed-db')
     expect(mocks.storageV2SecretVaultService.waitForIdle).toHaveBeenCalledTimes(1)
@@ -127,7 +133,7 @@ describe('AppDataMigrationService', () => {
 
     mocks.storageV2DataRootService.resolveDataRoot.mockReturnValue({ dataRoot: externalDataRoot })
 
-    await service.copyUserData(oldPath, newPath, [])
+    await service.copyUserData(oldPath, newPath)
 
     expect(fs.readFileSync(path.join(newPath, 'Data', 'agents.db'), 'utf-8')).toBe('active-agent-data')
     expect(fs.readFileSync(path.join(newPath, 'Local Storage', 'leveldb'), 'utf-8')).toBe('local-storage')

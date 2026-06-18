@@ -3,6 +3,7 @@ import path from 'node:path'
 
 import { loggerService } from '@logger'
 import { isPathInsideOrEqual } from '@main/utils/file/path'
+import { occupiedDirs as occupiedUserDataDirs } from '@shared/config/constant'
 
 import { storageV2DataRootService } from './storageV2/DataRootService'
 import { storageV2SecretVaultService } from './storageV2/SecretVaultService'
@@ -22,7 +23,7 @@ async function pathExists(filePath: string): Promise<boolean> {
 }
 
 class AppDataMigrationService {
-  async copyUserData(oldPath: string, newPath: string, occupiedDirs: string[] = []): Promise<void> {
+  async copyUserData(oldPath: string, newPath: string): Promise<void> {
     const resolvedOldPath = path.resolve(oldPath)
     const resolvedNewPath = path.resolve(newPath)
     const activeDataRoot = path.resolve(storageV2DataRootService.resolveDataRoot().dataRoot)
@@ -46,11 +47,12 @@ class AppDataMigrationService {
     const excludedRoots = [
       path.join(resolvedOldPath, 'Data'),
       ...RESTORE_STAGING_DIR_NAMES.map((name) => path.join(resolvedOldPath, name)),
-      ...occupiedDirs.map((dir) => path.resolve(dir))
+      ...occupiedUserDataDirs.map((dir) => path.resolve(resolvedOldPath, dir))
     ]
 
     await fs.promises.cp(resolvedOldPath, resolvedNewPath, {
       recursive: true,
+      verbatimSymlinks: true,
       filter: (src) => !excludedRoots.some((excludedRoot) => isPathInsideOrEqual(src, excludedRoot))
     })
 
