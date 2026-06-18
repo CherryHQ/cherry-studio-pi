@@ -70,6 +70,7 @@ describe('release workflow safety', () => {
     expect(prepareReleaseSkill).toContain('publish exactly once through the manual GitHub Actions Release workflow')
     expect(prepareReleaseSkill).toContain('Never publish a second release for the same user request')
     expect(prepareReleaseSkill).toContain('**`release.yml`** is manual-only')
+    expect(prepareReleaseSkill).toContain('Do not chain these commands in one shell line')
     expect(prepareReleaseSkill).not.toContain('Merge to trigger release build')
     expect(prepareReleaseSkill).not.toContain('automatically triggers:\n- **`release.yml`**')
   })

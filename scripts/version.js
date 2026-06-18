@@ -171,9 +171,12 @@ function assertReleaseBumpConfirmed({ version, env = process.env }) {
 function getPushInstructions(version) {
   return [
     `Changes are committed locally and tagged as v${version}.`,
-    'Push the commit and tag only when you are ready to expose the tag to CI/history:',
-    `git push && git push origin v${version}`,
-    'Publishing installers is a separate manual GitHub Actions -> Release workflow step.'
+    'Push the version commit first:',
+    'git push',
+    `Push the annotated tag only when you intentionally want to expose v${version} to CI/history:`,
+    `git push origin v${version}`,
+    'Do not chain these commands in one shell line.',
+    'Publishing installers is a separate manual GitHub Actions -> Release workflow step and must be run exactly once.'
   ].join('\n')
 }
 

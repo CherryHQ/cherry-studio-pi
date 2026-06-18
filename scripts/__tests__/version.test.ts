@@ -111,9 +111,13 @@ describe('version script', () => {
 
   it('prints manual push instructions without publishing installers', () => {
     const { getPushInstructions } = loadInternal()
+    const instructions = getPushInstructions('1.9.35')
 
-    expect(getPushInstructions('1.9.35')).toContain('git push origin v1.9.35')
-    expect(getPushInstructions('1.9.35')).toContain('separate manual GitHub Actions -> Release workflow')
+    expect(instructions).toContain('git push\n')
+    expect(instructions).toContain('git push origin v1.9.35')
+    expect(instructions).toContain('Do not chain these commands in one shell line')
+    expect(instructions).toContain('separate manual GitHub Actions -> Release workflow')
+    expect(instructions).not.toContain('git push && git push origin')
   })
 
   it('requires an exact one-shot confirmation before creating a release tag', () => {
