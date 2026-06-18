@@ -133,7 +133,8 @@ const createCustomFetch = (originalFetch?: FetchFunction): FetchFunction => {
     const body = parseJsonObjectBody(options?.body)
 
     if (Array.isArray(body?.tools) && body.tools.length === 0 && Object.hasOwn(body, 'tool_choice')) {
-      const { tool_choice: _toolChoice, ...nextBody } = body
+      const nextBody = { ...body }
+      delete nextBody.tool_choice
       return originalFetch
         ? originalFetch(url, { ...options, body: JSON.stringify(nextBody) })
         : fetch(url, { ...options, body: JSON.stringify(nextBody) })
