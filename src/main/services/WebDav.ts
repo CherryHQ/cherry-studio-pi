@@ -141,8 +141,15 @@ export default class WebDav {
     }
 
     try {
+      if (!(await this.instance.exists(this.webdavPath))) {
+        return []
+      }
       return await this.instance.getDirectoryContents(this.webdavPath)
     } catch (error) {
+      const status = (error as { status?: unknown })?.status
+      if (status === 404) {
+        return []
+      }
       logger.error('Error getting directory contents on WebDAV:', error as Error)
       throw error
     }

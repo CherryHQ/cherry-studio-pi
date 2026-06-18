@@ -156,4 +156,37 @@ describe('WebDav', () => {
     expect(mocks.client.exists).not.toHaveBeenCalledWith('/')
     expect(mocks.client.createDirectory).toHaveBeenCalledWith('/Cherry Studio Pi', { recursive: true })
   })
+
+  it('returns an empty listing when the configured WebDAV backup directory does not exist yet', async () => {
+    mocks.client.exists.mockResolvedValueOnce(false)
+
+    const webdav = new WebDav({
+      webdavHost: 'http://192.168.1.100:8080',
+      webdavUser: 'webdav',
+      webdavPass: 'test-webdav-password',
+      webdavPath: '/Cherry Studio Pi'
+    })
+
+    await expect(webdav.getDirectoryContents()).resolves.toEqual([])
+
+    expect(mocks.client.exists).toHaveBeenCalledWith('/Cherry Studio Pi')
+    expect(mocks.client.getDirectoryContents).not.toHaveBeenCalled()
+  })
+
+  it('returns an empty listing when the configured WebDAV backup directory disappears before listing', async () => {
+    mocks.client.exists.mockResolvedValueOnce(true)
+    mocks.client.getDirectoryContents.mockRejectedValueOnce(Object.assign(new Error('Not Found'), { status: 404 }))
+
+    const webdav = new WebDav({
+      webdavHost: 'http://192.168.1.100:8080',
+      webdavUser: 'webdav',
+      webdavPass: 'test-webdav-password',
+      webdavPath: '/Cherry Studio Pi'
+    })
+
+    await expect(webdav.getDirectoryContents()).resolves.toEqual([])
+
+    expect(mocks.client.exists).toHaveBeenCalledWith('/Cherry Studio Pi')
+    expect(mocks.client.getDirectoryContents).toHaveBeenCalledWith('/Cherry Studio Pi')
+  })
 })
