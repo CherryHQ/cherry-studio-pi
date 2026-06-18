@@ -139,6 +139,22 @@ describe('AppDataMigrationService', () => {
     expect(fs.readFileSync(path.join(newPath, 'Local Storage', 'leveldb'), 'utf-8')).toBe('local-storage')
   })
 
+  it.skipIf(process.platform === 'win32')('preserves relative symlinks in the active Data root', async () => {
+    const activeDataRoot = path.join(oldPath, 'Data')
+    fs.mkdirSync(activeDataRoot, { recursive: true })
+    fs.writeFileSync(path.join(activeDataRoot, 'target.txt'), 'active-data')
+    fs.symlinkSync('target.txt', path.join(activeDataRoot, 'target-link.txt'))
+
+    mocks.storageV2DataRootService.resolveDataRoot.mockReturnValue({ dataRoot: activeDataRoot })
+
+    await service.copyUserData(oldPath, newPath)
+
+    const copiedLinkPath = path.join(newPath, 'Data', 'target-link.txt')
+    expect(fs.lstatSync(copiedLinkPath).isSymbolicLink()).toBe(true)
+    expect(fs.readlinkSync(copiedLinkPath)).toBe('target.txt')
+    expect(fs.readFileSync(copiedLinkPath, 'utf-8')).toBe('active-data')
+  })
+
   it('rejects custom app data paths inside the active Storage v2 data root', async () => {
     const activeDataRoot = path.join(oldPath, 'Data')
     const nestedAppDataPath = path.join(activeDataRoot, 'nested-user-data')

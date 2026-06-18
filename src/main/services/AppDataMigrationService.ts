@@ -69,7 +69,7 @@ class AppDataMigrationService {
 
     await fs.promises.rm(targetDataRoot, { recursive: true, force: true })
     await fs.promises.mkdir(path.dirname(targetDataRoot), { recursive: true })
-    await fs.promises.cp(activeDataRoot, targetDataRoot, { recursive: true })
+    await fs.promises.cp(activeDataRoot, targetDataRoot, { recursive: true, verbatimSymlinks: true })
     await this.replaceStorageV2DatabaseCopy(targetDataRoot, snapshotPath)
   }
 
