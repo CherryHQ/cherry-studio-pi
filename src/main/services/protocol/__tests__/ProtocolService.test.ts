@@ -8,9 +8,12 @@ const {
   execFileMock,
   fsPromisesMock,
   handlersMock,
+  ipcHandlers,
   loggerMock,
   mainWindowServiceMock,
   platformMock,
+  protocolWindowMock,
+  protocolWindowWebContentsMock,
   windowManagerMock
 } = vi.hoisted(() => {
   const appMock = {
@@ -29,7 +32,18 @@ const {
     handleProvidersProtocolUrl: vi.fn()
   }
   const windowManagerMock = {
-    broadcast: vi.fn()
+    broadcast: vi.fn(),
+    getWindow: vi.fn(),
+    getWindowIdByWebContents: vi.fn(),
+    onWindowDestroyed: vi.fn()
+  }
+  const protocolWindowWebContentsMock = {
+    send: vi.fn(),
+    isDestroyed: vi.fn()
+  }
+  const protocolWindowMock = {
+    isDestroyed: vi.fn(),
+    webContents: protocolWindowWebContentsMock
   }
   const mainWindowServiceMock = {
     showMainWindow: vi.fn()
@@ -45,11 +59,14 @@ const {
       writeFile: vi.fn()
     },
     handlersMock,
+    ipcHandlers: new Map<string, (...args: any[]) => any>(),
     loggerMock,
     mainWindowServiceMock,
     platformMock: {
       isLinux: false
     },
+    protocolWindowMock,
+    protocolWindowWebContentsMock,
     windowManagerMock
   }
 })
@@ -94,6 +111,11 @@ vi.mock('@main/core/lifecycle', () => {
     protected registerDisposable<T>(disposable: T): T {
       return disposable
     }
+
+    protected ipcHandle(channel: string, listener: (...args: any[]) => any) {
+      ipcHandlers.set(channel, listener)
+      return { dispose: vi.fn() }
+    }
   }
   return {
     BaseService: MockBaseService,
@@ -114,6 +136,8 @@ vi.mock('../handlers/navigate', () => ({
 vi.mock('../handlers/providersImport', () => ({
   handleProvidersProtocolUrl: handlersMock.handleProvidersProtocolUrl
 }))
+
+import { IpcChannel } from '@shared/IpcChannel'
 
 import { ProtocolService } from '../ProtocolService'
 
@@ -136,10 +160,16 @@ describe('ProtocolService', () => {
     originalAppImage = process.env.APPIMAGE
     originalDefaultApp = (process as NodeJS.Process & { defaultApp?: boolean }).defaultApp
     vi.clearAllMocks()
+    ipcHandlers.clear()
     platformMock.isLinux = false
     fsPromisesMock.writeFile.mockResolvedValue(undefined)
     execFileMock.mockImplementation((_file, _args, callback) => callback(null, '', ''))
     cherryInOauthServiceMock.handleOAuthCallback.mockResolvedValue(undefined)
+    protocolWindowMock.isDestroyed.mockReturnValue(false)
+    protocolWindowWebContentsMock.isDestroyed.mockReturnValue(false)
+    windowManagerMock.getWindow.mockReturnValue(protocolWindowMock)
+    windowManagerMock.getWindowIdByWebContents.mockReturnValue('window-1')
+    windowManagerMock.onWindowDestroyed.mockReturnValue({ dispose: vi.fn() })
     service = new ProtocolService()
   })
 
@@ -203,13 +233,63 @@ describe('ProtocolService', () => {
     expect(url.href).toBe('cherrystudio://oauth/callback?code=abc')
   })
 
-  it('broadcasts unknown protocol hosts to all windows', () => {
-    ;(service as any).handleProtocolUrl('cherrystudio://unknown/path?foo=bar')
+  it('broadcasts unknown protocol hosts without query params', () => {
+    ;(service as any).handleProtocolUrl('cherrystudio://unknown/path?code=secret&foo=bar#token')
 
-    expect(windowManagerMock.broadcast).toHaveBeenCalledWith('protocol-data', {
-      url: 'cherrystudio://unknown/path?foo=bar',
-      params: { foo: 'bar' }
+    expect(windowManagerMock.broadcast).toHaveBeenCalledWith(IpcChannel.Protocol_Data, {
+      url: 'cherrystudio://unknown/path',
+      params: {}
     })
+  })
+
+  it('delivers registered sensitive protocol hosts only to the registered window', async () => {
+    await (service as any).onInit()
+    const register = ipcHandlers.get(IpcChannel.Protocol_RegisterHostListener)
+    if (!register) throw new Error('register handler missing')
+
+    await register({ sender: {} }, 'ppio')
+
+    ;(service as any).handleProtocolUrl('cherrystudio://ppio/callback?code=abc&state=xyz')
+
+    expect(protocolWindowWebContentsMock.send).toHaveBeenCalledWith(IpcChannel.Protocol_Data, {
+      url: 'cherrystudio://ppio/callback?code=abc&state=xyz',
+      params: { code: 'abc', state: 'xyz' }
+    })
+    expect(windowManagerMock.broadcast).not.toHaveBeenCalled()
+  })
+
+  it('queues sensitive protocol callbacks until a listener registers', async () => {
+    await (service as any).onInit()
+    ;(service as any).handleProtocolUrl('cherrystudio://nutstore/callback?s=encrypted-token')
+
+    expect(windowManagerMock.broadcast).not.toHaveBeenCalled()
+    expect(protocolWindowWebContentsMock.send).not.toHaveBeenCalled()
+
+    const register = ipcHandlers.get(IpcChannel.Protocol_RegisterHostListener)
+    if (!register) throw new Error('register handler missing')
+
+    expect(await register({ sender: {} }, 'nutstore')).toEqual({ host: 'nutstore', deliveredPending: 1 })
+
+    expect(protocolWindowWebContentsMock.send).toHaveBeenCalledWith(IpcChannel.Protocol_Data, {
+      url: 'cherrystudio://nutstore/callback?s=encrypted-token',
+      params: { s: 'encrypted-token' }
+    })
+    expect(windowManagerMock.broadcast).not.toHaveBeenCalled()
+  })
+
+  it('removes registered protocol host listeners on cleanup', async () => {
+    await (service as any).onInit()
+    const register = ipcHandlers.get(IpcChannel.Protocol_RegisterHostListener)
+    const unregister = ipcHandlers.get(IpcChannel.Protocol_UnregisterHostListener)
+    if (!register || !unregister) throw new Error('protocol host handlers missing')
+
+    await register({ sender: {} }, 'nutstore')
+    expect(await unregister({ sender: {} }, 'nutstore')).toBe(true)
+
+    ;(service as any).handleProtocolUrl('cherrystudio://nutstore/callback?s=encrypted-token')
+
+    expect(protocolWindowWebContentsMock.send).not.toHaveBeenCalled()
+    expect(windowManagerMock.broadcast).not.toHaveBeenCalled()
   })
 
   it('updates the AppImage desktop database without shell command construction', async () => {

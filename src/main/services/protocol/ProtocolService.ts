@@ -9,6 +9,7 @@ import { BaseService, Injectable, Phase, ServicePhase } from '@main/core/lifecyc
 import { isLinux } from '@main/core/platform'
 import { quoteDesktopExecArg } from '@main/utils/desktopEntry'
 import { summarizeTextForLog } from '@main/utils/logging'
+import { IpcChannel } from '@shared/IpcChannel'
 import { app } from 'electron'
 
 import { handleMcpProtocolUrl } from './handlers/mcpInstall'
@@ -21,9 +22,46 @@ const CHERRY_STUDIO_PROTOCOL_PREFIX = `${CHERRY_STUDIO_PROTOCOL}://`
 const DESKTOP_FILE_NAME = 'cherrystudio-url-handler.desktop'
 const execFileAsync = promisify(execFile)
 const logger = loggerService.withContext('ProtocolService')
+const REGISTERED_PROTOCOL_HOSTS = new Set(['nutstore', 'ppio'])
+const MAX_PENDING_PROTOCOL_CALLBACKS_PER_HOST = 5
+const PENDING_PROTOCOL_CALLBACK_TTL_MS = 5 * 60 * 1000
+
+type ProtocolDataPayload = {
+  url: string
+  params: Record<string, string>
+}
+
+type PendingProtocolDataPayload = ProtocolDataPayload & {
+  createdAt: number
+}
 
 function isCherryStudioProtocolUrlArg(arg: string): boolean {
   return arg.toLowerCase().startsWith(CHERRY_STUDIO_PROTOCOL_PREFIX)
+}
+
+function normalizeProtocolHost(host: unknown): string {
+  const normalized = typeof host === 'string' ? host.trim().toLowerCase() : ''
+  if (!normalized || !/^[a-z0-9.-]+$/.test(normalized)) {
+    throw new Error('Invalid protocol host listener')
+  }
+  return normalized
+}
+
+function buildProtocolPayload(url: URL): ProtocolDataPayload {
+  return {
+    url: url.toString(),
+    params: Object.fromEntries(url.searchParams.entries())
+  }
+}
+
+function buildSanitizedFallbackPayload(url: URL): ProtocolDataPayload {
+  const sanitized = new URL(url.toString())
+  sanitized.search = ''
+  sanitized.hash = ''
+  return {
+    url: sanitized.toString(),
+    params: {}
+  }
 }
 
 @Injectable('ProtocolService')
@@ -33,6 +71,9 @@ function isCherryStudioProtocolUrlArg(arg: string): boolean {
 // open-url events to fire before our listener attaches. MainWindowService is resolved
 // at call time inside listener callbacks — safe because OS events fire post-bootstrap.
 export class ProtocolService extends BaseService {
+  private readonly protocolHostListeners = new Map<string, Set<string>>()
+  private readonly pendingProtocolPayloads = new Map<string, PendingProtocolDataPayload[]>()
+
   protected async onInit() {
     // NOTE: Background phase's onInit runs on the first microtask after startPhase(),
     // which is before app.whenReady() (an OS-level event requiring the event loop).
@@ -40,6 +81,7 @@ export class ProtocolService extends BaseService {
 
     // 1) Register OS-level protocol scheme
     this.registerProtocolScheme()
+    this.registerProtocolIpcHandlers()
 
     // 2) macOS open-url listener (cold + hot start)
     const openUrlHandler = (event: Electron.Event, url: string) => {
@@ -73,7 +115,54 @@ export class ProtocolService extends BaseService {
 
   protected async onAllReady() {
     // Runs after all bootstrap phases — application.getPath() is safe
+    this.registerDisposable(
+      application.get('WindowManager').onWindowDestroyed((managed) => {
+        this.removeWindowProtocolHostListeners(managed.id)
+      })
+    )
     await this.setupAppImageDeepLink()
+  }
+
+  private registerProtocolIpcHandlers() {
+    this.ipcHandle(IpcChannel.Protocol_RegisterHostListener, (event, host: unknown) => {
+      const normalizedHost = normalizeProtocolHost(host)
+      const windowId = application.get('WindowManager').getWindowIdByWebContents(event.sender)
+      if (!windowId) {
+        throw new Error('Protocol listener sender is not a managed window')
+      }
+
+      const listeners = this.protocolHostListeners.get(normalizedHost) ?? new Set<string>()
+      listeners.add(windowId)
+      this.protocolHostListeners.set(normalizedHost, listeners)
+      const deliveredPending = this.flushPendingProtocolPayloads(normalizedHost, windowId)
+      return { host: normalizedHost, deliveredPending }
+    })
+
+    this.ipcHandle(IpcChannel.Protocol_UnregisterHostListener, (event, host: unknown) => {
+      const normalizedHost = normalizeProtocolHost(host)
+      const windowId = application.get('WindowManager').getWindowIdByWebContents(event.sender)
+      if (!windowId) return false
+      return this.removeProtocolHostListener(normalizedHost, windowId)
+    })
+  }
+
+  private removeProtocolHostListener(host: string, windowId: string): boolean {
+    const listeners = this.protocolHostListeners.get(host)
+    if (!listeners) return false
+    const removed = listeners.delete(windowId)
+    if (listeners.size === 0) {
+      this.protocolHostListeners.delete(host)
+    }
+    return removed
+  }
+
+  private removeWindowProtocolHostListeners(windowId: string): void {
+    for (const [host, listeners] of this.protocolHostListeners.entries()) {
+      listeners.delete(windowId)
+      if (listeners.size === 0) {
+        this.protocolHostListeners.delete(host)
+      }
+    }
   }
 
   private registerProtocolScheme() {
@@ -96,9 +185,9 @@ export class ProtocolService extends BaseService {
 
     try {
       const urlObj = new URL(url)
-      const params = new URLSearchParams(urlObj.search)
+      const host = urlObj.hostname.toLowerCase()
 
-      switch (urlObj.hostname.toLowerCase()) {
+      switch (host) {
         case 'mcp':
           handleMcpProtocolUrl(urlObj)
           return
@@ -122,29 +211,106 @@ export class ProtocolService extends BaseService {
           return
       }
 
+      if (REGISTERED_PROTOCOL_HOSTS.has(host)) {
+        const delivered = this.dispatchProtocolDataToRegisteredWindows(host, urlObj)
+        if (delivered) {
+          return
+        }
+
+        logger.warn('Sensitive protocol host has no registered listener yet, queueing callback for later delivery', {
+          host
+        })
+        this.queueProtocolPayload(host, urlObj)
+        return
+      }
+
       // Default branch: deep link with no main-process handler. Fan out to every
-      // managed renderer (Main / Settings / SubWindow / pooled tool surfaces);
-      // consumers (oauth.ts, useNutstoreSso, ...) filter by urlObj.hostname/pathname.
-      // broadcast() — not broadcastToType(Main) — because the flow-initiating
-      // window is not necessarily Main: the Settings window owns CherryIN OAuth
-      // in v2. Trade-off: the payload reaches renderers that don't need it; if
-      // selective routing is required (e.g. to confine OAuth `code`), promote
-      // that scheme to its own switch case alongside mcp/providers/navigate.
-      //
-      // TODO(security): any future OAuth-style host added to this scheme MUST
-      // get its own switch case above instead of falling through here — leaving
-      // it on the default broadcast would fan out `code` / `token` query params
-      // to renderers that have no business seeing them. Reviewer flagged in
-      // PR #14631 review #4282327822 (Important #5). When adding such a host,
-      // either route it through a dedicated case or add a parameter allowlist /
-      // sensitive-name strip to this default broadcast.
-      application.get('WindowManager').broadcast('protocol-data', {
-        url,
-        params: Object.fromEntries(params.entries())
-      })
+      // managed renderer for compatibility only. Unknown hosts do not get query
+      // or hash data in the fallback payload; OAuth-style schemes must register
+      // their host through Protocol_RegisterHostListener or add an explicit
+      // main-process case above before receiving sensitive callback values.
+      application.get('WindowManager').broadcast(IpcChannel.Protocol_Data, buildSanitizedFallbackPayload(urlObj))
     } catch (error) {
       logger.error('Failed to handle protocol URL', error as Error)
     }
+  }
+
+  private dispatchProtocolDataToRegisteredWindows(host: string, url: URL): boolean {
+    const listeners = this.protocolHostListeners.get(host)
+    if (!listeners || listeners.size === 0) {
+      return false
+    }
+
+    const payload = buildProtocolPayload(url)
+    let delivered = false
+
+    for (const windowId of [...listeners]) {
+      const window = application.get('WindowManager').getWindow(windowId)
+      if (!window || window.isDestroyed() || window.webContents.isDestroyed?.()) {
+        listeners.delete(windowId)
+        continue
+      }
+
+      try {
+        window.webContents.send(IpcChannel.Protocol_Data, payload)
+        delivered = true
+      } catch (error) {
+        listeners.delete(windowId)
+        logger.warn('Failed to deliver protocol URL to registered renderer window', {
+          host,
+          windowId,
+          error
+        })
+      }
+    }
+
+    if (listeners.size === 0) {
+      this.protocolHostListeners.delete(host)
+    }
+
+    return delivered
+  }
+
+  private queueProtocolPayload(host: string, url: URL): void {
+    const now = Date.now()
+    const pending = this.getFreshPendingProtocolPayloads(host, now)
+    pending.push({
+      ...buildProtocolPayload(url),
+      createdAt: now
+    })
+    this.pendingProtocolPayloads.set(host, pending.slice(-MAX_PENDING_PROTOCOL_CALLBACKS_PER_HOST))
+  }
+
+  private flushPendingProtocolPayloads(host: string, windowId: string): number {
+    const pending = this.getFreshPendingProtocolPayloads(host)
+    if (pending.length === 0) {
+      return 0
+    }
+
+    const window = application.get('WindowManager').getWindow(windowId)
+    if (!window || window.isDestroyed() || window.webContents.isDestroyed?.()) {
+      this.pendingProtocolPayloads.set(host, pending)
+      return 0
+    }
+
+    let delivered = 0
+    for (const { createdAt: _createdAt, ...payload } of pending) {
+      window.webContents.send(IpcChannel.Protocol_Data, payload)
+      delivered += 1
+    }
+    this.pendingProtocolPayloads.delete(host)
+    return delivered
+  }
+
+  private getFreshPendingProtocolPayloads(host: string, now = Date.now()): PendingProtocolDataPayload[] {
+    const pending = this.pendingProtocolPayloads.get(host) ?? []
+    const fresh = pending.filter((payload) => now - payload.createdAt <= PENDING_PROTOCOL_CALLBACK_TTL_MS)
+    if (fresh.length === 0) {
+      this.pendingProtocolPayloads.delete(host)
+    } else if (fresh.length !== pending.length) {
+      this.pendingProtocolPayloads.set(host, fresh)
+    }
+    return fresh
   }
 
   private handleArgvForUrl(args: string[]) {

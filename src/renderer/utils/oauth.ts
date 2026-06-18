@@ -120,63 +120,70 @@ export const oauthWithPPIO = async (setKey) => {
 
   return new Promise<string>((resolve, reject) => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null
-    const removeListener = window.api.protocol.onReceiveData(async (data) => {
-      try {
-        const url = new URL(data.url)
-        const params = new URLSearchParams(url.search)
-        const code = params.get('code')
+    const removeListener = window.api.protocol.onReceiveData(
+      async (data) => {
+        try {
+          const url = new URL(data.url)
+          if (url.hostname.toLowerCase() !== 'ppio') return
 
-        if (!code) {
-          reject(new Error('No authorization code received'))
-          return
-        }
+          const params = new URLSearchParams(url.search)
+          const code = params.get('code')
 
-        if (!PPIO_APP_SECRET) {
-          reject(
-            new Error('PPIO_APP_SECRET not configured. Please set RENDERER_VITE_PPIO_APP_SECRET environment variable.')
-          )
-          return
-        }
-        const formData = new URLSearchParams({
-          client_id: PPIO_CLIENT_ID,
-          client_secret: PPIO_APP_SECRET,
-          code: code,
-          grant_type: 'authorization_code',
-          redirect_uri: redirectUri
-        })
-        const tokenResponse = await fetch('https://ppio.com/oauth/token', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
-          body: formData.toString()
-        })
+          if (!code) {
+            reject(new Error('No authorization code received'))
+            return
+          }
 
-        if (!tokenResponse.ok) {
-          const errorText = await tokenResponse.text()
-          logger.error('[PPIO OAuth] Token exchange failed', {
-            status: tokenResponse.status,
-            error: summarizeTextForLog(errorText)
+          if (!PPIO_APP_SECRET) {
+            reject(
+              new Error(
+                'PPIO_APP_SECRET not configured. Please set RENDERER_VITE_PPIO_APP_SECRET environment variable.'
+              )
+            )
+            return
+          }
+          const formData = new URLSearchParams({
+            client_id: PPIO_CLIENT_ID,
+            client_secret: PPIO_APP_SECRET,
+            code: code,
+            grant_type: 'authorization_code',
+            redirect_uri: redirectUri
           })
-          throw new Error(`Failed to exchange code for token: ${tokenResponse.status} ${errorText}`)
-        }
+          const tokenResponse = await fetch('https://ppio.com/oauth/token', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: formData.toString()
+          })
 
-        const tokenData = await tokenResponse.json()
-        const accessToken = tokenData.access_token
+          if (!tokenResponse.ok) {
+            const errorText = await tokenResponse.text()
+            logger.error('[PPIO OAuth] Token exchange failed', {
+              status: tokenResponse.status,
+              error: summarizeTextForLog(errorText)
+            })
+            throw new Error(`Failed to exchange code for token: ${tokenResponse.status} ${errorText}`)
+          }
 
-        if (accessToken) {
-          setKey(accessToken)
-          resolve(accessToken)
-        } else {
-          reject(new Error('No access token received'))
+          const tokenData = await tokenResponse.json()
+          const accessToken = tokenData.access_token
+
+          if (accessToken) {
+            setKey(accessToken)
+            resolve(accessToken)
+          } else {
+            reject(new Error('No access token received'))
+          }
+        } catch (error) {
+          logger.error('[PPIO OAuth] Error processing callback:', error as Error)
+          reject(error)
+        } finally {
+          cleanup()
         }
-      } catch (error) {
-        logger.error('[PPIO OAuth] Error processing callback:', error as Error)
-        reject(error)
-      } finally {
-        cleanup()
-      }
-    })
+      },
+      { hosts: 'ppio' }
+    )
 
     function cleanup(): void {
       removeListener()

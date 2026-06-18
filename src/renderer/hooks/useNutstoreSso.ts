@@ -35,20 +35,23 @@ export function useNutstoreSso() {
         reject(error)
       }
 
-      removeListener = window.api.protocol.onReceiveData(async (data) => {
-        try {
-          const url = new URL(data.url)
-          if (url.hostname.toLowerCase() !== NUTSTORE_PROTOCOL_HOST) return
+      removeListener = window.api.protocol.onReceiveData(
+        async (data) => {
+          try {
+            const url = new URL(data.url)
+            if (url.hostname.toLowerCase() !== NUTSTORE_PROTOCOL_HOST) return
 
-          const params = new URLSearchParams(url.search)
-          const encryptedToken = params.get('s')
-          if (!encryptedToken) return
-          resolveOnce(encryptedToken)
-        } catch (error) {
-          logger.error('解析URL失败:', error as Error)
-          rejectOnce(error instanceof Error ? error : new Error('Failed to parse Nutstore SSO callback URL'))
-        }
-      })
+            const params = new URLSearchParams(url.search)
+            const encryptedToken = params.get('s')
+            if (!encryptedToken) return
+            resolveOnce(encryptedToken)
+          } catch (error) {
+            logger.error('解析URL失败:', error as Error)
+            rejectOnce(error instanceof Error ? error : new Error('Failed to parse Nutstore SSO callback URL'))
+          }
+        },
+        { hosts: NUTSTORE_PROTOCOL_HOST }
+      )
 
       timeoutId = setTimeout(() => {
         logger.warn('坚果云 SSO 登录超时')

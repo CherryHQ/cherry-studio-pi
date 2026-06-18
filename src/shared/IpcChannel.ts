@@ -539,7 +539,12 @@ export enum IpcChannel {
 
   // Settings window — legacy "open a named window" channel (preload `settings.openSettings`).
   // The former WindowManager_* control + event channels were migrated to IpcApi (`window.*`).
-  SettingsWindow_Open = 'settings-window:open'
+  SettingsWindow_Open = 'settings-window:open',
+
+  // Deep-link protocol callback routing
+  Protocol_Data = 'protocol-data',
+  Protocol_RegisterHostListener = 'protocol:register-host-listener',
+  Protocol_UnregisterHostListener = 'protocol:unregister-host-listener'
 
   // ──────────────────────────────────────────────────────────────
   // TODO(v2): the following IPC channels are still referenced via
@@ -549,7 +554,6 @@ export enum IpcChannel {
   // auto-complete and cross-reference support:
   //
   //   - 'notification-click'        (NotificationService + ipc.ts Notification_OnClick handler)
-  //   - 'protocol-data'             (ProtocolService + preload)
   //   - 'file-preprocess-finished'  (PreprocessingService + KnowledgeService)
   //   - 'file-preprocess-progress'  (BasePreprocessProvider)
   // ──────────────────────────────────────────────────────────────

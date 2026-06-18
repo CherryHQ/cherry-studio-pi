@@ -114,6 +114,26 @@ interface OpenClawChannelInfo {
   status: 'connected' | 'disconnected' | 'error'
 }
 
+type ProtocolReceiveData = {
+  url: string
+  params: Record<string, string>
+}
+
+type ProtocolReceiveOptions = {
+  hosts?: string | string[]
+}
+
+function normalizeProtocolHosts(hosts?: string | string[]): string[] {
+  const values = Array.isArray(hosts) ? hosts : hosts ? [hosts] : []
+  return Array.from(
+    new Set(
+      values
+        .map((host) => (typeof host === 'string' ? host.trim().toLowerCase() : ''))
+        .filter((host) => /^[a-z0-9.-]+$/.test(host))
+    )
+  )
+}
+
 type DirectoryListOptions = {
   recursive?: boolean
   maxDepth?: number
@@ -649,13 +669,21 @@ const api = {
       ipcRenderer.invoke(IpcChannel.EnvironmentDependencies_InstallBun)
   },
   protocol: {
-    onReceiveData: (callback: (data: { url: string; params: any }) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, data: { url: string; params: any }) => {
+    onReceiveData: (callback: (data: ProtocolReceiveData) => void, options?: ProtocolReceiveOptions) => {
+      const hosts = normalizeProtocolHosts(options?.hosts)
+      const listener = (_event: Electron.IpcRendererEvent, data: ProtocolReceiveData) => {
         callback(data)
       }
-      ipcRenderer.on('protocol-data', listener)
+      ipcRenderer.on(IpcChannel.Protocol_Data, listener)
+      for (const host of hosts) {
+        void ipcRenderer.invoke(IpcChannel.Protocol_RegisterHostListener, host).catch(() => undefined)
+      }
+
       return () => {
-        ipcRenderer.off('protocol-data', listener)
+        ipcRenderer.off(IpcChannel.Protocol_Data, listener)
+        for (const host of hosts) {
+          void ipcRenderer.invoke(IpcChannel.Protocol_UnregisterHostListener, host).catch(() => undefined)
+        }
       }
     }
   },
