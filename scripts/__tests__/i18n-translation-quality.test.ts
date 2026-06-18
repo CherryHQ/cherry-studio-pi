@@ -19,7 +19,11 @@ const FORBIDDEN_TRANSLATION_FRAGMENTS = [
   /Logga ut/i,
   /Berhasil keluar/i,
   /Reinicio necesario/i,
-  /Keluar/i
+  /Keluar/i,
+  /Create account/i,
+  /This service is provided/i,
+  /After you sign in/i,
+  /Use API key instead/i
 ] as const
 
 function readTranslateFiles() {

@@ -6669,11 +6669,11 @@
           "login_button": "Autorizar com CherryIN",
           "logout_button": "Sair",
           "not_logged_in": "Sessão não iniciada",
-          "register_account": "Create account",
-          "service_attribution": "This service is provided by <link>open.cherryin.ai</link>",
-          "tagline": "After you sign in, you can use all model services",
+          "register_account": "Criar conta",
+          "service_attribution": "Este serviço é fornecido por <link>open.cherryin.ai</link>",
+          "tagline": "Depois de iniciar sessão, pode usar todos os serviços de modelos",
           "title": "Login OAuth",
-          "use_api_key": "Use API key instead"
+          "use_api_key": "Usar chave API em alternativa"
         },
         "connect": "Conectar {{provider}}",
         "description": "Este serviço é fornecido por <website>{{provider}}</website>",

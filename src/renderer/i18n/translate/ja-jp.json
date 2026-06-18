@@ -6669,11 +6669,11 @@
           "login_button": "CherryINで認証",
           "logout_button": "ログアウト",
           "not_logged_in": "未ログイン",
-          "register_account": "Create account",
-          "service_attribution": "This service is provided by <link>open.cherryin.ai</link>",
-          "tagline": "After you sign in, you can use all model services",
+          "register_account": "アカウントを作成",
+          "service_attribution": "このサービスは<link>open.cherryin.ai</link>によって提供されています",
+          "tagline": "ログイン後、すべてのモデルサービスを使用できます",
           "title": "OAuthログイン",
-          "use_api_key": "Use API key instead"
+          "use_api_key": "代わりにAPIキーを使用"
         },
         "connect": "{{provider}}に接続",
         "description": "本サービスは<website>{{provider}}</website>によって提供されます",
