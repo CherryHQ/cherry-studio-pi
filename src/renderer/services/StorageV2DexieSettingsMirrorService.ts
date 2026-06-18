@@ -168,7 +168,8 @@ class StorageV2DexieSettingsMirrorService {
       return
     }
 
-    setTimeout(callback, 0)
+    const timer = setTimeout(callback, 0)
+    unrefTimer(timer)
   }
 
   private scheduleFlush(debounceMs: number) {

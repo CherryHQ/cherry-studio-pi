@@ -137,6 +137,23 @@ describe('StorageV2DexieTableMirrorService', () => {
     expect(unref).toHaveBeenCalledTimes(1)
   })
 
+  it('does not keep the renderer process alive while deferring auxiliary table hook callbacks', async () => {
+    const unref = vi.fn()
+    const timer = { unref } as unknown as ReturnType<typeof setTimeout>
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockReturnValue(timer)
+
+    const { storageV2DexieTableMirrorService } = await import('../StorageV2DexieTableMirrorService')
+
+    storageV2DexieTableMirrorService.install()
+    const creatingHook = mocks.quickPhrasesHook.mock.calls.find(([eventName]) => eventName === 'creating')?.[1]
+
+    expect(creatingHook).toBeTypeOf('function')
+    creatingHook?.('phrase-1', { id: 'phrase-1' })
+
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 0)
+    expect(unref).toHaveBeenCalledTimes(1)
+  })
+
   it('rejects strict flushes when an auxiliary table mirror write is still pending after failure', async () => {
     vi.useFakeTimers()
     const setSetting = vi.fn().mockRejectedValue(new Error('storage busy'))

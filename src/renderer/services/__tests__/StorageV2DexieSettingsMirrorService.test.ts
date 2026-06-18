@@ -111,6 +111,23 @@ describe('StorageV2DexieSettingsMirrorService', () => {
     expect(unref).toHaveBeenCalledTimes(1)
   })
 
+  it('does not keep the renderer process alive while deferring Dexie settings hook callbacks', async () => {
+    const unref = vi.fn()
+    const timer = { unref } as unknown as ReturnType<typeof setTimeout>
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockReturnValue(timer)
+
+    const { storageV2DexieSettingsMirrorService } = await import('../StorageV2DexieSettingsMirrorService')
+
+    storageV2DexieSettingsMirrorService.install()
+    const creatingHook = mocks.settingsHook.mock.calls.find(([eventName]) => eventName === 'creating')?.[1]
+
+    expect(creatingHook).toBeTypeOf('function')
+    creatingHook?.('language', { id: 'language', value: 'zh-CN' })
+
+    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 0)
+    expect(unref).toHaveBeenCalledTimes(1)
+  })
+
   it('delays retry after a transient Storage v2 settings mirror failure', async () => {
     const setSetting = vi.fn().mockRejectedValueOnce(new Error('storage busy')).mockResolvedValueOnce(undefined)
     Object.defineProperty(window, 'api', {
