@@ -3,8 +3,18 @@ import * as z from 'zod'
 import { type Note, NoteSchema } from '../../types/note'
 import { QueryBooleanSchema } from './_endpointHelpers'
 
+function normalizeNotePath(value: string) {
+  const normalized = value.trim().replace(/\\/g, '/').replace(/\/+/g, '/')
+  if (/^[A-Za-z]:\/$/.test(normalized)) return normalized
+  return normalized.length > 1 ? normalized.replace(/\/+$/g, '') : normalized
+}
+
+function isNotePathDescendant(candidate: string, parent: string) {
+  return candidate.startsWith(`${parent}/`)
+}
+
 const NotePathSchema = NoteSchema.shape.path
-  .transform((value) => value.trim().replace(/\\/g, '/'))
+  .transform(normalizeNotePath)
   .refine((value) => value.length > 0, 'path must not be blank')
   .refine((value) => value.length <= 500, 'path is too long')
 
@@ -45,7 +55,7 @@ export const RewriteNotePathSchema = z
     message: 'fromPath and toPath must differ',
     path: ['toPath']
   })
-  .refine((value) => !value.recursive || !value.toPath.startsWith(`${value.fromPath}/`), {
+  .refine((value) => !value.recursive || !isNotePathDescendant(value.toPath, value.fromPath), {
     message: 'Cannot rewrite a folder into its own descendant',
     path: ['toPath']
   })

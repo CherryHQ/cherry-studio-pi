@@ -57,6 +57,20 @@ describe('note DTO schemas', () => {
     })
   })
 
+  it('normalizes duplicate and trailing separators at the API boundary', () => {
+    expect(
+      RewriteNotePathSchema.parse({
+        rootPath: ' /notes// ',
+        fromPath: '/notes//folder/',
+        toPath: '/notes//folder2/'
+      })
+    ).toEqual({
+      rootPath: '/notes',
+      fromPath: '/notes/folder',
+      toPath: '/notes/folder2'
+    })
+  })
+
   it('rejects rewrite requests where source and target paths are the same', () => {
     expect(() =>
       RewriteNotePathSchema.parse({
@@ -76,5 +90,32 @@ describe('note DTO schemas', () => {
         recursive: true
       })
     ).toThrow('Cannot rewrite a folder into its own descendant')
+  })
+
+  it('rejects recursive rewrite requests into descendants even when source has a trailing slash', () => {
+    expect(() =>
+      RewriteNotePathSchema.parse({
+        rootPath: '/notes',
+        fromPath: '/notes/folder/',
+        toPath: '/notes/folder/child',
+        recursive: true
+      })
+    ).toThrow('Cannot rewrite a folder into its own descendant')
+  })
+
+  it('allows recursive rewrite requests into a sibling with a similar prefix', () => {
+    expect(
+      RewriteNotePathSchema.parse({
+        rootPath: '/notes',
+        fromPath: '/notes/folder',
+        toPath: '/notes/folder2',
+        recursive: true
+      })
+    ).toEqual({
+      rootPath: '/notes',
+      fromPath: '/notes/folder',
+      toPath: '/notes/folder2',
+      recursive: true
+    })
   })
 })
