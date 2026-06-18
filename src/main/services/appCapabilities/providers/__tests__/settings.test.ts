@@ -483,4 +483,22 @@ describe('settings app capabilities', () => {
     expect(mocks.navigateApp).toHaveBeenCalledWith('/settings/about')
     expect(byRoute.data).toEqual({ route: '/settings/about' })
   })
+
+  it('keeps settings route query strings while opening explicit settings routes', async () => {
+    const result = await capability('settings.open').execute(
+      { route: 'settings/provider?id=openai' },
+      { source: 'agent' }
+    )
+
+    expect(mocks.navigateApp).toHaveBeenCalledWith('/settings/provider?id=openai')
+    expect(result.data).toEqual({ route: '/settings/provider?id=openai' })
+  })
+
+  it('rejects non-settings routes through the settings opener', async () => {
+    await expect(capability('settings.open').execute({ route: '/agents' }, { source: 'agent' })).rejects.toThrow(
+      'Unsupported settings route: /agents'
+    )
+
+    expect(mocks.navigateApp).not.toHaveBeenCalled()
+  })
 })

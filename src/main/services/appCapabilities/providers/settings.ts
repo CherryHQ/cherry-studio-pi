@@ -95,6 +95,23 @@ const pathEnum = Array.from(
   new Set([...Object.keys(SETTINGS_SETTERS), ...Object.keys(PREFERENCE_SETTING_PATHS)])
 ).sort()
 
+function getRoutePathname(route: string) {
+  return /^([^?#]*)/.exec(route)?.[1] || '/'
+}
+
+function normalizeSettingsRouteInput(value: unknown) {
+  const raw = typeof value === 'string' ? value.trim() : ''
+  if (!raw) return ''
+
+  const route = raw.startsWith('/') ? raw : `/${raw}`
+  const pathname = getRoutePathname(route)
+  if (!SETTINGS_SECTIONS.some((section) => section.route === pathname)) {
+    throw new Error(`Unsupported settings route: ${route}`)
+  }
+
+  return route
+}
+
 function assignPath(target: Record<string, any>, keyPath: string, value: unknown) {
   const parts = keyPath.split('.').filter(Boolean)
   if (parts.length === 0) return
@@ -331,8 +348,8 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       tags: ['settings', 'navigation', 'open'],
       execute: async (input: any) => {
         const sectionInput = typeof input?.section === 'string' ? input.section.trim() : ''
-        const routeInput = typeof input?.route === 'string' ? input.route.trim() : ''
-        const section = SETTINGS_SECTIONS.find((item) => item.id === sectionInput || item.route === routeInput)
+        const routeInput = normalizeSettingsRouteInput(input?.route)
+        const section = SETTINGS_SECTIONS.find((item) => item.id === sectionInput)
         const route = section?.route || routeInput || '/settings/provider'
         await navigateApp(route)
         return okResult('Settings section opened', { route })
