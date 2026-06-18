@@ -10,7 +10,8 @@ function normalizeNotePath(value: string) {
 }
 
 function isNotePathDescendant(candidate: string, parent: string) {
-  return candidate.startsWith(`${parent}/`)
+  const parentPrefix = parent.endsWith('/') ? parent : `${parent}/`
+  return candidate !== parent && candidate.startsWith(parentPrefix)
 }
 
 const NotePathSchema = NoteSchema.shape.path

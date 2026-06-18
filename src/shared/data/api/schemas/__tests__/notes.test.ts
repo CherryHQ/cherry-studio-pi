@@ -103,6 +103,26 @@ describe('note DTO schemas', () => {
     ).toThrow('Cannot rewrite a folder into its own descendant')
   })
 
+  it('rejects recursive rewrite requests from a filesystem root into its descendant', () => {
+    expect(() =>
+      RewriteNotePathSchema.parse({
+        rootPath: '/',
+        fromPath: '/',
+        toPath: '/child',
+        recursive: true
+      })
+    ).toThrow('Cannot rewrite a folder into its own descendant')
+
+    expect(() =>
+      RewriteNotePathSchema.parse({
+        rootPath: 'C:/',
+        fromPath: 'C:/',
+        toPath: 'C:/Users/test/Notes',
+        recursive: true
+      })
+    ).toThrow('Cannot rewrite a folder into its own descendant')
+  })
+
   it('allows recursive rewrite requests into a sibling with a similar prefix', () => {
     expect(
       RewriteNotePathSchema.parse({
