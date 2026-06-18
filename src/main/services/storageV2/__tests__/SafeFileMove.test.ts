@@ -67,7 +67,8 @@ describe('movePathSync', () => {
     expect(mocks.fs.cpSync).toHaveBeenCalledWith('/mock/Files', '/mock/archive/Files', {
       recursive: true,
       force: false,
-      errorOnExist: true
+      errorOnExist: true,
+      verbatimSymlinks: true
     })
     expect(mocks.fs.rmSync).toHaveBeenCalledWith('/mock/Files', { recursive: true, force: true })
   })

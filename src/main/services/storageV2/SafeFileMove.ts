@@ -35,7 +35,7 @@ export function movePathSync(sourcePath: string, targetPath: string): void {
 
   const stats = fs.statSync(sourcePath)
   if (stats.isDirectory()) {
-    fs.cpSync(sourcePath, targetPath, { recursive: true, force: false, errorOnExist: true })
+    fs.cpSync(sourcePath, targetPath, { recursive: true, force: false, errorOnExist: true, verbatimSymlinks: true })
     fs.rmSync(sourcePath, { recursive: true, force: true })
     return
   }
