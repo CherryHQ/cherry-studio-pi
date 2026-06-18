@@ -44,6 +44,7 @@ import { calculateDirectorySize } from './utils'
 import { decrypt, encrypt } from './utils/aes'
 import { isSafeExternalUrl } from './utils/externalUrlSafety'
 import { hasWritePermission, isPathInside, untildify } from './utils/file'
+import { isNotEmptyDir } from './utils/file/path'
 import { summarizeUrlForLog } from './utils/logging'
 import { openPathInShell } from './utils/openPath'
 import { getCpuName, getDeviceType, getHostname } from './utils/system'
@@ -270,8 +271,8 @@ export async function registerIpc() {
     await session.defaultSession.closeAllConnections()
   })
 
-  ipcMain.handle(IpcChannel.App_IsNotEmptyDir, async (_, path: string) => {
-    return fs.readdirSync(path).length > 0
+  ipcMain.handle(IpcChannel.App_IsNotEmptyDir, async (_, filePath: string) => {
+    return isNotEmptyDir(filePath as `/${string}` | `${string}:\\${string}`)
   })
 
   // Copy user data to new location

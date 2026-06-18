@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, rm } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -10,7 +10,7 @@ vi.mock('@application', async () => {
   return mockApplicationFactory()
 })
 
-import { canWrite, isPathInside, isUnderInternalStorage } from '../path'
+import { canWrite, isNotEmptyDir, isPathInside, isUnderInternalStorage } from '../path'
 
 describe('isPathInside', () => {
   it('returns true when child is directly inside parent', () => {
@@ -99,5 +99,37 @@ describe('canWrite', () => {
   it.skipIf(process.platform === 'win32')('returns false for a chmod-stripped directory (POSIX)', async () => {
     await chmod(tmp, 0o500)
     expect(await canWrite(tmp as FilePath)).toBe(false)
+  })
+})
+
+describe('isNotEmptyDir', () => {
+  let tmp: string
+
+  beforeEach(async () => {
+    tmp = await mkdtemp(path.join(tmpdir(), 'cherry-fm-not-empty-dir-test-'))
+  })
+
+  afterEach(async () => {
+    await rm(tmp, { recursive: true, force: true })
+  })
+
+  it('returns false for an empty directory', async () => {
+    expect(await isNotEmptyDir(tmp as FilePath)).toBe(false)
+  })
+
+  it('returns true for a directory with entries', async () => {
+    await mkdir(path.join(tmp, 'nested'))
+    expect(await isNotEmptyDir(tmp as FilePath)).toBe(true)
+  })
+
+  it('returns false for a missing directory', async () => {
+    expect(await isNotEmptyDir(path.join(tmp, 'missing') as FilePath)).toBe(false)
+  })
+
+  it('fails closed for a file path', async () => {
+    const filePath = path.join(tmp, 'not-a-directory')
+    await writeFile(filePath, 'content')
+
+    expect(await isNotEmptyDir(filePath as FilePath)).toBe(true)
   })
 })

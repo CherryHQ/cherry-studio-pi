@@ -4,7 +4,7 @@
  * Path utilities — validation and resolution helpers.
  */
 
-import { access, constants } from 'node:fs/promises'
+import { access, constants, readdir } from 'node:fs/promises'
 import path from 'node:path'
 
 import { application } from '@application'
@@ -74,6 +74,16 @@ export async function canWrite(target: FilePath): Promise<boolean> {
 }
 
 /** Check if a directory is non-empty. */
-export async function isNotEmptyDir(_path: FilePath): Promise<boolean> {
-  return notImplemented('isNotEmptyDir')
+export async function isNotEmptyDir(target: FilePath): Promise<boolean> {
+  try {
+    return (await readdir(target)).length > 0
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException)?.code
+    if (code === 'ENOENT') return false
+
+    // Treat unreadable or non-directory paths as occupied. This helper is used
+    // before app-data migration; failing closed avoids copying user data into
+    // a path we cannot safely inspect.
+    return true
+  }
 }
