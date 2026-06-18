@@ -228,6 +228,7 @@ describe('ResourceSelectorShell', () => {
 
         openPopover()
         expect(screen.getByPlaceholderText('Search')).toBeInTheDocument()
+        await new Promise((resolve) => setTimeout(resolve, 0))
 
         dialogContent.setAttribute('data-state', 'open')
 

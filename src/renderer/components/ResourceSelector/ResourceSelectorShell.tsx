@@ -270,7 +270,7 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['aria-hidden', 'aria-modal', 'class', 'data-slot', 'hidden', 'role', 'style']
+      attributeFilter: ['aria-hidden', 'aria-modal', 'class', 'data-slot', 'data-state', 'hidden', 'role', 'style']
     })
     window.queueMicrotask(closeIfNewModalSurfaceAppears)
 
