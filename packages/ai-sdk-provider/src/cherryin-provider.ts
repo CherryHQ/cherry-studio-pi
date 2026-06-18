@@ -114,18 +114,29 @@ const isGoogleImageModel = (modelId: string) => {
 }
 const isGoogleGeminiImageModel = (modelId: string) => stripGooglePrefix(modelId).toLowerCase().startsWith('gemini-')
 
-const createCustomFetch = (originalFetch?: any) => {
-  return async (url: string, options: any) => {
-    if (options?.body) {
-      try {
-        const body = JSON.parse(options.body)
-        if (body.tools && Array.isArray(body.tools) && body.tools.length === 0 && body.tool_choice) {
-          delete body.tool_choice
-          options.body = JSON.stringify(body)
-        }
-      } catch (error) {
-        // ignore error
-      }
+const isJsonObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const parseJsonObjectBody = (body: unknown): Record<string, unknown> | undefined => {
+  if (typeof body !== 'string') return undefined
+
+  try {
+    const parsed = JSON.parse(body)
+    return isJsonObject(parsed) ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const createCustomFetch = (originalFetch?: FetchFunction): FetchFunction => {
+  return async (url, options) => {
+    const body = parseJsonObjectBody(options?.body)
+
+    if (Array.isArray(body?.tools) && body.tools.length === 0 && Object.hasOwn(body, 'tool_choice')) {
+      const { tool_choice: _toolChoice, ...nextBody } = body
+      return originalFetch
+        ? originalFetch(url, { ...options, body: JSON.stringify(nextBody) })
+        : fetch(url, { ...options, body: JSON.stringify(nextBody) })
     }
 
     return originalFetch ? originalFetch(url, options) : fetch(url, options)
