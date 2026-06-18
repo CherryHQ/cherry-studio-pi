@@ -18,4 +18,11 @@ describe('release workflow safety', () => {
       "github.repository == 'CherryHQ/cherry-studio-pi' && github.event_name == 'workflow_dispatch'"
     )
   })
+
+  it('refuses to overwrite an existing release unless explicitly requested', () => {
+    expect(workflow).toContain('replace_existing:')
+    expect(workflow).toContain('gh release view "$TAG"')
+    expect(workflow).toContain('Refusing to rebuild or overwrite an existing release')
+    expect(workflow).toContain('overwrite_files: ${{ needs.prepare.outputs.replace_existing }}')
+  })
 })

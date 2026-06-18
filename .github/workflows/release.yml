@@ -33,6 +33,11 @@ on:
         required: true
         default: false
         type: boolean
+      replace_existing:
+        description: "Replace an existing GitHub Release for this tag"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   actions: write
@@ -56,6 +61,7 @@ jobs:
       version: ${{ steps.release.outputs.version }}
       draft: ${{ steps.release.outputs.draft }}
       prerelease: ${{ steps.release.outputs.prerelease }}
+      replace_existing: ${{ steps.release.outputs.replace_existing }}
 
     steps:
       - name: Check out repository
@@ -71,6 +77,7 @@ jobs:
           CONFIRM_TAG="${{ github.event.inputs.confirm_tag }}"
           DRAFT="${{ inputs.draft }}"
           PRERELEASE="${{ inputs.prerelease }}"
+          REPLACE_EXISTING="${{ inputs.replace_existing }}"
 
           if [ "$CONFIRM_TAG" != "$TAG" ]; then
             echo "Release tag confirmation mismatch."
@@ -94,12 +101,16 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "draft=$DRAFT" >> "$GITHUB_OUTPUT"
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "replace_existing=$REPLACE_EXISTING" >> "$GITHUB_OUTPUT"
 
       - name: Validate release tag
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ steps.release.outputs.tag }}"
           VERSION="${{ steps.release.outputs.version }}"
+          REPLACE_EXISTING="${{ steps.release.outputs.replace_existing }}"
           DEFAULT_BRANCH_NAME="${{ github.event.repository.default_branch }}"
           DEFAULT_BRANCH="origin/$DEFAULT_BRANCH_NAME"
 
@@ -143,6 +154,34 @@ jobs:
             echo "Create a version bump commit and tag through scripts/version.js before publishing."
             exit 1
           fi
+
+          RELEASE_VIEW_ERROR="$(mktemp)"
+          RELEASE_VIEW_JSON="$(mktemp)"
+          if gh release view "$TAG" --repo "${{ github.repository }}" --json url,assets > "$RELEASE_VIEW_JSON" 2> "$RELEASE_VIEW_ERROR"; then
+            EXISTING_URL="$(
+              node -e 'const fs = require("fs"); const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); console.log(data.url || "")' "$RELEASE_VIEW_JSON"
+            )"
+            EXISTING_ASSET_COUNT="$(
+              node -e 'const fs = require("fs"); const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); console.log(Array.isArray(data.assets) ? data.assets.length : 0)' "$RELEASE_VIEW_JSON"
+            )"
+
+            if [ "$REPLACE_EXISTING" != "true" ]; then
+              echo "::error::GitHub Release $TAG already exists and has $EXISTING_ASSET_COUNT asset(s)."
+              echo "Existing release: $EXISTING_URL"
+              echo "Refusing to rebuild or overwrite an existing release from a normal one-shot release request."
+              echo "Only set replace_existing=true when you intentionally want to replace assets for the same tag."
+              exit 1
+            fi
+
+            echo "Replacing existing release $TAG with $EXISTING_ASSET_COUNT asset(s): $EXISTING_URL"
+          elif grep -Eqi 'not found|could not find|404' "$RELEASE_VIEW_ERROR"; then
+            echo "No existing GitHub Release found for $TAG."
+          else
+            echo "::error::Unable to verify whether GitHub Release $TAG already exists."
+            cat "$RELEASE_VIEW_ERROR"
+            exit 1
+          fi
+          rm -f "$RELEASE_VIEW_ERROR" "$RELEASE_VIEW_JSON"
 
           echo "Validated release tag $TAG at $TAG_COMMIT for version $VERSION."
 
@@ -307,7 +346,7 @@ jobs:
           draft: ${{ needs.prepare.outputs.draft }}
           prerelease: ${{ needs.prepare.outputs.prerelease }}
           generate_release_notes: true
-          overwrite_files: true
+          overwrite_files: ${{ needs.prepare.outputs.replace_existing }}
           fail_on_unmatched_files: true
           files: release-artifacts/*
 
