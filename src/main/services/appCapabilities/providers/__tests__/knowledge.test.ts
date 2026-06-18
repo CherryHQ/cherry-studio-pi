@@ -469,6 +469,36 @@ describe('knowledge app capabilities', () => {
     expect((result.data as any).id).toBe('metadata-kb')
   })
 
+  it('does not persist control or unknown fields in knowledge base metadata', async () => {
+    const result = await capability('knowledge.base.create').execute(
+      {
+        id: 'clean-kb',
+        name: 'Clean Knowledge',
+        model: { id: 'embed-model', provider: 'shared-provider', name: 'Embed Model', group: 'shared-provider' },
+        description: 'Agent-created knowledge base',
+        dimensions: 1024,
+        initialize: false,
+        apiKey: 'sk-should-not-persist',
+        debugPayload: { trace: 'temporary' }
+      },
+      { source: 'agent' }
+    )
+    const savedBase = mocks.storageV2KnowledgeRepository.importBases.mock.calls[0]?.[0]?.[0]
+
+    expect(savedBase).toMatchObject({
+      id: 'clean-kb',
+      name: 'Clean Knowledge',
+      description: 'Agent-created knowledge base',
+      dimensions: 1024
+    })
+    expect(savedBase).not.toHaveProperty('initialize')
+    expect(savedBase).not.toHaveProperty('apiKey')
+    expect(savedBase).not.toHaveProperty('debugPayload')
+    expect(result.data as any).not.toHaveProperty('initialize')
+    expect(result.data as any).not.toHaveProperty('apiKey')
+    expect(result.data as any).not.toHaveProperty('debugPayload')
+  })
+
   it('preserves explicit knowledge base metadata timestamps and items', async () => {
     const result = await capability('knowledge.base.create').execute(
       {

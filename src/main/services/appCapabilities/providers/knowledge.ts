@@ -24,6 +24,17 @@ const MAX_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT = 100
 const DEFAULT_KNOWLEDGE_SEARCH_RESULT_LIMIT = 50
 const MAX_KNOWLEDGE_SEARCH_RESULT_LIMIT = 100
 const RENDERER_STORE_FALLBACK_TIMEOUT_MS = 1_000
+const KNOWLEDGE_BASE_METADATA_FIELDS = [
+  'dimensions',
+  'description',
+  'documentCount',
+  'chunkSize',
+  'chunkOverlap',
+  'threshold',
+  'rerankModel',
+  'preprocessProvider',
+  'version'
+] as const satisfies readonly (keyof KnowledgeBase)[]
 
 function firstApiKey(value: unknown): string {
   return typeof value === 'string' ? (value.split(',')[0]?.trim() ?? '') : ''
@@ -113,6 +124,37 @@ function normalizeKnowledgeModel(value: unknown) {
     throw new Error('Knowledge base model is required')
   }
   return value
+}
+
+function createKnowledgeBaseMetadata(
+  input: any,
+  params: {
+    id: string
+    name: string
+    model: unknown
+    items: KnowledgeItem[]
+    createdAt: number
+    updatedAt: number
+  }
+): KnowledgeBase {
+  const base: Partial<KnowledgeBase> = {
+    id: params.id,
+    name: params.name,
+    model: params.model as KnowledgeBase['model'],
+    items: params.items,
+    created_at: params.createdAt,
+    updated_at: params.updatedAt
+  }
+
+  const inputRecord = input && typeof input === 'object' && !Array.isArray(input) ? input : {}
+  const mutableBase = base as Record<string, unknown>
+  for (const field of KNOWLEDGE_BASE_METADATA_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(inputRecord, field) && typeof inputRecord[field] !== 'undefined') {
+      mutableBase[field] = inputRecord[field]
+    }
+  }
+
+  return base as KnowledgeBase
 }
 
 function toRuntimeModelId(model: unknown) {
@@ -407,15 +449,14 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         const model = normalizeKnowledgeModel(input?.model)
         const items = normalizeKnowledgeItems(input?.items)
         const createdAt = normalizeOptionalTimestamp(input?.created_at, 'Knowledge base created_at', now)
-        const base = {
-          ...input,
+        const base = createKnowledgeBaseMetadata(input, {
           id,
           name,
           model,
           items,
-          created_at: createdAt,
-          updated_at: now
-        } as KnowledgeBase
+          createdAt,
+          updatedAt: now
+        })
 
         const warnings: string[] = []
         if (input?.initialize !== false) {
