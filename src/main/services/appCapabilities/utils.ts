@@ -7,7 +7,7 @@ import { isAllowedInAppRoute, normalizeInAppRoute } from '@main/services/navigat
 import { isPathInside } from '@main/utils/file'
 
 const SENSITIVE_KEY_PATTERN =
-  /api[-_]?key|private[-_]?key|access[-_]?key|token|secret|pass|password|authorization|credential|cookie/i
+  /api[-_\s]?key|private[-_\s]?key|access[-_\s]?key|token|secret|password|passwd|passphrase|passcode|(?:^|[-_\s])pass(?:$|[-_\s])|authorization|credential|cookie/i
 const CIRCULAR_REFERENCE_PLACEHOLDER = '[Circular]'
 const MAX_AGENT_STRING_CHARS = 8_000
 const MAX_AGENT_ARRAY_ITEMS = 200

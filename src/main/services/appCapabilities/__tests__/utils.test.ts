@@ -45,6 +45,7 @@ describe('app capability utils', () => {
     expect(
       sanitizeForAgent({
         apiKey: 'sk-secret',
+        'api key': 'sk-secret-with-space',
         authorization: 'Bearer token',
         authToken: {
           value: 'nested secret should not be traversed'
@@ -53,11 +54,19 @@ describe('app capability utils', () => {
           username: 'hidden-user',
           password: 'hidden-password'
         },
+        db_pass: 'hidden-pass',
+        passphrase: 'hidden-passphrase',
+        passwd: 'hidden-passwd',
+        passcode: 'hidden-passcode',
         accessKeyId: 'ak-example',
         cookieJar: ['session-secret'],
         privateKey: '-----BEGIN PRIVATE KEY-----',
         private_key: '-----BEGIN PRIVATE KEY-----',
         hasPassword: true,
+        passage: 'visible passage',
+        compass: 'visible compass',
+        bypassReason: 'visible bypass reason',
+        passengerCount: 3,
         nested: {
           name: 'visible',
           cookie: ''
@@ -65,14 +74,23 @@ describe('app capability utils', () => {
       })
     ).toEqual({
       apiKey: '[redacted]',
+      'api key': '[redacted]',
       authorization: '[redacted]',
       authToken: '[redacted]',
       credentials: '[redacted]',
+      db_pass: '[redacted]',
+      passphrase: '[redacted]',
+      passwd: '[redacted]',
+      passcode: '[redacted]',
       accessKeyId: '[redacted]',
       cookieJar: '[redacted]',
       privateKey: '[redacted]',
       private_key: '[redacted]',
       hasPassword: true,
+      passage: 'visible passage',
+      compass: 'visible compass',
+      bypassReason: 'visible bypass reason',
+      passengerCount: 3,
       nested: {
         name: 'visible',
         cookie: ''
