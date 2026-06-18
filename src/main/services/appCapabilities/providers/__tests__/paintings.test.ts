@@ -220,6 +220,44 @@ describe('painting app capabilities', () => {
     expect((result.data as any).paintings[0].imageFile).not.toContain('x'.repeat(5_000))
   })
 
+  it('bounds compact painting file previews before returning them to agents', async () => {
+    mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation(async (script: string) => {
+      if (script.includes('typeof')) return true
+      if (script.includes(RENDERER_GET_STORE_VALUE_BRIDGE)) {
+        return {
+          siliconflow_paintings: [
+            {
+              id: 'many-files',
+              files: Array.from({ length: 30 }, (_, index) => ({ id: `file-${index}`, name: `file-${index}.png` }))
+            }
+          ]
+        }
+      }
+      if (script.includes(RENDERER_GET_SETTINGS_BRIDGE)) return { defaultPaintingProvider: 'silicon' }
+      if (script.includes(RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE)) return {}
+      return undefined
+    })
+
+    const result = await capability('paintings.history.list').execute(
+      { namespace: 'siliconflow_paintings' },
+      { source: 'agent' }
+    )
+
+    expect((result.data as any).paintings[0]).toMatchObject({
+      id: 'many-files',
+      filesCount: 30,
+      filesTruncated: 10
+    })
+    expect((result.data as any).paintings[0].files).toHaveLength(20)
+    expect((result.data as any).paintings[0].files.at(-1)).toEqual({
+      id: 'file-19',
+      name: 'file-19.png',
+      type: undefined,
+      ext: undefined,
+      size: undefined
+    })
+  })
+
   it('bounds raw painting arrays before returning them to agents', async () => {
     mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation(async (script: string) => {
       if (script.includes('typeof')) return true

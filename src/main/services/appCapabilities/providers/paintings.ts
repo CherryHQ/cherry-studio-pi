@@ -22,6 +22,7 @@ export const PAINTING_NAMESPACES = [
 const DEFAULT_PAINTING_HISTORY_LIMIT = 50
 const MAX_PAINTING_HISTORY_LIMIT = 200
 const MAX_PAINTING_PROMPT_CHARS = 500
+const MAX_COMPACT_PAINTING_FILES = 20
 const MAX_RAW_PAINTING_STRING_CHARS = 2_000
 const MAX_RAW_PAINTING_ARRAY_ITEMS = 20
 const MAX_RAW_PAINTING_DEPTH = 4
@@ -118,6 +119,7 @@ function compactRawPaintingValue(value: unknown, depth: number, seen: WeakSet<ob
 }
 
 function compactPainting(namespace: string, painting: any, index: number) {
+  const files = Array.isArray(painting?.files) ? painting.files : []
   return {
     namespace,
     index,
@@ -131,16 +133,15 @@ function compactPainting(namespace: string, painting: any, index: number) {
     size: painting?.size ?? painting?.imageSize ?? painting?.image_size,
     aspectRatio: painting?.aspectRatio ?? painting?.aspect_ratio,
     urlsCount: Array.isArray(painting?.urls) ? painting.urls.length : 0,
-    filesCount: Array.isArray(painting?.files) ? painting.files.length : 0,
-    files: Array.isArray(painting?.files)
-      ? painting.files.map((file: any) => ({
-          id: file?.id,
-          name: file?.name ?? file?.origin_name,
-          type: file?.type,
-          ext: file?.ext,
-          size: file?.size
-        }))
-      : []
+    filesCount: files.length,
+    filesTruncated: Math.max(0, files.length - MAX_COMPACT_PAINTING_FILES),
+    files: files.slice(0, MAX_COMPACT_PAINTING_FILES).map((file: any) => ({
+      id: file?.id,
+      name: file?.name ?? file?.origin_name,
+      type: file?.type,
+      ext: file?.ext,
+      size: file?.size
+    }))
   }
 }
 
