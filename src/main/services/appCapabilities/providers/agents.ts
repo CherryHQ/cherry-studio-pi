@@ -13,6 +13,12 @@ import { okResult, sanitizeForAgent } from '../utils'
 
 const DEFAULT_AGENT_CAPABILITY_LIST_LIMIT = 50
 const MAX_AGENT_CAPABILITY_LIST_LIMIT = 200
+const AGENT_LIST_SORT_BY_VALUES = new Set(['createdAt', 'updatedAt', 'name', 'orderKey'])
+const AGENT_LIST_SORT_BY_ALIASES: Record<string, 'createdAt' | 'updatedAt' | 'name' | 'orderKey'> = {
+  created_at: 'createdAt',
+  updated_at: 'updatedAt',
+  order_key: 'orderKey'
+}
 
 function normalizeListLimit(value: unknown) {
   const parsed =
@@ -29,8 +35,14 @@ function normalizeOffset(value: unknown) {
   return Math.max(0, Math.trunc(parsed))
 }
 
-function normalizeSortOrder(value: unknown) {
+function normalizeSortOrder(value: unknown): 'asc' | 'desc' | undefined {
   return value === 'asc' || value === 'desc' ? value : undefined
+}
+
+function normalizeInputObject(input: unknown) {
+  if (input === null || typeof input === 'undefined') return {}
+  if (typeof input !== 'object' || Array.isArray(input)) throw new Error('Agent capability input must be an object')
+  return input as Record<string, unknown>
 }
 
 function normalizeOptionalText(value: unknown, label = 'Value') {
@@ -46,6 +58,20 @@ function normalizeRequiredText(value: unknown, label: string) {
   const text = normalizeOptionalText(value, label)
   if (!text) throw new Error(`${label} is required`)
   return text
+}
+
+function normalizeOptionalBoolean(value: unknown, label: string) {
+  if (value === null || typeof value === 'undefined') return undefined
+  if (typeof value !== 'boolean') throw new Error(`${label} must be a boolean`)
+  return value
+}
+
+function normalizeAgentSortBy(value: unknown) {
+  const sortBy = normalizeOptionalText(value, 'Agent sort field')
+  if (!sortBy) return undefined
+  if (AGENT_LIST_SORT_BY_ALIASES[sortBy]) return AGENT_LIST_SORT_BY_ALIASES[sortBy]
+  if (!AGENT_LIST_SORT_BY_VALUES.has(sortBy)) return undefined
+  return sortBy as 'createdAt' | 'updatedAt' | 'name' | 'orderKey'
 }
 
 function normalizeOptionalTextArray(value: unknown, label: string, itemLabel: string) {
@@ -70,20 +96,48 @@ function normalizeAgentType(value: unknown) {
   throw new Error(`Unsupported agent type: ${type}`)
 }
 
-function agentListOptions(input: any = {}) {
-  const { limit, offset, orderBy, sortOrder, ...rest } = input ?? {}
-  const normalizedSortOrder = normalizeSortOrder(sortOrder) ?? normalizeSortOrder(orderBy)
+function baseListOptions(input: Record<string, unknown>) {
+  const { limit, offset } = input
   return {
-    ...rest,
-    ...(normalizedSortOrder ? { sortOrder: normalizedSortOrder } : {}),
     limit: normalizeListLimit(limit),
     offset: normalizeOffset(offset)
   }
 }
 
+function modelListOptions(input: unknown) {
+  const inputObject = normalizeInputObject(input)
+  const providerType = normalizeOptionalText(inputObject.providerType, 'Provider type')
+  return {
+    ...baseListOptions(inputObject),
+    ...(providerType ? { providerType } : {})
+  }
+}
+
+function agentListOptions(input: unknown) {
+  const inputObject = normalizeInputObject(input)
+  const { orderBy, sortOrder } = inputObject
+  const normalizedSortOrder = normalizeSortOrder(sortOrder) ?? normalizeSortOrder(orderBy)
+  const sortBy = normalizeAgentSortBy(inputObject.sortBy)
+  const search = normalizeOptionalText(inputObject.search, 'Agent search query')
+  return {
+    ...baseListOptions(inputObject),
+    ...(sortBy ? { sortBy } : {}),
+    ...(search ? { search } : {}),
+    ...(normalizedSortOrder ? { sortOrder: normalizedSortOrder } : {})
+  }
+}
+
+function agentTaskListOptions(input: Record<string, unknown>) {
+  return {
+    ...baseListOptions(input),
+    includeHeartbeat: normalizeOptionalBoolean(input.includeHeartbeat, 'Include heartbeat')
+  }
+}
+
 async function listAgentTasks(input: any = {}) {
-  const options = agentListOptions(input)
-  const agentId = normalizeOptionalText(input?.agentId, 'Agent id')
+  const inputObject = normalizeInputObject(input)
+  const options = agentTaskListOptions(inputObject)
+  const agentId = normalizeOptionalText(inputObject.agentId, 'Agent id')
 
   if (agentId) {
     return agentTaskService.listTasks(agentId, {
@@ -135,7 +189,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['agents', 'models', 'llm'],
       execute: async (input: any) =>
-        okResult('Agent models listed', sanitizeForAgent(await modelsService.getModels(agentListOptions(input))))
+        okResult('Agent models listed', sanitizeForAgent(await modelsService.getModels(modelListOptions(input))))
     },
     {
       id: 'agents.list',

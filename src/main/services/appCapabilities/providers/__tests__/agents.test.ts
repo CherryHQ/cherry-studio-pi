@@ -125,7 +125,7 @@ describe('agent app capabilities', () => {
       offset: 0
     })
     expect(mocks.listAgentsWithStorageV2Recovery).toHaveBeenCalledWith({
-      sortBy: 'created_at',
+      sortBy: 'createdAt',
       sortOrder: 'desc',
       limit: 50,
       offset: 8
@@ -154,6 +154,63 @@ describe('agent app capabilities', () => {
       limit: 10,
       offset: undefined
     })
+  })
+
+  it('passes only supported agent list filters to underlying services', async () => {
+    await capability('agents.models.list').execute(
+      { providerType: ' openai ', unknown: { nested: true }, limit: 25 },
+      { source: 'agent' }
+    )
+    await capability('agents.list').execute(
+      { search: ' research ', sortBy: 'updated_at', sortOrder: 'asc', unknown: 'ignored' },
+      { source: 'agent' }
+    )
+    await capability('agents.tasks.list').execute(
+      { includeHeartbeat: true, extra: 'ignored', limit: 10 },
+      { source: 'agent' }
+    )
+
+    expect(mocks.modelsService.getModels).toHaveBeenCalledWith({
+      providerType: 'openai',
+      limit: 25,
+      offset: undefined
+    })
+    expect(mocks.listAgentsWithStorageV2Recovery).toHaveBeenCalledWith({
+      search: 'research',
+      sortBy: 'updatedAt',
+      sortOrder: 'asc',
+      limit: 50,
+      offset: undefined
+    })
+    expect(mocks.agentTaskService.listTasksAcrossAgents).toHaveBeenCalledWith({
+      agentIds: [],
+      includeHeartbeat: true,
+      limit: 10,
+      offset: undefined
+    })
+  })
+
+  it('rejects invalid typed agent list filters before service calls', async () => {
+    await expect(capability('agents.models.list').execute({ providerType: 123 }, { source: 'agent' })).rejects.toThrow(
+      'Provider type must be a string'
+    )
+    await expect(capability('agents.list').execute({ sortBy: 123 }, { source: 'agent' })).rejects.toThrow(
+      'Agent sort field must be a string'
+    )
+    await expect(capability('agents.list').execute({ search: ['research'] }, { source: 'agent' })).rejects.toThrow(
+      'Agent search query must be a string'
+    )
+    await expect(
+      capability('agents.tasks.list').execute({ includeHeartbeat: 'true' }, { source: 'agent' })
+    ).rejects.toThrow('Include heartbeat must be a boolean')
+    await expect(capability('agents.list').execute([], { source: 'agent' })).rejects.toThrow(
+      'Agent capability input must be an object'
+    )
+
+    expect(mocks.modelsService.getModels).not.toHaveBeenCalled()
+    expect(mocks.listAgentsWithStorageV2Recovery).not.toHaveBeenCalled()
+    expect(mocks.agentTaskService.listTasks).not.toHaveBeenCalled()
+    expect(mocks.agentTaskService.listTasksAcrossAgents).not.toHaveBeenCalled()
   })
 
   it('paginates all agent tasks after merging tasks from each agent', async () => {
