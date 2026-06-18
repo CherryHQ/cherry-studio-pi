@@ -21,6 +21,7 @@ permissions:
 
 jobs:
   update-config:
+    if: github.repository == 'CherryHQ/cherry-studio-pi'
     runs-on: ubuntu-latest
 
     steps:

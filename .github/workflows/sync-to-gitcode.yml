@@ -23,6 +23,7 @@ permissions:
 
 jobs:
   build-windows-signed:
+    if: github.repository == 'CherryHQ/cherry-studio-pi'
     runs-on: [self-hosted, windows-signing]
     outputs:
       tag: ${{ steps.get-tag.outputs.tag }}

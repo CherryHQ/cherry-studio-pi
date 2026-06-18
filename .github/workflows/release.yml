@@ -45,6 +45,7 @@ concurrency:
 jobs:
   prepare:
     name: Prepare release metadata
+    if: github.repository == 'CherryHQ/cherry-studio-pi'
     # Releases are intentionally manual-only. Pushing a tag must not publish a
     # GitHub Release; this keeps version bumps and public releases as separate,
     # explicit actions.

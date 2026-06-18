@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   cleanup-artifacts:
+    if: github.repository == 'CherryHQ/cherry-studio-pi'
     runs-on: ubuntu-latest
     steps:
       - name: Delete old artifacts
@@ -216,7 +217,7 @@ jobs:
 
   Build-Summary:
     needs: nightly-build
-    if: always()
+    if: always() && github.repository == 'CherryHQ/cherry-studio-pi'
     runs-on: ubuntu-latest
     steps:
       - name: Get date tag
