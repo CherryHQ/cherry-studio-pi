@@ -5,7 +5,7 @@ import { messageTable } from '@data/db/schemas/message'
 import { topicTable } from '@data/db/schemas/topic'
 import type { MessageData } from '@shared/data/types/message'
 import { eq } from 'drizzle-orm'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 
 import { truncateAll } from '../internal/truncate'
 import { setupTestDatabase } from '../testDatabase'
@@ -164,26 +164,24 @@ describe('setupTestDatabase — production code routing via MockMainDbService', 
 describe('setupTestDatabase — replay array does not accumulate across truncate cycles', () => {
   const dbh = setupTestDatabase()
 
-  it('100 truncate cycles do not cause a visible latency regression', async () => {
+  it('100 truncate cycles do not register extra durable PRAGMA replays', async () => {
     // Bootstrap: one transaction to warm up the connection
     await dbh.db.transaction(async () => {})
 
+    const setPragmaSpy = vi.spyOn(dbh.client, 'setPragma')
     const ITER = 100
     for (let i = 0; i < ITER; i++) {
       await truncateAll(dbh.db, dbh.client)
     }
 
-    // After 100 cycles: measure latency of one more transaction.
-    const start = performance.now()
+    // truncateAll must use one-shot client.execute() toggles. Calling
+    // setPragma() here would grow @libsql/client's durable replay list by two
+    // entries per cleanup cycle and slow every future reconnect.
+    expect(setPragmaSpy).not.toHaveBeenCalled()
+
     await dbh.db.transaction(async (tx) => {
       await tx.insert(topicTable).values({ id: 'after-cycles', orderKey: 'a0', createdAt: 1, updatedAt: 1 })
     })
-    const elapsed = performance.now() - start
-
-    // If setPragma replay grew to O(N), reconnect would replay 2*ITER PRAGMAs
-    // and this transaction would measurably slow. 50ms is a generous bound
-    // chosen to be noisy-proof on CI while still catching a regression.
-    expect(elapsed).toBeLessThan(50)
 
     const rows = await dbh.db.select().from(topicTable).where(eq(topicTable.id, 'after-cycles'))
     expect(rows).toHaveLength(1)
