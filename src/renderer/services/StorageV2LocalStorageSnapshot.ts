@@ -59,6 +59,30 @@ function sanitizeDurableLocalStorageValue(key: string, value: unknown): string |
   return typeof value === 'string' && value ? value : null
 }
 
+function safeGetLocalStorageItem(key: string): string | null {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function safeSetLocalStorageItem(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // Browser storage can be unavailable even when the global exists.
+  }
+}
+
+function safeRemoveLocalStorageItem(key: string) {
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    // Browser storage can be unavailable even when the global exists.
+  }
+}
+
 export function getStorageV2LocalStorageSnapshot(): StorageV2LocalStorageSnapshot {
   const durableValues: Record<string, string> = {}
   const mcpProviderTokens: Record<string, string> = {}
@@ -73,7 +97,7 @@ export function getStorageV2LocalStorageSnapshot(): StorageV2LocalStorageSnapsho
   }
 
   for (const key of DURABLE_LOCAL_STORAGE_KEYS) {
-    const value = localStorage.getItem(key)
+    const value = safeGetLocalStorageItem(key)
     const sanitizedValue = sanitizeDurableLocalStorageValue(key, value)
     if (sanitizedValue) {
       durableValues[key] = sanitizedValue
@@ -81,7 +105,7 @@ export function getStorageV2LocalStorageSnapshot(): StorageV2LocalStorageSnapsho
   }
 
   for (const key of MCP_PROVIDER_TOKEN_KEYS) {
-    const token = localStorage.getItem(key)
+    const token = safeGetLocalStorageItem(key)
     if (token) {
       mcpProviderTokens[key] = token
     }
@@ -106,7 +130,7 @@ export function applyStorageV2LocalStorageSnapshot(snapshot: Partial<StorageV2Lo
     if (DURABLE_LOCAL_STORAGE_KEY_SET.has(key)) {
       const sanitizedValue = sanitizeDurableLocalStorageValue(key, value)
       if (sanitizedValue) {
-        localStorage.setItem(key, sanitizedValue)
+        safeSetLocalStorageItem(key, sanitizedValue)
       }
     }
   }
@@ -117,14 +141,14 @@ export function applyStorageV2LocalStorageSnapshot(snapshot: Partial<StorageV2Lo
   ) {
     for (const key of snapshot.clearedMcpProviderTokenKeys) {
       if (MCP_PROVIDER_TOKEN_KEY_SET.has(key)) {
-        localStorage.removeItem(key)
+        safeRemoveLocalStorageItem(key)
       }
     }
   }
 
   for (const [key, token] of Object.entries(snapshot.mcpProviderTokens ?? {})) {
     if (MCP_PROVIDER_TOKEN_KEY_SET.has(key) && typeof token === 'string' && token) {
-      localStorage.setItem(key, token)
+      safeSetLocalStorageItem(key, token)
     }
   }
 }

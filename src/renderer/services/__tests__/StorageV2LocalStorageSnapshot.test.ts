@@ -79,6 +79,19 @@ describe('StorageV2LocalStorageSnapshot', () => {
     })
   })
 
+  it('returns an empty snapshot when browser localStorage reads are blocked', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('storage blocked')
+    })
+
+    expect(getStorageV2LocalStorageSnapshot()).toEqual({
+      clearedMcpProviderTokenKeys: [],
+      durableValues: {},
+      mcpProviderTokenClearMode: 'explicit',
+      mcpProviderTokens: {}
+    })
+  })
+
   it('does not mirror renderer persist cache when it only contains defaults', () => {
     localStorage.setItem(
       RENDERER_PERSIST_CACHE_LOCAL_STORAGE_KEY,
@@ -119,6 +132,28 @@ describe('StorageV2LocalStorageSnapshot', () => {
     expect(localStorage.getItem('ai302_token')).toBe('ai302-secret')
     expect(localStorage.getItem('bailian_token')).toBe('bailian-secret')
     expect(localStorage.getItem('unexpected_token')).toBeNull()
+  })
+
+  it('does not throw when browser localStorage writes are blocked during restore', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('storage blocked')
+    })
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new Error('storage blocked')
+    })
+
+    expect(() =>
+      applyStorageV2LocalStorageSnapshot({
+        clearedMcpProviderTokenKeys: ['mcprouter_token'],
+        durableValues: {
+          language: 'zh-CN'
+        },
+        mcpProviderTokenClearMode: 'explicit',
+        mcpProviderTokens: {
+          ai302_token: 'ai302-secret'
+        }
+      })
+    ).not.toThrow()
   })
 
   it('ignores legacy MCP provider token clear markers without an explicit clear mode', () => {
