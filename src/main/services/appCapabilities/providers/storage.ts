@@ -24,21 +24,17 @@ function normalizeOffset(value: unknown) {
   return Math.max(0, Math.trunc(parsed))
 }
 
-function normalizeOptionalText(value: unknown) {
+function normalizeOptionalText(value: unknown, label = 'Value') {
   if (typeof value === 'string') {
     const trimmed = value.trim()
     return trimmed || undefined
   }
   if (value === null || typeof value === 'undefined') return undefined
-  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
-    const trimmed = String(value).trim()
-    return trimmed || undefined
-  }
-  return undefined
+  throw new Error(`${label} must be a string`)
 }
 
 function normalizeRequiredText(value: unknown, label: string) {
-  const text = normalizeOptionalText(value)
+  const text = normalizeOptionalText(value, label)
   if (!text) throw new Error(`${label} is required`)
   return text
 }
@@ -117,8 +113,9 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       tags: ['storage', 'backup', 'local', 'data'],
       examples: ['Create a local backup', 'Back up my data before changing settings'],
       execute: async (input: any) => {
+        const reason = normalizeOptionalText(input?.reason, 'Backup reason') || 'agent-request'
         await prepareRendererStorageV2ForStorageOperation('backup')
-        const backup = await storageV2Service.createBackup(normalizeOptionalText(input?.reason) || 'agent-request')
+        const backup = await storageV2Service.createBackup(reason)
         return {
           ok: true,
           summary: `Backup created: ${backup.path}`,
@@ -207,13 +204,9 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       permissions: ['storage.snapshot.write'],
       tags: ['storage', 'snapshot', 'database'],
       execute: async (input: any) => {
+        const reason = normalizeOptionalText(input?.reason, 'Snapshot reason') || 'agent-request'
         await prepareRendererStorageV2ForStorageOperation('snapshot')
-        return okResult(
-          'Storage snapshot created',
-          sanitizeForAgent(
-            await storageV2Service.createSnapshot(normalizeOptionalText(input?.reason) || 'agent-request')
-          )
-        )
+        return okResult('Storage snapshot created', sanitizeForAgent(await storageV2Service.createSnapshot(reason)))
       }
     },
     {
@@ -270,8 +263,8 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
           'Conversations listed',
           sanitizeForAgent(
             await storageV2Service.listConversations({
-              ownerType: normalizeOptionalText(input?.ownerType),
-              ownerId: normalizeOptionalText(input?.ownerId),
+              ownerType: normalizeOptionalText(input?.ownerType, 'Owner type'),
+              ownerId: normalizeOptionalText(input?.ownerId, 'Owner id'),
               ...agentListOptions(input)
             })
           )

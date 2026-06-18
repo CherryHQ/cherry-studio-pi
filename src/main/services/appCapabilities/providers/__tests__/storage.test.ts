@@ -158,6 +158,31 @@ describe('storage app capabilities', () => {
     expect(mocks.storageV2Service.getFile).not.toHaveBeenCalled()
   })
 
+  it('rejects invalid storage text input shapes before preparing or calling services', async () => {
+    await expect(capability('storage.snapshot.create').execute({ reason: 123 }, { source: 'agent' })).rejects.toThrow(
+      'Snapshot reason must be a string'
+    )
+    await expect(
+      capability('storage.backup.create').execute({ reason: { label: 'agent' } }, { source: 'agent' })
+    ).rejects.toThrow('Backup reason must be a string')
+    await expect(
+      capability('storage.conversations.list').execute({ ownerType: ['assistant'] }, { source: 'agent' })
+    ).rejects.toThrow('Owner type must be a string')
+    await expect(
+      capability('storage.messages.list').execute({ conversationId: 123 }, { source: 'agent' })
+    ).rejects.toThrow('Conversation id must be a string')
+    await expect(capability('storage.file.get').execute({ fileId: true }, { source: 'agent' })).rejects.toThrow(
+      'File id must be a string'
+    )
+
+    expect(mocks.callRendererBridge).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.createSnapshot).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.createBackup).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.listConversations).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.listMessages).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.getFile).not.toHaveBeenCalled()
+  })
+
   it('normalizes file ids before reading Storage v2 file records', async () => {
     await capability('storage.file.get').execute({ fileId: ' file-1 ' }, { source: 'agent' })
 
