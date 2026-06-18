@@ -212,7 +212,7 @@ const FilesPage: FC = () => {
               {(['created_at', 'size', 'name'] as const).map((field) => (
                 <SortButton
                   key={field}
-                  active={sortField === field}
+                  $active={sortField === field}
                   onClick={() => {
                     if (sortField === field) {
                       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
@@ -335,16 +335,16 @@ const SideNav = styled.div`
   }
 `
 
-const SortButton = styled(Button)<{ active?: boolean }>`
+const SortButton = styled(Button)<{ $active?: boolean }>`
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 4px 12px;
   height: 30px;
   border-radius: var(--list-item-border-radius);
-  border: 0.5px solid ${(props) => (props.active ? 'var(--color-border)' : 'transparent')};
-  background-color: ${(props) => (props.active ? 'var(--color-background-soft)' : 'transparent')};
-  color: ${(props) => (props.active ? 'var(--color-text)' : 'var(--color-text-secondary)')};
+  border: 0.5px solid ${(props) => (props.$active ? 'var(--color-border)' : 'transparent')};
+  background-color: ${(props) => (props.$active ? 'var(--color-background-soft)' : 'transparent')};
+  color: ${(props) => (props.$active ? 'var(--color-text)' : 'var(--color-text-secondary)')};
 
   &:hover {
     background-color: var(--color-background-soft);
