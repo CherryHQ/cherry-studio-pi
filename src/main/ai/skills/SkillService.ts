@@ -58,6 +58,17 @@ function isPathInsideOrSame(parentPath: string, candidatePath: string): boolean 
   return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative))
 }
 
+export function resolveSkillStoragePath(skillsRoot: string, folderName: string): string {
+  const resolvedRoot = path.resolve(skillsRoot)
+  const resolvedTarget = path.resolve(resolvedRoot, folderName)
+
+  if (path.dirname(resolvedTarget) !== resolvedRoot) {
+    throw new Error(`Invalid skill folder name: ${folderName}`)
+  }
+
+  return resolvedTarget
+}
+
 /**
  * Skill management service.
  *
@@ -843,7 +854,7 @@ export class SkillService {
   // ===========================================================================
 
   private getSkillStoragePath(folderName: string): string {
-    return path.join(application.getPath('feature.agents.skills'), folderName)
+    return resolveSkillStoragePath(application.getPath('feature.agents.skills'), folderName)
   }
 
   private getSkillLinkPath(folderName: string, workspace: string): string {

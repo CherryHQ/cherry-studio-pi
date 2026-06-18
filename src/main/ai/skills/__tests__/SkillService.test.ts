@@ -19,7 +19,7 @@ vi.mock('@main/utils/markdownParser', () => ({
   findSkillMdPath: vi.fn()
 }))
 
-import { assertSkillZipEntriesWithin, SkillService } from '../SkillService'
+import { assertSkillZipEntriesWithin, resolveSkillStoragePath, SkillService } from '../SkillService'
 
 const AGENT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const SKILL_ID_1 = '11111111-1111-4111-8111-111111111111'
@@ -136,6 +136,20 @@ describe('SkillService', () => {
       )
 
       expect(findSkillMdPath).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('resolveSkillStoragePath', () => {
+    const skillsRoot = path.join(os.tmpdir(), 'global-skills')
+
+    it('resolves direct child skill folders under the global skills root', () => {
+      expect(resolveSkillStoragePath(skillsRoot, 'demo-skill')).toBe(path.join(skillsRoot, 'demo-skill'))
+    })
+
+    it('rejects empty, nested, and parent-traversal folder names', () => {
+      expect(() => resolveSkillStoragePath(skillsRoot, '')).toThrow('Invalid skill folder name')
+      expect(() => resolveSkillStoragePath(skillsRoot, 'nested/skill')).toThrow('Invalid skill folder name')
+      expect(() => resolveSkillStoragePath(skillsRoot, '../outside')).toThrow('Invalid skill folder name')
     })
   })
 
