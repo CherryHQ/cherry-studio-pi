@@ -151,4 +151,22 @@ describe('AppCapabilityRegistry', () => {
     expect(registry.search({ query: '帮我画图' }).map((item) => item.id)[0]).toBe('paintings.image.generate')
     expect(registry.search({ query: '同步 webdav 数据' }).map((item) => item.id)[0]).toBe('dataSync.sync.now')
   })
+
+  it('expands provider and credential intents to model provider capabilities', () => {
+    const registry = new AppCapabilityRegistry()
+    registry.register(capability({ id: 'settings.read' }))
+    registry.register(
+      capability({
+        id: 'storage.providers.list',
+        domain: 'storage',
+        kind: 'query',
+        title: 'List model providers',
+        description: 'List model provider records with secrets redacted',
+        risk: 'read',
+        tags: ['storage', 'models', 'providers', 'settings']
+      })
+    )
+
+    expect(registry.search({ query: '检查模型服务商密钥' }).map((item) => item.id)[0]).toBe('storage.providers.list')
+  })
 })

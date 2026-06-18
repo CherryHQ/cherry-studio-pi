@@ -21,6 +21,10 @@ const QUERY_EXPANSIONS: Array<[RegExp, string[]]> = [
   [/同步|云同步|多端|webdav/i, ['dataSync', 'sync', 'webdav']],
   [/目录|路径/, ['directory', 'path']],
   [/设置|配置|偏好/, ['settings', 'preferences', 'configuration']],
+  [
+    /服务商|供应商|api\s*keys?|apikey|密钥|凭证|模型配置/i,
+    ['providers', 'provider', 'models', 'credentials', 'api key', 'settings']
+  ],
   [/语言/, ['language', 'settings']],
   [/主题|外观/, ['theme', 'display', 'settings']],
   [/知识库|知识|检索|搜索资料|rag/i, ['knowledge', 'rag', 'search']],
@@ -38,11 +42,17 @@ const QUERY_EXPANSIONS: Array<[RegExp, string[]]> = [
   [/列表|列出|查看/, ['list', 'read']]
 ]
 
+const addExpandedTerm = (target: Set<string>, value: string) => {
+  for (const term of tokenize(value)) {
+    target.add(term)
+  }
+}
+
 const expandQueryTerms = (query: string) => {
   const expanded = new Set(tokenize(query))
   for (const [pattern, additions] of QUERY_EXPANSIONS) {
     if (pattern.test(query)) {
-      additions.forEach((term) => expanded.add(term))
+      additions.forEach((term) => addExpandedTerm(expanded, term))
     }
   }
   return Array.from(expanded)
