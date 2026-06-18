@@ -99,8 +99,20 @@ function getRoutePathname(route: string) {
   return /^([^?#]*)/.exec(route)?.[1] || '/'
 }
 
+function normalizeOptionalSettingsText(value: unknown, label: string) {
+  if (value === null || typeof value === 'undefined') return ''
+  if (typeof value !== 'string') throw new Error(`${label} must be a string`)
+  return value.trim()
+}
+
+function normalizeRequiredSettingsText(value: unknown, label: string) {
+  const text = normalizeOptionalSettingsText(value, label)
+  if (!text) throw new Error(`${label} is required`)
+  return text
+}
+
 function normalizeSettingsRouteInput(value: unknown) {
-  const raw = typeof value === 'string' ? value.trim() : ''
+  const raw = normalizeOptionalSettingsText(value, 'Settings route')
   if (!raw) return ''
 
   const route = raw.startsWith('/') ? raw : `/${raw}`
@@ -292,8 +304,7 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['settings', 'preferences', 'get'],
       execute: async (input: any) => {
-        const keyPath = String(input?.path ?? '').trim()
-        if (!keyPath) throw new Error('Setting path is required')
+        const keyPath = normalizeRequiredSettingsText(input?.path, 'Setting path')
         return okResult('Setting value read', {
           path: keyPath,
           value: sanitizeSettingValueForAgent(keyPath, await readSettingValueForAgent(keyPath))
@@ -320,8 +331,7 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       examples: ['Change language', 'Set theme', 'Set default painting provider', 'Enable API server'],
       execute: async (input: any) => {
         const inputObject = input && typeof input === 'object' ? input : {}
-        const keyPath = String(input?.path ?? '').trim()
-        if (!keyPath) throw new Error('Setting path is required')
+        const keyPath = normalizeRequiredSettingsText(input?.path, 'Setting path')
         if (!Object.prototype.hasOwnProperty.call(inputObject, 'value')) throw new Error('Setting value is required')
         if (!isSupportedSettingPath(keyPath)) throw new Error(`Unsupported setting path: ${keyPath}`)
         await persistSettingValue(keyPath, inputObject.value)
@@ -347,9 +357,10 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['settings', 'navigation', 'open'],
       execute: async (input: any) => {
-        const sectionInput = typeof input?.section === 'string' ? input.section.trim() : ''
+        const sectionInput = normalizeOptionalSettingsText(input?.section, 'Settings section')
         const routeInput = normalizeSettingsRouteInput(input?.route)
         const section = SETTINGS_SECTIONS.find((item) => item.id === sectionInput)
+        if (sectionInput && !section) throw new Error(`Unsupported settings section: ${sectionInput}`)
         const route = section?.route || routeInput || '/settings/provider'
         await navigateApp(route)
         return okResult('Settings section opened', { route })

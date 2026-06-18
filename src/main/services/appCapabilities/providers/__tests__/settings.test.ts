@@ -453,6 +453,18 @@ describe('settings app capabilities', () => {
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
 
+  it('rejects non-string setting paths without reading or writing settings', async () => {
+    await expect(capability('settings.value.get').execute({ path: ['theme'] }, { source: 'agent' })).rejects.toThrow(
+      'Setting path must be a string'
+    )
+    await expect(
+      capability('settings.value.set').execute({ path: { key: 'theme' }, value: 'dark' }, { source: 'agent' })
+    ).rejects.toThrow('Setting path must be a string')
+
+    expect(mocks.preferenceService.set).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
+  })
+
   it('rejects empty setting update paths without dispatching', async () => {
     await expect(
       capability('settings.value.set').execute({ path: '   ', value: 'dark' }, { source: 'agent' })
@@ -498,6 +510,20 @@ describe('settings app capabilities', () => {
     await expect(capability('settings.open').execute({ route: '/agents' }, { source: 'agent' })).rejects.toThrow(
       'Unsupported settings route: /agents'
     )
+
+    expect(mocks.navigateApp).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid settings opener inputs instead of opening the default section', async () => {
+    await expect(capability('settings.open').execute({ section: ['data'] }, { source: 'agent' })).rejects.toThrow(
+      'Settings section must be a string'
+    )
+    await expect(capability('settings.open').execute({ section: 'unknown' }, { source: 'agent' })).rejects.toThrow(
+      'Unsupported settings section: unknown'
+    )
+    await expect(
+      capability('settings.open').execute({ route: { path: '/settings/data' } }, { source: 'agent' })
+    ).rejects.toThrow('Settings route must be a string')
 
     expect(mocks.navigateApp).not.toHaveBeenCalled()
   })

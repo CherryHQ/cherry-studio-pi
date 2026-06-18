@@ -38,4 +38,20 @@ describe('navigation app capabilities', () => {
       }
     })
   })
+
+  it('rejects invalid routes instead of navigating to an implicit fallback', async () => {
+    mocks.navigateApp.mockClear()
+
+    await expect(capability('app.navigate').execute({}, { source: 'agent' })).rejects.toThrow(
+      'App route must be a string'
+    )
+    await expect(capability('app.navigate').execute({ route: '   ' }, { source: 'agent' })).rejects.toThrow(
+      'App route is required'
+    )
+    await expect(capability('app.navigate').execute({ route: ['settings/data'] }, { source: 'agent' })).rejects.toThrow(
+      'App route must be a string'
+    )
+
+    expect(mocks.navigateApp).not.toHaveBeenCalled()
+  })
 })

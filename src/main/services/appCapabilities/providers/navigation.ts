@@ -1,6 +1,15 @@
 import type { AppCapabilityDefinition } from '../types'
 import { navigateApp, normalizeAppRoute, okResult } from '../utils'
 
+function normalizeNavigationRoute(value: unknown) {
+  if (typeof value !== 'string') throw new Error('App route must be a string')
+
+  const route = value.trim()
+  if (!route) throw new Error('App route is required')
+
+  return normalizeAppRoute(route)
+}
+
 export function createNavigationCapabilities(): AppCapabilityDefinition[] {
   return [
     {
@@ -22,7 +31,7 @@ export function createNavigationCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['app', 'ui', 'navigation', 'open'],
       execute: async (input: any) => {
-        const route = normalizeAppRoute(String(input?.route || '/'))
+        const route = normalizeNavigationRoute(input?.route)
         await navigateApp(route)
         return okResult('Application navigated', { route })
       }
