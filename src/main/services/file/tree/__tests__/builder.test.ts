@@ -6,7 +6,7 @@ import type { TreeMutationEvent } from '@shared/file/types'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { createDirectoryTree, type DirectoryTreeBuilder, isTreePathSameOrChild } from '../builder'
-import { normalizeGitignoreRootPath } from '../gitignore'
+import { normalizeGitignoreRootPath, relativePathFromGitignoreRoot } from '../gitignore'
 
 const waitForEvent = (
   builder: DirectoryTreeBuilder,
@@ -46,6 +46,18 @@ describe('normalizeGitignoreRootPath', () => {
   it('preserves the filesystem root instead of trimming it to an empty path', () => {
     expect(normalizeGitignoreRootPath('/')).toBe('/')
     expect(normalizeGitignoreRootPath('/Users/me/Notes/')).toBe('/Users/me/Notes')
+  })
+})
+
+describe('relativePathFromGitignoreRoot', () => {
+  it('derives relative paths for filesystem roots without requiring a double slash', () => {
+    expect(relativePathFromGitignoreRoot('/Users/me/Notes/a.md', '/')).toBe('Users/me/Notes/a.md')
+    expect(relativePathFromGitignoreRoot('/', '/')).toBeNull()
+  })
+
+  it('keeps normal directory boundaries strict', () => {
+    expect(relativePathFromGitignoreRoot('/Users/me/Notes/a.md', '/Users/me/Notes')).toBe('a.md')
+    expect(relativePathFromGitignoreRoot('/Users/me/Notes-other/a.md', '/Users/me/Notes')).toBeNull()
   })
 })
 

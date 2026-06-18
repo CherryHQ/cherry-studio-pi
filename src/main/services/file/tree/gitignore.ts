@@ -83,6 +83,20 @@ export function normalizeGitignoreRootPath(rootPath: string): string {
   return rootPath.replace(/\\/g, '/').replace(/\/+$/, '') || '/'
 }
 
+export function relativePathFromGitignoreRoot(absPath: string, normalizedRoot: string): string | null {
+  const normalized = absPath.replace(/\\/g, '/')
+  if (normalized === normalizedRoot) return null
+
+  if (normalizedRoot === '/') {
+    const rel = normalized.startsWith('/') ? normalized.slice(1) : normalized
+    return rel || null
+  }
+
+  if (!normalized.startsWith(`${normalizedRoot}/`)) return null
+  const rel = normalized.slice(normalizedRoot.length + 1)
+  return rel || null
+}
+
 /**
  * Build a predicate from `${rootPath}/.gitignore`.
  *
@@ -130,10 +144,7 @@ export async function loadGitignorePredicate(rootPath: string): Promise<Gitignor
   }
 
   return (absPath: string) => {
-    const normalized = absPath.replace(/\\/g, '/')
-    if (normalized === normalizedRoot) return false
-    if (!normalized.startsWith(`${normalizedRoot}/`)) return false
-    const rel = normalized.slice(normalizedRoot.length + 1)
+    const rel = relativePathFromGitignoreRoot(absPath, normalizedRoot)
     if (!rel) return false
     return ig.ignores(rel)
   }
