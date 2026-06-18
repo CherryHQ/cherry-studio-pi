@@ -91,6 +91,12 @@ export type StorageV2RestoreBackupResult = {
   warnings: string[]
 }
 
+type BackupOverviewEntry = {
+  path: string
+  createdAt: string
+  reason: string | null
+}
+
 const RESTORABLE_DIRECTORIES = [
   'blobs',
   'secrets',
@@ -403,16 +409,20 @@ function getBackupTimeValue(createdAt: string | null) {
   return Number.isFinite(time) ? time : 0
 }
 
-function readBackupOverviewEntry(backupPath: string) {
-  const stat = fs.statSync(backupPath)
-  const metadata = readJsonFile(path.join(backupPath, 'metadata.json'))
-  const createdAt = typeof metadata?.createdAt === 'string' ? metadata.createdAt : stat.mtime.toISOString()
-  const reason = typeof metadata?.reason === 'string' ? metadata.reason : null
+function readBackupOverviewEntry(backupPath: string): BackupOverviewEntry | null {
+  try {
+    const stat = fs.statSync(backupPath)
+    const metadata = readJsonFile(path.join(backupPath, 'metadata.json'))
+    const createdAt = typeof metadata?.createdAt === 'string' ? metadata.createdAt : stat.mtime.toISOString()
+    const reason = typeof metadata?.reason === 'string' ? metadata.reason : null
 
-  return {
-    path: backupPath,
-    createdAt,
-    reason
+    return {
+      path: backupPath,
+      createdAt,
+      reason
+    }
+  } catch {
+    return null
   }
 }
 
@@ -516,6 +526,7 @@ export class StorageV2BackupService {
       .readdirSync(backupRoot, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => readBackupOverviewEntry(path.join(backupRoot, entry.name)))
+      .filter((entry): entry is BackupOverviewEntry => entry !== null)
       .sort((left, right) => {
         const timeDiff = getBackupTimeValue(right.createdAt) - getBackupTimeValue(left.createdAt)
         return timeDiff !== 0 ? timeDiff : right.path.localeCompare(left.path)

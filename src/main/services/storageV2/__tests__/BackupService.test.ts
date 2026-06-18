@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('node:fs', async () => {
   const actual = await vi.importActual<typeof fs>('node:fs')
-  return { ...actual, default: actual }
+  return { ...actual, default: { ...actual } }
 })
 
 vi.mock('node:os', async () => {
@@ -349,6 +349,29 @@ describe('StorageV2BackupService.getBackupOverview', () => {
   })
 
   it('returns the most recent Storage v2 backup for settings overview', async () => {
+    const overview = await new StorageV2BackupService().getBackupOverview()
+
+    expect(overview).toEqual({
+      backupRoot: path.join(dataRoot, 'backups'),
+      backupCount: 2,
+      latestBackupPath: path.join(dataRoot, 'backups', 'newer'),
+      latestBackupCreatedAt: '2026-01-02T00:00:00.000Z',
+      latestBackupReason: 'new-test'
+    })
+  })
+
+  it('skips unreadable backup directories when building the overview', async () => {
+    const brokenBackupPath = path.join(dataRoot, 'backups', 'broken')
+    fs.mkdirSync(brokenBackupPath)
+    const serviceFs = (fs as typeof fs & { default?: typeof fs }).default ?? fs
+    const realStatSync = serviceFs.statSync.bind(serviceFs)
+    vi.spyOn(serviceFs, 'statSync').mockImplementation(((target: fs.PathLike, options?: fs.StatSyncOptions) => {
+      if (String(target) === brokenBackupPath) {
+        throw new Error('backup directory disappeared')
+      }
+      return realStatSync(target, options as never)
+    }) as typeof fs.statSync)
+
     const overview = await new StorageV2BackupService().getBackupOverview()
 
     expect(overview).toEqual({
