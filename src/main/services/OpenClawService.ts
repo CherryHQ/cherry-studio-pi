@@ -758,6 +758,14 @@ export class OpenClawService extends BaseService {
 
       let stdout = ''
       let stderr = ''
+      let settled = false
+
+      const settle = (result: { code: number | null; stdout: string; stderr: string }) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        resolve(result)
+      }
 
       proc.stdout?.on('data', (data) => {
         stdout += data.toString()
@@ -769,25 +777,23 @@ export class OpenClawService extends BaseService {
       const timeout = setTimeout(() => {
         logger.warn('Gateway command timed out', { args: summarizeTextForLog(args.join(' ')) })
         proc.kill('SIGKILL')
-        resolve({ code: null, stdout, stderr })
+        settle({ code: null, stdout, stderr })
       }, timeoutMs)
       timeout.unref?.()
 
       proc.on('exit', (code) => {
-        clearTimeout(timeout)
         logger.info('Gateway command finished', {
           args: summarizeTextForLog(args.join(' ')),
           code,
           stdout: summarizeTextForLog(stdout.trim()),
           stderr: summarizeTextForLog(stderr.trim())
         })
-        resolve({ code, stdout, stderr })
+        settle({ code, stdout, stderr })
       })
 
       proc.on('error', (err) => {
-        clearTimeout(timeout)
         logger.error('Gateway command error', err, { args: summarizeTextForLog(args.join(' ')) })
-        resolve({ code: null, stdout, stderr: err.message })
+        settle({ code: null, stdout, stderr: err.message })
       })
     })
   }

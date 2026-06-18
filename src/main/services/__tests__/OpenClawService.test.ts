@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -85,6 +86,18 @@ vi.mock('../VertexAiService', () => ({
 async function createService() {
   const { OpenClawService } = await import('../OpenClawService')
   return new OpenClawService()
+}
+
+function createMockChildProcess() {
+  const child = new EventEmitter() as EventEmitter & {
+    kill: ReturnType<typeof vi.fn>
+    stdout: EventEmitter
+    stderr: EventEmitter
+  }
+  child.kill = vi.fn()
+  child.stdout = new EventEmitter()
+  child.stderr = new EventEmitter()
+  return child
 }
 
 describe('OpenClawService symlink safety', () => {
@@ -495,6 +508,34 @@ describe('OpenClawService gateway status state machine', () => {
       const status = await service.getStatus()
       expect(status.status).toBe('running')
     })
+  })
+})
+
+describe('OpenClawService gateway command runner', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('keeps timeout result when the killed gateway command later exits successfully', async () => {
+    vi.useFakeTimers()
+    const service = await createService()
+    const { crossPlatformSpawn } = await import('@main/utils/process')
+    const child = createMockChildProcess()
+
+    vi.mocked(crossPlatformSpawn).mockReturnValue(child as never)
+
+    const resultPromise = (service as any).execOpenClawCommandWithResult(
+      '/mock/bin/openclaw',
+      ['gateway', 'stop'],
+      {},
+      1000
+    )
+
+    vi.advanceTimersByTime(1000)
+    child.emit('exit', 0)
+
+    await expect(resultPromise).resolves.toEqual({ code: null, stdout: '', stderr: '' })
+    expect(child.kill).toHaveBeenCalledWith('SIGKILL')
   })
 })
 
