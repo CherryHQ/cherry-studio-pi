@@ -1,24 +1,15 @@
 import { Switch } from '@cherrystudio/ui'
 import { useMultiplePreferences } from '@data/hooks/usePreference'
 import { useTheme } from '@renderer/context/ThemeProvider'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import type { FC } from 'react'
-import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingTitle } from '..'
 const ExportMenuOptions: FC = () => {
   const { t } = useTranslation()
   const { theme } = useTheme()
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
+  const showSaveFailed = useSaveFailedToast()
 
   const [exportMenuOptions, setExportMenuOptions] = useMultiplePreferences({
     image: 'data.export.menus.image',
@@ -32,15 +23,6 @@ const ExportMenuOptions: FC = () => {
     docx: 'data.export.menus.docx',
     plain_text: 'data.export.menus.plain_text'
   })
-
-  const showSaveFailed = useCallback(
-    (error: unknown) => {
-      if (mountedRef.current) {
-        window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-      }
-    },
-    [t]
-  )
 
   const handleToggleOption = (option: string, checked: boolean) => {
     void setExportMenuOptions({
