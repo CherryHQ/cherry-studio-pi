@@ -148,6 +148,14 @@ function hasOwnInput(input: any, key: string) {
   return Object.prototype.hasOwnProperty.call(input ?? {}, key)
 }
 
+function normalizeInputObject(input: unknown) {
+  if (input === null || typeof input === 'undefined') return {}
+  if (typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('Data sync capability input must be an object')
+  }
+  return input as Record<string, unknown>
+}
+
 const WEBDAV_INPUT_LABELS: Partial<Record<keyof WebDavConfig, string>> = {
   webdavHost: 'WebDAV host',
   webdavUser: 'WebDAV username',
@@ -164,20 +172,21 @@ function normalizeInputText(value: unknown, fallback = '', options: { trim?: boo
   return trim ? value.trim() : value
 }
 
-function resolveInputText(input: any, key: keyof WebDavConfig, fallback = '') {
+function resolveInputText(input: Record<string, unknown>, key: keyof WebDavConfig, fallback = '') {
   return hasOwnInput(input, key)
-    ? normalizeInputText(input?.[key], fallback, { trim: key !== 'webdavPass', label: WEBDAV_INPUT_LABELS[key] ?? key })
+    ? normalizeInputText(input[key], fallback, { trim: key !== 'webdavPass', label: WEBDAV_INPUT_LABELS[key] ?? key })
     : fallback
 }
 
 async function resolveWebDavConfig(
-  input: any,
+  input: unknown,
   options: {
     requireCredentials?: boolean
   } = {}
 ): Promise<WebDavConfig> {
+  const inputObject = normalizeInputObject(input)
   const needsStoredConfig = (['webdavHost', 'webdavUser', 'webdavPass', 'webdavPath'] as const).some(
-    (key) => !hasOwnInput(input, key)
+    (key) => !hasOwnInput(inputObject, key)
   )
   const stored = needsStoredConfig
     ? await getStoredWebDavConfig()
@@ -189,10 +198,10 @@ async function resolveWebDavConfig(
       }
   return normalizeWebDavConfig(
     {
-      webdavHost: resolveInputText(input, 'webdavHost', stored.webdavHost),
-      webdavUser: resolveInputText(input, 'webdavUser', stored.webdavUser),
-      webdavPass: resolveInputText(input, 'webdavPass', stored.webdavPass),
-      webdavPath: resolveInputText(input, 'webdavPath', stored.webdavPath)
+      webdavHost: resolveInputText(inputObject, 'webdavHost', stored.webdavHost),
+      webdavUser: resolveInputText(inputObject, 'webdavUser', stored.webdavUser),
+      webdavPass: resolveInputText(inputObject, 'webdavPass', stored.webdavPass),
+      webdavPath: resolveInputText(inputObject, 'webdavPath', stored.webdavPath)
     },
     { defaultPath: DEFAULT_DATA_SYNC_PATH, requireCredentials: options.requireCredentials }
   )
@@ -416,10 +425,11 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       supportsDryRun: true,
       tags: ['dataSync', 'sync', 'webdav', 'configure', 'settings'],
       execute: async (input: any, context) => {
-        const config = await resolveWebDavConfig(input, { requireCredentials: true })
+        const inputObject = normalizeInputObject(input)
+        const config = await resolveWebDavConfig(inputObject, { requireCredentials: true })
         if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
-        const autoSync = normalizeOptionalBooleanInput(input?.autoSync, 'Auto sync')
-        const syncInterval = normalizeSyncIntervalInput(input?.syncInterval)
+        const autoSync = normalizeOptionalBooleanInput(inputObject.autoSync, 'Auto sync')
+        const syncInterval = normalizeSyncIntervalInput(inputObject.syncInterval)
         if (context.dryRun) {
           return okResult('WebDAV data sync config dry run completed', sanitizeForAgent(config))
         }
@@ -452,9 +462,10 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['network.webdav.read'],
       tags: ['dataSync', 'sync', 'webdav', 'directories', 'path'],
       execute: async (input: any) => {
-        const config = await resolveWebDavConfig(input, { requireCredentials: true })
+        const inputObject = normalizeInputObject(input)
+        const config = await resolveWebDavConfig(inputObject, { requireCredentials: true })
         if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
-        const remotePath = normalizeDirectoryPath(input?.remotePath)
+        const remotePath = normalizeDirectoryPath(inputObject.remotePath)
         return okResult(
           'WebDAV directories listed',
           sanitizeForAgent(
@@ -487,9 +498,10 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       supportsDryRun: true,
       tags: ['dataSync', 'sync', 'webdav', 'diagnose', 'troubleshoot', 'write-access'],
       execute: async (input: any, context) => {
-        const config = await resolveWebDavConfig(input, { requireCredentials: true })
+        const inputObject = normalizeInputObject(input)
+        const config = await resolveWebDavConfig(inputObject, { requireCredentials: true })
         if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
-        const remotePath = normalizeDirectoryPath(input?.remotePath, config.webdavPath || '/')
+        const remotePath = normalizeDirectoryPath(inputObject.remotePath, config.webdavPath || '/')
 
         const [status, directories, writeAccess] = await runWebDavCapability('诊断 WebDAV 同步', async () => {
           const [nextStatus, nextDirectories] = await Promise.all([
@@ -542,9 +554,10 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       tags: ['dataSync', 'sync', 'webdav', 'run'],
       examples: ['Sync my data now', 'Run WebDAV data sync'],
       execute: async (input: any, context) => {
-        const config = await resolveWebDavConfig(input, { requireCredentials: true })
+        const inputObject = normalizeInputObject(input)
+        const config = await resolveWebDavConfig(inputObject, { requireCredentials: true })
         if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
-        const saveConfig = normalizeOptionalBooleanInput(input?.saveConfig, 'Save config') === true
+        const saveConfig = normalizeOptionalBooleanInput(inputObject.saveConfig, 'Save config') === true
         if (context.dryRun) {
           return okResult('Data sync dry run completed', sanitizeForAgent({ config }))
         }
@@ -589,7 +602,8 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       supportsDryRun: true,
       tags: ['dataSync', 'sync', 'webdav', 'restore', 'snapshot'],
       execute: async (input: any, context) => {
-        const config = await resolveWebDavConfig(input, { requireCredentials: true })
+        const inputObject = normalizeInputObject(input)
+        const config = await resolveWebDavConfig(inputObject, { requireCredentials: true })
         if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
         if (context.dryRun) {
           return okResult('Data sync snapshot restore dry run completed', sanitizeForAgent({ config }))

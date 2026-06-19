@@ -409,6 +409,35 @@ describe('data sync app capabilities', () => {
     ).toBe(false)
   })
 
+  it('rejects invalid data sync capability input objects before side effects', async () => {
+    await expect(
+      capability('dataSync.webdav.config.set').execute('dav.example.com' as any, { source: 'agent' })
+    ).rejects.toThrow('Data sync capability input must be an object')
+    await expect(capability('dataSync.webdav.directories.list').execute([], { source: 'agent' })).rejects.toThrow(
+      'Data sync capability input must be an object'
+    )
+    await expect(capability('dataSync.webdav.diagnose').execute(true as any, { source: 'agent' })).rejects.toThrow(
+      'Data sync capability input must be an object'
+    )
+    await expect(capability('dataSync.sync.now').execute(['sync'] as any, { source: 'agent' })).rejects.toThrow(
+      'Data sync capability input must be an object'
+    )
+    await expect(
+      capability('dataSync.snapshot.restoreLatest').execute('restore' as any, { source: 'agent' })
+    ).rejects.toThrow('Data sync capability input must be an object')
+
+    expect(mocks.storageV2Service.getSetting).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.setSetting).not.toHaveBeenCalled()
+    expect(mocks.secretVault.getSecret).not.toHaveBeenCalled()
+    expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
+    expect(mocks.appDataSyncService.getStatus).not.toHaveBeenCalled()
+    expect(mocks.appDataSyncService.listRemoteDirectories).not.toHaveBeenCalled()
+    expect(mocks.appDataSyncService.checkWriteAccess).not.toHaveBeenCalled()
+    expect(mocks.appDataSyncService.syncNow).not.toHaveBeenCalled()
+    expect(mocks.appDataSyncService.restoreLatestSnapshot).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
+  })
+
   it('declares dry-run support for write capabilities that implement dry-run branches', () => {
     expect(capability('dataSync.webdav.config.set').supportsDryRun).toBe(true)
     expect(capability('dataSync.webdav.diagnose').supportsDryRun).toBe(true)
