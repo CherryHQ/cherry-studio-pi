@@ -476,6 +476,32 @@ describe('DataSyncService', () => {
     await expect(firstSync).resolves.toEqual(successSummary)
   })
 
+  it('clears renderer sync state when duplicate preflight status reconciliation times out', async () => {
+    vi.useFakeTimers()
+    const pendingSync = deferred<typeof successSummary>()
+    mocks.syncNow.mockReturnValueOnce(pendingSync.promise)
+
+    const firstSync = syncAppDataNow()
+    await vi.waitFor(() => expect(mocks.syncNow).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(getDataSyncRuntimeState().syncing).toBe(true))
+
+    mocks.getStatus.mockImplementationOnce(() => new Promise(() => undefined))
+    const duplicateSync = syncAppDataNow()
+    const rejection = expect(duplicateSync).rejects.toThrow('检查当前同步状态')
+
+    await vi.advanceTimersByTimeAsync(30_000)
+
+    await rejection
+    expect(getDataSyncRuntimeState()).toEqual({
+      syncing: false,
+      syncStartedAt: null
+    })
+    expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+
+    pendingSync.resolve(successSummary)
+    await expect(firstSync).resolves.toEqual(successSummary)
+  })
+
   it('returns null when the main process rejects because a sync is still running', async () => {
     mocks.syncNow.mockRejectedValueOnce(new Error('已有数据同步正在进行'))
 

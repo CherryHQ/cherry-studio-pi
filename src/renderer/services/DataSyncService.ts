@@ -469,11 +469,18 @@ function ensureLocalChangeAutoSyncSubscription() {
 
 export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<DataSyncSummary | null> {
   if (syncing) {
-    await withDataSyncStageTimeout(
-      '检查当前同步状态',
-      () => reconcileRendererSyncStateWithMainProcess(),
-      RENDERER_SYNC_STATUS_TIMEOUT_MS
-    )
+    try {
+      await withDataSyncStageTimeout(
+        '检查当前同步状态',
+        () => reconcileRendererSyncStateWithMainProcess(),
+        RENDERER_SYNC_STATUS_TIMEOUT_MS
+      )
+    } catch (error) {
+      logger.warn('Failed to reconcile renderer data sync state before starting another sync', error as Error)
+      setDataSyncRunning(false)
+      throw error
+    }
+
     if (syncing) {
       logger.info('Data sync already running')
       return null
