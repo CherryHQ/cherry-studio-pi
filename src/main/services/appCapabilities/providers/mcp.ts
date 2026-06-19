@@ -9,6 +9,12 @@ const DEFAULT_MCP_TOOL_LIST_LIMIT = 50
 const MAX_MCP_TOOL_LIST_LIMIT = 200
 const RENDERER_STORE_FALLBACK_TIMEOUT_MS = 500
 
+function normalizeInputObject(input: unknown) {
+  if (input === null || typeof input === 'undefined') return {}
+  if (typeof input !== 'object' || Array.isArray(input)) throw new Error('MCP capability input must be an object')
+  return input as Record<string, unknown>
+}
+
 function normalizeListLimit(value: unknown) {
   return normalizeBoundedIntegerInput(value, {
     label: 'MCP tool list limit',
@@ -83,7 +89,8 @@ export function createMcpCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['mcp', 'servers', 'tools'],
-      execute: async () => {
+      execute: async (input: unknown) => {
+        normalizeInputObject(input)
         return okResult('MCP servers listed', sanitizeForAgent(await listConfiguredMcpServers()))
       }
     },
@@ -103,10 +110,11 @@ export function createMcpCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['mcp', 'tools', 'list'],
-      execute: async (input: any) => {
-        const limit = normalizeListLimit(input?.limit)
-        const offset = normalizeOffset(input?.offset)
-        const includeSchemas = input?.includeSchemas === true
+      execute: async (input: unknown) => {
+        const inputObject = normalizeInputObject(input)
+        const limit = normalizeListLimit(inputObject.limit)
+        const offset = normalizeOffset(inputObject.offset)
+        const includeSchemas = inputObject.includeSchemas === true
         const tools = await mcpService.listAllActiveServerTools()
         const page = tools.slice(offset, offset + limit)
         return okResult('MCP tools listed', {
@@ -136,17 +144,19 @@ export function createMcpCapabilities(): AppCapabilityDefinition[] {
       permissions: ['mcp.tool.call'],
       sideEffects: ['mcp.tool.call'],
       tags: ['mcp', 'tools', 'call'],
-      execute: async (input: any, context) =>
-        okResult(
+      execute: async (input: unknown, context) => {
+        const inputObject = normalizeInputObject(input)
+        return okResult(
           'MCP tool called',
           sanitizeForAgent(
             await mcpService.callToolById(
-              normalizeRequiredText(input?.toolId, 'MCP tool id'),
-              normalizeToolParams(input?.params),
+              normalizeRequiredText(inputObject.toolId, 'MCP tool id'),
+              normalizeToolParams(inputObject.params),
               context.toolCallId
             )
           )
         )
+      }
     }
   ]
 }

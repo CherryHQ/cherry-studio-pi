@@ -37,6 +37,12 @@ const KNOWLEDGE_BASE_METADATA_FIELDS = [
   'version'
 ] as const satisfies readonly (keyof KnowledgeBase)[]
 
+function normalizeInputObject(input: unknown) {
+  if (input === null || typeof input === 'undefined') return {}
+  if (typeof input !== 'object' || Array.isArray(input)) throw new Error('Knowledge capability input must be an object')
+  return input as Record<string, unknown>
+}
+
 function firstApiKey(value: unknown): string {
   return typeof value === 'string' ? (value.split(',')[0]?.trim() ?? '') : ''
 }
@@ -409,11 +415,12 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['knowledge', 'rag', 'list'],
-      execute: async (input: any) => {
+      execute: async (input: unknown) => {
+        const inputObject = normalizeInputObject(input)
         const bases = await listKnowledgeBases()
         return okResult('Knowledge bases listed', {
           total: bases.length,
-          knowledge_bases: sanitizeForAgent(bases.map((base) => summarizeKnowledgeBaseForAgent(base, input)))
+          knowledge_bases: sanitizeForAgent(bases.map((base) => summarizeKnowledgeBaseForAgent(base, inputObject)))
         })
       }
     },
@@ -446,14 +453,15 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       permissions: ['knowledge.write'],
       sideEffects: ['database.write', 'filesystem.write'],
       tags: ['knowledge', 'rag', 'create'],
-      execute: async (input: any) => {
+      execute: async (input: unknown) => {
+        const inputObject = normalizeInputObject(input)
         const now = Date.now()
-        const id = normalizeOptionalText(input?.id, 'Knowledge base id') || `kb_${uuidv4()}`
-        const name = normalizeRequiredText(input?.name, 'Knowledge base name')
-        const model = normalizeKnowledgeModel(input?.model)
-        const items = normalizeKnowledgeItems(input?.items)
-        const createdAt = normalizeOptionalTimestamp(input?.created_at, 'Knowledge base created_at', now)
-        const base = createKnowledgeBaseMetadata(input, {
+        const id = normalizeOptionalText(inputObject.id, 'Knowledge base id') || `kb_${uuidv4()}`
+        const name = normalizeRequiredText(inputObject.name, 'Knowledge base name')
+        const model = normalizeKnowledgeModel(inputObject.model)
+        const items = normalizeKnowledgeItems(inputObject.items)
+        const createdAt = normalizeOptionalTimestamp(inputObject.created_at, 'Knowledge base created_at', now)
+        const base = createKnowledgeBaseMetadata(inputObject, {
           id,
           name,
           model,
@@ -463,7 +471,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         })
 
         const warnings: string[] = []
-        if (input?.initialize !== false) {
+        if (inputObject.initialize !== false) {
           try {
             const embeddingModelId = toRuntimeModelId(model)
             const dimensions = Number(base.dimensions)
@@ -530,12 +538,13 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['knowledge', 'rag', 'search'],
-      execute: async (input: any) => {
-        const query = normalizeRequiredText(input?.query, 'Knowledge search query')
+      execute: async (input: unknown) => {
+        const inputObject = normalizeInputObject(input)
+        const query = normalizeRequiredText(inputObject.query, 'Knowledge search query')
 
-        const ids = normalizeKnowledgeBaseIds(input?.knowledge_base_ids)
-        const documentCount = normalizeKnowledgeSearchDocumentCount(input?.document_count)
-        const resultLimit = normalizeKnowledgeSearchResultLimit(input?.result_limit)
+        const ids = normalizeKnowledgeBaseIds(inputObject.knowledge_base_ids)
+        const documentCount = normalizeKnowledgeSearchDocumentCount(inputObject.document_count)
+        const resultLimit = normalizeKnowledgeSearchResultLimit(inputObject.result_limit)
         const bases = await listKnowledgeBases()
         const targetBases = ids?.length ? bases.filter((base) => ids.includes(base.id)) : bases
         if (ids?.length) {
@@ -614,11 +623,12 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       permissions: ['knowledge.write'],
       sideEffects: ['database.write', 'filesystem.read', 'filesystem.write', 'model.call', 'network'],
       tags: ['knowledge', 'rag', 'add', 'ingest'],
-      execute: async (input: any) => {
-        const baseId = normalizeRequiredText(input?.baseId, 'Knowledge base id')
+      execute: async (input: unknown) => {
+        const inputObject = normalizeInputObject(input)
+        const baseId = normalizeRequiredText(inputObject.baseId, 'Knowledge base id')
         const base = (await listKnowledgeBases()).find((item) => item.id === baseId)
         if (!base) throw new Error(`Knowledge base not found: ${baseId}`)
-        const knowledgeItem = normalizeKnowledgeItem(input?.item)
+        const knowledgeItem = normalizeKnowledgeItem(inputObject.item)
         await toKnowledgeBaseParams(base)
         await knowledgeService.addItems(base.id, [knowledgeItem as never])
         const updatedBase = { ...base, items: [...(base.items ?? []), knowledgeItem], updated_at: Date.now() }
@@ -644,8 +654,9 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['database.write', 'filesystem.read', 'model.call', 'network'],
       supportsDryRun: true,
       tags: ['knowledge', 'rag', 'reset'],
-      execute: async (input: any, context) => {
-        const baseId = normalizeRequiredText(input?.baseId, 'Knowledge base id')
+      execute: async (input: unknown, context) => {
+        const inputObject = normalizeInputObject(input)
+        const baseId = normalizeRequiredText(inputObject.baseId, 'Knowledge base id')
         const base = (await listKnowledgeBases()).find((item) => item.id === baseId)
         if (!base) throw new Error(`Knowledge base not found: ${baseId}`)
         if (context.dryRun) return okResult('Knowledge base reset dry run completed', { baseId: base.id })

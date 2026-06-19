@@ -489,6 +489,29 @@ describe('settings app capabilities', () => {
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
 
+  it('rejects non-object settings capability inputs before reads, writes, or navigation', async () => {
+    await expect(capability('settings.sections.list').execute('sections' as any, { source: 'agent' })).rejects.toThrow(
+      'Settings capability input must be an object'
+    )
+    await expect(capability('settings.read').execute(['settings'] as any, { source: 'agent' })).rejects.toThrow(
+      'Settings capability input must be an object'
+    )
+    await expect(capability('settings.value.get').execute(true as any, { source: 'agent' })).rejects.toThrow(
+      'Settings capability input must be an object'
+    )
+    await expect(capability('settings.value.set').execute('theme' as any, { source: 'agent' })).rejects.toThrow(
+      'Settings capability input must be an object'
+    )
+    await expect(capability('settings.open').execute(['data'] as any, { source: 'agent' })).rejects.toThrow(
+      'Settings capability input must be an object'
+    )
+
+    expect(mocks.preferenceService.get).not.toHaveBeenCalled()
+    expect(mocks.preferenceService.set).not.toHaveBeenCalled()
+    expect(mocks.navigateApp).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
+  })
+
   it('normalizes settings section and route inputs before opening', async () => {
     const bySection = await capability('settings.open').execute({ section: ' data ' }, { source: 'agent' })
 

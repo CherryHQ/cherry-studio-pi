@@ -3,10 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   callRendererBridge: vi.fn(),
   storageV2Service: {
+    getDataRoot: vi.fn(),
+    healthCheck: vi.fn(),
+    getStats: vi.fn(),
     createSnapshot: vi.fn(),
     createBackup: vi.fn(),
+    getBackupOverview: vi.fn(),
     validateBackup: vi.fn(),
     restoreBackup: vi.fn(),
+    listProviders: vi.fn(),
     listAssistants: vi.fn(),
     listConversations: vi.fn(),
     listMessages: vi.fn(),
@@ -45,10 +50,15 @@ describe('storage app capabilities', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.callRendererBridge.mockResolvedValue(undefined)
+    mocks.storageV2Service.getDataRoot.mockReturnValue('/tmp/cherry-data')
+    mocks.storageV2Service.healthCheck.mockResolvedValue({ ok: true })
+    mocks.storageV2Service.getStats.mockResolvedValue({ providers: 0 })
     mocks.storageV2Service.createSnapshot.mockResolvedValue({ path: '/tmp/snapshot' })
     mocks.storageV2Service.createBackup.mockResolvedValue({ path: '/tmp/backup', metadata: {} })
+    mocks.storageV2Service.getBackupOverview.mockResolvedValue({ backups: [] })
     mocks.storageV2Service.validateBackup.mockResolvedValue({ ok: true })
     mocks.storageV2Service.restoreBackup.mockResolvedValue({ ok: true })
+    mocks.storageV2Service.listProviders.mockResolvedValue([])
     mocks.storageV2Service.listAssistants.mockResolvedValue([])
     mocks.storageV2Service.listConversations.mockResolvedValue([])
     mocks.storageV2Service.listMessages.mockResolvedValue([])
@@ -205,9 +215,24 @@ describe('storage app capabilities', () => {
   })
 
   it('rejects invalid storage capability input objects before side effects', async () => {
+    await expect(capability('storage.dataRoot.get').execute('root' as any, { source: 'agent' })).rejects.toThrow(
+      'Storage capability input must be an object'
+    )
+    await expect(capability('storage.health.check').execute(['health'] as any, { source: 'agent' })).rejects.toThrow(
+      'Storage capability input must be an object'
+    )
+    await expect(capability('storage.stats.get').execute(false as any, { source: 'agent' })).rejects.toThrow(
+      'Storage capability input must be an object'
+    )
     await expect(
       capability('storage.backup.create').execute('agent request' as any, { source: 'agent' })
     ).rejects.toThrow('Storage capability input must be an object')
+    await expect(
+      capability('storage.backup.overview').execute(['overview'] as any, { source: 'agent' })
+    ).rejects.toThrow('Storage capability input must be an object')
+    await expect(capability('storage.providers.list').execute('providers' as any, { source: 'agent' })).rejects.toThrow(
+      'Storage capability input must be an object'
+    )
     await expect(capability('storage.snapshot.create').execute([], { source: 'agent' })).rejects.toThrow(
       'Storage capability input must be an object'
     )
@@ -222,8 +247,13 @@ describe('storage app capabilities', () => {
     )
 
     expect(mocks.callRendererBridge).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.getDataRoot).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.healthCheck).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.getStats).not.toHaveBeenCalled()
     expect(mocks.storageV2Service.createBackup).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.getBackupOverview).not.toHaveBeenCalled()
     expect(mocks.storageV2Service.createSnapshot).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.listProviders).not.toHaveBeenCalled()
     expect(mocks.storageV2Service.listAssistants).not.toHaveBeenCalled()
     expect(mocks.storageV2Service.listMessages).not.toHaveBeenCalled()
     expect(mocks.storageV2Service.getFile).not.toHaveBeenCalled()

@@ -29,6 +29,12 @@ const MAX_RAW_PAINTING_DEPTH = 4
 const RENDERER_STORE_FALLBACK_TIMEOUT_MS = 1_000
 const PAINTING_PROVIDER_ROUTE_SEGMENT_PATTERN = /^[A-Za-z0-9_-]+$/
 
+function normalizeInputObject(input: unknown) {
+  if (input === null || typeof input === 'undefined') return {}
+  if (typeof input !== 'object' || Array.isArray(input)) throw new Error('Painting capability input must be an object')
+  return input as Record<string, unknown>
+}
+
 function normalizeListLimit(value: unknown) {
   return normalizeBoundedIntegerInput(value, {
     label: 'Painting history limit',
@@ -199,7 +205,8 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['paintings', 'image', 'providers', 'drawing'],
-      execute: async () => {
+      execute: async (input: unknown) => {
+        normalizeInputObject(input)
         return okResult('Painting providers listed', {
           defaultProvider: await readDefaultPaintingProvider(),
           namespaces: PAINTING_NAMESPACES
@@ -228,15 +235,16 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['paintings', 'image', 'history'],
-      execute: async (input: any) => {
-        normalizePaintingNamespace(input?.namespace)
-        normalizeListLimit(input?.limit)
-        normalizeOffset(input?.offset)
+      execute: async (input: unknown) => {
+        const inputObject = normalizeInputObject(input)
+        normalizePaintingNamespace(inputObject.namespace)
+        normalizeListLimit(inputObject.limit)
+        normalizeOffset(inputObject.offset)
         const paintings = await readRendererStoreValue<any>('state.paintings', {
           checkTimeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS,
           timeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS
         }).catch(() => ({}))
-        return okResult('Painting history listed', listPaintingHistory(paintings, input))
+        return okResult('Painting history listed', listPaintingHistory(paintings, inputObject))
       }
     },
     {
@@ -256,8 +264,9 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       permissions: ['paintings.write'],
       sideEffects: ['settings.write'],
       tags: ['paintings', 'settings', 'provider'],
-      execute: async (input: any) => {
-        const provider = normalizeProviderRouteSegment(input?.provider)
+      execute: async (input: unknown) => {
+        const inputObject = normalizeInputObject(input)
+        const provider = normalizeProviderRouteSegment(inputObject.provider)
         if (!provider) throw new Error('Painting provider is required')
         await persistSettingValue('defaultPaintingProvider', provider)
         return okResult('Default painting provider updated', { defaultProvider: provider })
@@ -277,8 +286,9 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['paintings', 'image', 'drawing', 'open'],
-      execute: async (input: any) => {
-        const inputProvider = normalizeProviderRouteSegment(input?.provider)
+      execute: async (input: unknown) => {
+        const inputObject = normalizeInputObject(input)
+        const inputProvider = normalizeProviderRouteSegment(inputObject.provider)
         const provider = inputProvider || normalizeProviderRouteSegment(await readDefaultPaintingProvider())
         const route = provider ? `/paintings/${provider}` : '/paintings'
         await navigateApp(route)
@@ -306,12 +316,13 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       permissions: ['paintings.generate'],
       sideEffects: ['model.call', 'network'],
       tags: ['paintings', 'image', 'generate', 'drawing'],
-      execute: async (input: any) => {
-        const prompt = normalizeRequiredText(input?.prompt, 'Painting prompt')
-        const inputProvider = normalizeProviderRouteSegment(input?.provider)
+      execute: async (input: unknown) => {
+        const inputObject = normalizeInputObject(input)
+        const prompt = normalizeRequiredText(inputObject.prompt, 'Painting prompt')
+        const inputProvider = normalizeProviderRouteSegment(inputObject.provider)
         const provider = inputProvider || normalizeProviderRouteSegment(await readDefaultPaintingProvider())
-        const model = normalizeOptionalText(input?.model, 'Painting model') || undefined
-        const size = normalizeOptionalText(input?.size, 'Painting size') || undefined
+        const model = normalizeOptionalText(inputObject.model, 'Painting model') || undefined
+        const size = normalizeOptionalText(inputObject.size, 'Painting size') || undefined
         const route = provider ? `/paintings/${provider}` : '/paintings'
         await navigateApp(route)
         return {

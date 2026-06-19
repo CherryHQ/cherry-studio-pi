@@ -362,6 +362,35 @@ describe('knowledge app capabilities', () => {
     expect(mocks.knowledgeService.search).not.toHaveBeenCalled()
   })
 
+  it('rejects non-object knowledge capability inputs before storage or model work', async () => {
+    await expect(capability('knowledge.bases.list').execute('bases' as any, { source: 'agent' })).rejects.toThrow(
+      'Knowledge capability input must be an object'
+    )
+    await expect(capability('knowledge.base.create').execute(['create'] as any, { source: 'agent' })).rejects.toThrow(
+      'Knowledge capability input must be an object'
+    )
+    await expect(capability('knowledge.search').execute(false as any, { source: 'agent' })).rejects.toThrow(
+      'Knowledge capability input must be an object'
+    )
+    await expect(capability('knowledge.item.add').execute('item' as any, { source: 'agent' })).rejects.toThrow(
+      'Knowledge capability input must be an object'
+    )
+    await expect(capability('knowledge.base.reset').execute(['reset'] as any, { source: 'agent' })).rejects.toThrow(
+      'Knowledge capability input must be an object'
+    )
+
+    expect(mocks.storageV2KnowledgeRepository.listBases).not.toHaveBeenCalled()
+    expect(mocks.storageV2KnowledgeRepository.importBases).not.toHaveBeenCalled()
+    expect(mocks.storageV2ProviderRepository.list).not.toHaveBeenCalled()
+    expect(mocks.storageV2SecretVaultService.getSecret).not.toHaveBeenCalled()
+    expect(mocks.knowledgeService.search).not.toHaveBeenCalled()
+    expect(mocks.knowledgeService.createBase).not.toHaveBeenCalled()
+    expect(mocks.knowledgeService.addItems).not.toHaveBeenCalled()
+    expect(mocks.knowledgeService.listRootItems).not.toHaveBeenCalled()
+    expect(mocks.knowledgeService.reindexItems).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
+  })
+
   it('rejects unknown requested knowledge base ids before searching', async () => {
     runtimeBases = [
       {

@@ -84,7 +84,10 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['storage', 'data', 'path'],
-      execute: async () => okResult('Storage data root read', { dataRoot: storageV2Service.getDataRoot() })
+      execute: async (input: unknown) => {
+        normalizeInputObject(input)
+        return okResult('Storage data root read', { dataRoot: storageV2Service.getDataRoot() })
+      }
     },
     {
       id: 'storage.health.check',
@@ -95,7 +98,10 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['storage', 'health', 'database'],
-      execute: async () => okResult('Storage health checked', sanitizeForAgent(await storageV2Service.healthCheck()))
+      execute: async (input: unknown) => {
+        normalizeInputObject(input)
+        return okResult('Storage health checked', sanitizeForAgent(await storageV2Service.healthCheck()))
+      }
     },
     {
       id: 'storage.stats.get',
@@ -106,7 +112,10 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['storage', 'stats', 'database'],
-      execute: async () => okResult('Storage statistics read', sanitizeForAgent(await storageV2Service.getStats()))
+      execute: async (input: unknown) => {
+        normalizeInputObject(input)
+        return okResult('Storage statistics read', sanitizeForAgent(await storageV2Service.getStats()))
+      }
     },
     {
       id: 'storage.backup.create',
@@ -147,8 +156,10 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['storage', 'backup', 'list'],
-      execute: async () =>
-        okResult('Backup overview read', sanitizeForAgent(await storageV2Service.getBackupOverview()))
+      execute: async (input: unknown) => {
+        normalizeInputObject(input)
+        return okResult('Backup overview read', sanitizeForAgent(await storageV2Service.getBackupOverview()))
+      }
     },
     {
       id: 'storage.backup.validate',
@@ -237,7 +248,10 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['storage', 'models', 'providers', 'settings'],
-      execute: async () => okResult('Providers listed', sanitizeForAgent(await storageV2Service.listProviders()))
+      execute: async (input: unknown) => {
+        normalizeInputObject(input)
+        return okResult('Providers listed', sanitizeForAgent(await storageV2Service.listProviders()))
+      }
     },
     {
       id: 'storage.assistants.list',

@@ -21,6 +21,12 @@ const MAX_NOTE_LIST_SCAN_ENTRIES = 5_000
 const MAX_NOTE_LIST_DEPTH = 10
 const RENDERER_STORE_FALLBACK_TIMEOUT_MS = 500
 
+function normalizeInputObject(input: unknown) {
+  if (input === null || typeof input === 'undefined') return {}
+  if (typeof input !== 'object' || Array.isArray(input)) throw new Error('Notes capability input must be an object')
+  return input as Record<string, unknown>
+}
+
 async function getNotesRoot() {
   const preferredPath = await Promise.resolve()
     .then(() => application.get('PreferenceService').get('feature.notes.path'))
@@ -344,9 +350,10 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['notes', 'files', 'markdown'],
-      execute: async (input: any) => {
+      execute: async (input: unknown) => {
+        const inputObject = normalizeInputObject(input)
         const root = await getNotesRoot()
-        return okResult('Notes listed', { root, ...(await listNoteEntries(root, input)) })
+        return okResult('Notes listed', { root, ...(await listNoteEntries(root, inputObject)) })
       }
     },
     {
@@ -369,14 +376,15 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['notes', 'read', 'markdown'],
-      execute: async (input: any) => {
-        const notePath = normalizeRequiredText(input?.path, 'Note path')
+      execute: async (input: unknown) => {
+        const inputObject = normalizeInputObject(input)
+        const notePath = normalizeRequiredText(inputObject.path, 'Note path')
         const root = await getNotesRoot()
         const filePath = resolveInsideRoot(root, notePath, '.md')
         await assertResolvedInsideNotesRoot(root, filePath)
         return okResult('Note read', {
           path: filePath,
-          ...(await readTextFilePreview(filePath, normalizeReadMaxBytes(input?.maxBytes)))
+          ...(await readTextFilePreview(filePath, normalizeReadMaxBytes(inputObject.maxBytes)))
         })
       }
     },
@@ -396,11 +404,12 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['notes', 'search', 'markdown'],
-      execute: async (input: any) => {
-        const query = normalizeRequiredText(input?.query, 'Note search query').toLowerCase()
+      execute: async (input: unknown) => {
+        const inputObject = normalizeInputObject(input)
+        const query = normalizeRequiredText(inputObject.query, 'Note search query').toLowerCase()
 
         const root = await getNotesRoot()
-        const limit = normalizeSearchLimit(input?.limit)
+        const limit = normalizeSearchLimit(inputObject.limit)
         const { files, scanTruncated } = await collectNoteFilesForSearch(root)
         const matches: any[] = []
         for (const file of files) {
@@ -453,10 +462,11 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       permissions: ['notes.write'],
       sideEffects: ['filesystem.write'],
       tags: ['notes', 'create', 'markdown'],
-      execute: async (input: any) => {
-        const parentInput = normalizeOptionalText(input?.parent, 'Note parent')
-        const nameInput = normalizeOptionalText(input?.name, 'Note name', 'Untitled') || 'Untitled'
-        const content = normalizeNoteContent(input?.content)
+      execute: async (input: unknown) => {
+        const inputObject = normalizeInputObject(input)
+        const parentInput = normalizeOptionalText(inputObject.parent, 'Note parent')
+        const nameInput = normalizeOptionalText(inputObject.name, 'Note name', 'Untitled') || 'Untitled'
+        const content = normalizeNoteContent(inputObject.content)
         const root = await getNotesRoot()
         const parent = resolveInsideRoot(root, parentInput)
         await assertResolvedInsideNotesRoot(root, parent, 'Note parent')
@@ -492,10 +502,10 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       permissions: ['notes.write'],
       sideEffects: ['filesystem.write'],
       tags: ['notes', 'write', 'markdown'],
-      execute: async (input: any) => {
-        const inputObject = input && typeof input === 'object' ? input : {}
+      execute: async (input: unknown) => {
+        const inputObject = normalizeInputObject(input)
         if (!Object.prototype.hasOwnProperty.call(inputObject, 'content')) throw new Error('Note content is required')
-        const notePath = normalizeRequiredText(input?.path, 'Note path')
+        const notePath = normalizeRequiredText(inputObject.path, 'Note path')
         const content = normalizeNoteContent(inputObject.content)
         const root = await getNotesRoot()
         const filePath = resolveInsideRoot(root, notePath, '.md')
@@ -526,8 +536,9 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['filesystem.delete'],
       supportsDryRun: true,
       tags: ['notes', 'delete'],
-      execute: async (input: any, context) => {
-        const notePath = normalizeRequiredText(input?.path, 'Note path')
+      execute: async (input: unknown, context) => {
+        const inputObject = normalizeInputObject(input)
+        const notePath = normalizeRequiredText(inputObject.path, 'Note path')
         const root = await getNotesRoot()
         const target = await resolveNoteDeleteTarget(root, notePath)
         assertNotNotesRoot(root, target)

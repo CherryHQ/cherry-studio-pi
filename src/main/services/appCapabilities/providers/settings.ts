@@ -95,6 +95,12 @@ const pathEnum = Array.from(
   new Set([...Object.keys(SETTINGS_SETTERS), ...Object.keys(PREFERENCE_SETTING_PATHS)])
 ).sort()
 
+function normalizeInputObject(input: unknown) {
+  if (input === null || typeof input === 'undefined') return {}
+  if (typeof input !== 'object' || Array.isArray(input)) throw new Error('Settings capability input must be an object')
+  return input as Record<string, unknown>
+}
+
 function getRoutePathname(route: string) {
   return /^([^?#]*)/.exec(route)?.[1] || '/'
 }
@@ -272,7 +278,10 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['settings', 'preferences', 'sections'],
-      execute: async () => okResult('Settings sections listed', { sections: SETTINGS_SECTIONS })
+      execute: async (input: unknown) => {
+        normalizeInputObject(input)
+        return okResult('Settings sections listed', { sections: SETTINGS_SECTIONS })
+      }
     },
     {
       id: 'settings.read',
@@ -283,7 +292,8 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['settings', 'preferences', 'read'],
-      execute: async () => {
+      execute: async (input: unknown) => {
+        normalizeInputObject(input)
         const settings = await readSettingsForAgent()
         return okResult('Settings read', { settings: sanitizeSettingsForAgent(settings) })
       }
@@ -303,8 +313,9 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['settings', 'preferences', 'get'],
-      execute: async (input: any) => {
-        const keyPath = normalizeRequiredSettingsText(input?.path, 'Setting path')
+      execute: async (input: unknown) => {
+        const inputObject = normalizeInputObject(input)
+        const keyPath = normalizeRequiredSettingsText(inputObject.path, 'Setting path')
         return okResult('Setting value read', {
           path: keyPath,
           value: sanitizeSettingValueForAgent(keyPath, await readSettingValueForAgent(keyPath))
@@ -330,9 +341,9 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['settings.write'],
       tags: ['settings', 'preferences', 'update', 'write'],
       examples: ['Change language', 'Set theme', 'Set default painting provider', 'Enable API server'],
-      execute: async (input: any) => {
-        const inputObject = input && typeof input === 'object' ? input : {}
-        const keyPath = normalizeRequiredSettingsText(input?.path, 'Setting path')
+      execute: async (input: unknown) => {
+        const inputObject = normalizeInputObject(input)
+        const keyPath = normalizeRequiredSettingsText(inputObject.path, 'Setting path')
         if (!Object.prototype.hasOwnProperty.call(inputObject, 'value')) throw new Error('Setting value is required')
         if (!isSupportedSettingPath(keyPath)) throw new Error(`Unsupported setting path: ${keyPath}`)
         await persistSettingValue(keyPath, inputObject.value)
@@ -357,9 +368,10 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['settings', 'navigation', 'open'],
-      execute: async (input: any) => {
-        const sectionInput = normalizeOptionalSettingsText(input?.section, 'Settings section')
-        const routeInput = normalizeSettingsRouteInput(input?.route)
+      execute: async (input: unknown) => {
+        const inputObject = normalizeInputObject(input)
+        const sectionInput = normalizeOptionalSettingsText(inputObject.section, 'Settings section')
+        const routeInput = normalizeSettingsRouteInput(inputObject.route)
         const section = SETTINGS_SECTIONS.find((item) => item.id === sectionInput)
         if (sectionInput && !section) throw new Error(`Unsupported settings section: ${sectionInput}`)
         const route = section?.route || routeInput || '/settings/provider'

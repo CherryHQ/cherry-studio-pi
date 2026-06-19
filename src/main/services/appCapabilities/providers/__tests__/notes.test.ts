@@ -77,4 +77,30 @@ describe('notes app capabilities', () => {
     expect(mocks.applicationGet).not.toHaveBeenCalled()
     expect(mocks.notifyMainProcessDataSyncLocalChange).not.toHaveBeenCalled()
   })
+
+  it('rejects non-object notes capability inputs before resolving the notes root', async () => {
+    await expect(capability('notes.list').execute('list' as any, { source: 'agent' })).rejects.toThrow(
+      'Notes capability input must be an object'
+    )
+    await expect(capability('notes.read').execute(['read'] as any, { source: 'agent' })).rejects.toThrow(
+      'Notes capability input must be an object'
+    )
+    await expect(capability('notes.search').execute(false as any, { source: 'agent' })).rejects.toThrow(
+      'Notes capability input must be an object'
+    )
+    await expect(capability('notes.create').execute('create' as any, { source: 'agent' })).rejects.toThrow(
+      'Notes capability input must be an object'
+    )
+    await expect(capability('notes.write').execute(['write'] as any, { source: 'agent' })).rejects.toThrow(
+      'Notes capability input must be an object'
+    )
+    await expect(capability('notes.delete').execute(true as any, { source: 'agent' })).rejects.toThrow(
+      'Notes capability input must be an object'
+    )
+
+    expect(await fs.readdir(notesRoot)).toEqual([])
+    expect(mocks.applicationGet).not.toHaveBeenCalled()
+    expect(mocks.readRendererStoreValue).not.toHaveBeenCalled()
+    expect(mocks.notifyMainProcessDataSyncLocalChange).not.toHaveBeenCalled()
+  })
 })

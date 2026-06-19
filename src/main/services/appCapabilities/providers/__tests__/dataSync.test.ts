@@ -410,6 +410,12 @@ describe('data sync app capabilities', () => {
   })
 
   it('rejects invalid data sync capability input objects before side effects', async () => {
+    await expect(capability('dataSync.status.get').execute('status' as any, { source: 'agent' })).rejects.toThrow(
+      'Data sync capability input must be an object'
+    )
+    await expect(
+      capability('dataSync.webdav.config.get').execute(['config'] as any, { source: 'agent' })
+    ).rejects.toThrow('Data sync capability input must be an object')
     await expect(
       capability('dataSync.webdav.config.set').execute('dav.example.com' as any, { source: 'agent' })
     ).rejects.toThrow('Data sync capability input must be an object')

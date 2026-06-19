@@ -376,7 +376,10 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['dataSync', 'sync', 'webdav', 'status'],
-      execute: async () => okResult('Data sync status read', sanitizeForAgent(await appDataSyncService.getStatus()))
+      execute: async (input: unknown) => {
+        normalizeInputObject(input)
+        return okResult('Data sync status read', sanitizeForAgent(await appDataSyncService.getStatus()))
+      }
     },
     {
       id: 'dataSync.webdav.config.get',
@@ -387,7 +390,8 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['dataSync', 'sync', 'webdav', 'settings'],
-      execute: async () => {
+      execute: async (input: unknown) => {
+        normalizeInputObject(input)
         const settings = await getDataSyncSettings()
         return okResult(
           'WebDAV sync config read',

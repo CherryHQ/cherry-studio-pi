@@ -217,6 +217,29 @@ describe('painting app capabilities', () => {
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
 
+  it('rejects non-object painting capability inputs before side effects', async () => {
+    await expect(
+      capability('paintings.providers.list').execute('providers' as any, { source: 'agent' })
+    ).rejects.toThrow('Painting capability input must be an object')
+    await expect(capability('paintings.history.list').execute(['history'] as any, { source: 'agent' })).rejects.toThrow(
+      'Painting capability input must be an object'
+    )
+    await expect(
+      capability('paintings.defaultProvider.set').execute(false as any, { source: 'agent' })
+    ).rejects.toThrow('Painting capability input must be an object')
+    await expect(capability('paintings.open').execute(['open'] as any, { source: 'agent' })).rejects.toThrow(
+      'Painting capability input must be an object'
+    )
+    await expect(
+      capability('paintings.image.generate').execute('draw a cat' as any, { source: 'agent' })
+    ).rejects.toThrow('Painting capability input must be an object')
+
+    expect(mocks.preferenceService.get).not.toHaveBeenCalled()
+    expect(mocks.preferenceService.set).not.toHaveBeenCalled()
+    expect(mocks.navigateApp).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
+  })
+
   it('returns raw painting history only when explicitly requested', async () => {
     const result = await capability('paintings.history.list').execute(
       { namespace: 'siliconflow_paintings', limit: 1, includeRaw: true },

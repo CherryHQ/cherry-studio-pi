@@ -187,6 +187,23 @@ describe('mcp app capabilities', () => {
     expect(mocks.mcpService.listAllActiveServerTools).not.toHaveBeenCalled()
   })
 
+  it('rejects non-object MCP capability inputs before side effects', async () => {
+    await expect(capability('mcp.servers.list').execute('servers' as any, { source: 'agent' })).rejects.toThrow(
+      'MCP capability input must be an object'
+    )
+    await expect(capability('mcp.tools.list').execute(['tools'] as any, { source: 'agent' })).rejects.toThrow(
+      'MCP capability input must be an object'
+    )
+    await expect(capability('mcp.tool.call').execute(false as any, { source: 'agent' })).rejects.toThrow(
+      'MCP capability input must be an object'
+    )
+
+    expect(mocks.mcpServerService.list).not.toHaveBeenCalled()
+    expect(mocks.mcpService.listAllActiveServerTools).not.toHaveBeenCalled()
+    expect(mocks.mcpService.callToolById).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
+  })
+
   it('normalizes MCP tool ids and params before calling tools', async () => {
     const result = await capability('mcp.tool.call').execute(
       { toolId: ' server__tool_1 ', params: { value: 'hello' } },
