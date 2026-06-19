@@ -2,7 +2,7 @@ import { useInvalidateCache, useQuery } from '@data/hooks/useDataApi'
 import { loggerService } from '@logger'
 import { KNOWLEDGE_ITEMS_MAX_LIMIT } from '@shared/data/api/schemas/knowledges'
 import type { KnowledgeAddItemInput, KnowledgeItem, KnowledgeItemStatus } from '@shared/data/types/knowledge'
-import { useCallback, useState } from 'react'
+import { type MutableRefObject, useCallback, useEffect, useRef, useState } from 'react'
 
 const KNOWLEDGE_V2_ITEMS_QUERY = {
   page: 1,
@@ -27,6 +27,25 @@ const deleteLogger = loggerService.withContext('useDeleteKnowledgeItem')
 const reindexLogger = loggerService.withContext('useReindexKnowledgeItem')
 
 type KnowledgeItemsLogger = typeof addLogger
+type MutationSequenceRef = MutableRefObject<number>
+type MountedRef = MutableRefObject<boolean>
+
+const useMountedRef = () => {
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  return mountedRef
+}
+
+const isCurrentMutation = (mountedRef: MountedRef, mutationSeqRef: MutationSequenceRef, mutationSeq: number) =>
+  mountedRef.current && mutationSeqRef.current === mutationSeq
 
 const refreshKnowledgeItemsCaches = async (
   invalidateCache: ReturnType<typeof useInvalidateCache>,
@@ -66,6 +85,8 @@ export const useAddKnowledgeItems = (baseId: string) => {
   const [error, setError] = useState<Error | undefined>()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const invalidateCache = useInvalidateCache()
+  const mountedRef = useMountedRef()
+  const mutationSeqRef = useRef(0)
 
   const submit = useCallback(
     async (items: KnowledgeAddItemInput[]): Promise<void> => {
@@ -77,8 +98,11 @@ export const useAddKnowledgeItems = (baseId: string) => {
         return Promise.reject(new Error('At least one knowledge source must be selected'))
       }
 
-      setError(undefined)
-      setIsSubmitting(true)
+      const mutationSeq = ++mutationSeqRef.current
+      if (mountedRef.current) {
+        setError(undefined)
+        setIsSubmitting(true)
+      }
 
       let submitError: Error | undefined
       try {
@@ -91,7 +115,9 @@ export const useAddKnowledgeItems = (baseId: string) => {
           sourceCount: items.length
         })
 
-        setError(submitError)
+        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
+          setError(submitError)
+        }
       } finally {
         await refreshKnowledgeItemsCaches(
           invalidateCache,
@@ -101,14 +127,16 @@ export const useAddKnowledgeItems = (baseId: string) => {
           { baseId }
         )
 
-        setIsSubmitting(false)
+        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
+          setIsSubmitting(false)
+        }
       }
 
       if (submitError) {
         throw submitError
       }
     },
-    [baseId, invalidateCache]
+    [baseId, invalidateCache, mountedRef]
   )
 
   return {
@@ -122,6 +150,8 @@ export const useDeleteKnowledgeItem = (baseId: string) => {
   const [error, setError] = useState<Error | undefined>()
   const [isDeleting, setIsDeleting] = useState(false)
   const invalidateCache = useInvalidateCache()
+  const mountedRef = useMountedRef()
+  const mutationSeqRef = useRef(0)
 
   const deleteItem = useCallback(
     async (item: KnowledgeItem): Promise<void> => {
@@ -129,8 +159,11 @@ export const useDeleteKnowledgeItem = (baseId: string) => {
         return Promise.reject(new Error('Knowledge base id is required'))
       }
 
-      setError(undefined)
-      setIsDeleting(true)
+      const mutationSeq = ++mutationSeqRef.current
+      if (mountedRef.current) {
+        setError(undefined)
+        setIsDeleting(true)
+      }
 
       let deleteError: Error | undefined
       try {
@@ -143,7 +176,9 @@ export const useDeleteKnowledgeItem = (baseId: string) => {
           itemId: item.id
         })
 
-        setError(deleteError)
+        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
+          setError(deleteError)
+        }
       } finally {
         await refreshKnowledgeItemsCaches(
           invalidateCache,
@@ -156,14 +191,16 @@ export const useDeleteKnowledgeItem = (baseId: string) => {
           }
         )
 
-        setIsDeleting(false)
+        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
+          setIsDeleting(false)
+        }
       }
 
       if (deleteError) {
         throw deleteError
       }
     },
-    [baseId, invalidateCache]
+    [baseId, invalidateCache, mountedRef]
   )
 
   return {
@@ -177,6 +214,8 @@ export const useReindexKnowledgeItem = (baseId: string) => {
   const [error, setError] = useState<Error | undefined>()
   const [isReindexing, setIsReindexing] = useState(false)
   const invalidateCache = useInvalidateCache()
+  const mountedRef = useMountedRef()
+  const mutationSeqRef = useRef(0)
 
   const reindexItem = useCallback(
     async (item: KnowledgeItem): Promise<void> => {
@@ -184,8 +223,11 @@ export const useReindexKnowledgeItem = (baseId: string) => {
         return Promise.reject(new Error('Knowledge base id is required'))
       }
 
-      setError(undefined)
-      setIsReindexing(true)
+      const mutationSeq = ++mutationSeqRef.current
+      if (mountedRef.current) {
+        setError(undefined)
+        setIsReindexing(true)
+      }
 
       let reindexError: Error | undefined
       try {
@@ -198,7 +240,9 @@ export const useReindexKnowledgeItem = (baseId: string) => {
           itemId: item.id
         })
 
-        setError(reindexError)
+        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
+          setError(reindexError)
+        }
       } finally {
         await refreshKnowledgeItemsCaches(
           invalidateCache,
@@ -211,14 +255,16 @@ export const useReindexKnowledgeItem = (baseId: string) => {
           }
         )
 
-        setIsReindexing(false)
+        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
+          setIsReindexing(false)
+        }
       }
 
       if (reindexError) {
         throw reindexError
       }
     },
-    [baseId, invalidateCache]
+    [baseId, invalidateCache, mountedRef]
   )
 
   return {

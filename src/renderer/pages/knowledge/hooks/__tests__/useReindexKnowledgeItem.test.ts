@@ -13,6 +13,20 @@ vi.mock('@data/hooks/useDataApi', () => ({
   useInvalidateCache: () => mockUseInvalidateCache()
 }))
 
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
+}
+
 describe('useReindexKnowledgeItem', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -60,5 +74,38 @@ describe('useReindexKnowledgeItem', () => {
       baseId: 'base-1',
       itemId: 'note-1'
     })
+  })
+
+  it('keeps reindexing until the latest overlapping reindex completes', async () => {
+    const firstReindex = deferred<void>()
+    const secondReindex = deferred<void>()
+    const item = createNoteItem({ id: 'note-1', content: '会议纪要' })
+    mockReindexItems.mockReturnValueOnce(firstReindex.promise).mockReturnValueOnce(secondReindex.promise)
+
+    const { result } = renderHook(() => useReindexKnowledgeItem('base-1'))
+
+    let firstReindexPromise!: Promise<void>
+    let secondReindexPromise!: Promise<void>
+    await act(async () => {
+      firstReindexPromise = result.current.reindexItem(item)
+      secondReindexPromise = result.current.reindexItem(item)
+      await Promise.resolve()
+    })
+
+    expect(result.current.isReindexing).toBe(true)
+
+    await act(async () => {
+      firstReindex.resolve(undefined)
+      await firstReindexPromise
+    })
+
+    expect(result.current.isReindexing).toBe(true)
+
+    await act(async () => {
+      secondReindex.resolve(undefined)
+      await secondReindexPromise
+    })
+
+    expect(result.current.isReindexing).toBe(false)
   })
 })

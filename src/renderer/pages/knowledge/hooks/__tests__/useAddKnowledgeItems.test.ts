@@ -12,6 +12,20 @@ vi.mock('@data/hooks/useDataApi', () => ({
   useInvalidateCache: () => mockUseInvalidateCache()
 }))
 
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
+}
+
 describe('useAddKnowledgeItems', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -114,5 +128,46 @@ describe('useAddKnowledgeItems', () => {
         baseId: 'base-1'
       }
     )
+  })
+
+  it('keeps submitting until the latest overlapping submit completes', async () => {
+    const firstSubmit = deferred<void>()
+    const secondSubmit = deferred<void>()
+    const items = [
+      {
+        type: 'url' as const,
+        data: {
+          source: 'https://example.com/article',
+          url: 'https://example.com/article'
+        }
+      }
+    ]
+    mockAddItems.mockReturnValueOnce(firstSubmit.promise).mockReturnValueOnce(secondSubmit.promise)
+
+    const { result } = renderHook(() => useAddKnowledgeItems('base-1'))
+
+    let firstSubmitPromise!: Promise<void>
+    let secondSubmitPromise!: Promise<void>
+    await act(async () => {
+      firstSubmitPromise = result.current.submit(items)
+      secondSubmitPromise = result.current.submit(items)
+      await Promise.resolve()
+    })
+
+    expect(result.current.isSubmitting).toBe(true)
+
+    await act(async () => {
+      firstSubmit.resolve(undefined)
+      await firstSubmitPromise
+    })
+
+    expect(result.current.isSubmitting).toBe(true)
+
+    await act(async () => {
+      secondSubmit.resolve(undefined)
+      await secondSubmitPromise
+    })
+
+    expect(result.current.isSubmitting).toBe(false)
   })
 })

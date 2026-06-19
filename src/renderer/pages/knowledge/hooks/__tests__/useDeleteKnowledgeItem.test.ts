@@ -13,6 +13,20 @@ vi.mock('@data/hooks/useDataApi', () => ({
   useInvalidateCache: () => mockUseInvalidateCache()
 }))
 
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
+}
+
 describe('useDeleteKnowledgeItem', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -60,5 +74,38 @@ describe('useDeleteKnowledgeItem', () => {
       baseId: 'base-1',
       itemId: 'note-1'
     })
+  })
+
+  it('keeps deleting until the latest overlapping delete completes', async () => {
+    const firstDelete = deferred<void>()
+    const secondDelete = deferred<void>()
+    const item = createNoteItem({ id: 'note-1', content: '会议纪要' })
+    mockDeleteItems.mockReturnValueOnce(firstDelete.promise).mockReturnValueOnce(secondDelete.promise)
+
+    const { result } = renderHook(() => useDeleteKnowledgeItem('base-1'))
+
+    let firstDeletePromise!: Promise<void>
+    let secondDeletePromise!: Promise<void>
+    await act(async () => {
+      firstDeletePromise = result.current.deleteItem(item)
+      secondDeletePromise = result.current.deleteItem(item)
+      await Promise.resolve()
+    })
+
+    expect(result.current.isDeleting).toBe(true)
+
+    await act(async () => {
+      firstDelete.resolve(undefined)
+      await firstDeletePromise
+    })
+
+    expect(result.current.isDeleting).toBe(true)
+
+    await act(async () => {
+      secondDelete.resolve(undefined)
+      await secondDeletePromise
+    })
+
+    expect(result.current.isDeleting).toBe(false)
   })
 })
