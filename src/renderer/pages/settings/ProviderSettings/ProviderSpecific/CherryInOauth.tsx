@@ -66,22 +66,50 @@ const CherryInOauth: FC<CherryInOauthProps> = ({ providerId }) => {
   const loginRef = useRef(false)
   const logoutConfirmRef = useRef(false)
   const logoutOperationRef = useRef(false)
+  const mountedRef = useRef(true)
+  const balanceFetchRunRef = useRef(0)
 
   const hasKeys = provider ? hasApiKeys(provider) : false
   const remoteHasOAuthToken = authConfig?.type === 'oauth' && Boolean(authConfig.accessToken)
   const hasOAuthToken = oauthTokenOverride ?? remoteHasOAuthToken
   const isOAuthLoggedIn = hasKeys && hasOAuthToken
 
+  const invalidateBalanceFetch = useCallback(() => {
+    balanceFetchRunRef.current += 1
+  }, [])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      invalidateBalanceFetch()
+    }
+  }, [invalidateBalanceFetch])
+
   const fetchData = useCallback(async () => {
+    const runId = balanceFetchRunRef.current + 1
+    balanceFetchRunRef.current = runId
+    const isCurrentRun = () => mountedRef.current && balanceFetchRunRef.current === runId
+
+    if (!mountedRef.current) {
+      return
+    }
+
     setIsLoadingData(true)
     try {
       const balance = await window.api.cherryin.getBalance(CHERRYIN_OAUTH_SERVER)
-      setBalanceInfo(balance)
+      if (isCurrentRun()) {
+        setBalanceInfo(balance)
+      }
     } catch (error) {
       logger.warn('Failed to fetch balance:', error as Error)
-      setBalanceInfo(null)
+      if (isCurrentRun()) {
+        setBalanceInfo(null)
+      }
     } finally {
-      setIsLoadingData(false)
+      if (isCurrentRun()) {
+        setIsLoadingData(false)
+      }
     }
   }, [])
 
@@ -89,9 +117,11 @@ const CherryInOauth: FC<CherryInOauthProps> = ({ providerId }) => {
     if (isOAuthLoggedIn) {
       void fetchData()
     } else {
+      invalidateBalanceFetch()
       setBalanceInfo(null)
+      setIsLoadingData(false)
     }
-  }, [fetchData, isOAuthLoggedIn])
+  }, [fetchData, invalidateBalanceFetch, isOAuthLoggedIn])
 
   useEffect(() => {
     if (oauthTokenOverride !== null && remoteHasOAuthToken === oauthTokenOverride) {
@@ -162,8 +192,10 @@ const CherryInOauth: FC<CherryInOauthProps> = ({ providerId }) => {
 
           try {
             await window.api.cherryin.logout(CHERRYIN_OAUTH_SERVER)
+            invalidateBalanceFetch()
             setOauthTokenOverride(false)
             setBalanceInfo(null)
+            setIsLoadingData(false)
 
             void Promise.resolve(refetchAuthConfig()).catch((error) => {
               logger.warn('Failed to refetch CherryIN auth config after logout:', error as Error)
@@ -195,7 +227,7 @@ const CherryInOauth: FC<CherryInOauthProps> = ({ providerId }) => {
       setIsLogoutConfirmOpen(false)
       throw error
     }
-  }, [deleteApiKey, provider?.apiKeys, refetchAuthConfig, t])
+  }, [deleteApiKey, invalidateBalanceFetch, provider?.apiKeys, refetchAuthConfig, t])
 
   const handleTopup = useCallback(() => {
     openHttpExternalUrl(CHERRYIN_TOPUP_URL)

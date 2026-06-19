@@ -141,6 +141,100 @@ describe('CherryInOauth', () => {
     expect(screen.getByText('-')).toBeInTheDocument()
   })
 
+  it('ignores stale balance responses after the login state changes and a newer fetch wins', async () => {
+    const firstBalance = deferred<{
+      balance: number
+      profile: { displayName: string; username: string; email: string; group: string }
+      monthlyUsageTokens: null
+      monthlySpend: number
+    }>()
+    const secondBalance = deferred<{
+      balance: number
+      profile: { displayName: string; username: string; email: string; group: string }
+      monthlyUsageTokens: null
+      monthlySpend: number
+    }>()
+    window.api.cherryin.getBalance = vi
+      .fn()
+      .mockReturnValueOnce(firstBalance.promise)
+      .mockReturnValueOnce(secondBalance.promise)
+
+    let loggedIn = true
+    useProviderMock.mockImplementation(() => ({
+      provider: {
+        id: 'cherryin',
+        name: 'CherryIN',
+        apiKeys: loggedIn ? [{ id: 'oauth-1', label: 'OAuth', isEnabled: true }] : [],
+        isEnabled: true
+      },
+      updateProvider: vi.fn(),
+      addApiKey: vi.fn(),
+      deleteApiKey: vi.fn()
+    }))
+    useProviderAuthConfigMock.mockImplementation(() => ({
+      data: loggedIn
+        ? {
+            type: 'oauth',
+            clientId: 'client-id',
+            accessToken: 'oauth-access',
+            refreshToken: 'oauth-refresh'
+          }
+        : null,
+      isLoading: false,
+      refetch: vi.fn()
+    }))
+
+    const { rerender } = render(<CherryInOauth providerId="cherryin" />)
+    await waitFor(() => {
+      expect(window.api.cherryin.getBalance).toHaveBeenCalledTimes(1)
+    })
+
+    loggedIn = false
+    rerender(<CherryInOauth providerId="cherryin" />)
+    loggedIn = true
+    rerender(<CherryInOauth providerId="cherryin" />)
+
+    await waitFor(() => {
+      expect(window.api.cherryin.getBalance).toHaveBeenCalledTimes(2)
+    })
+
+    await act(async () => {
+      secondBalance.resolve({
+        balance: 200,
+        profile: {
+          displayName: 'Fresh',
+          username: 'fresh',
+          email: 'fresh@example.com',
+          group: 'Pro'
+        },
+        monthlyUsageTokens: null,
+        monthlySpend: 2
+      })
+      await secondBalance.promise
+    })
+
+    expect(screen.getByText('$200.00')).toBeInTheDocument()
+
+    await act(async () => {
+      firstBalance.resolve({
+        balance: 100,
+        profile: {
+          displayName: 'Stale',
+          username: 'stale',
+          email: 'stale@example.com',
+          group: 'Old'
+        },
+        monthlyUsageTokens: null,
+        monthlySpend: 1
+      })
+      await firstBalance.promise
+    })
+
+    expect(screen.getByText('$200.00')).toBeInTheDocument()
+    expect(screen.queryByText('$100.00')).not.toBeInTheDocument()
+    expect(screen.queryByText('stale@example.com')).not.toBeInTheDocument()
+  })
+
   it('renders the logged-out card when there is no OAuth token', () => {
     useProviderMock.mockReturnValue({
       provider: {
