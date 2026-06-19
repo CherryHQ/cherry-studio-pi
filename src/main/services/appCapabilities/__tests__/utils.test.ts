@@ -24,7 +24,14 @@ vi.mock('@main/core/platform', () => ({
   isMac: true
 }))
 
-import { isAllowedAppRoute, isSensitiveAgentKey, navigateApp, normalizeAppRoute, sanitizeForAgent } from '../utils'
+import {
+  isAllowedAppRoute,
+  isSensitiveAgentKey,
+  navigateApp,
+  normalizeAppRoute,
+  sanitizeAppCapabilityResultForAgent,
+  sanitizeForAgent
+} from '../utils'
 
 describe('app capability utils', () => {
   beforeEach(() => {
@@ -120,6 +127,26 @@ describe('app capability utils', () => {
     expect(isSensitiveAgentKey('compass')).toBe(false)
     expect(isSensitiveAgentKey('bypassReason')).toBe(false)
     expect(isSensitiveAgentKey('passengerCount')).toBe(false)
+  })
+
+  it('redacts secrets embedded in capability summary text fields', () => {
+    const sanitized = sanitizeAppCapabilityResultForAgent({
+      ok: false,
+      isError: true,
+      summary: 'Failed with apiKey=sk-secret-token near compass=north',
+      error: 'Authorization: Bearer bearer-secret at https://user:pass@example.test',
+      warnings: ['password=plain-secret', 'passage=visible']
+    })
+
+    expect(JSON.stringify(sanitized)).not.toContain('sk-secret-token')
+    expect(JSON.stringify(sanitized)).not.toContain('bearer-secret')
+    expect(JSON.stringify(sanitized)).not.toContain('plain-secret')
+    expect(JSON.stringify(sanitized)).not.toContain('user:pass')
+    expect(sanitized.summary).toContain('apiKey=[redacted]')
+    expect(sanitized.summary).toContain('compass=north')
+    expect(sanitized.error).toContain('Authorization: Bearer [redacted]')
+    expect(sanitized.error).toContain('https://[redacted]@example.test')
+    expect(sanitized.warnings).toEqual(['password=[redacted]', 'passage=visible'])
   })
 
   it('serializes bigint values instead of throwing', () => {

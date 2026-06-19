@@ -172,6 +172,52 @@ describe('AppCapabilityService', () => {
     })
   })
 
+  it('redacts secrets embedded in agent capability summary and error text', async () => {
+    executeCapability.mockReset()
+    executeCapability.mockResolvedValueOnce({
+      ok: false,
+      isError: true,
+      summary: 'Failed with apiKey=sk-secret-token',
+      error: 'Authorization: Bearer bearer-secret at https://user:pass@example.test',
+      warnings: ['password=plain-secret', 'passage=visible']
+    } as any)
+    const service = new AppCapabilityService()
+
+    const result = await service.call('settings.read', {}, { source: 'agent' })
+    const serialized = JSON.stringify(result)
+
+    expect(serialized).not.toContain('sk-secret-token')
+    expect(serialized).not.toContain('bearer-secret')
+    expect(serialized).not.toContain('plain-secret')
+    expect(serialized).not.toContain('user:pass')
+    expect(result.summary).toContain('apiKey=[redacted]')
+    expect(result.error).toContain('Authorization: Bearer [redacted]')
+    expect(result.error).toContain('https://[redacted]@example.test')
+    expect(result.warnings).toEqual(['password=[redacted]', 'passage=visible'])
+  })
+
+  it('redacts secrets embedded in thrown agent capability errors', async () => {
+    executeCapability.mockReset()
+    executeCapability.mockRejectedValueOnce(
+      new Error(
+        'Failed with apiKey=sk-secret-token and Authorization: Bearer bearer-secret at https://user:pass@example.test'
+      )
+    )
+    const service = new AppCapabilityService()
+
+    const result = await service.call('settings.read', {}, { source: 'agent' })
+    const serialized = JSON.stringify(result)
+
+    expect(result.ok).toBe(false)
+    expect(serialized).not.toContain('sk-secret-token')
+    expect(serialized).not.toContain('bearer-secret')
+    expect(serialized).not.toContain('user:pass')
+    expect(result.summary).toContain('apiKey=[redacted]')
+    expect(result.summary).toContain('Authorization: Bearer [redacted]')
+    expect(result.summary).toContain('https://[redacted]@example.test')
+    expect(result.error).toContain('apiKey=[redacted]')
+  })
+
   it('does not sanitize non-agent capability results', async () => {
     executeCapability.mockReset()
     executeCapability.mockResolvedValueOnce({

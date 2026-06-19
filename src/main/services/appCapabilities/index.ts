@@ -10,4 +10,4 @@ export type {
   AppCapabilityRisk,
   AppCapabilitySearchOptions
 } from './types'
-export { sanitizeForAgent } from './utils'
+export { redactAgentText, sanitizeAppCapabilityResultForAgent, sanitizeForAgent } from './utils'

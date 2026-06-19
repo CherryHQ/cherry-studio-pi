@@ -9,7 +9,7 @@ import type {
   AppCapabilityResult,
   AppCapabilitySearchOptions
 } from './types'
-import { sanitizeForAgent } from './utils'
+import { sanitizeAppCapabilityResultForAgent } from './utils'
 
 const logger = loggerService.withContext('AppCapabilityService')
 
@@ -25,7 +25,7 @@ function sanitizeResultForSource<T>(
   source: AppCapabilityContext['source']
 ): AppCapabilityResult<T> {
   if (source !== 'agent') return result
-  return sanitizeForAgent(result) as AppCapabilityResult<T>
+  return sanitizeAppCapabilityResultForAgent(result)
 }
 
 function invalidCapabilityResult<T>(capabilityId: string, reason: string): AppCapabilityResult<T> {
@@ -158,22 +158,28 @@ export class AppCapabilityService {
     } catch (error) {
       if (context.signal?.aborted) {
         const message = abortReasonMessage(context.signal)
-        return {
-          ok: false,
-          isError: true,
-          summary: `${capabilityId} aborted: ${message}`,
-          error: message
-        }
+        return sanitizeResultForSource(
+          {
+            ok: false,
+            isError: true,
+            summary: `${capabilityId} aborted: ${message}`,
+            error: message
+          },
+          context.source ?? 'system'
+        )
       }
 
       const message = error instanceof Error ? error.message : String(error)
       logger.warn('App capability failed', { id: capabilityId, error: message })
-      return {
-        ok: false,
-        isError: true,
-        summary: `${capabilityId} failed: ${message}`,
-        error: message
-      }
+      return sanitizeResultForSource(
+        {
+          ok: false,
+          isError: true,
+          summary: `${capabilityId} failed: ${message}`,
+          error: message
+        },
+        context.source ?? 'system'
+      )
     }
   }
 }

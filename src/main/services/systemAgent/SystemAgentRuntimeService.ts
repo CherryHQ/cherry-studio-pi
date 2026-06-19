@@ -14,7 +14,7 @@ import {
   type AppCapabilityRisk,
   type AppCapabilitySearchOptions,
   appCapabilityService,
-  sanitizeForAgent
+  sanitizeAppCapabilityResultForAgent
 } from '@main/services/appCapabilities'
 
 const logger = loggerService.withContext('SystemAgentRuntimeService')
@@ -149,7 +149,7 @@ function normalizeCapabilityTimeoutMs(value: unknown) {
 }
 
 function sanitizeSystemAgentCapabilityResult<T>(result: AppCapabilityResult<T>): AppCapabilityResult<T> {
-  return sanitizeForAgent(result) as AppCapabilityResult<T>
+  return sanitizeAppCapabilityResultForAgent(result)
 }
 
 async function callAutoRunCapability(

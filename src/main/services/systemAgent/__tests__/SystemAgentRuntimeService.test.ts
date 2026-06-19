@@ -20,6 +20,37 @@ vi.mock('@logger', () => ({
 
 vi.mock('@main/services/appCapabilities', () => ({
   appCapabilityService: mocks.appCapabilityService,
+  sanitizeAppCapabilityResultForAgent: (result: any) => {
+    const sanitized = JSON.parse(
+      JSON.stringify(result, (key, item) => {
+        if (/api[-_]?key|password|secret|token/i.test(key) && typeof item === 'string') {
+          return item ? '[redacted]' : item
+        }
+        if (typeof item === 'string' && item.length > 64) return `${item.slice(0, 32)}...[truncated]`
+        return item
+      })
+    )
+    const redactText = (text: string) =>
+      text
+        .replace(/((?:Authorization)\s*:\s*(?:Bearer|Basic)\s+)([^\s'",;]+)/gi, '$1[redacted]')
+        .replace(
+          /((?:^|[^A-Za-z0-9])(?:api[-_]?key|token|secret|password|pass)\s*[=:]\s*['"]?)([^\s'",;]+)/gi,
+          '$1[redacted]'
+        )
+        .replace(/\b(https?:\/\/)([^/\s:@]+):([^/\s@]+)@/gi, '$1[redacted]@')
+    return {
+      ...sanitized,
+      ...(typeof sanitized.summary === 'string' ? { summary: redactText(sanitized.summary) } : {}),
+      ...(typeof sanitized.error === 'string' ? { error: redactText(sanitized.error) } : {}),
+      ...(Array.isArray(sanitized.warnings)
+        ? {
+            warnings: sanitized.warnings.map((warning: unknown) =>
+              typeof warning === 'string' ? redactText(warning) : warning
+            )
+          }
+        : {})
+    }
+  },
   sanitizeForAgent: (value: unknown) =>
     JSON.parse(
       JSON.stringify(value, (key, item) => {
@@ -378,6 +409,29 @@ describe('SystemAgentRuntimeService', () => {
       password: '[redacted]',
       longValue: 'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy...[truncated]'
     })
+  })
+
+  it('redacts secrets embedded in direct capability result text fields', async () => {
+    mocks.appCapabilityService.get.mockReturnValueOnce({ ...writeCapability, risk: 'read' })
+    mocks.appCapabilityService.call.mockResolvedValueOnce({
+      ok: false,
+      isError: true,
+      summary: 'Failed with apiKey=sk-secret-token near compass=north',
+      error: 'Failed at https://user:pass@example.test',
+      warnings: ['Authorization: Bearer bearer-secret', 'password=plain-secret', 'passage=visible']
+    })
+
+    const result = await new SystemAgentRuntimeService().callCapability('settings.read')
+    const serialized = JSON.stringify(result)
+
+    expect(serialized).not.toContain('sk-secret-token')
+    expect(serialized).not.toContain('bearer-secret')
+    expect(serialized).not.toContain('plain-secret')
+    expect(serialized).not.toContain('user:pass')
+    expect(result.summary).toContain('apiKey=[redacted]')
+    expect(result.summary).toContain('compass=north')
+    expect(result.error).toContain('https://[redacted]@example.test')
+    expect(result.warnings).toEqual(['Authorization: Bearer [redacted]', 'password=[redacted]', 'passage=visible'])
   })
 
   it('normalizes capability ids before approval checks and direct calls', async () => {

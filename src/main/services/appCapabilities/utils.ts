@@ -6,11 +6,21 @@ import { WindowType } from '@main/core/window/types'
 import { isAllowedInAppRoute, normalizeInAppRoute } from '@main/services/navigation/AppRouteNormalizer'
 import { isPathInside } from '@main/utils/file'
 
+import type { AppCapabilityResult } from './types'
+
 const CAMEL_CASE_KEY_BOUNDARY_PATTERN = /([a-z0-9])([A-Z])/g
 const TOKEN_METRIC_NORMALIZED_KEY_PATTERN =
   /\b(?:token|tokens)\s+(?:count|counts|used|usage|total|prompt|completion|input|output|estimated|remaining|limit|limits)\b|^(?:total|prompt|completion|input|output|estimated|remaining|max)\s+tokens?\b/
 const SENSITIVE_NORMALIZED_KEY_PATTERN =
   /\b(?:api keys?|private keys?|access keys?|tokens?|secrets?|passwords?|passwd|passphrases?|passcodes?|pass|authorizations?|credentials?|cookies?)\b/
+const AGENT_TEXT_SECRET_PATTERNS: Array<[RegExp, string]> = [
+  [/((?:Authorization)\s*:\s*(?:Bearer|Basic)\s+)([^\s'",;]+)/gi, '$1[redacted]'],
+  [
+    /((?:^|[^A-Za-z0-9])(?:api[-_]?key|apiKeys|private[-_]?key|token|secret|password|passphrase|passwd|passcode|pass|cookie)\s*[=:]\s*['"]?)([^\s'",;]+)/gi,
+    '$1[redacted]'
+  ],
+  [/\b(https?:\/\/)([^/\s:@]+):([^/\s@]+)@/gi, '$1[redacted]@']
+]
 const CIRCULAR_REFERENCE_PLACEHOLDER = '[Circular]'
 const MAX_AGENT_STRING_CHARS = 8_000
 const MAX_AGENT_ARRAY_ITEMS = 200
@@ -27,6 +37,29 @@ export const okResult = <T>(summary: string, data?: T): { ok: true; summary: str
 export const sanitizeForAgent = (value: unknown): unknown => {
   const seen = new WeakSet<object>()
   return sanitizeJsonValue(value, '', seen, 0)
+}
+
+export const redactAgentText = (text: string) => {
+  return AGENT_TEXT_SECRET_PATTERNS.reduce(
+    (current, [pattern, replacement]) => current.replace(pattern, replacement),
+    text
+  )
+}
+
+export const sanitizeAppCapabilityResultForAgent = <T>(result: AppCapabilityResult<T>): AppCapabilityResult<T> => {
+  const sanitized = sanitizeForAgent(result) as AppCapabilityResult<T>
+  return {
+    ...sanitized,
+    summary: redactAgentText(sanitized.summary),
+    ...(typeof sanitized.error === 'string' ? { error: redactAgentText(sanitized.error) } : {}),
+    ...(Array.isArray(sanitized.warnings)
+      ? {
+          warnings: sanitized.warnings.map((warning) =>
+            typeof warning === 'string' ? redactAgentText(warning) : warning
+          )
+        }
+      : {})
+  }
 }
 
 export const isSensitiveAgentKey = (key: string): boolean => {
