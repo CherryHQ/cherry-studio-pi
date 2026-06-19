@@ -97,10 +97,12 @@ export default function ProviderApiKeyListDrawer({ providerId, open, onClose }: 
       setSaving(true)
       try {
         await updateApiKeys(nextKeys)
-        return true
+        return mountedRef.current
       } catch (error) {
         logger.error('Failed to persist provider API keys', { providerId, error })
-        window.toast.error(t('settings.provider.api_key.save_failed'))
+        if (mountedRef.current) {
+          window.toast.error(t('settings.provider.api_key.save_failed'))
+        }
         return false
       } finally {
         savingRef.current = false
