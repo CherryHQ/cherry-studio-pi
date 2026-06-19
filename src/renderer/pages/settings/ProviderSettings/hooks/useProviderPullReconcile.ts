@@ -31,11 +31,13 @@ export function useProviderPullReconcile(providerId: string) {
     [apiKeysData]
   )
 
-  // Single-flight is keyed by the concrete enabled-key fingerprint: rapid
-  // blur/paste of the *same* key dedupes onto one upstream call, but a key
-  // change starts a fresh fetch instead of returning the stale promise. A
+  const requestSignature = `${providerId}::${enabledKeySignature}`
+
+  // Single-flight is keyed by provider + concrete enabled-key fingerprint:
+  // rapid blur/paste of the *same* key on the same provider dedupes onto one
+  // upstream call, but switching providers or keys starts a fresh fetch. A
   // monotonic sequence guard ensures a superseded fetch never overwrites the
-  // preview produced for the newer key.
+  // preview produced for the newer provider/key.
   const inflightRef = useRef<{ signature: string; promise: Promise<ModelSyncPreviewResponse | null> } | null>(null)
   const seqRef = useRef(0)
   const mountedRef = useRef(true)
@@ -47,12 +49,19 @@ export function useProviderPullReconcile(providerId: string) {
     }
   }, [])
 
+  useEffect(() => {
+    seqRef.current += 1
+    inflightRef.current = null
+    setPreview(null)
+    setIsPreviewLoading(false)
+  }, [requestSignature])
+
   const reset = useCallback(() => {
     setPreview(null)
   }, [])
 
   const fetchPreview = useCallback(async (): Promise<ModelSyncPreviewResponse | null> => {
-    const signature = enabledKeySignature
+    const signature = requestSignature
     const inflight = inflightRef.current
     if (inflight && inflight.signature === signature) {
       return inflight.promise
@@ -85,7 +94,7 @@ export function useProviderPullReconcile(providerId: string) {
     })()
     inflightRef.current = { signature, promise }
     return promise
-  }, [providerId, t, enabledKeySignature])
+  }, [providerId, t, requestSignature])
 
   return {
     preview,
