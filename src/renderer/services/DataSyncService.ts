@@ -278,7 +278,7 @@ function continueMainSyncAfterRendererTimeout(syncPromise: Promise<DataSyncSumma
       })
     })
     .finally(() => {
-      void reconcileRendererSyncStateWithMainProcess().catch((error) => {
+      void reconcileRendererSyncStateWithMainProcessWithTimeout('刷新延迟同步完成状态').catch((error) => {
         logger.warn('Failed to reconcile data sync runtime state after delayed sync completion', error as Error)
       })
       if (localChangeDuringSync) {
@@ -304,6 +304,10 @@ async function getMainProcessDataSyncStatus() {
     logger.warn('Failed to inspect main-process data sync status', error as Error)
     return null
   })
+}
+
+async function getMainProcessDataSyncStatusWithTimeout(stageName: string) {
+  return withDataSyncStageTimeout(stageName, () => getMainProcessDataSyncStatus(), RENDERER_SYNC_STATUS_TIMEOUT_MS)
 }
 
 async function isMainProcessRunning() {
@@ -335,8 +339,16 @@ async function reconcileRendererSyncStateWithMainProcess() {
   return mainProcessRunning
 }
 
+async function reconcileRendererSyncStateWithMainProcessWithTimeout(stageName: string) {
+  return withDataSyncStageTimeout(
+    stageName,
+    () => reconcileRendererSyncStateWithMainProcess(),
+    RENDERER_SYNC_STATUS_TIMEOUT_MS
+  )
+}
+
 export async function refreshDataSyncRuntimeStateFromMain(): Promise<DataSyncRuntimeState> {
-  await reconcileRendererSyncStateWithMainProcess()
+  await reconcileRendererSyncStateWithMainProcessWithTimeout('刷新主进程同步状态')
   return getDataSyncRuntimeState()
 }
 
@@ -521,7 +533,7 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
     const message = getErrorMessage(error)
     if (isDataSyncAlreadyRunningMessage(message)) {
       logger.info('Data sync already running in main process')
-      await reconcileRendererSyncStateWithMainProcess().catch((reconcileError) => {
+      await reconcileRendererSyncStateWithMainProcessWithTimeout('刷新已有同步状态').catch((reconcileError) => {
         logger.warn(
           'Failed to reconcile renderer data sync state after already-running response',
           reconcileError as Error
@@ -531,7 +543,12 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
     }
 
     if (error instanceof DataSyncStageTimeoutError && error.stageName === '执行 WebDAV 同步') {
-      const status = await getMainProcessDataSyncStatus()
+      const status = await getMainProcessDataSyncStatusWithTimeout('检查超时后的主进程同步状态').catch(
+        (statusError) => {
+          logger.warn('Failed to inspect main-process status after renderer data sync timeout', statusError as Error)
+          return null
+        }
+      )
       const mainProcessRunning = Boolean(status?.syncing)
       if (mainProcessRunning) {
         setDataSyncRunning(true, typeof status?.syncStartedAt === 'number' ? status.syncStartedAt : null)
@@ -564,7 +581,7 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
     if (!keepRendererSyncingAfterReturn) {
       setDataSyncRunning(false)
     }
-    await reconcileRendererSyncStateWithMainProcess().catch((error) => {
+    await reconcileRendererSyncStateWithMainProcessWithTimeout('同步结束后刷新主进程状态').catch((error) => {
       logger.warn('Failed to reconcile data sync runtime state after sync completion', error as Error)
     })
     if (localChangeDuringSync) {

@@ -578,6 +578,42 @@ describe('DataSyncService', () => {
     expect(getDataSyncRuntimeState().syncing).toBe(false)
   })
 
+  it('does not hang when status inspection also stalls after a main sync timeout', async () => {
+    vi.useFakeTimers()
+    const pendingSync = deferred<typeof successSummary>()
+    const idleStatus = {
+      syncing: false,
+      lastSummary: null,
+      conflicts: [],
+      syncStartedAt: null
+    }
+    mocks.syncNow.mockReturnValueOnce(pendingSync.promise)
+    mocks.getStatus
+      .mockResolvedValueOnce(idleStatus)
+      .mockResolvedValueOnce(idleStatus)
+      .mockImplementation(
+        () =>
+          new Promise(() => {
+            // Simulate a wedged status IPC after the WebDAV sync IPC has already timed out.
+          })
+      )
+
+    const sync = syncAppDataNow()
+    await vi.waitFor(() => expect(getDataSyncRuntimeState().syncing).toBe(true))
+    const rejection = expect(sync).rejects.toThrow('执行 WebDAV 同步')
+
+    await vi.advanceTimersByTimeAsync(15 * 60_000)
+    await vi.advanceTimersByTimeAsync(30_000)
+    await vi.advanceTimersByTimeAsync(30_000)
+
+    await rejection
+    expect(mocks.recordFailure).toHaveBeenCalledWith(expect.stringContaining('执行 WebDAV 同步'))
+    expect(getDataSyncRuntimeState()).toEqual({
+      syncing: false,
+      syncStartedAt: null
+    })
+  })
+
   it('recovers a completed main-process summary when the sync IPC times out after success', async () => {
     vi.useFakeTimers()
     const startedAt = Date.parse('2026-06-06T10:00:00.000Z')
