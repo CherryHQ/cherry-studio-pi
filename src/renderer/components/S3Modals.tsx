@@ -223,7 +223,15 @@ export function useS3RestoreModal({
       cancelText: t('settings.data.s3.restore.confirm.cancel'),
       centered: true,
       onOk: async () => {
+        if (!mountedRef.current) {
+          return
+        }
+
         await runExclusiveOperation(restoringRef, async () => {
+          if (!mountedRef.current) {
+            return
+          }
+
           setRestoring(true)
           try {
             await window.api.backup.restoreFromS3({

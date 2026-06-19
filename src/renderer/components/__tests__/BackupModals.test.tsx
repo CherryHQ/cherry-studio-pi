@@ -82,6 +82,31 @@ function renderS3RestoreHarness(): () => ReturnType<typeof useS3RestoreModal> {
   return () => restoreModal
 }
 
+function renderUnmountableS3RestoreHarness(): {
+  getRestoreModal: () => ReturnType<typeof useS3RestoreModal>
+  unmount: () => void
+} {
+  let restoreModal: ReturnType<typeof useS3RestoreModal>
+
+  function Harness(): ReactNode {
+    restoreModal = useS3RestoreModal({
+      endpoint: 'http://127.0.0.1:9000',
+      region: 'local',
+      bucket: 'backups',
+      accessKeyId: 'access',
+      secretAccessKey: 'secret'
+    })
+    return null
+  }
+
+  const view = render(<Harness />)
+
+  return {
+    getRestoreModal: () => restoreModal,
+    unmount: view.unmount
+  }
+}
+
 describe('backup modals', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -188,5 +213,29 @@ describe('backup modals', () => {
       runningRestore.resolve()
       await runningRestore.promise
     })
+  })
+
+  it('ignores S3 restore confirmation after the modal owner unmounts', async () => {
+    vi.mocked(window.api.backup.restoreFromS3).mockResolvedValue(undefined)
+    const { getRestoreModal, unmount } = renderUnmountableS3RestoreHarness()
+
+    await act(async () => {
+      getRestoreModal().setSelectedFile('backup.zip')
+    })
+
+    await act(async () => {
+      await getRestoreModal().handleRestore()
+    })
+
+    const onOk = vi.mocked(window.modal.confirm).mock.calls[0][0].onOk!
+    unmount()
+
+    await act(async () => {
+      await onOk()
+    })
+
+    expect(window.api.backup.restoreFromS3).not.toHaveBeenCalled()
+    expect(window.toast.success).not.toHaveBeenCalled()
+    expect(window.toast.error).not.toHaveBeenCalled()
   })
 })
