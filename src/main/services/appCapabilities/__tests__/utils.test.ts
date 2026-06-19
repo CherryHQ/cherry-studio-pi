@@ -135,18 +135,28 @@ describe('app capability utils', () => {
       isError: true,
       summary: 'Failed with apiKey=sk-secret-token near compass=north',
       error: 'Authorization: Bearer bearer-secret at https://user:pass@example.test',
-      warnings: ['password=plain-secret', 'passage=visible']
+      warnings: ['password=plain-secret', 'passage=visible'],
+      data: {
+        note: 'ordinary field with token=nested-secret',
+        url: 'https://nested-user:nested-pass@example.test/resource'
+      }
     })
 
     expect(JSON.stringify(sanitized)).not.toContain('sk-secret-token')
     expect(JSON.stringify(sanitized)).not.toContain('bearer-secret')
     expect(JSON.stringify(sanitized)).not.toContain('plain-secret')
     expect(JSON.stringify(sanitized)).not.toContain('user:pass')
+    expect(JSON.stringify(sanitized)).not.toContain('nested-secret')
+    expect(JSON.stringify(sanitized)).not.toContain('nested-user:nested-pass')
     expect(sanitized.summary).toContain('apiKey=[redacted]')
     expect(sanitized.summary).toContain('compass=north')
     expect(sanitized.error).toContain('Authorization: Bearer [redacted]')
     expect(sanitized.error).toContain('https://[redacted]@example.test')
     expect(sanitized.warnings).toEqual(['password=[redacted]', 'passage=visible'])
+    expect(sanitized.data).toEqual({
+      note: 'ordinary field with token=[redacted]',
+      url: 'https://[redacted]@example.test/resource'
+    })
   })
 
   it('serializes bigint values instead of throwing', () => {

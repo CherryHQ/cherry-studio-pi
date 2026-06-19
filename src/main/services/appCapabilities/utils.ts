@@ -81,8 +81,9 @@ function sanitizeJsonValue(value: unknown, key: string, seen: WeakSet<object>, d
   }
 
   if (typeof value === 'string') {
-    if (value.length <= MAX_AGENT_STRING_CHARS) return value
-    return `${value.slice(0, MAX_AGENT_STRING_CHARS)}...[truncated ${value.length - MAX_AGENT_STRING_CHARS} chars]`
+    const redacted = redactAgentText(value)
+    if (redacted.length <= MAX_AGENT_STRING_CHARS) return redacted
+    return `${redacted.slice(0, MAX_AGENT_STRING_CHARS)}...[truncated ${redacted.length - MAX_AGENT_STRING_CHARS} chars]`
   }
 
   if (value === null || typeof value === 'number' || typeof value === 'boolean') {
