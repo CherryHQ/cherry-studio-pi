@@ -380,7 +380,7 @@ describe('AgentChatContextProvider', () => {
     ])
   })
 
-  it('does not resurrect a missing agent model when the provider already has local user_model rows', async () => {
+  it('rejects a missing agent model when neither local rows nor provider registry can resolve it', async () => {
     mocks.getAgent.mockResolvedValue({
       id: 'agent-1',
       type: 'claude-code',
@@ -389,14 +389,12 @@ describe('AgentChatContextProvider', () => {
     })
     mocks.getModelByKey.mockRejectedValue(new Error('not found'))
     mocks.listModels.mockResolvedValue([makeModel('openai::gpt-4.1', { name: 'GPT 4.1', apiModelId: 'gpt-4.1' })])
-    mocks.resolveRegistryModels.mockResolvedValue([
-      makeModel('openai::gpt-4o', { name: 'GPT-4o', apiModelId: 'gpt-4o' })
-    ])
+    mocks.resolveRegistryModels.mockResolvedValue([])
 
     await expect(provider.prepareDispatch(makeSubscriber(), openReq())).rejects.toThrow(
       'Agent agent-1 model "openai::gpt-4o" is not registered in user_model'
     )
-    expect(mocks.resolveRegistryModels).not.toHaveBeenCalled()
+    expect(mocks.resolveRegistryModels).toHaveBeenCalledWith('openai', ['gpt-4o'])
     expect(mocks.saveMessage).not.toHaveBeenCalled()
     expect(mocks.saveMessages).not.toHaveBeenCalled()
     expect(mocks.runtimeBeginTurn).not.toHaveBeenCalled()
