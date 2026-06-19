@@ -6,6 +6,7 @@ import SelectionContextMenu from '@renderer/components/SelectionContextMenu'
 import { useCommandHandler } from '@renderer/features/command'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import { useChatContext } from '@renderer/hooks/useChatContext'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { useTimer } from '@renderer/hooks/useTimer'
 import { useV2Chat } from '@renderer/hooks/V2ChatContext'
 import SelectionBox from '@renderer/pages/home/Messages/SelectionBox'
@@ -18,7 +19,6 @@ import {
   captureScrollableAsDataURL,
   removeSpecialCharactersForFileName
 } from '@renderer/utils'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { updateCodeBlock } from '@renderer/utils/markdown'
 import { getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { getTextFromParts } from '@renderer/utils/messageUtils/partsHelpers'
@@ -64,6 +64,7 @@ const Messages: React.FC<MessagesProps> = ({
   const partsMap = usePartsMap()
   const v2Chat = useV2Chat()
   const { setTimeoutTimer } = useTimer()
+  const showCopyFailed = useSaveFailedToast('common.copy_failed')
 
   const { isMultiSelectMode, handleSelectMessage } = useChatContext()
 
@@ -171,7 +172,7 @@ const Messages: React.FC<MessagesProps> = ({
           })
         } catch (error) {
           logger.error('Failed to copy topic image:', error as Error)
-          window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+          showCopyFailed(error)
         }
       }),
       EventEmitter.on(EVENT_NAMES.EXPORT_TOPIC_IMAGE, async () => {
@@ -224,7 +225,7 @@ const Messages: React.FC<MessagesProps> = ({
 
     return () => unsubscribes.forEach((unsub) => unsub())
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assistant, scrollToBottom, topic])
+  }, [assistant, scrollToBottom, topic, showCopyFailed])
 
   useEffect(() => {
     if (!assistant) return
@@ -254,7 +255,7 @@ const Messages: React.FC<MessagesProps> = ({
         window.toast.success(t('message.copy.success'))
       } catch (error) {
         logger.error('Failed to copy last message:', error as Error)
-        window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+        showCopyFailed(error)
       }
     }
   })

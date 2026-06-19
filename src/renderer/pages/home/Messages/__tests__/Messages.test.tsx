@@ -1,5 +1,5 @@
 import type { Topic } from '@renderer/types'
-import { render } from '@testing-library/react'
+import { act, render, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -167,10 +167,12 @@ const { default: Messages } = await import('../Messages')
 
 function deferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void
-  const promise = new Promise<T>((resolvePromise) => {
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise
+    reject = rejectPromise
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 describe('Messages', () => {
@@ -244,6 +246,35 @@ describe('Messages', () => {
     expect(mocks.toastSuccess).not.toHaveBeenCalledWith('message.copy.success')
   })
 
+  it('ignores copy-last-message failures after unmount', async () => {
+    const clipboardOperation = deferred<void>()
+    mocks.clipboardWriteText.mockReturnValueOnce(clipboardOperation.promise)
+    const topic = { id: 'topic-1', assistantId: 'assistant-1', name: 'Topic' } as Topic
+    const { unmount } = render(
+      <Messages
+        topic={topic}
+        messages={[{ id: 'message-1', role: 'assistant', topicId: topic.id } as any]}
+        onComponentUpdate={vi.fn()}
+      />
+    )
+
+    const commandHandler = mocks.useCommandHandler.mock.calls.find(
+      ([command]) => command === 'chat.message.copy_last'
+    )?.[1]
+
+    const action = commandHandler?.()
+    await waitFor(() => expect(mocks.clipboardWriteText).toHaveBeenCalled())
+    unmount()
+
+    await act(async () => {
+      clipboardOperation.reject(new Error('clipboard unavailable after unmount'))
+      await action
+    })
+
+    expect(mocks.toastError).not.toHaveBeenCalled()
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith('message.copy.success')
+  })
+
   it('shows an error when copying the topic image cannot write to clipboard', async () => {
     mocks.captureScrollableAsBlob.mockImplementationOnce(async (_ref, callback) => {
       await callback(new Blob(['image'], { type: 'image/png' }))
@@ -260,6 +291,31 @@ describe('Messages', () => {
 
     expect(mocks.toastError).toHaveBeenCalledWith('common.copy_failed: image clipboard unavailable')
     expect(mocks.clipboardWrite).toHaveBeenCalled()
+  })
+
+  it('ignores topic image copy failures after unmount', async () => {
+    const clipboardOperation = deferred<void>()
+    mocks.captureScrollableAsBlob.mockImplementationOnce(async (_ref, callback) => {
+      await callback(new Blob(['image'], { type: 'image/png' }))
+    })
+    mocks.clipboardWrite.mockReturnValueOnce(clipboardOperation.promise)
+    const topic = { id: 'topic-1', assistantId: 'assistant-1', name: 'Topic' } as Topic
+
+    const { unmount } = render(<Messages topic={topic} messages={[]} onComponentUpdate={vi.fn()} />)
+
+    const eventCalls = mocks.eventOn.mock.calls as unknown as Array<[string, (...args: unknown[]) => unknown]>
+    const eventHandler = eventCalls.find(([eventName]) => eventName === 'copy-topic-image')?.[1]
+
+    const action = eventHandler?.(topic)
+    await waitFor(() => expect(mocks.clipboardWrite).toHaveBeenCalled())
+    unmount()
+
+    await act(async () => {
+      clipboardOperation.reject(new Error('image clipboard unavailable after unmount'))
+      await action
+    })
+
+    expect(mocks.toastError).not.toHaveBeenCalled()
   })
 
   it('prevents duplicate clear-topic confirmations and operations', async () => {
