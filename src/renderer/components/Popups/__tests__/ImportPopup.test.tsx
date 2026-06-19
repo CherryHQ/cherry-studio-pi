@@ -94,9 +94,23 @@ async function showPopup() {
 
   void ImportPopup.show().then(settled)
   const rendered = mocks.TopView.show.mock.calls[0][0] as React.ReactNode
-  render(<>{rendered}</>)
+  const renderResult = render(<>{rendered}</>)
 
-  return { ImportPopup, settled }
+  return { ImportPopup, settled, ...renderResult }
+}
+
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
 }
 
 describe('ImportPopup', () => {
@@ -176,6 +190,62 @@ describe('ImportPopup', () => {
       resolveOpen(null)
       await Promise.resolve()
     })
+  })
+
+  it('ignores file selection completion after the popup unmounts', async () => {
+    const { settled, unmount } = await showPopup()
+    const fileSelection = deferred<{ content: string } | null>()
+    vi.mocked(window.api.file.open).mockReturnValue(fileSelection.promise)
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('import.chatgpt.button'))
+      await Promise.resolve()
+    })
+
+    unmount()
+
+    await act(async () => {
+      fileSelection.resolve({ content: '{"ok":true}' })
+      await fileSelection.promise
+      await Promise.resolve()
+    })
+
+    expect(mocks.importChatGPTConversations).not.toHaveBeenCalled()
+    expect(window.toast.success).not.toHaveBeenCalled()
+    expect(window.toast.error).not.toHaveBeenCalled()
+    expect(mocks.TopView.hide).not.toHaveBeenCalled()
+    expect(settled).not.toHaveBeenCalled()
+  })
+
+  it('ignores import completion after the popup unmounts', async () => {
+    const { settled, unmount } = await showPopup()
+    const importOperation = deferred<{ success: boolean; topicsCount: number; messagesCount: number }>()
+    vi.mocked(window.api.file.open).mockResolvedValue({ content: '{"ok":true}' })
+    mocks.importChatGPTConversations.mockReturnValue(importOperation.promise)
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('import.chatgpt.button'))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(mocks.importChatGPTConversations).toHaveBeenCalledOnce()
+
+    unmount()
+
+    await act(async () => {
+      importOperation.resolve({
+        success: true,
+        topicsCount: 2,
+        messagesCount: 5
+      })
+      await importOperation.promise
+      await Promise.resolve()
+    })
+
+    expect(window.toast.success).not.toHaveBeenCalled()
+    expect(window.toast.error).not.toHaveBeenCalled()
+    expect(mocks.TopView.hide).not.toHaveBeenCalled()
+    expect(settled).not.toHaveBeenCalled()
   })
 
   it('resolves empty result on cancel', async () => {

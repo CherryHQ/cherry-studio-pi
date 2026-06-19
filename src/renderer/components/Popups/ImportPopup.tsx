@@ -10,7 +10,7 @@ import {
 } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import { importChatGPTConversations } from '@renderer/services/import'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { TopView } from '../TopView'
@@ -30,9 +30,21 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
   const [open, setOpen] = useState(true)
   const [selecting, setSelecting] = useState(false)
   const [importing, setImporting] = useState(false)
+  const mountedRef = useRef(true)
   const operationRef = useRef(false)
+  const operationSeqRef = useRef(0)
   const { t } = useTranslation()
   const close = useTopViewClose<PopupResult>({ resolve, setOpen, topViewKey: TopViewKey })
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+      operationRef.current = false
+      operationSeqRef.current += 1
+    }
+  }, [])
 
   const onOk = async () => {
     if (operationRef.current) {
@@ -40,12 +52,17 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
     }
 
     operationRef.current = true
+    const operationSeq = ++operationSeqRef.current
     setSelecting(true)
     try {
       // Select ChatGPT JSON file
       const file = await window.api.file.open({
         filters: [{ name: 'ChatGPT Conversations', extensions: ['json'] }]
       })
+
+      if (!mountedRef.current || operationSeq !== operationSeqRef.current) {
+        return
+      }
 
       setSelecting(false)
 
@@ -61,6 +78,10 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       // Import conversations
       const result = await importChatGPTConversations(fileContent)
 
+      if (!mountedRef.current || operationSeq !== operationSeqRef.current) {
+        return
+      }
+
       if (result.success) {
         window.toast.success(
           t('import.chatgpt.success', {
@@ -73,13 +94,19 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
         window.toast.error(result.error || t('import.chatgpt.error.unknown'))
       }
     } catch (error) {
-      logger.error('ChatGPT import failed:', error as Error)
-      window.toast.error(t('import.chatgpt.error.unknown'))
-      close({})
+      if (mountedRef.current && operationSeq === operationSeqRef.current) {
+        logger.error('ChatGPT import failed:', error as Error)
+        window.toast.error(t('import.chatgpt.error.unknown'))
+        close({})
+      }
     } finally {
-      operationRef.current = false
-      setSelecting(false)
-      setImporting(false)
+      if (operationSeq === operationSeqRef.current) {
+        operationRef.current = false
+      }
+      if (mountedRef.current && operationSeq === operationSeqRef.current) {
+        setSelecting(false)
+        setImporting(false)
+      }
     }
   }
 
