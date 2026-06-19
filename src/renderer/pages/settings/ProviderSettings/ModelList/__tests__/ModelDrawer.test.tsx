@@ -278,6 +278,39 @@ describe('Model drawers', () => {
     expect(screen.getByRole('button', { name: /settings\.models\.add\.add_model/i })).not.toBeDisabled()
   })
 
+  it('ignores a finished add-model submit after the drawer unmounts', async () => {
+    useProviderMock.mockReturnValue({
+      provider: { id: 'openai', name: 'OpenAI', isEnabled: false },
+      updateProvider: updateProviderMock
+    })
+    const runningCreate = deferred<void>()
+    createModelMock.mockReturnValueOnce(runningCreate.promise)
+    const onClose = vi.fn()
+
+    const { unmount } = render(<AddModelDrawer providerId="openai" open prefill={null} onClose={onClose} />)
+
+    fireEvent.change(screen.getByLabelText('settings.models.add.model_id.label'), {
+      target: { value: 'alpha-model' }
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /settings\.models\.add\.add_model/i }))
+    })
+
+    unmount()
+
+    await act(async () => {
+      runningCreate.resolve(undefined)
+      await runningCreate.promise
+    })
+
+    expect(createModelMock).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: 'openai', modelId: 'alpha-model' })
+    )
+    expect(onClose).not.toHaveBeenCalled()
+    expect(window.toast.error).not.toHaveBeenCalled()
+  })
+
   it('loads edit values, expands more settings, and keeps save plus auto-save on the existing mutation path', async () => {
     useProviderMock.mockReturnValue({
       provider: { id: 'openai', name: 'OpenAI', isEnabled: true },

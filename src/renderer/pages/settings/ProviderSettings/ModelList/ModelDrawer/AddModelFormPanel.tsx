@@ -54,8 +54,17 @@ export default function AddModelFormPanel({
   const [showMoreSettings, setShowMoreSettings] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const submittingRef = useRef(false)
+  const mountedRef = useRef(true)
 
   const mode: ModelDrawerMode = provider && isNewApiProvider(provider) ? 'new-api' : 'legacy'
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const ensureAddedModelsVisible = useCallback(
     async (modelCount: number) => {
@@ -64,6 +73,10 @@ export default function AddModelFormPanel({
       }
 
       const enabled = await enableProviderWhenModelsAvailable(provider, updateProvider, modelCount, 'manual_add_model')
+      if (!mountedRef.current) {
+        return false
+      }
+
       if (!enabled) {
         window.toast.error(t('settings.models.add.provider_enable_failed'))
         return false
@@ -161,7 +174,9 @@ export default function AddModelFormPanel({
 
         if (addedCount > 0) {
           if (await ensureAddedModelsVisible(addedCount)) {
-            onSuccess()
+            if (mountedRef.current) {
+              onSuccess()
+            }
           }
         }
         return
@@ -174,14 +189,20 @@ export default function AddModelFormPanel({
         })
       ) {
         if (await ensureAddedModelsVisible(1)) {
-          onSuccess()
+          if (mountedRef.current) {
+            onSuccess()
+          }
         }
       }
     } catch {
-      window.toast.error(t('settings.models.manage.operation_failed'))
+      if (mountedRef.current) {
+        window.toast.error(t('settings.models.manage.operation_failed'))
+      }
     } finally {
       submittingRef.current = false
-      setIsSubmitting(false)
+      if (mountedRef.current) {
+        setIsSubmitting(false)
+      }
     }
   }, [addSingleModel, ensureAddedModelsVisible, formState, mode, onSuccess, t])
 
