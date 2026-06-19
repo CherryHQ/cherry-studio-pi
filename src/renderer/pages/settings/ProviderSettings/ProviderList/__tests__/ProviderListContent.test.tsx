@@ -346,6 +346,52 @@ describe('ProviderListContent — C1 grouped reorder', () => {
     expect(onReorderError).toHaveBeenCalledWith(error)
   })
 
+  it('ignores stale async reorder failures after unmount', async () => {
+    const error = new Error('async reorder failed after unmount')
+    let rejectReorder!: (error: unknown) => void
+    const onReorder = vi.fn(
+      () =>
+        new Promise<void>((_, reject) => {
+          rejectReorder = reject
+        })
+    )
+    const onReorderError = vi.fn()
+    const all = [
+      provider('solo-a', 'solo-a', true),
+      provider('zhipu-a', 'zhipu', true),
+      provider('zhipu-b', 'zhipu', true),
+      provider('solo-b', 'solo-b', true)
+    ]
+
+    const { unmount } = render(
+      <ProviderListContent
+        providers={all}
+        visibleProviders={all}
+        searchActive={false}
+        expandedGroups={{ zhipu: true }}
+        onToggleGroup={() => {}}
+        onDragStateChange={() => {}}
+        onReorder={onReorder}
+        onReorderError={onReorderError}
+        renderItem={() => null}
+      />
+    )
+
+    act(() => {
+      sortableCalls[0].onSortEnd({ oldIndex: 1, newIndex: 2 })
+    })
+    expect(onReorder).toHaveBeenCalledTimes(1)
+
+    unmount()
+
+    await act(async () => {
+      rejectReorder(error)
+      await Promise.resolve()
+    })
+
+    expect(onReorderError).not.toHaveBeenCalled()
+  })
+
   it('uses center collision detection for grouped sorting', () => {
     const all = [
       provider('solo-a', 'solo-a', true),
