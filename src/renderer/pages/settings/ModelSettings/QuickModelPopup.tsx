@@ -18,7 +18,7 @@ import {
 import { usePreference } from '@data/hooks/usePreference'
 import { ResetIcon } from '@renderer/components/Icons'
 import { TopView } from '@renderer/components/TopView'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { CircleHelp } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -34,12 +34,7 @@ export const TopicNamingSettings = () => {
   const [topicNamingPrompt, setTopicNamingPrompt] = usePreference('topic.naming_prompt')
   const { t } = useTranslation()
 
-  const showSaveFailed = useCallback(
-    (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-    },
-    [t]
-  )
+  const showSaveFailed = useSaveFailedToast()
 
   const handleReset = useCallback(() => {
     void setTopicNamingPrompt('').catch(showSaveFailed)
