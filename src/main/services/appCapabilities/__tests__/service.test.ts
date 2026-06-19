@@ -189,4 +189,50 @@ describe('AppCapabilityService', () => {
     expect((result.data as any).apiKey).toBe('sk-secret')
     expect((result.data as any).text).toHaveLength(9_000)
   })
+
+  it('converts missing capability return values into standard error results', async () => {
+    executeCapability.mockReset()
+    executeCapability.mockResolvedValueOnce(undefined as any)
+    const service = new AppCapabilityService()
+
+    await expect(service.call('settings.read', {}, { source: 'agent' })).resolves.toEqual({
+      ok: false,
+      isError: true,
+      summary: 'settings.read returned an invalid result: expected an object',
+      error: 'settings.read returned an invalid result: expected an object'
+    })
+  })
+
+  it('converts capability results without a boolean ok field into standard error results', async () => {
+    executeCapability.mockReset()
+    executeCapability.mockResolvedValueOnce({ summary: 'not enough shape' } as any)
+    const service = new AppCapabilityService()
+
+    await expect(service.call('settings.read', {}, { source: 'agent' })).resolves.toEqual({
+      ok: false,
+      isError: true,
+      summary: 'settings.read returned an invalid result: missing boolean ok',
+      error: 'settings.read returned an invalid result: missing boolean ok'
+    })
+  })
+
+  it('fills a fallback summary for otherwise valid capability results', async () => {
+    executeCapability.mockReset()
+    executeCapability.mockResolvedValueOnce({ ok: true, data: { value: 1 } } as any)
+    executeCapability.mockResolvedValueOnce({ ok: false, error: 'bad input' } as any)
+    const service = new AppCapabilityService()
+
+    await expect(service.call('settings.read', {}, { source: 'agent' })).resolves.toEqual({
+      ok: true,
+      summary: 'settings.read completed',
+      data: { value: 1 }
+    })
+
+    await expect(service.call('settings.read', {}, { source: 'agent' })).resolves.toEqual({
+      ok: false,
+      isError: true,
+      summary: 'settings.read failed: bad input',
+      error: 'bad input'
+    })
+  })
 })

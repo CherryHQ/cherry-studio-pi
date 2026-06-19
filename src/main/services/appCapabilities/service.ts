@@ -28,6 +28,43 @@ function sanitizeResultForSource<T>(
   return sanitizeForAgent(result) as AppCapabilityResult<T>
 }
 
+function invalidCapabilityResult<T>(capabilityId: string, reason: string): AppCapabilityResult<T> {
+  const message = `${capabilityId} returned an invalid result: ${reason}`
+  return {
+    ok: false,
+    isError: true,
+    summary: message,
+    error: message
+  }
+}
+
+function normalizeCapabilityResult<T>(capabilityId: string, result: unknown): AppCapabilityResult<T> {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    return invalidCapabilityResult(capabilityId, 'expected an object')
+  }
+
+  const candidate = result as Partial<AppCapabilityResult<T>>
+  if (typeof candidate.ok !== 'boolean') {
+    return invalidCapabilityResult(capabilityId, 'missing boolean ok')
+  }
+
+  const summary =
+    typeof candidate.summary === 'string' && candidate.summary.trim()
+      ? candidate.summary
+      : candidate.ok
+        ? `${capabilityId} completed`
+        : typeof candidate.error === 'string' && candidate.error.trim()
+          ? `${capabilityId} failed: ${candidate.error}`
+          : `${capabilityId} failed`
+
+  return {
+    ...candidate,
+    ok: candidate.ok,
+    summary,
+    ...(candidate.ok ? {} : { isError: true })
+  } as AppCapabilityResult<T>
+}
+
 export class AppCapabilityService {
   private readonly registry = new AppCapabilityRegistry()
   private initialized = false
@@ -98,13 +135,16 @@ export class AppCapabilityService {
         risk: capability.risk,
         dryRun: context.dryRun === true
       })
-      const result = (await capability.execute(input, {
-        source: context.source ?? 'system',
-        sessionId: context.sessionId,
-        toolCallId: context.toolCallId,
-        signal: context.signal,
-        dryRun: context.dryRun
-      })) as AppCapabilityResult<T>
+      const result = normalizeCapabilityResult<T>(
+        capabilityId,
+        await capability.execute(input, {
+          source: context.source ?? 'system',
+          sessionId: context.sessionId,
+          toolCallId: context.toolCallId,
+          signal: context.signal,
+          dryRun: context.dryRun
+        })
+      )
       if (context.signal?.aborted) {
         const message = abortReasonMessage(context.signal)
         return {
