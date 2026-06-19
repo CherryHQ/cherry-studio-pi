@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import HtmlArtifactsCard from '../HtmlArtifactsCard'
@@ -10,6 +10,16 @@ const mockOpenExternal = vi.fn()
 const mockSave = vi.fn()
 const mockToastError = vi.fn()
 const mockToastSuccess = vi.fn()
+
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
 
 vi.mock('@logger', () => ({
   loggerService: {
@@ -97,6 +107,27 @@ describe('HtmlArtifactsCard', () => {
     fireEvent.click(screen.getByText('code_block.download.label'))
 
     await waitFor(() => expect(mockToastError).toHaveBeenCalledWith('common.save_failed: save failed'))
+    expect(mockToastSuccess).not.toHaveBeenCalled()
+  })
+
+  it('ignores artifact download failures after unmount', async () => {
+    const saveOperation = deferred<string | null>()
+    mockSave.mockReturnValueOnce(saveOperation.promise)
+    const { unmount } = render(
+      <HtmlArtifactsCard html="<html><head><title>Demo</title></head><body>Hello</body></html>" />
+    )
+
+    fireEvent.click(screen.getByText('code_block.download.label'))
+
+    await waitFor(() => expect(mockSave).toHaveBeenCalled())
+    unmount()
+
+    await act(async () => {
+      saveOperation.reject(new Error('save failed after unmount'))
+      await saveOperation.promise.catch(() => undefined)
+    })
+
+    expect(mockToastError).not.toHaveBeenCalled()
     expect(mockToastSuccess).not.toHaveBeenCalled()
   })
 })
