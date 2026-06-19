@@ -202,6 +202,36 @@ describe('useProviderApiKey', () => {
     expect(window.toast.error).not.toHaveBeenCalled()
   })
 
+  it('flushes pending keys to the previous provider before switching providers', async () => {
+    const updateApiKeysByProviderMock = vi.fn().mockResolvedValue(undefined)
+    useProviderMock.mockImplementation((providerId: string) => ({
+      provider: { id: providerId, isEnabled: true }
+    }))
+    useProviderMutationsMock.mockImplementation((providerId: string) => ({
+      updateApiKeys: (entries: unknown) => updateApiKeysByProviderMock(providerId, entries),
+      updateProvider: updateProviderMock
+    }))
+
+    const { result, rerender } = renderHook(({ providerId }) => useProviderApiKey(providerId), {
+      initialProps: { providerId: 'openai' }
+    })
+
+    act(() => {
+      result.current.setInputApiKey('sk-openai')
+    })
+
+    await act(async () => {
+      rerender({ providerId: 'anthropic' })
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(updateApiKeysByProviderMock).toHaveBeenCalledTimes(1)
+    expect(updateApiKeysByProviderMock).toHaveBeenCalledWith('openai', [
+      { id: expect.any(String), key: 'sk-openai', isEnabled: true }
+    ])
+  })
+
   it('does not auto-enable a disabled provider when the enabled key input is empty', async () => {
     useProviderMock.mockReturnValue({
       provider: { id: 'openai', isEnabled: false }

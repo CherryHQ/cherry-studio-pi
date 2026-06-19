@@ -200,7 +200,8 @@ export function useProviderApiKey(providerId: string) {
     setValue((previousValue) => (isSameApiKeyValue(previousValue, nextValue) ? previousValue : nextValue))
   }, [providerId, saveLater, serverApiKey])
 
-  useEffect(() => () => saveLater.flush(), [saveLater])
+  // Flush before switching providers while refs still point at the previous provider.
+  useEffect(() => () => saveLater.flush(), [providerId, saveLater])
 
   const setInputApiKey = useCallback(
     (nextInputApiKey: string) => {
