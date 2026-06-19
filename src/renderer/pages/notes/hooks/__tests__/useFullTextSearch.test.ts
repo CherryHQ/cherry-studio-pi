@@ -7,8 +7,7 @@ const mocks = vi.hoisted(() => ({
   searchAllFiles: vi.fn()
 }))
 
-vi.mock('@renderer/services/NotesSearchService', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@renderer/services/NotesSearchService')>()),
+vi.mock('@renderer/services/NotesSearchService', () => ({
   searchAllFiles: mocks.searchAllFiles
 }))
 
