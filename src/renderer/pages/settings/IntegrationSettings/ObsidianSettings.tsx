@@ -28,15 +28,27 @@ const ObsidianSettings: FC = () => {
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
   const defaultObsidianVaultRef = useRef(defaultObsidianVault)
+  const mountedRef = useRef(true)
   const vaultRequestSeqRef = useRef(0)
 
   useEffect(() => {
     defaultObsidianVaultRef.current = defaultObsidianVault
   }, [defaultObsidianVault])
 
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+      vaultRequestSeqRef.current += 1
+    }
+  }, [])
+
   const showSaveFailed = useCallback(
     (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+      if (mountedRef.current) {
+        window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+      }
     },
     [t]
   )
