@@ -10,9 +10,9 @@ import {
 } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
 import { useTheme } from '@renderer/context/ThemeProvider'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import type { FC } from 'react'
-import { useCallback, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -51,15 +51,7 @@ const MarkdownExportSettings: FC = () => {
   }, [])
 
   const isCurrentSelectFolder = (requestSeq: number) => mountedRef.current && requestSeq === selectFolderSeqRef.current
-
-  const showSaveFailed = useCallback(
-    (error: unknown) => {
-      if (mountedRef.current) {
-        window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-      }
-    },
-    [t]
-  )
+  const showSaveFailed = useSaveFailedToast()
 
   const handleSelectFolder = async () => {
     const requestSeq = ++selectFolderSeqRef.current
