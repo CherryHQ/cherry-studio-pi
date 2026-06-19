@@ -194,7 +194,21 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
   const [exportReasoning, setExportReasoning] = useState(false)
   const vaultRequestSeqRef = useRef(0)
   const filesRequestSeqRef = useRef(0)
+  const exportRequestSeqRef = useRef(0)
+  const mountedRef = useRef(true)
   const exportingRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+      vaultRequestSeqRef.current += 1
+      filesRequestSeqRef.current += 1
+      exportRequestSeqRef.current += 1
+      exportingRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     if (files.length > 0) {
@@ -307,6 +321,7 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
       return
     }
     exportingRef.current = true
+    const requestSeq = ++exportRequestSeqRef.current
     setExporting(true)
     let didResolve = false
     try {
@@ -322,6 +337,10 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
       } else {
         markdown = ''
       }
+      if (!mountedRef.current || requestSeq !== exportRequestSeqRef.current) {
+        return
+      }
+
       let content = ''
       if (state.processingMethod !== ObsidianProcessingMethod.NEW_OR_OVERWRITE) {
         content = `\n---\n${markdown}`
@@ -329,10 +348,16 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
         content = `---\ntitle: ${state.title}\ncreated: ${state.createdAt}\nsource: ${state.source}\ntags: ${state.tags}\n---\n${markdown}`
       }
       if (content === '') {
-        window.toast.error(i18n.t('chat.topics.export.obsidian_export_failed'))
+        if (mountedRef.current && requestSeq === exportRequestSeqRef.current) {
+          window.toast.error(i18n.t('chat.topics.export.obsidian_export_failed'))
+        }
         return
       }
       await navigator.clipboard.writeText(content)
+      if (!mountedRef.current || requestSeq !== exportRequestSeqRef.current) {
+        return
+      }
+
       void exportMarkdownToObsidian({
         ...state,
         folder: state.folder,
@@ -342,11 +367,15 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
       didResolve = true
       resolve(true)
     } catch (error) {
-      logger.error('Failed to prepare Obsidian export:', error as Error)
-      window.toast.error(i18n.t('chat.topics.export.obsidian_export_failed'))
+      if (mountedRef.current && requestSeq === exportRequestSeqRef.current) {
+        logger.error('Failed to prepare Obsidian export:', error as Error)
+        window.toast.error(i18n.t('chat.topics.export.obsidian_export_failed'))
+      }
     } finally {
-      exportingRef.current = false
-      if (!didResolve) {
+      if (mountedRef.current && requestSeq === exportRequestSeqRef.current) {
+        exportingRef.current = false
+      }
+      if (!didResolve && mountedRef.current && requestSeq === exportRequestSeqRef.current) {
         setExporting(false)
       }
     }
