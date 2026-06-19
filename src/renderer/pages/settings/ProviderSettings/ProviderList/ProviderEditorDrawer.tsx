@@ -99,6 +99,7 @@ export default function ProviderEditorDrawer({
   const [logoDirty, setLogoDirty] = useState(false)
   const [logoPickerOpen, setLogoPickerOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const mountedRef = useRef(true)
   const submittingRef = useRef(false)
   const previousOpenRef = useRef(false)
 
@@ -116,6 +117,12 @@ export default function ProviderEditorDrawer({
       requireBaseUrl: false
     }
   })()
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   // Reset form state every time the drawer transitions closed→open. Keys off
   // the mode so reopening in a different mode reseeds cleanly.
@@ -165,6 +172,10 @@ export default function ProviderEditorDrawer({
     try {
       const processedFile = file.type === 'image/gif' ? file : await compressImage(file)
       const encoded = await convertToBase64(processedFile)
+      if (!mountedRef.current) {
+        return
+      }
+
       if (typeof encoded === 'string') {
         setLogo(encoded)
         setLogoDirty(true)
@@ -173,7 +184,9 @@ export default function ProviderEditorDrawer({
       // compressImage / convertToBase64 can reject on a corrupt or
       // unsupported file — tell the user instead of silently doing nothing.
       logger.error('Failed to process uploaded provider logo', error as Error)
-      window.toast.error(t('settings.provider.logo_upload_failed'))
+      if (mountedRef.current) {
+        window.toast.error(t('settings.provider.logo_upload_failed'))
+      }
     }
   }
 
@@ -269,10 +282,14 @@ export default function ProviderEditorDrawer({
       await onSubmit(payload)
     } catch (error) {
       logger.error('Provider editor submit failed', error as Error)
-      window.toast.error(t('settings.provider.save_failed'))
+      if (mountedRef.current) {
+        window.toast.error(t('settings.provider.save_failed'))
+      }
     } finally {
       submittingRef.current = false
-      setIsSubmitting(false)
+      if (mountedRef.current) {
+        setIsSubmitting(false)
+      }
     }
   }
 

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ProviderEditorDrawer from '../ProviderEditorDrawer'
@@ -12,6 +12,14 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('@renderer/i18n/label', () => ({
   getProviderLabelKey: (id: string) => id
+}))
+
+vi.mock('@logger', () => ({
+  loggerService: {
+    withContext: () => ({
+      error: vi.fn()
+    })
+  }
 }))
 
 vi.mock('@cherrystudio/ui', () => ({
@@ -61,6 +69,23 @@ vi.mock('../../primitives/ProviderSettingsDrawer', () => ({
       </div>
     ) : null
 }))
+
+type Deferred<T> = {
+  promise: Promise<T>
+  reject: (reason?: unknown) => void
+  resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {}
+  let reject: (reason?: unknown) => void = () => {}
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, reject, resolve }
+}
 
 describe('ProviderEditorDrawer', () => {
   beforeEach(() => {
@@ -148,6 +173,39 @@ describe('ProviderEditorDrawer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }))
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores submit failures after the drawer unmounts', async () => {
+    const runningSubmit = deferred<void>()
+    const onSubmit = vi.fn(() => runningSubmit.promise)
+    const { unmount } = render(
+      <ProviderEditorDrawer
+        open
+        mode={{ kind: 'create-custom' }}
+        initialLogo={undefined}
+        onClose={vi.fn()}
+        onSubmit={onSubmit}
+      />
+    )
+
+    fireEvent.change(screen.getByPlaceholderText('settings.provider.add.name.placeholder'), {
+      target: { value: 'My Custom' }
+    })
+    fireEvent.change(screen.getByPlaceholderText('settings.provider.base_url.placeholder'), {
+      target: { value: 'https://api.example.com' }
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'button.add' }))
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+
+    unmount()
+
+    await act(async () => {
+      runningSubmit.reject(new Error('submit failed after unmount'))
+      await runningSubmit.promise.catch(() => undefined)
+    })
+
+    expect(window.toast.error).not.toHaveBeenCalled()
   })
 
   it('uses a duplicate-specific submit label when mode is duplicate', () => {
