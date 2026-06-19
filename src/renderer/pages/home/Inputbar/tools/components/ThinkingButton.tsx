@@ -21,6 +21,7 @@ import {
 } from '@renderer/config/models'
 import { cacheService } from '@renderer/data/CacheService'
 import { useAssistant } from '@renderer/hooks/useAssistant'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import type { ToolQuickPanelApi } from '@renderer/pages/home/Inputbar/types'
 import type { ThinkingOption } from '@renderer/types'
 import type { Model } from '@shared/data/types/model'
@@ -48,6 +49,7 @@ const ThinkingButton: FC<Props> = ({
   const quickPanelHook = useQuickPanel()
   const isControlled = controlledEffort !== undefined
   const { assistant, updateAssistantSettings } = useAssistant(assistantId)
+  const showSaveFailed = useSaveFailedToast()
 
   const currentReasoningEffort = useMemo<ThinkingOption>(() => {
     if (isControlled) return controlledEffort
@@ -82,9 +84,11 @@ const ThinkingButton: FC<Props> = ({
 
       if (!isEnabled) {
         cacheService.set(`assistant.reasoning_effort_cache.${assistantId}`, option)
-        void updateAssistantSettings({
-          reasoning_effort: option
-        })
+        void Promise.resolve(
+          updateAssistantSettings({
+            reasoning_effort: option
+          })
+        ).catch(showSaveFailed)
         return
       }
       if (
@@ -97,14 +101,17 @@ const ThinkingButton: FC<Props> = ({
         return
       }
       cacheService.set(`assistant.reasoning_effort_cache.${assistantId}`, option)
-      void updateAssistantSettings({
-        reasoning_effort: option
-      })
+      void Promise.resolve(
+        updateAssistantSettings({
+          reasoning_effort: option
+        })
+      ).catch(showSaveFailed)
     },
     [
       isControlled,
       onReasoningEffortChange,
       updateAssistantSettings,
+      showSaveFailed,
       assistantId,
       assistant?.settings.enableWebSearch,
       model,

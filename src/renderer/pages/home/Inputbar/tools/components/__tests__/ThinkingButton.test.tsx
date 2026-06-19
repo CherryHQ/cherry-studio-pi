@@ -1,7 +1,7 @@
 import type { ToolQuickPanelApi } from '@renderer/pages/home/Inputbar/types'
 import type { Assistant, ThinkingOption } from '@renderer/types'
 import type { Model } from '@shared/data/types/model'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ThinkingButton from '../ThinkingButton'
@@ -20,6 +20,24 @@ const mockIsDoubaoThinkingAutoModel = vi.fn()
 
 // Global toast mock
 const mockToastWarning = vi.fn()
+const mockToastError = vi.fn()
+
+type Deferred<T> = {
+  promise: Promise<T>
+  reject: (reason?: unknown) => void
+  resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {}
+  let reject: (reason?: unknown) => void = () => {}
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, reject, resolve }
+}
 
 // Mock react-i18next
 vi.mock('react-i18next', () => ({
@@ -306,7 +324,7 @@ const renderComponent = (
   mockIsDoubaoThinkingAutoModel.mockReturnValue(isDoubaoThinkingAutoModel)
 
   // Setup global toast mock
-  ;(global.window as any).toast = { warning: mockToastWarning }
+  ;(global.window as any).toast = { error: mockToastError, warning: mockToastWarning }
 
   return render(<ThinkingButton model={model} assistantId={assistantId} quickPanel={quickPanelApi} />)
 }
@@ -320,6 +338,7 @@ describe('ThinkingButton', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockToastWarning.mockClear()
+    mockToastError.mockClear()
 
     // Set default mock return values
     mockUseTranslation.mockReturnValue(createUseTranslationReturn())
@@ -331,7 +350,7 @@ describe('ThinkingButton', () => {
     mockIsOpenAIWebSearchModel.mockReturnValue(false)
     mockIsDoubaoThinkingAutoModel.mockReturnValue(false)
 
-    ;(global.window as any).toast = { warning: mockToastWarning }
+    ;(global.window as any).toast = { error: mockToastError, warning: mockToastWarning }
   })
 
   afterEach(() => {
@@ -438,6 +457,56 @@ describe('ThinkingButton', () => {
       expect(mockUpdateSettings).toHaveBeenCalledWith({
         reasoning_effort: 'none'
       })
+    })
+
+    it('shows a save failure when disabling thinking fails', async () => {
+      const mockUpdateSettings = vi.fn().mockRejectedValueOnce(new Error('save failed'))
+      const useAssistantReturn = createUseAssistantReturn({
+        updateAssistantSettings: mockUpdateSettings,
+        assistant: createAssistant({ settings: { reasoning_effort: 'high' } })
+      })
+
+      renderComponent({
+        modelType: 'doubao',
+        model: modelPresets.doubaoAuto(),
+        reasoningEffort: 'high',
+        useAssistantReturn,
+        isDoubaoThinkingAutoModel: true
+      })
+
+      fireEvent.click(getActionIconButton())
+
+      await waitFor(() => expect(mockToastError).toHaveBeenCalled())
+    })
+
+    it('ignores stale reasoning save failures after unmount', async () => {
+      const pendingSave = deferred<void>()
+      const mockUpdateSettings = vi.fn().mockReturnValueOnce(pendingSave.promise)
+      const useAssistantReturn = createUseAssistantReturn({
+        updateAssistantSettings: mockUpdateSettings,
+        assistant: createAssistant({ settings: { reasoning_effort: 'high' } })
+      })
+
+      const { unmount } = renderComponent({
+        modelType: 'doubao',
+        model: modelPresets.doubaoAuto(),
+        reasoningEffort: 'high',
+        useAssistantReturn,
+        isDoubaoThinkingAutoModel: true
+      })
+
+      fireEvent.click(getActionIconButton())
+      expect(mockUpdateSettings).toHaveBeenCalledWith({
+        reasoning_effort: 'none'
+      })
+      unmount()
+
+      await act(async () => {
+        pendingSave.reject(new Error('save failed after unmount'))
+        await pendingSave.promise.catch(() => undefined)
+      })
+
+      expect(mockToastError).not.toHaveBeenCalled()
     })
 
     it('should return true for Doubao after 251015 (multiple levels without auto)', () => {
