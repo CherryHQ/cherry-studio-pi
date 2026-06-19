@@ -34,6 +34,7 @@ const listenerKey = '__CHERRY_STUDIO_PI_MCP_ADD_SERVER_LISTENER__'
 
 describe('useMcpServer module listener', () => {
   const onMock = vi.fn()
+  let removeMock: ReturnType<typeof vi.fn>
   let addServerHandler: ((_event: unknown, server: { id?: string; name: string; command?: string }) => void) | undefined
 
   beforeEach(() => {
@@ -42,13 +43,14 @@ describe('useMcpServer module listener', () => {
     swrMutateMock.mockResolvedValue(undefined)
     delete (globalThis as Record<string, unknown>)[listenerKey]
     addServerHandler = undefined
+    removeMock = vi.fn()
 
     onMock.mockImplementation(
       (channel: string, handler: (_event: unknown, server: { id?: string; name: string }) => void) => {
         if (channel === IpcChannel.Mcp_AddServer) {
           addServerHandler = handler
         }
-        return vi.fn()
+        return removeMock
       }
     )
 
@@ -85,6 +87,21 @@ describe('useMcpServer module listener', () => {
       expect(navigateMock).toHaveBeenCalledTimes(1)
       expect(navigateMock).toHaveBeenCalledWith({ to: '/settings/mcp/settings/created-server-1' })
     })
+  })
+
+  it('unregisters the module listener and allows a fresh registration', async () => {
+    const module = await import('../useMcpServer')
+
+    expect(onMock).toHaveBeenCalledTimes(1)
+
+    module.unregisterMcpAddServerNavigationListener()
+
+    expect(removeMock).toHaveBeenCalledTimes(1)
+    expect((globalThis as Record<string, unknown>)[listenerKey]).toBeUndefined()
+
+    module.registerMcpAddServerNavigationListener()
+
+    expect(onMock).toHaveBeenCalledTimes(2)
   })
 
   it('still opens the installed server details when cache refresh fails', async () => {

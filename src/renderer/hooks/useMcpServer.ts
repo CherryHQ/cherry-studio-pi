@@ -12,8 +12,12 @@ import { mutate as mutateSWRCache } from 'swr'
 const MCP_ADD_SERVER_LISTENER_KEY = '__CHERRY_STUDIO_PI_MCP_ADD_SERVER_LISTENER__'
 const logger = loggerService.withContext('useMcpServer')
 
+type McpAddServerListenerState = {
+  remove: () => void
+}
+
 type McpAddServerListenerGlobal = typeof globalThis & {
-  [MCP_ADD_SERVER_LISTENER_KEY]?: boolean
+  [MCP_ADD_SERVER_LISTENER_KEY]?: boolean | McpAddServerListenerState
 }
 
 function handleProtocolMcpServerInstalled(server: McpServer): void {
@@ -41,13 +45,30 @@ export function registerMcpAddServerNavigationListener() {
   const globalState = globalThis as McpAddServerListenerGlobal
   if (globalState[MCP_ADD_SERVER_LISTENER_KEY]) return
 
-  globalState[MCP_ADD_SERVER_LISTENER_KEY] = true
-  ipcRenderer.on(IpcChannel.Mcp_AddServer, (_event, server: McpServer) => {
+  const remove = ipcRenderer.on(IpcChannel.Mcp_AddServer, (_event, server: McpServer) => {
     handleProtocolMcpServerInstalled(server)
   })
+  globalState[MCP_ADD_SERVER_LISTENER_KEY] = { remove }
+}
+
+export function unregisterMcpAddServerNavigationListener() {
+  const globalState = globalThis as McpAddServerListenerGlobal
+  const state = globalState[MCP_ADD_SERVER_LISTENER_KEY]
+
+  if (state && typeof state === 'object') {
+    state.remove()
+  }
+
+  delete globalState[MCP_ADD_SERVER_LISTENER_KEY]
 }
 
 registerMcpAddServerNavigationListener()
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    unregisterMcpAddServerNavigationListener()
+  })
+}
 
 /**
  * MCP servers list hook — data fetching with optional filters and create mutation.
