@@ -127,10 +127,14 @@ const McpServersList: FC = () => {
         env: {},
         isActive: false
       })
-      void navigate({ to: `/settings/mcp/settings/${newServer.id}` })
-      window.toast.success(t('settings.mcp.addSuccess'))
+      if (mountedRef.current) {
+        void navigate({ to: `/settings/mcp/settings/${newServer.id}` })
+        window.toast.success(t('settings.mcp.addSuccess'))
+      }
     } catch {
-      window.toast.error(t('settings.mcp.addError'))
+      if (mountedRef.current) {
+        window.toast.error(t('settings.mcp.addError'))
+      }
     } finally {
       manualAddRef.current = false
       if (mountedRef.current) {
@@ -142,8 +146,10 @@ const McpServersList: FC = () => {
   const handleAddServerSuccess = useCallback(
     async (dto: CreateMcpServerDto): Promise<McpServer> => {
       const created = await addMcpServer(dto)
-      setIsAddModalVisible(false)
-      window.toast.success(t('settings.mcp.addSuccess'))
+      if (mountedRef.current) {
+        setIsAddModalVisible(false)
+        window.toast.success(t('settings.mcp.addSuccess'))
+      }
       return created
     },
     [addMcpServer, t]
