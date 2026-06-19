@@ -204,6 +204,31 @@ describe('storage app capabilities', () => {
     expect(mocks.storageV2Service.getFile).not.toHaveBeenCalled()
   })
 
+  it('rejects invalid storage capability input objects before side effects', async () => {
+    await expect(
+      capability('storage.backup.create').execute('agent request' as any, { source: 'agent' })
+    ).rejects.toThrow('Storage capability input must be an object')
+    await expect(capability('storage.snapshot.create').execute([], { source: 'agent' })).rejects.toThrow(
+      'Storage capability input must be an object'
+    )
+    await expect(capability('storage.assistants.list').execute([], { source: 'agent' })).rejects.toThrow(
+      'Storage capability input must be an object'
+    )
+    await expect(capability('storage.messages.list').execute(['conversation-1'], { source: 'agent' })).rejects.toThrow(
+      'Storage capability input must be an object'
+    )
+    await expect(capability('storage.file.get').execute(true as any, { source: 'agent' })).rejects.toThrow(
+      'Storage capability input must be an object'
+    )
+
+    expect(mocks.callRendererBridge).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.createBackup).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.createSnapshot).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.listAssistants).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.listMessages).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.getFile).not.toHaveBeenCalled()
+  })
+
   it('rejects invalid Storage v2 pagination shapes before calling services', async () => {
     await expect(capability('storage.assistants.list').execute({ limit: true }, { source: 'agent' })).rejects.toThrow(
       'Storage list limit must be a number'

@@ -45,10 +45,17 @@ function normalizeRequiredText(value: unknown, label: string) {
   return text
 }
 
-function agentListOptions(input: any = {}) {
+function normalizeInputObject(input: unknown) {
+  if (input === null || typeof input === 'undefined') return {}
+  if (typeof input !== 'object' || Array.isArray(input)) throw new Error('Storage capability input must be an object')
+  return input as Record<string, unknown>
+}
+
+function agentListOptions(input: unknown = {}) {
+  const inputObject = normalizeInputObject(input)
   return {
-    limit: normalizeListLimit(input?.limit),
-    offset: normalizeOffset(input?.offset)
+    limit: normalizeListLimit(inputObject.limit),
+    offset: normalizeOffset(inputObject.offset)
   }
 }
 
@@ -119,7 +126,8 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       tags: ['storage', 'backup', 'local', 'data'],
       examples: ['Create a local backup', 'Back up my data before changing settings'],
       execute: async (input: any) => {
-        const reason = normalizeOptionalText(input?.reason, 'Backup reason') || 'agent-request'
+        const inputObject = normalizeInputObject(input)
+        const reason = normalizeOptionalText(inputObject.reason, 'Backup reason') || 'agent-request'
         await prepareRendererStorageV2ForStorageOperation('backup')
         const backup = await storageV2Service.createBackup(reason)
         return {
@@ -157,13 +165,15 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['storage', 'backup', 'validate'],
-      execute: async (input: any) =>
-        okResult(
+      execute: async (input: any) => {
+        const inputObject = normalizeInputObject(input)
+        return okResult(
           'Backup validated',
           sanitizeForAgent(
-            await storageV2Service.validateBackup(normalizeRequiredText(input?.backupPath, 'Backup path'))
+            await storageV2Service.validateBackup(normalizeRequiredText(inputObject.backupPath, 'Backup path'))
           )
         )
+      }
     },
     {
       id: 'storage.backup.restore',
@@ -184,7 +194,8 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       supportsDryRun: true,
       tags: ['storage', 'backup', 'restore'],
       execute: async (input: any, context) => {
-        const backupPath = normalizeRequiredText(input?.backupPath, 'Backup path')
+        const inputObject = normalizeInputObject(input)
+        const backupPath = normalizeRequiredText(inputObject.backupPath, 'Backup path')
         if (context.dryRun) {
           return okResult('Backup restore dry run completed', {
             validation: sanitizeForAgent(await storageV2Service.validateBackup(backupPath))
@@ -211,7 +222,8 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['database.read', 'database.write', 'filesystem.write'],
       tags: ['storage', 'snapshot', 'database'],
       execute: async (input: any) => {
-        const reason = normalizeOptionalText(input?.reason, 'Snapshot reason') || 'agent-request'
+        const inputObject = normalizeInputObject(input)
+        const reason = normalizeOptionalText(inputObject.reason, 'Snapshot reason') || 'agent-request'
         await prepareRendererStorageV2ForStorageOperation('snapshot')
         return okResult('Storage snapshot created', sanitizeForAgent(await storageV2Service.createSnapshot(reason)))
       }
@@ -265,17 +277,19 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['storage', 'conversations', 'chat'],
-      execute: async (input: any) =>
-        okResult(
+      execute: async (input: any) => {
+        const inputObject = normalizeInputObject(input)
+        return okResult(
           'Conversations listed',
           sanitizeForAgent(
             await storageV2Service.listConversations({
-              ownerType: normalizeOptionalText(input?.ownerType, 'Owner type'),
-              ownerId: normalizeOptionalText(input?.ownerId, 'Owner id'),
-              ...agentListOptions(input)
+              ownerType: normalizeOptionalText(inputObject.ownerType, 'Owner type'),
+              ownerId: normalizeOptionalText(inputObject.ownerId, 'Owner id'),
+              ...agentListOptions(inputObject)
             })
           )
         )
+      }
     },
     {
       id: 'storage.messages.list',
@@ -294,16 +308,18 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['storage', 'messages', 'conversations', 'chat'],
-      execute: async (input: any) =>
-        okResult(
+      execute: async (input: any) => {
+        const inputObject = normalizeInputObject(input)
+        return okResult(
           'Conversation messages listed',
           sanitizeForAgent(
             await storageV2Service.listMessages(
-              normalizeRequiredText(input?.conversationId, 'Conversation id'),
-              agentListOptions(input)
+              normalizeRequiredText(inputObject.conversationId, 'Conversation id'),
+              agentListOptions(inputObject)
             )
           )
         )
+      }
     },
     {
       id: 'storage.files.list',
@@ -338,11 +354,13 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['storage', 'files', 'read'],
-      execute: async (input: any) =>
-        okResult(
+      execute: async (input: any) => {
+        const inputObject = normalizeInputObject(input)
+        return okResult(
           'File record read',
-          sanitizeForAgent(await storageV2Service.getFile(normalizeRequiredText(input?.fileId, 'File id')))
+          sanitizeForAgent(await storageV2Service.getFile(normalizeRequiredText(inputObject.fileId, 'File id')))
         )
+      }
     }
   ]
 }
