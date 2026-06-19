@@ -6,10 +6,10 @@ import { ModelSelector } from '@renderer/components/ModelSelector'
 import { AssistantSelector } from '@renderer/components/ResourceSelector'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import { useProviderDisplayName } from '@renderer/hooks/useProvider'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { useTopicMutations } from '@renderer/hooks/useTopic'
 import { loggerService } from '@renderer/services/LoggerService'
 import { getLeadingEmoji } from '@renderer/utils'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { Model as SharedModel } from '@shared/data/types/model'
 import { isNonChatModel, isWebSearchModel } from '@shared/utils/model'
 import { ChevronDown } from 'lucide-react'
@@ -35,12 +35,7 @@ const TopicContent = ({ assistantId, topicId }: TopicContentProps) => {
   const assistantName = useMemo(() => assistant?.name || t('chat.default.name'), [assistant?.name, t])
   const providerName = useProviderDisplayName(currentSharedModel?.providerId)
 
-  const showSaveFailed = useCallback(
-    (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-    },
-    [t]
-  )
+  const showSaveFailed = useSaveFailedToast()
 
   const handleAssistantChange = useCallback(
     async (nextId: string | null) => {
