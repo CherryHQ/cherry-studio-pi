@@ -12,15 +12,25 @@ import { useTranslation } from 'react-i18next'
 
 import { ToastProvider, useToasts } from './toast'
 
-let onPop = () => {}
-let onShow = ({ element, id }: { element: React.FC | React.ReactNode; id: string }) => {
+type TopViewShowPayload = {
+  element: React.FC | React.ReactNode
+  id: string
+}
+
+const noopPop = () => {}
+const noopShow = ({ element, id }: TopViewShowPayload) => {
   void element
   id
 }
-let onHide = (id: string) => {
+const noopHide = (id: string) => {
   id
 }
-let onHideAll = () => {}
+const noopHideAll = () => {}
+
+let onPop = noopPop
+let onShow = noopShow
+let onHide = noopHide
+let onHideAll = noopHideAll
 
 interface Props {
   children?: React.ReactNode
@@ -51,28 +61,42 @@ const TopViewContent: React.FC<Props> = ({ children }) => {
     window.toast = toast
   }, [toast])
 
-  onPop = () => {
+  const handlePop = useCallback(() => {
     const views = [...elementsRef.current]
     views.pop()
     elementsRef.current = views
     setElements(elementsRef.current)
-  }
+  }, [])
 
-  onShow = ({ element, id }: ElementItem) => {
+  const handleShow = useCallback(({ element, id }: ElementItem) => {
     const next = elementsRef.current.filter((el) => el.id !== id).concat([{ element, id }])
     elementsRef.current = next
     setElements(next)
-  }
+  }, [])
 
-  onHide = (id: string) => {
+  const handleHide = useCallback((id: string) => {
     elementsRef.current = elementsRef.current.filter((el) => el.id !== id)
     setElements(elementsRef.current)
-  }
+  }, [])
 
-  onHideAll = () => {
+  const handleHideAll = useCallback(() => {
     setElements([])
     elementsRef.current = []
-  }
+  }, [])
+
+  useEffect(() => {
+    onPop = handlePop
+    onShow = handleShow
+    onHide = handleHide
+    onHideAll = handleHideAll
+
+    return () => {
+      if (onPop === handlePop) onPop = noopPop
+      if (onShow === handleShow) onShow = noopShow
+      if (onHide === handleHide) onHide = noopHide
+      if (onHideAll === handleHideAll) onHideAll = noopHideAll
+    }
+  }, [handleHide, handleHideAll, handlePop, handleShow])
 
   const FullScreenContainer: React.FC<PropsWithChildren> = useCallback(({ children }) => {
     return (

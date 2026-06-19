@@ -75,4 +75,17 @@ describe('TopView', () => {
     expect(screen.getByText('Older view')).toBeInTheDocument()
     expect(screen.queryByText('Latest view')).not.toBeInTheDocument()
   })
+
+  it('does not let an older unmount clear a newer TopView registration', () => {
+    const older = renderTopView()
+    renderTopView()
+
+    older.unmount()
+
+    act(() => {
+      TopView.show(<div>Current view</div>, 'current-popup')
+    })
+
+    expect(screen.getByText('Current view')).toBeInTheDocument()
+  })
 })
