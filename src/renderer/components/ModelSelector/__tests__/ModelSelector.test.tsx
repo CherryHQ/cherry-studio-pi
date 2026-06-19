@@ -3,6 +3,7 @@ import type { Model, UniqueModelId } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactNode, RefObject } from 'react'
+import { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ModelSelector } from '../ModelSelector'
@@ -468,6 +469,28 @@ describe('ModelSelector', () => {
     })
 
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('ignores shared selector force-close events while already closed', () => {
+    mockUseModelSelectorData.mockReturnValue(makeData())
+    const onMount = vi.fn()
+
+    const CountingTrigger = () => {
+      useEffect(() => {
+        onMount()
+      }, [])
+
+      return <button type="button">open</button>
+    }
+
+    render(<ModelSelector multiple={false} trigger={<CountingTrigger />} onSelect={vi.fn()} />)
+    expect(onMount).toHaveBeenCalledTimes(1)
+
+    act(() => {
+      window.dispatchEvent(new Event(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT))
+    })
+
+    expect(onMount).toHaveBeenCalledTimes(1)
   })
 
   it('closes when a new dialog surface appears while open', async () => {

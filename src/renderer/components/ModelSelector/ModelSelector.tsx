@@ -333,11 +333,15 @@ export function ModelSelector(props: ModelSelectorProps) {
   }, [])
 
   const open = openProp ?? internalOpen
+  const openRef = useRef(open)
+  openRef.current = open
+  const mountedRef = useRef(true)
   const multiSelectMode = multiple ? (multiSelectModeProp ?? internalMultiSelectMode) : false
   const triggerNode = isValidElement(trigger) ? trigger : <span>{trigger}</span>
 
   useEffect(() => {
     return () => {
+      mountedRef.current = false
       requestCloseResourceSelectors(selectorId)
     }
   }, [selectorId])
@@ -356,6 +360,8 @@ export function ModelSelector(props: ModelSelectorProps) {
   )
 
   const forceClose = useCallback(() => {
+    if (!mountedRef.current) return
+    if (!openRef.current) return
     // Match ResourceSelectorShell's close semantics: remount on close so a Radix
     // portal cannot linger above the next route/modal while its exit animation
     // settles.
