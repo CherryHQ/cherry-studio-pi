@@ -99,10 +99,21 @@ export function getDataSyncRuntimeState(): DataSyncRuntimeState {
 
 export function subscribeDataSyncRuntimeState(listener: (state: DataSyncRuntimeState) => void) {
   syncStateListeners.add(listener)
-  listener(getDataSyncRuntimeState())
+  notifyDataSyncRuntimeStateListener(listener, getDataSyncRuntimeState())
 
   return () => {
     syncStateListeners.delete(listener)
+  }
+}
+
+function notifyDataSyncRuntimeStateListener(
+  listener: (state: DataSyncRuntimeState) => void,
+  state: DataSyncRuntimeState
+) {
+  try {
+    listener(state)
+  } catch (error) {
+    logger.warn('Data sync runtime state listener failed', error as Error)
   }
 }
 
@@ -116,7 +127,7 @@ function setDataSyncRunning(nextSyncing: boolean, nextStartedAt?: number | null)
   }
 
   for (const listener of syncStateListeners) {
-    listener(nextState)
+    notifyDataSyncRuntimeStateListener(listener, nextState)
   }
 }
 

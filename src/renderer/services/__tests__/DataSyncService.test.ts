@@ -423,6 +423,45 @@ describe('DataSyncService', () => {
     unsubscribe()
   })
 
+  it('keeps notifying healthy subscribers when another runtime subscriber throws', async () => {
+    const pendingSync = deferred<typeof successSummary>()
+    const brokenSubscriber = vi.fn(() => {
+      throw new Error('listener failed')
+    })
+    const healthySubscriber = vi.fn()
+    let unsubscribeBroken: () => void = () => {}
+    let unsubscribeHealthy: () => void = () => {}
+    mocks.syncNow.mockReturnValueOnce(pendingSync.promise)
+
+    try {
+      expect(() => {
+        unsubscribeBroken = subscribeDataSyncRuntimeState(brokenSubscriber)
+        unsubscribeHealthy = subscribeDataSyncRuntimeState(healthySubscriber)
+      }).not.toThrow()
+
+      const sync = syncAppDataNow()
+      await vi.waitFor(() => expect(getDataSyncRuntimeState().syncing).toBe(true))
+
+      expect(healthySubscriber).toHaveBeenCalledWith(
+        expect.objectContaining({
+          syncing: true,
+          syncStartedAt: expect.any(Number)
+        })
+      )
+
+      pendingSync.resolve(successSummary)
+      await expect(sync).resolves.toEqual(successSummary)
+
+      expect(healthySubscriber).toHaveBeenLastCalledWith({
+        syncing: false,
+        syncStartedAt: null
+      })
+    } finally {
+      unsubscribeBroken()
+      unsubscribeHealthy()
+    }
+  })
+
   it('returns null for duplicate manual sync attempts while the first sync is in flight', async () => {
     const pendingSync = deferred<typeof successSummary>()
     mocks.syncNow.mockReturnValueOnce(pendingSync.promise)
