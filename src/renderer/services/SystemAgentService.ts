@@ -27,6 +27,8 @@ type ReportOptions = {
 
 type SystemAgentErrorTriggerState = {
   errorTriggersInitialized: boolean
+  errorListener?: (event: ErrorEvent) => void
+  unhandledRejectionListener?: (event: PromiseRejectionEvent) => void
   recentEvents: Map<string, number>
 }
 
@@ -133,10 +135,10 @@ export function reportErrorToSystemAgent(
 }
 
 export function initSystemAgentErrorTriggers() {
-  if (systemAgentErrorTriggerState.errorTriggersInitialized) return
-  systemAgentErrorTriggerState.errorTriggersInitialized = true
+  const state = getSystemAgentErrorTriggerState()
+  if (state.errorTriggersInitialized) return
 
-  window.addEventListener('error', (event) => {
+  const errorListener = (event: ErrorEvent) => {
     void reportErrorToSystemAgent(event.error || event.message, {
       source: 'renderer.window.error',
       message: event.message,
@@ -146,11 +148,40 @@ export function initSystemAgentErrorTriggers() {
         colno: event.colno
       }
     })
-  })
+  }
 
-  window.addEventListener('unhandledrejection', (event) => {
+  const unhandledRejectionListener = (event: PromiseRejectionEvent) => {
     void reportErrorToSystemAgent(event.reason, {
       source: 'renderer.window.unhandledrejection'
     })
+  }
+
+  window.addEventListener('error', errorListener)
+  window.addEventListener('unhandledrejection', unhandledRejectionListener)
+
+  state.errorListener = errorListener
+  state.unhandledRejectionListener = unhandledRejectionListener
+  state.errorTriggersInitialized = true
+}
+
+export function unregisterSystemAgentErrorTriggers() {
+  const state = getSystemAgentErrorTriggerState()
+
+  if (state.errorListener) {
+    window.removeEventListener('error', state.errorListener)
+  }
+
+  if (state.unhandledRejectionListener) {
+    window.removeEventListener('unhandledrejection', state.unhandledRejectionListener)
+  }
+
+  delete state.errorListener
+  delete state.unhandledRejectionListener
+  state.errorTriggersInitialized = false
+}
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    unregisterSystemAgentErrorTriggers()
   })
 }
