@@ -7,6 +7,7 @@ import { WebdavBackupManager } from '@renderer/components/WebdavBackupManager'
 import { useWebdavBackupModal, WebdavBackupModal } from '@renderer/components/WebdavModals'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useNutstoreSso } from '@renderer/hooks/useNutstoreSso'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { useTimer } from '@renderer/hooks/useTimer'
 import {
   backupToNutstore,
@@ -60,15 +61,7 @@ const NutstoreSettings: FC = () => {
 
   const nutstoreSsoHandler = useNutstoreSso()
   const { setTimeoutTimer } = useTimer()
-
-  const showSaveFailed = useCallback(
-    (error: unknown) => {
-      if (mountedRef.current) {
-        window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-      }
-    },
-    [t]
-  )
+  const showSaveFailed = useSaveFailedToast()
 
   useEffect(() => {
     mountedRef.current = true
