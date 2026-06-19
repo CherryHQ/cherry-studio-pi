@@ -103,6 +103,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
   const { activeCmTheme } = useCodeStyle()
   const [loading, setLoading] = useState(false)
   const loadingRef = useRef(false)
+  const mountedRef = useRef(true)
   const [importMethod, setImportMethod] = useState<'json' | 'dxt' | 'mcpb'>(initialImportMethod)
   const [packageFile, setPackageFile] = useState<File | null>(null)
   const { setTimeoutTimer } = useTimer()
@@ -120,6 +121,14 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
   useEffect(() => {
     setImportMethod(initialImportMethod)
   }, [initialImportMethod])
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   /**
    * 从JSON字符串中解析MCP服务器配置
@@ -173,7 +182,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
       })
     } catch (error) {
       logger.error(`Connectivity state update failed for ${createdServer.name}:`, error as Error)
-      if (notifyUser) {
+      if (notifyUser && mountedRef.current) {
         window.toast.error(createdServer.name + t('settings.mcp.addServer.importFrom.connectionFailed'))
       } else {
         logger.warn(
@@ -276,28 +285,32 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
           })
 
           const createdServer = await onSuccess(serverDto)
-          form.reset({ serverConfig: '' })
-          setPackageFile(null)
-          onClose()
+          if (mountedRef.current) {
+            form.reset({ serverConfig: '' })
+            setPackageFile(null)
+            onClose()
 
-          // Check server connectivity in background (with timeout)
-          setTimeoutTimer(
-            'handleOk',
-            () => {
-              void updateServerConnectivityState(createdServer, false)
-            },
-            1000
-          ) // Delay to ensure server is properly added to store
+            // Check server connectivity in background (with timeout)
+            setTimeoutTimer(
+              'handleOk',
+              () => {
+                void updateServerConnectivityState(createdServer, false)
+              },
+              1000
+            ) // Delay to ensure server is properly added to store
+          }
         } catch (error) {
           logger.error(`${isMcpbImport ? 'MCPB' : 'DXT'} processing error:`, error as Error)
-          window.toast.error(
-            t(
-              isMcpbImport
-                ? 'settings.mcp.addServer.importFrom.mcpbProcessFailed'
-                : 'settings.mcp.addServer.importFrom.dxtProcessFailed'
+          if (mountedRef.current) {
+            window.toast.error(
+              t(
+                isMcpbImport
+                  ? 'settings.mcp.addServer.importFrom.mcpbProcessFailed'
+                  : 'settings.mcp.addServer.importFrom.dxtProcessFailed'
+              )
             )
-          )
-          setLoading(false)
+            setLoading(false)
+          }
           return
         }
       } else {
@@ -336,15 +349,19 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
         })
 
         const createdServer = await onSuccess(serverDto)
-        form.reset({ serverConfig: '' })
-        onClose()
+        if (mountedRef.current) {
+          form.reset({ serverConfig: '' })
+          onClose()
+        }
 
         // 在背景非同步檢查伺服器可用性並更新狀態
         void updateServerConnectivityState(createdServer, true)
       }
     } finally {
       loadingRef.current = false
-      setLoading(false)
+      if (mountedRef.current) {
+        setLoading(false)
+      }
     }
   }
 
