@@ -15,7 +15,7 @@ import { useMiniApps } from '@renderer/hooks/useMiniApps'
 import { PRESETS_MINI_APPS } from '@shared/data/presets/mini-apps'
 import { Upload } from 'lucide-react'
 import type { ChangeEvent, FC } from 'react'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface Props {
@@ -36,7 +36,21 @@ const NewMiniAppPanel: FC<Props> = ({ open, onClose }) => {
   const [logo, setLogo] = useState('')
   const [logoUrl, setLogoUrl] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const mountedRef = useRef(true)
+  const openRef = useRef(open)
   const submittingRef = useRef(false)
+
+  useEffect(() => {
+    openRef.current = open
+  }, [open])
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  const isActive = () => mountedRef.current && openRef.current
 
   const reset = () => {
     setId('')
@@ -73,6 +87,10 @@ const NewMiniAppPanel: FC<Props> = ({ open, onClose }) => {
     if (!file) return
     const reader = new FileReader()
     reader.onload = (event) => {
+      if (!isActive()) {
+        return
+      }
+
       const data = event.target?.result
       if (typeof data === 'string') {
         setLogo(data)
@@ -80,7 +98,11 @@ const NewMiniAppPanel: FC<Props> = ({ open, onClose }) => {
         window.toast.success(t('settings.miniApps.custom.logo_upload_success'))
       }
     }
-    reader.onerror = () => window.toast.error(t('settings.miniApps.custom.logo_upload_error'))
+    reader.onerror = () => {
+      if (isActive()) {
+        window.toast.error(t('settings.miniApps.custom.logo_upload_error'))
+      }
+    }
     reader.readAsDataURL(file)
     e.target.value = ''
   }
@@ -114,14 +136,20 @@ const NewMiniAppPanel: FC<Props> = ({ open, onClose }) => {
         bordered: false,
         supportedRegions: ['CN', 'Global']
       })
-      window.toast.success(t('settings.miniApps.custom.save_success'))
-      handleClose(true)
+      if (isActive()) {
+        window.toast.success(t('settings.miniApps.custom.save_success'))
+        handleClose(true)
+      }
     } catch (error) {
-      window.toast.error(t('settings.miniApps.custom.save_error'))
-      logger.error('Failed to save custom mini app:', error as Error)
+      if (isActive()) {
+        window.toast.error(t('settings.miniApps.custom.save_error'))
+        logger.error('Failed to save custom mini app:', error as Error)
+      }
     } finally {
       submittingRef.current = false
-      setSubmitting(false)
+      if (mountedRef.current) {
+        setSubmitting(false)
+      }
     }
   }
 

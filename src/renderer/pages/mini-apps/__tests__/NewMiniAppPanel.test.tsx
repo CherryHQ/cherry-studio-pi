@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type React from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import NewMiniAppPanel from '../NewMiniAppPanel'
 
@@ -77,6 +77,10 @@ beforeEach(() => {
     error: vi.fn(),
     info: vi.fn()
   }
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 type Deferred<T> = {
@@ -163,6 +167,76 @@ describe('NewMiniAppPanel', () => {
     await waitFor(() => {
       expect(onClose).toHaveBeenCalledTimes(1)
     })
+  })
+
+  it('ignores a completed create after unmount', async () => {
+    const runningCreate = deferred<void>()
+    const onClose = vi.fn()
+    mocks.createCustomMiniApp.mockReturnValueOnce(runningCreate.promise)
+
+    const { unmount } = render(<NewMiniAppPanel open={true} onClose={onClose} />)
+    fireEvent.change(screen.getByPlaceholderText('settings.miniApps.custom.id_placeholder'), {
+      target: { value: 'custom-app' }
+    })
+    fireEvent.change(screen.getByPlaceholderText('settings.miniApps.custom.name_placeholder'), {
+      target: { value: 'My App' }
+    })
+    fireEvent.change(screen.getByPlaceholderText('settings.miniApps.custom.url_placeholder'), {
+      target: { value: 'https://my.app' }
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /common\.save/ }))
+    expect(mocks.createCustomMiniApp).toHaveBeenCalledTimes(1)
+
+    unmount()
+
+    await act(async () => {
+      runningCreate.resolve()
+      await runningCreate.promise
+    })
+
+    expect(onClose).not.toHaveBeenCalled()
+    expect(window.toast.success).not.toHaveBeenCalled()
+  })
+
+  it('ignores a completed logo file read after the panel closes', async () => {
+    const readers: Array<{
+      onerror: (() => void) | null
+      onload: ((event: { target?: { result?: string } }) => void) | null
+      readAsDataURL: ReturnType<typeof vi.fn>
+    }> = []
+
+    class MockFileReader {
+      onerror: (() => void) | null = null
+      onload: ((event: { target?: { result?: string } }) => void) | null = null
+      readAsDataURL = vi.fn()
+
+      constructor() {
+        readers.push(this)
+      }
+    }
+
+    vi.stubGlobal('FileReader', MockFileReader)
+
+    const onClose = vi.fn()
+    const { rerender } = render(<NewMiniAppPanel open={true} onClose={onClose} />)
+
+    fireEvent.change(screen.getByLabelText('settings.miniApps.custom.logo_upload_label'), {
+      target: {
+        files: [new File(['logo'], 'logo.png', { type: 'image/png' })]
+      }
+    })
+    expect(readers).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: /common\.cancel/ }))
+    rerender(<NewMiniAppPanel open={false} onClose={onClose} />)
+
+    await act(async () => {
+      readers[0].onload?.({ target: { result: 'data:image/png;base64,logo' } })
+    })
+
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(window.toast.success).not.toHaveBeenCalled()
   })
 
   it('submits a logo URL when provided', async () => {
