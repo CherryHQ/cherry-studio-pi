@@ -5,6 +5,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useNotesSettings } from '../useNotesSettings'
 
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
 vi.mock('react-i18next', async (importOriginal) => {
   const actual = await importOriginal<typeof ReactI18next>()
 
@@ -72,8 +82,42 @@ describe('useNotesSettings', () => {
     })
 
     await waitFor(() => {
-      expect(toastErrorMock).toHaveBeenCalledWith('notes.settings.save_failed')
+      expect(toastErrorMock).toHaveBeenCalledWith('notes.settings.save_failed: persist failed')
     })
+  })
+
+  it('ignores stale settings persistence failures after unmount', async () => {
+    const save = deferred()
+    mockUseMultiplePreferences.mockReturnValueOnce([
+      {
+        isFullWidth: false,
+        fontFamily: 'default',
+        fontSize: 14,
+        showTableOfContents: true,
+        defaultViewMode: 'edit',
+        defaultEditMode: 'preview',
+        showTabStatus: true,
+        notesPath: '/notes',
+        sortType: 'sort_a2z'
+      },
+      vi.fn().mockReturnValue(save.promise)
+    ])
+
+    const { result, unmount } = renderHook(() => useNotesSettings())
+
+    act(() => {
+      result.current.updateSettings({ fontSize: 18 })
+    })
+
+    unmount()
+
+    await act(async () => {
+      save.reject(new Error('late failure'))
+      await save.promise.catch(() => undefined)
+      await Promise.resolve()
+    })
+
+    expect(toastErrorMock).not.toHaveBeenCalled()
   })
 
   it('persists notes path and sort type through preference keys', async () => {
