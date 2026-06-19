@@ -26,6 +26,10 @@ function getWorkflowEventNames(workflow: string): string[] {
 describe('release workflow safety', () => {
   const workflowPath = path.resolve(process.cwd(), '.github/workflows/release.yml')
   const workflow = fs.readFileSync(workflowPath, 'utf8').replace(/\r\n/g, '\n')
+  const prepareReleaseWorkflowPath = path.resolve(process.cwd(), '.github/workflows/prepare-release.yml')
+  const prepareReleaseWorkflow = fs.readFileSync(prepareReleaseWorkflowPath, 'utf8').replace(/\r\n/g, '\n')
+  const releasePackagesWorkflowPath = path.resolve(process.cwd(), '.github/workflows/release-packages.yml')
+  const releasePackagesWorkflow = fs.readFileSync(releasePackagesWorkflowPath, 'utf8').replace(/\r\n/g, '\n')
   const prepareReleaseSkillPath = path.resolve(process.cwd(), '.agents/skills/prepare-release/SKILL.md')
   const prepareReleaseSkill = fs.readFileSync(prepareReleaseSkillPath, 'utf8').replace(/\r\n/g, '\n')
 
@@ -84,5 +88,16 @@ describe('release workflow safety', () => {
     expect(prepareReleaseSkill).toContain('Do not chain these commands in one shell line')
     expect(prepareReleaseSkill).not.toContain('Merge to trigger release build')
     expect(prepareReleaseSkill).not.toContain('automatically triggers:\n- **`release.yml`**')
+  })
+
+  it('keeps release preparation scoped to the Cherry Studio Pi repository', () => {
+    expect(prepareReleaseWorkflow).toContain(
+      "github.repository == 'CherryHQ/cherry-studio-pi' && github.ref == 'refs/heads/main'"
+    )
+  })
+
+  it('does not publish upstream packages from the Pi repository', () => {
+    expect(releasePackagesWorkflow).toContain("github.repository == 'CherryHQ/cherry-studio'")
+    expect(releasePackagesWorkflow).not.toContain("github.repository == 'CherryHQ/cherry-studio-pi'")
   })
 })
