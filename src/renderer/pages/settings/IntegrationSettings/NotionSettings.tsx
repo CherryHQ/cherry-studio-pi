@@ -5,7 +5,7 @@ import { Client } from '@notionhq/client'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { formatErrorMessage, formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { FC } from 'react'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -22,6 +22,14 @@ const NotionSettings: FC = () => {
   const { theme } = useTheme()
   const [checkingConnection, setCheckingConnection] = useState(false)
   const checkingConnectionRef = useRef(false)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
@@ -63,6 +71,10 @@ const NotionSettings: FC = () => {
         database_id: notionDatabaseID
       })
 
+      if (!mountedRef.current) {
+        return
+      }
+
       if (result) {
         window.toast.success(t('settings.data.notion.check.success'))
       } else {
@@ -70,10 +82,14 @@ const NotionSettings: FC = () => {
       }
     } catch (error) {
       logger.error('Failed to check Notion connection', error as Error)
-      window.toast.error(formatErrorMessage(error) || t('settings.data.notion.check.error'))
+      if (mountedRef.current) {
+        window.toast.error(formatErrorMessage(error) || t('settings.data.notion.check.error'))
+      }
     } finally {
       checkingConnectionRef.current = false
-      setCheckingConnection(false)
+      if (mountedRef.current) {
+        setCheckingConnection(false)
+      }
     }
   }
 

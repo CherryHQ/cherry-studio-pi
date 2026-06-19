@@ -4,7 +4,7 @@ import { loggerService } from '@logger'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { formatErrorMessage, formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { FC } from 'react'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -27,6 +27,14 @@ const YuqueSettings: FC = () => {
   const [, setYuqueRepoId] = usePreference('data.integration.yuque.repo_id')
   const [checkingConnection, setCheckingConnection] = useState(false)
   const checkingConnectionRef = useRef(false)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
@@ -66,6 +74,10 @@ const YuqueSettings: FC = () => {
         }
       })
 
+      if (!mountedRef.current) {
+        return
+      }
+
       if (!response.ok) {
         window.toast.error(t('settings.data.yuque.check.fail'))
         return
@@ -77,11 +89,19 @@ const YuqueSettings: FC = () => {
           'X-Auth-Token': yuqueToken
         }
       })
+      if (!mountedRef.current) {
+        return
+      }
+
       if (!repoIDResponse.ok) {
         window.toast.error(t('settings.data.yuque.check.fail'))
         return
       }
       const data = (await repoIDResponse.json()) as unknown
+      if (!mountedRef.current) {
+        return
+      }
+
       if (!isYuqueRepoResponse(data)) {
         logger.error('Invalid Yuque repo response')
         window.toast.error(t('settings.data.yuque.check.fail'))
@@ -91,10 +111,14 @@ const YuqueSettings: FC = () => {
       window.toast.success(t('settings.data.yuque.check.success'))
     } catch (error) {
       logger.error('Failed to check Yuque connection', error as Error)
-      window.toast.error(formatErrorMessage(error) || t('settings.data.yuque.check.fail'))
+      if (mountedRef.current) {
+        window.toast.error(formatErrorMessage(error) || t('settings.data.yuque.check.fail'))
+      }
     } finally {
       checkingConnectionRef.current = false
-      setCheckingConnection(false)
+      if (mountedRef.current) {
+        setCheckingConnection(false)
+      }
     }
   }
 

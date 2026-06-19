@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -92,15 +92,18 @@ vi.mock('react-i18next', () => ({
 type Deferred<T> = {
   promise: Promise<T>
   resolve: (value: T) => void
+  reject: (reason?: unknown) => void
 }
 
 function deferred<T>(): Deferred<T> {
   let resolve: (value: T) => void = () => {}
-  const promise = new Promise<T>((promiseResolve) => {
+  let reject: (reason?: unknown) => void = () => {}
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
     resolve = promiseResolve
+    reject = promiseReject
   })
 
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 describe('integration connection settings', () => {
@@ -224,5 +227,93 @@ describe('integration connection settings', () => {
       expect(window.toast.success).toHaveBeenCalledWith('settings.data.yuque.check.success')
     })
     expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('ignores stale Joplin connection failures after unmount', async () => {
+    const runningFetch = deferred<Response>()
+    global.fetch = vi.fn().mockReturnValueOnce(runningFetch.promise)
+    mocks.preferences = {
+      'data.integration.joplin.token': 'token',
+      'data.integration.joplin.url': 'http://127.0.0.1:41184/'
+    }
+
+    const { unmount } = render(<JoplinSettings />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'settings.data.joplin.check.button' }))
+    expect(fetch).toHaveBeenCalledTimes(1)
+    unmount()
+
+    await act(async () => {
+      runningFetch.reject(new Error('connection failed after unmount'))
+      await runningFetch.promise.catch(() => undefined)
+    })
+
+    expect(window.toast.error).not.toHaveBeenCalled()
+  })
+
+  it('ignores stale Siyuan connection failures after unmount', async () => {
+    const runningFetch = deferred<Response>()
+    global.fetch = vi.fn().mockReturnValueOnce(runningFetch.promise)
+    mocks.preferences = {
+      'data.integration.siyuan.api_url': 'http://127.0.0.1:6806',
+      'data.integration.siyuan.token': 'token'
+    }
+
+    const { unmount } = render(<SiyuanSettings />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'settings.data.siyuan.check.button' }))
+    expect(fetch).toHaveBeenCalledTimes(1)
+    unmount()
+
+    await act(async () => {
+      runningFetch.reject(new Error('connection failed after unmount'))
+      await runningFetch.promise.catch(() => undefined)
+    })
+
+    expect(window.toast.error).not.toHaveBeenCalled()
+  })
+
+  it('ignores stale Notion connection failures after unmount', async () => {
+    const runningCheck = deferred<unknown>()
+    mocks.notionRetrieve.mockReturnValueOnce(runningCheck.promise)
+    mocks.preferences = {
+      'data.integration.notion.api_key': 'secret_token',
+      'data.integration.notion.database_id': 'database_id'
+    }
+
+    const { unmount } = render(<NotionSettings />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'settings.data.notion.check.button' }))
+    expect(mocks.notionRetrieve).toHaveBeenCalledTimes(1)
+    unmount()
+
+    await act(async () => {
+      runningCheck.reject(new Error('connection failed after unmount'))
+      await runningCheck.promise.catch(() => undefined)
+    })
+
+    expect(window.toast.error).not.toHaveBeenCalled()
+  })
+
+  it('ignores stale Yuque connection failures after unmount', async () => {
+    const runningFetch = deferred<Response>()
+    global.fetch = vi.fn().mockReturnValueOnce(runningFetch.promise)
+    mocks.preferences = {
+      'data.integration.yuque.token': 'token',
+      'data.integration.yuque.url': 'https://www.yuque.com/cherry/studio'
+    }
+
+    const { unmount } = render(<YuqueSettings />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'settings.data.yuque.check.button' }))
+    expect(fetch).toHaveBeenCalledTimes(1)
+    unmount()
+
+    await act(async () => {
+      runningFetch.reject(new Error('connection failed after unmount'))
+      await runningFetch.promise.catch(() => undefined)
+    })
+
+    expect(window.toast.error).not.toHaveBeenCalled()
   })
 })

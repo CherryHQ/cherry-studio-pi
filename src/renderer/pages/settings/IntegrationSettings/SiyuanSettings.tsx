@@ -4,7 +4,7 @@ import { loggerService } from '@logger'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { FC } from 'react'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -22,6 +22,14 @@ const SiyuanSettings: FC = () => {
   const { theme } = useTheme()
   const [checkingConnection, setCheckingConnection] = useState(false)
   const checkingConnectionRef = useRef(false)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
@@ -75,12 +83,20 @@ const SiyuanSettings: FC = () => {
         }
       })
 
+      if (!mountedRef.current) {
+        return
+      }
+
       if (!response.ok) {
         window.toast.error(t('settings.data.siyuan.check.fail'))
         return
       }
 
       const data = await response.json()
+      if (!mountedRef.current) {
+        return
+      }
+
       if (data.code !== 0) {
         window.toast.error(t('settings.data.siyuan.check.fail'))
         return
@@ -89,10 +105,14 @@ const SiyuanSettings: FC = () => {
       window.toast.success(t('settings.data.siyuan.check.success'))
     } catch (error) {
       logger.error('Check Siyuan connection failed:', error as Error)
-      window.toast.error(t('settings.data.siyuan.check.error'))
+      if (mountedRef.current) {
+        window.toast.error(t('settings.data.siyuan.check.error'))
+      }
     } finally {
       checkingConnectionRef.current = false
-      setCheckingConnection(false)
+      if (mountedRef.current) {
+        setCheckingConnection(false)
+      }
     }
   }
 

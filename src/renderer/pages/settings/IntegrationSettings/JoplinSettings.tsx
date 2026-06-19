@@ -4,7 +4,7 @@ import { loggerService } from '@logger'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { formatErrorMessage, formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { FC } from 'react'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -29,6 +29,14 @@ const JoplinSettings: FC = () => {
   const { theme } = useTheme()
   const [checkingConnection, setCheckingConnection] = useState(false)
   const checkingConnectionRef = useRef(false)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
@@ -76,6 +84,10 @@ const JoplinSettings: FC = () => {
 
       const data = await response.json()
 
+      if (!mountedRef.current) {
+        return
+      }
+
       if (!response.ok || data?.error) {
         window.toast.error(t('settings.data.joplin.check.fail'))
         return
@@ -84,10 +96,14 @@ const JoplinSettings: FC = () => {
       window.toast.success(t('settings.data.joplin.check.success'))
     } catch (error) {
       logger.error('Failed to check Joplin connection', error as Error)
-      window.toast.error(`${t('settings.data.joplin.check.fail')}: ${formatErrorMessage(error)}`)
+      if (mountedRef.current) {
+        window.toast.error(`${t('settings.data.joplin.check.fail')}: ${formatErrorMessage(error)}`)
+      }
     } finally {
       checkingConnectionRef.current = false
-      setCheckingConnection(false)
+      if (mountedRef.current) {
+        setCheckingConnection(false)
+      }
     }
   }
 
