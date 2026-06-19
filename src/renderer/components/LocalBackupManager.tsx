@@ -43,10 +43,28 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
   const [deleting, setDeleting] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
+  const mountedRef = useRef(true)
+  const visibleRef = useRef(visible)
   const fetchSeqRef = useRef(0)
   const operationRef = useRef(false)
 
+  visibleRef.current = visible
+  const isActive = useCallback(() => mountedRef.current && visibleRef.current, [])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      visibleRef.current = false
+      fetchSeqRef.current += 1
+    }
+  }, [])
+
   const fetchBackupFiles = useCallback(async () => {
+    if (!isActive()) {
+      return
+    }
+
     if (!localBackupDir) {
       return
     }
@@ -55,19 +73,19 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
     setLoading(true)
     try {
       const files = await window.api.backup.listLocalBackupFiles(localBackupDir)
-      if (fetchSeq === fetchSeqRef.current) {
+      if (isActive() && fetchSeq === fetchSeqRef.current) {
         setBackupFiles(files)
       }
     } catch (error: any) {
-      if (fetchSeq === fetchSeqRef.current) {
+      if (isActive() && fetchSeq === fetchSeqRef.current) {
         window.toast.error(`${t('settings.data.local.backup.manager.fetch.error')}: ${error.message}`)
       }
     } finally {
-      if (fetchSeq === fetchSeqRef.current) {
+      if (isActive() && fetchSeq === fetchSeqRef.current) {
         setLoading(false)
       }
     }
-  }, [localBackupDir, t])
+  }, [localBackupDir, t, isActive])
 
   useEffect(() => {
     if (!visible) {
@@ -139,21 +157,34 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
       centered: true,
       onOk: async () => {
         await runExclusiveOperation(operationRef, async () => {
+          if (!isActive()) {
+            return
+          }
+
           setDeleting(true)
           try {
             // Delete selected files one by one
             for (const key of selectedRowKeys) {
               await window.api.backup.deleteLocalBackupFile(key.toString(), localBackupDir)
             }
+
+            if (!isActive()) {
+              return
+            }
+
             window.toast.success(
               t('settings.data.local.backup.manager.delete.success.multiple', { count: selectedRowKeys.length })
             )
             setSelectedRowKeys([])
             await fetchBackupFiles()
           } catch (error: any) {
-            window.toast.error(`${t('settings.data.local.backup.manager.delete.error')}: ${error.message}`)
+            if (isActive()) {
+              window.toast.error(`${t('settings.data.local.backup.manager.delete.error')}: ${error.message}`)
+            }
           } finally {
-            setDeleting(false)
+            if (isActive()) {
+              setDeleting(false)
+            }
           }
         })
       }
@@ -174,15 +205,28 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
       centered: true,
       onOk: async () => {
         await runExclusiveOperation(operationRef, async () => {
+          if (!isActive()) {
+            return
+          }
+
           setDeleting(true)
           try {
             await window.api.backup.deleteLocalBackupFile(fileName, localBackupDir)
+
+            if (!isActive()) {
+              return
+            }
+
             window.toast.success(t('settings.data.local.backup.manager.delete.success.single'))
             await fetchBackupFiles()
           } catch (error: any) {
-            window.toast.error(`${t('settings.data.local.backup.manager.delete.error')}: ${error.message}`)
+            if (isActive()) {
+              window.toast.error(`${t('settings.data.local.backup.manager.delete.error')}: ${error.message}`)
+            }
           } finally {
-            setDeleting(false)
+            if (isActive()) {
+              setDeleting(false)
+            }
           }
         })
       }
@@ -203,15 +247,28 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
       centered: true,
       onOk: async () => {
         await runExclusiveOperation(operationRef, async () => {
+          if (!isActive()) {
+            return
+          }
+
           setRestoring(true)
           try {
             await (restoreMethod || restoreFromLocal)(fileName)
+
+            if (!isActive()) {
+              return
+            }
+
             window.toast.success(t('settings.data.local.backup.manager.restore.success'))
             onClose() // Close the modal
           } catch (error: any) {
-            window.toast.error(`${t('settings.data.local.backup.manager.restore.error')}: ${error.message}`)
+            if (isActive()) {
+              window.toast.error(`${t('settings.data.local.backup.manager.restore.error')}: ${error.message}`)
+            }
           } finally {
-            setRestoring(false)
+            if (isActive()) {
+              setRestoring(false)
+            }
           }
         })
       }

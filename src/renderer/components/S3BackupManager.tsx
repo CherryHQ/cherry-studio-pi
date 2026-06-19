@@ -42,13 +42,31 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
   const [deleting, setDeleting] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
+  const mountedRef = useRef(true)
+  const visibleRef = useRef(visible)
   const fetchSeqRef = useRef(0)
   const operationRef = useRef(false)
   const { t } = useTranslation()
 
+  visibleRef.current = visible
+
   const { endpoint, region, bucket, accessKeyId, secretAccessKey } = s3Config
+  const isActive = useCallback(() => mountedRef.current && visibleRef.current, [])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      visibleRef.current = false
+      fetchSeqRef.current += 1
+    }
+  }, [])
 
   const fetchBackupFiles = useCallback(async () => {
+    if (!isActive()) {
+      return
+    }
+
     if (!endpoint || !region || !bucket || !accessKeyId || !secretAccessKey) {
       window.toast.error(t('settings.data.s3.manager.config.incomplete'))
       return
@@ -69,19 +87,19 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
         syncInterval: 0,
         maxBackups: 0
       })
-      if (fetchSeq === fetchSeqRef.current) {
+      if (isActive() && fetchSeq === fetchSeqRef.current) {
         setBackupFiles(files)
       }
     } catch (error: any) {
-      if (fetchSeq === fetchSeqRef.current) {
+      if (isActive() && fetchSeq === fetchSeqRef.current) {
         window.toast.error(t('settings.data.s3.manager.files.fetch.error', { message: error.message }))
       }
     } finally {
-      if (fetchSeq === fetchSeqRef.current) {
+      if (isActive() && fetchSeq === fetchSeqRef.current) {
         setLoading(false)
       }
     }
-  }, [endpoint, region, bucket, accessKeyId, secretAccessKey, t, s3Config])
+  }, [endpoint, region, bucket, accessKeyId, secretAccessKey, t, s3Config, isActive])
 
   useEffect(() => {
     if (!visible) {
@@ -154,6 +172,10 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
       centered: true,
       onOk: async () => {
         await runExclusiveOperation(operationRef, async () => {
+          if (!isActive()) {
+            return
+          }
+
           setDeleting(true)
           try {
             // 依次删除选中的文件
@@ -171,15 +193,24 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
                 maxBackups: 0
               })
             }
+
+            if (!isActive()) {
+              return
+            }
+
             window.toast.success(
               t('settings.data.s3.manager.delete.success.multiple', { count: selectedRowKeys.length })
             )
             setSelectedRowKeys([])
             await fetchBackupFiles()
           } catch (error: any) {
-            window.toast.error(t('settings.data.s3.manager.delete.error', { message: error.message }))
+            if (isActive()) {
+              window.toast.error(t('settings.data.s3.manager.delete.error', { message: error.message }))
+            }
           } finally {
-            setDeleting(false)
+            if (isActive()) {
+              setDeleting(false)
+            }
           }
         })
       }
@@ -201,6 +232,10 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
       centered: true,
       onOk: async () => {
         await runExclusiveOperation(operationRef, async () => {
+          if (!isActive()) {
+            return
+          }
+
           setDeleting(true)
           try {
             await window.api.backup.deleteS3File(fileName, {
@@ -215,12 +250,21 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
               syncInterval: 0,
               maxBackups: 0
             })
+
+            if (!isActive()) {
+              return
+            }
+
             window.toast.success(t('settings.data.s3.manager.delete.success.single'))
             await fetchBackupFiles()
           } catch (error: any) {
-            window.toast.error(t('settings.data.s3.manager.delete.error', { message: error.message }))
+            if (isActive()) {
+              window.toast.error(t('settings.data.s3.manager.delete.error', { message: error.message }))
+            }
           } finally {
-            setDeleting(false)
+            if (isActive()) {
+              setDeleting(false)
+            }
           }
         })
       }
@@ -242,15 +286,28 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
       centered: true,
       onOk: async () => {
         await runExclusiveOperation(operationRef, async () => {
+          if (!isActive()) {
+            return
+          }
+
           setRestoring(true)
           try {
             await (restoreMethod || restoreFromS3)(fileName)
+
+            if (!isActive()) {
+              return
+            }
+
             window.toast.success(t('settings.data.s3.restore.success'))
             onClose() // 关闭模态框
           } catch (error: any) {
-            window.toast.error(t('settings.data.s3.restore.error', { message: error.message }))
+            if (isActive()) {
+              window.toast.error(t('settings.data.s3.restore.error', { message: error.message }))
+            }
           } finally {
-            setRestoring(false)
+            if (isActive()) {
+              setRestoring(false)
+            }
           }
         })
       }
