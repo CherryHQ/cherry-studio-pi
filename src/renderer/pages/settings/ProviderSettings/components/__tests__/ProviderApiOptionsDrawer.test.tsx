@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ProviderApiOptionsDrawer from '../ProviderApiOptionsDrawer'
@@ -88,9 +88,23 @@ const provider = {
   }
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}
+
 describe('ProviderApiOptionsDrawer', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.toast = {
+      error: vi.fn()
+    } as any
     updateProviderMock.mockResolvedValue(undefined)
     useProviderMock.mockReturnValue({
       provider,
@@ -132,6 +146,22 @@ describe('ProviderApiOptionsDrawer', () => {
         }
       }
     })
+  })
+
+  it('does not show stale save errors after the drawer unmounts', async () => {
+    const save = createDeferred<void>()
+    updateProviderMock.mockReturnValueOnce(save.promise)
+    const { unmount } = render(<ProviderApiOptionsDrawer providerId="openai" open onClose={vi.fn()} />)
+
+    fireEvent.click(screen.getByLabelText('settings.provider.api.options.developer_role.label'))
+    unmount()
+
+    await act(async () => {
+      save.reject(new Error('closed'))
+      await save.promise.catch(() => undefined)
+    })
+
+    expect(window.toast.error).not.toHaveBeenCalled()
   })
 
   it('only renders array content for non OpenAI providers without anthropic cache support', () => {

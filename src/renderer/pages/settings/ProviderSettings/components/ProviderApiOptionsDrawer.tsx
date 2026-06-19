@@ -4,7 +4,7 @@ import { cn } from '@renderer/utils'
 import type { Provider, RuntimeApiFeatures } from '@shared/data/types/provider'
 import { isAnthropicSupportedProvider, isAzureOpenAIProvider, isOpenAICompatibleProvider } from '@shared/utils/provider'
 import { Info } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import ProviderActions from '../primitives/ProviderActions'
@@ -70,7 +70,16 @@ export default function ProviderApiOptionsDrawer({ providerId, open, onClose }: 
   const cacheLastNMessages = cacheControl?.cacheLastNMessages ?? 0
   const [tokenThresholdDraft, setTokenThresholdDraft] = useState(String(cacheTokenThreshold))
   const [cacheLastNDraft, setCacheLastNDraft] = useState(String(cacheLastNMessages))
+  const mountedRef = useRef(true)
   const effectiveCacheTokenThreshold = clampInteger(tokenThresholdDraft, 0, CACHE_TOKEN_THRESHOLD_MAX)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     if (!open) {
@@ -127,7 +136,9 @@ export default function ProviderApiOptionsDrawer({ providerId, open, onClose }: 
   }, [openAIOptions, provider, t])
 
   const handleSaveError = useCallback(() => {
-    window.toast.error(t('settings.provider.save_failed'))
+    if (mountedRef.current) {
+      window.toast.error(t('settings.provider.save_failed'))
+    }
   }, [t])
 
   const updateApiFeature = useCallback(

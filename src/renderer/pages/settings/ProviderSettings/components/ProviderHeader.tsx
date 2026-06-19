@@ -2,7 +2,7 @@ import { Button, Switch, Tooltip } from '@cherrystudio/ui'
 import { useProvider } from '@renderer/hooks/useProvider'
 import { ProviderAvatar } from '@renderer/pages/settings/ProviderSettings/components/ProviderAvatar'
 import { Bolt, BookOpen, ExternalLink } from 'lucide-react'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useProviderEnable } from '../hooks/providerSetting/useProviderEnable'
@@ -20,6 +20,15 @@ export default function ProviderHeader({ providerId }: ProviderHeaderProps) {
   const { toggleProviderEnabled } = useProviderEnable(providerId)
   const [apiOptionsOpen, setApiOptionsOpen] = useState(false)
   const [isTogglingEnabled, setIsTogglingEnabled] = useState(false)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const handleToggleEnabled = useCallback(
     async (enabled: boolean) => {
@@ -30,9 +39,13 @@ export default function ProviderHeader({ providerId }: ProviderHeaderProps) {
       try {
         await toggleProviderEnabled(enabled)
       } catch {
-        window.toast.error(t('settings.provider.save_failed'))
+        if (mountedRef.current) {
+          window.toast.error(t('settings.provider.save_failed'))
+        }
       } finally {
-        setIsTogglingEnabled(false)
+        if (mountedRef.current) {
+          setIsTogglingEnabled(false)
+        }
       }
     },
     [isTogglingEnabled, t, toggleProviderEnabled]

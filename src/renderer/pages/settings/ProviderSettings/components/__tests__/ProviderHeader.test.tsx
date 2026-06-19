@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ProviderHeader from '../ProviderHeader'
@@ -55,9 +55,23 @@ vi.mock('../../hooks/providerSetting/useProviderEnable', () => ({
   useProviderEnable: (...args: any[]) => useProviderEnableMock(...args)
 }))
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}
+
 describe('ProviderHeader', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.toast = {
+      error: vi.fn()
+    } as any
     useProviderMock.mockReturnValue({
       provider: {
         id: 'openai',
@@ -133,5 +147,24 @@ describe('ProviderHeader', () => {
     fireEvent.click(screen.getByRole('button', { name: 'settings.provider.api.options.label' }))
 
     expect(screen.getByText('api-options-drawer')).toBeInTheDocument()
+  })
+
+  it('does not show stale toggle errors after unmount', async () => {
+    const toggle = createDeferred<void>()
+    useProviderEnableMock.mockReturnValue({
+      toggleProviderEnabled: vi.fn().mockReturnValue(toggle.promise)
+    })
+
+    const { unmount } = render(<ProviderHeader providerId="openai" />)
+
+    fireEvent.click(screen.getByText('switch'))
+    unmount()
+
+    await act(async () => {
+      toggle.reject(new Error('closed'))
+      await toggle.promise.catch(() => undefined)
+    })
+
+    expect(window.toast.error).not.toHaveBeenCalled()
   })
 })
