@@ -78,4 +78,16 @@ describe('NotesSearchService', () => {
 
     expect(result).toBeNull()
   })
+
+  it('does not keep results when a search is aborted while reading file content', async () => {
+    const controller = new AbortController()
+    readExternalMock.mockImplementation(async () => {
+      controller.abort()
+      return 'needle in content'
+    })
+
+    const result = await searchAllFiles([makeNode('note.md', 'file')], 'needle', {}, controller.signal)
+
+    expect(result).toEqual([])
+  })
 })

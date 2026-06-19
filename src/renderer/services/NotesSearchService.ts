@@ -76,7 +76,8 @@ export function calculateRelevanceScore(node: NotesTreeNode, keyword: string, ma
 export async function searchFileContent(
   node: NotesTreeNode,
   keyword: string,
-  options: SearchOptions = {}
+  options: SearchOptions = {},
+  signal?: AbortSignal
 ): Promise<SearchResult | null> {
   const {
     caseSensitive = false,
@@ -87,6 +88,10 @@ export async function searchFileContent(
   } = options
 
   try {
+    if (signal?.aborted) {
+      return null
+    }
+
     if (node.type !== 'file') {
       return null
     }
@@ -97,6 +102,10 @@ export async function searchFileContent(
     }
 
     const content = await window.api.file.readExternal(node.externalPath)
+
+    if (signal?.aborted) {
+      return null
+    }
 
     if (!content) {
       return null
@@ -118,11 +127,19 @@ export async function searchFileContent(
     const matches: SearchMatch[] = []
 
     for (let i = 0; i < lines.length; i++) {
+      if (signal?.aborted) {
+        return null
+      }
+
       const line = lines[i]
       pattern.lastIndex = 0
 
       let match: RegExpExecArray | null
       while ((match = pattern.exec(line)) !== null) {
+        if (signal?.aborted) {
+          return null
+        }
+
         if (match[0].length === 0) {
           pattern.lastIndex += 1
           continue
@@ -171,6 +188,10 @@ export async function searchFileContent(
       score
     }
   } catch (error) {
+    if (signal?.aborted) {
+      return null
+    }
+
     logger.error('Failed to search file content', { externalPath: summarizeTextForLog(node.externalPath), error })
     return null
   }
@@ -251,7 +272,11 @@ export async function searchAllFiles(
       if (!node) break
 
       const nameMatch = matchFileName(node, normalizedKeyword, options.caseSensitive)
-      const contentResult = await searchFileContent(node, normalizedKeyword, options)
+      const contentResult = await searchFileContent(node, normalizedKeyword, options, signal)
+
+      if (signal?.aborted) {
+        break
+      }
 
       if (nameMatch && contentResult) {
         results.push({
@@ -273,6 +298,14 @@ export async function searchAllFiles(
   }
 
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, fileNodes.length) }, () => worker()))
+
+  if (signal?.aborted) {
+    logger.debug('Full-text search cancelled', {
+      keyword: summarizeTextForLog(normalizedKeyword),
+      totalFiles: fileNodes.length
+    })
+    return []
+  }
 
   const sortedResults = results.sort((a, b) => b.score - a.score)
 

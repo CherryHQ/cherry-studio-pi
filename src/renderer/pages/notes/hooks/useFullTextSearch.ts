@@ -42,6 +42,7 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
 
   const abortControllerRef = useRef<AbortController | null>(null)
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const mountedRef = useRef(true)
 
   // Store options in refs to avoid reference changes
   const searchOptionsRef = useRef(searchOptions)
@@ -63,7 +64,7 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
       clearTimeout(debounceTimerRef.current)
       debounceTimerRef.current = null
     }
-    if (updateSearching) {
+    if (updateSearching && mountedRef.current) {
       setIsSearching(false)
     }
   }, [])
@@ -110,7 +111,7 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
           abortController.signal
         )
 
-        if (abortController.signal.aborted) {
+        if (abortController.signal.aborted || !mountedRef.current) {
           return
         }
 
@@ -126,11 +127,19 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
         setResults(limitedResults)
         setStats(newStats)
       } catch (err) {
-        if (err instanceof Error && err.name !== 'AbortError') {
+        if (
+          !abortController.signal.aborted &&
+          mountedRef.current &&
+          err instanceof Error &&
+          err.name !== 'AbortError'
+        ) {
           setError(err)
         }
       } finally {
-        if (!abortController.signal.aborted) {
+        if (abortControllerRef.current === abortController) {
+          abortControllerRef.current = null
+        }
+        if (!abortController.signal.aborted && mountedRef.current) {
           setIsSearching(false)
         }
       }
@@ -152,10 +161,12 @@ export function useFullTextSearch(options: UseFullTextSearchOptions = {}): UseFu
   )
 
   useEffect(() => {
+    mountedRef.current = true
     return () => {
-      cancel()
+      mountedRef.current = false
+      cancelSearch(false)
     }
-  }, [cancel])
+  }, [cancelSearch])
 
   return {
     search,
