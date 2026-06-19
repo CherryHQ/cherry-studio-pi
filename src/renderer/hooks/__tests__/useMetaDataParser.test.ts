@@ -13,6 +13,17 @@ vi.mock('axios', () => ({
 
 const properties = ['og:title'] as const
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}
+
 describe('useMetaDataParser', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -66,5 +77,41 @@ describe('useMetaDataParser', () => {
 
     expect(axios.get).toHaveBeenLastCalledWith('https://second.example', expect.objectContaining({ timeout: 5000 }))
     expect(result.current.metadata['og:title']).toBe('Second')
+  })
+
+  it('ignores a stale response after the link changes', async () => {
+    const firstRequest = deferred<{ data: string }>()
+    vi.mocked(axios.get)
+      .mockReturnValueOnce(firstRequest.promise)
+      .mockResolvedValueOnce({ data: '<meta property="og:title" content="Second">' })
+
+    const { result, rerender } = renderHook(({ link }: { link: string }) => useMetaDataParser(link, properties), {
+      initialProps: { link: 'https://first.example' }
+    })
+
+    let firstParsePromise!: Promise<void>
+    await act(async () => {
+      firstParsePromise = result.current.parseMetadata()
+      await Promise.resolve()
+    })
+    expect(result.current.isLoading).toBe(true)
+
+    rerender({ link: 'https://second.example' })
+
+    await act(async () => {
+      firstRequest.resolve({ data: '<meta property="og:title" content="First">' })
+      await firstParsePromise
+    })
+
+    expect(result.current.metadata['og:title']).toBeUndefined()
+    expect(result.current.isLoading).toBe(true)
+
+    await act(async () => {
+      await result.current.parseMetadata()
+    })
+
+    expect(axios.get).toHaveBeenLastCalledWith('https://second.example', expect.objectContaining({ timeout: 5000 }))
+    expect(result.current.metadata['og:title']).toBe('Second')
+    expect(result.current.isLoading).toBe(false)
   })
 })

@@ -17,6 +17,7 @@ export function useMetaDataParser<T extends string>(
 
   const abortControllerRef = useRef<AbortController | null>(null)
   const isFetchingRef = useRef(false)
+  const mountedRef = useRef(true)
 
   useEffect(() => {
     abortControllerRef.current?.abort()
@@ -58,24 +59,33 @@ export function useMetaDataParser<T extends string>(
 
       parser.parseComplete(htmlContent)
 
-      setMetadata(parsedMetadata)
+      if (mountedRef.current && abortControllerRef.current === controller && !controller.signal.aborted) {
+        setMetadata(parsedMetadata)
+      }
     } catch (err) {
       // Don't set error if request was aborted
       if (axios.isCancel(err) || (err instanceof Error && err.name === 'AbortError')) {
         return
       }
-      setError(err instanceof Error ? err : new Error('Failed to fetch HTML'))
+      if (mountedRef.current && abortControllerRef.current === controller && !controller.signal.aborted) {
+        setError(err instanceof Error ? err : new Error('Failed to fetch HTML'))
+      }
     } finally {
       if (abortControllerRef.current === controller) {
         abortControllerRef.current = null
         isFetchingRef.current = false
-        setIsLoading(false)
+        if (mountedRef.current) {
+          setIsLoading(false)
+        }
       }
     }
   }, [link, properties, timeout])
 
   useEffect(() => {
+    mountedRef.current = true
+
     return () => {
+      mountedRef.current = false
       abortControllerRef.current?.abort()
       abortControllerRef.current = null
       isFetchingRef.current = false
