@@ -3,7 +3,7 @@ import { cn } from '@cherrystudio/ui/lib/utils'
 import { loggerService } from '@logger'
 import { TopView } from '@renderer/components/TopView'
 import type { CSSProperties, ReactNode } from 'react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useTopViewClose } from './useTopViewClose'
@@ -87,9 +87,16 @@ const PopupContainer: React.FC<Props> = ({
 }) => {
   const [open, setOpen] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const mountedRef = useRef(true)
   const submittingRef = useRef(false)
   const { t } = useTranslation()
   const close = useTopViewClose({ afterClose: rest.afterClose, resolve, setOpen, topViewKey: TopViewKey })
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const settle = (result: any) => {
     close(result)
@@ -105,16 +112,24 @@ const PopupContainer: React.FC<Props> = ({
     let shouldClose = false
     try {
       const result = await handleOk?.()
+      if (!mountedRef.current) {
+        return
+      }
+
       if (result === false) {
         return
       }
       shouldClose = true
     } catch (error) {
+      if (!mountedRef.current) {
+        return
+      }
+
       logger.error('GeneralPopup onOk handler failed:', error as Error)
       return
     } finally {
       submittingRef.current = false
-      if (!shouldClose) {
+      if (mountedRef.current && !shouldClose) {
         setSubmitting(false)
       }
     }
