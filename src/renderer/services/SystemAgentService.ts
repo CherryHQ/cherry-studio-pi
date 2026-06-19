@@ -48,10 +48,19 @@ function getSystemAgentErrorTriggerState() {
 const systemAgentErrorTriggerState = getSystemAgentErrorTriggerState()
 const recentEvents = systemAgentErrorTriggerState.recentEvents
 
+function normalizeMessageText(message: unknown) {
+  if (typeof message !== 'string') return null
+
+  const normalizedMessage = message.trim()
+  return normalizedMessage.length > 0 ? normalizedMessage : null
+}
+
 function errorMessage(error: unknown) {
-  if (error instanceof Error && error.message) return error.message
-  if (typeof error === 'string') return error
-  return String(error)
+  if (error instanceof Error) return normalizeMessageText(error.message) ?? 'Unknown error'
+  if (typeof error === 'string') return normalizeMessageText(error) ?? 'Unknown error'
+  if (error == null) return 'Unknown error'
+
+  return normalizeMessageText(String(error)) ?? 'Unknown error'
 }
 
 function dedupeKey(input: SystemAgentEventInput) {
@@ -124,11 +133,12 @@ export function reportErrorToSystemAgent(
   options: ReportOptions = {}
 ) {
   const { message, ...eventInput } = input
+  const normalizedMessage = normalizeMessageText(message)
   return handleSystemAgentEvent(
     {
       type: 'error',
       ...eventInput,
-      message: message || errorMessage(error)
+      message: normalizedMessage ?? errorMessage(error)
     },
     options
   )

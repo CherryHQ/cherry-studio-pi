@@ -140,6 +140,51 @@ describe('SystemAgentService', () => {
     )
   })
 
+  it('uses readable fallback messages for nullish and blank automatic errors', async () => {
+    await reportErrorToSystemAgent(null, {
+      source: 'test.null-error'
+    })
+    await reportErrorToSystemAgent(undefined, {
+      source: 'test.undefined-error'
+    })
+    await reportErrorToSystemAgent('   ', {
+      source: 'test.blank-error'
+    })
+    await reportErrorToSystemAgent(new Error('real failure'), {
+      source: 'test.blank-input-message',
+      message: '   '
+    })
+
+    expect(window.api.systemAgent.handleEvent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        source: 'test.null-error',
+        message: 'Unknown error'
+      })
+    )
+    expect(window.api.systemAgent.handleEvent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        source: 'test.undefined-error',
+        message: 'Unknown error'
+      })
+    )
+    expect(window.api.systemAgent.handleEvent).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        source: 'test.blank-error',
+        message: 'Unknown error'
+      })
+    )
+    expect(window.api.systemAgent.handleEvent).toHaveBeenNthCalledWith(
+      4,
+      expect.objectContaining({
+        source: 'test.blank-input-message',
+        message: 'real failure'
+      })
+    )
+  })
+
   it('supports longer dedupe windows for noisy automatic diagnostics', async () => {
     await handleSystemAgentEvent({ source: 'test.long-dedupe', message: 'same error' }, { dedupeMs: 10 * 60_000 })
     await handleSystemAgentEvent({ source: 'test.long-dedupe', message: 'same error' }, { dedupeMs: 10 * 60_000 })
