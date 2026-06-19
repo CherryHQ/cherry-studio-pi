@@ -2,15 +2,17 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { AppCapabilityRegistry } from '../registry'
 
-const { executeCapability } = vi.hoisted(() => ({
-  executeCapability: vi.fn(async () => ({ ok: true, summary: 'called' }))
+const { executeCapability, loggerInfo, loggerWarn } = vi.hoisted(() => ({
+  executeCapability: vi.fn(async () => ({ ok: true, summary: 'called' })),
+  loggerInfo: vi.fn(),
+  loggerWarn: vi.fn()
 }))
 
 vi.mock('@logger', () => ({
   loggerService: {
     withContext: vi.fn(() => ({
-      info: vi.fn(),
-      warn: vi.fn()
+      info: loggerInfo,
+      warn: loggerWarn
     }))
   }
 }))
@@ -82,6 +84,20 @@ describe('AppCapabilityService', () => {
     })
   })
 
+  it('redacts secrets from invalid agent capability ids before returning them', async () => {
+    const service = new AppCapabilityService()
+
+    const result = await service.call('missing.apiKey=sk-secret-token', {}, { source: 'agent' })
+
+    expect(JSON.stringify(result)).not.toContain('sk-secret-token')
+    expect(result).toMatchObject({
+      ok: false,
+      isError: true,
+      summary: 'Capability not found: missing.apiKey=[redacted]',
+      error: 'Capability not found: missing.apiKey=[redacted]'
+    })
+  })
+
   it('short-circuits calls when the signal is already aborted', async () => {
     executeCapability.mockClear()
     const service = new AppCapabilityService()
@@ -95,6 +111,24 @@ describe('AppCapabilityService', () => {
       error: 'user stopped task'
     })
 
+    expect(executeCapability).not.toHaveBeenCalled()
+  })
+
+  it('redacts secrets from agent abort reasons before returning them', async () => {
+    executeCapability.mockClear()
+    const service = new AppCapabilityService()
+    const controller = new AbortController()
+    controller.abort(new Error('stopped with password=plain-secret'))
+
+    const result = await service.call('settings.read', {}, { source: 'agent', signal: controller.signal })
+
+    expect(JSON.stringify(result)).not.toContain('plain-secret')
+    expect(result).toEqual({
+      ok: false,
+      isError: true,
+      summary: 'settings.read aborted: stopped with password=[redacted]',
+      error: 'stopped with password=[redacted]'
+    })
     expect(executeCapability).not.toHaveBeenCalled()
   })
 
@@ -197,6 +231,7 @@ describe('AppCapabilityService', () => {
   })
 
   it('redacts secrets embedded in thrown agent capability errors', async () => {
+    loggerWarn.mockClear()
     executeCapability.mockReset()
     executeCapability.mockRejectedValueOnce(
       new Error(
@@ -216,6 +251,10 @@ describe('AppCapabilityService', () => {
     expect(result.summary).toContain('Authorization: Bearer [redacted]')
     expect(result.summary).toContain('https://[redacted]@example.test')
     expect(result.error).toContain('apiKey=[redacted]')
+    expect(loggerWarn).toHaveBeenCalledWith('App capability failed', {
+      id: 'settings.read',
+      error: 'Failed with apiKey=[redacted] and Authorization: Bearer [redacted] at https://[redacted]@example.test'
+    })
   })
 
   it('does not sanitize non-agent capability results', async () => {

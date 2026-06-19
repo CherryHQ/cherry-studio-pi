@@ -9,7 +9,7 @@ import type {
   AppCapabilityResult,
   AppCapabilitySearchOptions
 } from './types'
-import { sanitizeAppCapabilityResultForAgent } from './utils'
+import { redactAgentText, sanitizeAppCapabilityResultForAgent } from './utils'
 
 const logger = loggerService.withContext('AppCapabilityService')
 
@@ -100,32 +100,41 @@ export class AppCapabilityService {
     const displayCapabilityId = capabilityId || '(empty)'
     const capability = this.registry.get(capabilityId)
     if (!capability) {
-      return {
-        ok: false,
-        isError: true,
-        summary: `Capability not found: ${displayCapabilityId}`,
-        error: `Capability not found: ${displayCapabilityId}`
-      }
+      return sanitizeResultForSource(
+        {
+          ok: false,
+          isError: true,
+          summary: `Capability not found: ${displayCapabilityId}`,
+          error: `Capability not found: ${displayCapabilityId}`
+        },
+        context.source ?? 'system'
+      )
     }
 
     if (context.signal?.aborted) {
       const message = abortReasonMessage(context.signal)
-      return {
-        ok: false,
-        isError: true,
-        summary: `${capabilityId} aborted: ${message}`,
-        error: message
-      }
+      return sanitizeResultForSource(
+        {
+          ok: false,
+          isError: true,
+          summary: `${capabilityId} aborted: ${message}`,
+          error: message
+        },
+        context.source ?? 'system'
+      )
     }
 
     if (context.dryRun === true && capability.risk !== 'read' && capability.supportsDryRun !== true) {
       const message = `Capability does not support dry run: ${displayCapabilityId}`
-      return {
-        ok: false,
-        isError: true,
-        summary: message,
-        error: message
-      }
+      return sanitizeResultForSource(
+        {
+          ok: false,
+          isError: true,
+          summary: message,
+          error: message
+        },
+        context.source ?? 'system'
+      )
     }
 
     try {
@@ -147,12 +156,15 @@ export class AppCapabilityService {
       )
       if (context.signal?.aborted) {
         const message = abortReasonMessage(context.signal)
-        return {
-          ok: false,
-          isError: true,
-          summary: `${capabilityId} aborted: ${message}`,
-          error: message
-        }
+        return sanitizeResultForSource(
+          {
+            ok: false,
+            isError: true,
+            summary: `${capabilityId} aborted: ${message}`,
+            error: message
+          },
+          context.source ?? 'system'
+        )
       }
       return sanitizeResultForSource(result, context.source ?? 'system')
     } catch (error) {
@@ -170,7 +182,7 @@ export class AppCapabilityService {
       }
 
       const message = error instanceof Error ? error.message : String(error)
-      logger.warn('App capability failed', { id: capabilityId, error: message })
+      logger.warn('App capability failed', { id: capabilityId, error: redactAgentText(message) })
       return sanitizeResultForSource(
         {
           ok: false,
