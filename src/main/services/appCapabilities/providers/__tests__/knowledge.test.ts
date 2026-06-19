@@ -203,6 +203,21 @@ describe('knowledge app capabilities', () => {
     })
   })
 
+  it('rejects invalid knowledge base item preview limit shapes', async () => {
+    runtimeBases = [
+      {
+        id: 'kb-preview',
+        name: 'Preview Knowledge',
+        model: { id: 'embed-model', provider: 'shared-provider' },
+        items: []
+      }
+    ]
+
+    await expect(
+      capability('knowledge.bases.list').execute({ includeItems: true, itemLimit: true }, { source: 'agent' })
+    ).rejects.toThrow('Knowledge base item preview limit must be a number')
+  })
+
   it('bounds concurrent knowledge searches and reuses provider config during one query', async () => {
     const bases = Array.from({ length: 8 }, (_, index) => ({
       id: `kb-${index}`,
@@ -330,6 +345,18 @@ describe('knowledge app capabilities', () => {
     await expect(
       capability('knowledge.search').execute({ query: 'matched', knowledge_base_ids: [123] }, { source: 'agent' })
     ).rejects.toThrow('Knowledge base id must be a string')
+
+    expect(mocks.storageV2KnowledgeRepository.listBases).not.toHaveBeenCalled()
+    expect(mocks.knowledgeService.search).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid knowledge search numeric limit shapes before searching', async () => {
+    await expect(
+      capability('knowledge.search').execute({ query: 'matched', document_count: true }, { source: 'agent' })
+    ).rejects.toThrow('Knowledge search document count must be a number')
+    await expect(
+      capability('knowledge.search').execute({ query: 'matched', result_limit: { limit: 5 } }, { source: 'agent' })
+    ).rejects.toThrow('Knowledge search result limit must be a number')
 
     expect(mocks.storageV2KnowledgeRepository.listBases).not.toHaveBeenCalled()
     expect(mocks.knowledgeService.search).not.toHaveBeenCalled()

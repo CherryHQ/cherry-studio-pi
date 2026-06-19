@@ -9,6 +9,7 @@ import type { KnowledgeBase as RuntimeKnowledgeBase } from '@shared/data/types/k
 import type { KnowledgeBase, KnowledgeBaseParams, KnowledgeItem, Provider } from '@types'
 import { v4 as uuidv4 } from 'uuid'
 
+import { normalizeBoundedIntegerInput } from '../input'
 import { readRendererStoreValue } from '../rendererBridge'
 import type { AppCapabilityDefinition } from '../types'
 import { okResult, sanitizeForAgent } from '../utils'
@@ -46,27 +47,30 @@ function normalizeBaseURL(value: unknown): string {
 }
 
 function normalizeKnowledgeBaseItemPreviewLimit(value: unknown): number {
-  const parsed =
-    typeof value === 'string' && !value.trim()
-      ? DEFAULT_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT
-      : Number(value ?? DEFAULT_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT)
-  const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT
-  return Math.max(0, Math.min(safeLimit, MAX_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT))
+  return normalizeBoundedIntegerInput(value, {
+    label: 'Knowledge base item preview limit',
+    defaultValue: DEFAULT_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT,
+    min: 0,
+    max: MAX_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT
+  })
 }
 
 function normalizeKnowledgeSearchDocumentCount(value: unknown): number {
-  const parsed = typeof value === 'string' && !value.trim() ? 5 : Number(value ?? 5)
-  const safeCount = Number.isFinite(parsed) ? Math.trunc(parsed) : 5
-  return Math.max(1, Math.min(safeCount, 20))
+  return normalizeBoundedIntegerInput(value, {
+    label: 'Knowledge search document count',
+    defaultValue: 5,
+    min: 1,
+    max: 20
+  })
 }
 
 function normalizeKnowledgeSearchResultLimit(value: unknown): number {
-  const parsed =
-    typeof value === 'string' && !value.trim()
-      ? DEFAULT_KNOWLEDGE_SEARCH_RESULT_LIMIT
-      : Number(value ?? DEFAULT_KNOWLEDGE_SEARCH_RESULT_LIMIT)
-  const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_KNOWLEDGE_SEARCH_RESULT_LIMIT
-  return Math.max(1, Math.min(safeLimit, MAX_KNOWLEDGE_SEARCH_RESULT_LIMIT))
+  return normalizeBoundedIntegerInput(value, {
+    label: 'Knowledge search result limit',
+    defaultValue: DEFAULT_KNOWLEDGE_SEARCH_RESULT_LIMIT,
+    min: 1,
+    max: MAX_KNOWLEDGE_SEARCH_RESULT_LIMIT
+  })
 }
 
 function normalizeOptionalText(value: unknown, label = 'Value') {
