@@ -355,6 +355,44 @@ describe('SystemAgentRuntimeService', () => {
     )
   })
 
+  it('rejects invalid direct call option shapes before capability lookup', async () => {
+    const service = new SystemAgentRuntimeService()
+
+    await expect(service.callCapability('dataSync.status.get', {}, [] as any)).resolves.toMatchObject({
+      ok: false,
+      isError: true,
+      summary: 'dataSync.status.get invalid options',
+      error: 'System agent capability options must be an object'
+    })
+    await expect(service.callCapability('dataSync.status.get', {}, 'approved' as any)).resolves.toMatchObject({
+      ok: false,
+      isError: true,
+      error: 'System agent capability options must be an object'
+    })
+    await expect(service.callCapability('dataSync.status.get', {}, { approved: 'true' } as any)).resolves.toMatchObject(
+      {
+        ok: false,
+        isError: true,
+        error: 'System agent capability approved must be a boolean'
+      }
+    )
+    await expect(service.callCapability('dataSync.status.get', {}, { sessionId: 123 } as any)).resolves.toMatchObject({
+      ok: false,
+      isError: true,
+      error: 'System agent capability sessionId must be a string'
+    })
+    await expect(
+      service.callCapability('dataSync.status.get', {}, { toolCallId: ['tool-call-1'] } as any)
+    ).resolves.toMatchObject({
+      ok: false,
+      isError: true,
+      error: 'System agent capability toolCallId must be a string'
+    })
+
+    expect(mocks.appCapabilityService.get).not.toHaveBeenCalled()
+    expect(mocks.appCapabilityService.call).not.toHaveBeenCalled()
+  })
+
   it('calls approved capabilities through the shared app capability service', async () => {
     mocks.appCapabilityService.get.mockReturnValueOnce(writeCapability)
     mocks.appCapabilityService.call.mockResolvedValueOnce({ ok: true, summary: 'done' })

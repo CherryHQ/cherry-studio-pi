@@ -92,6 +92,12 @@ function normalizeInputObject<T extends object>(input: T | unknown): Partial<T> 
   return input as Partial<T>
 }
 
+function normalizeStrictInputObject<T extends object>(input: T | unknown, label: string): Partial<T> {
+  if (input === null || typeof input === 'undefined') return {}
+  if (typeof input !== 'object' || Array.isArray(input)) throw new Error(`${label} must be an object`)
+  return input as Partial<T>
+}
+
 function normalizeOptionalText(value: unknown) {
   if (typeof value === 'string') {
     const text = value.trim()
@@ -102,6 +108,19 @@ function normalizeOptionalText(value: unknown) {
     return text || undefined
   }
   return undefined
+}
+
+function normalizeOptionalString(value: unknown, label: string) {
+  if (value === null || typeof value === 'undefined') return undefined
+  if (typeof value !== 'string') throw new Error(`${label} must be a string`)
+  const text = value.trim()
+  return text || undefined
+}
+
+function normalizeOptionalBoolean(value: unknown, label: string) {
+  if (value === null || typeof value === 'undefined') return undefined
+  if (typeof value !== 'boolean') throw new Error(`${label} must be a boolean`)
+  return value
 }
 
 function normalizePlanIntentInput(input: SystemAgentPlanIntentInput | unknown): SystemAgentPlanIntentInput {
@@ -146,6 +165,20 @@ function normalizeCapabilityTimeoutMs(value: unknown) {
     Math.max(Math.floor(numeric), MIN_SYSTEM_AGENT_CAPABILITY_TIMEOUT_MS),
     MAX_SYSTEM_AGENT_CAPABILITY_TIMEOUT_MS
   )
+}
+
+function normalizeCapabilityCallOptions(rawOptions: SystemAgentCapabilityCallOptions | unknown) {
+  const options = normalizeStrictInputObject<SystemAgentCapabilityCallOptions>(
+    rawOptions,
+    'System agent capability options'
+  )
+  return {
+    approved: normalizeOptionalBoolean(options.approved, 'System agent capability approved'),
+    dryRun: normalizeOptionalBoolean(options.dryRun, 'System agent capability dryRun'),
+    sessionId: normalizeOptionalString(options.sessionId, 'System agent capability sessionId'),
+    toolCallId: normalizeOptionalString(options.toolCallId, 'System agent capability toolCallId'),
+    timeoutMs: options.timeoutMs
+  }
 }
 
 function sanitizeSystemAgentCapabilityResult<T>(result: AppCapabilityResult<T>): AppCapabilityResult<T> {
@@ -281,9 +314,21 @@ export class SystemAgentRuntimeService {
     input: unknown = {},
     rawOptions: SystemAgentCapabilityCallOptions = {}
   ): Promise<AppCapabilityResult<T>> {
-    const options = normalizeInputObject<SystemAgentCapabilityCallOptions>(rawOptions)
     const capabilityId = String(id ?? '').trim()
     const displayCapabilityId = capabilityId || '(empty)'
+    let options: ReturnType<typeof normalizeCapabilityCallOptions>
+    try {
+      options = normalizeCapabilityCallOptions(rawOptions)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return {
+        ok: false,
+        isError: true,
+        summary: `${displayCapabilityId} invalid options`,
+        error: message
+      }
+    }
+
     const capability = appCapabilityService.get(capabilityId, { includeHidden: true, includeSchemas: false })
     if (!capability) {
       return {
