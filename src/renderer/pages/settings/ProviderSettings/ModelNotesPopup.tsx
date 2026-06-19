@@ -24,8 +24,15 @@ const PopupContainer: FC<Props> = ({ providerId, resolve }) => {
   const [notes, setNotes] = useState<string>(provider?.settings?.notes || '')
   const [edited, setEdited] = useState(false)
   const [saving, setSaving] = useState(false)
+  const mountedRef = useRef(true)
   const savingRef = useRef(false)
   const resolvedRef = useRef(false)
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     if (edited) {
@@ -44,14 +51,20 @@ const PopupContainer: FC<Props> = ({ providerId, resolve }) => {
     setSaving(true)
     try {
       await updateProvider({ providerSettings: { ...provider.settings, notes } })
+      if (!mountedRef.current) {
+        return
+      }
+
       setOpen(false)
       resolvedRef.current = true
       resolve({})
     } catch {
-      window.toast.error(t('blocks.edit.save.failed.label'))
+      if (mountedRef.current) {
+        window.toast.error(t('blocks.edit.save.failed.label'))
+      }
     } finally {
       savingRef.current = false
-      if (!resolvedRef.current) {
+      if (mountedRef.current && !resolvedRef.current) {
         setSaving(false)
       }
     }
