@@ -2,11 +2,11 @@ import { Button, Tooltip } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
 import { loggerService } from '@logger'
 import { useLanguages } from '@renderer/hooks/translate/useTranslateLanguages'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { translateText } from '@renderer/services/TranslateService'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { Languages, Loader2 } from 'lucide-react'
 import type { FC } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface Props {
@@ -25,6 +25,16 @@ const TranslateButton: FC<Props> = ({ text, onTranslated, disabled, style, isLoa
   const [targetLanguage] = usePreference('chat.input.translate.target_language')
   const [showTranslateConfirm] = usePreference('chat.input.translate.show_confirm')
   const { getLabel, languages } = useLanguages()
+  const mountedRef = useRef(true)
+  const showTranslateFailed = useSaveFailedToast('translate.error.failed')
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const translateConfirm = () => {
     if (!showTranslateConfirm) {
@@ -51,16 +61,21 @@ const TranslateButton: FC<Props> = ({ text, onTranslated, disabled, style, isLoa
       logger.warn('Failed to copy source text before translation:', error as Error)
     }
 
+    if (!mountedRef.current) return
+
     setIsTranslating(true)
     try {
       const targetVo = languages?.find((l) => l.langCode === targetLanguage)
       const translatedText = await translateText(text, targetVo ?? targetLanguage)
+      if (!mountedRef.current) return
       onTranslated(translatedText)
     } catch (error) {
       logger.error('Translation failed:', error as Error)
-      window.toast.error(formatErrorMessageWithPrefix(error, t('translate.error.failed')))
+      showTranslateFailed(error)
     } finally {
-      setIsTranslating(false)
+      if (mountedRef.current) {
+        setIsTranslating(false)
+      }
     }
   }
 

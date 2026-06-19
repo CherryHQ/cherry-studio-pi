@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import TranslateButton from '../TranslateButton'
@@ -10,6 +10,16 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
   translateText: vi.fn()
 }))
+
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
 
 vi.mock('@cherrystudio/ui', () => ({
   Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
@@ -96,6 +106,48 @@ describe('TranslateButton', () => {
     })
     expect(mocks.translateText).toHaveBeenCalledWith('source text', { langCode: 'en-us', label: 'English' })
     expect(mocks.loggerWarn).toHaveBeenCalled()
+    expect(mocks.toastError).not.toHaveBeenCalled()
+  })
+
+  it('ignores translated text after unmount', async () => {
+    const translation = deferred<string>()
+    mocks.translateText.mockReturnValueOnce(translation.promise)
+    const onTranslated = vi.fn()
+
+    const { unmount } = render(<TranslateButton text="source text" onTranslated={onTranslated} />)
+
+    fireEvent.click(screen.getByRole('button'))
+
+    await waitFor(() => expect(mocks.translateText).toHaveBeenCalled())
+    unmount()
+
+    await act(async () => {
+      translation.resolve('translated after unmount')
+      await translation.promise
+    })
+
+    expect(onTranslated).not.toHaveBeenCalled()
+    expect(mocks.toastError).not.toHaveBeenCalled()
+  })
+
+  it('ignores translation failures after unmount', async () => {
+    const translation = deferred<string>()
+    mocks.translateText.mockReturnValueOnce(translation.promise)
+    const onTranslated = vi.fn()
+
+    const { unmount } = render(<TranslateButton text="source text" onTranslated={onTranslated} />)
+
+    fireEvent.click(screen.getByRole('button'))
+
+    await waitFor(() => expect(mocks.translateText).toHaveBeenCalled())
+    unmount()
+
+    await act(async () => {
+      translation.reject(new Error('translation failed after unmount'))
+      await translation.promise.catch(() => undefined)
+    })
+
+    expect(onTranslated).not.toHaveBeenCalled()
     expect(mocks.toastError).not.toHaveBeenCalled()
   })
 })
