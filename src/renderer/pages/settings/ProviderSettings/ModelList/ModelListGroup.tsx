@@ -46,6 +46,7 @@ const ModelListGroup: React.FC<ModelListGroupProps> = ({
   const { t } = useTranslation()
   const [open, setOpen] = useState(defaultOpen)
   const scrollerRef = useRef<HTMLDivElement>(null)
+  const mountedRef = useRef(true)
   const groupLabel = getModelGroupLabel(groupName, t)
   const groupModels = useMemo(() => items.map(({ model }) => model), [items])
   const shouldVirtualize = items.length > 80
@@ -67,6 +68,14 @@ const ModelListGroup: React.FC<ModelListGroupProps> = ({
   }, [])
 
   useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
     if (!expansionCommand) {
       return
     }
@@ -80,6 +89,10 @@ const ModelListGroup: React.FC<ModelListGroupProps> = ({
       }
 
       void onToggleModels(groupModels, enabled).catch((error) => {
+        if (!mountedRef.current) {
+          return
+        }
+
         logger.error('Failed to toggle provider model group', { groupName, enabled, error })
         window.toast.error(t('settings.models.manage.operation_failed'))
       })

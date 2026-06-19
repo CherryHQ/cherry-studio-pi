@@ -3,7 +3,7 @@ import { getModelLogo } from '@renderer/config/models'
 import { cn } from '@renderer/utils'
 import type { Model } from '@shared/data/types/model'
 import { Settings } from 'lucide-react'
-import React, { memo, useCallback, useRef, useState } from 'react'
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { FreeTrialModelTag } from '../components/FreeTrialModelTag'
@@ -22,6 +22,15 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ ref, model, disabled, onE
   const { t } = useTranslation()
   const [toggling, setToggling] = useState(false)
   const togglingRef = useRef(false)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const handleEdit = useCallback(() => {
     onEdit(model)
@@ -38,10 +47,14 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ ref, model, disabled, onE
       try {
         await onToggleEnabled(model, enabled)
       } catch {
-        window.toast.error(t('settings.models.manage.operation_failed'))
+        if (mountedRef.current) {
+          window.toast.error(t('settings.models.manage.operation_failed'))
+        }
       } finally {
         togglingRef.current = false
-        setToggling(false)
+        if (mountedRef.current) {
+          setToggling(false)
+        }
       }
     },
     [model, onToggleEnabled, t]

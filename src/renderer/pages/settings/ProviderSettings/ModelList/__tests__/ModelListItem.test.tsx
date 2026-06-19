@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ModelListItem from '../ModelListItem'
@@ -61,15 +61,18 @@ vi.mock('../../components/ModelTagsWithLabel', () => ({
 type Deferred<T> = {
   promise: Promise<T>
   resolve: (value: T) => void
+  reject: (reason?: unknown) => void
 }
 
 function deferred<T>(): Deferred<T> {
   let resolve: (value: T) => void = () => {}
-  const promise = new Promise<T>((promiseResolve) => {
+  let reject: (reason?: unknown) => void = () => {}
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
     resolve = promiseResolve
+    reject = promiseReject
   })
 
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 describe('ModelListItem', () => {
@@ -144,6 +147,40 @@ describe('ModelListItem', () => {
     await waitFor(() => {
       expect(toggle).not.toBeDisabled()
     })
+  })
+
+  it('does not toast or update local toggle state after unmount', async () => {
+    const runningToggle = deferred<void>()
+    const onToggleEnabled = vi.fn().mockReturnValueOnce(runningToggle.promise)
+
+    const { unmount } = render(
+      <ModelListItem
+        model={
+          {
+            id: 'openai::alpha',
+            providerId: 'openai',
+            name: 'Alpha',
+            isEnabled: true,
+            capabilities: []
+          } as any
+        }
+        onEdit={vi.fn()}
+        onToggleEnabled={onToggleEnabled}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('switch'))
+    expect(screen.getByRole('switch')).toBeDisabled()
+
+    unmount()
+
+    await act(async () => {
+      runningToggle.reject(new Error('toggle failed after unmount'))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(window.toast.error).not.toHaveBeenCalled()
   })
 
   it('uses the smallest switch size for the model row action', () => {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ModelListGroup from '../ModelListGroup'
@@ -78,6 +78,23 @@ const models = [
   }
 ] as any
 
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+  reject: (reason?: unknown) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {}
+  let reject: (reason?: unknown) => void = () => {}
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}
+
 describe('ModelListGroup', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -141,6 +158,40 @@ describe('ModelListGroup', () => {
       })
     })
     expect(window.toast.error).toHaveBeenCalledWith('settings.models.manage.operation_failed')
+  })
+
+  it('ignores stale group bulk action failures after unmount', async () => {
+    const runningToggle = deferred<void>()
+    const onToggleModels = vi.fn().mockReturnValueOnce(runningToggle.promise)
+
+    const { unmount } = render(
+      <ModelListGroup
+        groupName="chat"
+        items={models.map((model: any) => ({ model }))}
+        defaultOpen
+        disabled={false}
+        pendingModelIds={new Set()}
+        bulkToggleEnabled={false}
+        bulkToggleLabel="settings.models.group_disable"
+        onEditModel={vi.fn()}
+        onToggleModel={vi.fn()}
+        onToggleModels={onToggleModels}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('switch', { name: 'settings.models.group_disable' }))
+    expect(onToggleModels).toHaveBeenCalledWith(models, false)
+
+    unmount()
+
+    await act(async () => {
+      runningToggle.reject(new Error('toggle failed after unmount'))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(loggerErrorMock).not.toHaveBeenCalled()
+    expect(window.toast.error).not.toHaveBeenCalled()
   })
 
   it('renders the group bulk action as a switch', () => {

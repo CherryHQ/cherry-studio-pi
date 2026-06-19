@@ -1,6 +1,6 @@
 import { useModelMutations, useModels } from '@renderer/hooks/useModel'
 import type { Model } from '@shared/data/types/model'
-import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 
 import { PROVIDER_SETTINGS_MODEL_SWR_OPTIONS } from '../hooks/providerSetting/constants'
 import {
@@ -101,6 +101,15 @@ export function useProviderModelList({ providerId, disabled = false }: UseProvid
   const [isBulkUpdating, setIsBulkUpdating] = useState(false)
   const [optimisticEnabledByModelId, setOptimisticEnabledByModelId] = useState<Record<string, boolean>>({})
   const [pendingModelIdMap, setPendingModelIdMap] = useState<Record<string, true>>({})
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const setSelectedCapabilityFilter = useCallback((filter: ModelListCapabilityFilter) => {
     startTransition(() => {
@@ -208,25 +217,29 @@ export function useProviderModelList({ providerId, disabled = false }: UseProvid
       try {
         await updateModel(model.providerId, modelId, { isEnabled: enabled })
       } catch (error) {
-        setOptimisticEnabledByModelId((current) => {
-          const next = { ...current }
+        if (mountedRef.current) {
+          setOptimisticEnabledByModelId((current) => {
+            const next = { ...current }
 
-          if (previousEnabled === model.isEnabled) {
-            delete next[model.id]
-          } else {
-            next[model.id] = previousEnabled
-          }
+            if (previousEnabled === model.isEnabled) {
+              delete next[model.id]
+            } else {
+              next[model.id] = previousEnabled
+            }
 
-          return next
-        })
+            return next
+          })
+        }
 
         throw error
       } finally {
-        setPendingModelIdMap((current) => {
-          const next = { ...current }
-          delete next[model.id]
-          return next
-        })
+        if (mountedRef.current) {
+          setPendingModelIdMap((current) => {
+            const next = { ...current }
+            delete next[model.id]
+            return next
+          })
+        }
       }
     },
     [optimisticEnabledByModelId, updateModel]
@@ -280,32 +293,36 @@ export function useProviderModelList({ providerId, disabled = false }: UseProvid
           }))
         )
       } catch (error) {
-        setOptimisticEnabledByModelId((current) => {
-          const next = { ...current }
+        if (mountedRef.current) {
+          setOptimisticEnabledByModelId((current) => {
+            const next = { ...current }
 
-          for (const { model, previousEnabled } of targetStates) {
-            if (previousEnabled === model.isEnabled) {
-              delete next[model.id]
-            } else {
-              next[model.id] = previousEnabled
+            for (const { model, previousEnabled } of targetStates) {
+              if (previousEnabled === model.isEnabled) {
+                delete next[model.id]
+              } else {
+                next[model.id] = previousEnabled
+              }
             }
-          }
 
-          return next
-        })
+            return next
+          })
+        }
 
         throw error
       } finally {
-        setPendingModelIdMap((current) => {
-          const next = { ...current }
+        if (mountedRef.current) {
+          setPendingModelIdMap((current) => {
+            const next = { ...current }
 
-          for (const { model } of targetStates) {
-            delete next[model.id]
-          }
+            for (const { model } of targetStates) {
+              delete next[model.id]
+            }
 
-          return next
-        })
-        setIsBulkUpdating(false)
+            return next
+          })
+          setIsBulkUpdating(false)
+        }
       }
     },
     [optimisticEnabledByModelId, updateModels]
