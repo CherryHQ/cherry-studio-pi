@@ -13,7 +13,7 @@ import {
 } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import { ImageUp, Link, LoaderCircle, UploadCloud } from 'lucide-react'
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('RichEditorImageUploader')
@@ -49,6 +49,29 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageSelect, vis
   const { t } = useTranslation()
   const [urlInput, setUrlInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const mountedRef = useRef(true)
+  const visibleRef = useRef(visible)
+  const uploadSeqRef = useRef(0)
+
+  visibleRef.current = visible
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      uploadSeqRef.current += 1
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!visible) {
+      uploadSeqRef.current += 1
+      setLoading(false)
+    }
+  }, [visible])
+
+  const isActiveUpload = (uploadSeq: number) =>
+    mountedRef.current && visibleRef.current && uploadSeq === uploadSeqRef.current
 
   const validateFile = (file: File) => {
     const isImage = file.type.startsWith('image/')
@@ -71,19 +94,27 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageSelect, vis
       return
     }
 
+    const uploadSeq = ++uploadSeqRef.current
     try {
       setLoading(true)
 
       // Convert to base64 and call callback
       const base64Url = await convertFileToBase64(file)
+      if (!isActiveUpload(uploadSeq)) {
+        return
+      }
       onImageSelect(base64Url)
       window.toast.success(t('richEditor.imageUploader.uploadSuccess'))
       onClose()
     } catch (error) {
-      logger.error('Image upload failed:', error as Error)
-      window.toast.error(t('richEditor.imageUploader.uploadError'))
+      if (isActiveUpload(uploadSeq)) {
+        logger.error('Image upload failed:', error as Error)
+        window.toast.error(t('richEditor.imageUploader.uploadError'))
+      }
     } finally {
-      setLoading(false)
+      if (mountedRef.current && uploadSeq === uploadSeqRef.current) {
+        setLoading(false)
+      }
     }
   }
 
@@ -106,6 +137,8 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageSelect, vis
   }
 
   const handleCancel = () => {
+    uploadSeqRef.current += 1
+    setLoading(false)
     setUrlInput('')
     onClose()
   }
