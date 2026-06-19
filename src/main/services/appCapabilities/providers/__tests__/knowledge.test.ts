@@ -133,6 +133,15 @@ describe('knowledge app capabilities', () => {
     })
   })
 
+  it('only exposes supported knowledge item add inputs', () => {
+    const properties = capability('knowledge.item.add').inputSchema.properties ?? {}
+
+    expect(properties).toHaveProperty('baseId')
+    expect(properties).toHaveProperty('item')
+    expect(properties).not.toHaveProperty('forceReload')
+    expect(properties).not.toHaveProperty('userId')
+  })
+
   it('lists knowledge bases from Storage v2 with lightweight item summaries by default', async () => {
     const bases = [
       {

@@ -613,9 +613,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         type: 'object',
         properties: {
           baseId: { type: 'string' },
-          item: { type: 'object', description: 'Knowledge item payload' },
-          forceReload: { type: 'boolean' },
-          userId: { type: 'string' }
+          item: { type: 'object', description: 'Knowledge item payload' }
         },
         required: ['baseId', 'item']
       },
