@@ -41,6 +41,9 @@ describe('release workflow safety', () => {
 
   it('requires an explicit repeated tag confirmation for manual publishing', () => {
     expect(workflow).toContain('confirm_tag:')
+    expect(workflow).toContain('tag:')
+    expect(workflow).toContain('default: ""')
+    expect(workflow).not.toContain('default: "v1.9.7"')
     expect(workflow).toContain('CONFIRM_TAG="${{ github.event.inputs.confirm_tag }}"')
     expect(workflow).toContain('Release tag confirmation mismatch')
   })

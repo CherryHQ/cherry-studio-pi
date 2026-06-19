@@ -6,7 +6,7 @@ on:
       tag:
         description: "Release tag, for example v1.9.7"
         required: true
-        default: "v1.9.7"
+        default: ""
         type: string
       confirm_tag:
         description: "Type the same release tag again to confirm"
