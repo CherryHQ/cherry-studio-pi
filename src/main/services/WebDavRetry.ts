@@ -35,6 +35,7 @@ type WebDavRetryOptions = {
 
 const RETRIABLE_WEB_DAV_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504])
 const DEFAULT_WEB_DAV_OPERATION_TIMEOUT_MS = 45_000
+const UNKNOWN_WEB_DAV_ERROR_MESSAGE = 'Unknown WebDAV error'
 
 function asObject(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
@@ -47,9 +48,28 @@ function parseStatus(value: unknown): number | null {
 }
 
 function errorMessage(error: unknown) {
-  if (error instanceof Error) return error.message
-  if (typeof error === 'string') return error
-  return String(error)
+  if (error instanceof Error) return normalizeMessageText(error.message) ?? UNKNOWN_WEB_DAV_ERROR_MESSAGE
+  if (typeof error === 'string') return normalizeMessageText(error) ?? UNKNOWN_WEB_DAV_ERROR_MESSAGE
+  if (error == null) return UNKNOWN_WEB_DAV_ERROR_MESSAGE
+
+  return normalizeMessageText(String(error)) ?? UNKNOWN_WEB_DAV_ERROR_MESSAGE
+}
+
+function normalizeMessageText(message: unknown) {
+  if (typeof message !== 'string') return null
+
+  const normalizedMessage = message.trim()
+  return normalizedMessage.length > 0 ? normalizedMessage : null
+}
+
+function normalizeMaxAttempts(value: number | undefined) {
+  const normalizedValue = typeof value === 'number' && Number.isFinite(value) ? value : 3
+  return Math.max(1, Math.floor(normalizedValue))
+}
+
+function normalizeNonNegativeDelay(value: number | undefined, defaultValue: number) {
+  const normalizedValue = typeof value === 'number' && Number.isFinite(value) ? value : defaultValue
+  return Math.max(0, normalizedValue)
 }
 
 export function getWebDavErrorStatus(error: unknown): number | null {
@@ -295,9 +315,9 @@ export async function runWebDavOperation<T>(
   fn: () => Promise<T>,
   options: WebDavRetryOptions = {}
 ): Promise<T> {
-  const maxAttempts = Math.max(1, options.maxAttempts ?? 3)
-  const initialDelayMs = Math.max(0, options.initialDelayMs ?? 500)
-  const timeoutMs = Math.max(0, options.timeoutMs ?? DEFAULT_WEB_DAV_OPERATION_TIMEOUT_MS)
+  const maxAttempts = normalizeMaxAttempts(options.maxAttempts)
+  const initialDelayMs = normalizeNonNegativeDelay(options.initialDelayMs, 500)
+  const timeoutMs = normalizeNonNegativeDelay(options.timeoutMs, DEFAULT_WEB_DAV_OPERATION_TIMEOUT_MS)
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {

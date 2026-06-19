@@ -116,6 +116,26 @@ describe('WebDavRetry', () => {
     ).rejects.toThrow('timed out')
   })
 
+  it('normalizes invalid retry options instead of skipping the WebDAV operation', async () => {
+    await expect(
+      runWebDavOperation('reading remote json /sync/v1/manifest.json', async () => 'ok', {
+        maxAttempts: Number.NaN,
+        initialDelayMs: Number.NaN,
+        timeoutMs: Number.NaN
+      })
+    ).resolves.toBe('ok')
+  })
+
+  it('uses a readable fallback when WebDAV clients reject with empty errors', () => {
+    const nullError = new WebDavOperationError('reading remote json /sync/v1/manifest.json', null)
+    const blankError = new WebDavOperationError('reading remote json /sync/v1/manifest.json', new Error('   '))
+
+    expect(nullError.message).toContain('Unknown WebDAV error')
+    expect(blankError.message).toContain('Unknown WebDAV error')
+    expect(nullError.message).not.toContain('null')
+    expect(blankError.message).not.toContain('   ')
+  })
+
   it('describes concurrent data sync attempts clearly', () => {
     const message = describeWebDavUserFacingError(new Error('Data sync is already running'), '同步数据')
 
