@@ -67,10 +67,19 @@ export function useProviderEndpointActions({
   const { t } = useTranslation()
   const providerConfig = provider ? PROVIDER_URLS[provider.id as keyof typeof PROVIDER_URLS] : undefined
   const lastPersistedApiHostRef = useRef(trim(providerApiHost))
+  const mountedRef = useRef(true)
 
   useEffect(() => {
     lastPersistedApiHostRef.current = trim(providerApiHost)
   }, [providerApiHost])
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const buildNextApiEndpointConfigs = useCallback(
     (baseUrl: string) => {
@@ -135,8 +144,17 @@ export function useProviderEndpointActions({
   )
 
   const debouncedPersistApiHost = useMemo(
-    () => debounce((nextApiHost: string) => void persistApiHostDraft(nextApiHost), 150),
-    [persistApiHostDraft]
+    () =>
+      debounce((nextApiHost: string) => {
+        void persistApiHostDraft(nextApiHost).catch((error) => {
+          logger.error('Failed to persist provider API host draft', { providerId: provider?.id, error })
+
+          if (mountedRef.current) {
+            window.toast.error(getEndpointActionErrorMessage(error, t('settings.provider.save_failed')))
+          }
+        })
+      }, 150),
+    [persistApiHostDraft, provider?.id, t]
   )
 
   useEffect(() => {

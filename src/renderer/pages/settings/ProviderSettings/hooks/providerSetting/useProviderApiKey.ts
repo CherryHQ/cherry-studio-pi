@@ -148,7 +148,9 @@ export function useProviderApiKey(providerId: string) {
         await updateProvider({ isEnabled: true })
       } catch (error) {
         logger.error('Failed to enable provider after saving API key', { providerId: provider.id, error })
-        window.toast.error(i18n.t('settings.models.add.provider_enable_failed'))
+        if (mountedRef.current) {
+          window.toast.error(i18n.t('settings.models.add.provider_enable_failed'))
+        }
       }
     },
     [apiKeysData, provider, updateApiKeys, updateProvider]

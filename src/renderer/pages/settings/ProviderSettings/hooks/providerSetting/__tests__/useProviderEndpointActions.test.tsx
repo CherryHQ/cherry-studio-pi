@@ -115,6 +115,70 @@ describe('useProviderEndpointActions', () => {
     expect(syncProviderModelsMock).not.toHaveBeenCalled()
   })
 
+  it('reports debounced api host persistence failures while mounted', async () => {
+    patchProviderMock.mockRejectedValueOnce(new Error('network down'))
+
+    renderHook(() =>
+      useProviderEndpointActions({
+        provider,
+        primaryEndpoint: ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS,
+        apiHost: 'https://proxy.example.com',
+        setApiHost: setApiHostMock,
+        providerApiHost: 'https://api.openai.com',
+        anthropicApiHost: '',
+        setAnthropicApiHost: setAnthropicApiHostMock,
+        apiVersion: '',
+        patchProvider: patchProviderMock,
+        syncProviderModels: syncProviderModelsMock
+      })
+    )
+
+    await act(async () => {
+      vi.runAllTimers()
+      await flushEndpointAction()
+    })
+
+    expect(patchProviderMock).toHaveBeenCalledWith({
+      endpointConfigs: {
+        [ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS]: {
+          baseUrl: 'https://proxy.example.com'
+        }
+      }
+    })
+    expect(window.toast.error).toHaveBeenCalledWith('settings.provider.save_failed: network down')
+  })
+
+  it('ignores debounced api host persistence failures after unmount', async () => {
+    patchProviderMock.mockRejectedValueOnce(new Error('network down'))
+
+    const { unmount } = renderHook(() =>
+      useProviderEndpointActions({
+        provider,
+        primaryEndpoint: ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS,
+        apiHost: 'https://proxy.example.com',
+        setApiHost: setApiHostMock,
+        providerApiHost: 'https://api.openai.com',
+        anthropicApiHost: '',
+        setAnthropicApiHost: setAnthropicApiHostMock,
+        apiVersion: '',
+        patchProvider: patchProviderMock,
+        syncProviderModels: syncProviderModelsMock
+      })
+    )
+
+    unmount()
+    await flushEndpointAction()
+
+    expect(patchProviderMock).toHaveBeenCalledWith({
+      endpointConfigs: {
+        [ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS]: {
+          baseUrl: 'https://proxy.example.com'
+        }
+      }
+    })
+    expect(window.toast.error).not.toHaveBeenCalled()
+  })
+
   it('flushes host persistence on blur and silently syncs models with the latest endpoint config', async () => {
     const { result } = renderHook(() =>
       useProviderEndpointActions({

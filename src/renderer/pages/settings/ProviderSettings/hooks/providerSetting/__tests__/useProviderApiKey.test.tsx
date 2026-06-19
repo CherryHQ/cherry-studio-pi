@@ -180,6 +180,28 @@ describe('useProviderApiKey', () => {
     expect(updateProviderMock).toHaveBeenCalledWith({ isEnabled: true })
   })
 
+  it('flushes pending keys on unmount without showing stale auto-enable failures', async () => {
+    useProviderMock.mockReturnValue({
+      provider: { id: 'openai', isEnabled: false }
+    })
+    updateProviderMock.mockRejectedValueOnce(new Error('enable failed'))
+    const { result, unmount } = renderHook(() => useProviderApiKey('openai'))
+
+    act(() => {
+      result.current.setInputApiKey('sk-on-close')
+    })
+
+    await act(async () => {
+      unmount()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(updateApiKeysMock).toHaveBeenCalledWith([{ id: expect.any(String), key: 'sk-on-close', isEnabled: true }])
+    expect(updateProviderMock).toHaveBeenCalledWith({ isEnabled: true })
+    expect(window.toast.error).not.toHaveBeenCalled()
+  })
+
   it('does not auto-enable a disabled provider when the enabled key input is empty', async () => {
     useProviderMock.mockReturnValue({
       provider: { id: 'openai', isEnabled: false }
