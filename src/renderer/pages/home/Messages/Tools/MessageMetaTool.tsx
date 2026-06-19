@@ -1,8 +1,8 @@
 import { CopyIcon } from '@renderer/components/Icons'
 import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { useTimer } from '@renderer/hooks/useTimer'
 import type { NormalToolResponse } from '@renderer/types'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { sanitizeHtml } from '@renderer/utils/html'
 import { Collapse } from 'antd'
 import { Check, ChevronRight, CornerDownRight } from 'lucide-react'
@@ -32,6 +32,7 @@ const MessageMetaTool: FC<Props> = ({ toolResponse }) => {
   const [copied, setCopied] = useState(false)
   const { setTimeoutTimer } = useTimer()
   const { t } = useTranslation()
+  const showCopyFailed = useSaveFailedToast('common.copy_failed')
 
   const isStreaming = status === 'streaming'
   const isDone = status === 'done'
@@ -56,7 +57,7 @@ const MessageMetaTool: FC<Props> = ({ toolResponse }) => {
       setCopied(true)
       setTimeoutTimer('copyMetaTool', () => setCopied(false), 2000)
     } catch (error) {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+      showCopyFailed(error)
     }
   }
 

@@ -1,5 +1,5 @@
 import type { McpToolResponse, NormalToolResponse } from '@renderer/types'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import MessageMcpTool from '../MessageMcpTool'
@@ -13,6 +13,16 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
   toastSuccess: vi.fn()
 }))
+
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
 
 vi.mock('@cherrystudio/ui', () => ({
   Flex: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -184,6 +194,27 @@ describe('message tool copy actions', () => {
     expect(mocks.setTimeoutTimer).not.toHaveBeenCalled()
   })
 
+  it('ignores MCP tool copy failures after unmount', async () => {
+    const clipboardOperation = deferred<void>()
+    mocks.clipboardWriteText.mockReturnValueOnce(clipboardOperation.promise)
+
+    const { unmount } = render(<MessageMcpTool toolResponse={createMcpToolResponse()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.copy' }))
+
+    await waitFor(() => expect(mocks.clipboardWriteText).toHaveBeenCalled())
+    unmount()
+
+    await act(async () => {
+      clipboardOperation.reject(new Error('clipboard unavailable after unmount'))
+      await clipboardOperation.promise.catch(() => undefined)
+    })
+
+    expect(mocks.toastError).not.toHaveBeenCalled()
+    expect(mocks.toastSuccess).not.toHaveBeenCalled()
+    expect(mocks.setTimeoutTimer).not.toHaveBeenCalled()
+  })
+
   it('shows copy failure feedback for meta tool responses', async () => {
     mocks.clipboardWriteText.mockRejectedValueOnce(new Error('clipboard unavailable'))
 
@@ -194,6 +225,27 @@ describe('message tool copy actions', () => {
     await waitFor(() => {
       expect(mocks.toastError).toHaveBeenCalledWith('common.copy_failed: clipboard unavailable')
     })
+    expect(mocks.toastSuccess).not.toHaveBeenCalled()
+    expect(mocks.setTimeoutTimer).not.toHaveBeenCalled()
+  })
+
+  it('ignores meta tool copy failures after unmount', async () => {
+    const clipboardOperation = deferred<void>()
+    mocks.clipboardWriteText.mockReturnValueOnce(clipboardOperation.promise)
+
+    const { unmount } = render(<MessageMetaTool toolResponse={createMetaToolResponse()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.copy' }))
+
+    await waitFor(() => expect(mocks.clipboardWriteText).toHaveBeenCalled())
+    unmount()
+
+    await act(async () => {
+      clipboardOperation.reject(new Error('clipboard unavailable after unmount'))
+      await clipboardOperation.promise.catch(() => undefined)
+    })
+
+    expect(mocks.toastError).not.toHaveBeenCalled()
     expect(mocks.toastSuccess).not.toHaveBeenCalled()
     expect(mocks.setTimeoutTimer).not.toHaveBeenCalled()
   })

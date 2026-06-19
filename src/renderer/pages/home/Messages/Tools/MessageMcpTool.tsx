@@ -6,10 +6,10 @@ import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { CopyIcon } from '@renderer/components/Icons'
 import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
 import { useIsToolAutoApproved } from '@renderer/hooks/useMcpServer'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { useTimer } from '@renderer/hooks/useTimer'
 import type { McpToolResponse } from '@renderer/types'
 import { createDataImageUri } from '@renderer/utils/dataImage'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { renderPlainTextCodeHtml, sanitizeHtml } from '@renderer/utils/html'
 import type { McpProgressEvent } from '@shared/config/types'
 import { IpcChannel } from '@shared/IpcChannel'
@@ -54,6 +54,7 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
   const [fontSize] = usePreference('chat.message.font_size')
   const [progress, setProgress] = useState<number>(0)
   const { setTimeoutTimer } = useTimer()
+  const showCopyFailed = useSaveFailedToast('common.copy_failed')
 
   const { id, tool, status, response, partialArguments } = toolResponse
   const approval = useToolApproval(toolResponse, tool)
@@ -100,7 +101,7 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
       setTimeoutTimer('copyContent', () => setCopiedMap((prev) => ({ ...prev, [toolId]: false })), 2000)
     } catch (error) {
       logger.error('Failed to copy MCP tool response:', error as Error)
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+      showCopyFailed(error)
     }
   }
 
