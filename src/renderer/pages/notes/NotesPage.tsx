@@ -37,6 +37,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import HeaderNavbar from './HeaderNavbar'
+import { hasNoteContentChanged, hasPendingNoteSave } from './noteSaveGuards'
 import NotesEditor from './NotesEditor'
 import NotesSidebar from './NotesSidebar'
 
@@ -156,19 +157,21 @@ const NotesPage: FC = () => {
 
   // 保存当前笔记内容
   const saveCurrentNote = useCallback(
-    async (content: string, filePath?: string) => {
+    async (content: string, filePath?: string): Promise<boolean> => {
       const targetPath = filePath || activeFilePath
-      if (!targetPath || content.trim() === currentContent.trim()) return
+      if (!targetPath) return false
+      if (!hasNoteContentChanged(content, currentContent)) return true
       if (contentLoadErrorRef.current && targetPath === activeFilePathRef.current) {
         logger.warn('Skipped note save because current file content failed to load', { targetPath })
         window.toast.error(t('notes.save_blocked_load_failed'))
-        return
+        return false
       }
 
       try {
         await window.api.file.write(targetPath, content)
         // 保存后立即刷新缓存，确保下次读取时获取最新内容
         invalidateFileContent(targetPath)
+        return true
       } catch (error) {
         logger.error('Failed to save note:', error as Error)
         const now = Date.now()
@@ -176,6 +179,7 @@ const NotesPage: FC = () => {
           lastSaveFailureToastAtRef.current = now
           window.toast.error(t('notes.save_failed'))
         }
+        return false
       }
     },
     [activeFilePath, currentContent, invalidateFileContent, t]
@@ -359,7 +363,7 @@ const NotesPage: FC = () => {
   // debounced writer hasn't flushed.
   useEffect(() => {
     return () => {
-      if (lastContentRef.current && lastFilePathRef.current && lastContentRef.current !== currentContentRef.current) {
+      if (hasPendingNoteSave(lastContentRef.current, lastFilePathRef.current, currentContentRef.current)) {
         const saveFn = saveCurrentNoteRef.current
         if (saveFn) {
           saveFn(lastContentRef.current, lastFilePathRef.current).catch((error) => {
@@ -414,7 +418,7 @@ const NotesPage: FC = () => {
   useEffect(() => {
     return () => {
       // 保存之前文件的内容
-      if (lastContentRef.current && lastFilePathRef.current) {
+      if (hasPendingNoteSave(lastContentRef.current, lastFilePathRef.current, currentContentRef.current)) {
         saveCurrentNote(lastContentRef.current, lastFilePathRef.current).catch((error) => {
           logger.error('Emergency save before file switch failed:', error as Error)
         })
