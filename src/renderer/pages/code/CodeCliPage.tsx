@@ -21,10 +21,10 @@ import { useDefaultAssistant } from '@renderer/hooks/useAssistant'
 import { useCodeCli } from '@renderer/hooks/useCodeCli'
 import { useModels } from '@renderer/hooks/useModel'
 import { getProviderDisplayName, useProviders } from '@renderer/hooks/useProvider'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { useTimer } from '@renderer/hooks/useTimer'
 import { loggerService } from '@renderer/services/LoggerService'
 import { EFFORT_RATIO } from '@renderer/types'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { getThinkingBudget } from '@shared/ai/reasoningBudget'
 import type { TerminalConfig } from '@shared/config/constant'
 import { codeCLI, terminalApps } from '@shared/config/constant'
@@ -116,12 +116,7 @@ const CodeCliPage: FC = () => {
 
   const rawModelId = useCallback((m: Model) => getRawModelId(m), [])
 
-  const showSaveFailed = useCallback(
-    (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-    },
-    [t]
-  )
+  const showSaveFailed = useSaveFailedToast()
 
   const modelPredicate = useCallback(
     (m: Model) => {

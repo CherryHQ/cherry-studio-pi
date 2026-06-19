@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 
 import { codeCLI, terminalApps } from '@shared/config/constant'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -10,10 +10,34 @@ const testState = vi.hoisted(() => ({
   selectedCliTool: 'github-copilot-cli',
   canLaunch: true,
   codeCliRun: vi.fn(),
+  setCliTool: vi.fn(),
+  setModel: vi.fn(),
+  setTerminal: vi.fn(),
+  setEnvVars: vi.fn(),
+  setCurrentDir: vi.fn(),
+  removeDir: vi.fn(),
+  selectFolder: vi.fn(),
   setTimeoutTimer: vi.fn()
 }))
 
 import CodeCliPage from '../CodeCliPage'
+
+type Deferred<T> = {
+  promise: Promise<T>
+  reject: (reason?: unknown) => void
+  resolve: (value: T | PromiseLike<T>) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: Deferred<T>['resolve']
+  let reject!: Deferred<T>['reject']
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, reject, resolve }
+}
 
 vi.mock('@cherrystudio/ui', async () => {
   const React = await import('react')
@@ -84,13 +108,13 @@ vi.mock('@renderer/hooks/useCodeCli', () => ({
     directories: [],
     currentDirectory: '',
     canLaunch: testState.canLaunch,
-    setCliTool: vi.fn().mockResolvedValue(undefined),
-    setModel: vi.fn().mockResolvedValue(undefined),
-    setTerminal: vi.fn(),
-    setEnvVars: vi.fn(),
-    setCurrentDir: vi.fn().mockResolvedValue(undefined),
-    removeDir: vi.fn().mockResolvedValue(undefined),
-    selectFolder: vi.fn().mockResolvedValue(undefined)
+    setCliTool: testState.setCliTool,
+    setModel: testState.setModel,
+    setTerminal: testState.setTerminal,
+    setEnvVars: testState.setEnvVars,
+    setCurrentDir: testState.setCurrentDir,
+    removeDir: testState.removeDir,
+    selectFolder: testState.selectFolder
   })
 }))
 
@@ -154,6 +178,13 @@ beforeEach(() => {
   testState.selectedCliTool = codeCLI.githubCopilotCli
   testState.canLaunch = true
   testState.codeCliRun.mockResolvedValue({ success: true })
+  testState.setCliTool.mockResolvedValue(undefined)
+  testState.setModel.mockResolvedValue(undefined)
+  testState.setTerminal.mockResolvedValue(undefined)
+  testState.setEnvVars.mockResolvedValue(undefined)
+  testState.setCurrentDir.mockResolvedValue(undefined)
+  testState.removeDir.mockResolvedValue(undefined)
+  testState.selectFolder.mockResolvedValue(undefined)
   Object.assign(window, {
     api: {
       isBinaryExist: vi.fn().mockResolvedValue(true),
@@ -191,6 +222,34 @@ describe('CodeCliPage', () => {
     // Behavioral guard: page must not theme the auto-update checkbox with the global primary token.
     expect(checkbox.className).not.toMatch(/primary/)
     expect(screen.getByText('code.auto_update_to_latest')).toHaveClass('font-normal')
+  })
+
+  it('shows a save failure when switching CLI tools fails', async () => {
+    testState.setCliTool.mockRejectedValueOnce(new Error('settings unavailable'))
+
+    render(<CodeCliPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'open tool' }))
+
+    await waitFor(() => expect(testState.setCliTool).toHaveBeenCalledWith(codeCLI.claudeCode))
+    await waitFor(() => expect(window.toast.error).toHaveBeenCalledWith('common.save_failed: settings unavailable'))
+  })
+
+  it('ignores stale CLI tool save failures after unmount', async () => {
+    const saveOperation = deferred<void>()
+    testState.setCliTool.mockReturnValueOnce(saveOperation.promise)
+
+    const { unmount } = render(<CodeCliPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'open tool' }))
+
+    await waitFor(() => expect(testState.setCliTool).toHaveBeenCalledWith(codeCLI.claudeCode))
+    unmount()
+
+    await act(async () => {
+      saveOperation.reject(new Error('settings unavailable after unmount'))
+      await saveOperation.promise.catch(() => undefined)
+    })
+
+    expect(window.toast.error).not.toHaveBeenCalled()
   })
 
   it('disables launch when the tool cannot launch', async () => {
