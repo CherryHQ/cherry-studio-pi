@@ -20,7 +20,7 @@ import type { CreateModelDto } from '@shared/data/api/schemas/models'
 import type { Model } from '@shared/data/types/model'
 import { ENDPOINT_TYPE, type EndpointType } from '@shared/data/types/model'
 import type { Provider } from '@shared/data/types/provider'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { drawerClasses } from '../primitives/ProviderSettingsPrimitives'
@@ -49,6 +49,7 @@ type FieldType = {
 const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels }) => {
   const [open, setOpen] = useState(true)
   const resolvedRef = useRef(false)
+  const mountedRef = useRef(true)
   const [endpointType, setEndpointType] = useState<EndpointType>(ENDPOINT_TYPE.OPENAI_CHAT_COMPLETIONS)
   const [submitting, setSubmitting] = useState(false)
   const submittingRef = useRef(false)
@@ -57,8 +58,16 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
   const { models: existingModels } = useModels({ providerId: provider.id })
   const { t } = useTranslation()
 
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
   const closeWithResult = (data: any) => {
-    if (resolvedRef.current) {
+    if (resolvedRef.current || !mountedRef.current) {
       return false
     }
     resolvedRef.current = true
@@ -98,6 +107,10 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
       }
     })
     await createModels(dtos)
+    if (!mountedRef.current) {
+      return false
+    }
+
     if (!provider.isEnabled) {
       const enabled = await enableProviderWhenModelsAvailable(
         provider,
@@ -105,6 +118,10 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
         dtos.length,
         'manual_batch_add_model'
       )
+      if (!mountedRef.current) {
+        return false
+      }
+
       if (!enabled) {
         window.toast.error(t('settings.models.add.provider_enable_failed'))
         return false
@@ -126,10 +143,12 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
       }
     } catch (error) {
       logger.error('Failed to batch add models', { providerId: provider.id, error })
-      window.toast.error(t('settings.models.manage.sync_pull_failed'))
+      if (mountedRef.current) {
+        window.toast.error(t('settings.models.manage.sync_pull_failed'))
+      }
     } finally {
       submittingRef.current = false
-      if (!resolvedRef.current) {
+      if (mountedRef.current && !resolvedRef.current) {
         setSubmitting(false)
       }
     }
