@@ -30,35 +30,53 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
   const [open, setOpen] = useState(true)
   const [progressData, setProgressData] = useState<ProgressData>()
   const [running, setRunning] = useState(false)
+  const mountedRef = useRef(true)
+  const operationSeqRef = useRef(0)
   const runningRef = useRef(false)
   const { t } = useTranslation()
   const close = useTopViewClose({ resolve, setOpen, topViewKey: TopViewKey })
 
   useEffect(() => {
+    mountedRef.current = true
+
     const removeListener = window.electron.ipcRenderer.on(IpcChannel.RestoreProgress, (_, data: ProgressData) => {
-      setProgressData(data)
+      if (mountedRef.current) {
+        setProgressData(data)
+      }
     })
 
     return () => {
+      mountedRef.current = false
+      operationSeqRef.current += 1
+      runningRef.current = false
       removeListener()
     }
   }, [])
+
+  const isCurrentRestore = (operationSeq: number) => mountedRef.current && operationSeqRef.current === operationSeq
 
   const onOk = async () => {
     if (runningRef.current) {
       return
     }
 
+    const operationSeq = ++operationSeqRef.current
     runningRef.current = true
     setRunning(true)
     let didClose = false
     try {
       await restore()
+      if (!isCurrentRestore(operationSeq)) {
+        return
+      }
+
       didClose = true
       close({})
     } finally {
-      runningRef.current = false
-      if (!didClose) {
+      if (operationSeqRef.current === operationSeq) {
+        runningRef.current = false
+      }
+      if (!didClose && isCurrentRestore(operationSeq)) {
         setRunning(false)
       }
     }
