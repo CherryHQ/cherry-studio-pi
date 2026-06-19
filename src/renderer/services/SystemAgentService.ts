@@ -121,11 +121,12 @@ export function reportErrorToSystemAgent(
   input: Omit<SystemAgentEventInput, 'type' | 'message'> & { message?: string },
   options: ReportOptions = {}
 ) {
+  const { message, ...eventInput } = input
   return handleSystemAgentEvent(
     {
       type: 'error',
-      message: input.message || errorMessage(error),
-      ...input
+      ...eventInput,
+      message: message || errorMessage(error)
     },
     options
   )

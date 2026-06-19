@@ -15,7 +15,7 @@ vi.mock('@renderer/i18n', () => ({
   }
 }))
 
-import { handleSystemAgentEvent, initSystemAgentErrorTriggers } from '../SystemAgentService'
+import { handleSystemAgentEvent, initSystemAgentErrorTriggers, reportErrorToSystemAgent } from '../SystemAgentService'
 
 const errorTriggerStateKey = '__CHERRY_STUDIO_PI_SYSTEM_AGENT_ERROR_TRIGGER_STATE__'
 
@@ -85,6 +85,34 @@ describe('SystemAgentService', () => {
     await handleSystemAgentEvent({ source: 'test.dedupe', message: 'same error' })
 
     expect(window.api.systemAgent.handleEvent).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps generated error messages when optional input messages are empty', async () => {
+    await reportErrorToSystemAgent(new Error('fallback failure'), {
+      source: 'test.fallback-message',
+      message: undefined
+    })
+    await reportErrorToSystemAgent('string failure', {
+      source: 'test.empty-message',
+      message: ''
+    })
+
+    expect(window.api.systemAgent.handleEvent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        type: 'error',
+        source: 'test.fallback-message',
+        message: 'fallback failure'
+      })
+    )
+    expect(window.api.systemAgent.handleEvent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        type: 'error',
+        source: 'test.empty-message',
+        message: 'string failure'
+      })
+    )
   })
 
   it('supports longer dedupe windows for noisy automatic diagnostics', async () => {
