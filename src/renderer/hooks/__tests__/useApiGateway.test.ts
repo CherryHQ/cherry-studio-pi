@@ -195,4 +195,69 @@ describe('useApiGateway', () => {
 
     expect(setApiGatewayConfig).toHaveBeenCalledTimes(1)
   })
+
+  it('persists successful starts but skips stale success toasts after unmount', async () => {
+    const startOperation = createDeferred<{ success: true }>()
+    const setApiGatewayConfig = vi.fn().mockResolvedValue(undefined)
+
+    mockUseMultiplePreferences.mockImplementation(() => [
+      {
+        apiKey: 'test-key',
+        enabled: false,
+        host: '127.0.0.1',
+        port: 23333
+      },
+      setApiGatewayConfig
+    ])
+    mockApiGateway.start.mockReturnValue(startOperation.promise)
+
+    const { result, unmount } = renderHook(() => useApiGateway())
+    let operationPromise!: Promise<void>
+
+    act(() => {
+      operationPromise = result.current.startApiGateway()
+    })
+
+    unmount()
+
+    await act(async () => {
+      startOperation.resolve({ success: true })
+      await operationPromise
+    })
+
+    expect(setApiGatewayConfig).toHaveBeenCalledWith({ enabled: true })
+    expect(mockToast.success).not.toHaveBeenCalled()
+    expect(mockToast.error).not.toHaveBeenCalled()
+  })
+
+  it('skips stale command errors after unmount', async () => {
+    const startOperation = createDeferred<{ success: true }>()
+
+    mockUseMultiplePreferences.mockImplementation(() => [
+      {
+        apiKey: 'test-key',
+        enabled: false,
+        host: '127.0.0.1',
+        port: 23333
+      },
+      vi.fn().mockResolvedValue(undefined)
+    ])
+    mockApiGateway.start.mockReturnValue(startOperation.promise)
+
+    const { result, unmount } = renderHook(() => useApiGateway())
+    let operationPromise!: Promise<void>
+
+    act(() => {
+      operationPromise = result.current.startApiGateway()
+    })
+
+    unmount()
+
+    await act(async () => {
+      startOperation.reject(new Error('ipc closed'))
+      await operationPromise
+    })
+
+    expect(mockToast.error).not.toHaveBeenCalled()
+  })
 })

@@ -33,14 +33,28 @@ export const useApiGateway = () => {
   // ready, so consumers (e.g. AgentPage) don't transiently read the default
   // `running=false` and flash a "server stopped" screen before Main's value arrives.
   const [apiGatewayLoading, setApiGatewayLoading] = useState(() => !cacheService.isSharedCacheReady())
+  const mountedRef = useRef(true)
   const operationRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     if (cacheService.isSharedCacheReady()) {
       setApiGatewayLoading(false)
       return
     }
-    return cacheService.onSharedCacheReady(() => setApiGatewayLoading(false))
+
+    return cacheService.onSharedCacheReady(() => {
+      if (mountedRef.current) {
+        setApiGatewayLoading(false)
+      }
+    })
   }, [])
 
   const setApiGatewayEnabled = useCallback(
@@ -60,7 +74,24 @@ export const useApiGateway = () => {
 
   const finishOperation = useCallback(() => {
     operationRef.current = false
-    setApiGatewayLoading(false)
+    if (mountedRef.current) {
+      setApiGatewayLoading(false)
+    }
+  }, [])
+
+  const showSuccess = useCallback(
+    (messageKey: string) => {
+      if (mountedRef.current) {
+        window.toast.success(t(messageKey))
+      }
+    },
+    [t]
+  )
+
+  const showError = useCallback((message: string) => {
+    if (mountedRef.current) {
+      window.toast.error(message)
+    }
   }, [])
 
   const startApiGateway = useCallback(async () => {
@@ -69,16 +100,16 @@ export const useApiGateway = () => {
       const result = await window.api.apiGateway.start()
       if (result.success) {
         await setApiGatewayEnabled(true)
-        window.toast.success(t('apiGateway.messages.startSuccess'))
+        showSuccess('apiGateway.messages.startSuccess')
       } else {
-        window.toast.error(t('apiGateway.messages.startError') + result.error)
+        showError(t('apiGateway.messages.startError') + result.error)
       }
     } catch (error: any) {
-      window.toast.error(t('apiGateway.messages.startError') + (error.message || error))
+      showError(t('apiGateway.messages.startError') + (error.message || error))
     } finally {
       finishOperation()
     }
-  }, [beginOperation, finishOperation, setApiGatewayEnabled, t])
+  }, [beginOperation, finishOperation, setApiGatewayEnabled, showError, showSuccess, t])
 
   const stopApiGateway = useCallback(async () => {
     if (!beginOperation()) return
@@ -86,16 +117,16 @@ export const useApiGateway = () => {
       const result = await window.api.apiGateway.stop()
       if (result.success) {
         await setApiGatewayEnabled(false)
-        window.toast.success(t('apiGateway.messages.stopSuccess'))
+        showSuccess('apiGateway.messages.stopSuccess')
       } else {
-        window.toast.error(t('apiGateway.messages.stopError') + result.error)
+        showError(t('apiGateway.messages.stopError') + result.error)
       }
     } catch (error: any) {
-      window.toast.error(t('apiGateway.messages.stopError') + (error.message || error))
+      showError(t('apiGateway.messages.stopError') + (error.message || error))
     } finally {
       finishOperation()
     }
-  }, [beginOperation, finishOperation, setApiGatewayEnabled, t])
+  }, [beginOperation, finishOperation, setApiGatewayEnabled, showError, showSuccess, t])
 
   const restartApiGateway = useCallback(async () => {
     if (!beginOperation()) return
@@ -103,26 +134,26 @@ export const useApiGateway = () => {
       const result = await window.api.apiGateway.restart()
       if (result.success) {
         await setApiGatewayEnabled(true)
-        window.toast.success(t('apiGateway.messages.restartSuccess'))
+        showSuccess('apiGateway.messages.restartSuccess')
       } else {
-        window.toast.error(t('apiGateway.messages.restartError') + result.error)
+        showError(t('apiGateway.messages.restartError') + result.error)
       }
     } catch (error) {
-      window.toast.error(t('apiGateway.messages.restartFailed') + (error as Error).message)
+      showError(t('apiGateway.messages.restartFailed') + (error as Error).message)
     } finally {
       finishOperation()
     }
-  }, [beginOperation, finishOperation, setApiGatewayEnabled, t])
+  }, [beginOperation, finishOperation, setApiGatewayEnabled, showError, showSuccess, t])
 
   // Keep the UI toggle in sync when Main auto-starts the gateway (e.g. when
   // agents exist) while the persisted `enabled` flag is still false.
   useEffect(() => {
     if (apiGatewayRunning && !apiGatewayConfig.enabled) {
       void setApiGatewayEnabled(true).catch((error) => {
-        window.toast.error(t('apiGateway.messages.operationFailed') + (error instanceof Error ? error.message : error))
+        showError(t('apiGateway.messages.operationFailed') + (error instanceof Error ? error.message : error))
       })
     }
-  }, [apiGatewayRunning, apiGatewayConfig.enabled, setApiGatewayEnabled, t])
+  }, [apiGatewayRunning, apiGatewayConfig.enabled, setApiGatewayEnabled, showError, t])
 
   return {
     apiGatewayConfig,
