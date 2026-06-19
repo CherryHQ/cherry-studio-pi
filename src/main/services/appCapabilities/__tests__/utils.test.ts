@@ -211,15 +211,23 @@ describe('app capability utils', () => {
     })
   })
 
-  it('returns JSON-safe values for dates and unsupported values', () => {
+  it('returns JSON-safe values for dates, numbers, and unsupported values', () => {
     expect(
       sanitizeForAgent({
         updatedAt: new Date('2026-06-06T00:00:00.000Z'),
+        score: 1,
+        notANumber: Number.NaN,
+        positiveInfinity: Number.POSITIVE_INFINITY,
+        negativeInfinity: Number.NEGATIVE_INFINITY,
         missing: undefined,
         list: [undefined, () => 'skip']
       })
     ).toEqual({
       updatedAt: '2026-06-06T00:00:00.000Z',
+      score: 1,
+      notANumber: null,
+      positiveInfinity: null,
+      negativeInfinity: null,
       list: [null, null]
     })
   })

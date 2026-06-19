@@ -86,7 +86,11 @@ function sanitizeJsonValue(value: unknown, key: string, seen: WeakSet<object>, d
     return `${redacted.slice(0, MAX_AGENT_STRING_CHARS)}...[truncated ${redacted.length - MAX_AGENT_STRING_CHARS} chars]`
   }
 
-  if (value === null || typeof value === 'number' || typeof value === 'boolean') {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+
+  if (value === null || typeof value === 'boolean') {
     return value
   }
   if (typeof value === 'bigint') return value.toString()
