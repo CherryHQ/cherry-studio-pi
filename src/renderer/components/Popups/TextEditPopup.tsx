@@ -70,6 +70,7 @@ const PopupContainer: React.FC<Props> = ({
   const [showTranslateConfirm] = usePreference('chat.input.translate.show_confirm')
   const { languages } = useLanguages()
   const isMounted = useRef(true)
+  const translationSeqRef = useRef(0)
   const {
     className: textareaClassName,
     onChange: handleTextareaChange,
@@ -83,11 +84,21 @@ const PopupContainer: React.FC<Props> = ({
   useEffect(() => {
     return () => {
       isMounted.current = false
+      translationSeqRef.current += 1
       translatingRef.current = false
     }
   }, [])
 
+  const isCurrentTranslation = (translationSeq: number) =>
+    isMounted.current && translationSeqRef.current === translationSeq
+
+  const invalidateTranslation = () => {
+    translationSeqRef.current += 1
+    translatingRef.current = false
+  }
+
   const settle = (result: string | null) => {
+    invalidateTranslation()
     close(result)
   }
 
@@ -132,6 +143,7 @@ const PopupContainer: React.FC<Props> = ({
     if (!textValue.trim() || translatingRef.current) return
 
     translatingRef.current = true
+    const translationSeq = ++translationSeqRef.current
     let didStartTranslating = false
     try {
       if (showTranslateConfirm) {
@@ -141,24 +153,29 @@ const PopupContainer: React.FC<Props> = ({
           centered: true
         })
         if (!confirmed) return
+        if (!isCurrentTranslation(translationSeq)) return
       }
 
-      if (isMounted.current) {
+      if (isCurrentTranslation(translationSeq)) {
         didStartTranslating = true
         setIsTranslating(true)
       }
 
       const targetVo = languages?.find((l) => l.langCode === targetLanguage)
       const translatedText = await translateText(textValue, targetVo ?? targetLanguage)
-      if (isMounted.current) {
+      if (isCurrentTranslation(translationSeq)) {
         setTextValue(translatedText)
       }
     } catch (error) {
-      logger.error('Translation failed:', error as Error)
-      window.toast.error(formatErrorMessageWithPrefix(error, t('translate.error.failed')))
+      if (isCurrentTranslation(translationSeq)) {
+        logger.error('Translation failed:', error as Error)
+        window.toast.error(formatErrorMessageWithPrefix(error, t('translate.error.failed')))
+      }
     } finally {
-      translatingRef.current = false
-      if (didStartTranslating && isMounted.current) {
+      if (translationSeqRef.current === translationSeq) {
+        translatingRef.current = false
+      }
+      if (didStartTranslating && isCurrentTranslation(translationSeq)) {
         setIsTranslating(false)
       }
     }
