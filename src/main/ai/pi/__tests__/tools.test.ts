@@ -815,6 +815,15 @@ exit 1
     expect(resultText(result)).toContain('storage.backup.create')
   })
 
+  it('returns a clear error when AppSearchCapabilities receives malformed params', async () => {
+    const search = getTool('AppSearchCapabilities', tmpDir, [tmpDir])
+    const result = await search.execute('app-search-malformed', null as any)
+
+    expect(result.details).toMatchObject({ isError: true })
+    expect(resultText(result)).toContain('AppSearchCapabilities parameters must be an object')
+    expect(appCapabilityService.search).not.toHaveBeenCalled()
+  })
+
   it('calls app capabilities directly without interactive tool approval', async () => {
     vi.mocked(appCapabilityService.call).mockResolvedValueOnce({
       ok: true,
@@ -843,6 +852,24 @@ exit 1
       })
     )
     expect(resultText(result)).toContain('Backup created')
+  })
+
+  it('returns a clear error when AppCallCapability receives malformed params', async () => {
+    const call = getTool('AppCallCapability', tmpDir, [tmpDir])
+    const result = await call.execute('app-call-malformed', [] as any)
+
+    expect(result.details).toMatchObject({ isError: true })
+    expect(resultText(result)).toContain('AppCallCapability parameters must be an object')
+    expect(appCapabilityService.call).not.toHaveBeenCalled()
+  })
+
+  it('rejects empty AppCallCapability ids before calling the app service', async () => {
+    const call = getTool('AppCallCapability', tmpDir, [tmpDir])
+    const result = await call.execute('app-call-empty-id', { id: '   ' })
+
+    expect(result.details).toMatchObject({ isError: true })
+    expect(resultText(result)).toContain('AppCallCapability requires a non-empty capability id')
+    expect(appCapabilityService.call).not.toHaveBeenCalled()
   })
 
   it('redacts secrets from thrown app capability errors', async () => {

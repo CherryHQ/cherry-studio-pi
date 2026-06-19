@@ -103,6 +103,21 @@ type PiToolsOptions = {
   sessionId?: string
 }
 
+const normalizeToolParams = (toolName: string, value: unknown): ToolParams => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${toolName} parameters must be an object`)
+  }
+  return value as ToolParams
+}
+
+const normalizeRequiredTextParam = (toolName: string, paramName: string, value: unknown): string => {
+  const normalized = typeof value === 'string' ? value.trim() : String(value ?? '').trim()
+  if (!normalized) {
+    throw new Error(`${toolName} requires a non-empty ${paramName}`)
+  }
+  return normalized
+}
+
 const textResult = (text: string, details: ToolResultDetails = {}): AgentToolResult<ToolResultDetails> => ({
   content: [{ type: 'text', text }],
   details
@@ -1317,7 +1332,7 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
     } as any,
     async execute(_toolCallId, params) {
       return safeExecute('AppSearchCapabilities', async () => {
-        const input = params as ToolParams
+        const input = normalizeToolParams('AppSearchCapabilities', params)
         const appCapabilityService = await getAppCapabilityService()
         const capabilities = appCapabilityService.search({
           query: input.query,
@@ -1356,13 +1371,14 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
     } as any,
     async execute(toolCallId, params, signal) {
       return safeExecute('AppCallCapability', async () => {
-        const input = params as ToolParams
+        const input = normalizeToolParams('AppCallCapability', params)
+        const capabilityId = normalizeRequiredTextParam('AppCallCapability', 'capability id', input.id)
         const appCapabilityService = await getAppCapabilityService()
-        const timeoutMs = resolveAppCapabilityTimeoutMs(input.id, input.timeoutMs)
-        const timeoutMessage = `AppCallCapability ${String(input.id ?? '(empty)')} timed out after ${timeoutMs}ms`
+        const timeoutMs = resolveAppCapabilityTimeoutMs(capabilityId, input.timeoutMs)
+        const timeoutMessage = `AppCallCapability ${capabilityId} timed out after ${timeoutMs}ms`
         const linkedAbort = createLinkedAbortSignal(signal, timeoutMs, timeoutMessage)
         const result = await runWithAbortSignal(
-          appCapabilityService.call(input.id, input.input ?? {}, {
+          appCapabilityService.call(capabilityId, input.input ?? {}, {
             source: 'agent',
             sessionId: options.sessionId,
             toolCallId: options.sessionId ? `${options.sessionId}:${toolCallId}` : toolCallId,
@@ -1375,12 +1391,12 @@ export function createPiTools(cwd: string, accessiblePaths: string[], options: P
         const text = truncateOutput(compacted.text, result.ok ? MAX_SUCCESS_OUTPUT_CHARS : MAX_ERROR_OUTPUT_CHARS)
         return result.ok
           ? textResult(text.text, {
-              capabilityId: input.id,
+              capabilityId,
               truncated: text.truncated || compacted.truncated,
               structuredContent: compacted.result
             })
           : errorTextResult(text.text, {
-              capabilityId: input.id,
+              capabilityId,
               truncated: text.truncated || compacted.truncated,
               structuredContent: compacted.result
             })
