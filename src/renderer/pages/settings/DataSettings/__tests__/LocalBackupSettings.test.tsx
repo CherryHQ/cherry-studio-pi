@@ -230,6 +230,25 @@ describe('LocalBackupSettings', () => {
     expect(window.toast.error).not.toHaveBeenCalled()
   })
 
+  it('does not show stale max-backup save errors after unmount', async () => {
+    mocks.preferenceValues['data.backup.local.dir'] = '/backup'
+    const saveOperation = deferred<void>()
+    preferenceSetter('data.backup.local.max_backups').mockReturnValue(saveOperation.promise)
+
+    const { unmount } = render(<LocalBackupSettings />)
+    fireEvent.click(screen.getAllByRole('button', { name: 'selector' })[1])
+
+    await waitFor(() => expect(preferenceSetter('data.backup.local.max_backups')).toHaveBeenCalledWith(5))
+    unmount()
+
+    await act(async () => {
+      saveOperation.reject(new Error('disk full'))
+      await saveOperation.promise.catch(() => undefined)
+    })
+
+    expect(window.toast.error).not.toHaveBeenCalled()
+  })
+
   it('keeps the latest backup directory change when an older validation resolves later', async () => {
     const slowResolve = deferred<string>()
     mocks.resolvePath.mockImplementation((value: string) => {

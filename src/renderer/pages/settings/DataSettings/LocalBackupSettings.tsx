@@ -6,10 +6,10 @@ import { LocalBackupManager } from '@renderer/components/LocalBackupManager'
 import { LocalBackupModal, useLocalBackupModal } from '@renderer/components/LocalBackupModals'
 import Selector from '@renderer/components/Selector'
 import { useTheme } from '@renderer/context/ThemeProvider'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { startAutoSync, stopAutoSync } from '@renderer/services/BackupService'
 import { useAppSelector } from '@renderer/store'
 import type { AppInfo } from '@renderer/types'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import dayjs from 'dayjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -85,10 +85,7 @@ const LocalBackupSettings: React.FC = () => {
   const { t } = useTranslation()
 
   const { localBackupSync } = useAppSelector((state) => state.backup)
-
-  const showSaveFailed = (error: unknown) => {
-    window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-  }
+  const showSaveFailed = useSaveFailedToast()
 
   const onSyncIntervalChange = async (value: number) => {
     try {
