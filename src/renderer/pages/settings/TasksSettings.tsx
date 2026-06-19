@@ -31,7 +31,6 @@ import { useChannels } from '@renderer/hooks/agents/useChannels'
 import { useCreateTask, useDeleteTask, useRunTask, useTaskLogs, useUpdateTask } from '@renderer/hooks/agents/useTasks'
 import type { CreateTaskRequest, ScheduledTaskEntity, TaskRunLogEntity, UpdateTaskRequest } from '@renderer/types'
 import type { AgentEntity } from '@renderer/types/agent'
-import type { Trigger } from '@shared/data/api/schemas/jobs'
 import { useNavigate } from '@tanstack/react-router'
 import {
   AlertTriangle,
@@ -52,6 +51,13 @@ import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingsContentColumn, SettingTitle } from '.'
 import { getAgentSessionNavigationTarget } from './taskNavigation'
+import {
+  formStateToTrigger,
+  isTaskCreateFormSubmittable,
+  parseScheduleDate,
+  type ScheduleKind,
+  triggerToFormState
+} from './taskScheduleGuards'
 import { resolveTaskTextFieldBlur } from './taskTextFieldGuards'
 
 const logger = loggerService.withContext('TasksSettings')
@@ -61,43 +67,6 @@ const SYSTEM_TASK_WORKSPACE_SOURCE = { type: 'system' as const } satisfies Creat
 
 type AgentInfo = { id: string; name: string }
 type ChannelInfo = { id: string; name: string; isActive?: boolean; hasActiveChatIds?: boolean }
-
-const parseScheduleDate = (value: string) => {
-  if (!value) return undefined
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? undefined : date
-}
-
-/** UI form state ↔ wire Trigger conversions. */
-type ScheduleKind = 'cron' | 'interval' | 'once'
-
-function triggerToFormState(trigger: Trigger): { kind: ScheduleKind; value: string } {
-  switch (trigger.kind) {
-    case 'cron':
-      return { kind: 'cron', value: trigger.expr }
-    case 'interval':
-      // Wire stores ms; UI shows minutes — round to keep "every 30m" stable on round-trip.
-      return { kind: 'interval', value: String(Math.max(1, Math.round(trigger.ms / 60_000))) }
-    case 'once':
-      return { kind: 'once', value: new Date(trigger.at).toISOString() }
-  }
-}
-
-function formStateToTrigger(kind: ScheduleKind, value: string): Trigger | null {
-  const trimmed = value.trim()
-  if (kind === 'cron') {
-    if (!trimmed) return null
-    return { kind: 'cron', expr: trimmed }
-  }
-  if (kind === 'interval') {
-    const minutes = parseInt(trimmed, 10)
-    if (!Number.isFinite(minutes) || minutes <= 0) return null
-    return { kind: 'interval', ms: minutes * 60_000 }
-  }
-  const at = Date.parse(trimmed)
-  if (!Number.isFinite(at)) return null
-  return { kind: 'once', at }
-}
 
 // --------------- Shared channel selector with warnings ---------------
 
@@ -721,14 +690,20 @@ const CreateForm: FC<{
   const [name, setName] = useState('')
   const [prompt, setPrompt] = useState('')
   const [promptModalOpen, setPromptModalOpen] = useState(false)
-  const [scheduleType, setScheduleType] = useState<'cron' | 'interval' | 'once'>('interval')
+  const [scheduleType, setScheduleType] = useState<ScheduleKind>('interval')
   const [scheduleValue, setScheduleValue] = useState('')
   const [timeoutMinutes, setTimeoutMinutes] = useState('')
   const [channelIds, setChannelIds] = useState<string[]>([])
   const workspaceSource = SYSTEM_TASK_WORKSPACE_SOURCE
   const [saving, setSaving] = useState(false)
 
-  const isValid = agentId && name.trim() && prompt.trim() && scheduleValue.trim() && workspaceSource
+  const isValid = isTaskCreateFormSubmittable({
+    agentId,
+    name,
+    prompt,
+    scheduleKind: scheduleType,
+    scheduleValue
+  })
 
   const handleCreate = useCallback(async () => {
     if (!agentId || !name.trim() || !prompt.trim() || !scheduleValue.trim()) return
@@ -823,7 +798,7 @@ const CreateForm: FC<{
               <SettingRowTitle>{t('agent.cherryClaw.tasks.scheduleType.label')}</SettingRowTitle>
               <Select
                 value={scheduleType}
-                onValueChange={(v: 'cron' | 'interval' | 'once') => {
+                onValueChange={(v: ScheduleKind) => {
                   setScheduleType(v)
                   setScheduleValue('')
                 }}>
