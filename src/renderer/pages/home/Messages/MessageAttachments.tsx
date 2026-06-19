@@ -1,10 +1,10 @@
 import { Button } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import { useAttachment } from '@renderer/hooks/useAttachment'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import FileManager from '@renderer/services/FileManager'
 import type { FileMetadata } from '@renderer/types/file'
 import { formatFileSize, parseFileTypes } from '@renderer/utils'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { t } from 'i18next'
 import { Paperclip } from 'lucide-react'
 import type { FC } from 'react'
@@ -17,6 +17,7 @@ const logger = loggerService.withContext('MessageAttachments')
 
 const MessageAttachments: FC<Props> = ({ file }) => {
   const { preview } = useAttachment()
+  const showOpenFailed = useSaveFailedToast('common.operation_failed')
 
   if (!file) {
     return null
@@ -38,7 +39,7 @@ const MessageAttachments: FC<Props> = ({ file }) => {
   const handleOpen = () => {
     void window.api.file.openPath(safePath).catch((error) => {
       logger.error('Failed to open message attachment', error as Error)
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+      showOpenFailed(error)
     })
   }
 
