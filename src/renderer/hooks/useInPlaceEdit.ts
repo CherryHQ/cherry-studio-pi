@@ -1,6 +1,7 @@
 import { loggerService } from '@logger'
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+
+import { useSaveFailedToast } from './useSaveFailedToast'
 
 const logger = loggerService.withContext('useInPlaceEdit')
 export interface UseInPlaceEditOptions {
@@ -31,13 +32,22 @@ export interface UseInPlaceEditReturn {
  */
 export function useInPlaceEdit(options: UseInPlaceEditOptions): UseInPlaceEditReturn {
   const { onSave, onCancel, onError, autoSelectOnStart = true, trimOnSave = true } = options
-  const { t } = useTranslation()
+  const showSaveFailedToast = useSaveFailedToast()
 
   const [isSaving, setIsSaving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
+  const mountedRef = useRef(true)
   const originalValueRef = useRef('')
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const startEdit = useCallback((initialValue: string) => {
     setIsEditing(true)
@@ -67,21 +77,28 @@ export function useInPlaceEdit(options: UseInPlaceEditOptions): UseInPlaceEditRe
 
     try {
       await onSave(finalValue)
+
+      if (!mountedRef.current) return
+
       setIsEditing(false)
       setEditValue('')
     } catch (error) {
       logger.error('Error saving in-place edit', { error })
 
+      if (!mountedRef.current) return
+
       // Call custom error handler if provided, otherwise show default toast
       if (onError) {
         onError(error)
       } else {
-        window.toast.error(t('common.save_failed') || 'Failed to save')
+        showSaveFailedToast(error)
       }
     } finally {
-      setIsSaving(false)
+      if (mountedRef.current) {
+        setIsSaving(false)
+      }
     }
-  }, [isSaving, trimOnSave, editValue, onSave, onError, t])
+  }, [isSaving, trimOnSave, editValue, onSave, onError, showSaveFailedToast])
 
   const cancelEdit = useCallback(() => {
     setIsEditing(false)
