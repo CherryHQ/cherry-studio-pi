@@ -204,6 +204,25 @@ describe('storage app capabilities', () => {
     expect(mocks.storageV2Service.getFile).not.toHaveBeenCalled()
   })
 
+  it('rejects invalid Storage v2 pagination shapes before calling services', async () => {
+    await expect(capability('storage.assistants.list').execute({ limit: true }, { source: 'agent' })).rejects.toThrow(
+      'Storage list limit must be a number'
+    )
+    await expect(
+      capability('storage.conversations.list').execute({ offset: { page: 1 } }, { source: 'agent' })
+    ).rejects.toThrow('Storage list offset must be a number')
+    await expect(
+      capability('storage.messages.list').execute(
+        { conversationId: 'conversation-1', limit: ['10'] },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Storage list limit must be a number')
+
+    expect(mocks.storageV2Service.listAssistants).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.listConversations).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.listMessages).not.toHaveBeenCalled()
+  })
+
   it('normalizes file ids before reading Storage v2 file records', async () => {
     await capability('storage.file.get').execute({ fileId: ' file-1 ' }, { source: 'agent' })
 

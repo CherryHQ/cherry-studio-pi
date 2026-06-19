@@ -12,6 +12,9 @@ const MAX_AGENT_LIST_LIMIT = 200
 const RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS = 5 * 60_000
 
 function normalizeListLimit(value: unknown) {
+  if (value !== null && typeof value !== 'undefined' && typeof value !== 'number' && typeof value !== 'string') {
+    throw new Error('Storage list limit must be a number')
+  }
   const parsed =
     typeof value === 'string' && !value.trim() ? DEFAULT_AGENT_LIST_LIMIT : Number(value ?? DEFAULT_AGENT_LIST_LIMIT)
   const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_AGENT_LIST_LIMIT
@@ -19,6 +22,9 @@ function normalizeListLimit(value: unknown) {
 }
 
 function normalizeOffset(value: unknown) {
+  if (value !== null && typeof value !== 'undefined' && typeof value !== 'number' && typeof value !== 'string') {
+    throw new Error('Storage list offset must be a number')
+  }
   const parsed = typeof value === 'string' && !value.trim() ? undefined : Number(value)
   if (parsed === undefined || !Number.isFinite(parsed)) return undefined
   return Math.max(0, Math.trunc(parsed))

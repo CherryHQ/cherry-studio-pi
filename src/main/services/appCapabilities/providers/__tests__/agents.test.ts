@@ -190,6 +190,12 @@ describe('agent app capabilities', () => {
     await expect(capability('agents.models.list').execute({ providerType: 123 }, { source: 'agent' })).rejects.toThrow(
       'Provider type must be a string'
     )
+    await expect(capability('agents.models.list').execute({ limit: true }, { source: 'agent' })).rejects.toThrow(
+      'Agent list limit must be a number'
+    )
+    await expect(capability('agents.list').execute({ offset: { page: 1 } }, { source: 'agent' })).rejects.toThrow(
+      'Agent list offset must be a number'
+    )
     await expect(capability('agents.list').execute({ sortBy: 123 }, { source: 'agent' })).rejects.toThrow(
       'Agent sort field must be a string'
     )

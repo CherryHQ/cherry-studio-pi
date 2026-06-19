@@ -21,6 +21,9 @@ const AGENT_LIST_SORT_BY_ALIASES: Record<string, 'createdAt' | 'updatedAt' | 'na
 }
 
 function normalizeListLimit(value: unknown) {
+  if (value !== null && typeof value !== 'undefined' && typeof value !== 'number' && typeof value !== 'string') {
+    throw new Error('Agent list limit must be a number')
+  }
   const parsed =
     typeof value === 'string' && !value.trim()
       ? DEFAULT_AGENT_CAPABILITY_LIST_LIMIT
@@ -30,6 +33,9 @@ function normalizeListLimit(value: unknown) {
 }
 
 function normalizeOffset(value: unknown) {
+  if (value !== null && typeof value !== 'undefined' && typeof value !== 'number' && typeof value !== 'string') {
+    throw new Error('Agent list offset must be a number')
+  }
   const parsed = typeof value === 'string' && !value.trim() ? undefined : Number(value)
   if (parsed === undefined || !Number.isFinite(parsed)) return undefined
   return Math.max(0, Math.trunc(parsed))
