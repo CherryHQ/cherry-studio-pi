@@ -251,6 +251,26 @@ describe('integration connection settings', () => {
     expect(window.toast.error).not.toHaveBeenCalled()
   })
 
+  it('ignores stale integration setting save failures after unmount', async () => {
+    const pendingSave = deferred<void>()
+    mocks.setPreference.mockReturnValueOnce(pendingSave.promise)
+
+    const { unmount } = render(<JoplinSettings />)
+
+    fireEvent.change(screen.getByPlaceholderText('settings.data.joplin.token_placeholder'), {
+      target: { value: 'new-token' }
+    })
+    expect(mocks.setPreference).toHaveBeenCalledWith('new-token')
+    unmount()
+
+    await act(async () => {
+      pendingSave.reject(new Error('save failed after unmount'))
+      await pendingSave.promise.catch(() => undefined)
+    })
+
+    expect(window.toast.error).not.toHaveBeenCalled()
+  })
+
   it('ignores stale Siyuan connection failures after unmount', async () => {
     const runningFetch = deferred<Response>()
     global.fetch = vi.fn().mockReturnValueOnce(runningFetch.promise)
