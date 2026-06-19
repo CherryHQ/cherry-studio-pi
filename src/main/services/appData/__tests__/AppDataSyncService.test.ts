@@ -580,6 +580,33 @@ describe('AppDataSyncService', () => {
     ])
   })
 
+  it('skips WebDAV directory entries outside the browsed path', async () => {
+    mocks.webdav.getDirectoryContents.mockResolvedValueOnce([
+      {
+        type: 'directory',
+        basename: 'Outside',
+        filename: '/other-root/Outside',
+        lastmod: '2026-05-29T00:00:00.000Z'
+      },
+      {
+        type: 'directory',
+        basename: 'Inside',
+        filename: '/remote-root/Inside',
+        lastmod: '2026-05-29T00:00:00.000Z'
+      }
+    ])
+
+    const result = await new AppDataSyncService().listRemoteDirectories(config, '/remote-root')
+
+    expect(result.directories).toEqual([
+      {
+        name: 'Inside',
+        path: '/remote-root/Inside',
+        modifiedAt: '2026-05-29T00:00:00.000Z'
+      }
+    ])
+  })
+
   it('splits pasted WebDAV credentials before creating the setup browser client', async () => {
     await new AppDataSyncService().listRemoteDirectories(
       {

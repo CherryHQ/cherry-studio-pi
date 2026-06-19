@@ -2404,6 +2404,15 @@ export class AppDataSyncService {
           }
 
           const entryPath = normalizeWebDavDirectoryPath(rawEntryPath)
+          if (!this.isRemotePathUnderRoot(entryPath, currentPath)) {
+            logger.warn('Skipped WebDAV directory entry outside the browsed path', {
+              currentPath,
+              entryPath,
+              entryType: entry.type
+            })
+            return []
+          }
+
           return {
             name: entry.basename || path.posix.basename(entryPath) || entryPath,
             path: entryPath,
