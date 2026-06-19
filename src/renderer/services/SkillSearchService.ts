@@ -80,13 +80,33 @@ function normalizeClawhub(raw: unknown): SkillSearchResult[] {
 // Fetch helpers
 // ===========================================================================
 
+function isAbortError(error: unknown) {
+  return error instanceof DOMException
+    ? error.name === 'AbortError'
+    : error instanceof Error && error.name === 'AbortError'
+}
+
 async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
   const controller = new AbortController()
+  const externalSignal = init?.signal
   let timer: ReturnType<typeof setTimeout> | undefined
+  let removeExternalAbortListener: (() => void) | undefined
+  const abortFromExternalSignal = () => {
+    controller.abort(externalSignal?.reason ?? new DOMException('Request aborted', 'AbortError'))
+  }
+
+  if (externalSignal?.aborted) {
+    abortFromExternalSignal()
+  } else if (externalSignal) {
+    externalSignal.addEventListener('abort', abortFromExternalSignal, { once: true })
+    removeExternalAbortListener = () => externalSignal.removeEventListener('abort', abortFromExternalSignal)
+  }
+
   const timeout = new Promise<Response>((_, reject) => {
     timer = setTimeout(() => {
-      controller.abort()
-      reject(new DOMException(`Request timed out after ${REQUEST_TIMEOUT_MS}ms`, 'AbortError'))
+      const error = new DOMException(`Request timed out after ${REQUEST_TIMEOUT_MS}ms`, 'AbortError')
+      controller.abort(error)
+      reject(error)
     }, REQUEST_TIMEOUT_MS)
     timer.unref?.()
   })
@@ -95,11 +115,12 @@ async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Respon
     return await Promise.race([fetch(url, { ...init, signal: controller.signal }), timeout])
   } finally {
     if (timer) clearTimeout(timer)
+    removeExternalAbortListener?.()
   }
 }
 
-async function fetchJson(url: string): Promise<unknown> {
-  const resp = await fetchWithTimeout(url)
+async function fetchJson(url: string, signal?: AbortSignal): Promise<unknown> {
+  const resp = await fetchWithTimeout(url, { signal })
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
   return resp.json()
 }
@@ -108,25 +129,25 @@ async function fetchJson(url: string): Promise<unknown> {
 // Source fetchers
 // ===========================================================================
 
-async function searchClaudePlugins(query: string): Promise<SkillSearchResult[]> {
+async function searchClaudePlugins(query: string, signal?: AbortSignal): Promise<SkillSearchResult[]> {
   const url = new URL(CLAUDE_PLUGINS_API)
   url.searchParams.set('q', query)
   url.searchParams.set('limit', '20')
-  const json = await fetchJson(url.toString())
+  const json = await fetchJson(url.toString(), signal)
   return normalizeClaudePlugins(json)
 }
 
-async function searchSkillsSh(query: string): Promise<SkillSearchResult[]> {
+async function searchSkillsSh(query: string, signal?: AbortSignal): Promise<SkillSearchResult[]> {
   const url = new URL(SKILLS_SH_API)
   url.searchParams.set('q', query)
-  const json = await fetchJson(url.toString())
+  const json = await fetchJson(url.toString(), signal)
   return normalizeSkillsSh(json)
 }
 
-async function searchClawhub(query: string): Promise<SkillSearchResult[]> {
+async function searchClawhub(query: string, signal?: AbortSignal): Promise<SkillSearchResult[]> {
   const url = new URL(CLAWHUB_API)
   url.searchParams.set('q', query)
-  const json = await fetchJson(url.toString())
+  const json = await fetchJson(url.toString(), signal)
   return normalizeClawhub(json)
 }
 
@@ -139,20 +160,26 @@ async function searchClawhub(query: string): Promise<SkillSearchResult[]> {
  * Returns results from whichever source responds first,
  * then merges remaining sources as they complete.
  */
-export async function searchSkills(query: string): Promise<SkillSearchResult[]> {
+export async function searchSkills(
+  query: string,
+  options: { signal?: AbortSignal } = {}
+): Promise<SkillSearchResult[]> {
   const normalizedQuery = query.trim()
   if (!normalizedQuery) return []
 
   const sources = [
-    searchSkillsSh(normalizedQuery).catch((err) => {
+    searchSkillsSh(normalizedQuery, options.signal).catch((err) => {
+      if (isAbortError(err)) return [] as SkillSearchResult[]
       logger.warn('skills.sh search failed', { error: err instanceof Error ? err.message : String(err) })
       return [] as SkillSearchResult[]
     }),
-    searchClaudePlugins(normalizedQuery).catch((err) => {
+    searchClaudePlugins(normalizedQuery, options.signal).catch((err) => {
+      if (isAbortError(err)) return [] as SkillSearchResult[]
       logger.warn('claude-plugins search failed', { error: err instanceof Error ? err.message : String(err) })
       return [] as SkillSearchResult[]
     }),
-    searchClawhub(normalizedQuery).catch((err) => {
+    searchClawhub(normalizedQuery, options.signal).catch((err) => {
+      if (isAbortError(err)) return [] as SkillSearchResult[]
       logger.warn('clawhub search failed', { error: err instanceof Error ? err.message : String(err) })
       return [] as SkillSearchResult[]
     })

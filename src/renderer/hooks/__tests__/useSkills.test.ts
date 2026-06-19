@@ -1,9 +1,10 @@
-import type { InstalledSkill } from '@renderer/types'
+import type { InstalledSkill, SkillSearchResult } from '@renderer/types'
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const useQueryMock = vi.hoisted(() => vi.fn())
 const invalidateMock = vi.hoisted(() => vi.fn())
+const searchSkillsMock = vi.hoisted(() => vi.fn())
 const toggleSkillMock = vi.hoisted(() => vi.fn())
 const uninstallSkillMock = vi.hoisted(() => vi.fn())
 const installSkillMock = vi.hoisted(() => vi.fn())
@@ -16,7 +17,11 @@ vi.mock('@data/hooks/useDataApi', () => ({
   useInvalidateCache: () => invalidateMock
 }))
 
-import { useInstalledSkills, useSkillInstall } from '../useSkills'
+vi.mock('@renderer/services/SkillSearchService', () => ({
+  searchSkills: searchSkillsMock
+}))
+
+import { useInstalledSkills, useSkillInstall, useSkillSearch } from '../useSkills'
 
 function createSkill(overrides: Partial<InstalledSkill> = {}): InstalledSkill {
   return {
@@ -36,6 +41,136 @@ function createSkill(overrides: Partial<InstalledSkill> = {}): InstalledSkill {
     ...overrides
   }
 }
+
+function createSearchResult(name: string): SkillSearchResult {
+  return {
+    slug: name.toLowerCase(),
+    name,
+    description: null,
+    author: null,
+    stars: 0,
+    downloads: 0,
+    sourceRegistry: 'skills.sh',
+    sourceUrl: null,
+    installSource: `skills.sh:${name.toLowerCase()}`
+  }
+}
+
+describe('useSkillSearch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('aborts a stale search when a newer query starts', async () => {
+    const pendingSearches: Array<{
+      query: string
+      signal?: AbortSignal
+      resolve: (results: SkillSearchResult[]) => void
+    }> = []
+
+    searchSkillsMock.mockImplementation(
+      (query: string, options?: { signal?: AbortSignal }) =>
+        new Promise<SkillSearchResult[]>((resolve) => {
+          pendingSearches.push({ query, signal: options?.signal, resolve })
+        })
+    )
+
+    const { result } = renderHook(() => useSkillSearch())
+    let firstSearch = Promise.resolve()
+    let secondSearch = Promise.resolve()
+
+    act(() => {
+      firstSearch = result.current.search('alpha')
+    })
+
+    expect(pendingSearches[0].query).toBe('alpha')
+    expect(pendingSearches[0].signal?.aborted).toBe(false)
+
+    act(() => {
+      secondSearch = result.current.search('beta')
+    })
+
+    expect(pendingSearches[0].signal?.aborted).toBe(true)
+    expect(pendingSearches[1].query).toBe('beta')
+    expect(pendingSearches[1].signal?.aborted).toBe(false)
+
+    await act(async () => {
+      pendingSearches[0].resolve([createSearchResult('Alpha')])
+      await firstSearch
+    })
+
+    expect(result.current.results).toEqual([])
+    expect(result.current.searching).toBe(true)
+
+    await act(async () => {
+      pendingSearches[1].resolve([createSearchResult('Beta')])
+      await secondSearch
+    })
+
+    expect(result.current.results).toEqual([createSearchResult('Beta')])
+    expect(result.current.searching).toBe(false)
+  })
+
+  it('aborts the current search when clearing results', async () => {
+    let capturedSignal: AbortSignal | undefined
+    let resolveSearch: ((results: SkillSearchResult[]) => void) | undefined
+    searchSkillsMock.mockImplementation(
+      (_query: string, options?: { signal?: AbortSignal }) =>
+        new Promise<SkillSearchResult[]>((resolve) => {
+          capturedSignal = options?.signal
+          resolveSearch = resolve
+        })
+    )
+
+    const { result } = renderHook(() => useSkillSearch())
+    let searchPromise = Promise.resolve()
+
+    act(() => {
+      searchPromise = result.current.search('alpha')
+    })
+
+    expect(result.current.searching).toBe(true)
+    expect(capturedSignal?.aborted).toBe(false)
+
+    act(() => {
+      result.current.clear()
+    })
+
+    expect(capturedSignal?.aborted).toBe(true)
+    expect(result.current.results).toEqual([])
+    expect(result.current.searching).toBe(false)
+
+    await act(async () => {
+      resolveSearch?.([createSearchResult('Alpha')])
+      await searchPromise
+    })
+
+    expect(result.current.results).toEqual([])
+    expect(result.current.searching).toBe(false)
+  })
+
+  it('aborts the current search on unmount', () => {
+    let capturedSignal: AbortSignal | undefined
+    searchSkillsMock.mockImplementation(
+      (_query: string, options?: { signal?: AbortSignal }) =>
+        new Promise<SkillSearchResult[]>(() => {
+          capturedSignal = options?.signal
+        })
+    )
+
+    const { result, unmount } = renderHook(() => useSkillSearch())
+
+    act(() => {
+      void result.current.search('alpha')
+    })
+
+    expect(capturedSignal?.aborted).toBe(false)
+
+    unmount()
+
+    expect(capturedSignal?.aborted).toBe(true)
+  })
+})
 
 describe('useInstalledSkills', () => {
   beforeEach(() => {

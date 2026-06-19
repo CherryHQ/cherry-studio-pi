@@ -2,7 +2,7 @@ import { useInvalidateCache, useQuery } from '@data/hooks/useDataApi'
 import { loggerService } from '@logger'
 import { searchSkills } from '@renderer/services/SkillSearchService'
 import type { InstalledSkill, SkillResult, SkillSearchResult } from '@types'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 const logger = loggerService.withContext('useSkills')
 
@@ -100,42 +100,64 @@ export function useSkillSearch() {
   const [results, setResults] = useState<SkillSearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const abortRef = useRef(0)
+  const requestSeqRef = useRef(0)
+  const activeAbortControllerRef = useRef<AbortController | null>(null)
 
-  const search = useCallback(async (query: string) => {
-    const requestId = ++abortRef.current
-
-    if (!query.trim()) {
-      setResults([])
-      setSearching(false)
-      return
-    }
-
-    setSearching(true)
-    setError(null)
-
-    try {
-      const data = await searchSkills(query)
-      if (requestId === abortRef.current) {
-        setResults(data)
-      }
-    } catch (err) {
-      if (requestId === abortRef.current) {
-        setError(err instanceof Error ? err.message : 'Search failed')
-      }
-    } finally {
-      if (requestId === abortRef.current) {
-        setSearching(false)
-      }
-    }
+  const abortActiveSearch = useCallback(() => {
+    activeAbortControllerRef.current?.abort(new DOMException('Skill search superseded', 'AbortError'))
+    activeAbortControllerRef.current = null
   }, [])
 
+  const search = useCallback(
+    async (query: string) => {
+      const requestId = ++requestSeqRef.current
+      abortActiveSearch()
+
+      if (!query.trim()) {
+        setResults([])
+        setSearching(false)
+        return
+      }
+
+      const controller = new AbortController()
+      activeAbortControllerRef.current = controller
+
+      setSearching(true)
+      setError(null)
+
+      try {
+        const data = await searchSkills(query, { signal: controller.signal })
+        if (requestId === requestSeqRef.current && !controller.signal.aborted) {
+          setResults(data)
+        }
+      } catch (err) {
+        if (requestId === requestSeqRef.current && !controller.signal.aborted) {
+          setError(err instanceof Error ? err.message : 'Search failed')
+        }
+      } finally {
+        if (requestId === requestSeqRef.current && activeAbortControllerRef.current === controller) {
+          activeAbortControllerRef.current = null
+          setSearching(false)
+        }
+      }
+    },
+    [abortActiveSearch]
+  )
+
   const clear = useCallback(() => {
-    abortRef.current++
+    requestSeqRef.current++
+    abortActiveSearch()
     setResults([])
     setSearching(false)
     setError(null)
-  }, [])
+  }, [abortActiveSearch])
+
+  useEffect(() => {
+    return () => {
+      requestSeqRef.current++
+      abortActiveSearch()
+    }
+  }, [abortActiveSearch])
 
   return { results, searching, error, search, clear }
 }

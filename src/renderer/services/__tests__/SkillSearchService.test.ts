@@ -335,6 +335,29 @@ describe('searchSkills', () => {
     expect(fetch).toHaveBeenCalledTimes(3)
   })
 
+  it('aborts in-flight registry requests when the caller aborts the search', async () => {
+    const fetchSignals: AbortSignal[] = []
+    vi.mocked(fetch).mockImplementation((_url, init) => {
+      const signal = init?.signal as AbortSignal
+      fetchSignals.push(signal)
+
+      return new Promise<Response>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+    })
+
+    const controller = new AbortController()
+    const searchPromise = searchSkills('code-review', { signal: controller.signal })
+
+    expect(fetch).toHaveBeenCalledTimes(3)
+
+    controller.abort(new DOMException('cancelled', 'AbortError'))
+
+    await expect(searchPromise).resolves.toEqual([])
+    expect(fetchSignals).toHaveLength(3)
+    expect(fetchSignals.every((signal) => signal.aborted)).toBe(true)
+  })
+
   it('trims the query before requesting registries', async () => {
     vi.mocked(fetch).mockImplementation(async (url) => {
       const href = url.toString()
