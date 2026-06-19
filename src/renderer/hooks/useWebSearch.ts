@@ -11,7 +11,8 @@ import type {
 import { PRESETS_WEB_SEARCH_PROVIDERS } from '@shared/data/presets/web-search-providers'
 import { normalizeWebSearchCutoffLimit } from '@shared/data/types/webSearch'
 import { useCallback, useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
+
+import { useSaveFailedToast } from './useSaveFailedToast'
 
 const logger = loggerService.withContext('useWebSearch')
 
@@ -192,7 +193,7 @@ export const useWebSearchProviders = () => {
 
 export const useSyncZhipuWebSearchApiKeys = () => {
   const { setApiKeys } = useWebSearchProviders()
-  const { t } = useTranslation()
+  const showSyncFailed = useSaveFailedToast('settings.tool.websearch.errors.zhipu_sync_failed')
 
   return useCallback(
     (providerId: string, apiKey: string) => {
@@ -202,10 +203,10 @@ export const useSyncZhipuWebSearchApiKeys = () => {
 
       void setApiKeys('zhipu', splitApiKeyString(apiKey)).catch((error) => {
         logger.error('Failed to sync Zhipu web search API keys', error as Error)
-        window.toast.error(t('settings.tool.websearch.errors.zhipu_sync_failed'))
+        showSyncFailed(error)
       })
     },
-    [setApiKeys, t]
+    [setApiKeys, showSyncFailed]
   )
 }
 
