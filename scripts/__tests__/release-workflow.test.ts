@@ -32,6 +32,8 @@ describe('release workflow safety', () => {
   const releasePackagesWorkflow = fs.readFileSync(releasePackagesWorkflowPath, 'utf8').replace(/\r\n/g, '\n')
   const gitCodeSyncWorkflowPath = path.resolve(process.cwd(), '.github/workflows/sync-to-gitcode.yml')
   const gitCodeSyncWorkflow = fs.readFileSync(gitCodeSyncWorkflowPath, 'utf8').replace(/\r\n/g, '\n')
+  const updateUpgradeConfigWorkflowPath = path.resolve(process.cwd(), '.github/workflows/update-app-upgrade-config.yml')
+  const updateUpgradeConfigWorkflow = fs.readFileSync(updateUpgradeConfigWorkflowPath, 'utf8').replace(/\r\n/g, '\n')
   const prepareReleaseSkillPath = path.resolve(process.cwd(), '.agents/skills/prepare-release/SKILL.md')
   const prepareReleaseSkill = fs.readFileSync(prepareReleaseSkillPath, 'utf8').replace(/\r\n/g, '\n')
 
@@ -109,6 +111,16 @@ describe('release workflow safety', () => {
     expect(gitCodeSyncWorkflow).toContain('GitCode sync tag confirmation mismatch')
     expect(gitCodeSyncWorkflow).toContain(
       'group: gitcode-release-sync-${{ github.repository }}-${{ github.event.inputs.tag }}'
+    )
+    expect(workflow).toContain('-f confirm_tag="$RELEASE_TAG"')
+  })
+
+  it('guards app upgrade config sync against accidental duplicate dispatches', () => {
+    expect(updateUpgradeConfigWorkflow).toContain('confirm_tag:')
+    expect(updateUpgradeConfigWorkflow).toContain('CONFIRM_TAG="${{ github.event.inputs.confirm_tag }}"')
+    expect(updateUpgradeConfigWorkflow).toContain('Upgrade config sync tag confirmation mismatch')
+    expect(updateUpgradeConfigWorkflow).toContain(
+      'group: app-upgrade-config-${{ github.repository }}-${{ github.event.inputs.tag }}'
     )
     expect(workflow).toContain('-f confirm_tag="$RELEASE_TAG"')
   })
