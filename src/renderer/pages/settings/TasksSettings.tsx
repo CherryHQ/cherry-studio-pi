@@ -59,6 +59,7 @@ import {
   triggerToFormState
 } from './taskScheduleGuards'
 import { resolveTaskTextFieldBlur } from './taskTextFieldGuards'
+import { parseTaskTimeoutMinutes, resolveTaskTimeoutBlur } from './taskTimeoutGuards'
 
 const logger = loggerService.withContext('TasksSettings')
 const SYSTEM_TASK_WORKSPACE_SOURCE = { type: 'system' as const } satisfies CreateTaskRequest['workspace']
@@ -412,9 +413,13 @@ const TaskDetail: FC<{
                   value={timeoutMinutes}
                   onChange={(e) => setTimeoutMinutes(e.target.value)}
                   onBlur={() => {
-                    const val = timeoutMinutes.trim() ? parseInt(timeoutMinutes, 10) : null
-                    const prev = task.timeoutMinutes ?? null
-                    if (val !== prev) saveField({ timeoutMinutes: val })
+                    const resolution = resolveTaskTimeoutBlur(timeoutMinutes, task.timeoutMinutes)
+                    if (resolution.action === 'save') {
+                      setTimeoutMinutes(String(resolution.value))
+                      saveField({ timeoutMinutes: resolution.value })
+                    } else if (resolution.action === 'reset') {
+                      setTimeoutMinutes(resolution.value)
+                    }
                   }}
                   placeholder={t('agent.cherryClaw.tasks.timeout.placeholder')}
                   disabled={isCompleted}
@@ -711,13 +716,13 @@ const CreateForm: FC<{
     if (!trigger) return
     setSaving(true)
     try {
-      const timeout = timeoutMinutes.trim() ? parseInt(timeoutMinutes, 10) : null
+      const timeout = parseTaskTimeoutMinutes(timeoutMinutes)
       await onCreate(agentId, {
         name: name.trim(),
         prompt: prompt.trim(),
         trigger,
         workspace: workspaceSource,
-        timeoutMinutes: timeout && timeout > 0 ? timeout : undefined,
+        timeoutMinutes: timeout ?? undefined,
         channelIds: channelIds.length > 0 ? channelIds : undefined
       })
     } finally {
