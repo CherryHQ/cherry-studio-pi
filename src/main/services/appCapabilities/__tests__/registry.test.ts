@@ -97,6 +97,22 @@ describe('AppCapabilityRegistry', () => {
     expect(() => registry.search({ query: 42 as any })).not.toThrow()
   })
 
+  it('rejects invalid search limit shapes before paging results', () => {
+    const registry = new AppCapabilityRegistry()
+    registry.register(capability({ id: 'a.first' }))
+    registry.register(capability({ id: 'b.second' }))
+
+    expect(() => registry.search({ query: '', limit: true as any })).toThrow(
+      'App capability search limit must be a number'
+    )
+    expect(() => registry.search({ query: '', limit: ['1'] as any })).toThrow(
+      'App capability search limit must be a number'
+    )
+    expect(() => registry.search({ query: '', limit: { value: 1 } as any })).toThrow(
+      'App capability search limit must be a number'
+    )
+  })
+
   it('looks up a single descriptor without listing and sorting all capabilities', () => {
     const registry = new AppCapabilityRegistry()
     registry.register(capability({ id: 'settings.hidden', hidden: true }))

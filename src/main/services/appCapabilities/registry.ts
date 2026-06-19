@@ -1,3 +1,4 @@
+import { normalizeBoundedIntegerInput } from './input'
 import type {
   AppCapabilityDefinition,
   AppCapabilityDescriptor,
@@ -61,10 +62,12 @@ const expandQueryTerms = (query: string) => {
 }
 
 const normalizeSearchLimit = (value: unknown) => {
-  const parsed =
-    typeof value === 'string' && !value.trim() ? DEFAULT_SEARCH_LIMIT : Number(value ?? DEFAULT_SEARCH_LIMIT)
-  const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_SEARCH_LIMIT
-  return Math.max(1, Math.min(safeLimit, MAX_SEARCH_LIMIT))
+  return normalizeBoundedIntegerInput(value, {
+    label: 'App capability search limit',
+    defaultValue: DEFAULT_SEARCH_LIMIT,
+    min: 1,
+    max: MAX_SEARCH_LIMIT
+  })
 }
 
 const normalizeOptionalFilterText = (value: unknown) => {
