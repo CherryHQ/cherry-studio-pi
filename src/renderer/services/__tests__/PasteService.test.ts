@@ -30,6 +30,24 @@ describe('PasteService', () => {
     addEventListener.mockRestore()
   })
 
+  it('unregisters the global paste listener and allows fresh registration', async () => {
+    const addEventListener = vi.spyOn(document, 'addEventListener').mockImplementation(() => undefined)
+    const removeEventListener = vi.spyOn(document, 'removeEventListener').mockImplementation(() => undefined)
+
+    const pasteService = await import('../PasteService')
+    pasteService.init()
+    pasteService.unregisterGlobalPasteListener()
+
+    expect(removeEventListener.mock.calls.filter(([event]) => event === 'paste')).toHaveLength(1)
+
+    pasteService.init()
+
+    expect(addEventListener.mock.calls.filter(([event]) => event === 'paste')).toHaveLength(2)
+
+    addEventListener.mockRestore()
+    removeEventListener.mockRestore()
+  })
+
   it('routes the global paste listener through the latest registered handler after module reloads', async () => {
     let pasteListener: ((event: ClipboardEvent) => Promise<void>) | undefined
     const addEventListener = vi.spyOn(document, 'addEventListener').mockImplementation(((

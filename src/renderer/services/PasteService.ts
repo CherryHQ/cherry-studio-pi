@@ -16,6 +16,7 @@ type PasteHandlers = Partial<Record<Exclude<ComponentType, null>, PasteHandler>>
 type PasteServiceState = {
   handlers: PasteHandlers
   initialized: boolean
+  pasteListener?: EventListener
   lastFocusedComponent: ComponentType
 }
 
@@ -167,13 +168,27 @@ export const getLastFocusedComponent = (): ComponentType => {
 export const init = () => {
   if (pasteServiceState.initialized) return
 
-  // 添加全局粘贴事件监听
-  document.addEventListener('paste', async (event) => {
-    await handleGlobalPaste(event)
-  })
+  const pasteListener: EventListener = (event) => {
+    void handleGlobalPaste(event as ClipboardEvent)
+  }
 
+  // 添加全局粘贴事件监听
+  document.addEventListener('paste', pasteListener)
+  pasteServiceState.pasteListener = pasteListener
   pasteServiceState.initialized = true
   logger.verbose('Global paste handler initialized')
+}
+
+/**
+ * 注销全局粘贴事件监听
+ */
+export const unregisterGlobalPasteListener = () => {
+  if (pasteServiceState.pasteListener) {
+    document.removeEventListener('paste', pasteServiceState.pasteListener)
+  }
+
+  delete pasteServiceState.pasteListener
+  pasteServiceState.initialized = false
 }
 
 /**
@@ -230,6 +245,13 @@ export default {
   setLastFocusedComponent,
   getLastFocusedComponent,
   init,
+  unregisterGlobalPasteListener,
   registerHandler,
   unregisterHandler
+}
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    unregisterGlobalPasteListener()
+  })
 }
