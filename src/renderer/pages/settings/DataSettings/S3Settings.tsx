@@ -7,12 +7,12 @@ import Selector from '@renderer/components/Selector'
 import { AppLogo } from '@renderer/config/env'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { useMiniAppPopup } from '@renderer/hooks/useMiniAppPopup'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { startAutoSync, stopAutoSync } from '@renderer/services/BackupService'
 import { useAppSelector } from '@renderer/store'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import dayjs from 'dayjs'
 import type { FC } from 'react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -30,31 +30,14 @@ const S3Settings: FC = () => {
   const [s3MaxBackups, setS3MaxBackups] = usePreference('data.backup.s3.max_backups')
 
   const [backupManagerVisible, setBackupManagerVisible] = useState(false)
-  const mountedRef = useRef(true)
-
-  useEffect(() => {
-    mountedRef.current = true
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
 
   const { theme } = useTheme()
   const { t } = useTranslation()
+  const showSaveFailed = useSaveFailedToast()
 
   const { openSmartMiniApp } = useMiniAppPopup()
 
   const { s3Sync } = useAppSelector((state) => state.backup)
-
-  const showSaveFailed = useCallback(
-    (error: unknown) => {
-      if (mountedRef.current) {
-        window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-      }
-    },
-    [t]
-  )
 
   const onSyncIntervalChange = async (value: number) => {
     try {
