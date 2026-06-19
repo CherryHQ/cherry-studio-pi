@@ -4,8 +4,6 @@ import path from 'node:path'
 
 import { application } from '@application'
 import { loggerService } from '@logger'
-import { isMac } from '@main/core/platform'
-import { WindowType } from '@main/core/window/types'
 import { appCapabilityService } from '@main/services/appCapabilities'
 import { listPaintingHistory, PAINTING_NAMESPACES } from '@main/services/appCapabilities/providers/paintings'
 import {
@@ -14,7 +12,7 @@ import {
   readSettingsForAgent
 } from '@main/services/appCapabilities/providers/settings'
 import { readRendererStoreValue } from '@main/services/appCapabilities/rendererBridge'
-import { isAllowedAppRoute, normalizeAppRoute, pickPath, sanitizeForAgent } from '@main/services/appCapabilities/utils'
+import { navigateApp, pickPath, sanitizeForAgent } from '@main/services/appCapabilities/utils'
 import { notifyMainProcessDataSyncLocalChange } from '@main/services/appData/DataSyncLocalChangeNotifier'
 import { getName, getNotesDir, isPathInside } from '@main/utils/file'
 import express from 'express'
@@ -50,19 +48,6 @@ const SETTINGS_SECTIONS = [
   ['prompts', 'Prompts', '/settings/prompts'],
   ['about', 'About', '/settings/about']
 ].map(([id, label, route]) => ({ id, label, route }))
-
-async function navigate(route: string) {
-  const nextRoute = normalizeAppRoute(route)
-  if (!isAllowedAppRoute(nextRoute)) {
-    throw new Error(`Navigation route is not allowed: ${nextRoute}`)
-  }
-
-  const win = application.get('WindowManager').getWindowsByType(WindowType.Main)[0]
-  if (!win || win.isDestroyed()) throw new Error('Main window is not available')
-
-  await win.webContents.executeJavaScript(`window.navigate(${JSON.stringify(nextRoute)})`)
-  if (isMac) application.get('MainWindowService').showMainWindow()
-}
 
 async function getNotesRoot() {
   const preferredPath = await Promise.resolve()
@@ -442,7 +427,7 @@ appToolsRouter.post('/settings/open', async (req, res, next) => {
   try {
     const section = SETTINGS_SECTIONS.find((item) => item.id === req.body?.section || item.route === req.body?.route)
     const route = section?.route || req.body?.route || '/settings/provider'
-    await navigate(route)
+    await navigateApp(route)
     res.json({ ok: true, route })
   } catch (error) {
     next(error)
@@ -451,7 +436,7 @@ appToolsRouter.post('/settings/open', async (req, res, next) => {
 
 appToolsRouter.post('/navigate', async (req, res, next) => {
   try {
-    await navigate(req.body?.route || '/')
+    await navigateApp(req.body?.route || '/')
     res.json({ ok: true })
   } catch (error) {
     next(error)

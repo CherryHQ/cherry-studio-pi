@@ -290,7 +290,9 @@ describe('app tools settings routes', () => {
       status: 200,
       json: { ok: true, route: '/settings/provider' }
     })
-    expect(mocks.mainWindow.webContents.executeJavaScript).toHaveBeenCalledWith('window.navigate("/settings/provider")')
+    expect(mocks.mainWindow.webContents.executeJavaScript).toHaveBeenCalledWith(
+      'window.navigate({ to: "/settings/provider" })'
+    )
   })
 })
 
