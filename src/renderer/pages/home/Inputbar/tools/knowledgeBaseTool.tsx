@@ -1,7 +1,7 @@
 import { useAssistantMutations } from '@renderer/hooks/useAssistant'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { defineTool, registerTool, TopicType } from '@renderer/pages/home/Inputbar/types'
 import { isSupportedToolUse } from '@renderer/utils/assistant'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { KnowledgeBaseListItem } from '@shared/data/api/schemas/knowledges'
 import { useCallback } from 'react'
 
@@ -25,8 +25,9 @@ const knowledgeBaseTool = defineTool({
   },
 
   render: function KnowledgeBaseToolRender(context) {
-    const { assistant, state, actions, quickPanel, t } = context
+    const { assistant, state, actions, quickPanel } = context
     const { updateAssistant } = useAssistantMutations()
+    const showSaveFailed = useSaveFailedToast()
 
     const handleSelect = useCallback(
       (bases: KnowledgeBaseListItem[]) => {
@@ -34,11 +35,9 @@ const knowledgeBaseTool = defineTool({
           .then(() => {
             actions.setSelectedKnowledgeBases?.(bases)
           })
-          .catch((error) => {
-            window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-          })
+          .catch(showSaveFailed)
       },
-      [updateAssistant, assistant.id, actions, t]
+      [updateAssistant, assistant.id, actions, showSaveFailed]
     )
 
     return (

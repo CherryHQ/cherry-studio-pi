@@ -7,6 +7,7 @@ import { useCommandHandler } from '@renderer/features/command'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import { useInputText } from '@renderer/hooks/useInputText'
 import { useKnowledgeBases } from '@renderer/hooks/useKnowledgeBase'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { useTextareaResize } from '@renderer/hooks/useTextareaResize'
 import { useTimer } from '@renderer/hooks/useTimer'
 import { mapApiTopicToRendererTopic, useTopicMutations } from '@renderer/hooks/useTopic'
@@ -21,7 +22,6 @@ import {
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import { type FileMetadata, type Topic, TopicType } from '@renderer/types'
 import { delay } from '@renderer/utils'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { getSendMessageShortcutLabel } from '@renderer/utils/input'
 import { documentExts, imageExts, textExts } from '@shared/config/constant'
 import type { KnowledgeBaseListItem } from '@shared/data/api/schemas/knowledges'
@@ -147,6 +147,7 @@ const InputbarInner: FC<InputbarInnerProps> = ({ setActiveTopic, topic, actionsR
   const { bases: allKnowledgeBases } = useKnowledgeBases()
   const [sendMessageShortcut] = usePreference('chat.input.send_message_shortcut')
   const [enableQuickPanelTriggers] = usePreference('chat.input.quick_panel.triggers_enabled')
+  const showSaveFailed = useSaveFailedToast()
 
   const { t } = useTranslation()
   const v2Chat = useV2Chat()
@@ -316,11 +317,9 @@ const InputbarInner: FC<InputbarInnerProps> = ({ setActiveTopic, topic, actionsR
         .then(() => {
           setSelectedKnowledgeBases(allKnowledgeBases.filter((kb) => nextIds.includes(kb.id)))
         })
-        .catch((error) => {
-          window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-        })
+        .catch(showSaveFailed)
     },
-    [assistant?.knowledgeBaseIds, allKnowledgeBases, setSelectedKnowledgeBases, t, updateAssistant]
+    [assistant?.knowledgeBaseIds, allKnowledgeBases, setSelectedKnowledgeBases, showSaveFailed, updateAssistant]
   )
 
   const handleToggleExpanded = useCallback(
