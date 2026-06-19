@@ -150,9 +150,13 @@ const NpxSearch: FC = () => {
 
       try {
         await addMcpServer(newServer)
-        window.toast.success(t('settings.mcp.addSuccess'))
+        if (mountedRef.current) {
+          window.toast.success(t('settings.mcp.addSuccess'))
+        }
       } catch {
-        window.toast.error(t('settings.mcp.addError'))
+        if (mountedRef.current) {
+          window.toast.error(t('settings.mcp.addError'))
+        }
       } finally {
         setPackageAdding(packageName, false)
       }
