@@ -30,6 +30,8 @@ describe('release workflow safety', () => {
   const prepareReleaseWorkflow = fs.readFileSync(prepareReleaseWorkflowPath, 'utf8').replace(/\r\n/g, '\n')
   const releasePackagesWorkflowPath = path.resolve(process.cwd(), '.github/workflows/release-packages.yml')
   const releasePackagesWorkflow = fs.readFileSync(releasePackagesWorkflowPath, 'utf8').replace(/\r\n/g, '\n')
+  const gitCodeSyncWorkflowPath = path.resolve(process.cwd(), '.github/workflows/sync-to-gitcode.yml')
+  const gitCodeSyncWorkflow = fs.readFileSync(gitCodeSyncWorkflowPath, 'utf8').replace(/\r\n/g, '\n')
   const prepareReleaseSkillPath = path.resolve(process.cwd(), '.agents/skills/prepare-release/SKILL.md')
   const prepareReleaseSkill = fs.readFileSync(prepareReleaseSkillPath, 'utf8').replace(/\r\n/g, '\n')
 
@@ -99,5 +101,15 @@ describe('release workflow safety', () => {
   it('does not publish upstream packages from the Pi repository', () => {
     expect(releasePackagesWorkflow).toContain("github.repository == 'CherryHQ/cherry-studio'")
     expect(releasePackagesWorkflow).not.toContain("github.repository == 'CherryHQ/cherry-studio-pi'")
+  })
+
+  it('guards GitCode release sync against accidental duplicate dispatches', () => {
+    expect(gitCodeSyncWorkflow).toContain('confirm_tag:')
+    expect(gitCodeSyncWorkflow).toContain('CONFIRM_TAG="${{ github.event.inputs.confirm_tag }}"')
+    expect(gitCodeSyncWorkflow).toContain('GitCode sync tag confirmation mismatch')
+    expect(gitCodeSyncWorkflow).toContain(
+      'group: gitcode-release-sync-${{ github.repository }}-${{ github.event.inputs.tag }}'
+    )
+    expect(workflow).toContain('-f confirm_tag="$RELEASE_TAG"')
   })
 })

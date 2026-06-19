@@ -9,6 +9,10 @@ on:
       tag:
         description: 'Release tag (e.g. v1.0.0)'
         required: true
+      confirm_tag:
+        description: 'Type the same release tag again to confirm GitCode sync'
+        required: true
+        default: ''
       clean:
         description: 'Clean node_modules before build'
         type: boolean
@@ -21,6 +25,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: gitcode-release-sync-${{ github.repository }}-${{ github.event.inputs.tag }}
+  cancel-in-progress: false
+
 jobs:
   build-windows-signed:
     if: github.repository == 'CherryHQ/cherry-studio-pi'
@@ -28,11 +36,27 @@ jobs:
     outputs:
       tag: ${{ steps.get-tag.outputs.tag }}
     steps:
-      - name: Get tag name
+      - name: Validate dispatch inputs
         id: get-tag
         shell: bash
         run: |
-          echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          TAG="${{ github.event.inputs.tag }}"
+          CONFIRM_TAG="${{ github.event.inputs.confirm_tag }}"
+
+          if [ "$CONFIRM_TAG" != "$TAG" ]; then
+            echo "GitCode sync tag confirmation mismatch."
+            echo "tag=$TAG"
+            echo "confirm_tag=$CONFIRM_TAG"
+            exit 1
+          fi
+
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $TAG"
+            echo "Expected a tag like v1.9.7, v1.9.7-rc.1, or v1.9.7-beta.1"
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Check out Git repository
         uses: actions/checkout@v6

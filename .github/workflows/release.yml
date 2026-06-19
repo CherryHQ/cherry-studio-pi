@@ -433,5 +433,6 @@ jobs:
             --repo "${{ github.repository }}" \
             --ref "${{ github.event.repository.default_branch }}" \
             -f tag="$RELEASE_TAG" \
+            -f confirm_tag="$RELEASE_TAG" \
             -f clean=false \
             -f dry_run=false
