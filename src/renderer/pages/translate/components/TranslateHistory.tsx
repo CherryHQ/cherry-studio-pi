@@ -2,6 +2,7 @@ import { ConfirmDialog, EmptyState, PageSidePanel } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import { DynamicVirtualList } from '@renderer/components/VirtualList'
 import { useLanguages, useTranslateHistories, useTranslateHistory } from '@renderer/hooks/translate'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { cn } from '@renderer/utils'
 import type { TranslateLangCode } from '@shared/data/preference/preferenceTypes'
 import type { TranslateHistory, TranslateLanguage } from '@shared/data/types/translate'
@@ -57,6 +58,7 @@ const TranslateHistoryList: FC<Props> = ({ isOpen, onHistoryItemClick, onClose }
   const { getLanguage, getLabel } = useLanguageLabels()
   const { clear: clearHistory, update: updateHistory } = useTranslateHistory()
   const pendingLoadMoreRef = useRef(false)
+  const showCopyFailed = useSaveFailedToast('common.copy_failed')
 
   const history: DisplayedTranslateHistoryItem[] = useMemo(
     () =>
@@ -103,10 +105,10 @@ const TranslateHistoryList: FC<Props> = ({ isOpen, onHistoryItemClick, onClose }
         window.toast.success(t('translate.copied'))
       } catch (error) {
         logger.error('Failed to copy translate history text', error as Error)
-        window.toast.error(t('common.copy_failed'))
+        showCopyFailed(error)
       }
     },
-    [t]
+    [showCopyFailed, t]
   )
 
   useEffect(() => {
