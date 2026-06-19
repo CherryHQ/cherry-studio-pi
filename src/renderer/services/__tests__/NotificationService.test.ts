@@ -5,7 +5,8 @@ const mocks = vi.hoisted(() => ({
   getMultiple: vi.fn(),
   queueAdd: vi.fn(),
   queueClear: vi.fn(),
-  ipcOn: vi.fn()
+  ipcOn: vi.fn(),
+  removeListener: vi.fn()
 }))
 
 vi.mock('@data/PreferenceService', () => ({
@@ -38,6 +39,7 @@ describe('NotificationService', () => {
     vi.resetModules()
     vi.clearAllMocks()
     delete (globalThis as Record<string, unknown>)[listenerKey]
+    mocks.ipcOn.mockReturnValue(mocks.removeListener)
     Object.defineProperty(window, 'electron', {
       configurable: true,
       value: {
@@ -88,5 +90,22 @@ describe('NotificationService', () => {
 
     expect(mocks.ipcOn).toHaveBeenCalledTimes(1)
     expect(mocks.ipcOn).toHaveBeenCalledWith('notification-click', expect.any(Function))
+  })
+
+  it('unregisters the notification click listener and allows fresh registration', async () => {
+    const { registerNotificationClickHandler, unregisterNotificationClickHandler } = await import(
+      '../NotificationService'
+    )
+
+    expect(mocks.ipcOn).toHaveBeenCalledTimes(1)
+
+    unregisterNotificationClickHandler()
+
+    expect(mocks.removeListener).toHaveBeenCalledTimes(1)
+    expect((globalThis as Record<string, unknown>)[listenerKey]).toBeUndefined()
+
+    registerNotificationClickHandler()
+
+    expect(mocks.ipcOn).toHaveBeenCalledTimes(2)
   })
 })

@@ -5,11 +5,46 @@ import { notificationQueue } from '../queue/NotificationQueue'
 
 const NOTIFICATION_CLICK_HANDLER_KEY = '__CHERRY_STUDIO_PI_NOTIFICATION_CLICK_HANDLER__'
 
+type NotificationClickHandlerState = {
+  remove: () => void
+}
+
+type NotificationClickHandlerGlobal = typeof globalThis & {
+  [NOTIFICATION_CLICK_HANDLER_KEY]?: boolean | NotificationClickHandlerState
+}
+
+export function registerNotificationClickHandler(): void {
+  const ipcRenderer = typeof window !== 'undefined' ? window.electron?.ipcRenderer : undefined
+  if (!ipcRenderer) return
+
+  const globalState = globalThis as NotificationClickHandlerGlobal
+  if (globalState[NOTIFICATION_CLICK_HANDLER_KEY]) return
+
+  const remove = ipcRenderer.on('notification-click', (_event, notification: Notification) => {
+    // 根据通知类型处理点击事件
+    if (notification.type === 'action') {
+      notification.onClick?.()
+    }
+  })
+  globalState[NOTIFICATION_CLICK_HANDLER_KEY] = { remove }
+}
+
+export function unregisterNotificationClickHandler(): void {
+  const globalState = globalThis as NotificationClickHandlerGlobal
+  const state = globalState[NOTIFICATION_CLICK_HANDLER_KEY]
+
+  if (state && typeof state === 'object') {
+    state.remove()
+  }
+
+  delete globalState[NOTIFICATION_CLICK_HANDLER_KEY]
+}
+
 export class NotificationService {
   private queue = notificationQueue
 
   constructor() {
-    this.setupNotificationClickHandler()
+    registerNotificationClickHandler()
   }
 
   /**
@@ -30,26 +65,6 @@ export class NotificationService {
   }
 
   /**
-   * 设置通知点击事件处理
-   */
-  private setupNotificationClickHandler(): void {
-    const ipcRenderer = typeof window !== 'undefined' ? window.electron?.ipcRenderer : undefined
-    if (!ipcRenderer) return
-
-    const globalState = globalThis as Record<string, unknown>
-    if (globalState[NOTIFICATION_CLICK_HANDLER_KEY]) return
-    globalState[NOTIFICATION_CLICK_HANDLER_KEY] = true
-
-    // Register an event listener for notification clicks
-    ipcRenderer.on('notification-click', (_event, notification: Notification) => {
-      // 根据通知类型处理点击事件
-      if (notification.type === 'action') {
-        notification.onClick?.()
-      }
-    })
-  }
-
-  /**
    * 清空通知队列
    */
   public clear(): void {
@@ -65,3 +80,9 @@ export class NotificationService {
 }
 
 export const notificationService = new NotificationService()
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    unregisterNotificationClickHandler()
+  })
+}
