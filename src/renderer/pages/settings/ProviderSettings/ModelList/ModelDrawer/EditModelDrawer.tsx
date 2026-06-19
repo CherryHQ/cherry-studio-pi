@@ -103,6 +103,8 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
   const savingRef = useRef(false)
   const deleteConfirmRef = useRef(false)
   const deleteRunningRef = useRef(false)
+  const mountedRef = useRef(true)
+  const activeRef = useRef(open)
 
   const mode: ModelDrawerMode = provider && isNewApiProvider(provider) ? 'new-api' : 'legacy'
   const apiModelId = useMemo(() => (model ? getModelApiId(model) : ''), [model])
@@ -110,6 +112,21 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
     () => (model ? getInitialSelectedCapabilities(model) : new Set<ModelCapabilityToggle>()),
     [model]
   )
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+      activeRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    activeRef.current = open
+  }, [open])
+
+  const isDrawerActive = useCallback(() => mountedRef.current && activeRef.current, [])
 
   useEffect(() => {
     if (!open || !model) {
@@ -211,10 +228,12 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
   const autoSave = useCallback(
     (overrides?: BuildPatchOverrides) => {
       void handleUpdateModel(buildPatch(overrides)).catch(() => {
-        window.toast.error(t('common.error'))
+        if (isDrawerActive()) {
+          window.toast.error(t('common.error'))
+        }
       })
     },
-    [buildPatch, handleUpdateModel, t]
+    [buildPatch, handleUpdateModel, isDrawerActive, t]
   )
 
   const handleToggleCapability = useCallback((type: ModelCapabilityToggle) => {
@@ -251,15 +270,21 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
     setSaving(true)
     try {
       await handleUpdateModel(buildPatch())
-      setShowMoreSettings(false)
-      onClose()
+      if (isDrawerActive()) {
+        setShowMoreSettings(false)
+        onClose()
+      }
     } catch {
-      window.toast.error(t('settings.models.manage.operation_failed'))
+      if (isDrawerActive()) {
+        window.toast.error(t('settings.models.manage.operation_failed'))
+      }
     } finally {
       savingRef.current = false
-      setSaving(false)
+      if (mountedRef.current) {
+        setSaving(false)
+      }
     }
-  }, [buildPatch, endpointTypes.length, handleUpdateModel, mode, onClose, t])
+  }, [buildPatch, endpointTypes.length, handleUpdateModel, isDrawerActive, mode, onClose, t])
 
   const handleFormSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -296,15 +321,17 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
         deleteRunningRef.current = true
         try {
           await deleteModel(model.providerId ?? providerId, modelId)
-          window.toast.success(t('common.delete_success'))
-          onClose()
+          if (isDrawerActive()) {
+            window.toast.success(t('common.delete_success'))
+            onClose()
+          }
         } finally {
           deleteRunningRef.current = false
           deleteConfirmRef.current = false
         }
       }
     })
-  }, [deleteModel, model, onClose, providerId, t])
+  }, [deleteModel, isDrawerActive, model, onClose, providerId, t])
 
   if (!provider || !model) {
     return <ProviderSettingsDrawer open={open} onClose={onClose} title={t('models.edit')} />
@@ -362,9 +389,13 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
                   onClick={async () => {
                     try {
                       await navigator.clipboard.writeText(apiModelId)
-                      window.toast.success(t('message.copied'))
+                      if (isDrawerActive()) {
+                        window.toast.success(t('message.copied'))
+                      }
                     } catch (error) {
-                      window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+                      if (isDrawerActive()) {
+                        window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+                      }
                     }
                   }}>
                   <CopyIcon size={14} />

@@ -437,6 +437,48 @@ describe('Model drawers', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('ignores a finished edit-model save after the drawer closes', async () => {
+    useProviderMock.mockReturnValue({
+      provider: { id: 'openai', name: 'OpenAI', isEnabled: true },
+      updateProvider: updateProviderMock
+    })
+    const runningUpdate = deferred<void>()
+    updateModelMock.mockReturnValueOnce(runningUpdate.promise)
+    const onClose = vi.fn()
+    const model = {
+      id: 'openai::claude-4-sonnet',
+      providerId: 'openai',
+      name: 'claude-4-sonnet',
+      group: 'Anthropic',
+      capabilities: [],
+      supportsStreaming: true,
+      pricing: {
+        input: { perMillionTokens: 0, currency: 'USD' },
+        output: { perMillionTokens: 0, currency: 'USD' }
+      }
+    } as any
+
+    const { rerender } = render(<EditModelDrawer providerId="openai" open onClose={onClose} model={model} />)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /common\.save/i }))
+    })
+
+    rerender(<EditModelDrawer providerId="openai" open={false} onClose={onClose} model={model} />)
+
+    await act(async () => {
+      runningUpdate.resolve()
+      await runningUpdate.promise
+    })
+
+    expect(onClose).not.toHaveBeenCalled()
+    expect(window.toast.error).not.toHaveBeenCalled()
+
+    rerender(<EditModelDrawer providerId="openai" open onClose={onClose} model={model} />)
+
+    expect(screen.getByRole('button', { name: /common\.save/i })).not.toBeDisabled()
+  })
+
   it('keeps edit-model drawer open and reports save failures', async () => {
     useProviderMock.mockReturnValue({
       provider: { id: 'openai', name: 'OpenAI', isEnabled: true },
@@ -560,6 +602,47 @@ describe('Model drawers', () => {
     expect(deleteModelMock).toHaveBeenCalledWith('openai', 'claude-4-sonnet')
     expect(window.toast.success).toHaveBeenCalledWith('common.delete_success')
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('ignores a finished model delete after the drawer closes', async () => {
+    useProviderMock.mockReturnValue({
+      provider: { id: 'openai', name: 'OpenAI', isEnabled: true },
+      updateProvider: updateProviderMock
+    })
+    const runningDelete = deferred<void>()
+    deleteModelMock.mockReturnValueOnce(runningDelete.promise)
+    const onClose = vi.fn()
+    const model = {
+      id: 'openai::claude-4-sonnet',
+      providerId: 'openai',
+      name: 'claude-4-sonnet',
+      group: 'Anthropic',
+      capabilities: [],
+      isEnabled: false,
+      supportsStreaming: true,
+      pricing: {
+        input: { perMillionTokens: 0, currency: 'USD' },
+        output: { perMillionTokens: 0, currency: 'USD' }
+      }
+    } as any
+
+    const { rerender } = render(<EditModelDrawer providerId="openai" open onClose={onClose} model={model} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /common\.delete/i }))
+
+    const options = (window.modal.confirm as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    const deleteRun = options.onOk()
+
+    rerender(<EditModelDrawer providerId="openai" open={false} onClose={onClose} model={model} />)
+
+    await act(async () => {
+      runningDelete.resolve(undefined)
+      await deleteRun
+    })
+
+    expect(deleteModelMock).toHaveBeenCalledWith('openai', 'claude-4-sonnet')
+    expect(window.toast.success).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('prevents duplicate model delete confirmations and operations', async () => {
