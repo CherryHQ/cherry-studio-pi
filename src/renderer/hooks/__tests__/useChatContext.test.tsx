@@ -69,10 +69,12 @@ vi.mock('react-i18next', () => ({
 
 function deferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void
-  const promise = new Promise<T>((resolvePromise) => {
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise
+    reject = rejectPromise
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 describe('useChatContextProvider', () => {
@@ -127,6 +129,25 @@ describe('useChatContextProvider', () => {
     expect(mocks.setSelectedMessageIds).not.toHaveBeenCalled()
   })
 
+  it('ignores selected message export failures after unmount', async () => {
+    const saveOperation = deferred<string | null>()
+    mocks.fileSave.mockReturnValueOnce(saveOperation.promise)
+
+    const { result, unmount } = renderHook(() => useChatContextProvider({ id: 'topic-1' } as any))
+
+    const action = result.current.handleMultiSelectAction('save', ['m1'])
+    unmount()
+
+    await act(async () => {
+      saveOperation.reject(new Error('disk full after unmount'))
+      await action
+    })
+
+    expect(mocks.toastError).not.toHaveBeenCalled()
+    expect(mocks.setMultiSelectMode).not.toHaveBeenCalled()
+    expect(mocks.setSelectedMessageIds).not.toHaveBeenCalled()
+  })
+
   it('shows an error and keeps multi-select mode when selected message copy fails', async () => {
     mocks.clipboardWriteText.mockRejectedValueOnce(new Error('permission denied'))
 
@@ -139,6 +160,25 @@ describe('useChatContextProvider', () => {
     expect(mocks.clipboardWriteText).toHaveBeenCalledWith('hello from selected message')
     expect(mocks.toastError).toHaveBeenCalledWith('common.copy_failed: permission denied')
     expect(mocks.toastSuccess).not.toHaveBeenCalled()
+    expect(mocks.setMultiSelectMode).not.toHaveBeenCalled()
+    expect(mocks.setSelectedMessageIds).not.toHaveBeenCalled()
+  })
+
+  it('ignores selected message copy failures after unmount', async () => {
+    const copyOperation = deferred<void>()
+    mocks.clipboardWriteText.mockReturnValueOnce(copyOperation.promise)
+
+    const { result, unmount } = renderHook(() => useChatContextProvider({ id: 'topic-1' } as any))
+
+    const action = result.current.handleMultiSelectAction('copy', ['m1'])
+    unmount()
+
+    await act(async () => {
+      copyOperation.reject(new Error('permission denied after unmount'))
+      await action
+    })
+
+    expect(mocks.toastError).not.toHaveBeenCalled()
     expect(mocks.setMultiSelectMode).not.toHaveBeenCalled()
     expect(mocks.setSelectedMessageIds).not.toHaveBeenCalled()
   })

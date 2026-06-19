@@ -1,10 +1,10 @@
 import { useCache } from '@data/hooks/useCache'
 import { loggerService } from '@logger'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { useV2Chat } from '@renderer/hooks/V2ChatContext'
 import { usePartsMap } from '@renderer/pages/home/Messages/Blocks'
 import { EVENT_NAMES, EventEmitter } from '@renderer/services/EventService'
 import type { Topic } from '@renderer/types'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { getTextFromParts } from '@renderer/utils/messageUtils/partsHelpers'
 import { createContext, use, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -49,6 +49,8 @@ export const useChatContextProvider = (activeTopic: Topic): ChatContextValue => 
   const { t } = useTranslation()
   const v2 = useV2Chat()
   const partsMap = usePartsMap()
+  const showSaveFailed = useSaveFailedToast()
+  const showCopyFailed = useSaveFailedToast('common.copy_failed')
 
   const [isMultiSelectMode, setIsMultiSelectMode] = useCache('chat.multi_select_mode')
   const [selectedMessageIds, setSelectedMessageIds] = useCache('chat.selected_message_ids')
@@ -175,7 +177,7 @@ export const useChatContextProvider = (activeTopic: Topic): ChatContextValue => 
               }
             } catch (error) {
               logger.error('Failed to save selected messages:', error as Error)
-              window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+              showSaveFailed(error)
             }
           }
           break
@@ -192,7 +194,7 @@ export const useChatContextProvider = (activeTopic: Topic): ChatContextValue => 
               handleToggleMultiSelectMode(false)
             } catch (error) {
               logger.error('Failed to copy selected messages:', error as Error)
-              window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+              showCopyFailed(error)
             }
           }
           break
@@ -201,7 +203,7 @@ export const useChatContextProvider = (activeTopic: Topic): ChatContextValue => 
           break
       }
     },
-    [t, v2, handleToggleMultiSelectMode, partsMap]
+    [t, v2, handleToggleMultiSelectMode, partsMap, showSaveFailed, showCopyFailed]
   )
 
   return {
