@@ -1,5 +1,5 @@
 import { ENDPOINT_TYPE } from '@shared/data/types/model'
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useProviderDeepLinkImport } from '../useProviderDeepLinkImport'
@@ -34,6 +34,17 @@ vi.mock('../../UrlSchemaInfoPopup', () => ({
     show: (...args: any[]) => popupShowMock(...args)
   }
 }))
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}
 
 describe('useProviderDeepLinkImport', () => {
   beforeEach(() => {
@@ -215,5 +226,94 @@ describe('useProviderDeepLinkImport', () => {
     expect(addApiKeyTriggerMock).not.toHaveBeenCalled()
     expect(onSelectProvider).not.toHaveBeenCalled()
     expect(navigateMock).toHaveBeenCalledWith({ to: '/settings/provider' })
+  })
+
+  it('does not continue a pending popup import after unmount', async () => {
+    const onSelectProvider = vi.fn()
+    const popup = createDeferred<any>()
+    popupShowMock.mockReturnValue(popup.promise)
+
+    const { unmount } = renderHook(() =>
+      useProviderDeepLinkImport(
+        JSON.stringify({
+          id: 'openai',
+          apiKey: 'sk-openai',
+          baseUrl: 'https://api.openai.com',
+          type: 'openai',
+          name: 'OpenAI'
+        }),
+        onSelectProvider
+      )
+    )
+
+    await waitFor(() => expect(popupShowMock).toHaveBeenCalledTimes(1))
+    unmount()
+
+    await act(async () => {
+      popup.resolve({
+        updatedProvider: {
+          id: 'openai',
+          name: 'OpenAI',
+          type: 'openai',
+          apiKey: 'sk-openai',
+          apiHost: 'https://api.openai.com'
+        },
+        isNew: true,
+        displayName: 'OpenAI'
+      })
+      await popup.promise
+    })
+
+    expect(createProviderMock).not.toHaveBeenCalled()
+    expect(updateProviderByIdMock).not.toHaveBeenCalled()
+    expect(addApiKeyTriggerMock).not.toHaveBeenCalled()
+    expect(onSelectProvider).not.toHaveBeenCalled()
+    expect(navigateMock).not.toHaveBeenCalled()
+    expect(window.toast.success).not.toHaveBeenCalled()
+    expect(window.toast.error).not.toHaveBeenCalled()
+  })
+
+  it('does not show stale import errors after unmount', async () => {
+    const onSelectProvider = vi.fn()
+    const createProvider = createDeferred<any>()
+    createProviderMock.mockReturnValueOnce(createProvider.promise)
+    popupShowMock.mockResolvedValue({
+      updatedProvider: {
+        id: 'openai',
+        name: 'OpenAI',
+        type: 'openai',
+        apiKey: 'sk-openai',
+        apiHost: 'https://api.openai.com'
+      },
+      isNew: true,
+      displayName: 'OpenAI'
+    })
+
+    const { unmount } = renderHook(() =>
+      useProviderDeepLinkImport(
+        JSON.stringify({
+          id: 'openai',
+          apiKey: 'sk-openai',
+          baseUrl: 'https://api.openai.com',
+          type: 'openai',
+          name: 'OpenAI'
+        }),
+        onSelectProvider
+      )
+    )
+
+    await waitFor(() => expect(createProviderMock).toHaveBeenCalledTimes(1))
+    unmount()
+
+    await act(async () => {
+      createProvider.reject(new Error('closed'))
+      await createProvider.promise.catch(() => undefined)
+    })
+
+    expect(addApiKeyTriggerMock).not.toHaveBeenCalled()
+    expect(onSelectProvider).not.toHaveBeenCalled()
+    expect(navigateMock).not.toHaveBeenCalled()
+    expect(window.toast.success).not.toHaveBeenCalled()
+    expect(window.toast.error).not.toHaveBeenCalled()
   })
 })

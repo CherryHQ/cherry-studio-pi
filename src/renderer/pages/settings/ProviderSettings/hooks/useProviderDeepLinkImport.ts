@@ -59,9 +59,15 @@ export function useProviderDeepLinkImport(
       return
     }
 
+    let active = true
+    const isActive = () => active
+
     const importProvider = async (providerData: ImportedProviderSearchData) => {
       try {
         const popupResult = await UrlSchemaInfoPopup.show(providerData)
+        if (!isActive()) {
+          return
+        }
         const { updatedProvider, isNew, displayName } = popupResult
 
         if (!updatedProvider) {
@@ -107,10 +113,15 @@ export function useProviderDeepLinkImport(
           })
         }
 
-        onSelectProvider(providerId)
-        void navigate({ to: '/settings/provider', search: { id: providerId } })
-        window.toast.success(t('settings.models.provider_key_added', { provider: displayName }))
+        if (isActive()) {
+          onSelectProvider(providerId)
+          void navigate({ to: '/settings/provider', search: { id: providerId } })
+          window.toast.success(t('settings.models.provider_key_added', { provider: displayName }))
+        }
       } catch (error) {
+        if (!isActive()) {
+          return
+        }
         logger.error('Failed to import provider deep link data', error as Error)
         window.toast.error(t('settings.models.provider_key_add_failed_by_invalid_data'))
         void navigate({ to: '/settings/provider' })
@@ -131,6 +142,10 @@ export function useProviderDeepLinkImport(
       logger.error('Failed to parse provider deep link import data', error as Error)
       window.toast.error(t('settings.models.provider_key_add_failed_by_invalid_data'))
       void navigate({ to: '/settings/provider' })
+    }
+
+    return () => {
+      active = false
     }
   }, [addApiKeyTrigger, createProvider, navigate, onSelectProvider, searchAddProviderData, t, updateProviderById])
 }
