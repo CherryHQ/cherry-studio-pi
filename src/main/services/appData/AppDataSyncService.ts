@@ -964,8 +964,12 @@ function hasStorageV2RemoteData(manifest?: StorageV2WebDavRecordSyncManifest | n
   )
 }
 
+function isEmptyRuntimeDirectoryMeta(meta: Pick<RemoteRuntimeDirectoryMeta, 'fileCount' | 'byteSize' | 'valueHash'>) {
+  return meta.fileCount === 0 && meta.byteSize === 0 && meta.valueHash === EMPTY_RUNTIME_DIRECTORY_VALUE_HASH
+}
+
 function hasRuntimeDirectoriesRemoteData(manifest?: RemoteRuntimeDirectoriesManifest | null) {
-  return Object.keys(manifest?.directories ?? {}).length > 0
+  return Object.values(manifest?.directories ?? {}).some((meta) => !isEmptyRuntimeDirectoryMeta(meta))
 }
 
 function hasNotesRemoteData(manifest?: RemoteNotesManifest | null) {
@@ -3254,10 +3258,6 @@ export class AppDataSyncService {
     return Boolean(stat?.isDirectory())
   }
 
-  private isEmptyRuntimeDirectoryMeta(meta: RemoteRuntimeDirectoryMeta) {
-    return meta.fileCount === 0 && meta.byteSize === 0 && meta.valueHash === EMPTY_RUNTIME_DIRECTORY_VALUE_HASH
-  }
-
   private async pushRuntimeDirectoryBundle(
     client: WebDAVClient,
     basePath: string,
@@ -3470,7 +3470,7 @@ export class AppDataSyncService {
     summary: DataSyncSummary,
     context: SyncRunContext,
     stageSyncState: (id: string, value: unknown) => void,
-    options: { preferRemoteOnFirstJoin?: boolean } = {}
+    options: { joiningExistingSyncSpace?: boolean; preferRemoteOnFirstJoin?: boolean } = {}
   ) {
     const directoriesManifest = this.normalizeRuntimeDirectoriesManifest(inputManifest)
     const deviceId = db.getDeviceId()
@@ -3530,7 +3530,7 @@ export class AppDataSyncService {
 
       if (!localSnapshot && remoteMeta) {
         const remoteCursor = runtimeDirectoryContentCursor(remoteMeta.valueHash)
-        if (this.isEmptyRuntimeDirectoryMeta(remoteMeta)) {
+        if (isEmptyRuntimeDirectoryMeta(remoteMeta)) {
           stageSyncState(syncKey, remoteCursor)
           summary.skipped += 1
           continue
@@ -3558,6 +3558,11 @@ export class AppDataSyncService {
       if (localSnapshot.valueHash === remoteMeta.valueHash) {
         stageSyncState(syncKey, localCursor)
         summary.skipped += 1
+        continue
+      }
+
+      if (!lastCursor && options.joiningExistingSyncSpace && isEmptyRuntimeDirectoryMeta(remoteMeta)) {
+        await uploadSnapshot(localSnapshot)
         continue
       }
 
@@ -4351,7 +4356,7 @@ export class AppDataSyncService {
         summary,
         context,
         stageSyncState,
-        { preferRemoteOnFirstJoin: preferRemoteRuntimeDirectoriesOnFirstJoin }
+        { joiningExistingSyncSpace, preferRemoteOnFirstJoin: preferRemoteRuntimeDirectoriesOnFirstJoin }
       )
 
       if (this.shouldUploadFullSnapshot(db, manifest, summary.lastSyncAt)) {

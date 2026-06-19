@@ -336,6 +336,23 @@ function createRuntimeDirectoryBundle(input: {
   }
 }
 
+function createEmptyRuntimeDirectoryBundle(name: 'Memory' | 'Skills' | 'MCP' | 'Channels', updatedAt: number) {
+  const bundle = {
+    version: 1,
+    name,
+    updatedAt,
+    files: {}
+  }
+  const compressed = gzipSync(Buffer.from(JSON.stringify(bundle), 'utf8'), { level: 9 })
+
+  return {
+    valueHash: hashJson([]),
+    byteSize: 0,
+    compressed,
+    fileCount: 0
+  }
+}
+
 function mockDirectoryContentsFromRemoteFiles() {
   mocks.webdav.getDirectoryContents.mockImplementation(async (dirPath: string) => {
     const normalized = path.posix.normalize(dirPath).replace(/\/+$/g, '')
@@ -2843,6 +2860,74 @@ describe('AppDataSyncService', () => {
         String(filePath).includes('/runtime-directories/bundles/')
       )
     ).toBe(false)
+  })
+
+  it('does not let empty remote runtime directories wipe local data when first joining an existing sync space', async () => {
+    const relativePath = 'sync-fixture/SKILL.md'
+    const localSkillPath = path.join(mocks.runtimeDataRoot, 'Skills', relativePath)
+    await fsp.mkdir(path.dirname(localSkillPath), { recursive: true })
+    await fsp.writeFile(localSkillPath, '# Local User Skill')
+    await fsp.utimes(localSkillPath, new Date('2026-06-06T12:00:00.000Z'), new Date('2026-06-06T12:00:00.000Z'))
+
+    const emptyRemoteBundle = createEmptyRuntimeDirectoryBundle('Skills', Date.parse('2026-06-08T12:00:00.000Z'))
+    const emptyRemoteBundlePath = `/remote-root/sync/v1/runtime-directories/bundles/Skills/${emptyRemoteBundle.valueHash}.json.gz`
+    mocks.remoteFiles.set(emptyRemoteBundlePath, emptyRemoteBundle.compressed)
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        generation: 7,
+        updatedAt: 1760000000000,
+        records: {},
+        syncSpace: {
+          version: 1,
+          id: 'sync-space-existing',
+          createdAt: 1760000000000,
+          keyMaterial: 'abcdefghijklmnopqrstuvwxyz123456',
+          keyFormat: 'cherry-sync-space-key-v1',
+          secretEncryption: 'cherry-webdav-secret-sync-aes-256-gcm'
+        },
+        runtimeDirectories: {
+          version: 1,
+          updatedAt: 1760000000000,
+          directories: {
+            Skills: {
+              version: 1,
+              name: 'Skills',
+              valueHash: emptyRemoteBundle.valueHash,
+              byteSize: emptyRemoteBundle.byteSize,
+              compressedByteSize: emptyRemoteBundle.compressed.byteLength,
+              fileCount: emptyRemoteBundle.fileCount,
+              updatedAt: Date.parse('2026-06-08T12:00:00.000Z'),
+              deviceId: 'remote-device',
+              path: `runtime-directories/bundles/Skills/${emptyRemoteBundle.valueHash}.json.gz`
+            }
+          }
+        }
+      })
+    )
+    mocks.webdav.exists.mockImplementation(async (filePath: string) => {
+      if (String(filePath).endsWith('/.sync.lock.json') || String(filePath).includes('/runtime-directories/bundles/')) {
+        return mocks.remoteFiles.has(filePath)
+      }
+      return true
+    })
+
+    const summary = await new AppDataSyncService().syncNow(config)
+
+    await expect(fsp.readFile(localSkillPath, 'utf8')).resolves.toBe('# Local User Skill')
+    expect(summary.uploaded).toBeGreaterThanOrEqual(1)
+    expect(mocks.webdav.getFileContents).not.toHaveBeenCalledWith(emptyRemoteBundlePath, { format: 'binary' })
+    const publishedManifest = JSON.parse(String(mocks.remoteFiles.get('/remote-root/sync/v1/manifest.json')))
+    expect(publishedManifest.runtimeDirectories.directories.Skills).toEqual(
+      expect.objectContaining({
+        name: 'Skills',
+        byteSize: Buffer.byteLength('# Local User Skill', 'utf8'),
+        fileCount: 1,
+        deviceId: 'local-device'
+      })
+    )
+    expect(publishedManifest.runtimeDirectories.directories.Skills.valueHash).not.toBe(emptyRemoteBundle.valueHash)
   })
 
   it('downloads remote runtime directories that appear after a local first-join defer', async () => {
