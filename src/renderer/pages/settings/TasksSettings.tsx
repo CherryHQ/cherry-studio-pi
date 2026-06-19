@@ -52,6 +52,7 @@ import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingRow, SettingRowTitle, SettingsContentColumn, SettingTitle } from '.'
 import { getAgentSessionNavigationTarget } from './taskNavigation'
+import { resolveTaskTextFieldBlur } from './taskTextFieldGuards'
 
 const logger = loggerService.withContext('TasksSettings')
 const SYSTEM_TASK_WORKSPACE_SOURCE = { type: 'system' as const } satisfies CreateTaskRequest['workspace']
@@ -210,14 +211,32 @@ const TaskDetail: FC<{
     [task.id, onUpdate]
   )
 
+  const commitName = useCallback(() => {
+    const resolution = resolveTaskTextFieldBlur(name, task.name)
+    if (resolution.action === 'save') {
+      setName(resolution.value)
+      saveField({ name: resolution.value })
+    } else if (resolution.action === 'reset') {
+      setName(resolution.value)
+    }
+  }, [name, saveField, task.name])
+
+  const commitPrompt = useCallback(() => {
+    const resolution = resolveTaskTextFieldBlur(prompt, task.prompt)
+    if (resolution.action === 'save') {
+      setPrompt(resolution.value)
+      saveField({ prompt: resolution.value })
+    } else if (resolution.action === 'reset') {
+      setPrompt(resolution.value)
+    }
+  }, [prompt, saveField, task.prompt])
+
   const handlePromptModalOpenChange = useCallback(
     (open: boolean) => {
-      if (!open && prompt.trim() && prompt !== task.prompt) {
-        saveField({ prompt: prompt.trim() })
-      }
+      if (!open) commitPrompt()
       setPromptModalOpen(open)
     },
-    [prompt, saveField, task.prompt]
+    [commitPrompt]
   )
 
   const formatDateTime = (iso: string | null | undefined) => {
@@ -309,7 +328,7 @@ const TaskDetail: FC<{
             <UIInput
               value={name}
               onChange={(e) => setName(e.target.value)}
-              onBlur={() => name.trim() && name !== task.name && saveField({ name: name.trim() })}
+              onBlur={commitName}
               disabled={isCompleted}
             />
           </SettingRow>
@@ -334,7 +353,7 @@ const TaskDetail: FC<{
             <Textarea.Input
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              onBlur={() => prompt.trim() && prompt !== task.prompt && saveField({ prompt: prompt.trim() })}
+              onBlur={commitPrompt}
               disabled={isCompleted}
               rows={4}
               className="min-h-22 resize-y px-3 py-2"
