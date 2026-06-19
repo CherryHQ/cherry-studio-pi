@@ -63,7 +63,9 @@ const NutstoreSettings: FC = () => {
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+      if (mountedRef.current) {
+        window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+      }
     },
     [t]
   )
@@ -152,6 +154,10 @@ const NutstoreSettings: FC = () => {
       title: t('settings.data.nutstore.logout.title'),
       content: t('settings.data.nutstore.logout.content')
     })
+    if (!mountedRef.current) {
+      return
+    }
+
     if (confirmedLogout) {
       try {
         await setNutstoreToken('')
@@ -161,7 +167,9 @@ const NutstoreSettings: FC = () => {
         showSaveFailed(error)
         return
       }
-      setNutstoreUsername('')
+      if (mountedRef.current) {
+        setNutstoreUsername('')
+      }
     }
   }, [setNutstorePath, setNutstoreToken, setNutstoreAutoSync, showSaveFailed, t])
 

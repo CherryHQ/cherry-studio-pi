@@ -2,13 +2,17 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import NutstoreSettings from '../NutstoreSettings'
 import S3Settings from '../S3Settings'
 import WebDavSettings from '../WebDavSettings'
 
 const mocks = vi.hoisted(() => ({
   openSmartMiniApp: vi.fn(),
+  modalConfirm: vi.fn(),
+  nutstoreSsoHandler: vi.fn(),
   preferenceValues: {} as Record<string, unknown>,
   preferenceSetters: {} as Record<string, ReturnType<typeof vi.fn>>,
+  setTimeoutTimer: vi.fn(),
   startAutoSync: vi.fn(),
   stopAutoSync: vi.fn()
 }))
@@ -37,7 +41,10 @@ function preferenceSetter(key: string) {
 }
 
 vi.mock('@ant-design/icons', () => ({
+  CheckOutlined: () => <span />,
+  FolderOutlined: () => <span />,
   FolderOpenOutlined: () => <span />,
+  LoadingOutlined: () => <span />,
   SaveOutlined: () => <span />,
   SyncOutlined: () => <span />
 }))
@@ -88,6 +95,12 @@ vi.mock('@cherrystudio/ui', () => ({
 
 vi.mock('@data/hooks/usePreference', () => ({
   usePreference: (key: string) => [mocks.preferenceValues[key], preferenceSetter(key)]
+}))
+
+vi.mock('@renderer/components/Popups/NutsorePathPopup', () => ({
+  default: {
+    show: vi.fn()
+  }
 }))
 
 vi.mock('@renderer/components/Selector', () => ({
@@ -156,10 +169,29 @@ vi.mock('@renderer/context/ThemeProvider', () => ({
   useTheme: () => ({ theme: 'light' })
 }))
 
+vi.mock('@renderer/hooks/useNutstoreSso', () => ({
+  useNutstoreSso: () => mocks.nutstoreSsoHandler
+}))
+
+vi.mock('@renderer/hooks/useTimer', () => ({
+  useTimer: () => ({
+    setTimeoutTimer: mocks.setTimeoutTimer
+  })
+}))
+
 vi.mock('@renderer/hooks/useMiniAppPopup', () => ({
   useMiniAppPopup: () => ({
     openSmartMiniApp: mocks.openSmartMiniApp
   })
+}))
+
+vi.mock('@renderer/services/NutstoreService', () => ({
+  backupToNutstore: vi.fn(),
+  checkConnection: vi.fn().mockResolvedValue(true),
+  createDirectory: vi.fn(),
+  restoreFromNutstore: vi.fn(),
+  startNutstoreAutoSync: vi.fn().mockResolvedValue(undefined),
+  stopNutstoreAutoSync: vi.fn()
 }))
 
 vi.mock('@renderer/services/BackupService', () => ({
@@ -181,12 +213,31 @@ vi.mock('@renderer/store', () => ({
           lastSyncTime: null,
           syncing: false
         }
+      },
+      nutstore: {
+        nutstoreSyncState: {
+          lastSyncError: null,
+          lastSyncTime: null,
+          syncing: false
+        }
       }
     })
 }))
 
+vi.mock('@renderer/utils', () => ({
+  modalConfirm: mocks.modalConfirm
+}))
+
 vi.mock('@renderer/utils/error', () => ({
   formatErrorMessageWithPrefix: (_error: unknown, prefix: string) => `${prefix}: failed`
+}))
+
+vi.mock('@renderer/utils/openExternal', () => ({
+  openHttpExternalUrl: vi.fn().mockReturnValue(true)
+}))
+
+vi.mock('@shared/config/nutstore', () => ({
+  NUTSTORE_HOST: 'https://dav.jianguoyun.com'
 }))
 
 vi.mock('../..', () => ({
@@ -230,10 +281,29 @@ describe('remote backup settings', () => {
       'data.backup.webdav.path': '/cherry-studio-pi',
       'data.backup.webdav.skip_backup_file': false,
       'data.backup.webdav.sync_interval': 0,
-      'data.backup.webdav.user': 'dav-user'
+      'data.backup.webdav.user': 'dav-user',
+      'data.backup.nutstore.auto_sync': false,
+      'data.backup.nutstore.max_backups': 5,
+      'data.backup.nutstore.path': '/cherry-studio-pi',
+      'data.backup.nutstore.skip_backup_file': false,
+      'data.backup.nutstore.sync_interval': 0,
+      'data.backup.nutstore.token': 'encrypted-token'
     }
     mocks.preferenceSetters = {}
 
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        nutstore: {
+          decryptToken: vi.fn().mockResolvedValue({
+            access_token: 'nut-pass',
+            username: 'nut-user'
+          }),
+          getDirectoryContents: vi.fn().mockResolvedValue([]),
+          getSSOUrl: vi.fn().mockResolvedValue('https://sso.example.com')
+        }
+      }
+    })
     Object.defineProperty(window, 'toast', {
       configurable: true,
       value: {
@@ -285,6 +355,25 @@ describe('remote backup settings', () => {
     fireEvent.click(screen.getByRole('button', { name: '10' }))
 
     await waitFor(() => expect(preferenceSetter('data.backup.s3.max_backups')).toHaveBeenCalledWith(10))
+    unmount()
+
+    await act(async () => {
+      saveOperation.reject(new Error('write failed'))
+      await saveOperation.promise.catch(() => undefined)
+    })
+
+    expect(window.toast.error).not.toHaveBeenCalled()
+  })
+
+  it('ignores stale Nutstore save errors after unmount', async () => {
+    const saveOperation = deferred<void>()
+    preferenceSetter('data.backup.nutstore.max_backups').mockReturnValue(saveOperation.promise)
+
+    const { unmount } = render(<NutstoreSettings />)
+    await screen.findByText('nut-user')
+    fireEvent.click(screen.getByRole('button', { name: '10' }))
+
+    await waitFor(() => expect(preferenceSetter('data.backup.nutstore.max_backups')).toHaveBeenCalledWith(10))
     unmount()
 
     await act(async () => {
