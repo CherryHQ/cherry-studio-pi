@@ -10,7 +10,7 @@ import { useAppSelector } from '@renderer/store'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import dayjs from 'dayjs'
 import type { FC } from 'react'
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -27,6 +27,15 @@ const WebDavSettings: FC = () => {
   const [webdavUser, setWebdavUser] = usePreference('data.backup.webdav.user')
 
   const [backupManagerVisible, setBackupManagerVisible] = useState(false)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const { theme } = useTheme()
 
@@ -36,9 +45,14 @@ const WebDavSettings: FC = () => {
 
   // 把之前备份的文件定时上传到 webdav，首先先配置 webdav 的 host, port, user, pass, path
 
-  const showSaveFailed = (error: unknown) => {
-    window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-  }
+  const showSaveFailed = useCallback(
+    (error: unknown) => {
+      if (mountedRef.current) {
+        window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+      }
+    },
+    [t]
+  )
 
   const onSyncIntervalChange = async (value: number) => {
     try {
