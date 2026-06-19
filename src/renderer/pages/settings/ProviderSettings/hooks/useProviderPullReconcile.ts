@@ -1,6 +1,6 @@
 import { loggerService } from '@logger'
 import { useProviderApiKeys } from '@renderer/hooks/useProvider'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { buildModelListSyncPreview } from '../ModelList/buildModelListSyncPreview'
@@ -38,6 +38,14 @@ export function useProviderPullReconcile(providerId: string) {
   // preview produced for the newer key.
   const inflightRef = useRef<{ signature: string; promise: Promise<ModelSyncPreviewResponse | null> } | null>(null)
   const seqRef = useRef(0)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const reset = useCallback(() => {
     setPreview(null)
@@ -50,7 +58,7 @@ export function useProviderPullReconcile(providerId: string) {
       return inflight.promise
     }
     const seq = ++seqRef.current
-    const isCurrent = () => seqRef.current === seq
+    const isCurrent = () => mountedRef.current && seqRef.current === seq
     setIsPreviewLoading(true)
     const promise = (async () => {
       try {
@@ -58,8 +66,8 @@ export function useProviderPullReconcile(providerId: string) {
         if (isCurrent()) setPreview(next)
         return next
       } catch (error) {
-        logger.error('Pull reconcile preview failed', { providerId, error })
         if (isCurrent()) {
+          logger.error('Pull reconcile preview failed', { providerId, error })
           setPreview(null)
           if (error instanceof ModelSyncError && error.code === 'NO_ENABLED_API_KEY') {
             window.toast.error(t('settings.models.check.no_api_keys'))

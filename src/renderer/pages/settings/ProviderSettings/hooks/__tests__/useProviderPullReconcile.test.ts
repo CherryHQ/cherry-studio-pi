@@ -39,10 +39,12 @@ const keys = (...values: string[]) => ({
 
 const deferred = <T>() => {
   let resolve!: (v: T) => void
-  const promise = new Promise<T>((r) => {
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((r, j) => {
     resolve = r
+    reject = j
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 describe('useProviderPullReconcile — C3 single-flight by api-key signature', () => {
@@ -106,5 +108,26 @@ describe('useProviderPullReconcile — C3 single-flight by api-key signature', (
     })
 
     expect(result.current.preview).toEqual({ added: [{ id: 'k2' }], missing: [] })
+  })
+
+  it('does not surface stale preview failures after unmount', async () => {
+    useProviderApiKeysMock.mockReturnValue(keys('sk-1'))
+    const d = deferred<any>()
+    buildPreviewMock.mockReturnValue(d.promise)
+
+    const { result, unmount } = renderHook(() => useProviderPullReconcile('openai'))
+
+    let previewPromise: Promise<any>
+    act(() => {
+      previewPromise = result.current.fetchPreview()
+    })
+    unmount()
+
+    await act(async () => {
+      d.reject(new Error('closed'))
+      await previewPromise.catch(() => undefined)
+    })
+
+    expect(window.toast.error).not.toHaveBeenCalled()
   })
 })

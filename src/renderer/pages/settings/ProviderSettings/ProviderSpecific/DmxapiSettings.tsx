@@ -4,7 +4,7 @@ import { useProvider } from '@renderer/hooks/useProvider'
 import { replaceEndpointConfigDomain } from '@renderer/pages/settings/ProviderSettings/utils/providerDisplay'
 import type { Provider } from '@shared/data/types/provider'
 import type { FC } from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { ProviderSettingsSubtitle } from '../primitives/ProviderSettingsPrimitives'
@@ -33,6 +33,8 @@ function resolveDmxPlatformFromProvider(provider: Provider | undefined): Platfor
 const DmxapiSettings: FC<DmxapiSettingsProps> = ({ providerId }) => {
   const { provider, updateProvider } = useProvider(providerId)
   const { t } = useTranslation()
+  const mountedRef = useRef(true)
+  const saveSeqRef = useRef(0)
 
   const PlatformOptions = [
     {
@@ -57,6 +59,13 @@ const DmxapiSettings: FC<DmxapiSettingsProps> = ({ providerId }) => {
   )
 
   useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
     setSelectedPlatform(resolveDmxPlatformFromProvider(provider))
   }, [provider])
 
@@ -67,13 +76,17 @@ const DmxapiSettings: FC<DmxapiSettingsProps> = ({ providerId }) => {
       if (next === previous) {
         return
       }
+      const saveSeq = ++saveSeqRef.current
+      const isCurrentSave = () => mountedRef.current && saveSeqRef.current === saveSeq
       setSelectedPlatform(next)
       const newEndpointConfigs = replaceEndpointConfigDomain(provider?.endpointConfigs, next)
       try {
         await updateProvider({ endpointConfigs: newEndpointConfigs })
       } catch {
-        setSelectedPlatform(previous)
-        window.toast.error(t('settings.provider.save_failed'))
+        if (isCurrentSave()) {
+          setSelectedPlatform(previous)
+          window.toast.error(t('settings.provider.save_failed'))
+        }
       }
     },
     [provider, t, updateProvider]
