@@ -221,13 +221,28 @@ function normalizeDirectoryPath(value: unknown, fallback = '/') {
 }
 
 function normalizeSyncIntervalInput(value: unknown) {
-  if (typeof value === 'undefined') return undefined
-  const parsed = typeof value === 'string' && !value.trim() ? undefined : Number(value)
-  if (typeof parsed === 'undefined') return undefined
+  if (value === null || typeof value === 'undefined') return undefined
+  if (typeof value === 'string' && !value.trim()) return undefined
+  if (typeof value !== 'number' && typeof value !== 'string') {
+    throw new Error('Sync interval must be a finite number of minutes')
+  }
+  const parsed = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(parsed)) throw new Error('Sync interval must be a finite number of minutes')
   const interval = Math.trunc(parsed)
   if (interval < 0) throw new Error('Sync interval cannot be negative')
   return interval
+}
+
+function normalizeOptionalBooleanInput(value: unknown, label: string) {
+  if (value === null || typeof value === 'undefined') return undefined
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (!normalized) return undefined
+    if (['true', '1', 'yes', 'on'].includes(normalized)) return true
+    if (['false', '0', 'no', 'off'].includes(normalized)) return false
+  }
+  throw new Error(`${label} must be a boolean`)
 }
 
 async function runWebDavCapability<T>(
@@ -403,13 +418,14 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any, context) => {
         const config = await resolveWebDavConfig(input, { requireCredentials: true })
         if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
+        const autoSync = normalizeOptionalBooleanInput(input?.autoSync, 'Auto sync')
         const syncInterval = normalizeSyncIntervalInput(input?.syncInterval)
         if (context.dryRun) {
           return okResult('WebDAV data sync config dry run completed', sanitizeForAgent(config))
         }
 
         await persistWebDavConfig(config, {
-          autoSync: typeof input?.autoSync === 'boolean' ? input.autoSync : undefined,
+          autoSync,
           syncInterval
         })
         return okResult('WebDAV data sync config saved', sanitizeForAgent(config))
@@ -528,11 +544,12 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any, context) => {
         const config = await resolveWebDavConfig(input, { requireCredentials: true })
         if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
+        const saveConfig = normalizeOptionalBooleanInput(input?.saveConfig, 'Save config') === true
         if (context.dryRun) {
           return okResult('Data sync dry run completed', sanitizeForAgent({ config }))
         }
 
-        if (input?.saveConfig === true) {
+        if (saveConfig) {
           await persistWebDavConfig(config)
         }
         await prepareRendererStorageV2ForDataSync()

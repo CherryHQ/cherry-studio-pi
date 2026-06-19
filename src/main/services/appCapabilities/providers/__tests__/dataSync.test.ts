@@ -234,6 +234,25 @@ describe('data sync app capabilities', () => {
     expect(setCall?.[0]).toContain('"dataSyncSyncInterval":30')
   })
 
+  it('normalizes boolean-like WebDAV config flags before saving', async () => {
+    const result = await capability('dataSync.webdav.config.set').execute(
+      {
+        webdavHost: 'dav.example.com',
+        webdavUser: 'user',
+        webdavPass: 'secret',
+        autoSync: 'off'
+      },
+      { source: 'agent' }
+    )
+
+    const setCall = mocks.browserWindows[0].webContents.executeJavaScript.mock.calls.find(([script]) =>
+      String(script).startsWith(`window[${JSON.stringify(RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE)}](`)
+    )
+    expect(result.ok).toBe(true)
+    expect(mocks.storageV2Service.setSetting).toHaveBeenCalledWith('settings.dataSyncAutoSync', false, 'settings')
+    expect(setCall?.[0]).toContain('"dataSyncAutoSync":false')
+  })
+
   it('allows updating WebDAV sync options from stored config without requiring host in schema', async () => {
     expect(capability('dataSync.webdav.config.set').inputSchema.required ?? []).not.toContain('webdavHost')
 
@@ -267,6 +286,40 @@ describe('data sync app capabilities', () => {
         { source: 'agent' }
       )
     ).rejects.toThrow('Sync interval must be a finite number of minutes')
+
+    expect(mocks.storageV2Service.setSetting).not.toHaveBeenCalled()
+    expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-numeric WebDAV sync interval shapes before saving settings', async () => {
+    await expect(
+      capability('dataSync.webdav.config.set').execute(
+        {
+          webdavHost: 'dav.example.com',
+          webdavUser: 'user',
+          webdavPass: 'secret',
+          syncInterval: true
+        },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Sync interval must be a finite number of minutes')
+
+    expect(mocks.storageV2Service.setSetting).not.toHaveBeenCalled()
+    expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid WebDAV boolean flags before saving settings', async () => {
+    await expect(
+      capability('dataSync.webdav.config.set').execute(
+        {
+          webdavHost: 'dav.example.com',
+          webdavUser: 'user',
+          webdavPass: 'secret',
+          autoSync: 'sometimes'
+        },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('Auto sync must be a boolean')
 
     expect(mocks.storageV2Service.setSetting).not.toHaveBeenCalled()
     expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
@@ -495,6 +548,43 @@ describe('data sync app capabilities', () => {
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
     expect(result.summary).toContain('dry run')
     expect(mocks.appDataSyncService.syncNow).not.toHaveBeenCalled()
+  })
+
+  it('normalizes boolean-like saveConfig input before syncing', async () => {
+    mocks.appDataSyncService.syncNow.mockResolvedValueOnce({ status: 'success' })
+
+    const result = await capability('dataSync.sync.now').execute(
+      {
+        webdavHost: 'dav.example.com',
+        webdavUser: 'user',
+        webdavPass: 'secret',
+        webdavPath: '/team-sync',
+        saveConfig: 'true'
+      },
+      { source: 'agent' }
+    )
+
+    expect(result.ok).toBe(true)
+    expect(mocks.storageV2Service.setSetting).toHaveBeenCalledWith(
+      'settings.dataSyncWebdavHost',
+      'https://dav.example.com',
+      'settings'
+    )
+    expect(mocks.appDataSyncService.syncNow).toHaveBeenCalledWith({
+      webdavHost: 'https://dav.example.com',
+      webdavUser: 'user',
+      webdavPass: 'secret',
+      webdavPath: '/team-sync'
+    })
+  })
+
+  it('rejects invalid saveConfig input before syncing', async () => {
+    await expect(
+      capability('dataSync.sync.now').execute({ saveConfig: 'sometimes' }, { source: 'agent' })
+    ).rejects.toThrow('Save config must be a boolean')
+
+    expect(mocks.appDataSyncService.syncNow).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.setSetting).not.toHaveBeenCalled()
   })
 
   it('prepares renderer runtime data and broadcasts completion after agent-triggered data sync', async () => {
