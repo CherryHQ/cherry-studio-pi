@@ -56,6 +56,17 @@ function createSearchResult(name: string): SkillSearchResult {
   }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}
+
 describe('useSkillSearch', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -357,6 +368,43 @@ describe('useSkillInstall', () => {
     expect(installSkillFromDirectoryMock).toHaveBeenCalledWith({ directoryPath: '/tmp/my-skill' })
     expect(invalidateMock).toHaveBeenCalledTimes(2)
     expect(invalidateMock).toHaveBeenCalledWith('/skills')
+  })
+
+  it('keeps installing key for the latest overlapping install', async () => {
+    const remoteInstall = deferred<{ success: true; data: InstalledSkill }>()
+    const zipInstall = deferred<{ success: true; data: InstalledSkill }>()
+    installSkillMock.mockReturnValueOnce(remoteInstall.promise)
+    installSkillFromZipMock.mockReturnValueOnce(zipInstall.promise)
+
+    const { result } = renderHook(() => useSkillInstall())
+
+    let remoteInstallPromise!: ReturnType<typeof result.current.install>
+    let zipInstallPromise!: ReturnType<typeof result.current.installFromZip>
+    await act(async () => {
+      remoteInstallPromise = result.current.install('skills.sh:owner/repo/remote-skill')
+      zipInstallPromise = result.current.installFromZip('/tmp/local-skill.zip')
+      await Promise.resolve()
+    })
+
+    expect(result.current.installingKey).toBe('zip')
+    expect(result.current.isInstalling('skills.sh:owner/repo/remote-skill')).toBe(false)
+    expect(result.current.isInstalling('zip')).toBe(true)
+
+    await act(async () => {
+      remoteInstall.resolve({ success: true, data: createSkill({ id: 'skill-remote' }) })
+      await remoteInstallPromise
+    })
+
+    expect(result.current.installingKey).toBe('zip')
+    expect(result.current.isInstalling('zip')).toBe(true)
+
+    await act(async () => {
+      zipInstall.resolve({ success: true, data: createSkill({ id: 'skill-zip' }) })
+      await zipInstallPromise
+    })
+
+    expect(result.current.installingKey).toBeNull()
+    expect(result.current.isInstalling()).toBe(false)
   })
 
   it('logs, toasts, and rethrows local ZIP and directory install failures', async () => {
