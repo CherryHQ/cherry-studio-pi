@@ -5,6 +5,14 @@ import { IpcChannel } from '@shared/IpcChannel'
 const logger = loggerService.withContext('PyodideService')
 const PYODIDE_IPC_HANDLER_KEY = '__CHERRY_STUDIO_PI_PYODIDE_IPC_HANDLER__'
 
+type PyodideIpcHandlerState = {
+  remove: () => void
+}
+
+type PyodideIpcHandlerGlobal = typeof globalThis & {
+  [PYODIDE_IPC_HANDLER_KEY]?: boolean | PyodideIpcHandlerState
+}
+
 const SERVICE_CONFIG = {
   WORKER: {
     MAX_INIT_RETRY: 5, // 最大初始化重试次数
@@ -340,11 +348,10 @@ export function registerPyodideIpcHandler(): void {
   const ipcRenderer = typeof window !== 'undefined' ? window.electron?.ipcRenderer : undefined
   if (!ipcRenderer) return
 
-  const globalState = globalThis as Record<string, unknown>
+  const globalState = globalThis as PyodideIpcHandlerGlobal
   if (globalState[PYODIDE_IPC_HANDLER_KEY]) return
-  globalState[PYODIDE_IPC_HANDLER_KEY] = true
 
-  ipcRenderer.on(IpcChannel.Python_ExecutionRequest, async (_, request: PythonExecutionRequest) => {
+  const remove = ipcRenderer.on(IpcChannel.Python_ExecutionRequest, async (_, request: PythonExecutionRequest) => {
     try {
       const { text } = await pyodideService.runScript(request.script, request.context, request.timeout)
       const response: PythonExecutionResponse = {
@@ -360,7 +367,26 @@ export function registerPyodideIpcHandler(): void {
       ipcRenderer.send(IpcChannel.Python_ExecutionResponse, response)
     }
   })
+  globalState[PYODIDE_IPC_HANDLER_KEY] = { remove }
+}
+
+export function unregisterPyodideIpcHandler(): void {
+  const globalState = globalThis as PyodideIpcHandlerGlobal
+  const state = globalState[PYODIDE_IPC_HANDLER_KEY]
+
+  if (state && typeof state === 'object') {
+    state.remove()
+  }
+
+  delete globalState[PYODIDE_IPC_HANDLER_KEY]
 }
 
 // Set up IPC handler for main process requests
 registerPyodideIpcHandler()
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    unregisterPyodideIpcHandler()
+    pyodideService.terminate()
+  })
+}

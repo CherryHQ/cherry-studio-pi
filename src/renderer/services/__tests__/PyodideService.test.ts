@@ -260,4 +260,33 @@ describe('PyodideService', () => {
 
     expect(onMock).toHaveBeenCalledTimes(1)
   })
+
+  it('unregisters the Python execution IPC handler and allows a fresh registration', async () => {
+    const removeMock = vi.fn()
+    const onMock = vi.fn(() => removeMock)
+    const sendMock = vi.fn()
+
+    Object.defineProperty(window, 'electron', {
+      configurable: true,
+      value: {
+        ipcRenderer: {
+          on: onMock,
+          send: sendMock
+        }
+      }
+    })
+
+    const module = await import('../PyodideService')
+
+    expect(onMock).toHaveBeenCalledTimes(1)
+
+    module.unregisterPyodideIpcHandler()
+
+    expect(removeMock).toHaveBeenCalledTimes(1)
+    expect((globalThis as Record<string, unknown>)[ipcListenerKey]).toBeUndefined()
+
+    module.registerPyodideIpcHandler()
+
+    expect(onMock).toHaveBeenCalledTimes(2)
+  })
 })
