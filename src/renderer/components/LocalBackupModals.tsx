@@ -2,7 +2,7 @@ import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 import { loggerService } from '@logger'
 import { backupToLocal } from '@renderer/services/BackupService'
 import dayjs from 'dayjs'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface LocalBackupModalProps {
@@ -55,7 +55,15 @@ export function useLocalBackupModal(localBackupDir: string | undefined) {
   const [isModalVisible, setIsModalVisible] = useState(false)
   const [backuping, setBackuping] = useState(false)
   const [customFileName, setCustomFileName] = useState('')
+  const mountedRef = useRef(true)
   const backupingRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const handleCancel = () => {
     if (backupingRef.current) {
@@ -70,6 +78,9 @@ export function useLocalBackupModal(localBackupDir: string | undefined) {
     const hostname = await window.api.system.getHostname()
     const timestamp = dayjs().format('YYYYMMDDHHmmss')
     const defaultFileName = `cherry-studio-pi.${timestamp}.${hostname}.${deviceType}.zip`
+    if (!mountedRef.current) {
+      return
+    }
     setCustomFileName(defaultFileName)
     setIsModalVisible(true)
   }, [])
@@ -80,7 +91,9 @@ export function useLocalBackupModal(localBackupDir: string | undefined) {
     }
 
     if (!localBackupDir) {
-      setIsModalVisible(false)
+      if (mountedRef.current) {
+        setIsModalVisible(false)
+      }
       return
     }
 
@@ -91,12 +104,16 @@ export function useLocalBackupModal(localBackupDir: string | undefined) {
         showMessage: true,
         customFileName: customFileName || undefined
       })
-      setIsModalVisible(false)
+      if (mountedRef.current) {
+        setIsModalVisible(false)
+      }
     } catch (error) {
       logger.error('Backup failed:', error as Error)
     } finally {
       backupingRef.current = false
-      setBackuping(false)
+      if (mountedRef.current) {
+        setBackuping(false)
+      }
     }
   }
 
