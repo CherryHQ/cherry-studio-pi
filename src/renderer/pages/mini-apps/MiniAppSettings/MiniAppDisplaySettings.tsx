@@ -1,7 +1,7 @@
 import { Button, PageSidePanelItem, PageSidePanelSection, Slider, Switch, Tooltip } from '@cherrystudio/ui'
 import { usePreference } from '@data/hooks/usePreference'
 import Selector from '@renderer/components/Selector'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import type { MiniAppRegionFilter } from '@shared/data/types/miniApp'
 import { Undo2 } from 'lucide-react'
 import type { FC } from 'react'
@@ -22,12 +22,7 @@ const MiniAppDisplaySettings: FC = () => {
   const [region = 'auto', setRegion] = usePreference('feature.mini_app.region')
 
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const showSaveFailed = useCallback(
-    (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-    },
-    [t]
-  )
+  const showSaveFailed = useSaveFailedToast()
 
   useEffect(
     () => () => {
