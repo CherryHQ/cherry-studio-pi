@@ -3,6 +3,7 @@ import { cn } from '@cherrystudio/ui/lib/utils'
 import CodeViewer from '@renderer/components/CodeViewer'
 import GeneralPopup from '@renderer/components/Popups/GeneralPopup'
 import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import i18n from '@renderer/i18n'
 import type { DiagnosisContext, DiagnosisResult } from '@renderer/services/ErrorDiagnosisService'
 import type { SerializedAiSdkError, SerializedAiSdkErrorUnion, SerializedError } from '@renderer/types/error'
@@ -30,7 +31,7 @@ import {
   isSerializedAiSdkUnsupportedFunctionalityError,
   isSerializedError
 } from '@renderer/types/error'
-import { formatAiSdkError, formatError, formatErrorMessageWithPrefix, safeToString } from '@renderer/utils/error'
+import { formatAiSdkError, formatError, safeToString } from '@renderer/utils/error'
 import { escapeHtmlText, sanitizeHtml } from '@renderer/utils/html'
 import { parseDataUrl } from '@shared/utils'
 import { CheckCircle, Copy, Loader2, Stethoscope } from 'lucide-react'
@@ -517,6 +518,7 @@ const ErrorDetailContent: React.FC<ErrorDetailContentProps> = ({
   const diagSectionRef = useRef<{ runDiagnosis: () => void }>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const isInitialRenderRef = useRef(true)
+  const showCopyFailed = useSaveFailedToast('common.copy_failed')
 
   // Scroll to bottom when diagnosis status changes, but skip initial render
   useEffect(() => {
@@ -550,9 +552,9 @@ const ErrorDetailContent: React.FC<ErrorDetailContentProps> = ({
       await navigator.clipboard.writeText(errorText)
       window.toast.success(t('message.copied'))
     } catch (clipboardError) {
-      window.toast.error(formatErrorMessageWithPrefix(clipboardError, t('common.copy_failed')))
+      showCopyFailed(clipboardError)
     }
-  }, [error, t])
+  }, [error, t, showCopyFailed])
 
   const renderErrorDetails = (error?: SerializedError) => {
     if (!error) {

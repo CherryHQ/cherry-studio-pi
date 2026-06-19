@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ErrorDetailContent } from '..'
@@ -9,6 +9,16 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
   toastSuccess: vi.fn()
 }))
+
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
 
 vi.mock('@renderer/context/CodeStyleProvider', () => ({
   useCodeStyle: () => ({
@@ -113,6 +123,34 @@ describe('ErrorDetailContent', () => {
     await waitFor(() => {
       expect(mocks.toastError).toHaveBeenCalledWith('common.copy_failed: clipboard locked')
     })
+    expect(mocks.toastSuccess).not.toHaveBeenCalled()
+  })
+
+  it('ignores copy failure feedback after unmount', async () => {
+    const clipboardOperation = deferred<void>()
+    mocks.clipboardWriteText.mockReturnValueOnce(clipboardOperation.promise)
+
+    const { unmount } = render(
+      <ErrorDetailContent
+        error={{
+          name: 'Error',
+          message: 'Something failed',
+          stack: null
+        }}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /common.copy/ }))
+
+    await waitFor(() => expect(mocks.clipboardWriteText).toHaveBeenCalled())
+    unmount()
+
+    await act(async () => {
+      clipboardOperation.reject(new Error('clipboard locked after unmount'))
+      await clipboardOperation.promise.catch(() => undefined)
+    })
+
+    expect(mocks.toastError).not.toHaveBeenCalled()
     expect(mocks.toastSuccess).not.toHaveBeenCalled()
   })
 })
