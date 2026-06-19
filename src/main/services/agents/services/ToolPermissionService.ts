@@ -247,6 +247,8 @@ export async function promptForToolApproval(
       toolCallId: options.toolCallId
     }
 
+    pendingRequests.set(requestId, pending)
+
     if (options.signal) {
       const abortListener = () => {
         finalizeRequest(
@@ -257,14 +259,20 @@ export async function promptForToolApproval(
       }
       pending.abortListener = abortListener
       options.signal.addEventListener('abort', abortListener, { once: true })
+      if (options.signal.aborted) {
+        finalizeRequest(
+          requestId,
+          { behavior: 'deny', message: 'Tool request aborted before user decision' },
+          'aborted'
+        )
+        return
+      }
     }
 
     pending.timeout = setTimeout(() => {
       finalizeRequest(requestId, { behavior: 'deny', message: 'Tool permission request timed out' }, 'timeout')
     }, options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
     pending.timeout.unref?.()
-
-    pendingRequests.set(requestId, pending)
 
     const sent = broadcastToRenderer(IpcChannel.AgentToolPermission_Request, requestPayload)
     if (!sent) {

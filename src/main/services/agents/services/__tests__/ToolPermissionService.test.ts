@@ -81,6 +81,48 @@ describe('ToolPermissionService', () => {
     })
   })
 
+  it('settles permission prompts if the abort signal fires while the prompt is being registered', async () => {
+    const controller = new AbortController()
+    const originalAddEventListener = controller.signal.addEventListener.bind(controller.signal)
+    vi.spyOn(controller.signal, 'addEventListener').mockImplementation(((
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions
+    ) => {
+      originalAddEventListener(type, listener, options)
+      if (type === 'abort') {
+        controller.abort()
+      }
+    }) as AbortSignal['addEventListener'])
+
+    await expect(
+      promptForToolApproval(
+        'filesystem.write',
+        { path: '/tmp/project/file.txt' },
+        {
+          signal: controller.signal,
+          toolCallId: 'tool-call-abort-race',
+          timeoutMs: 12_345
+        }
+      )
+    ).resolves.toEqual({
+      behavior: 'deny',
+      message: 'Tool request aborted before user decision'
+    })
+
+    expect(mocks.webContentsSend).toHaveBeenCalledWith(
+      IpcChannel.AgentToolPermission_Result,
+      expect.objectContaining({
+        reason: 'aborted',
+        toolCallId: 'tool-call-abort-race'
+      })
+    )
+    expect(mocks.webContentsSend).not.toHaveBeenCalledWith(
+      IpcChannel.AgentToolPermission_Request,
+      expect.objectContaining({ toolCallId: 'tool-call-abort-race' })
+    )
+  })
+
   it('settles permission prompts when the renderer window rejects IPC sends', async () => {
     mocks.webContentsSend.mockImplementation(() => {
       throw new Error('window is gone')
