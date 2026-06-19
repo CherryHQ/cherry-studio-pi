@@ -9,6 +9,13 @@ const mocks = vi.hoisted(() => ({
   getAppInfo: vi.fn(),
   getDataPathFromArgs: vi.fn(),
   loggerWarn: vi.fn(),
+  preferences: {
+    'app.dist.auto_update.enabled': true,
+    'app.language': 'en-US',
+    'app.privacy.data_collection.enabled': false,
+    'ui.custom_css': '',
+    'ui.window_style': 'default'
+  } as Record<string, unknown>,
   settings: {
     dataSyncAutoSync: false,
     dataSyncSyncInterval: 0,
@@ -31,16 +38,7 @@ vi.mock('@data/CacheService', () => ({
 }))
 
 vi.mock('@data/hooks/usePreference', () => ({
-  usePreference: (key: string) => {
-    const values: Record<string, unknown> = {
-      'app.dist.auto_update.enabled': true,
-      'app.language': 'en-US',
-      'app.privacy.data_collection.enabled': false,
-      'ui.custom_css': '',
-      'ui.window_style': 'default'
-    }
-    return [values[key]]
-  }
+  usePreference: (key: string) => [mocks.preferences[key]]
 }))
 
 vi.mock('@logger', () => ({
@@ -148,6 +146,13 @@ describe('useAppInit', () => {
       dataSyncWebdavPass: '',
       dataSyncWebdavUser: ''
     }
+    mocks.preferences = {
+      'app.dist.auto_update.enabled': true,
+      'app.language': 'en-US',
+      'app.privacy.data_collection.enabled': false,
+      'ui.custom_css': '',
+      'ui.window_style': 'default'
+    }
     vi.spyOn(console, 'timeEnd').mockImplementation(() => undefined)
     mocks.getDataPathFromArgs.mockResolvedValue(null)
     mocks.getAppInfo.mockResolvedValue({
@@ -173,6 +178,24 @@ describe('useAppInit', () => {
     unmount()
     act(() => {
       vi.advanceTimersByTime(2000)
+    })
+    await flushMicrotasks()
+
+    expect(mocks.getAppInfo).toHaveBeenCalledTimes(1)
+    expect(mocks.checkForUpdate).not.toHaveBeenCalled()
+    expect(mocks.updateAppUpdateState).not.toHaveBeenCalled()
+  })
+
+  it('does not register update-check timers when auto update checks are disabled', async () => {
+    mocks.preferences['app.dist.auto_update.enabled'] = false
+
+    renderHook(() => useAppInit())
+    await flushMicrotasks()
+
+    expect(mocks.getAppInfo).toHaveBeenCalledTimes(1)
+
+    act(() => {
+      vi.advanceTimersByTime(4 * 60 * 60 * 1000)
     })
     await flushMicrotasks()
 

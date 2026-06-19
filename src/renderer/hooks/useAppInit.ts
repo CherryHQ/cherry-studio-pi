@@ -83,13 +83,15 @@ export function useAppInit() {
   }, [savedAvatar])
 
   useEffect(() => {
+    if (!autoCheckUpdate) return
+
     let active = true
 
     const checkForUpdates = async () => {
       try {
         const { isPackaged } = await window.api.getAppInfo()
 
-        if (!active || !isPackaged || !autoCheckUpdate) {
+        if (!active || !isPackaged) {
           return
         }
 
