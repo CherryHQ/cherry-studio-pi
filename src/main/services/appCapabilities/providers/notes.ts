@@ -7,7 +7,7 @@ import { getName, getNotesDir } from '@main/utils/file'
 
 import { readRendererStoreValue } from '../rendererBridge'
 import type { AppCapabilityDefinition } from '../types'
-import { okResult, resolveInsideRoot } from '../utils'
+import { normalizeBoundedIntegerInput, okResult, resolveInsideRoot } from '../utils'
 
 const DEFAULT_NOTE_SEARCH_LIMIT = 100
 const MAX_NOTE_SEARCH_LIMIT = 200
@@ -117,32 +117,38 @@ async function resolveNoteDeleteTarget(root: string, input: string) {
 }
 
 function normalizeSearchLimit(value: unknown) {
-  const parsed =
-    typeof value === 'string' && !value.trim() ? DEFAULT_NOTE_SEARCH_LIMIT : Number(value ?? DEFAULT_NOTE_SEARCH_LIMIT)
-  const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_NOTE_SEARCH_LIMIT
-  return Math.max(1, Math.min(safeLimit, MAX_NOTE_SEARCH_LIMIT))
+  return normalizeBoundedIntegerInput(value, {
+    label: 'Note search limit',
+    defaultValue: DEFAULT_NOTE_SEARCH_LIMIT,
+    min: 1,
+    max: MAX_NOTE_SEARCH_LIMIT
+  })
 }
 
 function normalizeListLimit(value: unknown) {
-  const parsed =
-    typeof value === 'string' && !value.trim() ? DEFAULT_NOTE_LIST_LIMIT : Number(value ?? DEFAULT_NOTE_LIST_LIMIT)
-  const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_NOTE_LIST_LIMIT
-  return Math.max(1, Math.min(safeLimit, MAX_NOTE_LIST_LIMIT))
+  return normalizeBoundedIntegerInput(value, {
+    label: 'Note list limit',
+    defaultValue: DEFAULT_NOTE_LIST_LIMIT,
+    min: 1,
+    max: MAX_NOTE_LIST_LIMIT
+  })
 }
 
 function normalizeOffset(value: unknown) {
-  const parsed = typeof value === 'string' && !value.trim() ? 0 : Number(value ?? 0)
-  const safeOffset = Number.isFinite(parsed) ? Math.trunc(parsed) : 0
-  return Math.max(0, safeOffset)
+  return normalizeBoundedIntegerInput(value, {
+    label: 'Note list offset',
+    defaultValue: 0,
+    min: 0
+  })
 }
 
 function normalizeReadMaxBytes(value: unknown) {
-  const parsed =
-    typeof value === 'string' && !value.trim()
-      ? DEFAULT_NOTE_READ_MAX_BYTES
-      : Number(value ?? DEFAULT_NOTE_READ_MAX_BYTES)
-  const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_NOTE_READ_MAX_BYTES
-  return Math.max(1, Math.min(safeLimit, MAX_NOTE_READ_MAX_BYTES))
+  return normalizeBoundedIntegerInput(value, {
+    label: 'Note read maxBytes',
+    defaultValue: DEFAULT_NOTE_READ_MAX_BYTES,
+    min: 1,
+    max: MAX_NOTE_READ_MAX_BYTES
+  })
 }
 
 async function readTextFilePreview(filePath: string, maxBytes: number) {

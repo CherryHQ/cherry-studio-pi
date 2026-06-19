@@ -114,6 +114,23 @@ describe('notes app capabilities', () => {
     expect((result.data as any).nextOffset).toBeNull()
   })
 
+  it('rejects invalid numeric option shapes before scanning or reading notes', async () => {
+    await fs.writeFile(path.join(tmpDir, 'daily.md'), 'today\n', 'utf8')
+
+    await expect(getCapability('notes.list').execute({ limit: true }, { source: 'agent' })).rejects.toThrow(
+      'Note list limit must be a number'
+    )
+    await expect(getCapability('notes.list').execute({ offset: { page: 1 } }, { source: 'agent' })).rejects.toThrow(
+      'Note list offset must be a number'
+    )
+    await expect(
+      getCapability('notes.search').execute({ query: 'today', limit: ['10'] }, { source: 'agent' })
+    ).rejects.toThrow('Note search limit must be a number')
+    await expect(
+      getCapability('notes.read').execute({ path: 'daily', maxBytes: true }, { source: 'agent' })
+    ).rejects.toThrow('Note read maxBytes must be a number')
+  })
+
   it('treats notes.search limit as a result limit instead of a file scan limit', async () => {
     for (let index = 0; index < 20; index += 1) {
       const filePath = path.join(tmpDir, `miss-${index}.md`)

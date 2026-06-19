@@ -40,14 +40,18 @@ vi.mock('@main/services/ReduxService', () => ({
   reduxService: mocks.reduxService
 }))
 
-vi.mock('../../utils', () => ({
-  okResult: (summary: string, data?: unknown) => ({
-    ok: true,
-    summary,
-    ...(data === undefined ? {} : { data })
-  }),
-  sanitizeForAgent: (value: unknown) => value
-}))
+vi.mock('../../utils', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>
+  return {
+    ...actual,
+    okResult: (summary: string, data?: unknown) => ({
+      ok: true,
+      summary,
+      ...(data === undefined ? {} : { data })
+    }),
+    sanitizeForAgent: (value: unknown) => value
+  }
+})
 
 import { RENDERER_GET_STORE_VALUE_BRIDGE } from '@shared/storeBridge'
 
@@ -170,6 +174,17 @@ describe('mcp app capabilities', () => {
         inputSchema: expect.objectContaining({ type: 'object' })
       })
     ])
+  })
+
+  it('rejects invalid MCP list pagination shapes before listing tools', async () => {
+    await expect(capability('mcp.tools.list').execute({ limit: true }, { source: 'agent' })).rejects.toThrow(
+      'MCP tool list limit must be a number'
+    )
+    await expect(capability('mcp.tools.list').execute({ offset: { page: 1 } }, { source: 'agent' })).rejects.toThrow(
+      'MCP tool list offset must be a number'
+    )
+
+    expect(mocks.mcpService.listAllActiveServerTools).not.toHaveBeenCalled()
   })
 
   it('normalizes MCP tool ids and params before calling tools', async () => {

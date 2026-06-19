@@ -29,6 +29,7 @@ import {
   isSensitiveAgentKey,
   navigateApp,
   normalizeAppRoute,
+  normalizeBoundedIntegerInput,
   sanitizeAppCapabilityResultForAgent,
   sanitizeForAgent
 } from '../utils'
@@ -313,6 +314,26 @@ describe('app capability utils', () => {
     expect(Object.keys(sanitized.object)).toHaveLength(201)
     expect(sanitized.object.__truncatedKeys).toBe(5)
     expect(sanitized.object.key199).toBe(199)
+  })
+
+  it('normalizes bounded integer inputs without coercing invalid shapes', () => {
+    const options = {
+      label: 'Page limit',
+      defaultValue: 50,
+      min: 1,
+      max: 100
+    }
+
+    expect(normalizeBoundedIntegerInput(undefined, options)).toBe(50)
+    expect(normalizeBoundedIntegerInput(null, options)).toBe(50)
+    expect(normalizeBoundedIntegerInput('', options)).toBe(50)
+    expect(normalizeBoundedIntegerInput('12.8', options)).toBe(12)
+    expect(normalizeBoundedIntegerInput('bad', options)).toBe(50)
+    expect(normalizeBoundedIntegerInput(5000, options)).toBe(100)
+    expect(normalizeBoundedIntegerInput(-5, options)).toBe(1)
+    expect(() => normalizeBoundedIntegerInput(true, options)).toThrow('Page limit must be a number')
+    expect(() => normalizeBoundedIntegerInput(['10'], options)).toThrow('Page limit must be a number')
+    expect(() => normalizeBoundedIntegerInput({ value: 10 }, options)).toThrow('Page limit must be a number')
   })
 
   it('keeps a single unreadable object property from breaking the whole result', () => {

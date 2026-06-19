@@ -40,17 +40,21 @@ vi.mock('@main/services/ReduxService', () => ({
   reduxService: mocks.reduxService
 }))
 
-vi.mock('../../utils', () => ({
-  navigateApp: mocks.navigateApp,
-  okResult: (summary: string, data?: unknown) => ({
-    ok: true,
-    summary,
-    ...(data === undefined ? {} : { data })
-  }),
-  pickPath: (value: any, keyPath = '') =>
-    keyPath ? keyPath.split('.').reduce((current, key) => current?.[key], value) : value,
-  sanitizeForAgent: (value: unknown) => value
-}))
+vi.mock('../../utils', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>
+  return {
+    ...actual,
+    navigateApp: mocks.navigateApp,
+    okResult: (summary: string, data?: unknown) => ({
+      ok: true,
+      summary,
+      ...(data === undefined ? {} : { data })
+    }),
+    pickPath: (value: any, keyPath = '') =>
+      keyPath ? keyPath.split('.').reduce((current, key) => current?.[key], value) : value,
+    sanitizeForAgent: (value: unknown) => value
+  }
+})
 
 import { RENDERER_DISPATCH_SETTINGS_ACTION_BRIDGE, RENDERER_GET_SETTINGS_BRIDGE } from '@shared/settingsBridge'
 import { RENDERER_GET_STORE_VALUE_BRIDGE } from '@shared/storeBridge'
@@ -198,6 +202,17 @@ describe('painting app capabilities', () => {
     await expect(
       capability('paintings.history.list').execute({ namespace: 'missing_namespace' }, { source: 'agent' })
     ).rejects.toThrow('Unsupported painting namespace: missing_namespace')
+
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid painting history pagination shapes before reading renderer state', async () => {
+    await expect(capability('paintings.history.list').execute({ limit: true }, { source: 'agent' })).rejects.toThrow(
+      'Painting history limit must be a number'
+    )
+    await expect(capability('paintings.history.list').execute({ offset: ['1'] }, { source: 'agent' })).rejects.toThrow(
+      'Painting history offset must be a number'
+    )
 
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })

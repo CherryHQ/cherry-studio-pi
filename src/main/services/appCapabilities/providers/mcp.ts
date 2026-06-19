@@ -3,25 +3,27 @@ import mcpService from '@main/services/MCPService'
 
 import { readRendererStoreValue } from '../rendererBridge'
 import type { AppCapabilityDefinition } from '../types'
-import { okResult, sanitizeForAgent } from '../utils'
+import { normalizeBoundedIntegerInput, okResult, sanitizeForAgent } from '../utils'
 
 const DEFAULT_MCP_TOOL_LIST_LIMIT = 50
 const MAX_MCP_TOOL_LIST_LIMIT = 200
 const RENDERER_STORE_FALLBACK_TIMEOUT_MS = 500
 
 function normalizeListLimit(value: unknown) {
-  const parsed =
-    typeof value === 'string' && !value.trim()
-      ? DEFAULT_MCP_TOOL_LIST_LIMIT
-      : Number(value ?? DEFAULT_MCP_TOOL_LIST_LIMIT)
-  const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_MCP_TOOL_LIST_LIMIT
-  return Math.max(1, Math.min(safeLimit, MAX_MCP_TOOL_LIST_LIMIT))
+  return normalizeBoundedIntegerInput(value, {
+    label: 'MCP tool list limit',
+    defaultValue: DEFAULT_MCP_TOOL_LIST_LIMIT,
+    min: 1,
+    max: MAX_MCP_TOOL_LIST_LIMIT
+  })
 }
 
 function normalizeOffset(value: unknown) {
-  const parsed = typeof value === 'string' && !value.trim() ? 0 : Number(value ?? 0)
-  const safeOffset = Number.isFinite(parsed) ? Math.trunc(parsed) : 0
-  return Math.max(0, safeOffset)
+  return normalizeBoundedIntegerInput(value, {
+    label: 'MCP tool list offset',
+    defaultValue: 0,
+    min: 0
+  })
 }
 
 function normalizeRequiredText(value: unknown, label: string) {

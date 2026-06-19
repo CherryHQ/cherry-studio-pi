@@ -1,6 +1,6 @@
 import { readRendererStoreValue } from '../rendererBridge'
 import type { AppCapabilityDefinition } from '../types'
-import { navigateApp, okResult, sanitizeForAgent } from '../utils'
+import { navigateApp, normalizeBoundedIntegerInput, okResult, sanitizeForAgent } from '../utils'
 import { persistSettingValue, readSettingValueForAgent } from './settings'
 
 export const PAINTING_NAMESPACES = [
@@ -30,18 +30,20 @@ const RENDERER_STORE_FALLBACK_TIMEOUT_MS = 1_000
 const PAINTING_PROVIDER_ROUTE_SEGMENT_PATTERN = /^[A-Za-z0-9_-]+$/
 
 function normalizeListLimit(value: unknown) {
-  const parsed =
-    typeof value === 'string' && !value.trim()
-      ? DEFAULT_PAINTING_HISTORY_LIMIT
-      : Number(value ?? DEFAULT_PAINTING_HISTORY_LIMIT)
-  const safeLimit = Number.isFinite(parsed) ? Math.trunc(parsed) : DEFAULT_PAINTING_HISTORY_LIMIT
-  return Math.max(1, Math.min(safeLimit, MAX_PAINTING_HISTORY_LIMIT))
+  return normalizeBoundedIntegerInput(value, {
+    label: 'Painting history limit',
+    defaultValue: DEFAULT_PAINTING_HISTORY_LIMIT,
+    min: 1,
+    max: MAX_PAINTING_HISTORY_LIMIT
+  })
 }
 
 function normalizeOffset(value: unknown) {
-  const parsed = typeof value === 'string' && !value.trim() ? 0 : Number(value ?? 0)
-  const safeOffset = Number.isFinite(parsed) ? Math.trunc(parsed) : 0
-  return Math.max(0, safeOffset)
+  return normalizeBoundedIntegerInput(value, {
+    label: 'Painting history offset',
+    defaultValue: 0,
+    min: 0
+  })
 }
 
 function normalizeOptionalText(value: unknown, label = 'Value') {
@@ -228,6 +230,8 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       tags: ['paintings', 'image', 'history'],
       execute: async (input: any) => {
         normalizePaintingNamespace(input?.namespace)
+        normalizeListLimit(input?.limit)
+        normalizeOffset(input?.offset)
         const paintings = await readRendererStoreValue<any>('state.paintings', {
           checkTimeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS,
           timeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS
