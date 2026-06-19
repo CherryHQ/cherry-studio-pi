@@ -404,7 +404,14 @@ export const providerCharge = async (provider: string) => {
     }
   }
 
-  const { url, width, height } = chargeUrlMap[provider]
+  const charge = chargeUrlMap[provider as keyof typeof chargeUrlMap]
+  if (!charge) {
+    logger.warn('Unknown provider charge URL requested', { provider })
+    window.toast.error(i18n.t('settings.provider.oauth.error'))
+    return
+  }
+
+  const { url, width, height } = charge
 
   openOAuthPopup(
     url,
@@ -447,7 +454,14 @@ export const providerBills = async (provider: string) => {
     }
   }
 
-  const { url, width, height } = billsUrlMap[provider]
+  const bills = billsUrlMap[provider as keyof typeof billsUrlMap]
+  if (!bills) {
+    logger.warn('Unknown provider bills URL requested', { provider })
+    window.toast.error(i18n.t('settings.provider.oauth.error'))
+    return
+  }
+
+  const { url, width, height } = bills
 
   openOAuthPopup(
     url,

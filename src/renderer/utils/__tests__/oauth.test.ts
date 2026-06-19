@@ -187,4 +187,14 @@ describe('oauth utilities', () => {
 
     timeoutSpy.mockRestore()
   })
+
+  it('handles unknown provider billing links without throwing', async () => {
+    const { providerBills, providerCharge } = await import('../oauth')
+
+    await expect(providerCharge('missing-provider')).resolves.toBeUndefined()
+    await expect(providerBills('missing-provider')).resolves.toBeUndefined()
+
+    expect(openSpy).not.toHaveBeenCalled()
+    expect(toastError).toHaveBeenCalledWith('settings.provider.oauth.error')
+  })
 })
