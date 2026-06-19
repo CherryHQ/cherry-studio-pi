@@ -57,7 +57,16 @@ const FileProcessingApiKeyItem: FC<FileProcessingApiKeyItemProps> = ({ item, onU
   const [saving, setSaving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const savingRef = useRef(false)
+  const mountedRef = useRef(true)
   const hasUnsavedChanges = editValue.trim() !== item.key.trim()
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     if (isEditing) {
@@ -81,7 +90,9 @@ const FileProcessingApiKeyItem: FC<FileProcessingApiKeyItemProps> = ({ item, onU
       await action()
     } finally {
       savingRef.current = false
-      setSaving(false)
+      if (mountedRef.current) {
+        setSaving(false)
+      }
     }
   }
 
@@ -89,6 +100,10 @@ const FileProcessingApiKeyItem: FC<FileProcessingApiKeyItemProps> = ({ item, onU
     await runSavingAction(async () => {
       try {
         const result = await onUpdate(editValue)
+        if (!mountedRef.current) {
+          return
+        }
+
         if (!result.isValid) {
           window.toast.warning(result.error)
           return
@@ -97,7 +112,9 @@ const FileProcessingApiKeyItem: FC<FileProcessingApiKeyItemProps> = ({ item, onU
         setIsEditing(false)
       } catch (error) {
         logger.error('Failed to save file processing API key', error as Error)
-        window.toast.error(t('settings.tool.file_processing.errors.save_failed'))
+        if (mountedRef.current) {
+          window.toast.error(t('settings.tool.file_processing.errors.save_failed'))
+        }
       }
     })
   }
@@ -119,10 +136,16 @@ const FileProcessingApiKeyItem: FC<FileProcessingApiKeyItemProps> = ({ item, onU
   const handleCopy = () => {
     navigator.clipboard
       .writeText(item.key)
-      .then(() => window.toast.success(t('common.copied')))
+      .then(() => {
+        if (mountedRef.current) {
+          window.toast.success(t('common.copied'))
+        }
+      })
       .catch((error) => {
         logger.error('Failed to copy file processing API key', error as Error)
-        window.toast.error(t('common.copy_failed'))
+        if (mountedRef.current) {
+          window.toast.error(t('common.copy_failed'))
+        }
       })
   }
 
@@ -135,12 +158,18 @@ const FileProcessingApiKeyItem: FC<FileProcessingApiKeyItemProps> = ({ item, onU
         cancelText: t('common.cancel')
       })
 
+      if (!mountedRef.current) {
+        return
+      }
+
       if (confirmed) {
         try {
           await onRemove()
         } catch (error) {
           logger.error('Failed to remove file processing API key', error as Error)
-          window.toast.error(t('settings.tool.file_processing.errors.save_failed'))
+          if (mountedRef.current) {
+            window.toast.error(t('settings.tool.file_processing.errors.save_failed'))
+          }
         }
       }
     })

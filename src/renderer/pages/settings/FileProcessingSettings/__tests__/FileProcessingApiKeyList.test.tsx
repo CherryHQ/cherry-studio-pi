@@ -1,5 +1,5 @@
 import { mockRendererLoggerService } from '@test-mocks/RendererLoggerService'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -58,15 +58,18 @@ vi.mock('@cherrystudio/ui', () => ({
 type Deferred<T> = {
   promise: Promise<T>
   resolve: (value: T) => void
+  reject: (reason?: unknown) => void
 }
 
 function deferred<T>(): Deferred<T> {
   let resolve: (value: T) => void = () => {}
-  const promise = new Promise<T>((promiseResolve) => {
+  let reject: (reason?: unknown) => void = () => {}
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
     resolve = promiseResolve
+    reject = promiseReject
   })
 
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 describe('FileProcessingApiKeyList', () => {
@@ -198,6 +201,30 @@ describe('FileProcessingApiKeyList', () => {
     expect(screen.getByPlaceholderText('settings.provider.api.key.new_key.placeholder')).toHaveValue('key-1')
   })
 
+  it('ignores save failures after the API key row unmounts', async () => {
+    const runningUpdate = deferred<void>()
+    setApiKeysMock.mockReturnValueOnce(runningUpdate.promise)
+    const { unmount } = render(
+      <FileProcessingApiKeyList processorId="mistral" apiKeys={[]} onSetApiKeys={setApiKeysMock} />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /common.add/ }))
+    fireEvent.change(screen.getByPlaceholderText('settings.provider.api.key.new_key.placeholder'), {
+      target: { value: 'key-1' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }))
+
+    await waitFor(() => expect(setApiKeysMock).toHaveBeenCalledWith('mistral', ['key-1']))
+    unmount()
+
+    await act(async () => {
+      runningUpdate.reject(new Error('persist failed after unmount'))
+      await runningUpdate.promise.catch(() => undefined)
+    })
+
+    expect(window.toast.error).not.toHaveBeenCalled()
+  })
+
   it('reports remove failures without treating the deletion as successful', async () => {
     const error = new Error('persist failed')
     setApiKeysMock.mockRejectedValueOnce(error)
@@ -210,6 +237,29 @@ describe('FileProcessingApiKeyList', () => {
     })
     expect(loggerErrorSpy).toHaveBeenCalledWith('Failed to remove file processing API key', error)
     expect(screen.getByText('key-1')).toBeInTheDocument()
+  })
+
+  it('does not remove a key when delete confirmation resolves after unmount', async () => {
+    const runningConfirmation = deferred<boolean>()
+    const confirm = vi.fn().mockReturnValueOnce(runningConfirmation.promise)
+    Object.defineProperty(window, 'modal', {
+      configurable: true,
+      value: { confirm }
+    })
+    const { unmount } = render(
+      <FileProcessingApiKeyList processorId="mistral" apiKeys={['key-1']} onSetApiKeys={setApiKeysMock} />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.delete' }))
+    expect(confirm).toHaveBeenCalledTimes(1)
+    unmount()
+
+    await act(async () => {
+      runningConfirmation.resolve(true)
+      await runningConfirmation.promise
+    })
+
+    expect(setApiKeysMock).not.toHaveBeenCalled()
   })
 
   it('updates saved key rows from apiKeys props', () => {
