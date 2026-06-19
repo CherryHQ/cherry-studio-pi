@@ -213,6 +213,10 @@ type SyncRunContext = {
   failureRecorded: boolean
 }
 
+type DataSyncRunOptions = {
+  signal?: AbortSignal
+}
+
 export type DataSyncRemoteDirectory = {
   name: string
   path: string
@@ -1176,6 +1180,13 @@ export class AppDataSyncService {
     )}仍未完成${stageText}。为避免远端锁被长时间占用，本次同步已停止；请稍后重试，如果再次出现请检查 WebDAV 服务响应或本机数据文件是否异常。`
   }
 
+  private formatExternalAbortMessage(signal: AbortSignal) {
+    const reason = signal.reason
+    if (reason instanceof Error && reason.message) return reason.message
+    if (typeof reason === 'string' && reason.trim()) return reason.trim()
+    return '同步已取消。'
+  }
+
   private abortSyncRun(context: SyncRunContext, reason: string) {
     context.aborted = true
     context.abortReason = reason
@@ -1192,9 +1203,14 @@ export class AppDataSyncService {
     }
   }
 
-  private withSyncRunDeadline<T>(promise: Promise<T>, context: SyncRunContext): Promise<T> {
+  private withSyncRunDeadline<T>(
+    promise: Promise<T>,
+    context: SyncRunContext,
+    options: DataSyncRunOptions = {}
+  ): Promise<T> {
     const remainingMs = Math.max(0, context.deadlineAt - Date.now())
     let timeoutId: ReturnType<typeof setTimeout> | null = null
+    let abortListener: (() => void) | null = null
     const timeout = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => {
         reject(this.abortSyncRun(context, this.formatSyncDeadlineExceededMessage(context)))
@@ -1203,6 +1219,19 @@ export class AppDataSyncService {
         timeoutId.unref()
       }
     })
+    const externalAbort = options.signal
+      ? new Promise<never>((_, reject) => {
+          const abort = () => {
+            reject(this.abortSyncRun(context, this.formatExternalAbortMessage(options.signal!)))
+          }
+          if (options.signal!.aborted) {
+            abort()
+            return
+          }
+          abortListener = abort
+          options.signal!.addEventListener('abort', abort, { once: true })
+        })
+      : null
 
     promise.catch((error) => {
       if (context.aborted) {
@@ -1210,9 +1239,12 @@ export class AppDataSyncService {
       }
     })
 
-    return Promise.race([promise, timeout]).finally(() => {
+    return Promise.race(externalAbort ? [promise, timeout, externalAbort] : [promise, timeout]).finally(() => {
       if (timeoutId) {
         clearTimeout(timeoutId)
+      }
+      if (abortListener) {
+        options.signal?.removeEventListener('abort', abortListener)
       }
     })
   }
@@ -4033,7 +4065,7 @@ export class AppDataSyncService {
     )
   }
 
-  async syncNow(config: WebDavConfig): Promise<DataSyncSummary> {
+  async syncNow(config: WebDavConfig, options: DataSyncRunOptions = {}): Promise<DataSyncSummary> {
     const normalizedConfig = this.normalizeSyncWebDavConfig(config)
 
     await this.clearExpiredInFlightSync()
@@ -4067,7 +4099,7 @@ export class AppDataSyncService {
       })
       .catch(() => undefined)
 
-    const sync = this.withSyncRunDeadline(backgroundSync, context)
+    const sync = this.withSyncRunDeadline(backgroundSync, context, options)
     this.syncInFlight = sync
 
     try {

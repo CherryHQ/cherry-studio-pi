@@ -4143,9 +4143,15 @@ describe('AppDataSyncService', () => {
         syncStartedAt: null
       })
     )
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/manifest.json'))
+    ).toBe(false)
 
     await expect(service.syncNow(config)).resolves.toEqual(expect.objectContaining({ status: 'success' }))
     expect(mocks.storageRecordSync.sync).toHaveBeenCalledTimes(2)
+    const manifestWritesAfterRetry = mocks.webdav.putFileContents.mock.calls.filter(([filePath]) =>
+      String(filePath).endsWith('/manifest.json')
+    ).length
 
     pendingStorageSync.resolve({
       manifest: { version: 1, records: {}, blobs: {} },
@@ -4164,5 +4170,87 @@ describe('AppDataSyncService', () => {
       }
     })
     await vi.advanceTimersByTimeAsync(0)
+    expect(
+      mocks.webdav.putFileContents.mock.calls.filter(([filePath]) => String(filePath).endsWith('/manifest.json'))
+    ).toHaveLength(manifestWritesAfterRetry)
+  })
+
+  it('aborts in-flight data sync when an external signal is cancelled', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-05T08:00:00.000Z'))
+    const pendingStorageSync = deferred<{
+      manifest: { version: 1; records: Record<string, never>; blobs: Record<string, never> }
+      syncStates: never[]
+      summary: {
+        storageUploaded: number
+        storageDownloaded: number
+        storageDeleted: number
+        storageConflicts: number
+        storageResolvedConflicts: number
+        storageSkipped: number
+        blobUploaded: number
+        blobDownloaded: number
+        secretUploaded: number
+        secretDownloaded: number
+      }
+    }>()
+    mocks.storageRecordSync.sync.mockReturnValueOnce(pendingStorageSync.promise)
+    const controller = new AbortController()
+
+    const service = new AppDataSyncService()
+    const sync = service.syncNow(config, { signal: controller.signal })
+    await vi.waitFor(() => expect(mocks.storageRecordSync.sync).toHaveBeenCalledTimes(1))
+    await expect(service.getStatus()).resolves.toEqual(
+      expect.objectContaining({
+        syncing: true,
+        syncStartedAt: expect.any(Number)
+      })
+    )
+
+    controller.abort(new Error('system agent cancelled data sync'))
+    await expect(sync).rejects.toThrow('system agent cancelled data sync')
+    expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith(
+      'last-sync-summary',
+      expect.objectContaining({
+        status: 'failed',
+        error: 'system agent cancelled data sync'
+      })
+    )
+    await expect(service.getStatus()).resolves.toEqual(
+      expect.objectContaining({
+        syncing: false,
+        syncStartedAt: null
+      })
+    )
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/manifest.json'))
+    ).toBe(false)
+
+    await expect(service.syncNow(config)).resolves.toEqual(expect.objectContaining({ status: 'success' }))
+    expect(mocks.storageRecordSync.sync).toHaveBeenCalledTimes(2)
+    const manifestWritesAfterRetry = mocks.webdav.putFileContents.mock.calls.filter(([filePath]) =>
+      String(filePath).endsWith('/manifest.json')
+    ).length
+
+    pendingStorageSync.resolve({
+      manifest: { version: 1, records: {}, blobs: {} },
+      syncStates: [],
+      summary: {
+        storageUploaded: 0,
+        storageDownloaded: 0,
+        storageDeleted: 0,
+        storageConflicts: 0,
+        storageResolvedConflicts: 0,
+        storageSkipped: 0,
+        blobUploaded: 0,
+        blobDownloaded: 0,
+        secretUploaded: 0,
+        secretDownloaded: 0
+      }
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(
+      mocks.webdav.putFileContents.mock.calls.filter(([filePath]) => String(filePath).endsWith('/manifest.json'))
+    ).toHaveLength(manifestWritesAfterRetry)
   })
 })

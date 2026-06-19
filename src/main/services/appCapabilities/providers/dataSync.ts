@@ -576,9 +576,14 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
           await persistWebDavConfig(config)
         }
         await prepareRendererStorageV2ForDataSync()
-        const summary = await runWebDavCapability('同步数据', () => appDataSyncService.syncNow(config), {
-          recordDataSyncFailure: true
-        })
+        const syncOptions = context.signal ? { signal: context.signal } : null
+        const summary = await runWebDavCapability(
+          '同步数据',
+          () => (syncOptions ? appDataSyncService.syncNow(config, syncOptions) : appDataSyncService.syncNow(config)),
+          {
+            recordDataSyncFailure: true
+          }
+        )
         broadcastExternalDataSyncCompleted(summary, context.source)
         return okResult('Data sync completed', sanitizeForAgent(summary))
       }

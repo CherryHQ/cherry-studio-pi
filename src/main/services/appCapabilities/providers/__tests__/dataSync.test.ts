@@ -723,6 +723,23 @@ describe('data sync app capabilities', () => {
     })
   })
 
+  it('passes agent abort signals into long-running data sync calls', async () => {
+    const controller = new AbortController()
+    mocks.appDataSyncService.syncNow.mockResolvedValueOnce({ status: 'success' })
+
+    await capability('dataSync.sync.now').execute({}, { source: 'agent', signal: controller.signal })
+
+    expect(mocks.appDataSyncService.syncNow).toHaveBeenCalledWith(
+      {
+        webdavHost: 'https://dav.example.com',
+        webdavUser: 'user',
+        webdavPass: 'secret',
+        webdavPath: '/sync-root'
+      },
+      { signal: controller.signal }
+    )
+  })
+
   it('records a failure summary when agent-triggered data sync fails', async () => {
     mocks.appDataSyncService.syncNow.mockRejectedValueOnce(new Error('503 Service Unavailable'))
 
