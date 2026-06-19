@@ -7,7 +7,7 @@ import { API_SERVER_DEFAULTS } from '@shared/config/constant'
 import { Copy, ExternalLink, Play, RotateCcw, Server, Square, TriangleAlert } from 'lucide-react'
 import type React from 'react'
 import type { FC } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -33,6 +33,15 @@ const ApiGatewaySettings: FC = () => {
   const serverUrl = `http://${serverHost}:${serverPort}`
   const apiKey = apiGatewayConfig.apiKey || ''
   const [portDraft, setPortDraft] = useState(() => String(serverPort))
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     setPortDraft(String(serverPort))
@@ -57,11 +66,15 @@ const ApiGatewaySettings: FC = () => {
     if (!apiKey) return
     try {
       await navigator.clipboard.writeText(apiKey)
-      window.toast.success(t('apiGateway.messages.apiKeyCopied'))
+      if (mountedRef.current) {
+        window.toast.success(t('apiGateway.messages.apiKeyCopied'))
+      }
     } catch {
       // Clipboard write can be denied (permissions / insecure context); don't
       // report a copy that didn't happen.
-      window.toast.error(t('apiGateway.messages.operationFailed'))
+      if (mountedRef.current) {
+        window.toast.error(t('apiGateway.messages.operationFailed'))
+      }
     }
   }
 
@@ -72,9 +85,13 @@ const ApiGatewaySettings: FC = () => {
   const regenerateApiKey = async () => {
     try {
       await setApiGatewayConfig({ apiKey: generateApiKey() })
-      window.toast.success(t('apiGateway.messages.apiKeyRegenerated'))
+      if (mountedRef.current) {
+        window.toast.success(t('apiGateway.messages.apiKeyRegenerated'))
+      }
     } catch {
-      window.toast.error(t('apiGateway.messages.operationFailed'))
+      if (mountedRef.current) {
+        window.toast.error(t('apiGateway.messages.operationFailed'))
+      }
     }
   }
 
@@ -95,11 +112,15 @@ const ApiGatewaySettings: FC = () => {
 
     void setApiGatewayConfig({ port })
       .then(() => {
-        setPortDraft(String(port))
+        if (mountedRef.current) {
+          setPortDraft(String(port))
+        }
       })
       .catch(() => {
-        setPortDraft(String(serverPort))
-        window.toast.error(t('apiGateway.messages.operationFailed'))
+        if (mountedRef.current) {
+          setPortDraft(String(serverPort))
+          window.toast.error(t('apiGateway.messages.operationFailed'))
+        }
       })
   }
 
