@@ -9,13 +9,36 @@ const logger = loggerService.withContext('Utils:oauth')
 const oauthMessageCleanups = new Map<string, () => void>()
 const OAUTH_POPUP_FEATURES =
   'width=720,height=720,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes'
+const OAUTH_MESSAGE_TIMEOUT_MS = 10 * 60 * 1000
+const OAUTH_POPUP_CLOSED_POLL_MS = 1000
 
-function replaceOAuthMessageHandler(provider: string, handler: (event: MessageEvent) => void) {
+function replaceOAuthMessageHandler(
+  provider: string,
+  handler: (event: MessageEvent) => void,
+  options: { popup?: Window | null } = {}
+) {
   oauthMessageCleanups.get(provider)?.()
 
+  let disposed = false
   window.addEventListener('message', handler)
+  const timeoutId = window.setTimeout(() => {
+    logger.warn('OAuth message listener timed out', { provider })
+    cleanup()
+  }, OAUTH_MESSAGE_TIMEOUT_MS)
+  const closedPollId = options.popup
+    ? window.setInterval(() => {
+        if (!options.popup?.closed) return
+        logger.debug('OAuth popup closed before callback', { provider })
+        cleanup()
+      }, OAUTH_POPUP_CLOSED_POLL_MS)
+    : null
+
   const cleanup = () => {
+    if (disposed) return
+    disposed = true
     window.removeEventListener('message', handler)
+    window.clearTimeout(timeoutId)
+    if (closedPollId !== null) window.clearInterval(closedPollId)
     if (oauthMessageCleanups.get(provider) === cleanup) {
       oauthMessageCleanups.delete(provider)
     }
@@ -63,7 +86,7 @@ export const oauthWithSiliconFlow = async (setKey) => {
     }
   }
 
-  cleanup = replaceOAuthMessageHandler('siliconflow', messageHandler)
+  cleanup = replaceOAuthMessageHandler('siliconflow', messageHandler, { popup })
 }
 
 export const oauthWithAihubmix = async (setKey) => {
@@ -99,7 +122,7 @@ export const oauthWithAihubmix = async (setKey) => {
     }
   }
 
-  cleanup = replaceOAuthMessageHandler('aihubmix', messageHandler)
+  cleanup = replaceOAuthMessageHandler('aihubmix', messageHandler, { popup })
 }
 
 export const oauthWithPPIO = async (setKey) => {
@@ -244,7 +267,7 @@ export const oauthWith302AI = async (setKey) => {
     }
   }
 
-  cleanup = replaceOAuthMessageHandler('302ai', messageHandler)
+  cleanup = replaceOAuthMessageHandler('302ai', messageHandler, { popup })
 }
 
 export const oauthWithAiOnly = async (setKey) => {
@@ -265,7 +288,7 @@ export const oauthWithAiOnly = async (setKey) => {
     }
   }
 
-  cleanup = replaceOAuthMessageHandler('aionly', messageHandler)
+  cleanup = replaceOAuthMessageHandler('aionly', messageHandler, { popup })
 }
 
 export interface NewApiOAuthConfig {

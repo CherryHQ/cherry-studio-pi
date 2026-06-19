@@ -42,6 +42,7 @@ describe('oauth utilities', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     addEventListenerSpy.mockRestore()
     removeEventListenerSpy.mockRestore()
@@ -88,6 +89,33 @@ describe('oauth utilities', () => {
 
     expect(setKey).not.toHaveBeenCalled()
     expect(close).not.toHaveBeenCalled()
+  })
+
+  it('removes OAuth message listeners when the popup is closed before callback', async () => {
+    vi.useFakeTimers()
+    const popup = { close, closed: false }
+    openSpy.mockReturnValue(popup as any)
+
+    const { oauthWithSiliconFlow } = await import('../oauth')
+    await oauthWithSiliconFlow(vi.fn())
+    const handler = addEventListenerSpy.mock.calls.find(([event]) => event === 'message')?.[1]
+
+    popup.closed = true
+    vi.advanceTimersByTime(1000)
+
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('message', handler)
+  })
+
+  it('removes OAuth message listeners when a provider never calls back', async () => {
+    vi.useFakeTimers()
+    const { oauthWith302AI } = await import('../oauth')
+
+    await oauthWith302AI(vi.fn())
+    const handler = addEventListenerSpy.mock.calls.find(([event]) => event === 'message')?.[1]
+
+    vi.advanceTimersByTime(10 * 60 * 1000)
+
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('message', handler)
   })
 
   it('opens Aihubmix OAuth URL without a leading space', async () => {
