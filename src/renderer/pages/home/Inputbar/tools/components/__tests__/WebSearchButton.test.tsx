@@ -1,15 +1,32 @@
 import '@testing-library/jest-dom/vitest'
 
 import { MockUsePreferenceUtils } from '@test-mocks/renderer/usePreference'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import type * as ReactI18next from 'react-i18next'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import WebSearchButton from '../WebSearchButton'
 
 const updateAssistantMock = vi.fn()
 const navigateMock = vi.fn()
 const confirmMock = vi.fn()
+
+type Deferred<T> = {
+  promise: Promise<T>
+  reject: (reason?: unknown) => void
+  resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {}
+  let reject: (reason?: unknown) => void = () => {}
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, reject, resolve }
+}
 
 vi.mock('react-i18next', async (importOriginal) => {
   const actual = await importOriginal<typeof ReactI18next>()
@@ -119,8 +136,16 @@ describe('WebSearchButton', () => {
       modal: {
         ...window.modal,
         confirm: confirmMock
+      },
+      toast: {
+        error: vi.fn(),
+        warning: vi.fn()
       }
     })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('opens web search settings and does not update the assistant when external providers are missing', () => {
@@ -135,5 +160,34 @@ describe('WebSearchButton', () => {
       })
     )
     expect(updateAssistantMock).not.toHaveBeenCalled()
+  })
+
+  it('ignores stale assistant update failures after unmount', async () => {
+    vi.useFakeTimers()
+    const pendingUpdate = deferred<void>()
+    updateAssistantMock.mockReturnValueOnce(pendingUpdate.promise)
+    MockUsePreferenceUtils.setPreferenceValue('chat.web_search.default_search_keywords_provider', 'tavily')
+    MockUsePreferenceUtils.setPreferenceValue('chat.web_search.provider_overrides', {
+      tavily: {
+        apiKeys: ['tvly-key']
+      }
+    })
+
+    const { unmount } = render(<WebSearchButton assistantId="assistant-1" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'chat.input.web_search.label' }))
+
+    await act(async () => {
+      vi.runAllTimers()
+    })
+    expect(updateAssistantMock).toHaveBeenCalledWith({ settings: { enableWebSearch: true } })
+    unmount()
+
+    await act(async () => {
+      pendingUpdate.reject(new Error('save failed after unmount'))
+      await pendingUpdate.promise.catch(() => undefined)
+    })
+
+    expect(window.toast.error).not.toHaveBeenCalled()
   })
 })

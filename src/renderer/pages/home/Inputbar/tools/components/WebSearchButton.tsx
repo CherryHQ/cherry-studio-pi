@@ -1,11 +1,11 @@
 import { ActionIconButton } from '@renderer/components/Buttons'
 import { useAssistant } from '@renderer/hooks/useAssistant'
 import { useProvider } from '@renderer/hooks/useProvider'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { useTimer } from '@renderer/hooks/useTimer'
 import { useWebSearchProviders } from '@renderer/hooks/useWebSearch'
 import { getWebSearchProviderLogo } from '@renderer/pages/settings/WebSearchSettings/utils/webSearchProviderMeta'
 import { getEffectiveMcpMode } from '@renderer/types'
-import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { WebSearchProviderId } from '@shared/data/preference/preferenceTypes'
 import {
   isGemini3Model,
@@ -56,12 +56,7 @@ const WebSearchButton: FC<Props> = ({ assistantId }) => {
   // assistant flag — no external provider is invoked, so don't show its logo.
   const providerLogo = !hasBuiltinWebSearch && activeProviderId ? getWebSearchProviderLogo(activeProviderId) : undefined
 
-  const showSaveFailed = useCallback(
-    (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
-    },
-    [t]
-  )
+  const showSaveFailed = useSaveFailedToast()
 
   const onClick = useCallback(() => {
     if (!assistant || !model) {
