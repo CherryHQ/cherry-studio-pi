@@ -1,7 +1,9 @@
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+
+import { useSaveFailedToast } from '../hooks/useSaveFailedToast'
 
 const logger = loggerService.withContext('SelectionContextMenu')
 
@@ -62,6 +64,17 @@ function extractSelectedText(selection: Selection): string {
 const SelectionContextMenu: React.FC<SelectionContextMenuProps> = ({ children }) => {
   const { t } = useTranslation()
   const [selectedText, setSelectedText] = useState('')
+  const mountedRef = useRef(true)
+  const showCopyFailed = useSaveFailedToast('message.copy.failed')
+  const showQuoteFailed = useSaveFailedToast('common.error')
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const handleOpenChange = (open: boolean) => {
     if (!open) return
@@ -76,17 +89,21 @@ const SelectionContextMenu: React.FC<SelectionContextMenuProps> = ({ children })
   const handleCopy = () => {
     navigator.clipboard
       .writeText(selectedText)
-      .then(() => window.toast.success(t('message.copied')))
+      .then(() => {
+        if (mountedRef.current) {
+          window.toast.success(t('message.copied'))
+        }
+      })
       .catch((error) => {
         logger.error('clipboard write failed', error as Error)
-        window.toast.error(t('message.copy.failed'))
+        showCopyFailed(error)
       })
   }
 
   const handleQuote = () => {
     void window.api.quoteToMainWindow(selectedText).catch((error) => {
       logger.error('quote to main window failed', error as Error)
-      window.toast.error(t('common.error'))
+      showQuoteFailed(error)
     })
   }
 
