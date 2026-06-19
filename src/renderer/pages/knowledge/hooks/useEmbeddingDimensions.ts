@@ -1,6 +1,6 @@
 import { loggerService } from '@logger'
 import { UniqueModelIdSchema } from '@shared/data/types/model'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { normalizeKnowledgeError } from '../utils'
 
@@ -35,23 +35,43 @@ const fetchEmbeddingDimensions = async (uniqueModelId: string): Promise<number> 
   }
 }
 
+const useMountedRef = () => {
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  return mountedRef
+}
+
 export const useEmbeddingDimensions = () => {
   const [isFetchingDimensions, setIsFetchingDimensions] = useState(false)
+  const mountedRef = useMountedRef()
+  const requestSeqRef = useRef(0)
 
-  const fetchDimensions = useCallback(async (uniqueModelId: string): Promise<number> => {
-    setIsFetchingDimensions(true)
+  const fetchDimensions = useCallback(
+    async (uniqueModelId: string): Promise<number> => {
+      const requestSeq = ++requestSeqRef.current
 
-    return fetchEmbeddingDimensions(uniqueModelId).then(
-      (dimensions) => {
-        setIsFetchingDimensions(false)
-        return dimensions
-      },
-      (error) => {
-        setIsFetchingDimensions(false)
-        throw error
+      if (mountedRef.current) {
+        setIsFetchingDimensions(true)
       }
-    )
-  }, [])
+
+      try {
+        return await fetchEmbeddingDimensions(uniqueModelId)
+      } finally {
+        if (mountedRef.current && requestSeqRef.current === requestSeq) {
+          setIsFetchingDimensions(false)
+        }
+      }
+    },
+    [mountedRef]
+  )
 
   return {
     fetchDimensions,
