@@ -37,6 +37,36 @@ export function formStateToTrigger(kind: ScheduleKind, value: string): Trigger |
   return { kind: 'once', at }
 }
 
+function triggersEqual(left: Trigger, right: Trigger) {
+  if (left.kind !== right.kind) return false
+  if (left.kind === 'cron' && right.kind === 'cron') return left.expr === right.expr
+  if (left.kind === 'interval' && right.kind === 'interval') return left.ms === right.ms
+  if (left.kind === 'once' && right.kind === 'once') return left.at === right.at
+  return false
+}
+
+export function resolveTaskScheduleBlur(
+  draftKind: ScheduleKind,
+  draftValue: string,
+  currentTrigger: Trigger
+):
+  | { action: 'noop' }
+  | { action: 'reset'; state: { kind: ScheduleKind; value: string } }
+  | { action: 'save'; trigger: Trigger; state: { kind: ScheduleKind; value: string } } {
+  const trigger = formStateToTrigger(draftKind, draftValue)
+  const currentState = triggerToFormState(currentTrigger)
+
+  if (!trigger) return { action: 'reset', state: currentState }
+
+  const nextState = triggerToFormState(trigger)
+  if (triggersEqual(trigger, currentTrigger)) {
+    if (draftKind === currentState.kind && draftValue.trim() === currentState.value) return { action: 'noop' }
+    return { action: 'reset', state: currentState }
+  }
+
+  return { action: 'save', trigger, state: nextState }
+}
+
 export function isTaskCreateFormSubmittable(input: {
   agentId: string | null
   name: string

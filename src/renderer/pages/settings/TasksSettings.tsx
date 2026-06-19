@@ -55,6 +55,7 @@ import {
   formStateToTrigger,
   isTaskCreateFormSubmittable,
   parseScheduleDate,
+  resolveTaskScheduleBlur,
   type ScheduleKind,
   triggerToFormState
 } from './taskScheduleGuards'
@@ -209,6 +210,18 @@ const TaskDetail: FC<{
     [commitPrompt]
   )
 
+  const commitSchedule = useCallback(() => {
+    const resolution = resolveTaskScheduleBlur(scheduleType, scheduleValue, task.trigger)
+    if (resolution.action === 'save') {
+      setScheduleType(resolution.state.kind)
+      setScheduleValue(resolution.state.value)
+      saveField({ trigger: resolution.trigger })
+    } else if (resolution.action === 'reset') {
+      setScheduleType(resolution.state.kind)
+      setScheduleValue(resolution.state.value)
+    }
+  }, [saveField, scheduleType, scheduleValue, task.trigger])
+
   const formatDateTime = (iso: string | null | undefined) => {
     if (!iso) return '-'
     const d = new Date(iso)
@@ -356,12 +369,7 @@ const TaskDetail: FC<{
                 <UIInput
                   value={scheduleValue}
                   onChange={(e) => setScheduleValue(e.target.value)}
-                  onBlur={() => {
-                    const trigger = formStateToTrigger(scheduleType, scheduleValue)
-                    if (!trigger) return
-                    if (JSON.stringify(trigger) === JSON.stringify(task.trigger)) return
-                    saveField({ trigger })
-                  }}
+                  onBlur={commitSchedule}
                   placeholder={t('agent.cherryClaw.tasks.cronPlaceholder')}
                   disabled={isCompleted}
                 />
@@ -373,12 +381,7 @@ const TaskDetail: FC<{
                     min={1}
                     value={scheduleValue}
                     onChange={(e) => setScheduleValue(e.target.value)}
-                    onBlur={() => {
-                      const trigger = formStateToTrigger(scheduleType, scheduleValue)
-                      if (!trigger) return
-                      if (JSON.stringify(trigger) === JSON.stringify(task.trigger)) return
-                      saveField({ trigger })
-                    }}
+                    onBlur={commitSchedule}
                     placeholder={t('agent.cherryClaw.tasks.intervalPlaceholder')}
                     disabled={isCompleted}
                     className="pr-10"

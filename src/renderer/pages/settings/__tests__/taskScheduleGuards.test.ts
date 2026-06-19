@@ -4,6 +4,7 @@ import {
   formStateToTrigger,
   isTaskCreateFormSubmittable,
   parseScheduleDate,
+  resolveTaskScheduleBlur,
   triggerToFormState
 } from '../taskScheduleGuards'
 
@@ -61,5 +62,32 @@ describe('task schedule guards', () => {
     expect(parseScheduleDate('')).toBeUndefined()
     expect(parseScheduleDate('not-a-date')).toBeUndefined()
     expect(parseScheduleDate('2026-06-20T08:00:00.000Z')).toEqual(new Date('2026-06-20T08:00:00.000Z'))
+  })
+
+  it('resolves schedule blur edits without leaving unsaved invalid values visible', () => {
+    const current = { kind: 'interval' as const, ms: 10 * 60_000 }
+
+    expect(resolveTaskScheduleBlur('interval', '20', current)).toEqual({
+      action: 'save',
+      trigger: { kind: 'interval', ms: 20 * 60_000 },
+      state: { kind: 'interval', value: '20' }
+    })
+    expect(resolveTaskScheduleBlur('interval', '0', current)).toEqual({
+      action: 'reset',
+      state: { kind: 'interval', value: '10' }
+    })
+    expect(resolveTaskScheduleBlur('interval', '010', current)).toEqual({
+      action: 'reset',
+      state: { kind: 'interval', value: '10' }
+    })
+    expect(resolveTaskScheduleBlur('cron', '   ', current)).toEqual({
+      action: 'reset',
+      state: { kind: 'interval', value: '10' }
+    })
+    expect(resolveTaskScheduleBlur('cron', '  0 9 * * *  ', current)).toEqual({
+      action: 'save',
+      trigger: { kind: 'cron', expr: '0 9 * * *' },
+      state: { kind: 'cron', value: '0 9 * * *' }
+    })
   })
 })
