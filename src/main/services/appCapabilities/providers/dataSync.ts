@@ -22,6 +22,8 @@ import { okResult, sanitizeForAgent } from '../utils'
 const logger = loggerService.withContext('AppCapability:DataSync')
 const DEFAULT_DATA_SYNC_PATH = '/cherry-studio-pi'
 const DATA_SYNC_SUFFIX = '/sync/v1'
+const DATA_SYNC_SETTINGS_BRIDGE_CHECK_TIMEOUT_MS = 800
+const DATA_SYNC_SETTINGS_BRIDGE_CALL_TIMEOUT_MS = 1_500
 const RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS = 5 * 60_000
 
 type DataSyncSettingsState = {
@@ -124,6 +126,8 @@ async function getDataSyncSettings(): Promise<DataSyncSettingsState> {
 
   try {
     return await callRendererBridge<DataSyncBridgeSettings>(RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE, undefined, {
+      checkTimeoutMs: DATA_SYNC_SETTINGS_BRIDGE_CHECK_TIMEOUT_MS,
+      timeoutMs: DATA_SYNC_SETTINGS_BRIDGE_CALL_TIMEOUT_MS,
       timeoutMessage: 'Timed out reading data sync settings'
     })
   } catch (error) {
@@ -336,6 +340,8 @@ async function persistWebDavConfig(config: WebDavConfig, options: { autoSync?: b
 
   try {
     await callRendererBridge<DataSyncBridgeSettings>(RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE, settings, {
+      checkTimeoutMs: DATA_SYNC_SETTINGS_BRIDGE_CHECK_TIMEOUT_MS,
+      timeoutMs: DATA_SYNC_SETTINGS_BRIDGE_CALL_TIMEOUT_MS,
       timeoutMessage: 'Timed out saving data sync settings'
     })
   } catch (error) {

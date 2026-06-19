@@ -158,6 +158,33 @@ describe('data sync app capabilities', () => {
     )
   })
 
+  it('falls back quickly when the renderer settings bridge is unresponsive', async () => {
+    vi.useFakeTimers()
+    try {
+      mocks.storageV2Service.getSetting.mockResolvedValue(null)
+      mocks.secretVault.getSecret.mockResolvedValue(null)
+      mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation(() => new Promise(() => undefined))
+
+      const resultPromise = capability('dataSync.webdav.config.get').execute({}, { source: 'agent' })
+
+      await vi.advanceTimersByTimeAsync(800)
+
+      await expect(resultPromise).resolves.toMatchObject({
+        ok: true,
+        data: {
+          webdavHost: '',
+          webdavUser: '',
+          webdavPass: '',
+          webdavPath: '/cherry-studio-pi',
+          autoSync: false,
+          syncInterval: 0
+        }
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('falls back to the renderer settings bridge when Storage v2 settings cannot be read', async () => {
     mocks.storageV2Service.getSetting.mockRejectedValueOnce(new Error('database is busy'))
 
@@ -213,6 +240,42 @@ describe('data sync app capabilities', () => {
     expect(setCall?.[0]).toContain('"dataSyncWebdavPath":"/Team/Sync"')
     expect(setCall?.[0]).toContain('"dataSyncAutoSync":false')
     expect(setCall?.[0]).toContain('"dataSyncSyncInterval":30')
+  })
+
+  it('keeps saved WebDAV config when the renderer refresh bridge is unresponsive', async () => {
+    vi.useFakeTimers()
+    try {
+      mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation(() => new Promise(() => undefined))
+
+      const resultPromise = capability('dataSync.webdav.config.set').execute(
+        {
+          webdavHost: 'dav.example.com',
+          webdavUser: 'user',
+          webdavPass: 'secret',
+          webdavPath: '/sync-root'
+        },
+        { source: 'agent' }
+      )
+
+      await vi.advanceTimersByTimeAsync(800)
+
+      await expect(resultPromise).resolves.toMatchObject({
+        ok: true,
+        summary: 'WebDAV data sync config saved'
+      })
+      expect(mocks.storageV2Service.setSetting).toHaveBeenCalledWith(
+        'settings.dataSyncWebdavHost',
+        'https://dav.example.com',
+        'settings'
+      )
+      expect(mocks.storageV2Service.setSetting).toHaveBeenCalledWith(
+        'settings.dataSyncWebdavPath',
+        '/sync-root',
+        'settings'
+      )
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('normalizes numeric string WebDAV sync intervals before saving', async () => {
