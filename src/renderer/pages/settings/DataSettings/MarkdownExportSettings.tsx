@@ -12,7 +12,7 @@ import { usePreference } from '@data/hooks/usePreference'
 import { useTheme } from '@renderer/context/ThemeProvider'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { FC } from 'react'
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingDivider, SettingGroup, SettingHelpText, SettingRow, SettingRowTitle, SettingTitle } from '..'
@@ -38,22 +38,43 @@ const MarkdownExportSettings: FC = () => {
   const [standardizeCitationsInExport, setStandardizeCitationsInExport] = usePreference(
     'data.export.markdown.standardize_citations'
   )
+  const mountedRef = useRef(true)
+  const selectFolderSeqRef = useRef(0)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+      selectFolderSeqRef.current += 1
+    }
+  }, [])
+
+  const isCurrentSelectFolder = (requestSeq: number) => mountedRef.current && requestSeq === selectFolderSeqRef.current
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+      if (mountedRef.current) {
+        window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+      }
     },
     [t]
   )
 
   const handleSelectFolder = async () => {
+    const requestSeq = ++selectFolderSeqRef.current
+
     try {
       const path = await window.api.file.selectFolder()
-      if (path) {
-        await setmarkdownExportPath(path)
+      if (!isCurrentSelectFolder(requestSeq) || !path) {
+        return
       }
+
+      await setmarkdownExportPath(path)
     } catch (error) {
-      showSaveFailed(error)
+      if (isCurrentSelectFolder(requestSeq)) {
+        showSaveFailed(error)
+      }
     }
   }
 
