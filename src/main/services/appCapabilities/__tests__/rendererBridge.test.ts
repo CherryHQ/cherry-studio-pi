@@ -202,4 +202,25 @@ describe('app capability renderer bridge', () => {
       vi.useRealTimers()
     }
   })
+
+  it('aborts renderer bridge waits when the caller signal is cancelled', async () => {
+    vi.useFakeTimers()
+    try {
+      const unresponsiveWindow = createWindow(vi.fn(() => new Promise(() => undefined)))
+      mocks.getAllWindows.mockReturnValue([unresponsiveWindow])
+      const controller = new AbortController()
+
+      const result = callRendererBridge('test.abort', undefined, {
+        checkTimeoutMs: 5_000,
+        timeoutMs: 5_000,
+        signal: controller.signal
+      })
+
+      controller.abort(new Error('agent cancelled bridge call'))
+      await expect(result).rejects.toThrow('agent cancelled bridge call')
+      await vi.advanceTimersByTimeAsync(5_000)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

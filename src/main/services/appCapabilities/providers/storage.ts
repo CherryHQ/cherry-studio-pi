@@ -59,13 +59,15 @@ function agentListOptions(input: unknown = {}) {
   }
 }
 
-async function prepareRendererStorageV2ForStorageOperation(operation: string) {
+async function prepareRendererStorageV2ForStorageOperation(operation: string, signal?: AbortSignal) {
   try {
     await callRendererBridge<void>(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE, undefined, {
       timeoutMs: RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS,
-      timeoutMessage: `Timed out preparing local data before ${operation}`
+      timeoutMessage: `Timed out preparing local data before ${operation}`,
+      signal
     })
   } catch (error) {
+    if (signal?.aborted) throw error
     logger.warn('Renderer Storage v2 preparation bridge is unavailable; continuing with persisted Storage v2 data', {
       operation,
       error: getBridgeErrorMessage(error)
@@ -134,10 +136,10 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['database.read', 'filesystem.read', 'filesystem.write'],
       tags: ['storage', 'backup', 'local', 'data'],
       examples: ['Create a local backup', 'Back up my data before changing settings'],
-      execute: async (input: any) => {
+      execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
         const reason = normalizeOptionalText(inputObject.reason, 'Backup reason') || 'agent-request'
-        await prepareRendererStorageV2ForStorageOperation('backup')
+        await prepareRendererStorageV2ForStorageOperation('backup', context.signal)
         const backup = await storageV2Service.createBackup(reason)
         return {
           ok: true,
@@ -212,7 +214,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
             validation: sanitizeForAgent(await storageV2Service.validateBackup(backupPath))
           })
         }
-        await prepareRendererStorageV2ForStorageOperation('restore')
+        await prepareRendererStorageV2ForStorageOperation('restore', context.signal)
         return okResult('Backup restored', sanitizeForAgent(await storageV2Service.restoreBackup(backupPath)))
       }
     },
@@ -232,10 +234,10 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       permissions: ['storage.snapshot.write'],
       sideEffects: ['database.read', 'database.write', 'filesystem.write'],
       tags: ['storage', 'snapshot', 'database'],
-      execute: async (input: any) => {
+      execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
         const reason = normalizeOptionalText(inputObject.reason, 'Snapshot reason') || 'agent-request'
-        await prepareRendererStorageV2ForStorageOperation('snapshot')
+        await prepareRendererStorageV2ForStorageOperation('snapshot', context.signal)
         return okResult('Storage snapshot created', sanitizeForAgent(await storageV2Service.createSnapshot(reason)))
       }
     },

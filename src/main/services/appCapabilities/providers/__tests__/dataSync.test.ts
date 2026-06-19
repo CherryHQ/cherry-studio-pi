@@ -740,6 +740,25 @@ describe('data sync app capabilities', () => {
     )
   })
 
+  it('stops before syncing when renderer preparation is cancelled by the caller signal', async () => {
+    const controller = new AbortController()
+    mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation(async (script: string) => {
+      if (script.includes('typeof')) return true
+      if (script.includes(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE)) {
+        controller.abort(new Error('agent cancelled data sync preparation'))
+        throw new Error('agent cancelled data sync preparation')
+      }
+      return undefined
+    })
+
+    await expect(
+      capability('dataSync.sync.now').execute({}, { source: 'agent', signal: controller.signal })
+    ).rejects.toThrow('agent cancelled data sync preparation')
+
+    expect(mocks.appDataSyncService.syncNow).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.send).not.toHaveBeenCalled()
+  })
+
   it('records a failure summary when agent-triggered data sync fails', async () => {
     mocks.appDataSyncService.syncNow.mockRejectedValueOnce(new Error('503 Service Unavailable'))
 

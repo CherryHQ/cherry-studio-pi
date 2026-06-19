@@ -173,6 +173,28 @@ describe('storage app capabilities', () => {
     )
   })
 
+  it('stops storage writes when renderer preparation is cancelled by the caller signal', async () => {
+    const controller = new AbortController()
+    mocks.callRendererBridge.mockImplementationOnce(async () => {
+      controller.abort(new Error('agent cancelled storage backup'))
+      throw new Error('agent cancelled storage backup')
+    })
+
+    await expect(
+      capability('storage.backup.create').execute(
+        { reason: 'agent request' },
+        { source: 'agent', signal: controller.signal }
+      )
+    ).rejects.toThrow('agent cancelled storage backup')
+
+    expect(mocks.callRendererBridge).toHaveBeenCalledWith(
+      expect.any(String),
+      undefined,
+      expect.objectContaining({ signal: controller.signal })
+    )
+    expect(mocks.storageV2Service.createBackup).not.toHaveBeenCalled()
+  })
+
   it('rejects empty required storage identifiers before calling services', async () => {
     await expect(
       capability('storage.backup.validate').execute({ backupPath: '   ' }, { source: 'agent' })

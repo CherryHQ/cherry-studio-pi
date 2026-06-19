@@ -274,13 +274,15 @@ async function runWebDavCapability<T>(
   }
 }
 
-async function prepareRendererStorageV2ForDataSync() {
+async function prepareRendererStorageV2ForDataSync(signal?: AbortSignal) {
   try {
     await callRendererBridge<void>(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE, undefined, {
       timeoutMs: RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS,
-      timeoutMessage: 'Timed out preparing local data before sync'
+      timeoutMessage: 'Timed out preparing local data before sync',
+      signal
     })
   } catch (error) {
+    if (signal?.aborted) throw error
     logger.warn('Renderer Storage v2 preparation bridge is unavailable; continuing with persisted Storage v2 data', {
       error: getBridgeErrorMessage(error)
     })
@@ -575,7 +577,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
         if (saveConfig) {
           await persistWebDavConfig(config)
         }
-        await prepareRendererStorageV2ForDataSync()
+        await prepareRendererStorageV2ForDataSync(context.signal)
         const syncOptions = context.signal ? { signal: context.signal } : null
         const summary = await runWebDavCapability(
           '同步数据',
