@@ -138,8 +138,9 @@ jobs:
             echo "  CHERRY_STUDIO_PI_RELEASE_CONFIRM=$TAG pnpm release patch"
             echo "Push the version commit first:"
             echo "  git push"
-            echo "Push the annotated tag only after confirming this release should be published:"
+            echo "Push the annotated tag only after confirming this tag should be available remotely:"
             echo "  git push origin $TAG"
+            echo "Pushing the tag does not publish installers; it only makes the tag selectable here."
             exit 1
           fi
 

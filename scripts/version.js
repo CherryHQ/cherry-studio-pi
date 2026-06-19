@@ -173,8 +173,9 @@ function getPushInstructions(version) {
     `Changes are committed locally and tagged as v${version}.`,
     'Push the version commit first:',
     'git push',
-    `Push the annotated tag only when you intentionally want to expose v${version} to CI/history:`,
+    `Push the annotated tag only after confirming v${version} should be available for exactly one manual release:`,
     `git push origin v${version}`,
+    'Pushing the tag does not publish installers; it only makes the tag selectable by the manual Release workflow.',
     'Do not chain these commands in one shell line.',
     'Publishing installers is a separate manual GitHub Actions -> Release workflow step and must be run exactly once.'
   ].join('\n')

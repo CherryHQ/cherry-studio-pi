@@ -148,7 +148,7 @@ Otherwise, ask the user to confirm before proceeding to Step 6.
    CHERRY_STUDIO_PI_RELEASE_CONFIRM=v{version} pnpm release {patch|minor|major}
    ```
    Use the exact target tag in `CHERRY_STUDIO_PI_RELEASE_CONFIRM`. Do not reuse an old confirmation value.
-3. Push the version commit first, then push that exact tag only after checking the user really asked to publish this release. Do not chain these commands in one shell line:
+3. Push the version commit first, then push that exact tag only after checking the user really asked to make this tag available for the one manual release. Pushing the tag does not publish installers; it only makes the tag selectable by the manual Release workflow. Do not chain these commands in one shell line:
    ```bash
    git push
    git push origin v{version}

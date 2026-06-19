@@ -68,7 +68,8 @@ describe('release workflow safety', () => {
 
   it('does not suggest chained version commit and tag pushes', () => {
     expect(workflow).toContain('Push the version commit first:')
-    expect(workflow).toContain('Push the annotated tag only after confirming this release should be published:')
+    expect(workflow).toContain('Push the annotated tag only after confirming this tag should be available remotely:')
+    expect(workflow).toContain('Pushing the tag does not publish installers; it only makes the tag selectable here.')
     expect(workflow).not.toContain('git push && git push origin')
     expect(prepareReleaseSkill).not.toContain('git push && git push origin')
   })

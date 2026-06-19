@@ -24,7 +24,8 @@ Reusing the same confirmation cannot create a second patch release, because the 
 helper exits before modifying files.
 
 Avoid direct `git tag && git push` unless you intentionally bypass the local guard. Release tags must use annotated
-tags, but pushing a tag alone does not build or publish installers:
+tags, but pushing a tag alone does not build or publish installers; it only makes that tag available to the manual
+Release workflow:
 
 ```bash
 git tag -a v1.9.7 -m "Version 1.9.7"

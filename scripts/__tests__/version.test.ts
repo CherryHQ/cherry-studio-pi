@@ -115,6 +115,7 @@ describe('version script', () => {
 
     expect(instructions).toContain('git push\n')
     expect(instructions).toContain('git push origin v1.9.35')
+    expect(instructions).toContain('Pushing the tag does not publish installers')
     expect(instructions).toContain('Do not chain these commands in one shell line')
     expect(instructions).toContain('separate manual GitHub Actions -> Release workflow')
     expect(instructions).not.toContain('git push && git push origin')
