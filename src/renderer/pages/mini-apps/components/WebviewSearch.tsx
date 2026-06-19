@@ -15,6 +15,7 @@ interface WebviewSearchProps {
 }
 
 const logger = loggerService.withContext('WebviewSearch')
+const FIND_IN_PAGE_ERROR_TOAST_COOLDOWN_MS = 2_000
 
 const WebviewSearch: FC<WebviewSearchProps> = ({ webviewRef, isWebviewReady, appId }) => {
   const { t } = useTranslation()
@@ -25,6 +26,7 @@ const WebviewSearch: FC<WebviewSearchProps> = ({ webviewRef, isWebviewReady, app
   const inputRef = useRef<HTMLInputElement>(null)
   const focusFrameRef = useRef<number | null>(null)
   const lastAppIdRef = useRef<string>(appId)
+  const lastFindErrorToastAtRef = useRef(Number.NEGATIVE_INFINITY)
   const attachedWebviewRef = useRef<WebviewTag | null>(null)
   const activeWebview = webviewRef.current ?? null
 
@@ -120,9 +122,14 @@ const WebviewSearch: FC<WebviewSearchProps> = ({ webviewRef, isWebviewReady, app
       }
       try {
         target.findInPage(text, options)
+        lastFindErrorToastAtRef.current = Number.NEGATIVE_INFINITY
       } catch (error) {
-        logger.error('findInPage failed', { error })
-        window.toast?.error(t('common.error'))
+        const now = Date.now()
+        if (now - lastFindErrorToastAtRef.current >= FIND_IN_PAGE_ERROR_TOAST_COOLDOWN_MS) {
+          lastFindErrorToastAtRef.current = now
+          logger.error('findInPage failed', { error })
+          window.toast?.error(t('common.error'))
+        }
       }
     },
     [getUsableWebview, resetSearchState, stopSearch, t]

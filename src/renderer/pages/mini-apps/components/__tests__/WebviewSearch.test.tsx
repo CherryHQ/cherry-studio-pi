@@ -366,6 +366,40 @@ describe('WebviewSearch', () => {
     await waitFor(() => {
       expect(toastMock.error).toHaveBeenCalledWith('Error')
     })
+    expect(toastMock.error).toHaveBeenCalledTimes(1)
+  })
+
+  it('allows a new search failure toast after a successful search resets the failure cooldown', async () => {
+    const { findInPageMock, webview } = createWebviewMock()
+    findInPageMock.mockImplementation(() => {
+      throw new Error('findInPage failed')
+    })
+    const webviewRef = { current: webview } as React.RefObject<WebviewTag | null>
+    const user = userEvent.setup()
+
+    render(<WebviewSearch webviewRef={webviewRef} isWebviewReady appId="app-1" />)
+    await openSearchOverlay()
+
+    const input = screen.getByRole('textbox')
+    await user.type(input, 'Cherry')
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledTimes(1)
+    })
+
+    findInPageMock.mockImplementation(() => undefined)
+    await user.type(input, '!')
+    await waitFor(() => {
+      expect(findInPageMock).toHaveBeenLastCalledWith('Cherry!', undefined)
+    })
+
+    findInPageMock.mockImplementation(() => {
+      throw new Error('findInPage failed again')
+    })
+    await user.type(input, '?')
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledTimes(2)
+    })
   })
 
   it('stops search when component unmounts', async () => {
