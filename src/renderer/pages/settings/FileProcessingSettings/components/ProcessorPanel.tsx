@@ -4,7 +4,7 @@ import { useLanguages } from '@renderer/hooks/translate'
 import { formatApiKeys, splitApiKeyString, validateApiHost } from '@renderer/utils/api'
 import type { FileProcessorFeature, FileProcessorId } from '@shared/data/preference/preferenceTypes'
 import { List, SquareCheckBig } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SettingHelpLink, SettingHelpText, SettingHelpTextRow, SettingRow, SettingRowTitle, SettingTitle } from '../..'
@@ -68,6 +68,15 @@ export function ProcessorPanel({
   const [apiKeysInput, setApiKeysInput] = useState(() => apiKeysValue)
   const [apiHostInput, setApiHostInput] = useState(apiHostValue)
   const [modelIdInput, setModelIdInput] = useState(modelIdValue)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     setApiKeysInput(apiKeysValue)
@@ -117,7 +126,9 @@ export function ProcessorPanel({
         await action()
       } catch (error) {
         logger.error(`Failed to ${actionName}`, error as Error)
-        window.toast.error(t('settings.tool.file_processing.errors.save_failed'))
+        if (mountedRef.current) {
+          window.toast.error(t('settings.tool.file_processing.errors.save_failed'))
+        }
       }
     },
     [t]
