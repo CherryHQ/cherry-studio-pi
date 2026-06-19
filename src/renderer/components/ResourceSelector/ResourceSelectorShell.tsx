@@ -283,11 +283,13 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
     (next: boolean) => {
       if (next) {
         requestCloseResourceSelectors(selectorId)
+        if (openProp === undefined) setInternalOpen(true)
+        onOpenChangeProp?.(true)
+        return
       }
-      if (openProp === undefined) setInternalOpen(next)
-      onOpenChangeProp?.(next)
+      forceClose()
     },
-    [openProp, onOpenChangeProp, selectorId]
+    [forceClose, openProp, onOpenChangeProp, selectorId]
   )
   const closeBeforeAction = useCallback(
     (action: () => void) => {

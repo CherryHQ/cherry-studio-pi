@@ -160,6 +160,29 @@ describe('ResourceSelectorShell', () => {
       expect(screen.queryByPlaceholderText('Search')).not.toBeInTheDocument()
     })
 
+    it('remounts the selector on ordinary popover close so stale portals cannot linger', async () => {
+      render(
+        <ResourceSelectorShell
+          trigger={<button type="button">Open</button>}
+          items={ITEMS}
+          pinnedIds={[]}
+          onTogglePin={vi.fn()}
+          labels={LABELS}
+          value={null}
+          onChange={vi.fn()}
+        />
+      )
+
+      openPopover()
+      const firstListboxId = screen.getByRole('listbox').id
+
+      fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
+
+      openPopover()
+      expect(screen.getByRole('listbox').id).not.toBe(firstListboxId)
+    })
+
     it('closes when a new dialog surface appears while the selector is open', async () => {
       render(
         <ResourceSelectorShell
