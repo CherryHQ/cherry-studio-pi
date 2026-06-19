@@ -48,12 +48,16 @@ export const isWebSearchModel = (model: Model): boolean => model.capabilities.in
 export const isGenerateImageModel = (model: Model): boolean =>
   model.capabilities.includes(MODEL_CAPABILITY.IMAGE_GENERATION)
 
-export const isFreeModel = (model: Pick<Model, 'id' | 'name' | 'providerId'>): boolean => {
+const FREE_MODEL_TOKEN_PATTERN = /(?:^|[^a-z0-9])free(?:$|[^a-z0-9])/i
+
+export const isFreeModel = (
+  model: Pick<Model, 'id' | 'name' | 'providerId'> & Partial<Pick<Model, 'apiModelId'>>
+): boolean => {
   if (model.providerId === CHERRYAI_PROVIDER_ID) {
     return true
   }
 
-  return (model.id + model.name).toLowerCase().includes('free')
+  return FREE_MODEL_TOKEN_PATTERN.test(`${model.id} ${model.name} ${model.apiModelId ?? ''}`)
 }
 
 export const isGenerateVideoModel = (model: Model): boolean =>

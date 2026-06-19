@@ -1,7 +1,6 @@
 /**
  * Behavior tests for the model-selector tag filter predicates. Focus is on
- * the parts that are easy to silently break: the "free" substring match
- * (false-positive risk on words like `freedom-*` / `carefree-*`), the
+ * the parts that are easy to silently break: the "free" token match,
  * capability tag dispatch, and cherryai special-casing.
  */
 
@@ -83,7 +82,7 @@ describe('matchesModelTag — "free" tag', () => {
     expect(matchesModelTag(model, 'free')).toBe(true)
   })
 
-  it('matches when the name contains the "free" substring (case-insensitive)', () => {
+  it('matches when the name contains a separated "free" token (case-insensitive)', () => {
     const model = makeModel({ name: 'Llama-3-Free-8B' })
 
     expect(matchesModelTag(model, 'free')).toBe(true)
@@ -95,12 +94,9 @@ describe('matchesModelTag — "free" tag', () => {
     expect(matchesModelTag(model, 'free')).toBe(true)
   })
 
-  it('accepts the substring even when embedded in a longer word (known false-positive surface)', () => {
-    // "freedom" / "carefree" will match. Locking this in explicitly so a
-    // future tightening of the predicate surfaces as a test change rather
-    // than a silent UX regression.
-    expect(matchesModelTag(makeModel({ name: 'freedom-pro' }), 'free')).toBe(true)
-    expect(matchesModelTag(makeModel({ name: 'carefree-mini' }), 'free')).toBe(true)
+  it('does not match "free" when embedded in a longer word', () => {
+    expect(matchesModelTag(makeModel({ name: 'freedom-pro' }), 'free')).toBe(false)
+    expect(matchesModelTag(makeModel({ name: 'carefree-mini' }), 'free')).toBe(false)
   })
 
   it('returns false when no field contains "free" and provider is not cherryai', () => {

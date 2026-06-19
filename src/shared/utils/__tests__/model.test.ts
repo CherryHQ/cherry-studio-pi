@@ -10,6 +10,7 @@ import {
   inferWebSearchFromModelId,
   isAnthropicModel,
   isEmbeddingModel,
+  isFreeModel,
   isFunctionCallingModel,
   isGemini3Model,
   isGenerateImageModel,
@@ -78,6 +79,15 @@ describe('shared model capability helpers', () => {
     expect(isEmbeddingModel(createModel([MODEL_CAPABILITY.EMBEDDING]))).toBe(true)
     expect(isRerankModel(createModel([MODEL_CAPABILITY.RERANK]))).toBe(true)
     expect(isGenerateImageModel(createModel([MODEL_CAPABILITY.IMAGE_GENERATION]))).toBe(true)
+  })
+
+  it('identifies free models by separated tokens without matching longer words', () => {
+    expect(isFreeModel({ ...createModel(), id: 'openrouter::qwen/qwen3-coder:free' })).toBe(true)
+    expect(isFreeModel({ ...createModel(), id: 'openai::gpt-4-1-nano-free' })).toBe(true)
+    expect(isFreeModel({ ...createModel(), id: 'openrouter::qwen3', name: 'Qwen3 Coder (free)' })).toBe(true)
+    expect(isFreeModel({ ...createModel(), id: 'openrouter::qwen3', apiModelId: 'qwen/qwen3-coder:free' })).toBe(true)
+    expect(isFreeModel({ ...createModel(), id: 'custom::freedom-pro', name: 'Freedom Pro' })).toBe(false)
+    expect(isFreeModel({ ...createModel(), id: 'custom::mini', name: 'Carefree Mini' })).toBe(false)
   })
 
   it('covers known capability inference regression ids', () => {

@@ -1,5 +1,6 @@
 import { MODALITY } from '@cherrystudio/provider-registry'
 import { type Model, MODEL_CAPABILITY, type ModelTag } from '@shared/data/types/model'
+import { isFreeModel } from '@shared/utils/model'
 import { useCallback, useMemo, useState } from 'react'
 
 type ModelPredict = (m: Model) => boolean
@@ -36,14 +37,6 @@ const capabilityTagPredicates: Record<Exclude<ModelSelectorTag, 'free'>, ModelPr
   [MODEL_CAPABILITY.FUNCTION_CALL]: (model) => model.capabilities.includes(MODEL_CAPABILITY.FUNCTION_CALL),
   [MODEL_CAPABILITY.WEB_SEARCH]: (model) => model.capabilities.includes(MODEL_CAPABILITY.WEB_SEARCH),
   [MODEL_CAPABILITY.RERANK]: (model) => model.capabilities.includes(MODEL_CAPABILITY.RERANK)
-}
-
-function isFreeModel(model: Model) {
-  if (model.providerId === 'cherryai') {
-    return true
-  }
-
-  return `${model.id} ${model.name} ${model.apiModelId ?? ''}`.toLowerCase().includes('free')
 }
 
 export function matchesModelTag(model: Model, tag: ModelSelectorTag) {
