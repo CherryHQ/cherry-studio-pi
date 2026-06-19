@@ -28,6 +28,20 @@ vi.mock('@data/hooks/useDataApi', () => ({
   useInvalidateCache: () => mockUseInvalidateCache()
 }))
 
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve: (value: T) => void = () => {}
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
+}
+
 const createKnowledgeBase = (overrides: Partial<KnowledgeBase> = {}): KnowledgeBase => ({
   id: '',
   name: '',
@@ -204,6 +218,45 @@ describe('useCreateKnowledgeBase', () => {
       embeddingModelId: 'openai::text-embedding-3-small'
     })
   })
+
+  it('keeps creating until the latest overlapping create completes', async () => {
+    const firstCreatedBase = createKnowledgeBase({ id: 'base-older', name: 'Older Base' })
+    const secondCreatedBase = createKnowledgeBase({ id: 'base-newer', name: 'Newer Base' })
+    const firstCreate = deferred<KnowledgeBase>()
+    const secondCreate = deferred<KnowledgeBase>()
+    const input: CreateKnowledgeBaseInput = {
+      name: 'Base',
+      embeddingModelId: 'openai::text-embedding-3-small',
+      dimensions: 1536
+    }
+    mockRuntimeCreateBase.mockReturnValueOnce(firstCreate.promise).mockReturnValueOnce(secondCreate.promise)
+
+    const { result } = renderHook(() => useCreateKnowledgeBase())
+
+    let firstCreatePromise!: Promise<KnowledgeBase>
+    let secondCreatePromise!: Promise<KnowledgeBase>
+    await act(async () => {
+      firstCreatePromise = result.current.createBase(input)
+      secondCreatePromise = result.current.createBase(input)
+      await Promise.resolve()
+    })
+
+    expect(result.current.isCreating).toBe(true)
+
+    await act(async () => {
+      firstCreate.resolve(firstCreatedBase)
+      await firstCreatePromise
+    })
+
+    expect(result.current.isCreating).toBe(true)
+
+    await act(async () => {
+      secondCreate.resolve(secondCreatedBase)
+      await secondCreatePromise
+    })
+
+    expect(result.current.isCreating).toBe(false)
+  })
 })
 
 describe('useRestoreKnowledgeBase', () => {
@@ -279,6 +332,46 @@ describe('useRestoreKnowledgeBase', () => {
       name: 'Legacy KB_bak',
       embeddingModelId: 'openai::text-embedding-3-small'
     })
+  })
+
+  it('keeps restoring until the latest overlapping restore completes', async () => {
+    const firstRestoredBase = createKnowledgeBase({ id: 'restored-older', name: 'Older Restore' })
+    const secondRestoredBase = createKnowledgeBase({ id: 'restored-newer', name: 'Newer Restore' })
+    const firstRestore = deferred<KnowledgeBase>()
+    const secondRestore = deferred<KnowledgeBase>()
+    const input = {
+      sourceBaseId: 'source-base',
+      name: 'Restored Base',
+      embeddingModelId: 'openai::text-embedding-3-small',
+      dimensions: 1024
+    }
+    mockRuntimeRestoreBase.mockReturnValueOnce(firstRestore.promise).mockReturnValueOnce(secondRestore.promise)
+
+    const { result } = renderHook(() => useRestoreKnowledgeBase())
+
+    let firstRestorePromise!: Promise<KnowledgeBase>
+    let secondRestorePromise!: Promise<KnowledgeBase>
+    await act(async () => {
+      firstRestorePromise = result.current.restoreBase(input)
+      secondRestorePromise = result.current.restoreBase(input)
+      await Promise.resolve()
+    })
+
+    expect(result.current.isRestoring).toBe(true)
+
+    await act(async () => {
+      firstRestore.resolve(firstRestoredBase)
+      await firstRestorePromise
+    })
+
+    expect(result.current.isRestoring).toBe(true)
+
+    await act(async () => {
+      secondRestore.resolve(secondRestoredBase)
+      await secondRestorePromise
+    })
+
+    expect(result.current.isRestoring).toBe(false)
   })
 })
 
@@ -370,5 +463,37 @@ describe('useDeleteKnowledgeBase', () => {
     expect(loggerErrorSpy).toHaveBeenCalledWith('Failed to delete knowledge base', deleteError, {
       baseId: 'base-1'
     })
+  })
+
+  it('keeps deleting until the latest overlapping delete completes', async () => {
+    const firstDelete = deferred<void>()
+    const secondDelete = deferred<void>()
+    mockRuntimeDeleteBase.mockReturnValueOnce(firstDelete.promise).mockReturnValueOnce(secondDelete.promise)
+
+    const { result } = renderHook(() => useDeleteKnowledgeBase())
+
+    let firstDeletePromise!: Promise<void>
+    let secondDeletePromise!: Promise<void>
+    await act(async () => {
+      firstDeletePromise = result.current.deleteBase('base-1')
+      secondDeletePromise = result.current.deleteBase('base-2')
+      await Promise.resolve()
+    })
+
+    expect(result.current.isDeleting).toBe(true)
+
+    await act(async () => {
+      firstDelete.resolve(undefined)
+      await firstDeletePromise
+    })
+
+    expect(result.current.isDeleting).toBe(true)
+
+    await act(async () => {
+      secondDelete.resolve(undefined)
+      await secondDeletePromise
+    })
+
+    expect(result.current.isDeleting).toBe(false)
   })
 })

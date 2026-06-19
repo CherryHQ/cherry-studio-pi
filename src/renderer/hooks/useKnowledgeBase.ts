@@ -3,7 +3,7 @@ import { loggerService } from '@logger'
 import type { KnowledgeBaseListItem, UpdateKnowledgeBaseDto } from '@shared/data/api/schemas/knowledges'
 import { KNOWLEDGE_BASES_MAX_LIMIT } from '@shared/data/api/schemas/knowledges'
 import type { CreateKnowledgeBaseDto, RestoreKnowledgeBaseDto } from '@shared/data/types/knowledge'
-import { useCallback, useState } from 'react'
+import { type MutableRefObject, useCallback, useEffect, useRef, useState } from 'react'
 
 const KNOWLEDGE_V2_BASES_QUERY = {
   page: 1,
@@ -20,6 +20,26 @@ const normalizeError = (error: unknown): Error => {
 
   return new Error(String(error))
 }
+
+type MutationSequenceRef = MutableRefObject<number>
+type MountedRef = MutableRefObject<boolean>
+
+const useMountedRef = () => {
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  return mountedRef
+}
+
+const isCurrentMutation = (mountedRef: MountedRef, mutationSeqRef: MutationSequenceRef, mutationSeq: number) =>
+  mountedRef.current && mutationSeqRef.current === mutationSeq
 
 export type CreateKnowledgeBaseInput = Pick<
   CreateKnowledgeBaseDto,
@@ -49,10 +69,14 @@ export const useCreateKnowledgeBase = () => {
   const [isCreating, setIsCreating] = useState(false)
   const [createError, setCreateError] = useState<Error | undefined>()
   const invalidateCache = useInvalidateCache()
+  const mountedRef = useMountedRef()
+  const mutationSeqRef = useRef(0)
 
   const createBase = useCallback(
     async (input: CreateKnowledgeBaseInput) => {
-      setCreateError(undefined)
+      if (mountedRef.current) {
+        setCreateError(undefined)
+      }
 
       const name = input.name.trim()
       const groupId = input.groupId?.trim()
@@ -86,7 +110,10 @@ export const useCreateKnowledgeBase = () => {
         body.groupId = groupId
       }
 
-      setIsCreating(true)
+      const mutationSeq = ++mutationSeqRef.current
+      if (mountedRef.current) {
+        setIsCreating(true)
+      }
 
       try {
         const createdBase = await window.api.knowledge.createBase(body)
@@ -99,7 +126,9 @@ export const useCreateKnowledgeBase = () => {
           })
         }
 
-        setIsCreating(false)
+        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
+          setIsCreating(false)
+        }
         return createdBase
       } catch (error) {
         const normalizedError = normalizeError(error)
@@ -108,12 +137,14 @@ export const useCreateKnowledgeBase = () => {
           groupId,
           embeddingModelId
         })
-        setCreateError(normalizedError)
-        setIsCreating(false)
+        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
+          setCreateError(normalizedError)
+          setIsCreating(false)
+        }
         throw normalizedError
       }
     },
-    [invalidateCache]
+    [invalidateCache, mountedRef]
   )
 
   return {
@@ -127,10 +158,14 @@ export const useRestoreKnowledgeBase = () => {
   const [isRestoring, setIsRestoring] = useState(false)
   const [restoreError, setRestoreError] = useState<Error | undefined>()
   const invalidateCache = useInvalidateCache()
+  const mountedRef = useMountedRef()
+  const mutationSeqRef = useRef(0)
 
   const restoreBase = useCallback(
     async (input: RestoreKnowledgeBaseInput) => {
-      setRestoreError(undefined)
+      if (mountedRef.current) {
+        setRestoreError(undefined)
+      }
 
       const sourceBaseId = input.sourceBaseId.trim()
       const name = input.name?.trim()
@@ -153,7 +188,10 @@ export const useRestoreKnowledgeBase = () => {
         throw new Error(`Knowledge base dimensions must be a positive integer, received "${input.dimensions}"`)
       }
 
-      setIsRestoring(true)
+      const mutationSeq = ++mutationSeqRef.current
+      if (mountedRef.current) {
+        setIsRestoring(true)
+      }
 
       try {
         const restoredBase = await window.api.knowledge.restoreBase({
@@ -172,7 +210,9 @@ export const useRestoreKnowledgeBase = () => {
           })
         }
 
-        setIsRestoring(false)
+        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
+          setIsRestoring(false)
+        }
         return restoredBase
       } catch (error) {
         const normalizedError = normalizeError(error)
@@ -181,12 +221,14 @@ export const useRestoreKnowledgeBase = () => {
           name,
           embeddingModelId
         })
-        setRestoreError(normalizedError)
-        setIsRestoring(false)
+        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
+          setRestoreError(normalizedError)
+          setIsRestoring(false)
+        }
         throw normalizedError
       }
     },
-    [invalidateCache]
+    [invalidateCache, mountedRef]
   )
 
   return {
@@ -235,11 +277,16 @@ export const useDeleteKnowledgeBase = () => {
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<Error | undefined>()
   const invalidateCache = useInvalidateCache()
+  const mountedRef = useMountedRef()
+  const mutationSeqRef = useRef(0)
 
   const deleteBase = useCallback(
     async (baseId: string) => {
-      setDeleteError(undefined)
-      setIsDeleting(true)
+      const mutationSeq = ++mutationSeqRef.current
+      if (mountedRef.current) {
+        setDeleteError(undefined)
+        setIsDeleting(true)
+      }
       let mutationError: Error | undefined
 
       try {
@@ -249,7 +296,9 @@ export const useDeleteKnowledgeBase = () => {
         logger.error('Failed to delete knowledge base', normalizedError, {
           baseId
         })
-        setDeleteError(normalizedError)
+        if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
+          setDeleteError(normalizedError)
+        }
         mutationError = normalizedError
       }
 
@@ -261,13 +310,15 @@ export const useDeleteKnowledgeBase = () => {
         })
       }
 
-      setIsDeleting(false)
+      if (isCurrentMutation(mountedRef, mutationSeqRef, mutationSeq)) {
+        setIsDeleting(false)
+      }
 
       if (mutationError) {
         throw mutationError
       }
     },
-    [invalidateCache]
+    [invalidateCache, mountedRef]
   )
 
   return {
