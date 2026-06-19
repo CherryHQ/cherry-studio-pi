@@ -44,12 +44,11 @@ async function resolveUniqueStoredModel(agentId: string, storedModelId: UniqueMo
   const registeredMatch = selectSingleModelMatch(agentId, storedModelId, matches)
   if (registeredMatch) return registeredMatch
 
-  if (providerModels.length > 0) return null
-
   // Match the renderer-side agent-session fallback: a synced/restored agent can
-  // briefly keep only `provider::model` while its user_model rows have not
-  // arrived yet. If the provider itself exists, the registry resolver returns a
-  // fully-shaped preset/custom model so the agent runtime can still start.
+  // briefly keep only `provider::model` while its exact user_model row has not
+  // arrived yet. Do not require the provider model list to be empty: another
+  // model for the same provider may already exist locally while this one is
+  // still missing.
   const registryModels = await providerRegistryService.resolveModels(providerId, [modelId])
   return selectSingleModelMatch(agentId, storedModelId, registryModels)
 }
