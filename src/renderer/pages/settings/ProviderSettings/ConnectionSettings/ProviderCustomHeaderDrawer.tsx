@@ -190,8 +190,16 @@ export default function ProviderCustomHeaderDrawer({ providerId, open, onClose }
   const [headersUiMode, setHeadersUiMode] = useState<HeadersUiMode>('list')
   const [jsonDraft, setJsonDraft] = useState('')
   const [saving, setSaving] = useState(false)
+  const mountedRef = useRef(true)
   const wasOpenRef = useRef(false)
   const savingRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     const justOpened = open && !wasOpenRef.current
@@ -288,11 +296,15 @@ export default function ProviderCustomHeaderDrawer({ providerId, open, onClose }
       // Surface the failure and keep the drawer open so the user can retry
       // instead of silently losing their edits.
       logger.error('Failed to save provider request config', error as Error, { providerId })
-      window.toast.error(t('settings.provider.save_failed'))
+      if (mountedRef.current) {
+        window.toast.error(t('settings.provider.save_failed'))
+      }
       return
     } finally {
       savingRef.current = false
-      setSaving(false)
+      if (mountedRef.current) {
+        setSaving(false)
+      }
     }
 
     if (!didSave) {
@@ -311,8 +323,10 @@ export default function ProviderCustomHeaderDrawer({ providerId, open, onClose }
       })
     }
 
-    window.toast.success(t('message.save.success.title'))
-    onClose()
+    if (mountedRef.current) {
+      window.toast.success(t('message.save.success.title'))
+      onClose()
+    }
   }, [
     endpointDrafts,
     headersUiMode,

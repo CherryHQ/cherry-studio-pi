@@ -108,15 +108,18 @@ vi.mock('react-i18next', () => ({
 type Deferred<T> = {
   promise: Promise<T>
   resolve: (value: T) => void
+  reject: (reason?: unknown) => void
 }
 
 function deferred<T>(): Deferred<T> {
   let resolve: (value: T) => void = () => {}
-  const promise = new Promise<T>((promiseResolve) => {
+  let reject: (reason?: unknown) => void = () => {}
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
     resolve = promiseResolve
+    reject = promiseReject
   })
 
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 describe('ProviderCustomHeaderDrawer', () => {
@@ -162,5 +165,23 @@ describe('ProviderCustomHeaderDrawer', () => {
     await act(async () => {
       runningSave.resolve()
     })
+  })
+
+  it('does not surface stale save failures after unmount', async () => {
+    const runningSave = deferred<void>()
+    mocks.updateProvider.mockReturnValueOnce(runningSave.promise)
+    const { unmount } = render(<ProviderCustomHeaderDrawer providerId="openai" open onClose={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }))
+    expect(mocks.updateProvider).toHaveBeenCalledTimes(1)
+
+    unmount()
+
+    await act(async () => {
+      runningSave.reject(new Error('save failed after unmount'))
+      await runningSave.promise.catch(() => undefined)
+    })
+
+    expect(window.toast.error).not.toHaveBeenCalled()
   })
 })
