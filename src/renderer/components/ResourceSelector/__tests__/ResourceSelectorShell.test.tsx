@@ -183,6 +183,41 @@ describe('ResourceSelectorShell', () => {
       expect(screen.getByRole('listbox').id).not.toBe(firstListboxId)
     })
 
+    it('ignores repeated force-close events after the selector is already closed', async () => {
+      const onOpenChange = vi.fn()
+
+      render(
+        <ResourceSelectorShell
+          trigger={<button type="button">Open</button>}
+          items={ITEMS}
+          pinnedIds={[]}
+          onTogglePin={vi.fn()}
+          labels={LABELS}
+          value={null}
+          onChange={vi.fn()}
+          onOpenChange={onOpenChange}
+        />
+      )
+
+      openPopover()
+      expect(screen.getByRole('listbox')).toBeInTheDocument()
+
+      act(() => {
+        window.dispatchEvent(new CustomEvent(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT))
+      })
+
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
+      expect(onOpenChange).toHaveBeenCalledWith(false)
+      const closeCallCount = onOpenChange.mock.calls.filter(([next]) => next === false).length
+
+      act(() => {
+        window.dispatchEvent(new CustomEvent(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT))
+        window.dispatchEvent(new CustomEvent(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT))
+      })
+
+      expect(onOpenChange.mock.calls.filter(([next]) => next === false)).toHaveLength(closeCallCount)
+    })
+
     it('closes when a new dialog surface appears while the selector is open', async () => {
       render(
         <ResourceSelectorShell

@@ -222,6 +222,8 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
   const [selectorEpoch, setSelectorEpoch] = useState(0)
   const selectorId = useId()
   const open = openProp ?? internalOpen
+  const openRef = useRef(open)
+  openRef.current = open
   const mountedRef = useRef(true)
   useEffect(() => {
     return () => {
@@ -232,6 +234,7 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
 
   const forceClose = useCallback(() => {
     if (!mountedRef.current) return
+    if (!openRef.current) return
     // Radix keeps popover content mounted while the close animation runs. Resource selectors often
     // launch modal/router transitions immediately after closing; remounting the selector tears down
     // the old portal synchronously so it cannot linger above the next surface.
