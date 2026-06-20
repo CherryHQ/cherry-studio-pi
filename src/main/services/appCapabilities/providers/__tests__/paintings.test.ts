@@ -266,20 +266,20 @@ describe('painting app capabilities', () => {
   it('rejects invalid painting history namespaces before reading renderer state', async () => {
     await expect(
       capability('paintings.history.list').execute({ namespace: ['siliconflow_paintings'] }, { source: 'agent' })
-    ).rejects.toThrow('Painting namespace must be a string')
+    ).rejects.toThrow('绘图命名空间必须是字符串。')
     await expect(
       capability('paintings.history.list').execute({ namespace: 'missing_namespace' }, { source: 'agent' })
-    ).rejects.toThrow('Unsupported painting namespace: missing_namespace')
+    ).rejects.toThrow('不支持的绘图命名空间：missing_namespace')
 
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
 
   it('rejects invalid painting history pagination shapes before reading renderer state', async () => {
     await expect(capability('paintings.history.list').execute({ limit: true }, { source: 'agent' })).rejects.toThrow(
-      'Painting history limit must be a number'
+      '绘图历史数量必须是数字。'
     )
     await expect(capability('paintings.history.list').execute({ offset: ['1'] }, { source: 'agent' })).rejects.toThrow(
-      'Painting history offset must be a number'
+      '绘图历史偏移量必须是数字。'
     )
 
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
@@ -288,19 +288,19 @@ describe('painting app capabilities', () => {
   it('rejects non-object painting capability inputs before side effects', async () => {
     await expect(
       capability('paintings.providers.list').execute('providers' as any, { source: 'agent' })
-    ).rejects.toThrow('Painting capability input must be an object')
+    ).rejects.toThrow('绘图能力的输入必须是对象。')
     await expect(capability('paintings.history.list').execute(['history'] as any, { source: 'agent' })).rejects.toThrow(
-      'Painting capability input must be an object'
+      '绘图能力的输入必须是对象。'
     )
     await expect(
       capability('paintings.defaultProvider.set').execute(false as any, { source: 'agent' })
-    ).rejects.toThrow('Painting capability input must be an object')
+    ).rejects.toThrow('绘图能力的输入必须是对象。')
     await expect(capability('paintings.open').execute(['open'] as any, { source: 'agent' })).rejects.toThrow(
-      'Painting capability input must be an object'
+      '绘图能力的输入必须是对象。'
     )
     await expect(
       capability('paintings.image.generate').execute('draw a cat' as any, { source: 'agent' })
-    ).rejects.toThrow('Painting capability input must be an object')
+    ).rejects.toThrow('绘图能力的输入必须是对象。')
 
     expect(mocks.preferenceService.get).not.toHaveBeenCalled()
     expect(mocks.preferenceService.set).not.toHaveBeenCalled()
@@ -416,7 +416,7 @@ describe('painting app capabilities', () => {
   it('rejects empty painting provider updates', async () => {
     await expect(
       capability('paintings.defaultProvider.set').execute({ provider: '   ' }, { source: 'agent' })
-    ).rejects.toThrow('Painting provider is required')
+    ).rejects.toThrow('绘图服务商不能为空。')
 
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
@@ -424,16 +424,16 @@ describe('painting app capabilities', () => {
   it('rejects route-unsafe painting provider ids before navigation or persistence', async () => {
     await expect(
       capability('paintings.defaultProvider.set').execute({ provider: '../settings/data' }, { source: 'agent' })
-    ).rejects.toThrow('Painting provider must be a route-safe provider id')
+    ).rejects.toThrow('绘图服务商 ID 只能包含字母、数字、下划线或连字符。')
     await expect(
       capability('paintings.open').execute({ provider: 'openai?tab=settings' }, { source: 'agent' })
-    ).rejects.toThrow('Painting provider must be a route-safe provider id')
+    ).rejects.toThrow('绘图服务商 ID 只能包含字母、数字、下划线或连字符。')
     await expect(
       capability('paintings.image.generate').execute(
         { prompt: 'draw a cat', provider: 'openai/../../settings' },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Painting provider must be a route-safe provider id')
+    ).rejects.toThrow('绘图服务商 ID 只能包含字母、数字、下划线或连字符。')
 
     expect(mocks.preferenceService.set).not.toHaveBeenCalled()
     expect(mocks.navigateApp).not.toHaveBeenCalled()
@@ -442,25 +442,25 @@ describe('painting app capabilities', () => {
   it('rejects invalid painting text input shapes before persistence or navigation', async () => {
     await expect(
       capability('paintings.defaultProvider.set').execute({ provider: 123 }, { source: 'agent' })
-    ).rejects.toThrow('Painting provider must be a string')
+    ).rejects.toThrow('绘图服务商必须是字符串。')
     await expect(capability('paintings.open').execute({ provider: true }, { source: 'agent' })).rejects.toThrow(
-      'Painting provider must be a string'
+      '绘图服务商必须是字符串。'
     )
     await expect(
       capability('paintings.image.generate').execute({ prompt: 123, provider: 'openai' }, { source: 'agent' })
-    ).rejects.toThrow('Painting prompt must be a string')
+    ).rejects.toThrow('绘图提示词必须是字符串。')
     await expect(
       capability('paintings.image.generate').execute(
         { prompt: 'draw a cat', provider: 'openai', model: ['gpt-image-1'] },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Painting model must be a string')
+    ).rejects.toThrow('绘图模型必须是字符串。')
     await expect(
       capability('paintings.image.generate').execute(
         { prompt: 'draw a cat', provider: 'openai', size: { value: '1024x1024' } },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Painting size must be a string')
+    ).rejects.toThrow('绘图尺寸必须是字符串。')
 
     expect(mocks.preferenceService.set).not.toHaveBeenCalled()
     expect(mocks.navigateApp).not.toHaveBeenCalled()
@@ -507,7 +507,7 @@ describe('painting app capabilities', () => {
   it('rejects empty image generation prompts before opening the painting workspace', async () => {
     await expect(
       capability('paintings.image.generate').execute({ prompt: '   ', provider: 'openai' }, { source: 'agent' })
-    ).rejects.toThrow('Painting prompt is required')
+    ).rejects.toThrow('绘图提示词不能为空。')
 
     expect(mocks.navigateApp).not.toHaveBeenCalled()
   })

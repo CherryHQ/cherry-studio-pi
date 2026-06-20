@@ -28,10 +28,25 @@ const MAX_RAW_PAINTING_ARRAY_ITEMS = 20
 const MAX_RAW_PAINTING_DEPTH = 4
 const RENDERER_STORE_FALLBACK_TIMEOUT_MS = 1_000
 const PAINTING_PROVIDER_ROUTE_SEGMENT_PATTERN = /^[A-Za-z0-9_-]+$/
+const PAINTING_INPUT_OBJECT_ERROR = '绘图能力的输入必须是对象。'
+const PAINTING_ABORT_ERROR = '绘图能力调用已取消。'
+const PAINTING_HISTORY_LIMIT_TYPE_ERROR = '绘图历史数量必须是数字。'
+const PAINTING_HISTORY_OFFSET_TYPE_ERROR = '绘图历史偏移量必须是数字。'
+const PAINTING_PROVIDER_ROUTE_ERROR = '绘图服务商 ID 只能包含字母、数字、下划线或连字符。'
+const PAINTING_PROVIDER_REQUIRED_ERROR = '绘图服务商不能为空。'
+const PAINTING_NAMESPACE_UNSUPPORTED_PREFIX = '不支持的绘图命名空间：'
+const TEXT_STRING_ERROR_SUFFIX = '必须是字符串。'
+const TEXT_REQUIRED_ERROR_SUFFIX = '不能为空。'
+const DEFAULT_TEXT_LABEL = '输入值'
+const PAINTING_PROVIDER_LABEL = '绘图服务商'
+const PAINTING_NAMESPACE_LABEL = '绘图命名空间'
+const PAINTING_PROMPT_LABEL = '绘图提示词'
+const PAINTING_MODEL_LABEL = '绘图模型'
+const PAINTING_SIZE_LABEL = '绘图尺寸'
 
 function normalizeInputObject(input: unknown) {
   if (input === null || typeof input === 'undefined') return {}
-  if (typeof input !== 'object' || Array.isArray(input)) throw new Error('Painting capability input must be an object')
+  if (typeof input !== 'object' || Array.isArray(input)) throw new Error(PAINTING_INPUT_OBJECT_ERROR)
   return input as Record<string, unknown>
 }
 
@@ -40,7 +55,7 @@ function throwIfPaintingSignalAborted(signal?: AbortSignal) {
   const reason = signal.reason
   if (reason instanceof Error) throw reason
   if (typeof reason === 'string' && reason.trim()) throw new Error(reason.trim())
-  throw new Error('Painting capability call aborted')
+  throw new Error(PAINTING_ABORT_ERROR)
 }
 
 function normalizeListLimit(value: unknown) {
@@ -48,7 +63,8 @@ function normalizeListLimit(value: unknown) {
     label: 'Painting history limit',
     defaultValue: DEFAULT_PAINTING_HISTORY_LIMIT,
     min: 1,
-    max: MAX_PAINTING_HISTORY_LIMIT
+    max: MAX_PAINTING_HISTORY_LIMIT,
+    invalidTypeMessage: PAINTING_HISTORY_LIMIT_TYPE_ERROR
   })
 }
 
@@ -56,36 +72,37 @@ function normalizeOffset(value: unknown) {
   return normalizeBoundedIntegerInput(value, {
     label: 'Painting history offset',
     defaultValue: 0,
-    min: 0
+    min: 0,
+    invalidTypeMessage: PAINTING_HISTORY_OFFSET_TYPE_ERROR
   })
 }
 
-function normalizeOptionalText(value: unknown, label = 'Value') {
+function normalizeOptionalText(value: unknown, label = DEFAULT_TEXT_LABEL) {
   if (typeof value === 'string') return value.trim()
   if (value === null || typeof value === 'undefined') return ''
-  throw new Error(`${label} must be a string`)
+  throw new Error(label + TEXT_STRING_ERROR_SUFFIX)
 }
 
 function normalizeRequiredText(value: unknown, label: string) {
   const text = normalizeOptionalText(value, label)
-  if (!text) throw new Error(`${label} is required`)
+  if (!text) throw new Error(label + TEXT_REQUIRED_ERROR_SUFFIX)
   return text
 }
 
-function normalizeProviderRouteSegment(value: unknown, label = 'Painting provider') {
+function normalizeProviderRouteSegment(value: unknown, label = PAINTING_PROVIDER_LABEL) {
   const provider = normalizeOptionalText(value, label)
   if (!provider) return ''
   if (!PAINTING_PROVIDER_ROUTE_SEGMENT_PATTERN.test(provider)) {
-    throw new Error('Painting provider must be a route-safe provider id')
+    throw new Error(PAINTING_PROVIDER_ROUTE_ERROR)
   }
   return provider
 }
 
 function normalizePaintingNamespace(value: unknown) {
-  const namespace = normalizeOptionalText(value, 'Painting namespace')
+  const namespace = normalizeOptionalText(value, PAINTING_NAMESPACE_LABEL)
   if (!namespace) return ''
   if (!PAINTING_NAMESPACES.includes(namespace)) {
-    throw new Error(`Unsupported painting namespace: ${namespace}`)
+    throw new Error(PAINTING_NAMESPACE_UNSUPPORTED_PREFIX + namespace)
   }
   return namespace
 }
@@ -286,7 +303,7 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
         const provider = normalizeProviderRouteSegment(inputObject.provider)
-        if (!provider) throw new Error('Painting provider is required')
+        if (!provider) throw new Error(PAINTING_PROVIDER_REQUIRED_ERROR)
         throwIfPaintingSignalAborted(context.signal)
         await persistSettingValue('defaultPaintingProvider', provider, context.signal)
         throwIfPaintingSignalAborted(context.signal)
@@ -342,12 +359,12 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       tags: ['paintings', 'image', 'generate', 'drawing'],
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
-        const prompt = normalizeRequiredText(inputObject.prompt, 'Painting prompt')
+        const prompt = normalizeRequiredText(inputObject.prompt, PAINTING_PROMPT_LABEL)
         const inputProvider = normalizeProviderRouteSegment(inputObject.provider)
         const provider =
           inputProvider || normalizeProviderRouteSegment(await readDefaultPaintingProvider(context.signal))
-        const model = normalizeOptionalText(inputObject.model, 'Painting model') || undefined
-        const size = normalizeOptionalText(inputObject.size, 'Painting size') || undefined
+        const model = normalizeOptionalText(inputObject.model, PAINTING_MODEL_LABEL) || undefined
+        const size = normalizeOptionalText(inputObject.size, PAINTING_SIZE_LABEL) || undefined
         const route = provider ? `/paintings/${provider}` : '/paintings'
         throwIfPaintingSignalAborted(context.signal)
         await (context.signal ? navigateApp(route, context.signal) : navigateApp(route))

@@ -5,6 +5,7 @@ export interface NormalizeBoundedIntegerInputOptions {
   max?: number
   emptyStringValue?: number
   invalidNumberValue?: number
+  invalidTypeMessage?: string
 }
 
 export function normalizeBoundedIntegerInput(value: unknown, options: NormalizeBoundedIntegerInputOptions) {
@@ -14,11 +15,12 @@ export function normalizeBoundedIntegerInput(value: unknown, options: NormalizeB
     min = Number.MIN_SAFE_INTEGER,
     max = Number.MAX_SAFE_INTEGER,
     emptyStringValue = defaultValue,
-    invalidNumberValue = defaultValue
+    invalidNumberValue = defaultValue,
+    invalidTypeMessage
   } = options
 
   if (value !== null && typeof value !== 'undefined' && typeof value !== 'number' && typeof value !== 'string') {
-    throw new Error(`${label} must be a number`)
+    throw new Error(invalidTypeMessage ?? `${label} must be a number`)
   }
 
   const parsed = typeof value === 'string' && !value.trim() ? emptyStringValue : Number(value ?? defaultValue)
