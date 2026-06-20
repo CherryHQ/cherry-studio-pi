@@ -13,9 +13,11 @@ import type {
 import { createClient } from 'webdav'
 
 import { createWebDavClientOptions } from './WebDavClientOptions'
+import { getWebDavErrorStatus } from './WebDavRetry'
 
 const logger = loggerService.withContext('WebDav')
 const DEFAULT_BACKUP_WEBDAV_PATH = '/cherry-studio-pi'
+const REMOTE_DIRECTORY_ALREADY_EXISTS_STATUSES = new Set([405, 409, 412])
 
 function redactWebDavHostForLog(webdavHost: string) {
   try {
@@ -31,6 +33,11 @@ function redactWebDavHostForLog(webdavHost: string) {
 function isRemotePathInside(targetPath: string, rootPath: string) {
   const relativePath = path.posix.relative(rootPath, targetPath)
   return relativePath === '' || (!relativePath.startsWith('..') && !path.posix.isAbsolute(relativePath))
+}
+
+function mayBeConcurrentDirectoryCreateError(error: unknown) {
+  const status = getWebDavErrorStatus(error)
+  return status !== null && REMOTE_DIRECTORY_ALREADY_EXISTS_STATUSES.has(status)
 }
 
 export default class WebDav {
@@ -114,6 +121,16 @@ export default class WebDav {
         })
       }
     } catch (error) {
+      if (mayBeConcurrentDirectoryCreateError(error)) {
+        const existsAfterFailure = await this.instance.exists(dirPath).catch(() => false)
+        if (existsAfterFailure) {
+          logger.warn('WebDAV directory already exists after create failure; continuing', {
+            dirPath,
+            status: getWebDavErrorStatus(error)
+          })
+          return
+        }
+      }
       logger.error('Error creating directory on WebDAV:', error as Error)
       throw error
     }
@@ -189,6 +206,16 @@ export default class WebDav {
       })
       return true
     } catch (error) {
+      if (mayBeConcurrentDirectoryCreateError(error)) {
+        const existsAfterFailure = await this.instance.exists(this.webdavPath).catch(() => false)
+        if (existsAfterFailure) {
+          logger.warn('WebDAV root directory already exists after create failure; continuing', {
+            path: this.webdavPath,
+            status: getWebDavErrorStatus(error)
+          })
+          return true
+        }
+      }
       logger.error('Error checking connection:', error as Error)
       throw error
     }
