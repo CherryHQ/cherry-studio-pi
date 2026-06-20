@@ -5,7 +5,7 @@ import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
 import { exportTableToExcel } from '@renderer/utils/exportExcel'
 import { Check, FileSpreadsheet } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
-import React, { memo, useCallback } from 'react'
+import React, { memo, useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 import type { Node } from 'unist'
@@ -27,6 +27,15 @@ const Table: React.FC<Props> = ({ children, node, blockId }) => {
   const { t } = useTranslation()
   const [copied, setCopied] = useTemporaryValue(false, 2000)
   const mdCtx = useMarkdownBlockContext()
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const handleCopyTable = useCallback(async () => {
     const tableMarkdown = extractTableMarkdown(blockId ?? '', node?.position, mdCtx?.content)
@@ -47,10 +56,14 @@ const Table: React.FC<Props> = ({ children, node, blockId }) => {
       } else {
         await navigator.clipboard.writeText(tableMarkdown)
       }
-      setCopied(true)
+      if (mountedRef.current) {
+        setCopied(true)
+      }
     } catch (error) {
       logger.error('Failed to copy table to clipboard', { error })
-      window.toast?.error(t('message.copy.failed'))
+      if (mountedRef.current) {
+        window.toast?.error(t('message.copy.failed'))
+      }
     }
   }, [blockId, node?.position, setCopied, t, mdCtx?.content])
 

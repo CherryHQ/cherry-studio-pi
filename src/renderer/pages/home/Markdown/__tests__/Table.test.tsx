@@ -4,6 +4,23 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import Table, { extractTableMarkdown } from '../Table'
 
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T | PromiseLike<T>) => void
+  reject: (reason?: unknown) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: Deferred<T>['resolve']
+  let reject!: Deferred<T>['reject']
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}
+
 const mocks = vi.hoisted(() => {
   return {
     store: {
@@ -296,6 +313,23 @@ Line 4`
         expect(getCopyIcon()).toBeInTheDocument()
         expect(queryCheckIcon()).not.toBeInTheDocument()
       })
+    })
+
+    it('should ignore delayed copy feedback after unmount', async () => {
+      const runningCopy = deferred<void>()
+      vi.spyOn(navigator.clipboard, 'writeText').mockReturnValueOnce(runningCopy.promise)
+      const { unmount } = render(<Table {...defaultProps} />)
+
+      await user.click(getCopyButton())
+      unmount()
+
+      await act(async () => {
+        runningCopy.resolve()
+        await runningCopy.promise
+      })
+
+      expect(queryCheckIcon()).not.toBeInTheDocument()
+      expect(mocks.windowToast.error).not.toHaveBeenCalled()
     })
   })
 
