@@ -1,6 +1,8 @@
 import { RENDERER_GET_STORE_VALUE_BRIDGE } from '@shared/storeBridge'
 import { BrowserWindow } from 'electron'
 
+import { redactAgentText } from './redaction'
+
 const DEFAULT_RENDERER_BRIDGE_CHECK_TIMEOUT_MS = 5_000
 const DEFAULT_RENDERER_BRIDGE_CALL_TIMEOUT_MS = 5_000
 const CACHED_RENDERER_BRIDGE_GRACE_MS = 50
@@ -20,7 +22,7 @@ class RendererBridgeTimeoutError extends Error {
 }
 
 export function getBridgeErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error)
+  return redactAgentText(error instanceof Error ? error.message : String(error))
 }
 
 function rendererBridgeAbortError(signal: AbortSignal) {

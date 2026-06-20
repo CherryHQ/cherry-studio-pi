@@ -10,7 +10,7 @@ vi.mock('electron', () => ({
   }
 }))
 
-import { callRendererBridge } from '../rendererBridge'
+import { callRendererBridge, getBridgeErrorMessage } from '../rendererBridge'
 
 function createWindow(executeJavaScript: ReturnType<typeof vi.fn>) {
   return {
@@ -35,6 +35,25 @@ function deferred<T>() {
 describe('app capability renderer bridge', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('redacts sensitive values from bridge error messages', () => {
+    const message = getBridgeErrorMessage(
+      new Error(
+        'Execution failed: window["settings.update"]({"webdavPass":"MSCGBE7IKGONGZYS","apiKey":"sk-secret","private_key":"-----BEGIN PRIVATE KEY-----","tokenCount":42,"passage":"visible"}) Authorization: Bearer raw-token'
+      )
+    )
+
+    expect(message).not.toContain('MSCGBE7IKGONGZYS')
+    expect(message).not.toContain('sk-secret')
+    expect(message).not.toContain('BEGIN PRIVATE KEY')
+    expect(message).not.toContain('raw-token')
+    expect(message).toContain('"webdavPass":"[redacted]"')
+    expect(message).toContain('"apiKey":"[redacted]"')
+    expect(message).toContain('"private_key":"[redacted]"')
+    expect(message).toContain('"tokenCount":42')
+    expect(message).toContain('"passage":"visible"')
+    expect(message).toContain('Authorization: Bearer [redacted]')
   })
 
   it('uses the first responsive bridge without waiting for earlier unresponsive windows', async () => {
