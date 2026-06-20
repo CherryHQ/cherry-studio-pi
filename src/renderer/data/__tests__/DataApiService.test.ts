@@ -137,4 +137,26 @@ describe('DataApiService', () => {
     expect(serializedLogs).not.toContain('secret-token')
     expect(serializedLogs).not.toContain('Authorization')
   })
+
+  it('keeps subscription events isolated when a subscriber callback throws', () => {
+    const unsubscribe = vi.fn()
+    let subscriptionHandler: ((data: unknown, event: string) => void) | undefined
+    vi.mocked(window.api.dataApi.subscribe).mockImplementation((_path, handler) => {
+      subscriptionHandler = handler
+      return unsubscribe
+    })
+
+    const service = new DataApiService()
+    const callback = vi.fn(() => {
+      throw new Error('subscriber failed')
+    })
+    const stop = service.subscribe({ path: '/providers' } as never, callback)
+
+    expect(() => subscriptionHandler?.({ id: 'openai' }, 'updated')).not.toThrow()
+    expect(callback).toHaveBeenCalledWith({ id: 'openai' }, 'updated')
+    expect(warnMock).toHaveBeenCalledWith('Subscription callback failed: /providers', expect.any(Error))
+
+    stop()
+    expect(unsubscribe).toHaveBeenCalledTimes(1)
+  })
 })

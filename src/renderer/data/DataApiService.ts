@@ -366,7 +366,11 @@ export class DataApiService implements ApiClient {
     const unsubscribe = window.api.dataApi.subscribe(options.path, (data, event) => {
       // Convert string event to SubscriptionEvent enum
       const subscriptionEvent = event as SubscriptionEvent
-      callback(data, subscriptionEvent)
+      try {
+        callback(data, subscriptionEvent)
+      } catch (error) {
+        logger.warn(`Subscription callback failed: ${options.path}`, error as Error)
+      }
     })
 
     logger.debug(`Subscribed to ${options.path}`, { subscriptionId })
