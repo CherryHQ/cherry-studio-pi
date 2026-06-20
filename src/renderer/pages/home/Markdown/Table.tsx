@@ -169,12 +169,12 @@ const ToolButton = styled.div`
   user-select: none;
   transition: all 0.2s ease;
   opacity: 1;
-  color: var(--color-text-3);
-  background-color: var(--color-background-mute);
+  color: var(--color-foreground-muted);
+  background-color: var(--color-accent);
   will-change: background-color, opacity;
 
   &:hover {
-    background-color: var(--color-background-soft);
+    background-color: var(--color-muted);
   }
 `
 

@@ -101,7 +101,7 @@ const TooltipHeader = styled.div`
 `
 
 const TooltipTitle = styled.div`
-  color: var(--color-text-1);
+  color: var(--color-foreground);
   font-size: 14px;
   line-height: 1.4;
   overflow: hidden;
@@ -117,12 +117,12 @@ const TooltipBody = styled.div`
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
-  color: var(--color-text-2);
+  color: var(--color-foreground-secondary);
 `
 
 const TooltipFooter = styled.div`
   font-size: 12px;
-  color: var(--color-link);
+  color: var(--color-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
