@@ -245,6 +245,18 @@ describe('ShortcutSettings shortcut recorder', () => {
     expect(shortcutsMock.updatePreference).not.toHaveBeenCalled()
   })
 
+  it('clears recording safely when blur moves to a non-element target', () => {
+    renderShortcutSettings()
+
+    fireEvent.click(screen.getByText('settings.shortcuts.press_shortcut'))
+    const recorder = screen.getByRole('button', { name: 'settings.shortcuts.press_shortcut' })
+    const textTarget = document.createTextNode('outside')
+
+    expect(() => fireEvent.blur(recorder, { relatedTarget: textTarget })).not.toThrow()
+
+    expect(screen.getByText('settings.shortcuts.press_shortcut')).toBeInTheDocument()
+  })
+
   it('prevents duplicate reset-default confirmations and writes', async () => {
     const runningReset = deferred<void>()
     setMultipleMock.mockReturnValueOnce(runningReset.promise)

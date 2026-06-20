@@ -45,6 +45,10 @@ const logger = loggerService.withContext('ShortcutSettings')
 const isBindingEqual = (a: ShortcutBinding, b: ShortcutBinding): boolean =>
   a.length === b.length && a.every((key, index) => key === b[index])
 
+const closestFromEventTarget = (target: EventTarget | null, selector: string): Element | null => {
+  return target instanceof Element ? target.closest(selector) : null
+}
+
 const keyCodeToAccelerator: Record<string, ShortcutToken> = {
   Backquote: '`',
   Period: '.',
@@ -399,7 +403,7 @@ const ShortcutSettings: FC = () => {
             )}
             onKeyDown={(event) => void handleKeyDown(event, record)}
             onBlur={(event) => {
-              const isUndoClick = (event.relatedTarget as HTMLElement)?.closest('.shortcut-undo-icon')
+              const isUndoClick = closestFromEventTarget(event.relatedTarget, '.shortcut-undo-icon')
               if (!isUndoClick) {
                 clearEditingState()
               }
