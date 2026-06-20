@@ -76,18 +76,13 @@ describe('AgentSidePanelDrawer', () => {
     expect(mocks.topView.hide).toHaveBeenCalledWith('AgentSidePanelDrawer')
   })
 
-  it('hard-closes the TopView even when the drawer component has mounted', async () => {
+  it('hard-closes the TopView directly instead of waiting for a mounted drawer animation', async () => {
     const { default: AgentSidePanelDrawer } = await import('../AgentSidePanelDrawer')
-    const close = vi.fn()
 
-    AgentSidePanelDrawer.registerCloseHandler(close)
     AgentSidePanelDrawer.hide()
 
     expect(mocks.closeTransientResourceSelectors).toHaveBeenCalledTimes(1)
-    expect(close).not.toHaveBeenCalled()
     expect(mocks.topView.hide).toHaveBeenCalledTimes(1)
     expect(mocks.topView.hide).toHaveBeenCalledWith('AgentSidePanelDrawer')
-
-    AgentSidePanelDrawer.unregisterCloseHandler(close)
   })
 })
