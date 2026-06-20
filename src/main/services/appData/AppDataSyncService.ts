@@ -4760,14 +4760,6 @@ export class AppDataSyncService {
       } else {
         logger.info('Skipped WebDAV manifest publish because remote sync state did not change')
       }
-      this.assertSyncRunActive(context, '提交本地同步游标')
-      stageSyncState(DATA_SYNC_SYNC_SPACE_ID_STATE_KEY, syncSpace.id)
-      await storageV2WebDavRecordSyncService.commitRecordSyncStates(storageSyncStates)
-      for (const [id, value] of pendingSyncStates) {
-        this.assertSyncRunActive(context, '提交本地应用数据同步游标')
-        await this.setSyncState(db, id, value)
-      }
-
       const cleanupErrors: string[] = []
       const appDataArtifactsChanged = appDataArtifactFingerprintBeforeSync !== appDataArtifactFingerprint(manifest)
       const storageV2ArtifactsChanged =
@@ -4814,7 +4806,15 @@ export class AppDataSyncService {
       }
       if (ranRemoteArtifactCleanup) {
         this.assertSyncRunActive(context, '记录远端旧文件清理时间')
-        await this.setSyncState(db, DATA_SYNC_LAST_REMOTE_ARTIFACT_CLEANUP_AT_STATE_KEY, summary.lastSyncAt)
+        stageSyncState(DATA_SYNC_LAST_REMOTE_ARTIFACT_CLEANUP_AT_STATE_KEY, summary.lastSyncAt)
+      }
+
+      this.assertSyncRunActive(context, '提交本地同步游标')
+      stageSyncState(DATA_SYNC_SYNC_SPACE_ID_STATE_KEY, syncSpace.id)
+      await storageV2WebDavRecordSyncService.commitRecordSyncStates(storageSyncStates)
+      for (const [id, value] of pendingSyncStates) {
+        this.assertSyncRunActive(context, '提交本地应用数据同步游标')
+        await this.setSyncState(db, id, value)
       }
 
       summary.status = 'success'

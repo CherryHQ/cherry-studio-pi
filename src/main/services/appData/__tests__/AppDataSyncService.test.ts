@@ -2101,6 +2101,11 @@ describe('AppDataSyncService', () => {
     const service = new AppDataSyncService()
     await expect(service.syncNow(config)).rejects.toThrow('远端旧同步文件清理失败')
 
+    expect(mocks.storageRecordSync.commitRecordSyncStates).not.toHaveBeenCalled()
+    expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith('record:settings:theme:hash', expect.anything())
+    expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith('data-sync-sync-space-id', expect.anything())
+    expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith('last-sync-summary', expect.anything())
+
     const failureSummary = await service.recordSyncFailure(new Error('cleanup denied'))
 
     expect(failureSummary).toEqual(
@@ -3855,7 +3860,7 @@ describe('AppDataSyncService', () => {
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/records/settings/old-two.json')).toBe(false)
   })
 
-  it('fails visibly when stale Storage v2 cleanup cannot finish after publishing the manifest', async () => {
+  it('does not commit local cursors when stale Storage v2 cleanup fails after manifest publish', async () => {
     mocks.storageRecordSync.sync.mockResolvedValueOnce({
       manifest: {
         version: 1,
@@ -3899,9 +3904,9 @@ describe('AppDataSyncService', () => {
 
     await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端旧同步文件清理失败')
 
-    expect(mocks.storageRecordSync.commitRecordSyncStates).toHaveBeenCalledWith([
-      { id: 'settings:theme', valueHash: 'storage-theme-hash' }
-    ])
+    expect(mocks.storageRecordSync.commitRecordSyncStates).not.toHaveBeenCalled()
+    expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith('settings:theme', 'storage-theme-hash')
+    expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith('data-sync-sync-space-id', expect.anything())
     expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith('last-sync-summary', expect.anything())
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/manifest.json')).toBe(true)
   })
