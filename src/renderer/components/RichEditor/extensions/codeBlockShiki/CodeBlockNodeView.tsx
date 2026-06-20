@@ -16,6 +16,8 @@ const CodeBlockNodeView: FC<ReactNodeViewProps> = (props) => {
 
   // Build language options with 'text' always available
   useEffect(() => {
+    let cancelled = false
+
     const loadLanguageOptions = async () => {
       try {
         const shiki = await getShiki()
@@ -29,13 +31,21 @@ const CodeBlockNodeView: FC<ReactNodeViewProps> = (props) => {
 
         const allLanguages = Array.from(new Set(['text', ...bundledLanguages, ...loadedLanguages]))
 
-        setLanguageOptions(allLanguages)
+        if (!cancelled) {
+          setLanguageOptions(allLanguages)
+        }
       } catch {
-        setLanguageOptions(DEFAULT_LANGUAGES)
+        if (!cancelled) {
+          setLanguageOptions(DEFAULT_LANGUAGES)
+        }
       }
     }
 
     void loadLanguageOptions()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   // Handle language change
