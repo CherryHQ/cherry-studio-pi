@@ -314,7 +314,8 @@ describe('app tools capability call routes', () => {
       {},
       {
         source: 'api',
-        dryRun: true
+        dryRun: true,
+        signal: expect.any(AbortSignal)
       }
     )
   })
@@ -327,7 +328,8 @@ describe('app tools capability call routes', () => {
       { path: 'theme' },
       {
         source: 'api',
-        dryRun: false
+        dryRun: false,
+        signal: expect.any(AbortSignal)
       }
     )
   })

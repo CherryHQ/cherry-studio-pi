@@ -154,6 +154,34 @@ function resolveCapabilityCallBody(body: unknown) {
   }
 }
 
+function createResponseAbortSignal(res: express.Response) {
+  const controller = new AbortController()
+  let disposed = false
+
+  const cleanup = () => {
+    if (disposed) return
+    disposed = true
+    res.off('close', abort)
+    res.off('finish', cleanup)
+  }
+
+  const abort = () => {
+    const shouldAbort = !res.writableEnded
+    cleanup()
+    if (shouldAbort && !controller.signal.aborted) {
+      controller.abort(new Error('HTTP client disconnected before app capability completed'))
+    }
+  }
+
+  res.once('close', abort)
+  res.once('finish', cleanup)
+
+  return {
+    signal: controller.signal,
+    dispose: cleanup
+  }
+}
+
 async function resolveNoteDeletePath(root: string, input?: string) {
   const target = resolveNotePath(root, input)
   if (path.extname(target) || (await fs.stat(target).catch(() => null))) {
@@ -375,15 +403,19 @@ appToolsRouter.get('/capabilities/search', (req, res, next) => {
 })
 
 appToolsRouter.post('/capabilities/:id/call', async (req, res, next) => {
+  const responseAbort = createResponseAbortSignal(res)
   try {
     const { input, dryRun } = resolveCapabilityCallBody(req.body)
     const result = await appCapabilityService.call(req.params.id, input, {
       source: 'api',
-      dryRun
+      dryRun,
+      signal: responseAbort.signal
     })
     res.status(result.ok ? 200 : 400).json(result)
   } catch (error) {
     next(error)
+  } finally {
+    responseAbort.dispose()
   }
 })
 
