@@ -9,6 +9,12 @@ const linkHoverPlugin = new PluginKey('linkHover')
 // Plugin to auto-update empty href links
 const linkAutoUpdatePlugin = new PluginKey('linkAutoUpdate')
 
+const closestElementFromTarget = (target: EventTarget | null, selector: string): Element | null => {
+  if (target instanceof Element) return target.closest(selector)
+  if (target instanceof Node) return target.parentElement?.closest(selector) ?? null
+  return null
+}
+
 // Helper function to get the range of a mark at a given position
 function getMarkRange($pos: ResolvedPos, markType: MarkType, attrs?: any): { from: number; to: number } | null {
   const { doc } = $pos
@@ -77,10 +83,9 @@ const createLinkHoverPlugin = (options: LinkHoverPluginOptions) => {
           // Don't process hover if not editable
           if (!options.editable) return false
 
-          const target = event.target as HTMLElement
-          const linkElement = target.closest('a[href]') as HTMLAnchorElement
+          const linkElement = closestElementFromTarget(event.target, 'a[href]')
 
-          if (linkElement) {
+          if (linkElement instanceof HTMLAnchorElement) {
             // Clear any existing timeout
             if (hoverTimeout) {
               clearTimeout(hoverTimeout)
@@ -193,10 +198,9 @@ const createLinkHoverPlugin = (options: LinkHoverPluginOptions) => {
           return false
         },
         mouseout: (_, event) => {
-          const target = event.target as HTMLElement
-          const linkElement = target.closest('a[href]')
+          const linkElement = closestElementFromTarget(event.target, 'a[href]')
 
-          if (linkElement) {
+          if (linkElement instanceof HTMLAnchorElement) {
             // Clear hover timeout if leaving the link
             if (hoverTimeout) {
               clearTimeout(hoverTimeout)
@@ -204,9 +208,8 @@ const createLinkHoverPlugin = (options: LinkHoverPluginOptions) => {
             }
 
             // Check if we're still within the link or moving to the popup
-            const relatedTarget = event.relatedTarget as HTMLElement
-            const isMovingToPopup = relatedTarget?.closest('[data-link-editor]')
-            const isStillInLink = relatedTarget?.closest('a[href]') === linkElement
+            const isMovingToPopup = closestElementFromTarget(event.relatedTarget, '[data-link-editor]')
+            const isStillInLink = closestElementFromTarget(event.relatedTarget, 'a[href]') === linkElement
 
             if (!isMovingToPopup && !isStillInLink) {
               options.onLinkHoverEnd?.()
@@ -218,6 +221,11 @@ const createLinkHoverPlugin = (options: LinkHoverPluginOptions) => {
       }
     }
   })
+}
+
+export const _testing = {
+  closestElementFromTarget,
+  createLinkHoverPlugin
 }
 
 // Plugin to automatically update empty href with text content
