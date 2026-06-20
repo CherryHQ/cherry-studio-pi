@@ -257,11 +257,13 @@ const DataSyncSettings: FC = () => {
   const restoreSnapshotRef = useRef(false)
   const restoreSnapshotOperationRef = useRef(false)
   const diagnosisRef = useRef(false)
+  const mountedRef = useRef(true)
   const statusRefreshFeedbackRef = useRef({ t, webdavHost, webdavPath })
   statusRefreshFeedbackRef.current = { t, webdavHost, webdavPath }
 
   useEffect(() => {
     return () => {
+      mountedRef.current = false
       statusRefreshSeqRef.current += 1
       statusRefreshLoadingSeqRef.current += 1
       directoryLoadSeqRef.current += 1
@@ -462,8 +464,12 @@ const DataSyncSettings: FC = () => {
     setSyncing(true)
     try {
       const summary = await syncAppDataNow(config)
+      if (!mountedRef.current) return
+
       if (!summary) {
         const nextStatus = await refreshStatus().catch(() => null)
+        if (!mountedRef.current) return
+
         latestStatus = nextStatus
         keepSyncingWhenStatusUnknown = true
         window.toast.info(t('settings.data.data_sync.toast.sync_running'))
@@ -481,9 +487,13 @@ const DataSyncSettings: FC = () => {
         }))
       }
       latestStatus = await refreshStatus().catch(() => null)
+      if (!mountedRef.current) return
+
       window.toast.success(t('settings.data.data_sync.toast.sync_success'))
     } catch (error) {
       latestStatus = await refreshStatus().catch(() => null)
+      if (!mountedRef.current) return
+
       if (isDataSyncAlreadyRunningError(error)) {
         keepSyncingWhenStatusUnknown = true
         setSyncing(latestStatus ? isSyncing(latestStatus) : true)
@@ -505,11 +515,13 @@ const DataSyncSettings: FC = () => {
         { showToast: true }
       )
     } finally {
-      if (!latestStatus && !completedSummary) {
+      if (mountedRef.current && !latestStatus && !completedSummary) {
         latestStatus = await refreshStatus().catch(() => null)
       }
 
-      setSyncing(latestStatus ? isSyncing(latestStatus) : keepSyncingWhenStatusUnknown)
+      if (mountedRef.current) {
+        setSyncing(latestStatus ? isSyncing(latestStatus) : keepSyncingWhenStatusUnknown)
+      }
       syncNowRef.current = false
     }
   }

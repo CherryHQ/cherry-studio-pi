@@ -437,6 +437,28 @@ describe('DataSyncSettings', () => {
     await waitFor(() => expect(mocks.toast.success).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_success'))
   })
 
+  it('does not show stale manual sync feedback after the settings page unmounts', async () => {
+    const runningSync = deferred<ReturnType<typeof successSummary>>()
+    mocks.syncAppDataNow.mockReturnValueOnce(runningSync.promise)
+
+    const { unmount } = render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(syncButton())
+    await waitFor(() => expect(mocks.syncAppDataNow).toHaveBeenCalledTimes(1))
+
+    unmount()
+
+    await act(async () => {
+      runningSync.resolve(successSummary())
+      await runningSync.promise
+      await Promise.resolve()
+    })
+
+    expect(mocks.toast.success).not.toHaveBeenCalled()
+    expect(mocks.toast.info).not.toHaveBeenCalledWith('settings.data.data_sync.toast.sync_running')
+  })
+
   it('keeps a manual sync busy when a status refresh reports stale idle state', async () => {
     const runningSync = deferred<ReturnType<typeof successSummary>>()
     mocks.syncAppDataNow.mockReturnValueOnce(runningSync.promise)
