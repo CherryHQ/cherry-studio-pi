@@ -146,6 +146,16 @@ describe('useImageTools', () => {
     return mockSvg
   }
 
+  const getWheelHandler = (mockContainer: HTMLDivElement) => {
+    const addEventListenerMock = mockContainer.addEventListener as unknown as {
+      mock: { calls: Array<[string, EventListenerOrEventListenerObject]> }
+    }
+
+    return addEventListenerMock.mock.calls.find(([type]) => type === 'wheel')?.[1] as
+      | ((event: WheelEvent) => void)
+      | undefined
+  }
+
   describe('initialization', () => {
     it('should initialize with default scale', () => {
       const mockContainer = createMockContainer()
@@ -485,6 +495,72 @@ describe('useImageTools', () => {
 
       expect(mockContainer.addEventListener).not.toHaveBeenCalledWith('mousedown', expect.any(Function))
       expect(mockContainer.addEventListener).not.toHaveBeenCalledWith('wheel', expect.any(Function))
+    })
+
+    it('ignores wheel zoom events whose target is not a DOM node', () => {
+      const mockContainer = createMockContainer()
+      const mockSvg = createMockSvgElement()
+      mockContainer.querySelector = vi.fn().mockReturnValue(mockSvg)
+
+      const { result } = renderHook(() =>
+        useImageTools(
+          { current: mockContainer },
+          {
+            prefix: 'test',
+            imgSelector: 'svg',
+            enableWheelZoom: true
+          }
+        )
+      )
+
+      const wheelHandler = getWheelHandler(mockContainer)
+
+      expect(wheelHandler).toBeDefined()
+
+      const event = new WheelEvent('wheel', { ctrlKey: true, deltaY: -1 })
+      Object.defineProperty(event, 'target', {
+        configurable: true,
+        value: window
+      })
+
+      expect(() => wheelHandler?.(event)).not.toThrow()
+      expect(mockContainer.contains).not.toHaveBeenCalled()
+      expect(result.current.getCurrentTransform().scale).toBe(1)
+    })
+
+    it('still zooms for wheel events inside the container', () => {
+      const mockContainer = createMockContainer()
+      const mockSvg = createMockSvgElement()
+      const target = document.createElement('div')
+      mockContainer.querySelector = vi.fn().mockReturnValue(mockSvg)
+
+      const { result } = renderHook(() =>
+        useImageTools(
+          { current: mockContainer },
+          {
+            prefix: 'test',
+            imgSelector: 'svg',
+            enableWheelZoom: true
+          }
+        )
+      )
+
+      const wheelHandler = getWheelHandler(mockContainer)
+
+      expect(wheelHandler).toBeDefined()
+
+      const event = new WheelEvent('wheel', { ctrlKey: true, deltaY: -1 })
+      Object.defineProperty(event, 'target', {
+        configurable: true,
+        value: target
+      })
+
+      act(() => {
+        wheelHandler?.(event)
+      })
+
+      expect(mockContainer.contains).toHaveBeenCalledWith(target)
+      expect(result.current.getCurrentTransform().scale).toBe(1.1)
     })
   })
 

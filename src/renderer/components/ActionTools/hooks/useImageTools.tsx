@@ -186,9 +186,10 @@ export const useImageTools = (
     const container = containerRef.current
 
     const handleWheel = (e: WheelEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.target) {
+      const target = e.target
+      if ((e.ctrlKey || e.metaKey) && target instanceof Node) {
         // 确认事件发生在容器内部
-        if (container.contains(e.target as Node)) {
+        if (container.contains(target)) {
           const delta = e.deltaY < 0 ? 0.1 : -0.1
           zoom(delta)
         }
