@@ -1004,6 +1004,9 @@ export class StorageV2Service {
     const llm = optionalRecord(snapshot.llm)
     const providers = optionalArray<Record<string, unknown>>(llm?.providers) ?? []
     const apiKeyProviderIds = options.apiKeyProviderIds
+    const apiKeyCredentialRefsByProvider = apiKeyProviderIds
+      ? await storageV2ProviderRepository.listCredentialRefs()
+      : null
     const modelProviderIds = options.modelProviderIds
     let providerCount = 0
     let modelCount = 0
@@ -1023,8 +1026,14 @@ export class StorageV2Service {
         }
       }
 
-      if (normalized.apiKeys || apiKeyProviderIds?.has(providerId)) {
-        await providerService.replaceApiKeys(providerId, normalized.apiKeys ?? [])
+      if (apiKeyProviderIds) {
+        if (apiKeyProviderIds.has(providerId)) {
+          const credentialRefs = apiKeyCredentialRefsByProvider?.get(providerId)
+          const hasStoredApiKeyRef = Boolean(credentialRefs?.apiKeys || credentialRefs?.apiKey)
+          await providerService.replaceApiKeys(providerId, hasStoredApiKeyRef ? (normalized.apiKeys ?? []) : [])
+        }
+      } else if (normalized.apiKeys) {
+        await providerService.replaceApiKeys(providerId, normalized.apiKeys)
       }
 
       const projectedModelCount =

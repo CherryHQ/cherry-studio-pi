@@ -994,9 +994,18 @@ describe('StorageV2Service', () => {
       }
     ])
     mocks.providerService.getByProviderId.mockResolvedValue({ id: 'openai' })
+    mocks.secretVault.getSecret.mockImplementation(async (secretRef: string) => {
+      if (secretRef === 'storage-v2://secret/provider/openai/apiKeys') {
+        return JSON.stringify([{ id: 'stale-key', key: 'sk-stale', isEnabled: true }])
+      }
+      return null
+    })
 
     await expect(
-      new StorageV2Service().projectProvidersToDataApiRuntime({ modelProviderIds: new Set() })
+      new StorageV2Service().projectProvidersToDataApiRuntime({
+        apiKeyProviderIds: new Set(),
+        modelProviderIds: new Set()
+      })
     ).resolves.toEqual({
       providerCount: 1,
       modelCount: 0
@@ -1028,6 +1037,12 @@ describe('StorageV2Service', () => {
       }
     ])
     mocks.providerService.getByProviderId.mockResolvedValue({ id: 'openai' })
+    mocks.secretVault.getSecret.mockImplementation(async (secretRef: string) => {
+      if (secretRef === 'storage-v2://secret/provider/openai/apiKeys') {
+        return JSON.stringify([{ id: 'stale-key', key: 'sk-stale', isEnabled: true }])
+      }
+      return null
+    })
 
     await expect(
       new StorageV2Service().projectProvidersToDataApiRuntime({
