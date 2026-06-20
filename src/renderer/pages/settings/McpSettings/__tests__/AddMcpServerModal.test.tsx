@@ -6,6 +6,7 @@ import AddMcpServerModal from '../AddMcpServerModal'
 
 const mocks = vi.hoisted(() => ({
   checkMcpConnectivity: vi.fn(),
+  loggerError: vi.fn(),
   patchData: vi.fn(),
   setTimeoutTimer: vi.fn()
 }))
@@ -69,7 +70,7 @@ vi.mock('@logger', () => ({
   loggerService: {
     withContext: () => ({
       debug: vi.fn(),
-      error: vi.fn(),
+      error: mocks.loggerError,
       warn: vi.fn()
     })
   }
@@ -156,5 +157,27 @@ describe('AddMcpServerModal', () => {
     await waitFor(() => expect(mocks.checkMcpConnectivity).toHaveBeenCalledWith('server-1'))
     expect(onClose).not.toHaveBeenCalled()
     expect(window.toast.error).not.toHaveBeenCalled()
+  })
+
+  it('does not log raw MCP JSON import text when parsing fails', async () => {
+    const onClose = vi.fn()
+    const onSuccess = vi.fn()
+
+    render(<AddMcpServerModal visible onClose={onClose} onSuccess={onSuccess} existingServers={[]} />)
+
+    fireEvent.change(screen.getByLabelText('server-config'), {
+      target: {
+        value: '{"mcpServers":{"secret-server":{"headers":{"Authorization":"Bearer sk-secret-token"}}'
+      }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'common.confirm' }))
+
+    await waitFor(() => expect(mocks.loggerError).toHaveBeenCalled())
+    expect(screen.getByText('settings.mcp.addServer.importFrom.invalid')).toBeInTheDocument()
+
+    const loggedPayload = JSON.stringify(mocks.loggerError.mock.calls)
+    expect(loggedPayload).toContain('trimmedLength')
+    expect(loggedPayload).not.toContain('sk-secret-token')
+    expect(loggedPayload).not.toContain('Bearer')
   })
 })

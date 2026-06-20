@@ -19,6 +19,7 @@ import { dataApiService } from '@data/DataApiService'
 import { usePreference } from '@data/hooks/usePreference'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { loggerService } from '@logger'
+import { summarizeObjectShapeForLog, summarizeTextForLog } from '@renderer/aiCore/utils/logging'
 import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
 import { useTimer } from '@renderer/hooks/useTimer'
 import type { McpServer } from '@renderer/types'
@@ -143,13 +144,13 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
     const trimmedInput = inputValue.trim()
     const parsedJson = parseJSON(trimmedInput)
     if (parsedJson === null) {
-      logger.error('Failed to parse json.', { input: trimmedInput })
+      logger.error('Failed to parse MCP server JSON.', { input: summarizeTextForLog(trimmedInput) })
       return { serverToAdd: null, error: t('settings.mcp.addServer.importFrom.invalid') }
     }
 
     const { data: validConfig, error } = safeValidateMcpConfig(parsedJson)
     if (error) {
-      logger.error('Failed to validate json.', { parsedJson, error })
+      logger.error('Failed to validate MCP server JSON.', { parsedJson: summarizeObjectShapeForLog(parsedJson), error })
       return { serverToAdd: null, error: formatZodError(error, t('settings.mcp.addServer.importFrom.invalid')) }
     }
 
