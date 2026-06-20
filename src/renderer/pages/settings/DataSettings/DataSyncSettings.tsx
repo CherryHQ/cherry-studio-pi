@@ -256,6 +256,7 @@ const DataSyncSettings: FC = () => {
   const syncNowRef = useRef(false)
   const restoreSnapshotRef = useRef(false)
   const restoreSnapshotOperationRef = useRef(false)
+  const restoreSnapshotConfirmRef = useRef<ReturnType<typeof Modal.confirm> | null>(null)
   const diagnosisRef = useRef(false)
   const mountedRef = useRef(true)
   const statusRefreshFeedbackRef = useRef({ t, webdavHost, webdavPath })
@@ -268,6 +269,9 @@ const DataSyncSettings: FC = () => {
       statusRefreshLoadingSeqRef.current += 1
       directoryLoadSeqRef.current += 1
       diagnosisSeqRef.current += 1
+      restoreSnapshotConfirmRef.current?.destroy()
+      restoreSnapshotConfirmRef.current = null
+      restoreSnapshotRef.current = false
     }
   }, [])
 
@@ -540,16 +544,17 @@ const DataSyncSettings: FC = () => {
     }
 
     restoreSnapshotRef.current = true
-    Modal.confirm({
+    restoreSnapshotConfirmRef.current = Modal.confirm({
       title: t('settings.data.data_sync.restore_confirm_title'),
       content: t('settings.data.data_sync.restore_confirm_content'),
       okText: t('settings.data.data_sync.restore_latest'),
       okButtonProps: { danger: true },
       onCancel: () => {
         restoreSnapshotRef.current = false
+        restoreSnapshotConfirmRef.current = null
       },
       onOk: async () => {
-        if (restoreSnapshotOperationRef.current) {
+        if (!mountedRef.current || restoreSnapshotOperationRef.current) {
           return
         }
 
@@ -557,8 +562,12 @@ const DataSyncSettings: FC = () => {
         setRestoring(true)
         try {
           await window.api.dataSync.restoreLatestSnapshot(config)
+          if (!mountedRef.current) return
+
           window.toast.success(t('settings.data.data_sync.toast.restore_success'))
         } catch (error) {
+          if (!mountedRef.current) return
+
           window.toast.error(t('settings.data.data_sync.toast.restore_failed', { message: getErrorMessage(error) }))
           void reportErrorToSystemAgent(
             error,
@@ -573,9 +582,12 @@ const DataSyncSettings: FC = () => {
             { showToast: true }
           )
         } finally {
-          setRestoring(false)
+          if (mountedRef.current) {
+            setRestoring(false)
+          }
           restoreSnapshotOperationRef.current = false
           restoreSnapshotRef.current = false
+          restoreSnapshotConfirmRef.current = null
         }
       }
     })

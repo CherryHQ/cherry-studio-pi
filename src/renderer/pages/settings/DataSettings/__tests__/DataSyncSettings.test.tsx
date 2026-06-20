@@ -536,6 +536,67 @@ describe('DataSyncSettings', () => {
     }
   })
 
+  it('destroys a pending latest snapshot restore confirmation when the page unmounts', async () => {
+    const destroy = vi.fn()
+    const confirmSpy = vi.spyOn(Modal, 'confirm').mockImplementation(() => {
+      return {
+        destroy,
+        update: vi.fn()
+      } as ReturnType<typeof Modal.confirm>
+    })
+
+    try {
+      const view = render(<DataSyncSettings />)
+      await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+      fireEvent.click(buttonByText('settings.data.data_sync.restore_latest'))
+      view.unmount()
+
+      expect(destroy).toHaveBeenCalledTimes(1)
+    } finally {
+      confirmSpy.mockRestore()
+    }
+  })
+
+  it('does not show stale latest snapshot restore feedback after the page unmounts', async () => {
+    const runningRestore = deferred<void>()
+    mocks.restoreLatestSnapshot.mockReturnValueOnce(runningRestore.promise)
+    let confirmOptions: { onOk?: () => unknown | Promise<unknown> } = {}
+    const confirmSpy = vi.spyOn(Modal, 'confirm').mockImplementation((options) => {
+      confirmOptions = options
+      return {
+        destroy: vi.fn(),
+        update: vi.fn()
+      } as ReturnType<typeof Modal.confirm>
+    })
+
+    try {
+      const view = render(<DataSyncSettings />)
+      await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+      fireEvent.click(buttonByText('settings.data.data_sync.restore_latest'))
+
+      let restorePromise: unknown
+      await act(async () => {
+        restorePromise = confirmOptions.onOk?.()
+      })
+
+      view.unmount()
+
+      await act(async () => {
+        runningRestore.resolve()
+        await restorePromise
+      })
+
+      expect(mocks.toast.success).not.toHaveBeenCalledWith('settings.data.data_sync.toast.restore_success')
+      expect(mocks.toast.error).not.toHaveBeenCalledWith(
+        expect.stringContaining('settings.data.data_sync.toast.restore_failed')
+      )
+    } finally {
+      confirmSpy.mockRestore()
+    }
+  })
+
   it('splits a pasted WebDAV account block in the URL field into host username and password', async () => {
     render(<DataSyncSettings />)
     await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
