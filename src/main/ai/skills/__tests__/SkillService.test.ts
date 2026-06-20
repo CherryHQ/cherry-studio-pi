@@ -11,6 +11,7 @@ import { loggerService } from '@logger'
 import { findSkillMdPath, parseSkillMetadata } from '@main/utils/markdownParser'
 import { setupTestDatabase } from '@test-helpers/db'
 import { eq } from 'drizzle-orm'
+import { net } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@main/utils/markdownParser', () => ({
@@ -25,6 +26,7 @@ const AGENT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const SKILL_ID_1 = '11111111-1111-4111-8111-111111111111'
 const SKILL_ID_2 = '22222222-2222-4222-8222-222222222222'
 const SKILL_ID_BUILTIN = '33333333-3333-4333-8333-333333333333'
+const TEST_SKILL_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024
 
 describe('SkillService', () => {
   const dbh = setupTestDatabase()
@@ -543,6 +545,51 @@ describe('SkillService', () => {
       const spy = vi.spyOn(skillService as never, 'installFromClawhub').mockResolvedValue({} as never)
       await skillService.install({ installSource: 'clawhub:my-skill' })
       expect(spy).toHaveBeenCalledWith('my-skill')
+    })
+
+    it('rejects oversized streamed clawhub downloads before buffering or extracting', async () => {
+      const skillService = new SkillService()
+      const installTempRoot = await createTempDir('skill-install-temp-')
+      const cancel = vi.fn().mockResolvedValue(undefined)
+      const releaseLock = vi.fn()
+      const arrayBuffer = vi.fn()
+      const extractSpy = vi.spyOn(skillService as never, 'extractZip')
+      const getPathSpy = vi.spyOn(application, 'getPath').mockImplementation((key: string, filename?: string) => {
+        if (key === 'feature.agents.skills.install.temp') {
+          return filename ? path.join(installTempRoot, filename) : installTempRoot
+        }
+        return filename ? `/mock/${key}/${filename}` : `/mock/${key}`
+      })
+      vi.mocked(net.fetch)
+        .mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers() } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/zip' }),
+          body: {
+            getReader: () => ({
+              read: vi.fn().mockResolvedValueOnce({
+                done: false,
+                value: { byteLength: TEST_SKILL_DOWNLOAD_MAX_BYTES + 1 }
+              }),
+              cancel,
+              releaseLock
+            })
+          },
+          arrayBuffer
+        } as unknown as Response)
+
+      try {
+        await expect((skillService as any).installFromClawhub('huge-skill')).rejects.toThrow('Skill download too large')
+        expect(cancel).toHaveBeenCalled()
+        expect(releaseLock).toHaveBeenCalled()
+        expect(arrayBuffer).not.toHaveBeenCalled()
+        expect(extractSpy).not.toHaveBeenCalled()
+      } finally {
+        getPathSpy.mockRestore()
+        extractSpy.mockRestore()
+        vi.mocked(net.fetch).mockReset()
+      }
     })
   })
 

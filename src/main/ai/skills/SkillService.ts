@@ -95,6 +95,53 @@ export class SkillService {
     })
   }
 
+  private async writeDownloadResponseToFile(response: Response, filePath: string): Promise<void> {
+    const contentLength = Number.parseInt(response.headers.get('content-length') ?? '', 10)
+    if (Number.isFinite(contentLength) && contentLength > MAX_EXTRACTED_SIZE) {
+      throw new Error(`Skill download too large: ${contentLength} bytes exceeds ${MAX_EXTRACTED_SIZE}`)
+    }
+
+    if (!response.body || typeof response.body.getReader !== 'function') {
+      const buffer = Buffer.from(await response.arrayBuffer())
+      if (buffer.length > MAX_EXTRACTED_SIZE) {
+        throw new Error(`Skill download too large: ${buffer.length} bytes exceeds ${MAX_EXTRACTED_SIZE}`)
+      }
+      await fs.promises.writeFile(filePath, buffer)
+      return
+    }
+
+    const reader = response.body.getReader()
+    const output = await fs.promises.open(filePath, 'w')
+    let totalBytes = 0
+    let removePartialFile = false
+
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const byteLength = value.byteLength
+        if (totalBytes + byteLength > MAX_EXTRACTED_SIZE) {
+          removePartialFile = true
+          await reader.cancel().catch(() => undefined)
+          throw new Error(`Skill download too large: ${totalBytes + byteLength} bytes exceeds ${MAX_EXTRACTED_SIZE}`)
+        }
+
+        await output.write(Buffer.from(value))
+        totalBytes += byteLength
+      }
+    } catch (error) {
+      removePartialFile = true
+      throw error
+    } finally {
+      reader.releaseLock()
+      await output.close()
+      if (removePartialFile) {
+        await fs.promises.rm(filePath, { force: true }).catch(() => undefined)
+      }
+    }
+  }
+
   // ===========================================================================
   // Public API
   // ===========================================================================
@@ -626,8 +673,7 @@ export class SkillService {
     const zipPath = path.join(tempDir, 'skill.zip')
 
     try {
-      const buffer = Buffer.from(await downloadResp.arrayBuffer())
-      await fs.promises.writeFile(zipPath, buffer)
+      await this.writeDownloadResponseToFile(downloadResp, zipPath)
       const extractDir = path.join(tempDir, 'extracted')
       await fs.promises.mkdir(extractDir, { recursive: true })
       await this.extractZip(zipPath, extractDir)
