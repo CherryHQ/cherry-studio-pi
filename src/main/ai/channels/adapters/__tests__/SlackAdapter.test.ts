@@ -78,6 +78,7 @@ function mockBinaryResponse(buf: Buffer, contentType = 'image/png'): Response {
 // Realistic Slack user IDs (alphanumeric, no underscores)
 const BOT_USER_ID = 'UBOT12345'
 const USER1_ID = 'U01ABCDEF'
+const TEST_ATTACHMENT_MAX_BYTES = 100 * 1024 * 1024
 
 describe('SlackAdapter', () => {
   beforeEach(() => {
@@ -392,6 +393,64 @@ describe('SlackAdapter', () => {
 
     await vi.waitFor(() => expect(messageSpy).toHaveBeenCalledTimes(1))
     expect(messageSpy.mock.calls[0][0].images).toBeUndefined()
+  })
+
+  it('skips an oversized streamed image download when content-length is missing', async () => {
+    const adapter = await connectAdapter()
+    const messageSpy = vi.fn()
+    adapter.on('message', messageSpy)
+
+    const cancel = vi.fn().mockResolvedValue(undefined)
+    const releaseLock = vi.fn()
+    const arrayBuffer = vi.fn()
+    const streamedOversize = {
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'image/png' }),
+      body: {
+        getReader: () => ({
+          read: vi.fn().mockResolvedValueOnce({
+            done: false,
+            value: { byteLength: TEST_ATTACHMENT_MAX_BYTES + 1 }
+          }),
+          cancel,
+          releaseLock
+        })
+      },
+      arrayBuffer
+    } as unknown as Response
+
+    mockNetFetch.mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('files.slack.com')) {
+        return Promise.resolve(streamedOversize)
+      }
+      if (url.includes('users.info')) {
+        return Promise.resolve(mockJsonResponse({ ok: true, user: { real_name: 'Test User' } }))
+      }
+      return Promise.resolve(mockJsonResponse({ ok: true }))
+    })
+
+    simulateMessageEvent({
+      channel: 'C0ALLOWED',
+      user: USER1_ID,
+      text: 'see attached',
+      subtype: 'file_share',
+      files: [
+        {
+          id: 'F1',
+          name: 'streaming-huge.png',
+          mimetype: 'image/png',
+          size: 1000,
+          url_private: 'https://files.slack.com/streaming-huge.png'
+        }
+      ]
+    })
+
+    await vi.waitFor(() => expect(messageSpy).toHaveBeenCalledTimes(1))
+    expect(messageSpy.mock.calls[0][0].images).toBeUndefined()
+    expect(cancel).toHaveBeenCalled()
+    expect(releaseLock).toHaveBeenCalled()
+    expect(arrayBuffer).not.toHaveBeenCalled()
   })
 
   it('ignores messages from the bot itself', async () => {

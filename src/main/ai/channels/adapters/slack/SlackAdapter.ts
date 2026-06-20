@@ -1,4 +1,9 @@
-import { type FileAttachment, type ImageAttachment, MAX_FILE_SIZE_BYTES } from '@main/utils/downloadAsBase64'
+import {
+  type FileAttachment,
+  type ImageAttachment,
+  MAX_FILE_SIZE_BYTES,
+  readResponseBufferWithinLimit
+} from '@main/utils/downloadAsBase64'
 import { net } from 'electron'
 import WebSocket from 'ws'
 
@@ -485,8 +490,8 @@ class SlackAdapter extends ChannelAdapter {
       if (contentLength && Number.parseInt(contentLength, 10) > MAX_FILE_SIZE_BYTES) return null
       const contentType = response.headers.get('content-type') || 'image/png'
       const mediaType = contentType.split(';')[0].trim()
-      const buffer = Buffer.from(await response.arrayBuffer())
-      if (buffer.length > MAX_FILE_SIZE_BYTES) return null
+      const { buffer } = await readResponseBufferWithinLimit(response)
+      if (!buffer) return null
       return { data: buffer.toString('base64'), media_type: mediaType }
     } catch {
       return null
@@ -500,8 +505,8 @@ class SlackAdapter extends ChannelAdapter {
         signal: AbortSignal.timeout(SLACK_FILE_DOWNLOAD_TIMEOUT_MS)
       })
       if (!response.ok) return null
-      const buffer = Buffer.from(await response.arrayBuffer())
-      if (buffer.length > MAX_FILE_SIZE_BYTES) return null
+      const { buffer } = await readResponseBufferWithinLimit(response)
+      if (!buffer) return null
       const contentType = response.headers.get('content-type') || 'application/octet-stream'
       const mediaType = contentType.split(';')[0].trim()
       return { filename, data: buffer.toString('base64'), media_type: mediaType, size: buffer.length }

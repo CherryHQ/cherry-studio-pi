@@ -24,7 +24,7 @@ export type FileAttachment = {
 export const MAX_FILE_SIZE_BYTES = 100 * MB
 export const ATTACHMENT_DOWNLOAD_TIMEOUT_MS = 120_000
 
-async function readResponseBufferWithinLimit(
+export async function readResponseBufferWithinLimit(
   response: Response
 ): Promise<{ buffer: Buffer | null; bytesRead: number }> {
   if (!response.body) {
