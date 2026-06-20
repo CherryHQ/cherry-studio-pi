@@ -518,7 +518,16 @@ const ErrorDetailContent: React.FC<ErrorDetailContentProps> = ({
   const diagSectionRef = useRef<{ runDiagnosis: () => void }>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const isInitialRenderRef = useRef(true)
+  const mountedRef = useRef(true)
   const showCopyFailed = useSaveFailedToast('common.copy_failed')
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   // Scroll to bottom when diagnosis status changes, but skip initial render
   useEffect(() => {
@@ -550,7 +559,9 @@ const ErrorDetailContent: React.FC<ErrorDetailContentProps> = ({
 
     try {
       await navigator.clipboard.writeText(errorText)
-      window.toast.success(t('message.copied'))
+      if (mountedRef.current) {
+        window.toast.success(t('message.copied'))
+      }
     } catch (clipboardError) {
       showCopyFailed(clipboardError)
     }

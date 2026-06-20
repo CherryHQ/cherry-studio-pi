@@ -153,4 +153,32 @@ describe('ErrorDetailContent', () => {
     expect(mocks.toastError).not.toHaveBeenCalled()
     expect(mocks.toastSuccess).not.toHaveBeenCalled()
   })
+
+  it('ignores copy success feedback after unmount', async () => {
+    const clipboardOperation = deferred<void>()
+    mocks.clipboardWriteText.mockReturnValueOnce(clipboardOperation.promise)
+
+    const { unmount } = render(
+      <ErrorDetailContent
+        error={{
+          name: 'Error',
+          message: 'Something failed',
+          stack: null
+        }}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /common.copy/ }))
+
+    await waitFor(() => expect(mocks.clipboardWriteText).toHaveBeenCalled())
+    unmount()
+
+    await act(async () => {
+      clipboardOperation.resolve()
+      await clipboardOperation.promise
+    })
+
+    expect(mocks.toastError).not.toHaveBeenCalled()
+    expect(mocks.toastSuccess).not.toHaveBeenCalled()
+  })
 })
