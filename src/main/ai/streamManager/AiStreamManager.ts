@@ -421,7 +421,25 @@ export class AiStreamManager extends BaseService {
     }
     this.activeStreams.set(input.topicId, stream)
     // Chat broadcasts to SharedCache so `useChatWithHistory.resumeActiveStream` can attach; prompt is silent.
-    stream.lifecycle.onCreated(stream)
+    try {
+      stream.lifecycle.onCreated(stream)
+    } catch (error) {
+      logger.warn('Stream lifecycle onCreated failed; cleaning up just-started stream', {
+        topicId: input.topicId,
+        lifecycle: stream.lifecycle.name,
+        error
+      })
+      for (const exec of stream.executions.values()) {
+        if (exec.status === 'streaming') {
+          exec.status = 'aborted'
+          exec.abortController.abort('stream-lifecycle-on-created-failed')
+        }
+        endRootSpan(exec, 'aborted')
+      }
+      this.releasePowerSaveBlocker(input.topicId)
+      this.activeStreams.delete(input.topicId)
+      throw error
+    }
 
     return {
       mode: 'started',

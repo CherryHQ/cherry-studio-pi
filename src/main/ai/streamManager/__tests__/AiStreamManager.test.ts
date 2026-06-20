@@ -261,6 +261,30 @@ describe('AiStreamManager', () => {
       expect(powerSaveMocks.release).toHaveBeenCalledTimes(1)
     })
 
+    it('cleans up the started stream if lifecycle creation broadcast fails', () => {
+      const signals: AbortSignal[] = []
+      mockStreamText.mockImplementation(async (request: AiStreamRequest) => {
+        const signal = (request.requestOptions as { signal?: AbortSignal } | undefined)?.signal
+        if (signal) signals.push(signal)
+        return pendingStream(signal)
+      })
+      fakeCacheService.setShared.mockImplementationOnce(() => {
+        throw new Error('cache unavailable')
+      })
+
+      expect(() =>
+        mgr.send({
+          topicId: 'a',
+          models: [{ modelId: 'provider-a::model-a', request: req('a') }],
+          listeners: [new FakeListener('l:a')]
+        })
+      ).toThrow('cache unavailable')
+
+      expect(mgr.inspect('a')).toBeUndefined()
+      expect(powerSaveMocks.release).toHaveBeenCalledTimes(1)
+      expect(signals[0]?.aborted).toBe(true)
+    })
+
     it('throws on duplicate modelId within a single send call', () => {
       const request = req('a')
       expect(() =>
