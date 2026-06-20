@@ -371,7 +371,7 @@ async function readTextFilePreview(filePath: string, maxBytes: number, signal?: 
   const stat = await fs.stat(filePath)
   throwIfAppToolsSignalAborted(signal)
   if (stat.size <= maxBytes) {
-    const content = await fs.readFile(filePath, 'utf8')
+    const content = await fs.readFile(filePath, { encoding: 'utf8', signal })
     throwIfAppToolsSignalAborted(signal)
     return {
       content,
@@ -585,7 +585,9 @@ appToolsRouter.get('/notes/search', async (req, res, next) => {
         continue
       }
 
-      const content = await fs.readFile(file.externalPath, 'utf8').catch(() => '')
+      const content = await fs
+        .readFile(file.externalPath, { encoding: 'utf8', signal: responseAbort.signal })
+        .catch(() => '')
       throwIfAppToolsSignalAborted(responseAbort.signal)
       const index = content.toLowerCase().indexOf(query)
       if (index >= 0) {
@@ -626,7 +628,10 @@ appToolsRouter.post('/notes', async (req, res, next) => {
     const filePath = path.join(parent, `${safeName}.md`)
     await assertResolvedInsideNotesRoot(root, filePath)
     throwIfAppToolsSignalAborted(responseAbort.signal)
-    await fs.writeFile(filePath, normalizeNoteContent(req.body?.content), 'utf8')
+    await fs.writeFile(filePath, normalizeNoteContent(req.body?.content), {
+      encoding: 'utf8',
+      signal: responseAbort.signal
+    })
     notifyMainProcessDataSyncLocalChange('file', { source: 'api.app-tools.notes.create', path: filePath })
     res.json({ ok: true, path: filePath, name: safeName })
   } catch (error) {
@@ -643,7 +648,10 @@ appToolsRouter.put('/notes', async (req, res, next) => {
     const filePath = resolveNotePath(root, req.body?.path, true)
     await assertResolvedInsideNotesRoot(root, filePath)
     throwIfAppToolsSignalAborted(responseAbort.signal)
-    await fs.writeFile(filePath, normalizeNoteContent(req.body?.content), 'utf8')
+    await fs.writeFile(filePath, normalizeNoteContent(req.body?.content), {
+      encoding: 'utf8',
+      signal: responseAbort.signal
+    })
     notifyMainProcessDataSyncLocalChange('file', { source: 'api.app-tools.notes.write', path: filePath })
     res.json({ ok: true, path: filePath })
   } catch (error) {

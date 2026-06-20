@@ -224,6 +224,36 @@ describe('app tools notes routes', () => {
     expect(await fs.readFile(notePath, 'utf8')).toBe('false')
   })
 
+  it('passes response abort signals into note reads and writes', async () => {
+    const notePath = path.join(tmpDir, 'abortable.md')
+    await fs.writeFile(notePath, 'read me\n', 'utf8')
+    const readSpy = vi.spyOn(fs, 'readFile')
+    const writeSpy = vi.spyOn(fs, 'writeFile')
+
+    try {
+      const read = await requestAppTools('GET', '/notes/read?path=abortable')
+      const written = await requestAppTools('PUT', '/notes', {
+        path: 'abortable',
+        content: 'written'
+      })
+
+      expect(read.status).toBe(200)
+      expect(written.status).toBe(200)
+      expect(readSpy).toHaveBeenCalledWith(
+        notePath,
+        expect.objectContaining({ encoding: 'utf8', signal: expect.any(AbortSignal) })
+      )
+      expect(writeSpy).toHaveBeenCalledWith(
+        notePath,
+        'written',
+        expect.objectContaining({ encoding: 'utf8', signal: expect.any(AbortSignal) })
+      )
+    } finally {
+      readSpy.mockRestore()
+      writeSpy.mockRestore()
+    }
+  })
+
   it('rejects note symlinks that resolve outside the notes root', async () => {
     const outsideDir = `${tmpDir}-outside`
     const outsideFile = path.join(outsideDir, 'secret.md')
