@@ -81,7 +81,7 @@ const ThinkingEffect: React.FC<Props> = ({ isThinking, thinkingTimeText, content
                 if (index < messages.length - 5) return null
 
                 return (
-                  <div key={index} className="w-full truncate text-(--color-text-2) text-[11px] leading-3.5">
+                  <div key={index} className="w-full truncate text-[11px] text-foreground-secondary leading-3.5">
                     {message}
                   </div>
                 )
@@ -97,7 +97,7 @@ const ThinkingEffect: React.FC<Props> = ({ isThinking, thinkingTimeText, content
           'relative flex h-full w-10 shrink-0 items-center justify-center text-(--color-border) transition-transform duration-150',
           expanded && 'rotate-90'
         )}>
-        <ChevronRight size={20} color="var(--color-text-3)" strokeWidth={1} />
+        <ChevronRight size={20} color="var(--color-foreground-muted)" strokeWidth={1} />
       </div>
     </div>
   )

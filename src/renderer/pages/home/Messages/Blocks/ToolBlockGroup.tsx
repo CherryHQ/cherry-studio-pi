@@ -82,7 +82,7 @@ const GroupHeaderContent = React.memo(({ items, allCompleted }: GroupHeaderConte
     return (
       <div className="flex items-center gap-2 font-medium text-[13px]">
         <Wrench size={14} className="text-(--color-primary)" />
-        <span className="text-(--color-text-1)">{t('message.tools.groupHeader', { count: items.length })}</span>
+        <span className="text-foreground">{t('message.tools.groupHeader', { count: items.length })}</span>
       </div>
     )
   }
@@ -136,7 +136,7 @@ const GroupHeaderContent = React.memo(({ items, allCompleted }: GroupHeaderConte
   return (
     <div className="flex items-center gap-2 font-medium text-[13px]">
       <Wrench size={14} className="text-(--color-primary)" />
-      <span className="text-(--color-text-1)">{t('message.tools.groupHeader', { count: items.length })}</span>
+      <span className="text-foreground">{t('message.tools.groupHeader', { count: items.length })}</span>
     </div>
   )
 })

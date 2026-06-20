@@ -113,7 +113,7 @@ const ThinkingBlock: React.FC<Props> = ({ id, content, isStreaming, thinkingMs }
               <Tooltip content={t('common.copy')} delay={800}>
                 <button
                   type="button"
-                  className="message-action-button -right-3 -top-3 absolute ml-auto flex cursor-pointer items-center justify-center border-none bg-transparent p-1 text-(--color-text-2) opacity-60 transition-all duration-300 hover:text-(--color-text) hover:opacity-100 focus-visible:outline-(--color-primary) focus-visible:outline-2 focus-visible:outline-offset-2 [&_.iconfont]:text-sm"
+                  className="message-action-button -right-3 -top-3 absolute ml-auto flex cursor-pointer items-center justify-center border-none bg-transparent p-1 text-foreground-secondary opacity-60 transition-all duration-300 hover:text-foreground hover:opacity-100 focus-visible:outline-(--color-primary) focus-visible:outline-2 focus-visible:outline-offset-2 [&_.iconfont]:text-sm"
                   onClick={(e) => {
                     e.stopPropagation()
                     copyThought()
