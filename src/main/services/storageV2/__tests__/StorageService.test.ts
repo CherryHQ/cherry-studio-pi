@@ -221,6 +221,7 @@ describe('StorageV2Service', () => {
     mocks.fileRepository.delete.mockResolvedValue({ deleted: true })
     mocks.fileRepository.list.mockResolvedValue([])
     mocks.knowledgeRepository.listBases.mockResolvedValue([])
+    mocks.secretVault.getSecret.mockResolvedValue(null)
     mocks.providerService.list.mockResolvedValue([])
     mocks.providerService.create.mockResolvedValue(undefined)
     mocks.providerService.getByProviderId.mockResolvedValue({ id: 'provider-1' })
@@ -1002,6 +1003,43 @@ describe('StorageV2Service', () => {
     })
 
     expect(mocks.providerService.update).toHaveBeenCalledWith('openai', expect.any(Object))
+    expect(mocks.providerService.replaceApiKeys).not.toHaveBeenCalled()
+    expect(mocks.modelService.list).not.toHaveBeenCalled()
+    expect(mocks.modelService.reconcileForProvider).not.toHaveBeenCalled()
+    expect(mocks.modelService.bulkUpdate).not.toHaveBeenCalled()
+  })
+
+  it('clears stale runtime api keys when a synced provider credential was deleted', async () => {
+    mocks.providerRepository.list.mockResolvedValue([
+      {
+        id: 'openai',
+        type: 'openai',
+        name: 'OpenAI',
+        apiHost: 'https://api.openai.com/v1',
+        enabled: true,
+        sortOrder: 0,
+        config: { id: 'openai', presetProviderId: 'openai' },
+        models: [],
+        hasCredentialRef: false,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        deletedAt: null,
+        version: 1
+      }
+    ])
+    mocks.providerService.getByProviderId.mockResolvedValue({ id: 'openai' })
+
+    await expect(
+      new StorageV2Service().projectProvidersToDataApiRuntime({
+        apiKeyProviderIds: new Set(['openai']),
+        modelProviderIds: new Set()
+      })
+    ).resolves.toEqual({
+      providerCount: 1,
+      modelCount: 0
+    })
+
+    expect(mocks.providerService.replaceApiKeys).toHaveBeenCalledWith('openai', [])
     expect(mocks.modelService.list).not.toHaveBeenCalled()
     expect(mocks.modelService.reconcileForProvider).not.toHaveBeenCalled()
     expect(mocks.modelService.bulkUpdate).not.toHaveBeenCalled()

@@ -20,6 +20,7 @@ import { storageV2DataRootService } from '@main/services/storageV2/DataRootServi
 import { storageV2FileLegacyProjectionService } from '@main/services/storageV2/FileLegacyProjectionService'
 import { pruneManagedLegacyProjectionArchives } from '@main/services/storageV2/LegacyProjectionArchiveCleanup'
 import { storageV2Service } from '@main/services/storageV2/StorageService'
+import { decodeStorageV2CompositeEntityId } from '@main/services/storageV2/SyncEntityId'
 import {
   type StorageV2WebDavRecordSyncManifest,
   storageV2WebDavRecordSyncService,
@@ -1158,6 +1159,36 @@ function getStorageV2ModelProviderIds(manifest?: StorageV2WebDavRecordSyncManife
     const providerId = parseUniqueModelId(id).providerId
     if (providerId) providerIds.add(providerId)
   }
+  return providerIds
+}
+
+function isProviderApiKeyCredentialKind(value: unknown) {
+  return value === 'apiKey' || value === 'apiKeys'
+}
+
+function getStorageV2ApiKeyCredentialProviderIds(manifest?: StorageV2WebDavRecordSyncManifest | null) {
+  const providerIds = new Set<string>()
+
+  for (const [, meta] of storageV2ManifestRecordEntries(manifest)) {
+    if (meta.entityType === 'provider_credential') {
+      const [providerId, credentialKind] = meta.idValues
+      if (providerId && isProviderApiKeyCredentialKind(credentialKind)) {
+        providerIds.add(providerId)
+      }
+      continue
+    }
+
+    if (meta.entityType !== 'sync_tombstone') continue
+    const [entityType, entityId] = meta.idValues
+    if (entityType !== 'provider_credential' || !entityId) continue
+    const idValues = decodeStorageV2CompositeEntityId(entityId, 2)
+    if (!idValues) continue
+    const [providerId, credentialKind] = idValues
+    if (providerId && isProviderApiKeyCredentialKind(credentialKind)) {
+      providerIds.add(providerId)
+    }
+  }
+
   return providerIds
 }
 
@@ -3966,9 +3997,16 @@ export class AppDataSyncService {
       }
     }
 
-    if ([...entityTypes].some((entityType) => PROVIDER_RUNTIME_ENTITY_TYPES.has(entityType))) {
+    const apiKeyCredentialProviderIds = getStorageV2ApiKeyCredentialProviderIds(manifest)
+    const modelProviderIds = getStorageV2ModelProviderIds(manifest)
+    const hasProviderRuntimeRecords =
+      [...entityTypes].some((entityType) => PROVIDER_RUNTIME_ENTITY_TYPES.has(entityType)) ||
+      apiKeyCredentialProviderIds.size > 0
+
+    if (hasProviderRuntimeRecords) {
       await storageV2Service.projectProvidersToDataApiRuntime({
-        modelProviderIds: getStorageV2ModelProviderIds(manifest)
+        apiKeyProviderIds: apiKeyCredentialProviderIds,
+        modelProviderIds
       })
       projected = true
     }
