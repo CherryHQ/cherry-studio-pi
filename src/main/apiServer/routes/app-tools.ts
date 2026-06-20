@@ -49,13 +49,31 @@ const SETTINGS_SECTIONS = [
   ['about', 'About', '/settings/about']
 ].map(([id, label, route]) => ({ id, label, route }))
 
-async function getNotesRoot() {
+function createAppToolsAbortError(signal: AbortSignal, fallbackMessage = 'App tools request was aborted') {
+  const reason = signal.reason
+  if (reason instanceof Error) return reason
+  if (typeof reason === 'string' && reason.trim()) return new Error(reason.trim())
+  return new Error(fallbackMessage)
+}
+
+function throwIfAppToolsSignalAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return
+  throw createAppToolsAbortError(signal)
+}
+
+async function getNotesRoot(signal?: AbortSignal) {
+  throwIfAppToolsSignalAborted(signal)
   const preferredPath = await Promise.resolve()
     .then(() => application.get('PreferenceService').get('feature.notes.path'))
     .catch(() => '')
+  throwIfAppToolsSignalAborted(signal)
   if (typeof preferredPath === 'string' && preferredPath.trim()) return path.resolve(preferredPath.trim())
 
-  const noteState = await readRendererStoreValue<any>('state.note').catch(() => null)
+  const noteState = await readRendererStoreValue<any>('state.note', { signal }).catch((error) => {
+    if (signal?.aborted) throw error
+    return null
+  })
+  throwIfAppToolsSignalAborted(signal)
   return path.resolve(noteState?.notesPath || getNotesDir())
 }
 
@@ -209,17 +227,19 @@ function toNoteTreePath(root: string, entryPath: string, stripMarkdownExt = fals
   return `/${relativePath}`
 }
 
-async function scanNotesTreeBounded(root: string) {
+async function scanNotesTreeBounded(root: string, signal?: AbortSignal) {
   let scannedEntries = 0
   let scanTruncated = false
 
   const scanDirectory = async (dirPath: string, depth: number): Promise<any[]> => {
+    throwIfAppToolsSignalAborted(signal)
     if (depth > MAX_NOTES_LIST_DEPTH || scanTruncated) {
       scanTruncated = true
       return []
     }
 
     const entries = await fs.readdir(dirPath, { withFileTypes: true }).catch(() => [])
+    throwIfAppToolsSignalAborted(signal)
     const nodes: any[] = []
 
     entries.sort((left, right) => {
@@ -228,6 +248,7 @@ async function scanNotesTreeBounded(root: string) {
     })
 
     for (const entry of entries) {
+      throwIfAppToolsSignalAborted(signal)
       if (entry.name.startsWith('.')) continue
       scannedEntries += 1
       if (scannedEntries > MAX_NOTES_LIST_SCAN_ENTRIES) {
@@ -239,6 +260,7 @@ async function scanNotesTreeBounded(root: string) {
       const externalPath = entryPath.replace(/\\/g, '/')
       if (entry.isDirectory()) {
         const stats = await fs.stat(entryPath).catch(() => null)
+        throwIfAppToolsSignalAborted(signal)
         nodes.push({
           id: noteNodeId(externalPath),
           name: entry.name,
@@ -255,6 +277,7 @@ async function scanNotesTreeBounded(root: string) {
       if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== '.md') continue
 
       const stats = await fs.stat(entryPath).catch(() => null)
+      throwIfAppToolsSignalAborted(signal)
       const name = path.basename(entry.name, path.extname(entry.name))
       nodes.push({
         id: noteNodeId(externalPath),
@@ -279,15 +302,17 @@ async function scanNotesTreeBounded(root: string) {
   }
 }
 
-async function collectNoteFilesForSearch(root: string) {
+async function collectNoteFilesForSearch(root: string, signal?: AbortSignal) {
   const files: any[] = []
   const stack = [{ dirPath: root, depth: 0 }]
   let scannedEntries = 0
   let scanTruncated = false
 
   while (stack.length > 0 && files.length < MAX_NOTES_SEARCH_FILES && !scanTruncated) {
+    throwIfAppToolsSignalAborted(signal)
     const current = stack.pop()!
     const entries = await fs.readdir(current.dirPath, { withFileTypes: true }).catch(() => [])
+    throwIfAppToolsSignalAborted(signal)
     const childDirectories: Array<{ dirPath: string; depth: number }> = []
 
     entries.sort((left, right) => {
@@ -296,6 +321,7 @@ async function collectNoteFilesForSearch(root: string) {
     })
 
     for (const entry of entries) {
+      throwIfAppToolsSignalAborted(signal)
       if (entry.name.startsWith('.')) continue
       scannedEntries += 1
       if (scannedEntries > MAX_NOTES_LIST_SCAN_ENTRIES) {
@@ -340,11 +366,15 @@ async function collectNoteFilesForSearch(root: string) {
   }
 }
 
-async function readTextFilePreview(filePath: string, maxBytes: number) {
+async function readTextFilePreview(filePath: string, maxBytes: number, signal?: AbortSignal) {
+  throwIfAppToolsSignalAborted(signal)
   const stat = await fs.stat(filePath)
+  throwIfAppToolsSignalAborted(signal)
   if (stat.size <= maxBytes) {
+    const content = await fs.readFile(filePath, 'utf8')
+    throwIfAppToolsSignalAborted(signal)
     return {
-      content: await fs.readFile(filePath, 'utf8'),
+      content,
       byteSize: stat.size,
       truncated: false,
       maxBytes
@@ -353,8 +383,10 @@ async function readTextFilePreview(filePath: string, maxBytes: number) {
 
   const handle = await fs.open(filePath, 'r')
   try {
+    throwIfAppToolsSignalAborted(signal)
     const buffer = Buffer.alloc(maxBytes)
     const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0)
+    throwIfAppToolsSignalAborted(signal)
     return {
       content: buffer.subarray(0, bytesRead).toString('utf8'),
       byteSize: stat.size,
@@ -420,23 +452,30 @@ appToolsRouter.post('/capabilities/:id/call', async (req, res, next) => {
 })
 
 appToolsRouter.get('/settings', async (_req, res, next) => {
+  const responseAbort = createResponseAbortSignal(res)
   try {
-    res.json({ settings: sanitizeForAgent(await readSettingsForAgent()) })
+    res.json({ settings: sanitizeForAgent(await readSettingsForAgent(responseAbort.signal)) })
   } catch (error) {
     next(error)
+  } finally {
+    responseAbort.dispose()
   }
 })
 
 appToolsRouter.get('/settings/value', async (req, res, next) => {
+  const responseAbort = createResponseAbortSignal(res)
   try {
-    const settings = await readSettingsForAgent()
+    const settings = await readSettingsForAgent(responseAbort.signal)
     res.json({ path: req.query.path || '', value: sanitizeForAgent(pickPath(settings, String(req.query.path || ''))) })
   } catch (error) {
     next(error)
+  } finally {
+    responseAbort.dispose()
   }
 })
 
 appToolsRouter.patch('/settings/value', async (req, res, next) => {
+  const responseAbort = createResponseAbortSignal(res)
   try {
     const { path: keyPath, value } = req.body ?? {}
     const normalizedPath = String(keyPath || '').trim()
@@ -448,10 +487,12 @@ appToolsRouter.patch('/settings/value', async (req, res, next) => {
       res.status(400).json({ error: 'Setting value is required' })
       return
     }
-    await persistSettingValue(normalizedPath, value)
+    await persistSettingValue(normalizedPath, value, responseAbort.signal)
     res.json({ ok: true, path: normalizedPath, value: sanitizeForAgent(value) })
   } catch (error) {
     next(error)
+  } finally {
+    responseAbort.dispose()
   }
 })
 
@@ -482,27 +523,35 @@ appToolsRouter.post('/navigate', async (req, res, next) => {
 })
 
 appToolsRouter.get('/notes', async (_req, res, next) => {
+  const responseAbort = createResponseAbortSignal(res)
   try {
-    const root = await getNotesRoot()
-    res.json({ root, ...(await scanNotesTreeBounded(root)) })
+    const root = await getNotesRoot(responseAbort.signal)
+    res.json({ root, ...(await scanNotesTreeBounded(root, responseAbort.signal)) })
   } catch (error) {
     next(error)
+  } finally {
+    responseAbort.dispose()
   }
 })
 
 appToolsRouter.get('/notes/read', async (req, res, next) => {
+  const responseAbort = createResponseAbortSignal(res)
   try {
-    const root = await getNotesRoot()
+    const root = await getNotesRoot(responseAbort.signal)
     const filePath = resolveNotePath(root, String(req.query.path || ''), true)
     await assertResolvedInsideNotesRoot(root, filePath)
+    throwIfAppToolsSignalAborted(responseAbort.signal)
     const maxBytes = normalizePositiveInteger(req.query.maxBytes, DEFAULT_NOTE_READ_MAX_BYTES, MAX_NOTE_READ_MAX_BYTES)
-    res.json({ path: filePath, ...(await readTextFilePreview(filePath, maxBytes)) })
+    res.json({ path: filePath, ...(await readTextFilePreview(filePath, maxBytes, responseAbort.signal)) })
   } catch (error) {
     next(error)
+  } finally {
+    responseAbort.dispose()
   }
 })
 
 appToolsRouter.get('/notes/search', async (req, res, next) => {
+  const responseAbort = createResponseAbortSignal(res)
   try {
     const query = String(req.query.q || '')
       .trim()
@@ -511,17 +560,19 @@ appToolsRouter.get('/notes/search', async (req, res, next) => {
       res.status(400).json({ error: 'Missing search query' })
       return
     }
-    const root = await getNotesRoot()
+    const root = await getNotesRoot(responseAbort.signal)
     const limit = normalizePositiveInteger(req.query.limit, DEFAULT_NOTES_SEARCH_LIMIT, MAX_NOTES_SEARCH_LIMIT)
-    const { files, scannedEntries, scanTruncated } = await collectNoteFilesForSearch(root)
+    const { files, scannedEntries, scanTruncated } = await collectNoteFilesForSearch(root, responseAbort.signal)
     const matches: any[] = []
     let skippedLargeFiles = 0
     let searched = 0
     for (const file of files) {
+      throwIfAppToolsSignalAborted(responseAbort.signal)
       if (matches.length >= limit) break
       searched += 1
       const nameMatches = file.name.toLowerCase().includes(query)
       const stat = await fs.stat(file.externalPath).catch(() => null)
+      throwIfAppToolsSignalAborted(responseAbort.signal)
       if (!stat?.isFile()) continue
 
       if (nameMatches) {
@@ -535,6 +586,7 @@ appToolsRouter.get('/notes/search', async (req, res, next) => {
       }
 
       const content = await fs.readFile(file.externalPath, 'utf8').catch(() => '')
+      throwIfAppToolsSignalAborted(responseAbort.signal)
       const index = content.toLowerCase().indexOf(query)
       if (index >= 0) {
         matches.push({
@@ -557,85 +609,115 @@ appToolsRouter.get('/notes/search', async (req, res, next) => {
     })
   } catch (error) {
     next(error)
+  } finally {
+    responseAbort.dispose()
   }
 })
 
 appToolsRouter.post('/notes', async (req, res, next) => {
+  const responseAbort = createResponseAbortSignal(res)
   try {
-    const root = await getNotesRoot()
+    const root = await getNotesRoot(responseAbort.signal)
     const parent = resolveNotePath(root, req.body?.parent || '')
     await assertResolvedInsideNotesRoot(root, parent, 'Note parent')
+    throwIfAppToolsSignalAborted(responseAbort.signal)
     await fs.mkdir(parent, { recursive: true })
     const safeName = getName(parent, req.body?.name || 'Untitled', true)
     const filePath = path.join(parent, `${safeName}.md`)
     await assertResolvedInsideNotesRoot(root, filePath)
+    throwIfAppToolsSignalAborted(responseAbort.signal)
     await fs.writeFile(filePath, normalizeNoteContent(req.body?.content), 'utf8')
     notifyMainProcessDataSyncLocalChange('file', { source: 'api.app-tools.notes.create', path: filePath })
     res.json({ ok: true, path: filePath, name: safeName })
   } catch (error) {
     next(error)
+  } finally {
+    responseAbort.dispose()
   }
 })
 
 appToolsRouter.put('/notes', async (req, res, next) => {
+  const responseAbort = createResponseAbortSignal(res)
   try {
-    const root = await getNotesRoot()
+    const root = await getNotesRoot(responseAbort.signal)
     const filePath = resolveNotePath(root, req.body?.path, true)
     await assertResolvedInsideNotesRoot(root, filePath)
+    throwIfAppToolsSignalAborted(responseAbort.signal)
     await fs.writeFile(filePath, normalizeNoteContent(req.body?.content), 'utf8')
     notifyMainProcessDataSyncLocalChange('file', { source: 'api.app-tools.notes.write', path: filePath })
     res.json({ ok: true, path: filePath })
   } catch (error) {
     next(error)
+  } finally {
+    responseAbort.dispose()
   }
 })
 
 appToolsRouter.delete('/notes', async (req, res, next) => {
+  const responseAbort = createResponseAbortSignal(res)
   try {
-    const root = await getNotesRoot()
+    const root = await getNotesRoot(responseAbort.signal)
     const target = await resolveNoteDeletePath(root, String(req.query.path || req.body?.path || ''))
     if (isNotesRoot(root, target)) {
       res.status(400).json({ error: 'Cannot delete the notes root directory' })
       return
     }
     await assertResolvedInsideNotesRoot(root, target)
+    throwIfAppToolsSignalAborted(responseAbort.signal)
     await fs.rm(target, { force: true, recursive: true })
     notifyMainProcessDataSyncLocalChange('file', { source: 'api.app-tools.notes.delete', path: target })
     res.json({ ok: true, path: target })
   } catch (error) {
     next(error)
+  } finally {
+    responseAbort.dispose()
   }
 })
 
 appToolsRouter.get('/paintings/providers', async (_req, res, next) => {
+  const responseAbort = createResponseAbortSignal(res)
   try {
-    const settings = await readSettingsForAgent()
+    const settings = await readSettingsForAgent(responseAbort.signal)
     res.json({ defaultProvider: settings?.defaultPaintingProvider, namespaces: PAINTING_NAMESPACES })
   } catch (error) {
     next(error)
+  } finally {
+    responseAbort.dispose()
   }
 })
 
 appToolsRouter.get('/paintings', async (req, res, next) => {
+  const responseAbort = createResponseAbortSignal(res)
   try {
-    const paintings = await readRendererStoreValue<any>('state.paintings').catch(() => ({}))
+    const paintings = await readRendererStoreValue<any>('state.paintings', { signal: responseAbort.signal }).catch(
+      (error) => {
+        if (responseAbort.signal.aborted) throw error
+        return {}
+      }
+    )
+    throwIfAppToolsSignalAborted(responseAbort.signal)
     res.json(listPaintingHistory(paintings, req.query))
   } catch (error) {
     next(error)
+  } finally {
+    responseAbort.dispose()
   }
 })
 
 appToolsRouter.patch('/paintings/default-provider', async (req, res, next) => {
+  const responseAbort = createResponseAbortSignal(res)
   try {
     const provider = normalizePaintingProviderId(req.body?.provider)
     if (!provider) {
       res.status(400).json({ error: 'Painting provider is required' })
       return
     }
-    await persistSettingValue('defaultPaintingProvider', provider)
+    await persistSettingValue('defaultPaintingProvider', provider, responseAbort.signal)
     res.json({ ok: true, defaultProvider: provider })
   } catch (error) {
     next(error)
+  } finally {
+    responseAbort.dispose()
   }
 })
 

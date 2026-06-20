@@ -96,17 +96,9 @@ vi.mock('@main/utils/file', () => ({
 import { appToolsRoutes } from '../app-tools'
 
 async function requestAppTools(method: string, requestPath: string, body?: unknown) {
-  const app = express()
-  app.use(express.json())
-  app.use(appToolsRoutes)
-
-  const server = await new Promise<Server>((resolve) => {
-    const listeningServer = app.listen(0, () => resolve(listeningServer))
-  })
+  const { baseUrl, close } = await startAppToolsServer()
   try {
-    const address = server.address()
-    if (!address || typeof address === 'string') throw new Error('Test server did not bind to a TCP port')
-    const response = await fetch(`http://127.0.0.1:${address.port}${requestPath}`, {
+    const response = await fetch(`${baseUrl}${requestPath}`, {
       method,
       headers: body === undefined ? undefined : { 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body)
@@ -114,9 +106,27 @@ async function requestAppTools(method: string, requestPath: string, body?: unkno
     const json = await response.json()
     return { status: response.status, json }
   } finally {
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()))
-    })
+    await close()
+  }
+}
+
+async function startAppToolsServer() {
+  const app = express()
+  app.use(express.json())
+  app.use(appToolsRoutes)
+
+  const server = await new Promise<Server>((resolve) => {
+    const listeningServer = app.listen(0, () => resolve(listeningServer))
+  })
+  const address = server.address()
+  if (!address || typeof address === 'string') throw new Error('Test server did not bind to a TCP port')
+
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()))
+      })
   }
 }
 
@@ -252,6 +262,46 @@ describe('app tools notes routes', () => {
       await fs.rm(outsideDir, { recursive: true, force: true })
     }
   })
+
+  it('stops notes search after the API client disconnects', async () => {
+    await fs.writeFile(path.join(tmpDir, 'long-search.md'), 'needle\n', 'utf8')
+
+    let markReaddirStarted!: () => void
+    let releaseReaddir!: () => void
+    const readdirStarted = new Promise<void>((resolve) => {
+      markReaddirStarted = resolve
+    })
+    const unblockReaddir = new Promise<void>((resolve) => {
+      releaseReaddir = resolve
+    })
+    const originalReaddir = fs.readdir.bind(fs)
+    const readdirSpy = vi.spyOn(fs, 'readdir').mockImplementationOnce(async (...args: any[]) => {
+      markReaddirStarted()
+      await unblockReaddir
+      return originalReaddir(...(args as [any, any])) as any
+    })
+    const statSpy = vi.spyOn(fs, 'stat')
+    const { baseUrl, close } = await startAppToolsServer()
+    const controller = new AbortController()
+
+    try {
+      const request = fetch(`${baseUrl}/notes/search?q=needle`, { signal: controller.signal }).catch((error) => error)
+      await readdirStarted
+      controller.abort(new Error('test client disconnected'))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      releaseReaddir()
+
+      await expect(request).resolves.toBeInstanceOf(Error)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+
+      expect(readdirSpy).toHaveBeenCalled()
+      expect(statSpy).not.toHaveBeenCalled()
+    } finally {
+      await close()
+      readdirSpy.mockRestore()
+      statSpy.mockRestore()
+    }
+  })
 })
 
 describe('app tools settings routes', () => {
@@ -278,7 +328,7 @@ describe('app tools settings routes', () => {
       status: 200,
       json: { ok: true, path: 'showTopics', value: false }
     })
-    expect(mocks.persistSettingValue).toHaveBeenCalledWith('showTopics', false)
+    expect(mocks.persistSettingValue).toHaveBeenCalledWith('showTopics', false, expect.any(AbortSignal))
   })
 
   it('returns the default settings route when opening settings without a body route', async () => {
@@ -360,6 +410,10 @@ describe('app tools painting routes', () => {
       status: 200,
       json: { ok: true, defaultProvider: 'openai_image_generate' }
     })
-    expect(mocks.persistSettingValue).toHaveBeenCalledWith('defaultPaintingProvider', 'openai_image_generate')
+    expect(mocks.persistSettingValue).toHaveBeenCalledWith(
+      'defaultPaintingProvider',
+      'openai_image_generate',
+      expect.any(AbortSignal)
+    )
   })
 })
