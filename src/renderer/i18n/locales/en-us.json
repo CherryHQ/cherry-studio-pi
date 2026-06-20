@@ -1269,6 +1269,7 @@
         "collapse_in": "Collapse",
         "collapse_out": "Remove from collapse",
         "expand": "Expand",
+        "external_app_not_found": "External app not found: {{name}}",
         "file_not_found": "File not found: {{path}}",
         "open_file": "Open File",
         "open_file_error": "Failed to open file: {{path}}",

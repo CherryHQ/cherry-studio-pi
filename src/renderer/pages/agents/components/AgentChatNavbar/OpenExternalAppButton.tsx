@@ -38,7 +38,7 @@ const OpenExternalAppButton = ({ workdir, className }: OpenExternalAppButtonProp
           break
         default:
           logger.error(`Unexpected Error: External app not found: ${app.id}`)
-          window.toast.error(`Unexpected Error: External app not found: ${app.id}`)
+          window.toast.error(t('chat.input.tools.external_app_not_found', { name: app.id }))
       }
     },
     [t, workdir]
@@ -55,7 +55,7 @@ const OpenExternalAppButton = ({ workdir, className }: OpenExternalAppButtonProp
     const config = availableEditors.find((app) => app.id === e.key)
     if (!config) {
       logger.error(`Unexpected Error: External app not found: ${e.key}`)
-      window.toast.error(`Unexpected Error: External app not found: ${e.key}`)
+      window.toast.error(t('chat.input.tools.external_app_not_found', { name: e.key }))
       return
     }
     setSelectedEditorId(config.id)

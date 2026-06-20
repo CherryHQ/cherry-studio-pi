@@ -398,9 +398,6 @@
           "failed": "Error al reordenar las sesiones"
         }
       },
-      "tool": {
-        "disabled": "La herramienta {{toolName}} está deshabilitada para este agente."
-      },
       "update": {
         "error": {
           "failed": "Error al actualizar la sesión"
@@ -1272,6 +1269,7 @@
         "collapse_in": "Agregar a la contracción",
         "collapse_out": "Eliminar de la contracción",
         "expand": "Expandir",
+        "external_app_not_found": "[to be translated]:External app not found: {{name}}",
         "file_not_found": "Archivo no encontrado: {{path}}",
         "open_file": "Abrir archivo",
         "open_file_error": "Error al abrir el archivo: {{path}}",
@@ -6176,6 +6174,7 @@
           "placeholder": "Por ejemplo, GPT-3.5",
           "tooltip": "Por ejemplo, GPT-4"
         },
+        "provider_enable_failed": "[to be translated]:The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors.",
         "supported_text_delta": {
           "label": "salida de texto incremental",
           "tooltip": "Cuando el modelo no sea compatible, desactive este botón."

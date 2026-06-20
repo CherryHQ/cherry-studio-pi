@@ -398,9 +398,6 @@
           "failed": "Nu s-a putut reordona sesiunile"
         }
       },
-      "tool": {
-        "disabled": "Instrumentul {{toolName}} este dezactivat pentru acest agent."
-      },
       "update": {
         "error": {
           "failed": "Nu s-a putut actualiza sesiunea"
@@ -1272,6 +1269,7 @@
         "collapse_in": "Restrânge",
         "collapse_out": "Elimină din restrângere",
         "expand": "Extinde",
+        "external_app_not_found": "[to be translated]:External app not found: {{name}}",
         "file_not_found": "Fișier negăsit: {{path}}",
         "open_file": "Deschide fișier",
         "open_file_error": "Nu s-a putut deschide fișierul: {{path}}",
@@ -6176,6 +6174,7 @@
           "placeholder": "Opțional de ex. GPT-4",
           "tooltip": "Opțional de ex. GPT-4"
         },
+        "provider_enable_failed": "[to be translated]:The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors.",
         "supported_text_delta": {
           "label": "Suportă ieșire text incrementală",
           "tooltip": "Modelul returnează text incremental, mai degrabă decât tot odată. Activat implicit, dacă modelul nu acceptă acest lucru, te rugăm să dezactivezi această opțiune"

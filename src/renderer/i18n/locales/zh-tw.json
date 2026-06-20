@@ -1269,6 +1269,7 @@
         "collapse_in": "加入折疊",
         "collapse_out": "移出折疊",
         "expand": "展開",
+        "external_app_not_found": "找不到外部應用程式: {{name}}",
         "file_not_found": "檔案不存在: {{path}}",
         "open_file": "開啟檔案",
         "open_file_error": "無法開啟檔案: {{path}}",

@@ -1269,6 +1269,7 @@
         "collapse_in": "加入折叠",
         "collapse_out": "移出折叠",
         "expand": "展开",
+        "external_app_not_found": "找不到外部应用: {{name}}",
         "file_not_found": "文件不存在: {{path}}",
         "open_file": "打开文件",
         "open_file_error": "无法打开文件: {{path}}",

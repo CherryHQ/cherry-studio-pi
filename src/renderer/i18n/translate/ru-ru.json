@@ -398,9 +398,6 @@
           "failed": "Не удалось изменить порядок сеансов"
         }
       },
-      "tool": {
-        "disabled": "Инструмент {{toolName}} отключен для этого агента."
-      },
       "update": {
         "error": {
           "failed": "Не удалось обновить сеанс"
@@ -1272,6 +1269,7 @@
         "collapse_in": "Свернуть",
         "collapse_out": "Развернуть",
         "expand": "Развернуть",
+        "external_app_not_found": "[to be translated]:External app not found: {{name}}",
         "file_not_found": "Файл не найден: {{path}}",
         "open_file": "Открыть файл",
         "open_file_error": "Не удалось открыть файл: {{path}}",
@@ -6176,6 +6174,7 @@
           "placeholder": "Необязательно, например, GPT-4",
           "tooltip": "Необязательно, например, GPT-4"
         },
+        "provider_enable_failed": "[to be translated]:The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors.",
         "supported_text_delta": {
           "label": "Поддержка инкрементного текстового вывода",
           "tooltip": "Модель возвращает текст по частям, а не одним блоком, по умолчанию включено, если модель не поддерживает, закройте эту опцию"

@@ -398,9 +398,6 @@
           "failed": "Falha ao reordenar as sessões"
         }
       },
-      "tool": {
-        "disabled": "A ferramenta {{toolName}} está desativada para este agente."
-      },
       "update": {
         "error": {
           "failed": "Falha ao atualizar a sessão"
@@ -1272,6 +1269,7 @@
         "collapse_in": "Incluir no recolhimento",
         "collapse_out": "Remover do recolhimento",
         "expand": "Expandir",
+        "external_app_not_found": "[to be translated]:External app not found: {{name}}",
         "file_not_found": "Arquivo não encontrado: {{path}}",
         "open_file": "Abrir Arquivo",
         "open_file_error": "Falha ao abrir o arquivo: {{path}}",
@@ -6176,6 +6174,7 @@
           "placeholder": "Exemplo: GPT-3.5",
           "tooltip": "Por exemplo, GPT-4"
         },
+        "provider_enable_failed": "[to be translated]:The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors.",
         "supported_text_delta": {
           "label": "saída de texto incremental",
           "tooltip": "Quando o modelo não for suportado, desative este botão"

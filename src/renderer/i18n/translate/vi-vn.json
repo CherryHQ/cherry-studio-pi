@@ -398,9 +398,6 @@
           "failed": "Không thể sắp xếp lại các phiên"
         }
       },
-      "tool": {
-        "disabled": "Công cụ {{toolName}} đã bị tắt cho agent này."
-      },
       "update": {
         "error": {
           "failed": "Không cập nhật được phiên"
@@ -1272,6 +1269,7 @@
         "collapse_in": "Thu gọn",
         "collapse_out": "Gỡ khỏi trạng thái thu gọn",
         "expand": "Mở rộng",
+        "external_app_not_found": "[to be translated]:External app not found: {{name}}",
         "file_not_found": "Không tìm thấy tệp: {{path}}",
         "open_file": "Mở Tệp",
         "open_file_error": "Không mở được tệp: {{path}}",
@@ -6176,6 +6174,7 @@
           "placeholder": "Opcional p. ej. GPT-4",
           "tooltip": "Opcjonalnie np. GPT-4"
         },
+        "provider_enable_failed": "[to be translated]:The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors.",
         "supported_text_delta": {
           "label": "Hỗ trợ xuất văn bản tăng dần",
           "tooltip": "Mô hình trả về văn bản theo từng phần, thay vì toàn bộ cùng lúc. Được bật theo mặc định, nếu mô hình không hỗ trợ, vui lòng tắt tùy chọn này"

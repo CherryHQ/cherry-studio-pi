@@ -398,9 +398,6 @@
           "failed": "Αποτυχία αναδιάταξης συνεδριών"
         }
       },
-      "tool": {
-        "disabled": "Το εργαλείο {{toolName}} είναι απενεργοποιημένο για αυτόν τον agent."
-      },
       "update": {
         "error": {
           "failed": "Αποτυχία ενημέρωσης της συνεδρίας"
@@ -1272,6 +1269,7 @@
         "collapse_in": "Εισαγωγή σε σύμπτυξη",
         "collapse_out": "Αφαίρεση από σύμπτυξη",
         "expand": "Επέκταση",
+        "external_app_not_found": "[to be translated]:External app not found: {{name}}",
         "file_not_found": "Δεν βρέθηκε το αρχείο: {{path}}",
         "open_file": "Άνοιγμα Αρχείου",
         "open_file_error": "Αποτυχία ανοίγματος αρχείου: {{path}}",
@@ -6176,6 +6174,7 @@
           "placeholder": "Για παράδειγμα GPT-3.5",
           "tooltip": "Για παράδειγμα GPT-4"
         },
+        "provider_enable_failed": "[to be translated]:The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors.",
         "supported_text_delta": {
           "label": "αυξητική έξοδος κειμένου",
           "tooltip": "Όταν το μοντέλο δεν υποστηρίζεται, απενεργοποιήστε αυτό το κουμπί"

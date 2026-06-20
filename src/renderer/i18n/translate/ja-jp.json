@@ -398,9 +398,6 @@
           "failed": "セッションの並び替えに失敗しました"
         }
       },
-      "tool": {
-        "disabled": "{{toolName}} ツールはこのエージェントで無効になっています。"
-      },
       "update": {
         "error": {
           "failed": "セッションの更新に失敗しました"
@@ -1272,6 +1269,7 @@
         "collapse_in": "折りたたむ",
         "collapse_out": "展開",
         "expand": "展開",
+        "external_app_not_found": "[to be translated]:External app not found: {{name}}",
         "file_not_found": "ファイルが見つかりません: {{path}}",
         "open_file": "ファイルを開く",
         "open_file_error": "ファイルを開けませんでした: {{path}}",
@@ -6176,6 +6174,7 @@
           "placeholder": "例：GPT-4",
           "tooltip": "例：GPT-4"
         },
+        "provider_enable_failed": "[to be translated]:The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors.",
         "supported_text_delta": {
           "label": "インクリメンタルテキスト出力のサポート",
           "tooltip": "モデルがテキストをチャンクで返す場合、デフォルトで有効になっています。モデルがサポートしていない場合は、このオプションを無効にしてください"

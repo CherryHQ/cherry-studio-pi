@@ -398,9 +398,6 @@
           "failed": "Fehler beim Neuordnen der Sitzungen"
         }
       },
-      "tool": {
-        "disabled": "Das Tool {{toolName}} ist für diesen Agenten deaktiviert."
-      },
       "update": {
         "error": {
           "failed": "Sitzung aktualisieren fehlgeschlagen"
@@ -1272,6 +1269,7 @@
         "collapse_in": "Zum Falten hinzufügen",
         "collapse_out": "Aus Falten entfernen",
         "expand": "Ausklappen",
+        "external_app_not_found": "[to be translated]:External app not found: {{name}}",
         "file_not_found": "Datei nicht gefunden: {{path}}",
         "open_file": "Datei öffnen",
         "open_file_error": "Fehler beim Öffnen der Datei: {{path}}",
@@ -6176,6 +6174,7 @@
           "placeholder": "Beispiel: GPT-4",
           "tooltip": "Beispiel: GPT-4"
         },
+        "provider_enable_failed": "[to be translated]:The model was added, but the provider could not be enabled. Enable this provider first, otherwise these models will not appear in Chat or Agent model selectors.",
         "supported_text_delta": {
           "label": "Unterstützt inkrementelle Textausgabe",
           "tooltip": "Modell gibt Text inkrementell zurück statt alles auf einmal. Standardmäßig aktiviert, bei Nicht-Unterstützung deaktivieren"
