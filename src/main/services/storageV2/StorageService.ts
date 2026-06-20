@@ -74,6 +74,9 @@ const MCP_PROVIDER_TOKEN_KEYS = new Set([
   'bailian_token'
 ])
 const PROVIDER_EXTRA_HEADERS_CREDENTIAL_KIND = 'extraHeaders'
+const PROVIDER_EXTRA_HEADER_SCOPES = ['settings', 'providerSettings'] as const
+type ProviderExtraHeaderScope = (typeof PROVIDER_EXTRA_HEADER_SCOPES)[number]
+type ProviderExtraHeadersCredentialPayload = Partial<Record<ProviderExtraHeaderScope, Record<string, string>>>
 
 function cloneRecord(value: unknown): Record<string, any> {
   if (!value || typeof value !== 'object') return {}
@@ -220,71 +223,115 @@ function parseProviderAuthConfigSecret(secret: string): AuthConfig | null {
   }
 }
 
-function parseProviderExtraHeadersSecret(secret: string): Record<string, string> | null {
+function normalizeProviderExtraHeaderRecord(value: unknown): Record<string, string> | null {
+  if (!isRecord(value)) return null
+
+  const headers = Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] =>
+        typeof entry[0] === 'string' &&
+        entry[0].trim().length > 0 &&
+        typeof entry[1] === 'string' &&
+        entry[1].trim().length > 0
+    )
+  )
+
+  return Object.keys(headers).length > 0 ? headers : null
+}
+
+function parseProviderExtraHeadersSecret(secret: string): ProviderExtraHeadersCredentialPayload | null {
   try {
     const parsed = JSON.parse(secret) as unknown
+    const legacyHeaders = normalizeProviderExtraHeaderRecord(parsed)
+    if (legacyHeaders) return { settings: legacyHeaders }
     if (!isRecord(parsed)) return null
 
-    return Object.fromEntries(
-      Object.entries(parsed).filter(
-        (entry): entry is [string, string] =>
-          typeof entry[0] === 'string' &&
-          entry[0].trim().length > 0 &&
-          typeof entry[1] === 'string' &&
-          entry[1].trim().length > 0
-      )
-    )
+    const payload: ProviderExtraHeadersCredentialPayload = {}
+    for (const scope of PROVIDER_EXTRA_HEADER_SCOPES) {
+      const headers = normalizeProviderExtraHeaderRecord(parsed[scope])
+      if (headers) payload[scope] = headers
+    }
+
+    return Object.keys(payload).length > 0 ? payload : null
   } catch {
     return null
   }
 }
 
-function getProviderExtraHeaders(provider: Provider): Record<string, string> | null {
-  const settings = (provider as unknown as { settings?: unknown }).settings
-  if (!isRecord(settings) || !isRecord(settings.extraHeaders)) return null
+function getProviderExtraHeaders(provider: Provider, scope: ProviderExtraHeaderScope): Record<string, string> | null {
+  const container = (provider as unknown as Record<string, unknown>)[scope]
+  if (!isRecord(container) || !isRecord(container.extraHeaders)) return null
 
   return Object.fromEntries(
-    Object.entries(settings.extraHeaders).filter(
+    Object.entries(container.extraHeaders).filter(
       (entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string'
     )
   )
 }
 
 function hasProviderExtraHeadersField(provider: Provider) {
-  const settings = (provider as unknown as { settings?: unknown }).settings
-  return isRecord(settings) && Object.hasOwn(settings, 'extraHeaders')
+  const providerLike = provider as unknown as Record<string, unknown>
+  return PROVIDER_EXTRA_HEADER_SCOPES.some((scope) => {
+    const container = providerLike[scope]
+    return isRecord(container) && Object.hasOwn(container, 'extraHeaders')
+  })
 }
 
-function getProviderSensitiveExtraHeaders(provider: Provider) {
-  const headers = getProviderExtraHeaders(provider)
-  if (!headers) return {}
+function getProviderSensitiveExtraHeaders(provider: Provider): ProviderExtraHeadersCredentialPayload {
+  const sensitiveByScope: ProviderExtraHeadersCredentialPayload = {}
 
-  return Object.fromEntries(
-    Object.entries(headers).filter(
-      ([headerName, headerValue]) =>
-        isSensitiveHeaderName(headerName) && headerValue.trim() && !isStorageV2SecretRefValue(headerValue)
+  for (const scope of PROVIDER_EXTRA_HEADER_SCOPES) {
+    const headers = getProviderExtraHeaders(provider, scope)
+    if (!headers) continue
+
+    const sensitiveHeaders = Object.fromEntries(
+      Object.entries(headers).filter(
+        ([headerName, headerValue]) =>
+          isSensitiveHeaderName(headerName) && headerValue.trim() && !isStorageV2SecretRefValue(headerValue)
+      )
     )
-  )
-}
-
-function stripProviderSensitiveExtraHeaders(provider: Provider, sensitiveHeaders: Record<string, string>) {
-  const sensitiveHeaderNames = new Set(Object.keys(sensitiveHeaders))
-  if (sensitiveHeaderNames.size === 0) return provider
-
-  const providerLike = provider as unknown as Record<string, any>
-  const settings = isRecord(providerLike.settings) ? { ...providerLike.settings } : {}
-  const extraHeaders = isRecord(settings.extraHeaders) ? { ...settings.extraHeaders } : {}
-  for (const headerName of sensitiveHeaderNames) {
-    delete extraHeaders[headerName]
+    if (Object.keys(sensitiveHeaders).length > 0) {
+      sensitiveByScope[scope] = sensitiveHeaders
+    }
   }
 
-  return {
-    ...providerLike,
-    settings: {
-      ...settings,
+  return sensitiveByScope
+}
+
+function stripProviderSensitiveExtraHeaders(
+  provider: Provider,
+  sensitiveHeaders: ProviderExtraHeadersCredentialPayload
+) {
+  if (Object.keys(sensitiveHeaders).length === 0) return provider
+
+  const providerLike = provider as unknown as Record<string, any>
+  const nextProvider = { ...providerLike }
+  for (const scope of PROVIDER_EXTRA_HEADER_SCOPES) {
+    const sensitiveHeaderNames = new Set(Object.keys(sensitiveHeaders[scope] ?? {}))
+    if (sensitiveHeaderNames.size === 0) continue
+
+    const container = isRecord(nextProvider[scope]) ? { ...nextProvider[scope] } : {}
+    const extraHeaders = isRecord(container.extraHeaders) ? { ...container.extraHeaders } : {}
+    for (const headerName of sensitiveHeaderNames) {
+      delete extraHeaders[headerName]
+    }
+    nextProvider[scope] = {
+      ...container,
       extraHeaders
     }
-  } as unknown as Provider
+  }
+
+  return nextProvider as unknown as Provider
+}
+
+function serializeProviderExtraHeadersSecretPayload(sensitiveHeaders: ProviderExtraHeadersCredentialPayload) {
+  const settingsHeaders = sensitiveHeaders.settings
+  const providerSettingsHeaders = sensitiveHeaders.providerSettings
+  if (settingsHeaders && !providerSettingsHeaders) {
+    return JSON.stringify(settingsHeaders)
+  }
+
+  return JSON.stringify(sensitiveHeaders)
 }
 
 function mergeClearCredentialKinds(
@@ -312,7 +359,7 @@ async function prepareProviderExtraHeaderCredentials(provider: Provider): Promis
       'provider',
       provider.id,
       PROVIDER_EXTRA_HEADERS_CREDENTIAL_KIND,
-      JSON.stringify(sensitiveHeaders)
+      serializeProviderExtraHeadersSecretPayload(sensitiveHeaders)
     )
   } else if (hasProviderExtraHeadersField(provider)) {
     clearCredentialKinds.push(PROVIDER_EXTRA_HEADERS_CREDENTIAL_KIND)
@@ -1068,15 +1115,20 @@ export class StorageV2Service {
           const storedExtraHeadersRef = providerCredentialRefs.extraHeaders
           if (storedExtraHeadersRef) {
             const extraHeadersSecret = await storageV2SecretVaultService.getSecret(storedExtraHeadersRef)
-            const extraHeaders = extraHeadersSecret ? parseProviderExtraHeadersSecret(extraHeadersSecret) : null
-            if (extraHeaders) {
-              const settings = isRecord(snapshot.settings) ? { ...snapshot.settings } : {}
-              const currentHeaders = isRecord(settings.extraHeaders) ? settings.extraHeaders : {}
-              snapshot.settings = {
-                ...settings,
-                extraHeaders: {
-                  ...currentHeaders,
-                  ...extraHeaders
+            const extraHeadersByScope = extraHeadersSecret ? parseProviderExtraHeadersSecret(extraHeadersSecret) : null
+            if (extraHeadersByScope) {
+              for (const scope of PROVIDER_EXTRA_HEADER_SCOPES) {
+                const extraHeaders = extraHeadersByScope[scope]
+                if (!extraHeaders) continue
+
+                const container = isRecord(snapshot[scope]) ? { ...snapshot[scope] } : {}
+                const currentHeaders = isRecord(container.extraHeaders) ? container.extraHeaders : {}
+                snapshot[scope] = {
+                  ...container,
+                  extraHeaders: {
+                    ...currentHeaders,
+                    ...extraHeaders
+                  }
                 }
               }
             } else {
