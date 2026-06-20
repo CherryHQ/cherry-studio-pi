@@ -84,11 +84,8 @@ export default class AgentSidePanelDrawer {
 
   static hide() {
     closeTransientResourceSelectors()
-    if (AgentSidePanelDrawer.closeHandler) {
-      AgentSidePanelDrawer.closeHandler()
-      return
-    }
-
+    // Programmatic closes usually happen right before a route change or modal opens.
+    // Remove the TopView immediately so the drawer cannot linger above the next surface.
     TopView.hide(TopViewKey)
     AgentSidePanelDrawer.activeResolve?.()
     AgentSidePanelDrawer.clearActive()
