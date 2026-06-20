@@ -199,6 +199,17 @@ describe('mcp app capabilities', () => {
     expect(mocks.mcpService.listAllActiveServerTools).not.toHaveBeenCalled()
   })
 
+  it('stops MCP tool listing before querying active tools when the capability signal is aborted', async () => {
+    const controller = new AbortController()
+    controller.abort('agent stopped MCP tool listing')
+
+    await expect(
+      capability('mcp.tools.list').execute({}, { source: 'agent', signal: controller.signal })
+    ).rejects.toThrow('agent stopped MCP tool listing')
+
+    expect(mocks.mcpService.listAllActiveServerTools).not.toHaveBeenCalled()
+  })
+
   it('rejects non-object MCP capability inputs before side effects', async () => {
     await expect(capability('mcp.servers.list').execute('servers' as any, { source: 'agent' })).rejects.toThrow(
       'MCP capability input must be an object'
@@ -224,6 +235,20 @@ describe('mcp app capabilities', () => {
 
     expect(result.ok).toBe(true)
     expect(mocks.mcpService.callToolById).toHaveBeenCalledWith('server__tool_1', { value: 'hello' }, 'tool-call-1')
+  })
+
+  it('stops MCP tool calls before external side effects when the capability signal is aborted', async () => {
+    const controller = new AbortController()
+    controller.abort('agent stopped MCP tool call')
+
+    await expect(
+      capability('mcp.tool.call').execute(
+        { toolId: 'server__tool_1', params: { value: 'hello' } },
+        { source: 'agent', signal: controller.signal }
+      )
+    ).rejects.toThrow('agent stopped MCP tool call')
+
+    expect(mocks.mcpService.callToolById).not.toHaveBeenCalled()
   })
 
   it('rejects empty MCP tool ids and invalid params before calling tools', async () => {

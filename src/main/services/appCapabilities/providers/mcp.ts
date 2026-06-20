@@ -123,12 +123,14 @@ export function createMcpCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['mcp', 'tools', 'list'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
         const limit = normalizeListLimit(inputObject.limit)
         const offset = normalizeOffset(inputObject.offset)
         const includeSchemas = inputObject.includeSchemas === true
+        throwIfMcpSignalAborted(context.signal)
         const tools = await mcpService.listAllActiveServerTools()
+        throwIfMcpSignalAborted(context.signal)
         const page = tools.slice(offset, offset + limit)
         return okResult('MCP tools listed', {
           total: tools.length,
@@ -159,16 +161,12 @@ export function createMcpCapabilities(): AppCapabilityDefinition[] {
       tags: ['mcp', 'tools', 'call'],
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
-        return okResult(
-          'MCP tool called',
-          sanitizeForAgent(
-            await mcpService.callToolById(
-              normalizeRequiredText(inputObject.toolId, 'MCP tool id'),
-              normalizeToolParams(inputObject.params),
-              context.toolCallId
-            )
-          )
-        )
+        const toolId = normalizeRequiredText(inputObject.toolId, 'MCP tool id')
+        const params = normalizeToolParams(inputObject.params)
+        throwIfMcpSignalAborted(context.signal)
+        const response = await mcpService.callToolById(toolId, params, context.toolCallId)
+        throwIfMcpSignalAborted(context.signal)
+        return okResult('MCP tool called', sanitizeForAgent(response))
       }
     }
   ]

@@ -474,7 +474,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       permissions: ['knowledge.write'],
       sideEffects: ['database.write', 'filesystem.write'],
       tags: ['knowledge', 'rag', 'create'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
         const now = Date.now()
         const id = normalizeOptionalText(inputObject.id, 'Knowledge base id') || `kb_${uuidv4()}`
@@ -490,10 +490,12 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
           createdAt,
           updatedAt: now
         })
+        throwIfKnowledgeSignalAborted(context.signal)
 
         const warnings: string[] = []
         if (inputObject.initialize !== false) {
           try {
+            throwIfKnowledgeSignalAborted(context.signal)
             const embeddingModelId = toRuntimeModelId(model)
             const dimensions = Number(base.dimensions)
             if (!embeddingModelId || !Number.isFinite(dimensions) || dimensions <= 0) {
@@ -511,8 +513,10 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
               fileProcessorId: base.preprocessProvider?.provider?.id,
               searchMode: 'vector'
             })
+            throwIfKnowledgeSignalAborted(context.signal)
             const savedBase = runtimeKnowledgeBaseToLegacyMetadata(runtimeBase, base)
             await upsertKnowledgeBaseMetadata(savedBase)
+            throwIfKnowledgeSignalAborted(context.signal)
             return {
               ok: true,
               summary: `Knowledge base saved: ${savedBase.name}`,
@@ -520,11 +524,13 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
               warnings
             }
           } catch (error) {
+            if (context.signal?.aborted) throw error
             warnings.push(`Vector store was not initialized: ${error instanceof Error ? error.message : String(error)}`)
           }
         }
 
         await upsertKnowledgeBaseMetadata(base)
+        throwIfKnowledgeSignalAborted(context.signal)
         return {
           ok: true,
           summary: `Knowledge base saved: ${base.name}`,
@@ -578,8 +584,10 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         const resolveProviderConfig = createCachedProviderConfigResolver(context.signal)
         const resultsPerBase = await mapWithConcurrency(targetBases, KNOWLEDGE_SEARCH_CONCURRENCY, async (base) => {
           try {
+            throwIfKnowledgeSignalAborted(context.signal)
             await toKnowledgeBaseParams(base, resolveProviderConfig)
             const results = await knowledgeService.search(base.id, query)
+            throwIfKnowledgeSignalAborted(context.signal)
             return {
               baseId: base.id,
               baseName: base.name,
@@ -650,9 +658,12 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         if (!base) throw new Error(`Knowledge base not found: ${baseId}`)
         const knowledgeItem = normalizeKnowledgeItem(inputObject.item)
         await toKnowledgeBaseParams(base, (providerId) => getProviderConfig(providerId, context.signal))
+        throwIfKnowledgeSignalAborted(context.signal)
         await knowledgeService.addItems(base.id, [knowledgeItem as never])
+        throwIfKnowledgeSignalAborted(context.signal)
         const updatedBase = { ...base, items: [...(base.items ?? []), knowledgeItem], updated_at: Date.now() }
         await upsertKnowledgeBaseMetadata(updatedBase)
+        throwIfKnowledgeSignalAborted(context.signal)
         return okResult('Knowledge item added', sanitizeForAgent({ baseId: base.id, item: knowledgeItem }))
       }
     },
@@ -681,12 +692,15 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         if (!base) throw new Error(`Knowledge base not found: ${baseId}`)
         if (context.dryRun) return okResult('Knowledge base reset dry run completed', { baseId: base.id })
         await toKnowledgeBaseParams(base, (providerId) => getProviderConfig(providerId, context.signal))
+        throwIfKnowledgeSignalAborted(context.signal)
         const roots = await knowledgeService.listRootItems(base.id)
+        throwIfKnowledgeSignalAborted(context.signal)
         if (roots.length > 0) {
           await knowledgeService.reindexItems(
             base.id,
             roots.map((item) => item.id)
           )
+          throwIfKnowledgeSignalAborted(context.signal)
         }
         return okResult('Knowledge base reset', { baseId: base.id, name: base.name })
       }

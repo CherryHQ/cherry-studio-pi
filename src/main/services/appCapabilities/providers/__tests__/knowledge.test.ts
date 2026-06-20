@@ -383,6 +383,112 @@ describe('knowledge app capabilities', () => {
     expect(mocks.knowledgeService.search).not.toHaveBeenCalled()
   })
 
+  it('stops knowledge base creation before vector initialization or metadata writes when aborted', async () => {
+    const controller = new AbortController()
+    controller.abort('agent stopped knowledge creation')
+
+    await expect(
+      capability('knowledge.base.create').execute(
+        {
+          name: 'Stopped Knowledge',
+          model: { id: 'embed-model', provider: 'shared-provider' },
+          dimensions: 1024
+        },
+        { source: 'agent', signal: controller.signal }
+      )
+    ).rejects.toThrow('agent stopped knowledge creation')
+
+    expect(mocks.knowledgeService.createBase).not.toHaveBeenCalled()
+    expect(mocks.storageV2KnowledgeRepository.importBases).not.toHaveBeenCalled()
+  })
+
+  it('does not convert agent-cancelled knowledge search into a per-base warning', async () => {
+    const controller = new AbortController()
+    runtimeBases = [
+      {
+        id: 'kb-1',
+        name: 'Knowledge One',
+        model: { id: 'embed-model', provider: 'shared-provider' },
+        items: []
+      }
+    ]
+    runtimeProviders = [
+      {
+        id: 'shared-provider',
+        apiKey: 'sk-shared',
+        apiHost: 'https://example.com/'
+      }
+    ]
+    mocks.knowledgeService.search.mockImplementationOnce(async () => {
+      controller.abort(new Error('agent stopped knowledge search'))
+      throw controller.signal.reason
+    })
+
+    await expect(
+      capability('knowledge.search').execute({ query: 'matched' }, { source: 'agent', signal: controller.signal })
+    ).rejects.toThrow('agent stopped knowledge search')
+  })
+
+  it('stops knowledge item metadata writes when ingestion is cancelled', async () => {
+    const controller = new AbortController()
+    runtimeBases = [
+      {
+        id: 'kb-1',
+        name: 'Knowledge One',
+        model: { id: 'embed-model', provider: 'shared-provider' },
+        items: []
+      }
+    ]
+    runtimeProviders = [
+      {
+        id: 'shared-provider',
+        apiKey: 'sk-shared',
+        apiHost: 'https://example.com/'
+      }
+    ]
+    mocks.knowledgeService.addItems.mockImplementationOnce(async () => {
+      controller.abort(new Error('agent stopped knowledge ingestion'))
+    })
+
+    await expect(
+      capability('knowledge.item.add').execute(
+        { baseId: 'kb-1', item: { id: 'item-1', type: 'note', content: 'hello' } },
+        { source: 'agent', signal: controller.signal }
+      )
+    ).rejects.toThrow('agent stopped knowledge ingestion')
+
+    expect(mocks.storageV2KnowledgeRepository.importBases).not.toHaveBeenCalled()
+  })
+
+  it('stops knowledge reset before reindexing when root listing is cancelled', async () => {
+    const controller = new AbortController()
+    runtimeBases = [
+      {
+        id: 'kb-1',
+        name: 'Knowledge One',
+        model: { id: 'embed-model', provider: 'shared-provider' },
+        items: []
+      }
+    ]
+    runtimeProviders = [
+      {
+        id: 'shared-provider',
+        apiKey: 'sk-shared',
+        apiHost: 'https://example.com/'
+      }
+    ]
+    mocks.knowledgeService.listRootItems.mockImplementationOnce(async () => {
+      controller.abort(new Error('agent stopped knowledge reset'))
+      return [{ id: 'root-1' }]
+    })
+
+    await expect(
+      capability('knowledge.base.reset').execute({ baseId: 'kb-1' }, { source: 'agent', signal: controller.signal })
+    ).rejects.toThrow('agent stopped knowledge reset')
+
+    expect(mocks.knowledgeService.reindexItems).not.toHaveBeenCalled()
+  })
+
   it('rejects non-object knowledge capability inputs before storage or model work', async () => {
     await expect(capability('knowledge.bases.list').execute('bases' as any, { source: 'agent' })).rejects.toThrow(
       'Knowledge capability input must be an object'
