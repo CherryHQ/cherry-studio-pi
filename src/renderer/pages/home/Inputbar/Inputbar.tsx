@@ -153,10 +153,15 @@ const InputbarInner: FC<InputbarInnerProps> = ({ setActiveTopic, topic, actionsR
   const v2Chat = useV2Chat()
   const { isPending } = useTopicStreamStatus(topic.id)
   const [isSending, setIsSending] = useState(false)
+  const sendInFlightRef = useRef(false)
   useEffect(() => {
-    if (isPending) setIsSending(false)
+    if (isPending) {
+      sendInFlightRef.current = false
+      setIsSending(false)
+    }
   }, [isPending])
   useEffect(() => {
+    sendInFlightRef.current = false
     setIsSending(false)
   }, [topic.id])
   const loading = isPending || isSending || awaitingApproval
@@ -226,6 +231,10 @@ const InputbarInner: FC<InputbarInnerProps> = ({ setActiveTopic, topic, actionsR
       })
 
   const sendMessage = useCallback(async () => {
+    if (sendInFlightRef.current) {
+      return
+    }
+
     if (!model) {
       window.toast.error(t('code.model_required'))
       return
@@ -233,6 +242,7 @@ const InputbarInner: FC<InputbarInnerProps> = ({ setActiveTopic, topic, actionsR
 
     const text_ = text.trim()
     if (!text_) return
+    sendInFlightRef.current = true
     setIsSending(true)
     setText('')
     setFiles([])
@@ -257,6 +267,7 @@ const InputbarInner: FC<InputbarInnerProps> = ({ setActiveTopic, topic, actionsR
       setFiles(files)
       window.toast.error(t('chat.input.send_failed'))
     } finally {
+      sendInFlightRef.current = false
       setIsSending(false)
     }
   }, [
