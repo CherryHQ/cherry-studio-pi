@@ -55,11 +55,13 @@ const BasicDataSettings: React.FC = () => {
   )
 
   const releaseQuitHold = useCallback(
-    (holdId: string) => {
-      void window.api.application.allowQuit(holdId).catch((error) => {
+    async (holdId: string) => {
+      try {
+        await window.api.application.allowQuit(holdId)
+      } catch (error) {
         logger.error('Failed to release data migration quit hold', error as Error)
         showOperationFailed(error)
-      })
+      }
     },
     [showOperationFailed]
   )
@@ -352,26 +354,11 @@ const BasicDataSettings: React.FC = () => {
       clearInterval(progressInterval)
     }
 
-    updateProgress(100, 'success')
-
     if (!copyResult.success) {
-      await new Promise<void>((resolve) => {
-        setTimeoutTimer(
-          'startMigration_2',
-          () => {
-            loadingModal.destroy()
-            window.toast.error({
-              title: t('settings.data.app_data.copy_failed') + ': ' + copyResult.error,
-              timeout: 5000
-            })
-            resolve()
-          },
-          500
-        )
-      })
-
       throw new Error(copyResult.error || 'Unknown error during copy')
     }
+
+    updateProgress(100, 'success')
 
     await window.api.setAppDataPath(newPath)
 
@@ -412,25 +399,28 @@ const BasicDataSettings: React.FC = () => {
       )
 
       const { loadingModal, progressInterval, updateProgress } = showProgressModal(title, className, PathsContent)
-      const holdId = await window.api.application.preventQuit(t('settings.data.app_data.stop_quit_app_reason'))
+      let holdId: string | null = null
+      let quitHoldReleased = false
+      const releaseQuitHoldOnce = async () => {
+        if (!holdId || quitHoldReleased) return
+
+        quitHoldReleased = true
+        await releaseQuitHold(holdId)
+      }
+
       try {
+        holdId = await window.api.application.preventQuit(t('settings.data.app_data.stop_quit_app_reason'))
         await startMigration(originalPath, newDataPath, progressInterval, updateProgress, loadingModal)
 
         setAppInfo(await window.api.getAppInfo())
 
-        setTimeoutTimer(
-          'handleDataMigration',
-          () => {
-            window.toast.success(t('settings.data.app_data.select_success'))
-            releaseQuitHold(holdId)
-            requestRelaunch({
-              args: ['--user-data-dir=' + newDataPath]
-            })
-          },
-          1000
-        )
+        window.toast.success(t('settings.data.app_data.select_success'))
+        await releaseQuitHoldOnce()
+        requestRelaunch({
+          args: ['--user-data-dir=' + newDataPath]
+        })
       } catch (error) {
-        releaseQuitHold(holdId)
+        await releaseQuitHoldOnce()
         window.toast.error({
           title: t('settings.data.app_data.copy_failed') + ': ' + error,
           timeout: 5000
