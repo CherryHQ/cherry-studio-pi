@@ -11,10 +11,21 @@ const DEFAULT_AGENT_LIST_LIMIT = 50
 const MAX_AGENT_LIST_LIMIT = 200
 const RENDERER_PREPARE_STORAGE_V2_CHECK_TIMEOUT_MS = 800
 const RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS = 1_500
+const STORAGE_LIST_LIMIT_NUMBER_ERROR = '存储列表 limit 必须是数字。'
+const STORAGE_LIST_OFFSET_NUMBER_ERROR = '存储列表 offset 必须是数字。'
+const STORAGE_INPUT_OBJECT_ERROR = '存储能力的输入必须是对象。'
+const STORAGE_ABORT_ERROR = '存储能力调用已取消。'
+const BACKUP_REASON_LABEL = '备份原因'
+const SNAPSHOT_REASON_LABEL = '快照原因'
+const BACKUP_PATH_LABEL = '备份路径'
+const OWNER_TYPE_LABEL = '归属类型'
+const OWNER_ID_LABEL = '归属 ID'
+const CONVERSATION_ID_LABEL = '对话 ID'
+const FILE_ID_LABEL = '文件 ID'
 
 function normalizeListLimit(value: unknown) {
   if (value !== null && typeof value !== 'undefined' && typeof value !== 'number' && typeof value !== 'string') {
-    throw new Error('Storage list limit must be a number')
+    throw new Error(STORAGE_LIST_LIMIT_NUMBER_ERROR)
   }
   const parsed =
     typeof value === 'string' && !value.trim() ? DEFAULT_AGENT_LIST_LIMIT : Number(value ?? DEFAULT_AGENT_LIST_LIMIT)
@@ -24,31 +35,31 @@ function normalizeListLimit(value: unknown) {
 
 function normalizeOffset(value: unknown) {
   if (value !== null && typeof value !== 'undefined' && typeof value !== 'number' && typeof value !== 'string') {
-    throw new Error('Storage list offset must be a number')
+    throw new Error(STORAGE_LIST_OFFSET_NUMBER_ERROR)
   }
   const parsed = typeof value === 'string' && !value.trim() ? undefined : Number(value)
   if (parsed === undefined || !Number.isFinite(parsed)) return undefined
   return Math.max(0, Math.trunc(parsed))
 }
 
-function normalizeOptionalText(value: unknown, label = 'Value') {
+function normalizeOptionalText(value: unknown, label = '输入值') {
   if (typeof value === 'string') {
     const trimmed = value.trim()
     return trimmed || undefined
   }
   if (value === null || typeof value === 'undefined') return undefined
-  throw new Error(`${label} must be a string`)
+  throw new Error(label + ' 必须是字符串。')
 }
 
 function normalizeRequiredText(value: unknown, label: string) {
   const text = normalizeOptionalText(value, label)
-  if (!text) throw new Error(`${label} is required`)
+  if (!text) throw new Error(label + ' 不能为空。')
   return text
 }
 
 function normalizeInputObject(input: unknown) {
   if (input === null || typeof input === 'undefined') return {}
-  if (typeof input !== 'object' || Array.isArray(input)) throw new Error('Storage capability input must be an object')
+  if (typeof input !== 'object' || Array.isArray(input)) throw new Error(STORAGE_INPUT_OBJECT_ERROR)
   return input as Record<string, unknown>
 }
 
@@ -57,7 +68,7 @@ function throwIfStorageSignalAborted(signal?: AbortSignal) {
   const reason = signal.reason
   if (reason instanceof Error) throw reason
   if (typeof reason === 'string' && reason.trim()) throw new Error(reason.trim())
-  throw new Error('Storage capability call aborted')
+  throw new Error(STORAGE_ABORT_ERROR)
 }
 
 function agentListOptions(input: unknown = {}) {
@@ -73,7 +84,7 @@ async function prepareRendererStorageV2ForStorageOperation(operation: string, si
     await callRendererBridge<void>(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE, undefined, {
       checkTimeoutMs: RENDERER_PREPARE_STORAGE_V2_CHECK_TIMEOUT_MS,
       timeoutMs: RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS,
-      timeoutMessage: `Timed out preparing local data before ${operation}`,
+      timeoutMessage: '准备本地存储数据超时，操作尚未开始：' + operation,
       signal
     })
   } catch (error) {
@@ -155,7 +166,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       examples: ['Create a local backup', 'Back up my data before changing settings'],
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
-        const reason = normalizeOptionalText(inputObject.reason, 'Backup reason') || 'agent-request'
+        const reason = normalizeOptionalText(inputObject.reason, BACKUP_REASON_LABEL) || 'agent-request'
         throwIfStorageSignalAborted(context.signal)
         await prepareRendererStorageV2ForStorageOperation('backup', context.signal)
         throwIfStorageSignalAborted(context.signal)
@@ -203,7 +214,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       tags: ['storage', 'backup', 'validate'],
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
-        const backupPath = normalizeRequiredText(inputObject.backupPath, 'Backup path')
+        const backupPath = normalizeRequiredText(inputObject.backupPath, BACKUP_PATH_LABEL)
         throwIfStorageSignalAborted(context.signal)
         const validation = await storageV2Service.validateBackup(backupPath)
         throwIfStorageSignalAborted(context.signal)
@@ -230,7 +241,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       tags: ['storage', 'backup', 'restore'],
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
-        const backupPath = normalizeRequiredText(inputObject.backupPath, 'Backup path')
+        const backupPath = normalizeRequiredText(inputObject.backupPath, BACKUP_PATH_LABEL)
         if (context.dryRun) {
           throwIfStorageSignalAborted(context.signal)
           const validation = await storageV2Service.validateBackup(backupPath)
@@ -265,7 +276,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       tags: ['storage', 'snapshot', 'database'],
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
-        const reason = normalizeOptionalText(inputObject.reason, 'Snapshot reason') || 'agent-request'
+        const reason = normalizeOptionalText(inputObject.reason, SNAPSHOT_REASON_LABEL) || 'agent-request'
         throwIfStorageSignalAborted(context.signal)
         await prepareRendererStorageV2ForStorageOperation('snapshot', context.signal)
         throwIfStorageSignalAborted(context.signal)
@@ -337,8 +348,8 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
         const options = {
-          ownerType: normalizeOptionalText(inputObject.ownerType, 'Owner type'),
-          ownerId: normalizeOptionalText(inputObject.ownerId, 'Owner id'),
+          ownerType: normalizeOptionalText(inputObject.ownerType, OWNER_TYPE_LABEL),
+          ownerId: normalizeOptionalText(inputObject.ownerId, OWNER_ID_LABEL),
           ...agentListOptions(inputObject)
         }
         throwIfStorageSignalAborted(context.signal)
@@ -366,7 +377,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       tags: ['storage', 'messages', 'conversations', 'chat'],
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
-        const conversationId = normalizeRequiredText(inputObject.conversationId, 'Conversation id')
+        const conversationId = normalizeRequiredText(inputObject.conversationId, CONVERSATION_ID_LABEL)
         const options = agentListOptions(inputObject)
         throwIfStorageSignalAborted(context.signal)
         const messages = await storageV2Service.listMessages(conversationId, options)
@@ -414,7 +425,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       tags: ['storage', 'files', 'read'],
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
-        const fileId = normalizeRequiredText(inputObject.fileId, 'File id')
+        const fileId = normalizeRequiredText(inputObject.fileId, FILE_ID_LABEL)
         throwIfStorageSignalAborted(context.signal)
         const file = await storageV2Service.getFile(fileId)
         throwIfStorageSignalAborted(context.signal)

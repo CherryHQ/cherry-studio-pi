@@ -322,12 +322,12 @@ describe('storage app capabilities', () => {
   it('rejects empty required storage identifiers before calling services', async () => {
     await expect(
       capability('storage.backup.validate').execute({ backupPath: '   ' }, { source: 'agent' })
-    ).rejects.toThrow('Backup path is required')
+    ).rejects.toThrow('备份路径 不能为空')
     await expect(
       capability('storage.messages.list').execute({ conversationId: '   ' }, { source: 'agent' })
-    ).rejects.toThrow('Conversation id is required')
+    ).rejects.toThrow('对话 ID 不能为空')
     await expect(capability('storage.file.get').execute({ fileId: '   ' }, { source: 'agent' })).rejects.toThrow(
-      'File id is required'
+      '文件 ID 不能为空'
     )
 
     expect(mocks.storageV2Service.validateBackup).not.toHaveBeenCalled()
@@ -337,19 +337,19 @@ describe('storage app capabilities', () => {
 
   it('rejects invalid storage text input shapes before preparing or calling services', async () => {
     await expect(capability('storage.snapshot.create').execute({ reason: 123 }, { source: 'agent' })).rejects.toThrow(
-      'Snapshot reason must be a string'
+      '快照原因 必须是字符串'
     )
     await expect(
       capability('storage.backup.create').execute({ reason: { label: 'agent' } }, { source: 'agent' })
-    ).rejects.toThrow('Backup reason must be a string')
+    ).rejects.toThrow('备份原因 必须是字符串')
     await expect(
       capability('storage.conversations.list').execute({ ownerType: ['assistant'] }, { source: 'agent' })
-    ).rejects.toThrow('Owner type must be a string')
+    ).rejects.toThrow('归属类型 必须是字符串')
     await expect(
       capability('storage.messages.list').execute({ conversationId: 123 }, { source: 'agent' })
-    ).rejects.toThrow('Conversation id must be a string')
+    ).rejects.toThrow('对话 ID 必须是字符串')
     await expect(capability('storage.file.get').execute({ fileId: true }, { source: 'agent' })).rejects.toThrow(
-      'File id must be a string'
+      '文件 ID 必须是字符串'
     )
 
     expect(mocks.callRendererBridge).not.toHaveBeenCalled()
@@ -362,34 +362,34 @@ describe('storage app capabilities', () => {
 
   it('rejects invalid storage capability input objects before side effects', async () => {
     await expect(capability('storage.dataRoot.get').execute('root' as any, { source: 'agent' })).rejects.toThrow(
-      'Storage capability input must be an object'
+      '存储能力的输入必须是对象'
     )
     await expect(capability('storage.health.check').execute(['health'] as any, { source: 'agent' })).rejects.toThrow(
-      'Storage capability input must be an object'
+      '存储能力的输入必须是对象'
     )
     await expect(capability('storage.stats.get').execute(false as any, { source: 'agent' })).rejects.toThrow(
-      'Storage capability input must be an object'
+      '存储能力的输入必须是对象'
     )
     await expect(
       capability('storage.backup.create').execute('agent request' as any, { source: 'agent' })
-    ).rejects.toThrow('Storage capability input must be an object')
+    ).rejects.toThrow('存储能力的输入必须是对象')
     await expect(
       capability('storage.backup.overview').execute(['overview'] as any, { source: 'agent' })
-    ).rejects.toThrow('Storage capability input must be an object')
+    ).rejects.toThrow('存储能力的输入必须是对象')
     await expect(capability('storage.providers.list').execute('providers' as any, { source: 'agent' })).rejects.toThrow(
-      'Storage capability input must be an object'
+      '存储能力的输入必须是对象'
     )
     await expect(capability('storage.snapshot.create').execute([], { source: 'agent' })).rejects.toThrow(
-      'Storage capability input must be an object'
+      '存储能力的输入必须是对象'
     )
     await expect(capability('storage.assistants.list').execute([], { source: 'agent' })).rejects.toThrow(
-      'Storage capability input must be an object'
+      '存储能力的输入必须是对象'
     )
     await expect(capability('storage.messages.list').execute(['conversation-1'], { source: 'agent' })).rejects.toThrow(
-      'Storage capability input must be an object'
+      '存储能力的输入必须是对象'
     )
     await expect(capability('storage.file.get').execute(true as any, { source: 'agent' })).rejects.toThrow(
-      'Storage capability input must be an object'
+      '存储能力的输入必须是对象'
     )
 
     expect(mocks.callRendererBridge).not.toHaveBeenCalled()
@@ -407,17 +407,17 @@ describe('storage app capabilities', () => {
 
   it('rejects invalid Storage v2 pagination shapes before calling services', async () => {
     await expect(capability('storage.assistants.list').execute({ limit: true }, { source: 'agent' })).rejects.toThrow(
-      'Storage list limit must be a number'
+      '存储列表 limit 必须是数字'
     )
     await expect(
       capability('storage.conversations.list').execute({ offset: { page: 1 } }, { source: 'agent' })
-    ).rejects.toThrow('Storage list offset must be a number')
+    ).rejects.toThrow('存储列表 offset 必须是数字')
     await expect(
       capability('storage.messages.list').execute(
         { conversationId: 'conversation-1', limit: ['10'] },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Storage list limit must be a number')
+    ).rejects.toThrow('存储列表 limit 必须是数字')
 
     expect(mocks.storageV2Service.listAssistants).not.toHaveBeenCalled()
     expect(mocks.storageV2Service.listConversations).not.toHaveBeenCalled()
