@@ -346,21 +346,28 @@ export class AppUpdaterService extends BaseService {
 
   private startManualDownloadUpdate(): void {
     const token = this.cancellationToken
+    const blocker = powerSaveBlockerService.acquire('app-update.download', {
+      type: 'prevent-app-suspension'
+    })
 
     logger.info('Starting manual update download')
 
     try {
-      void autoUpdater.downloadUpdate(token).catch((error: unknown) => {
-        if (token.cancelled) {
-          logger.info('Update download cancelled')
-          return
-        }
+      void autoUpdater
+        .downloadUpdate(token)
+        .catch((error: unknown) => {
+          if (token.cancelled) {
+            logger.info('Update download cancelled')
+            return
+          }
 
-        const updateError = toError(error)
-        logger.error('Failed to download update:', updateError)
-        application.get('WindowManager').broadcastToType(WindowType.Main, IpcChannel.UpdateError, updateError)
-      })
+          const updateError = toError(error)
+          logger.error('Failed to download update:', updateError)
+          application.get('WindowManager').broadcastToType(WindowType.Main, IpcChannel.UpdateError, updateError)
+        })
+        .finally(() => blocker.release())
     } catch (error) {
+      blocker.release()
       const updateError = toError(error)
       logger.error('Failed to start update download:', updateError)
       application.get('WindowManager').broadcastToType(WindowType.Main, IpcChannel.UpdateError, updateError)

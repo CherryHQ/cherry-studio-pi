@@ -2,6 +2,10 @@ import type { UpdateInfo } from 'builder-util-runtime'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  updateDownloadBlocker: {
+    key: 'update-download-blocker',
+    release: vi.fn()
+  },
   updateInstallBlocker: {
     key: 'update-install-blocker',
     release: vi.fn()
@@ -159,7 +163,9 @@ describe('AppUpdaterService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     MockMainPreferenceServiceUtils.resetMocks()
-    mocks.powerSaveBlockerService.acquire.mockReturnValue(mocks.updateInstallBlocker)
+    mocks.powerSaveBlockerService.acquire.mockImplementation((reason: string) =>
+      reason === 'app-update.download' ? mocks.updateDownloadBlocker : mocks.updateInstallBlocker
+    )
     mocks.applicationOnWillQuit.mockReturnValue(mocks.willQuitDisposable)
     appUpdater = new AppUpdaterService()
   })
@@ -453,15 +459,32 @@ describe('AppUpdaterService', () => {
       vi.mocked(autoUpdater.downloadUpdate).mockRejectedValueOnce(downloadError)
 
       const result = await appUpdater.checkForUpdates()
-      await Promise.resolve()
+      await new Promise((resolve) => setImmediate(resolve))
 
       expect(result.updateInfo).toBe(updateInfo)
       expect(autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1)
+      expect(mocks.powerSaveBlockerService.acquire).toHaveBeenCalledWith('app-update.download', {
+        type: 'prevent-app-suspension'
+      })
+      expect(mocks.updateDownloadBlocker.release).toHaveBeenCalledTimes(1)
       expect(mocks.windowManager.broadcastToType).toHaveBeenCalledWith(
         WindowType.Main,
         IpcChannel.UpdateError,
         downloadError
       )
+    })
+
+    it('releases the manual download power blocker after a successful download', async () => {
+      autoUpdater.autoDownload = false
+      vi.mocked(autoUpdater.downloadUpdate).mockResolvedValueOnce([])
+
+      await appUpdater.checkForUpdates()
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(mocks.powerSaveBlockerService.acquire).toHaveBeenCalledWith('app-update.download', {
+        type: 'prevent-app-suspension'
+      })
+      expect(mocks.updateDownloadBlocker.release).toHaveBeenCalledTimes(1)
     })
 
     it('does not report an update error when the manual download is cancelled', async () => {
@@ -477,9 +500,10 @@ describe('AppUpdaterService', () => {
       await appUpdater.checkForUpdates()
       appUpdater.cancelDownload()
       rejectDownload?.(new Error('cancelled'))
-      await Promise.resolve()
+      await new Promise((resolve) => setImmediate(resolve))
 
       expect(autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1)
+      expect(mocks.updateDownloadBlocker.release).toHaveBeenCalledTimes(1)
       expect(mocks.windowManager.broadcastToType).not.toHaveBeenCalledWith(
         WindowType.Main,
         IpcChannel.UpdateError,
