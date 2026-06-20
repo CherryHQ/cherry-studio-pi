@@ -633,11 +633,30 @@ export class OvmsManager extends BaseService {
         return { success: true, message: 'Model download process is not running' }
       }
 
-      // Terminate all ovdnd processes
+      // Terminate all ovdnd processes and wait for the recursive child cleanup to finish.
+      const terminationResults: Array<{ success: boolean; message?: string }> = []
       for (const process of processList) {
         const processId = Number(process.Id)
         if (Number.isInteger(processId) && processId > 0) {
-          void this.terminalProcess(processId)
+          terminationResults.push(await this.terminalProcess(processId))
+        }
+      }
+
+      if (terminationResults.length === 0) {
+        logger.warn('No valid ovdnd process ids were found while stopping model download', { processList })
+        return { success: false, message: 'No valid model download process was found' }
+      }
+
+      const failedResults = terminationResults.filter((result) => !result.success)
+      if (failedResults.length > 0) {
+        logger.warn('Failed to stop one or more model download processes', { failedResults })
+        return {
+          success: false,
+          message:
+            failedResults
+              .map((result) => result.message)
+              .filter(Boolean)
+              .join('; ') || 'Failed to stop model download process'
         }
       }
 

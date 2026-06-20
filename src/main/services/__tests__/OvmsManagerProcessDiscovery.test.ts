@@ -50,6 +50,17 @@ async function loadOvmsManager() {
   return new OvmsManager()
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}
+
 describe('OvmsManager process discovery', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -114,5 +125,51 @@ describe('OvmsManager process discovery', () => {
 
     expect(mocks.exec).not.toHaveBeenCalled()
     expect(mocks.fs.remove).not.toHaveBeenCalled()
+  })
+
+  it('waits for every OVMS downloader process to terminate before reporting success', async () => {
+    mocks.exec.mockImplementation((_file, _args, _options, callback) =>
+      callback(null, JSON.stringify([{ Id: 101 }, { Id: 202 }]), '')
+    )
+    const manager = await loadOvmsManager()
+    const firstTermination = deferred<{ success: boolean; message?: string }>()
+    const secondTermination = deferred<{ success: boolean; message?: string }>()
+    vi.spyOn(manager as any, 'terminalProcess')
+      .mockReturnValueOnce(firstTermination.promise)
+      .mockReturnValueOnce(secondTermination.promise)
+
+    const resultPromise = manager.stopAddModel()
+    let settled = false
+    void resultPromise.finally(() => {
+      settled = true
+    })
+    await Promise.resolve()
+
+    expect(settled).toBe(false)
+
+    firstTermination.resolve({ success: true })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    secondTermination.resolve({ success: true })
+
+    await expect(resultPromise).resolves.toEqual({
+      success: true,
+      message: 'Model download process stopped successfully'
+    })
+  })
+
+  it('does not report success when an OVMS downloader process fails to terminate', async () => {
+    mocks.exec.mockImplementation((_file, _args, _options, callback) => callback(null, JSON.stringify({ Id: 101 }), ''))
+    const manager = await loadOvmsManager()
+    vi.spyOn(manager as any, 'terminalProcess').mockResolvedValueOnce({
+      success: false,
+      message: 'Process 101 did not disappear within 5 seconds'
+    })
+
+    await expect(manager.stopAddModel()).resolves.toEqual({
+      success: false,
+      message: 'Process 101 did not disappear within 5 seconds'
+    })
   })
 })
