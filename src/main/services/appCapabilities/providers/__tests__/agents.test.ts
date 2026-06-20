@@ -188,31 +188,68 @@ describe('agent app capabilities', () => {
 
   it('rejects invalid typed agent list filters before service calls', async () => {
     await expect(capability('agents.models.list').execute({ providerType: 123 }, { source: 'agent' })).rejects.toThrow(
-      'Provider type must be a string'
+      '服务商类型必须是字符串。'
     )
     await expect(capability('agents.models.list').execute({ limit: true }, { source: 'agent' })).rejects.toThrow(
-      'Agent list limit must be a number'
+      '智能体列表数量必须是数字。'
     )
     await expect(capability('agents.list').execute({ offset: { page: 1 } }, { source: 'agent' })).rejects.toThrow(
-      'Agent list offset must be a number'
+      '智能体列表偏移量必须是数字。'
     )
     await expect(capability('agents.list').execute({ sortBy: 123 }, { source: 'agent' })).rejects.toThrow(
-      'Agent sort field must be a string'
+      '智能体排序字段必须是字符串。'
     )
     await expect(capability('agents.list').execute({ search: ['research'] }, { source: 'agent' })).rejects.toThrow(
-      'Agent search query must be a string'
+      '智能体搜索关键词必须是字符串。'
     )
     await expect(
       capability('agents.tasks.list').execute({ includeHeartbeat: 'true' }, { source: 'agent' })
-    ).rejects.toThrow('Include heartbeat must be a boolean')
+    ).rejects.toThrow('包含心跳任务必须是布尔值。')
     await expect(capability('agents.list').execute([], { source: 'agent' })).rejects.toThrow(
-      'Agent capability input must be an object'
+      '智能体能力的输入必须是对象。'
     )
 
     expect(mocks.modelsService.getModels).not.toHaveBeenCalled()
     expect(mocks.listAgentsWithStorageV2Recovery).not.toHaveBeenCalled()
     expect(mocks.agentTaskService.listTasks).not.toHaveBeenCalled()
     expect(mocks.agentTaskService.listTasksAcrossAgents).not.toHaveBeenCalled()
+  })
+
+  it('rejects non-object agent capability inputs before service calls', async () => {
+    await expect(capability('agents.models.list').execute('models' as any, { source: 'agent' })).rejects.toThrow(
+      '智能体能力的输入必须是对象。'
+    )
+    await expect(capability('agents.list').execute([], { source: 'agent' })).rejects.toThrow(
+      '智能体能力的输入必须是对象。'
+    )
+    await expect(capability('agents.get').execute('agent-1' as any, { source: 'agent' })).rejects.toThrow(
+      '智能体能力的输入必须是对象。'
+    )
+    await expect(capability('agents.create').execute(['agent'] as any, { source: 'agent' })).rejects.toThrow(
+      '智能体能力的输入必须是对象。'
+    )
+    await expect(capability('agents.sessions.list').execute(false as any, { source: 'agent' })).rejects.toThrow(
+      '智能体能力的输入必须是对象。'
+    )
+    await expect(capability('agents.session.create').execute(['session'] as any, { source: 'agent' })).rejects.toThrow(
+      '智能体能力的输入必须是对象。'
+    )
+    await expect(capability('agents.tasks.list').execute('tasks' as any, { source: 'agent' })).rejects.toThrow(
+      '智能体能力的输入必须是对象。'
+    )
+    await expect(capability('agents.task.create').execute(['task'] as any, { source: 'agent' })).rejects.toThrow(
+      '智能体能力的输入必须是对象。'
+    )
+
+    expect(mocks.modelsService.getModels).not.toHaveBeenCalled()
+    expect(mocks.listAgentsWithStorageV2Recovery).not.toHaveBeenCalled()
+    expect(mocks.getAgentWithStorageV2Recovery).not.toHaveBeenCalled()
+    expect(mocks.createAgentWithStorageV2Recovery).not.toHaveBeenCalled()
+    expect(mocks.agentSessionService.listByCursor).not.toHaveBeenCalled()
+    expect(mocks.agentSessionService.createSession).not.toHaveBeenCalled()
+    expect(mocks.agentTaskService.listTasks).not.toHaveBeenCalled()
+    expect(mocks.agentTaskService.listTasksAcrossAgents).not.toHaveBeenCalled()
+    expect(mocks.agentTaskService.createTask).not.toHaveBeenCalled()
   })
 
   it('stops agent read and list capabilities before service calls when aborted', async () => {
@@ -301,6 +338,14 @@ describe('agent app capabilities', () => {
     expect(properties).toHaveProperty('description')
     expect(properties).not.toHaveProperty('model')
     expect(properties).not.toHaveProperty('instructions')
+  })
+
+  it('reports missing agents with a localized error', async () => {
+    mocks.getAgentWithStorageV2Recovery.mockResolvedValueOnce(null)
+
+    await expect(capability('agents.get').execute({ agentId: 'missing-agent' }, { source: 'agent' })).rejects.toThrow(
+      '未找到智能体：missing-agent'
+    )
   })
 
   it('treats blank optional agent filters as omitted', async () => {
@@ -469,30 +514,30 @@ describe('agent app capabilities', () => {
     )
 
     expect(result.ok).toBe(true)
-    expect(result.summary).toContain('Default session could not be created')
+    expect(result.summary).toContain('默认会话创建失败')
     expect(result.data).toMatchObject({
       agent: { id: 'agent-1', name: 'Agent One' },
       defaultSession: null,
-      warnings: ['Default session could not be created: workspace unavailable']
+      warnings: ['默认会话创建失败：workspace unavailable']
     })
   })
 
   it('rejects empty required agent inputs before calling services', async () => {
     await expect(
       capability('agents.create').execute({ name: '   ', model: 'model-1' }, { source: 'agent' })
-    ).rejects.toThrow('Agent name is required')
+    ).rejects.toThrow('智能体名称不能为空。')
     await expect(
       capability('agents.create').execute({ name: 'Agent One', model: '   ' }, { source: 'agent' })
-    ).rejects.toThrow('Agent model is required')
+    ).rejects.toThrow('智能体模型不能为空。')
     await expect(capability('agents.get').execute({ agentId: '   ' }, { source: 'agent' })).rejects.toThrow(
-      'Agent id is required'
+      '智能体 ID 不能为空。'
     )
     await expect(capability('agents.session.create').execute({ agentId: '   ' }, { source: 'agent' })).rejects.toThrow(
-      'Agent id is required'
+      '智能体 ID 不能为空。'
     )
     await expect(
       capability('agents.task.create').execute({ agentId: 'agent-1', task: [] }, { source: 'agent' })
-    ).rejects.toThrow('Agent task is required')
+    ).rejects.toThrow('智能体任务不能为空。')
 
     expect(mocks.createAgentWithStorageV2Recovery).not.toHaveBeenCalled()
     expect(mocks.getAgentWithStorageV2Recovery).not.toHaveBeenCalled()
@@ -521,22 +566,28 @@ describe('agent app capabilities', () => {
         { name: 'Agent One', model: 'model-1', accessible_paths: '/tmp/work' },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Accessible paths must be an array')
+    ).rejects.toThrow('可访问路径列表必须是数组。')
     await expect(
       capability('agents.create').execute({ name: 'Agent One', model: 'model-1', mcps: 'docs' }, { source: 'agent' })
-    ).rejects.toThrow('MCP server ids must be an array')
+    ).rejects.toThrow('MCP 服务 ID 列表必须是数组。')
     await expect(
       capability('agents.create').execute(
         { name: 'Agent One', model: 'model-1', disabledTools: 'Bash' },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Disabled tools must be an array')
+    ).rejects.toThrow('禁用工具列表必须是数组。')
     await expect(
       capability('agents.create').execute(
         { name: 'Agent One', model: 'model-1', configuration: [] },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Agent configuration must be an object')
+    ).rejects.toThrow('智能体配置必须是对象。')
+    await expect(
+      capability('agents.create').execute(
+        { name: 'Agent One', model: 'model-1', type: 'unsupported' },
+        { source: 'agent' }
+      )
+    ).rejects.toThrow('不支持的智能体类型：unsupported')
 
     expect(mocks.agentWorkspaceService.findOrCreateByPath).not.toHaveBeenCalled()
     expect(mocks.createAgentWithStorageV2Recovery).not.toHaveBeenCalled()
@@ -545,59 +596,59 @@ describe('agent app capabilities', () => {
 
   it('rejects invalid agent text input shapes before side effects', async () => {
     await expect(capability('agents.get').execute({ agentId: 123 }, { source: 'agent' })).rejects.toThrow(
-      'Agent id must be a string'
+      '智能体 ID 必须是字符串。'
     )
     await expect(capability('agents.sessions.list').execute({ agentId: 123 }, { source: 'agent' })).rejects.toThrow(
-      'Agent id must be a string'
+      '智能体 ID 必须是字符串。'
     )
     await expect(capability('agents.tasks.list').execute({ agentId: 123 }, { source: 'agent' })).rejects.toThrow(
-      'Agent id must be a string'
+      '智能体 ID 必须是字符串。'
     )
     await expect(
       capability('agents.session.create').execute({ agentId: 'agent-1', name: ['Research'] }, { source: 'agent' })
-    ).rejects.toThrow('Session name must be a string')
+    ).rejects.toThrow('会话名称必须是字符串。')
     await expect(
       capability('agents.session.create').execute(
         { agentId: 'agent-1', description: { text: 'Explore docs' } },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Session description must be a string')
+    ).rejects.toThrow('会话描述必须是字符串。')
     await expect(
       capability('agents.task.create').execute({ agentId: false, task: { title: 'Check sync' } }, { source: 'agent' })
-    ).rejects.toThrow('Agent id must be a string')
+    ).rejects.toThrow('智能体 ID 必须是字符串。')
     await expect(
       capability('agents.create').execute({ name: 123, model: 'model-1' }, { source: 'agent' })
-    ).rejects.toThrow('Agent name must be a string')
+    ).rejects.toThrow('智能体名称必须是字符串。')
     await expect(
       capability('agents.create').execute({ name: 'Agent One', model: 123 }, { source: 'agent' })
-    ).rejects.toThrow('Agent model must be a string')
+    ).rejects.toThrow('智能体模型必须是字符串。')
     await expect(
       capability('agents.create').execute(
         { name: 'Agent One', model: 'model-1', type: 123, accessible_paths: ['/tmp/work'] },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Agent type must be a string')
+    ).rejects.toThrow('智能体类型必须是字符串。')
     await expect(
       capability('agents.create').execute(
         { name: 'Agent One', model: 'model-1', accessible_paths: [123] },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Accessible path must be a string')
+    ).rejects.toThrow('可访问路径必须是字符串。')
     await expect(
       capability('agents.create').execute(
         { name: 'Agent One', model: 'model-1', workspacePath: { path: '/tmp/work' } },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Agent workspace path must be a string')
+    ).rejects.toThrow('智能体工作目录必须是字符串。')
     await expect(
       capability('agents.create').execute({ name: 'Agent One', model: 'model-1', mcps: [false] }, { source: 'agent' })
-    ).rejects.toThrow('MCP server id must be a string')
+    ).rejects.toThrow('MCP 服务 ID 必须是字符串。')
     await expect(
       capability('agents.create').execute(
         { name: 'Agent One', model: 'model-1', disabledTools: [{ name: 'Bash' }] },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Disabled tool must be a string')
+    ).rejects.toThrow('禁用工具必须是字符串。')
 
     expect(mocks.getAgentWithStorageV2Recovery).not.toHaveBeenCalled()
     expect(mocks.agentSessionService.listByCursor).not.toHaveBeenCalled()

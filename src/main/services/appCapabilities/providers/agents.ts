@@ -7,6 +7,7 @@ import {
   getAgentWithStorageV2Recovery,
   listAgentsWithStorageV2Recovery
 } from '@main/services/agents/AgentStorageV2ReadThrough'
+import type { CreateTaskDto } from '@shared/data/api/schemas/agents'
 
 import type { AppCapabilityDefinition } from '../types'
 import { okResult, sanitizeForAgent } from '../utils'
@@ -19,10 +20,48 @@ const AGENT_LIST_SORT_BY_ALIASES: Record<string, 'createdAt' | 'updatedAt' | 'na
   updated_at: 'updatedAt',
   order_key: 'orderKey'
 }
+const AGENT_LIST_LIMIT_TYPE_ERROR = '智能体列表数量必须是数字。'
+const AGENT_LIST_OFFSET_TYPE_ERROR = '智能体列表偏移量必须是数字。'
+const AGENT_INPUT_OBJECT_ERROR = '智能体能力的输入必须是对象。'
+const AGENT_ABORT_ERROR = '智能体能力调用已取消。'
+const AGENT_TASK_REQUIRED_ERROR = '智能体任务不能为空。'
+const DEFAULT_SESSION_WARNING_PREFIX = '默认会话创建失败：'
+const UNSUPPORTED_AGENT_TYPE_PREFIX = '不支持的智能体类型：'
+const AGENT_NOT_FOUND_PREFIX = '未找到智能体：'
+const TEXT_STRING_ERROR_SUFFIX = '必须是字符串。'
+const TEXT_REQUIRED_ERROR_SUFFIX = '不能为空。'
+const BOOLEAN_ERROR_SUFFIX = '必须是布尔值。'
+const ARRAY_ERROR_SUFFIX = '必须是数组。'
+const OBJECT_ERROR_SUFFIX = '必须是对象。'
+const DEFAULT_TEXT_LABEL = '输入值'
+const PROVIDER_TYPE_LABEL = '服务商类型'
+const AGENT_SORT_FIELD_LABEL = '智能体排序字段'
+const AGENT_SEARCH_QUERY_LABEL = '智能体搜索关键词'
+const INCLUDE_HEARTBEAT_LABEL = '包含心跳任务'
+const AGENT_ID_LABEL = '智能体 ID '
+const AGENT_NAME_LABEL = '智能体名称'
+const AGENT_MODEL_LABEL = '智能体模型'
+const AGENT_SESSION_NAME_LABEL = '智能体会话名称'
+const ACCESSIBLE_PATHS_LABEL = '可访问路径列表'
+const ACCESSIBLE_PATH_LABEL = '可访问路径'
+const AGENT_WORKSPACE_PATH_LABEL = '智能体工作目录'
+const AGENT_TYPE_LABEL = '智能体类型'
+const AGENT_DESCRIPTION_LABEL = '智能体描述'
+const AGENT_INSTRUCTIONS_LABEL = '智能体提示词'
+const AGENT_PLAN_MODEL_LABEL = '智能体规划模型'
+const AGENT_SMALL_MODEL_LABEL = '智能体小模型'
+const MCP_SERVER_IDS_LABEL = 'MCP 服务 ID 列表'
+const MCP_SERVER_ID_LABEL = 'MCP 服务 ID '
+const DISABLED_TOOLS_LABEL = '禁用工具列表'
+const DISABLED_TOOL_LABEL = '禁用工具'
+const AGENT_CONFIGURATION_LABEL = '智能体配置'
+const AGENT_SESSION_CURSOR_LABEL = '智能体会话游标'
+const SESSION_NAME_LABEL = '会话名称'
+const SESSION_DESCRIPTION_LABEL = '会话描述'
 
 function normalizeListLimit(value: unknown) {
   if (value !== null && typeof value !== 'undefined' && typeof value !== 'number' && typeof value !== 'string') {
-    throw new Error('Agent list limit must be a number')
+    throw new Error(AGENT_LIST_LIMIT_TYPE_ERROR)
   }
   const parsed =
     typeof value === 'string' && !value.trim()
@@ -34,7 +73,7 @@ function normalizeListLimit(value: unknown) {
 
 function normalizeOffset(value: unknown) {
   if (value !== null && typeof value !== 'undefined' && typeof value !== 'number' && typeof value !== 'string') {
-    throw new Error('Agent list offset must be a number')
+    throw new Error(AGENT_LIST_OFFSET_TYPE_ERROR)
   }
   const parsed = typeof value === 'string' && !value.trim() ? undefined : Number(value)
   if (parsed === undefined || !Number.isFinite(parsed)) return undefined
@@ -47,7 +86,7 @@ function normalizeSortOrder(value: unknown): 'asc' | 'desc' | undefined {
 
 function normalizeInputObject(input: unknown) {
   if (input === null || typeof input === 'undefined') return {}
-  if (typeof input !== 'object' || Array.isArray(input)) throw new Error('Agent capability input must be an object')
+  if (typeof input !== 'object' || Array.isArray(input)) throw new Error(AGENT_INPUT_OBJECT_ERROR)
   return input as Record<string, unknown>
 }
 
@@ -56,32 +95,32 @@ function throwIfAgentSignalAborted(signal?: AbortSignal) {
   const reason = signal.reason
   if (reason instanceof Error) throw reason
   if (typeof reason === 'string' && reason.trim()) throw new Error(reason.trim())
-  throw new Error('Agent capability call aborted')
+  throw new Error(AGENT_ABORT_ERROR)
 }
 
-function normalizeOptionalText(value: unknown, label = 'Value') {
+function normalizeOptionalText(value: unknown, label = DEFAULT_TEXT_LABEL) {
   if (typeof value === 'string') {
     const trimmed = value.trim()
     return trimmed || undefined
   }
   if (value === null || typeof value === 'undefined') return undefined
-  throw new Error(`${label} must be a string`)
+  throw new Error(label + TEXT_STRING_ERROR_SUFFIX)
 }
 
 function normalizeRequiredText(value: unknown, label: string) {
   const text = normalizeOptionalText(value, label)
-  if (!text) throw new Error(`${label} is required`)
+  if (!text) throw new Error(label + TEXT_REQUIRED_ERROR_SUFFIX)
   return text
 }
 
 function normalizeOptionalBoolean(value: unknown, label: string) {
   if (value === null || typeof value === 'undefined') return undefined
-  if (typeof value !== 'boolean') throw new Error(`${label} must be a boolean`)
+  if (typeof value !== 'boolean') throw new Error(label + BOOLEAN_ERROR_SUFFIX)
   return value
 }
 
 function normalizeAgentSortBy(value: unknown) {
-  const sortBy = normalizeOptionalText(value, 'Agent sort field')
+  const sortBy = normalizeOptionalText(value, AGENT_SORT_FIELD_LABEL)
   if (!sortBy) return undefined
   if (AGENT_LIST_SORT_BY_ALIASES[sortBy]) return AGENT_LIST_SORT_BY_ALIASES[sortBy]
   if (!AGENT_LIST_SORT_BY_VALUES.has(sortBy)) return undefined
@@ -90,7 +129,7 @@ function normalizeAgentSortBy(value: unknown) {
 
 function normalizeOptionalTextArray(value: unknown, label: string, itemLabel: string) {
   if (value === null || typeof value === 'undefined') return undefined
-  if (!Array.isArray(value)) throw new Error(`${label} must be an array`)
+  if (!Array.isArray(value)) throw new Error(label + ARRAY_ERROR_SUFFIX)
   const items = value
     .map((item) => normalizeOptionalText(item, itemLabel))
     .filter((item): item is string => Boolean(item))
@@ -99,15 +138,15 @@ function normalizeOptionalTextArray(value: unknown, label: string, itemLabel: st
 
 function normalizeOptionalObject(value: unknown, label: string) {
   if (value === null || typeof value === 'undefined') return undefined
-  if (typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object`)
+  if (typeof value !== 'object' || Array.isArray(value)) throw new Error(label + OBJECT_ERROR_SUFFIX)
   return value as Record<string, unknown>
 }
 
 function normalizeAgentType(value: unknown) {
-  const type = normalizeOptionalText(value, 'Agent type')
+  const type = normalizeOptionalText(value, AGENT_TYPE_LABEL)
   if (!type) return 'pi'
   if (type === 'pi' || type === 'claude-code') return type
-  throw new Error(`Unsupported agent type: ${type}`)
+  throw new Error(UNSUPPORTED_AGENT_TYPE_PREFIX + type)
 }
 
 function baseListOptions(input: Record<string, unknown>) {
@@ -120,7 +159,7 @@ function baseListOptions(input: Record<string, unknown>) {
 
 function modelListOptions(input: unknown) {
   const inputObject = normalizeInputObject(input)
-  const providerType = normalizeOptionalText(inputObject.providerType, 'Provider type')
+  const providerType = normalizeOptionalText(inputObject.providerType, PROVIDER_TYPE_LABEL)
   return {
     ...baseListOptions(inputObject),
     ...(providerType ? { providerType } : {})
@@ -132,7 +171,7 @@ function agentListOptions(input: unknown) {
   const { orderBy, sortOrder } = inputObject
   const normalizedSortOrder = normalizeSortOrder(sortOrder) ?? normalizeSortOrder(orderBy)
   const sortBy = normalizeAgentSortBy(inputObject.sortBy)
-  const search = normalizeOptionalText(inputObject.search, 'Agent search query')
+  const search = normalizeOptionalText(inputObject.search, AGENT_SEARCH_QUERY_LABEL)
   return {
     ...baseListOptions(inputObject),
     ...(sortBy ? { sortBy } : {}),
@@ -144,14 +183,14 @@ function agentListOptions(input: unknown) {
 function agentTaskListOptions(input: Record<string, unknown>) {
   return {
     ...baseListOptions(input),
-    includeHeartbeat: normalizeOptionalBoolean(input.includeHeartbeat, 'Include heartbeat')
+    includeHeartbeat: normalizeOptionalBoolean(input.includeHeartbeat, INCLUDE_HEARTBEAT_LABEL)
   }
 }
 
 async function listAgentTasks(input: any = {}, signal?: AbortSignal) {
   const inputObject = normalizeInputObject(input)
   const options = agentTaskListOptions(inputObject)
-  const agentId = normalizeOptionalText(inputObject.agentId, 'Agent id')
+  const agentId = normalizeOptionalText(inputObject.agentId, AGENT_ID_LABEL)
   throwIfAgentSignalAborted(signal)
 
   if (agentId) {
@@ -187,7 +226,7 @@ async function createDefaultAgentSession(
   } catch (error) {
     if (signal?.aborted) throw error
     const message = error instanceof Error ? error.message : String(error)
-    return { session: null, warning: `Default session could not be created: ${message}` }
+    return { session: null, warning: DEFAULT_SESSION_WARNING_PREFIX + message }
   }
 }
 
@@ -259,11 +298,12 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['agents', 'read'],
       execute: async (input: any, context) => {
-        const agentId = normalizeRequiredText(input?.agentId, 'Agent id')
+        const inputObject = normalizeInputObject(input)
+        const agentId = normalizeRequiredText(inputObject.agentId, AGENT_ID_LABEL)
         throwIfAgentSignalAborted(context.signal)
         const agent = await getAgentWithStorageV2Recovery(agentId)
         throwIfAgentSignalAborted(context.signal)
-        if (!agent) throw new Error(`Agent not found: ${agentId}`)
+        if (!agent) throw new Error(AGENT_NOT_FOUND_PREFIX + agentId)
         return okResult('Agent read', sanitizeForAgent(agent))
       }
     },
@@ -310,26 +350,35 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['database.write', 'filesystem.write'],
       tags: ['agents', 'create'],
       execute: async (input: any, context) => {
-        const name = normalizeRequiredText(input?.name, 'Agent name')
-        const model = normalizeRequiredText(input?.model, 'Agent model')
-        const sessionName = normalizeOptionalText(input?.sessionName, 'Agent session name') || 'Default session'
+        const inputObject = normalizeInputObject(input)
+        const name = normalizeRequiredText(inputObject.name, AGENT_NAME_LABEL)
+        const model = normalizeRequiredText(inputObject.model, AGENT_MODEL_LABEL)
+        const sessionName =
+          normalizeOptionalText(inputObject.sessionName, AGENT_SESSION_NAME_LABEL) || 'Default session'
         const accessiblePaths = normalizeOptionalTextArray(
-          input?.accessible_paths,
-          'Accessible paths',
-          'Accessible path'
+          inputObject.accessible_paths,
+          ACCESSIBLE_PATHS_LABEL,
+          ACCESSIBLE_PATH_LABEL
         )
         const workspacePath = normalizeOptionalText(
-          input?.workspacePath ?? input?.workspace_path,
-          'Agent workspace path'
+          inputObject.workspacePath ?? inputObject.workspace_path,
+          AGENT_WORKSPACE_PATH_LABEL
         )
-        const type = normalizeAgentType(input?.type)
-        const description = normalizeOptionalText(input?.description, 'Agent description')
-        const instructions = normalizeOptionalText(input?.instructions, 'Agent instructions')
-        const planModel = normalizeOptionalText(input?.planModel ?? input?.plan_model, 'Agent plan model')
-        const smallModel = normalizeOptionalText(input?.smallModel ?? input?.small_model, 'Agent small model')
-        const mcps = normalizeOptionalTextArray(input?.mcps, 'MCP server ids', 'MCP server id')
-        const disabledTools = normalizeOptionalTextArray(input?.disabledTools, 'Disabled tools', 'Disabled tool')
-        const configuration = normalizeOptionalObject(input?.configuration, 'Agent configuration')
+        const type = normalizeAgentType(inputObject.type)
+        const description = normalizeOptionalText(inputObject.description, AGENT_DESCRIPTION_LABEL)
+        const instructions = normalizeOptionalText(inputObject.instructions, AGENT_INSTRUCTIONS_LABEL)
+        const planModel = normalizeOptionalText(inputObject.planModel ?? inputObject.plan_model, AGENT_PLAN_MODEL_LABEL)
+        const smallModel = normalizeOptionalText(
+          inputObject.smallModel ?? inputObject.small_model,
+          AGENT_SMALL_MODEL_LABEL
+        )
+        const mcps = normalizeOptionalTextArray(inputObject.mcps, MCP_SERVER_IDS_LABEL, MCP_SERVER_ID_LABEL)
+        const disabledTools = normalizeOptionalTextArray(
+          inputObject.disabledTools,
+          DISABLED_TOOLS_LABEL,
+          DISABLED_TOOL_LABEL
+        )
+        const configuration = normalizeOptionalObject(inputObject.configuration, AGENT_CONFIGURATION_LABEL)
         const initialWorkspacePath = workspacePath ?? accessiblePaths?.[0]
         throwIfAgentSignalAborted(context.signal)
         const sessionWorkspace = initialWorkspacePath
@@ -386,10 +435,11 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['agents', 'sessions', 'list'],
       execute: async (input: any, context) => {
+        const inputObject = normalizeInputObject(input)
         const options = {
-          agentId: normalizeOptionalText(input?.agentId, 'Agent id'),
-          limit: normalizeListLimit(input?.limit),
-          cursor: normalizeOptionalText(input?.cursor, 'Agent session cursor')
+          agentId: normalizeOptionalText(inputObject.agentId, AGENT_ID_LABEL),
+          limit: normalizeListLimit(inputObject.limit),
+          cursor: normalizeOptionalText(inputObject.cursor, AGENT_SESSION_CURSOR_LABEL)
         }
         throwIfAgentSignalAborted(context.signal)
         const sessions = await agentSessionService.listByCursor(options)
@@ -417,11 +467,11 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['database.write'],
       tags: ['agents', 'sessions', 'create'],
       execute: async (input: any, context) => {
-        const { agentId, ...sessionInput } = input ?? {}
+        const { agentId, ...sessionInput } = normalizeInputObject(input)
         const sessionPayload = {
-          agentId: normalizeRequiredText(agentId, 'Agent id'),
-          name: normalizeOptionalText(sessionInput.name, 'Session name') || 'New session',
-          description: normalizeOptionalText(sessionInput.description, 'Session description'),
+          agentId: normalizeRequiredText(agentId, AGENT_ID_LABEL),
+          name: normalizeOptionalText(sessionInput.name, SESSION_NAME_LABEL) || 'New session',
+          description: normalizeOptionalText(sessionInput.description, SESSION_DESCRIPTION_LABEL),
           workspace: { type: 'system' as const }
         }
         throwIfAgentSignalAborted(context.signal)
@@ -469,13 +519,14 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['database.write'],
       tags: ['agents', 'tasks', 'schedule', 'create'],
       execute: async (input: any, context) => {
-        const taskInput = input?.task
+        const inputObject = normalizeInputObject(input)
+        const taskInput = inputObject.task
         if (!taskInput || typeof taskInput !== 'object' || Array.isArray(taskInput)) {
-          throw new Error('Agent task is required')
+          throw new Error(AGENT_TASK_REQUIRED_ERROR)
         }
-        const agentId = normalizeRequiredText(input?.agentId, 'Agent id')
+        const agentId = normalizeRequiredText(inputObject.agentId, AGENT_ID_LABEL)
         throwIfAgentSignalAborted(context.signal)
-        const task = await agentTaskService.createTask(agentId, taskInput)
+        const task = await agentTaskService.createTask(agentId, taskInput as CreateTaskDto)
         throwIfAgentSignalAborted(context.signal)
         return okResult('Agent task created', sanitizeForAgent(task))
       }
