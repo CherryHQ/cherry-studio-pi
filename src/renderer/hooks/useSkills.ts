@@ -154,7 +154,6 @@ export function useSkillSearch() {
 
   useEffect(() => {
     return () => {
-      requestSeqRef.current++
       abortActiveSearch()
     }
   }, [abortActiveSearch])
@@ -176,7 +175,6 @@ export function useSkillInstall() {
 
     return () => {
       mountedRef.current = false
-      installSeqRef.current++
     }
   }, [])
 
