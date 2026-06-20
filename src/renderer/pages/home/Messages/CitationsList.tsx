@@ -11,7 +11,7 @@ import { cleanMarkdownContent } from '@renderer/utils/formats'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { Popover, Skeleton } from 'antd'
 import { Check, Copy, FileSearch } from 'lucide-react'
-import React, { useCallback } from 'react'
+import React, { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -158,21 +158,49 @@ const handleLinkClick = (
 const CopyButton: React.FC<{ content: string }> = ({ content }) => {
   const [copied, setCopied] = useTemporaryValue(false, 2000)
   const { t } = useTranslation()
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const handleCopy = () => {
     if (!content) return
     navigator.clipboard
       .writeText(content)
       .then(() => {
-        setCopied(true)
-        window.toast.success(t('common.copied'))
+        if (mountedRef.current) {
+          setCopied(true)
+          window.toast.success(t('common.copied'))
+        }
       })
       .catch(() => {
-        window.toast.error(t('message.copy.failed'))
+        if (mountedRef.current) {
+          window.toast.error(t('message.copy.failed'))
+        }
       })
   }
 
-  return <CopyIconWrapper onClick={handleCopy}>{copied ? <Check size={14} /> : <Copy size={14} />}</CopyIconWrapper>
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    handleCopy()
+  }
+
+  return (
+    <CopyIconWrapper
+      onClick={handleCopy}
+      onKeyDown={handleKeyDown}
+      role="button"
+      tabIndex={0}
+      aria-label={t('common.copy')}>
+      {copied ? <Check size={14} /> : <Copy size={14} />}
+    </CopyIconWrapper>
+  )
 }
 
 const WebSearchCitation: React.FC<{ citation: Citation }> = ({ citation }) => {

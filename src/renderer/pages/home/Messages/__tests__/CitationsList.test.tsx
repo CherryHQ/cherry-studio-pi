@@ -1,8 +1,25 @@
 import type { Citation } from '@renderer/types'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import CitationsList from '../CitationsList'
+
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T | PromiseLike<T>) => void
+  reject: (reason?: unknown) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: Deferred<T>['resolve']
+  let reject!: Deferred<T>['reject']
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}
 
 vi.mock('@cherrystudio/ui', () => ({
   Button: ({ children, ...props }: any) => (
@@ -58,6 +75,19 @@ describe('CitationsList', () => {
     vi.stubGlobal('api', {
       file: {
         openPath: vi.fn()
+      }
+    })
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined)
+      }
+    })
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: {
+        error: vi.fn(),
+        success: vi.fn()
       }
     })
   })
@@ -172,5 +202,32 @@ describe('CitationsList', () => {
 
     expect(window.open).not.toHaveBeenCalled()
     expect(window.api.file.openPath).toHaveBeenCalledWith('/Users/cherry/Documents/source.md')
+  })
+
+  it('does not show copy feedback after the citation copy button unmounts', async () => {
+    const runningCopy = deferred<void>()
+    vi.mocked(navigator.clipboard.writeText).mockReturnValueOnce(runningCopy.promise)
+    const citations: Citation[] = [
+      {
+        number: 1,
+        url: '/Users/cherry/Documents/source.md',
+        title: 'Local citation',
+        content: 'Reference text',
+        showFavicon: true,
+        type: 'knowledge'
+      }
+    ]
+    const { unmount } = render(<CitationsList citations={citations} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.copy' }))
+    unmount()
+
+    await act(async () => {
+      runningCopy.resolve()
+      await runningCopy.promise
+    })
+
+    expect(window.toast.success).not.toHaveBeenCalled()
+    expect(window.toast.error).not.toHaveBeenCalled()
   })
 })
