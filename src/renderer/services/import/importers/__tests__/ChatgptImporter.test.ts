@@ -89,4 +89,18 @@ describe('ChatgptImporter', () => {
       'Answer from object content'
     ])
   })
+
+  it('does not validate exports with a null mapping', () => {
+    const importer = new ChatgptImporter()
+
+    expect(
+      importer.validate(
+        JSON.stringify({
+          title: 'Broken export',
+          create_time: 1_700_000_000,
+          mapping: null
+        })
+      )
+    ).toBe(false)
+  })
 })

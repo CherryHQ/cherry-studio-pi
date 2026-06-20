@@ -86,6 +86,7 @@ export class ChatgptImporter implements ConversationImporter {
           typeof conv === 'object' &&
           'mapping' in conv &&
           typeof conv.mapping === 'object' &&
+          conv.mapping !== null &&
           'title' in conv &&
           'create_time' in conv
       )
