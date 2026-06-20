@@ -63,7 +63,7 @@ export const OgCard = ({ link, show }: Props) => {
 
         <div
           title={metadata['og:description'] || link}
-          className="line-clamp-3 text-(--color-text-secondary) text-xs leading-tight">
+          className="line-clamp-3 text-foreground-secondary text-xs leading-tight">
           {metadata['og:description'] || link}
         </div>
       </div>
