@@ -332,7 +332,9 @@ export function ModelSelector(props: ModelSelectorProps) {
     }
   }, [])
 
-  const open = openProp ?? internalOpen
+  const [forceClosed, setForceClosed] = useState(false)
+  const requestedOpen = openProp ?? internalOpen
+  const open = requestedOpen && !forceClosed
   const openRef = useRef(open)
   openRef.current = open
   const mountedRef = useRef(true)
@@ -349,6 +351,7 @@ export function ModelSelector(props: ModelSelectorProps) {
   const applyOpenChange = useCallback(
     (nextOpen: boolean) => {
       if (nextOpen) {
+        setForceClosed(false)
         requestCloseResourceSelectors(selectorId)
       }
       if (openProp === undefined) {
@@ -362,9 +365,11 @@ export function ModelSelector(props: ModelSelectorProps) {
   const forceClose = useCallback(() => {
     if (!mountedRef.current) return
     if (!openRef.current) return
+    openRef.current = false
     // Match ResourceSelectorShell's close semantics: remount on close so a Radix
     // portal cannot linger above the next route/modal while its exit animation
     // settles.
+    setForceClosed(true)
     setSelectorEpoch((epoch) => epoch + 1)
     applyOpenChange(false)
   }, [applyOpenChange])
@@ -417,6 +422,10 @@ export function ModelSelector(props: ModelSelectorProps) {
       observer.disconnect()
     }
   }, [forceClose, open])
+
+  useEffect(() => {
+    if (!requestedOpen) setForceClosed(false)
+  }, [requestedOpen])
 
   const handleShortcut = useCallback(() => applyOpenChange(true), [applyOpenChange])
 

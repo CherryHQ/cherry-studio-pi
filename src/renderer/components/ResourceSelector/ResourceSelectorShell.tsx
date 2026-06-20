@@ -219,9 +219,11 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
   // Own the open state so we can reset search on close without relying on the caller being
   // controlled. When `openProp` is set the caller wins; otherwise we track it ourselves.
   const [internalOpen, setInternalOpen] = useState(false)
+  const [forceClosed, setForceClosed] = useState(false)
   const [selectorEpoch, setSelectorEpoch] = useState(0)
   const selectorId = useId()
-  const open = openProp ?? internalOpen
+  const requestedOpen = openProp ?? internalOpen
+  const open = requestedOpen && !forceClosed
   const openRef = useRef(open)
   openRef.current = open
   const mountedRef = useRef(true)
@@ -235,9 +237,11 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
   const forceClose = useCallback(() => {
     if (!mountedRef.current) return
     if (!openRef.current) return
+    openRef.current = false
     // Radix keeps popover content mounted while the close animation runs. Resource selectors often
     // launch modal/router transitions immediately after closing; remounting the selector tears down
     // the old portal synchronously so it cannot linger above the next surface.
+    setForceClosed(true)
     setSelectorEpoch((epoch) => epoch + 1)
     if (openProp === undefined) setInternalOpen(false)
     onOpenChangeProp?.(false)
@@ -288,6 +292,7 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
   const handleOpenChange = useCallback(
     (next: boolean) => {
       if (next) {
+        setForceClosed(false)
         requestCloseResourceSelectors(selectorId)
         if (openProp === undefined) setInternalOpen(true)
         onOpenChangeProp?.(true)
@@ -322,6 +327,10 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
     if (open) return
     setSearchValue('')
   }, [open])
+
+  useEffect(() => {
+    if (!requestedOpen) setForceClosed(false)
+  }, [requestedOpen])
 
   // Fire onOpen for both Radix-internal and external (controlled) opens. Routing this through
   // an effect on the effective `open` value covers the controlled `open=true` path that

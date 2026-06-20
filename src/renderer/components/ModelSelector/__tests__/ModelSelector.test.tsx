@@ -471,6 +471,30 @@ describe('ModelSelector', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
+  it('hides controlled-open content after force-close even if the parent state is stale', async () => {
+    mockUseModelSelectorData.mockReturnValue(makeData())
+    const onOpenChange = vi.fn()
+
+    render(
+      <ModelSelector
+        open
+        onOpenChange={onOpenChange}
+        multiple={false}
+        trigger={<button type="button">open</button>}
+        onSelect={vi.fn()}
+      />
+    )
+
+    expect(screen.getByTestId('model-selector-content')).toBeInTheDocument()
+
+    act(() => {
+      window.dispatchEvent(new Event(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT))
+    })
+
+    await waitFor(() => expect(screen.queryByTestId('model-selector-content')).not.toBeInTheDocument())
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
   it('ignores shared selector force-close events while already closed', () => {
     mockUseModelSelectorData.mockReturnValue(makeData())
     const onMount = vi.fn()

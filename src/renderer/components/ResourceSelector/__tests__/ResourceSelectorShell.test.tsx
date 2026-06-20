@@ -218,6 +218,33 @@ describe('ResourceSelectorShell', () => {
       expect(onOpenChange.mock.calls.filter(([next]) => next === false)).toHaveLength(closeCallCount)
     })
 
+    it('hides a controlled-open selector after force-close even if the parent state is stale', async () => {
+      const onOpenChange = vi.fn()
+
+      render(
+        <ResourceSelectorShell
+          trigger={<button type="button">Open</button>}
+          open
+          onOpenChange={onOpenChange}
+          items={ITEMS}
+          pinnedIds={[]}
+          onTogglePin={vi.fn()}
+          labels={LABELS}
+          value={null}
+          onChange={vi.fn()}
+        />
+      )
+
+      expect(screen.getByPlaceholderText('Search')).toBeInTheDocument()
+
+      act(() => {
+        window.dispatchEvent(new CustomEvent(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT))
+      })
+
+      await waitFor(() => expect(screen.queryByPlaceholderText('Search')).not.toBeInTheDocument())
+      expect(onOpenChange).toHaveBeenCalledWith(false)
+    })
+
     it('closes when a new dialog surface appears while the selector is open', async () => {
       render(
         <ResourceSelectorShell
