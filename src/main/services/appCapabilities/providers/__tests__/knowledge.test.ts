@@ -236,7 +236,7 @@ describe('knowledge app capabilities', () => {
 
     await expect(
       capability('knowledge.bases.list').execute({ includeItems: true, itemLimit: true }, { source: 'agent' })
-    ).rejects.toThrow('Knowledge base item preview limit must be a number')
+    ).rejects.toThrow('知识库条目预览数量必须是数字。')
   })
 
   it('bounds concurrent knowledge searches and reuses provider config during one query', async () => {
@@ -358,14 +358,14 @@ describe('knowledge app capabilities', () => {
 
   it('rejects invalid knowledge search text inputs before reading or searching', async () => {
     await expect(capability('knowledge.search').execute({ query: ['matched'] }, { source: 'agent' })).rejects.toThrow(
-      'Knowledge search query must be a string'
+      '知识库搜索关键词必须是字符串。'
     )
     await expect(
       capability('knowledge.search').execute({ query: 'matched', knowledge_base_ids: 'kb-1' }, { source: 'agent' })
-    ).rejects.toThrow('Knowledge base ids must be an array')
+    ).rejects.toThrow('知识库 ID 列表必须是数组。')
     await expect(
       capability('knowledge.search').execute({ query: 'matched', knowledge_base_ids: [123] }, { source: 'agent' })
-    ).rejects.toThrow('Knowledge base id must be a string')
+    ).rejects.toThrow('知识库 ID 必须是字符串。')
 
     expect(mocks.storageV2KnowledgeRepository.listBases).not.toHaveBeenCalled()
     expect(mocks.knowledgeService.search).not.toHaveBeenCalled()
@@ -374,10 +374,10 @@ describe('knowledge app capabilities', () => {
   it('rejects invalid knowledge search numeric limit shapes before searching', async () => {
     await expect(
       capability('knowledge.search').execute({ query: 'matched', document_count: true }, { source: 'agent' })
-    ).rejects.toThrow('Knowledge search document count must be a number')
+    ).rejects.toThrow('知识库搜索文档数量必须是数字。')
     await expect(
       capability('knowledge.search').execute({ query: 'matched', result_limit: { limit: 5 } }, { source: 'agent' })
-    ).rejects.toThrow('Knowledge search result limit must be a number')
+    ).rejects.toThrow('知识库搜索结果数量必须是数字。')
 
     expect(mocks.storageV2KnowledgeRepository.listBases).not.toHaveBeenCalled()
     expect(mocks.knowledgeService.search).not.toHaveBeenCalled()
@@ -491,19 +491,19 @@ describe('knowledge app capabilities', () => {
 
   it('rejects non-object knowledge capability inputs before storage or model work', async () => {
     await expect(capability('knowledge.bases.list').execute('bases' as any, { source: 'agent' })).rejects.toThrow(
-      'Knowledge capability input must be an object'
+      '知识库能力的输入必须是对象。'
     )
     await expect(capability('knowledge.base.create').execute(['create'] as any, { source: 'agent' })).rejects.toThrow(
-      'Knowledge capability input must be an object'
+      '知识库能力的输入必须是对象。'
     )
     await expect(capability('knowledge.search').execute(false as any, { source: 'agent' })).rejects.toThrow(
-      'Knowledge capability input must be an object'
+      '知识库能力的输入必须是对象。'
     )
     await expect(capability('knowledge.item.add').execute('item' as any, { source: 'agent' })).rejects.toThrow(
-      'Knowledge capability input must be an object'
+      '知识库能力的输入必须是对象。'
     )
     await expect(capability('knowledge.base.reset').execute(['reset'] as any, { source: 'agent' })).rejects.toThrow(
-      'Knowledge capability input must be an object'
+      '知识库能力的输入必须是对象。'
     )
 
     expect(mocks.storageV2KnowledgeRepository.listBases).not.toHaveBeenCalled()
@@ -536,7 +536,7 @@ describe('knowledge app capabilities', () => {
         },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Knowledge base not found: missing-kb')
+    ).rejects.toThrow('未找到知识库：missing-kb')
 
     expect(mocks.knowledgeService.search).not.toHaveBeenCalled()
   })
@@ -582,7 +582,7 @@ describe('knowledge app capabilities', () => {
     })
     expect((result.data as any).results).toHaveLength(5)
     expect(result.warnings).toEqual([
-      'Returned 5 of 12 knowledge search results; narrow knowledge_base_ids or raise result_limit.'
+      '已返回 5 / 12 条知识库搜索结果；请缩小 knowledge_base_ids 范围或提高 result_limit。'
     ])
   })
 
@@ -769,10 +769,10 @@ describe('knowledge app capabilities', () => {
   it('rejects invalid knowledge base creation input before writing metadata', async () => {
     await expect(
       capability('knowledge.base.create').execute({ name: 'Knowledge One' }, { source: 'agent' })
-    ).rejects.toThrow('Knowledge base model is required')
+    ).rejects.toThrow('知识库模型不能为空。')
     await expect(
       capability('knowledge.base.create').execute({ name: 'Knowledge One', model: [] }, { source: 'agent' })
-    ).rejects.toThrow('Knowledge base model is required')
+    ).rejects.toThrow('知识库模型不能为空。')
     await expect(
       capability('knowledge.base.create').execute(
         {
@@ -783,7 +783,7 @@ describe('knowledge app capabilities', () => {
         },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Knowledge base id must be a string')
+    ).rejects.toThrow('知识库 ID 必须是字符串。')
     await expect(
       capability('knowledge.base.create').execute(
         {
@@ -794,7 +794,7 @@ describe('knowledge app capabilities', () => {
         },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Knowledge base items must be an array')
+    ).rejects.toThrow('知识库条目列表必须是数组。')
     await expect(
       capability('knowledge.base.create').execute(
         {
@@ -805,7 +805,7 @@ describe('knowledge app capabilities', () => {
         },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Knowledge item is required')
+    ).rejects.toThrow('知识库条目不能为空。')
     await expect(
       capability('knowledge.base.create').execute(
         {
@@ -816,7 +816,7 @@ describe('knowledge app capabilities', () => {
         },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Knowledge base created_at must be a finite number or valid date string')
+    ).rejects.toThrow('知识库创建时间必须是有限数字或有效日期字符串。')
 
     expect(mocks.storageV2KnowledgeRepository.importBases).not.toHaveBeenCalled()
     expect(mocks.knowledgeService.createBase).not.toHaveBeenCalled()
@@ -826,17 +826,17 @@ describe('knowledge app capabilities', () => {
     runtimeBases = [{ id: 'kb-1', name: 'Knowledge One', items: [] }]
 
     await expect(capability('knowledge.base.reset').execute({ baseId: '   ' }, { source: 'agent' })).rejects.toThrow(
-      'Knowledge base id is required'
+      '知识库 ID 不能为空。'
     )
     await expect(capability('knowledge.base.reset').execute({ baseId: 123 }, { source: 'agent' })).rejects.toThrow(
-      'Knowledge base id must be a string'
+      '知识库 ID 必须是字符串。'
     )
     await expect(
       capability('knowledge.item.add').execute({ baseId: 'kb-1', item: [] }, { source: 'agent' })
-    ).rejects.toThrow('Knowledge item is required')
+    ).rejects.toThrow('知识库条目不能为空。')
     await expect(
       capability('knowledge.item.add').execute({ baseId: false, item: { id: 'item-1' } }, { source: 'agent' })
-    ).rejects.toThrow('Knowledge base id must be a string')
+    ).rejects.toThrow('知识库 ID 必须是字符串。')
 
     expect(mocks.knowledgeService.addItems).not.toHaveBeenCalled()
     expect(mocks.knowledgeService.reindexItems).not.toHaveBeenCalled()

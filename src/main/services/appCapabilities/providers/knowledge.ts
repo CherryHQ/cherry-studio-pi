@@ -25,6 +25,31 @@ const MAX_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT = 100
 const DEFAULT_KNOWLEDGE_SEARCH_RESULT_LIMIT = 50
 const MAX_KNOWLEDGE_SEARCH_RESULT_LIMIT = 100
 const RENDERER_STORE_FALLBACK_TIMEOUT_MS = 1_000
+const KNOWLEDGE_ABORT_ERROR = '知识库能力调用已取消。'
+const KNOWLEDGE_INPUT_OBJECT_ERROR = '知识库能力的输入必须是对象。'
+const KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT_TYPE_ERROR = '知识库条目预览数量必须是数字。'
+const KNOWLEDGE_SEARCH_DOCUMENT_COUNT_TYPE_ERROR = '知识库搜索文档数量必须是数字。'
+const KNOWLEDGE_SEARCH_RESULT_LIMIT_TYPE_ERROR = '知识库搜索结果数量必须是数字。'
+const KNOWLEDGE_TEXT_STRING_ERROR_SUFFIX = '必须是字符串。'
+const KNOWLEDGE_TEXT_REQUIRED_ERROR_SUFFIX = '不能为空。'
+const KNOWLEDGE_ARRAY_ERROR_SUFFIX = '必须是数组。'
+const KNOWLEDGE_TIMESTAMP_ERROR_SUFFIX = '必须是有限数字或有效日期字符串。'
+const DEFAULT_TEXT_LABEL = '输入值'
+const KNOWLEDGE_BASE_ID_LABEL = '知识库 ID '
+const KNOWLEDGE_BASE_NAME_LABEL = '知识库名称'
+const KNOWLEDGE_SEARCH_QUERY_LABEL = '知识库搜索关键词'
+const KNOWLEDGE_BASE_CREATED_AT_LABEL = '知识库创建时间'
+const KNOWLEDGE_BASE_IDS_LABEL = '知识库 ID 列表'
+const KNOWLEDGE_BASE_ITEMS_LABEL = '知识库条目列表'
+const KNOWLEDGE_ITEM_REQUIRED_ERROR = '知识库条目不能为空。'
+const KNOWLEDGE_BASE_MODEL_REQUIRED_ERROR = '知识库模型不能为空。'
+const KNOWLEDGE_BASE_NOT_FOUND_PREFIX = '未找到知识库：'
+const KNOWLEDGE_BASE_NAME_PREFIX = '知识库“'
+const KNOWLEDGE_EMBEDDING_CONFIG_MISSING_SUFFIX = '”缺少嵌入模型服务商配置。'
+const PROVIDER_NOT_FOUND_FOR_KNOWLEDGE_BASE_PREFIX = '未找到知识库“'
+const PROVIDER_NOT_FOUND_FOR_KNOWLEDGE_BASE_MIDDLE = '”使用的服务商：'
+const MISSING_EMBEDDING_MODEL_ERROR = '缺少嵌入服务商、模型 ID 或向量维度。'
+const VECTOR_STORE_WARNING_PREFIX = '向量库未初始化：'
 const KNOWLEDGE_BASE_METADATA_FIELDS = [
   'dimensions',
   'description',
@@ -42,12 +67,12 @@ function throwIfKnowledgeSignalAborted(signal?: AbortSignal) {
   const reason = signal.reason
   if (reason instanceof Error) throw reason
   if (typeof reason === 'string' && reason.trim()) throw new Error(reason.trim())
-  throw new Error('Knowledge capability call aborted')
+  throw new Error(KNOWLEDGE_ABORT_ERROR)
 }
 
 function normalizeInputObject(input: unknown) {
   if (input === null || typeof input === 'undefined') return {}
-  if (typeof input !== 'object' || Array.isArray(input)) throw new Error('Knowledge capability input must be an object')
+  if (typeof input !== 'object' || Array.isArray(input)) throw new Error(KNOWLEDGE_INPUT_OBJECT_ERROR)
   return input as Record<string, unknown>
 }
 
@@ -65,7 +90,8 @@ function normalizeKnowledgeBaseItemPreviewLimit(value: unknown): number {
     label: 'Knowledge base item preview limit',
     defaultValue: DEFAULT_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT,
     min: 0,
-    max: MAX_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT
+    max: MAX_KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT,
+    invalidTypeMessage: KNOWLEDGE_BASE_ITEM_PREVIEW_LIMIT_TYPE_ERROR
   })
 }
 
@@ -74,7 +100,8 @@ function normalizeKnowledgeSearchDocumentCount(value: unknown): number {
     label: 'Knowledge search document count',
     defaultValue: 5,
     min: 1,
-    max: 20
+    max: 20,
+    invalidTypeMessage: KNOWLEDGE_SEARCH_DOCUMENT_COUNT_TYPE_ERROR
   })
 }
 
@@ -83,30 +110,31 @@ function normalizeKnowledgeSearchResultLimit(value: unknown): number {
     label: 'Knowledge search result limit',
     defaultValue: DEFAULT_KNOWLEDGE_SEARCH_RESULT_LIMIT,
     min: 1,
-    max: MAX_KNOWLEDGE_SEARCH_RESULT_LIMIT
+    max: MAX_KNOWLEDGE_SEARCH_RESULT_LIMIT,
+    invalidTypeMessage: KNOWLEDGE_SEARCH_RESULT_LIMIT_TYPE_ERROR
   })
 }
 
-function normalizeOptionalText(value: unknown, label = 'Value') {
+function normalizeOptionalText(value: unknown, label = DEFAULT_TEXT_LABEL) {
   if (typeof value === 'string') {
     const trimmed = value.trim()
     return trimmed || undefined
   }
   if (value === null || typeof value === 'undefined') return undefined
-  throw new Error(`${label} must be a string`)
+  throw new Error(label + KNOWLEDGE_TEXT_STRING_ERROR_SUFFIX)
 }
 
 function normalizeRequiredText(value: unknown, label: string) {
   const text = normalizeOptionalText(value, label)
-  if (!text) throw new Error(`${label} is required`)
+  if (!text) throw new Error(label + KNOWLEDGE_TEXT_REQUIRED_ERROR_SUFFIX)
   return text
 }
 
 function normalizeKnowledgeBaseIds(value: unknown) {
   if (value === null || typeof value === 'undefined') return undefined
-  if (!Array.isArray(value)) throw new Error('Knowledge base ids must be an array')
+  if (!Array.isArray(value)) throw new Error(KNOWLEDGE_BASE_IDS_LABEL + KNOWLEDGE_ARRAY_ERROR_SUFFIX)
   const ids = value.flatMap((item) => {
-    const id = normalizeOptionalText(item, 'Knowledge base id')
+    const id = normalizeOptionalText(item, KNOWLEDGE_BASE_ID_LABEL)
     return id ? [id] : []
   })
   return [...new Set(ids)]
@@ -114,14 +142,14 @@ function normalizeKnowledgeBaseIds(value: unknown) {
 
 function normalizeKnowledgeItem(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('Knowledge item is required')
+    throw new Error(KNOWLEDGE_ITEM_REQUIRED_ERROR)
   }
   return value as KnowledgeItem
 }
 
 function normalizeKnowledgeItems(value: unknown) {
   if (value === null || typeof value === 'undefined') return []
-  if (!Array.isArray(value)) throw new Error('Knowledge base items must be an array')
+  if (!Array.isArray(value)) throw new Error(KNOWLEDGE_BASE_ITEMS_LABEL + KNOWLEDGE_ARRAY_ERROR_SUFFIX)
   return value.map((item) => normalizeKnowledgeItem(item))
 }
 
@@ -134,12 +162,12 @@ function normalizeOptionalTimestamp(value: unknown, label: string, fallback: num
     const parsed = Date.parse(trimmed)
     if (Number.isFinite(parsed)) return parsed
   }
-  throw new Error(`${label} must be a finite number or valid date string`)
+  throw new Error(label + KNOWLEDGE_TIMESTAMP_ERROR_SUFFIX)
 }
 
 function normalizeKnowledgeModel(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('Knowledge base model is required')
+    throw new Error(KNOWLEDGE_BASE_MODEL_REQUIRED_ERROR)
   }
   return value
 }
@@ -372,12 +400,17 @@ async function toKnowledgeBaseParams(
 ): Promise<KnowledgeBaseParams> {
   const embedProviderId = base.model?.provider
   if (!embedProviderId) {
-    throw new Error(`Knowledge base "${base.name}" is missing embedding model provider configuration`)
+    throw new Error(KNOWLEDGE_BASE_NAME_PREFIX + base.name + KNOWLEDGE_EMBEDDING_CONFIG_MISSING_SUFFIX)
   }
 
   const embedConfig = await resolveProviderConfig(embedProviderId)
   if (!embedConfig) {
-    throw new Error(`Provider "${embedProviderId}" not found for knowledge base "${base.name}"`)
+    throw new Error(
+      PROVIDER_NOT_FOUND_FOR_KNOWLEDGE_BASE_PREFIX +
+        base.name +
+        PROVIDER_NOT_FOUND_FOR_KNOWLEDGE_BASE_MIDDLE +
+        embedProviderId
+    )
   }
 
   const params: KnowledgeBaseParams = {
@@ -477,11 +510,11 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
         const now = Date.now()
-        const id = normalizeOptionalText(inputObject.id, 'Knowledge base id') || `kb_${uuidv4()}`
-        const name = normalizeRequiredText(inputObject.name, 'Knowledge base name')
+        const id = normalizeOptionalText(inputObject.id, KNOWLEDGE_BASE_ID_LABEL) || `kb_${uuidv4()}`
+        const name = normalizeRequiredText(inputObject.name, KNOWLEDGE_BASE_NAME_LABEL)
         const model = normalizeKnowledgeModel(inputObject.model)
         const items = normalizeKnowledgeItems(inputObject.items)
-        const createdAt = normalizeOptionalTimestamp(inputObject.created_at, 'Knowledge base created_at', now)
+        const createdAt = normalizeOptionalTimestamp(inputObject.created_at, KNOWLEDGE_BASE_CREATED_AT_LABEL, now)
         const base = createKnowledgeBaseMetadata(inputObject, {
           id,
           name,
@@ -499,7 +532,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
             const embeddingModelId = toRuntimeModelId(model)
             const dimensions = Number(base.dimensions)
             if (!embeddingModelId || !Number.isFinite(dimensions) || dimensions <= 0) {
-              throw new Error('Missing embedding provider, model id, or dimensions')
+              throw new Error(MISSING_EMBEDDING_MODEL_ERROR)
             }
             const runtimeBase = await knowledgeService.createBase({
               name: base.name,
@@ -525,7 +558,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
             }
           } catch (error) {
             if (context.signal?.aborted) throw error
-            warnings.push(`Vector store was not initialized: ${error instanceof Error ? error.message : String(error)}`)
+            warnings.push(VECTOR_STORE_WARNING_PREFIX + (error instanceof Error ? error.message : String(error)))
           }
         }
 
@@ -567,7 +600,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       tags: ['knowledge', 'rag', 'search'],
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
-        const query = normalizeRequiredText(inputObject.query, 'Knowledge search query')
+        const query = normalizeRequiredText(inputObject.query, KNOWLEDGE_SEARCH_QUERY_LABEL)
 
         const ids = normalizeKnowledgeBaseIds(inputObject.knowledge_base_ids)
         const documentCount = normalizeKnowledgeSearchDocumentCount(inputObject.document_count)
@@ -578,7 +611,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
           const foundIds = new Set(targetBases.map((base) => base.id))
           const missingIds = ids.filter((id) => !foundIds.has(id))
           if (missingIds.length > 0) {
-            throw new Error(`Knowledge base not found: ${missingIds.join(', ')}`)
+            throw new Error(KNOWLEDGE_BASE_NOT_FOUND_PREFIX + missingIds.join(', '))
           }
         }
         const resolveProviderConfig = createCachedProviderConfigResolver(context.signal)
@@ -613,7 +646,11 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         const warnings = resultsPerBase.flatMap((item) => (item.error ? [`${item.baseName}: ${item.error}`] : []))
         if (truncatedCount > 0) {
           warnings.push(
-            `Returned ${limitedResults.length} of ${results.length} knowledge search results; narrow knowledge_base_ids or raise result_limit.`
+            '已返回 ' +
+              limitedResults.length +
+              ' / ' +
+              results.length +
+              ' 条知识库搜索结果；请缩小 knowledge_base_ids 范围或提高 result_limit。'
           )
         }
         return {
@@ -653,9 +690,9 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       tags: ['knowledge', 'rag', 'add', 'ingest'],
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
-        const baseId = normalizeRequiredText(inputObject.baseId, 'Knowledge base id')
+        const baseId = normalizeRequiredText(inputObject.baseId, KNOWLEDGE_BASE_ID_LABEL)
         const base = (await listKnowledgeBases(context.signal)).find((item) => item.id === baseId)
-        if (!base) throw new Error(`Knowledge base not found: ${baseId}`)
+        if (!base) throw new Error(KNOWLEDGE_BASE_NOT_FOUND_PREFIX + baseId)
         const knowledgeItem = normalizeKnowledgeItem(inputObject.item)
         await toKnowledgeBaseParams(base, (providerId) => getProviderConfig(providerId, context.signal))
         throwIfKnowledgeSignalAborted(context.signal)
@@ -687,9 +724,9 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       tags: ['knowledge', 'rag', 'reset'],
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
-        const baseId = normalizeRequiredText(inputObject.baseId, 'Knowledge base id')
+        const baseId = normalizeRequiredText(inputObject.baseId, KNOWLEDGE_BASE_ID_LABEL)
         const base = (await listKnowledgeBases(context.signal)).find((item) => item.id === baseId)
-        if (!base) throw new Error(`Knowledge base not found: ${baseId}`)
+        if (!base) throw new Error(KNOWLEDGE_BASE_NOT_FOUND_PREFIX + baseId)
         if (context.dryRun) return okResult('Knowledge base reset dry run completed', { baseId: base.id })
         await toKnowledgeBaseParams(base, (providerId) => getProviderConfig(providerId, context.signal))
         throwIfKnowledgeSignalAborted(context.signal)
