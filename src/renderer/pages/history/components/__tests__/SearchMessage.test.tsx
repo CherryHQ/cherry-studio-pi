@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 
 import type { Topic } from '@renderer/types'
-import type { Message } from '@renderer/types/newMessage'
+import { type Message, UserMessageStatus } from '@renderer/types/newMessage'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -76,20 +76,24 @@ vi.mock('react-i18next', () => ({
   })
 }))
 
-const topic = (id: string, name: string): Topic =>
-  ({
-    id,
-    name,
-    messages: []
-  }) as Topic
+const topic = (id: string, name: string): Topic => ({
+  id,
+  assistantId: undefined,
+  name,
+  createdAt: '2026-06-20T00:00:00.000Z',
+  updatedAt: '2026-06-20T00:00:00.000Z',
+  messages: []
+})
 
-const message = (id: string, topicId: string): Message =>
-  ({
-    id,
-    topicId,
-    role: 'user',
-    content: id
-  }) as Message
+const message = (id: string, topicId: string): Message => ({
+  id,
+  topicId,
+  role: 'user',
+  assistantId: undefined,
+  createdAt: '2026-06-20T00:00:00.000Z',
+  status: UserMessageStatus.SUCCESS,
+  blocks: []
+})
 
 describe('SearchMessage', () => {
   beforeEach(() => {

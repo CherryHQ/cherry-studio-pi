@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 
+import type { OperationResult } from '@shared/config/types'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -72,8 +73,8 @@ describe('UpdateButton', () => {
   })
 
   it('ignores delayed update completion after unmount', async () => {
-    const updateOperation = deferred<{ success: boolean }>()
-    window.api.openclaw.performUpdate.mockReturnValueOnce(updateOperation.promise)
+    const updateOperation = deferred<OperationResult>()
+    vi.mocked(window.api.openclaw.performUpdate).mockReturnValueOnce(updateOperation.promise)
     const onUpdateComplete = vi.fn()
     const onUpdatingChange = vi.fn()
     const { unmount } = render(<UpdateButton onUpdateComplete={onUpdateComplete} onUpdatingChange={onUpdatingChange} />)
