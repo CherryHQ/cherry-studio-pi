@@ -1387,6 +1387,62 @@ describe('AppDataSyncService', () => {
     expect(cancel).toHaveBeenCalled()
   })
 
+  it('restores previous WebDAV headers after releasing a native lock', async () => {
+    const unlock = vi.fn(async () => true)
+    const setHeaders = vi.fn()
+    const service = new AppDataSyncService() as unknown as {
+      releaseRemoteLock(
+        client: Pick<WebDAVClient, 'unlock' | 'setHeaders'>,
+        lock: {
+          type: 'webdav'
+          path: string
+          ownerId: string
+          token: string
+          previousHeaders: Record<string, string>
+        }
+      ): Promise<void>
+    }
+
+    await service.releaseRemoteLock({ unlock, setHeaders } as never, {
+      type: 'webdav',
+      path: '/remote-root/sync/v1',
+      ownerId: 'device-a',
+      token: 'opaquelocktoken:server-lock',
+      previousHeaders: { Depth: '1' }
+    })
+
+    expect(unlock).toHaveBeenCalledWith('/remote-root/sync/v1', 'opaquelocktoken:server-lock')
+    expect(setHeaders).toHaveBeenCalledWith({ Depth: '1' })
+  })
+
+  it('clears native WebDAV lock headers when no previous headers are available', async () => {
+    const unlock = vi.fn(async () => true)
+    const setHeaders = vi.fn()
+    const service = new AppDataSyncService() as unknown as {
+      releaseRemoteLock(
+        client: Pick<WebDAVClient, 'unlock' | 'setHeaders'>,
+        lock: {
+          type: 'webdav'
+          path: string
+          ownerId: string
+          token: string
+          previousHeaders: null
+        }
+      ): Promise<void>
+    }
+
+    await service.releaseRemoteLock({ unlock, setHeaders } as never, {
+      type: 'webdav',
+      path: '/remote-root/sync/v1',
+      ownerId: 'device-a',
+      token: 'opaquelocktoken:server-lock',
+      previousHeaders: null
+    })
+
+    expect(unlock).toHaveBeenCalledWith('/remote-root/sync/v1', 'opaquelocktoken:server-lock')
+    expect(setHeaders).toHaveBeenCalledWith({})
+  })
+
   it('reports active remote locks during WebDAV diagnosis instead of passing readiness checks', async () => {
     const now = Date.now()
     mocks.remoteFiles.set(

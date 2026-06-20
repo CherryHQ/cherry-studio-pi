@@ -2268,7 +2268,7 @@ export class AppDataSyncService {
 
       if (!lock?.token) return null
 
-      const previousHeaders = typeof client.getHeaders === 'function' ? client.getHeaders() : null
+      const previousHeaders = typeof client.getHeaders === 'function' ? (client.getHeaders() ?? {}) : null
       if (typeof client.setHeaders === 'function') {
         client.setHeaders({
           ...previousHeaders,
@@ -2420,8 +2420,8 @@ export class AppDataSyncService {
       } catch (error) {
         logger.warn('Failed to release native WebDAV data sync lock', error as Error)
       } finally {
-        if (typeof client.setHeaders === 'function' && lock.previousHeaders) {
-          client.setHeaders(lock.previousHeaders)
+        if (typeof client.setHeaders === 'function') {
+          client.setHeaders(lock.previousHeaders ?? {})
         }
       }
       return
