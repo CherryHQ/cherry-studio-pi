@@ -20,12 +20,13 @@ interface CitationsListProps {
 }
 
 const logger = loggerService.withContext('CitationsList')
+const CITATION_QUERY_GC_TIME_MS = 10 * 60 * 1000
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: Infinity,
-      gcTime: Infinity,
+      gcTime: CITATION_QUERY_GC_TIME_MS,
       refetchOnWindowFocus: false,
       retry: false
     }
