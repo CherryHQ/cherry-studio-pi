@@ -27,16 +27,28 @@ function normalizeInputObject(input: unknown) {
   return input as Record<string, unknown>
 }
 
-async function getNotesRoot() {
+function throwIfNotesSignalAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return
+  const reason = signal.reason
+  if (reason instanceof Error) throw reason
+  if (typeof reason === 'string' && reason.trim()) throw new Error(reason.trim())
+  throw new Error('Notes capability call aborted')
+}
+
+async function getNotesRoot(signal?: AbortSignal) {
+  throwIfNotesSignalAborted(signal)
   const preferredPath = await Promise.resolve()
     .then(() => application.get('PreferenceService').get('feature.notes.path'))
     .catch(() => '')
+  throwIfNotesSignalAborted(signal)
   if (typeof preferredPath === 'string' && preferredPath.trim()) return path.resolve(preferredPath.trim())
 
   const noteState = await readRendererStoreValue<any>('state.note', {
     checkTimeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS,
-    timeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS
+    timeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS,
+    signal
   }).catch(() => null)
+  throwIfNotesSignalAborted(signal)
   return path.resolve(noteState?.notesPath || getNotesDir())
 }
 
@@ -157,11 +169,15 @@ function normalizeReadMaxBytes(value: unknown) {
   })
 }
 
-async function readTextFilePreview(filePath: string, maxBytes: number) {
+async function readTextFilePreview(filePath: string, maxBytes: number, signal?: AbortSignal) {
+  throwIfNotesSignalAborted(signal)
   const stat = await fs.stat(filePath)
+  throwIfNotesSignalAborted(signal)
   if (stat.size <= maxBytes) {
+    const content = await fs.readFile(filePath, 'utf8')
+    throwIfNotesSignalAborted(signal)
     return {
-      content: await fs.readFile(filePath, 'utf8'),
+      content,
       byteSize: stat.size,
       truncated: false,
       maxBytes
@@ -170,8 +186,10 @@ async function readTextFilePreview(filePath: string, maxBytes: number) {
 
   const handle = await fs.open(filePath, 'r')
   try {
+    throwIfNotesSignalAborted(signal)
     const buffer = Buffer.alloc(maxBytes)
     const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0)
+    throwIfNotesSignalAborted(signal)
     return {
       content: buffer.subarray(0, bytesRead).toString('utf8'),
       byteSize: stat.size,
@@ -183,7 +201,7 @@ async function readTextFilePreview(filePath: string, maxBytes: number) {
   }
 }
 
-async function listNoteEntries(root: string, input: any) {
+async function listNoteEntries(root: string, input: any, signal?: AbortSignal) {
   const limit = normalizeListLimit(input?.limit)
   const offset = normalizeOffset(input?.offset)
   const collected: any[] = []
@@ -193,8 +211,10 @@ async function listNoteEntries(root: string, input: any) {
   let hitScanLimit = false
 
   while (stack.length > 0 && collected.length <= limit) {
+    throwIfNotesSignalAborted(signal)
     const current = stack.pop()!
     const entries = await fs.readdir(current.dirPath, { withFileTypes: true }).catch(() => [])
+    throwIfNotesSignalAborted(signal)
     const childDirectories: Array<{ dirPath: string; depth: number }> = []
 
     entries.sort((left, right) => {
@@ -203,6 +223,7 @@ async function listNoteEntries(root: string, input: any) {
     })
 
     for (const entry of entries) {
+      throwIfNotesSignalAborted(signal)
       if (entry.name.startsWith('.')) continue
       scannedEntries += 1
       if (scannedEntries > MAX_NOTE_LIST_SCAN_ENTRIES) {
@@ -215,6 +236,7 @@ async function listNoteEntries(root: string, input: any) {
 
       if (entry.isDirectory()) {
         const stats = await fs.stat(entryPath).catch(() => null)
+        throwIfNotesSignalAborted(signal)
         const item = {
           type: 'folder',
           name: entry.name,
@@ -232,6 +254,7 @@ async function listNoteEntries(root: string, input: any) {
         }
       } else if (entry.isFile() && path.extname(entry.name).toLowerCase() === '.md') {
         const stats = await fs.stat(entryPath).catch(() => null)
+        throwIfNotesSignalAborted(signal)
         const treePath = `/${relativePath.replace(/\.md$/i, '')}`
         const item = {
           type: 'file',
@@ -271,15 +294,17 @@ async function listNoteEntries(root: string, input: any) {
   }
 }
 
-async function collectNoteFilesForSearch(root: string) {
+async function collectNoteFilesForSearch(root: string, signal?: AbortSignal) {
   const files: any[] = []
   const stack = [{ dirPath: root, depth: 0 }]
   let scannedEntries = 0
   let hitScanLimit = false
 
   while (stack.length > 0 && files.length < MAX_NOTE_SEARCH_FILES) {
+    throwIfNotesSignalAborted(signal)
     const current = stack.pop()!
     const entries = await fs.readdir(current.dirPath, { withFileTypes: true }).catch(() => [])
+    throwIfNotesSignalAborted(signal)
     const childDirectories: Array<{ dirPath: string; depth: number }> = []
 
     entries.sort((left, right) => {
@@ -288,6 +313,7 @@ async function collectNoteFilesForSearch(root: string) {
     })
 
     for (const entry of entries) {
+      throwIfNotesSignalAborted(signal)
       if (entry.name.startsWith('.')) continue
       scannedEntries += 1
       if (scannedEntries > MAX_NOTE_LIST_SCAN_ENTRIES) {
@@ -350,10 +376,13 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['notes', 'files', 'markdown'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
-        const root = await getNotesRoot()
-        return okResult('Notes listed', { root, ...(await listNoteEntries(root, inputObject)) })
+        throwIfNotesSignalAborted(context.signal)
+        const root = await getNotesRoot(context.signal)
+        const entries = await listNoteEntries(root, inputObject, context.signal)
+        throwIfNotesSignalAborted(context.signal)
+        return okResult('Notes listed', { root, ...entries })
       }
     },
     {
@@ -376,15 +405,19 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['notes', 'read', 'markdown'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
         const notePath = normalizeRequiredText(inputObject.path, 'Note path')
-        const root = await getNotesRoot()
+        throwIfNotesSignalAborted(context.signal)
+        const root = await getNotesRoot(context.signal)
         const filePath = resolveInsideRoot(root, notePath, '.md')
         await assertResolvedInsideNotesRoot(root, filePath)
+        throwIfNotesSignalAborted(context.signal)
+        const preview = await readTextFilePreview(filePath, normalizeReadMaxBytes(inputObject.maxBytes), context.signal)
+        throwIfNotesSignalAborted(context.signal)
         return okResult('Note read', {
           path: filePath,
-          ...(await readTextFilePreview(filePath, normalizeReadMaxBytes(inputObject.maxBytes)))
+          ...preview
         })
       }
     },
@@ -404,18 +437,21 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['notes', 'search', 'markdown'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
         const query = normalizeRequiredText(inputObject.query, 'Note search query').toLowerCase()
 
-        const root = await getNotesRoot()
+        throwIfNotesSignalAborted(context.signal)
+        const root = await getNotesRoot(context.signal)
         const limit = normalizeSearchLimit(inputObject.limit)
-        const { files, scanTruncated } = await collectNoteFilesForSearch(root)
+        const { files, scanTruncated } = await collectNoteFilesForSearch(root, context.signal)
         const matches: any[] = []
         for (const file of files) {
+          throwIfNotesSignalAborted(context.signal)
           if (matches.length >= limit) break
           const nameMatches = file.name.toLowerCase().includes(query)
           const stat = await fs.stat(file.externalPath).catch(() => null)
+          throwIfNotesSignalAborted(context.signal)
           if (!stat?.isFile()) continue
           if (nameMatches) {
             matches.push({ ...file, byteSize: stat.size, match: 'name', snippet: '' })
@@ -424,6 +460,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
           if (stat.size > MAX_NOTE_SEARCH_FILE_BYTES) continue
 
           const content = await fs.readFile(file.externalPath, 'utf8').catch(() => '')
+          throwIfNotesSignalAborted(context.signal)
           const index = content.toLowerCase().indexOf(query)
           if (index >= 0) {
             matches.push({
@@ -434,6 +471,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
             })
           }
         }
+        throwIfNotesSignalAborted(context.signal)
         return okResult('Notes searched', {
           query,
           root,
@@ -462,20 +500,25 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       permissions: ['notes.write'],
       sideEffects: ['filesystem.write'],
       tags: ['notes', 'create', 'markdown'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
         const parentInput = normalizeOptionalText(inputObject.parent, 'Note parent')
         const nameInput = normalizeOptionalText(inputObject.name, 'Note name', 'Untitled') || 'Untitled'
         const content = normalizeNoteContent(inputObject.content)
-        const root = await getNotesRoot()
+        throwIfNotesSignalAborted(context.signal)
+        const root = await getNotesRoot(context.signal)
         const parent = resolveInsideRoot(root, parentInput)
         await assertResolvedInsideNotesRoot(root, parent, 'Note parent')
+        throwIfNotesSignalAborted(context.signal)
         await fs.mkdir(parent, { recursive: true })
+        throwIfNotesSignalAborted(context.signal)
         const safeName = getName(parent, nameInput, true)
         const filePath = path.join(parent, `${safeName}.md`)
         await assertResolvedInsideNotesRoot(root, filePath)
+        throwIfNotesSignalAborted(context.signal)
         await fs.writeFile(filePath, content, 'utf8')
         notifyMainProcessDataSyncLocalChange('file', { source: 'app-capability.notes.create', path: filePath })
+        throwIfNotesSignalAborted(context.signal)
         return {
           ok: true,
           summary: `Note created: ${safeName}`,
@@ -502,19 +545,24 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       permissions: ['notes.write'],
       sideEffects: ['filesystem.write'],
       tags: ['notes', 'write', 'markdown'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
         if (!Object.prototype.hasOwnProperty.call(inputObject, 'content')) throw new Error('Note content is required')
         const notePath = normalizeRequiredText(inputObject.path, 'Note path')
         const content = normalizeNoteContent(inputObject.content)
-        const root = await getNotesRoot()
+        throwIfNotesSignalAborted(context.signal)
+        const root = await getNotesRoot(context.signal)
         const filePath = resolveInsideRoot(root, notePath, '.md')
         await assertResolvedInsideNotesRoot(root, filePath)
+        throwIfNotesSignalAborted(context.signal)
         const parent = path.dirname(filePath)
         await assertResolvedInsideNotesRoot(root, parent, 'Note parent')
+        throwIfNotesSignalAborted(context.signal)
         await fs.mkdir(parent, { recursive: true })
+        throwIfNotesSignalAborted(context.signal)
         await fs.writeFile(filePath, content, 'utf8')
         notifyMainProcessDataSyncLocalChange('file', { source: 'app-capability.notes.write', path: filePath })
+        throwIfNotesSignalAborted(context.signal)
         return okResult('Note written', { path: filePath })
       }
     },
@@ -539,13 +587,16 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
         const notePath = normalizeRequiredText(inputObject.path, 'Note path')
-        const root = await getNotesRoot()
+        throwIfNotesSignalAborted(context.signal)
+        const root = await getNotesRoot(context.signal)
         const target = await resolveNoteDeleteTarget(root, notePath)
         assertNotNotesRoot(root, target)
         await assertResolvedInsideNotesRoot(root, target)
+        throwIfNotesSignalAborted(context.signal)
         if (context.dryRun) return okResult('Note delete dry run completed', { path: target })
         await fs.rm(target, { force: true, recursive: true })
         notifyMainProcessDataSyncLocalChange('file', { source: 'app-capability.notes.delete', path: target })
+        throwIfNotesSignalAborted(context.signal)
         return okResult('Note deleted', { path: target })
       }
     }

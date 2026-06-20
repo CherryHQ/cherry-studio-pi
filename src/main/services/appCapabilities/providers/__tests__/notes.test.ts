@@ -103,4 +103,51 @@ describe('notes app capabilities', () => {
     expect(mocks.readRendererStoreValue).not.toHaveBeenCalled()
     expect(mocks.notifyMainProcessDataSyncLocalChange).not.toHaveBeenCalled()
   })
+
+  it('stops notes capabilities before filesystem work when the caller signal is already aborted', async () => {
+    const controller = new AbortController()
+    controller.abort('agent stopped notes work')
+    const context = { source: 'agent' as const, signal: controller.signal }
+
+    await expect(capability('notes.list').execute({}, context)).rejects.toThrow('agent stopped notes work')
+    await expect(capability('notes.read').execute({ path: 'one' }, context)).rejects.toThrow('agent stopped notes work')
+    await expect(capability('notes.search').execute({ query: 'hello' }, context)).rejects.toThrow(
+      'agent stopped notes work'
+    )
+    await expect(capability('notes.create').execute({ name: 'one', content: 'hello' }, context)).rejects.toThrow(
+      'agent stopped notes work'
+    )
+    await expect(capability('notes.write').execute({ path: 'one', content: 'hello' }, context)).rejects.toThrow(
+      'agent stopped notes work'
+    )
+    await expect(capability('notes.delete').execute({ path: 'one' }, context)).rejects.toThrow(
+      'agent stopped notes work'
+    )
+
+    expect(await fs.readdir(notesRoot)).toEqual([])
+    expect(mocks.applicationGet).not.toHaveBeenCalled()
+    expect(mocks.readRendererStoreValue).not.toHaveBeenCalled()
+    expect(mocks.notifyMainProcessDataSyncLocalChange).not.toHaveBeenCalled()
+  })
+
+  it('notifies data sync for completed note writes before surfacing caller cancellation', async () => {
+    const controller = new AbortController()
+    mocks.notifyMainProcessDataSyncLocalChange.mockImplementationOnce(() => {
+      controller.abort('agent cancelled after note write')
+    })
+
+    await expect(
+      capability('notes.write').execute(
+        { path: 'daily/today', content: 'hello from agent' },
+        { source: 'agent', signal: controller.signal }
+      )
+    ).rejects.toThrow('agent cancelled after note write')
+
+    const filePath = path.join(notesRoot, 'daily', 'today.md')
+    await expect(fs.readFile(filePath, 'utf8')).resolves.toBe('hello from agent')
+    expect(mocks.notifyMainProcessDataSyncLocalChange).toHaveBeenCalledWith('file', {
+      source: 'app-capability.notes.write',
+      path: filePath
+    })
+  })
 })
