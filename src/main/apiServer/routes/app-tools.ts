@@ -456,22 +456,28 @@ appToolsRouter.patch('/settings/value', async (req, res, next) => {
 })
 
 appToolsRouter.post('/settings/open', async (req, res, next) => {
+  const responseAbort = createResponseAbortSignal(res)
   try {
     const section = SETTINGS_SECTIONS.find((item) => item.id === req.body?.section || item.route === req.body?.route)
     const route = section?.route || req.body?.route || '/settings/provider'
-    await navigateApp(route)
+    await navigateApp(route, responseAbort.signal)
     res.json({ ok: true, route })
   } catch (error) {
     next(error)
+  } finally {
+    responseAbort.dispose()
   }
 })
 
 appToolsRouter.post('/navigate', async (req, res, next) => {
+  const responseAbort = createResponseAbortSignal(res)
   try {
-    await navigateApp(req.body?.route || '/')
+    await navigateApp(req.body?.route || '/', responseAbort.signal)
     res.json({ ok: true })
   } catch (error) {
     next(error)
+  } finally {
+    responseAbort.dispose()
   }
 })
 
