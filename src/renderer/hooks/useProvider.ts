@@ -93,7 +93,6 @@ export function useProvider(providerId: string) {
 // ─── Layer 3: Pure mutations ──────────────────────────────────────────
 export function useProviderMutations(providerId: string) {
   // P0: all mutations refresh list + entity + all sub-paths — no manual invalidate needed.
-  const refresh = providerRefreshPaths(providerId)
   const catalogRefresh = providerCatalogRefreshPaths(providerId)
 
   const {
@@ -119,15 +118,17 @@ export function useProviderMutations(providerId: string) {
     trigger: deleteApiKeyTrigger,
     isLoading: isDeletingApiKey,
     error: deleteApiKeyError
-  } = useMutation('DELETE', '/providers/:providerId/api-keys/:keyId', { refresh })
+  } = useMutation('DELETE', '/providers/:providerId/api-keys/:keyId', { refresh: catalogRefresh })
 
   const {
     trigger: updateApiKeyTrigger,
     isLoading: isUpdatingApiKey,
     error: updateApiKeyError
-  } = useMutation('PATCH', '/providers/:providerId/api-keys/:keyId', { refresh })
+  } = useMutation('PATCH', '/providers/:providerId/api-keys/:keyId', { refresh: catalogRefresh })
 
-  const { trigger: replaceApiKeysTrigger } = useMutation('PUT', '/providers/:providerId/api-keys', { refresh })
+  const { trigger: replaceApiKeysTrigger } = useMutation('PUT', '/providers/:providerId/api-keys', {
+    refresh: catalogRefresh
+  })
 
   const updateProvider = useCallback(
     async (updates: UpdateProviderDto) => {
