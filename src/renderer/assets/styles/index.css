@@ -50,7 +50,7 @@ body,
 body {
   display: flex;
   min-height: 100vh;
-  color: var(--color-text);
+  color: var(--color-foreground);
   font-size: 14px;
   line-height: 1.6;
   overflow: hidden;
@@ -163,7 +163,7 @@ ul {
 .bubble:not(.multi-select-mode) .message-user .message-content-container {
   border-radius: 10px;
   padding: 10px 16px 10px 16px;
-  background-color: var(--chat-background-user);
+  background-color: var(--color-muted);
   align-self: self-end;
   margin-left: 46px;
   margin-right: 45px;
@@ -189,7 +189,7 @@ ul {
 }
 
 .bubble:not(.multi-select-mode) .message-user code {
-  color: var(--color-text);
+  color: var(--color-foreground);
 }
 
 .bubble:not(.multi-select-mode) .message-user .markdown {
@@ -197,12 +197,12 @@ ul {
 }
 
 ::highlight(search-matches) {
-  background-color: var(--color-background-highlight);
-  color: var(--color-highlight);
+  background-color: color-mix(in srgb, var(--color-warning) 50%, transparent);
+  color: var(--color-foreground);
 }
 
 ::highlight(current-match) {
-  background-color: var(--color-background-highlight-accent);
+  background-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
 }
 
 textarea::-webkit-resizer {
