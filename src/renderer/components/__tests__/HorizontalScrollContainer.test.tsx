@@ -46,7 +46,9 @@ describe('HorizontalScrollContainer', () => {
   it('does not expand when clicking text inside a no-expand target', () => {
     const { container } = render(
       <HorizontalScrollContainer expandable>
-        <button data-no-expand>close</button>
+        <button type="button" data-no-expand>
+          close
+        </button>
       </HorizontalScrollContainer>
     )
     const content = getScrollContent(container)
