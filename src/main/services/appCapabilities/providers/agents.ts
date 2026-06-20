@@ -51,6 +51,14 @@ function normalizeInputObject(input: unknown) {
   return input as Record<string, unknown>
 }
 
+function throwIfAgentSignalAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return
+  const reason = signal.reason
+  if (reason instanceof Error) throw reason
+  if (typeof reason === 'string' && reason.trim()) throw new Error(reason.trim())
+  throw new Error('Agent capability call aborted')
+}
+
 function normalizeOptionalText(value: unknown, label = 'Value') {
   if (typeof value === 'string') {
     const trimmed = value.trim()
@@ -140,35 +148,44 @@ function agentTaskListOptions(input: Record<string, unknown>) {
   }
 }
 
-async function listAgentTasks(input: any = {}) {
+async function listAgentTasks(input: any = {}, signal?: AbortSignal) {
   const inputObject = normalizeInputObject(input)
   const options = agentTaskListOptions(inputObject)
   const agentId = normalizeOptionalText(inputObject.agentId, 'Agent id')
+  throwIfAgentSignalAborted(signal)
 
   if (agentId) {
-    return agentTaskService.listTasks(agentId, {
+    const tasks = await agentTaskService.listTasks(agentId, {
       limit: options.limit,
       offset: options.offset,
       includeHeartbeat: options.includeHeartbeat
     })
+    throwIfAgentSignalAborted(signal)
+    return tasks
   }
 
-  return await agentTaskService.listTasksAcrossAgents({
+  const tasks = await agentTaskService.listTasksAcrossAgents({
     includeHeartbeat: options.includeHeartbeat,
     limit: options.limit ?? DEFAULT_AGENT_CAPABILITY_LIST_LIMIT,
     offset: options.offset
   })
+  throwIfAgentSignalAborted(signal)
+  return tasks
 }
 
 async function createDefaultAgentSession(
   agentId: string,
   name: string,
-  workspace: { type: 'system' } | { type: 'user'; workspaceId: string }
+  workspace: { type: 'system' } | { type: 'user'; workspaceId: string },
+  signal?: AbortSignal
 ) {
   try {
+    throwIfAgentSignalAborted(signal)
     const session = await agentSessionService.createSession({ agentId, name, workspace })
+    throwIfAgentSignalAborted(signal)
     return { session, warning: undefined }
   } catch (error) {
+    if (signal?.aborted) throw error
     const message = error instanceof Error ? error.message : String(error)
     return { session: null, warning: `Default session could not be created: ${message}` }
   }
@@ -192,8 +209,13 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['agents', 'models', 'llm'],
-      execute: async (input: any) =>
-        okResult('Agent models listed', sanitizeForAgent(await modelsService.getModels(modelListOptions(input))))
+      execute: async (input: any, context) => {
+        const options = modelListOptions(input)
+        throwIfAgentSignalAborted(context.signal)
+        const models = await modelsService.getModels(options)
+        throwIfAgentSignalAborted(context.signal)
+        return okResult('Agent models listed', sanitizeForAgent(models))
+      }
     },
     {
       id: 'agents.list',
@@ -213,8 +235,13 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['agents', 'list'],
-      execute: async (input: any) =>
-        okResult('Agents listed', sanitizeForAgent(await listAgentsWithStorageV2Recovery(agentListOptions(input))))
+      execute: async (input: any, context) => {
+        const options = agentListOptions(input)
+        throwIfAgentSignalAborted(context.signal)
+        const agents = await listAgentsWithStorageV2Recovery(options)
+        throwIfAgentSignalAborted(context.signal)
+        return okResult('Agents listed', sanitizeForAgent(agents))
+      }
     },
     {
       id: 'agents.get',
@@ -231,9 +258,11 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['agents', 'read'],
-      execute: async (input: any) => {
+      execute: async (input: any, context) => {
         const agentId = normalizeRequiredText(input?.agentId, 'Agent id')
+        throwIfAgentSignalAborted(context.signal)
         const agent = await getAgentWithStorageV2Recovery(agentId)
+        throwIfAgentSignalAborted(context.signal)
         if (!agent) throw new Error(`Agent not found: ${agentId}`)
         return okResult('Agent read', sanitizeForAgent(agent))
       }
@@ -280,7 +309,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       permissions: ['agents.write'],
       sideEffects: ['database.write', 'filesystem.write'],
       tags: ['agents', 'create'],
-      execute: async (input: any) => {
+      execute: async (input: any, context) => {
         const name = normalizeRequiredText(input?.name, 'Agent name')
         const model = normalizeRequiredText(input?.model, 'Agent model')
         const sessionName = normalizeOptionalText(input?.sessionName, 'Agent session name') || 'Default session'
@@ -302,12 +331,14 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
         const disabledTools = normalizeOptionalTextArray(input?.disabledTools, 'Disabled tools', 'Disabled tool')
         const configuration = normalizeOptionalObject(input?.configuration, 'Agent configuration')
         const initialWorkspacePath = workspacePath ?? accessiblePaths?.[0]
+        throwIfAgentSignalAborted(context.signal)
         const sessionWorkspace = initialWorkspacePath
           ? {
               type: 'user' as const,
               workspaceId: (await agentWorkspaceService.findOrCreateByPath(initialWorkspacePath)).id
             }
           : ({ type: 'system' } as const)
+        throwIfAgentSignalAborted(context.signal)
         const agent = await createAgentWithStorageV2Recovery({
           type,
           name,
@@ -320,7 +351,13 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
           disabledTools,
           configuration
         })
-        const { session, warning } = await createDefaultAgentSession(agent.id, sessionName, sessionWorkspace)
+        throwIfAgentSignalAborted(context.signal)
+        const { session, warning } = await createDefaultAgentSession(
+          agent.id,
+          sessionName,
+          sessionWorkspace,
+          context.signal
+        )
         return {
           ok: true,
           summary: warning ? `Agent created: ${agent.name}; ${warning}` : `Agent created: ${agent.name}`,
@@ -348,17 +385,17 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['agents', 'sessions', 'list'],
-      execute: async (input: any) =>
-        okResult(
-          'Agent sessions listed',
-          sanitizeForAgent(
-            await agentSessionService.listByCursor({
-              agentId: normalizeOptionalText(input?.agentId, 'Agent id'),
-              limit: normalizeListLimit(input?.limit),
-              cursor: normalizeOptionalText(input?.cursor, 'Agent session cursor')
-            })
-          )
-        )
+      execute: async (input: any, context) => {
+        const options = {
+          agentId: normalizeOptionalText(input?.agentId, 'Agent id'),
+          limit: normalizeListLimit(input?.limit),
+          cursor: normalizeOptionalText(input?.cursor, 'Agent session cursor')
+        }
+        throwIfAgentSignalAborted(context.signal)
+        const sessions = await agentSessionService.listByCursor(options)
+        throwIfAgentSignalAborted(context.signal)
+        return okResult('Agent sessions listed', sanitizeForAgent(sessions))
+      }
     },
     {
       id: 'agents.session.create',
@@ -379,14 +416,17 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       permissions: ['agents.sessions.write'],
       sideEffects: ['database.write'],
       tags: ['agents', 'sessions', 'create'],
-      execute: async (input: any) => {
+      execute: async (input: any, context) => {
         const { agentId, ...sessionInput } = input ?? {}
-        const session = await agentSessionService.createSession({
+        const sessionPayload = {
           agentId: normalizeRequiredText(agentId, 'Agent id'),
           name: normalizeOptionalText(sessionInput.name, 'Session name') || 'New session',
           description: normalizeOptionalText(sessionInput.description, 'Session description'),
-          workspace: { type: 'system' }
-        })
+          workspace: { type: 'system' as const }
+        }
+        throwIfAgentSignalAborted(context.signal)
+        const session = await agentSessionService.createSession(sessionPayload)
+        throwIfAgentSignalAborted(context.signal)
         return okResult('Agent session created', sanitizeForAgent(session))
       }
     },
@@ -407,7 +447,8 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['agents', 'tasks', 'schedule'],
-      execute: async (input: any) => okResult('Agent tasks listed', sanitizeForAgent(await listAgentTasks(input)))
+      execute: async (input: any, context) =>
+        okResult('Agent tasks listed', sanitizeForAgent(await listAgentTasks(input, context.signal)))
     },
     {
       id: 'agents.task.create',
@@ -427,12 +468,15 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       permissions: ['agents.tasks.write'],
       sideEffects: ['database.write'],
       tags: ['agents', 'tasks', 'schedule', 'create'],
-      execute: async (input: any) => {
+      execute: async (input: any, context) => {
         const taskInput = input?.task
         if (!taskInput || typeof taskInput !== 'object' || Array.isArray(taskInput)) {
           throw new Error('Agent task is required')
         }
-        const task = await agentTaskService.createTask(normalizeRequiredText(input?.agentId, 'Agent id'), taskInput)
+        const agentId = normalizeRequiredText(input?.agentId, 'Agent id')
+        throwIfAgentSignalAborted(context.signal)
+        const task = await agentTaskService.createTask(agentId, taskInput)
+        throwIfAgentSignalAborted(context.signal)
         return okResult('Agent task created', sanitizeForAgent(task))
       }
     }

@@ -215,6 +215,28 @@ describe('agent app capabilities', () => {
     expect(mocks.agentTaskService.listTasksAcrossAgents).not.toHaveBeenCalled()
   })
 
+  it('stops agent read and list capabilities before service calls when aborted', async () => {
+    const controller = new AbortController()
+    controller.abort('agent stopped list work')
+    const context = { source: 'agent' as const, signal: controller.signal }
+
+    await expect(capability('agents.models.list').execute({}, context)).rejects.toThrow('agent stopped list work')
+    await expect(capability('agents.list').execute({}, context)).rejects.toThrow('agent stopped list work')
+    await expect(capability('agents.get').execute({ agentId: 'agent-1' }, context)).rejects.toThrow(
+      'agent stopped list work'
+    )
+    await expect(capability('agents.sessions.list').execute({ agentId: 'agent-1' }, context)).rejects.toThrow(
+      'agent stopped list work'
+    )
+    await expect(capability('agents.tasks.list').execute({}, context)).rejects.toThrow('agent stopped list work')
+
+    expect(mocks.modelsService.getModels).not.toHaveBeenCalled()
+    expect(mocks.listAgentsWithStorageV2Recovery).not.toHaveBeenCalled()
+    expect(mocks.getAgentWithStorageV2Recovery).not.toHaveBeenCalled()
+    expect(mocks.agentSessionService.listByCursor).not.toHaveBeenCalled()
+    expect(mocks.agentTaskService.listTasksAcrossAgents).not.toHaveBeenCalled()
+  })
+
   it('delegates all-agent task pagination to task storage without prefetching agents', async () => {
     mocks.agentTaskService.listTasksAcrossAgents.mockResolvedValueOnce({
       total: 3,
@@ -334,6 +356,68 @@ describe('agent app capabilities', () => {
     })
   })
 
+  it('stops agent creation before workspace or agent writes when aborted', async () => {
+    const controller = new AbortController()
+    controller.abort('agent stopped creation')
+
+    await expect(
+      capability('agents.create').execute(
+        {
+          name: 'Agent One',
+          model: 'model-1',
+          workspacePath: '/tmp/work'
+        },
+        { source: 'agent', signal: controller.signal }
+      )
+    ).rejects.toThrow('agent stopped creation')
+
+    expect(mocks.agentWorkspaceService.findOrCreateByPath).not.toHaveBeenCalled()
+    expect(mocks.createAgentWithStorageV2Recovery).not.toHaveBeenCalled()
+    expect(mocks.agentSessionService.createSession).not.toHaveBeenCalled()
+  })
+
+  it('stops agent creation after workspace resolution when cancelled before agent write', async () => {
+    const controller = new AbortController()
+    mocks.agentWorkspaceService.findOrCreateByPath.mockImplementationOnce(async () => {
+      controller.abort(new Error('agent stopped after workspace'))
+      return { id: 'workspace-1', path: '/tmp/work' }
+    })
+
+    await expect(
+      capability('agents.create').execute(
+        {
+          name: 'Agent One',
+          model: 'model-1',
+          workspacePath: '/tmp/work'
+        },
+        { source: 'agent', signal: controller.signal }
+      )
+    ).rejects.toThrow('agent stopped after workspace')
+
+    expect(mocks.createAgentWithStorageV2Recovery).not.toHaveBeenCalled()
+    expect(mocks.agentSessionService.createSession).not.toHaveBeenCalled()
+  })
+
+  it('stops default session creation when agent creation is cancelled after the agent write', async () => {
+    const controller = new AbortController()
+    mocks.createAgentWithStorageV2Recovery.mockImplementationOnce(async () => {
+      controller.abort(new Error('agent stopped after agent write'))
+      return { id: 'agent-1', name: 'Agent One' }
+    })
+
+    await expect(
+      capability('agents.create').execute(
+        {
+          name: 'Agent One',
+          model: 'model-1'
+        },
+        { source: 'agent', signal: controller.signal }
+      )
+    ).rejects.toThrow('agent stopped after agent write')
+
+    expect(mocks.agentSessionService.createSession).not.toHaveBeenCalled()
+  })
+
   it('accepts UI-style workspacePath when creating an initial agent session', async () => {
     await capability('agents.create').execute(
       {
@@ -412,6 +496,22 @@ describe('agent app capabilities', () => {
 
     expect(mocks.createAgentWithStorageV2Recovery).not.toHaveBeenCalled()
     expect(mocks.getAgentWithStorageV2Recovery).not.toHaveBeenCalled()
+    expect(mocks.agentTaskService.createTask).not.toHaveBeenCalled()
+  })
+
+  it('stops agent session and task creation before writes when aborted', async () => {
+    const controller = new AbortController()
+    controller.abort('agent stopped writes')
+    const context = { source: 'agent' as const, signal: controller.signal }
+
+    await expect(
+      capability('agents.session.create').execute({ agentId: 'agent-1', name: 'Research' }, context)
+    ).rejects.toThrow('agent stopped writes')
+    await expect(
+      capability('agents.task.create').execute({ agentId: 'agent-1', task: { title: 'Check sync' } }, context)
+    ).rejects.toThrow('agent stopped writes')
+
+    expect(mocks.agentSessionService.createSession).not.toHaveBeenCalled()
     expect(mocks.agentTaskService.createTask).not.toHaveBeenCalled()
   })
 
