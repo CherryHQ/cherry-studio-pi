@@ -237,7 +237,7 @@ const SelectionActionContent: FC<{ action: SelectionActionItem }> = ({ action })
             <DynamicIcon
               name={action.icon as any}
               size={16}
-              style={{ color: 'var(--color-text-1)' }}
+              style={{ color: 'var(--color-foreground)' }}
               fallback={() => {}}
             />
           </TitleBarIcon>
@@ -307,7 +307,7 @@ const WindowFrame = styled.div<{ $opacity: number }>`
   margin: 2px;
   background-color: var(--color-background);
   border: 1px solid var(--color-border);
-  box-shadow: 0px 0px 2px var(--color-text-3);
+  box-shadow: 0px 0px 2px var(--color-foreground-muted);
   border-radius: 8px;
   overflow: hidden;
   box-sizing: border-box;
@@ -320,8 +320,7 @@ const TitleBar = styled.div<{ $isWindowFocus: boolean }>`
   flex-direction: row;
   height: 32px;
   padding: 0 8px;
-  background-color: ${(props) =>
-    props.$isWindowFocus ? 'var(--color-background-mute)' : 'var(--color-background-soft)'};
+  background-color: ${(props) => (props.$isWindowFocus ? 'var(--color-accent)' : 'var(--color-muted)')};
   transition: background-color 0.3s ease;
   -webkit-app-region: drag;
 `
@@ -341,7 +340,7 @@ const TitleBarCaption = styled.div`
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
 `
 
 const TitleBarButtons = styled.div`
@@ -393,7 +392,7 @@ const WinButton = styled(Button)`
 
   &.close {
     &:hover {
-      background-color: var(--color-error) !important;
+      background-color: var(--color-error-base) !important;
       color: var(--color-white) !important;
     }
   }
@@ -404,8 +403,8 @@ const WinButton = styled(Button)`
   }
 
   &:hover {
-    background-color: var(--color-hover) !important;
-    color: var(--color-icon-white) !important;
+    background-color: var(--color-accent) !important;
+    color: var(--color-white) !important;
   }
 `
 
@@ -435,7 +434,7 @@ const OpacitySlider = styled.div`
   left: 42px;
   top: 100%;
   margin-top: 8px;
-  background-color: var(--color-background-mute);
+  background-color: var(--color-accent);
   padding: 16px 8px 12px 8px;
   border-radius: 4px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.25);

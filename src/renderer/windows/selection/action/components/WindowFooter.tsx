@@ -232,7 +232,7 @@ const OpButtonWrapper = styled.div`
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  color: var(--color-text-secondary);
+  color: var(--color-foreground-secondary);
   font-size: 12px;
   gap: 6px;
 `
@@ -245,8 +245,8 @@ const OpButton = styled.div<{ $isWindowFocus: boolean; $isHovered?: boolean }>`
   gap: 5px;
   padding: 0 8px;
   border-radius: 4px;
-  background-color: var(--color-background-mute);
-  color: var(--color-text-secondary);
+  background-color: var(--color-accent);
+  color: var(--color-foreground-secondary);
   height: 22px;
   opacity: ${(props) => (props.$isWindowFocus ? 1 : 0.2)};
   transition: opacity 0.3s ease;
@@ -257,11 +257,11 @@ const OpButton = styled.div<{ $isWindowFocus: boolean; $isHovered?: boolean }>`
   user-select: none;
 
   .btn-icon {
-    color: var(--color-text-secondary);
+    color: var(--color-foreground-secondary);
   }
 
   .loading-icon {
-    color: var(--color-error);
+    color: var(--color-error-base);
   }
 
   &:hover,

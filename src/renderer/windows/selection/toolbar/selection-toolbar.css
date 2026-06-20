@@ -5,10 +5,7 @@ html {
 }
 
 :root {
-  /* Basic Colors */
-  --color-error: #f44336;
-
-  --selection-toolbar-color-error: var(--color-error);
+  --selection-toolbar-color-error: var(--color-error-base, #f44336);
 
   /* Toolbar */
   --selection-toolbar-height: 36px; /* default: 36px   max: 42px */

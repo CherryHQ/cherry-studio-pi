@@ -274,7 +274,7 @@ const ActionTranslate: FC<Props> = ({ action, scrollToBottom }) => {
               )}
             </DetectedLanguageTag>
 
-            <ArrowRight size={16} color="var(--color-text-3)" style={{ flexShrink: 0 }} />
+            <ArrowRight size={16} color="var(--color-foreground-muted)" style={{ flexShrink: 0 }} />
 
             <LanguageSelect
               value={actualTargetLanguage.langCode}
@@ -366,7 +366,7 @@ const OriginalHeader = styled.div`
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
-  color: var(--color-text-secondary);
+  color: var(--color-foreground-secondary);
   font-size: 12px;
   padding: 4px 0;
   white-space: nowrap;
@@ -386,9 +386,9 @@ const OriginalHeader = styled.div`
 const OriginalContent = styled.div`
   margin-top: 8px;
   padding: 8px;
-  background-color: var(--color-background-soft);
+  background-color: var(--color-muted);
   border-radius: 4px;
-  color: var(--color-text-secondary);
+  color: var(--color-foreground-secondary);
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-word;
@@ -405,9 +405,9 @@ const FooterPadding = styled.div`
 `
 
 const ErrorMsg = styled.div`
-  color: var(--color-error);
+  color: var(--color-error-base);
   background: rgba(255, 0, 0, 0.15);
-  border: 1px solid var(--color-error);
+  border: 1px solid var(--color-error-base);
   padding: 8px 12px;
   border-radius: 4px;
   margin-bottom: 12px;
@@ -427,10 +427,10 @@ const DetectedLanguageTag = styled.div`
   display: flex;
   align-items: center;
   padding: 4px 8px;
-  background-color: var(--color-background-soft);
+  background-color: var(--color-muted);
   border-radius: 4px;
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: var(--color-foreground-secondary);
   white-space: nowrap;
   flex-shrink: 0;
 `
@@ -443,12 +443,12 @@ const SettingsButton = styled.div`
   height: 28px;
   border-radius: 4px;
   cursor: pointer;
-  color: var(--color-text-3);
+  color: var(--color-foreground-muted);
   flex-shrink: 0;
 
   &:hover {
-    background-color: var(--color-background-soft);
-    color: var(--color-text);
+    background-color: var(--color-muted);
+    color: var(--color-foreground);
   }
 `
 
@@ -463,12 +463,12 @@ const SettingsMenuItem = styled.div`
 
 const SettingsLabel = styled.span`
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: var(--color-foreground-secondary);
 `
 
 const HelpIcon = styled(CircleHelp)`
   cursor: pointer;
-  color: var(--color-text-3);
+  color: var(--color-foreground-muted);
   flex-shrink: 0;
 `
 

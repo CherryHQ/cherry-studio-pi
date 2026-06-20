@@ -220,7 +220,7 @@ const OriginalHeader = styled.div`
   align-items: center;
   justify-content: space-between;
   cursor: pointer;
-  color: var(--color-text-secondary);
+  color: var(--color-foreground-secondary);
   font-size: 12px;
 
   &:hover {
@@ -239,9 +239,9 @@ const OriginalContent = styled.div`
   padding: 8px;
   margin-top: 8px;
   margin-bottom: 12px;
-  background-color: var(--color-background-soft);
+  background-color: var(--color-muted);
   border-radius: 4px;
-  color: var(--color-text-secondary);
+  color: var(--color-foreground-secondary);
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-word;
@@ -258,9 +258,9 @@ const FooterPadding = styled.div`
 `
 
 const ErrorMsg = styled.div`
-  color: var(--color-error);
+  color: var(--color-error-base);
   background: rgba(255, 0, 0, 0.15);
-  border: 1px solid var(--color-error);
+  border: 1px solid var(--color-error-base);
   padding: 8px 12px;
   border-radius: 4px;
   margin-bottom: 12px;
