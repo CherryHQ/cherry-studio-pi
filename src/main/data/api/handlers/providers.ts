@@ -8,6 +8,7 @@
 
 import { providerService } from '@data/services/ProviderService'
 import { loggerService } from '@logger'
+import { notifyMainProcessDataSyncLocalChange } from '@main/services/appData/DataSyncLocalChangeNotifier'
 import { storageV2Service } from '@main/services/storageV2/StorageService'
 import type { HandlersFor } from '@shared/data/api/apiTypes'
 import { OrderBatchRequestSchema, OrderRequestSchema } from '@shared/data/api/schemas/_endpointHelpers'
@@ -82,6 +83,14 @@ async function deleteProviderFromStorageV2(providerId: string) {
   }
 }
 
+function notifyProviderStorageV2Changed(providerId: string, operation: string) {
+  notifyMainProcessDataSyncLocalChange('storage-v2', {
+    entityType: 'provider',
+    providerId,
+    operation
+  })
+}
+
 export const providerHandlers: HandlersFor<ProviderSchemas> = {
   '/providers': {
     GET: async ({ query }) => {
@@ -99,6 +108,7 @@ export const providerHandlers: HandlersFor<ProviderSchemas> = {
       if (parsed.authConfig) {
         await mirrorProviderAuthConfigToStorageV2(provider.id, parsed.authConfig)
       }
+      notifyProviderStorageV2Changed(provider.id, 'create')
       return provider
     }
   },
@@ -115,12 +125,14 @@ export const providerHandlers: HandlersFor<ProviderSchemas> = {
       if (parsed.authConfig !== undefined) {
         await mirrorProviderAuthConfigToStorageV2(params.providerId, parsed.authConfig)
       }
+      notifyProviderStorageV2Changed(params.providerId, 'update')
       return provider
     },
 
     DELETE: async ({ params }) => {
       await providerService.delete(params.providerId)
       await deleteProviderFromStorageV2(params.providerId)
+      notifyProviderStorageV2Changed(params.providerId, 'delete')
       return undefined
     }
   },
@@ -137,6 +149,7 @@ export const providerHandlers: HandlersFor<ProviderSchemas> = {
       const provider = await providerService.addApiKey(params.providerId, parsed.key, parsed.label)
       await mirrorProviderMetadataToStorageV2(provider)
       await mirrorProviderApiKeysToStorageV2(params.providerId)
+      notifyProviderStorageV2Changed(params.providerId, 'api-key:add')
       return provider
     },
 
@@ -145,6 +158,7 @@ export const providerHandlers: HandlersFor<ProviderSchemas> = {
       const provider = await providerService.replaceApiKeys(params.providerId, parsed.keys)
       await mirrorProviderMetadataToStorageV2(provider)
       await mirrorProviderApiKeysToStorageV2(params.providerId, parsed.keys)
+      notifyProviderStorageV2Changed(params.providerId, 'api-key:replace')
       return provider
     }
   },
@@ -161,6 +175,7 @@ export const providerHandlers: HandlersFor<ProviderSchemas> = {
       const provider = await providerService.updateApiKey(params.providerId, params.keyId, parsed)
       await mirrorProviderMetadataToStorageV2(provider)
       await mirrorProviderApiKeysToStorageV2(params.providerId)
+      notifyProviderStorageV2Changed(params.providerId, 'api-key:update')
       return provider
     },
 
@@ -168,6 +183,7 @@ export const providerHandlers: HandlersFor<ProviderSchemas> = {
       const provider = await providerService.deleteApiKey(params.providerId, params.keyId)
       await mirrorProviderMetadataToStorageV2(provider)
       await mirrorProviderApiKeysToStorageV2(params.providerId)
+      notifyProviderStorageV2Changed(params.providerId, 'api-key:delete')
       return provider
     }
   },
@@ -177,6 +193,7 @@ export const providerHandlers: HandlersFor<ProviderSchemas> = {
       const parsed = OrderRequestSchema.parse(body)
       await providerService.move(params.id, parsed)
       await mirrorProviderOrderToStorageV2()
+      notifyProviderStorageV2Changed(params.id, 'order:update')
       return undefined
     }
   },
@@ -186,6 +203,11 @@ export const providerHandlers: HandlersFor<ProviderSchemas> = {
       const parsed = OrderBatchRequestSchema.parse(body)
       await providerService.reorder(parsed.moves)
       await mirrorProviderOrderToStorageV2()
+      notifyMainProcessDataSyncLocalChange('storage-v2', {
+        entityType: 'provider',
+        providerIds: parsed.moves.map((move) => move.id),
+        operation: 'order:batch'
+      })
       return undefined
     }
   }

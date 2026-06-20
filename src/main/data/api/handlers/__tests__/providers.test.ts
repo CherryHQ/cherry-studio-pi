@@ -16,6 +16,7 @@ const {
   upsertProviderApiKeysMock,
   upsertProviderAuthConfigMock,
   deleteStorageV2ProviderMock,
+  notifyDataSyncLocalChangeMock,
   moveMock,
   reorderMock
 } = vi.hoisted(() => ({
@@ -34,6 +35,7 @@ const {
   upsertProviderApiKeysMock: vi.fn(),
   upsertProviderAuthConfigMock: vi.fn(),
   deleteStorageV2ProviderMock: vi.fn(),
+  notifyDataSyncLocalChangeMock: vi.fn(),
   moveMock: vi.fn(),
   reorderMock: vi.fn()
 }))
@@ -63,6 +65,10 @@ vi.mock('@main/services/storageV2/StorageService', () => ({
     upsertProviderAuthConfig: upsertProviderAuthConfigMock,
     deleteProvider: deleteStorageV2ProviderMock
   }
+}))
+
+vi.mock('@main/services/appData/DataSyncLocalChangeNotifier', () => ({
+  notifyMainProcessDataSyncLocalChange: notifyDataSyncLocalChangeMock
 }))
 
 import { providerHandlers } from '../providers'
@@ -106,6 +112,11 @@ describe('providerHandlers', () => {
       expect(upsertProviderMetadataMock).toHaveBeenCalledWith(created)
       expect(upsertProviderApiKeysMock).not.toHaveBeenCalled()
       expect(upsertProviderAuthConfigMock).not.toHaveBeenCalled()
+      expect(notifyDataSyncLocalChangeMock).toHaveBeenCalledWith('storage-v2', {
+        entityType: 'provider',
+        providerId: 'custom-provider',
+        operation: 'create'
+      })
     })
 
     it('mirrors create-time api keys and auth config to Storage v2', async () => {
@@ -135,6 +146,11 @@ describe('providerHandlers', () => {
       expect(upsertProviderMetadataMock).toHaveBeenCalledWith(created)
       expect(upsertProviderApiKeysMock).toHaveBeenCalledWith('custom-provider', apiKeys)
       expect(upsertProviderAuthConfigMock).toHaveBeenCalledWith('custom-provider', authConfig)
+      expect(notifyDataSyncLocalChangeMock).toHaveBeenCalledWith('storage-v2', {
+        entityType: 'provider',
+        providerId: 'custom-provider',
+        operation: 'create'
+      })
     })
 
     it('rejects unknown create fields before calling the service', async () => {
@@ -165,6 +181,11 @@ describe('providerHandlers', () => {
       expect(updateMock).toHaveBeenCalledWith('openai', { isEnabled: false })
       expect(upsertProviderMetadataMock).toHaveBeenCalledWith(updated)
       expect(upsertProviderAuthConfigMock).not.toHaveBeenCalled()
+      expect(notifyDataSyncLocalChangeMock).toHaveBeenCalledWith('storage-v2', {
+        entityType: 'provider',
+        providerId: 'openai',
+        operation: 'update'
+      })
       expect(result).toBe(updated)
     })
 
@@ -181,6 +202,11 @@ describe('providerHandlers', () => {
       expect(updateMock).toHaveBeenCalledWith('bedrock', { authConfig })
       expect(upsertProviderMetadataMock).toHaveBeenCalledWith(updated)
       expect(upsertProviderAuthConfigMock).toHaveBeenCalledWith('bedrock', authConfig)
+      expect(notifyDataSyncLocalChangeMock).toHaveBeenCalledWith('storage-v2', {
+        entityType: 'provider',
+        providerId: 'bedrock',
+        operation: 'update'
+      })
       expect(result).toBe(updated)
     })
 
@@ -204,6 +230,11 @@ describe('providerHandlers', () => {
 
       expect(deleteMock).toHaveBeenCalledWith('openai')
       expect(deleteStorageV2ProviderMock).toHaveBeenCalledWith('openai')
+      expect(notifyDataSyncLocalChangeMock).toHaveBeenCalledWith('storage-v2', {
+        entityType: 'provider',
+        providerId: 'openai',
+        operation: 'delete'
+      })
       expect(result).toBeUndefined()
     })
   })
@@ -251,6 +282,11 @@ describe('providerHandlers', () => {
       expect(upsertProviderMetadataMock).toHaveBeenCalledWith(updated)
       expect(getApiKeysMock).not.toHaveBeenCalled()
       expect(upsertProviderApiKeysMock).toHaveBeenCalledWith('openai', keys)
+      expect(notifyDataSyncLocalChangeMock).toHaveBeenCalledWith('storage-v2', {
+        entityType: 'provider',
+        providerId: 'openai',
+        operation: 'api-key:replace'
+      })
     })
 
     it('adds one API key with an optional label', async () => {
@@ -269,6 +305,11 @@ describe('providerHandlers', () => {
       expect(upsertProviderApiKeysMock).toHaveBeenCalledWith('openai', [
         { id: 'key-a', key: 'sk-a', label: 'Primary', isEnabled: true }
       ])
+      expect(notifyDataSyncLocalChangeMock).toHaveBeenCalledWith('storage-v2', {
+        entityType: 'provider',
+        providerId: 'openai',
+        operation: 'api-key:add'
+      })
       expect(result).toBe(updated)
     })
 
@@ -326,6 +367,11 @@ describe('providerHandlers', () => {
       expect(upsertProviderApiKeysMock).toHaveBeenCalledWith('openai', [
         { id: 'key-a', key: 'sk-new', isEnabled: false }
       ])
+      expect(notifyDataSyncLocalChangeMock).toHaveBeenCalledWith('storage-v2', {
+        entityType: 'provider',
+        providerId: 'openai',
+        operation: 'api-key:update'
+      })
       expect(result).toBe(updated)
     })
 
@@ -353,6 +399,11 @@ describe('providerHandlers', () => {
       expect(upsertProviderMetadataMock).toHaveBeenCalledWith(updated)
       expect(getApiKeysMock).toHaveBeenCalledWith('openai')
       expect(upsertProviderApiKeysMock).toHaveBeenCalledWith('openai', [])
+      expect(notifyDataSyncLocalChangeMock).toHaveBeenCalledWith('storage-v2', {
+        entityType: 'provider',
+        providerId: 'openai',
+        operation: 'api-key:delete'
+      })
       expect(result).toBe(updated)
     })
   })
@@ -371,6 +422,11 @@ describe('providerHandlers', () => {
       expect(listMock).toHaveBeenCalledWith({})
       expect(upsertProviderMetadataMock).toHaveBeenCalledWith(providers[0], 0)
       expect(upsertProviderMetadataMock).toHaveBeenCalledWith(providers[1], 1)
+      expect(notifyDataSyncLocalChangeMock).toHaveBeenCalledWith('storage-v2', {
+        entityType: 'provider',
+        providerId: 'openai',
+        operation: 'order:update'
+      })
     })
 
     it('rejects invalid move anchors before calling the service', async () => {
@@ -399,6 +455,11 @@ describe('providerHandlers', () => {
       expect(listMock).toHaveBeenCalledWith({})
       expect(upsertProviderMetadataMock).toHaveBeenCalledWith(providers[0], 0)
       expect(upsertProviderMetadataMock).toHaveBeenCalledWith(providers[1], 1)
+      expect(notifyDataSyncLocalChangeMock).toHaveBeenCalledWith('storage-v2', {
+        entityType: 'provider',
+        providerIds: ['openai'],
+        operation: 'order:batch'
+      })
     })
 
     it('rejects empty reorder batches before calling the service', async () => {
