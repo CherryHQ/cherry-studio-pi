@@ -130,7 +130,22 @@ function parseResponse(raw: string): DiagnosisResult {
     }
   }
 
-  const parsed = JSON.parse(cleaned) as DiagnosisResult
+  let parsed: DiagnosisResult
+  try {
+    parsed = JSON.parse(cleaned) as DiagnosisResult
+  } catch {
+    const fallbackText = cleaned.trim().replace(/\s+/g, ' ').slice(0, 300)
+    if (!fallbackText) {
+      throw new Error('Invalid diagnosis response format')
+    }
+
+    return {
+      summary: fallbackText,
+      category: 'unknown',
+      explanation: fallbackText,
+      steps: []
+    }
+  }
 
   if (!parsed.summary || !Array.isArray(parsed.steps)) {
     throw new Error('Invalid diagnosis response format')

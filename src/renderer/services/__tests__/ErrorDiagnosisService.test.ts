@@ -112,9 +112,17 @@ describe('ErrorDiagnosisService', () => {
       await expect(diagnoseError(makeError(), 'en')).rejects.toThrow()
     })
 
-    it('throws on invalid JSON from all models', async () => {
-      mockFetchGenerate.mockResolvedValue('not valid json')
-      await expect(diagnoseError(makeError(), 'en')).rejects.toThrow()
+    it('returns a readable fallback when the model responds with non-JSON text', async () => {
+      mockFetchGenerate.mockResolvedValue('The API key looks invalid. Check provider settings.')
+
+      const result = await diagnoseError(makeError(), 'en')
+
+      expect(result).toEqual({
+        summary: 'The API key looks invalid. Check provider settings.',
+        category: 'unknown',
+        explanation: 'The API key looks invalid. Check provider settings.',
+        steps: []
+      })
     })
 
     it('throws on missing required fields', async () => {
