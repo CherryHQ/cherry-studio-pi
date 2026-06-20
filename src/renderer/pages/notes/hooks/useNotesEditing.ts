@@ -20,12 +20,14 @@ export const useNotesEditing = ({ onRenameNode }: UseNotesEditingProps) => {
   const newlyRenamedClearTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
 
   useEffect(() => {
+    const newlyRenamedClearTimers = newlyRenamedClearTimersRef.current
+
     return () => {
       isMountedRef.current = false
-      for (const timer of newlyRenamedClearTimersRef.current) {
+      for (const timer of newlyRenamedClearTimers) {
         clearTimeout(timer)
       }
-      newlyRenamedClearTimersRef.current.clear()
+      newlyRenamedClearTimers.clear()
     }
   }, [])
 
