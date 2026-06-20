@@ -1,7 +1,5 @@
 import type { Provider } from '@renderer/types'
 
-import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
-
 const pendingProviderById = new Map<string, Provider>()
 const providerWriteQueueById = new Map<string, Promise<unknown>>()
 
@@ -37,7 +35,6 @@ export async function upsertStorageV2Provider(
     undefined,
     options
   )
-  notifyDataSyncLocalChange('provider')
   return result
 }
 
@@ -48,9 +45,6 @@ export async function upsertStorageV2ProviderList(providers: Provider[]) {
     await upsertProvider(provider as unknown as Parameters<typeof upsertProvider>[0], index, undefined, {
       preserveExistingCredential: true
     })
-  }
-  if (providers.length > 0) {
-    notifyDataSyncLocalChange('provider')
   }
 }
 

@@ -38,7 +38,6 @@ describe('StorageV2ProviderWriteService', () => {
 
   it('upserts provider lists with stable sort order before Redux state is changed', async () => {
     const upsertProvider = vi.fn().mockResolvedValue({ skippedSecret: false })
-    const events: string[] = []
     Object.defineProperty(window, 'api', {
       configurable: true,
       value: {
@@ -48,17 +47,9 @@ describe('StorageV2ProviderWriteService', () => {
       }
     })
 
-    const { subscribeDataSyncLocalChanges } = await import('../DataSyncLocalChangeSignal')
     const { upsertStorageV2ProviderList } = await import('../StorageV2ProviderWriteService')
-    const unsubscribe = subscribeDataSyncLocalChanges((event) => {
-      events.push(event.reason)
-    })
 
-    try {
-      await upsertStorageV2ProviderList([provider('provider-a'), provider('provider-b')])
-    } finally {
-      unsubscribe()
-    }
+    await upsertStorageV2ProviderList([provider('provider-a'), provider('provider-b')])
 
     expect(upsertProvider).toHaveBeenNthCalledWith(1, expect.objectContaining({ id: 'provider-a' }), 0, undefined, {
       preserveExistingCredential: true
@@ -66,7 +57,6 @@ describe('StorageV2ProviderWriteService', () => {
     expect(upsertProvider).toHaveBeenNthCalledWith(2, expect.objectContaining({ id: 'provider-b' }), 1, undefined, {
       preserveExistingCredential: true
     })
-    expect(events).toEqual(['provider'])
   })
 
   it('queues model mutations for the same provider so rapid writes build on pending state', async () => {
@@ -130,7 +120,7 @@ describe('StorageV2ProviderWriteService', () => {
     )
   })
 
-  it('notifies data sync after direct provider upserts', async () => {
+  it('leaves direct provider upsert sync notifications to the main-process Storage v2 sync log', async () => {
     const upsertProvider = vi.fn().mockResolvedValue({ skippedSecret: false })
     const events: string[] = []
     Object.defineProperty(window, 'api', {
@@ -157,7 +147,7 @@ describe('StorageV2ProviderWriteService', () => {
     expect(upsertProvider).toHaveBeenCalledWith(expect.objectContaining({ id: 'provider-a' }), 2, undefined, {
       preserveExistingCredential: true
     })
-    expect(events).toEqual(['provider'])
+    expect(events).toEqual([])
   })
 
   it('only clears provider credentials when explicitly requested', async () => {
