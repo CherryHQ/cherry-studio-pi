@@ -45,11 +45,7 @@ export const useCopyTool = ({ showPreviewTools, previewRef, onCopySource, setToo
 
     const baseTool = {
       ...TOOL_SPECS.copy,
-      icon: copied ? (
-        <Check className="tool-icon" color="var(--color-status-success)" />
-      ) : (
-        <CopyIcon className="tool-icon" />
-      ),
+      icon: copied ? <Check className="tool-icon" color="var(--color-success)" /> : <CopyIcon className="tool-icon" />,
       tooltip: t('code_block.copy.source'),
       onClick: handleCopySource
     }
@@ -57,7 +53,7 @@ export const useCopyTool = ({ showPreviewTools, previewRef, onCopySource, setToo
     const copyImageTool = {
       ...TOOL_SPECS['copy-image'],
       icon: copiedImage ? (
-        <Check className="tool-icon" color="var(--color-status-success)" />
+        <Check className="tool-icon" color="var(--color-success)" />
       ) : (
         <Image className="tool-icon" />
       ),
