@@ -310,11 +310,11 @@ const ManageIconButton: FC<PropsWithChildren<ManageIconButtonProps>> = ({
     type="button"
     disabled={disabled}
     className={cn(
-      'flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-none bg-transparent text-(--color-text-2) transition-all duration-200',
+      'flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-none bg-transparent text-(--color-foreground-secondary) transition-all duration-200',
       disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer',
-      !disabled && !danger && 'hover:bg-(--color-background-mute) hover:text-(--color-text-1)',
-      danger && 'text-(--color-error)',
-      danger && !disabled && 'hover:bg-(--color-error) hover:text-white [&:hover>svg]:text-white',
+      !disabled && !danger && 'hover:bg-(--color-accent) hover:text-(--color-foreground)',
+      danger && 'text-(--color-error-base)',
+      danger && !disabled && 'hover:bg-(--color-error-base) hover:text-white [&:hover>svg]:text-white',
       className
     )}>
     {children}
@@ -357,7 +357,7 @@ const SearchInput: FC<SearchInputProps> = ({ className, ref, ...props }) => (
     {...props}
     ref={ref}
     className={cn(
-      'h-7 min-w-0 flex-1 border-none bg-transparent p-0 text-(--color-text-1) text-[13px] outline-none placeholder:text-(--color-text-3)',
+      'h-7 min-w-0 flex-1 border-none bg-transparent p-0 text-(--color-foreground) text-[13px] outline-none placeholder:text-(--color-foreground-muted)',
       className
     )}
   />

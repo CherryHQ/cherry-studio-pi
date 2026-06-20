@@ -158,7 +158,7 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
   const [renamingTopics] = useCache('topic.renaming')
   const [newlyRenamedTopics] = useCache('topic.newly_renamed')
 
-  const borderRadius = showTopicTime ? 12 : 'var(--list-item-border-radius)'
+  const borderRadius = showTopicTime ? 12 : 'var(--radius-lg)'
 
   const [deletingTopicId, setDeletingTopicId] = useState<string | null>(null)
   const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -384,7 +384,9 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
         title: t('chat.topics.edit.title'),
         message: '',
         defaultValue: topic?.name || '',
-        extraNode: <div style={{ color: 'var(--color-text-3)', marginTop: 8 }}>{t('chat.topics.edit.title_tip')}</div>
+        extraNode: (
+          <div style={{ color: 'var(--color-foreground-muted)', marginTop: 8 }}>{t('chat.topics.edit.title_tip')}</div>
+        )
       })
       if (name && topic?.name !== name) {
         void updateTopic({ ...topic, name, isNameManuallyEdited: true })
@@ -686,7 +688,7 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
                         {isSelected ? (
                           <CheckSquare size={16} color="var(--color-primary)" />
                         ) : (
-                          <Square size={16} color="var(--color-text-3)" />
+                          <Square size={16} color="var(--color-foreground-muted)" />
                         )}
                       </SelectIcon>
                     )}
@@ -729,16 +731,16 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
                             }
                           }}>
                           {deletingTopicId === topic.id ? (
-                            <DeleteIcon size={14} color="var(--color-error)" style={{ pointerEvents: 'none' }} />
+                            <DeleteIcon size={14} color="var(--color-error-base)" style={{ pointerEvents: 'none' }} />
                           ) : (
-                            <XIcon size={14} color="var(--color-text-3)" style={{ pointerEvents: 'none' }} />
+                            <XIcon size={14} color="var(--color-foreground-muted)" style={{ pointerEvents: 'none' }} />
                           )}
                         </MenuButton>
                       </Tooltip>
                     )}
                     {topic.pinned && (
                       <MenuButton className="pin">
-                        <PinIcon size={14} color="var(--color-text-3)" />
+                        <PinIcon size={14} color="var(--color-foreground-muted)" />
                       </MenuButton>
                     )}
                   </TopicNameContainer>
@@ -773,7 +775,7 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
 
 const TopicListItem = styled.div`
   padding: 7px 12px;
-  border-radius: var(--list-item-border-radius);
+  border-radius: var(--radius-lg);
   font-size: 13px;
   display: flex;
   flex-direction: column;
@@ -783,11 +785,11 @@ const TopicListItem = styled.div`
 
   .menu {
     opacity: 0;
-    color: var(--color-text-3);
+    color: var(--color-foreground-muted);
   }
 
   &:hover {
-    background-color: var(--color-list-item-hover);
+    background-color: var(--color-accent);
     transition: background-color 0.1s;
 
     .menu {
@@ -796,28 +798,28 @@ const TopicListItem = styled.div`
   }
 
   &.active {
-    background-color: var(--color-list-item);
+    background-color: var(--color-background);
     box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     .menu {
       opacity: 1;
 
       &:hover {
-        color: var(--color-text-2);
+        color: var(--color-foreground-secondary);
       }
     }
   }
   &.singlealone {
     &:hover {
-      background-color: var(--color-background-soft);
+      background-color: var(--color-muted);
     }
     &.active {
-      background-color: var(--color-background-mute);
+      background-color: var(--color-accent);
       box-shadow: none;
     }
   }
 
   &.selected {
-    background-color: var(--color-primary-bg);
+    background-color: var(--color-primary-soft);
     box-shadow: inset 0 0 0 1px var(--color-primary);
   }
 
@@ -853,7 +855,7 @@ const TopicName = styled.div`
 const TopicEditInput = styled.input`
   background: var(--color-background);
   border: none;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
   font-size: 13px;
   font-family: inherit;
   padding: 2px 6px;
@@ -885,7 +887,7 @@ const PendingIndicator = styled.div.attrs({
   left: 3px;
   top: 15px;
   border-radius: 50%;
-  background-color: var(--color-status-warning);
+  background-color: var(--color-warning);
 `
 
 const FulfilledIndicator = styled.div.attrs({
@@ -898,11 +900,11 @@ const FulfilledIndicator = styled.div.attrs({
   left: 3px;
   top: 15px;
   border-radius: 50%;
-  background-color: var(--color-status-success);
+  background-color: var(--color-success);
 `
 
 const TopicPromptText = styled.div`
-  color: var(--color-text-2);
+  color: var(--color-foreground-secondary);
   font-size: 12px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -914,7 +916,7 @@ const TopicPromptText = styled.div`
 `
 
 const TopicTime = styled.div`
-  color: var(--color-text-3);
+  color: var(--color-foreground-muted);
   font-size: 11px;
 `
 
@@ -948,21 +950,21 @@ const HeaderIconButton = styled.div`
   height: 32px;
   min-width: 32px;
   min-height: 32px;
-  border-radius: var(--list-item-border-radius);
+  border-radius: var(--radius-lg);
   cursor: pointer;
-  color: var(--color-text-2);
+  color: var(--color-foreground-secondary);
   transition: all 0.2s;
 
   &:hover {
-    background-color: var(--color-background-mute);
-    color: var(--color-text-1);
+    background-color: var(--color-accent);
+    color: var(--color-foreground);
   }
 
   &.active {
     color: var(--color-primary);
 
     &:hover {
-      background-color: var(--color-background-mute);
+      background-color: var(--color-accent);
     }
   }
 `

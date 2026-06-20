@@ -43,7 +43,7 @@ const TagsContainer: FC<React.HTMLAttributes<HTMLDivElement>> = ({ children, ...
 const GroupTitle: FC<React.HTMLAttributes<HTMLDivElement>> = ({ children, ...props }) => (
   <div
     className={cn(
-      'my-1 flex h-6 cursor-pointer flex-row items-center justify-between font-medium text-[var(--color-text-2)] text-xs'
+      'my-1 flex h-6 cursor-pointer flex-row items-center justify-between font-medium text-[var(--color-foreground-secondary)] text-xs'
     )}
     {...props}>
     {children}
@@ -52,7 +52,9 @@ const GroupTitle: FC<React.HTMLAttributes<HTMLDivElement>> = ({ children, ...pro
 
 const GroupTitleName: FC<React.HTMLAttributes<HTMLDivElement>> = ({ children, ...props }) => (
   <div
-    className={cn('mr-1 box-border flex max-w-[50%] truncate px-1 text-[13px] text-[var(--color-text)] leading-6')}
+    className={cn(
+      'mr-1 box-border flex max-w-[50%] truncate px-1 text-[13px] text-[var(--color-foreground)] leading-6'
+    )}
     {...props}>
     {children}
   </div>
