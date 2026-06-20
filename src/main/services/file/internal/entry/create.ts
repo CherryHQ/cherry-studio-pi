@@ -60,6 +60,30 @@ interface NormalisedSource {
 
 const BASE64_DATA_URI = /^data:([^;,]+);base64,(.+)$/
 
+function decodeBase64Payload(payload: string): Buffer {
+  const normalized = payload.trim()
+  const match = /^([A-Za-z0-9+/]+)(={0,2})$/.exec(normalized)
+
+  if (!match) {
+    throw new Error('createInternal(base64): payload is not valid base64')
+  }
+
+  const [, unpaddedPayload, padding] = match
+
+  if ((padding && normalized.length % 4 !== 0) || (!padding && unpaddedPayload.length % 4 === 1)) {
+    throw new Error('createInternal(base64): payload has invalid base64 padding')
+  }
+
+  const paddedPayload = unpaddedPayload.padEnd(Math.ceil(unpaddedPayload.length / 4) * 4, '=')
+  const bytes = Buffer.from(paddedPayload, 'base64')
+
+  if (bytes.toString('base64').replace(/=+$/, '') !== unpaddedPayload) {
+    throw new Error('createInternal(base64): payload failed base64 round-trip validation')
+  }
+
+  return bytes
+}
+
 function normaliseSource(params: CreateInternalEntryParams): NormalisedSource {
   if (params.source === 'bytes') {
     const data = params.data
@@ -77,7 +101,7 @@ function normaliseSource(params: CreateInternalEntryParams): NormalisedSource {
     const mimeType = match[1]
     const payload = match[2]
     const ext = mime.getExtension(mimeType)
-    const bytes = Buffer.from(payload, 'base64')
+    const bytes = decodeBase64Payload(payload)
     return {
       name: params.name ?? `Pasted ${new Date().toISOString().slice(0, 10)}`,
       ext: ext ?? null,

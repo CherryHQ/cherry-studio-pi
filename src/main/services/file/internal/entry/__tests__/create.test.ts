@@ -213,6 +213,40 @@ describe('internal/entry/create.createInternal', () => {
       expect(entry.ext).toBe('png')
       expect(entry.name.length).toBeGreaterThan(0)
     })
+
+    it('accepts valid unpadded base64 payloads', async () => {
+      const dataUri = 'data:image/png;base64,AQI' as `data:${string};base64,${string}`
+
+      const entry = await createInternal(deps, { source: 'base64', data: dataUri })
+
+      expect(entry.origin).toBe('internal')
+      if (entry.origin !== 'internal') throw new Error('expected internal entry')
+      expect(entry.size).toBe(2)
+      const physical = path.join(filesDir, `${entry.id}.png`)
+      expect(Array.from(await readFile(physical))).toEqual([0x01, 0x02])
+    })
+
+    it('rejects malformed base64 payloads before writing files or rows', async () => {
+      await expect(
+        createInternal(deps, { source: 'base64', data: 'data:image/png;base64,not-valid!@#' })
+      ).rejects.toThrow('payload is not valid base64')
+
+      const { readdir } = await import('node:fs/promises')
+      expect(await readdir(filesDir)).toEqual([])
+      const all = await dbh.db.select().from((await import('@data/db/schemas/file')).fileEntryTable)
+      expect(all).toHaveLength(0)
+    })
+
+    it('rejects impossible base64 padding before writing files or rows', async () => {
+      await expect(createInternal(deps, { source: 'base64', data: 'data:image/png;base64,A' })).rejects.toThrow(
+        'payload has invalid base64 padding'
+      )
+
+      const { readdir } = await import('node:fs/promises')
+      expect(await readdir(filesDir)).toEqual([])
+      const all = await dbh.db.select().from((await import('@data/db/schemas/file')).fileEntryTable)
+      expect(all).toHaveLength(0)
+    })
   })
 
   describe('ensureExternal DanglingCache wiring', () => {
