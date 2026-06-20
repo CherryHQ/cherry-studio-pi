@@ -3,7 +3,7 @@ import { loggerService } from '@logger'
 import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
 import { normalizeKnowledgeError } from '@renderer/pages/knowledge/utils'
 import { Check, ChevronDown, ChevronUp, Copy, FileText } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import type { RecallResultItem } from './types'
@@ -20,15 +20,26 @@ const RecallResultCard = ({ item, index }: RecallResultCardProps) => {
   const { t } = useTranslation()
   const [isExpanded, setIsExpanded] = useState(false)
   const [copied, setCopiedTemporarily] = useTemporaryValue(false, 2000)
+  const mountedRef = useRef(true)
   const scoreLabel =
     item.scoreKind === 'relevance'
       ? t('knowledge.recall.result_relevance', { score: formatRecallPercent(item.score) })
       : t('knowledge.recall.result_rank', { rank: item.rank })
 
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
   const copyContent = async () => {
     try {
       await navigator.clipboard.writeText(item.plainText)
-      setCopiedTemporarily(true)
+      if (mountedRef.current) {
+        setCopiedTemporarily(true)
+      }
     } catch (error) {
       const normalizedError = normalizeKnowledgeError(error)
       logger.error('Failed to copy recall result content', normalizedError, {
@@ -36,7 +47,9 @@ const RecallResultCard = ({ item, index }: RecallResultCardProps) => {
         sourceName: item.sourceName,
         chunkIndex: item.chunkIndex
       })
-      window.toast.error(t('message.copy.failed'))
+      if (mountedRef.current) {
+        window.toast.error(t('message.copy.failed'))
+      }
     }
   }
 
