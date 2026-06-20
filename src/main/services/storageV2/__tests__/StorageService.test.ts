@@ -94,7 +94,23 @@ const mocks = vi.hoisted(() => ({
   },
   knowledgeRepository: {
     listBases: vi.fn()
+  },
+  providerService: {
+    getApiKeys: vi.fn(),
+    getAuthConfig: vi.fn(),
+    list: vi.fn()
+  },
+  modelService: {
+    list: vi.fn()
   }
+}))
+
+vi.mock('@data/services/ModelService', () => ({
+  modelService: mocks.modelService
+}))
+
+vi.mock('@data/services/ProviderService', () => ({
+  providerService: mocks.providerService
 }))
 
 vi.mock('../AgentDbMirrorService', () => ({
@@ -199,6 +215,10 @@ describe('StorageV2Service', () => {
     mocks.fileRepository.delete.mockResolvedValue({ deleted: true })
     mocks.fileRepository.list.mockResolvedValue([])
     mocks.knowledgeRepository.listBases.mockResolvedValue([])
+    mocks.providerService.list.mockResolvedValue([])
+    mocks.providerService.getApiKeys.mockResolvedValue([])
+    mocks.providerService.getAuthConfig.mockResolvedValue(null)
+    mocks.modelService.list.mockResolvedValue([])
     mocks.dataRootService.resolveDataRoot.mockReturnValue({ dataRoot: '/mock/Data', candidates: [] })
     mocks.database.healthCheck.mockResolvedValue({ ok: true, quickCheck: 'ok' })
     mocks.database.integrityReport.mockResolvedValue({
@@ -802,6 +822,45 @@ describe('StorageV2Service', () => {
     expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
     expect(mocks.providerRepository.upsertCredentials).toHaveBeenCalledWith('provider-1', undefined, {
       clearCredentialKinds: ['apiKey', 'apiKeys']
+    })
+  })
+
+  it('flushes provider runtime metadata, models, api keys, and auth config into Storage v2', async () => {
+    const provider = {
+      id: 'provider-1',
+      name: 'OpenAI',
+      presetProviderId: 'openai',
+      isEnabled: true,
+      apiKeys: [{ id: 'key-a', isEnabled: true }],
+      authType: 'api-key',
+      apiFeatures: {},
+      settings: {}
+    } as unknown as Provider
+    const apiKeys = [{ id: 'key-a', key: 'sk-a', isEnabled: true }]
+    const authConfig = { type: 'oauth', clientId: 'client-id', accessToken: 'access-token' } as const
+    const models = [{ id: 'gpt-4o', providerId: 'provider-1', name: 'GPT-4o' }]
+
+    mocks.providerService.list.mockResolvedValue([provider])
+    mocks.providerService.getApiKeys.mockResolvedValue(apiKeys)
+    mocks.providerService.getAuthConfig.mockResolvedValue(authConfig)
+    mocks.modelService.list.mockResolvedValue(models)
+    mocks.secretVault.setSecret.mockImplementation(async (_scope, _ownerId, kind) => `secret://${kind}`)
+
+    await expect(new StorageV2Service().flushProviderRuntimeMirrors()).resolves.toEqual({ mirroredCount: 1 })
+
+    expect(mocks.providerService.list).toHaveBeenCalledWith({})
+    expect(mocks.modelService.list).toHaveBeenCalledWith({ providerId: 'provider-1' })
+    expect(mocks.providerRepository.upsert).toHaveBeenCalledWith({ ...provider, models }, 0, undefined, {
+      preserveExistingCredential: true,
+      preserveSortOrder: false
+    })
+    expect(mocks.providerRepository.upsertCredentials).toHaveBeenCalledWith(
+      'provider-1',
+      { apiKeys: 'secret://apiKeys', apiKey: 'secret://apiKey' },
+      undefined
+    )
+    expect(mocks.providerRepository.upsertCredentials).toHaveBeenCalledWith('provider-1', {
+      authConfig: 'secret://authConfig'
     })
   })
 

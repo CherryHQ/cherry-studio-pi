@@ -1,3 +1,5 @@
+import { modelService } from '@data/services/ModelService'
+import { providerService } from '@data/services/ProviderService'
 import { type AuthConfig, AuthConfigSchema } from '@shared/data/types/provider'
 import type { Assistant, Provider } from '@types'
 
@@ -782,9 +784,28 @@ export class StorageV2Service {
   private async flushPendingRuntimeMirrors() {
     await configManager.flushPendingStorageV2ConfigStrict()
     await configManager.mirrorAllToStorageV2()
+    await this.flushProviderRuntimeMirrors()
     await storageV2DataApiAgentRuntimeMirrorService.flushStrict()
     await storageV2AgentDbMirrorService.flushStrict()
     await storageV2KnowledgeMirrorService.flushStrict()
+  }
+
+  async flushProviderRuntimeMirrors() {
+    const providers = await providerService.list({})
+
+    for (const [index, provider] of providers.entries()) {
+      const [apiKeys, authConfig, models] = await Promise.all([
+        providerService.getApiKeys(provider.id),
+        providerService.getAuthConfig(provider.id),
+        modelService.list({ providerId: provider.id })
+      ])
+
+      await this.upsertProviderModels(provider as never, models, index)
+      await this.upsertProviderApiKeys(provider.id, apiKeys)
+      await this.upsertProviderAuthConfig(provider.id, authConfig)
+    }
+
+    return { mirroredCount: providers.length }
   }
 
   getDataRoot() {
