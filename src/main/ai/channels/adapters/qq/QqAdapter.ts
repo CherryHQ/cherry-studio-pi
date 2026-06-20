@@ -13,6 +13,7 @@ import { ChannelAdapter, type ChannelAdapterConfig, type SendMessageOptions } fr
 import { registerAdapterFactory } from '../../ChannelManager'
 import { isSlashCommand } from '../../constants'
 import { splitMessage } from '../../utils'
+import { readChannelApiErrorText } from '../apiErrorPreview'
 
 const QQ_MAX_LENGTH = 2000
 const QQ_API_BASE = 'https://api.sgroup.qq.com'
@@ -172,7 +173,7 @@ class QqAdapter extends ChannelAdapter {
     })
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => '')
+      const errorText = await readChannelApiErrorText(response).catch(() => '')
       throw new Error(`QQ API request failed ${endpoint}: HTTP ${response.status} - ${errorText}`)
     }
 

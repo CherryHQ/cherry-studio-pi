@@ -14,6 +14,7 @@ import { registerAdapterFactory } from '../../ChannelManager'
 import { isSlashCommand, SLASH_COMMANDS } from '../../constants'
 import { FlushController } from '../../FlushController'
 import { splitMessage } from '../../utils'
+import { readChannelApiErrorText } from '../apiErrorPreview'
 import { buildDiscordUserAgent } from './userAgent'
 
 const DISCORD_API_BASE = 'https://discord.com/api/v10'
@@ -274,7 +275,7 @@ class DiscordAdapter extends ChannelAdapter {
       signal: AbortSignal.timeout(DISCORD_API_TIMEOUT_MS)
     })
     if (!response.ok) {
-      const errorText = await response.text().catch(() => '')
+      const errorText = await readChannelApiErrorText(response).catch(() => '')
       throw new Error(`Failed to get gateway URL: HTTP ${response.status} - ${errorText}`)
     }
     const data = (await response.json()) as { url: string }
@@ -760,7 +761,7 @@ class DiscordAdapter extends ChannelAdapter {
     })
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => '')
+      const errorText = await readChannelApiErrorText(response).catch(() => '')
       throw new Error(`Discord API error ${url}: HTTP ${response.status} - ${errorText}`)
     }
 

@@ -12,6 +12,7 @@ import { registerAdapterFactory } from '../../ChannelManager'
 import { isSlashCommand } from '../../constants'
 import { FlushController } from '../../FlushController'
 import { splitMessage } from '../../utils'
+import { readChannelApiErrorText } from '../apiErrorPreview'
 import { toSlackMarkdown } from './slackMarkdown'
 
 const SLACK_API_BASE = 'https://slack.com/api'
@@ -635,7 +636,7 @@ class SlackAdapter extends ChannelAdapter {
     })
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => '')
+      const errorText = await readChannelApiErrorText(response).catch(() => '')
       throw new Error(`Slack API error ${method}: HTTP ${response.status} - ${errorText}`)
     }
 
