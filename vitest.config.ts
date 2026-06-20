@@ -6,6 +6,12 @@ import electronViteConfig from './electron.vite.config'
 const mainConfig = (electronViteConfig as any).main
 const rendererConfig = (electronViteConfig as any).renderer
 
+const rendererTestPlugins = rendererConfig.plugins.flatMap(function flattenPlugin(plugin: any): any[] {
+  if (Array.isArray(plugin)) return plugin.flatMap(flattenPlugin)
+  if (typeof plugin?.name === 'string' && plugin.name.startsWith('@tailwindcss/vite:')) return []
+  return [plugin]
+})
+
 export default defineConfig({
   test: {
     projects: [
@@ -33,7 +39,7 @@ export default defineConfig({
       // 渲染进程单元测试配置
       {
         extends: true,
-        plugins: rendererConfig.plugins.filter((plugin: any) => plugin.name !== 'tailwindcss'),
+        plugins: rendererTestPlugins,
         resolve: {
           alias: rendererConfig.resolve.alias
         },
