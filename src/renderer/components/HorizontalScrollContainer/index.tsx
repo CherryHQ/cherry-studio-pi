@@ -25,6 +25,12 @@ export interface HorizontalScrollContainerProps {
   expandable?: boolean
 }
 
+function getEventTargetElement(target: EventTarget | null): Element | null {
+  if (target instanceof Element) return target
+  if (target instanceof Node) return target.parentElement
+  return null
+}
+
 const HorizontalScrollContainer: React.FC<HorizontalScrollContainerProps> = ({
   children,
   dependencies = [],
@@ -47,8 +53,8 @@ const HorizontalScrollContainer: React.FC<HorizontalScrollContainerProps> = ({
   const handleContainerClick = (e: React.MouseEvent) => {
     if (expandable) {
       // 确保不是点击了其他交互元素（如 tag 的关闭按钮）
-      const target = e.target as HTMLElement
-      if (!target.closest('[data-no-expand]')) {
+      const target = getEventTargetElement(e.target)
+      if (target && !target.closest('[data-no-expand]')) {
         setIsExpanded(!isExpanded)
       }
     }
