@@ -174,7 +174,7 @@ async function readTextFilePreview(filePath: string, maxBytes: number, signal?: 
   const stat = await fs.stat(filePath)
   throwIfNotesSignalAborted(signal)
   if (stat.size <= maxBytes) {
-    const content = await fs.readFile(filePath, 'utf8')
+    const content = await fs.readFile(filePath, { encoding: 'utf8', signal })
     throwIfNotesSignalAborted(signal)
     return {
       content,
@@ -459,7 +459,9 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
           }
           if (stat.size > MAX_NOTE_SEARCH_FILE_BYTES) continue
 
-          const content = await fs.readFile(file.externalPath, 'utf8').catch(() => '')
+          const content = await fs
+            .readFile(file.externalPath, { encoding: 'utf8', signal: context.signal })
+            .catch(() => '')
           throwIfNotesSignalAborted(context.signal)
           const index = content.toLowerCase().indexOf(query)
           if (index >= 0) {
@@ -516,7 +518,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
         const filePath = path.join(parent, `${safeName}.md`)
         await assertResolvedInsideNotesRoot(root, filePath)
         throwIfNotesSignalAborted(context.signal)
-        await fs.writeFile(filePath, content, 'utf8')
+        await fs.writeFile(filePath, content, { encoding: 'utf8', signal: context.signal })
         notifyMainProcessDataSyncLocalChange('file', { source: 'app-capability.notes.create', path: filePath })
         throwIfNotesSignalAborted(context.signal)
         return {
@@ -560,7 +562,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
         throwIfNotesSignalAborted(context.signal)
         await fs.mkdir(parent, { recursive: true })
         throwIfNotesSignalAborted(context.signal)
-        await fs.writeFile(filePath, content, 'utf8')
+        await fs.writeFile(filePath, content, { encoding: 'utf8', signal: context.signal })
         notifyMainProcessDataSyncLocalChange('file', { source: 'app-capability.notes.write', path: filePath })
         throwIfNotesSignalAborted(context.signal)
         return okResult('Note written', { path: filePath })

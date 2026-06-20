@@ -130,6 +130,33 @@ describe('notes app capabilities', () => {
     expect(mocks.notifyMainProcessDataSyncLocalChange).not.toHaveBeenCalled()
   })
 
+  it('passes caller signals into note read and write file operations', async () => {
+    const filePath = path.join(notesRoot, 'daily.md')
+    await fs.writeFile(filePath, 'hello from disk', 'utf8')
+    const controller = new AbortController()
+    const context = { source: 'agent' as const, signal: controller.signal }
+    const readSpy = vi.spyOn(fs, 'readFile')
+    const writeSpy = vi.spyOn(fs, 'writeFile')
+
+    try {
+      await capability('notes.read').execute({ path: 'daily' }, context)
+      await capability('notes.write').execute({ path: 'daily', content: 'hello from agent' }, context)
+
+      expect(readSpy).toHaveBeenCalledWith(
+        filePath,
+        expect.objectContaining({ encoding: 'utf8', signal: controller.signal })
+      )
+      expect(writeSpy).toHaveBeenCalledWith(
+        filePath,
+        'hello from agent',
+        expect.objectContaining({ encoding: 'utf8', signal: controller.signal })
+      )
+    } finally {
+      readSpy.mockRestore()
+      writeSpy.mockRestore()
+    }
+  })
+
   it('notifies data sync for completed note writes before surfacing caller cancellation', async () => {
     const controller = new AbortController()
     mocks.notifyMainProcessDataSyncLocalChange.mockImplementationOnce(() => {
