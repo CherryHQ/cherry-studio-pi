@@ -1,7 +1,7 @@
 import { Button, Input, RowFlex } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import { FolderIcon as NutstoreFolderIcon } from '@renderer/components/Icons/NutstoreIcons'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 interface NewFolderProps {
@@ -61,12 +61,17 @@ function FileList(props: FileListProps) {
   const folders = files.filter((file) => file.isDir).sort((a, b) => a.basename.localeCompare(b.basename, ['zh']))
 
   useEffect(() => {
+    let cancelled = false
+    setFiles([])
+
     async function fetchFiles() {
       try {
         const items = await props.fs.ls(props.path)
-        setFiles(items)
+        if (!cancelled) {
+          setFiles(items)
+        }
       } catch (error) {
-        if (error instanceof Error) {
+        if (!cancelled && error instanceof Error) {
           logger.error('Error fetching files:', error)
           window.modal.error({
             content: error.message,
@@ -76,6 +81,10 @@ function FileList(props: FileListProps) {
       }
     }
     void fetchFiles()
+
+    return () => {
+      cancelled = true
+    }
   }, [props.path, props.fs])
 
   return (
@@ -98,8 +107,17 @@ export function NutstorePathSelector(props: Props) {
 
   const [stack, setStack] = useState<string[]>(['/'])
   const [showNewFolder, setShowNewFolder] = useState(false)
+  const mountedRef = useRef(true)
 
   const cwd = stack.at(-1)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const enter = useCallback((path: string) => {
     setStack((prev) => [...prev, path])
@@ -113,6 +131,7 @@ export function NutstorePathSelector(props: Props) {
     async (name: string) => {
       const target = (cwd ?? '/') + (cwd && cwd !== '/' ? '/' : '') + name
       await props.fs.mkdirs(target)
+      if (!mountedRef.current) return
       setShowNewFolder(false)
       enter(target)
     },
