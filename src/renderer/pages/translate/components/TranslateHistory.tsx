@@ -58,7 +58,16 @@ const TranslateHistoryList: FC<Props> = ({ isOpen, onHistoryItemClick, onClose }
   const { getLanguage, getLabel } = useLanguageLabels()
   const { clear: clearHistory, update: updateHistory } = useTranslateHistory()
   const pendingLoadMoreRef = useRef(false)
+  const mountedRef = useRef(true)
   const showCopyFailed = useSaveFailedToast('common.copy_failed')
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const history: DisplayedTranslateHistoryItem[] = useMemo(
     () =>
@@ -102,7 +111,9 @@ const TranslateHistoryList: FC<Props> = ({ isOpen, onHistoryItemClick, onClose }
     async (value: string) => {
       try {
         await navigator.clipboard.writeText(value)
-        window.toast.success(t('translate.copied'))
+        if (mountedRef.current) {
+          window.toast.success(t('translate.copied'))
+        }
       } catch (error) {
         logger.error('Failed to copy translate history text', error as Error)
         showCopyFailed(error)

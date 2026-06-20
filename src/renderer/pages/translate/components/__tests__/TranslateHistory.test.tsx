@@ -232,6 +232,26 @@ describe('TranslateHistory', () => {
     expect((window as any).toast.success).toHaveBeenCalledWith('translate.copied')
   })
 
+  it('ignores copy success toast after unmount', async () => {
+    const copyOperation = deferred<void>()
+    writeTextMock.mockReturnValueOnce(copyOperation.promise)
+    const { unmount } = render(<TranslateHistory isOpen onHistoryItemClick={vi.fn()} onClose={vi.fn()} />)
+
+    fireEvent.click(screen.getByText('hello'))
+    fireEvent.click(screen.getByRole('button', { name: 'translate.history.copy_target' }))
+
+    await waitFor(() => expect(writeTextMock).toHaveBeenCalledWith('你好'))
+    unmount()
+
+    await act(async () => {
+      copyOperation.resolve()
+      await copyOperation.promise
+    })
+
+    expect((window as any).toast.success).not.toHaveBeenCalled()
+    expect((window as any).toast.error).not.toHaveBeenCalled()
+  })
+
   it('shows copy failure toast when clipboard write rejects', async () => {
     writeTextMock.mockRejectedValueOnce(new Error('clipboard denied'))
     render(<TranslateHistory isOpen onHistoryItemClick={vi.fn()} onClose={vi.fn()} />)
