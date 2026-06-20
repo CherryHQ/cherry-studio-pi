@@ -887,6 +887,44 @@ describe('main web search API providers', () => {
     )
   })
 
+  it('stops streaming oversized upstream HTTP error bodies after the preview cap', async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined)
+    const releaseLock = vi.fn()
+    const text = vi.fn()
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 502,
+      body: {
+        getReader: () => ({
+          read: vi.fn().mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode('x'.repeat(600))
+          }),
+          cancel,
+          releaseLock
+        })
+      },
+      text
+    } as unknown as Response)
+
+    const provider = createProviderDriver(
+      ExaProvider,
+      createProvider({
+        id: 'exa',
+        name: 'Exa',
+        apiKeys: ['exa-key'],
+        apiHost: 'https://api.exa.ai'
+      })
+    )
+
+    await expect(provider.searchKeywords('hello', runtimeConfig)).rejects.toThrow(
+      `Exa search failed: HTTP 502 ${'x'.repeat(500)}... [truncated]`
+    )
+    expect(cancel).toHaveBeenCalled()
+    expect(releaseLock).toHaveBeenCalled()
+    expect(text).not.toHaveBeenCalled()
+  })
+
   it('matches Exa MCP request and normalized response snapshots from fixtures', async () => {
     fetchMock.mockResolvedValue(createTextResponse(loadFixtureText('exa-mcp-response.txt'), 'text/event-stream'))
 

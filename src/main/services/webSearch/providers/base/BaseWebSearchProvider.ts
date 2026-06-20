@@ -1,3 +1,4 @@
+import { readResponseTextWithinLimit } from '@main/utils/readResponseText'
 import type { WebSearchCapability, WebSearchProvider } from '@shared/data/preference/preferenceTypes'
 import { withoutTrailingSlash } from '@shared/utils'
 import type * as z from 'zod'
@@ -57,14 +58,15 @@ export abstract class BaseWebSearchProvider {
   }
 
   protected async throwHttpError(message: string, response: Response): Promise<never> {
-    const errorText = (await response.text()).trim()
+    const { text, truncated } = await readResponseTextWithinLimit(response, MAX_HTTP_ERROR_TEXT_LENGTH + 1)
+    const errorText = text.trim()
 
     if (!errorText) {
       throw new Error(`${message}: HTTP ${response.status}`)
     }
 
     const truncatedErrorText =
-      errorText.length > MAX_HTTP_ERROR_TEXT_LENGTH
+      truncated || errorText.length > MAX_HTTP_ERROR_TEXT_LENGTH
         ? `${errorText.slice(0, MAX_HTTP_ERROR_TEXT_LENGTH)}... [truncated]`
         : errorText
 
