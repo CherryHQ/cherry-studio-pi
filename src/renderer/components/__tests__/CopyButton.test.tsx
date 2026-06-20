@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -14,6 +14,23 @@ const mockClipboard = {
 const mockedToast = {
   success: vi.fn(),
   error: vi.fn()
+}
+
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T | PromiseLike<T>) => void
+  reject: (reason?: unknown) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: Deferred<T>['resolve']
+  let reject!: Deferred<T>['reject']
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
 }
 
 // Mock useTranslation
@@ -118,6 +135,25 @@ describe('CopyButton', () => {
 
     expect(mockedToast.error).toHaveBeenCalledWith('复制失败')
     expect(mockedToast.success).not.toHaveBeenCalled()
+  })
+
+  it('should ignore delayed copy feedback after unmount', async () => {
+    const runningCopy = deferred<void>()
+    mockWriteText.mockReturnValueOnce(runningCopy.promise)
+    const { unmount } = render(<CopyButton textToCopy="test text" />)
+
+    const copyIcon = document.querySelector('.copy-icon')
+    const clickableElement = copyIcon?.parentElement
+    await userEvent.click(clickableElement!)
+    unmount()
+
+    await act(async () => {
+      runningCopy.resolve()
+      await runningCopy.promise
+    })
+
+    expect(mockedToast.success).not.toHaveBeenCalled()
+    expect(mockedToast.error).not.toHaveBeenCalled()
   })
 
   it('should apply custom size to icon and label', () => {
