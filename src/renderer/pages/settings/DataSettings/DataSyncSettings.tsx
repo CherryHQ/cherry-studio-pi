@@ -359,7 +359,7 @@ const DataSyncSettings: FC = () => {
       if (!isLatestRequest()) return null
 
       setStatus(nextStatus)
-      setSyncing(Boolean(nextStatus.syncing))
+      setSyncing(syncNowRef.current || Boolean(nextStatus.syncing))
       if (!nextStatus.syncing) {
         const runtimeState = await refreshDataSyncRuntimeStateFromMain().catch(() => null)
         if (runtimeState && isLatestRequest()) {
@@ -370,7 +370,7 @@ const DataSyncSettings: FC = () => {
     } catch (error) {
       if (!isLatestRequest()) return null
 
-      setSyncing(false)
+      setSyncing(syncNowRef.current)
       setRuntimeSyncing(false)
       setStatus((prev) => (prev ? { ...prev, syncing: false, syncStartedAt: null } : prev))
       if (showLoading) {
@@ -438,9 +438,17 @@ const DataSyncSettings: FC = () => {
       return
     }
 
-    if (syncNowRef.current || syncInProgress) {
+    if (syncNowRef.current) {
       setSyncing(true)
       window.toast.info(t('settings.data.data_sync.toast.sync_running'))
+      return
+    }
+
+    if (syncInProgress) {
+      const nextStatus = await refreshStatus().catch(() => null)
+      if (nextStatus?.syncing) {
+        window.toast.info(t('settings.data.data_sync.toast.sync_running'))
+      }
       return
     }
 

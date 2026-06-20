@@ -437,6 +437,27 @@ describe('DataSyncSettings', () => {
     await waitFor(() => expect(mocks.toast.success).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_success'))
   })
 
+  it('keeps a manual sync busy when a status refresh reports stale idle state', async () => {
+    const runningSync = deferred<ReturnType<typeof successSummary>>()
+    mocks.syncAppDataNow.mockReturnValueOnce(runningSync.promise)
+    mocks.getStatus.mockResolvedValue(idleStatus())
+
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(syncButton())
+    await waitFor(() => expect(mocks.syncAppDataNow).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(screen.getByText('settings.data.data_sync.refresh_status'))
+
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(syncButton()).toHaveClass('ant-btn-loading'))
+
+    runningSync.resolve(successSummary())
+    await waitFor(() => expect(mocks.toast.success).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_success'))
+    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+  })
+
   it('prevents duplicate data sync diagnostics while a diagnosis is pending', async () => {
     const runningDiagnosis = deferred<{ ok: boolean; basePath: string }>()
     mocks.checkWriteAccess.mockReturnValueOnce(runningDiagnosis.promise)
