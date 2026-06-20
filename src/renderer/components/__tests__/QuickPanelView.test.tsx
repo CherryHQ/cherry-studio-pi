@@ -357,6 +357,35 @@ describe('QuickPanelView', () => {
       )
     })
 
+    it('ignores click events whose target is not an element', () => {
+      const onClose = vi.fn()
+      const list = createList(1)
+
+      render(
+        wrapWithProviders(
+          <>
+            <QuickPanelView setInputText={vi.fn()} />
+            <OpenPanelOnMount list={list} onClose={onClose} />
+          </>
+        )
+      )
+
+      const panel = screen.getByTestId('quick-panel')
+      expect(panel).toHaveClass('visible')
+
+      expect(() => {
+        window.dispatchEvent(
+          new MouseEvent('click', {
+            bubbles: true,
+            cancelable: true
+          })
+        )
+      }).not.toThrow()
+
+      expect(panel).toHaveClass('visible')
+      expect(onClose).not.toHaveBeenCalled()
+    })
+
     it('should return to the previous menu with Ctrl+ArrowLeft without mutating history state', async () => {
       const user = userEvent.setup()
       const childList = createList(1, 'Child')

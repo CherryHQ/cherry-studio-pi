@@ -654,7 +654,9 @@ export const QuickPanelView: React.FC<Props> = ({ setInputText }) => {
     }
 
     const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
+      if (!(e.target instanceof Element)) return
+
+      const target = e.target
       if (target.closest('#inputbar')) return
       if (bodyRef.current && !bodyRef.current.contains(target)) {
         handleClose('outsideclick')
