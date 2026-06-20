@@ -4,6 +4,34 @@ import { summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
 
 const logger = loggerService.withContext('ProtocolService:providersImport')
 
+function decodeQueryComponentPreservingPlus(value: string) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+function getProtocolQueryParam(search: string, name: string) {
+  const query = search.startsWith('?') ? search.slice(1) : search
+  if (!query) return null
+
+  for (const pair of query.split('&')) {
+    const separatorIndex = pair.indexOf('=')
+    const rawName = separatorIndex >= 0 ? pair.slice(0, separatorIndex) : pair
+    if (decodeQueryComponentPreservingPlus(rawName) !== name) continue
+
+    const rawValue = separatorIndex >= 0 ? pair.slice(separatorIndex + 1) : ''
+    return decodeQueryComponentPreservingPlus(rawValue)
+  }
+
+  return null
+}
+
+function normalizeBase64Payload(value: string) {
+  return value.replaceAll('_', '+').replaceAll('-', '/')
+}
+
 function parseSingleQuotedJsonLiteral(input: string, startIndex: number) {
   let value = ''
   let escaped = false
@@ -117,7 +145,7 @@ function parseProviderImportPayload(decoded: string) {
 
 export function parseProvidersImportData(data: string) {
   try {
-    const result = parseProviderImportPayload(Buffer.from(data, 'base64').toString('utf-8'))
+    const result = parseProviderImportPayload(Buffer.from(normalizeBase64Payload(data), 'base64').toString('utf-8'))
 
     return JSON.stringify(result)
   } catch (error) {
@@ -139,17 +167,14 @@ export async function handleProvidersProtocolUrl(url: URL) {
       // }
       // cherrystudio://providers/api-keys?v=1&data={base64Encode(JSON.stringify(jsonConfig))}
 
-      // replace + and / to _ and - because + and / are processed by URLSearchParams
-      const processedSearch = url.search.replaceAll('+', '_').replaceAll('/', '-')
-      const params = new URLSearchParams(processedSearch)
-      const data = parseProvidersImportData(params.get('data')?.replaceAll('_', '+').replaceAll('-', '/') || '')
+      const data = parseProvidersImportData(getProtocolQueryParam(url.search, 'data') || '')
 
       if (!data) {
         logger.error('handleProvidersProtocolUrl data is null or invalid')
         return
       }
 
-      const version = params.get('v')
+      const version = getProtocolQueryParam(url.search, 'v')
       if (version == '1') {
         // TODO: handle different version
         logger.debug('handleProvidersProtocolUrl', { data: summarizeTextForLog(data), version })

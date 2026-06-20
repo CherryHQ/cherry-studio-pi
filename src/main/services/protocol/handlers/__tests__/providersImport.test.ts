@@ -80,6 +80,15 @@ describe('providersImport protocol handler', () => {
     expect(parseProvidersImportData(payload)).toBe(JSON.stringify({ id: 'tokenflux' }))
   })
 
+  it('parses URL-safe base64 provider import payloads directly', () => {
+    const config = { id: 'tokenflux', apiKey: 'sk-10895-Ͽ' }
+    const payload = toUrlSafeBase64(config)
+
+    expect(payload).toContain('_')
+    expect(payload).toContain('-')
+    expect(parseProvidersImportData(payload)).toBe(JSON.stringify(config))
+  })
+
   it('preserves apostrophes and parentheses in standard JSON payload strings', () => {
     const config = {
       id: 'custom',
