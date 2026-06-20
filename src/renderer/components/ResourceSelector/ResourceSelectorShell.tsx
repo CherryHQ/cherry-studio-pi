@@ -279,7 +279,10 @@ export function ResourceSelectorShell<T extends ResourceSelectorShellItem>(props
     })
     window.queueMicrotask(closeIfNewModalSurfaceAppears)
 
-    return () => observer.disconnect()
+    return () => {
+      closed = true
+      observer.disconnect()
+    }
   }, [closeAllSelectors, open])
 
   const handleOpenChange = useCallback(

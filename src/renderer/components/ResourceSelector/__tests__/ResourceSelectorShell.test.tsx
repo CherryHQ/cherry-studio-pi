@@ -245,6 +245,59 @@ describe('ResourceSelectorShell', () => {
       }
     })
 
+    it('ignores stale modal observer callbacks after unmount', async () => {
+      const originalMutationObserver = globalThis.MutationObserver
+      const observerCallbacks: MutationCallback[] = []
+      class MutationObserverMock {
+        constructor(callback: MutationCallback) {
+          observerCallbacks.push(callback)
+        }
+
+        observe() {}
+        disconnect() {}
+        takeRecords() {
+          return []
+        }
+      }
+      globalThis.MutationObserver = MutationObserverMock as typeof MutationObserver
+
+      const closeListener = vi.fn()
+      window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeListener)
+      const dialogContent = document.createElement('div')
+      dialogContent.setAttribute('data-slot', 'dialog-content')
+
+      try {
+        const { unmount } = render(
+          <ResourceSelectorShell
+            trigger={<button type="button">Open</button>}
+            items={ITEMS}
+            pinnedIds={[]}
+            onTogglePin={vi.fn()}
+            labels={LABELS}
+            value={null}
+            onChange={vi.fn()}
+          />
+        )
+
+        openPopover()
+        await waitFor(() => expect(observerCallbacks.length).toBeGreaterThan(0))
+
+        unmount()
+        const closeCallCountAfterUnmount = closeListener.mock.calls.length
+        document.body.appendChild(dialogContent)
+
+        act(() => {
+          observerCallbacks.forEach((callback) => callback([], {} as MutationObserver))
+        })
+
+        expect(closeListener).toHaveBeenCalledTimes(closeCallCountAfterUnmount)
+      } finally {
+        dialogContent.remove()
+        window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeListener)
+        globalThis.MutationObserver = originalMutationObserver
+      }
+    })
+
     it('closes when a pre-mounted hidden dialog surface becomes visible', async () => {
       const dialogContent = document.createElement('div')
       dialogContent.setAttribute('data-slot', 'dialog-content')

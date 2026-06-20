@@ -412,7 +412,10 @@ export function ModelSelector(props: ModelSelectorProps) {
     })
     window.queueMicrotask(closeIfNewModalSurfaceAppears)
 
-    return () => observer.disconnect()
+    return () => {
+      closed = true
+      observer.disconnect()
+    }
   }, [forceClose, open])
 
   const handleShortcut = useCallback(() => applyOpenChange(true), [applyOpenChange])
