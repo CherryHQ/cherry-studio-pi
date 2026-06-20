@@ -95,6 +95,15 @@ const TranslatePage: FC = () => {
   const outputTextRef = useRef<HTMLDivElement>(null)
   const isProgrammaticScroll = useRef(false)
   const translateInputRef = useRef(translateInput)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     translateInputRef.current = translateInput
@@ -125,7 +134,9 @@ const TranslatePage: FC = () => {
         await persistPromise
       } catch (error) {
         logger.error(`Failed to persist ${actionName}`, error as Error)
-        window.toast.error(t('common.save_failed'))
+        if (mountedRef.current) {
+          window.toast.error(t('common.save_failed'))
+        }
       }
     },
     [t]
@@ -153,8 +164,11 @@ const TranslatePage: FC = () => {
 
   const copy = useCallback(
     async (value: string) => {
+      if (!mountedRef.current) return
       await navigator.clipboard.writeText(value)
-      setCopied(true)
+      if (mountedRef.current) {
+        setCopied(true)
+      }
     },
     [setCopied]
   )
@@ -165,7 +179,9 @@ const TranslatePage: FC = () => {
       await copy(translateInput)
     } catch (error) {
       logger.error('Failed to copy source text:', error as Error)
-      window.toast.error(t('common.copy_failed'))
+      if (mountedRef.current) {
+        window.toast.error(t('common.copy_failed'))
+      }
     }
   }, [copy, t, translateInput])
 
@@ -174,7 +190,9 @@ const TranslatePage: FC = () => {
       await copy(translateOutput)
     } catch (error) {
       logger.error('Failed to copy text to clipboard:', error as Error)
-      window.toast.error(t('common.copy_failed'))
+      if (mountedRef.current) {
+        window.toast.error(t('common.copy_failed'))
+      }
     }
   }, [copy, t, translateOutput])
 

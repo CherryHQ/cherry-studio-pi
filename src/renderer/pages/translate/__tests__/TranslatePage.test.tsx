@@ -524,6 +524,32 @@ describe('TranslatePage', () => {
     expect(clipboardWriteTextMock).toHaveBeenCalledWith('translated text')
   })
 
+  it('skips scheduled auto-copy after unmount', async () => {
+    MockUsePreferenceUtils.setMultiplePreferenceValues({
+      'feature.translate.model_id': 'openai::gpt-4.1',
+      'feature.translate.page.source_language': 'zh-cn',
+      'feature.translate.page.auto_copy': true
+    })
+
+    const { rerender, unmount } = render(<TranslatePage />)
+    fireEvent.change(screen.getByLabelText('translate.input.placeholder'), { target: { value: 'hello' } })
+    rerender(<TranslatePage />)
+    fireEvent.click(screen.getByRole('button', { name: 'translate.button.translate' }))
+
+    await waitFor(() =>
+      expect(translateCoreMock.setTimeoutTimer).toHaveBeenCalledWith('auto-copy', expect.any(Function), 100)
+    )
+
+    const autoCopyCallback = translateCoreMock.setTimeoutTimer.mock.calls[0]?.[1] as (() => Promise<void>) | undefined
+    unmount()
+
+    await act(async () => {
+      await autoCopyCallback?.()
+    })
+
+    expect(clipboardWriteTextMock).not.toHaveBeenCalled()
+  })
+
   it('keeps history and settings drawers mutually exclusive and exposes open state through aria-pressed', () => {
     render(<TranslatePage />)
     const historyButton = screen.getByRole('button', { name: 'translate.history.title' })
