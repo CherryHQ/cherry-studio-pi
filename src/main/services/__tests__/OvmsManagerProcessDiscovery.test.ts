@@ -115,6 +115,28 @@ describe('OvmsManager process discovery', () => {
     expect(applyModelPath).toHaveBeenCalledWith(`${ovmsDir}/models/org/model";Remove-Item`)
   })
 
+  it('normalizes surrounding whitespace in OVMS model ids across download and config writes', async () => {
+    const ovmsDir = '/mock/home/.cherrystudio/ovms/ovms'
+    mocks.fs.pathExists.mockResolvedValue(false)
+    mocks.exec.mockImplementation((_file, _args, _options, callback) => callback(null, 'downloaded', ''))
+    const manager = await loadOvmsManager()
+    const updateModelConfig = vi.spyOn(manager, 'updateModelConfig').mockResolvedValue(true)
+    const applyModelPath = vi.spyOn(manager as any, 'applyModelPath').mockResolvedValue(true)
+
+    await expect(manager.addModel('Trimmed Model', '  org/model  ', '', 'text_generation')).resolves.toEqual({
+      success: true
+    })
+
+    expect(mocks.exec).toHaveBeenCalledWith(
+      `${ovmsDir}/ovdnd.exe`,
+      expect.arrayContaining(['--source_model', 'org/model']),
+      expect.objectContaining({ cwd: ovmsDir }),
+      expect.any(Function)
+    )
+    expect(updateModelConfig).toHaveBeenCalledWith('Trimmed Model', 'org/model')
+    expect(applyModelPath).toHaveBeenCalledWith(`${ovmsDir}/models/org/model`)
+  })
+
   it('rejects model ids that would escape the OVMS models directory', async () => {
     mocks.fs.pathExists.mockResolvedValue(false)
     const manager = await loadOvmsManager()

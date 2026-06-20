@@ -444,7 +444,8 @@ export class OvmsManager extends BaseService {
    * @param modelId ID of the model to check
    */
   public async isNameAndIDAvalid(modelName: string, modelId: string): Promise<boolean> {
-    if (!modelName || !modelId) {
+    const normalizedModelId = modelId.trim()
+    if (!modelName || !normalizedModelId) {
       logger.error('Model name and ID cannot be empty')
       return false
     }
@@ -464,10 +465,10 @@ export class OvmsManager extends BaseService {
 
       // Check if the model name or ID already exists in the config
       const exists = config.mediapipe_config_list.some(
-        (model) => model.name === modelName || model.base_path === modelId
+        (model) => model.name === modelName || model.base_path === normalizedModelId
       )
       if (exists) {
-        logger.warn(`Model with name "${modelName}" or ID "${modelId}" already exists in the config`)
+        logger.warn(`Model with name "${modelName}" or ID "${normalizedModelId}" already exists in the config`)
         return false
       }
     } catch (error) {
@@ -528,7 +529,8 @@ export class OvmsManager extends BaseService {
     modelSource: string,
     task: string = 'text_generation'
   ): Promise<{ success: boolean; message?: string }> {
-    logger.info(`Adding model: ${modelName} with ID: ${modelId}, Source: ${modelSource}, Task: ${task}`)
+    const normalizedModelId = modelId.trim()
+    logger.info(`Adding model: ${modelName} with ID: ${normalizedModelId}, Source: ${modelSource}, Task: ${task}`)
 
     const homeDir = homedir()
     const ovdndDir = path.join(homeDir, HOME_CHERRY_DIR, 'ovms', 'ovms')
@@ -536,11 +538,11 @@ export class OvmsManager extends BaseService {
     let pathModel: string | null = null
 
     try {
-      pathModel = resolveSafeModelDirectory(modelsDir, modelId)
+      pathModel = resolveSafeModelDirectory(modelsDir, normalizedModelId)
 
       // check the ovdnDir+'models'+modelId exist or not
       if (await fs.pathExists(pathModel)) {
-        logger.error(`Model with ID ${modelId} already exists`)
+        logger.error(`Model with ID ${normalizedModelId} already exists`)
         return { success: false, message: 'Model ID already exists!' }
       }
 
@@ -557,7 +559,7 @@ export class OvmsManager extends BaseService {
         '--model_repository_path',
         modelsDir,
         '--source_model',
-        modelId,
+        normalizedModelId,
         '--model_name',
         modelName,
         '--target_device',
@@ -592,12 +594,12 @@ export class OvmsManager extends BaseService {
       logger.error(`Failed to add model: ${error}`)
       return {
         success: false,
-        message: `Download model ${modelId} failed, please check following items and try it again:<p>- the model id</p><p>- network connection and proxy</p>`
+        message: `Download model ${normalizedModelId || modelId} failed, please check following items and try it again:<p>- the model id</p><p>- network connection and proxy</p>`
       }
     }
 
     // Update config file
-    if (!(await this.updateModelConfig(modelName, modelId))) {
+    if (!(await this.updateModelConfig(modelName, normalizedModelId))) {
       logger.error('Failed to update model config')
       return { success: false, message: 'Failed to update model config' }
     }
@@ -607,7 +609,7 @@ export class OvmsManager extends BaseService {
       return { success: false, message: 'Failed to apply model patchs' }
     }
 
-    logger.info(`Model ${modelName} added successfully with ID ${modelId}`)
+    logger.info(`Model ${modelName} added successfully with ID ${normalizedModelId}`)
     return { success: true }
   }
 
@@ -674,6 +676,7 @@ export class OvmsManager extends BaseService {
    */
   public async checkModelExists(modelId: string): Promise<boolean> {
     const configPath = this.getConfigPath()
+    const normalizedModelId = modelId.trim()
 
     try {
       const config = await this.readRuntimeConfig(configPath)
@@ -687,7 +690,7 @@ export class OvmsManager extends BaseService {
         return false
       }
 
-      return config.mediapipe_config_list.some((model) => model.base_path === modelId)
+      return config.mediapipe_config_list.some((model) => model.base_path === normalizedModelId)
     } catch (error) {
       logger.error(`Failed to check model existence: ${error}`)
       return false
@@ -699,6 +702,7 @@ export class OvmsManager extends BaseService {
    */
   public async updateModelConfig(modelName: string, modelId: string): Promise<boolean> {
     const configPath = this.getConfigPath()
+    const normalizedModelId = modelId.trim()
 
     try {
       // Ensure the models directory exists
@@ -713,11 +717,11 @@ export class OvmsManager extends BaseService {
       // Add new model config
       const newModelConfig: ModelConfig = {
         name: modelName,
-        base_path: modelId
+        base_path: normalizedModelId
       }
 
       // Check if model already exists, if so, update it
-      const existingIndex = config.mediapipe_config_list.findIndex((model) => model.base_path === modelId)
+      const existingIndex = config.mediapipe_config_list.findIndex((model) => model.base_path === normalizedModelId)
 
       if (existingIndex >= 0) {
         config.mediapipe_config_list[existingIndex] = newModelConfig
