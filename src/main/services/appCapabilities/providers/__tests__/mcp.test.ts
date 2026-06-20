@@ -212,13 +212,13 @@ describe('mcp app capabilities', () => {
 
   it('rejects non-object MCP capability inputs before side effects', async () => {
     await expect(capability('mcp.servers.list').execute('servers' as any, { source: 'agent' })).rejects.toThrow(
-      'MCP capability input must be an object'
+      'MCP 能力的输入必须是对象'
     )
     await expect(capability('mcp.tools.list').execute(['tools'] as any, { source: 'agent' })).rejects.toThrow(
-      'MCP capability input must be an object'
+      'MCP 能力的输入必须是对象'
     )
     await expect(capability('mcp.tool.call').execute(false as any, { source: 'agent' })).rejects.toThrow(
-      'MCP capability input must be an object'
+      'MCP 能力的输入必须是对象'
     )
 
     expect(mocks.mcpServerService.list).not.toHaveBeenCalled()
@@ -254,15 +254,15 @@ describe('mcp app capabilities', () => {
   it('rejects empty MCP tool ids and invalid params before calling tools', async () => {
     await expect(
       capability('mcp.tool.call').execute({ toolId: '   ', params: { value: 'hello' } }, { source: 'agent' })
-    ).rejects.toThrow('MCP tool id is required')
+    ).rejects.toThrow('MCP 工具 ID 不能为空')
 
     await expect(
       capability('mcp.tool.call').execute({ toolId: 'server__tool_1', params: 'bad' }, { source: 'agent' })
-    ).rejects.toThrow('MCP tool params must be an object')
+    ).rejects.toThrow('MCP 工具参数必须是对象')
 
     await expect(
       capability('mcp.tool.call').execute({ toolId: 'server__tool_1', params: [] }, { source: 'agent' })
-    ).rejects.toThrow('MCP tool params must be an object')
+    ).rejects.toThrow('MCP 工具参数必须是对象')
 
     await capability('mcp.tool.call').execute({ toolId: 'server__tool_1' }, { source: 'agent' })
 

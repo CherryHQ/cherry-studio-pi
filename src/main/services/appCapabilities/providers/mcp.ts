@@ -8,10 +8,14 @@ import { normalizeBoundedIntegerInput, okResult, sanitizeForAgent } from '../uti
 const DEFAULT_MCP_TOOL_LIST_LIMIT = 50
 const MAX_MCP_TOOL_LIST_LIMIT = 200
 const RENDERER_STORE_FALLBACK_TIMEOUT_MS = 500
+const MCP_INPUT_OBJECT_ERROR = 'MCP 能力的输入必须是对象。'
+const MCP_ABORT_ERROR = 'MCP 能力调用已取消。'
+const MCP_TOOL_ID_LABEL = 'MCP 工具 ID'
+const MCP_TOOL_PARAMS_OBJECT_ERROR = 'MCP 工具参数必须是对象。'
 
 function normalizeInputObject(input: unknown) {
   if (input === null || typeof input === 'undefined') return {}
-  if (typeof input !== 'object' || Array.isArray(input)) throw new Error('MCP capability input must be an object')
+  if (typeof input !== 'object' || Array.isArray(input)) throw new Error(MCP_INPUT_OBJECT_ERROR)
   return input as Record<string, unknown>
 }
 
@@ -20,7 +24,7 @@ function throwIfMcpSignalAborted(signal?: AbortSignal) {
   const reason = signal.reason
   if (reason instanceof Error) throw reason
   if (typeof reason === 'string' && reason.trim()) throw new Error(reason.trim())
-  throw new Error('MCP capability call aborted')
+  throw new Error(MCP_ABORT_ERROR)
 }
 
 function normalizeListLimit(value: unknown) {
@@ -42,13 +46,13 @@ function normalizeOffset(value: unknown) {
 
 function normalizeRequiredText(value: unknown, label: string) {
   const text = typeof value === 'string' ? value.trim() : ''
-  if (!text) throw new Error(`${label} is required`)
+  if (!text) throw new Error(label + ' 不能为空。')
   return text
 }
 
 function normalizeToolParams(value: unknown) {
   if (value === null || typeof value === 'undefined') return {}
-  if (typeof value !== 'object' || Array.isArray(value)) throw new Error('MCP tool params must be an object')
+  if (typeof value !== 'object' || Array.isArray(value)) throw new Error(MCP_TOOL_PARAMS_OBJECT_ERROR)
   return value as Record<string, unknown>
 }
 
@@ -161,7 +165,7 @@ export function createMcpCapabilities(): AppCapabilityDefinition[] {
       tags: ['mcp', 'tools', 'call'],
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
-        const toolId = normalizeRequiredText(inputObject.toolId, 'MCP tool id')
+        const toolId = normalizeRequiredText(inputObject.toolId, MCP_TOOL_ID_LABEL)
         const params = normalizeToolParams(inputObject.params)
         throwIfMcpSignalAborted(context.signal)
         const response = await mcpService.callToolById(toolId, params, context.toolCallId)
