@@ -1,6 +1,6 @@
 import type { ThinkingMessageBlock } from '@renderer/types/newMessage'
 import { MessageBlockStatus, MessageBlockType } from '@renderer/types/newMessage'
-import { render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ThinkingBlock from '../ThinkingBlock'
@@ -9,6 +9,23 @@ import ThinkingBlock from '../ThinkingBlock'
 const mockUseSettings = vi.fn()
 const mockUseTranslation = vi.fn()
 let mockUsePreference: any
+
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T | PromiseLike<T>) => void
+  reject: (reason?: unknown) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: Deferred<T>['resolve']
+  let reject!: Deferred<T>['reject']
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}
 
 // Mock hooks
 vi.mock('@renderer/hooks/useSettings', () => ({
@@ -171,6 +188,20 @@ describe('ThinkingBlock', () => {
         if (key === 'message.copy.failed') return 'Copy failed'
         if (key === 'common.copy') return 'Copy'
         return key
+      }
+    })
+
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined)
+      }
+    })
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: {
+        error: vi.fn(),
+        success: vi.fn()
       }
     })
   })
@@ -432,6 +463,24 @@ describe('ThinkingBlock', () => {
   })
 
   describe('integration and edge cases', () => {
+    it('should ignore delayed copy feedback after unmount', async () => {
+      const runningCopy = deferred<void>()
+      vi.mocked(navigator.clipboard.writeText).mockReturnValueOnce(runningCopy.promise)
+      const block = createThinkingBlock({ content: 'Copy me later', status: MessageBlockStatus.SUCCESS })
+      const { unmount } = renderThinkingBlock(block)
+
+      fireEvent.click(getCopyButton()!)
+      unmount()
+
+      await act(async () => {
+        runningCopy.resolve()
+        await runningCopy.promise
+      })
+
+      expect(window.toast.success).not.toHaveBeenCalled()
+      expect(window.toast.error).not.toHaveBeenCalled()
+    })
+
     it('should handle content updates correctly', () => {
       const block1 = createThinkingBlock({ content: 'Original thought' })
       const { rerender } = renderThinkingBlock(block1)

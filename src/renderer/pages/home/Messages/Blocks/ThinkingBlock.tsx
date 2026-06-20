@@ -41,8 +41,17 @@ const ThinkingBlock: React.FC<Props> = ({ id, content, isStreaming, thinkingMs }
   const [thoughtAutoCollapse] = usePreference('chat.message.thought.auto_collapse')
   const [activeKey, setActiveKey] = useState<string>(thoughtAutoCollapse ? '' : 'thought')
   const { anchorRef, withScrollAnchor } = useScrollAnchor<HTMLDivElement>()
+  const mountedRef = useRef(true)
 
   const isThinking = isStreaming
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     if (thoughtAutoCollapse) {
@@ -57,12 +66,16 @@ const ThinkingBlock: React.FC<Props> = ({ id, content, isStreaming, thinkingMs }
       navigator.clipboard
         .writeText(content)
         .then(() => {
-          window.toast.success({ title: t('message.copied'), key: 'copy-message' })
-          setCopied(true)
+          if (mountedRef.current) {
+            window.toast.success({ title: t('message.copied'), key: 'copy-message' })
+            setCopied(true)
+          }
         })
         .catch((error) => {
           logger.error('Failed to copy text:', error)
-          window.toast.error({ title: t('message.copy.failed'), key: 'copy-message-error' })
+          if (mountedRef.current) {
+            window.toast.error({ title: t('message.copy.failed'), key: 'copy-message-error' })
+          }
         })
     }
   }, [content, setCopied, t])
