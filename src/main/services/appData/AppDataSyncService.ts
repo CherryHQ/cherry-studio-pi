@@ -19,6 +19,7 @@ import { storageV2DataApiAgentRuntimeMirrorService } from '@main/services/storag
 import { storageV2DataRootService } from '@main/services/storageV2/DataRootService'
 import { storageV2FileLegacyProjectionService } from '@main/services/storageV2/FileLegacyProjectionService'
 import { pruneManagedLegacyProjectionArchives } from '@main/services/storageV2/LegacyProjectionArchiveCleanup'
+import { storageV2Service } from '@main/services/storageV2/StorageService'
 import {
   type StorageV2WebDavRecordSyncManifest,
   storageV2WebDavRecordSyncService,
@@ -442,6 +443,7 @@ const AGENT_RUNTIME_ENTITY_TYPES = new Set([
 
 const FILE_RUNTIME_ENTITY_TYPES = new Set(['blob', 'file'])
 const APP_DATA_RUNTIME_ENTITY_TYPES = new Set(['kv_record'])
+const PROVIDER_RUNTIME_ENTITY_TYPES = new Set(['provider', 'provider_credential', 'model'])
 const RENDERER_HYDRATION_ENTITY_TYPES = new Set([
   'profile',
   'provider',
@@ -3949,6 +3951,11 @@ export class AppDataSyncService {
         db = await getAppDataDatabase()
         projected = true
       }
+    }
+
+    if ([...entityTypes].some((entityType) => PROVIDER_RUNTIME_ENTITY_TYPES.has(entityType))) {
+      await storageV2Service.projectProvidersToDataApiRuntime()
+      projected = true
     }
 
     if ([...entityTypes].some((entityType) => RENDERER_HYDRATION_ENTITY_TYPES.has(entityType))) {

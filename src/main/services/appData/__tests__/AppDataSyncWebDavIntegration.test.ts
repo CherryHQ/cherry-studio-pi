@@ -23,6 +23,12 @@ vi.mock('@main/services/AppRuntimeSaveService', () => ({
   flushMainStorageV2RuntimeMirrors: vi.fn().mockResolvedValue(undefined)
 }))
 
+vi.mock('@main/services/storageV2/StorageService', () => ({
+  storageV2Service: {
+    projectProvidersToDataApiRuntime: vi.fn().mockResolvedValue({ providerCount: 0, modelCount: 0 })
+  }
+}))
+
 vi.unmock('node:fs')
 vi.unmock('node:fs/promises')
 vi.unmock('node:http')

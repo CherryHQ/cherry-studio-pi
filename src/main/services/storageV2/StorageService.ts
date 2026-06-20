@@ -1,5 +1,10 @@
 import { modelService } from '@data/services/ModelService'
 import { providerService } from '@data/services/ProviderService'
+import { ErrorCode, isDataApiError } from '@shared/data/api'
+import type { CreateModelDto, UpdateModelDto } from '@shared/data/api/schemas/models'
+import type { CreateProviderDto, UpdateProviderDto } from '@shared/data/api/schemas/providers'
+import { isUniqueModelId, type Model as DataApiModel, parseUniqueModelId } from '@shared/data/types/model'
+import type { ApiKeyEntry, ProviderSettings } from '@shared/data/types/provider'
 import { type AuthConfig, AuthConfigSchema } from '@shared/data/types/provider'
 import type { Assistant, Provider } from '@types'
 
@@ -124,6 +129,190 @@ function makeStorageV2SecretRef(scope: string, ownerId: string, kind: string) {
 
 function isNonEmptyString(value: string | undefined): value is string {
   return typeof value === 'string' && value.length > 0
+}
+
+function ownValue(record: Record<string, unknown>, key: string): unknown {
+  return Object.hasOwn(record, key) ? record[key] : undefined
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function optionalArray<T = unknown>(value: unknown): T[] | undefined {
+  return Array.isArray(value) ? (value as T[]) : undefined
+}
+
+function optionalRecord<T extends Record<string, unknown> = Record<string, unknown>>(value: unknown): T | undefined {
+  return isRecord(value) ? (value as T) : undefined
+}
+
+function normalizeProjectionApiKeys(provider: Record<string, unknown>): ApiKeyEntry[] | undefined {
+  const keys: ApiKeyEntry[] = []
+  const seen = new Set<string>()
+  const entries = optionalArray<Record<string, unknown>>(provider.apiKeys)
+
+  if (entries) {
+    entries.forEach((entry, index) => {
+      if (!isRecord(entry)) return
+      const key = optionalString(entry.key)
+      if (!key || seen.has(key)) return
+      seen.add(key)
+      keys.push({
+        id: optionalString(entry.id) ?? `key-${index + 1}`,
+        key,
+        ...(optionalString(entry.label) ? { label: optionalString(entry.label) } : {}),
+        isEnabled: typeof entry.isEnabled === 'boolean' ? entry.isEnabled : true
+      })
+    })
+  }
+
+  const legacyApiKey = optionalString(provider.apiKey)
+  if (legacyApiKey && !seen.has(legacyApiKey)) {
+    keys.push({
+      id: 'legacy-api-key',
+      key: legacyApiKey,
+      isEnabled: true
+    })
+  }
+
+  if (!entries && !legacyApiKey) return undefined
+  return keys
+}
+
+function normalizeProjectionAuthConfig(provider: Record<string, unknown>): AuthConfig | undefined {
+  if (!Object.hasOwn(provider, 'authConfig')) return undefined
+  const parsed = AuthConfigSchema.safeParse(provider.authConfig)
+  return parsed.success ? parsed.data : undefined
+}
+
+function normalizeProjectionProviderSettings(provider: Record<string, unknown>): Partial<ProviderSettings> | undefined {
+  return (
+    optionalRecord<Partial<ProviderSettings>>(provider.providerSettings) ??
+    optionalRecord<Partial<ProviderSettings>>(provider.settings)
+  )
+}
+
+function normalizeProjectionProvider(provider: unknown): {
+  create: CreateProviderDto
+  update: UpdateProviderDto
+  apiKeys?: ApiKeyEntry[]
+} | null {
+  if (!isRecord(provider)) return null
+
+  const providerId = optionalString(provider.id)
+  const name = optionalString(provider.name) ?? providerId
+  if (!providerId || !name) return null
+
+  const apiKeys = normalizeProjectionApiKeys(provider)
+  const authConfig = normalizeProjectionAuthConfig(provider)
+  const providerSettings = normalizeProjectionProviderSettings(provider)
+  const endpointConfigs = optionalRecord(provider.endpointConfigs) as CreateProviderDto['endpointConfigs'] | undefined
+  const apiFeatures = optionalRecord(provider.apiFeatures) as CreateProviderDto['apiFeatures'] | undefined
+  const defaultChatEndpoint = optionalString(provider.defaultChatEndpoint) as CreateProviderDto['defaultChatEndpoint']
+  const providerType = optionalString(provider.type)
+  const presetProviderId =
+    optionalString(provider.presetProviderId) ??
+    (providerType && providerType !== providerId ? providerType : undefined)
+  const enabled =
+    typeof provider.isEnabled === 'boolean'
+      ? provider.isEnabled
+      : typeof provider.enabled === 'boolean'
+        ? provider.enabled
+        : undefined
+
+  const create: CreateProviderDto = {
+    providerId,
+    name,
+    ...(presetProviderId ? { presetProviderId } : {}),
+    ...(endpointConfigs ? { endpointConfigs } : {}),
+    ...(defaultChatEndpoint ? { defaultChatEndpoint } : {}),
+    ...(apiKeys ? { apiKeys } : {}),
+    ...(authConfig ? { authConfig } : {}),
+    ...(apiFeatures ? { apiFeatures } : {}),
+    ...(providerSettings ? { providerSettings } : {})
+  }
+  const update: UpdateProviderDto = {
+    name,
+    ...(endpointConfigs ? { endpointConfigs } : {}),
+    ...(defaultChatEndpoint ? { defaultChatEndpoint } : {}),
+    ...(authConfig ? { authConfig } : {}),
+    ...(apiFeatures ? { apiFeatures } : {}),
+    ...(providerSettings ? { providerSettings } : {}),
+    ...(enabled !== undefined ? { isEnabled: enabled } : {})
+  }
+
+  return { create, update, apiKeys }
+}
+
+function normalizeProjectionModelId(providerId: string, model: Record<string, unknown>): string | null {
+  const apiModelId = optionalString(model.apiModelId) ?? optionalString(model.modelId)
+  if (apiModelId) return apiModelId
+
+  const id = optionalString(model.id)
+  if (!id) return null
+  if (isUniqueModelId(id)) {
+    const parsed = parseUniqueModelId(id)
+    return parsed.providerId === providerId ? parsed.modelId : null
+  }
+  return id
+}
+
+function normalizeProjectionModel(providerId: string, model: unknown): CreateModelDto | null {
+  if (!isRecord(model)) return null
+  const modelId = normalizeProjectionModelId(providerId, model)
+  if (!modelId) return null
+
+  return {
+    providerId,
+    modelId,
+    ...(optionalString(model.presetModelId) ? { presetModelId: optionalString(model.presetModelId) } : {}),
+    ...(optionalString(model.name) ? { name: optionalString(model.name) } : {}),
+    ...(optionalString(model.description) ? { description: optionalString(model.description) } : {}),
+    ...(optionalString(model.group) ? { group: optionalString(model.group) } : {}),
+    ...(optionalArray(model.capabilities) ? { capabilities: optionalArray(model.capabilities) as never } : {}),
+    ...(optionalArray(model.inputModalities) ? { inputModalities: optionalArray(model.inputModalities) as never } : {}),
+    ...(optionalArray(model.outputModalities)
+      ? { outputModalities: optionalArray(model.outputModalities) as never }
+      : {}),
+    ...(optionalArray(model.endpointTypes) ? { endpointTypes: optionalArray(model.endpointTypes) as never } : {}),
+    ...(typeof model.contextWindow === 'number' ? { contextWindow: model.contextWindow } : {}),
+    ...(typeof model.maxInputTokens === 'number' ? { maxInputTokens: model.maxInputTokens } : {}),
+    ...(typeof model.maxOutputTokens === 'number' ? { maxOutputTokens: model.maxOutputTokens } : {}),
+    ...(typeof model.supportsStreaming === 'boolean' ? { supportsStreaming: model.supportsStreaming } : {}),
+    ...(optionalRecord(model.reasoning) ? { reasoning: optionalRecord(model.reasoning) as never } : {}),
+    ...(optionalRecord(ownValue(model, 'parameterSupport') ?? ownValue(model, 'parameters'))
+      ? {
+          parameterSupport: optionalRecord(
+            ownValue(model, 'parameterSupport') ?? ownValue(model, 'parameters')
+          ) as never
+        }
+      : {}),
+    ...(optionalRecord(model.pricing) ? { pricing: optionalRecord(model.pricing) as never } : {})
+  }
+}
+
+function toProjectionModelPatch(model: CreateModelDto, source: Record<string, unknown>): UpdateModelDto {
+  return {
+    ...(model.name !== undefined ? { name: model.name } : {}),
+    ...(model.description !== undefined ? { description: model.description } : {}),
+    ...(model.group !== undefined ? { group: model.group } : {}),
+    ...(model.capabilities !== undefined ? { capabilities: model.capabilities } : {}),
+    ...(model.inputModalities !== undefined ? { inputModalities: model.inputModalities } : {}),
+    ...(model.outputModalities !== undefined ? { outputModalities: model.outputModalities } : {}),
+    ...(model.endpointTypes !== undefined ? { endpointTypes: model.endpointTypes } : {}),
+    ...(model.parameterSupport !== undefined ? { parameterSupport: model.parameterSupport } : {}),
+    ...(model.supportsStreaming !== undefined ? { supportsStreaming: model.supportsStreaming } : {}),
+    ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
+    ...(model.maxInputTokens !== undefined ? { maxInputTokens: model.maxInputTokens } : {}),
+    ...(model.maxOutputTokens !== undefined ? { maxOutputTokens: model.maxOutputTokens } : {}),
+    ...(model.reasoning !== undefined ? { reasoning: model.reasoning } : {}),
+    ...(model.pricing !== undefined ? { pricing: model.pricing } : {}),
+    ...(typeof source.isEnabled === 'boolean' ? { isEnabled: source.isEnabled } : {}),
+    ...(typeof source.isHidden === 'boolean' ? { isHidden: source.isHidden } : {}),
+    ...(typeof source.isDeprecated === 'boolean' ? { isDeprecated: source.isDeprecated } : {}),
+    ...(optionalString(source.notes) ? { notes: optionalString(source.notes) } : {})
+  }
 }
 
 function normalizeProviderCredentialRefs(
@@ -806,6 +995,87 @@ export class StorageV2Service {
     }
 
     return { mirroredCount: providers.length }
+  }
+
+  async projectProvidersToDataApiRuntime() {
+    const snapshot = await this.getCoreSnapshot({ includeSecrets: true })
+    const llm = optionalRecord(snapshot.llm)
+    const providers = optionalArray<Record<string, unknown>>(llm?.providers) ?? []
+    let providerCount = 0
+    let modelCount = 0
+
+    for (const provider of providers) {
+      const normalized = normalizeProjectionProvider(provider)
+      if (!normalized) continue
+
+      const providerId = normalized.create.providerId
+      const exists = await this.dataApiProviderExists(providerId)
+      if (exists) {
+        await providerService.update(providerId, normalized.update)
+      } else {
+        await providerService.create(normalized.create)
+        if (Object.keys(normalized.update).length > 0) {
+          await providerService.update(providerId, normalized.update)
+        }
+      }
+
+      if (normalized.apiKeys) {
+        await providerService.replaceApiKeys(providerId, normalized.apiKeys)
+      }
+
+      const projectedModelCount = await this.projectProviderModelsToDataApiRuntime(providerId, provider.models)
+      providerCount += 1
+      modelCount += projectedModelCount
+    }
+
+    return { providerCount, modelCount }
+  }
+
+  private async dataApiProviderExists(providerId: string) {
+    try {
+      await providerService.getByProviderId(providerId)
+      return true
+    } catch (error) {
+      if (isDataApiError(error) && error.code === ErrorCode.NOT_FOUND) {
+        return false
+      }
+      throw error
+    }
+  }
+
+  private async projectProviderModelsToDataApiRuntime(providerId: string, rawModels: unknown) {
+    const sourceModels = optionalArray<Record<string, unknown>>(rawModels)
+    if (!sourceModels) return 0
+
+    const remoteModels = sourceModels.flatMap((source) => {
+      const model = normalizeProjectionModel(providerId, source)
+      return model ? [{ model, source }] : []
+    })
+    const localModels = await modelService.list({ providerId })
+    const localByModelId = new Map(localModels.map((model: DataApiModel) => [model.apiModelId, model]))
+    const remoteModelIds = new Set(remoteModels.map(({ model }) => model.modelId))
+    const toAdd = remoteModels
+      .filter(({ model }) => !localByModelId.has(model.modelId))
+      .map(({ model }) => ({ dto: model }))
+    const toRemove = localModels
+      .filter((model: DataApiModel) => typeof model.apiModelId === 'string' && !remoteModelIds.has(model.apiModelId))
+      .map((model: DataApiModel) => model.id)
+    const toUpdate = remoteModels
+      .filter(({ model }) => localByModelId.has(model.modelId))
+      .map(({ model, source }) => ({
+        providerId,
+        modelId: model.modelId,
+        patch: toProjectionModelPatch(model, source)
+      }))
+
+    if (toAdd.length > 0 || toRemove.length > 0) {
+      await modelService.reconcileForProvider(providerId, { toAdd, toRemove })
+    }
+    if (toUpdate.length > 0) {
+      await modelService.bulkUpdate(toUpdate)
+    }
+
+    return remoteModels.length
   }
 
   getDataRoot() {

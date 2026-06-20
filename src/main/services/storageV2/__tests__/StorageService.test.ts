@@ -96,12 +96,18 @@ const mocks = vi.hoisted(() => ({
     listBases: vi.fn()
   },
   providerService: {
+    create: vi.fn(),
+    getByProviderId: vi.fn(),
     getApiKeys: vi.fn(),
     getAuthConfig: vi.fn(),
-    list: vi.fn()
+    list: vi.fn(),
+    replaceApiKeys: vi.fn(),
+    update: vi.fn()
   },
   modelService: {
-    list: vi.fn()
+    bulkUpdate: vi.fn(),
+    list: vi.fn(),
+    reconcileForProvider: vi.fn()
   }
 }))
 
@@ -216,9 +222,15 @@ describe('StorageV2Service', () => {
     mocks.fileRepository.list.mockResolvedValue([])
     mocks.knowledgeRepository.listBases.mockResolvedValue([])
     mocks.providerService.list.mockResolvedValue([])
+    mocks.providerService.create.mockResolvedValue(undefined)
+    mocks.providerService.getByProviderId.mockResolvedValue({ id: 'provider-1' })
     mocks.providerService.getApiKeys.mockResolvedValue([])
     mocks.providerService.getAuthConfig.mockResolvedValue(null)
+    mocks.providerService.replaceApiKeys.mockResolvedValue(undefined)
+    mocks.providerService.update.mockResolvedValue(undefined)
     mocks.modelService.list.mockResolvedValue([])
+    mocks.modelService.bulkUpdate.mockResolvedValue([])
+    mocks.modelService.reconcileForProvider.mockResolvedValue([])
     mocks.dataRootService.resolveDataRoot.mockReturnValue({ dataRoot: '/mock/Data', candidates: [] })
     mocks.database.healthCheck.mockResolvedValue({ ok: true, quickCheck: 'ok' })
     mocks.database.integrityReport.mockResolvedValue({
@@ -862,6 +874,104 @@ describe('StorageV2Service', () => {
     expect(mocks.providerRepository.upsertCredentials).toHaveBeenCalledWith('provider-1', {
       authConfig: 'secret://authConfig'
     })
+  })
+
+  it('projects synced Storage v2 providers, credentials, and models back to the Data API runtime', async () => {
+    const apiKeysRef = 'storage-v2://secret/provider/openai/apiKeys'
+    const authConfigRef = 'storage-v2://secret/provider/openai/authConfig'
+    const apiKeys = [{ id: 'key-a', key: 'sk-a', label: 'Primary', isEnabled: true }]
+    const authConfig = { type: 'oauth', clientId: 'client-id', accessToken: 'access-token' }
+    mocks.providerRepository.list.mockResolvedValue([
+      {
+        id: 'openai',
+        type: 'openai',
+        name: 'OpenAI',
+        apiHost: 'https://api.openai.com/v1',
+        enabled: true,
+        sortOrder: 0,
+        config: {
+          id: 'openai',
+          presetProviderId: 'openai',
+          endpointConfigs: {
+            'openai-chat-completions': { baseUrl: 'https://api.openai.com/v1' }
+          },
+          defaultChatEndpoint: 'openai-chat-completions',
+          apiFeatures: {},
+          settings: {}
+        },
+        models: [
+          {
+            id: 'gpt-4o',
+            apiModelId: 'gpt-4o',
+            providerId: 'openai',
+            name: 'GPT-4o',
+            capabilities: [],
+            isEnabled: true,
+            isHidden: false
+          }
+        ],
+        hasCredentialRef: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        deletedAt: null,
+        version: 1
+      }
+    ])
+    mocks.providerRepository.listCredentialRefs.mockResolvedValue(
+      new Map([['openai', { apiKeys: apiKeysRef, authConfig: authConfigRef }]])
+    )
+    mocks.secretVault.getSecret.mockImplementation(async (secretRef: string) => {
+      if (secretRef === apiKeysRef) return JSON.stringify(apiKeys)
+      if (secretRef === authConfigRef) return JSON.stringify(authConfig)
+      return null
+    })
+    mocks.providerService.getByProviderId.mockResolvedValue({ id: 'openai' })
+    mocks.modelService.list.mockResolvedValue([
+      {
+        id: 'openai::gpt-4o',
+        apiModelId: 'gpt-4o',
+        providerId: 'openai',
+        name: 'Old GPT-4o',
+        capabilities: [],
+        isEnabled: true,
+        isHidden: false
+      },
+      {
+        id: 'openai::old-model',
+        apiModelId: 'old-model',
+        providerId: 'openai',
+        name: 'Old Model',
+        capabilities: [],
+        isEnabled: true,
+        isHidden: false
+      }
+    ])
+
+    await expect(new StorageV2Service().projectProvidersToDataApiRuntime()).resolves.toEqual({
+      providerCount: 1,
+      modelCount: 1
+    })
+
+    expect(mocks.providerService.update).toHaveBeenCalledWith(
+      'openai',
+      expect.objectContaining({
+        name: 'OpenAI',
+        authConfig,
+        isEnabled: true
+      })
+    )
+    expect(mocks.providerService.replaceApiKeys).toHaveBeenCalledWith('openai', apiKeys)
+    expect(mocks.modelService.reconcileForProvider).toHaveBeenCalledWith('openai', {
+      toAdd: [],
+      toRemove: ['openai::old-model']
+    })
+    expect(mocks.modelService.bulkUpdate).toHaveBeenCalledWith([
+      expect.objectContaining({
+        providerId: 'openai',
+        modelId: 'gpt-4o',
+        patch: expect.objectContaining({ name: 'GPT-4o', isEnabled: true, isHidden: false })
+      })
+    ])
   })
 
   it('deletes providers through the Storage v2 tombstone repository path', async () => {

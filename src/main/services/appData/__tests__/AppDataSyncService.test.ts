@@ -56,7 +56,8 @@ const mocks = vi.hoisted(() => ({
   runtimeProjection: {
     projectAgents: vi.fn(),
     projectFiles: vi.fn(),
-    projectAppData: vi.fn()
+    projectAppData: vi.fn(),
+    projectProviders: vi.fn()
   },
   dataRoot: {
     ensureDataRoot: vi.fn()
@@ -165,6 +166,12 @@ vi.mock('@main/services/storageV2/FileLegacyProjectionService', () => ({
 vi.mock('@main/services/storageV2/AppDataLegacyProjectionService', () => ({
   storageV2AppDataLegacyProjectionService: {
     projectToLegacyRuntime: mocks.runtimeProjection.projectAppData
+  }
+}))
+
+vi.mock('@main/services/storageV2/StorageService', () => ({
+  storageV2Service: {
+    projectProvidersToDataApiRuntime: mocks.runtimeProjection.projectProviders
   }
 }))
 
@@ -455,6 +462,7 @@ describe('AppDataSyncService', () => {
     mocks.runtimeProjection.projectAgents.mockResolvedValue({ projectedAgentCount: 0 })
     mocks.runtimeProjection.projectFiles.mockResolvedValue({ projectedFileCount: 0 })
     mocks.runtimeProjection.projectAppData.mockResolvedValue({ projectedRecordCount: 0 })
+    mocks.runtimeProjection.projectProviders.mockResolvedValue({ providerCount: 0, modelCount: 0 })
     mocks.dataRoot.ensureDataRoot.mockReturnValue({ dataRoot: '/tmp/cherry-studio-pi-data-root' })
     mocks.runtimeFlush.flushMainStorageV2RuntimeMirrors.mockResolvedValue(undefined)
     mocks.storageRecordSync.sync.mockResolvedValue({
@@ -3452,6 +3460,7 @@ describe('AppDataSyncService', () => {
         skipWriteAccessProbe: true
       })
     )
+    expect(mocks.runtimeProjection.projectProviders).toHaveBeenCalledTimes(1)
     expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith('data-sync-sync-space-id', 'sync-space-existing')
   })
 
