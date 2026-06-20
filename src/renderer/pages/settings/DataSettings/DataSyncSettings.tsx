@@ -421,19 +421,10 @@ const DataSyncSettings: FC = () => {
   useEffect(() => subscribeDataSyncRuntimeState((state) => setRuntimeSyncing(state.syncing)), [])
 
   useEffect(() => {
+    const refreshInterval = syncInProgress ? 2_000 : 10_000
     const timer = window.setInterval(() => {
       void refreshStatus().catch(() => undefined)
-    }, 10_000)
-
-    return () => window.clearInterval(timer)
-  }, [refreshStatus])
-
-  useEffect(() => {
-    if (!syncInProgress) return
-
-    const timer = window.setInterval(() => {
-      void refreshStatus().catch(() => undefined)
-    }, 2_000)
+    }, refreshInterval)
 
     return () => window.clearInterval(timer)
   }, [refreshStatus, syncInProgress])

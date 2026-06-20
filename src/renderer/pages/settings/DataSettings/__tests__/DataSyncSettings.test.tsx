@@ -232,6 +232,39 @@ describe('DataSyncSettings', () => {
     await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
   })
 
+  it('uses one fast status polling interval while syncing', async () => {
+    vi.useFakeTimers()
+    try {
+      mocks.getStatus.mockResolvedValue(runningStatus())
+
+      render(<DataSyncSettings />)
+
+      await act(async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(mocks.getStatus).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_999)
+      })
+      expect(mocks.getStatus).toHaveBeenCalledTimes(1)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      expect(mocks.getStatus).toHaveBeenCalledTimes(2)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(8_000)
+      })
+      expect(mocks.getStatus).toHaveBeenCalledTimes(6)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('disables sync actions and remote browsing until WebDAV credentials are complete', async () => {
     render(<DataSyncSettings />)
     await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
