@@ -213,8 +213,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
 }
 
-function getMainProcessLocalChangeReason(payload: unknown): DataSyncLocalChangeReason {
-  if (isRecord(payload) && payload.reason === 'file') return 'file'
+function getMainProcessLocalChangeReason(payload: unknown): DataSyncLocalChangeReason | null {
+  if (isRecord(payload)) {
+    if (payload.reason === 'file') return 'file'
+    if (payload.reason === 'storage-v2' || payload.reason === undefined) return 'storage-v2'
+    return null
+  }
+
   return 'storage-v2'
 }
 
@@ -439,6 +444,13 @@ function ensureMainProcessStorageV2ChangeSubscription() {
 
   storageV2LocalChangeUnsubscribe = subscribe((payload: unknown) => {
     const reason = getMainProcessLocalChangeReason(payload)
+    if (!reason) {
+      logger.warn('Ignored malformed main-process Storage v2 local change signal', {
+        payload: summarizeObjectShapeForLog(payload, 1)
+      })
+      return
+    }
+
     if (syncing) {
       if (reason === 'file') {
         localChangeDuringSync = true

@@ -914,6 +914,34 @@ describe('DataSyncService', () => {
     expect(mocks.prepareStorageV2ForDataSync).toHaveBeenCalledTimes(1)
   })
 
+  it('ignores malformed main-process local change reasons', async () => {
+    vi.useFakeTimers()
+    mocks.getState.mockReturnValue({
+      settings: {
+        dataSyncWebdavHost: 'https://dav.example.test',
+        dataSyncWebdavUser: 'user',
+        dataSyncWebdavPass: 'pass',
+        dataSyncWebdavPath: '/cherry-studio-pi',
+        dataSyncAutoSync: true,
+        dataSyncSyncInterval: 15
+      }
+    })
+
+    startDataSyncAutoSync(false)
+    expect(mocks.onLocalStorageV2Changed).toHaveBeenCalledTimes(1)
+
+    mocks.localStorageV2ChangeListener?.({
+      reason: 'unknown',
+      entityType: 'agent',
+      entityId: 'agent-1'
+    })
+
+    await vi.advanceTimersByTimeAsync(20_000)
+
+    expect(mocks.syncNow).not.toHaveBeenCalled()
+    expect(mocks.prepareStorageV2ForDataSync).not.toHaveBeenCalled()
+  })
+
   it('queues main-process file changes that happen while an auto sync is running', async () => {
     vi.useFakeTimers()
     mocks.getState.mockReturnValue({
