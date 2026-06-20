@@ -33,6 +33,13 @@ const NOTE_SEARCH_LIMIT_TYPE_ERROR = '笔记搜索数量必须是数字。'
 const NOTE_LIST_LIMIT_TYPE_ERROR = '笔记列表数量必须是数字。'
 const NOTE_LIST_OFFSET_TYPE_ERROR = '笔记列表偏移量必须是数字。'
 const NOTE_READ_MAX_BYTES_TYPE_ERROR = '笔记读取字节数上限必须是数字。'
+const NOTES_LISTED_SUMMARY = '已列出笔记'
+const NOTE_READ_SUMMARY = '已读取笔记'
+const NOTES_SEARCHED_SUMMARY = '笔记搜索已完成'
+const NOTE_CREATED_PREFIX = '已创建笔记：'
+const NOTE_WRITTEN_SUMMARY = '笔记已写入'
+const NOTE_DELETE_DRY_RUN_SUMMARY = '笔记删除演练已完成'
+const NOTE_DELETED_SUMMARY = '笔记已删除'
 
 function normalizeInputObject(input: unknown) {
   if (input === null || typeof input === 'undefined') return {}
@@ -399,7 +406,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
         const root = await getNotesRoot(context.signal)
         const entries = await listNoteEntries(root, inputObject, context.signal)
         throwIfNotesSignalAborted(context.signal)
-        return okResult('Notes listed', { root, ...entries })
+        return okResult(NOTES_LISTED_SUMMARY, { root, ...entries })
       }
     },
     {
@@ -432,7 +439,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
         throwIfNotesSignalAborted(context.signal)
         const preview = await readTextFilePreview(filePath, normalizeReadMaxBytes(inputObject.maxBytes), context.signal)
         throwIfNotesSignalAborted(context.signal)
-        return okResult('Note read', {
+        return okResult(NOTE_READ_SUMMARY, {
           path: filePath,
           ...preview
         })
@@ -491,7 +498,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
           }
         }
         throwIfNotesSignalAborted(context.signal)
-        return okResult('Notes searched', {
+        return okResult(NOTES_SEARCHED_SUMMARY, {
           query,
           root,
           matches,
@@ -540,7 +547,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
         throwIfNotesSignalAborted(context.signal)
         return {
           ok: true,
-          summary: `Note created: ${safeName}`,
+          summary: NOTE_CREATED_PREFIX + safeName,
           data: { path: filePath, name: safeName },
           artifacts: [{ type: 'note', path: filePath, title: safeName }]
         }
@@ -582,7 +589,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
         await fs.writeFile(filePath, content, { encoding: 'utf8', signal: context.signal })
         notifyMainProcessDataSyncLocalChange('file', { source: 'app-capability.notes.write', path: filePath })
         throwIfNotesSignalAborted(context.signal)
-        return okResult('Note written', { path: filePath })
+        return okResult(NOTE_WRITTEN_SUMMARY, { path: filePath })
       }
     },
     {
@@ -612,11 +619,11 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
         assertNotNotesRoot(root, target)
         await assertResolvedInsideNotesRoot(root, target)
         throwIfNotesSignalAborted(context.signal)
-        if (context.dryRun) return okResult('Note delete dry run completed', { path: target })
+        if (context.dryRun) return okResult(NOTE_DELETE_DRY_RUN_SUMMARY, { path: target })
         await fs.rm(target, { force: true, recursive: true })
         notifyMainProcessDataSyncLocalChange('file', { source: 'app-capability.notes.delete', path: target })
         throwIfNotesSignalAborted(context.signal)
-        return okResult('Note deleted', { path: target })
+        return okResult(NOTE_DELETED_SUMMARY, { path: target })
       }
     }
   ]

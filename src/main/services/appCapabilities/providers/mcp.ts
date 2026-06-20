@@ -14,6 +14,9 @@ const MCP_TOOL_ID_LABEL = 'MCP 工具 ID'
 const MCP_TOOL_PARAMS_OBJECT_ERROR = 'MCP 工具参数必须是对象。'
 const MCP_TOOL_LIST_LIMIT_TYPE_ERROR = 'MCP 工具列表数量必须是数字。'
 const MCP_TOOL_LIST_OFFSET_TYPE_ERROR = 'MCP 工具列表偏移量必须是数字。'
+const MCP_SERVERS_LISTED_SUMMARY = '已列出 MCP 服务器'
+const MCP_TOOLS_LISTED_SUMMARY = '已列出 MCP 工具'
+const MCP_TOOL_CALLED_SUMMARY = 'MCP 工具调用已完成'
 
 function normalizeInputObject(input: unknown) {
   if (input === null || typeof input === 'undefined') return {}
@@ -112,7 +115,7 @@ export function createMcpCapabilities(): AppCapabilityDefinition[] {
       tags: ['mcp', 'servers', 'tools'],
       execute: async (input: unknown, context) => {
         normalizeInputObject(input)
-        return okResult('MCP servers listed', sanitizeForAgent(await listConfiguredMcpServers(context.signal)))
+        return okResult(MCP_SERVERS_LISTED_SUMMARY, sanitizeForAgent(await listConfiguredMcpServers(context.signal)))
       }
     },
     {
@@ -140,7 +143,7 @@ export function createMcpCapabilities(): AppCapabilityDefinition[] {
         const tools = await mcpService.listAllActiveServerTools()
         throwIfMcpSignalAborted(context.signal)
         const page = tools.slice(offset, offset + limit)
-        return okResult('MCP tools listed', {
+        return okResult(MCP_TOOLS_LISTED_SUMMARY, {
           total: tools.length,
           limit,
           offset,
@@ -174,7 +177,7 @@ export function createMcpCapabilities(): AppCapabilityDefinition[] {
         throwIfMcpSignalAborted(context.signal)
         const response = await mcpService.callToolById(toolId, params, context.toolCallId)
         throwIfMcpSignalAborted(context.signal)
-        return okResult('MCP tool called', sanitizeForAgent(response))
+        return okResult(MCP_TOOL_CALLED_SUMMARY, sanitizeForAgent(response))
       }
     }
   ]
