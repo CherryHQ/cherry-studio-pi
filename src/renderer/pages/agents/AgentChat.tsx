@@ -21,7 +21,7 @@ import { isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
 import { Loader2 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import type { PropsWithChildren } from 'react'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { PinnedTodoPanel } from '../home/Inputbar/components/PinnedTodoPanel'
@@ -131,7 +131,7 @@ interface InnerProps {
   isMultiSelectMode: boolean
 }
 
-const AgentChatInner = ({
+export const AgentChatInner = ({
   agentId,
   sessionId,
   activeAgent,
@@ -143,7 +143,14 @@ const AgentChatInner = ({
   const sessionTopicId = useMemo(() => buildAgentSessionTopicId(sessionId), [sessionId])
   const { messages: uiMessages, isLoading, hasOlder, loadOlder, refresh } = useAgentSessionParts(agentId, sessionId)
   const chat = useChatWithHistory(sessionTopicId, uiMessages, refresh)
+  const { setMessages, status } = chat
   const { models } = useModels()
+  const { isPending } = useTopicStreamStatus(sessionTopicId)
+
+  useEffect(() => {
+    if (isPending || status === 'streaming' || status === 'submitted') return
+    setMessages(uiMessages)
+  }, [isPending, uiMessages, status, setMessages])
 
   // ── Rendering pipeline ────────────────────────────────────────────
   const snapshot = useMemo<ModelSnapshot | undefined>(() => {
@@ -177,8 +184,6 @@ const AgentChatInner = ({
     }
     return next
   }, [basePartsMap, overlay])
-
-  const { isPending } = useTopicStreamStatus(sessionTopicId)
 
   return (
     <Container className={cn(messageStyle, { 'multi-select-mode': isMultiSelectMode })}>
