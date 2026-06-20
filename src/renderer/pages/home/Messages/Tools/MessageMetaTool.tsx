@@ -7,7 +7,7 @@ import { sanitizeHtml } from '@renderer/utils/html'
 import { Collapse } from 'antd'
 import { Check, ChevronRight, CornerDownRight } from 'lucide-react'
 import type { FC } from 'react'
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -33,11 +33,20 @@ const MessageMetaTool: FC<Props> = ({ toolResponse }) => {
   const { setTimeoutTimer } = useTimer()
   const { t } = useTranslation()
   const showCopyFailed = useSaveFailedToast('common.copy_failed')
+  const mountedRef = useRef(true)
 
   const isStreaming = status === 'streaming'
   const isDone = status === 'done'
   const isError = status === 'error'
   const hasError = response?.isError === true
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   // Auto-expand while the call is in flight; collapse once finished.
   useEffect(() => {
@@ -53,6 +62,10 @@ const MessageMetaTool: FC<Props> = ({ toolResponse }) => {
     const payload = JSON.stringify({ args: toolResponse.arguments, response: toolResponse.response }, null, 2)
     try {
       await navigator.clipboard.writeText(payload)
+      if (!mountedRef.current) {
+        return
+      }
+
       window.toast.success({ title: t('message.copied'), key: 'copy-meta-tool' })
       setCopied(true)
       setTimeoutTimer('copyMetaTool', () => setCopied(false), 2000)

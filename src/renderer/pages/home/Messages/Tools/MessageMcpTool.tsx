@@ -17,7 +17,7 @@ import { Collapse, ConfigProvider, Progress } from 'antd'
 import { Check, ChevronRight, ShieldCheck } from 'lucide-react'
 import { parse as parsePartialJson } from 'partial-json'
 import type { FC } from 'react'
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -55,6 +55,7 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
   const [progress, setProgress] = useState<number>(0)
   const { setTimeoutTimer } = useTimer()
   const showCopyFailed = useSaveFailedToast('common.copy_failed')
+  const mountedRef = useRef(true)
 
   const { id, tool, status, response, partialArguments } = toolResponse
   const approval = useToolApproval(toolResponse, tool)
@@ -65,6 +66,14 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
   const isCancelled = status === 'cancelled'
   const isStreaming = status === 'streaming'
   const willAwaitApproval = approval.isWaiting || (!autoApproved && status === 'invoking')
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     const removeListener = window.electron.ipcRenderer.on(
@@ -96,6 +105,10 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
   const copyContent = async (content: string, toolId: string) => {
     try {
       await navigator.clipboard.writeText(content)
+      if (!mountedRef.current) {
+        return
+      }
+
       window.toast.success({ title: t('message.copied'), key: 'copy-message' })
       setCopiedMap((prev) => ({ ...prev, [toolId]: true }))
       setTimeoutTimer('copyContent', () => setCopiedMap((prev) => ({ ...prev, [toolId]: false })), 2000)

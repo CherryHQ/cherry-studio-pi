@@ -215,6 +215,27 @@ describe('message tool copy actions', () => {
     expect(mocks.setTimeoutTimer).not.toHaveBeenCalled()
   })
 
+  it('ignores MCP tool copy success after unmount', async () => {
+    const clipboardOperation = deferred<void>()
+    mocks.clipboardWriteText.mockReturnValueOnce(clipboardOperation.promise)
+
+    const { unmount } = render(<MessageMcpTool toolResponse={createMcpToolResponse()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.copy' }))
+
+    await waitFor(() => expect(mocks.clipboardWriteText).toHaveBeenCalled())
+    unmount()
+
+    await act(async () => {
+      clipboardOperation.resolve()
+      await clipboardOperation.promise
+    })
+
+    expect(mocks.toastError).not.toHaveBeenCalled()
+    expect(mocks.toastSuccess).not.toHaveBeenCalled()
+    expect(mocks.setTimeoutTimer).not.toHaveBeenCalled()
+  })
+
   it('shows copy failure feedback for meta tool responses', async () => {
     mocks.clipboardWriteText.mockRejectedValueOnce(new Error('clipboard unavailable'))
 
@@ -243,6 +264,27 @@ describe('message tool copy actions', () => {
     await act(async () => {
       clipboardOperation.reject(new Error('clipboard unavailable after unmount'))
       await clipboardOperation.promise.catch(() => undefined)
+    })
+
+    expect(mocks.toastError).not.toHaveBeenCalled()
+    expect(mocks.toastSuccess).not.toHaveBeenCalled()
+    expect(mocks.setTimeoutTimer).not.toHaveBeenCalled()
+  })
+
+  it('ignores meta tool copy success after unmount', async () => {
+    const clipboardOperation = deferred<void>()
+    mocks.clipboardWriteText.mockReturnValueOnce(clipboardOperation.promise)
+
+    const { unmount } = render(<MessageMetaTool toolResponse={createMetaToolResponse()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.copy' }))
+
+    await waitFor(() => expect(mocks.clipboardWriteText).toHaveBeenCalled())
+    unmount()
+
+    await act(async () => {
+      clipboardOperation.resolve()
+      await clipboardOperation.promise
     })
 
     expect(mocks.toastError).not.toHaveBeenCalled()
