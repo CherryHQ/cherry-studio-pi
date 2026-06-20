@@ -22,6 +22,7 @@ import { ActionMenu, type ActionMenuItem } from './components/ActionMenu'
 import LinkEditor from './components/LinkEditor'
 import PlusButton from './components/PlusButton'
 // DragContextMenuWrapper 已被 TipTap 扩展替代
+import { removeDraggableFromDragHandleTarget } from './helpers/dragHandleTarget'
 import { clearRichEditorHighlight, findElementByLine, scrollAndHighlight } from './highlight'
 import { EditorContent as StyledEditorContent, RichEditorWrapper } from './styles'
 import { ToC } from './TableOfContent'
@@ -187,11 +188,7 @@ const RichEditor = ({
 
   // Handle drag end callback to clean up draggable attribute
   const handleDragEnd = useCallback((e: DragEvent) => {
-    // Clean up draggable attribute from the drag handle element
-    const target = e.target as HTMLElement
-    if (target && target.classList.contains('drag-handle')) {
-      target.removeAttribute('draggable')
-    }
+    removeDraggableFromDragHandleTarget(e.target)
   }, [])
 
   const closeTableActionMenu = () => {
