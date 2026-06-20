@@ -18,7 +18,25 @@ export type DataSyncLocalChangeEvent = {
   changedAt: number
 }
 
+const DATA_SYNC_LOCAL_CHANGE_REASONS = new Set<string>([
+  'redux',
+  'conversation',
+  'file',
+  'agent',
+  'assistant',
+  'provider',
+  'app-data',
+  'dexie-settings',
+  'dexie-table',
+  'local-storage',
+  'storage-v2'
+])
+
 let notificationSuppressionDepth = 0
+
+function isDataSyncLocalChangeReason(value: unknown): value is DataSyncLocalChangeReason {
+  return typeof value === 'string' && DATA_SYNC_LOCAL_CHANGE_REASONS.has(value)
+}
 
 function createLocalChangeEvent(detail: DataSyncLocalChangeEvent) {
   const eventConstructor = typeof window !== 'undefined' ? window.CustomEvent : globalThis.CustomEvent
@@ -58,7 +76,7 @@ export function subscribeDataSyncLocalChanges(listener: (event: DataSyncLocalCha
 
   const handler = (event: Event) => {
     const detail = (event as CustomEvent<DataSyncLocalChangeEvent>).detail
-    if (!detail?.reason) return
+    if (!isDataSyncLocalChangeReason(detail?.reason)) return
     listener(detail)
   }
 
