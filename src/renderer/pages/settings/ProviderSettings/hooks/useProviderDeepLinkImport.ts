@@ -37,6 +37,33 @@ interface ImportedProviderSearchData {
   name?: string
 }
 
+function parseProviderSearchData(value: string): ImportedProviderSearchData | null {
+  const parsed = JSON.parse(value) as unknown
+
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return null
+  }
+
+  const record = parsed as Record<string, unknown>
+  const id = typeof record.id === 'string' ? record.id.trim() : ''
+  const apiKey = typeof record.apiKey === 'string' ? record.apiKey.trim() : ''
+  const baseUrl = typeof record.baseUrl === 'string' ? record.baseUrl.trim() : ''
+  const type = typeof record.type === 'string' ? (record.type as ProviderType) : undefined
+  const name = typeof record.name === 'string' ? record.name.trim() : undefined
+
+  if (!id || !apiKey || !baseUrl) {
+    return null
+  }
+
+  return {
+    id,
+    apiKey,
+    baseUrl,
+    ...(type ? { type } : {}),
+    ...(name ? { name } : {})
+  }
+}
+
 /** Consumes one provider deep-link import payload from the URL into create/update + add-api-key calls. */
 export function useProviderDeepLinkImport(
   searchAddProviderData: string | undefined,
@@ -129,9 +156,8 @@ export function useProviderDeepLinkImport(
     }
 
     try {
-      const parsed = JSON.parse(searchAddProviderData) as ImportedProviderSearchData
-
-      if (!parsed.id || !parsed.apiKey || !parsed.baseUrl) {
+      const parsed = parseProviderSearchData(searchAddProviderData)
+      if (!parsed) {
         window.toast.error(t('settings.models.provider_key_add_failed_by_invalid_data'))
         void navigate({ to: '/settings/provider' })
         return

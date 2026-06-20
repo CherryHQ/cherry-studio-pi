@@ -193,6 +193,71 @@ describe('useProviderDeepLinkImport', () => {
     expect(onSelectProvider).not.toHaveBeenCalled()
   })
 
+  it('rejects non-string provider import fields before showing the popup', async () => {
+    const onSelectProvider = vi.fn()
+
+    renderHook(() =>
+      useProviderDeepLinkImport(
+        JSON.stringify({
+          id: 123,
+          apiKey: ['sk-invalid'],
+          baseUrl: { value: 'https://api.openai.com' },
+          type: 'openai',
+          name: 'OpenAI'
+        }),
+        onSelectProvider
+      )
+    )
+
+    await waitFor(() => expect(window.toast.error).toHaveBeenCalledTimes(1))
+
+    expect(popupShowMock).not.toHaveBeenCalled()
+    expect(createProviderMock).not.toHaveBeenCalled()
+    expect(updateProviderByIdMock).not.toHaveBeenCalled()
+    expect(addApiKeyTriggerMock).not.toHaveBeenCalled()
+    expect(navigateMock).toHaveBeenCalledWith({ to: '/settings/provider' })
+    expect(onSelectProvider).not.toHaveBeenCalled()
+  })
+
+  it('trims provider import string fields before showing the popup', async () => {
+    const onSelectProvider = vi.fn()
+
+    popupShowMock.mockResolvedValue({
+      updatedProvider: {
+        id: 'openai',
+        name: 'OpenAI',
+        type: 'openai',
+        apiKey: 'sk-openai',
+        apiHost: 'https://api.openai.com'
+      },
+      isNew: true,
+      displayName: 'OpenAI'
+    })
+
+    renderHook(() =>
+      useProviderDeepLinkImport(
+        JSON.stringify({
+          id: ' openai ',
+          apiKey: ' sk-openai ',
+          baseUrl: ' https://api.openai.com ',
+          type: 'openai',
+          name: ' OpenAI '
+        }),
+        onSelectProvider
+      )
+    )
+
+    await waitFor(() => expect(popupShowMock).toHaveBeenCalledTimes(1))
+
+    expect(popupShowMock).toHaveBeenCalledWith({
+      id: 'openai',
+      apiKey: 'sk-openai',
+      baseUrl: 'https://api.openai.com',
+      type: 'openai',
+      name: 'OpenAI'
+    })
+  })
+
   it('shows an error toast and clears the search state when provider import mutations fail', async () => {
     const onSelectProvider = vi.fn()
     createProviderMock.mockRejectedValue(new Error('create failed'))
