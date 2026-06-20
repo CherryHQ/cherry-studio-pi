@@ -58,6 +58,14 @@ const AGENT_CONFIGURATION_LABEL = '智能体配置'
 const AGENT_SESSION_CURSOR_LABEL = '智能体会话游标'
 const SESSION_NAME_LABEL = '会话名称'
 const SESSION_DESCRIPTION_LABEL = '会话描述'
+const AGENT_MODELS_LISTED_SUMMARY = '已列出智能体可用模型'
+const AGENTS_LISTED_SUMMARY = '已列出智能体'
+const AGENT_READ_SUMMARY = '已读取智能体'
+const AGENT_CREATED_PREFIX = '已创建智能体：'
+const AGENT_SESSIONS_LISTED_SUMMARY = '已列出智能体会话'
+const AGENT_SESSION_CREATED_SUMMARY = '智能体会话已创建'
+const AGENT_TASKS_LISTED_SUMMARY = '已列出智能体任务'
+const AGENT_TASK_CREATED_SUMMARY = '智能体任务已创建'
 
 function normalizeListLimit(value: unknown) {
   if (value !== null && typeof value !== 'undefined' && typeof value !== 'number' && typeof value !== 'string') {
@@ -253,7 +261,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
         throwIfAgentSignalAborted(context.signal)
         const models = await modelsService.getModels(options)
         throwIfAgentSignalAborted(context.signal)
-        return okResult('Agent models listed', sanitizeForAgent(models))
+        return okResult(AGENT_MODELS_LISTED_SUMMARY, sanitizeForAgent(models))
       }
     },
     {
@@ -279,7 +287,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
         throwIfAgentSignalAborted(context.signal)
         const agents = await listAgentsWithStorageV2Recovery(options)
         throwIfAgentSignalAborted(context.signal)
-        return okResult('Agents listed', sanitizeForAgent(agents))
+        return okResult(AGENTS_LISTED_SUMMARY, sanitizeForAgent(agents))
       }
     },
     {
@@ -304,7 +312,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
         const agent = await getAgentWithStorageV2Recovery(agentId)
         throwIfAgentSignalAborted(context.signal)
         if (!agent) throw new Error(AGENT_NOT_FOUND_PREFIX + agentId)
-        return okResult('Agent read', sanitizeForAgent(agent))
+        return okResult(AGENT_READ_SUMMARY, sanitizeForAgent(agent))
       }
     },
     {
@@ -409,7 +417,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
         )
         return {
           ok: true,
-          summary: warning ? `Agent created: ${agent.name}; ${warning}` : `Agent created: ${agent.name}`,
+          summary: warning ? AGENT_CREATED_PREFIX + agent.name + '；' + warning : AGENT_CREATED_PREFIX + agent.name,
           data: sanitizeForAgent({
             agent,
             defaultSession: session,
@@ -444,7 +452,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
         throwIfAgentSignalAborted(context.signal)
         const sessions = await agentSessionService.listByCursor(options)
         throwIfAgentSignalAborted(context.signal)
-        return okResult('Agent sessions listed', sanitizeForAgent(sessions))
+        return okResult(AGENT_SESSIONS_LISTED_SUMMARY, sanitizeForAgent(sessions))
       }
     },
     {
@@ -477,7 +485,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
         throwIfAgentSignalAborted(context.signal)
         const session = await agentSessionService.createSession(sessionPayload)
         throwIfAgentSignalAborted(context.signal)
-        return okResult('Agent session created', sanitizeForAgent(session))
+        return okResult(AGENT_SESSION_CREATED_SUMMARY, sanitizeForAgent(session))
       }
     },
     {
@@ -498,7 +506,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
       risk: 'read',
       tags: ['agents', 'tasks', 'schedule'],
       execute: async (input: any, context) =>
-        okResult('Agent tasks listed', sanitizeForAgent(await listAgentTasks(input, context.signal)))
+        okResult(AGENT_TASKS_LISTED_SUMMARY, sanitizeForAgent(await listAgentTasks(input, context.signal)))
     },
     {
       id: 'agents.task.create',
@@ -528,7 +536,7 @@ export function createAgentCapabilities(): AppCapabilityDefinition[] {
         throwIfAgentSignalAborted(context.signal)
         const task = await agentTaskService.createTask(agentId, taskInput as CreateTaskDto)
         throwIfAgentSignalAborted(context.signal)
-        return okResult('Agent task created', sanitizeForAgent(task))
+        return okResult(AGENT_TASK_CREATED_SUMMARY, sanitizeForAgent(task))
       }
     }
   ]
