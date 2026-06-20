@@ -25,7 +25,8 @@ export const ActionMenu: FC<ActionMenuProps> = ({ show, position, items, onClose
   useEffect(() => {
     if (!show) return
     const onDocMouseDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      const target = e.target
+      if (ref.current && (!(target instanceof Node) || !ref.current.contains(target))) {
         onClose()
       }
     }
