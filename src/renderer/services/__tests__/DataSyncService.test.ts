@@ -1119,6 +1119,51 @@ describe('DataSyncService', () => {
     })
   })
 
+  it('preserves auto sync failure backoff when a retry finds another sync already running', async () => {
+    vi.useFakeTimers()
+    mocks.getState.mockReturnValue({
+      settings: {
+        dataSyncWebdavHost: 'https://dav.example.test',
+        dataSyncWebdavUser: 'user',
+        dataSyncWebdavPass: 'pass',
+        dataSyncWebdavPath: '/cherry-studio-pi',
+        dataSyncAutoSync: true,
+        dataSyncSyncInterval: 1
+      }
+    })
+    const syncError = new Error('503 Service Unavailable')
+    mocks.syncNow
+      .mockRejectedValueOnce(syncError)
+      .mockRejectedValueOnce(new Error('已有数据同步正在进行'))
+      .mockRejectedValueOnce(syncError)
+      .mockResolvedValue(successSummary)
+
+    startDataSyncAutoSync(true)
+
+    await vi.advanceTimersByTimeAsync(1_000)
+    await vi.waitFor(() => {
+      expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+    })
+
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
+    await vi.waitFor(() => {
+      expect(mocks.syncNow).toHaveBeenCalledTimes(2)
+    })
+
+    await vi.advanceTimersByTimeAsync(60_000)
+    await vi.waitFor(() => {
+      expect(mocks.syncNow).toHaveBeenCalledTimes(3)
+    })
+
+    await vi.advanceTimersByTimeAsync(9 * 60_000)
+    expect(mocks.syncNow).toHaveBeenCalledTimes(3)
+
+    await vi.advanceTimersByTimeAsync(60_000)
+    await vi.waitFor(() => {
+      expect(mocks.syncNow).toHaveBeenCalledTimes(4)
+    })
+  })
+
   it('defers local-change auto syncs to the existing failure retry during backoff', async () => {
     vi.useFakeTimers()
     mocks.getState.mockReturnValue({

@@ -704,8 +704,15 @@ async function performAutoSync() {
   }
 
   try {
-    await syncAppDataNow()
-    resetAutoSyncFailureBackoff()
+    const summary = await syncAppDataNow()
+    if (summary) {
+      resetAutoSyncFailureBackoff()
+    } else {
+      logger.info('Auto data sync did not start because another sync is still in progress; preserving retry state', {
+        autoSyncFailureCount,
+        cooldownRemainingMs: getAutoSyncCooldownRemainingMs()
+      })
+    }
   } catch (error) {
     autoSyncFailureCount += 1
     const retryDelayMs = getAutoSyncFailureRetryDelayMs(intervalMs)
