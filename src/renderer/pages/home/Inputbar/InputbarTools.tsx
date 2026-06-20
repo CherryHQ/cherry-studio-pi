@@ -56,6 +56,12 @@ interface ToolConfig {
   visible: boolean
 }
 
+export const closestInputbarToolElement = (target: EventTarget | null): Element | null => {
+  if (target instanceof Element) return target.closest('[data-key]')
+  if (target instanceof Node) return target.parentElement?.closest('[data-key]') ?? null
+  return null
+}
+
 const DraggablePortal = ({ children, isDragging }: { children: React.ReactNode; isDragging: boolean }) => {
   return isDragging ? createPortal(children, document.body) : children
 }
@@ -315,8 +321,7 @@ const InputbarTools = ({ scope, assistant, model, session }: InputbarToolsNewPro
         <ContextMenuTrigger asChild>
           <ToolsContainer
             onContextMenu={(e) => {
-              const target = e.target as HTMLElement
-              const isToolButton = target.closest('[data-key]')
+              const isToolButton = closestInputbarToolElement(e.target)
               if (!isToolButton) {
                 setTargetTool(null)
               }
