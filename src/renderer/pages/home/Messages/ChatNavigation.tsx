@@ -32,6 +32,12 @@ interface ChatNavigationProps {
   containerId: string
 }
 
+function getTargetElement(target: EventTarget | null): Element | null {
+  if (target instanceof Element) return target
+  if (target instanceof Node) return target.parentElement
+  return null
+}
+
 const ChatNavigation: FC<ChatNavigationProps> = ({ containerId }) => {
   const { t } = useTranslation()
   const [isVisible, setIsVisible] = useState(false)
@@ -274,8 +280,8 @@ const ChatNavigation: FC<ChatNavigationProps> = ({ containerId }) => {
       const topPosition = window.innerHeight * 0.35 // 35% from top
       const height = window.innerHeight * 0.3 // 30% of window height
 
-      const target = e.target as HTMLElement
-      const isInExcludedArea = EXCLUDED_SELECTORS.some((selector) => target.closest(selector))
+      const targetElement = getTargetElement(e.target)
+      const isInExcludedArea = EXCLUDED_SELECTORS.some((selector) => targetElement?.closest(selector))
 
       const isInTriggerArea =
         !isInExcludedArea &&
