@@ -1,7 +1,7 @@
 import { loggerService } from '@renderer/services/LoggerService'
 import { ArrowUpCircle, Loader2 } from 'lucide-react'
 import type { FC } from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('UpdateButton')
@@ -23,6 +23,15 @@ const UpdateButton: FC<UpdateButtonProps> = ({ onUpdateComplete, onUpdatingChang
 
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   const [isUpdating, setIsUpdating] = useState(false)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   // Notify parent when updating state changes
   useEffect(() => {
@@ -32,7 +41,9 @@ const UpdateButton: FC<UpdateButtonProps> = ({ onUpdateComplete, onUpdatingChang
   const checkUpdate = useCallback(async () => {
     try {
       const result = await window.api.openclaw.checkUpdate()
-      setUpdateInfo(result)
+      if (mountedRef.current) {
+        setUpdateInfo(result)
+      }
     } catch (err) {
       logger.error('Failed to check for updates', err as Error)
     }
@@ -42,6 +53,7 @@ const UpdateButton: FC<UpdateButtonProps> = ({ onUpdateComplete, onUpdatingChang
     setIsUpdating(true)
     try {
       const result = await window.api.openclaw.performUpdate()
+      if (!mountedRef.current) return
       if (result.success) {
         setUpdateInfo(null)
         window.toast.success(t('openclaw.update.success'))
@@ -51,9 +63,13 @@ const UpdateButton: FC<UpdateButtonProps> = ({ onUpdateComplete, onUpdatingChang
       }
     } catch (err) {
       logger.error('Failed to update OpenClaw', err as Error)
-      window.toast.error(err instanceof Error ? err.message : String(err))
+      if (mountedRef.current) {
+        window.toast.error(err instanceof Error ? err.message : String(err))
+      }
     } finally {
-      setIsUpdating(false)
+      if (mountedRef.current) {
+        setIsUpdating(false)
+      }
     }
   }, [onUpdateComplete, t])
 
