@@ -261,7 +261,7 @@ describe('data sync app capabilities', () => {
 
       await expect(resultPromise).resolves.toMatchObject({
         ok: true,
-        summary: 'WebDAV data sync config saved'
+        summary: 'WebDAV 同步配置已保存'
       })
       expect(mocks.storageV2Service.setSetting).toHaveBeenCalledWith(
         'settings.dataSyncWebdavHost',
@@ -694,7 +694,7 @@ describe('data sync app capabilities', () => {
 
     expect(result.ok).toBe(true)
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
-    expect(result.summary).toContain('dry run')
+    expect(result.summary).toContain('演练')
     expect(mocks.appDataSyncService.syncNow).not.toHaveBeenCalled()
   })
 
@@ -835,7 +835,7 @@ describe('data sync app capabilities', () => {
     const result = await capability('dataSync.sync.now').execute({}, { source: 'agent' })
 
     expect(result.ok).toBe(true)
-    expect(result.summary).toBe('Data sync completed')
+    expect(result.summary).toBe('数据同步已完成')
   })
 
   it('keeps agent-triggered data sync running when the renderer preparation bridge is unavailable', async () => {
@@ -884,7 +884,7 @@ describe('data sync app capabilities', () => {
 
       await expect(resultPromise).resolves.toMatchObject({
         ok: true,
-        summary: 'Data sync completed'
+        summary: '数据同步已完成'
       })
       expect(mocks.appDataSyncService.syncNow).toHaveBeenCalledWith({
         webdavHost: 'https://dav.example.com',

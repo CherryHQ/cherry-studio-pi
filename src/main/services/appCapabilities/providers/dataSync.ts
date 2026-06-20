@@ -29,6 +29,19 @@ const RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS = 1_500
 const DATA_SYNC_INPUT_OBJECT_ERROR = '数据同步能力的输入必须是对象。'
 const WEBDAV_HOST_REQUIRED_ERROR = 'WebDAV URL 不能为空。请先配置 WebDAV 服务器地址，再重试数据同步。'
 const SYNC_INTERVAL_FINITE_ERROR = '同步间隔必须是有限数字（单位：分钟）。'
+const DATA_SYNC_SETTINGS_READ_TIMEOUT_ERROR = '读取数据同步设置超时。'
+const DATA_SYNC_SETTINGS_SAVE_TIMEOUT_ERROR = '保存数据同步设置超时。'
+const DATA_SYNC_STORAGE_PREPARE_TIMEOUT_ERROR = '同步前准备本地数据超时。'
+const DATA_SYNC_STATUS_READ_SUMMARY = '已读取数据同步状态'
+const WEBDAV_CONFIG_READ_SUMMARY = '已读取 WebDAV 同步配置'
+const WEBDAV_CONFIG_DRY_RUN_SUMMARY = 'WebDAV 同步配置演练已完成'
+const WEBDAV_CONFIG_SAVED_SUMMARY = 'WebDAV 同步配置已保存'
+const WEBDAV_DIRECTORIES_LISTED_SUMMARY = '已列出 WebDAV 远程目录'
+const WEBDAV_DIAGNOSIS_COMPLETED_SUMMARY = 'WebDAV 数据同步诊断已完成'
+const DATA_SYNC_DRY_RUN_SUMMARY = '数据同步演练已完成'
+const DATA_SYNC_COMPLETED_SUMMARY = '数据同步已完成'
+const DATA_SYNC_SNAPSHOT_RESTORE_DRY_RUN_SUMMARY = '数据同步安全快照恢复演练已完成'
+const DATA_SYNC_SNAPSHOT_RESTORE_STARTED_SUMMARY = '已开始恢复数据同步安全快照'
 const DEFAULT_INPUT_LABEL = '输入值'
 const REMOTE_PATH_LABEL = '远程路径'
 
@@ -151,7 +164,7 @@ async function getDataSyncSettings(signal?: AbortSignal): Promise<DataSyncSettin
     return await callRendererBridge<DataSyncBridgeSettings>(RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE, undefined, {
       checkTimeoutMs: DATA_SYNC_SETTINGS_BRIDGE_CHECK_TIMEOUT_MS,
       timeoutMs: DATA_SYNC_SETTINGS_BRIDGE_CALL_TIMEOUT_MS,
-      timeoutMessage: 'Timed out reading data sync settings',
+      timeoutMessage: DATA_SYNC_SETTINGS_READ_TIMEOUT_ERROR,
       signal
     })
   } catch (error) {
@@ -311,7 +324,7 @@ async function prepareRendererStorageV2ForDataSync(signal?: AbortSignal) {
     await callRendererBridge<void>(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE, undefined, {
       checkTimeoutMs: RENDERER_PREPARE_STORAGE_V2_CHECK_TIMEOUT_MS,
       timeoutMs: RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS,
-      timeoutMessage: 'Timed out preparing local data before sync',
+      timeoutMessage: DATA_SYNC_STORAGE_PREPARE_TIMEOUT_ERROR,
       signal
     })
   } catch (error) {
@@ -384,7 +397,7 @@ async function persistWebDavConfig(
     await callRendererBridge<DataSyncBridgeSettings>(RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE, settings, {
       checkTimeoutMs: DATA_SYNC_SETTINGS_BRIDGE_CHECK_TIMEOUT_MS,
       timeoutMs: DATA_SYNC_SETTINGS_BRIDGE_CALL_TIMEOUT_MS,
-      timeoutMessage: 'Timed out saving data sync settings',
+      timeoutMessage: DATA_SYNC_SETTINGS_SAVE_TIMEOUT_ERROR,
       signal: options.signal
     })
   } catch (error) {
@@ -429,7 +442,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: unknown, context) => {
         normalizeInputObject(input)
         throwIfDataSyncCapabilityAborted(context.signal)
-        return okResult('Data sync status read', sanitizeForAgent(await appDataSyncService.getStatus()))
+        return okResult(DATA_SYNC_STATUS_READ_SUMMARY, sanitizeForAgent(await appDataSyncService.getStatus()))
       }
     },
     {
@@ -445,7 +458,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
         normalizeInputObject(input)
         const settings = await getDataSyncSettings(context.signal)
         return okResult(
-          'WebDAV sync config read',
+          WEBDAV_CONFIG_READ_SUMMARY,
           sanitizeForAgent({
             webdavHost: settings.dataSyncWebdavHost ?? '',
             webdavUser: settings.dataSyncWebdavUser ?? '',
@@ -486,7 +499,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
         const autoSync = normalizeOptionalBooleanInput(inputObject.autoSync, '自动同步')
         const syncInterval = normalizeSyncIntervalInput(inputObject.syncInterval)
         if (context.dryRun) {
-          return okResult('WebDAV data sync config dry run completed', sanitizeForAgent(config))
+          return okResult(WEBDAV_CONFIG_DRY_RUN_SUMMARY, sanitizeForAgent(config))
         }
 
         await persistWebDavConfig(config, {
@@ -494,7 +507,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
           syncInterval,
           signal: context.signal
         })
-        return okResult('WebDAV data sync config saved', sanitizeForAgent(config))
+        return okResult(WEBDAV_CONFIG_SAVED_SUMMARY, sanitizeForAgent(config))
       }
     },
     {
@@ -524,7 +537,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
         const remotePath = normalizeDirectoryPath(inputObject.remotePath)
         const serviceOptions = context.signal ? { signal: context.signal } : undefined
         return okResult(
-          'WebDAV directories listed',
+          WEBDAV_DIRECTORIES_LISTED_SUMMARY,
           sanitizeForAgent(
             await runWebDavCapability(
               '读取远程目录',
@@ -587,7 +600,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
           { signal: context.signal }
         )
         return okResult(
-          'WebDAV data sync diagnosis completed',
+          WEBDAV_DIAGNOSIS_COMPLETED_SUMMARY,
           sanitizeForAgent({
             config,
             effectiveSyncPath: normalizeRemotePath(config.webdavPath),
@@ -634,7 +647,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
         assertWebDavHost(config)
         const saveConfig = normalizeOptionalBooleanInput(inputObject.saveConfig, '保存配置') === true
         if (context.dryRun) {
-          return okResult('Data sync dry run completed', sanitizeForAgent({ config }))
+          return okResult(DATA_SYNC_DRY_RUN_SUMMARY, sanitizeForAgent({ config }))
         }
 
         if (saveConfig) {
@@ -651,7 +664,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
           }
         )
         broadcastExternalDataSyncCompleted(summary, context.source)
-        return okResult('Data sync completed', sanitizeForAgent(summary))
+        return okResult(DATA_SYNC_COMPLETED_SUMMARY, sanitizeForAgent(summary))
       }
     },
     {
@@ -687,7 +700,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
         const config = await resolveWebDavConfig(inputObject, { requireCredentials: true, signal: context.signal })
         assertWebDavHost(config)
         if (context.dryRun) {
-          return okResult('Data sync snapshot restore dry run completed', sanitizeForAgent({ config }))
+          return okResult(DATA_SYNC_SNAPSHOT_RESTORE_DRY_RUN_SUMMARY, sanitizeForAgent({ config }))
         }
 
         await runWebDavCapability(
@@ -698,7 +711,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
               : appDataSyncService.restoreLatestSnapshot(config),
           { signal: context.signal }
         )
-        return okResult('Data sync snapshot restore started')
+        return okResult(DATA_SYNC_SNAPSHOT_RESTORE_STARTED_SUMMARY)
       }
     }
   ]
