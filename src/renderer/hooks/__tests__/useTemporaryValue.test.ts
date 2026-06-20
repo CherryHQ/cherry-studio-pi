@@ -87,6 +87,20 @@ describe('useTemporaryValue', () => {
       expect(result.current[0]).toBe('temporary') // 注意：这里应该还是'temporary'，因为组件已卸载
     })
 
+    it('should ignore setter calls after unmount', () => {
+      const { result, unmount } = renderHook(() => useTemporaryValue('default', 1000))
+      const [, setTemporaryValue] = result.current
+
+      unmount()
+
+      act(() => {
+        setTemporaryValue('temporary')
+      })
+
+      expect(result.current[0]).toBe('default')
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
     it('should handle multiple calls correctly', () => {
       const { result } = renderHook(() => useTemporaryValue('default', 1000))
       const [, setTemporaryValue] = result.current
