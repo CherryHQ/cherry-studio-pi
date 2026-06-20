@@ -67,7 +67,7 @@ export function ToolPermissionRequestCard({ toolResponse }: Props) {
           className="w-full"
           expandIconPosition="end"
           expandIcon={({ isActive }) => (
-            <ExpandIcon $isActive={isActive} size={18} color="var(--color-text-3)" strokeWidth={1.5} />
+            <ExpandIcon $isActive={isActive} size={18} color="var(--color-foreground-muted)" strokeWidth={1.5} />
           )}
           size="small"
           defaultActiveKey={[String(renderedItem.key ?? toolName)]}
@@ -97,7 +97,7 @@ const Container = styled.div`
   max-width: 100%;
   border-radius: 0.75rem;
   border: 1px solid var(--color-border);
-  background-color: var(--color-background-soft);
+  background-color: var(--color-muted);
   overflow: hidden;
 
   .ant-collapse {
@@ -122,7 +122,7 @@ const Container = styled.div`
     width: 40px;
     padding: 0 !important;
     margin-inline-start: 0 !important;
-    color: var(--color-text-3) !important;
+    color: var(--color-foreground-muted) !important;
     display: flex !important;
     align-items: center;
     justify-content: center;

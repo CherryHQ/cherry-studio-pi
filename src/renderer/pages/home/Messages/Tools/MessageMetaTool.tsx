@@ -85,7 +85,7 @@ const MessageMetaTool: FC<Props> = ({ toolResponse }) => {
         onChange={(keys) => setActiveKeys(Array.isArray(keys) ? keys : [keys])}
         expandIconPosition="end"
         expandIcon={({ isActive }) => (
-          <ExpandIcon $isActive={isActive} size={18} color="var(--color-text-3)" strokeWidth={1.5} />
+          <ExpandIcon $isActive={isActive} size={18} color="var(--color-foreground-muted)" strokeWidth={1.5} />
         )}
         items={[
           {
@@ -402,7 +402,7 @@ const TitleRow = styled.div`
 `
 
 const TitleText = styled.span`
-  color: var(--color-text);
+  color: var(--color-foreground);
   font-weight: 500;
   font-size: 13px;
   font-family: var(--font-family-mono, monospace);
@@ -423,14 +423,14 @@ const CopyButton = styled.button`
   border: none;
   padding: 4px;
   cursor: pointer;
-  color: var(--color-text-2);
+  color: var(--color-foreground-secondary);
   opacity: 0.7;
   border-radius: 4px;
   display: flex;
   align-items: center;
   &:hover {
     opacity: 1;
-    background: var(--color-bg-3);
+    background: var(--color-accent);
   }
 `
 
@@ -458,15 +458,15 @@ const ToolNameChip = styled.code`
   padding: 2px 6px;
   font-family: var(--font-family-mono, monospace);
   font-size: 12px;
-  color: var(--color-text);
-  background: var(--color-background-soft);
+  color: var(--color-foreground);
+  background: var(--color-muted);
   border: 1px solid var(--color-border);
   border-radius: 4px;
 `
 
 const NamespaceTitle = styled.div`
   font-size: 12px;
-  color: var(--color-text-2);
+  color: var(--color-foreground-secondary);
   small {
     opacity: 0.7;
   }
@@ -485,7 +485,7 @@ const CodeBlock = styled.pre`
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-word;
-  background: var(--color-background-soft);
+  background: var(--color-muted);
   border-radius: 4px;
   overflow: auto;
   max-height: 300px;
@@ -497,7 +497,7 @@ const CodeBlock = styled.pre`
 
 const Highlighted = styled.div`
   & pre {
-    background: var(--color-background-soft) !important;
+    background: var(--color-muted) !important;
     padding: 8px;
     border-radius: 4px;
     overflow: auto;
@@ -511,7 +511,7 @@ const InnerHint = styled.div`
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: var(--color-text-3);
+  color: var(--color-foreground-muted);
   code {
     font-family: var(--font-family-mono, monospace);
   }
@@ -519,7 +519,7 @@ const InnerHint = styled.div`
 
 const Empty = styled.div`
   font-size: 12px;
-  color: var(--color-text-3);
+  color: var(--color-foreground-muted);
   font-style: italic;
 `
 

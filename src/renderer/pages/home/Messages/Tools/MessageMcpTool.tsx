@@ -223,7 +223,7 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
               items={getCollapseItems()}
               expandIconPosition="end"
               expandIcon={({ isActive }) => (
-                <ExpandIcon $isActive={isActive} size={18} color="var(--color-text-3)" strokeWidth={1.5} />
+                <ExpandIcon $isActive={isActive} size={18} color="var(--color-foreground-muted)" strokeWidth={1.5} />
               )}
             />
             {(isPending || approval.isWaiting || approval.isExecuting) && (
@@ -433,7 +433,7 @@ const ToolContentWrapper = styled.div`
   }
 
   &.pending {
-    background-color: var(--color-background-soft);
+    background-color: var(--color-muted);
     .ant-collapse {
       border: none;
     }
@@ -451,7 +451,7 @@ const ActionsBar = styled.div`
 const ActionLabel = styled.div`
   flex: 1;
   font-size: 14px;
-  color: var(--color-text-2);
+  color: var(--color-foreground-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -463,10 +463,10 @@ const ExpandIcon = styled(ChevronRight)<{ $isActive?: boolean }>`
 `
 
 const CollapseContainer = styled(Collapse)`
-  --status-color-warning: var(--color-status-warning, #faad14);
+  --status-color-warning: var(--color-warning, #faad14);
   --status-color-invoking: var(--color-primary);
-  --status-color-error: var(--color-status-error, #ff4d4f);
-  --status-color-success: var(--color-primary, green);
+  --status-color-error: var(--color-error-base, #ff4d4f);
+  --status-color-success: var(--color-success, green);
   width: 100%;
   max-width: 100%;
   border-radius: 10px;
@@ -484,7 +484,7 @@ const CollapseContainer = styled(Collapse)`
     width: 40px;
     padding: 0 !important;
     margin-inline-start: 0 !important;
-    color: var(--color-text-3) !important;
+    color: var(--color-foreground-muted) !important;
     display: flex !important;
     align-items: center;
     justify-content: center;
@@ -529,7 +529,7 @@ const TitleContent = styled.div`
 `
 
 const ToolName = styled(Flex)`
-  color: var(--color-text);
+  color: var(--color-foreground);
   font-weight: 500;
   font-size: 13px;
   line-height: 20px;
@@ -546,7 +546,7 @@ const ActionButtonsContainer = styled.div`
 const ActionButton = styled.button`
   background: none;
   border: none;
-  color: var(--color-text-2);
+  color: var(--color-foreground-secondary);
   cursor: pointer;
   padding: 4px;
   display: flex;
@@ -561,15 +561,15 @@ const ActionButton = styled.button`
 
   &:hover {
     opacity: 1;
-    color: var(--color-text);
-    background-color: var(--color-bg-3);
+    color: var(--color-foreground);
+    background-color: var(--color-accent);
   }
 
   &.confirm-button {
     color: var(--color-primary);
 
     &:hover {
-      background-color: var(--color-primary-bg);
+      background-color: var(--color-primary-soft);
       color: var(--color-primary);
     }
   }

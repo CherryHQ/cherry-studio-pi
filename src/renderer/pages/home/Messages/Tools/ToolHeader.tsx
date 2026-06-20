@@ -171,7 +171,7 @@ const LabelContainer = styled.div`
 
 const ToolName = styled(Flex)`
   font-weight: 500;
-  color: var(--color-text);
+  color: var(--color-foreground);
   flex-shrink: 0;
 
   .tool-icon {
@@ -184,7 +184,7 @@ const ToolName = styled(Flex)`
 `
 
 const Description = styled.span`
-  color: var(--color-text-2);
+  color: var(--color-foreground-secondary);
   font-weight: 400;
   font-size: 13px;
   overflow: hidden;
@@ -200,7 +200,7 @@ const Description = styled.span`
 `
 
 const Stats = styled.span`
-  color: var(--color-text-2);
+  color: var(--color-foreground-secondary);
   font-weight: 400;
   font-size: 12px;
   white-space: nowrap;

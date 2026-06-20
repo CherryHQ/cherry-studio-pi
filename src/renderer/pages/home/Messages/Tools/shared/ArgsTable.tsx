@@ -72,7 +72,7 @@ export const ArgsSection = styled.div`
 export const ArgsSectionTitle = styled.div`
   font-size: 11px;
   font-weight: 600;
-  color: var(--color-text-3);
+  color: var(--color-foreground-muted);
   text-transform: uppercase;
   margin-bottom: 8px;
 `
@@ -92,7 +92,7 @@ export const ArgKey = styled.td`
 `
 
 export const ArgValue = styled.td`
-  color: var(--color-text);
+  color: var(--color-foreground);
   padding: 4px 0;
   word-break: break-all;
   white-space: pre-wrap;
