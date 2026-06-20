@@ -6,6 +6,7 @@ import { gzipSync } from 'node:zlib'
 
 import type { WebDavConfig } from '@types'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { WebDAVClient } from 'webdav'
 
 vi.unmock('node:fs')
 
@@ -1290,6 +1291,25 @@ describe('AppDataSyncService', () => {
     )
     expect(mocks.webdav.unlock).toHaveBeenCalledWith('/remote-root/sync/v1', 'opaquelocktoken:server-stale')
     expect(mocks.storageRecordSync.sync).toHaveBeenCalled()
+  })
+
+  it('caps streamed WebDAV lock-discovery responses before parsing', async () => {
+    const cancel = vi.fn()
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('x'.repeat(65 * 1024)))
+      },
+      cancel
+    })
+    const customRequest = vi.fn(async () => new Response(stream))
+    const service = new AppDataSyncService() as unknown as {
+      discoverWebDavLockTokens(client: Pick<WebDAVClient, 'customRequest'>, remotePath: string): Promise<string[]>
+    }
+
+    await expect(service.discoverWebDavLockTokens({ customRequest } as never, '/remote-root/sync/v1')).resolves.toEqual(
+      []
+    )
+    expect(cancel).toHaveBeenCalled()
   })
 
   it('reports active remote locks during WebDAV diagnosis instead of passing readiness checks', async () => {

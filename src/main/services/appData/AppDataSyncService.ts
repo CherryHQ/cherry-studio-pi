@@ -30,6 +30,7 @@ import { createWebDavClientOptions } from '@main/services/WebDavClientOptions'
 import { normalizeWebDavHost, runWebDavOperation, WebDavOperationError } from '@main/services/WebDavRetry'
 import { getDataPath } from '@main/utils'
 import { getNotesDir } from '@main/utils/file'
+import { readResponseTextWithinLimit } from '@main/utils/readResponseText'
 import { sanitizeFilename } from '@shared/file/types/filename'
 import { normalizeWebDavConfig, normalizeWebDavPath } from '@shared/webdavConfig'
 import type { WebDavConfig } from '@types'
@@ -43,6 +44,7 @@ const logger = loggerService.withContext('AppDataSyncService')
 const DATA_SYNC_ALREADY_RUNNING_ERROR = 'Data sync is already running'
 const LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS = 10 * 60 * 1000
 const EMPTY_RUNTIME_DIRECTORY_VALUE_HASH = hashJsonValue([])
+const WEB_DAV_LOCK_DISCOVERY_MAX_BYTES = 64 * 1024
 
 type RemoteRecordMeta = {
   scope: string
@@ -1849,7 +1851,10 @@ export class AppDataSyncService {
           }),
         { logger }
       )
-      const xml = await response.text()
+      const { text: xml } = await readResponseTextWithinLimit(
+        response as unknown as Pick<Response, 'body' | 'text'>,
+        WEB_DAV_LOCK_DISCOVERY_MAX_BYTES
+      )
       const parser = new XMLParser({
         ignoreAttributes: false,
         removeNSPrefix: true,
