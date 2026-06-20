@@ -11,10 +11,12 @@
  */
 
 import { loggerService } from '@logger'
+import { readResponseTextWithinLimit } from '@main/utils/readResponseText'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 
 const logger = loggerService.withContext('DiDiMcpServer')
+const DIDI_ERROR_TEXT_MAX_BYTES = 4096
 
 export class DiDiMcpServer {
   private _server: Server
@@ -456,7 +458,8 @@ export class DiDiMcpServer {
     })
 
     if (!response.ok) {
-      const errorText = await response.text()
+      const { text, truncated } = await readResponseTextWithinLimit(response, DIDI_ERROR_TEXT_MAX_BYTES)
+      const errorText = truncated ? `${text}\n...[truncated]` : text
       throw new Error(`HTTP ${response.status}: ${errorText}`)
     }
 

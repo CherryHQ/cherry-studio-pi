@@ -114,4 +114,20 @@ describe('FeishuAppRegistration', () => {
     )
     expect((thrown as Error).message).not.toContain('sensitive-device-code')
   })
+
+  it('rejects oversized streamed registration responses before buffering them', async () => {
+    const cancel = vi.fn()
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('x'.repeat(1024 * 1024 + 1)))
+      },
+      cancel
+    })
+    vi.mocked(net.fetch).mockResolvedValue(new Response(stream))
+
+    await expect(registrationBegin('feishu')).rejects.toThrow(
+      'Feishu registration API response is too large (read 1048576+ bytes)'
+    )
+    expect(cancel).toHaveBeenCalled()
+  })
 })

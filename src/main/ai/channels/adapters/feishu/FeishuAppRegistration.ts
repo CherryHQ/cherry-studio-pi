@@ -7,6 +7,7 @@
  * Flow: init -> begin (returns QR URL) -> poll (returns client_id + client_secret)
  */
 import { loggerService } from '@logger'
+import { readResponseTextWithinLimit } from '@main/utils/readResponseText'
 import type { FeishuDomain } from '@shared/data/types/channel'
 import { net } from 'electron'
 
@@ -17,6 +18,7 @@ const BASE_URLS: Record<FeishuDomain, string> = {
   lark: 'https://accounts.larksuite.com'
 }
 const REGISTRATION_REQUEST_TIMEOUT_MS = 30_000
+const REGISTRATION_RESPONSE_MAX_BYTES = 1024 * 1024
 
 type RegistrationBeginResult = {
   deviceCode: string
@@ -93,7 +95,11 @@ async function postRegistration(
     signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
   })
 
-  const text = await res.text()
+  const { text, truncated, bytesRead } = await readResponseTextWithinLimit(res, REGISTRATION_RESPONSE_MAX_BYTES)
+  if (truncated) {
+    throw new Error(`Feishu registration API response is too large (read ${bytesRead}+ bytes)`)
+  }
+
   try {
     return JSON.parse(text) as Record<string, unknown>
   } catch {
