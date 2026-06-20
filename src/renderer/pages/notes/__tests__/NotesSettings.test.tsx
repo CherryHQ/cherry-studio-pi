@@ -39,7 +39,7 @@ vi.mock('@cherrystudio/ui', () => ({
     void _variant
 
     return (
-      <button {...props} disabled={disabled}>
+      <button {...props} type={props.type ?? 'button'} disabled={disabled}>
         {children}
       </button>
     )

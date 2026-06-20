@@ -38,7 +38,7 @@ vi.mock('@cherrystudio/ui', async (importOriginal) => {
       delete buttonProps.variant
 
       return (
-        <button {...buttonProps} disabled={disabled || loading}>
+        <button {...buttonProps} type={buttonProps.type ?? 'button'} disabled={disabled || loading}>
           {children}
         </button>
       )

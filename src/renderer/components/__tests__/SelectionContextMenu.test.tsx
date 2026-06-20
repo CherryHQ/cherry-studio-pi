@@ -24,7 +24,7 @@ vi.mock('@cherrystudio/ui', () => ({
   ),
   ContextMenuContent: ({ children }: any) => <div>{children}</div>,
   ContextMenuItem: ({ children, disabled, onSelect }: any) => (
-    <button disabled={disabled} onClick={() => onSelect?.()}>
+    <button type="button" disabled={disabled} onClick={() => onSelect?.()}>
       {children}
     </button>
   ),

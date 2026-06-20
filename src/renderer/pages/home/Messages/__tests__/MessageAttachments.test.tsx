@@ -21,7 +21,11 @@ function deferred<T = void>() {
 }
 
 vi.mock('@cherrystudio/ui', () => ({
-  Button: ({ children, onClick }: any) => <button onClick={onClick}>{children}</button>
+  Button: ({ children, onClick }: any) => (
+    <button type="button" onClick={onClick}>
+      {children}
+    </button>
+  )
 }))
 
 vi.mock('@logger', () => ({
