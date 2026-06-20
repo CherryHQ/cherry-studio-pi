@@ -2587,6 +2587,63 @@ describe('AppDataSyncService', () => {
     expect(mocks.runtimeProjection.projectAppData).not.toHaveBeenCalled()
   })
 
+  it('rejects remote runtime directory bundles with impossible base64 content length', async () => {
+    const relativePath = 'sync-fixture/SKILL.md'
+    const content = Buffer.from('x', 'utf8')
+    const file = {
+      relativePath,
+      valueHash: sha256Buffer(content),
+      byteSize: content.byteLength,
+      updatedAt: Date.parse('2026-06-01T12:00:00.000Z'),
+      mode: 0o644,
+      contentBase64: 'A'.repeat(1024)
+    }
+    const bundleHash = hashJson([[file.relativePath, file.valueHash, file.byteSize, file.mode]])
+    const bundle = {
+      version: 1,
+      name: 'Skills',
+      updatedAt: file.updatedAt,
+      files: {
+        [relativePath]: file
+      }
+    }
+    const compressed = gzipSync(Buffer.from(JSON.stringify(bundle), 'utf8'), { level: 9 })
+    const remoteBundlePath = `/remote-root/sync/v1/runtime-directories/bundles/Skills/${bundleHash}.json.gz`
+    mocks.remoteFiles.set(remoteBundlePath, compressed)
+    mocks.remoteFiles.set(
+      '/remote-root/sync/v1/manifest.json',
+      JSON.stringify({
+        version: 1,
+        updatedAt: 1760000000000,
+        records: {},
+        runtimeDirectories: {
+          version: 1,
+          updatedAt: 1760000000000,
+          directories: {
+            Skills: {
+              version: 1,
+              name: 'Skills',
+              valueHash: bundleHash,
+              byteSize: file.byteSize,
+              compressedByteSize: compressed.byteLength,
+              fileCount: 1,
+              updatedAt: file.updatedAt,
+              deviceId: 'device-b',
+              path: `runtime-directories/bundles/Skills/${bundleHash}.json.gz`
+            }
+          }
+        }
+      })
+    )
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('异常文件内容长度')
+
+    expect(mocks.webdav.getFileContents).toHaveBeenCalledWith(remoteBundlePath, { format: 'binary' })
+    expect(mocks.runtimeProjection.projectAgents).not.toHaveBeenCalled()
+    expect(mocks.runtimeProjection.projectFiles).not.toHaveBeenCalled()
+    expect(mocks.runtimeProjection.projectAppData).not.toHaveBeenCalled()
+  })
+
   it('fails before publishing the manifest when an existing runtime directory bundle cannot be verified', async () => {
     const skillPath = path.join(mocks.runtimeDataRoot, 'Skills', 'sync-fixture', 'SKILL.md')
     await fsp.mkdir(path.dirname(skillPath), { recursive: true })

@@ -870,6 +870,10 @@ function runtimeDirectoryBundleJsonByteLimit(
   return Math.max(2 * 1024 * 1024, Math.min(policy.maxTotalBytes * 4, expectedBase64Bytes + metadataBudget))
 }
 
+function maxBase64EncodedLength(byteSize: number) {
+  return byteSize === 0 ? 0 : Math.ceil(byteSize / 3) * 4
+}
+
 function shouldAttemptRemoteFullSnapshotUpload() {
   return process.env[REMOTE_FULL_SNAPSHOT_OPT_IN_ENV] === '1'
 }
@@ -3378,6 +3382,10 @@ export class AppDataSyncService {
       }
       if (typeof file.contentBase64 !== 'string') {
         throw new Error(`远端 ${meta.name} 目录数据包包含无效文件内容。为避免写入损坏数据，本次同步已停止。`)
+      }
+      const maxContentBase64Length = maxBase64EncodedLength(byteSize)
+      if (file.contentBase64.length > maxContentBase64Length) {
+        throw new Error(`远端 ${meta.name} 目录数据包包含异常文件内容长度。为避免写入损坏数据，本次同步已停止。`)
       }
     }
     if (meta.fileCount > 0 && files.length !== meta.fileCount) {
