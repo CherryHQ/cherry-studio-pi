@@ -579,6 +579,37 @@ describe('FileStorage Storage v2 upload flow', () => {
     )
   })
 
+  it('saves base64 images with validated decoded bytes', async () => {
+    const { fileStorage } = await import('../FileStorage')
+
+    const saved = await fileStorage.saveBase64Image(undefined as never, 'data:image/png;base64,AQI')
+
+    expect(saved.ext).toBe('.png')
+    expect(saved.size).toBe(2)
+    expect(Array.from(fs.readFileSync(saved.path))).toEqual([0x01, 0x02])
+  })
+
+  it('rejects malformed base64 images before writing legacy files', async () => {
+    const { fileStorage } = await import('../FileStorage')
+
+    await expect(fileStorage.saveBase64Image(undefined as never, 'data:image/png;base64,not-valid!@#')).rejects.toThrow(
+      'payload is not valid base64'
+    )
+
+    expect(fs.readdirSync(mocks.dirs.files)).toEqual([])
+  })
+
+  it('rejects non-base64 data URLs before writing image files', async () => {
+    mocks.showSaveDialogSync.mockReturnValueOnce(path.join(mocks.dirs.root, 'plot.png'))
+    const mockedFs = await import('fs')
+    const { fileStorage } = await import('../FileStorage')
+
+    await expect(fileStorage.saveImage(undefined as never, 'plot', 'data:image/png,hello')).rejects.toThrow(
+      'data URL is not base64 encoded'
+    )
+    expect(mockedFs.writeFileSync).not.toHaveBeenCalled()
+  })
+
   it('rejects private remote download URLs before the main process fetches them', async () => {
     const { fileStorage } = await import('../FileStorage')
 

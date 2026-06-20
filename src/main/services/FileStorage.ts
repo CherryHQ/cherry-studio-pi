@@ -50,6 +50,44 @@ const logger = loggerService.withContext('FileStorage')
 const REMOTE_FILE_DOWNLOAD_MAX_BYTES = 100 * MB
 const REMOTE_FILE_DOWNLOAD_TIMEOUT_MS = 120_000
 
+function decodeBase64Payload(payload: string, context: string): Buffer {
+  const normalized = payload.trim()
+  const match = /^([A-Za-z0-9+/]+)(={0,2})$/.exec(normalized)
+
+  if (!match) {
+    throw new Error(`${context}: payload is not valid base64`)
+  }
+
+  const [, unpaddedPayload, padding] = match
+
+  if ((padding && normalized.length % 4 !== 0) || (!padding && unpaddedPayload.length % 4 === 1)) {
+    throw new Error(`${context}: payload has invalid base64 padding`)
+  }
+
+  const paddedPayload = unpaddedPayload.padEnd(Math.ceil(unpaddedPayload.length / 4) * 4, '=')
+  const buffer = Buffer.from(paddedPayload, 'base64')
+
+  if (buffer.toString('base64').replace(/=+$/, '') !== unpaddedPayload) {
+    throw new Error(`${context}: payload failed base64 round-trip validation`)
+  }
+
+  return buffer
+}
+
+function decodeBase64ImageInput(value: string, context: string): { buffer: Buffer; mediaType?: string } {
+  const parseResult = parseDataUrl(value)
+
+  if (parseResult && !parseResult.isBase64) {
+    throw new Error(`${context}: data URL is not base64 encoded`)
+  }
+
+  const payload = parseResult?.data ?? value
+  return {
+    buffer: decodeBase64Payload(payload, context),
+    mediaType: parseResult?.mediaType
+  }
+}
+
 function sanitizeTempFileName(fileName: string): string {
   const rawName = String(fileName ?? '')
     .split('\u0000')
@@ -839,11 +877,8 @@ class FileStorage {
         throw new Error('Base64 data is required')
       }
 
-      const parseResult = parseDataUrl(base64Data)
-      const base64String = parseResult?.data ?? base64Data
-      const ext = parseResult?.mediaType ? this.getExtensionFromMimeType(parseResult.mediaType) : '.png'
-
-      const buffer = Buffer.from(base64String, 'base64')
+      const { buffer, mediaType } = decodeBase64ImageInput(base64Data, 'saveBase64Image')
+      const ext = mediaType ? this.getExtensionFromMimeType(mediaType) : '.png'
       const uuid = uuidv4()
       const destPath = path.join(this.storageDir, uuid + ext)
 
@@ -1626,8 +1661,8 @@ class FileStorage {
       })
 
       if (filePath) {
-        const parseResult = parseDataUrl(data)
-        fs.writeFileSync(filePath, parseResult?.data ?? data, 'base64')
+        const { buffer } = decodeBase64ImageInput(data, 'saveImage')
+        fs.writeFileSync(filePath, buffer)
         return true
       }
     } catch (error) {
