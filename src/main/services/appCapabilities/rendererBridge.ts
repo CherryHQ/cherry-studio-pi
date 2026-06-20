@@ -12,6 +12,13 @@ type RendererBridgeProbeResult = {
 
 const cachedBridgeWindows = new Map<string, BrowserWindow>()
 
+class RendererBridgeTimeoutError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'RendererBridgeTimeoutError'
+  }
+}
+
 export function getBridgeErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
@@ -48,7 +55,7 @@ export async function withRendererBridgeTimeout<T>(
     return await Promise.race([
       promise,
       new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
+        timeout = setTimeout(() => reject(new RendererBridgeTimeoutError(errorMessage)), timeoutMs)
         timeout.unref?.()
       }),
       ...(abort ? [abort] : [])
@@ -138,6 +145,7 @@ export async function callRendererBridge<T>(
           return value as T
         } catch (error) {
           cachedBridgeWindows.delete(bridgeKey)
+          if (error instanceof RendererBridgeTimeoutError) throw error
           lastProbeError = error
         }
       } else {
@@ -205,6 +213,7 @@ export async function callRendererBridge<T>(
       if (cachedBridgeWindows.get(bridgeKey) === probe.browserWindow) {
         cachedBridgeWindows.delete(bridgeKey)
       }
+      if (error instanceof RendererBridgeTimeoutError) throw error
       lastCallError = error
     }
   }

@@ -89,6 +89,42 @@ describe('app capability renderer bridge', () => {
     expect(responsiveWindow.webContents.executeJavaScript).toHaveBeenCalledWith('window["test.bridge"]()')
   })
 
+  it('does not replay a timed-out actual bridge call on another window', async () => {
+    vi.useFakeTimers()
+    try {
+      const slowCallWindow = createWindow(
+        vi.fn((script: string) => {
+          if (script.includes('typeof')) return Promise.resolve(true)
+          return new Promise(() => undefined)
+        })
+      )
+      const otherWindow = createWindow(
+        vi.fn(async (script: string) => {
+          if (script.includes('typeof')) return true
+          return 'other'
+        })
+      )
+      mocks.getAllWindows.mockReturnValue([slowCallWindow, otherWindow])
+
+      const result = callRendererBridge('test.write.timeout', { write: true }, { timeoutMs: 5_000 })
+      const expectation = expect(result).rejects.toThrow('Timed out calling the main window bridge')
+      await vi.advanceTimersByTimeAsync(5_001)
+
+      await expectation
+      expect(slowCallWindow.webContents.executeJavaScript).toHaveBeenCalledWith(
+        'window["test.write.timeout"]({"write":true})'
+      )
+      expect(otherWindow.webContents.executeJavaScript).toHaveBeenCalledWith(
+        'typeof window["test.write.timeout"] === \'function\''
+      )
+      expect(otherWindow.webContents.executeJavaScript).not.toHaveBeenCalledWith(
+        'window["test.write.timeout"]({"write":true})'
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('reuses the last successful bridge window on repeated calls', async () => {
     const cachedWindow = createWindow(
       vi.fn(async (script: string) => {
