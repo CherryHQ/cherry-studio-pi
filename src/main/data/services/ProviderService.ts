@@ -437,7 +437,7 @@ class ProviderService {
       throw DataApiErrorFactory.validation({ key: ['API key cannot be empty'] })
     }
 
-    const { provider, added } = await this.runApiKeyMutation(providerId, async () => {
+    const { provider, status } = await this.runApiKeyMutation(providerId, async () => {
       return await this.dbService.withWriteTx(async (tx) => {
         const [row] = await tx
           .select()
@@ -450,10 +450,26 @@ class ProviderService {
         }
 
         const existingKeys = row.apiKeys ?? []
+        const existingKeyIndex = existingKeys.findIndex((k) => k.key.trim() === normalizedKey)
 
-        // Skip if key value already exists
-        if (existingKeys.some((k) => k.key.trim() === normalizedKey)) {
-          return { provider: rowToRuntimeProvider(row), added: false }
+        // Do not create duplicate keys. If the user re-imports an existing disabled
+        // key/provider, treat it as an explicit request to make that credential usable.
+        if (existingKeyIndex !== -1) {
+          const existingKey = existingKeys[existingKeyIndex]
+          if (row.isEnabled && existingKey.isEnabled) {
+            return { provider: rowToRuntimeProvider(row), status: 'skipped' as const }
+          }
+
+          const updatedKeys = existingKeys.map((entry, index) =>
+            index === existingKeyIndex ? { ...entry, isEnabled: true } : entry
+          )
+          const [updated] = await tx
+            .update(userProviderTable)
+            .set({ apiKeys: updatedKeys, isEnabled: true })
+            .where(eq(userProviderTable.providerId, providerId))
+            .returning()
+
+          return { provider: rowToRuntimeProvider(updated), status: 'enabled-existing' as const }
         }
 
         const newEntry = {
@@ -471,12 +487,14 @@ class ProviderService {
           .where(eq(userProviderTable.providerId, providerId))
           .returning()
 
-        return { provider: rowToRuntimeProvider(updated), added: true }
+        return { provider: rowToRuntimeProvider(updated), status: 'added' as const }
       })
     })
 
-    if (added) {
+    if (status === 'added') {
       logger.info('Added API key to provider', { providerId })
+    } else if (status === 'enabled-existing') {
+      logger.info('Enabled existing API key for provider', { providerId })
     } else {
       logger.info('API key already exists, skipping', { providerId })
     }

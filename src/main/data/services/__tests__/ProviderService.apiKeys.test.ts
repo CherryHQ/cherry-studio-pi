@@ -102,6 +102,44 @@ describe('ProviderService API keys', () => {
     })
   })
 
+  it('enables a disabled provider when importing an existing API key again', async () => {
+    await dbh.db.insert(userProviderTable).values({
+      providerId: 'disabled-existing-provider',
+      name: 'Disabled Existing Provider',
+      orderKey: generateOrderKeyBetween(null, null),
+      apiKeys: [{ id: 'existing-key', key: 'sk-existing', isEnabled: true }],
+      isEnabled: false
+    })
+
+    const updated = await providerService.addApiKey('disabled-existing-provider', ' sk-existing ', 'Duplicate')
+
+    expect(updated.isEnabled).toBe(true)
+    expect(updated.apiKeys).toEqual([{ id: 'existing-key', isEnabled: true }])
+    expect(await readProvider('disabled-existing-provider')).toMatchObject({
+      isEnabled: true,
+      apiKeys: [{ id: 'existing-key', key: 'sk-existing', isEnabled: true }]
+    })
+  })
+
+  it('re-enables an existing disabled API key instead of creating a duplicate', async () => {
+    await dbh.db.insert(userProviderTable).values({
+      providerId: 'disabled-key-provider',
+      name: 'Disabled Key Provider',
+      orderKey: generateOrderKeyBetween(null, null),
+      apiKeys: [{ id: 'disabled-key', key: 'sk-disabled-existing', isEnabled: false }],
+      isEnabled: false
+    })
+
+    const updated = await providerService.addApiKey('disabled-key-provider', 'sk-disabled-existing')
+
+    expect(updated.isEnabled).toBe(true)
+    expect(updated.apiKeys).toEqual([{ id: 'disabled-key', isEnabled: true }])
+    expect(await readProvider('disabled-key-provider')).toMatchObject({
+      isEnabled: true,
+      apiKeys: [{ id: 'disabled-key', key: 'sk-disabled-existing', isEnabled: true }]
+    })
+  })
+
   it('routes API key mutations through the serialized write transaction helper', async () => {
     await seedProvider()
     const withWriteTx = application.get('DbService').withWriteTx as Mock
