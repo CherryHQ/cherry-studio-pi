@@ -2728,6 +2728,58 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(remote.files.has('/remote-root/sync/v1/storage-v2/bundle/stale.json')).toBe(false)
   })
 
+  it('skips self-referential normalized WebDAV directories during stale artifact cleanup', async () => {
+    const remote = makeSharedWebDavStore()
+    const bundleDir = '/remote-root/sync/v1/storage-v2/bundle'
+    remote.files.set(`${bundleDir}/current.json`, JSON.stringify({ current: true }))
+    remote.files.set(`${bundleDir}/stale.json`, JSON.stringify({ stale: true }))
+    remote.client.getDirectoryContents.mockImplementation(async (filePath: string) => {
+      if (filePath === bundleDir) {
+        return [
+          {
+            filename: `${bundleDir}/loop/..`,
+            basename: 'loop/..',
+            type: 'directory'
+          },
+          {
+            filename: `${bundleDir}/current.json`,
+            basename: 'current.json',
+            type: 'file'
+          },
+          {
+            filename: `${bundleDir}/stale.json`,
+            basename: 'stale.json',
+            type: 'file'
+          }
+        ]
+      }
+      return []
+    })
+
+    await new StorageV2WebDavRecordSyncService([settingsTable]).pruneRemoteArtifacts(
+      remote.client as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        records: {},
+        blobs: {},
+        bundle: {
+          version: 1,
+          path: 'storage-v2/bundle/current.json',
+          valueHash: 'current-hash',
+          recordCount: 0,
+          blobCount: 0,
+          updatedAt: Date.parse('2026-05-29T12:00:00.000Z')
+        },
+        secrets: null
+      }
+    )
+
+    expect(remote.files.has(`${bundleDir}/current.json`)).toBe(true)
+    expect(remote.files.has(`${bundleDir}/stale.json`)).toBe(false)
+    expect(remote.client.getDirectoryContents.mock.calls.filter(([filePath]) => filePath === bundleDir)).toHaveLength(1)
+  })
+
   it('fails visibly when stale Storage v2 cleanup exceeds the remote file budget', async () => {
     process.env.CHERRY_STUDIO_DATA_SYNC_CLEANUP_MAX_FILES = '1'
     const remote = makeSharedWebDavStore()

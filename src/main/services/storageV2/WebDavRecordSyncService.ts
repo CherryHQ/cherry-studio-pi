@@ -1144,6 +1144,7 @@ export class StorageV2WebDavRecordSyncService {
       const filename = remoteDirectoryEntryPath(entry, dirPath)
       if (!filename || filename === dirPath) continue
       const normalizedFilename = path.posix.normalize(filename)
+      if (normalizedFilename === normalizedDirPath) continue
       if (normalizedFilename !== normalizedDirPath && !normalizedFilename.startsWith(`${normalizedDirPath}/`)) continue
       if (entry.type === 'directory') {
         files.push(
