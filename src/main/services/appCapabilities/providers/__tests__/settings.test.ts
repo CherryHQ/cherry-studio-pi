@@ -280,6 +280,23 @@ describe('settings app capabilities', () => {
     expect(JSON.stringify(data.settings)).not.toContain('BEGIN PRIVATE KEY')
   })
 
+  it('surfaces a source warning when renderer settings are unavailable', async () => {
+    mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation(async (script: string) => {
+      if (script.includes('typeof')) return true
+      if (script.includes(RENDERER_GET_SETTINGS_BRIDGE)) throw new Error('renderer busy')
+      return undefined
+    })
+
+    const result = await capability('settings.read').execute({}, { source: 'agent' })
+    const data = result.data as { settings: Record<string, unknown>; sourceWarnings?: string[] }
+
+    expect(data.settings).toMatchObject({
+      theme: 'system',
+      webdavPass: '[redacted]'
+    })
+    expect(data.sourceWarnings).toEqual(['Renderer settings bridge unavailable: renderer busy'])
+  })
+
   it('stops settings reads immediately when the capability signal is aborted', async () => {
     const controller = new AbortController()
     controller.abort('agent stopped')

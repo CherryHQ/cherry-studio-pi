@@ -187,9 +187,10 @@ function sanitizeSettingsForAgent(value: unknown, keyPath = ''): unknown {
   return sanitizeForAgent(value)
 }
 
-export async function readSettingsForAgent(signal?: AbortSignal) {
+export async function readSettingsForAgentDetailed(signal?: AbortSignal) {
   throwIfSettingsSignalAborted(signal)
   let settings: Record<string, any> = {}
+  const sourceWarnings: string[] = []
   try {
     settings = await callRendererBridge<Record<string, any>>(RENDERER_GET_SETTINGS_BRIDGE, undefined, {
       checkTimeoutMs: SETTINGS_RENDERER_BRIDGE_CHECK_TIMEOUT_MS,
@@ -199,6 +200,9 @@ export async function readSettingsForAgent(signal?: AbortSignal) {
     })
   } catch (error) {
     if (signal?.aborted) throw error
+    const message = getBridgeErrorMessage(error)
+    logger.warn('Renderer settings bridge unavailable; returning preference-backed settings only', { error: message })
+    sourceWarnings.push(`Renderer settings bridge unavailable: ${message}`)
     settings = {}
   }
 
@@ -209,10 +213,17 @@ export async function readSettingsForAgent(signal?: AbortSignal) {
       const value = preferenceService.get(preferenceKey)
       if (typeof value !== 'undefined') assignPath(merged, keyPath, value)
     }
-    return merged
-  } catch {
-    return settings
+    return { settings: merged, sourceWarnings }
+  } catch (error) {
+    const message = getBridgeErrorMessage(error)
+    logger.warn('Preference service unavailable while reading settings for app capability', { error: message })
+    sourceWarnings.push(`Preference service unavailable: ${message}`)
+    return { settings, sourceWarnings }
   }
+}
+
+export async function readSettingsForAgent(signal?: AbortSignal) {
+  return (await readSettingsForAgentDetailed(signal)).settings
 }
 
 export function isSupportedSettingPath(keyPath: string) {
@@ -310,8 +321,11 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       tags: ['settings', 'preferences', 'read'],
       execute: async (input: unknown, context) => {
         normalizeInputObject(input)
-        const settings = await readSettingsForAgent(context.signal)
-        return okResult('Settings read', { settings: sanitizeSettingsForAgent(settings) })
+        const { settings, sourceWarnings } = await readSettingsForAgentDetailed(context.signal)
+        return okResult('Settings read', {
+          settings: sanitizeSettingsForAgent(settings),
+          ...(sourceWarnings.length > 0 ? { sourceWarnings } : {})
+        })
       }
     },
     {
