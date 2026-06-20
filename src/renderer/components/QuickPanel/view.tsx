@@ -513,7 +513,8 @@ export const QuickPanelView: React.FC<Props> = ({ setInputText }) => {
     if (!ctx.isVisible) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isMac ? e.metaKey : e.ctrlKey) {
+      const assistiveKeyPressed = isMac ? e.metaKey : e.ctrlKey
+      if (assistiveKeyPressed) {
         setIsAssistiveKeyPressed(true)
       }
 
@@ -522,7 +523,7 @@ export const QuickPanelView: React.FC<Props> = ({ setInputText }) => {
         e.stopPropagation()
         setIsMouseOver(false)
       }
-      if (['ArrowLeft', 'ArrowRight'].includes(e.key) && isAssistiveKeyPressed) {
+      if (['ArrowLeft', 'ArrowRight'].includes(e.key) && assistiveKeyPressed) {
         e.preventDefault()
         e.stopPropagation()
         setIsMouseOver(false)
@@ -531,7 +532,7 @@ export const QuickPanelView: React.FC<Props> = ({ setInputText }) => {
       switch (e.key) {
         case 'ArrowUp':
           scrollTriggerRef.current = 'keyboard'
-          if (isAssistiveKeyPressed) {
+          if (assistiveKeyPressed) {
             setIndex((prev) => {
               if (prev === -1) return list.length > 0 ? list.length - 1 : -1
               const newIndex = prev - ctx.pageSize
@@ -548,7 +549,7 @@ export const QuickPanelView: React.FC<Props> = ({ setInputText }) => {
 
         case 'ArrowDown':
           scrollTriggerRef.current = 'keyboard'
-          if (isAssistiveKeyPressed) {
+          if (assistiveKeyPressed) {
             setIndex((prev) => {
               if (prev === -1) return list.length > 0 ? 0 : -1
               const newIndex = prev + ctx.pageSize
@@ -582,7 +583,7 @@ export const QuickPanelView: React.FC<Props> = ({ setInputText }) => {
           break
 
         case 'ArrowLeft':
-          if (!isAssistiveKeyPressed) return
+          if (!assistiveKeyPressed) return
           if (!historyPanel.length) return
           scrollTriggerRef.current = 'initial'
           clearSearchText(false)
@@ -594,7 +595,7 @@ export const QuickPanelView: React.FC<Props> = ({ setInputText }) => {
           break
 
         case 'ArrowRight':
-          if (!isAssistiveKeyPressed) return
+          if (!assistiveKeyPressed) return
           if (!list?.[index]?.isMenu) return
           scrollTriggerRef.current = 'initial'
           clearSearchText(false)
@@ -633,6 +634,8 @@ export const QuickPanelView: React.FC<Props> = ({ setInputText }) => {
 
             handleItemAction(list[index], 'enter')
           } else {
+            e.preventDefault()
+            e.stopPropagation()
             handleClose('enter_empty')
           }
           break

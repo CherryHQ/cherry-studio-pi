@@ -59,16 +59,17 @@ type KeyStep = {
 const PAGE_SIZE = 7
 
 // 用于测试 open 行为的组件
-function OpenPanelOnMount({ list }: { list: QuickPanelListItem[] }) {
+function OpenPanelOnMount({ list, onClose }: { list: QuickPanelListItem[]; onClose?: ReturnType<typeof vi.fn> }) {
   const quickPanel = useQuickPanel()
   useEffect(() => {
     quickPanel.open({
       title: 'Test Panel',
       list,
       symbol: 'test',
-      pageSize: PAGE_SIZE
+      pageSize: PAGE_SIZE,
+      onClose
     })
-  }, [list, quickPanel])
+  }, [list, onClose, quickPanel])
   return null
 }
 
@@ -301,6 +302,59 @@ describe('QuickPanelView', () => {
       ]
 
       await runKeySequenceAndCheck(screen.getByTestId('quick-panel'), keySequence)
+    })
+
+    it('uses the modifier state from the current keydown event for page jumps', async () => {
+      const list = createList(100, 'Item')
+
+      render(
+        wrapWithProviders(
+          <>
+            <QuickPanelView setInputText={vi.fn()} />
+            <OpenPanelOnMount list={list} />
+          </>
+        )
+      )
+
+      const panel = screen.getByTestId('quick-panel')
+      fireEvent.keyDown(window, { key: 'ArrowDown' })
+      await waitFor(() => expect(panel.querySelector('.focused')?.textContent).toContain('Item 1'))
+
+      fireEvent.keyDown(window, { key: 'ArrowDown', ctrlKey: true })
+      await waitFor(() => expect(panel.querySelector('.focused')?.textContent).toContain(`Item ${PAGE_SIZE + 1}`))
+    })
+
+    it('prevents Enter from leaking to the input when an empty visible panel closes', async () => {
+      const onClose = vi.fn()
+
+      render(
+        wrapWithProviders(
+          <>
+            <QuickPanelView setInputText={vi.fn()} />
+            <OpenPanelOnMount list={[]} onClose={onClose} />
+          </>
+        )
+      )
+
+      expect(screen.getByTestId('quick-panel')).toHaveClass('visible')
+
+      const enterEvent = new KeyboardEvent('keydown', {
+        key: 'Enter',
+        bubbles: true,
+        cancelable: true
+      })
+      const stopPropagation = vi.spyOn(enterEvent, 'stopPropagation')
+      fireEvent(window, enterEvent)
+
+      expect(enterEvent.defaultPrevented).toBe(true)
+      expect(stopPropagation).toHaveBeenCalled()
+      await waitFor(() =>
+        expect(onClose).toHaveBeenCalledWith(
+          expect.objectContaining({
+            action: 'enter_empty'
+          })
+        )
+      )
     })
 
     it('should return to the previous menu with Ctrl+ArrowLeft without mutating history state', async () => {
