@@ -7,6 +7,9 @@ import { useProviderDeepLinkImport } from '../useProviderDeepLinkImport'
 const createProviderMock = vi.fn()
 const updateProviderByIdMock = vi.fn()
 const addApiKeyTriggerMock = vi.fn()
+const useMutationMock = vi.fn<(...args: any[]) => { trigger: typeof addApiKeyTriggerMock }>(() => ({
+  trigger: addApiKeyTriggerMock
+}))
 const navigateMock = vi.fn()
 const popupShowMock = vi.fn()
 
@@ -20,9 +23,7 @@ vi.mock('@renderer/hooks/useProvider', () => ({
 }))
 
 vi.mock('@data/hooks/useDataApi', () => ({
-  useMutation: () => ({
-    trigger: addApiKeyTriggerMock
-  })
+  useMutation: (...args: any[]) => useMutationMock(...args)
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -87,6 +88,18 @@ describe('useProviderDeepLinkImport', () => {
     )
 
     await waitFor(() => expect(createProviderMock).toHaveBeenCalledTimes(1))
+
+    const addKeyMutation = useMutationMock.mock.calls.find(
+      (call) => call[0] === 'POST' && call[1] === '/providers/:providerId/api-keys'
+    )
+    expect(addKeyMutation).toBeDefined()
+    expect(addKeyMutation![2].refresh({ args: { params: { providerId: 'openai' } } })).toEqual([
+      '/providers',
+      '/providers/openai',
+      '/providers/openai/*',
+      '/models',
+      '/pins'
+    ])
 
     expect(popupShowMock).toHaveBeenCalledWith({
       id: 'openai',

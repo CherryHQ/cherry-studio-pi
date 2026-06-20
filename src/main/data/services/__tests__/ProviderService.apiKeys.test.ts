@@ -47,6 +47,11 @@ describe('ProviderService API keys', () => {
     return row?.apiKeys ?? []
   }
 
+  async function readProvider(providerId = 'openai') {
+    const [row] = await dbh.db.select().from(userProviderTable).where(eq(userProviderTable.providerId, providerId))
+    return row
+  }
+
   async function seedManagedCherryAiProvider() {
     await dbh.db.insert(userProviderTable).values({
       providerId: CHERRYAI_PROVIDER_ID,
@@ -76,6 +81,25 @@ describe('ProviderService API keys', () => {
     const keys = await readApiKeys()
     expect(keys.filter((entry) => entry.key === 'sk-new')).toHaveLength(1)
     expect(keys.some((entry) => entry.key === ' sk-new ')).toBe(false)
+  })
+
+  it('enables a disabled provider after adding a usable API key', async () => {
+    await dbh.db.insert(userProviderTable).values({
+      providerId: 'disabled-provider',
+      name: 'Disabled Provider',
+      orderKey: generateOrderKeyBetween(null, null),
+      apiKeys: [],
+      isEnabled: false
+    })
+
+    const updated = await providerService.addApiKey('disabled-provider', 'sk-enabled')
+
+    expect(updated.isEnabled).toBe(true)
+    expect(updated.apiKeys).toEqual([{ id: expect.any(String), isEnabled: true }])
+    expect(await readProvider('disabled-provider')).toMatchObject({
+      isEnabled: true,
+      apiKeys: [{ id: expect.any(String), key: 'sk-enabled', isEnabled: true }]
+    })
   })
 
   it('routes API key mutations through the serialized write transaction helper', async () => {

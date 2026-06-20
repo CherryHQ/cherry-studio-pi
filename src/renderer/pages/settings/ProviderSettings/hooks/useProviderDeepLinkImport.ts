@@ -77,7 +77,9 @@ export function useProviderDeepLinkImport(
     refresh: ({ args }) => [
       '/providers',
       `/providers/${args!.params.providerId}`,
-      `/providers/${args!.params.providerId}/*`
+      `/providers/${args!.params.providerId}/*`,
+      '/models',
+      '/pins'
     ]
   })
 

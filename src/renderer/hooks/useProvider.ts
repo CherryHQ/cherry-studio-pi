@@ -113,7 +113,7 @@ export function useProviderMutations(providerId: string) {
     trigger: addApiKeyTrigger,
     isLoading: isAddingApiKey,
     error: addApiKeyError
-  } = useMutation('POST', '/providers/:providerId/api-keys', { refresh })
+  } = useMutation('POST', '/providers/:providerId/api-keys', { refresh: catalogRefresh })
 
   const {
     trigger: deleteApiKeyTrigger,

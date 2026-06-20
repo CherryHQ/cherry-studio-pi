@@ -467,7 +467,7 @@ class ProviderService {
 
         const [updated] = await tx
           .update(userProviderTable)
-          .set({ apiKeys: updatedKeys })
+          .set({ apiKeys: updatedKeys, isEnabled: true })
           .where(eq(userProviderTable.providerId, providerId))
           .returning()
 

@@ -271,7 +271,7 @@ describe('useProviderMutations', () => {
     })
   })
 
-  it('should set up POST api-keys mutation with /* wildcard refresh', () => {
+  it('should set up POST api-keys mutation with catalog refresh', () => {
     renderHook(() => useProviderMutations('openai'))
 
     const addKeyCall = mockUseMutation.mock.calls.find(
@@ -279,9 +279,9 @@ describe('useProviderMutations', () => {
     )
 
     expect(addKeyCall).toBeDefined()
-    // /* wildcard covers api-keys sub-path declaratively; no explicit sub-path needed
+    // Adding a usable key can enable the provider, which changes model-selector visibility.
     expect(addKeyCall![2]).toEqual({
-      refresh: ['/providers', '/providers/openai', '/providers/openai/*']
+      refresh: ['/providers', '/providers/openai', '/providers/openai/*', '/models', '/pins']
     })
   })
 
