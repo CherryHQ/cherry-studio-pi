@@ -883,7 +883,7 @@ export class AgentSessionRuntimeService extends BaseService {
           logger.error('Failed to start steer continuation turn', { sessionId: entry.sessionId, error })
         })
         .finally(() => {
-          entry.startingNextTurn = false
+          if (this.isCurrentEntry(entry)) entry.startingNextTurn = false
         })
     })
   }
@@ -896,6 +896,8 @@ export class AgentSessionRuntimeService extends BaseService {
    * The steer message is reused only for rename/seed context — U2 is already a persisted row.
    */
   private async startContinuationTurn(entry: AgentSessionRuntimeEntry): Promise<void> {
+    if (!this.isCurrentEntry(entry)) return
+
     const steerMessage = entry.rollSteerInputs?.[0]?.message ?? createSyntheticUserMessage(entry.sessionId)
     entry.rollSteerInputs = undefined
 
@@ -915,6 +917,8 @@ export class AgentSessionRuntimeService extends BaseService {
       // The A2 placeholder save failed — abandon the roll, drop the buffered post-steer chunks, and
       // surface the failure (mirrors `startNextTurn`'s doomed-placeholder handling).
       rootSpan?.end()
+      if (!this.isCurrentEntry(entry)) return
+
       entry.rolling = false
       entry.rollBuffer = undefined
       application.get('AiStreamManager').broadcastTopicError(entry.topicId, entry.modelId, serializeError(error))

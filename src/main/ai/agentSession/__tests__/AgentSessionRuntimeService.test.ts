@@ -1665,6 +1665,47 @@ describe('AgentSessionRuntimeService', () => {
     expect(entry.lastTerminalStatus).toBe('error')
   })
 
+  it('does not create a continuation placeholder for a stale roll entry', async () => {
+    const service = new AgentSessionRuntimeService()
+    service.beginTurn(baseTurnInput)
+    const staleEntry = getEntry(service)
+    staleEntry.rolling = true
+    staleEntry.rollBuffer = [{ type: 'text-delta', id: 'p2', delta: 'post' } as any]
+    staleEntry.rollSteerInputs = [{ message: userMessage('user-2'), systemReminder: true }] as any
+
+    service.closeSession('session-1')
+    mocks.saveMessage.mockClear()
+
+    await expect((service as any).startContinuationTurn(staleEntry)).resolves.toBeUndefined()
+
+    expect(mocks.saveMessage).not.toHaveBeenCalled()
+    expect(mocks.startRuntimeTurn).not.toHaveBeenCalled()
+  })
+
+  it('does not surface stale continuation save failures after the session is closed', async () => {
+    const service = new AgentSessionRuntimeService()
+    service.beginTurn(baseTurnInput)
+    const entry = getEntry(service)
+    entry.rolling = true
+    entry.rollBuffer = [{ type: 'text-delta', id: 'p2', delta: 'post' } as any]
+    entry.rollSteerInputs = [{ message: userMessage('user-2'), systemReminder: true }] as any
+
+    const deferred = createDeferred<any>()
+    mocks.saveMessage.mockImplementationOnce(() => deferred.promise)
+
+    const continuation = (service as any).startContinuationTurn(entry)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    service.closeSession('session-1')
+    deferred.reject(new Error('db down'))
+
+    await expect(continuation).resolves.toBeUndefined()
+
+    expect(mocks.startRuntimeTurn).not.toHaveBeenCalled()
+    expect(mocks.broadcastTopicError).not.toHaveBeenCalled()
+    expect(service.inspect('session-1')).toBeUndefined()
+  })
+
   it('abandons the roll and surfaces the error when the continuation placeholder save rejects (S5)', async () => {
     const service = new AgentSessionRuntimeService()
     service.beginTurn(baseTurnInput)
