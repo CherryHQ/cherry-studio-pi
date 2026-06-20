@@ -3519,8 +3519,65 @@ describe('AppDataSyncService', () => {
     await new AppDataSyncService().syncNow(config)
 
     expect(mocks.runtimeProjection.projectProviders).toHaveBeenCalledTimes(1)
+    expect(mocks.runtimeProjection.projectAgents).not.toHaveBeenCalled()
     expect(mocks.runtimeProjection.projectProviders.mock.calls[0][0].apiKeyProviderIds).toEqual(new Set(['openai']))
     expect(mocks.runtimeProjection.projectProviders.mock.calls[0][0].modelProviderIds).toEqual(new Set())
+  })
+
+  it('keeps agent runtime projection for synced Storage v2 agent tombstones', async () => {
+    const agentSkillEntityId = JSON.stringify(['agent-1', 'skill-1'])
+    const existingStorageManifest = {
+      version: 1,
+      records: {
+        [`sync_tombstone:agent_skill:${agentSkillEntityId}`]: {
+          entityType: 'sync_tombstone',
+          table: 'sync_tombstones',
+          idValues: ['agent_skill', agentSkillEntityId],
+          valueHash: 'agent-skill-tombstone-hash',
+          updatedAt: 1760000000000,
+          deletedAt: null,
+          version: 1,
+          path: 'storage-v2/records/sync_tombstone/agent-skill.json'
+        }
+      },
+      blobs: {}
+    }
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
+      if (mocks.remoteFiles.has(filePath)) {
+        return mocks.remoteFiles.get(filePath)
+      }
+
+      if (filePath.endsWith('/manifest.json')) {
+        return JSON.stringify({
+          version: 1,
+          updatedAt: 1760000000000,
+          records: {},
+          storageV2: existingStorageManifest
+        })
+      }
+      throw new Error(`Unexpected WebDAV read: ${filePath}`)
+    })
+    mocks.storageRecordSync.sync.mockResolvedValueOnce({
+      manifest: existingStorageManifest,
+      syncStates: [],
+      summary: {
+        storageUploaded: 0,
+        storageDownloaded: 1,
+        storageDeleted: 0,
+        storageConflicts: 0,
+        storageResolvedConflicts: 0,
+        storageSkipped: 0,
+        blobUploaded: 0,
+        blobDownloaded: 0,
+        secretUploaded: 0,
+        secretDownloaded: 0
+      }
+    })
+
+    await new AppDataSyncService().syncNow(config)
+
+    expect(mocks.runtimeProjection.projectAgents).toHaveBeenCalledTimes(1)
+    expect(mocks.runtimeProjection.projectProviders).not.toHaveBeenCalled()
   })
 
   it('does not upload optional full data snapshots by default', async () => {

@@ -439,7 +439,6 @@ const AGENT_RUNTIME_ENTITY_TYPES = new Set([
   'message_block',
   'scheduled_task',
   'skill',
-  'sync_tombstone',
   'task_run_log'
 ])
 
@@ -1147,7 +1146,14 @@ function isRemoteArtifactCleanupDue(lastCleanupAt: unknown, now: number) {
 }
 
 function getStorageV2ManifestEntityTypes(manifest?: StorageV2WebDavRecordSyncManifest | null) {
-  return new Set(storageV2ManifestRecordEntries(manifest).map(([, meta]) => meta.entityType))
+  const entityTypes = new Set<string>()
+
+  for (const [, meta] of storageV2ManifestRecordEntries(manifest)) {
+    const tombstoneTarget = storageV2TombstoneTargetFromMeta(meta)
+    entityTypes.add(tombstoneTarget?.entityType ?? meta.entityType)
+  }
+
+  return entityTypes
 }
 
 function getStorageV2ModelProviderIds(manifest?: StorageV2WebDavRecordSyncManifest | null) {
@@ -1166,23 +1172,29 @@ function isProviderApiKeyCredentialKind(value: unknown) {
   return value === 'apiKey' || value === 'apiKeys'
 }
 
+const STORAGE_V2_TOMBSTONE_TARGET_PART_COUNTS: Record<string, number> = {
+  agent_skill: 2,
+  channel_task_subscription: 2,
+  provider_credential: 2
+}
+
+function storageV2TombstoneTargetFromMeta(meta: StorageV2WebDavRecordSyncManifest['records'][string]) {
+  if (meta.entityType !== 'sync_tombstone') return null
+  const [entityType, entityId] = meta.idValues
+  const expectedParts = entityType ? STORAGE_V2_TOMBSTONE_TARGET_PART_COUNTS[entityType] : undefined
+  if (!entityType || !entityId || !expectedParts) return null
+  const idValues = decodeStorageV2CompositeEntityId(entityId, expectedParts)
+  return idValues ? { entityType, idValues } : null
+}
+
 function getStorageV2ApiKeyCredentialProviderIds(manifest?: StorageV2WebDavRecordSyncManifest | null) {
   const providerIds = new Set<string>()
 
   for (const [, meta] of storageV2ManifestRecordEntries(manifest)) {
-    if (meta.entityType === 'provider_credential') {
-      const [providerId, credentialKind] = meta.idValues
-      if (providerId && isProviderApiKeyCredentialKind(credentialKind)) {
-        providerIds.add(providerId)
-      }
-      continue
-    }
-
-    if (meta.entityType !== 'sync_tombstone') continue
-    const [entityType, entityId] = meta.idValues
-    if (entityType !== 'provider_credential' || !entityId) continue
-    const idValues = decodeStorageV2CompositeEntityId(entityId, 2)
-    if (!idValues) continue
+    const target = storageV2TombstoneTargetFromMeta(meta)
+    const entityType = target?.entityType ?? meta.entityType
+    if (entityType !== 'provider_credential') continue
+    const idValues = target?.idValues ?? meta.idValues
     const [providerId, credentialKind] = idValues
     if (providerId && isProviderApiKeyCredentialKind(credentialKind)) {
       providerIds.add(providerId)
