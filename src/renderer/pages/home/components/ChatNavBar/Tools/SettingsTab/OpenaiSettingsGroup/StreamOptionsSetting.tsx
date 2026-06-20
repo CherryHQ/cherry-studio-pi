@@ -55,7 +55,7 @@ const StreamOptionsSetting: FC<Props> = ({ SettingRowTitleSmall }) => {
       <SettingRowTitleSmall>
         {t('settings.openai.stream_options.include_usage.title')}{' '}
         <Tooltip title={t('settings.openai.stream_options.include_usage.tip')}>
-          <CircleHelp size={14} style={{ marginLeft: 4 }} color="var(--color-text-2)" />
+          <CircleHelp size={14} style={{ marginLeft: 4 }} color="var(--color-foreground-secondary)" />
         </Tooltip>
       </SettingRowTitleSmall>
       <Selector

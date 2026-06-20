@@ -65,7 +65,7 @@ const GroqSettingsGroup: FC<Props> = ({ SettingGroup, SettingRowTitleSmall }) =>
           <SettingRowTitleSmall>
             {t('settings.openai.service_tier.title')}{' '}
             <Tooltip title={t('settings.openai.service_tier.tip')}>
-              <CircleHelp size={14} style={{ marginLeft: 4 }} color="var(--color-text-2)" />
+              <CircleHelp size={14} style={{ marginLeft: 4 }} color="var(--color-foreground-secondary)" />
             </Tooltip>
           </SettingRowTitleSmall>
           <Selector

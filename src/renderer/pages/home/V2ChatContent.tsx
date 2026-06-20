@@ -85,7 +85,7 @@ const V2ChatContent: FC<Props> = ({ topic, setActiveTopic, onPersistTemporaryTop
   if (isHistoryLoading) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
-        <div className="text-sm" style={{ color: 'var(--color-text-3)' }}>
+        <div className="text-sm" style={{ color: 'var(--color-foreground-muted)' }}>
           {t('common.loading')}
         </div>
       </div>

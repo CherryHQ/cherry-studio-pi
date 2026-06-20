@@ -61,7 +61,7 @@ const ReasoningSummarySetting: FC<Props> = ({ SettingRowTitleSmall }) => {
       <SettingRowTitleSmall>
         {t('settings.openai.summary_text_mode.title')}{' '}
         <Tooltip title={t('settings.openai.summary_text_mode.tip')}>
-          <CircleHelp size={14} style={{ marginLeft: 4 }} color="var(--color-text-2)" />
+          <CircleHelp size={14} style={{ marginLeft: 4 }} color="var(--color-foreground-secondary)" />
         </Tooltip>
       </SettingRowTitleSmall>
       <Selector
