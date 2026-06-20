@@ -10,9 +10,10 @@ type Props = {
   show: boolean
 }
 
+const OPEN_GRAPH_PROPERTIES = ['og:title', 'og:description', 'og:image', 'og:imageAlt'] as const
+
 export const OgCard = ({ link, show }: Props) => {
-  const openGraph = ['og:title', 'og:description', 'og:image', 'og:imageAlt'] as const
-  const { metadata, isLoading, parseMetadata } = useMetaDataParser(link, openGraph)
+  const { metadata, isLoading, parseMetadata } = useMetaDataParser(link, OPEN_GRAPH_PROPERTIES)
 
   const hasImage = !!metadata['og:image']
 
