@@ -17,6 +17,8 @@ import dayjs from 'dayjs'
 import DOMPurify from 'dompurify'
 import { appendBlocks } from 'notion-helper'
 
+import { fetchExportResource } from './exportFetch'
+
 const logger = loggerService.withContext('Utils:export')
 
 let exportState = false
@@ -697,7 +699,7 @@ export const exportMarkdownToYuque = async (title: string, content: string): Pro
   setExportingState(true)
 
   try {
-    const response = await fetch(`https://www.yuque.com/api/v2/repos/${yuqueRepoId}/docs`, {
+    const response = await fetchExportResource(`https://www.yuque.com/api/v2/repos/${yuqueRepoId}/docs`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -719,7 +721,7 @@ export const exportMarkdownToYuque = async (title: string, content: string): Pro
     const data = await response.json()
     const doc_id = data.data.id
 
-    const tocResponse = await fetch(`https://www.yuque.com/api/v2/repos/${yuqueRepoId}/toc`, {
+    const tocResponse = await fetchExportResource(`https://www.yuque.com/api/v2/repos/${yuqueRepoId}/toc`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -908,7 +910,7 @@ export const exportMarkdownToJoplin = async (
 
   try {
     const baseUrl = joplinUrl.endsWith('/') ? joplinUrl : `${joplinUrl}/`
-    const response = await fetch(`${baseUrl}notes?token=${joplinToken}`, {
+    const response = await fetchExportResource(`${baseUrl}notes?token=${joplinToken}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -967,7 +969,7 @@ export const exportMarkdownToSiyuan = async (title: string, content: string): Pr
 
   try {
     // test connection
-    const testResponse = await fetch(`${siyuanApiUrl}/api/notebook/lsNotebooks`, {
+    const testResponse = await fetchExportResource(`${siyuanApiUrl}/api/notebook/lsNotebooks`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1010,7 +1012,7 @@ export const exportMarkdownToSiyuan = async (title: string, content: string): Pr
  * @returns 渲染后的字符串
  */
 async function renderSprigTemplate(apiUrl: string, token: string, template: string): Promise<string> {
-  const response = await fetch(`${apiUrl}/api/template/renderSprig`, {
+  const response = await fetchExportResource(`${apiUrl}/api/template/renderSprig`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -1037,7 +1039,7 @@ async function createSiyuanDoc(
   path: string,
   markdown: string
 ): Promise<string> {
-  const response = await fetch(`${apiUrl}/api/filetree/createDocWithMd`, {
+  const response = await fetchExportResource(`${apiUrl}/api/filetree/createDocWithMd`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
