@@ -101,7 +101,7 @@ const TopViewContent: React.FC<Props> = ({ children }) => {
   const FullScreenContainer: React.FC<PropsWithChildren> = useCallback(({ children }) => {
     return (
       <Box className="topview-fullscreen-container absolute h-full w-full flex-1">
-        <Box className="absolute h-full w-full" onClick={onPop} />
+        <Box className="topview-backdrop absolute h-full w-full" />
         {children}
       </Box>
     )

@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -74,6 +74,21 @@ describe('TopView', () => {
 
     expect(screen.getByText('Older view')).toBeInTheDocument()
     expect(screen.queryByText('Latest view')).not.toBeInTheDocument()
+  })
+
+  it('does not bypass popup close handlers when the fullscreen backdrop is clicked', () => {
+    const { container } = renderTopView()
+
+    act(() => {
+      TopView.show(<div>Promise popup</div>, 'promise-popup')
+    })
+
+    const backdrop = container.querySelector('.topview-backdrop')
+    expect(backdrop).toBeInstanceOf(HTMLElement)
+
+    fireEvent.click(backdrop as HTMLElement)
+
+    expect(screen.getByText('Promise popup')).toBeInTheDocument()
   })
 
   it('does not let an older unmount clear a newer TopView registration', () => {
