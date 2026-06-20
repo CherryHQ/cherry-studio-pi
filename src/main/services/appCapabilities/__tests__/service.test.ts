@@ -151,6 +151,25 @@ describe('AppCapabilityService', () => {
     expect(executeCapability).toHaveBeenCalledTimes(1)
   })
 
+  it('returns aborted without waiting for providers that ignore the signal', async () => {
+    executeCapability.mockClear()
+    const service = new AppCapabilityService()
+    const controller = new AbortController()
+    executeCapability.mockImplementationOnce(async () => new Promise(() => undefined))
+
+    const resultPromise = service.call('settings.read', {}, { source: 'agent', signal: controller.signal })
+    await Promise.resolve()
+    controller.abort(new Error('user stopped a stuck provider'))
+
+    await expect(resultPromise).resolves.toEqual({
+      ok: false,
+      isError: true,
+      summary: 'settings.read aborted: user stopped a stuck provider',
+      error: 'user stopped a stuck provider'
+    })
+    expect(executeCapability).toHaveBeenCalledTimes(1)
+  })
+
   it('reports aborted when capability execution throws after the signal aborts', async () => {
     executeCapability.mockClear()
     const service = new AppCapabilityService()

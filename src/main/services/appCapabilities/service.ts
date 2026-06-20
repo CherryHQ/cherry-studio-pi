@@ -20,6 +20,34 @@ function abortReasonMessage(signal: AbortSignal) {
   return 'Capability call aborted'
 }
 
+function abortReasonError(signal: AbortSignal) {
+  const reason = signal.reason
+  if (reason instanceof Error) return reason
+  return new Error(abortReasonMessage(signal))
+}
+
+function createAbortWait(signal: AbortSignal) {
+  let disposed = false
+  let abortListener: (() => void) | undefined
+
+  const promise = new Promise<never>((_, reject) => {
+    abortListener = () => reject(abortReasonError(signal))
+    if (signal.aborted) {
+      abortListener()
+      return
+    }
+    signal.addEventListener('abort', abortListener, { once: true })
+  })
+
+  const dispose = () => {
+    if (disposed) return
+    disposed = true
+    if (abortListener) signal.removeEventListener('abort', abortListener)
+  }
+
+  return { promise, dispose }
+}
+
 function sanitizeResultForSource<T>(
   result: AppCapabilityResult<T>,
   source: AppCapabilityContext['source']
@@ -144,16 +172,21 @@ export class AppCapabilityService {
         risk: capability.risk,
         dryRun: context.dryRun === true
       })
-      const result = normalizeCapabilityResult<T>(
-        capabilityId,
-        await capability.execute(input, {
+      const abortWait = context.signal ? createAbortWait(context.signal) : null
+      let rawResult: unknown
+      try {
+        const execution = capability.execute(input, {
           source: context.source ?? 'system',
           sessionId: context.sessionId,
           toolCallId: context.toolCallId,
           signal: context.signal,
           dryRun: context.dryRun
         })
-      )
+        rawResult = abortWait ? await Promise.race([execution, abortWait.promise]) : await execution
+      } finally {
+        abortWait?.dispose()
+      }
+      const result = normalizeCapabilityResult<T>(capabilityId, rawResult)
       if (context.signal?.aborted) {
         const message = abortReasonMessage(context.signal)
         return sanitizeResultForSource(
