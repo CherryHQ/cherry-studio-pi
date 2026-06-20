@@ -158,7 +158,7 @@ describe('settings app capabilities', () => {
 
     expect(result).toEqual({
       ok: true,
-      summary: 'Setting value read',
+      summary: '已读取设置值',
       data: {
         path: 'apiServer.port',
         value: 24444

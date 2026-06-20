@@ -25,6 +25,11 @@ const UNSUPPORTED_SETTINGS_SECTION_PREFIX = '不支持的设置分区：'
 const RENDERER_SETTINGS_BRIDGE_WARNING_PREFIX = '渲染进程设置桥不可用：'
 const PREFERENCE_SERVICE_WARNING_PREFIX = '偏好设置服务不可用：'
 const RUNTIME_SETTING_WRITE_ERROR_PREFIX = '写入运行时设置失败：'
+const SETTINGS_SECTIONS_LISTED_SUMMARY = '已列出设置分区'
+const SETTINGS_READ_SUMMARY = '已读取设置'
+const SETTING_VALUE_READ_SUMMARY = '已读取设置值'
+const SETTING_UPDATED_SUMMARY = '设置已更新'
+const SETTINGS_SECTION_OPENED_SUMMARY = '已打开设置分区'
 
 export const SETTINGS_SECTIONS = [
   ['provider', 'Provider', '/settings/provider'],
@@ -322,7 +327,7 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       tags: ['settings', 'preferences', 'sections'],
       execute: async (input: unknown) => {
         normalizeInputObject(input)
-        return okResult('Settings sections listed', { sections: SETTINGS_SECTIONS })
+        return okResult(SETTINGS_SECTIONS_LISTED_SUMMARY, { sections: SETTINGS_SECTIONS })
       }
     },
     {
@@ -337,7 +342,7 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: unknown, context) => {
         normalizeInputObject(input)
         const { settings, sourceWarnings } = await readSettingsForAgentDetailed(context.signal)
-        return okResult('Settings read', {
+        return okResult(SETTINGS_READ_SUMMARY, {
           settings: sanitizeSettingsForAgent(settings),
           ...(sourceWarnings.length > 0 ? { sourceWarnings } : {})
         })
@@ -361,7 +366,7 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
         const keyPath = normalizeRequiredSettingsText(inputObject.path, SETTING_PATH_LABEL)
-        return okResult('Setting value read', {
+        return okResult(SETTING_VALUE_READ_SUMMARY, {
           path: keyPath,
           value: sanitizeSettingValueForAgent(keyPath, await readSettingValueForAgent(keyPath, context.signal))
         })
@@ -392,7 +397,7 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
         if (!Object.prototype.hasOwnProperty.call(inputObject, 'value')) throw new Error(SETTING_VALUE_REQUIRED_ERROR)
         if (!isSupportedSettingPath(keyPath)) throw new Error(UNSUPPORTED_SETTING_PATH_PREFIX + keyPath)
         await persistSettingValue(keyPath, inputObject.value, context.signal)
-        return okResult('Setting updated', {
+        return okResult(SETTING_UPDATED_SUMMARY, {
           path: keyPath,
           value: sanitizeSettingValueForAgent(keyPath, inputObject.value)
         })
@@ -423,7 +428,7 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
         throwIfSettingsSignalAborted(context.signal)
         await (context.signal ? navigateApp(route, context.signal) : navigateApp(route))
         throwIfSettingsSignalAborted(context.signal)
-        return okResult('Settings section opened', { route })
+        return okResult(SETTINGS_SECTION_OPENED_SUMMARY, { route })
       }
     }
   ]

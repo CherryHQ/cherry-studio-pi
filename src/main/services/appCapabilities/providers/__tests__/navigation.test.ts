@@ -32,7 +32,7 @@ describe('navigation app capabilities', () => {
     expect(mocks.navigateApp).toHaveBeenCalledWith('/settings/data')
     expect(result).toEqual({
       ok: true,
-      summary: 'Application navigated',
+      summary: '应用导航已完成',
       data: {
         route: '/settings/data'
       }

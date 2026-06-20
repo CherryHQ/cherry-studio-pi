@@ -4,6 +4,7 @@ import { navigateApp, normalizeAppRoute, okResult } from '../utils'
 const APP_ROUTE_STRING_ERROR = '应用路由必须是字符串。'
 const APP_ROUTE_REQUIRED_ERROR = '应用路由不能为空。'
 const NAVIGATION_ABORT_ERROR = '导航能力调用已取消。'
+const APPLICATION_NAVIGATED_SUMMARY = '应用导航已完成'
 
 function normalizeNavigationRoute(value: unknown) {
   if (typeof value !== 'string') throw new Error(APP_ROUTE_STRING_ERROR)
@@ -47,7 +48,7 @@ export function createNavigationCapabilities(): AppCapabilityDefinition[] {
         throwIfNavigationSignalAborted(context.signal)
         await (context.signal ? navigateApp(route, context.signal) : navigateApp(route))
         throwIfNavigationSignalAborted(context.signal)
-        return okResult('Application navigated', { route })
+        return okResult(APPLICATION_NAVIGATED_SUMMARY, { route })
       }
     }
   ]
