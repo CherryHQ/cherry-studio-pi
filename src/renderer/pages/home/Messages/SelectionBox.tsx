@@ -8,6 +8,12 @@ interface SelectionBoxProps {
   handleSelectMessage: (messageId: string, selected: boolean) => void
 }
 
+function getEventTargetElement(target: EventTarget | null): Element | null {
+  if (target instanceof Element) return target
+  if (target instanceof Node) return target.parentElement
+  return null
+}
+
 const SelectionBox: React.FC<SelectionBoxProps> = ({
   isMultiSelectMode,
   scrollContainerRef,
@@ -40,8 +46,10 @@ const SelectionBox: React.FC<SelectionBoxProps> = ({
     }
 
     const handleMouseDown = (e: MouseEvent) => {
-      if ((e.target as HTMLElement).closest('.ant-checkbox-wrapper')) return
-      if ((e.target as HTMLElement).closest('.MessageFooter')) return
+      const target = getEventTargetElement(e.target)
+      if (!target) return
+      if (target.closest('.ant-checkbox-wrapper')) return
+      if (target.closest('.MessageFooter')) return
 
       e.preventDefault()
 
