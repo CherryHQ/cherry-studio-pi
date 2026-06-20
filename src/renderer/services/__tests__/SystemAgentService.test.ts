@@ -140,6 +140,61 @@ describe('SystemAgentService', () => {
     )
   })
 
+  it('redacts sensitive renderer error payloads before handing them to the system agent', async () => {
+    await reportErrorToSystemAgent(
+      new Error(
+        'sync failed apiKey=sk-secret Authorization: Bearer bearer-secret at https://user:pass@example.test/data'
+      ),
+      {
+        source: 'test.redacted-error',
+        details: {
+          webdavPass: 'dav-secret',
+          passage: 'visible passage',
+          tokenCount: 42,
+          nested: {
+            privateKey: 'pem-secret',
+            url: 'https://nested-user:nested-pass@example.test/resource'
+          }
+        },
+        capabilityInput: {
+          password: 'plain-secret',
+          bypassReason: 'visible reason'
+        }
+      },
+      { dedupe: false }
+    )
+
+    const handleEvent = window.api.systemAgent.handleEvent as unknown as ReturnType<typeof vi.fn>
+    const eventPayload = handleEvent.mock.calls[0][0]
+    const serializedPayload = JSON.stringify(eventPayload)
+
+    expect(serializedPayload).not.toContain('sk-secret')
+    expect(serializedPayload).not.toContain('bearer-secret')
+    expect(serializedPayload).not.toContain('user:pass')
+    expect(serializedPayload).not.toContain('dav-secret')
+    expect(serializedPayload).not.toContain('pem-secret')
+    expect(serializedPayload).not.toContain('nested-user:nested-pass')
+    expect(serializedPayload).not.toContain('plain-secret')
+    expect(eventPayload).toEqual(
+      expect.objectContaining({
+        message: expect.stringContaining('apiKey=[redacted]'),
+        details: expect.objectContaining({
+          webdavPass: '[redacted]',
+          passage: 'visible passage',
+          tokenCount: 42,
+          nested: expect.objectContaining({
+            privateKey: '[redacted]',
+            url: 'https://[redacted]@example.test/resource'
+          })
+        }),
+        capabilityInput: expect.objectContaining({
+          password: '[redacted]',
+          bypassReason: 'visible reason'
+        })
+      })
+    )
+  })
+
   it('uses readable fallback messages for nullish and blank automatic errors', async () => {
     await reportErrorToSystemAgent(null, {
       source: 'test.null-error'
