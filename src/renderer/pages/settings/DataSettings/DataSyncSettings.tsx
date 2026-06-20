@@ -262,6 +262,9 @@ const DataSyncSettings: FC = () => {
 
   useEffect(() => {
     return () => {
+      statusRefreshSeqRef.current += 1
+      statusRefreshLoadingSeqRef.current += 1
+      directoryLoadSeqRef.current += 1
       diagnosisSeqRef.current += 1
     }
   }, [])

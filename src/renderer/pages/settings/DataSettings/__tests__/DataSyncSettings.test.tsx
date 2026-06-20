@@ -261,6 +261,24 @@ describe('DataSyncSettings', () => {
     await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
   })
 
+  it('ignores pending status refresh responses after unmount', async () => {
+    const pendingStatus = deferred<ReturnType<typeof idleStatus>>()
+    mocks.getStatus.mockImplementationOnce(() => pendingStatus.promise)
+
+    const { unmount } = render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    unmount()
+
+    await act(async () => {
+      pendingStatus.resolve(idleStatus())
+      await pendingStatus.promise
+      await Promise.resolve()
+    })
+
+    expect(mocks.refreshDataSyncRuntimeStateFromMain).not.toHaveBeenCalled()
+  })
+
   it('does not leave the sync button stuck when status refresh fails', async () => {
     mocks.getStatus.mockResolvedValueOnce(runningStatus()).mockRejectedValueOnce(new Error('status unavailable'))
 
@@ -779,6 +797,31 @@ describe('DataSyncSettings', () => {
 
     expect(await screen.findByText('/fresh')).toBeTruthy()
     expect(screen.queryByText('/slow/stale')).toBeNull()
+  })
+
+  it('cancels pending remote directory loads after unmount', async () => {
+    const pendingDirectory = deferred<{
+      path: string
+      parentPath: string | null
+      directories: Array<{ name: string; path: string; modifiedAt: string | null }>
+    }>()
+    mocks.listRemoteDirectories.mockImplementationOnce(() => pendingDirectory.promise)
+
+    const { unmount } = render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(screen.getByText('settings.data.data_sync.remote_path_browse'))
+    await waitFor(() => expect(mocks.listRemoteDirectories).toHaveBeenCalledTimes(1))
+
+    unmount()
+
+    await act(async () => {
+      pendingDirectory.reject(new Error('late directory failure'))
+      await pendingDirectory.promise.catch(() => undefined)
+      await Promise.resolve()
+    })
+
+    expect(mocks.reportErrorToSystemAgent).not.toHaveBeenCalled()
   })
 
   it('shows directory browser failures without leaving the directory loader stuck', async () => {
