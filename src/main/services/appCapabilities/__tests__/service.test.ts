@@ -67,8 +67,8 @@ describe('AppCapabilityService', () => {
     expect(result).toEqual({
       ok: false,
       isError: true,
-      summary: 'Capability does not support dry run: settings.value.set',
-      error: 'Capability does not support dry run: settings.value.set'
+      summary: '能力不支持 dry run：settings.value.set',
+      error: '能力不支持 dry run：settings.value.set'
     })
     expect(executeCapability).not.toHaveBeenCalled()
   })
@@ -79,8 +79,8 @@ describe('AppCapabilityService', () => {
     await expect(service.call(null as any)).resolves.toEqual({
       ok: false,
       isError: true,
-      summary: 'Capability not found: (empty)',
-      error: 'Capability not found: (empty)'
+      summary: '未找到能力：(empty)',
+      error: '未找到能力：(empty)'
     })
   })
 
@@ -93,8 +93,8 @@ describe('AppCapabilityService', () => {
     expect(result).toMatchObject({
       ok: false,
       isError: true,
-      summary: 'Capability not found: missing.apiKey=[redacted]',
-      error: 'Capability not found: missing.apiKey=[redacted]'
+      summary: '未找到能力：missing.apiKey=[redacted]',
+      error: '未找到能力：missing.apiKey=[redacted]'
     })
   })
 
@@ -107,7 +107,7 @@ describe('AppCapabilityService', () => {
     await expect(service.call('settings.read', {}, { source: 'agent', signal: controller.signal })).resolves.toEqual({
       ok: false,
       isError: true,
-      summary: 'settings.read aborted: user stopped task',
+      summary: 'settings.read 已取消：user stopped task',
       error: 'user stopped task'
     })
 
@@ -126,7 +126,7 @@ describe('AppCapabilityService', () => {
     expect(result).toEqual({
       ok: false,
       isError: true,
-      summary: 'settings.read aborted: stopped with password=[redacted]',
+      summary: 'settings.read 已取消：stopped with password=[redacted]',
       error: 'stopped with password=[redacted]'
     })
     expect(executeCapability).not.toHaveBeenCalled()
@@ -144,7 +144,7 @@ describe('AppCapabilityService', () => {
     await expect(service.call('settings.read', {}, { source: 'agent', signal: controller.signal })).resolves.toEqual({
       ok: false,
       isError: true,
-      summary: 'settings.read aborted: user stopped while running',
+      summary: 'settings.read 已取消：user stopped while running',
       error: 'user stopped while running'
     })
 
@@ -164,7 +164,7 @@ describe('AppCapabilityService', () => {
     await expect(resultPromise).resolves.toEqual({
       ok: false,
       isError: true,
-      summary: 'settings.read aborted: user stopped a stuck provider',
+      summary: 'settings.read 已取消：user stopped a stuck provider',
       error: 'user stopped a stuck provider'
     })
     expect(executeCapability).toHaveBeenCalledTimes(1)
@@ -182,7 +182,7 @@ describe('AppCapabilityService', () => {
     await expect(service.call('settings.read', {}, { source: 'agent', signal: controller.signal })).resolves.toEqual({
       ok: false,
       isError: true,
-      summary: 'settings.read aborted: system timeout',
+      summary: 'settings.read 已取消：system timeout',
       error: 'system timeout'
     })
 
@@ -302,8 +302,8 @@ describe('AppCapabilityService', () => {
     await expect(service.call('settings.read', {}, { source: 'agent' })).resolves.toEqual({
       ok: false,
       isError: true,
-      summary: 'settings.read returned an invalid result: expected an object',
-      error: 'settings.read returned an invalid result: expected an object'
+      summary: 'settings.read 返回了无效结果：应返回对象',
+      error: 'settings.read 返回了无效结果：应返回对象'
     })
   })
 
@@ -315,8 +315,8 @@ describe('AppCapabilityService', () => {
     await expect(service.call('settings.read', {}, { source: 'agent' })).resolves.toEqual({
       ok: false,
       isError: true,
-      summary: 'settings.read returned an invalid result: missing boolean ok',
-      error: 'settings.read returned an invalid result: missing boolean ok'
+      summary: 'settings.read 返回了无效结果：缺少布尔值 ok',
+      error: 'settings.read 返回了无效结果：缺少布尔值 ok'
     })
   })
 
@@ -328,14 +328,14 @@ describe('AppCapabilityService', () => {
 
     await expect(service.call('settings.read', {}, { source: 'agent' })).resolves.toEqual({
       ok: true,
-      summary: 'settings.read completed',
+      summary: 'settings.read 已完成',
       data: { value: 1 }
     })
 
     await expect(service.call('settings.read', {}, { source: 'agent' })).resolves.toEqual({
       ok: false,
       isError: true,
-      summary: 'settings.read failed: bad input',
+      summary: 'settings.read 调用失败：bad input',
       error: 'bad input'
     })
   })

@@ -12,12 +12,22 @@ import type {
 import { redactAgentText, sanitizeAppCapabilityResultForAgent } from './utils'
 
 const logger = loggerService.withContext('AppCapabilityService')
+const DEFAULT_ABORT_REASON = '能力调用已取消。'
+const INVALID_RESULT_EXPECTED_OBJECT_REASON = '应返回对象'
+const INVALID_RESULT_MISSING_OK_REASON = '缺少布尔值 ok'
+const INVALID_RESULT_INFIX = ' 返回了无效结果：'
+const CAPABILITY_NOT_FOUND_PREFIX = '未找到能力：'
+const CAPABILITY_COMPLETED_SUFFIX = ' 已完成'
+const CAPABILITY_FAILED_SUFFIX = ' 调用失败'
+const CAPABILITY_FAILED_INFIX = ' 调用失败：'
+const CAPABILITY_ABORTED_INFIX = ' 已取消：'
+const DRY_RUN_UNSUPPORTED_PREFIX = '能力不支持 dry run：'
 
 function abortReasonMessage(signal: AbortSignal) {
   const reason = signal.reason
   if (reason instanceof Error && reason.message) return reason.message
   if (typeof reason === 'string' && reason.trim()) return reason.trim()
-  return 'Capability call aborted'
+  return DEFAULT_ABORT_REASON
 }
 
 function abortReasonError(signal: AbortSignal) {
@@ -57,7 +67,7 @@ function sanitizeResultForSource<T>(
 }
 
 function invalidCapabilityResult<T>(capabilityId: string, reason: string): AppCapabilityResult<T> {
-  const message = `${capabilityId} returned an invalid result: ${reason}`
+  const message = capabilityId + INVALID_RESULT_INFIX + reason
   return {
     ok: false,
     isError: true,
@@ -68,22 +78,22 @@ function invalidCapabilityResult<T>(capabilityId: string, reason: string): AppCa
 
 function normalizeCapabilityResult<T>(capabilityId: string, result: unknown): AppCapabilityResult<T> {
   if (!result || typeof result !== 'object' || Array.isArray(result)) {
-    return invalidCapabilityResult(capabilityId, 'expected an object')
+    return invalidCapabilityResult(capabilityId, INVALID_RESULT_EXPECTED_OBJECT_REASON)
   }
 
   const candidate = result as Partial<AppCapabilityResult<T>>
   if (typeof candidate.ok !== 'boolean') {
-    return invalidCapabilityResult(capabilityId, 'missing boolean ok')
+    return invalidCapabilityResult(capabilityId, INVALID_RESULT_MISSING_OK_REASON)
   }
 
   const summary =
     typeof candidate.summary === 'string' && candidate.summary.trim()
       ? candidate.summary
       : candidate.ok
-        ? `${capabilityId} completed`
+        ? capabilityId + CAPABILITY_COMPLETED_SUFFIX
         : typeof candidate.error === 'string' && candidate.error.trim()
-          ? `${capabilityId} failed: ${candidate.error}`
-          : `${capabilityId} failed`
+          ? capabilityId + CAPABILITY_FAILED_INFIX + candidate.error
+          : capabilityId + CAPABILITY_FAILED_SUFFIX
 
   return {
     ...candidate,
@@ -132,8 +142,8 @@ export class AppCapabilityService {
         {
           ok: false,
           isError: true,
-          summary: `Capability not found: ${displayCapabilityId}`,
-          error: `Capability not found: ${displayCapabilityId}`
+          summary: CAPABILITY_NOT_FOUND_PREFIX + displayCapabilityId,
+          error: CAPABILITY_NOT_FOUND_PREFIX + displayCapabilityId
         },
         context.source ?? 'system'
       )
@@ -145,7 +155,7 @@ export class AppCapabilityService {
         {
           ok: false,
           isError: true,
-          summary: `${capabilityId} aborted: ${message}`,
+          summary: capabilityId + CAPABILITY_ABORTED_INFIX + message,
           error: message
         },
         context.source ?? 'system'
@@ -153,7 +163,7 @@ export class AppCapabilityService {
     }
 
     if (context.dryRun === true && capability.risk !== 'read' && capability.supportsDryRun !== true) {
-      const message = `Capability does not support dry run: ${displayCapabilityId}`
+      const message = DRY_RUN_UNSUPPORTED_PREFIX + displayCapabilityId
       return sanitizeResultForSource(
         {
           ok: false,
@@ -193,7 +203,7 @@ export class AppCapabilityService {
           {
             ok: false,
             isError: true,
-            summary: `${capabilityId} aborted: ${message}`,
+            summary: capabilityId + CAPABILITY_ABORTED_INFIX + message,
             error: message
           },
           context.source ?? 'system'
@@ -207,7 +217,7 @@ export class AppCapabilityService {
           {
             ok: false,
             isError: true,
-            summary: `${capabilityId} aborted: ${message}`,
+            summary: capabilityId + CAPABILITY_ABORTED_INFIX + message,
             error: message
           },
           context.source ?? 'system'
@@ -220,7 +230,7 @@ export class AppCapabilityService {
         {
           ok: false,
           isError: true,
-          summary: `${capabilityId} failed: ${message}`,
+          summary: capabilityId + CAPABILITY_FAILED_INFIX + message,
           error: message
         },
         context.source ?? 'system'
