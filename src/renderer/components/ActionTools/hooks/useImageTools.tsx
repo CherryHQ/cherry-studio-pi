@@ -23,9 +23,18 @@ export const useImageTools = (
   }
 ) => {
   const transformRef = useRef({ scale: 1, x: 0, y: 0 }) // 管理变换状态
+  const mountedRef = useRef(true)
   const { imgSelector, prefix, enableDrag, enableWheelZoom } = options
   const { t } = useTranslation()
   const { theme } = useTheme()
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   // 创建选择器函数
   const getImgElement = useCallback((): SVGElement | null => {
@@ -212,10 +221,14 @@ export const useImageTools = (
 
       const blob = await svgToPngBlob(imgElement)
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-      window.toast.success(t('message.copy.success'))
+      if (mountedRef.current) {
+        window.toast.success(t('message.copy.success'))
+      }
     } catch (error) {
       logger.error('Copy failed:', error as Error)
-      window.toast.error(t('message.copy.failed'))
+      if (mountedRef.current) {
+        window.toast.error(t('message.copy.failed'))
+      }
     }
   }, [getCleanImgElement, t])
 

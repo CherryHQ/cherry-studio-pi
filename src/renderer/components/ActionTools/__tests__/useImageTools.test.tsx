@@ -1,5 +1,5 @@
 import { useImageTools } from '@renderer/components/ActionTools'
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Mock dependencies
@@ -15,6 +15,23 @@ const mocks = vi.hoisted(() => ({
     show: vi.fn()
   }
 }))
+
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T | PromiseLike<T>) => void
+  reject: (reason?: unknown) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: Deferred<T>['resolve']
+  let reject!: Deferred<T>['reject']
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}
 
 vi.mock('@renderer/utils/image', () => ({
   svgToPngBlob: mocks.svgToPngBlob,
@@ -297,6 +314,38 @@ describe('useImageTools', () => {
       expect(mocks.svgToPngBlob).toHaveBeenCalledWith(mockSvg)
       expect(mockWrite).toHaveBeenCalled()
       expect(mockedToast.success).toHaveBeenCalledWith('message.copy.success')
+    })
+
+    it('should ignore delayed copy feedback after unmount', async () => {
+      const mockContainer = createMockContainer()
+      const mockSvg = createMockSvgElement()
+      mockContainer.querySelector = vi.fn().mockReturnValue(mockSvg)
+      const runningWrite = deferred<void>()
+
+      mocks.svgToPngBlob.mockResolvedValue(new Blob(['test'], { type: 'image/png' }))
+      mockWrite.mockReturnValueOnce(runningWrite.promise)
+
+      const { result, unmount } = renderHook(() =>
+        useImageTools(
+          { current: mockContainer },
+          {
+            prefix: 'test',
+            imgSelector: 'svg'
+          }
+        )
+      )
+
+      const copyPromise = result.current.copy()
+      await waitFor(() => expect(mockWrite).toHaveBeenCalled())
+      unmount()
+
+      await act(async () => {
+        runningWrite.resolve()
+        await copyPromise
+      })
+
+      expect(mockedToast.success).not.toHaveBeenCalled()
+      expect(mockedToast.error).not.toHaveBeenCalled()
     })
 
     it('should download image as PNG and SVG', async () => {
