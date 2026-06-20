@@ -10,6 +10,28 @@ import type { WebDAVClient } from 'webdav'
 
 vi.unmock('node:fs')
 
+type MockWithCalls = {
+  mock: {
+    calls: unknown[][]
+  }
+}
+
+const matchesExpectedValue = (actual: unknown, expected: unknown) => {
+  const matcher = expected as { asymmetricMatch?: (value: unknown) => boolean } | null
+  if (typeof matcher?.asymmetricMatch === 'function') {
+    return matcher.asymmetricMatch(actual)
+  }
+  return Object.is(actual, expected)
+}
+
+const expectFirstArgCalledWith = (mock: MockWithCalls, expected: unknown) => {
+  expect(mock.mock.calls.some(([actual]) => matchesExpectedValue(actual, expected))).toBe(true)
+}
+
+const expectFirstArgNotCalledWith = (mock: MockWithCalls, expected: unknown) => {
+  expect(mock.mock.calls.some(([actual]) => matchesExpectedValue(actual, expected))).toBe(false)
+}
+
 const mocks = vi.hoisted(() => ({
   db: {
     listRecords: vi.fn(),
@@ -781,8 +803,8 @@ describe('AppDataSyncService', () => {
   it('does not append the sync suffix twice when users paste the internal sync path', async () => {
     await new AppDataSyncService().syncNow({ ...config, webdavPath: '/remote-root/sync/v1' })
 
-    expect(mocks.webdav.exists).toHaveBeenCalledWith('/remote-root/sync/v1')
-    expect(mocks.webdav.exists).not.toHaveBeenCalledWith('/remote-root/sync/v1/sync/v1')
+    expectFirstArgCalledWith(mocks.webdav.exists, '/remote-root/sync/v1')
+    expectFirstArgNotCalledWith(mocks.webdav.exists, '/remote-root/sync/v1/sync/v1')
   })
 
   it('uses a portable remote file lock even when the provider supports native LOCK', async () => {
@@ -793,7 +815,7 @@ describe('AppDataSyncService', () => {
     expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
       expect.stringMatching(/^\/remote-root\/sync\/v1\/\.sync\.locks\/local-device\.[a-f0-9-]+\.json$/),
       expect.stringContaining('"ownerId": "local-device"'),
-      { overwrite: false }
+      expect.objectContaining({ overwrite: false })
     )
     const lockWrite = mocks.webdav.putFileContents.mock.calls.find(
       ([filePath, , options]) => String(filePath).includes('/.sync.locks/') && options?.overwrite === false
@@ -808,7 +830,8 @@ describe('AppDataSyncService', () => {
       })
     )
     expect(lockPayload.expiresAt).toBeLessThanOrEqual(lockPayload.deadlineAt)
-    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(
+    expectFirstArgCalledWith(
+      mocks.webdav.deleteFile,
       expect.stringMatching(/^\/remote-root\/sync\/v1\/\.sync\.locks\/local-device\.[a-f0-9-]+\.json$/)
     )
   })
@@ -825,6 +848,28 @@ describe('AppDataSyncService', () => {
     expect(mocks.runtimeFlush.flushMainStorageV2RuntimeMirrors.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.storageRecordSync.sync.mock.invocationCallOrder[0]
     )
+  })
+
+  it('passes the sync-run abort signal into WebDAV sync requests', async () => {
+    await new AppDataSyncService().syncNow(config)
+
+    const lockWrite = mocks.webdav.putFileContents.mock.calls.find(
+      ([filePath, , options]) => String(filePath).includes('/.sync.locks/') && options?.overwrite === false
+    )
+    expect(lockWrite?.[2]).toEqual(expect.objectContaining({ overwrite: false, signal: expect.any(AbortSignal) }))
+
+    const manifestRead = mocks.webdav.getFileContents.mock.calls.find(
+      ([filePath]) => filePath === '/remote-root/sync/v1/manifest.json'
+    )
+    expect(manifestRead?.[1]).toEqual(expect.objectContaining({ format: 'binary', signal: expect.any(AbortSignal) }))
+
+    const manifestWrite = mocks.webdav.putFileContents.mock.calls.find(
+      ([filePath, , options]) => filePath === '/remote-root/sync/v1/manifest.json' && options?.overwrite === true
+    )
+    expect(manifestWrite?.[2]).toEqual(expect.objectContaining({ overwrite: true, signal: expect.any(AbortSignal) }))
+
+    const storageSyncCall = mocks.storageRecordSync.sync.mock.calls[0]
+    expect(storageSyncCall?.[3]).toEqual(expect.objectContaining({ signal: expect.any(AbortSignal) }))
   })
 
   it('forgets a transient remote lock renewal failure after a later renewal succeeds', async () => {
@@ -1032,11 +1077,11 @@ describe('AppDataSyncService', () => {
       })
       await vi.advanceTimersByTimeAsync(0)
 
-      expect(mocks.webdav.deleteFile).not.toHaveBeenCalledWith(lockPath)
+      expectFirstArgNotCalledWith(mocks.webdav.deleteFile, lockPath)
 
       pendingRenewal.resolve(true)
       await expect(sync).resolves.toEqual(expect.objectContaining({ status: 'success' }))
-      expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(lockPath)
+      expectFirstArgCalledWith(mocks.webdav.deleteFile, lockPath)
       expect(mocks.remoteFiles.has(lockPath!)).toBe(false)
     } finally {
       vi.useRealTimers()
@@ -1106,7 +1151,7 @@ describe('AppDataSyncService', () => {
 
     await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端同步锁读取失败')
 
-    expect(mocks.webdav.getFileContents).not.toHaveBeenCalledWith(lockPath, { format: 'binary' })
+    expectFirstArgNotCalledWith(mocks.webdav.getFileContents, lockPath)
     expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
   })
 
@@ -1134,7 +1179,7 @@ describe('AppDataSyncService', () => {
 
     await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('另一台设备正在同步这个 WebDAV 目录')
 
-    expect(mocks.webdav.deleteFile).not.toHaveBeenCalledWith(lockPath)
+    expectFirstArgNotCalledWith(mocks.webdav.deleteFile, lockPath)
     expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
     expect(mocks.webdav.putFileContents).not.toHaveBeenCalledWith(
       expect.stringMatching(/\.cherry-studio-pi-write-test-/),
@@ -1151,7 +1196,7 @@ describe('AppDataSyncService', () => {
     const summary = await new AppDataSyncService().syncNow(config)
 
     expect(summary.status).toBe('success')
-    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(lockPath)
+    expectFirstArgCalledWith(mocks.webdav.deleteFile, lockPath)
     expect(mocks.remoteFiles.has(lockPath)).toBe(false)
     expect(mocks.storageRecordSync.sync).toHaveBeenCalled()
   })
@@ -1201,7 +1246,7 @@ describe('AppDataSyncService', () => {
     const summary = await new AppDataSyncService().syncNow(config)
 
     expect(summary.status).toBe('success')
-    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/.sync.lock.json')
+    expectFirstArgCalledWith(mocks.webdav.deleteFile, '/remote-root/sync/v1/.sync.lock.json')
     expect(mocks.storageRecordSync.sync).toHaveBeenCalled()
   })
 
@@ -1230,7 +1275,7 @@ describe('AppDataSyncService', () => {
 
     await expect(service.syncNow(config)).rejects.toThrow('当前设备已有一次同步正在占用这个 WebDAV 目录')
 
-    expect(mocks.webdav.deleteFile).not.toHaveBeenCalledWith(lockPath)
+    expectFirstArgNotCalledWith(mocks.webdav.deleteFile, lockPath)
     expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
   })
 
@@ -1253,7 +1298,7 @@ describe('AppDataSyncService', () => {
       const summary = await new AppDataSyncService().syncNow(config)
 
       expect(summary.status).toBe('success')
-      expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/.sync.lock.json')
+      expectFirstArgCalledWith(mocks.webdav.deleteFile, '/remote-root/sync/v1/.sync.lock.json')
       expect(mocks.storageRecordSync.sync).toHaveBeenCalled()
     } finally {
       nowSpy.mockRestore()
@@ -1281,7 +1326,7 @@ describe('AppDataSyncService', () => {
       const summary = await new AppDataSyncService().syncNow(config)
 
       expect(summary.status).toBe('success')
-      expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/.sync.lock.json')
+      expectFirstArgCalledWith(mocks.webdav.deleteFile, '/remote-root/sync/v1/.sync.lock.json')
       expect(mocks.storageRecordSync.sync).toHaveBeenCalled()
     } finally {
       nowSpy.mockRestore()
@@ -1456,11 +1501,14 @@ describe('AppDataSyncService', () => {
 
     await new AppDataSyncService().syncNow(config)
 
-    expect(mocks.webdav.createDirectory).toHaveBeenCalledWith('/remote-root/sync/v1', { recursive: true })
+    expect(mocks.webdav.createDirectory).toHaveBeenCalledWith(
+      '/remote-root/sync/v1',
+      expect.objectContaining({ recursive: true })
+    )
     expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
       expect.stringMatching(/^\/remote-root\/sync\/v1\/\.cherry-studio-pi-write-test-/),
       'ok',
-      { overwrite: true }
+      expect.objectContaining({ overwrite: true })
     )
   })
 
@@ -2226,7 +2274,7 @@ describe('AppDataSyncService', () => {
 
     await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端同步状态 manifest.json过大')
 
-    expect(mocks.webdav.getFileContents).not.toHaveBeenCalledWith(manifestPath, { format: 'binary' })
+    expectFirstArgNotCalledWith(mocks.webdav.getFileContents, manifestPath)
     expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
   })
 
@@ -2506,7 +2554,7 @@ describe('AppDataSyncService', () => {
 
     await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端笔记文件 big.md过大')
 
-    expect(mocks.webdav.getFileContents).not.toHaveBeenCalledWith(notePath, { format: 'binary' })
+    expectFirstArgNotCalledWith(mocks.webdav.getFileContents, notePath)
   })
 
   it('rejects oversized local notes files before uploading them', async () => {
@@ -2631,7 +2679,7 @@ describe('AppDataSyncService', () => {
 
     await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('远端 Skills 目录数据包无法解压或解析')
 
-    expect(mocks.webdav.getFileContents).toHaveBeenCalledWith(remoteBundlePath, { format: 'binary' })
+    expectFirstArgCalledWith(mocks.webdav.getFileContents, remoteBundlePath)
     expect(mocks.runtimeProjection.projectAgents).not.toHaveBeenCalled()
     expect(mocks.runtimeProjection.projectFiles).not.toHaveBeenCalled()
     expect(mocks.runtimeProjection.projectAppData).not.toHaveBeenCalled()
@@ -2688,7 +2736,7 @@ describe('AppDataSyncService', () => {
 
     await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('异常文件内容长度')
 
-    expect(mocks.webdav.getFileContents).toHaveBeenCalledWith(remoteBundlePath, { format: 'binary' })
+    expectFirstArgCalledWith(mocks.webdav.getFileContents, remoteBundlePath)
     expect(mocks.runtimeProjection.projectAgents).not.toHaveBeenCalled()
     expect(mocks.runtimeProjection.projectFiles).not.toHaveBeenCalled()
     expect(mocks.runtimeProjection.projectAppData).not.toHaveBeenCalled()
@@ -3024,7 +3072,7 @@ describe('AppDataSyncService', () => {
 
     await expect(fsp.readFile(localSkillPath, 'utf8')).resolves.toBe('# Local User Skill')
     expect(summary.uploaded).toBeGreaterThanOrEqual(1)
-    expect(mocks.webdav.getFileContents).not.toHaveBeenCalledWith(emptyRemoteBundlePath, { format: 'binary' })
+    expectFirstArgNotCalledWith(mocks.webdav.getFileContents, emptyRemoteBundlePath)
     const publishedManifest = JSON.parse(String(mocks.remoteFiles.get('/remote-root/sync/v1/manifest.json')))
     expect(publishedManifest.runtimeDirectories.directories.Skills).toEqual(
       expect.objectContaining({
@@ -3371,7 +3419,7 @@ describe('AppDataSyncService', () => {
     expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
       expect.stringContaining('/manifest.json'),
       expect.stringContaining('"syncSpace"'),
-      { overwrite: true }
+      expect.objectContaining({ overwrite: true })
     )
   })
 
@@ -3410,11 +3458,11 @@ describe('AppDataSyncService', () => {
     const snapshotUpload = mocks.webdav.putFileContents.mock.calls.find(([filePath]) =>
       String(filePath).includes(`/backups/${summary.snapshotFileName}`)
     )
-    expect(snapshotUpload?.[2]).toEqual({ overwrite: true, contentLength: 6 })
+    expect(snapshotUpload?.[2]).toEqual(expect.objectContaining({ overwrite: true, contentLength: 6 }))
     expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
       expect.stringContaining('/manifest.json'),
       expect.stringContaining('"syncSpace"'),
-      { overwrite: true }
+      expect.objectContaining({ overwrite: true })
     )
   })
 
@@ -3467,15 +3515,16 @@ describe('AppDataSyncService', () => {
     const summary = await new AppDataSyncService().syncNow(config)
 
     expect(summary.status).toBe('success')
-    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/.tmp-manifest.json-stale.json')
-    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/.tmp-.sync.lock.json-stale.json')
-    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/.cherry-studio-pi-write-test-stale.tmp')
-    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(
+    expectFirstArgCalledWith(mocks.webdav.deleteFile, '/remote-root/sync/v1/.tmp-manifest.json-stale.json')
+    expectFirstArgCalledWith(mocks.webdav.deleteFile, '/remote-root/sync/v1/.tmp-.sync.lock.json-stale.json')
+    expectFirstArgCalledWith(mocks.webdav.deleteFile, '/remote-root/sync/v1/.cherry-studio-pi-write-test-stale.tmp')
+    expectFirstArgCalledWith(
+      mocks.webdav.deleteFile,
       '/remote-root/sync/v1/.cherry-studio-pi-storage-write-test-stale.tmp'
     )
-    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/records/settings/stale-hash.json')
-    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/backups')
-    expect(mocks.webdav.deleteFile).not.toHaveBeenCalledWith('/remote-root/sync/v1/records/settings/theme.json')
+    expectFirstArgCalledWith(mocks.webdav.deleteFile, '/remote-root/sync/v1/records/settings/stale-hash.json')
+    expectFirstArgCalledWith(mocks.webdav.deleteFile, '/remote-root/sync/v1/backups')
+    expectFirstArgNotCalledWith(mocks.webdav.deleteFile, '/remote-root/sync/v1/records/settings/theme.json')
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/.tmp-manifest.json-stale.json')).toBe(false)
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/.tmp-.sync.lock.json-stale.json')).toBe(false)
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/.cherry-studio-pi-write-test-stale.tmp')).toBe(false)
@@ -3511,8 +3560,8 @@ describe('AppDataSyncService', () => {
     const summary = await new AppDataSyncService().syncNow(config)
 
     expect(summary.status).toBe('success')
-    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/records/settings/stale-hash.json')
-    expect(mocks.webdav.deleteFile).not.toHaveBeenCalledWith('/remote-root/sync/v1/records/settings/theme.json')
+    expectFirstArgCalledWith(mocks.webdav.deleteFile, '/remote-root/sync/v1/records/settings/stale-hash.json')
+    expectFirstArgNotCalledWith(mocks.webdav.deleteFile, '/remote-root/sync/v1/records/settings/theme.json')
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/records/settings/stale-hash.json')).toBe(false)
   })
 
@@ -3554,8 +3603,8 @@ describe('AppDataSyncService', () => {
     const summary = await new AppDataSyncService().syncNow(config)
 
     expect(summary.status).toBe('success')
-    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(insideTempPath)
-    expect(mocks.webdav.deleteFile).not.toHaveBeenCalledWith(outsideTempPath)
+    expectFirstArgCalledWith(mocks.webdav.deleteFile, insideTempPath)
+    expectFirstArgNotCalledWith(mocks.webdav.deleteFile, outsideTempPath)
     expect(mocks.remoteFiles.has(insideTempPath)).toBe(false)
     expect(mocks.remoteFiles.has(outsideTempPath)).toBe(true)
   })
@@ -3577,8 +3626,8 @@ describe('AppDataSyncService', () => {
     const summary = await new AppDataSyncService().syncNow(config)
 
     expect(summary.status).toBe('success')
-    expect(mocks.webdav.getDirectoryContents).toHaveBeenCalledWith('/remote-root/sync/v1/records/settings')
-    expect(mocks.webdav.deleteFile).not.toHaveBeenCalledWith(stalePath)
+    expectFirstArgCalledWith(mocks.webdav.getDirectoryContents, '/remote-root/sync/v1/records/settings')
+    expectFirstArgNotCalledWith(mocks.webdav.deleteFile, stalePath)
   })
 
   it('fails visibly when stale app-data cleanup exceeds the remote file budget after publishing', async () => {
@@ -3620,7 +3669,7 @@ describe('AppDataSyncService', () => {
     const summary = await new AppDataSyncService().syncNow(config)
 
     expect(summary.status).toBe('success')
-    expect(mocks.webdav.deleteFile).toHaveBeenCalledWith('/remote-root/sync/v1/records')
+    expectFirstArgCalledWith(mocks.webdav.deleteFile, '/remote-root/sync/v1/records')
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/records/settings/old-one.json')).toBe(false)
     expect(mocks.remoteFiles.has('/remote-root/sync/v1/records/settings/old-two.json')).toBe(false)
   })
@@ -3759,9 +3808,9 @@ describe('AppDataSyncService', () => {
     expect(
       mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).includes('/.tmp-manifest.json'))
     ).toBe(false)
-    expect(mocks.webdav.getDirectoryContents).toHaveBeenCalledWith('/remote-root/sync/v1')
-    expect(mocks.webdav.getDirectoryContents).not.toHaveBeenCalledWith('/remote-root/sync/v1/records')
-    expect(mocks.webdav.getDirectoryContents).not.toHaveBeenCalledWith('/remote-root/sync/v1/storage-v2/bundle')
+    expectFirstArgCalledWith(mocks.webdav.getDirectoryContents, '/remote-root/sync/v1')
+    expectFirstArgNotCalledWith(mocks.webdav.getDirectoryContents, '/remote-root/sync/v1/records')
+    expectFirstArgNotCalledWith(mocks.webdav.getDirectoryContents, '/remote-root/sync/v1/storage-v2/bundle')
     expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith(
       'data-sync-last-remote-artifact-cleanup-at',
       expect.anything()
