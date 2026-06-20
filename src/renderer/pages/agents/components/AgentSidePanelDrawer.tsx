@@ -40,7 +40,7 @@ const PopupContainer = ({ resolve }: Props) => {
           paddingTop: isMac ? 'var(--navbar-height)' : 0,
           height: 'calc(100vh - var(--navbar-height))',
           overflow: 'hidden',
-          backgroundColor: 'var(--color-background-opacity)'
+          backgroundColor: 'var(--color-background)'
         },
         wrapper: {
           width: 'var(--assistants-width)'

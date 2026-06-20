@@ -79,7 +79,7 @@ const AgentChat = () => {
   if (isInitializing) {
     return (
       <Container className="flex flex-1 flex-col items-center justify-center">
-        <Loader2 className="size-6 animate-spin text-(--color-text-3)" />
+        <Loader2 className="size-6 animate-spin text-foreground-muted" />
       </Container>
     )
   }

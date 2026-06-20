@@ -143,7 +143,7 @@ const AgentSessionMessages = ({
                   <div
                     className="pointer-events-none flex w-full justify-center py-2.5"
                     style={{ background: 'var(--color-background)' }}>
-                    <LoadingIcon color="var(--color-text-2)" />
+                    <LoadingIcon color="var(--color-foreground-secondary)" />
                   </div>
                 )}
               </div>

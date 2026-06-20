@@ -137,7 +137,7 @@ const Sessions = ({ onSelectItem }: SessionsProps) => {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="flex h-full items-center justify-center">
-        <Loader2 className="size-5 animate-spin text-(--color-text-3)" />
+        <Loader2 className="size-5 animate-spin text-foreground-muted" />
       </motion.div>
     )
   }
@@ -146,11 +146,11 @@ const Sessions = ({ onSelectItem }: SessionsProps) => {
     return (
       <div
         role="alert"
-        className="m-2.5 flex items-start gap-2 rounded-md border border-(--color-error) bg-(--color-error)/10 px-3 py-2 text-sm">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-(--color-error)" />
+        className="m-2.5 flex items-start gap-2 rounded-md border border-destructive bg-destructive/10 px-3 py-2 text-sm">
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
         <div className="flex flex-1 flex-col gap-1">
           <div className="font-medium">{t('agent.session.get.error.failed')}</div>
-          <div className="text-(--color-text-3) text-xs">{formatErrorMessage(error)}</div>
+          <div className="text-foreground-muted text-xs">{formatErrorMessage(error)}</div>
           <div>
             <Button size="sm" variant="outline" onClick={() => void reload()} disabled={isValidating}>
               {t('common.retry')}
@@ -196,7 +196,7 @@ const Sessions = ({ onSelectItem }: SessionsProps) => {
       </DraggableVirtualList>
       {isLoadingMore && (
         <div className="flex justify-center py-2">
-          <Loader2 className="size-4 animate-spin text-(--color-text-3)" />
+          <Loader2 className="size-4 animate-spin text-foreground-muted" />
         </div>
       )}
     </div>

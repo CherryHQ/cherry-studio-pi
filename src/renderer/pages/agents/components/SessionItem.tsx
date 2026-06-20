@@ -77,9 +77,9 @@ const SessionItem = ({ session, channelType, pinned, onTogglePin, onDelete, onPr
             }
           }}>
           {isConfirmingDeletion ? (
-            <DeleteIcon size={14} color="var(--color-error)" style={{ pointerEvents: 'none' }} />
+            <DeleteIcon size={14} color="var(--color-error-base)" style={{ pointerEvents: 'none' }} />
           ) : (
-            <XIcon size={14} color="var(--color-text-3)" style={{ pointerEvents: 'none' }} />
+            <XIcon size={14} color="var(--color-foreground-muted)" style={{ pointerEvents: 'none' }} />
           )}
         </MenuButton>
       </Tooltip>
@@ -170,7 +170,7 @@ const SessionItem = ({ session, channelType, pinned, onTogglePin, onDelete, onPr
         onDoubleClick={() => startEdit(session.name ?? '')}
         title={session.name ?? session.id}
         style={{
-          borderRadius: 'var(--list-item-border-radius)',
+          borderRadius: 'var(--radius-lg)',
           cursor: isEditing ? 'default' : 'pointer'
         }}>
         {isPending && !isActive && <PendingIndicator />}
@@ -200,7 +200,7 @@ const SessionItem = ({ session, channelType, pinned, onTogglePin, onDelete, onPr
 
 const SessionListItem = styled.div`
   padding: 7px 12px;
-  border-radius: var(--list-item-border-radius);
+  border-radius: var(--radius-lg);
   font-size: 13px;
   display: flex;
   flex-direction: column;
@@ -210,11 +210,11 @@ const SessionListItem = styled.div`
 
   .menu {
     opacity: 0;
-    color: var(--color-text-3);
+    color: var(--color-foreground-muted);
   }
 
   &:hover {
-    background-color: var(--color-list-item-hover);
+    background-color: var(--color-accent);
     transition: background-color 0.1s;
 
     .menu {
@@ -223,23 +223,23 @@ const SessionListItem = styled.div`
   }
 
   &.active {
-    background-color: var(--color-list-item);
+    background-color: var(--color-background);
     box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     .menu {
       opacity: 1;
 
       &:hover {
-        color: var(--color-text-2);
+        color: var(--color-foreground-secondary);
       }
     }
   }
 
   &.singlealone {
     &:hover {
-      background-color: var(--color-background-soft);
+      background-color: var(--color-muted);
     }
     &.active {
-      background-color: var(--color-background-mute);
+      background-color: var(--color-accent);
       box-shadow: none;
     }
   }
@@ -275,7 +275,7 @@ const ChannelIconImg = styled.img`
 const SessionEditInput = styled.input`
   background: var(--color-background);
   border: none;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
   font-size: 13px;
   font-family: inherit;
   padding: 2px 6px;
@@ -306,7 +306,7 @@ const PendingIndicator = styled.div.attrs({
   left: 3px;
   top: 15px;
   border-radius: 50%;
-  background-color: var(--color-status-warning);
+  background-color: var(--color-warning);
 `
 
 const FulfilledIndicator = styled.div.attrs({
@@ -319,7 +319,7 @@ const FulfilledIndicator = styled.div.attrs({
   left: 3px;
   top: 15px;
   border-radius: 50%;
-  background-color: var(--color-status-success);
+  background-color: var(--color-success);
 `
 
 export default memo(SessionItem)
