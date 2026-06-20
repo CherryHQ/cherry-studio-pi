@@ -7,6 +7,28 @@ import { describe, expect, it } from 'vitest'
 import { Button } from '../button'
 
 describe('Button', () => {
+  it('defaults native buttons to type button', () => {
+    render(<Button>Open menu</Button>)
+
+    expect(screen.getByRole('button', { name: /open menu/i })).toHaveAttribute('type', 'button')
+  })
+
+  it('preserves explicit submit type for form actions', () => {
+    render(<Button type="submit">Save</Button>)
+
+    expect(screen.getByRole('button', { name: /save/i })).toHaveAttribute('type', 'submit')
+  })
+
+  it('does not force a button type onto asChild content', () => {
+    render(
+      <Button asChild>
+        <a href="/settings">Settings</a>
+      </Button>
+    )
+
+    expect(screen.getByRole('link', { name: /settings/i })).not.toHaveAttribute('type')
+  })
+
   it('emits data-busy for loading styles and disables the button', () => {
     render(<Button loading>Save</Button>)
 
