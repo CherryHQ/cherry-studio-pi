@@ -106,6 +106,15 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
   const [executionResult, setExecutionResult] = useState<{ text: string; image?: string } | null>(null)
 
   const [tools, setTools] = useState<ActionTool[]>([])
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const isExecutable = useMemo(() => {
     return codeExecutionEnabled && language === 'python'
@@ -152,10 +161,14 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
       // Prioritize getting content from editor, fallback to children
       const content = sourceViewRef.current?.getContent?.() ?? children
       await navigator.clipboard.writeText(content.trimEnd())
-      window.toast.success(t('code_block.copy.success'))
+      if (mountedRef.current) {
+        window.toast.success(t('code_block.copy.success'))
+      }
     } catch (error) {
       logger.error('Failed to copy to clipboard:', { error })
-      window.toast.error(t('code_block.copy.failed'))
+      if (mountedRef.current) {
+        window.toast.error(t('code_block.copy.failed'))
+      }
     }
   }, [children, t])
   // Note: sourceViewRef not in deps because it's a stable ref,
@@ -177,7 +190,9 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
     const ext = getExtensionByLanguage(language)
     void window.api.file.save(`${fileName}${ext}`, children).catch((error) => {
       logger.error('Failed to save code block source', error as Error)
-      window.toast.error(t('common.save_failed'))
+      if (mountedRef.current) {
+        window.toast.error(t('common.save_failed'))
+      }
     })
   }, [children, language, t])
 
@@ -188,16 +203,20 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
     pyodideService
       .runScript(children, {}, codeExecutionTimeoutMinutes * 60000)
       .then((result) => {
+        if (!mountedRef.current) return
         setExecutionResult(result)
       })
       .catch((error) => {
+        if (!mountedRef.current) return
         logger.error('Unexpected error:', error)
         setExecutionResult({
           text: `Unexpected error: ${error.message || 'Unknown error'}`
         })
       })
       .finally(() => {
-        setIsRunning(false)
+        if (mountedRef.current) {
+          setIsRunning(false)
+        }
       })
   }, [children, codeExecutionTimeoutMinutes])
 
