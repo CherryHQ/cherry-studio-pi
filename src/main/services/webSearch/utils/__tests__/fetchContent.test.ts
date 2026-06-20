@@ -36,7 +36,7 @@ vi.mock('jsdom', async () => {
   }
 })
 
-import { fetchWebSearchContent } from '../fetchContent'
+import { fetchWebSearchContent, MAX_WEB_SEARCH_CONTENT_BYTES } from '../fetchContent'
 
 function createTextResponse(body: string, contentType: string, status = 200) {
   return new Response(body, {
@@ -51,6 +51,7 @@ describe('fetchWebSearchContent', () => {
   beforeEach(() => {
     fetchMock.mockReset()
     jsdomConstructorMock.mockReset()
+    loggerMocks.warn.mockClear()
     loggerMocks.error.mockClear()
   })
 
@@ -74,6 +75,40 @@ describe('fetchWebSearchContent', () => {
     await fetchWebSearchContent('https://example.com/article')
 
     expect(jsdomConstructorMock).toHaveBeenCalledWith(html, { url: 'http://localhost/' })
+  })
+
+  it('limits streamed HTML before readability parsing when content-length is missing', async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined)
+    const releaseLock = vi.fn()
+    const text = vi.fn()
+    const html = `<html><body><article>${'a'.repeat(MAX_WEB_SEARCH_CONTENT_BYTES + 32)}</article></body></html>`
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'text/html' }),
+      body: {
+        getReader: () => ({
+          read: vi.fn().mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode(html)
+          }),
+          cancel,
+          releaseLock
+        })
+      },
+      text
+    } as unknown as Response)
+
+    await fetchWebSearchContent('https://example.com/large-article')
+
+    expect(cancel).toHaveBeenCalled()
+    expect(releaseLock).toHaveBeenCalled()
+    expect(text).not.toHaveBeenCalled()
+    expect(jsdomConstructorMock.mock.calls[0][0]).toHaveLength(MAX_WEB_SEARCH_CONTENT_BYTES)
+    expect(loggerMocks.warn).toHaveBeenCalledWith(
+      'Web search content truncated before readability parsing',
+      expect.objectContaining({ bytesRead: MAX_WEB_SEARCH_CONTENT_BYTES })
+    )
   })
 
   it('throws when fetching content fails', async () => {

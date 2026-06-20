@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
+import { DEFAULT_MAX_RESPONSE_TEXT_BYTES, readResponseTextWithinLimit } from '@main/utils/readResponseText'
 import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
 import { Readability } from '@mozilla/readability'
 import type { WebSearchResult } from '@shared/data/types/webSearch'
@@ -12,6 +13,7 @@ import { isAbortError } from './errors'
 const logger = loggerService.withContext('MainWebSearchContentFetcher')
 const turndownService = new TurndownService()
 const SAFE_JSDOM_URL = 'http://localhost/'
+export const MAX_WEB_SEARCH_CONTENT_BYTES = DEFAULT_MAX_RESPONSE_TEXT_BYTES
 
 function buildHeaders(headers?: HeadersInit) {
   const resolvedHeaders = new Headers(headers)
@@ -42,7 +44,17 @@ export async function fetchWebSearchContent(url: string, httpOptions: RequestIni
       throw new Error(`HTTP error: ${response.status}`)
     }
 
-    const html = await response.text()
+    const {
+      text: html,
+      truncated,
+      bytesRead
+    } = await readResponseTextWithinLimit(response, MAX_WEB_SEARCH_CONTENT_BYTES)
+    if (truncated) {
+      logger.warn('Web search content truncated before readability parsing', {
+        url: summarizeUrlForLog(safeUrl),
+        bytesRead
+      })
+    }
 
     const dom = new JSDOM(html, { url: SAFE_JSDOM_URL })
     const article = new Readability(dom.window.document).parse()

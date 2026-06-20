@@ -1,5 +1,6 @@
 // port https://github.com/zcaceres/fetch-mcp/blob/main/src/index.ts
 
+import { DEFAULT_MAX_RESPONSE_TEXT_BYTES, readResponseTextWithinLimit } from '@main/utils/readResponseText'
 import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
@@ -16,6 +17,11 @@ export const RequestPayloadSchema = z.object({
 export type RequestPayload = z.infer<typeof RequestPayloadSchema>
 
 export const MCP_FETCH_TIMEOUT_MS = 30_000
+export const MCP_FETCH_MAX_TEXT_BYTES = DEFAULT_MAX_RESPONSE_TEXT_BYTES
+
+function appendTruncationNotice(text: string, truncated: boolean): string {
+  return truncated ? `${text}\n\n[truncated after ${MCP_FETCH_MAX_TEXT_BYTES} bytes]` : text
+}
 
 export class Fetcher {
   private static async _fetch({ url, headers }: RequestPayload): Promise<Response> {
@@ -57,8 +63,8 @@ export class Fetcher {
   static async html(requestPayload: RequestPayload) {
     try {
       const response = await this._fetch(requestPayload)
-      const html = await response.text()
-      return { content: [{ type: 'text', text: html }], isError: false }
+      const { text: html, truncated } = await readResponseTextWithinLimit(response, MCP_FETCH_MAX_TEXT_BYTES)
+      return { content: [{ type: 'text', text: appendTruncationNotice(html, truncated) }], isError: false }
     } catch (error) {
       return {
         content: [{ type: 'text', text: (error as Error).message }],
@@ -70,7 +76,11 @@ export class Fetcher {
   static async json(requestPayload: RequestPayload) {
     try {
       const response = await this._fetch(requestPayload)
-      const json = await response.json()
+      const { text, truncated } = await readResponseTextWithinLimit(response, MCP_FETCH_MAX_TEXT_BYTES)
+      if (truncated) {
+        throw new Error(`Fetched JSON exceeds ${MCP_FETCH_MAX_TEXT_BYTES} bytes`)
+      }
+      const json = JSON.parse(text)
       return {
         content: [{ type: 'text', text: JSON.stringify(json) }],
         isError: false
@@ -86,7 +96,7 @@ export class Fetcher {
   static async txt(requestPayload: RequestPayload) {
     try {
       const response = await this._fetch(requestPayload)
-      const html = await response.text()
+      const { text: html, truncated } = await readResponseTextWithinLimit(response, MCP_FETCH_MAX_TEXT_BYTES)
 
       const dom = new JSDOM(html)
       const document = dom.window.document
@@ -101,7 +111,7 @@ export class Fetcher {
       const normalizedText = text.replace(/\s+/g, ' ').trim()
 
       return {
-        content: [{ type: 'text', text: normalizedText }],
+        content: [{ type: 'text', text: appendTruncationNotice(normalizedText, truncated) }],
         isError: false
       }
     } catch (error) {
@@ -115,10 +125,10 @@ export class Fetcher {
   static async markdown(requestPayload: RequestPayload) {
     try {
       const response = await this._fetch(requestPayload)
-      const html = await response.text()
+      const { text: html, truncated } = await readResponseTextWithinLimit(response, MCP_FETCH_MAX_TEXT_BYTES)
       const turndownService = new TurndownService()
       const markdown = turndownService.turndown(html)
-      return { content: [{ type: 'text', text: markdown }], isError: false }
+      return { content: [{ type: 'text', text: appendTruncationNotice(markdown, truncated) }], isError: false }
     } catch (error) {
       return {
         content: [{ type: 'text', text: (error as Error).message }],

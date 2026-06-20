@@ -4,7 +4,7 @@ const electron = await import('electron')
 const mockNetFetch = vi.fn()
 vi.mocked(electron.net.fetch).mockImplementation(mockNetFetch)
 
-const { Fetcher, MCP_FETCH_TIMEOUT_MS } = await import('../fetch')
+const { Fetcher, MCP_FETCH_MAX_TEXT_BYTES, MCP_FETCH_TIMEOUT_MS } = await import('../fetch')
 
 describe('MCP fetch server', () => {
   beforeEach(() => {
@@ -27,6 +27,34 @@ describe('MCP fetch server', () => {
         signal: expect.any(AbortSignal)
       })
     )
+  })
+
+  it('truncates streamed HTML responses instead of reading the whole body', async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined)
+    const releaseLock = vi.fn()
+    const text = vi.fn()
+    mockNetFetch.mockResolvedValue({
+      ok: true,
+      body: {
+        getReader: () => ({
+          read: vi.fn().mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode('x'.repeat(MCP_FETCH_MAX_TEXT_BYTES + 1))
+          }),
+          cancel,
+          releaseLock
+        })
+      },
+      text
+    } as unknown as Response)
+
+    const result = await Fetcher.html({ url: 'https://example.com' })
+
+    expect(result.isError).toBe(false)
+    expect(result.content[0].text).toContain(`[truncated after ${MCP_FETCH_MAX_TEXT_BYTES} bytes]`)
+    expect(cancel).toHaveBeenCalled()
+    expect(releaseLock).toHaveBeenCalled()
+    expect(text).not.toHaveBeenCalled()
   })
 
   it('returns an error instead of hanging when the remote page stalls', async () => {
