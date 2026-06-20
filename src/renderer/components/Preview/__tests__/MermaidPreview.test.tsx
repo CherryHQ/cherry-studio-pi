@@ -125,6 +125,39 @@ describe('MermaidPreview', () => {
         })
       )
     })
+
+    it('should clean up the measurement element safely if it has already been detached', async () => {
+      let measureElement: HTMLElement | null = null
+      mockMermaid.render.mockImplementationOnce(async (_diagramId, _content, element) => {
+        measureElement = element
+        element.remove()
+        return {
+          svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><g>test diagram</g></svg>'
+        }
+      })
+      render(<MermaidPreview>{mermaidCode}</MermaidPreview>)
+      const renderMermaid = mocks.useDebouncedRender.mock.calls.at(-1)?.[1] as (
+        content: string,
+        container: HTMLDivElement
+      ) => Promise<void>
+      const container = document.createElement('div')
+      vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+        width: 320,
+        height: 240,
+        top: 0,
+        left: 0,
+        right: 320,
+        bottom: 240,
+        x: 0,
+        y: 0,
+        toJSON: () => ({})
+      })
+
+      await expect(renderMermaid(mermaidCode, container)).resolves.toBeUndefined()
+
+      expect(measureElement).toBeInstanceOf(HTMLElement)
+      expect(document.body.contains(measureElement)).toBe(false)
+    })
   })
 
   describe('loading state', () => {
