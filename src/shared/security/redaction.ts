@@ -8,7 +8,8 @@ const SENSITIVE_TEXT_PATTERNS: Array<[RegExp, string]> = [
   [/\b(https?:\/\/)([^/\s:@]+):([^/\s@]+)@/gi, '$1[redacted]@']
 ]
 const QUOTED_KEY_VALUE_PATTERN = /(["'])([^"'\r\n]{1,120})\1(\s*:\s*)(["'])((?:\\.|(?!\4).){0,2048})\4/g
-const UNQUOTED_KEY_VALUE_PATTERN = /(^|[^A-Za-z0-9_$])([A-Za-z0-9_.:-]{1,120})(\s*[=:]\s*)(["']?)([^'",;\s}\]]+)\4/g
+const UNQUOTED_EQUALS_KEY_VALUE_PATTERN = /(^|[^A-Za-z0-9_$])([A-Za-z0-9_.-]{1,120})(\s*=\s*)(["']?)([^'",;\s}\]]+)\4/g
+const UNQUOTED_COLON_KEY_VALUE_PATTERN = /(^|[^A-Za-z0-9_$])([A-Za-z0-9_.-]{1,120})(\s*:\s*)(["']?)([^'",;\s}\]]+)\4/g
 const REDACTED_VALUE = '[redacted]'
 
 export const isSensitiveAgentKey = (key: string): boolean => {
@@ -36,18 +37,25 @@ export const redactAgentText = (text: string) => {
         return `${keyQuote}${key}${keyQuote}${separator}${valueQuote}${REDACTED_VALUE}${valueQuote}`
       }
     )
-    .replace(
-      UNQUOTED_KEY_VALUE_PATTERN,
-      (match, prefix: string, key: string, separator: string, valueQuote: string, value: string) => {
-        if (
-          !isSensitiveAgentKey(key) ||
-          value.length === 0 ||
-          value === REDACTED_VALUE.slice(0, -1) ||
-          (key.toLowerCase() === 'authorization' && /^(?:Bearer|Basic)$/i.test(value))
-        ) {
-          return match
-        }
-        return `${prefix}${key}${separator}${valueQuote}${REDACTED_VALUE}${valueQuote}`
-      }
-    )
+    .replace(UNQUOTED_EQUALS_KEY_VALUE_PATTERN, redactUnquotedKeyValue)
+    .replace(UNQUOTED_COLON_KEY_VALUE_PATTERN, redactUnquotedKeyValue)
+}
+
+function redactUnquotedKeyValue(
+  match: string,
+  prefix: string,
+  key: string,
+  separator: string,
+  valueQuote: string,
+  value: string
+) {
+  if (
+    !isSensitiveAgentKey(key) ||
+    value.length === 0 ||
+    value === REDACTED_VALUE.slice(0, -1) ||
+    (key.toLowerCase() === 'authorization' && /^(?:Bearer|Basic)$/i.test(value))
+  ) {
+    return match
+  }
+  return `${prefix}${key}${separator}${valueQuote}${REDACTED_VALUE}${valueQuote}`
 }

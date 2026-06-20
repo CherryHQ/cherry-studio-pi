@@ -160,6 +160,12 @@ describe('app capability utils', () => {
     })
   })
 
+  it('redacts sensitive dotted keys after ordinary colon text', () => {
+    const sanitized = sanitizeForAgent('Capability not found: missing.apiKey=sk-secret-token')
+
+    expect(sanitized).toBe('Capability not found: missing.apiKey=[redacted]')
+  })
+
   it('serializes bigint values instead of throwing', () => {
     expect(sanitizeForAgent({ count: 42n })).toEqual({ count: '42' })
   })
