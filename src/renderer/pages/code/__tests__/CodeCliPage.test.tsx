@@ -17,6 +17,7 @@ const testState = vi.hoisted(() => ({
   setCurrentDir: vi.fn(),
   removeDir: vi.fn(),
   selectFolder: vi.fn(),
+  setIsBunInstalled: vi.fn(),
   setTimeoutTimer: vi.fn()
 }))
 
@@ -96,7 +97,7 @@ vi.mock('@renderer/config/constant', () => ({
 }))
 
 vi.mock('@renderer/data/hooks/useCache', () => ({
-  usePersistCache: () => [testState.isBunInstalled, vi.fn()]
+  usePersistCache: () => [testState.isBunInstalled, testState.setIsBunInstalled]
 }))
 
 vi.mock('@renderer/hooks/useCodeCli', () => ({
@@ -185,6 +186,7 @@ beforeEach(() => {
   testState.setCurrentDir.mockResolvedValue(undefined)
   testState.removeDir.mockResolvedValue(undefined)
   testState.selectFolder.mockResolvedValue(undefined)
+  testState.setIsBunInstalled.mockReset()
   Object.assign(window, {
     api: {
       isBinaryExist: vi.fn().mockResolvedValue(true),
@@ -250,6 +252,28 @@ describe('CodeCliPage', () => {
     })
 
     expect(window.toast.error).not.toHaveBeenCalled()
+  })
+
+  it('ignores delayed bun installation checks after unmount', async () => {
+    const checkOperation = deferred<boolean>()
+    Object.assign(window, {
+      api: {
+        ...window.api,
+        isBinaryExist: vi.fn().mockReturnValueOnce(checkOperation.promise)
+      }
+    })
+
+    const { unmount } = render(<CodeCliPage />)
+    expect(window.api.isBinaryExist).toHaveBeenCalledWith('bun')
+
+    unmount()
+
+    await act(async () => {
+      checkOperation.resolve(false)
+      await checkOperation.promise
+    })
+
+    expect(testState.setIsBunInstalled).not.toHaveBeenCalled()
   })
 
   it('disables launch when the tool cannot launch', async () => {

@@ -43,7 +43,7 @@ import {
 import { isAnthropicProvider, isOpenAIProvider } from '@shared/utils/provider'
 import { Check, FolderOpen } from 'lucide-react'
 import type { FC } from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -113,6 +113,15 @@ const CodeCliPage: FC = () => {
   const [terminalCustomPaths, setTerminalCustomPaths] = useState<Record<string, string>>({})
 
   const [dialogOpen, setDialogOpen] = useState(false)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const rawModelId = useCallback((m: Model) => getRawModelId(m), [])
 
@@ -280,7 +289,9 @@ const CodeCliPage: FC = () => {
   const checkBunInstallation = useCallback(async () => {
     try {
       const bunExists = await window.api.isBinaryExist('bun')
-      setIsBunInstalled(bunExists)
+      if (mountedRef.current) {
+        setIsBunInstalled(bunExists)
+      }
     } catch (error) {
       logger.error('Failed to check bun installation status:', error as Error)
     }
@@ -291,14 +302,18 @@ const CodeCliPage: FC = () => {
 
     try {
       const terminals = await window.api.codeCli.getAvailableTerminals()
-      setAvailableTerminals(terminals)
-      logger.info('Available terminals loaded', {
-        count: terminals.length,
-        names: terminals.map((ti) => ti.name)
-      })
+      if (mountedRef.current) {
+        setAvailableTerminals(terminals)
+        logger.info('Available terminals loaded', {
+          count: terminals.length,
+          names: terminals.map((ti) => ti.name)
+        })
+      }
     } catch (error) {
       logger.error('Failed to load available terminals:', error as Error)
-      setAvailableTerminals([])
+      if (mountedRef.current) {
+        setAvailableTerminals([])
+      }
     }
   }, [])
 
@@ -306,15 +321,20 @@ const CodeCliPage: FC = () => {
     try {
       setIsInstallingBun(true)
       await window.api.installBunBinary()
+      if (!mountedRef.current) return
       setIsBunInstalled(true)
       window.toast.success(t('settings.mcp.installSuccess'))
     } catch (error) {
       logger.error('Failed to install bun:', error as Error)
       const message = error instanceof Error ? error.message : String(error)
-      window.toast.error(`${t('settings.mcp.installError')}: ${message}`)
+      if (mountedRef.current) {
+        window.toast.error(`${t('settings.mcp.installError')}: ${message}`)
+      }
     } finally {
-      setIsInstallingBun(false)
-      setTimeoutTimer('handleInstallBun', checkBunInstallation, 1000)
+      if (mountedRef.current) {
+        setIsInstallingBun(false)
+        setTimeoutTimer('handleInstallBun', checkBunInstallation, 1000)
+      }
     }
   }
 
