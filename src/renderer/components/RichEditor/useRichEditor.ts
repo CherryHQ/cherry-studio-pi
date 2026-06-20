@@ -26,7 +26,7 @@ import Typography from '@tiptap/extension-typography'
 import { useEditor, useEditorState } from '@tiptap/react'
 import { StarterKit } from '@tiptap/starter-kit'
 import { t } from 'i18next'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { commandSuggestion } from './command'
 import { CodeBlockShiki } from './extensions/codeBlockShiki/codeBlockShiki'
@@ -36,6 +36,7 @@ import { EnhancedMath } from './extensions/enhancedMath'
 import { Placeholder } from './extensions/placeholder'
 import { YamlFrontMatter } from './extensions/yamlFrontMatter'
 import { blobToArrayBuffer, compressImage, shouldCompressImage } from './helpers/imageUtils'
+import { getMathDialogPosition } from './helpers/mathDialogPosition'
 
 const logger = loggerService.withContext('useRichEditor')
 
@@ -181,6 +182,7 @@ export const useRichEditor = (options: UseRichEditorOptions = {}): UseRichEditor
   const { activeShikiTheme } = useCodeStyle()
 
   const [tableOfContentsItems, setTableOfContentsItems] = useState<TableOfContentDataItem[]>([])
+  const editorRef = useRef<Editor | null>(null)
 
   // Link editor state
   const [linkEditorState, setLinkEditorState] = useState<{
@@ -288,27 +290,15 @@ export const useRichEditor = (options: UseRichEditorOptions = {}): UseRichEditor
       EnhancedMath.configure({
         blockOptions: {
           onClick: (node, pos) => {
-            // Get position from the clicked element
-            let position: { x: number; y: number; top: number } | undefined
-            if (event?.target instanceof HTMLElement) {
-              const rect =
-                event.target.closest('.math-display')?.getBoundingClientRect() || event.target.getBoundingClientRect()
-              position = {
-                x: rect.left + rect.width / 2,
-                y: rect.bottom,
-                top: rect.top
-              }
-            }
-
             const customEvent = new CustomEvent('openMathDialog', {
               detail: {
                 defaultValue: node.attrs.latex || '',
-                position: position,
+                position: getMathDialogPosition(editorRef.current, pos),
                 onSubmit: () => {
-                  editor.commands.focus()
+                  editorRef.current?.commands.focus()
                 },
                 onFormulaChange: (formula: string) => {
-                  editor.chain().setNodeSelection(pos).updateBlockMath({ latex: formula }).run()
+                  editorRef.current?.chain().setNodeSelection(pos).updateBlockMath({ latex: formula }).run()
                 }
               }
             })
@@ -318,26 +308,15 @@ export const useRichEditor = (options: UseRichEditorOptions = {}): UseRichEditor
         },
         inlineOptions: {
           onClick: (node, pos) => {
-            let position: { x: number; y: number; top: number } | undefined
-            if (event?.target instanceof HTMLElement) {
-              const rect =
-                event.target.closest('.math-inline')?.getBoundingClientRect() || event.target.getBoundingClientRect()
-              position = {
-                x: rect.left + rect.width / 2,
-                y: rect.bottom,
-                top: rect.top
-              }
-            }
-
             const customEvent = new CustomEvent('openMathDialog', {
               detail: {
                 defaultValue: node.attrs.latex || '',
-                position: position,
+                position: getMathDialogPosition(editorRef.current, pos),
                 onSubmit: () => {
-                  editor.commands.focus()
+                  editorRef.current?.commands.focus()
                 },
                 onFormulaChange: (formula: string) => {
-                  editor.chain().setNodeSelection(pos).updateInlineMath({ latex: formula }).run()
+                  editorRef.current?.chain().setNodeSelection(pos).updateInlineMath({ latex: formula }).run()
                 }
               }
             })
@@ -471,6 +450,7 @@ export const useRichEditor = (options: UseRichEditorOptions = {}): UseRichEditor
       onBlur?.()
     },
     onCreate: ({ editor: currentEditor }) => {
+      editorRef.current = currentEditor
       migrateMathStrings(currentEditor)
       try {
         currentEditor.commands.focus('end')
@@ -479,6 +459,8 @@ export const useRichEditor = (options: UseRichEditorOptions = {}): UseRichEditor
       }
     }
   })
+
+  editorRef.current = editor ?? null
 
   // Handle image paste function
   const handleImagePaste = useCallback(
