@@ -199,16 +199,17 @@ export type StatusColor = 'primary' | 'success' | 'warning' | 'error' | 'muted'
 function getStatusColor(color: StatusColor): string {
   switch (color) {
     case 'primary':
-    case 'success':
       return 'var(--color-primary)'
+    case 'success':
+      return 'var(--color-success)'
     case 'warning':
-      return 'var(--color-status-warning, #faad14)'
+      return 'var(--color-warning, #faad14)'
     case 'error':
-      return 'var(--color-status-error, #ff4d4f)'
+      return 'var(--color-error-base, #ff4d4f)'
     case 'muted':
-      return 'var(--color-text-3)'
+      return 'var(--color-foreground-muted)'
     default:
-      return 'var(--color-text)'
+      return 'var(--color-foreground)'
   }
 }
 

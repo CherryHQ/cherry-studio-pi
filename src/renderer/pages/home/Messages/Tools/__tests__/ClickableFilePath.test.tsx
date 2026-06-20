@@ -68,7 +68,7 @@ describe('ClickableFilePath', () => {
     render(<ClickableFilePath path="/tmp/test.ts" />)
     const span = screen.getByText('/tmp/test.ts')
     expect(span).toHaveClass('cursor-pointer')
-    expect(span).toHaveStyle({ color: 'var(--color-link)' })
+    expect(span).toHaveStyle({ color: 'var(--color-primary)' })
   })
 
   it('should render ellipsis dropdown trigger', () => {
