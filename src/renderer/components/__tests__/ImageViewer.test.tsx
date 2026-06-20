@@ -1,9 +1,26 @@
 import '@testing-library/jest-dom/vitest'
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import ImageViewer, { getImageBlobFromSource } from '../ImageViewer'
+
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T | PromiseLike<T>) => void
+  reject: (reason?: unknown) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: Deferred<T>['resolve']
+  let reject!: Deferred<T>['reject']
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}
 
 const mocks = vi.hoisted(() => ({
   download: vi.fn(),
@@ -101,6 +118,44 @@ describe('ImageViewer', () => {
     })
     expect(mocks.clipboard.write).toHaveBeenCalledWith([expect.any(MockClipboardItem)])
     expect(mocks.toast.success).toHaveBeenCalledWith('message.copy.success')
+  })
+
+  it('ignores delayed copy source feedback after unmount', async () => {
+    const runningCopy = deferred<void>()
+    mocks.clipboard.writeText.mockReturnValueOnce(runningCopy.promise)
+    const { unmount } = render(<ImageViewer src="https://example.com/image.png" alt="Example image" />)
+
+    fireEvent.contextMenu(screen.getByRole('img', { name: 'Example image' }))
+    fireEvent.click(screen.getByRole('button', { name: 'preview.copy.src' }))
+    unmount()
+
+    await act(async () => {
+      runningCopy.resolve()
+      await runningCopy.promise
+    })
+
+    expect(mocks.toast.success).not.toHaveBeenCalled()
+    expect(mocks.toast.error).not.toHaveBeenCalled()
+  })
+
+  it('ignores delayed copy image feedback after unmount', async () => {
+    const runningCopy = deferred<void>()
+    mocks.clipboard.write.mockReturnValueOnce(runningCopy.promise)
+    const { unmount } = render(<ImageViewer src="data:image/png;base64,aGVsbG8=" alt="Example image" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.copy' }))
+    await waitFor(() => {
+      expect(mocks.clipboard.write).toHaveBeenCalledWith([expect.any(MockClipboardItem)])
+    })
+    unmount()
+
+    await act(async () => {
+      runningCopy.resolve()
+      await runningCopy.promise
+    })
+
+    expect(mocks.toast.success).not.toHaveBeenCalled()
+    expect(mocks.toast.error).not.toHaveBeenCalled()
   })
 
   it('downloads the image from the context menu', () => {

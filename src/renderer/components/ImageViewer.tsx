@@ -97,8 +97,17 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, 
   )
   const [localOpen, setLocalOpen] = React.useState(false)
   const [localActiveIndex, setLocalActiveIndex] = React.useState(initialIndex)
+  const mountedRef = React.useRef(true)
   const open = previewConfig?.visible ?? localOpen
   const activeIndex = previewConfig?.activeIndex ?? localActiveIndex
+
+  React.useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   React.useEffect(() => {
     setLocalActiveIndex(initialIndex)
@@ -145,11 +154,15 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, 
     async (item: ImagePreviewItem) => {
       try {
         await copyImageToClipboard(item.src)
-        window.toast.success(t('message.copy.success'))
+        if (mountedRef.current) {
+          window.toast.success(t('message.copy.success'))
+        }
       } catch (error) {
         const err = error as Error
         logger.error(`Failed to copy image: ${err.message}`, { stack: err.stack })
-        window.toast.error(t('message.copy.failed'))
+        if (mountedRef.current) {
+          window.toast.error(t('message.copy.failed'))
+        }
       }
     },
     [t]
@@ -159,11 +172,15 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, 
     async (item: ImagePreviewItem) => {
       try {
         await navigator.clipboard.writeText(item.src)
-        window.toast.success(t('message.copy.success'))
+        if (mountedRef.current) {
+          window.toast.success(t('message.copy.success'))
+        }
       } catch (error) {
         const err = error as Error
         logger.error(`Failed to copy image source: ${err.message}`, { stack: err.stack })
-        window.toast.error(t('message.copy.failed'))
+        if (mountedRef.current) {
+          window.toast.error(t('message.copy.failed'))
+        }
       }
     },
     [t]
