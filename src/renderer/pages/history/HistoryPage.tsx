@@ -138,13 +138,13 @@ const SearchIcon = styled.div`
   flex-direction: row;
   justify-content: center;
   align-items: center;
-  background-color: var(--color-background-soft);
+  background-color: var(--color-muted);
   margin-right: 2px;
   &.back-icon {
     cursor: pointer;
     transition: background-color 0.2s;
     &:hover {
-      background-color: var(--color-background-mute);
+      background-color: var(--color-accent);
     }
   }
 `

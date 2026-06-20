@@ -56,7 +56,7 @@ const SearchMessage: FC<Props> = ({ message, ...props }) => {
           <MessageItem message={message} topic={topic} hideMenuBar={true} />
           <Button
             variant="ghost"
-            className="absolute top-4 right-4 text-[var(--color-text-3)]"
+            className="absolute top-4 right-4 text-foreground-muted"
             onClick={() => locateToMessage(navigate, message)}>
             <Forward size={16} />
           </Button>

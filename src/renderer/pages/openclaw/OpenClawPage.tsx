@@ -44,12 +44,11 @@ const TitleSection: FC<TitleSectionProps> = ({ title, description, clickable = f
       <Openclaw.Avatar size={64} shape="rounded" />
     </div>
     <h1
-      className={`mt-3 font-semibold text-2xl ${clickable ? 'cursor-pointer hover:text-(--color-primary)' : ''}`}
-      style={{ color: 'var(--color-text-1)' }}
+      className={`mt-3 font-semibold text-2xl text-foreground ${clickable ? 'cursor-pointer hover:text-primary' : ''}`}
       onClick={clickable ? () => openHttpExternalUrl(docsUrl ?? DEFAULT_DOCS_URL) : undefined}>
       {title}
     </h1>
-    <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--color-text-2)' }}>
+    <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--color-foreground-secondary)' }}>
       {description}
     </p>
   </div>
@@ -306,10 +305,10 @@ const OpenClawPage: FC = () => {
   }
 
   const renderLogContainer = (expanded = false) => (
-    <div className="mb-6 overflow-hidden rounded-lg" style={{ background: 'var(--color-background-soft)' }}>
+    <div className="mb-6 overflow-hidden rounded-lg" style={{ background: 'var(--color-muted)' }}>
       <div
         className="flex items-center justify-between px-3 py-2 font-medium text-[13px]"
-        style={{ background: 'var(--color-background-mute)' }}>
+        style={{ background: 'var(--color-accent)' }}>
         <span>{t(expanded ? 'openclaw.uninstall_progress' : 'openclaw.install_progress')}</span>
         {!expanded && (
           <Button size="sm" variant="ghost" onClick={() => setShowLogs(false)}>
@@ -325,10 +324,10 @@ const OpenClawPage: FC = () => {
             style={{
               color:
                 log.type === 'error'
-                  ? 'var(--color-error)'
+                  ? 'var(--color-error-base)'
                   : log.type === 'warn'
                     ? 'var(--color-warning)'
-                    : 'var(--color-text-2)'
+                    : 'var(--color-foreground-secondary)'
             }}>
             {log.message}
           </div>
@@ -392,7 +391,7 @@ const OpenClawPage: FC = () => {
         {installPath && gatewayStatus !== 'running' && (
           <div
             className="mb-6 flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm"
-            style={{ background: 'var(--color-background-soft)', color: 'var(--color-text-3)' }}>
+            style={{ background: 'var(--color-muted)', color: 'var(--color-foreground-muted)' }}>
             <div className="min-w-0 shrink overflow-hidden">
               <div className="mb-1">{t('openclaw.installed_at')}</div>
               <div className="flex items-center gap-2">
@@ -419,8 +418,7 @@ const OpenClawPage: FC = () => {
               </div>
             </div>
             <span
-              className="cursor-pointer whitespace-nowrap text-xs transition-colors hover:text-(--color-error)!"
-              style={{ color: 'var(--color-text-3)' }}
+              className="cursor-pointer whitespace-nowrap text-foreground-muted text-xs transition-colors hover:text-destructive"
               onClick={handleUninstall}>
               {t('openclaw.quick_actions.uninstall')}
             </span>
@@ -431,13 +429,13 @@ const OpenClawPage: FC = () => {
         {gatewayStatus === 'running' && (
           <div
             className="mb-6 flex items-center justify-between rounded-lg p-3"
-            style={{ background: 'var(--color-background-soft)' }}>
+            style={{ background: 'var(--color-muted)' }}>
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-green-500" />
-              <span className="font-medium text-sm" style={{ color: 'var(--color-text-1)' }}>
+              <span className="font-medium text-sm" style={{ color: 'var(--color-foreground)' }}>
                 {t('openclaw.status.running')}
               </span>
-              <span className="font-mono text-[13px]" style={{ color: 'var(--color-text-3)' }}>
+              <span className="font-mono text-[13px]" style={{ color: 'var(--color-foreground-muted)' }}>
                 :{gatewayPort}
               </span>
             </div>
@@ -500,7 +498,9 @@ const OpenClawPage: FC = () => {
         {/* Model Selector - only show when not running */}
         {gatewayStatus !== 'running' && (
           <div className="mb-6">
-            <div className="mb-2 flex items-center gap-2 font-medium text-sm" style={{ color: 'var(--color-text-1)' }}>
+            <div
+              className="mb-2 flex items-center gap-2 font-medium text-sm"
+              style={{ color: 'var(--color-foreground)' }}>
               {t('openclaw.model_config.model')}
             </div>
             <ModelSelector
@@ -519,14 +519,14 @@ const OpenClawPage: FC = () => {
                 </Button>
               }
             />
-            <div className="mt-1 text-xs" style={{ color: 'var(--color-text-3)' }}>
+            <div className="mt-1 text-xs" style={{ color: 'var(--color-foreground-muted)' }}>
               {t('openclaw.model_config.sync_hint')}
             </div>
 
             {/* Tips about OpenClaw */}
             <div
               className="mt-4 rounded-lg p-3 text-xs leading-relaxed"
-              style={{ background: 'var(--color-background-mute)', color: 'var(--color-text-3)' }}>
+              style={{ background: 'var(--color-accent)', color: 'var(--color-foreground-muted)' }}>
               <div className="mb-1">💡 {t('openclaw.tips.title')}</div>
               <ul className="list-inside list-disc space-y-1">
                 <li>{t('openclaw.tips.permissions')}</li>
@@ -561,7 +561,7 @@ const OpenClawPage: FC = () => {
   const renderCheckingContent = () => (
     <div id="content-container" className="flex flex-1 flex-col items-center justify-center">
       <Loader2 className="size-7 animate-spin" style={{ color: 'var(--color-primary)' }} />
-      <div className="mt-4" style={{ color: 'var(--color-text-3)' }}>
+      <div className="mt-4" style={{ color: 'var(--color-foreground-muted)' }}>
         {t('openclaw.checking_installation')}
       </div>
     </div>

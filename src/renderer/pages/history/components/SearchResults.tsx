@@ -341,7 +341,7 @@ const SearchResults: FC<Props> = ({ keywords, onMessageClick, onTopicClick, ...p
 
   return (
     <Container ref={containerRef} {...props} onScroll={handleScroll}>
-      <Spin spinning={isLoading} indicator={<LoadingIcon color="var(--color-text-2)" />}>
+      <Spin spinning={isLoading} indicator={<LoadingIcon color="var(--color-foreground-secondary)" />}>
         <SearchToolbar>
           <Segmented
             shape="round"
@@ -411,7 +411,7 @@ const Container = styled.div`
 
 const SearchStats = styled.div`
   font-size: 13px;
-  color: var(--color-text-3);
+  color: var(--color-foreground-muted);
 `
 
 const SearchToolbar = styled.div`

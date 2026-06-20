@@ -116,7 +116,7 @@ const ListItem = styled.div`
 const Date = styled.div`
   font-size: 26px;
   font-weight: bold;
-  color: var(--color-text-3);
+  color: var(--color-foreground-muted);
 `
 
 const TopicItem = styled.div`
@@ -130,12 +130,12 @@ const TopicItem = styled.div`
 
 const TopicName = styled.div`
   font-size: 14px;
-  color: var(--color-text);
+  color: var(--color-foreground);
 `
 
 const TopicDate = styled.div`
   font-size: 14px;
-  color: var(--color-text-3);
+  color: var(--color-foreground-muted);
   margin-left: 10px;
 `
 
