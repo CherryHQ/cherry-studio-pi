@@ -3461,6 +3461,7 @@ describe('AppDataSyncService', () => {
       })
     )
     expect(mocks.runtimeProjection.projectProviders).toHaveBeenCalledTimes(1)
+    expect(mocks.runtimeProjection.projectProviders.mock.calls[0][0].modelProviderIds).toEqual(new Set())
     expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith('data-sync-sync-space-id', 'sync-space-existing')
   })
 

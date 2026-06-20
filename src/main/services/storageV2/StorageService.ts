@@ -997,10 +997,11 @@ export class StorageV2Service {
     return { mirroredCount: providers.length }
   }
 
-  async projectProvidersToDataApiRuntime() {
+  async projectProvidersToDataApiRuntime(options: { modelProviderIds?: ReadonlySet<string> } = {}) {
     const snapshot = await this.getCoreSnapshot({ includeSecrets: true })
     const llm = optionalRecord(snapshot.llm)
     const providers = optionalArray<Record<string, unknown>>(llm?.providers) ?? []
+    const modelProviderIds = options.modelProviderIds
     let providerCount = 0
     let modelCount = 0
 
@@ -1023,7 +1024,10 @@ export class StorageV2Service {
         await providerService.replaceApiKeys(providerId, normalized.apiKeys)
       }
 
-      const projectedModelCount = await this.projectProviderModelsToDataApiRuntime(providerId, provider.models)
+      const projectedModelCount =
+        !modelProviderIds || modelProviderIds.has(providerId)
+          ? await this.projectProviderModelsToDataApiRuntime(providerId, provider.models)
+          : 0
       providerCount += 1
       modelCount += projectedModelCount
     }

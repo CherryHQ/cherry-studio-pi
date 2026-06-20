@@ -32,6 +32,7 @@ import { normalizeWebDavHost, runWebDavOperation, WebDavOperationError } from '@
 import { getDataPath } from '@main/utils'
 import { getNotesDir } from '@main/utils/file'
 import { readResponseTextWithinLimit } from '@main/utils/readResponseText'
+import { isUniqueModelId, parseUniqueModelId } from '@shared/data/types/model'
 import { sanitizeFilename } from '@shared/file/types/filename'
 import { normalizeWebDavConfig, normalizeWebDavPath } from '@shared/webdavConfig'
 import type { WebDavConfig } from '@types'
@@ -1146,6 +1147,18 @@ function isRemoteArtifactCleanupDue(lastCleanupAt: unknown, now: number) {
 
 function getStorageV2ManifestEntityTypes(manifest?: StorageV2WebDavRecordSyncManifest | null) {
   return new Set(storageV2ManifestRecordEntries(manifest).map(([, meta]) => meta.entityType))
+}
+
+function getStorageV2ModelProviderIds(manifest?: StorageV2WebDavRecordSyncManifest | null) {
+  const providerIds = new Set<string>()
+  for (const [, meta] of storageV2ManifestRecordEntries(manifest)) {
+    if (meta.entityType !== 'model') continue
+    const id = meta.idValues[0]
+    if (!isUniqueModelId(id)) continue
+    const providerId = parseUniqueModelId(id).providerId
+    if (providerId) providerIds.add(providerId)
+  }
+  return providerIds
 }
 
 function collectWebDavLockTokens(value: unknown, tokens = new Set<string>()) {
@@ -3954,7 +3967,9 @@ export class AppDataSyncService {
     }
 
     if ([...entityTypes].some((entityType) => PROVIDER_RUNTIME_ENTITY_TYPES.has(entityType))) {
-      await storageV2Service.projectProvidersToDataApiRuntime()
+      await storageV2Service.projectProvidersToDataApiRuntime({
+        modelProviderIds: getStorageV2ModelProviderIds(manifest)
+      })
       projected = true
     }
 

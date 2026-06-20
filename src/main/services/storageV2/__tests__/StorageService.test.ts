@@ -974,6 +974,39 @@ describe('StorageV2Service', () => {
     ])
   })
 
+  it('does not reconcile provider models when only provider credentials changed', async () => {
+    mocks.providerRepository.list.mockResolvedValue([
+      {
+        id: 'openai',
+        type: 'openai',
+        name: 'OpenAI',
+        apiHost: 'https://api.openai.com/v1',
+        enabled: true,
+        sortOrder: 0,
+        config: { id: 'openai', presetProviderId: 'openai' },
+        models: [],
+        hasCredentialRef: false,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        deletedAt: null,
+        version: 1
+      }
+    ])
+    mocks.providerService.getByProviderId.mockResolvedValue({ id: 'openai' })
+
+    await expect(
+      new StorageV2Service().projectProvidersToDataApiRuntime({ modelProviderIds: new Set() })
+    ).resolves.toEqual({
+      providerCount: 1,
+      modelCount: 0
+    })
+
+    expect(mocks.providerService.update).toHaveBeenCalledWith('openai', expect.any(Object))
+    expect(mocks.modelService.list).not.toHaveBeenCalled()
+    expect(mocks.modelService.reconcileForProvider).not.toHaveBeenCalled()
+    expect(mocks.modelService.bulkUpdate).not.toHaveBeenCalled()
+  })
+
   it('deletes providers through the Storage v2 tombstone repository path', async () => {
     mocks.providerRepository.delete.mockResolvedValue({ deleted: true })
 
