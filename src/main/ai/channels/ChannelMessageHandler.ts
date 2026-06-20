@@ -12,7 +12,7 @@ import { runtimeDriverRegistry } from '@main/ai/runtime/registry'
 import { ChannelAdapterListener, type StreamListener } from '@main/ai/streamManager'
 import { startAgentSessionRun } from '@main/ai/streamManager/api/startAgentSessionRun'
 import { application } from '@main/core/application'
-import type { FileAttachment, ImageAttachment } from '@main/utils/downloadAsBase64'
+import { type FileAttachment, type ImageAttachment, MAX_FILE_SIZE_BYTES } from '@main/utils/downloadAsBase64'
 import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
 
 import type { ChannelAdapter, ChannelCommandEvent, ChannelMessageEvent } from './ChannelAdapter'
@@ -23,6 +23,9 @@ const logger = loggerService.withContext('ChannelMessageHandler')
 
 const TYPING_INTERVAL_MS = 4000
 const CHANNEL_WORKSPACE_DIR = '.cherry-studio-pi'
+const MAX_ATTACHMENT_BASE64_CHARS = Math.ceil(MAX_FILE_SIZE_BYTES / 3) * 4
+const MAX_ATTACHMENT_FILE_NAME_CHARS = 160
+const BASE64_PAYLOAD_RE = /^[A-Za-z0-9+/]*={0,2}$/
 
 /** Max number of entries in the session tracker before evicting oldest entries. */
 const SESSION_TRACKER_MAX_SIZE = 500
@@ -45,6 +48,58 @@ type PendingBatch = {
   messages: ChannelMessageEvent[]
   timer: ReturnType<typeof setTimeout>
   resolvers: BatchResolver[]
+}
+
+function decodeAttachmentBase64(data: string, context: string): Buffer {
+  const payload = data.trim()
+  if (payload.length === 0) {
+    throw new Error(`${context}: attachment payload is empty`)
+  }
+  if (payload.length > MAX_ATTACHMENT_BASE64_CHARS) {
+    throw new Error(`${context}: attachment payload exceeds the 100 MB limit`)
+  }
+  if (payload.length % 4 === 1) {
+    throw new Error(`${context}: attachment payload has invalid base64 padding`)
+  }
+  if (!BASE64_PAYLOAD_RE.test(payload)) {
+    throw new Error(`${context}: attachment payload is not valid base64`)
+  }
+
+  const normalized = payload.replace(/=+$/, '')
+  const padded = payload.padEnd(Math.ceil(payload.length / 4) * 4, '=')
+  const bytes = Buffer.from(padded, 'base64')
+  if (bytes.toString('base64').replace(/=+$/, '') !== normalized) {
+    throw new Error(`${context}: attachment payload failed base64 validation`)
+  }
+  return bytes
+}
+
+function sanitizeAttachmentExtension(mediaType: string, fallback: string): string {
+  const subtype = mediaType.split(';')[0]?.trim().toLowerCase().split('/')[1] ?? ''
+  const normalized = subtype
+    .replace(/^x-/, '')
+    .replace(/^jpeg$/, 'jpg')
+    .split('+')[0]
+  const safe = normalized.replace(/[^a-z0-9]/g, '').slice(0, 12)
+  return safe || fallback
+}
+
+function sanitizeAttachmentFileName(filename: string): string {
+  const withoutReservedChars = filename.replace(/[/\\:*?"<>|]/g, '_')
+  const withoutControlChars = Array.from(withoutReservedChars, (char) => (char.charCodeAt(0) < 32 ? '_' : char)).join(
+    ''
+  )
+  const normalized = withoutControlChars.replace(/\s+/g, ' ').trim()
+  const safe = normalized.length > 0 && !/^\.+$/.test(normalized) ? normalized : 'attachment'
+  if (safe.length <= MAX_ATTACHMENT_FILE_NAME_CHARS) {
+    return safe
+  }
+
+  const ext = path.extname(safe)
+  const preservedExt = ext.length > 0 && ext.length <= 24 ? ext : ''
+  const stem = safe.slice(0, safe.length - preservedExt.length) || 'attachment'
+  const stemLimit = Math.max(1, MAX_ATTACHMENT_FILE_NAME_CHARS - preservedExt.length)
+  return `${stem.slice(0, stemLimit)}${preservedExt}`
 }
 
 export class ChannelMessageHandler {
@@ -232,6 +287,13 @@ export class ChannelMessageHandler {
             agentId,
             error: error instanceof Error ? error.message : String(error)
           })
+          await this.sendBestEffortNotification(
+            adapter,
+            message.chatId,
+            '⚠️ Failed to save attached images. Please resend the attachment and try again.',
+            'image-attachment-error'
+          )
+          return
         }
       }
 
@@ -250,6 +312,13 @@ export class ChannelMessageHandler {
             agentId,
             error: error instanceof Error ? error.message : String(error)
           })
+          await this.sendBestEffortNotification(
+            adapter,
+            message.chatId,
+            '⚠️ Failed to save attached files. Please resend the attachment and try again.',
+            'file-attachment-error'
+          )
+          return
         }
       }
 
@@ -637,10 +706,10 @@ export class ChannelMessageHandler {
 
     const paths: string[] = []
     for (const img of images) {
-      const ext = img.media_type.split('/')[1]?.replace('jpeg', 'jpg') || 'png'
+      const ext = sanitizeAttachmentExtension(img.media_type, 'png')
       const filename = `${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`
       const filePath = path.join(dir, filename)
-      await fs.writeFile(filePath, Buffer.from(img.data, 'base64'))
+      await fs.writeFile(filePath, decodeAttachmentBase64(img.data, 'channel image attachment'))
       paths.push(filePath)
     }
 
@@ -658,10 +727,10 @@ export class ChannelMessageHandler {
     const paths: string[] = []
     for (const file of files) {
       // Prefix with timestamp to avoid collisions, preserve original filename for readability
-      const safeName = file.filename.replace(/[/\\:*?"<>|]/g, '_')
+      const safeName = sanitizeAttachmentFileName(file.filename)
       const filename = `${Date.now()}-${safeName}`
       const filePath = path.join(dir, filename)
-      await fs.writeFile(filePath, Buffer.from(file.data, 'base64'))
+      await fs.writeFile(filePath, decodeAttachmentBase64(file.data, 'channel file attachment'))
       paths.push(filePath)
     }
 

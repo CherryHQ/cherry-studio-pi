@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -317,6 +317,100 @@ describe('ChannelMessageHandler', () => {
           {
             type: 'text',
             text: expect.stringContaining(path.join(workspacePath, '.cherry-studio-pi', 'channel-images'))
+          }
+        ]
+      })
+    )
+  })
+
+  it('rejects malformed channel image payloads before starting an agent run', async () => {
+    const adapter = createMockAdapter()
+    const workspacePath = await createTempRoot()
+    const session = {
+      id: 'session-1',
+      agentId: 'agent-1',
+      agentType: 'pi',
+      model: 'openai::gpt-4',
+      workspace: { path: workspacePath },
+      configuration: {}
+    }
+
+    vi.mocked(agentService.getAgent).mockResolvedValueOnce({
+      id: 'agent-1',
+      type: 'pi',
+      configuration: {},
+      model: 'openai::gpt-4'
+    } as any)
+    vi.mocked(agentSessionService.create).mockResolvedValueOnce(session as any)
+
+    await handleIncomingAndFlush(adapter, {
+      chatId: 'chat-1',
+      userId: 'user-1',
+      userName: 'User',
+      text: 'Please inspect this image',
+      images: [{ data: 'not-valid!@#', media_type: 'image/png' }]
+    })
+
+    expect(mockStartAgentSessionRun).not.toHaveBeenCalled()
+    expect(adapter.sendMessage).toHaveBeenCalledWith(
+      'chat-1',
+      '⚠️ Failed to save attached images. Please resend the attachment and try again.'
+    )
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      'Failed to persist channel images',
+      expect.objectContaining({
+        agentId: 'agent-1',
+        error: expect.stringContaining('not valid base64')
+      })
+    )
+  })
+
+  it('truncates long channel attachment filenames while preserving the extension', async () => {
+    const adapter = createMockAdapter()
+    const workspacePath = await createTempRoot()
+    const session = {
+      id: 'session-1',
+      agentId: 'agent-1',
+      agentType: 'pi',
+      model: 'openai::gpt-4',
+      workspace: { path: workspacePath },
+      configuration: {}
+    }
+
+    vi.mocked(agentService.getAgent).mockResolvedValueOnce({
+      id: 'agent-1',
+      type: 'pi',
+      configuration: {},
+      model: 'openai::gpt-4'
+    } as any)
+    vi.mocked(agentSessionService.create).mockResolvedValueOnce(session as any)
+    simulateStream([{ type: 'text-delta', delta: 'OK' }])
+
+    await handleIncomingAndFlush(adapter, {
+      chatId: 'chat-1',
+      userId: 'user-1',
+      userName: 'User',
+      text: 'Please inspect this file',
+      files: [
+        {
+          filename: `${'a'.repeat(300)}.pdf`,
+          data: 'aGVsbG8=',
+          media_type: 'application/pdf',
+          size: 5
+        }
+      ]
+    })
+
+    const entries = await readdir(path.join(workspacePath, '.cherry-studio-pi', 'channel-files'))
+    expect(entries).toHaveLength(1)
+    expect(entries[0].length).toBeLessThanOrEqual(180)
+    expect(entries[0]).toMatch(/\.pdf$/)
+    expect(mockStartAgentSessionRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userParts: [
+          {
+            type: 'text',
+            text: expect.stringContaining(path.join(workspacePath, '.cherry-studio-pi', 'channel-files'))
           }
         ]
       })
