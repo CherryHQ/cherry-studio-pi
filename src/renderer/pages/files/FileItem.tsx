@@ -126,7 +126,7 @@ const CardContent = styled.div`
 
 const FileIcon = styled.div`
   max-height: 44px;
-  color: var(--color-text-3);
+  color: var(--color-foreground-muted);
   font-size: 32px;
   display: flex;
   align-items: center;
@@ -150,7 +150,7 @@ const FileName = styled.div`
 
 const FileInfo = styled.div`
   font-size: 13px;
-  color: var(--color-text-2);
+  color: var(--color-foreground-secondary);
 `
 
 const FileActions = styled.div`

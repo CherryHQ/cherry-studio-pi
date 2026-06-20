@@ -167,7 +167,7 @@ const FilesPage: FC = () => {
             placement="left"
             icon={<ExclamationCircleOutlined style={{ color: 'red' }} />}>
             <Button variant="ghost">
-              <DeleteIcon size={14} className="lucide-custom" style={{ color: 'var(--color-error)' }} />
+              <DeleteIcon size={14} className="lucide-custom" style={{ color: 'var(--color-error-base)' }} />
             </Button>
           </Popconfirm>
           {fileType !== 'image' && (
@@ -320,15 +320,15 @@ const SideNav = styled.div`
     line-height: 36px;
     margin: 4px 0;
     width: 100%;
-    border-radius: var(--list-item-border-radius);
+    border-radius: var(--radius-lg);
     border: 0.5px solid transparent;
 
     &:hover {
-      background-color: var(--color-background-soft) !important;
+      background-color: var(--color-muted) !important;
     }
 
     &.ant-menu-item-selected {
-      background-color: var(--color-background-soft);
+      background-color: var(--color-muted);
       color: var(--color-primary);
       border: 0.5px solid var(--color-border);
     }
@@ -341,14 +341,14 @@ const SortButton = styled(Button)<{ $active?: boolean }>`
   gap: 4px;
   padding: 4px 12px;
   height: 30px;
-  border-radius: var(--list-item-border-radius);
+  border-radius: var(--radius-lg);
   border: 0.5px solid ${(props) => (props.$active ? 'var(--color-border)' : 'transparent')};
-  background-color: ${(props) => (props.$active ? 'var(--color-background-soft)' : 'transparent')};
-  color: ${(props) => (props.$active ? 'var(--color-text)' : 'var(--color-text-secondary)')};
+  background-color: ${(props) => (props.$active ? 'var(--color-muted)' : 'transparent')};
+  color: ${(props) => (props.$active ? 'var(--color-foreground)' : 'var(--color-foreground-secondary)')};
 
   &:hover {
-    background-color: var(--color-background-soft);
-    color: var(--color-text);
+    background-color: var(--color-muted);
+    color: var(--color-foreground);
   }
 
   .anticon {
