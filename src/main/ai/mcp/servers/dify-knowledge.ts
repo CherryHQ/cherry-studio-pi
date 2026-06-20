@@ -1,5 +1,6 @@
 // inspired by https://dify.ai/blog/turn-your-dify-app-into-an-mcp-server
 import { loggerService } from '@logger'
+import { readResponseTextWithinLimit } from '@main/utils/readResponseText'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { net } from 'electron'
@@ -7,6 +8,7 @@ import * as z from 'zod'
 
 const logger = loggerService.withContext('DifyKnowledgeServer')
 const DIFY_REQUEST_TIMEOUT_MS = 30_000
+const DIFY_ERROR_TEXT_MAX_BYTES = 4 * 1024
 
 interface DifyKnowledgeServerConfig {
   difyKey: string
@@ -141,6 +143,12 @@ class DifyKnowledgeServer {
     })
   }
 
+  private async readApiErrorText(response: Response): Promise<string> {
+    const { text, truncated } = await readResponseTextWithinLimit(response, DIFY_ERROR_TEXT_MAX_BYTES)
+    const preview = text.trim()
+    return truncated ? `${preview}\n[truncated]` : preview
+  }
+
   private async performListKnowledges(difyKey: string, apiHost: string): Promise<McpResponse> {
     try {
       const url = `${apiHost.replace(/\/$/, '')}/datasets`
@@ -152,7 +160,7 @@ class DifyKnowledgeServer {
       })
 
       if (!response.ok) {
-        const errorText = await response.text()
+        const errorText = await this.readApiErrorText(response)
         throw new Error(`API request failed, status code ${response.status}: ${errorText}`)
       }
 
@@ -215,7 +223,7 @@ class DifyKnowledgeServer {
       })
 
       if (!response.ok) {
-        const errorText = await response.text()
+        const errorText = await this.readApiErrorText(response)
         throw new Error(`API request failed, status code ${response.status}: ${errorText}`)
       }
 

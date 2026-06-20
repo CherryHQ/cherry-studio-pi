@@ -1,6 +1,7 @@
 // Brave Search MCP Server
 // port https://github.com/modelcontextprotocol/servers/blob/main/src/brave-search/index.ts
 
+import { readResponseTextWithinLimit } from '@main/utils/readResponseText'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import type { Tool } from '@modelcontextprotocol/sdk/types.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
@@ -68,6 +69,7 @@ const RATE_LIMIT = {
   perMonth: 15000
 }
 const BRAVE_REQUEST_TIMEOUT_MS = 30_000
+export const BRAVE_ERROR_TEXT_MAX_BYTES = 4 * 1024
 
 const requestCount = {
   second: 0,
@@ -97,6 +99,15 @@ function braveFetch(url: string, apiKey: string): Promise<Response> {
     },
     signal: AbortSignal.timeout(BRAVE_REQUEST_TIMEOUT_MS)
   })
+}
+
+export async function buildBraveApiErrorMessage(response: Response): Promise<string> {
+  const { text, truncated } = await readResponseTextWithinLimit(response, BRAVE_ERROR_TEXT_MAX_BYTES)
+  const body = text.trim()
+  const bodyPreview = truncated ? `${body}\n[truncated]` : body
+  return bodyPreview
+    ? `Brave API error: ${response.status} ${response.statusText}\n${bodyPreview}`
+    : `Brave API error: ${response.status} ${response.statusText}`
 }
 
 interface BraveWeb {
@@ -176,7 +187,7 @@ async function performWebSearch(apiKey: string, query: string, count: number = 1
   const response = await braveFetch(url.toString(), apiKey)
 
   if (!response.ok) {
-    throw new Error(`Brave API error: ${response.status} ${response.statusText}\n${await response.text()}`)
+    throw new Error(await buildBraveApiErrorMessage(response))
   }
 
   const data = (await response.json()) as BraveWeb
@@ -203,7 +214,7 @@ async function performLocalSearch(apiKey: string, query: string, count: number =
   const webResponse = await braveFetch(webUrl.toString(), apiKey)
 
   if (!webResponse.ok) {
-    throw new Error(`Brave API error: ${webResponse.status} ${webResponse.statusText}\n${await webResponse.text()}`)
+    throw new Error(await buildBraveApiErrorMessage(webResponse))
   }
 
   const webData = (await webResponse.json()) as BraveWeb
@@ -230,7 +241,7 @@ async function getPoisData(apiKey: string, ids: string[]): Promise<BravePoiRespo
   const response = await braveFetch(url.toString(), apiKey)
 
   if (!response.ok) {
-    throw new Error(`Brave API error: ${response.status} ${response.statusText}\n${await response.text()}`)
+    throw new Error(await buildBraveApiErrorMessage(response))
   }
 
   return (await response.json()) as BravePoiResponse
@@ -243,7 +254,7 @@ async function getDescriptionsData(apiKey: string, ids: string[]): Promise<Brave
   const response = await braveFetch(url.toString(), apiKey)
 
   if (!response.ok) {
-    throw new Error(`Brave API error: ${response.status} ${response.statusText}\n${await response.text()}`)
+    throw new Error(await buildBraveApiErrorMessage(response))
   }
 
   return (await response.json()) as BraveDescription
