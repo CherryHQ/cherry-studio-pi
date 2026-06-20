@@ -4978,6 +4978,96 @@
       "data": {
         "title": "Data Directory"
       },
+      "data_sync": {
+        "auto_sync": "Auto Sync",
+        "current_device": "Current Device",
+        "diagnose": "Diagnose",
+        "diagnosis": {
+          "checked_at": "Checked at: {{time}}",
+          "device": "Device: {{deviceId}}",
+          "title": "WebDAV Diagnosis",
+          "write_path": "Write path: {{path}}",
+          "write_success": "WebDAV connection and write access are available."
+        },
+        "effective_path": "Effective Sync Path",
+        "effective_path_help": "This is the final WebDAV directory Cherry Studio Pi will read and write.",
+        "help": "Sync local settings, providers, assistants, agents, conversations, knowledge data, notes, and runtime metadata through WebDAV.",
+        "interval": {
+          "day_one": "Every day",
+          "hour_one": "Every hour",
+          "hour_other": "Every {{count}} hours",
+          "minute_one": "Every minute",
+          "minute_other": "Every {{count}} minutes",
+          "off": "Off"
+        },
+        "last_result": "Latest Result",
+        "method": "Sync Method",
+        "method_value": "WebDAV",
+        "password": "Password",
+        "password_placeholder": "WebDAV password",
+        "refresh_status": "Refresh Status",
+        "remote_browser": {
+          "current_path": "Current path: {{path}}",
+          "empty": "No folders found",
+          "error_title": "Unable to load remote directory",
+          "path_hint": "You can continue using the configured path: {{path}}",
+          "path_hint_title": "Directory path",
+          "refresh": "Refresh",
+          "select": "Select",
+          "select_current": "Select Current",
+          "title": "Browse WebDAV Directory",
+          "use_current_path": "Use configured path",
+          "use_root": "Use root"
+        },
+        "remote_path": "Sync Directory",
+        "remote_path_browse": "Browse",
+        "remote_path_help": "Choose a dedicated WebDAV directory. Use the same directory on every device that should sync together.",
+        "restore_confirm_content": "Restore the latest remote safety snapshot to this device? Current local data may be overwritten.",
+        "restore_confirm_title": "Restore Latest Snapshot",
+        "restore_latest": "Restore Latest",
+        "snapshot": {
+          "join_safety": "Local safety snapshot: {{file}} ({{size}})",
+          "open_local": "Show local snapshot",
+          "uploaded": "Remote safety snapshot: {{file}} ({{size}})"
+        },
+        "storage": {
+          "blobs": "Files: uploaded {{uploaded}}, downloaded {{downloaded}}",
+          "conflicts": "Storage conflicts: {{count}}",
+          "records": "Storage records: uploaded {{uploaded}}, downloaded {{downloaded}}",
+          "resolved_conflicts": "Resolved storage conflicts: {{count}}"
+        },
+        "summary": {
+          "conflicts": "Conflicts: {{count}}",
+          "deleted": "Deleted: {{count}}",
+          "downloaded": "Downloaded: {{count}}",
+          "error": "Error: {{message}}",
+          "remote_path": "Remote path: {{path}}",
+          "resolved_conflicts": "Resolved conflicts: {{count}}",
+          "status_failed": "Failed",
+          "status_success": "Success",
+          "uploaded": "Uploaded: {{count}}"
+        },
+        "sync": "Sync",
+        "sync_now": "Manual Sync",
+        "title": "Data Sync",
+        "toast": {
+          "diagnose_failed": "Diagnosis failed: {{message}}",
+          "diagnose_success": "Diagnosis passed",
+          "open_snapshot_failed": "Failed to open local safety snapshot: {{message}}",
+          "remote_path_selected": "Selected WebDAV directory: {{path}}",
+          "restore_failed": "Restore failed: {{message}}",
+          "restore_success": "Restore completed",
+          "sync_failed": "Data sync failed: {{message}}",
+          "sync_running": "Data sync is still running.",
+          "sync_success": "Data sync completed.",
+          "webdav_required": "Please configure the WebDAV host, username, and password first."
+        },
+        "uninitialized": "Not initialized",
+        "unresolved_conflicts": "Unresolved Conflicts",
+        "username": "Username",
+        "username_placeholder": "WebDAV username",
+        "webdav_host": "WebDAV Host"
+      },
       "divider": {
         "basic": "Basic Data",
         "cloud_storage": "Cloud Backup",

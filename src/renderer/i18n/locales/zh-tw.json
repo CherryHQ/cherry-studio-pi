@@ -4978,6 +4978,96 @@
       "data": {
         "title": "資料目錄"
       },
+      "data_sync": {
+        "auto_sync": "自動同步",
+        "current_device": "目前裝置",
+        "diagnose": "診斷",
+        "diagnosis": {
+          "checked_at": "檢查時間：{{time}}",
+          "device": "裝置：{{deviceId}}",
+          "title": "WebDAV 診斷",
+          "write_path": "寫入路徑：{{path}}",
+          "write_success": "WebDAV 連線與寫入權限正常。"
+        },
+        "effective_path": "實際同步路徑",
+        "effective_path_help": "Cherry Studio Pi 最終會讀寫這個 WebDAV 目錄。",
+        "help": "透過 WebDAV 同步本機設定、服務商、助手、智能體、對話、知識庫、筆記與執行階段中繼資料。",
+        "interval": {
+          "day_one": "每天",
+          "hour_one": "每小時",
+          "hour_other": "每 {{count}} 小時",
+          "minute_one": "每分鐘",
+          "minute_other": "每 {{count}} 分鐘",
+          "off": "關閉"
+        },
+        "last_result": "最近結果",
+        "method": "同步方式",
+        "method_value": "WebDAV",
+        "password": "密碼",
+        "password_placeholder": "WebDAV 密碼",
+        "refresh_status": "重新整理狀態",
+        "remote_browser": {
+          "current_path": "目前路徑：{{path}}",
+          "empty": "沒有找到資料夾",
+          "error_title": "無法載入遠端目錄",
+          "path_hint": "也可以繼續使用目前設定的路徑：{{path}}",
+          "path_hint_title": "目錄路徑",
+          "refresh": "重新整理",
+          "select": "選擇",
+          "select_current": "選擇目前目錄",
+          "title": "瀏覽 WebDAV 目錄",
+          "use_current_path": "使用設定路徑",
+          "use_root": "使用根目錄"
+        },
+        "remote_path": "同步目錄",
+        "remote_path_browse": "瀏覽",
+        "remote_path_help": "請選擇一個專用 WebDAV 目錄。需要同步的每台裝置都應使用同一個目錄。",
+        "restore_confirm_content": "要將遠端最新安全快照恢復到這台裝置嗎？目前本機資料可能會被覆蓋。",
+        "restore_confirm_title": "恢復最新快照",
+        "restore_latest": "恢復最新",
+        "snapshot": {
+          "join_safety": "本機安全快照：{{file}}（{{size}}）",
+          "open_local": "顯示本機快照",
+          "uploaded": "遠端安全快照：{{file}}（{{size}}）"
+        },
+        "storage": {
+          "blobs": "檔案：上傳 {{uploaded}}，下載 {{downloaded}}",
+          "conflicts": "儲存衝突：{{count}}",
+          "records": "儲存記錄：上傳 {{uploaded}}，下載 {{downloaded}}",
+          "resolved_conflicts": "已處理儲存衝突：{{count}}"
+        },
+        "summary": {
+          "conflicts": "衝突：{{count}}",
+          "deleted": "刪除：{{count}}",
+          "downloaded": "下載：{{count}}",
+          "error": "錯誤：{{message}}",
+          "remote_path": "遠端路徑：{{path}}",
+          "resolved_conflicts": "已處理衝突：{{count}}",
+          "status_failed": "失敗",
+          "status_success": "成功",
+          "uploaded": "上傳：{{count}}"
+        },
+        "sync": "同步",
+        "sync_now": "手動同步",
+        "title": "資料同步",
+        "toast": {
+          "diagnose_failed": "診斷失敗：{{message}}",
+          "diagnose_success": "診斷通過",
+          "open_snapshot_failed": "開啟本機安全快照失敗：{{message}}",
+          "remote_path_selected": "已選擇 WebDAV 目錄：{{path}}",
+          "restore_failed": "恢復失敗：{{message}}",
+          "restore_success": "恢復完成",
+          "sync_failed": "同步資料失敗：{{message}}",
+          "sync_running": "資料同步仍在進行中。",
+          "sync_success": "資料同步完成。",
+          "webdav_required": "請先填寫 WebDAV 位址、帳號和密碼。"
+        },
+        "uninitialized": "未初始化",
+        "unresolved_conflicts": "未解決衝突",
+        "username": "帳號",
+        "username_placeholder": "WebDAV 使用者名稱",
+        "webdav_host": "WebDAV 位址"
+      },
       "divider": {
         "basic": "基本資料設定",
         "cloud_storage": "雲備份設定",

@@ -38,6 +38,15 @@ vi.mock('@renderer/store', () => ({
   }
 }))
 
+vi.mock('@renderer/i18n', () => ({
+  default: {
+    t: (key: string) =>
+      key === 'settings.data.data_sync.toast.webdav_required'
+        ? 'Please configure the WebDAV host, username, and password first.'
+        : key
+  }
+}))
+
 vi.mock('../StorageV2HydrationService', () => ({
   hydrateRuntimeCacheFromStorageV2: mocks.hydrateRuntimeCacheFromStorageV2
 }))
@@ -396,7 +405,7 @@ describe('DataSyncService', () => {
       }
     })
 
-    await expect(syncAppDataNow()).rejects.toThrow('WebDAV host is required')
+    await expect(syncAppDataNow()).rejects.toThrow('Please configure the WebDAV host, username, and password first.')
 
     expect(mocks.prepareStorageV2ForDataSync).not.toHaveBeenCalled()
     expect(mocks.syncNow).not.toHaveBeenCalled()

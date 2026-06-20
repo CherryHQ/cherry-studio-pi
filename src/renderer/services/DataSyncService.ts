@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { summarizeObjectShapeForLog } from '@renderer/aiCore/utils/logging'
+import i18n from '@renderer/i18n'
 import store, { persistor } from '@renderer/store'
 import type { WebDavConfig } from '@renderer/types'
 
@@ -518,7 +519,7 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
 
   const config = configOverride ?? getWebDavConfig()
   if (!config.webdavHost) {
-    throw new Error('WebDAV host is required')
+    throw new Error(i18n.t('settings.data.data_sync.toast.webdav_required'))
   }
 
   if (
