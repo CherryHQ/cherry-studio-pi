@@ -16,6 +16,18 @@ const MAX_AGENT_OBJECT_KEYS = 200
 const MAX_AGENT_OBJECT_DEPTH = 8
 const NAVIGATION_TIMEOUT_MS = 5_000
 
+function createAbortError(signal: AbortSignal, fallbackMessage: string) {
+  const reason = signal.reason
+  if (reason instanceof Error) return reason
+  if (typeof reason === 'string' && reason.trim()) return new Error(reason.trim())
+  return new Error(fallbackMessage)
+}
+
+function throwIfAbortSignalAborted(signal: AbortSignal | undefined, fallbackMessage: string) {
+  if (!signal?.aborted) return
+  throw createAbortError(signal, fallbackMessage)
+}
+
 export type { NormalizeBoundedIntegerInputOptions } from './input'
 export { normalizeBoundedIntegerInput } from './input'
 export { isSensitiveAgentKey, redactAgentText } from './redaction'
@@ -218,17 +230,26 @@ export const resolveInsideRoot = (root: string, input?: string, defaultExt?: str
   return resolved
 }
 
-export const navigateApp = async (route: string) => {
+export const navigateApp = async (route: string, signal?: AbortSignal) => {
   const nextRoute = normalizeAppRoute(route)
   if (!isAllowedAppRoute(nextRoute)) {
     throw new Error(`Navigation route is not allowed: ${nextRoute}`)
   }
+  throwIfAbortSignalAborted(signal, `Navigation to ${nextRoute} was aborted`)
 
   const win = application.get('WindowManager').getWindowsByType(WindowType.Main)[0]
   if (!win || win.isDestroyed()) throw new Error('Main window is not available')
 
   let timeout: ReturnType<typeof setTimeout> | undefined
+  let abortListener: (() => void) | undefined
   try {
+    const abortPromise = signal
+      ? new Promise<never>((_, reject) => {
+          abortListener = () => reject(createAbortError(signal, `Navigation to ${nextRoute} was aborted`))
+          signal.addEventListener('abort', abortListener, { once: true })
+        })
+      : undefined
+
     await Promise.race([
       win.webContents.executeJavaScript(`window.navigate({ to: ${JSON.stringify(nextRoute)} })`),
       new Promise<never>((_, reject) => {
@@ -237,10 +258,13 @@ export const navigateApp = async (route: string) => {
           NAVIGATION_TIMEOUT_MS
         )
         timeout.unref?.()
-      })
+      }),
+      ...(abortPromise ? [abortPromise] : [])
     ])
   } finally {
     if (timeout) clearTimeout(timeout)
+    if (abortListener) signal?.removeEventListener('abort', abortListener)
   }
+  throwIfAbortSignalAborted(signal, `Navigation to ${nextRoute} was aborted`)
   if (isMac) application.get('MainWindowService').showMainWindow()
 }

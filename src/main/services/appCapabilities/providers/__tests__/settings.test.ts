@@ -601,4 +601,15 @@ describe('settings app capabilities', () => {
 
     expect(mocks.navigateApp).not.toHaveBeenCalled()
   })
+
+  it('stops before opening settings when the capability signal is aborted', async () => {
+    const controller = new AbortController()
+    controller.abort('agent stopped settings navigation')
+
+    await expect(
+      capability('settings.open').execute({ section: 'data' }, { source: 'agent', signal: controller.signal })
+    ).rejects.toThrow('agent stopped settings navigation')
+
+    expect(mocks.navigateApp).not.toHaveBeenCalled()
+  })
 })

@@ -408,4 +408,32 @@ describe('app capability utils', () => {
       vi.useRealTimers()
     }
   })
+
+  it('stops navigation before touching the main window when the signal is already aborted', async () => {
+    const controller = new AbortController()
+    controller.abort('agent stopped navigation')
+
+    await expect(navigateApp('/settings/data', controller.signal)).rejects.toThrow('agent stopped navigation')
+
+    expect(mocks.getWindowsByType).not.toHaveBeenCalled()
+    expect(mocks.executeJavaScript).not.toHaveBeenCalled()
+    expect(mocks.showMainWindow).not.toHaveBeenCalled()
+  })
+
+  it('stops waiting for renderer navigation when the signal aborts', async () => {
+    vi.useFakeTimers()
+    try {
+      const controller = new AbortController()
+      mocks.executeJavaScript.mockReturnValue(new Promise(() => undefined))
+
+      const promise = navigateApp('/settings/data', controller.signal)
+      await vi.advanceTimersByTimeAsync(0)
+      controller.abort(new Error('agent cancelled navigation'))
+
+      await expect(promise).rejects.toThrow('agent cancelled navigation')
+      expect(mocks.showMainWindow).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

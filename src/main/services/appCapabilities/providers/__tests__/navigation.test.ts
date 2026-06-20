@@ -54,4 +54,26 @@ describe('navigation app capabilities', () => {
 
     expect(mocks.navigateApp).not.toHaveBeenCalled()
   })
+
+  it('stops before navigating when the caller signal is already aborted', async () => {
+    const controller = new AbortController()
+    controller.abort('agent stopped navigation')
+
+    await expect(
+      capability('app.navigate').execute({ route: '/settings/data' }, { source: 'agent', signal: controller.signal })
+    ).rejects.toThrow('agent stopped navigation')
+
+    expect(mocks.navigateApp).not.toHaveBeenCalled()
+  })
+
+  it('does not return stale navigation success when cancellation happens during navigation', async () => {
+    const controller = new AbortController()
+    mocks.navigateApp.mockImplementationOnce(async () => {
+      controller.abort('agent cancelled navigation')
+    })
+
+    await expect(
+      capability('app.navigate').execute({ route: '/settings/data' }, { source: 'agent', signal: controller.signal })
+    ).rejects.toThrow('agent cancelled navigation')
+  })
 })

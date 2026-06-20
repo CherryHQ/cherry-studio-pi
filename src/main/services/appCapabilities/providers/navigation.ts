@@ -10,6 +10,14 @@ function normalizeNavigationRoute(value: unknown) {
   return normalizeAppRoute(route)
 }
 
+function throwIfNavigationSignalAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return
+  const reason = signal.reason
+  if (reason instanceof Error) throw reason
+  if (typeof reason === 'string' && reason.trim()) throw new Error(reason.trim())
+  throw new Error('Navigation capability call aborted')
+}
+
 export function createNavigationCapabilities(): AppCapabilityDefinition[] {
   return [
     {
@@ -30,9 +38,11 @@ export function createNavigationCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['app', 'ui', 'navigation', 'open'],
-      execute: async (input: any) => {
+      execute: async (input: any, context) => {
         const route = normalizeNavigationRoute(input?.route)
-        await navigateApp(route)
+        throwIfNavigationSignalAborted(context.signal)
+        await (context.signal ? navigateApp(route, context.signal) : navigateApp(route))
+        throwIfNavigationSignalAborted(context.signal)
         return okResult('Application navigated', { route })
       }
     }

@@ -398,14 +398,16 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['settings', 'navigation', 'open'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
         const sectionInput = normalizeOptionalSettingsText(inputObject.section, 'Settings section')
         const routeInput = normalizeSettingsRouteInput(inputObject.route)
         const section = SETTINGS_SECTIONS.find((item) => item.id === sectionInput)
         if (sectionInput && !section) throw new Error(`Unsupported settings section: ${sectionInput}`)
         const route = section?.route || routeInput || '/settings/provider'
-        await navigateApp(route)
+        throwIfSettingsSignalAborted(context.signal)
+        await (context.signal ? navigateApp(route, context.signal) : navigateApp(route))
+        throwIfSettingsSignalAborted(context.signal)
         return okResult('Settings section opened', { route })
       }
     }

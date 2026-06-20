@@ -314,7 +314,7 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
           inputProvider || normalizeProviderRouteSegment(await readDefaultPaintingProvider(context.signal))
         const route = provider ? `/paintings/${provider}` : '/paintings'
         throwIfPaintingSignalAborted(context.signal)
-        await navigateApp(route)
+        await (context.signal ? navigateApp(route, context.signal) : navigateApp(route))
         throwIfPaintingSignalAborted(context.signal)
         return okResult('Painting workspace opened', { route })
       }
@@ -350,7 +350,7 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
         const size = normalizeOptionalText(inputObject.size, 'Painting size') || undefined
         const route = provider ? `/paintings/${provider}` : '/paintings'
         throwIfPaintingSignalAborted(context.signal)
-        await navigateApp(route)
+        await (context.signal ? navigateApp(route, context.signal) : navigateApp(route))
         throwIfPaintingSignalAborted(context.signal)
         return {
           ok: true,
