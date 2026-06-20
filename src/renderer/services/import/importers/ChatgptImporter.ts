@@ -25,7 +25,7 @@ interface ChatGPTMessage {
   }
   content: {
     content_type: string
-    parts?: string[]
+    parts?: unknown[]
   }
   metadata?: any
   create_time?: number
@@ -44,6 +44,23 @@ interface ChatGPTConversation {
   update_time: number
   mapping: Record<string, ChatGPTNode>
   current_node?: string
+}
+
+function normalizeChatGPTPartToText(part: unknown): string {
+  if (typeof part === 'string') return part
+  if (!part || typeof part !== 'object') return ''
+
+  const record = part as Record<string, unknown>
+  if (typeof record.text === 'string') return record.text
+  if (typeof record.content === 'string') return record.content
+
+  return ''
+}
+
+function getChatGPTTextParts(parts: unknown): string[] {
+  if (!Array.isArray(parts)) return []
+
+  return parts.map(normalizeChatGPTPartToText).filter((part) => part.trim().length > 0)
 }
 
 /**
@@ -154,12 +171,7 @@ export class ChatgptImporter implements ConversationImporter {
       if (node?.message) {
         const message = node.message
         // Filter out empty messages and tool messages
-        if (
-          message.author.role !== 'tool' &&
-          message.content?.parts &&
-          message.content.parts.length > 0 &&
-          message.content.parts.some((part) => part && part.trim().length > 0)
-        ) {
+        if (message.author.role !== 'tool' && getChatGPTTextParts(message.content?.parts).length > 0) {
           messages.push(message)
         }
       }
@@ -190,7 +202,7 @@ export class ChatgptImporter implements ConversationImporter {
     const role = this.mapRole(chatgptMessage.author.role)
 
     // Extract text content from parts
-    const content = (chatgptMessage.content?.parts || []).filter((part) => part && part.trim()).join('\n\n')
+    const content = getChatGPTTextParts(chatgptMessage.content?.parts).join('\n\n')
 
     const createdAt = chatgptMessage.create_time
       ? new Date(chatgptMessage.create_time * 1000).toISOString()
