@@ -3,7 +3,6 @@ import db from '@renderer/databases'
 import type { FileMetadata, LegacyAssistant as Assistant, Topic } from '@renderer/types'
 import type { Message, MessageBlock } from '@renderer/types/newMessage'
 
-import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
 import { fetchStorageV2TopicMessages } from './StorageV2ConversationHydrationService'
 import { getRendererStorageV2Api, type RendererStorageV2Api } from './StorageV2RendererApi'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
@@ -387,7 +386,6 @@ class StorageV2ConversationMirrorService {
     this.pendingDestructiveTopicIds.delete(topicId)
     this.lastError = null
 
-    notifyDataSyncLocalChange('conversation')
     logger.debug(`Persisted conversation snapshot ${topicId} to Storage v2`)
   }
 
@@ -457,8 +455,6 @@ class StorageV2ConversationMirrorService {
       const files = await hydrateFilesFromDexie(collectFilesFromBlocks(normalizedBlocks))
       await this.mirrorFiles(storageV2, Array.from(files.values()))
     }
-
-    notifyDataSyncLocalChange('conversation')
   }
 
   async upsertMessageBlocksFirst(
@@ -487,7 +483,6 @@ class StorageV2ConversationMirrorService {
     })
     const files = await hydrateFilesFromDexie(collectFilesFromBlocks(normalizedBlocks))
     await this.mirrorFiles(storageV2, Array.from(files.values()))
-    notifyDataSyncLocalChange('conversation')
   }
 
   async findTopicIdsForBlockIds(blockIds: Iterable<string | undefined>, getState: StateGetter): Promise<Set<string>> {
@@ -655,7 +650,6 @@ class StorageV2ConversationMirrorService {
 
       logger.debug(`Mirrored ${conversations.length} conversation(s) to Storage v2`)
       this.lastError = null
-      notifyDataSyncLocalChange('conversation')
     } catch (error) {
       for (const topicId of topicIds) {
         this.pendingTopicIds.add(topicId)

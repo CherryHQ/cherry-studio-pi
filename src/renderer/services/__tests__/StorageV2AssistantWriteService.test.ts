@@ -36,7 +36,6 @@ describe('StorageV2AssistantWriteService', () => {
 
   it('upserts assistant lists with stable sort order before Redux state is changed', async () => {
     const upsertAssistant = vi.fn().mockResolvedValue(undefined)
-    const events: string[] = []
     Object.defineProperty(window, 'api', {
       configurable: true,
       value: {
@@ -46,21 +45,12 @@ describe('StorageV2AssistantWriteService', () => {
       }
     })
 
-    const { subscribeDataSyncLocalChanges } = await import('../DataSyncLocalChangeSignal')
     const { upsertStorageV2AssistantList } = await import('../StorageV2AssistantWriteService')
-    const unsubscribe = subscribeDataSyncLocalChanges((event) => {
-      events.push(event.reason)
-    })
 
-    try {
-      await upsertStorageV2AssistantList([assistant('assistant-a'), assistant('assistant-b')])
-    } finally {
-      unsubscribe()
-    }
+    await upsertStorageV2AssistantList([assistant('assistant-a'), assistant('assistant-b')])
 
     expect(upsertAssistant).toHaveBeenNthCalledWith(1, expect.objectContaining({ id: 'assistant-a' }), 0)
     expect(upsertAssistant).toHaveBeenNthCalledWith(2, expect.objectContaining({ id: 'assistant-b' }), 1)
-    expect(events).toEqual(['assistant'])
   })
 
   it('queues mutations for the same assistant so rapid writes build on pending state', async () => {
@@ -124,7 +114,7 @@ describe('StorageV2AssistantWriteService', () => {
     )
   })
 
-  it('notifies data sync after direct assistant upserts', async () => {
+  it('leaves direct assistant upsert sync notifications to the main-process Storage v2 sync log', async () => {
     const upsertAssistant = vi.fn().mockResolvedValue(undefined)
     const events: string[] = []
     Object.defineProperty(window, 'api', {
@@ -149,6 +139,6 @@ describe('StorageV2AssistantWriteService', () => {
     }
 
     expect(upsertAssistant).toHaveBeenCalledWith(expect.objectContaining({ id: 'assistant-a' }), 2)
-    expect(events).toEqual(['assistant'])
+    expect(events).toEqual([])
   })
 })

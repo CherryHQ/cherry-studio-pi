@@ -1,6 +1,5 @@
 import { loggerService } from '@logger'
 
-import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
 import { getRendererStorageV2Api, type RendererStorageV2Api } from './StorageV2RendererApi'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
 import { unrefTimer } from './StorageV2TimerUtils'
@@ -90,7 +89,6 @@ class StorageV2AgentMirrorService {
     try {
       await storageV2.importLegacyAgentDb({ dryRun: false, createSnapshot: false })
       this.lastError = null
-      notifyDataSyncLocalChange('agent')
       logger.debug('Mirrored agent database to Storage v2')
     } catch (error) {
       this.pending = true

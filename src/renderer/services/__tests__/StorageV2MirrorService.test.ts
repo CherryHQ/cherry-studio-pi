@@ -368,7 +368,7 @@ describe('StorageV2MirrorService', () => {
     })
   })
 
-  it('signals data sync after a successful Redux mirror write', async () => {
+  it('leaves Redux mirror sync notifications to the main-process Storage v2 sync log', async () => {
     const events: string[] = []
     const { subscribeDataSyncLocalChanges } = await import('../DataSyncLocalChangeSignal')
     const { storageV2MirrorService } = await import('../StorageV2MirrorService')
@@ -380,7 +380,7 @@ describe('StorageV2MirrorService', () => {
     await vi.advanceTimersByTimeAsync(1500)
 
     expect(importLegacyReduxSnapshot).toHaveBeenCalledTimes(1)
-    expect(events).toContain('redux')
+    expect(events).toEqual([])
     unsubscribe()
   })
 })

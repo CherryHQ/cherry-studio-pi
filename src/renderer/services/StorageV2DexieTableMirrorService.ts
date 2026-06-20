@@ -1,7 +1,6 @@
 import { loggerService } from '@logger'
 import db from '@renderer/databases'
 
-import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
 import { getRendererStorageV2Api, type RendererStorageV2Api } from './StorageV2RendererApi'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
 import { unrefTimer } from './StorageV2TimerUtils'
@@ -300,9 +299,6 @@ class StorageV2DexieTableMirrorService {
         `Mirrored ${mirroredRowCount} Dexie auxiliary row(s) and ${deleteMarkerCount} delete marker(s) to Storage v2`
       )
       this.lastError = null
-      if (mirroredRowCount > 0 || deleteMarkerCount > 0) {
-        notifyDataSyncLocalChange('dexie-table')
-      }
     } catch (error) {
       this.requeuePending(rowIdsByTable, deletedIdsByTable)
       this.lastError = error

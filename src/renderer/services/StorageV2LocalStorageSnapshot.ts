@@ -4,7 +4,6 @@ import {
   serializeRendererPersistCacheValue
 } from '@shared/data/cache/cacheSchemas'
 
-import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
 import { getRendererStorageV2Api } from './StorageV2RendererApi'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
 import { unrefTimer } from './StorageV2TimerUtils'
@@ -253,7 +252,6 @@ export async function flushStorageV2LocalStorageMirror() {
       for (const key of snapshot.clearedMcpProviderTokenKeys) {
         pendingClearedMcpProviderTokenKeys.delete(key)
       }
-      notifyDataSyncLocalChange('local-storage')
       logger.debug('Mirrored durable localStorage values to Storage v2')
     })
     .catch((error) => {

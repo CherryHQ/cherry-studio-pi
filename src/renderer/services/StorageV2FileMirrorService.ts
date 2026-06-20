@@ -1,7 +1,6 @@
 import { loggerService } from '@logger'
 import db from '@renderer/databases'
 
-import { notifyDataSyncLocalChange } from './DataSyncLocalChangeSignal'
 import { getRendererStorageV2Api, type RendererStorageV2Api } from './StorageV2RendererApi'
 import { serializeStorageV2MirrorError, type StorageV2RuntimeMirrorStatusEntry } from './StorageV2RuntimeMirrorStatus'
 import { unrefTimer } from './StorageV2TimerUtils'
@@ -136,9 +135,6 @@ class StorageV2FileMirrorService {
         `Mirrored ${files.length} file(s) and ${missingFileIds.length} missing file tombstone(s) to Storage v2`
       )
       this.lastError = null
-      if (files.length > 0 || missingFileIds.length > 0) {
-        notifyDataSyncLocalChange('file')
-      }
     } catch (error) {
       for (const fileId of fileIds) {
         this.pendingFileIds.add(fileId)
