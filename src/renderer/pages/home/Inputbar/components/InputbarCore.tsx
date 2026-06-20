@@ -173,6 +173,7 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
   const startDragY = useRef<number>(0)
   const startHeight = useRef<number>(0)
   const dragCleanupRef = useRef<(() => void) | null>(null)
+  const mountedRef = useRef(true)
   const { setTimeoutTimer } = useTimer()
 
   // 全局 QuickPanel Hook (用于控制面板显示状态)
@@ -180,6 +181,14 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
   const quickPanelOpen = quickPanel.open
 
   const textRef = useRef(text)
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
   useEffect(() => {
     textRef.current = text
   }, [text])
@@ -465,11 +474,15 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
       try {
         const targetPath = file.path
         const content = await window.api.file.readExternal(targetPath, true)
+        if (!mountedRef.current) return
+
         try {
           await navigator.clipboard.writeText(content)
         } catch (clipboardError) {
           logger.warn('Failed to copy txt attachment content to clipboard:', clipboardError as Error)
         }
+
+        if (!mountedRef.current) return
 
         setText((prev) => {
           if (!prev) {

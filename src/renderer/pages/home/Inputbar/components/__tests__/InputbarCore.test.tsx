@@ -1,7 +1,8 @@
 import '@testing-library/jest-dom/vitest'
 
+import type { FileMetadata } from '@renderer/types'
 import { TopicType } from '@renderer/types'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { TextAreaRef } from 'antd/lib/input/TextArea'
 import React from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -20,6 +21,27 @@ const pasteServiceMock = vi.hoisted(() => ({
   setLastFocusedComponent: vi.fn(),
   unregisterHandler: vi.fn()
 }))
+const fileApiMock = vi.hoisted(() => ({
+  readExternal: vi.fn()
+}))
+const clipboardWriteTextMock = vi.hoisted(() => vi.fn())
+
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T | PromiseLike<T>) => void
+  reject: (reason?: unknown) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: Deferred<T>['resolve']
+  let reject!: Deferred<T>['reject']
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve
+    reject = promiseReject
+  })
+
+  return { promise, resolve, reject }
+}
 
 vi.mock('@ant-design/icons', async () => {
   const React = await import('react')
@@ -127,7 +149,15 @@ vi.mock('@renderer/pages/home/Inputbar/SendMessageButton', () => ({
 }))
 
 vi.mock('@renderer/pages/home/Inputbar/AttachmentPreview', () => ({
-  default: () => null
+  default: ({ files, onPasteAsText }: { files: FileMetadata[]; onPasteAsText: (file: FileMetadata) => void }) => (
+    <div>
+      {files.map((file) => (
+        <button key={file.id} type="button" aria-label={`paste ${file.name}`} onClick={() => onPasteAsText(file)}>
+          paste
+        </button>
+      ))}
+    </div>
+  )
 }))
 
 vi.mock('@renderer/pages/home/Inputbar/hooks/useFileDragDrop', () => ({
@@ -152,11 +182,17 @@ vi.mock('@renderer/services/PasteService', () => ({
 
 function renderInputbar(
   scope: TopicType.Chat | TopicType.Session,
-  overrides: { focusTextarea?: () => void; onHeightChange?: (height: number) => void } = {}
+  overrides: {
+    files?: FileMetadata[]
+    focusTextarea?: () => void
+    onHeightChange?: (height: number) => void
+    onTextChange?: (text: string) => void
+  } = {}
 ) {
   const textareaRef: React.RefObject<TextAreaRef | null> = { current: null }
   const focusTextarea = overrides.focusTextarea ?? vi.fn()
   const onHeightChange = overrides.onHeightChange ?? vi.fn()
+  const onTextChange = overrides.onTextChange ?? vi.fn()
   const actions = {
     resizeTextArea: vi.fn(),
     addNewTopic: vi.fn(),
@@ -167,12 +203,12 @@ function renderInputbar(
   }
 
   const view = render(
-    <InputbarToolsProvider initialState={{ files: [] }} actions={actions}>
+    <InputbarToolsProvider initialState={{ files: overrides.files ?? [] }} actions={actions}>
       <InputbarCore
         scope={scope}
         placeholder="Say something"
         text="hello"
-        onTextChange={vi.fn()}
+        onTextChange={onTextChange}
         textareaRef={textareaRef}
         resizeTextArea={vi.fn()}
         focusTextarea={focusTextarea}
@@ -190,6 +226,7 @@ function renderInputbar(
     sendButton: screen.getByRole('button', { name: 'send' }),
     focusTextarea,
     onHeightChange,
+    onTextChange,
     unmount: view.unmount
   }
 }
@@ -199,6 +236,20 @@ describe('InputbarCore', () => {
     vi.clearAllMocks()
     cacheMock.values.clear()
     pasteServiceMock.getLastFocusedComponent.mockReturnValue('inputbar')
+    fileApiMock.readExternal.mockReset()
+    fileApiMock.readExternal.mockResolvedValue('file content')
+    clipboardWriteTextMock.mockReset()
+    clipboardWriteTextMock.mockResolvedValue(undefined)
+    Object.assign(window, {
+      api: {
+        file: fileApiMock
+      }
+    })
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: clipboardWriteTextMock
+      }
+    })
   })
 
   it('keeps the chat textarea editable when web search state is stale', () => {
@@ -209,6 +260,30 @@ describe('InputbarCore', () => {
     expect(textarea).not.toBeDisabled()
     expect(cacheMock.values.get('chat.web_search.searching')).toBe(false)
     expect(sendButton).not.toHaveAttribute('aria-disabled', 'true')
+  })
+
+  it('ignores delayed txt attachment paste after unmount', async () => {
+    const readOperation = deferred<string>()
+    fileApiMock.readExternal.mockReturnValueOnce(readOperation.promise)
+    const onTextChange = vi.fn()
+    const file = {
+      id: 'file-1',
+      name: 'notes.txt',
+      path: '/tmp/notes.txt'
+    } as FileMetadata
+    const { unmount } = renderInputbar(TopicType.Chat, { files: [file], onTextChange })
+
+    fireEvent.click(screen.getByRole('button', { name: 'paste notes.txt' }))
+    expect(fileApiMock.readExternal).toHaveBeenCalledWith('/tmp/notes.txt', true)
+    unmount()
+
+    await act(async () => {
+      readOperation.resolve('delayed content')
+      await readOperation.promise
+    })
+
+    expect(clipboardWriteTextMock).not.toHaveBeenCalled()
+    expect(onTextChange).not.toHaveBeenCalled()
   })
 
   it('does not let chat web-search state block agent session input', () => {
