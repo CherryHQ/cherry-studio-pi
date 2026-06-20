@@ -14,6 +14,7 @@ type WriteJsonOptions = {
   overwrite?: boolean
   timeoutMs?: number
   maxVerifyBytes?: number
+  signal?: AbortSignal
 }
 
 const MOVE_UNSUPPORTED_STATUSES = new Set([403, 405, 409, 501])
@@ -82,6 +83,13 @@ function assertRemoteJsonWithinVerifyLimit(
   )
 }
 
+function withWebDavSignal<T extends Record<string, unknown>>(
+  options: T,
+  signal?: AbortSignal
+): T & { signal?: AbortSignal } {
+  return signal ? { ...options, signal } : options
+}
+
 async function assertRemoteJsonFileWithinVerifyLimit(
   client: WebDAVClient,
   filePath: string,
@@ -90,15 +98,20 @@ async function assertRemoteJsonFileWithinVerifyLimit(
   const maxVerifyBytes = options.maxVerifyBytes
   if (!maxVerifyBytes) return
 
-  const stat = (client as WebDAVClient & { stat?: (targetPath: string) => Promise<unknown> }).stat
+  const stat = (
+    client as WebDAVClient & {
+      stat?: (targetPath: string, options?: { signal?: AbortSignal }) => Promise<unknown>
+    }
+  ).stat
   if (typeof stat !== 'function') return
 
   const result = await runWebDavOperation(
     `checking ${options.operation} verification size ${filePath}`,
-    () => stat.call(client, filePath),
+    () => (options.signal ? stat.call(client, filePath, { signal: options.signal }) : stat.call(client, filePath)),
     {
       logger: options.logger,
-      timeoutMs: options.timeoutMs
+      timeoutMs: options.timeoutMs,
+      signal: options.signal
     }
   )
   const byteLength = Number((result as { size?: unknown } | null)?.size)
@@ -113,8 +126,8 @@ async function readRemoteJsonHash(client: WebDAVClient, filePath: string, option
   await assertRemoteJsonFileWithinVerifyLimit(client, filePath, options)
   const contents = await runWebDavOperation(
     `verifying ${options.operation} ${filePath}`,
-    () => client.getFileContents(filePath, { format: 'binary' }),
-    { logger: options.logger, timeoutMs: options.timeoutMs }
+    () => client.getFileContents(filePath, withWebDavSignal({ format: 'binary' as const }, options.signal)),
+    { logger: options.logger, timeoutMs: options.timeoutMs, signal: options.signal }
   )
   assertRemoteJsonWithinVerifyLimit(contents, filePath, options)
   return hashJsonValue(JSON.parse(webDavBufferToString(contents)))
@@ -140,13 +153,23 @@ export async function verifyRemoteJsonHash(
 }
 
 async function deleteRemoteFile(client: WebDAVClient, filePath: string, options: WriteJsonOptions) {
-  const deleteFile = (client as WebDAVClient & { deleteFile?: (targetPath: string) => Promise<void> }).deleteFile
+  const deleteFile = (
+    client as WebDAVClient & { deleteFile?: (targetPath: string, options?: { signal?: AbortSignal }) => Promise<void> }
+  ).deleteFile
   if (typeof deleteFile !== 'function') return
 
-  await runWebDavOperation(`deleting temporary remote file ${filePath}`, () => deleteFile.call(client, filePath), {
-    logger: options.logger,
-    timeoutMs: options.timeoutMs
-  }).catch((error) => {
+  await runWebDavOperation(
+    `deleting temporary remote file ${filePath}`,
+    () =>
+      options.signal
+        ? deleteFile.call(client, filePath, { signal: options.signal })
+        : deleteFile.call(client, filePath),
+    {
+      logger: options.logger,
+      timeoutMs: options.timeoutMs,
+      signal: options.signal
+    }
+  ).catch((error) => {
     if (error instanceof WebDavOperationError && error.status === 404) return
     options.logger.warn(`Failed to delete temporary remote file ${filePath}`, error as Error)
   })
@@ -162,7 +185,11 @@ async function promoteRemoteFile(
 
   const moveFile = (
     client as WebDAVClient & {
-      moveFile?: (sourcePath: string, targetPath: string, options?: { overwrite?: boolean }) => Promise<void>
+      moveFile?: (
+        sourcePath: string,
+        targetPath: string,
+        options?: { overwrite?: boolean; signal?: AbortSignal }
+      ) => Promise<void>
     }
   ).moveFile
   if (typeof moveFile !== 'function') return false
@@ -170,8 +197,14 @@ async function promoteRemoteFile(
   try {
     await runWebDavOperation(
       `promoting ${options.operation} ${temporaryPath} to ${filePath}`,
-      () => moveFile.call(client, temporaryPath, filePath, { overwrite: options.overwrite ?? true }),
-      { logger: options.logger, timeoutMs: options.timeoutMs }
+      () =>
+        moveFile.call(
+          client,
+          temporaryPath,
+          filePath,
+          withWebDavSignal({ overwrite: options.overwrite ?? true }, options.signal)
+        ),
+      { logger: options.logger, timeoutMs: options.timeoutMs, signal: options.signal }
     )
     return true
   } catch (error) {
@@ -210,8 +243,8 @@ export async function writeWebDavJsonAtomically(
   try {
     await runWebDavOperation(
       `writing temporary ${options.operation} ${temporaryPath}`,
-      () => client.putFileContents(temporaryPath, content, { overwrite: true }),
-      { logger: options.logger, timeoutMs: options.timeoutMs }
+      () => client.putFileContents(temporaryPath, content, withWebDavSignal({ overwrite: true }, options.signal)),
+      { logger: options.logger, timeoutMs: options.timeoutMs, signal: options.signal }
     )
 
     if (!(await verifyRemoteJsonHash(client, temporaryPath, expectedHash, verifyOptions))) {
@@ -222,8 +255,13 @@ export async function writeWebDavJsonAtomically(
     if (!promoted) {
       const written = await runWebDavOperation(
         `writing verified ${options.operation} ${filePath}`,
-        () => client.putFileContents(filePath, content, { overwrite: options.overwrite ?? true }),
-        { logger: options.logger, timeoutMs: options.timeoutMs }
+        () =>
+          client.putFileContents(
+            filePath,
+            content,
+            withWebDavSignal({ overwrite: options.overwrite ?? true }, options.signal)
+          ),
+        { logger: options.logger, timeoutMs: options.timeoutMs, signal: options.signal }
       )
       if (written === false && options.overwrite !== false) {
         throw new Error(`Remote ${options.operation} write was rejected: ${filePath}`)

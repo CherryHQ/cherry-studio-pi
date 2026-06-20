@@ -2322,6 +2322,46 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(db.state.rows).toEqual([])
   })
 
+  it('passes external abort signals into remote Storage v2 record bundle reads', async () => {
+    const remote = makeSharedWebDavStore()
+    const db = makeSettingsDb([])
+    const bundle = {
+      version: 1,
+      updatedAt: 0,
+      records: {},
+      blobs: {}
+    }
+    const bundlePath = '/remote-root/sync/v1/storage-v2/bundle/current.json'
+    const bundleValueHash = hashJson({ records: bundle.records, blobs: bundle.blobs })
+    const controller = new AbortController()
+    remote.files.set(bundlePath, JSON.stringify(bundle))
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+
+    await new StorageV2WebDavRecordSyncService([settingsTable]).sync(
+      remote.client as any,
+      '/remote-root/sync/v1',
+      {
+        version: 1,
+        blobs: {},
+        records: {},
+        bundle: {
+          version: 1,
+          path: 'storage-v2/bundle/current.json',
+          valueHash: bundleValueHash,
+          recordCount: 0,
+          blobCount: 0,
+          updatedAt: 0
+        }
+      },
+      { signal: controller.signal }
+    )
+
+    expect(remote.client.getFileContents).toHaveBeenCalledWith(
+      bundlePath,
+      expect.objectContaining({ signal: controller.signal })
+    )
+  })
+
   it('downloads remote Storage v2 rows into the local database', async () => {
     const remoteRow = {
       key: 'theme',

@@ -210,6 +210,8 @@ type SyncRunContext = {
   startedAt: number
   deadlineAt: number
   maxRuntimeMs: number
+  abortController: AbortController
+  signal: AbortSignal
   aborted: boolean
   abortReason: string | null
   failureRecorded: boolean
@@ -1195,10 +1197,13 @@ export class AppDataSyncService {
   private createSyncRunContext(): SyncRunContext {
     const startedAt = Date.now()
     const maxRuntimeMs = configuredDataSyncMaxRuntimeMs()
+    const abortController = new AbortController()
     return {
       startedAt,
       deadlineAt: startedAt + maxRuntimeMs,
       maxRuntimeMs,
+      abortController,
+      signal: abortController.signal,
       aborted: false,
       abortReason: null,
       failureRecorded: false
@@ -1220,9 +1225,16 @@ export class AppDataSyncService {
   }
 
   private abortSyncRun(context: SyncRunContext, reason: string) {
-    context.aborted = true
-    context.abortReason = reason
-    return new Error(reason)
+    if (!context.aborted) {
+      context.aborted = true
+      context.abortReason = reason
+      if (!context.abortController.signal.aborted) {
+        context.abortController.abort(new Error(reason))
+      }
+    } else if (!context.abortReason) {
+      context.abortReason = reason
+    }
+    return new Error(context.abortReason ?? reason)
   }
 
   private assertSyncRunActive(context: SyncRunContext, stage?: string) {
@@ -4465,7 +4477,8 @@ export class AppDataSyncService {
         beforeRemoteConflictApply: async () => this.createJoinSafetySnapshotOnce(db, summary),
         preferRemoteOnFirstJoin: preferRemoteStorageOnFirstJoin,
         skipWriteAccessProbe: true,
-        assertActive: () => this.assertSyncRunActive(context, '同步 Storage v2 数据')
+        assertActive: () => this.assertSyncRunActive(context, '同步 Storage v2 数据'),
+        signal: context.signal
       })
       this.assertSyncRunActive(context, '合并 Storage v2 同步结果')
       manifest.storageV2 = storageSync.manifest
@@ -4576,7 +4589,8 @@ export class AppDataSyncService {
         this.assertSyncRunActive(context, '清理远端 Storage v2 旧文件')
         await storageV2WebDavRecordSyncService
           .pruneRemoteArtifacts(client, basePath, manifest.storageV2, {
-            assertActive: () => this.assertSyncRunActive(context, '清理远端 Storage v2 旧文件')
+            assertActive: () => this.assertSyncRunActive(context, '清理远端 Storage v2 旧文件'),
+            signal: context.signal
           })
           .catch((error) => {
             logger.warn('Failed to prune stale Storage v2 WebDAV artifacts after sync', error as Error)

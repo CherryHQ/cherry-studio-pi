@@ -48,6 +48,21 @@ function remoteDirectoryEntryPath(entry: { filename?: string; basename?: string 
   return null
 }
 
+function withStorageWebDavSignal<T extends Record<string, unknown>>(
+  options: T,
+  signal?: AbortSignal
+): T & { signal?: AbortSignal } {
+  return signal ? { ...options, signal } : options
+}
+
+function webDavExists(client: WebDAVClient, filePath: string, signal?: AbortSignal) {
+  return signal ? client.exists(filePath, { signal }) : client.exists(filePath)
+}
+
+function webDavGetDirectoryContents(client: WebDAVClient, filePath: string, signal?: AbortSignal) {
+  return signal ? client.getDirectoryContents(filePath, { signal }) : client.getDirectoryContents(filePath)
+}
+
 type StorageV2SyncTable = {
   entityType: StorageV2SyncEntityType
   table: string
@@ -169,6 +184,7 @@ type StorageV2WebDavRecordSyncOptions = {
   preferRemoteOnFirstJoin?: boolean
   skipWriteAccessProbe?: boolean
   assertActive?: () => void
+  signal?: AbortSignal
 }
 
 type RemoteSecretVaultCache = {
@@ -910,11 +926,16 @@ export class StorageV2WebDavRecordSyncService {
     return this.tableWeightsByEntity.get(entityType) ?? Number.MAX_SAFE_INTEGER
   }
 
-  private async ensureDirectory(client: WebDAVClient, dirPath: string) {
+  private async ensureDirectory(client: WebDAVClient, dirPath: string, signal?: AbortSignal) {
     if (dirPath === '/') return
 
     try {
-      if (await runWebDavOperation(`checking remote directory ${dirPath}`, () => client.exists(dirPath), { logger })) {
+      if (
+        await runWebDavOperation(`checking remote directory ${dirPath}`, () => webDavExists(client, dirPath, signal), {
+          logger,
+          signal
+        })
+      ) {
         return
       }
     } catch (error) {
@@ -927,9 +948,10 @@ export class StorageV2WebDavRecordSyncService {
     try {
       await runWebDavOperation(
         `creating remote directory ${dirPath}`,
-        () => client.createDirectory(dirPath, { recursive: true }),
+        () => client.createDirectory(dirPath, withStorageWebDavSignal({ recursive: true }, signal)),
         {
-          logger
+          logger,
+          signal
         }
       )
     } catch (error) {
@@ -940,8 +962,8 @@ export class StorageV2WebDavRecordSyncService {
       if (isPreconditionCreateDirectoryError(error)) {
         const existsAfterFailure = await runWebDavOperation(
           `checking remote directory ${dirPath} after create precondition failure`,
-          () => client.exists(dirPath),
-          { logger }
+          () => webDavExists(client, dirPath, signal),
+          { logger, signal }
         ).catch(() => false)
         if (existsAfterFailure) {
           logger.warn(`Remote directory ${dirPath} exists after create precondition failure`, error as Error)
@@ -952,15 +974,17 @@ export class StorageV2WebDavRecordSyncService {
     }
   }
 
-  private async assertWriteAccess(client: WebDAVClient, basePath: string) {
+  private async assertWriteAccess(client: WebDAVClient, basePath: string, signal?: AbortSignal) {
     const probePath = path.posix.join(basePath, `.cherry-studio-pi-storage-write-test-${Date.now()}.tmp`)
     await runWebDavOperation(
       `writing Storage v2 sync probe ${probePath}`,
-      () => client.putFileContents(probePath, 'ok', { overwrite: true }),
-      { logger }
+      () => client.putFileContents(probePath, 'ok', withStorageWebDavSignal({ overwrite: true }, signal)),
+      { logger, signal }
     )
 
-    const maybeDeleteFile = (client as WebDAVClient & { deleteFile?: (filePath: string) => Promise<void> }).deleteFile
+    const maybeDeleteFile = (
+      client as WebDAVClient & { deleteFile?: (filePath: string, options?: { signal?: AbortSignal }) => Promise<void> }
+    ).deleteFile
     if (typeof maybeDeleteFile !== 'function') {
       throw new Error(
         '当前 WebDAV 客户端不支持删除远端文件，无法保证 Storage v2 同步目录文件数量收敛。请更换 WebDAV 服务或升级客户端后重试。'
@@ -969,21 +993,30 @@ export class StorageV2WebDavRecordSyncService {
 
     await runWebDavOperation(
       `deleting Storage v2 sync probe ${probePath}`,
-      () => maybeDeleteFile.call(client, probePath),
-      { logger }
+      () => (signal ? maybeDeleteFile.call(client, probePath, { signal }) : maybeDeleteFile.call(client, probePath)),
+      { logger, signal }
     )
   }
 
-  private async getRemoteFileByteSize(client: WebDAVClient, filePath: string): Promise<number | null> {
-    const stat = (client as WebDAVClient & { stat?: (targetPath: string) => Promise<unknown> }).stat
+  private async getRemoteFileByteSize(
+    client: WebDAVClient,
+    filePath: string,
+    signal?: AbortSignal
+  ): Promise<number | null> {
+    const stat = (
+      client as WebDAVClient & {
+        stat?: (targetPath: string, options?: { signal?: AbortSignal }) => Promise<unknown>
+      }
+    ).stat
     if (typeof stat !== 'function') return null
 
     try {
       const result = await runWebDavOperation(
         `checking remote file size ${filePath}`,
-        () => stat.call(client, filePath),
+        () => (signal ? stat.call(client, filePath, { signal }) : stat.call(client, filePath)),
         {
-          logger
+          logger,
+          signal
         }
       )
       const size = Number((result as { size?: unknown } | null)?.size)
@@ -999,9 +1032,10 @@ export class StorageV2WebDavRecordSyncService {
     client: WebDAVClient,
     filePath: string,
     label: string,
-    maxBytes: number
+    maxBytes: number,
+    signal?: AbortSignal
   ) {
-    const byteSize = await this.getRemoteFileByteSize(client, filePath)
+    const byteSize = await this.getRemoteFileByteSize(client, filePath, signal)
     if (byteSize == null || byteSize <= maxBytes) return
 
     throw new RemoteSyncSizeLimitError(
@@ -1020,24 +1054,29 @@ export class StorageV2WebDavRecordSyncService {
   private async readJson<T>(
     client: WebDAVClient,
     filePath: string,
-    options: { maxBytes?: number; label?: string } = {}
+    options: { maxBytes?: number; label?: string; signal?: AbortSignal } = {}
   ): Promise<T | null> {
     try {
       if (
-        !(await runWebDavOperation(`checking Storage v2 sync record ${filePath}`, () => client.exists(filePath), {
-          logger
-        }))
+        !(await runWebDavOperation(
+          `checking Storage v2 sync record ${filePath}`,
+          () => webDavExists(client, filePath, options.signal),
+          {
+            logger,
+            signal: options.signal
+          }
+        ))
       ) {
         return null
       }
       const label = options.label ?? '远端 Storage v2 JSON'
       if (options.maxBytes) {
-        await this.assertRemoteFileWithinByteLimit(client, filePath, label, options.maxBytes)
+        await this.assertRemoteFileWithinByteLimit(client, filePath, label, options.maxBytes, options.signal)
       }
       const contents = await runWebDavOperation(
         `reading Storage v2 sync record ${filePath}`,
-        () => client.getFileContents(filePath, { format: 'binary' }),
-        { logger }
+        () => client.getFileContents(filePath, withStorageWebDavSignal({ format: 'binary' as const }, options.signal)),
+        { logger, signal: options.signal }
       )
       const buffer = bufferFromRemoteContents(contents)
       if (options.maxBytes) {
@@ -1061,7 +1100,8 @@ export class StorageV2WebDavRecordSyncService {
     client: WebDAVClient,
     basePath: string,
     meta: RemoteRecordMeta,
-    bundledRecord?: LocalRecord | null
+    bundledRecord?: LocalRecord | null,
+    signal?: AbortSignal
   ) {
     if (isBundleRecordPath(meta.path)) {
       return Boolean(bundledRecord)
@@ -1072,8 +1112,8 @@ export class StorageV2WebDavRecordSyncService {
       const remotePath = path.posix.join(basePath, relativePath)
       return await runWebDavOperation(
         `checking Storage v2 sync record existence ${remotePath}`,
-        () => client.exists(remotePath),
-        { logger }
+        () => webDavExists(client, remotePath, signal),
+        { logger, signal }
       )
     } catch {
       return false
@@ -1084,13 +1124,14 @@ export class StorageV2WebDavRecordSyncService {
     client: WebDAVClient,
     filePath: string,
     data: unknown,
-    options: { overwrite?: boolean } = {}
+    options: { overwrite?: boolean; signal?: AbortSignal } = {}
   ) {
-    await this.ensureDirectory(client, path.posix.dirname(filePath))
+    await this.ensureDirectory(client, path.posix.dirname(filePath), options.signal)
     await writeWebDavJsonAtomically(client, filePath, data, {
       logger,
       operation: 'Storage v2 sync record',
-      overwrite: options.overwrite
+      overwrite: options.overwrite,
+      signal: options.signal
     })
   }
 
@@ -1106,14 +1147,14 @@ export class StorageV2WebDavRecordSyncService {
   private async listRemoteFilesRecursive(
     client: WebDAVClient,
     dirPath: string,
-    options: { assertActive?: () => void; counter?: { files: number }; rootPath?: string } = {}
+    options: { assertActive?: () => void; counter?: { files: number }; rootPath?: string; signal?: AbortSignal } = {}
   ): Promise<string[]> {
     options.assertActive?.()
     try {
       const exists = await runWebDavOperation(
         `checking Storage v2 artifact directory ${dirPath}`,
-        () => client.exists(dirPath),
-        { logger }
+        () => webDavExists(client, dirPath, options.signal),
+        { logger, signal: options.signal }
       )
       if (!exists) return []
     } catch (error) {
@@ -1123,8 +1164,8 @@ export class StorageV2WebDavRecordSyncService {
 
     const contents = await runWebDavOperation(
       `listing Storage v2 artifact directory ${dirPath}`,
-      () => client.getDirectoryContents(dirPath),
-      { logger }
+      () => webDavGetDirectoryContents(client, dirPath, options.signal),
+      { logger, signal: options.signal }
     ).catch((error) => {
       if (error instanceof WebDavOperationError && error.status === 404) return []
       throw error
@@ -1151,7 +1192,8 @@ export class StorageV2WebDavRecordSyncService {
           ...(await this.listRemoteFilesRecursive(client, normalizedFilename, {
             assertActive: options.assertActive,
             counter,
-            rootPath
+            rootPath,
+            signal: options.signal
           }))
         )
       } else {
@@ -1164,8 +1206,12 @@ export class StorageV2WebDavRecordSyncService {
     return files
   }
 
-  private async deleteRemoteFileIfPossible(client: WebDAVClient, filePath: string) {
-    const deleteFile = (client as WebDAVClient & { deleteFile?: (targetPath: string) => Promise<void> }).deleteFile
+  private async deleteRemoteFileIfPossible(client: WebDAVClient, filePath: string, signal?: AbortSignal) {
+    const deleteFile = (
+      client as WebDAVClient & {
+        deleteFile?: (targetPath: string, options?: { signal?: AbortSignal }) => Promise<void>
+      }
+    ).deleteFile
     if (typeof deleteFile !== 'function') {
       throw new Error(
         '当前 WebDAV 客户端不支持删除远端文件，无法清理旧 Storage v2 同步文件。请更换 WebDAV 服务或升级客户端后重试。'
@@ -1174,9 +1220,10 @@ export class StorageV2WebDavRecordSyncService {
 
     await runWebDavOperation(
       `deleting stale Storage v2 artifact ${filePath}`,
-      () => deleteFile.call(client, filePath),
+      () => (signal ? deleteFile.call(client, filePath, { signal }) : deleteFile.call(client, filePath)),
       {
-        logger
+        logger,
+        signal
       }
     ).catch((error) => {
       if (error instanceof WebDavOperationError && error.status === 404) return
@@ -1201,12 +1248,13 @@ export class StorageV2WebDavRecordSyncService {
   private async pruneRemoteArtifactRootIfUnreferenced(
     client: WebDAVClient,
     rootPath: string,
-    referenced: ReadonlySet<string>
+    referenced: ReadonlySet<string>,
+    signal?: AbortSignal
   ) {
     if (this.hasReferencedPathUnderRoot(referenced, rootPath)) return false
 
     try {
-      await this.deleteRemoteFileIfPossible(client, rootPath)
+      await this.deleteRemoteFileIfPossible(client, rootPath, signal)
       return true
     } catch (error) {
       if (error instanceof WebDavOperationError && error.transient) {
@@ -1225,7 +1273,7 @@ export class StorageV2WebDavRecordSyncService {
     client: WebDAVClient,
     basePath: string,
     manifest: StorageV2WebDavRecordSyncManifest | null | undefined,
-    options: { assertActive?: () => void } = {}
+    options: { assertActive?: () => void; signal?: AbortSignal } = {}
   ) {
     if (!manifest) return
 
@@ -1248,15 +1296,18 @@ export class StorageV2WebDavRecordSyncService {
     for (const root of roots) {
       options.assertActive?.()
       const rootPath = path.posix.join(basePath, root)
-      if (await this.pruneRemoteArtifactRootIfUnreferenced(client, rootPath, referenced)) {
+      if (await this.pruneRemoteArtifactRootIfUnreferenced(client, rootPath, referenced, options.signal)) {
         continue
       }
 
-      const files = await this.listRemoteFilesRecursive(client, rootPath, { assertActive: options.assertActive })
+      const files = await this.listRemoteFilesRecursive(client, rootPath, {
+        assertActive: options.assertActive,
+        signal: options.signal
+      })
       for (const filePath of files) {
         options.assertActive?.()
         if (referenced.has(filePath)) continue
-        await this.deleteRemoteFileIfPossible(client, filePath)
+        await this.deleteRemoteFileIfPossible(client, filePath, options.signal)
       }
     }
   }
@@ -1303,7 +1354,8 @@ export class StorageV2WebDavRecordSyncService {
   private async readRecordBundle(
     client: WebDAVClient,
     basePath: string,
-    manifest: StorageV2WebDavRecordSyncManifest
+    manifest: StorageV2WebDavRecordSyncManifest,
+    signal?: AbortSignal
   ): Promise<StorageV2WebDavRecordSyncBundle | null> {
     if (!manifest.bundle?.path) return null
 
@@ -1312,7 +1364,8 @@ export class StorageV2WebDavRecordSyncService {
       path.posix.join(basePath, safeRemoteRelativePath(manifest.bundle.path)),
       {
         maxBytes: MAX_SYNC_RECORD_BUNDLE_REMOTE_JSON_BYTES,
-        label: '远端 Storage v2 记录包'
+        label: '远端 Storage v2 记录包',
+        signal
       }
     )
     if (!isPlainRecord(bundle?.records)) {
@@ -1435,7 +1488,7 @@ export class StorageV2WebDavRecordSyncService {
     basePath: string,
     manifest: StorageV2WebDavRecordSyncManifest,
     recordsById: Map<string, LocalRecord>,
-    options: { verifiedRemoteBundle?: { path: string; valueHash: string } | null } = {}
+    options: { verifiedRemoteBundle?: { path: string; valueHash: string } | null; signal?: AbortSignal } = {}
   ) {
     const bundle = this.buildBundle(recordsById, manifest.blobs)
     const bundleByteSize = jsonByteLength(bundle)
@@ -1451,7 +1504,10 @@ export class StorageV2WebDavRecordSyncService {
     const remoteBundleAlreadyVerified =
       options.verifiedRemoteBundle?.path === relativePath && options.verifiedRemoteBundle.valueHash === valueHash
     if (!remoteBundleAlreadyVerified) {
-      await this.writeJson(client, path.posix.join(basePath, relativePath), bundle, { overwrite: false })
+      await this.writeJson(client, path.posix.join(basePath, relativePath), bundle, {
+        overwrite: false,
+        signal: options.signal
+      })
     }
 
     manifest.records = Object.fromEntries(
@@ -1570,7 +1626,8 @@ export class StorageV2WebDavRecordSyncService {
       path.posix.join(basePath, safeRemoteRelativePath(manifest.secrets.path)),
       {
         maxBytes: MAX_SYNC_SECRET_BUNDLE_JSON_BYTES,
-        label: '远端敏感配置数据包'
+        label: '远端敏感配置数据包',
+        signal: options.signal
       }
     )
     if (!bundle?.secrets || typeof bundle.secrets !== 'object') {
@@ -1633,7 +1690,8 @@ export class StorageV2WebDavRecordSyncService {
     basePath: string,
     manifest: StorageV2WebDavRecordSyncManifest,
     secrets: Record<string, StorageV2PlaintextSecretVaultEntry>,
-    secretKeyMaterial: string | undefined
+    secretKeyMaterial: string | undefined,
+    signal?: AbortSignal
   ) {
     const valueHash = secretVaultValueHash(secrets)
     const relativePath = secretBundlePath(valueHash)
@@ -1660,7 +1718,10 @@ export class StorageV2WebDavRecordSyncService {
       )
     }
 
-    await this.writeJson(client, path.posix.join(basePath, relativePath), bundle, { overwrite: true })
+    await this.writeJson(client, path.posix.join(basePath, relativePath), bundle, {
+      overwrite: true,
+      signal
+    })
     manifest.secrets = {
       version: 1,
       path: relativePath,
@@ -1796,7 +1857,14 @@ export class StorageV2WebDavRecordSyncService {
     }
 
     if (!remoteSecrets) {
-      await this.writeRemoteSecretVaultBundle(client, basePath, manifest, localSecrets, options.secretKeyMaterial)
+      await this.writeRemoteSecretVaultBundle(
+        client,
+        basePath,
+        manifest,
+        localSecrets,
+        options.secretKeyMaterial,
+        options.signal
+      )
       summary.secretUploaded += localIds.length
       return
     }
@@ -1859,7 +1927,14 @@ export class StorageV2WebDavRecordSyncService {
 
     const mergedHash = secretVaultValueHash(merged)
     if (remoteNeedsUpdate || mergedHash !== manifest.secrets?.valueHash) {
-      await this.writeRemoteSecretVaultBundle(client, basePath, manifest, merged, options.secretKeyMaterial)
+      await this.writeRemoteSecretVaultBundle(
+        client,
+        basePath,
+        manifest,
+        merged,
+        options.secretKeyMaterial,
+        options.signal
+      )
     }
   }
 
@@ -1964,7 +2039,8 @@ export class StorageV2WebDavRecordSyncService {
     basePath: string,
     manifest: StorageV2WebDavRecordSyncManifest,
     record: LocalRecord,
-    bundledRecords?: Map<string, LocalRecord>
+    bundledRecords?: Map<string, LocalRecord>,
+    signal?: AbortSignal
   ) {
     if (bundledRecords) {
       bundledRecords.set(record.id, record)
@@ -1973,7 +2049,7 @@ export class StorageV2WebDavRecordSyncService {
     }
 
     const relativePath = recordPath(record)
-    await this.writeJson(client, path.posix.join(basePath, relativePath), record)
+    await this.writeJson(client, path.posix.join(basePath, relativePath), record, { signal })
 
     manifest.records[record.id] = recordMetaFromLocalRecord(record, relativePath)
   }
@@ -1982,7 +2058,8 @@ export class StorageV2WebDavRecordSyncService {
     client: WebDAVClient,
     basePath: string,
     meta: RemoteRecordMeta,
-    bundledRecord?: LocalRecord | null
+    bundledRecord?: LocalRecord | null,
+    signal?: AbortSignal
   ) {
     if (!bundledRecord && isBundleRecordPath(meta.path)) {
       throw new Error(
@@ -1994,7 +2071,8 @@ export class StorageV2WebDavRecordSyncService {
       bundledRecord ??
       (await this.readJson<LocalRecord>(client, path.posix.join(basePath, safeRemoteRelativePath(meta.path)), {
         maxBytes: MAX_SYNC_RECORD_REMOTE_JSON_BYTES,
-        label: `远端 Storage v2 记录 ${meta.entityType}:${meta.idValues.join(':')}`
+        label: `远端 Storage v2 记录 ${meta.entityType}:${meta.idValues.join(':')}`,
+        signal
       }))
     if (!record?.row || !record?.table) {
       throw new Error(
@@ -2427,7 +2505,8 @@ export class StorageV2WebDavRecordSyncService {
     basePath: string,
     manifest: StorageV2WebDavRecordSyncManifest,
     record: LocalRecord,
-    summary: StorageV2WebDavRecordSyncSummary
+    summary: StorageV2WebDavRecordSyncSummary,
+    signal?: AbortSignal
   ) {
     const storagePathColumn = record.table.blobStoragePathColumn
     const checksumColumn = record.table.blobChecksumColumn
@@ -2460,19 +2539,20 @@ export class StorageV2WebDavRecordSyncService {
     if (remote?.checksum === checksum && remote.byteSize === stat.size) return
 
     const relativePath = blobPath(blobId, checksum)
-    await this.ensureDirectory(client, path.posix.dirname(path.posix.join(basePath, relativePath)))
+    await this.ensureDirectory(client, path.posix.dirname(path.posix.join(basePath, relativePath)), signal)
     const remotePath = path.posix.join(basePath, relativePath)
     await runWebDavOperation(
       `uploading Storage v2 blob ${remotePath}`,
       () =>
         client.putFileContents(remotePath, fs.createReadStream(localPath), {
           overwrite: true,
-          contentLength: stat.size
+          contentLength: stat.size,
+          ...(signal ? { signal } : {})
         }),
-      { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
+      { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS, signal }
     )
 
-    await this.assertRemoteBlobIntegrity(client, remotePath, blobId, checksum, stat.size)
+    await this.assertRemoteBlobIntegrity(client, remotePath, blobId, checksum, stat.size, signal)
 
     manifest.blobs[blobId] = {
       id: blobId,
@@ -2490,7 +2570,8 @@ export class StorageV2WebDavRecordSyncService {
     basePath: string,
     manifest: StorageV2WebDavRecordSyncManifest,
     record: LocalRecord,
-    summary: StorageV2WebDavRecordSyncSummary
+    summary: StorageV2WebDavRecordSyncSummary,
+    signal?: AbortSignal
   ) {
     const storagePathColumn = record.table.blobStoragePathColumn
     const checksumColumn = record.table.blobChecksumColumn
@@ -2547,11 +2628,17 @@ export class StorageV2WebDavRecordSyncService {
     }
 
     const remotePath = path.posix.join(basePath, safeRemoteRelativePath(blob.path))
-    await this.assertRemoteFileWithinByteLimit(client, remotePath, `远端附件文件 blob ${blobId}`, MAX_SYNC_BLOB_BYTES)
+    await this.assertRemoteFileWithinByteLimit(
+      client,
+      remotePath,
+      `远端附件文件 blob ${blobId}`,
+      MAX_SYNC_BLOB_BYTES,
+      signal
+    )
     const contents = await runWebDavOperation(
       `downloading Storage v2 blob ${remotePath}`,
-      () => client.getFileContents(remotePath, { format: 'binary' }),
-      { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
+      () => client.getFileContents(remotePath, withStorageWebDavSignal({ format: 'binary' as const }, signal)),
+      { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS, signal }
     )
     const buffer = bufferFromRemoteContents(contents)
     this.assertBlobBufferIntegrity(buffer, blobId, blob.checksum, blob.byteSize)
@@ -2587,7 +2674,7 @@ export class StorageV2WebDavRecordSyncService {
       summary
     )
     options.assertActive?.()
-    await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary)
+    await this.ensureRemoteBlobFile(client, basePath, manifest, remoteRecord, summary, options.signal)
   }
 
   private assertBlobBufferIntegrity(buffer: Buffer, blobId: string, checksum: string, byteSize: number) {
@@ -2605,12 +2692,13 @@ export class StorageV2WebDavRecordSyncService {
     remotePath: string,
     blobId: string,
     checksum: string,
-    byteSize: number
+    byteSize: number,
+    signal?: AbortSignal
   ) {
     const contents = await runWebDavOperation(
       `verifying uploaded Storage v2 blob ${remotePath}`,
-      () => client.getFileContents(remotePath, { format: 'binary' }),
-      { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
+      () => client.getFileContents(remotePath, withStorageWebDavSignal({ format: 'binary' as const }, signal)),
+      { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS, signal }
     )
     this.assertBlobBufferIntegrity(bufferFromRemoteContents(contents), blobId, checksum, byteSize)
   }
@@ -2645,10 +2733,10 @@ export class StorageV2WebDavRecordSyncService {
       pendingSyncStates.set(id, valueHash)
     }
     options.assertActive?.()
-    await this.ensureDirectory(client, basePath)
+    await this.ensureDirectory(client, basePath, options.signal)
     options.assertActive?.()
     if (!options.skipWriteAccessProbe) {
-      await this.assertWriteAccess(client, basePath)
+      await this.assertWriteAccess(client, basePath, options.signal)
     }
     options.assertActive?.()
     const localRecords = await this.listLocalRecords(dbClient)
@@ -2656,7 +2744,7 @@ export class StorageV2WebDavRecordSyncService {
     const localById = new Map(localRecords.map((record) => [record.id, record]))
     const firstJoinRequiredUploadIds = collectFirstJoinRequiredUploadIds(localRecords)
     const initialBundleMeta = manifest.bundle
-    const remoteBundle = await this.readRecordBundle(client, basePath, manifest)
+    const remoteBundle = await this.readRecordBundle(client, basePath, manifest, options.signal)
     options.assertActive?.()
     const bundledRecords = new Map<string, LocalRecord>(Object.entries(remoteBundle?.records ?? {}))
     if (remoteBundle) {
@@ -2720,9 +2808,9 @@ export class StorageV2WebDavRecordSyncService {
         }
 
         options.assertActive?.()
-        await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords)
+        await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords, options.signal)
         options.assertActive?.()
-        await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
+        await this.pushBlobFile(client, basePath, manifest, localRecord, summary, options.signal)
         options.assertActive?.()
         await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
         stageRecordSyncState(id, localRecord.valueHash)
@@ -2758,7 +2846,7 @@ export class StorageV2WebDavRecordSyncService {
         }
 
         options.assertActive?.()
-        const remoteRecord = await this.pullRecord(client, basePath, remoteMeta, bundledRecord)
+        const remoteRecord = await this.pullRecord(client, basePath, remoteMeta, bundledRecord, options.signal)
         if (remoteRecord) {
           options.assertActive?.()
           await this.prepareRemoteRecordForLocalApply(
@@ -2788,12 +2876,18 @@ export class StorageV2WebDavRecordSyncService {
       }
 
       if (localRecord.valueHash === remoteMeta.valueHash) {
-        const remoteRecordAccessible = await this.hasRemoteRecord(client, basePath, remoteMeta, bundledRecord)
+        const remoteRecordAccessible = await this.hasRemoteRecord(
+          client,
+          basePath,
+          remoteMeta,
+          bundledRecord,
+          options.signal
+        )
         if (!remoteRecordAccessible) {
           options.assertActive?.()
-          await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords)
+          await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords, options.signal)
           options.assertActive?.()
-          await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
+          await this.pushBlobFile(client, basePath, manifest, localRecord, summary, options.signal)
           options.assertActive?.()
           await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
           stageRecordSyncState(id, localRecord.valueHash)
@@ -2803,7 +2897,7 @@ export class StorageV2WebDavRecordSyncService {
         }
 
         options.assertActive?.()
-        await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
+        await this.pushBlobFile(client, basePath, manifest, localRecord, summary, options.signal)
         options.assertActive?.()
         await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
         bundledRecords.set(id, localRecord)
@@ -2815,7 +2909,7 @@ export class StorageV2WebDavRecordSyncService {
 
       const localChanged = hasLocalRecordChangedSinceSync(lastHash, localRecord.valueHash)
       options.assertActive?.()
-      const remoteRecord = await this.pullRecord(client, basePath, remoteMeta, bundledRecord)
+      const remoteRecord = await this.pullRecord(client, basePath, remoteMeta, bundledRecord, options.signal)
       if (!remoteRecord) {
         summary.storageSkipped += 1
         continue
@@ -2889,9 +2983,9 @@ export class StorageV2WebDavRecordSyncService {
 
       if (localChanged && !remoteChanged) {
         options.assertActive?.()
-        await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords)
+        await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords, options.signal)
         options.assertActive?.()
-        await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
+        await this.pushBlobFile(client, basePath, manifest, localRecord, summary, options.signal)
         options.assertActive?.()
         await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
         stageRecordSyncState(id, localRecord.valueHash)
@@ -2925,9 +3019,9 @@ export class StorageV2WebDavRecordSyncService {
       const localWins = this.shouldLocalRecordWin(localRecord, remoteRecord)
       if (localWins) {
         options.assertActive?.()
-        await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords)
+        await this.pushRecord(client, basePath, manifest, localRecord, bundledRecords, options.signal)
         options.assertActive?.()
-        await this.pushBlobFile(client, basePath, manifest, localRecord, summary)
+        await this.pushBlobFile(client, basePath, manifest, localRecord, summary, options.signal)
         options.assertActive?.()
         await this.applyLocalTombstoneRecord(dbClient, manifest, localRecord, bundledRecords)
         stageRecordSyncState(id, localRecord.valueHash)
@@ -3001,7 +3095,8 @@ export class StorageV2WebDavRecordSyncService {
               path: initialBundleMeta.path,
               valueHash: initialBundleMeta.valueHash
             }
-          : null
+          : null,
+      signal: options.signal
     })
     options.assertActive?.()
     return {
