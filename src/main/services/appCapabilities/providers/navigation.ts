@@ -1,11 +1,15 @@
 import type { AppCapabilityDefinition } from '../types'
 import { navigateApp, normalizeAppRoute, okResult } from '../utils'
 
+const APP_ROUTE_STRING_ERROR = '应用路由必须是字符串。'
+const APP_ROUTE_REQUIRED_ERROR = '应用路由不能为空。'
+const NAVIGATION_ABORT_ERROR = '导航能力调用已取消。'
+
 function normalizeNavigationRoute(value: unknown) {
-  if (typeof value !== 'string') throw new Error('App route must be a string')
+  if (typeof value !== 'string') throw new Error(APP_ROUTE_STRING_ERROR)
 
   const route = value.trim()
-  if (!route) throw new Error('App route is required')
+  if (!route) throw new Error(APP_ROUTE_REQUIRED_ERROR)
 
   return normalizeAppRoute(route)
 }
@@ -15,7 +19,7 @@ function throwIfNavigationSignalAborted(signal?: AbortSignal) {
   const reason = signal.reason
   if (reason instanceof Error) throw reason
   if (typeof reason === 'string' && reason.trim()) throw new Error(reason.trim())
-  throw new Error('Navigation capability call aborted')
+  throw new Error(NAVIGATION_ABORT_ERROR)
 }
 
 export function createNavigationCapabilities(): AppCapabilityDefinition[] {
