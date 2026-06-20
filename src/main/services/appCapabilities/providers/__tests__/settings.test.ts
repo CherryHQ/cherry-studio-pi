@@ -294,7 +294,7 @@ describe('settings app capabilities', () => {
       theme: 'system',
       webdavPass: '[redacted]'
     })
-    expect(data.sourceWarnings).toEqual(['Renderer settings bridge unavailable: renderer busy'])
+    expect(data.sourceWarnings).toEqual(['渲染进程设置桥不可用：renderer busy'])
   })
 
   it('stops settings reads immediately when the capability signal is aborted', async () => {
@@ -418,7 +418,7 @@ describe('settings app capabilities', () => {
 
     await expect(
       capability('settings.value.set').execute({ path: 'showAssistants', value: false }, { source: 'agent' })
-    ).rejects.toThrow('Unsupported setting path: showAssistants')
+    ).rejects.toThrow('不支持的设置路径：showAssistants')
 
     expect(mocks.preferenceService.set).not.toHaveBeenCalled()
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
@@ -498,7 +498,7 @@ describe('settings app capabilities', () => {
 
   it('rejects empty setting paths without reading all settings', async () => {
     await expect(capability('settings.value.get').execute({ path: '   ' }, { source: 'agent' })).rejects.toThrow(
-      'Setting path is required'
+      '设置路径不能为空。'
     )
 
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
@@ -506,11 +506,11 @@ describe('settings app capabilities', () => {
 
   it('rejects non-string setting paths without reading or writing settings', async () => {
     await expect(capability('settings.value.get').execute({ path: ['theme'] }, { source: 'agent' })).rejects.toThrow(
-      'Setting path must be a string'
+      '设置路径必须是字符串。'
     )
     await expect(
       capability('settings.value.set').execute({ path: { key: 'theme' }, value: 'dark' }, { source: 'agent' })
-    ).rejects.toThrow('Setting path must be a string')
+    ).rejects.toThrow('设置路径必须是字符串。')
 
     expect(mocks.preferenceService.set).not.toHaveBeenCalled()
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
@@ -519,14 +519,14 @@ describe('settings app capabilities', () => {
   it('rejects empty setting update paths without dispatching', async () => {
     await expect(
       capability('settings.value.set').execute({ path: '   ', value: 'dark' }, { source: 'agent' })
-    ).rejects.toThrow('Setting path is required')
+    ).rejects.toThrow('设置路径不能为空。')
 
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
 
   it('rejects missing setting update values without writing undefined', async () => {
     await expect(capability('settings.value.set').execute({ path: 'theme' }, { source: 'agent' })).rejects.toThrow(
-      'Setting value is required'
+      '设置值不能为空。'
     )
 
     expect(mocks.preferenceService.set).not.toHaveBeenCalled()
@@ -535,19 +535,19 @@ describe('settings app capabilities', () => {
 
   it('rejects non-object settings capability inputs before reads, writes, or navigation', async () => {
     await expect(capability('settings.sections.list').execute('sections' as any, { source: 'agent' })).rejects.toThrow(
-      'Settings capability input must be an object'
+      '设置能力的输入必须是对象。'
     )
     await expect(capability('settings.read').execute(['settings'] as any, { source: 'agent' })).rejects.toThrow(
-      'Settings capability input must be an object'
+      '设置能力的输入必须是对象。'
     )
     await expect(capability('settings.value.get').execute(true as any, { source: 'agent' })).rejects.toThrow(
-      'Settings capability input must be an object'
+      '设置能力的输入必须是对象。'
     )
     await expect(capability('settings.value.set').execute('theme' as any, { source: 'agent' })).rejects.toThrow(
-      'Settings capability input must be an object'
+      '设置能力的输入必须是对象。'
     )
     await expect(capability('settings.open').execute(['data'] as any, { source: 'agent' })).rejects.toThrow(
-      'Settings capability input must be an object'
+      '设置能力的输入必须是对象。'
     )
 
     expect(mocks.preferenceService.get).not.toHaveBeenCalled()
@@ -582,7 +582,7 @@ describe('settings app capabilities', () => {
 
   it('rejects non-settings routes through the settings opener', async () => {
     await expect(capability('settings.open').execute({ route: '/agents' }, { source: 'agent' })).rejects.toThrow(
-      'Unsupported settings route: /agents'
+      '不支持的设置路由：/agents'
     )
 
     expect(mocks.navigateApp).not.toHaveBeenCalled()
@@ -590,14 +590,14 @@ describe('settings app capabilities', () => {
 
   it('rejects invalid settings opener inputs instead of opening the default section', async () => {
     await expect(capability('settings.open').execute({ section: ['data'] }, { source: 'agent' })).rejects.toThrow(
-      'Settings section must be a string'
+      '设置分区必须是字符串。'
     )
     await expect(capability('settings.open').execute({ section: 'unknown' }, { source: 'agent' })).rejects.toThrow(
-      'Unsupported settings section: unknown'
+      '不支持的设置分区：unknown'
     )
     await expect(
       capability('settings.open').execute({ route: { path: '/settings/data' } }, { source: 'agent' })
-    ).rejects.toThrow('Settings route must be a string')
+    ).rejects.toThrow('设置路由必须是字符串。')
 
     expect(mocks.navigateApp).not.toHaveBeenCalled()
   })

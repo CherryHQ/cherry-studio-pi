@@ -10,6 +10,21 @@ import { isSensitiveAgentKey, navigateApp, okResult, pickPath, sanitizeForAgent 
 const logger = loggerService.withContext('AppCapability:Settings')
 const SETTINGS_RENDERER_BRIDGE_CHECK_TIMEOUT_MS = 800
 const SETTINGS_RENDERER_BRIDGE_CALL_TIMEOUT_MS = 1_500
+const SETTINGS_ABORT_ERROR = '设置能力调用已取消。'
+const SETTINGS_INPUT_OBJECT_ERROR = '设置能力的输入必须是对象。'
+const SETTINGS_TEXT_STRING_ERROR_SUFFIX = '必须是字符串。'
+const SETTINGS_TEXT_REQUIRED_ERROR_SUFFIX = '不能为空。'
+const SETTINGS_READ_TIMEOUT_ERROR = '读取设置超时'
+const SETTING_PATH_LABEL = '设置路径'
+const SETTING_VALUE_REQUIRED_ERROR = '设置值不能为空。'
+const SETTINGS_ROUTE_LABEL = '设置路由'
+const SETTINGS_SECTION_LABEL = '设置分区'
+const UNSUPPORTED_SETTINGS_ROUTE_PREFIX = '不支持的设置路由：'
+const UNSUPPORTED_SETTING_PATH_PREFIX = '不支持的设置路径：'
+const UNSUPPORTED_SETTINGS_SECTION_PREFIX = '不支持的设置分区：'
+const RENDERER_SETTINGS_BRIDGE_WARNING_PREFIX = '渲染进程设置桥不可用：'
+const PREFERENCE_SERVICE_WARNING_PREFIX = '偏好设置服务不可用：'
+const RUNTIME_SETTING_WRITE_ERROR_PREFIX = '写入运行时设置失败：'
 
 export const SETTINGS_SECTIONS = [
   ['provider', 'Provider', '/settings/provider'],
@@ -100,12 +115,12 @@ function throwIfSettingsSignalAborted(signal?: AbortSignal) {
   const reason = signal.reason
   if (reason instanceof Error) throw reason
   if (typeof reason === 'string' && reason.trim()) throw new Error(reason.trim())
-  throw new Error('Settings capability call aborted')
+  throw new Error(SETTINGS_ABORT_ERROR)
 }
 
 function normalizeInputObject(input: unknown) {
   if (input === null || typeof input === 'undefined') return {}
-  if (typeof input !== 'object' || Array.isArray(input)) throw new Error('Settings capability input must be an object')
+  if (typeof input !== 'object' || Array.isArray(input)) throw new Error(SETTINGS_INPUT_OBJECT_ERROR)
   return input as Record<string, unknown>
 }
 
@@ -115,24 +130,24 @@ function getRoutePathname(route: string) {
 
 function normalizeOptionalSettingsText(value: unknown, label: string) {
   if (value === null || typeof value === 'undefined') return ''
-  if (typeof value !== 'string') throw new Error(`${label} must be a string`)
+  if (typeof value !== 'string') throw new Error(label + SETTINGS_TEXT_STRING_ERROR_SUFFIX)
   return value.trim()
 }
 
 function normalizeRequiredSettingsText(value: unknown, label: string) {
   const text = normalizeOptionalSettingsText(value, label)
-  if (!text) throw new Error(`${label} is required`)
+  if (!text) throw new Error(label + SETTINGS_TEXT_REQUIRED_ERROR_SUFFIX)
   return text
 }
 
 function normalizeSettingsRouteInput(value: unknown) {
-  const raw = normalizeOptionalSettingsText(value, 'Settings route')
+  const raw = normalizeOptionalSettingsText(value, SETTINGS_ROUTE_LABEL)
   if (!raw) return ''
 
   const route = raw.startsWith('/') ? raw : `/${raw}`
   const pathname = getRoutePathname(route)
   if (!SETTINGS_SECTIONS.some((section) => section.route === pathname)) {
-    throw new Error(`Unsupported settings route: ${route}`)
+    throw new Error(UNSUPPORTED_SETTINGS_ROUTE_PREFIX + route)
   }
 
   return route
@@ -195,14 +210,14 @@ export async function readSettingsForAgentDetailed(signal?: AbortSignal) {
     settings = await callRendererBridge<Record<string, any>>(RENDERER_GET_SETTINGS_BRIDGE, undefined, {
       checkTimeoutMs: SETTINGS_RENDERER_BRIDGE_CHECK_TIMEOUT_MS,
       timeoutMs: SETTINGS_RENDERER_BRIDGE_CALL_TIMEOUT_MS,
-      timeoutMessage: 'Timed out reading settings',
+      timeoutMessage: SETTINGS_READ_TIMEOUT_ERROR,
       signal
     })
   } catch (error) {
     if (signal?.aborted) throw error
     const message = getBridgeErrorMessage(error)
     logger.warn('Renderer settings bridge unavailable; returning preference-backed settings only', { error: message })
-    sourceWarnings.push(`Renderer settings bridge unavailable: ${message}`)
+    sourceWarnings.push(RENDERER_SETTINGS_BRIDGE_WARNING_PREFIX + message)
     settings = {}
   }
 
@@ -217,7 +232,7 @@ export async function readSettingsForAgentDetailed(signal?: AbortSignal) {
   } catch (error) {
     const message = getBridgeErrorMessage(error)
     logger.warn('Preference service unavailable while reading settings for app capability', { error: message })
-    sourceWarnings.push(`Preference service unavailable: ${message}`)
+    sourceWarnings.push(PREFERENCE_SERVICE_WARNING_PREFIX + message)
     return { settings, sourceWarnings }
   }
 }
@@ -260,7 +275,7 @@ export async function persistSettingValue(keyPath: string, value: unknown, signa
   throwIfSettingsSignalAborted(signal)
   const action = SETTINGS_SETTERS[keyPath]
   const preferenceKey = PREFERENCE_SETTING_PATHS[keyPath]
-  if (!action && !preferenceKey) throw new Error(`Unsupported setting path: ${keyPath}`)
+  if (!action && !preferenceKey) throw new Error(UNSUPPORTED_SETTING_PATH_PREFIX + keyPath)
 
   if (preferenceKey) {
     await application.get('PreferenceService').set(preferenceKey, value as never)
@@ -289,7 +304,7 @@ export async function persistSettingValue(keyPath: string, value: unknown, signa
         })
         return
       }
-      throw new Error(`Failed to write runtime setting: ${getBridgeErrorMessage(error)}`)
+      throw new Error(RUNTIME_SETTING_WRITE_ERROR_PREFIX + getBridgeErrorMessage(error))
     }
   }
 }
@@ -345,7 +360,7 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       tags: ['settings', 'preferences', 'get'],
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
-        const keyPath = normalizeRequiredSettingsText(inputObject.path, 'Setting path')
+        const keyPath = normalizeRequiredSettingsText(inputObject.path, SETTING_PATH_LABEL)
         return okResult('Setting value read', {
           path: keyPath,
           value: sanitizeSettingValueForAgent(keyPath, await readSettingValueForAgent(keyPath, context.signal))
@@ -373,9 +388,9 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       examples: ['Change language', 'Set theme', 'Set default painting provider', 'Enable API server'],
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
-        const keyPath = normalizeRequiredSettingsText(inputObject.path, 'Setting path')
-        if (!Object.prototype.hasOwnProperty.call(inputObject, 'value')) throw new Error('Setting value is required')
-        if (!isSupportedSettingPath(keyPath)) throw new Error(`Unsupported setting path: ${keyPath}`)
+        const keyPath = normalizeRequiredSettingsText(inputObject.path, SETTING_PATH_LABEL)
+        if (!Object.prototype.hasOwnProperty.call(inputObject, 'value')) throw new Error(SETTING_VALUE_REQUIRED_ERROR)
+        if (!isSupportedSettingPath(keyPath)) throw new Error(UNSUPPORTED_SETTING_PATH_PREFIX + keyPath)
         await persistSettingValue(keyPath, inputObject.value, context.signal)
         return okResult('Setting updated', {
           path: keyPath,
@@ -400,10 +415,10 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       tags: ['settings', 'navigation', 'open'],
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
-        const sectionInput = normalizeOptionalSettingsText(inputObject.section, 'Settings section')
+        const sectionInput = normalizeOptionalSettingsText(inputObject.section, SETTINGS_SECTION_LABEL)
         const routeInput = normalizeSettingsRouteInput(inputObject.route)
         const section = SETTINGS_SECTIONS.find((item) => item.id === sectionInput)
-        if (sectionInput && !section) throw new Error(`Unsupported settings section: ${sectionInput}`)
+        if (sectionInput && !section) throw new Error(UNSUPPORTED_SETTINGS_SECTION_PREFIX + sectionInput)
         const route = section?.route || routeInput || '/settings/provider'
         throwIfSettingsSignalAborted(context.signal)
         await (context.signal ? navigateApp(route, context.signal) : navigateApp(route))
