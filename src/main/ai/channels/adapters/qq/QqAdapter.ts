@@ -1,4 +1,9 @@
-import { type FileAttachment, type ImageAttachment, MAX_FILE_SIZE_BYTES } from '@main/utils/downloadAsBase64'
+import {
+  type FileAttachment,
+  type ImageAttachment,
+  MAX_FILE_SIZE_BYTES,
+  readResponseBufferWithinLimit
+} from '@main/utils/downloadAsBase64'
 import { summarizeUrlForLog } from '@main/utils/logging'
 import { sanitizeRemoteUrl } from '@main/utils/remoteUrlSafety'
 import { net } from 'electron'
@@ -443,13 +448,13 @@ class QqAdapter extends ChannelAdapter {
                 signal: AbortSignal.timeout(QQ_ATTACHMENT_DOWNLOAD_TIMEOUT_MS)
               })
               if (!retry.ok) return
-              const buffer = Buffer.from(await retry.arrayBuffer())
+              const { buffer } = await readResponseBufferWithinLimit(retry)
               // `att.size` is attacker-supplied metadata; cap on the real downloaded bytes.
-              if (buffer.length > MAX_FILE_SIZE_BYTES) return
+              if (!buffer) return
               this.pushAttachment(att, buffer, images, files)
             } else {
-              const buffer = Buffer.from(await response.arrayBuffer())
-              if (buffer.length > MAX_FILE_SIZE_BYTES) return
+              const { buffer } = await readResponseBufferWithinLimit(response)
+              if (!buffer) return
               this.pushAttachment(att, buffer, images, files)
             }
           } catch {

@@ -13,7 +13,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { loggerService } from '@logger'
 import { storageV2SecretVaultService } from '@main/services/storageV2/SecretVaultService'
 import { storageV2SettingsRepository } from '@main/services/storageV2/StorageV2Repositories'
-import { MAX_FILE_SIZE_BYTES } from '@main/utils/downloadAsBase64'
+import { MAX_FILE_SIZE_BYTES, readResponseBufferWithinLimit } from '@main/utils/downloadAsBase64'
 import { net } from 'electron'
 import * as z from 'zod'
 
@@ -250,9 +250,9 @@ async function cdnDownloadImage(item: ImageItem): Promise<Buffer | null> {
     return null
   }
 
-  const encrypted = Buffer.from(await response.arrayBuffer())
-  if (encrypted.length > MAX_FILE_SIZE_BYTES) {
-    logger.warn('Image too large after CDN download', { size: encrypted.length })
+  const { buffer: encrypted, bytesRead } = await readResponseBufferWithinLimit(response)
+  if (!encrypted) {
+    logger.warn('Image too large after CDN download', { size: bytesRead })
     return null
   }
   return aesEcbDecrypt(encrypted, aesKey)
@@ -320,9 +320,9 @@ async function cdnDownloadFile(item: FileItem): Promise<Buffer | null> {
     return null
   }
 
-  const encrypted = Buffer.from(await response.arrayBuffer())
-  if (encrypted.length > MAX_FILE_SIZE_BYTES) {
-    logger.warn('File too large after CDN download', { size: encrypted.length })
+  const { buffer: encrypted, bytesRead } = await readResponseBufferWithinLimit(response)
+  if (!encrypted) {
+    logger.warn('File too large after CDN download', { size: bytesRead })
     return null
   }
   return aesEcbDecrypt(encrypted, aesKey)

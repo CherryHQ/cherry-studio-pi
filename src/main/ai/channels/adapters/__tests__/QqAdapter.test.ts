@@ -31,6 +31,7 @@ import { registerAdapterFactory } from '../../ChannelManager'
 const qqCall = vi.mocked(registerAdapterFactory).mock.calls.find((c) => c[0] === 'qq')
 if (!qqCall) throw new Error('registerAdapterFactory was not called for qq')
 const qqFactory = qqCall[1] as (channel: any, agentId: string) => any
+const TEST_ATTACHMENT_MAX_BYTES = 100 * 1024 * 1024
 
 function mockBinaryResponse(buf: Buffer, contentType = 'image/png'): Response {
   return {
@@ -76,6 +77,39 @@ describe('QqAdapter.downloadAttachments', () => {
     expect(result.images).toHaveLength(1)
     expect(mockNetFetch).toHaveBeenCalled()
     expect(mockNetFetch.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('skips an oversized streamed attachment when content-length is missing', async () => {
+    const adapter = createAdapter()
+    vi.spyOn(adapter, 'getAccessToken').mockResolvedValue('tok')
+    const cancel = vi.fn().mockResolvedValue(undefined)
+    const releaseLock = vi.fn()
+    const arrayBuffer = vi.fn()
+    mockNetFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'image/png' }),
+      body: {
+        getReader: () => ({
+          read: vi.fn().mockResolvedValueOnce({
+            done: false,
+            value: { byteLength: TEST_ATTACHMENT_MAX_BYTES + 1 }
+          }),
+          cancel,
+          releaseLock
+        })
+      },
+      arrayBuffer
+    } as unknown as Response)
+
+    const result = await adapter.downloadAttachments([
+      { url: 'https://gchat.qpic.cn/huge.png', content_type: 'image/png', filename: 'huge.png' }
+    ])
+
+    expect(result).toEqual({})
+    expect(cancel).toHaveBeenCalled()
+    expect(releaseLock).toHaveBeenCalled()
+    expect(arrayBuffer).not.toHaveBeenCalled()
   })
 
   it('keeps only one heartbeat interval across duplicate HELLO payloads', async () => {
