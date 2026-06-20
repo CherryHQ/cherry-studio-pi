@@ -40,7 +40,7 @@ vi.mock('@logger', () => ({
   }
 }))
 
-import { handleMcpProtocolUrl } from '../mcpInstall'
+import { handleMcpProtocolUrl, MCP_INSTALL_PROTOCOL_PAYLOAD_MAX_CHARS } from '../mcpInstall'
 
 const toBase64 = (value: unknown) => Buffer.from(JSON.stringify(value), 'utf-8').toString('base64')
 const toUrlSafeBase64 = (value: unknown) => toBase64(value).replaceAll('+', '_').replaceAll('/', '-')
@@ -151,6 +151,23 @@ describe('mcpInstall protocol handler', () => {
     expect(windowManagerMock.broadcastToType).not.toHaveBeenCalled()
     expect(mainWindowServiceMock.showMainWindow).toHaveBeenCalled()
     expect(loggerMock.error).toHaveBeenCalledWith('Failed to parse MCP protocol install payload', expect.any(Error))
+  })
+
+  it('rejects oversized MCP install payloads before decoding', async () => {
+    const oversizedPayload = 'A'.repeat(MCP_INSTALL_PROTOCOL_PAYLOAD_MAX_CHARS + 1)
+
+    await handleMcpProtocolUrl(new URL(`cherrystudio://mcp/install?servers=${oversizedPayload}`))
+
+    expect(mcpServerServiceMock.create).not.toHaveBeenCalled()
+    expect(windowManagerMock.broadcastToType).not.toHaveBeenCalled()
+    expect(mainWindowServiceMock.showMainWindow).toHaveBeenCalled()
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      expect.stringContaining('too large'),
+      expect.objectContaining({
+        maxValueChars: MCP_INSTALL_PROTOCOL_PAYLOAD_MAX_CHARS
+      })
+    )
+    expect(JSON.stringify(loggerMock.warn.mock.calls)).not.toContain(oversizedPayload)
   })
 
   it('skips invalid MCP server entries without dropping valid entries', async () => {

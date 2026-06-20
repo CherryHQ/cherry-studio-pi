@@ -3,6 +3,7 @@ import { loggerService } from '@logger'
 import { summarizeTextForLog, summarizeUrlForLog } from '@main/utils/logging'
 
 const logger = loggerService.withContext('ProtocolService:providersImport')
+export const PROVIDERS_IMPORT_PROTOCOL_DATA_MAX_CHARS = 64 * 1024
 
 function decodeQueryComponentPreservingPlus(value: string) {
   try {
@@ -12,7 +13,7 @@ function decodeQueryComponentPreservingPlus(value: string) {
   }
 }
 
-function getProtocolQueryParam(search: string, name: string) {
+function getProtocolQueryParam(search: string, name: string, maxValueChars = Infinity) {
   const query = search.startsWith('?') ? search.slice(1) : search
   if (!query) return null
 
@@ -22,6 +23,14 @@ function getProtocolQueryParam(search: string, name: string) {
     if (decodeQueryComponentPreservingPlus(rawName) !== name) continue
 
     const rawValue = separatorIndex >= 0 ? pair.slice(separatorIndex + 1) : ''
+    if (rawValue.length > maxValueChars) {
+      logger.warn('Rejected providers protocol query parameter because it is too large', {
+        name,
+        length: rawValue.length,
+        maxValueChars
+      })
+      return null
+    }
     return decodeQueryComponentPreservingPlus(rawValue)
   }
 
@@ -145,6 +154,14 @@ function parseProviderImportPayload(decoded: string) {
 
 export function parseProvidersImportData(data: string) {
   try {
+    if (data.length > PROVIDERS_IMPORT_PROTOCOL_DATA_MAX_CHARS) {
+      logger.warn('Rejected providers protocol import payload because it is too large', {
+        length: data.length,
+        maxValueChars: PROVIDERS_IMPORT_PROTOCOL_DATA_MAX_CHARS
+      })
+      return null
+    }
+
     const result = parseProviderImportPayload(Buffer.from(normalizeBase64Payload(data), 'base64').toString('utf-8'))
 
     return JSON.stringify(result)
@@ -167,7 +184,14 @@ export async function handleProvidersProtocolUrl(url: URL) {
       // }
       // cherrystudio://providers/api-keys?v=1&data={base64Encode(JSON.stringify(jsonConfig))}
 
-      const data = parseProvidersImportData(getProtocolQueryParam(url.search, 'data') || '')
+      const rawData = getProtocolQueryParam(url.search, 'data', PROVIDERS_IMPORT_PROTOCOL_DATA_MAX_CHARS)
+
+      if (!rawData) {
+        logger.error('handleProvidersProtocolUrl data is null or invalid')
+        return
+      }
+
+      const data = parseProvidersImportData(rawData)
 
       if (!data) {
         logger.error('handleProvidersProtocolUrl data is null or invalid')

@@ -9,6 +9,7 @@ import { IpcChannel } from '@shared/IpcChannel'
 
 const logger = loggerService.withContext('ProtocolService:mcpInstall')
 const MCP_SERVER_FALLBACK_NAME = 'MCP Server'
+export const MCP_INSTALL_PROTOCOL_PAYLOAD_MAX_CHARS = 512 * 1024
 
 const MCP_SERVER_IMPORT_FIELDS = [
   'name',
@@ -45,7 +46,7 @@ function decodeQueryComponentPreservingPlus(value: string) {
   }
 }
 
-function getProtocolQueryParam(search: string, name: string) {
+function getProtocolQueryParam(search: string, name: string, maxValueChars = Infinity) {
   const query = search.startsWith('?') ? search.slice(1) : search
   if (!query) return null
 
@@ -55,6 +56,14 @@ function getProtocolQueryParam(search: string, name: string) {
     if (decodeQueryComponentPreservingPlus(rawName) !== name) continue
 
     const rawValue = separatorIndex >= 0 ? pair.slice(separatorIndex + 1) : ''
+    if (rawValue.length > maxValueChars) {
+      logger.warn('Rejected MCP protocol query parameter because it is too large', {
+        name,
+        length: rawValue.length,
+        maxValueChars
+      })
+      return null
+    }
     return decodeQueryComponentPreservingPlus(rawValue)
   }
 
@@ -185,9 +194,18 @@ export async function handleMcpProtocolUrl(url: URL) {
       // }
       // cherrystudio://mcp/install?servers={base64Encode(JSON.stringify(jsonConfig))}
 
-      const data = getProtocolQueryParam(url.search, 'servers')
+      const data = getProtocolQueryParam(url.search, 'servers', MCP_INSTALL_PROTOCOL_PAYLOAD_MAX_CHARS)
 
       if (data) {
+        if (data.length > MCP_INSTALL_PROTOCOL_PAYLOAD_MAX_CHARS) {
+          logger.warn('Rejected MCP protocol install payload because it is too large', {
+            length: data.length,
+            maxValueChars: MCP_INSTALL_PROTOCOL_PAYLOAD_MAX_CHARS
+          })
+          application.get('MainWindowService').showMainWindow()
+          break
+        }
+
         try {
           const stringify = Buffer.from(normalizeBase64Payload(data), 'base64').toString('utf8')
           logger.debug('install MCP servers from protocol', { payload: summarizeTextForLog(stringify) })

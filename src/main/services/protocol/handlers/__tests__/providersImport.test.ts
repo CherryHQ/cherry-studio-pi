@@ -6,7 +6,8 @@ const { applicationMock, loggerMock, settingsWindowServiceMock } = vi.hoisted(()
   }
   const loggerMock = {
     debug: vi.fn(),
-    error: vi.fn()
+    error: vi.fn(),
+    warn: vi.fn()
   }
   const applicationMock = {
     get: vi.fn((name: string) => {
@@ -25,7 +26,11 @@ vi.mock('@logger', () => ({
   }
 }))
 
-import { handleProvidersProtocolUrl, parseProvidersImportData } from '../providersImport'
+import {
+  handleProvidersProtocolUrl,
+  parseProvidersImportData,
+  PROVIDERS_IMPORT_PROTOCOL_DATA_MAX_CHARS
+} from '../providersImport'
 
 const toUrlSafeBase64 = (value: unknown) =>
   Buffer.from(JSON.stringify(value), 'utf-8').toString('base64').replaceAll('+', '_').replaceAll('/', '-')
@@ -58,6 +63,22 @@ describe('providersImport protocol handler', () => {
 
     expect(settingsWindowServiceMock.open).not.toHaveBeenCalled()
     expect(loggerMock.error).toHaveBeenCalled()
+  })
+
+  it('rejects oversized provider import payloads before decoding', async () => {
+    const oversizedPayload = 'A'.repeat(PROVIDERS_IMPORT_PROTOCOL_DATA_MAX_CHARS + 1)
+
+    expect(parseProvidersImportData(oversizedPayload)).toBeNull()
+    await handleProvidersProtocolUrl(new URL(`cherrystudio://providers/api-keys?v=1&data=${oversizedPayload}`))
+
+    expect(settingsWindowServiceMock.open).not.toHaveBeenCalled()
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      expect.stringContaining('too large'),
+      expect.objectContaining({
+        maxValueChars: PROVIDERS_IMPORT_PROTOCOL_DATA_MAX_CHARS
+      })
+    )
+    expect(JSON.stringify(loggerMock.warn.mock.calls)).not.toContain(oversizedPayload)
   })
 
   it('preserves standard base64 plus and slash characters through URL parsing', async () => {
