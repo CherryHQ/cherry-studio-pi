@@ -66,7 +66,9 @@ const LinkEditor: React.FC<LinkEditorProps> = ({
     if (!visible) return
 
     const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement
+      if (!(event.target instanceof Element)) return
+
+      const target = event.target
 
       // Don't close if clicking within the editor or on a link
       if (containerRef.current?.contains(target) || target.closest('a[href]') || target.closest('[data-link-editor]')) {
