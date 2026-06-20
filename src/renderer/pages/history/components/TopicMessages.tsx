@@ -38,13 +38,21 @@ const TopicMessages: FC<Props> = ({ topic: _topic, ...props }) => {
   const [topic, setTopic] = useState<Topic | undefined>(_topic)
 
   useEffect(() => {
-    setTopic(_topic ? { ..._topic, messages: [] } : undefined)
-    if (!_topic) return
+    let cancelled = false
 
-    void runAsyncFunction(async () => {
-      const topic = await getTopicById(_topic.id)
-      setTopic(topic)
-    })
+    setTopic(_topic ? { ..._topic, messages: [] } : undefined)
+    if (_topic) {
+      void runAsyncFunction(async () => {
+        const topic = await getTopicById(_topic.id)
+        if (!cancelled) {
+          setTopic(topic)
+        }
+      })
+    }
+
+    return () => {
+      cancelled = true
+    }
   }, [_topic])
 
   const isEmpty = (topic?.messages || []).length === 0
