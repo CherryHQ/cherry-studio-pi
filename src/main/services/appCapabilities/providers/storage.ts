@@ -51,6 +51,14 @@ function normalizeInputObject(input: unknown) {
   return input as Record<string, unknown>
 }
 
+function throwIfStorageSignalAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return
+  const reason = signal.reason
+  if (reason instanceof Error) throw reason
+  if (typeof reason === 'string' && reason.trim()) throw new Error(reason.trim())
+  throw new Error('Storage capability call aborted')
+}
+
 function agentListOptions(input: unknown = {}) {
   const inputObject = normalizeInputObject(input)
   return {
@@ -86,8 +94,9 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['storage', 'data', 'path'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         normalizeInputObject(input)
+        throwIfStorageSignalAborted(context.signal)
         return okResult('Storage data root read', { dataRoot: storageV2Service.getDataRoot() })
       }
     },
@@ -100,9 +109,12 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['storage', 'health', 'database'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         normalizeInputObject(input)
-        return okResult('Storage health checked', sanitizeForAgent(await storageV2Service.healthCheck()))
+        throwIfStorageSignalAborted(context.signal)
+        const health = await storageV2Service.healthCheck()
+        throwIfStorageSignalAborted(context.signal)
+        return okResult('Storage health checked', sanitizeForAgent(health))
       }
     },
     {
@@ -114,9 +126,12 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['storage', 'stats', 'database'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         normalizeInputObject(input)
-        return okResult('Storage statistics read', sanitizeForAgent(await storageV2Service.getStats()))
+        throwIfStorageSignalAborted(context.signal)
+        const stats = await storageV2Service.getStats()
+        throwIfStorageSignalAborted(context.signal)
+        return okResult('Storage statistics read', sanitizeForAgent(stats))
       }
     },
     {
@@ -139,8 +154,11 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
         const reason = normalizeOptionalText(inputObject.reason, 'Backup reason') || 'agent-request'
+        throwIfStorageSignalAborted(context.signal)
         await prepareRendererStorageV2ForStorageOperation('backup', context.signal)
+        throwIfStorageSignalAborted(context.signal)
         const backup = await storageV2Service.createBackup(reason)
+        throwIfStorageSignalAborted(context.signal)
         return {
           ok: true,
           summary: `Backup created: ${backup.path}`,
@@ -158,9 +176,12 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['storage', 'backup', 'list'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         normalizeInputObject(input)
-        return okResult('Backup overview read', sanitizeForAgent(await storageV2Service.getBackupOverview()))
+        throwIfStorageSignalAborted(context.signal)
+        const overview = await storageV2Service.getBackupOverview()
+        throwIfStorageSignalAborted(context.signal)
+        return okResult('Backup overview read', sanitizeForAgent(overview))
       }
     },
     {
@@ -178,14 +199,13 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['storage', 'backup', 'validate'],
-      execute: async (input: any) => {
+      execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
-        return okResult(
-          'Backup validated',
-          sanitizeForAgent(
-            await storageV2Service.validateBackup(normalizeRequiredText(inputObject.backupPath, 'Backup path'))
-          )
-        )
+        const backupPath = normalizeRequiredText(inputObject.backupPath, 'Backup path')
+        throwIfStorageSignalAborted(context.signal)
+        const validation = await storageV2Service.validateBackup(backupPath)
+        throwIfStorageSignalAborted(context.signal)
+        return okResult('Backup validated', sanitizeForAgent(validation))
       }
     },
     {
@@ -210,12 +230,19 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
         const inputObject = normalizeInputObject(input)
         const backupPath = normalizeRequiredText(inputObject.backupPath, 'Backup path')
         if (context.dryRun) {
+          throwIfStorageSignalAborted(context.signal)
+          const validation = await storageV2Service.validateBackup(backupPath)
+          throwIfStorageSignalAborted(context.signal)
           return okResult('Backup restore dry run completed', {
-            validation: sanitizeForAgent(await storageV2Service.validateBackup(backupPath))
+            validation: sanitizeForAgent(validation)
           })
         }
+        throwIfStorageSignalAborted(context.signal)
         await prepareRendererStorageV2ForStorageOperation('restore', context.signal)
-        return okResult('Backup restored', sanitizeForAgent(await storageV2Service.restoreBackup(backupPath)))
+        throwIfStorageSignalAborted(context.signal)
+        const restore = await storageV2Service.restoreBackup(backupPath)
+        throwIfStorageSignalAborted(context.signal)
+        return okResult('Backup restored', sanitizeForAgent(restore))
       }
     },
     {
@@ -237,8 +264,12 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
         const reason = normalizeOptionalText(inputObject.reason, 'Snapshot reason') || 'agent-request'
+        throwIfStorageSignalAborted(context.signal)
         await prepareRendererStorageV2ForStorageOperation('snapshot', context.signal)
-        return okResult('Storage snapshot created', sanitizeForAgent(await storageV2Service.createSnapshot(reason)))
+        throwIfStorageSignalAborted(context.signal)
+        const snapshot = await storageV2Service.createSnapshot(reason)
+        throwIfStorageSignalAborted(context.signal)
+        return okResult('Storage snapshot created', sanitizeForAgent(snapshot))
       }
     },
     {
@@ -250,9 +281,12 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['storage', 'models', 'providers', 'settings'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         normalizeInputObject(input)
-        return okResult('Providers listed', sanitizeForAgent(await storageV2Service.listProviders()))
+        throwIfStorageSignalAborted(context.signal)
+        const providers = await storageV2Service.listProviders()
+        throwIfStorageSignalAborted(context.signal)
+        return okResult('Providers listed', sanitizeForAgent(providers))
       }
     },
     {
@@ -270,8 +304,13 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
           offset: { type: 'number', description: 'Pagination offset' }
         }
       },
-      execute: async (input: any) =>
-        okResult('Assistants listed', sanitizeForAgent(await storageV2Service.listAssistants(agentListOptions(input))))
+      execute: async (input: any, context) => {
+        const options = agentListOptions(input)
+        throwIfStorageSignalAborted(context.signal)
+        const assistants = await storageV2Service.listAssistants(options)
+        throwIfStorageSignalAborted(context.signal)
+        return okResult('Assistants listed', sanitizeForAgent(assistants))
+      }
     },
     {
       id: 'storage.conversations.list',
@@ -293,18 +332,17 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['storage', 'conversations', 'chat'],
-      execute: async (input: any) => {
+      execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
-        return okResult(
-          'Conversations listed',
-          sanitizeForAgent(
-            await storageV2Service.listConversations({
-              ownerType: normalizeOptionalText(inputObject.ownerType, 'Owner type'),
-              ownerId: normalizeOptionalText(inputObject.ownerId, 'Owner id'),
-              ...agentListOptions(inputObject)
-            })
-          )
-        )
+        const options = {
+          ownerType: normalizeOptionalText(inputObject.ownerType, 'Owner type'),
+          ownerId: normalizeOptionalText(inputObject.ownerId, 'Owner id'),
+          ...agentListOptions(inputObject)
+        }
+        throwIfStorageSignalAborted(context.signal)
+        const conversations = await storageV2Service.listConversations(options)
+        throwIfStorageSignalAborted(context.signal)
+        return okResult('Conversations listed', sanitizeForAgent(conversations))
       }
     },
     {
@@ -324,17 +362,14 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['storage', 'messages', 'conversations', 'chat'],
-      execute: async (input: any) => {
+      execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
-        return okResult(
-          'Conversation messages listed',
-          sanitizeForAgent(
-            await storageV2Service.listMessages(
-              normalizeRequiredText(inputObject.conversationId, 'Conversation id'),
-              agentListOptions(inputObject)
-            )
-          )
-        )
+        const conversationId = normalizeRequiredText(inputObject.conversationId, 'Conversation id')
+        const options = agentListOptions(inputObject)
+        throwIfStorageSignalAborted(context.signal)
+        const messages = await storageV2Service.listMessages(conversationId, options)
+        throwIfStorageSignalAborted(context.signal)
+        return okResult('Conversation messages listed', sanitizeForAgent(messages))
       }
     },
     {
@@ -352,8 +387,13 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['storage', 'files'],
-      execute: async (input: any) =>
-        okResult('Files listed', sanitizeForAgent(await storageV2Service.listFiles(agentListOptions(input))))
+      execute: async (input: any, context) => {
+        const options = agentListOptions(input)
+        throwIfStorageSignalAborted(context.signal)
+        const files = await storageV2Service.listFiles(options)
+        throwIfStorageSignalAborted(context.signal)
+        return okResult('Files listed', sanitizeForAgent(files))
+      }
     },
     {
       id: 'storage.file.get',
@@ -370,12 +410,13 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['storage', 'files', 'read'],
-      execute: async (input: any) => {
+      execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
-        return okResult(
-          'File record read',
-          sanitizeForAgent(await storageV2Service.getFile(normalizeRequiredText(inputObject.fileId, 'File id')))
-        )
+        const fileId = normalizeRequiredText(inputObject.fileId, 'File id')
+        throwIfStorageSignalAborted(context.signal)
+        const file = await storageV2Service.getFile(fileId)
+        throwIfStorageSignalAborted(context.signal)
+        return okResult('File record read', sanitizeForAgent(file))
       }
     }
   ]

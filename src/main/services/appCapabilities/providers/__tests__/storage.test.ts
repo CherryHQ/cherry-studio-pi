@@ -195,6 +195,101 @@ describe('storage app capabilities', () => {
     expect(mocks.storageV2Service.createBackup).not.toHaveBeenCalled()
   })
 
+  it('stops storage capabilities before service calls when the caller signal is already aborted', async () => {
+    const controller = new AbortController()
+    controller.abort('agent stopped storage work')
+    const context = { source: 'agent' as const, signal: controller.signal }
+
+    await expect(capability('storage.dataRoot.get').execute({}, context)).rejects.toThrow('agent stopped storage work')
+    await expect(capability('storage.health.check').execute({}, context)).rejects.toThrow('agent stopped storage work')
+    await expect(capability('storage.stats.get').execute({}, context)).rejects.toThrow('agent stopped storage work')
+    await expect(capability('storage.backup.create').execute({ reason: 'agent request' }, context)).rejects.toThrow(
+      'agent stopped storage work'
+    )
+    await expect(capability('storage.backup.overview').execute({}, context)).rejects.toThrow(
+      'agent stopped storage work'
+    )
+    await expect(capability('storage.backup.validate').execute({ backupPath: '/tmp/backup' }, context)).rejects.toThrow(
+      'agent stopped storage work'
+    )
+    await expect(capability('storage.backup.restore').execute({ backupPath: '/tmp/backup' }, context)).rejects.toThrow(
+      'agent stopped storage work'
+    )
+    await expect(capability('storage.snapshot.create').execute({ reason: 'agent request' }, context)).rejects.toThrow(
+      'agent stopped storage work'
+    )
+    await expect(capability('storage.providers.list').execute({}, context)).rejects.toThrow(
+      'agent stopped storage work'
+    )
+    await expect(capability('storage.assistants.list').execute({}, context)).rejects.toThrow(
+      'agent stopped storage work'
+    )
+    await expect(capability('storage.conversations.list').execute({}, context)).rejects.toThrow(
+      'agent stopped storage work'
+    )
+    await expect(
+      capability('storage.messages.list').execute({ conversationId: 'conversation-1' }, context)
+    ).rejects.toThrow('agent stopped storage work')
+    await expect(capability('storage.files.list').execute({}, context)).rejects.toThrow('agent stopped storage work')
+    await expect(capability('storage.file.get').execute({ fileId: 'file-1' }, context)).rejects.toThrow(
+      'agent stopped storage work'
+    )
+
+    expect(mocks.callRendererBridge).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.getDataRoot).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.healthCheck).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.getStats).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.createBackup).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.getBackupOverview).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.validateBackup).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.restoreBackup).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.createSnapshot).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.listProviders).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.listAssistants).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.listConversations).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.listMessages).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.listFiles).not.toHaveBeenCalled()
+    expect(mocks.storageV2Service.getFile).not.toHaveBeenCalled()
+  })
+
+  it('does not return stale storage results when cancellation happens during service work', async () => {
+    const backupController = new AbortController()
+    mocks.storageV2Service.createBackup.mockImplementationOnce(async () => {
+      backupController.abort(new Error('agent cancelled during backup'))
+      return { path: '/tmp/backup-after-cancel', metadata: {} }
+    })
+
+    await expect(
+      capability('storage.backup.create').execute(
+        { reason: 'agent request' },
+        { source: 'agent', signal: backupController.signal }
+      )
+    ).rejects.toThrow('agent cancelled during backup')
+
+    const snapshotController = new AbortController()
+    mocks.storageV2Service.createSnapshot.mockImplementationOnce(async () => {
+      snapshotController.abort('agent cancelled during snapshot')
+      return { path: '/tmp/snapshot-after-cancel' }
+    })
+
+    await expect(
+      capability('storage.snapshot.create').execute(
+        { reason: 'agent request' },
+        { source: 'agent', signal: snapshotController.signal }
+      )
+    ).rejects.toThrow('agent cancelled during snapshot')
+
+    const healthController = new AbortController()
+    mocks.storageV2Service.healthCheck.mockImplementationOnce(async () => {
+      healthController.abort('agent cancelled during health check')
+      return { ok: true }
+    })
+
+    await expect(
+      capability('storage.health.check').execute({}, { source: 'agent', signal: healthController.signal })
+    ).rejects.toThrow('agent cancelled during health check')
+  })
+
   it('rejects empty required storage identifiers before calling services', async () => {
     await expect(
       capability('storage.backup.validate').execute({ backupPath: '   ' }, { source: 'agent' })
