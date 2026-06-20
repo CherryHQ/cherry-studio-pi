@@ -42,9 +42,11 @@ describe('release workflow safety', () => {
   })
 
   it('keeps the release job guarded against non-manual events', () => {
-    expect(workflow).toContain(
-      "github.repository == 'CherryHQ/cherry-studio-pi' && github.event_name == 'workflow_dispatch'"
+    const manualDispatchGuards = workflow.match(
+      /github\.repository == 'CherryHQ\/cherry-studio-pi' && github\.event_name == 'workflow_dispatch'/g
     )
+
+    expect(manualDispatchGuards).toHaveLength(3)
   })
 
   it('requires an explicit repeated tag confirmation for manual publishing', () => {
