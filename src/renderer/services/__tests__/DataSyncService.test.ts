@@ -981,6 +981,45 @@ describe('DataSyncService', () => {
     })
   })
 
+  it('queues main-process Storage v2 changes that happen while an auto sync is running', async () => {
+    vi.useFakeTimers()
+    mocks.getState.mockReturnValue({
+      settings: {
+        dataSyncWebdavHost: 'https://dav.example.test',
+        dataSyncWebdavUser: 'user',
+        dataSyncWebdavPass: 'pass',
+        dataSyncWebdavPath: '/cherry-studio-pi',
+        dataSyncAutoSync: true,
+        dataSyncSyncInterval: 15
+      }
+    })
+    const pendingSync = deferred<typeof successSummary>()
+    mocks.syncNow.mockReturnValueOnce(pendingSync.promise).mockResolvedValue(successSummary)
+
+    startDataSyncAutoSync(true)
+    await vi.advanceTimersByTimeAsync(1000)
+    await vi.waitFor(() => {
+      expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+    })
+
+    mocks.localStorageV2ChangeListener?.({
+      entityType: 'assistant',
+      entityId: 'assistant-1',
+      operation: 'upsert'
+    })
+    pendingSync.resolve(successSummary)
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.waitFor(() => {
+      expect(getDataSyncRuntimeState().syncing).toBe(false)
+    })
+    expect(mocks.syncNow).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(20_000)
+    await vi.waitFor(() => {
+      expect(mocks.syncNow).toHaveBeenCalledTimes(2)
+    })
+  })
+
   it('does not schedule a redundant auto sync for mirror signals emitted while preparing sync data', async () => {
     vi.useFakeTimers()
     mocks.getState.mockReturnValue({

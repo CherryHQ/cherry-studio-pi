@@ -71,6 +71,7 @@ let localChangeDuringSync = false
 let syncStartedAt: number | null = null
 let autoSyncFailureCount = 0
 let autoSyncCooldownUntil = 0
+let suppressMainProcessStorageV2LocalChanges = false
 const syncStateListeners = new Set<(state: DataSyncRuntimeState) => void>()
 
 class DataSyncStageTimeoutError extends Error {
@@ -202,9 +203,11 @@ async function withDataSyncStageTimeout<T>(
 
 async function prepareStorageV2ForDataSyncWithSuppressedNotifications() {
   const releaseNotificationSuppression = beginDataSyncLocalChangeNotificationSuppression()
+  suppressMainProcessStorageV2LocalChanges = true
   try {
     await withDataSyncStageTimeout('准备本机数据', () => prepareStorageV2ForDataSync())
   } finally {
+    suppressMainProcessStorageV2LocalChanges = false
     releaseNotificationSuppression()
   }
 }
@@ -452,16 +455,18 @@ function ensureMainProcessStorageV2ChangeSubscription() {
     }
 
     if (syncing) {
-      if (reason === 'file') {
-        localChangeDuringSync = true
-        logger.debug('Queued data sync after current sync because a main-process file changed', {
+      if (reason === 'storage-v2' && suppressMainProcessStorageV2LocalChanges) {
+        logger.debug('Ignored main-process Storage v2 local change emitted while preparing sync data', {
           payload: summarizeObjectShapeForLog(payload, 1)
         })
-      } else {
-        logger.debug('Ignored main-process Storage v2 local change while data sync is running', {
-          payload: summarizeObjectShapeForLog(payload, 1)
-        })
+        return
       }
+
+      localChangeDuringSync = true
+      logger.debug('Queued data sync after current sync because a main-process change arrived', {
+        reason,
+        payload: summarizeObjectShapeForLog(payload, 1)
+      })
       return
     }
 
