@@ -2,6 +2,7 @@ import { application } from '@application'
 import { providerService } from '@data/services/ProviderService'
 import { loggerService } from '@logger'
 import { type Activatable, BaseService, type Disposable, Injectable, Phase, ServicePhase } from '@main/core/lifecycle'
+import { readResponseTextWithinLimit } from '@main/utils/readResponseText'
 import { CHERRYIN_CONFIG } from '@shared/config/constant'
 import type { AuthConfig } from '@shared/data/types/provider'
 import { IpcChannel } from '@shared/IpcChannel'
@@ -12,6 +13,7 @@ import * as z from 'zod'
 const logger = loggerService.withContext('CherryInOauthService')
 const CHERRYIN_PROVIDER_ID = 'cherryin'
 const CHERRYIN_REQUEST_TIMEOUT_MS = 30_000
+const CHERRYIN_DIAGNOSTIC_BODY_MAX_BYTES = 4096
 
 // Zod schemas for API response validation
 const BalanceDataSchema = z.object({
@@ -393,7 +395,7 @@ export class CherryInOauthService extends BaseService implements Activatable {
       })
 
       if (!tokenResponse.ok) {
-        const errorText = await tokenResponse.text()
+        const errorText = await this.readResponseTextForDiagnostics(tokenResponse)
         logger.error('Token exchange failed', {
           status: tokenResponse.status,
           body: this.redactDiagnosticValue(errorText)
@@ -419,7 +421,7 @@ export class CherryInOauthService extends BaseService implements Activatable {
       })
 
       if (!apiKeysResponse.ok) {
-        const errorText = await apiKeysResponse.text()
+        const errorText = await this.readResponseTextForDiagnostics(apiKeysResponse)
         logger.error('Failed to fetch API keys', {
           status: apiKeysResponse.status,
           body: this.redactDiagnosticValue(errorText)
@@ -541,7 +543,7 @@ export class CherryInOauthService extends BaseService implements Activatable {
       })
 
       if (!response.ok) {
-        const errorText = await response.text()
+        const errorText = await this.readResponseTextForDiagnostics(response)
         logger.error('Token refresh failed', {
           status: response.status,
           body: this.redactDiagnosticValue(errorText)
@@ -606,13 +608,22 @@ export class CherryInOauthService extends BaseService implements Activatable {
     return value
   }
 
+  private readResponseTextForDiagnostics = async (response: Response): Promise<string> => {
+    try {
+      const { text, truncated } = await readResponseTextWithinLimit(response, CHERRYIN_DIAGNOSTIC_BODY_MAX_BYTES)
+      return truncated ? `${text}\n...[truncated]` : text
+    } catch {
+      return ''
+    }
+  }
+
   private readResponseBodyForDiagnostics = async (response: Response): Promise<unknown> => {
     if (typeof response.clone !== 'function') {
       return null
     }
 
     try {
-      const text = await response.clone().text()
+      const text = await this.readResponseTextForDiagnostics(response.clone())
       if (!text) {
         return null
       }

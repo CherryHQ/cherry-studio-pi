@@ -1,5 +1,5 @@
 import type { ImageModelV3CallOptions } from '@ai-sdk/provider'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import * as z from 'zod'
 
 import { SiliconImageModel } from '../../silicon/SiliconImageModel'
@@ -49,5 +49,26 @@ describe('SiliconFlow response boundary', () => {
       new SiliconImageModel('Qwen/Qwen-Image', { ...config, fetch }).doGenerate(opts())
     )
     expect(result.images).toMatchSnapshot()
+  })
+
+  it('caps streamed HTTP error previews without reading the full body', async () => {
+    const cancel = vi.fn()
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('x'.repeat(600)))
+      },
+      cancel
+    })
+    const fetch = vi.fn().mockResolvedValue(new Response(stream, { status: 400, statusText: 'Bad Request' }))
+
+    const error = await new SiliconImageModel('Qwen/Qwen-Image', { ...config, fetch })
+      .doGenerate(opts())
+      .catch((cause) => cause)
+
+    expect(error).toMatchObject({
+      name: 'AI_APICallError',
+      responseBody: 'x'.repeat(500)
+    })
+    expect(cancel).toHaveBeenCalled()
   })
 })

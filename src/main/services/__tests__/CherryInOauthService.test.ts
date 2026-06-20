@@ -617,6 +617,51 @@ describe('CherryInOauthService', () => {
     expect(oauthUpdateCalls).toEqual([])
   })
 
+  it('caps streamed OAuth api-keys error diagnostics before logging', async () => {
+    const errorSpy = vi.spyOn(mockMainLoggerService, 'error').mockImplementation(() => {})
+    const cancel = vi.fn()
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('x'.repeat(5000)))
+      },
+      cancel
+    })
+
+    providerServiceMocks.getAuthConfig.mockResolvedValue(null)
+    providerServiceMocks.update.mockResolvedValue(undefined)
+    vi.mocked(net.fetch).mockImplementation(async (url) => {
+      const urlString = String(url)
+      if (urlString.endsWith('/oauth2/token')) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: async () => ({ access_token: 'oauth-access', refresh_token: 'oauth-refresh' })
+        } as Response
+      }
+      return new Response(stream, { status: 500, statusText: 'Internal Server Error' })
+    })
+
+    const { state } = await cherryInOauthService.startOAuthFlow(
+      { sender: { id: 7 } } as Electron.IpcMainInvokeEvent,
+      'https://open.cherryin.ai'
+    )
+
+    await cherryInOauthService.handleOAuthCallback(
+      new URL(`cherrystudio://oauth/callback?state=${state}&code=auth-code`)
+    )
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Failed to fetch API keys',
+      expect.objectContaining({
+        status: 500,
+        body: `${'x'.repeat(4096)}\n...[truncated]`
+      })
+    )
+    expect(cancel).toHaveBeenCalled()
+    errorSpy.mockRestore()
+  })
+
   it('drops the OAuth callback silently when the initiator window is gone', async () => {
     // T6: pin the resolveInitiatorWebContents -> null branch in the SUCCESS
     // path. After a legit code arrives the callback must not crash and must

@@ -1,7 +1,7 @@
 import { APICallError, type ImageModelV3, type ImageModelV3CallOptions, type SharedV3Warning } from '@ai-sdk/provider'
 import { combineHeaders, type FetchFunction, removeUndefinedEntries } from '@ai-sdk/provider-utils'
 
-import { fileToDataUrl } from '../transportUtils'
+import { fileToDataUrl, readLimitedHttpErrorText } from '../transportUtils'
 
 /**
  * SiliconFlow Image Generation model — one class for every SiliconFlow
@@ -110,9 +110,8 @@ export class SiliconImageModel implements ImageModelV3 {
     response.headers.forEach((value, key) => {
       responseHeaders[key] = value
     })
-    const responseBody = await response.text()
-
     if (!response.ok) {
+      const responseBody = await readLimitedHttpErrorText(response)
       throw new APICallError({
         message: responseBody || response.statusText,
         url,
@@ -123,6 +122,7 @@ export class SiliconImageModel implements ImageModelV3 {
       })
     }
 
+    const responseBody = await response.text()
     let parsed: ImageResponseBody
     try {
       parsed = JSON.parse(responseBody) as ImageResponseBody

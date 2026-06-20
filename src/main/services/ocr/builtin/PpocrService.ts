@@ -1,4 +1,5 @@
 import { loadOcrImage } from '@main/utils/ocr'
+import { readResponseTextWithinLimit } from '@main/utils/readResponseText'
 import type { ImageFileMetadata, OcrPpocrConfig, OcrResult, SupportedOcrFile } from '@types'
 import { isImageFileMetadata } from '@types'
 import { net } from 'electron'
@@ -40,6 +41,7 @@ const OcrResponseSchema = z.object({
 })
 
 export const PPOCR_REQUEST_TIMEOUT_MS = 120_000
+const PPOCR_ERROR_RESPONSE_MAX_BYTES = 4096
 
 export class PpocrService extends OcrBaseService {
   public ocr = async (file: SupportedOcrFile, options?: OcrPpocrConfig): Promise<OcrResult> => {
@@ -86,9 +88,15 @@ export class PpocrService extends OcrBaseService {
       })
 
       if (!response.ok) {
-        const text = await response.text().catch(() => '')
+        const { bytesRead, truncated } = await readResponseTextWithinLimit(
+          response,
+          PPOCR_ERROR_RESPONSE_MAX_BYTES
+        ).catch(() => ({
+          bytesRead: 0,
+          truncated: false
+        }))
         throw new Error(
-          `OCR service returned HTTP ${response.status} ${response.statusText} (body length: ${text.length})`
+          `OCR service returned HTTP ${response.status} ${response.statusText} (body length: ${bytesRead}${truncated ? '+' : ''})`
         )
       }
 

@@ -97,4 +97,25 @@ describe('PpocrService', () => {
     expect((thrown as Error).message).not.toContain('sensitive recognized text')
     expect((thrown as Error).message).not.toContain('base64 payload')
   })
+
+  it('caps streamed OCR error responses before diagnostics', async () => {
+    const cancel = vi.fn()
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('x'.repeat(5000)))
+      },
+      cancel
+    })
+    mockNetFetch.mockResolvedValue(new Response(stream, { status: 500, statusText: 'Internal Server Error' }))
+
+    const service = new PpocrService()
+
+    await expect(
+      service.ocr(imageFile as never, {
+        apiUrl: 'https://ocr.example/api',
+        accessToken: 'ocr-token'
+      })
+    ).rejects.toThrow('OCR service returned HTTP 500 Internal Server Error (body length: 4096+)')
+    expect(cancel).toHaveBeenCalled()
+  })
 })
