@@ -172,6 +172,63 @@ describe('painting app capabilities', () => {
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
 
+  it('stops painting capabilities before side effects when the caller signal is already aborted', async () => {
+    const controller = new AbortController()
+    controller.abort('agent stopped painting work')
+    const context = { source: 'agent' as const, signal: controller.signal }
+
+    await expect(capability('paintings.providers.list').execute({}, context)).rejects.toThrow(
+      'agent stopped painting work'
+    )
+    await expect(capability('paintings.defaultProvider.set').execute({ provider: 'openai' }, context)).rejects.toThrow(
+      'agent stopped painting work'
+    )
+    await expect(capability('paintings.open').execute({ provider: 'openai' }, context)).rejects.toThrow(
+      'agent stopped painting work'
+    )
+    await expect(
+      capability('paintings.image.generate').execute({ prompt: 'draw a cat', provider: 'openai' }, context)
+    ).rejects.toThrow('agent stopped painting work')
+
+    expect(mocks.preferenceService.get).not.toHaveBeenCalled()
+    expect(mocks.preferenceService.set).not.toHaveBeenCalled()
+    expect(mocks.navigateApp).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
+  })
+
+  it('does not return stale painting results when cancellation happens during side effects', async () => {
+    const providerController = new AbortController()
+    mocks.preferenceService.get.mockImplementationOnce(() => {
+      providerController.abort('agent cancelled while reading painting provider')
+      return 'openai'
+    })
+
+    await expect(
+      capability('paintings.providers.list').execute({}, { source: 'agent', signal: providerController.signal })
+    ).rejects.toThrow('agent cancelled while reading painting provider')
+
+    const openController = new AbortController()
+    mocks.navigateApp.mockImplementationOnce(async () => {
+      openController.abort(new Error('agent cancelled during painting navigation'))
+    })
+
+    await expect(
+      capability('paintings.open').execute({ provider: 'openai' }, { source: 'agent', signal: openController.signal })
+    ).rejects.toThrow('agent cancelled during painting navigation')
+
+    const generateController = new AbortController()
+    mocks.navigateApp.mockImplementationOnce(async () => {
+      generateController.abort('agent cancelled during painting generation')
+    })
+
+    await expect(
+      capability('paintings.image.generate').execute(
+        { prompt: 'draw a cat', provider: 'openai' },
+        { source: 'agent', signal: generateController.signal }
+      )
+    ).rejects.toThrow('agent cancelled during painting generation')
+  })
+
   it('supports namespace and offset pagination for painting history', async () => {
     const result = await capability('paintings.history.list').execute(
       { namespace: 'siliconflow_paintings', limit: 1, offset: 1 },

@@ -35,6 +35,14 @@ function normalizeInputObject(input: unknown) {
   return input as Record<string, unknown>
 }
 
+function throwIfPaintingSignalAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return
+  const reason = signal.reason
+  if (reason instanceof Error) throw reason
+  if (typeof reason === 'string' && reason.trim()) throw new Error(reason.trim())
+  throw new Error('Painting capability call aborted')
+}
+
 function normalizeListLimit(value: unknown) {
   return normalizeBoundedIntegerInput(value, {
     label: 'Painting history limit',
@@ -190,7 +198,9 @@ export function listPaintingHistory(paintings: any, input: any) {
 }
 
 async function readDefaultPaintingProvider(signal?: AbortSignal) {
+  throwIfPaintingSignalAborted(signal)
   const provider = await readSettingValueForAgent('defaultPaintingProvider', signal)
+  throwIfPaintingSignalAborted(signal)
   return typeof provider === 'string' ? provider.trim() : ''
 }
 
@@ -207,8 +217,11 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
       tags: ['paintings', 'image', 'providers', 'drawing'],
       execute: async (input: unknown, context) => {
         normalizeInputObject(input)
+        throwIfPaintingSignalAborted(context.signal)
+        const defaultProvider = await readDefaultPaintingProvider(context.signal)
+        throwIfPaintingSignalAborted(context.signal)
         return okResult('Painting providers listed', {
-          defaultProvider: await readDefaultPaintingProvider(context.signal),
+          defaultProvider,
           namespaces: PAINTING_NAMESPACES
         })
       }
@@ -240,6 +253,7 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
         normalizePaintingNamespace(inputObject.namespace)
         normalizeListLimit(inputObject.limit)
         normalizeOffset(inputObject.offset)
+        throwIfPaintingSignalAborted(context.signal)
         const paintings = await readRendererStoreValue<any>('state.paintings', {
           checkTimeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS,
           timeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS,
@@ -248,6 +262,7 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
           if (context.signal?.aborted) throw error
           return {}
         })
+        throwIfPaintingSignalAborted(context.signal)
         return okResult('Painting history listed', listPaintingHistory(paintings, inputObject))
       }
     },
@@ -272,7 +287,9 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
         const inputObject = normalizeInputObject(input)
         const provider = normalizeProviderRouteSegment(inputObject.provider)
         if (!provider) throw new Error('Painting provider is required')
+        throwIfPaintingSignalAborted(context.signal)
         await persistSettingValue('defaultPaintingProvider', provider, context.signal)
+        throwIfPaintingSignalAborted(context.signal)
         return okResult('Default painting provider updated', { defaultProvider: provider })
       }
     },
@@ -296,7 +313,9 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
         const provider =
           inputProvider || normalizeProviderRouteSegment(await readDefaultPaintingProvider(context.signal))
         const route = provider ? `/paintings/${provider}` : '/paintings'
+        throwIfPaintingSignalAborted(context.signal)
         await navigateApp(route)
+        throwIfPaintingSignalAborted(context.signal)
         return okResult('Painting workspace opened', { route })
       }
     },
@@ -330,7 +349,9 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
         const model = normalizeOptionalText(inputObject.model, 'Painting model') || undefined
         const size = normalizeOptionalText(inputObject.size, 'Painting size') || undefined
         const route = provider ? `/paintings/${provider}` : '/paintings'
+        throwIfPaintingSignalAborted(context.signal)
         await navigateApp(route)
+        throwIfPaintingSignalAborted(context.signal)
         return {
           ok: true,
           summary:
