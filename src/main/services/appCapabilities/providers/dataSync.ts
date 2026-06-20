@@ -55,20 +55,35 @@ function normalizeStoredNumber(value: unknown, fallback = 0) {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
-async function resolveStoredSecret(value: unknown) {
+function dataSyncCapabilityAbortError(signal: AbortSignal) {
+  const reason = signal.reason
+  if (reason instanceof Error) return reason
+  if (typeof reason === 'string' && reason.trim()) return new Error(reason.trim())
+  return new Error('Data sync capability call aborted')
+}
+
+function throwIfDataSyncCapabilityAborted(signal?: AbortSignal) {
+  if (signal?.aborted) throw dataSyncCapabilityAbortError(signal)
+}
+
+async function resolveStoredSecret(value: unknown, signal?: AbortSignal) {
+  throwIfDataSyncCapabilityAborted(signal)
   if (typeof value === 'string') return value
   if (!isRecord(value)) return ''
 
   const secretRef = value.secretRef
   if (!isNonEmptyString(secretRef)) return ''
 
-  return (await storageV2SecretVaultService.getSecret(secretRef)) ?? ''
+  const secret = (await storageV2SecretVaultService.getSecret(secretRef)) ?? ''
+  throwIfDataSyncCapabilityAborted(signal)
+  return secret
 }
 
-async function getStorageV2DataSyncSettings(): Promise<{
+async function getStorageV2DataSyncSettings(signal?: AbortSignal): Promise<{
   settings: DataSyncSettingsState
   hasConfiguredValue: boolean
 }> {
+  throwIfDataSyncCapabilityAborted(signal)
   const [webdavHost, webdavUser, webdavPass, webdavPath, dataSyncAutoSync, dataSyncSyncInterval] = await Promise.all([
     storageV2Service.getSetting('settings.dataSyncWebdavHost'),
     storageV2Service.getSetting('settings.dataSyncWebdavUser'),
@@ -77,11 +92,12 @@ async function getStorageV2DataSyncSettings(): Promise<{
     storageV2Service.getSetting('settings.dataSyncAutoSync'),
     storageV2Service.getSetting('settings.dataSyncSyncInterval')
   ])
+  throwIfDataSyncCapabilityAborted(signal)
 
   const settings = {
     dataSyncWebdavHost: normalizeStoredString(webdavHost),
     dataSyncWebdavUser: normalizeStoredString(webdavUser),
-    dataSyncWebdavPass: await resolveStoredSecret(webdavPass),
+    dataSyncWebdavPass: await resolveStoredSecret(webdavPass, signal),
     dataSyncWebdavPath: normalizeStoredString(webdavPath, DEFAULT_DATA_SYNC_PATH),
     dataSyncAutoSync: normalizeStoredBoolean(dataSyncAutoSync),
     dataSyncSyncInterval: normalizeStoredNumber(dataSyncSyncInterval)
@@ -100,7 +116,7 @@ async function getStorageV2DataSyncSettings(): Promise<{
   }
 }
 
-async function getDataSyncSettings(): Promise<DataSyncSettingsState> {
+async function getDataSyncSettings(signal?: AbortSignal): Promise<DataSyncSettingsState> {
   let storageSettings: Awaited<ReturnType<typeof getStorageV2DataSyncSettings>> = {
     settings: {
       dataSyncWebdavHost: '',
@@ -114,11 +130,12 @@ async function getDataSyncSettings(): Promise<DataSyncSettingsState> {
   }
 
   try {
-    storageSettings = await getStorageV2DataSyncSettings()
+    storageSettings = await getStorageV2DataSyncSettings(signal)
     if (storageSettings.hasConfiguredValue) {
       return storageSettings.settings
     }
   } catch (error) {
+    if (signal?.aborted) throw error
     logger.warn('Failed to read data sync settings from Storage v2; falling back to renderer settings bridge', {
       error: getBridgeErrorMessage(error)
     })
@@ -128,9 +145,11 @@ async function getDataSyncSettings(): Promise<DataSyncSettingsState> {
     return await callRendererBridge<DataSyncBridgeSettings>(RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE, undefined, {
       checkTimeoutMs: DATA_SYNC_SETTINGS_BRIDGE_CHECK_TIMEOUT_MS,
       timeoutMs: DATA_SYNC_SETTINGS_BRIDGE_CALL_TIMEOUT_MS,
-      timeoutMessage: 'Timed out reading data sync settings'
+      timeoutMessage: 'Timed out reading data sync settings',
+      signal
     })
   } catch (error) {
+    if (signal?.aborted) throw error
     logger.warn('Failed to read data sync settings from renderer; using Storage v2 fallback', {
       error: getBridgeErrorMessage(error)
     })
@@ -138,8 +157,8 @@ async function getDataSyncSettings(): Promise<DataSyncSettingsState> {
   }
 }
 
-async function getStoredWebDavConfig(): Promise<WebDavConfig> {
-  const settings = await getDataSyncSettings()
+async function getStoredWebDavConfig(signal?: AbortSignal): Promise<WebDavConfig> {
+  const settings = await getDataSyncSettings(signal)
   return {
     webdavHost: settings.dataSyncWebdavHost ?? '',
     webdavUser: settings.dataSyncWebdavUser ?? '',
@@ -186,6 +205,7 @@ async function resolveWebDavConfig(
   input: unknown,
   options: {
     requireCredentials?: boolean
+    signal?: AbortSignal
   } = {}
 ): Promise<WebDavConfig> {
   const inputObject = normalizeInputObject(input)
@@ -193,7 +213,7 @@ async function resolveWebDavConfig(
     (key) => !hasOwnInput(inputObject, key)
   )
   const stored = needsStoredConfig
-    ? await getStoredWebDavConfig()
+    ? await getStoredWebDavConfig(options.signal)
     : {
         webdavHost: '',
         webdavUser: '',
@@ -261,11 +281,13 @@ function normalizeOptionalBooleanInput(value: unknown, label: string) {
 async function runWebDavCapability<T>(
   action: string,
   fn: () => Promise<T>,
-  options: { recordDataSyncFailure?: boolean } = {}
+  options: { recordDataSyncFailure?: boolean; signal?: AbortSignal } = {}
 ) {
   try {
+    throwIfDataSyncCapabilityAborted(options.signal)
     return await fn()
   } catch (error) {
+    if (options.signal?.aborted) throw dataSyncCapabilityAbortError(options.signal)
     const message = describeWebDavUserFacingError(error, action)
     if (options.recordDataSyncFailure) {
       await Promise.resolve(appDataSyncService.recordSyncFailure(new Error(message))).catch(() => undefined)
@@ -291,8 +313,9 @@ async function prepareRendererStorageV2ForDataSync(signal?: AbortSignal) {
 
 async function persistWebDavConfigToStorageV2(
   config: WebDavConfig,
-  options: { autoSync?: boolean; syncInterval?: number } = {}
+  options: { autoSync?: boolean; syncInterval?: number; signal?: AbortSignal } = {}
 ) {
+  throwIfDataSyncCapabilityAborted(options.signal)
   const secretValue = config.webdavPass || ''
   const secretSettingValue = secretValue
     ? {
@@ -304,6 +327,7 @@ async function persistWebDavConfigToStorageV2(
         )
       }
     : ''
+  throwIfDataSyncCapabilityAborted(options.signal)
 
   const entries: Array<[key: string, value: unknown]> = [
     ['settings.dataSyncWebdavHost', config.webdavHost || ''],
@@ -321,10 +345,14 @@ async function persistWebDavConfigToStorageV2(
 
   for (const [key, value] of entries) {
     await storageV2Service.setSetting(key, value, 'settings')
+    throwIfDataSyncCapabilityAborted(options.signal)
   }
 }
 
-async function persistWebDavConfig(config: WebDavConfig, options: { autoSync?: boolean; syncInterval?: number } = {}) {
+async function persistWebDavConfig(
+  config: WebDavConfig,
+  options: { autoSync?: boolean; syncInterval?: number; signal?: AbortSignal } = {}
+) {
   const settings: DataSyncBridgeSettingsUpdate = {
     dataSyncWebdavHost: config.webdavHost || '',
     dataSyncWebdavUser: config.webdavUser || '',
@@ -339,14 +367,17 @@ async function persistWebDavConfig(config: WebDavConfig, options: { autoSync?: b
   }
 
   await persistWebDavConfigToStorageV2(config, options)
+  throwIfDataSyncCapabilityAborted(options.signal)
 
   try {
     await callRendererBridge<DataSyncBridgeSettings>(RENDERER_SET_DATA_SYNC_SETTINGS_BRIDGE, settings, {
       checkTimeoutMs: DATA_SYNC_SETTINGS_BRIDGE_CHECK_TIMEOUT_MS,
       timeoutMs: DATA_SYNC_SETTINGS_BRIDGE_CALL_TIMEOUT_MS,
-      timeoutMessage: 'Timed out saving data sync settings'
+      timeoutMessage: 'Timed out saving data sync settings',
+      signal: options.signal
     })
   } catch (error) {
+    if (options.signal?.aborted) throw error
     logger.warn('Saved data sync settings to Storage v2, but renderer settings refresh failed', {
       error: getBridgeErrorMessage(error)
     })
@@ -384,8 +415,9 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['dataSync', 'sync', 'webdav', 'status'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         normalizeInputObject(input)
+        throwIfDataSyncCapabilityAborted(context.signal)
         return okResult('Data sync status read', sanitizeForAgent(await appDataSyncService.getStatus()))
       }
     },
@@ -398,9 +430,9 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['dataSync', 'sync', 'webdav', 'settings'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         normalizeInputObject(input)
-        const settings = await getDataSyncSettings()
+        const settings = await getDataSyncSettings(context.signal)
         return okResult(
           'WebDAV sync config read',
           sanitizeForAgent({
@@ -438,7 +470,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       tags: ['dataSync', 'sync', 'webdav', 'configure', 'settings'],
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
-        const config = await resolveWebDavConfig(inputObject, { requireCredentials: true })
+        const config = await resolveWebDavConfig(inputObject, { requireCredentials: true, signal: context.signal })
         if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
         const autoSync = normalizeOptionalBooleanInput(inputObject.autoSync, 'Auto sync')
         const syncInterval = normalizeSyncIntervalInput(inputObject.syncInterval)
@@ -448,7 +480,8 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
 
         await persistWebDavConfig(config, {
           autoSync,
-          syncInterval
+          syncInterval,
+          signal: context.signal
         })
         return okResult('WebDAV data sync config saved', sanitizeForAgent(config))
       }
@@ -473,16 +506,22 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       permissions: ['network.webdav.read'],
       sideEffects: ['network.webdav.read'],
       tags: ['dataSync', 'sync', 'webdav', 'directories', 'path'],
-      execute: async (input: any) => {
+      execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
-        const config = await resolveWebDavConfig(inputObject, { requireCredentials: true })
+        const config = await resolveWebDavConfig(inputObject, { requireCredentials: true, signal: context.signal })
         if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
         const remotePath = normalizeDirectoryPath(inputObject.remotePath)
+        const serviceOptions = context.signal ? { signal: context.signal } : undefined
         return okResult(
           'WebDAV directories listed',
           sanitizeForAgent(
-            await runWebDavCapability('读取远程目录', () =>
-              appDataSyncService.listRemoteDirectories(config, remotePath)
+            await runWebDavCapability(
+              '读取远程目录',
+              () =>
+                serviceOptions
+                  ? appDataSyncService.listRemoteDirectories(config, remotePath, serviceOptions)
+                  : appDataSyncService.listRemoteDirectories(config, remotePath),
+              { signal: context.signal }
             )
           )
         )
@@ -511,18 +550,31 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       tags: ['dataSync', 'sync', 'webdav', 'diagnose', 'troubleshoot', 'write-access'],
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
-        const config = await resolveWebDavConfig(inputObject, { requireCredentials: true })
+        const config = await resolveWebDavConfig(inputObject, { requireCredentials: true, signal: context.signal })
         if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
         const remotePath = normalizeDirectoryPath(inputObject.remotePath, config.webdavPath || '/')
+        const serviceOptions = context.signal ? { signal: context.signal } : undefined
 
-        const [status, directories, writeAccess] = await runWebDavCapability('诊断 WebDAV 同步', async () => {
-          const [nextStatus, nextDirectories] = await Promise.all([
-            appDataSyncService.getStatus(),
-            appDataSyncService.listRemoteDirectories(config, remotePath)
-          ])
-          const nextWriteAccess = context.dryRun ? null : await appDataSyncService.checkWriteAccess(config)
-          return [nextStatus, nextDirectories, nextWriteAccess] as const
-        })
+        const [status, directories, writeAccess] = await runWebDavCapability(
+          '诊断 WebDAV 同步',
+          async () => {
+            throwIfDataSyncCapabilityAborted(context.signal)
+            const [nextStatus, nextDirectories] = await Promise.all([
+              appDataSyncService.getStatus(),
+              serviceOptions
+                ? appDataSyncService.listRemoteDirectories(config, remotePath, serviceOptions)
+                : appDataSyncService.listRemoteDirectories(config, remotePath)
+            ])
+            throwIfDataSyncCapabilityAborted(context.signal)
+            const nextWriteAccess = context.dryRun
+              ? null
+              : serviceOptions
+                ? await appDataSyncService.checkWriteAccess(config, serviceOptions)
+                : await appDataSyncService.checkWriteAccess(config)
+            return [nextStatus, nextDirectories, nextWriteAccess] as const
+          },
+          { signal: context.signal }
+        )
         return okResult(
           'WebDAV data sync diagnosis completed',
           sanitizeForAgent({
@@ -567,7 +619,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       examples: ['Sync my data now', 'Run WebDAV data sync'],
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
-        const config = await resolveWebDavConfig(inputObject, { requireCredentials: true })
+        const config = await resolveWebDavConfig(inputObject, { requireCredentials: true, signal: context.signal })
         if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
         const saveConfig = normalizeOptionalBooleanInput(inputObject.saveConfig, 'Save config') === true
         if (context.dryRun) {
@@ -575,7 +627,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
         }
 
         if (saveConfig) {
-          await persistWebDavConfig(config)
+          await persistWebDavConfig(config, { signal: context.signal })
         }
         await prepareRendererStorageV2ForDataSync(context.signal)
         const syncOptions = context.signal ? { signal: context.signal } : null
@@ -583,7 +635,8 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
           '同步数据',
           () => (syncOptions ? appDataSyncService.syncNow(config, syncOptions) : appDataSyncService.syncNow(config)),
           {
-            recordDataSyncFailure: true
+            recordDataSyncFailure: true,
+            signal: context.signal
           }
         )
         broadcastExternalDataSyncCompleted(summary, context.source)
@@ -620,13 +673,20 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       tags: ['dataSync', 'sync', 'webdav', 'restore', 'snapshot'],
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
-        const config = await resolveWebDavConfig(inputObject, { requireCredentials: true })
+        const config = await resolveWebDavConfig(inputObject, { requireCredentials: true, signal: context.signal })
         if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
         if (context.dryRun) {
           return okResult('Data sync snapshot restore dry run completed', sanitizeForAgent({ config }))
         }
 
-        await runWebDavCapability('恢复安全快照', () => appDataSyncService.restoreLatestSnapshot(config))
+        await runWebDavCapability(
+          '恢复安全快照',
+          () =>
+            context.signal
+              ? appDataSyncService.restoreLatestSnapshot(config, { signal: context.signal })
+              : appDataSyncService.restoreLatestSnapshot(config),
+          { signal: context.signal }
+        )
         return okResult('Data sync snapshot restore started')
       }
     }

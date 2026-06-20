@@ -639,6 +639,56 @@ describe('data sync app capabilities', () => {
     expect(mocks.appDataSyncService.checkWriteAccess).not.toHaveBeenCalled()
   })
 
+  it('passes agent abort signals into WebDAV browse, diagnosis, and restore calls', async () => {
+    const controller = new AbortController()
+    const signalContext = { source: 'agent' as const, signal: controller.signal }
+    const config = {
+      webdavHost: 'https://dav.example.com',
+      webdavUser: 'user',
+      webdavPass: 'secret',
+      webdavPath: '/sync-root'
+    }
+
+    mocks.appDataSyncService.listRemoteDirectories.mockResolvedValue({ path: '/', directories: [] })
+    mocks.appDataSyncService.getStatus.mockResolvedValue({ deviceId: 'device-1', conflicts: [] })
+    mocks.appDataSyncService.checkWriteAccess.mockResolvedValue({ ok: true, basePath: '/sync-root/sync/v1' })
+    mocks.appDataSyncService.restoreLatestSnapshot.mockResolvedValue({ ok: true })
+
+    await capability('dataSync.webdav.directories.list').execute({ remotePath: '/' }, signalContext)
+    expect(mocks.appDataSyncService.listRemoteDirectories).toHaveBeenLastCalledWith(config, '/', {
+      signal: controller.signal
+    })
+
+    await capability('dataSync.webdav.diagnose').execute({}, signalContext)
+    expect(mocks.appDataSyncService.listRemoteDirectories).toHaveBeenLastCalledWith(config, '/sync-root', {
+      signal: controller.signal
+    })
+    expect(mocks.appDataSyncService.checkWriteAccess).toHaveBeenLastCalledWith(config, { signal: controller.signal })
+
+    await capability('dataSync.snapshot.restoreLatest').execute({}, signalContext)
+    expect(mocks.appDataSyncService.restoreLatestSnapshot).toHaveBeenLastCalledWith(config, {
+      signal: controller.signal
+    })
+  })
+
+  it('does not wrap agent-cancelled WebDAV capability calls as user-facing WebDAV failures', async () => {
+    const controller = new AbortController()
+    mocks.appDataSyncService.listRemoteDirectories.mockImplementationOnce(async () => {
+      controller.abort(new Error('agent stopped WebDAV browse'))
+      throw controller.signal.reason
+    })
+
+    await expect(
+      capability('dataSync.webdav.directories.list').execute(
+        { remotePath: '/' },
+        {
+          source: 'agent',
+          signal: controller.signal
+        }
+      )
+    ).rejects.toThrow('agent stopped WebDAV browse')
+  })
+
   it('supports data sync dry runs without writing remote data', async () => {
     const result = await capability('dataSync.sync.now').execute({}, { source: 'agent', dryRun: true })
 

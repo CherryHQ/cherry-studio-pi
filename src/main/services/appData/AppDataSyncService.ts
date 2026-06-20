@@ -219,6 +219,32 @@ type DataSyncRunOptions = {
   signal?: AbortSignal
 }
 
+function dataSyncAbortError(signal: AbortSignal) {
+  const reason = signal.reason
+  if (reason instanceof Error) return reason
+  if (typeof reason === 'string' && reason.trim()) return new Error(reason.trim())
+  return new Error('Data sync operation aborted')
+}
+
+function throwIfDataSyncOperationAborted(signal?: AbortSignal) {
+  if (signal?.aborted) throw dataSyncAbortError(signal)
+}
+
+function webDavWriteOptions<T extends Record<string, unknown>>(
+  options: T,
+  signal?: AbortSignal
+): T & { signal?: AbortSignal } {
+  return signal ? { ...options, signal } : options
+}
+
+function webDavExists(client: WebDAVClient, targetPath: string, signal?: AbortSignal) {
+  return signal ? client.exists(targetPath, { signal }) : client.exists(targetPath)
+}
+
+function webDavGetDirectoryContents(client: WebDAVClient, targetPath: string, signal?: AbortSignal) {
+  return signal ? client.getDirectoryContents(targetPath, { signal }) : client.getDirectoryContents(targetPath)
+}
+
 export type DataSyncRemoteDirectory = {
   name: string
   path: string
@@ -1349,11 +1375,18 @@ export class AppDataSyncService {
     )
   }
 
-  private async ensureDirectory(client: WebDAVClient, dirPath: string) {
+  private async ensureDirectory(client: WebDAVClient, dirPath: string, options: DataSyncRunOptions = {}) {
     if (dirPath === '/') return
 
     try {
-      if (await runWebDavOperation(`checking remote directory ${dirPath}`, () => client.exists(dirPath), { logger })) {
+      throwIfDataSyncOperationAborted(options.signal)
+      if (
+        await runWebDavOperation(
+          `checking remote directory ${dirPath}`,
+          () => webDavExists(client, dirPath, options.signal),
+          { logger, signal: options.signal }
+        )
+      ) {
         return
       }
     } catch (error) {
@@ -1364,11 +1397,13 @@ export class AppDataSyncService {
     }
 
     try {
+      throwIfDataSyncOperationAborted(options.signal)
       await runWebDavOperation(
         `creating remote directory ${dirPath}`,
-        () => client.createDirectory(dirPath, { recursive: true }),
+        () => client.createDirectory(dirPath, webDavWriteOptions({ recursive: true }, options.signal)),
         {
-          logger
+          logger,
+          signal: options.signal
         }
       )
     } catch (error) {
@@ -1379,8 +1414,8 @@ export class AppDataSyncService {
       if (isPreconditionCreateDirectoryError(error)) {
         const existsAfterFailure = await runWebDavOperation(
           `checking remote directory ${dirPath} after create precondition failure`,
-          () => client.exists(dirPath),
-          { logger }
+          () => webDavExists(client, dirPath, options.signal),
+          { logger, signal: options.signal }
         ).catch(() => false)
         if (existsAfterFailure) {
           logger.warn(`Remote directory ${dirPath} exists after create precondition failure`, error as Error)
@@ -1391,49 +1426,73 @@ export class AppDataSyncService {
     }
   }
 
-  private async assertProbeWriteAccess(client: WebDAVClient, probePath: string, label: string) {
+  private async assertProbeWriteAccess(
+    client: WebDAVClient,
+    probePath: string,
+    label: string,
+    options: DataSyncRunOptions = {}
+  ) {
+    throwIfDataSyncOperationAborted(options.signal)
     await runWebDavOperation(
       `writing ${label} ${probePath}`,
-      () => client.putFileContents(probePath, 'ok', { overwrite: true }),
-      { logger }
+      () => client.putFileContents(probePath, 'ok', webDavWriteOptions({ overwrite: true }, options.signal)),
+      { logger, signal: options.signal }
     )
 
-    const maybeDeleteFile = (client as WebDAVClient & { deleteFile?: (filePath: string) => Promise<void> }).deleteFile
+    const maybeDeleteFile = (
+      client as WebDAVClient & { deleteFile?: (filePath: string, options?: { signal?: AbortSignal }) => Promise<void> }
+    ).deleteFile
     if (typeof maybeDeleteFile !== 'function') {
       throw new Error(
         '当前 WebDAV 客户端不支持删除远端文件，无法保证同步目录文件数量收敛。请更换 WebDAV 服务或升级客户端后重试。'
       )
     }
 
-    await runWebDavOperation(`deleting ${label} ${probePath}`, () => maybeDeleteFile.call(client, probePath), {
-      logger
-    })
+    throwIfDataSyncOperationAborted(options.signal)
+    await runWebDavOperation(
+      `deleting ${label} ${probePath}`,
+      () =>
+        options.signal
+          ? maybeDeleteFile.call(client, probePath, { signal: options.signal })
+          : maybeDeleteFile.call(client, probePath),
+      {
+        logger,
+        signal: options.signal
+      }
+    )
   }
 
-  private async assertWriteAccess(client: WebDAVClient, basePath: string) {
+  private async assertWriteAccess(client: WebDAVClient, basePath: string, options: DataSyncRunOptions = {}) {
     const probePath = path.posix.join(basePath, `.cherry-studio-pi-write-test-${Date.now()}.tmp`)
-    await this.assertProbeWriteAccess(client, probePath, 'remote sync probe')
+    await this.assertProbeWriteAccess(client, probePath, 'remote sync probe', options)
   }
 
-  private async assertStorageV2WriteAccess(client: WebDAVClient, basePath: string) {
+  private async assertStorageV2WriteAccess(client: WebDAVClient, basePath: string, options: DataSyncRunOptions = {}) {
     for (const relativeProbeDir of STORAGE_V2_WRITE_ACCESS_PROBE_DIRS) {
       const storageProbeDir = path.posix.join(basePath, relativeProbeDir)
-      await this.ensureDirectory(client, storageProbeDir)
+      await this.ensureDirectory(client, storageProbeDir, options)
       const probePath = path.posix.join(storageProbeDir, `.cherry-studio-pi-storage-write-test-${Date.now()}.tmp`)
-      await this.assertProbeWriteAccess(client, probePath, `Storage v2 sync probe ${relativeProbeDir}`)
+      await this.assertProbeWriteAccess(client, probePath, `Storage v2 sync probe ${relativeProbeDir}`, options)
     }
   }
 
-  private async getRemoteFileByteSize(client: WebDAVClient, filePath: string): Promise<number | null> {
-    const stat = (client as WebDAVClient & { stat?: (targetPath: string) => Promise<unknown> }).stat
+  private async getRemoteFileByteSize(
+    client: WebDAVClient,
+    filePath: string,
+    signal?: AbortSignal
+  ): Promise<number | null> {
+    const stat = (
+      client as WebDAVClient & { stat?: (targetPath: string, options?: { signal?: AbortSignal }) => Promise<unknown> }
+    ).stat
     if (typeof stat !== 'function') return null
 
     try {
       const result = await runWebDavOperation(
         `checking remote file size ${filePath}`,
-        () => stat.call(client, filePath),
+        () => (signal ? stat.call(client, filePath, { signal }) : stat.call(client, filePath)),
         {
-          logger
+          logger,
+          signal
         }
       )
       const size = Number((result as { size?: unknown } | null)?.size)
@@ -1449,9 +1508,10 @@ export class AppDataSyncService {
     client: WebDAVClient,
     filePath: string,
     label: string,
-    maxBytes: number
+    maxBytes: number,
+    signal?: AbortSignal
   ) {
-    const byteSize = await this.getRemoteFileByteSize(client, filePath)
+    const byteSize = await this.getRemoteFileByteSize(client, filePath, signal)
     if (byteSize == null || byteSize <= maxBytes) return
 
     throw new RemoteSyncSizeLimitError(
@@ -1470,21 +1530,28 @@ export class AppDataSyncService {
   private async readJson<T>(
     client: WebDAVClient,
     filePath: string,
-    options: { throwOnInvalidJson?: boolean; maxBytes?: number; label?: string } = {}
+    options: { throwOnInvalidJson?: boolean; maxBytes?: number; label?: string; signal?: AbortSignal } = {}
   ): Promise<T | null> {
     try {
-      if (!(await runWebDavOperation(`checking remote json ${filePath}`, () => client.exists(filePath), { logger }))) {
+      throwIfDataSyncOperationAborted(options.signal)
+      if (
+        !(await runWebDavOperation(
+          `checking remote json ${filePath}`,
+          () => webDavExists(client, filePath, options.signal),
+          { logger, signal: options.signal }
+        ))
+      ) {
         return null
       }
 
       const label = options.label ?? '远端同步 JSON'
       if (options.maxBytes) {
-        await this.assertRemoteFileWithinByteLimit(client, filePath, label, options.maxBytes)
+        await this.assertRemoteFileWithinByteLimit(client, filePath, label, options.maxBytes, options.signal)
       }
       const contents = await runWebDavOperation(
         `reading remote json ${filePath}`,
-        () => client.getFileContents(filePath, { format: 'binary' }),
-        { logger }
+        () => client.getFileContents(filePath, webDavWriteOptions({ format: 'binary' as const }, options.signal)),
+        { logger, signal: options.signal }
       )
       const buffer = bufferFromRemote(contents)
       if (options.maxBytes) {
@@ -1814,13 +1881,14 @@ export class AppDataSyncService {
     return `另一台设备正在同步这个 WebDAV 目录（设备：${lock.ownerId}，开始：${createdAt}，最近活动：${updatedAt}，锁过期：${expiresAt}，最长占用到：${deadlineText}）。请等待它完成后再试；如果那台设备长时间卡住，软件会在最长占用时间后自动接管。`
   }
 
-  private async readRemoteLock(client: WebDAVClient, lockPath: string) {
+  private async readRemoteLock(client: WebDAVClient, lockPath: string, signal?: AbortSignal) {
     try {
       return this.normalizeRemoteLock(
         await this.readJson<RemoteSyncLock>(client, lockPath, {
           throwOnInvalidJson: true,
           maxBytes: REMOTE_SYNC_LOCK_MAX_BYTES,
-          label: '远端同步锁'
+          label: '远端同步锁',
+          signal
         })
       )
     } catch (error) {
@@ -1975,25 +2043,26 @@ export class AppDataSyncService {
     )
   }
 
-  private async ensureRemoteLockDirectory(client: WebDAVClient, basePath: string) {
+  private async ensureRemoteLockDirectory(client: WebDAVClient, basePath: string, options: DataSyncRunOptions = {}) {
     const lockDir = this.getRemoteLockDir(basePath)
     try {
-      await this.ensureDirectory(client, lockDir)
+      await this.ensureDirectory(client, lockDir, options)
       return
     } catch (error) {
       if (!isWebDavLockedError(error) || !(await this.unlockDiscoveredWebDavLocksForPath(client, lockDir))) {
         throw error
       }
-      await this.ensureDirectory(client, lockDir)
+      await this.ensureDirectory(client, lockDir, options)
     }
   }
 
-  private async readRemoteLockIfExists(client: WebDAVClient, lockPath: string) {
+  private async readRemoteLockIfExists(client: WebDAVClient, lockPath: string, options: DataSyncRunOptions = {}) {
     const hasLock = await runWebDavOperation(
       `checking remote data sync lock ${lockPath}`,
-      () => client.exists(lockPath),
+      () => webDavExists(client, lockPath, options.signal),
       {
-        logger
+        logger,
+        signal: options.signal
       }
     )
     if (!hasLock) return { exists: false, lock: null }
@@ -2001,7 +2070,7 @@ export class AppDataSyncService {
     try {
       return {
         exists: true,
-        lock: await this.readRemoteLock(client, lockPath)
+        lock: await this.readRemoteLock(client, lockPath, options.signal)
       }
     } catch (error) {
       if (isCausedByWebDavStatus(error, 404)) {
@@ -2012,10 +2081,17 @@ export class AppDataSyncService {
     }
   }
 
-  private async listRemoteLockClaims(client: WebDAVClient, basePath: string, ownerId: string) {
+  private async listRemoteLockClaims(
+    client: WebDAVClient,
+    basePath: string,
+    ownerId: string,
+    options: DataSyncRunOptions = {}
+  ) {
     const lockDir = this.getRemoteLockDir(basePath)
-    const exists = await runWebDavOperation(`checking remote data sync lock directory ${lockDir}`, () =>
-      client.exists(lockDir)
+    const exists = await runWebDavOperation(
+      `checking remote data sync lock directory ${lockDir}`,
+      () => webDavExists(client, lockDir, options.signal),
+      { logger, signal: options.signal }
     ).catch((error) => {
       if (error instanceof WebDavOperationError && error.status === 404) return false
       throw error
@@ -2024,8 +2100,8 @@ export class AppDataSyncService {
 
     const contents = await runWebDavOperation(
       `listing remote data sync lock directory ${lockDir}`,
-      () => client.getDirectoryContents(lockDir),
-      { logger }
+      () => webDavGetDirectoryContents(client, lockDir, options.signal),
+      { logger, signal: options.signal }
     )
     const entries = normalizeDirectoryContents(contents)
     const fileEntries = entries.filter((entry) => entry.type !== 'directory')
@@ -2044,7 +2120,7 @@ export class AppDataSyncService {
       if (!lockPath.startsWith(`${normalizedLockDir}/`)) continue
       let lock: RemoteSyncLock | null
       try {
-        lock = await this.readRemoteLock(client, lockPath)
+        lock = await this.readRemoteLock(client, lockPath, options.signal)
       } catch (error) {
         if (isCausedByTransientWebDavError(error)) {
           throw error
@@ -2070,12 +2146,12 @@ export class AppDataSyncService {
     client: WebDAVClient,
     basePath: string,
     ownerId: string,
-    options: { currentToken?: string } = {}
+    options: { currentToken?: string; signal?: AbortSignal } = {}
   ) {
     const blockingLocks: RemoteSyncLockEntry[] = []
     const now = Date.now()
     const legacyLockPath = this.getLegacyRemoteLockPath(basePath)
-    const legacyLock = await this.readRemoteLockIfExists(client, legacyLockPath)
+    const legacyLock = await this.readRemoteLockIfExists(client, legacyLockPath, { signal: options.signal })
     if (legacyLock.exists) {
       if (!legacyLock.lock) {
         await this.removeReclaimableRemoteLock(client, legacyLockPath, null, ownerId, { bestEffort: true })
@@ -2086,7 +2162,7 @@ export class AppDataSyncService {
       }
     }
 
-    for (const claim of await this.listRemoteLockClaims(client, basePath, ownerId)) {
+    for (const claim of await this.listRemoteLockClaims(client, basePath, ownerId, { signal: options.signal })) {
       if (options.currentToken && claim.lock.ownerId === ownerId && claim.lock.token === options.currentToken) {
         continue
       }
@@ -2100,8 +2176,13 @@ export class AppDataSyncService {
     return blockingLocks
   }
 
-  private async assertRemoteLockAvailable(client: WebDAVClient, basePath: string, ownerId: string) {
-    const blockingLocks = await this.listBlockingRemoteLocks(client, basePath, ownerId)
+  private async assertRemoteLockAvailable(
+    client: WebDAVClient,
+    basePath: string,
+    ownerId: string,
+    options: DataSyncRunOptions = {}
+  ) {
+    const blockingLocks = await this.listBlockingRemoteLocks(client, basePath, ownerId, { signal: options.signal })
     if (blockingLocks.length === 0) return
 
     throw new Error(this.formatRemoteLockMessage(blockingLocks[0].lock, ownerId))
@@ -2404,7 +2485,11 @@ export class AppDataSyncService {
     }
   }
 
-  async listRemoteDirectories(config: WebDavConfig, remotePath = '/'): Promise<DataSyncRemoteDirectoryList> {
+  async listRemoteDirectories(
+    config: WebDavConfig,
+    remotePath = '/',
+    options: DataSyncRunOptions = {}
+  ): Promise<DataSyncRemoteDirectoryList> {
     const normalizedConfig = this.normalizeSyncWebDavConfig(config)
 
     const client = this.createRawWebDavClient(normalizedConfig)
@@ -2415,8 +2500,8 @@ export class AppDataSyncService {
       normalizeDirectoryContents(
         await runWebDavOperation(
           `listing remote directory ${targetPath}`,
-          () => client.getDirectoryContents(targetPath),
-          { logger }
+          () => webDavGetDirectoryContents(client, targetPath, options.signal),
+          { logger, signal: options.signal }
         )
       )
 
@@ -2469,15 +2554,15 @@ export class AppDataSyncService {
     }
   }
 
-  async checkWriteAccess(config: WebDavConfig): Promise<DataSyncWriteAccessResult> {
+  async checkWriteAccess(config: WebDavConfig, options: DataSyncRunOptions = {}): Promise<DataSyncWriteAccessResult> {
     const normalizedConfig = this.normalizeSyncWebDavConfig(config)
 
     const db = await getAppDataDatabase()
     const { client, basePath } = this.createWebDavClient(normalizedConfig)
-    await this.ensureDirectory(client, basePath)
-    await this.assertRemoteLockAvailable(client, basePath, db.getDeviceId())
-    await this.assertWriteAccess(client, basePath)
-    await this.assertStorageV2WriteAccess(client, basePath)
+    await this.ensureDirectory(client, basePath, options)
+    await this.assertRemoteLockAvailable(client, basePath, db.getDeviceId(), options)
+    await this.assertWriteAccess(client, basePath, options)
+    await this.assertStorageV2WriteAccess(client, basePath, options)
 
     return { ok: true, basePath }
   }
@@ -4017,19 +4102,21 @@ export class AppDataSyncService {
     }
   }
 
-  async restoreLatestSnapshot(config: WebDavConfig) {
+  async restoreLatestSnapshot(config: WebDavConfig, options: DataSyncRunOptions = {}) {
     const normalizedConfig = this.normalizeSyncWebDavConfig(config)
 
     return powerSaveBlockerService.runWithBlocker(
       'data-sync.snapshot-restore',
       async () => {
+        throwIfDataSyncOperationAborted(options.signal)
         const { client, basePath } = this.createWebDavClient(normalizedConfig)
         const manifestPath = path.posix.join(basePath, 'manifest.json')
         const manifest = this.normalizeManifest(
           await this.readJson<RemoteManifest>(client, manifestPath, {
             throwOnInvalidJson: true,
             maxBytes: REMOTE_MANIFEST_MAX_BYTES,
-            label: '远端同步状态 manifest.json'
+            label: '远端同步状态 manifest.json',
+            signal: options.signal
           })
         )
         const snapshot = selectLatestRemoteSnapshot(manifest)
@@ -4044,12 +4131,19 @@ export class AppDataSyncService {
             `远端安全快照过大（${snapshot.byteSize} 字节，限制 ${REMOTE_SNAPSHOT_MAX_BYTES} 字节）。为避免长时间下载或占用过多内存，本次恢复已停止。`
           )
         }
-        await this.assertRemoteFileWithinByteLimit(client, remotePath, '远端安全快照', REMOTE_SNAPSHOT_MAX_BYTES)
+        await this.assertRemoteFileWithinByteLimit(
+          client,
+          remotePath,
+          '远端安全快照',
+          REMOTE_SNAPSHOT_MAX_BYTES,
+          options.signal
+        )
 
+        throwIfDataSyncOperationAborted(options.signal)
         const backupContents = await runWebDavOperation(
           `downloading data sync snapshot ${remotePath}`,
-          () => client.getFileContents(remotePath, { format: 'binary' }),
-          { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS }
+          () => client.getFileContents(remotePath, webDavWriteOptions({ format: 'binary' as const }, options.signal)),
+          { logger, timeoutMs: LARGE_WEB_DAV_TRANSFER_TIMEOUT_MS, signal: options.signal }
         )
         const backupBuffer = bufferFromRemote(backupContents)
         if (backupBuffer.byteLength !== snapshot.byteSize) {
@@ -4058,6 +4152,7 @@ export class AppDataSyncService {
         if (snapshot.checksum && sha256Buffer(backupBuffer) !== snapshot.checksum) {
           throw new Error('远端安全快照校验失败。为避免恢复损坏数据，本次恢复已停止。')
         }
+        throwIfDataSyncOperationAborted(options.signal)
         const localBackupPath = path.join(
           getSystemTempDir(),
           'cherry-studio-pi-data-sync',
@@ -4067,6 +4162,7 @@ export class AppDataSyncService {
         await fsp.writeFile(localBackupPath, backupBuffer)
 
         try {
+          throwIfDataSyncOperationAborted(options.signal)
           return await this.backupManager.restore(undefined as unknown as Electron.IpcMainInvokeEvent, localBackupPath)
         } finally {
           await fsp.rm(localBackupPath, { force: true }).catch(() => undefined)

@@ -31,6 +31,7 @@ type WebDavRetryOptions = {
   maxAttempts?: number
   initialDelayMs?: number
   timeoutMs?: number
+  signal?: AbortSignal
 }
 
 const RETRIABLE_WEB_DAV_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504])
@@ -150,11 +151,39 @@ function toError(error: unknown) {
   return error instanceof Error ? error : new Error(errorMessage(error))
 }
 
-function delay(ms: number) {
-  return new Promise((resolve) => {
-    const timeout = setTimeout(resolve, ms)
+function webDavAbortError(signal: AbortSignal) {
+  const reason = signal.reason
+  if (reason instanceof Error) return reason
+  if (typeof reason === 'string' && reason.trim()) return new Error(reason.trim())
+  return new Error('WebDAV operation aborted')
+}
+
+function throwIfWebDavAborted(signal?: AbortSignal) {
+  if (signal?.aborted) throw webDavAbortError(signal)
+}
+
+function delay(ms: number, signal?: AbortSignal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(webDavAbortError(signal))
+      return
+    }
+
+    let abortListener: (() => void) | undefined
+    const timeout = setTimeout(() => {
+      if (abortListener) signal?.removeEventListener('abort', abortListener)
+      resolve(undefined)
+    }, ms)
     if (typeof timeout === 'object' && timeout && 'unref' in timeout && typeof timeout.unref === 'function') {
       timeout.unref()
+    }
+    if (signal) {
+      abortListener = () => {
+        clearTimeout(timeout)
+        signal.removeEventListener('abort', abortListener!)
+        reject(webDavAbortError(signal))
+      }
+      signal.addEventListener('abort', abortListener, { once: true })
     }
   })
 }
@@ -163,29 +192,47 @@ function isTimeoutError(error: unknown) {
   return /\bETIMEDOUT\b|\bESOCKETTIMEDOUT\b|timed out|timeout/i.test(errorMessage(error))
 }
 
-function withTimeout<T>(promise: Promise<T>, operation: string, timeoutMs: number): Promise<T> {
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+function withTimeout<T>(promise: Promise<T>, operation: string, timeoutMs: number, signal?: AbortSignal): Promise<T> {
+  throwIfWebDavAborted(signal)
+
+  const shouldUseTimeout = Number.isFinite(timeoutMs) && timeoutMs > 0
+  if (!shouldUseTimeout && !signal) {
     return promise
   }
 
   let timeoutId: ReturnType<typeof setTimeout> | null = null
-  const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      const error = new Error(`WebDAV operation timed out after ${timeoutMs}ms while ${operation}`) as Error & {
-        code: string
-      }
-      error.code = 'ETIMEDOUT'
-      reject(error)
-    }, timeoutMs)
-    if (typeof timeoutId === 'object' && timeoutId && 'unref' in timeoutId && typeof timeoutId.unref === 'function') {
-      timeoutId.unref()
-    }
-  })
+  let abortListener: (() => void) | undefined
+  const timeout = shouldUseTimeout
+    ? new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          const error = new Error(`WebDAV operation timed out after ${timeoutMs}ms while ${operation}`) as Error & {
+            code: string
+          }
+          error.code = 'ETIMEDOUT'
+          reject(error)
+        }, timeoutMs)
+        if (
+          typeof timeoutId === 'object' &&
+          timeoutId &&
+          'unref' in timeoutId &&
+          typeof timeoutId.unref === 'function'
+        ) {
+          timeoutId.unref()
+        }
+      })
+    : null
+  const abort = signal
+    ? new Promise<never>((_, reject) => {
+        abortListener = () => reject(webDavAbortError(signal))
+        signal.addEventListener('abort', abortListener, { once: true })
+      })
+    : null
 
-  return Promise.race([promise, timeout]).finally(() => {
+  return Promise.race([promise, ...(timeout ? [timeout] : []), ...(abort ? [abort] : [])]).finally(() => {
     if (timeoutId) {
       clearTimeout(timeoutId)
     }
+    if (abortListener) signal?.removeEventListener('abort', abortListener)
   })
 }
 
@@ -320,9 +367,11 @@ export async function runWebDavOperation<T>(
   const timeoutMs = normalizeNonNegativeDelay(options.timeoutMs, DEFAULT_WEB_DAV_OPERATION_TIMEOUT_MS)
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    throwIfWebDavAborted(options.signal)
     try {
-      return await withTimeout(fn(), operation, timeoutMs)
+      return await withTimeout(fn(), operation, timeoutMs, options.signal)
     } catch (error) {
+      throwIfWebDavAborted(options.signal)
       const wrapped = new WebDavOperationError(operation, error)
       if (!wrapped.transient || attempt >= maxAttempts) {
         throw wrapped
@@ -335,7 +384,7 @@ export async function runWebDavOperation<T>(
 
       const retryDelay = initialDelayMs * 2 ** (attempt - 1)
       if (retryDelay > 0) {
-        await delay(retryDelay)
+        await delay(retryDelay, options.signal)
       }
     }
   }

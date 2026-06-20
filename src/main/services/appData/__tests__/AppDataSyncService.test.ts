@@ -551,6 +551,14 @@ describe('AppDataSyncService', () => {
     })
   })
 
+  it('passes abort signals into WebDAV directory browsing requests', async () => {
+    const controller = new AbortController()
+
+    await new AppDataSyncService().listRemoteDirectories(config, '/remote-root', { signal: controller.signal })
+
+    expect(mocks.webdav.getDirectoryContents).toHaveBeenCalledWith('/remote-root', { signal: controller.signal })
+  })
+
   it('skips malformed WebDAV directory entries without breaking setup browsing', async () => {
     mocks.webdav.getDirectoryContents.mockResolvedValueOnce([
       {
@@ -716,6 +724,28 @@ describe('AppDataSyncService', () => {
         )
       }
       expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
+    } finally {
+      nowSpy.mockRestore()
+    }
+  })
+
+  it('passes abort signals into WebDAV write-access probe requests', async () => {
+    const controller = new AbortController()
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1760000000123)
+
+    try {
+      await new AppDataSyncService().checkWriteAccess(config, { signal: controller.signal })
+
+      expect(mocks.webdav.exists).toHaveBeenCalledWith('/remote-root/sync/v1', { signal: controller.signal })
+      expect(mocks.webdav.putFileContents).toHaveBeenCalledWith(
+        '/remote-root/sync/v1/.cherry-studio-pi-write-test-1760000000123.tmp',
+        'ok',
+        { overwrite: true, signal: controller.signal }
+      )
+      expect(mocks.webdav.deleteFile).toHaveBeenCalledWith(
+        '/remote-root/sync/v1/.cherry-studio-pi-write-test-1760000000123.tmp',
+        { signal: controller.signal }
+      )
     } finally {
       nowSpy.mockRestore()
     }

@@ -116,6 +116,23 @@ describe('WebDavRetry', () => {
     ).rejects.toThrow('timed out')
   })
 
+  it('aborts stalled WebDAV operations without waiting for retries or timeouts', async () => {
+    const controller = new AbortController()
+    const operation = runWebDavOperation(
+      'reading remote json /sync/v1/manifest.json',
+      () => new Promise(() => undefined),
+      {
+        maxAttempts: 3,
+        timeoutMs: 60_000,
+        signal: controller.signal
+      }
+    )
+
+    controller.abort(new Error('agent cancelled WebDAV request'))
+
+    await expect(operation).rejects.toThrow('agent cancelled WebDAV request')
+  })
+
   it('normalizes invalid retry options instead of skipping the WebDAV operation', async () => {
     await expect(
       runWebDavOperation('reading remote json /sync/v1/manifest.json', async () => 'ok', {
