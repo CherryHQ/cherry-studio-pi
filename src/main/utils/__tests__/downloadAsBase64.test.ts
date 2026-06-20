@@ -5,9 +5,8 @@ import { mockMainLoggerService } from '../../../../tests/__mocks__/MainLoggerSer
 const electron = await import('electron')
 const mockNetFetch = vi.mocked(electron.net.fetch)
 
-const { ATTACHMENT_DOWNLOAD_TIMEOUT_MS, downloadFileAsBase64, downloadImageAsBase64 } = await import(
-  '../downloadAsBase64'
-)
+const { ATTACHMENT_DOWNLOAD_TIMEOUT_MS, MAX_FILE_SIZE_BYTES, downloadFileAsBase64, downloadImageAsBase64 } =
+  await import('../downloadAsBase64')
 
 function mockResponse(body: string, headers: Record<string, string> = {}, ok = true, status = 200) {
   const bytes = new TextEncoder().encode(body)
@@ -52,6 +51,48 @@ describe('downloadAsBase64', () => {
     expect(timeoutSpy).toHaveBeenCalledWith(ATTACHMENT_DOWNLOAD_TIMEOUT_MS)
 
     timeoutSpy.mockRestore()
+  })
+
+  it('cancels streamed attachment downloads before buffering bodies over the size limit', async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined)
+    const releaseLock = vi.fn()
+    const arrayBuffer = vi.fn()
+    const reader = {
+      read: vi.fn().mockResolvedValueOnce({
+        done: false,
+        value: { byteLength: MAX_FILE_SIZE_BYTES + 1 }
+      }),
+      cancel,
+      releaseLock
+    }
+    mockNetFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'image/png' }),
+      body: {
+        getReader: () => reader
+      },
+      arrayBuffer
+    } as unknown as Response)
+
+    await expect(downloadImageAsBase64('https://example.com/huge.png')).resolves.toBeNull()
+
+    expect(cancel).toHaveBeenCalled()
+    expect(releaseLock).toHaveBeenCalled()
+    expect(arrayBuffer).not.toHaveBeenCalled()
+    expect(mockMainLoggerService.warn).toHaveBeenCalledWith('Image too large after download', {
+      url: {
+        type: 'url',
+        protocol: 'https:',
+        host: 'example.com',
+        pathnameLength: 9,
+        searchLength: 0,
+        hashLength: 0,
+        hasSearch: false,
+        hasHash: false
+      },
+      size: MAX_FILE_SIZE_BYTES + 1
+    })
   })
 
   it('summarizes failed image URLs without logging query or hash secrets', async () => {

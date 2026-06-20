@@ -24,6 +24,43 @@ export type FileAttachment = {
 export const MAX_FILE_SIZE_BYTES = 100 * MB
 export const ATTACHMENT_DOWNLOAD_TIMEOUT_MS = 120_000
 
+async function readResponseBufferWithinLimit(
+  response: Response
+): Promise<{ buffer: Buffer | null; bytesRead: number }> {
+  if (!response.body) {
+    const buffer = Buffer.from(await response.arrayBuffer())
+    return {
+      buffer: buffer.length > MAX_FILE_SIZE_BYTES ? null : buffer,
+      bytesRead: buffer.length
+    }
+  }
+
+  const reader = response.body.getReader()
+  const chunks: Buffer[] = []
+  let totalBytes = 0
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (!value) continue
+
+      const byteLength = value.byteLength
+      if (totalBytes + byteLength > MAX_FILE_SIZE_BYTES) {
+        await reader.cancel().catch(() => undefined)
+        return { buffer: null, bytesRead: totalBytes + byteLength }
+      }
+
+      chunks.push(Buffer.from(value))
+      totalBytes += byteLength
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  return { buffer: Buffer.concat(chunks, totalBytes), bytesRead: totalBytes }
+}
+
 function fetchRemoteAttachment(url: string): Promise<Response> {
   return net.fetch(sanitizeRemoteUrl(url), {
     signal: AbortSignal.timeout(ATTACHMENT_DOWNLOAD_TIMEOUT_MS)
@@ -49,9 +86,9 @@ export async function downloadImageAsBase64(url: string): Promise<ImageAttachmen
       return null
     }
 
-    const buffer = Buffer.from(await response.arrayBuffer())
-    if (buffer.length > MAX_FILE_SIZE_BYTES) {
-      logger.warn('Image too large after download', { url: summarizeUrlForLog(url), size: buffer.length })
+    const { buffer, bytesRead } = await readResponseBufferWithinLimit(response)
+    if (!buffer) {
+      logger.warn('Image too large after download', { url: summarizeUrlForLog(url), size: bytesRead })
       return null
     }
 
@@ -86,9 +123,9 @@ export async function downloadFileAsBase64(url: string, filename: string): Promi
       return null
     }
 
-    const buffer = Buffer.from(await response.arrayBuffer())
-    if (buffer.length > MAX_FILE_SIZE_BYTES) {
-      logger.warn('File too large after download', { filename, size: buffer.length })
+    const { buffer, bytesRead } = await readResponseBufferWithinLimit(response)
+    if (!buffer) {
+      logger.warn('File too large after download', { filename, size: bytesRead })
       return null
     }
 
