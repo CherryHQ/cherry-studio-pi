@@ -163,7 +163,7 @@ const Section = styled.div`
 const SectionTitle = styled.h2`
   font-size: 14px;
   font-weight: 600;
-  color: var(--color-text);
+  color: var(--color-foreground);
   opacity: 0.8;
   margin: 0;
   padding: 0 36px;
@@ -223,7 +223,7 @@ const IconWrapper = styled.div<{ $bgColor: string }>`
 
 const AppName = styled.div`
   font-size: 12px;
-  color: var(--color-text);
+  color: var(--color-foreground);
   text-align: center;
   width: 100%;
   overflow: hidden;

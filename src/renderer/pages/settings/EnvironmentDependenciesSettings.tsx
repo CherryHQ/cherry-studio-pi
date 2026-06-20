@@ -256,7 +256,7 @@ const VersionText = styled.span`
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--color-text-3);
+  color: var(--color-foreground-muted);
   font-size: 12px;
 `
 
