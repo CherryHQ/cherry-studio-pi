@@ -137,4 +137,45 @@ describe('ImageUploader', () => {
     expect(window.toast.error).not.toHaveBeenCalled()
     expect(onClose).not.toHaveBeenCalled()
   })
+
+  it('embeds normalized http image urls from the URL tab', () => {
+    const onImageSelect = vi.fn()
+    const onClose = vi.fn()
+
+    render(<ImageUploader visible onImageSelect={onImageSelect} onClose={onClose} />)
+
+    fireEvent.change(screen.getByPlaceholderText('richEditor.imageUploader.urlPlaceholder'), {
+      target: { value: ' https://example.com/image.png ' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'richEditor.imageUploader.embedImage' }))
+
+    expect(onImageSelect).toHaveBeenCalledWith('https://example.com/image.png')
+    expect(window.toast.success).toHaveBeenCalledWith('richEditor.imageUploader.embedSuccess')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects unsafe image embed urls', () => {
+    const onImageSelect = vi.fn()
+    const onClose = vi.fn()
+
+    render(<ImageUploader visible onImageSelect={onImageSelect} onClose={onClose} />)
+
+    const input = screen.getByPlaceholderText('richEditor.imageUploader.urlPlaceholder')
+    const submit = screen.getByRole('button', { name: 'richEditor.imageUploader.embedImage' })
+
+    for (const value of [
+      'javascript:alert(1)',
+      'file:///Users/test/image.png',
+      'https://user:pass@example.com/image.png',
+      'https://example.com/image.png\npassword: secret'
+    ]) {
+      fireEvent.change(input, { target: { value } })
+      fireEvent.click(submit)
+    }
+
+    expect(onImageSelect).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(window.toast.error).toHaveBeenCalledTimes(4)
+    expect(window.toast.error).toHaveBeenCalledWith('richEditor.imageUploader.invalidUrl')
+  })
 })

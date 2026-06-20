@@ -17,6 +17,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('RichEditorImageUploader')
+const ALLOWED_IMAGE_URL_PROTOCOLS = new Set(['http:', 'https:'])
 
 interface ImageUploaderProps {
   /** Callback when image is selected/uploaded */
@@ -28,6 +29,20 @@ interface ImageUploaderProps {
 }
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024
+
+const normalizeImageEmbedUrl = (rawUrl: string): string | null => {
+  const trimmedUrl = rawUrl.trim()
+  if (!trimmedUrl || /\s/.test(trimmedUrl)) return null
+
+  try {
+    const parsedUrl = new URL(trimmedUrl)
+    if (!ALLOWED_IMAGE_URL_PROTOCOLS.has(parsedUrl.protocol)) return null
+    if (parsedUrl.username || parsedUrl.password) return null
+    return parsedUrl.href
+  } catch {
+    return null
+  }
+}
 
 // Function to convert file to base64 URL
 const convertFileToBase64 = (file: File): Promise<string> => {
@@ -124,16 +139,16 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageSelect, vis
       return
     }
 
-    // Basic URL validation
-    try {
-      new URL(urlInput.trim())
-      onImageSelect(urlInput.trim())
-      window.toast.success(t('richEditor.imageUploader.embedSuccess'))
-      setUrlInput('')
-      onClose()
-    } catch {
+    const imageUrl = normalizeImageEmbedUrl(urlInput)
+    if (!imageUrl) {
       window.toast.error(t('richEditor.imageUploader.invalidUrl'))
+      return
     }
+
+    onImageSelect(imageUrl)
+    window.toast.success(t('richEditor.imageUploader.embedSuccess'))
+    setUrlInput('')
+    onClose()
   }
 
   const handleCancel = () => {
