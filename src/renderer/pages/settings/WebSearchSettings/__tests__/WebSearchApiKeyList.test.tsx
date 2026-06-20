@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 
 import type * as CherryStudioUi from '@cherrystudio/ui'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type * as ReactI18next from 'react-i18next'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -24,15 +24,18 @@ const mocks = vi.hoisted(() => ({
 type Deferred<T> = {
   promise: Promise<T>
   resolve: (value: T) => void
+  reject: (reason?: unknown) => void
 }
 
 function deferred<T>(): Deferred<T> {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((promiseResolve) => {
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
     resolve = promiseResolve
+    reject = promiseReject
   })
 
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 vi.mock('react-i18next', async (importOriginal) => {
@@ -152,6 +155,28 @@ describe('WebSearchApiKeyList', () => {
     )
   })
 
+  it('ignores save failures after the key row unmounts', async () => {
+    const runningUpdate = deferred<{ isValid: boolean }>()
+    updateListItemMock.mockReturnValueOnce(runningUpdate.promise)
+    const { unmount } = render(<WebSearchApiKeyList providerId="tavily" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.edit' }))
+    fireEvent.change(screen.getByPlaceholderText('settings.provider.api.key.new_key.placeholder'), {
+      target: { value: 'key-b' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'common.save' }))
+
+    await waitFor(() => expect(updateListItemMock).toHaveBeenCalledWith(defaultItem, 'key-b'))
+    unmount()
+
+    await act(async () => {
+      runningUpdate.reject(new Error('persist failed after unmount'))
+      await runningUpdate.promise.catch(() => undefined)
+    })
+
+    expect(toastErrorMock).not.toHaveBeenCalled()
+  })
+
   it('shows a save-failed toast when deleting a key rejects', async () => {
     removeListItemMock.mockRejectedValueOnce(new Error('persist failed'))
     render(<WebSearchApiKeyList providerId="tavily" />)
@@ -175,6 +200,23 @@ describe('WebSearchApiKeyList', () => {
 
     runningConfirmation.resolve(false)
     await waitFor(() => expect(removeListItemMock).not.toHaveBeenCalled())
+  })
+
+  it('does not remove a key when delete confirmation resolves after unmount', async () => {
+    const runningConfirmation = deferred<boolean>()
+    confirmMock.mockReturnValueOnce(runningConfirmation.promise)
+    const { unmount } = render(<WebSearchApiKeyList providerId="tavily" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.delete' }))
+    expect(confirmMock).toHaveBeenCalledTimes(1)
+    unmount()
+
+    await act(async () => {
+      runningConfirmation.resolve(true)
+      await runningConfirmation.promise
+    })
+
+    expect(removeListItemMock).not.toHaveBeenCalled()
   })
 
   it('restores the previous value when editing is cancelled', () => {

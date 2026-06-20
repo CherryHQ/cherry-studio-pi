@@ -6,7 +6,7 @@ const logger = loggerService.withContext('WebSearchSettings')
 
 export type WebSearchPersistResult<T> = { ok: true; value: T } | { ok: false }
 
-export function useWebSearchPersist() {
+export function useWebSearchPersist(shouldNotify?: () => boolean) {
   const { t } = useTranslation()
 
   return useCallback(
@@ -15,10 +15,12 @@ export function useWebSearchPersist() {
         return { ok: true, value: await action() }
       } catch (error) {
         logger.error(message, error as Error)
-        window.toast.error(t('settings.tool.websearch.errors.save_failed'))
+        if (shouldNotify?.() ?? true) {
+          window.toast.error(t('settings.tool.websearch.errors.save_failed'))
+        }
         return { ok: false }
       }
     },
-    [t]
+    [shouldNotify, t]
   )
 }

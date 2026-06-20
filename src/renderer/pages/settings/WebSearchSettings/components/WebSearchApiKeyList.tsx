@@ -7,7 +7,7 @@ import { cn } from '@renderer/utils/style'
 import type { WebSearchProviderId } from '@shared/data/preference/preferenceTypes'
 import { Check, Copy, Minus, Plus, X } from 'lucide-react'
 import type { FC } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useWebSearchApiKeyList, type WebSearchApiKeyListItem as ApiKeyListItem } from '../hooks/useWebSearchApiKeyList'
@@ -32,7 +32,8 @@ const WebSearchApiKeyItem: FC<WebSearchApiKeyItemProps> = ({ item, onUpdate, onR
   const inputRef = useRef<HTMLInputElement>(null)
   const mountedRef = useRef(true)
   const savingRef = useRef(false)
-  const persist = useWebSearchPersist()
+  const isMounted = useCallback(() => mountedRef.current, [])
+  const persist = useWebSearchPersist(isMounted)
   const hasUnsavedChanges = editValue.trim() !== item.key.trim()
 
   useEffect(() => {
@@ -73,6 +74,10 @@ const WebSearchApiKeyItem: FC<WebSearchApiKeyItemProps> = ({ item, onUpdate, onR
   const handleSave = async () => {
     await runSavingAction(async () => {
       const result = await persist(() => onUpdate(editValue), 'Failed to save web search API key')
+      if (!mountedRef.current) {
+        return
+      }
+
       if (!result.ok) {
         return
       }
@@ -105,8 +110,16 @@ const WebSearchApiKeyItem: FC<WebSearchApiKeyItemProps> = ({ item, onUpdate, onR
   const handleCopy = () => {
     navigator.clipboard
       .writeText(item.key)
-      .then(() => window.toast.success(t('message.copy.success')))
-      .catch(() => window.toast.error(t('message.copy.failed')))
+      .then(() => {
+        if (mountedRef.current) {
+          window.toast.success(t('message.copy.success'))
+        }
+      })
+      .catch(() => {
+        if (mountedRef.current) {
+          window.toast.error(t('message.copy.failed'))
+        }
+      })
   }
 
   const handleRemove = async () => {
@@ -117,6 +130,10 @@ const WebSearchApiKeyItem: FC<WebSearchApiKeyItemProps> = ({ item, onUpdate, onR
         okText: t('common.confirm'),
         cancelText: t('common.cancel')
       })
+
+      if (!mountedRef.current) {
+        return
+      }
 
       if (confirmed) {
         await persist(onRemove, 'Failed to remove web search API key')
