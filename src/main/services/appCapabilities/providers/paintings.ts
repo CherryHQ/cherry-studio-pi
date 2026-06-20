@@ -43,6 +43,12 @@ const PAINTING_NAMESPACE_LABEL = '绘图命名空间'
 const PAINTING_PROMPT_LABEL = '绘图提示词'
 const PAINTING_MODEL_LABEL = '绘图模型'
 const PAINTING_SIZE_LABEL = '绘图尺寸'
+const PAINTING_PROVIDERS_LISTED_SUMMARY = '已列出绘图服务商'
+const PAINTING_HISTORY_LISTED_SUMMARY = '已列出绘图历史'
+const PAINTING_DEFAULT_PROVIDER_UPDATED_SUMMARY = '默认绘图服务商已更新'
+const PAINTING_WORKSPACE_OPENED_SUMMARY = '已打开绘图工作区'
+const PAINTING_GENERATION_PREPARED_SUMMARY = '绘图请求已准备好。当前 UI 生成桥接尚未接入，已打开绘图工作区供继续操作。'
+const PAINTING_GENERATION_BRIDGE_WARNING = '无界面的直接绘图生成会在下一轮服务商桥接中接入。'
 
 function normalizeInputObject(input: unknown) {
   if (input === null || typeof input === 'undefined') return {}
@@ -237,7 +243,7 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
         throwIfPaintingSignalAborted(context.signal)
         const defaultProvider = await readDefaultPaintingProvider(context.signal)
         throwIfPaintingSignalAborted(context.signal)
-        return okResult('Painting providers listed', {
+        return okResult(PAINTING_PROVIDERS_LISTED_SUMMARY, {
           defaultProvider,
           namespaces: PAINTING_NAMESPACES
         })
@@ -280,7 +286,7 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
           return {}
         })
         throwIfPaintingSignalAborted(context.signal)
-        return okResult('Painting history listed', listPaintingHistory(paintings, inputObject))
+        return okResult(PAINTING_HISTORY_LISTED_SUMMARY, listPaintingHistory(paintings, inputObject))
       }
     },
     {
@@ -307,7 +313,7 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
         throwIfPaintingSignalAborted(context.signal)
         await persistSettingValue('defaultPaintingProvider', provider, context.signal)
         throwIfPaintingSignalAborted(context.signal)
-        return okResult('Default painting provider updated', { defaultProvider: provider })
+        return okResult(PAINTING_DEFAULT_PROVIDER_UPDATED_SUMMARY, { defaultProvider: provider })
       }
     },
     {
@@ -333,7 +339,7 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
         throwIfPaintingSignalAborted(context.signal)
         await (context.signal ? navigateApp(route, context.signal) : navigateApp(route))
         throwIfPaintingSignalAborted(context.signal)
-        return okResult('Painting workspace opened', { route })
+        return okResult(PAINTING_WORKSPACE_OPENED_SUMMARY, { route })
       }
     },
     {
@@ -371,8 +377,7 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
         throwIfPaintingSignalAborted(context.signal)
         return {
           ok: true,
-          summary:
-            'Painting generation request prepared. The UI generation bridge is not wired yet, so the painting workspace was opened.',
+          summary: PAINTING_GENERATION_PREPARED_SUMMARY,
           data: {
             provider,
             route,
@@ -380,7 +385,7 @@ export function createPaintingCapabilities(): AppCapabilityDefinition[] {
             model,
             size
           },
-          warnings: ['Direct headless painting generation will be wired in the next provider bridge pass.']
+          warnings: [PAINTING_GENERATION_BRIDGE_WARNING]
         }
       }
     }
