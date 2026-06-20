@@ -22,6 +22,25 @@ const OWNER_TYPE_LABEL = '归属类型'
 const OWNER_ID_LABEL = '归属 ID'
 const CONVERSATION_ID_LABEL = '对话 ID'
 const FILE_ID_LABEL = '文件 ID'
+const STORAGE_DATA_ROOT_READ_SUMMARY = '已读取存储数据目录'
+const STORAGE_HEALTH_CHECKED_SUMMARY = '存储健康检查已完成'
+const STORAGE_STATS_READ_SUMMARY = '已读取存储统计信息'
+const BACKUP_CREATED_PREFIX = '已创建备份：'
+const BACKUP_ARTIFACT_TITLE = 'Storage v2 备份'
+const BACKUP_OVERVIEW_READ_SUMMARY = '已读取备份概览'
+const BACKUP_VALIDATED_SUMMARY = '备份校验已完成'
+const BACKUP_RESTORE_DRY_RUN_SUMMARY = '备份恢复演练已完成'
+const BACKUP_RESTORED_SUMMARY = '备份恢复已完成'
+const STORAGE_SNAPSHOT_CREATED_SUMMARY = '存储快照已创建'
+const PROVIDERS_LISTED_SUMMARY = '已列出模型服务商'
+const ASSISTANTS_LISTED_SUMMARY = '已列出助手'
+const CONVERSATIONS_LISTED_SUMMARY = '已列出对话'
+const CONVERSATION_MESSAGES_LISTED_SUMMARY = '已列出对话消息'
+const FILES_LISTED_SUMMARY = '已列出文件记录'
+const FILE_RECORD_READ_SUMMARY = '已读取文件记录'
+const STORAGE_OPERATION_BACKUP = '备份'
+const STORAGE_OPERATION_RESTORE = '恢复'
+const STORAGE_OPERATION_SNAPSHOT = '快照'
 
 function normalizeListLimit(value: unknown) {
   if (value !== null && typeof value !== 'undefined' && typeof value !== 'number' && typeof value !== 'string') {
@@ -110,7 +129,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: unknown, context) => {
         normalizeInputObject(input)
         throwIfStorageSignalAborted(context.signal)
-        return okResult('Storage data root read', { dataRoot: storageV2Service.getDataRoot() })
+        return okResult(STORAGE_DATA_ROOT_READ_SUMMARY, { dataRoot: storageV2Service.getDataRoot() })
       }
     },
     {
@@ -127,7 +146,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
         throwIfStorageSignalAborted(context.signal)
         const health = await storageV2Service.healthCheck()
         throwIfStorageSignalAborted(context.signal)
-        return okResult('Storage health checked', sanitizeForAgent(health))
+        return okResult(STORAGE_HEALTH_CHECKED_SUMMARY, sanitizeForAgent(health))
       }
     },
     {
@@ -144,7 +163,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
         throwIfStorageSignalAborted(context.signal)
         const stats = await storageV2Service.getStats()
         throwIfStorageSignalAborted(context.signal)
-        return okResult('Storage statistics read', sanitizeForAgent(stats))
+        return okResult(STORAGE_STATS_READ_SUMMARY, sanitizeForAgent(stats))
       }
     },
     {
@@ -168,15 +187,15 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
         const inputObject = normalizeInputObject(input)
         const reason = normalizeOptionalText(inputObject.reason, BACKUP_REASON_LABEL) || 'agent-request'
         throwIfStorageSignalAborted(context.signal)
-        await prepareRendererStorageV2ForStorageOperation('backup', context.signal)
+        await prepareRendererStorageV2ForStorageOperation(STORAGE_OPERATION_BACKUP, context.signal)
         throwIfStorageSignalAborted(context.signal)
         const backup = await storageV2Service.createBackup(reason)
         throwIfStorageSignalAborted(context.signal)
         return {
           ok: true,
-          summary: `Backup created: ${backup.path}`,
+          summary: BACKUP_CREATED_PREFIX + backup.path,
           data: sanitizeForAgent(backup),
-          artifacts: [{ type: 'backup', path: backup.path, title: 'Storage v2 backup' }]
+          artifacts: [{ type: 'backup', path: backup.path, title: BACKUP_ARTIFACT_TITLE }]
         }
       }
     },
@@ -194,7 +213,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
         throwIfStorageSignalAborted(context.signal)
         const overview = await storageV2Service.getBackupOverview()
         throwIfStorageSignalAborted(context.signal)
-        return okResult('Backup overview read', sanitizeForAgent(overview))
+        return okResult(BACKUP_OVERVIEW_READ_SUMMARY, sanitizeForAgent(overview))
       }
     },
     {
@@ -218,7 +237,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
         throwIfStorageSignalAborted(context.signal)
         const validation = await storageV2Service.validateBackup(backupPath)
         throwIfStorageSignalAborted(context.signal)
-        return okResult('Backup validated', sanitizeForAgent(validation))
+        return okResult(BACKUP_VALIDATED_SUMMARY, sanitizeForAgent(validation))
       }
     },
     {
@@ -246,16 +265,16 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
           throwIfStorageSignalAborted(context.signal)
           const validation = await storageV2Service.validateBackup(backupPath)
           throwIfStorageSignalAborted(context.signal)
-          return okResult('Backup restore dry run completed', {
+          return okResult(BACKUP_RESTORE_DRY_RUN_SUMMARY, {
             validation: sanitizeForAgent(validation)
           })
         }
         throwIfStorageSignalAborted(context.signal)
-        await prepareRendererStorageV2ForStorageOperation('restore', context.signal)
+        await prepareRendererStorageV2ForStorageOperation(STORAGE_OPERATION_RESTORE, context.signal)
         throwIfStorageSignalAborted(context.signal)
         const restore = await storageV2Service.restoreBackup(backupPath)
         throwIfStorageSignalAborted(context.signal)
-        return okResult('Backup restored', sanitizeForAgent(restore))
+        return okResult(BACKUP_RESTORED_SUMMARY, sanitizeForAgent(restore))
       }
     },
     {
@@ -278,11 +297,11 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
         const inputObject = normalizeInputObject(input)
         const reason = normalizeOptionalText(inputObject.reason, SNAPSHOT_REASON_LABEL) || 'agent-request'
         throwIfStorageSignalAborted(context.signal)
-        await prepareRendererStorageV2ForStorageOperation('snapshot', context.signal)
+        await prepareRendererStorageV2ForStorageOperation(STORAGE_OPERATION_SNAPSHOT, context.signal)
         throwIfStorageSignalAborted(context.signal)
         const snapshot = await storageV2Service.createSnapshot(reason)
         throwIfStorageSignalAborted(context.signal)
-        return okResult('Storage snapshot created', sanitizeForAgent(snapshot))
+        return okResult(STORAGE_SNAPSHOT_CREATED_SUMMARY, sanitizeForAgent(snapshot))
       }
     },
     {
@@ -299,7 +318,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
         throwIfStorageSignalAborted(context.signal)
         const providers = await storageV2Service.listProviders()
         throwIfStorageSignalAborted(context.signal)
-        return okResult('Providers listed', sanitizeForAgent(providers))
+        return okResult(PROVIDERS_LISTED_SUMMARY, sanitizeForAgent(providers))
       }
     },
     {
@@ -322,7 +341,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
         throwIfStorageSignalAborted(context.signal)
         const assistants = await storageV2Service.listAssistants(options)
         throwIfStorageSignalAborted(context.signal)
-        return okResult('Assistants listed', sanitizeForAgent(assistants))
+        return okResult(ASSISTANTS_LISTED_SUMMARY, sanitizeForAgent(assistants))
       }
     },
     {
@@ -355,7 +374,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
         throwIfStorageSignalAborted(context.signal)
         const conversations = await storageV2Service.listConversations(options)
         throwIfStorageSignalAborted(context.signal)
-        return okResult('Conversations listed', sanitizeForAgent(conversations))
+        return okResult(CONVERSATIONS_LISTED_SUMMARY, sanitizeForAgent(conversations))
       }
     },
     {
@@ -382,7 +401,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
         throwIfStorageSignalAborted(context.signal)
         const messages = await storageV2Service.listMessages(conversationId, options)
         throwIfStorageSignalAborted(context.signal)
-        return okResult('Conversation messages listed', sanitizeForAgent(messages))
+        return okResult(CONVERSATION_MESSAGES_LISTED_SUMMARY, sanitizeForAgent(messages))
       }
     },
     {
@@ -405,7 +424,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
         throwIfStorageSignalAborted(context.signal)
         const files = await storageV2Service.listFiles(options)
         throwIfStorageSignalAborted(context.signal)
-        return okResult('Files listed', sanitizeForAgent(files))
+        return okResult(FILES_LISTED_SUMMARY, sanitizeForAgent(files))
       }
     },
     {
@@ -429,7 +448,7 @@ export function createStorageCapabilities(): AppCapabilityDefinition[] {
         throwIfStorageSignalAborted(context.signal)
         const file = await storageV2Service.getFile(fileId)
         throwIfStorageSignalAborted(context.signal)
-        return okResult('File record read', sanitizeForAgent(file))
+        return okResult(FILE_RECORD_READ_SUMMARY, sanitizeForAgent(file))
       }
     }
   ]
