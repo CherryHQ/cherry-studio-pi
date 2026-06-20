@@ -98,5 +98,25 @@ describe('serializeError', () => {
       expect(result.toolName).toBe('missing_tool')
       expect(result.availableTools).toEqual(['alpha', 'beta'])
     })
+
+    it('does not throw when array-like AI SDK fields are malformed', () => {
+      const malformedRetry = Object.assign(new Error('retry failed'), {
+        reason: 'maxRetriesExceeded',
+        lastError: new Error('last'),
+        errors: new Error('single attempt')
+      })
+      const malformedEmbedding = Object.assign(new Error('too many values'), {
+        provider: 'openai',
+        modelId: 'text-embedding-3-large',
+        maxEmbeddingsPerCall: 128,
+        values: 'single input'
+      })
+
+      expect(() => serializeError(malformedRetry)).not.toThrow()
+      expect(serializeError(malformedRetry).errors).toHaveLength(1)
+
+      expect(() => serializeError(malformedEmbedding)).not.toThrow()
+      expect(serializeError(malformedEmbedding).values).toEqual(['single input'])
+    })
   })
 })
