@@ -120,6 +120,22 @@ describe('prepareUIMessages — file:// URL resolution', () => {
     expect(ui.parts[0]).toMatchObject({ type: 'text', text: 'keep me' })
   })
 
+  it('drops file parts that are too large to inline', async () => {
+    const largePath = path.join(tmpDir, 'large-video.mp4')
+    await fs.writeFile(largePath, '')
+    await fs.truncate(largePath, 101 * 1024 * 1024)
+
+    const msg = makeMessage({
+      parts: [
+        { type: 'text', text: 'keep me' },
+        { type: 'file', url: `file://${largePath}`, mediaType: 'video/mp4', filename: 'large-video.mp4' }
+      ] as CherryMessagePart[]
+    })
+    const [ui] = await prepareUIMessages([msg])
+    expect(ui.parts).toHaveLength(1)
+    expect(ui.parts[0]).toMatchObject({ type: 'text', text: 'keep me' })
+  })
+
   it('leaves non-file parts unchanged', async () => {
     const msg = makeMessage({
       parts: [

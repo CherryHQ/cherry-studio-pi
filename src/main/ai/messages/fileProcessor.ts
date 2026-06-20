@@ -22,10 +22,12 @@ import { fileURLToPath } from 'node:url'
 import { application } from '@application'
 import { loggerService } from '@logger'
 import { summarizeUrlForLog } from '@main/utils/logging'
+import { MB } from '@shared/config/constant'
 import type { FileUIPart } from '@shared/data/types/message'
 import { readCherryMeta } from '@shared/data/types/uiParts'
 
 const logger = loggerService.withContext('ai:fileProcessor')
+const MAX_INLINE_FILE_BYTES = 100 * MB
 
 /** Common media-type inference by extension — covers what providers actually accept. */
 const EXT_TO_MEDIA_TYPE: Record<string, string> = {
@@ -50,6 +52,14 @@ function inferMediaType(filePath: string): string {
 }
 
 async function pathToDataUrl(absPath: string, mediaTypeHint?: string): Promise<string> {
+  const stats = await fs.stat(absPath)
+  if (!stats.isFile()) {
+    throw new Error('Path is not a regular file')
+  }
+  if (stats.size > MAX_INLINE_FILE_BYTES) {
+    throw new Error(`File is too large to inline (${stats.size} bytes)`)
+  }
+
   const bytes = await fs.readFile(absPath)
   const mediaType = mediaTypeHint ?? inferMediaType(absPath)
   return `data:${mediaType};base64,${bytes.toString('base64')}`
