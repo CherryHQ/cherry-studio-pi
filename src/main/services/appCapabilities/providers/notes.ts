@@ -29,6 +29,10 @@ const NOTE_NAME_LABEL = '笔记名称'
 const NOTE_SEARCH_QUERY_LABEL = '笔记搜索关键词'
 const NOTE_CONTENT_REQUIRED_ERROR = '笔记内容不能为空。'
 const NOTE_OUTSIDE_ROOT_SUFFIX = '解析到了笔记目录之外。请检查路径是否包含上级目录或符号链接。'
+const NOTE_SEARCH_LIMIT_TYPE_ERROR = '笔记搜索数量必须是数字。'
+const NOTE_LIST_LIMIT_TYPE_ERROR = '笔记列表数量必须是数字。'
+const NOTE_LIST_OFFSET_TYPE_ERROR = '笔记列表偏移量必须是数字。'
+const NOTE_READ_MAX_BYTES_TYPE_ERROR = '笔记读取字节数上限必须是数字。'
 
 function normalizeInputObject(input: unknown) {
   if (input === null || typeof input === 'undefined') return {}
@@ -148,7 +152,8 @@ function normalizeSearchLimit(value: unknown) {
     label: 'Note search limit',
     defaultValue: DEFAULT_NOTE_SEARCH_LIMIT,
     min: 1,
-    max: MAX_NOTE_SEARCH_LIMIT
+    max: MAX_NOTE_SEARCH_LIMIT,
+    invalidTypeMessage: NOTE_SEARCH_LIMIT_TYPE_ERROR
   })
 }
 
@@ -157,7 +162,8 @@ function normalizeListLimit(value: unknown) {
     label: 'Note list limit',
     defaultValue: DEFAULT_NOTE_LIST_LIMIT,
     min: 1,
-    max: MAX_NOTE_LIST_LIMIT
+    max: MAX_NOTE_LIST_LIMIT,
+    invalidTypeMessage: NOTE_LIST_LIMIT_TYPE_ERROR
   })
 }
 
@@ -165,7 +171,8 @@ function normalizeOffset(value: unknown) {
   return normalizeBoundedIntegerInput(value, {
     label: 'Note list offset',
     defaultValue: 0,
-    min: 0
+    min: 0,
+    invalidTypeMessage: NOTE_LIST_OFFSET_TYPE_ERROR
   })
 }
 
@@ -174,7 +181,8 @@ function normalizeReadMaxBytes(value: unknown) {
     label: 'Note read maxBytes',
     defaultValue: DEFAULT_NOTE_READ_MAX_BYTES,
     min: 1,
-    max: MAX_NOTE_READ_MAX_BYTES
+    max: MAX_NOTE_READ_MAX_BYTES,
+    invalidTypeMessage: NOTE_READ_MAX_BYTES_TYPE_ERROR
   })
 }
 

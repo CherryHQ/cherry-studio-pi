@@ -6,6 +6,11 @@ import { redactAgentText } from './redaction'
 const DEFAULT_RENDERER_BRIDGE_CHECK_TIMEOUT_MS = 5_000
 const DEFAULT_RENDERER_BRIDGE_CALL_TIMEOUT_MS = 5_000
 const CACHED_RENDERER_BRIDGE_GRACE_MS = 50
+const RENDERER_BRIDGE_ABORT_ERROR = '渲染进程桥接调用已取消。'
+const RENDERER_BRIDGE_PROBE_TIMEOUT_ERROR = '等待主窗口响应超时。'
+const RENDERER_BRIDGE_CALL_TIMEOUT_ERROR = '调用主窗口桥接超时。'
+const MAIN_WINDOW_NOT_READY_ERROR = '主窗口尚未准备好，请打开主窗口后重试。'
+const RUNTIME_STATE_READ_TIMEOUT_PREFIX = '读取运行时状态超时：'
 
 type RendererBridgeProbeResult = {
   hasBridge: boolean
@@ -29,7 +34,7 @@ function rendererBridgeAbortError(signal: AbortSignal) {
   const reason = signal.reason
   if (reason instanceof Error) return reason
   if (typeof reason === 'string' && reason.trim()) return new Error(reason.trim())
-  return new Error('Renderer bridge call aborted')
+  return new Error(RENDERER_BRIDGE_ABORT_ERROR)
 }
 
 export async function withRendererBridgeTimeout<T>(
@@ -87,7 +92,7 @@ async function probeRendererBridgeWindow(
     const hasBridge = await withRendererBridgeTimeout(
       browserWindow.webContents.executeJavaScript(`typeof window[${bridgeName}] === 'function'`) as Promise<boolean>,
       options.checkTimeoutMs ?? DEFAULT_RENDERER_BRIDGE_CHECK_TIMEOUT_MS,
-      'Timed out waiting for the main window to respond',
+      RENDERER_BRIDGE_PROBE_TIMEOUT_ERROR,
       { signal: options.signal }
     )
     return { hasBridge }
@@ -140,7 +145,7 @@ export async function callRendererBridge<T>(
           const value = await withRendererBridgeTimeout(
             cachedFastResult.browserWindow.webContents.executeJavaScript(callScript),
             options.timeoutMs ?? DEFAULT_RENDERER_BRIDGE_CALL_TIMEOUT_MS,
-            options.timeoutMessage ?? 'Timed out calling the main window bridge',
+            options.timeoutMessage ?? RENDERER_BRIDGE_CALL_TIMEOUT_ERROR,
             { signal: options.signal }
           )
           cachedBridgeWindows.set(bridgeKey, cachedFastResult.browserWindow)
@@ -167,7 +172,7 @@ export async function callRendererBridge<T>(
     promise: withRendererBridgeTimeout(
       browserWindow.webContents.executeJavaScript(`typeof window[${bridgeName}] === 'function'`) as Promise<boolean>,
       options.checkTimeoutMs ?? DEFAULT_RENDERER_BRIDGE_CHECK_TIMEOUT_MS,
-      'Timed out waiting for the main window to respond',
+      RENDERER_BRIDGE_PROBE_TIMEOUT_ERROR,
       { signal: options.signal }
     )
       .then<RendererBridgeProbeResult>((hasBridge) => ({ hasBridge }))
@@ -206,7 +211,7 @@ export async function callRendererBridge<T>(
       const value = await withRendererBridgeTimeout(
         probe.browserWindow.webContents.executeJavaScript(callScript),
         options.timeoutMs ?? DEFAULT_RENDERER_BRIDGE_CALL_TIMEOUT_MS,
-        options.timeoutMessage ?? 'Timed out calling the main window bridge',
+        options.timeoutMessage ?? RENDERER_BRIDGE_CALL_TIMEOUT_ERROR,
         { signal: options.signal }
       )
       cachedBridgeWindows.set(bridgeKey, probe.browserWindow)
@@ -226,7 +231,7 @@ export async function callRendererBridge<T>(
   if (lastProbeError) {
     throw new Error(getBridgeErrorMessage(lastProbeError))
   }
-  throw new Error('The main window is not ready. Open the main window and try again.')
+  throw new Error(MAIN_WINDOW_NOT_READY_ERROR)
 }
 
 export async function readRendererStoreValue<T>(
@@ -244,7 +249,7 @@ export async function readRendererStoreValue<T>(
     {
       checkTimeoutMs: options.checkTimeoutMs,
       timeoutMs: options.timeoutMs,
-      timeoutMessage: options.timeoutMessage ?? `Timed out reading runtime state: ${path}`,
+      timeoutMessage: options.timeoutMessage ?? RUNTIME_STATE_READ_TIMEOUT_PREFIX + path,
       signal: options.signal
     }
   )

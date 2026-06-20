@@ -12,6 +12,8 @@ const MCP_INPUT_OBJECT_ERROR = 'MCP 能力的输入必须是对象。'
 const MCP_ABORT_ERROR = 'MCP 能力调用已取消。'
 const MCP_TOOL_ID_LABEL = 'MCP 工具 ID'
 const MCP_TOOL_PARAMS_OBJECT_ERROR = 'MCP 工具参数必须是对象。'
+const MCP_TOOL_LIST_LIMIT_TYPE_ERROR = 'MCP 工具列表数量必须是数字。'
+const MCP_TOOL_LIST_OFFSET_TYPE_ERROR = 'MCP 工具列表偏移量必须是数字。'
 
 function normalizeInputObject(input: unknown) {
   if (input === null || typeof input === 'undefined') return {}
@@ -32,7 +34,8 @@ function normalizeListLimit(value: unknown) {
     label: 'MCP tool list limit',
     defaultValue: DEFAULT_MCP_TOOL_LIST_LIMIT,
     min: 1,
-    max: MAX_MCP_TOOL_LIST_LIMIT
+    max: MAX_MCP_TOOL_LIST_LIMIT,
+    invalidTypeMessage: MCP_TOOL_LIST_LIMIT_TYPE_ERROR
   })
 }
 
@@ -40,7 +43,8 @@ function normalizeOffset(value: unknown) {
   return normalizeBoundedIntegerInput(value, {
     label: 'MCP tool list offset',
     defaultValue: 0,
-    min: 0
+    min: 0,
+    invalidTypeMessage: MCP_TOOL_LIST_OFFSET_TYPE_ERROR
   })
 }
 

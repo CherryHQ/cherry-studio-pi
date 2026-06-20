@@ -126,7 +126,7 @@ describe('app capability renderer bridge', () => {
       mocks.getAllWindows.mockReturnValue([slowCallWindow, otherWindow])
 
       const result = callRendererBridge('test.write.timeout', { write: true }, { timeoutMs: 5_000 })
-      const expectation = expect(result).rejects.toThrow('Timed out calling the main window bridge')
+      const expectation = expect(result).rejects.toThrow('调用主窗口桥接超时。')
       await vi.advanceTimersByTimeAsync(5_001)
 
       await expectation
@@ -277,5 +277,11 @@ describe('app capability renderer bridge', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('uses localized fallback errors when no renderer bridge can be called', async () => {
+    mocks.getAllWindows.mockReturnValue([])
+
+    await expect(callRendererBridge('test.missing')).rejects.toThrow('主窗口尚未准备好，请打开主窗口后重试。')
   })
 })

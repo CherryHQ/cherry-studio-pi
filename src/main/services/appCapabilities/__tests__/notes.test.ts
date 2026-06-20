@@ -118,17 +118,17 @@ describe('notes app capabilities', () => {
     await fs.writeFile(path.join(tmpDir, 'daily.md'), 'today\n', 'utf8')
 
     await expect(getCapability('notes.list').execute({ limit: true }, { source: 'agent' })).rejects.toThrow(
-      'Note list limit must be a number'
+      '笔记列表数量必须是数字。'
     )
     await expect(getCapability('notes.list').execute({ offset: { page: 1 } }, { source: 'agent' })).rejects.toThrow(
-      'Note list offset must be a number'
+      '笔记列表偏移量必须是数字。'
     )
     await expect(
       getCapability('notes.search').execute({ query: 'today', limit: ['10'] }, { source: 'agent' })
-    ).rejects.toThrow('Note search limit must be a number')
+    ).rejects.toThrow('笔记搜索数量必须是数字。')
     await expect(
       getCapability('notes.read').execute({ path: 'daily', maxBytes: true }, { source: 'agent' })
-    ).rejects.toThrow('Note read maxBytes must be a number')
+    ).rejects.toThrow('笔记读取字节数上限必须是数字。')
   })
 
   it('treats notes.search limit as a result limit instead of a file scan limit', async () => {

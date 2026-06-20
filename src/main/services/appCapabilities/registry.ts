@@ -11,6 +11,7 @@ const normalize = (value: string) => value.toLowerCase().replace(/[_./:-]+/g, ' 
 const DEFAULT_SEARCH_LIMIT = 8
 const MAX_SEARCH_LIMIT = 50
 const VALID_RISKS = new Set<AppCapabilityRisk>(['read', 'write', 'destructive', 'external'])
+const APP_CAPABILITY_SEARCH_LIMIT_TYPE_ERROR = '能力搜索数量必须是数字。'
 
 const tokenize = (value: string) =>
   normalize(value)
@@ -66,7 +67,8 @@ const normalizeSearchLimit = (value: unknown) => {
     label: 'App capability search limit',
     defaultValue: DEFAULT_SEARCH_LIMIT,
     min: 1,
-    max: MAX_SEARCH_LIMIT
+    max: MAX_SEARCH_LIMIT,
+    invalidTypeMessage: APP_CAPABILITY_SEARCH_LIMIT_TYPE_ERROR
   })
 }
 

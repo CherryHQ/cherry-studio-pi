@@ -190,10 +190,10 @@ describe('mcp app capabilities', () => {
 
   it('rejects invalid MCP list pagination shapes before listing tools', async () => {
     await expect(capability('mcp.tools.list').execute({ limit: true }, { source: 'agent' })).rejects.toThrow(
-      'MCP tool list limit must be a number'
+      'MCP 工具列表数量必须是数字。'
     )
     await expect(capability('mcp.tools.list').execute({ offset: { page: 1 } }, { source: 'agent' })).rejects.toThrow(
-      'MCP tool list offset must be a number'
+      'MCP 工具列表偏移量必须是数字。'
     )
 
     expect(mocks.mcpService.listAllActiveServerTools).not.toHaveBeenCalled()

@@ -102,15 +102,9 @@ describe('AppCapabilityRegistry', () => {
     registry.register(capability({ id: 'a.first' }))
     registry.register(capability({ id: 'b.second' }))
 
-    expect(() => registry.search({ query: '', limit: true as any })).toThrow(
-      'App capability search limit must be a number'
-    )
-    expect(() => registry.search({ query: '', limit: ['1'] as any })).toThrow(
-      'App capability search limit must be a number'
-    )
-    expect(() => registry.search({ query: '', limit: { value: 1 } as any })).toThrow(
-      'App capability search limit must be a number'
-    )
+    expect(() => registry.search({ query: '', limit: true as any })).toThrow('能力搜索数量必须是数字。')
+    expect(() => registry.search({ query: '', limit: ['1'] as any })).toThrow('能力搜索数量必须是数字。')
+    expect(() => registry.search({ query: '', limit: { value: 1 } as any })).toThrow('能力搜索数量必须是数字。')
   })
 
   it('looks up a single descriptor without listing and sorting all capabilities', () => {

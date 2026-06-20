@@ -399,7 +399,7 @@ describe('app capability utils', () => {
       mocks.executeJavaScript.mockReturnValue(new Promise(() => undefined))
 
       const promise = navigateApp('/settings/data')
-      const assertion = expect(promise).rejects.toThrow('Timed out navigating app route /settings/data after 5000ms')
+      const assertion = expect(promise).rejects.toThrow('打开应用内页面超时：/settings/data，5000ms 后仍未响应。')
       await vi.advanceTimersByTimeAsync(5_000)
 
       await assertion

@@ -15,6 +15,12 @@ const MAX_AGENT_ARRAY_ITEMS = 200
 const MAX_AGENT_OBJECT_KEYS = 200
 const MAX_AGENT_OBJECT_DEPTH = 8
 const NAVIGATION_TIMEOUT_MS = 5_000
+const PATH_OUTSIDE_ROOT_ERROR = '路径超出了允许访问的根目录。'
+const NAVIGATION_ROUTE_NOT_ALLOWED_PREFIX = '不允许打开这个应用内路径：'
+const NAVIGATION_ABORTED_PREFIX = '打开应用内页面已取消：'
+const MAIN_WINDOW_UNAVAILABLE_ERROR = '主窗口不可用，请打开应用主窗口后重试。'
+const NAVIGATION_TIMEOUT_PREFIX = '打开应用内页面超时：'
+const NAVIGATION_TIMEOUT_SUFFIX = 'ms 后仍未响应。'
 
 function createAbortError(signal: AbortSignal, fallbackMessage: string) {
   const reason = signal.reason
@@ -225,7 +231,7 @@ export const resolveInsideRoot = (root: string, input?: string, defaultExt?: str
   const candidate = path.resolve(path.isAbsolute(raw) ? raw : path.join(root, raw))
   const resolved = defaultExt && path.extname(candidate) === '' ? `${candidate}${defaultExt}` : candidate
   if (resolved !== root && !isPathInside(resolved, root)) {
-    throw new Error('Path is outside the allowed root directory')
+    throw new Error(PATH_OUTSIDE_ROOT_ERROR)
   }
   return resolved
 }
@@ -233,19 +239,19 @@ export const resolveInsideRoot = (root: string, input?: string, defaultExt?: str
 export const navigateApp = async (route: string, signal?: AbortSignal) => {
   const nextRoute = normalizeAppRoute(route)
   if (!isAllowedAppRoute(nextRoute)) {
-    throw new Error(`Navigation route is not allowed: ${nextRoute}`)
+    throw new Error(NAVIGATION_ROUTE_NOT_ALLOWED_PREFIX + nextRoute)
   }
-  throwIfAbortSignalAborted(signal, `Navigation to ${nextRoute} was aborted`)
+  throwIfAbortSignalAborted(signal, NAVIGATION_ABORTED_PREFIX + nextRoute)
 
   const win = application.get('WindowManager').getWindowsByType(WindowType.Main)[0]
-  if (!win || win.isDestroyed()) throw new Error('Main window is not available')
+  if (!win || win.isDestroyed()) throw new Error(MAIN_WINDOW_UNAVAILABLE_ERROR)
 
   let timeout: ReturnType<typeof setTimeout> | undefined
   let abortListener: (() => void) | undefined
   try {
     const abortPromise = signal
       ? new Promise<never>((_, reject) => {
-          abortListener = () => reject(createAbortError(signal, `Navigation to ${nextRoute} was aborted`))
+          abortListener = () => reject(createAbortError(signal, NAVIGATION_ABORTED_PREFIX + nextRoute))
           signal.addEventListener('abort', abortListener, { once: true })
         })
       : undefined
@@ -254,7 +260,12 @@ export const navigateApp = async (route: string, signal?: AbortSignal) => {
       win.webContents.executeJavaScript(`window.navigate({ to: ${JSON.stringify(nextRoute)} })`),
       new Promise<never>((_, reject) => {
         timeout = setTimeout(
-          () => reject(new Error(`Timed out navigating app route ${nextRoute} after ${NAVIGATION_TIMEOUT_MS}ms`)),
+          () =>
+            reject(
+              new Error(
+                NAVIGATION_TIMEOUT_PREFIX + nextRoute + '，' + NAVIGATION_TIMEOUT_MS + NAVIGATION_TIMEOUT_SUFFIX
+              )
+            ),
           NAVIGATION_TIMEOUT_MS
         )
         timeout.unref?.()
@@ -265,6 +276,6 @@ export const navigateApp = async (route: string, signal?: AbortSignal) => {
     if (timeout) clearTimeout(timeout)
     if (abortListener) signal?.removeEventListener('abort', abortListener)
   }
-  throwIfAbortSignalAborted(signal, `Navigation to ${nextRoute} was aborted`)
+  throwIfAbortSignalAborted(signal, NAVIGATION_ABORTED_PREFIX + nextRoute)
   if (isMac) application.get('MainWindowService').showMainWindow()
 }
