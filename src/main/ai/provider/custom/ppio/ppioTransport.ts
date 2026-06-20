@@ -1,7 +1,13 @@
 import { DEFAULT_TIMEOUT } from '@shared/config/constant'
 
 import type { ImageGenerationSubmitInput, ImageGenerationTransport } from '../imageGenerationModel'
-import { createAbortError, fileToDataUrl, isTerminalHttpStatus, waitWithSignal } from '../transportUtils'
+import {
+  createAbortError,
+  fileToDataUrl,
+  isTerminalHttpStatus,
+  readLimitedHttpErrorText,
+  waitWithSignal
+} from '../transportUtils'
 
 /**
  * PPIO submit/poll transport.
@@ -160,7 +166,7 @@ class PpioTransport implements ImageGenerationTransport {
       const response = await fetch(url, fetchOptions)
 
       if (!response.ok) {
-        const errorText = (await response.text().catch(() => '')).slice(0, 500)
+        const errorText = await readLimitedHttpErrorText(response)
         throw new PpioApiError(`PPIO API error: ${response.status} - ${errorText}`, response.status)
       }
 

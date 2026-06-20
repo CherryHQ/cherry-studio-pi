@@ -215,4 +215,32 @@ describe('DashScope request boundary', () => {
       })
     }
   )
+
+  it('caps streamed HTTP error previews without reading the full body', async () => {
+    const cancel = vi.fn()
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('x'.repeat(600)))
+      },
+      cancel
+    })
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(stream, { status: 500 }))
+
+    try {
+      await expect(
+        transport.submit({
+          ...base,
+          modelId: 'qwen-image',
+          prompt: 'a fox',
+          providerParams: { modelDescriptor: descriptor('qwen-image', 'generate') }
+        } as ImageGenerationSubmitInput)
+      ).rejects.toMatchObject({
+        name: 'DashScopeApiError',
+        message: `DashScope API error: 500 - ${'x'.repeat(500)}`
+      })
+      expect(cancel).toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
+  })
 })

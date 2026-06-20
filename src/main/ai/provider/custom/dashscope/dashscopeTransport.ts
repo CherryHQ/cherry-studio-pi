@@ -1,7 +1,13 @@
 import { DEFAULT_TIMEOUT } from '@shared/config/constant'
 
 import type { ImageGenerationSubmitInput, ImageGenerationTransport } from '../imageGenerationModel'
-import { createAbortError, fileToDataUrl, isTerminalHttpStatus, waitWithSignal } from '../transportUtils'
+import {
+  createAbortError,
+  fileToDataUrl,
+  isTerminalHttpStatus,
+  readLimitedHttpErrorText,
+  waitWithSignal
+} from '../transportUtils'
 
 /**
  * Aliyun DashScope (Bailian) async image-generation transport.
@@ -529,7 +535,7 @@ class DashScopeTransport implements ImageGenerationTransport {
     try {
       const response = await fetch(`${this.baseURL}${path}`, fetchOptions)
       if (!response.ok) {
-        const errorText = (await response.text().catch(() => '')).slice(0, 500)
+        const errorText = await readLimitedHttpErrorText(response)
         throw new DashScopeApiError(`DashScope API error: ${response.status} - ${errorText}`, response.status)
       }
       return (await response.json()) as T

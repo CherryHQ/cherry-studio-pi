@@ -2,7 +2,13 @@ import { DEFAULT_TIMEOUT } from '@shared/config/constant'
 import { parseDataUrl } from '@shared/utils'
 
 import type { ImageGenerationSubmitInput, ImageGenerationTransport } from '../imageGenerationModel'
-import { createAbortError, isTerminalHttpStatus, uint8ToBase64, waitWithSignal } from '../transportUtils'
+import {
+  createAbortError,
+  isTerminalHttpStatus,
+  readLimitedHttpErrorText,
+  uint8ToBase64,
+  waitWithSignal
+} from '../transportUtils'
 
 /**
  * ModelScope (魔搭) API Inference transport for AIGC image generation.
@@ -272,7 +278,7 @@ class ModelscopeTransport implements ImageGenerationTransport {
     try {
       const response = await fetch(`${this.baseURL}${path}`, fetchOptions)
       if (!response.ok) {
-        const errorText = (await response.text().catch(() => '')).slice(0, 500)
+        const errorText = await readLimitedHttpErrorText(response)
         throw new ModelscopeApiError(`ModelScope API error: ${response.status} - ${errorText}`, response.status)
       }
       return (await response.json()) as T

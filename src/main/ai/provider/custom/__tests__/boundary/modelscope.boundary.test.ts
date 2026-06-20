@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import * as z from 'zod'
 
 import type { ImageGenerationSubmitInput } from '../../imageGenerationModel'
@@ -93,5 +93,32 @@ describe('ModelScope request boundary', () => {
         { task_id: '   ' }
       )
     ).rejects.toThrow('ModelScope async image generation response is missing task_id')
+  })
+
+  it('caps streamed HTTP error previews without reading the full body', async () => {
+    const cancel = vi.fn()
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('x'.repeat(600)))
+      },
+      cancel
+    })
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(stream, { status: 500 }))
+
+    try {
+      await expect(
+        transport.submit({
+          ...base,
+          modelId: 'MusePublic/489_ckpt_FLUX_1',
+          prompt: 'a fox'
+        } as ImageGenerationSubmitInput)
+      ).rejects.toMatchObject({
+        name: 'ModelscopeApiError',
+        message: `ModelScope API error: 500 - ${'x'.repeat(500)}`
+      })
+      expect(cancel).toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

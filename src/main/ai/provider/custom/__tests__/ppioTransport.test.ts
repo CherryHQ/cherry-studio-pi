@@ -235,6 +235,38 @@ describe('PpioTransport', () => {
     expect(result).toEqual({ imageUrls: ['https://img/a.png', 'https://img/b.png'] })
   })
 
+  it('caps streamed HTTP error previews without reading the full body', async () => {
+    const transport = createPpioTransport({ apiKey: 'token' })
+    const cancel = vi.fn()
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('x'.repeat(600)))
+      },
+      cancel
+    })
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(stream, { status: 500 }))
+
+    await expect(
+      transport.submit({
+        modelId: 'seedream-4.5-draw',
+        prompt: 'a fox',
+        n: 1,
+        size: undefined,
+        seed: undefined,
+        files: undefined,
+        mask: undefined,
+        providerParams: {
+          model: 'seedream-4.5-draw',
+          modelDescriptor: { id: 'seedream-4.5-draw', endpoint: '/v3/seedream-4.5', isSync: true }
+        }
+      })
+    ).rejects.toMatchObject({
+      name: 'PpioApiError',
+      message: `PPIO API error: 500 - ${'x'.repeat(500)}`
+    })
+    expect(cancel).toHaveBeenCalled()
+  })
+
   it('uses Seedream 4.0 plural images field for edit requests', async () => {
     const transport = createPpioTransport({ apiKey: 'token' })
     const fetchMock = vi
