@@ -50,6 +50,13 @@ const PROVIDER_NOT_FOUND_FOR_KNOWLEDGE_BASE_PREFIX = '未找到知识库“'
 const PROVIDER_NOT_FOUND_FOR_KNOWLEDGE_BASE_MIDDLE = '”使用的服务商：'
 const MISSING_EMBEDDING_MODEL_ERROR = '缺少嵌入服务商、模型 ID 或向量维度。'
 const VECTOR_STORE_WARNING_PREFIX = '向量库未初始化：'
+const KNOWLEDGE_BASES_LISTED_SUMMARY = '已列出知识库'
+const KNOWLEDGE_BASE_SAVED_PREFIX = '知识库已保存：'
+const KNOWLEDGE_SEARCH_RETURNED_PREFIX = '知识库搜索返回 '
+const KNOWLEDGE_SEARCH_RETURNED_SUFFIX = ' 条结果'
+const KNOWLEDGE_ITEM_ADDED_SUMMARY = '知识库条目已添加'
+const KNOWLEDGE_BASE_RESET_DRY_RUN_SUMMARY = '知识库重置演练已完成'
+const KNOWLEDGE_BASE_RESET_SUMMARY = '知识库已重置'
 const KNOWLEDGE_BASE_METADATA_FIELDS = [
   'dimensions',
   'description',
@@ -472,7 +479,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
         const bases = await listKnowledgeBases(context.signal)
-        return okResult('Knowledge bases listed', {
+        return okResult(KNOWLEDGE_BASES_LISTED_SUMMARY, {
           total: bases.length,
           knowledge_bases: sanitizeForAgent(bases.map((base) => summarizeKnowledgeBaseForAgent(base, inputObject)))
         })
@@ -552,7 +559,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
             throwIfKnowledgeSignalAborted(context.signal)
             return {
               ok: true,
-              summary: `Knowledge base saved: ${savedBase.name}`,
+              summary: KNOWLEDGE_BASE_SAVED_PREFIX + savedBase.name,
               data: sanitizeForAgent(savedBase),
               warnings
             }
@@ -566,7 +573,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         throwIfKnowledgeSignalAborted(context.signal)
         return {
           ok: true,
-          summary: `Knowledge base saved: ${base.name}`,
+          summary: KNOWLEDGE_BASE_SAVED_PREFIX + base.name,
           data: sanitizeForAgent(base),
           warnings
         }
@@ -655,7 +662,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         }
         return {
           ok: true,
-          summary: `Knowledge search returned ${limitedResults.length} result(s)`,
+          summary: KNOWLEDGE_SEARCH_RETURNED_PREFIX + limitedResults.length + KNOWLEDGE_SEARCH_RETURNED_SUFFIX,
           data: {
             query,
             total: limitedResults.length,
@@ -701,7 +708,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         const updatedBase = { ...base, items: [...(base.items ?? []), knowledgeItem], updated_at: Date.now() }
         await upsertKnowledgeBaseMetadata(updatedBase)
         throwIfKnowledgeSignalAborted(context.signal)
-        return okResult('Knowledge item added', sanitizeForAgent({ baseId: base.id, item: knowledgeItem }))
+        return okResult(KNOWLEDGE_ITEM_ADDED_SUMMARY, sanitizeForAgent({ baseId: base.id, item: knowledgeItem }))
       }
     },
     {
@@ -727,7 +734,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
         const baseId = normalizeRequiredText(inputObject.baseId, KNOWLEDGE_BASE_ID_LABEL)
         const base = (await listKnowledgeBases(context.signal)).find((item) => item.id === baseId)
         if (!base) throw new Error(KNOWLEDGE_BASE_NOT_FOUND_PREFIX + baseId)
-        if (context.dryRun) return okResult('Knowledge base reset dry run completed', { baseId: base.id })
+        if (context.dryRun) return okResult(KNOWLEDGE_BASE_RESET_DRY_RUN_SUMMARY, { baseId: base.id })
         await toKnowledgeBaseParams(base, (providerId) => getProviderConfig(providerId, context.signal))
         throwIfKnowledgeSignalAborted(context.signal)
         const roots = await knowledgeService.listRootItems(base.id)
@@ -739,7 +746,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
           )
           throwIfKnowledgeSignalAborted(context.signal)
         }
-        return okResult('Knowledge base reset', { baseId: base.id, name: base.name })
+        return okResult(KNOWLEDGE_BASE_RESET_SUMMARY, { baseId: base.id, name: base.name })
       }
     }
   ]
