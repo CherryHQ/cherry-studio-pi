@@ -95,6 +95,14 @@ const pathEnum = Array.from(
   new Set([...Object.keys(SETTINGS_SETTERS), ...Object.keys(PREFERENCE_SETTING_PATHS)])
 ).sort()
 
+function throwIfSettingsSignalAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return
+  const reason = signal.reason
+  if (reason instanceof Error) throw reason
+  if (typeof reason === 'string' && reason.trim()) throw new Error(reason.trim())
+  throw new Error('Settings capability call aborted')
+}
+
 function normalizeInputObject(input: unknown) {
   if (input === null || typeof input === 'undefined') return {}
   if (typeof input !== 'object' || Array.isArray(input)) throw new Error('Settings capability input must be an object')
@@ -179,15 +187,18 @@ function sanitizeSettingsForAgent(value: unknown, keyPath = ''): unknown {
   return sanitizeForAgent(value)
 }
 
-export async function readSettingsForAgent() {
+export async function readSettingsForAgent(signal?: AbortSignal) {
+  throwIfSettingsSignalAborted(signal)
   let settings: Record<string, any> = {}
   try {
     settings = await callRendererBridge<Record<string, any>>(RENDERER_GET_SETTINGS_BRIDGE, undefined, {
       checkTimeoutMs: SETTINGS_RENDERER_BRIDGE_CHECK_TIMEOUT_MS,
       timeoutMs: SETTINGS_RENDERER_BRIDGE_CALL_TIMEOUT_MS,
-      timeoutMessage: 'Timed out reading settings'
+      timeoutMessage: 'Timed out reading settings',
+      signal
     })
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) throw error
     settings = {}
   }
 
@@ -225,15 +236,17 @@ function readPreferenceSettingValue(keyPath: string): { found: true; value: unkn
   }
 }
 
-export async function readSettingValueForAgent(keyPath: string) {
+export async function readSettingValueForAgent(keyPath: string, signal?: AbortSignal) {
+  throwIfSettingsSignalAborted(signal)
   const preferenceValue = readPreferenceSettingValue(keyPath)
   if (preferenceValue.found) return preferenceValue.value
 
-  const settings = await readSettingsForAgent()
+  const settings = await readSettingsForAgent(signal)
   return pickPath(settings, keyPath)
 }
 
-export async function persistSettingValue(keyPath: string, value: unknown) {
+export async function persistSettingValue(keyPath: string, value: unknown, signal?: AbortSignal) {
+  throwIfSettingsSignalAborted(signal)
   const action = SETTINGS_SETTERS[keyPath]
   const preferenceKey = PREFERENCE_SETTING_PATHS[keyPath]
   if (!action && !preferenceKey) throw new Error(`Unsupported setting path: ${keyPath}`)
@@ -241,6 +254,7 @@ export async function persistSettingValue(keyPath: string, value: unknown) {
   if (preferenceKey) {
     await application.get('PreferenceService').set(preferenceKey, value as never)
   }
+  throwIfSettingsSignalAborted(signal)
 
   if (action) {
     try {
@@ -250,10 +264,12 @@ export async function persistSettingValue(keyPath: string, value: unknown) {
         {
           checkTimeoutMs: SETTINGS_RENDERER_BRIDGE_CHECK_TIMEOUT_MS,
           timeoutMs: SETTINGS_RENDERER_BRIDGE_CALL_TIMEOUT_MS,
-          timeoutMessage: '写入设置超时'
+          timeoutMessage: '写入设置超时',
+          signal
         }
       )
     } catch (error) {
+      if (signal?.aborted) throw error
       if (preferenceKey) {
         logger.warn('Runtime setting dispatch failed after preference write; keeping persisted setting', {
           path: keyPath,
@@ -292,9 +308,9 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['settings', 'preferences', 'read'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         normalizeInputObject(input)
-        const settings = await readSettingsForAgent()
+        const settings = await readSettingsForAgent(context.signal)
         return okResult('Settings read', { settings: sanitizeSettingsForAgent(settings) })
       }
     },
@@ -313,12 +329,12 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['settings', 'preferences', 'get'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
         const keyPath = normalizeRequiredSettingsText(inputObject.path, 'Setting path')
         return okResult('Setting value read', {
           path: keyPath,
-          value: sanitizeSettingValueForAgent(keyPath, await readSettingValueForAgent(keyPath))
+          value: sanitizeSettingValueForAgent(keyPath, await readSettingValueForAgent(keyPath, context.signal))
         })
       }
     },
@@ -341,12 +357,12 @@ export function createSettingsCapabilities(): AppCapabilityDefinition[] {
       sideEffects: ['settings.write'],
       tags: ['settings', 'preferences', 'update', 'write'],
       examples: ['Change language', 'Set theme', 'Set default painting provider', 'Enable API server'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
         const keyPath = normalizeRequiredSettingsText(inputObject.path, 'Setting path')
         if (!Object.prototype.hasOwnProperty.call(inputObject, 'value')) throw new Error('Setting value is required')
         if (!isSupportedSettingPath(keyPath)) throw new Error(`Unsupported setting path: ${keyPath}`)
-        await persistSettingValue(keyPath, inputObject.value)
+        await persistSettingValue(keyPath, inputObject.value, context.signal)
         return okResult('Setting updated', {
           path: keyPath,
           value: sanitizeSettingValueForAgent(keyPath, inputObject.value)

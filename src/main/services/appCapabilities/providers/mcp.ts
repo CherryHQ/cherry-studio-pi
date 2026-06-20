@@ -15,6 +15,14 @@ function normalizeInputObject(input: unknown) {
   return input as Record<string, unknown>
 }
 
+function throwIfMcpSignalAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return
+  const reason = signal.reason
+  if (reason instanceof Error) throw reason
+  if (typeof reason === 'string' && reason.trim()) throw new Error(reason.trim())
+  throw new Error('MCP capability call aborted')
+}
+
 function normalizeListLimit(value: unknown) {
   return normalizeBoundedIntegerInput(value, {
     label: 'MCP tool list limit',
@@ -62,7 +70,8 @@ function compactMcpTool(tool: any, includeSchemas: boolean) {
   }
 }
 
-async function listConfiguredMcpServers() {
+async function listConfiguredMcpServers(signal?: AbortSignal) {
+  throwIfMcpSignalAborted(signal)
   try {
     const { items } = await mcpServerService.list({})
     if (items.length > 0) return items
@@ -73,8 +82,12 @@ async function listConfiguredMcpServers() {
 
   const mcpState = await readRendererStoreValue<any>('state.mcp', {
     checkTimeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS,
-    timeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS
-  }).catch(() => null)
+    timeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS,
+    signal
+  }).catch((error) => {
+    if (signal?.aborted) throw error
+    return null
+  })
   return Array.isArray(mcpState?.servers) ? mcpState.servers : []
 }
 
@@ -89,9 +102,9 @@ export function createMcpCapabilities(): AppCapabilityDefinition[] {
       inputSchema: { type: 'object', properties: {} },
       risk: 'read',
       tags: ['mcp', 'servers', 'tools'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         normalizeInputObject(input)
-        return okResult('MCP servers listed', sanitizeForAgent(await listConfiguredMcpServers()))
+        return okResult('MCP servers listed', sanitizeForAgent(await listConfiguredMcpServers(context.signal)))
       }
     },
     {

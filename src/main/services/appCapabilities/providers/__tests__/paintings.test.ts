@@ -161,6 +161,17 @@ describe('painting app capabilities', () => {
     )
   })
 
+  it('stops painting history reads when the capability signal is aborted', async () => {
+    const controller = new AbortController()
+    controller.abort('agent stopped')
+
+    await expect(
+      capability('paintings.history.list').execute({ limit: 1 }, { source: 'agent', signal: controller.signal })
+    ).rejects.toThrow('agent stopped')
+
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
+  })
+
   it('supports namespace and offset pagination for painting history', async () => {
     const result = await capability('paintings.history.list').execute(
       { namespace: 'siliconflow_paintings', limit: 1, offset: 1 },

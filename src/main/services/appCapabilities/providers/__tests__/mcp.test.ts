@@ -121,6 +121,18 @@ describe('mcp app capabilities', () => {
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
 
+  it('stops MCP server listing before data service or renderer fallback when the capability signal is aborted', async () => {
+    const controller = new AbortController()
+    controller.abort('agent stopped')
+
+    await expect(
+      capability('mcp.servers.list').execute({}, { source: 'agent', signal: controller.signal })
+    ).rejects.toThrow('agent stopped')
+
+    expect(mocks.mcpServerService.list).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
+  })
+
   it('falls back to the renderer MCP store when the main-process data service has no configured servers yet', async () => {
     mocks.mcpServerService.list.mockResolvedValueOnce({ items: [], total: 0, page: 1 })
 

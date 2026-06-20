@@ -37,6 +37,14 @@ const KNOWLEDGE_BASE_METADATA_FIELDS = [
   'version'
 ] as const satisfies readonly (keyof KnowledgeBase)[]
 
+function throwIfKnowledgeSignalAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return
+  const reason = signal.reason
+  if (reason instanceof Error) throw reason
+  if (typeof reason === 'string' && reason.trim()) throw new Error(reason.trim())
+  throw new Error('Knowledge capability call aborted')
+}
+
 function normalizeInputObject(input: unknown) {
   if (input === null || typeof input === 'undefined') return {}
   if (typeof input !== 'object' || Array.isArray(input)) throw new Error('Knowledge capability input must be an object')
@@ -244,26 +252,36 @@ function summarizeKnowledgeBaseForAgent(base: KnowledgeBase, input: any = {}) {
   }
 }
 
-async function listKnowledgeBases(): Promise<KnowledgeBase[]> {
+async function listKnowledgeBases(signal?: AbortSignal): Promise<KnowledgeBase[]> {
+  throwIfKnowledgeSignalAborted(signal)
   try {
     const bases = (await storageV2KnowledgeRepository.listBases()) as KnowledgeBase[]
     if (bases.length > 0) return bases
   } catch (error) {
+    if (signal?.aborted) throw error
     logger.debug('Knowledge Storage v2 repository unavailable, falling back to runtime store bridge', error as Error)
   }
 
   return (
     (await readRendererStoreValue<KnowledgeBase[]>('state.knowledge.bases', {
       checkTimeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS,
-      timeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS
-    }).catch(() => [])) ?? []
+      timeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS,
+      signal
+    }).catch((error) => {
+      if (signal?.aborted) throw error
+      return []
+    })) ?? []
   )
 }
 
-async function getProviderConfigFromRuntime(providerId: string): Promise<ProviderRuntimeConfig | null> {
+async function getProviderConfigFromRuntime(
+  providerId: string,
+  signal?: AbortSignal
+): Promise<ProviderRuntimeConfig | null> {
   const providers = await readRendererStoreValue<Provider[]>('state.llm.providers', {
     checkTimeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS,
-    timeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS
+    timeoutMs: RENDERER_STORE_FALLBACK_TIMEOUT_MS,
+    signal
   })
   const provider = providers?.find((item) => item.id === providerId)
   if (!provider) return null
@@ -294,32 +312,35 @@ function hasUsableProviderRuntimeConfig(config: ProviderRuntimeConfig | null) {
   return Boolean(config && (config.apiKey || config.baseURL))
 }
 
-async function getProviderConfig(providerId: string): Promise<ProviderRuntimeConfig | null> {
+async function getProviderConfig(providerId: string, signal?: AbortSignal): Promise<ProviderRuntimeConfig | null> {
+  throwIfKnowledgeSignalAborted(signal)
   let storageConfig: ProviderRuntimeConfig | null = null
   try {
     storageConfig = await getProviderConfigFromStorageV2(providerId)
     if (hasUsableProviderRuntimeConfig(storageConfig)) return storageConfig
   } catch (error) {
+    if (signal?.aborted) throw error
     logger.debug('Provider Storage v2 config unavailable, falling back to runtime store bridge', error as Error)
   }
 
   try {
-    const runtimeConfig = await getProviderConfigFromRuntime(providerId)
+    const runtimeConfig = await getProviderConfigFromRuntime(providerId, signal)
     if (runtimeConfig) return runtimeConfig
   } catch (error) {
+    if (signal?.aborted) throw error
     logger.debug('Provider runtime store bridge unavailable, falling back to Storage v2', error as Error)
   }
 
   return storageConfig ?? getProviderConfigFromStorageV2(providerId)
 }
 
-function createCachedProviderConfigResolver(): ProviderConfigResolver {
+function createCachedProviderConfigResolver(signal?: AbortSignal): ProviderConfigResolver {
   const cache = new Map<string, Promise<ProviderRuntimeConfig | null>>()
   return (providerId: string) => {
     const cached = cache.get(providerId)
     if (cached) return cached
 
-    const next = getProviderConfig(providerId)
+    const next = getProviderConfig(providerId, signal)
     cache.set(providerId, next)
     return next
   }
@@ -415,9 +436,9 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['knowledge', 'rag', 'list'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
-        const bases = await listKnowledgeBases()
+        const bases = await listKnowledgeBases(context.signal)
         return okResult('Knowledge bases listed', {
           total: bases.length,
           knowledge_bases: sanitizeForAgent(bases.map((base) => summarizeKnowledgeBaseForAgent(base, inputObject)))
@@ -538,14 +559,14 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       },
       risk: 'read',
       tags: ['knowledge', 'rag', 'search'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
         const query = normalizeRequiredText(inputObject.query, 'Knowledge search query')
 
         const ids = normalizeKnowledgeBaseIds(inputObject.knowledge_base_ids)
         const documentCount = normalizeKnowledgeSearchDocumentCount(inputObject.document_count)
         const resultLimit = normalizeKnowledgeSearchResultLimit(inputObject.result_limit)
-        const bases = await listKnowledgeBases()
+        const bases = await listKnowledgeBases(context.signal)
         const targetBases = ids?.length ? bases.filter((base) => ids.includes(base.id)) : bases
         if (ids?.length) {
           const foundIds = new Set(targetBases.map((base) => base.id))
@@ -554,7 +575,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
             throw new Error(`Knowledge base not found: ${missingIds.join(', ')}`)
           }
         }
-        const resolveProviderConfig = createCachedProviderConfigResolver()
+        const resolveProviderConfig = createCachedProviderConfigResolver(context.signal)
         const resultsPerBase = await mapWithConcurrency(targetBases, KNOWLEDGE_SEARCH_CONCURRENCY, async (base) => {
           try {
             await toKnowledgeBaseParams(base, resolveProviderConfig)
@@ -569,6 +590,7 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
               }))
             }
           } catch (error) {
+            if (context.signal?.aborted) throw error
             return {
               baseId: base.id,
               baseName: base.name,
@@ -621,13 +643,13 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       permissions: ['knowledge.write'],
       sideEffects: ['database.write', 'filesystem.read', 'filesystem.write', 'model.call', 'network'],
       tags: ['knowledge', 'rag', 'add', 'ingest'],
-      execute: async (input: unknown) => {
+      execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
         const baseId = normalizeRequiredText(inputObject.baseId, 'Knowledge base id')
-        const base = (await listKnowledgeBases()).find((item) => item.id === baseId)
+        const base = (await listKnowledgeBases(context.signal)).find((item) => item.id === baseId)
         if (!base) throw new Error(`Knowledge base not found: ${baseId}`)
         const knowledgeItem = normalizeKnowledgeItem(inputObject.item)
-        await toKnowledgeBaseParams(base)
+        await toKnowledgeBaseParams(base, (providerId) => getProviderConfig(providerId, context.signal))
         await knowledgeService.addItems(base.id, [knowledgeItem as never])
         const updatedBase = { ...base, items: [...(base.items ?? []), knowledgeItem], updated_at: Date.now() }
         await upsertKnowledgeBaseMetadata(updatedBase)
@@ -655,10 +677,10 @@ export function createKnowledgeCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
         const baseId = normalizeRequiredText(inputObject.baseId, 'Knowledge base id')
-        const base = (await listKnowledgeBases()).find((item) => item.id === baseId)
+        const base = (await listKnowledgeBases(context.signal)).find((item) => item.id === baseId)
         if (!base) throw new Error(`Knowledge base not found: ${baseId}`)
         if (context.dryRun) return okResult('Knowledge base reset dry run completed', { baseId: base.id })
-        await toKnowledgeBaseParams(base)
+        await toKnowledgeBaseParams(base, (providerId) => getProviderConfig(providerId, context.signal))
         const roots = await knowledgeService.listRootItems(base.id)
         if (roots.length > 0) {
           await knowledgeService.reindexItems(

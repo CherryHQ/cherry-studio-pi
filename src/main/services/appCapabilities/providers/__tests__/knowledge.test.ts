@@ -178,6 +178,18 @@ describe('knowledge app capabilities', () => {
     expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
 
+  it('stops knowledge base listing before storage or renderer reads when the capability signal is aborted', async () => {
+    const controller = new AbortController()
+    controller.abort('agent stopped')
+
+    await expect(
+      capability('knowledge.bases.list').execute({}, { source: 'agent', signal: controller.signal })
+    ).rejects.toThrow('agent stopped')
+
+    expect(mocks.storageV2KnowledgeRepository.listBases).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
+  })
+
   it('bounds knowledge base item previews when explicitly requested', async () => {
     const bases = [
       {

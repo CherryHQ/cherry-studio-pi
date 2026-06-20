@@ -280,6 +280,18 @@ describe('settings app capabilities', () => {
     expect(JSON.stringify(data.settings)).not.toContain('BEGIN PRIVATE KEY')
   })
 
+  it('stops settings reads immediately when the capability signal is aborted', async () => {
+    const controller = new AbortController()
+    controller.abort('agent stopped')
+
+    await expect(
+      capability('settings.read').execute({}, { source: 'agent', signal: controller.signal })
+    ).rejects.toThrow('agent stopped')
+
+    expect(mocks.preferenceService.get).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
+  })
+
   it('redacts sensitive setting update values in the agent response only', async () => {
     const result = await capability('settings.value.set').execute(
       { path: 'apiServer.apiKey', value: 'new-server-secret' },
@@ -293,6 +305,21 @@ describe('settings app capabilities', () => {
       path: 'apiServer.apiKey',
       value: '[redacted]'
     })
+  })
+
+  it('does not persist or dispatch setting updates when the capability signal is aborted', async () => {
+    const controller = new AbortController()
+    controller.abort('agent stopped')
+
+    await expect(
+      capability('settings.value.set').execute(
+        { path: 'defaultPaintingProvider', value: 'ppio' },
+        { source: 'agent', signal: controller.signal }
+      )
+    ).rejects.toThrow('agent stopped')
+
+    expect(mocks.preferenceService.set).not.toHaveBeenCalled()
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).not.toHaveBeenCalled()
   })
 
   it('declares setting writes as side-effecting operations', () => {
