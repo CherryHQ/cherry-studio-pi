@@ -35,7 +35,7 @@ const ClipboardPreview: FC<ClipboardPreviewProps> = ({ referenceText, clearClipb
 
 const Container = styled.div`
   padding: 12px;
-  background-color: var(--color-background-opacity);
+  background-color: var(--color-background);
   border-radius: 8px;
   margin-bottom: 10px;
 `
@@ -43,13 +43,13 @@ const ClipboardContent = styled.div`
   display: flex;
   align-items: center;
   width: 100%;
-  color: var(--color-text-secondary);
+  color: var(--color-foreground-secondary);
 `
 
 const CloseButton = styled.button`
   background: none;
   border: none;
-  color: var(--color-text-secondary);
+  color: var(--color-foreground-secondary);
   cursor: pointer;
   padding: 4px;
   display: flex;
@@ -58,7 +58,7 @@ const CloseButton = styled.button`
   flex-shrink: 0;
 
   &:hover {
-    color: var(--color-text);
+    color: var(--color-foreground);
   }
 `
 

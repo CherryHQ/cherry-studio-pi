@@ -519,9 +519,9 @@ const Main = styled.main`
 `
 
 const ErrorMsg = styled.div`
-  color: var(--color-error);
+  color: var(--color-error-base);
   background: rgba(255, 0, 0, 0.15);
-  border: 1px solid var(--color-error);
+  border: 1px solid var(--color-error-base);
   padding: 8px 12px;
   border-radius: 4px;
   margin-bottom: 12px;

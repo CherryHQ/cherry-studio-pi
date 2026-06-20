@@ -114,7 +114,7 @@ const ResultText = styled.div`
 `
 
 const LoadingText = styled.div`
-  color: var(--color-text-2);
+  color: var(--color-foreground-secondary);
   font-style: italic;
 `
 

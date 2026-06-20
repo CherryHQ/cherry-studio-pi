@@ -32,7 +32,7 @@ const FeatureMenus = ({
   const features = useMemo(
     () => [
       {
-        icon: <MessageSquare size={16} color="var(--color-text)" />,
+        icon: <MessageSquare size={16} color="var(--color-foreground)" />,
         title: t('quickAssistant.feature.chat'),
         active: true,
         onClick: () => {
@@ -43,12 +43,12 @@ const FeatureMenus = ({
         }
       },
       {
-        icon: <Languages size={16} color="var(--color-text)" />,
+        icon: <Languages size={16} color="var(--color-foreground)" />,
         title: t('quickAssistant.feature.translate'),
         onClick: () => text && setRoute('translate')
       },
       {
-        icon: <FileText size={16} color="var(--color-text)" />,
+        icon: <FileText size={16} color="var(--color-foreground)" />,
         title: t('quickAssistant.feature.summary'),
         onClick: () => {
           if (text) {
@@ -58,7 +58,7 @@ const FeatureMenus = ({
         }
       },
       {
-        icon: <Lightbulb size={16} color="var(--color-text)" />,
+        icon: <Lightbulb size={16} color="var(--color-foreground)" />,
         title: t('quickAssistant.feature.explanation'),
         onClick: () => {
           if (text) {
@@ -133,11 +133,11 @@ const FeatureItem = styled.div`
   user-select: none;
 
   &:hover {
-    background: var(--color-background-mute);
+    background: var(--color-accent);
   }
 
   &.active {
-    background: var(--color-background-mute);
+    background: var(--color-accent);
   }
 `
 

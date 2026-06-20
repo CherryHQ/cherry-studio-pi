@@ -17,7 +17,7 @@ interface Props {
 }
 
 const getMessageBackground = (isBubbleStyle: boolean, isAssistantMessage: boolean) =>
-  isBubbleStyle ? (isAssistantMessage ? 'transparent' : 'var(--chat-background-user)') : undefined
+  isBubbleStyle ? (isAssistantMessage ? 'transparent' : 'var(--color-muted)') : undefined
 
 const MessageItem: FC<Props> = ({ message, index, total, route }) => {
   // const [message, setMessage] = useState(_message)

@@ -50,9 +50,9 @@ const Footer: FC<FooterProps> = ({
           bordered={false}
           icon={
             loading ? (
-              <LoadingOutlined style={{ fontSize: 12, color: 'var(--color-error)', padding: 0 }} spin />
+              <LoadingOutlined style={{ fontSize: 12, color: 'var(--color-error-base)', padding: 0 }} spin />
             ) : (
-              <CircleArrowLeft size={14} color="var(--color-text)" />
+              <CircleArrowLeft size={14} color="var(--color-foreground)" />
             )
           }
           className="nodrag"
@@ -78,7 +78,7 @@ const Footer: FC<FooterProps> = ({
         {route !== 'home' && !loading && (
           <Tag
             bordered={false}
-            icon={<Copy size={14} color="var(--color-text)" />}
+            icon={<Copy size={14} color="var(--color-foreground)" />}
             style={{ cursor: 'pointer' }}
             className="nodrag"
             onClick={handleCopy}>
@@ -90,7 +90,7 @@ const Footer: FC<FooterProps> = ({
         <Tooltip placement="left" content={t('quickAssistant.tooltip.pin')} delay={800}>
           <Pin
             size={14}
-            stroke={isPinned ? 'var(--color-primary)' : 'var(--color-text)'}
+            stroke={isPinned ? 'var(--color-primary)' : 'var(--color-foreground)'}
             style={{
               transform: isPinned ? 'rotate(40deg)' : 'rotate(0deg)',
               transition: 'transform 0.2s ease-in-out'
@@ -107,7 +107,7 @@ const WindowFooter = styled.div`
   flex-direction: row;
   justify-content: space-between;
   padding: 5px 0;
-  color: var(--color-text-secondary);
+  color: var(--color-foreground-secondary);
   font-size: 12px;
 `
 
@@ -115,7 +115,7 @@ const FooterText = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-text-secondary);
+  color: var(--color-foreground-secondary);
   font-size: 12px;
 `
 
@@ -134,7 +134,7 @@ const Tag = styled(AntdTag)`
   transition: all 0.2s ease-in-out;
 
   &:hover {
-    background-color: var(--color-background-soft);
+    background-color: var(--color-muted);
     color: var(--color-primary);
   }
 `
