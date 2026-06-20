@@ -61,6 +61,15 @@ describe('webdavConfig', () => {
     expect(config.webdavPath).toBe('/Cherry Studio Pi')
   })
 
+  it('strips URL-embedded credentials when only normalizing the host', () => {
+    expect(normalizeWebDavHost('http://webdav:test-webdav-password@192.168.1.100:8080/dav')).toBe(
+      'http://192.168.1.100:8080/dav'
+    )
+    expect(normalizeWebDavHost('webdavs://user:secret@dav.example.com/remote.php/dav')).toBe(
+      'https://dav.example.com/remote.php/dav'
+    )
+  })
+
   it('normalizes a local single-label host with port when scheme is omitted', () => {
     const config = normalizeWebDavConfig(
       {

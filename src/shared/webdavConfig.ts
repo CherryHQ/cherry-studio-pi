@@ -72,7 +72,18 @@ export function normalizeWebDavHost(webdavHost?: string) {
   const parsed = parseWebDavInput(webdavHost ?? '')
   const trimmed = stripStructuredTailFromHost(parsed.webdavHost)
   if (!trimmed) return ''
-  return normalizeWebDavUrlScheme(/^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`)
+  const normalizedHost = normalizeWebDavUrlScheme(
+    /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+  )
+
+  try {
+    const url = new URL(normalizedHost)
+    url.username = ''
+    url.password = ''
+    return url.pathname === '/' && !url.search && !url.hash ? url.origin : url.toString()
+  } catch {
+    return normalizedHost
+  }
 }
 
 export function normalizeWebDavPath(value?: string, defaultPath = DEFAULT_WEBDAV_SYNC_PATH) {
