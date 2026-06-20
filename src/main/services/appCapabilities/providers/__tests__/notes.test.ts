@@ -49,7 +49,7 @@ describe('notes app capabilities', () => {
 
   it('rejects invalid note search queries before resolving the notes root', async () => {
     await expect(capability('notes.search').execute({ query: ['hello'] }, { source: 'agent' })).rejects.toThrow(
-      'Note search query must be a string'
+      '笔记搜索关键词 必须是字符串'
     )
 
     expect(mocks.applicationGet).not.toHaveBeenCalled()
@@ -58,19 +58,19 @@ describe('notes app capabilities', () => {
 
   it('rejects invalid note paths and names before filesystem mutations', async () => {
     await expect(capability('notes.read').execute({ path: 123 }, { source: 'agent' })).rejects.toThrow(
-      'Note path must be a string'
+      '笔记路径 必须是字符串'
     )
     await expect(
       capability('notes.create').execute({ parent: { path: 'projects' }, name: 'One' }, { source: 'agent' })
-    ).rejects.toThrow('Note parent must be a string')
+    ).rejects.toThrow('笔记父目录 必须是字符串')
     await expect(
       capability('notes.create').execute({ parent: 'projects', name: ['One'] }, { source: 'agent' })
-    ).rejects.toThrow('Note name must be a string')
+    ).rejects.toThrow('笔记名称 必须是字符串')
     await expect(
       capability('notes.write').execute({ path: false, content: 'hello' }, { source: 'agent' })
-    ).rejects.toThrow('Note path must be a string')
+    ).rejects.toThrow('笔记路径 必须是字符串')
     await expect(capability('notes.delete').execute({ path: [] }, { source: 'agent' })).rejects.toThrow(
-      'Note path must be a string'
+      '笔记路径 必须是字符串'
     )
 
     expect(await fs.readdir(notesRoot)).toEqual([])
@@ -80,22 +80,22 @@ describe('notes app capabilities', () => {
 
   it('rejects non-object notes capability inputs before resolving the notes root', async () => {
     await expect(capability('notes.list').execute('list' as any, { source: 'agent' })).rejects.toThrow(
-      'Notes capability input must be an object'
+      '笔记能力的输入必须是对象'
     )
     await expect(capability('notes.read').execute(['read'] as any, { source: 'agent' })).rejects.toThrow(
-      'Notes capability input must be an object'
+      '笔记能力的输入必须是对象'
     )
     await expect(capability('notes.search').execute(false as any, { source: 'agent' })).rejects.toThrow(
-      'Notes capability input must be an object'
+      '笔记能力的输入必须是对象'
     )
     await expect(capability('notes.create').execute('create' as any, { source: 'agent' })).rejects.toThrow(
-      'Notes capability input must be an object'
+      '笔记能力的输入必须是对象'
     )
     await expect(capability('notes.write').execute(['write'] as any, { source: 'agent' })).rejects.toThrow(
-      'Notes capability input must be an object'
+      '笔记能力的输入必须是对象'
     )
     await expect(capability('notes.delete').execute(true as any, { source: 'agent' })).rejects.toThrow(
-      'Notes capability input must be an object'
+      '笔记能力的输入必须是对象'
     )
 
     expect(await fs.readdir(notesRoot)).toEqual([])

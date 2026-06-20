@@ -20,10 +20,19 @@ const MAX_NOTE_LIST_LIMIT = 500
 const MAX_NOTE_LIST_SCAN_ENTRIES = 5_000
 const MAX_NOTE_LIST_DEPTH = 10
 const RENDERER_STORE_FALLBACK_TIMEOUT_MS = 500
+const NOTES_INPUT_OBJECT_ERROR = '笔记能力的输入必须是对象。'
+const NOTES_ABORT_ERROR = '笔记能力调用已取消。'
+const NOTES_ROOT_DELETE_ERROR = '不能删除笔记根目录。'
+const NOTE_PATH_LABEL = '笔记路径'
+const NOTE_PARENT_LABEL = '笔记父目录'
+const NOTE_NAME_LABEL = '笔记名称'
+const NOTE_SEARCH_QUERY_LABEL = '笔记搜索关键词'
+const NOTE_CONTENT_REQUIRED_ERROR = '笔记内容不能为空。'
+const NOTE_OUTSIDE_ROOT_SUFFIX = '解析到了笔记目录之外。请检查路径是否包含上级目录或符号链接。'
 
 function normalizeInputObject(input: unknown) {
   if (input === null || typeof input === 'undefined') return {}
-  if (typeof input !== 'object' || Array.isArray(input)) throw new Error('Notes capability input must be an object')
+  if (typeof input !== 'object' || Array.isArray(input)) throw new Error(NOTES_INPUT_OBJECT_ERROR)
   return input as Record<string, unknown>
 }
 
@@ -32,7 +41,7 @@ function throwIfNotesSignalAborted(signal?: AbortSignal) {
   const reason = signal.reason
   if (reason instanceof Error) throw reason
   if (typeof reason === 'string' && reason.trim()) throw new Error(reason.trim())
-  throw new Error('Notes capability call aborted')
+  throw new Error(NOTES_ABORT_ERROR)
 }
 
 async function getNotesRoot(signal?: AbortSignal) {
@@ -52,15 +61,15 @@ async function getNotesRoot(signal?: AbortSignal) {
   return path.resolve(noteState?.notesPath || getNotesDir())
 }
 
-function normalizeOptionalText(value: unknown, label = 'Value', fallback = '') {
+function normalizeOptionalText(value: unknown, label = '输入值', fallback = '') {
   if (typeof value === 'string') return value.trim()
   if (value === null || typeof value === 'undefined') return fallback
-  throw new Error(`${label} must be a string`)
+  throw new Error(label + ' 必须是字符串。')
 }
 
 function normalizeRequiredText(value: unknown, label: string) {
   const text = normalizeOptionalText(value, label)
-  if (!text) throw new Error(`${label} is required`)
+  if (!text) throw new Error(label + ' 不能为空。')
   return text
 }
 
@@ -79,7 +88,7 @@ function normalizeNoteContent(value: unknown) {
 
 function assertNotNotesRoot(root: string, target: string) {
   if (path.resolve(root) === path.resolve(target)) {
-    throw new Error('Cannot delete the notes root directory')
+    throw new Error(NOTES_ROOT_DELETE_ERROR)
   }
 }
 
@@ -115,11 +124,11 @@ async function resolveRealPathPreservingMissingSegments(filePath: string) {
   }
 }
 
-async function assertResolvedInsideNotesRoot(root: string, target: string, label = 'Note path') {
+async function assertResolvedInsideNotesRoot(root: string, target: string, label = NOTE_PATH_LABEL) {
   const realRoot = await realpathOrResolvedPath(root)
   const realTarget = await resolveRealPathPreservingMissingSegments(target)
   if (!isPathInsideOrEqual(realTarget, realRoot)) {
-    throw new Error(`${label} resolves outside the notes root directory`)
+    throw new Error(label + NOTE_OUTSIDE_ROOT_SUFFIX)
   }
 }
 
@@ -407,7 +416,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       tags: ['notes', 'read', 'markdown'],
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
-        const notePath = normalizeRequiredText(inputObject.path, 'Note path')
+        const notePath = normalizeRequiredText(inputObject.path, NOTE_PATH_LABEL)
         throwIfNotesSignalAborted(context.signal)
         const root = await getNotesRoot(context.signal)
         const filePath = resolveInsideRoot(root, notePath, '.md')
@@ -439,7 +448,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       tags: ['notes', 'search', 'markdown'],
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
-        const query = normalizeRequiredText(inputObject.query, 'Note search query').toLowerCase()
+        const query = normalizeRequiredText(inputObject.query, NOTE_SEARCH_QUERY_LABEL).toLowerCase()
 
         throwIfNotesSignalAborted(context.signal)
         const root = await getNotesRoot(context.signal)
@@ -504,13 +513,13 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       tags: ['notes', 'create', 'markdown'],
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
-        const parentInput = normalizeOptionalText(inputObject.parent, 'Note parent')
-        const nameInput = normalizeOptionalText(inputObject.name, 'Note name', 'Untitled') || 'Untitled'
+        const parentInput = normalizeOptionalText(inputObject.parent, NOTE_PARENT_LABEL)
+        const nameInput = normalizeOptionalText(inputObject.name, NOTE_NAME_LABEL, 'Untitled') || 'Untitled'
         const content = normalizeNoteContent(inputObject.content)
         throwIfNotesSignalAborted(context.signal)
         const root = await getNotesRoot(context.signal)
         const parent = resolveInsideRoot(root, parentInput)
-        await assertResolvedInsideNotesRoot(root, parent, 'Note parent')
+        await assertResolvedInsideNotesRoot(root, parent, NOTE_PARENT_LABEL)
         throwIfNotesSignalAborted(context.signal)
         await fs.mkdir(parent, { recursive: true })
         throwIfNotesSignalAborted(context.signal)
@@ -549,8 +558,8 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       tags: ['notes', 'write', 'markdown'],
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
-        if (!Object.prototype.hasOwnProperty.call(inputObject, 'content')) throw new Error('Note content is required')
-        const notePath = normalizeRequiredText(inputObject.path, 'Note path')
+        if (!Object.prototype.hasOwnProperty.call(inputObject, 'content')) throw new Error(NOTE_CONTENT_REQUIRED_ERROR)
+        const notePath = normalizeRequiredText(inputObject.path, NOTE_PATH_LABEL)
         const content = normalizeNoteContent(inputObject.content)
         throwIfNotesSignalAborted(context.signal)
         const root = await getNotesRoot(context.signal)
@@ -558,7 +567,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
         await assertResolvedInsideNotesRoot(root, filePath)
         throwIfNotesSignalAborted(context.signal)
         const parent = path.dirname(filePath)
-        await assertResolvedInsideNotesRoot(root, parent, 'Note parent')
+        await assertResolvedInsideNotesRoot(root, parent, NOTE_PARENT_LABEL)
         throwIfNotesSignalAborted(context.signal)
         await fs.mkdir(parent, { recursive: true })
         throwIfNotesSignalAborted(context.signal)
@@ -588,7 +597,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
       tags: ['notes', 'delete'],
       execute: async (input: unknown, context) => {
         const inputObject = normalizeInputObject(input)
-        const notePath = normalizeRequiredText(inputObject.path, 'Note path')
+        const notePath = normalizeRequiredText(inputObject.path, NOTE_PATH_LABEL)
         throwIfNotesSignalAborted(context.signal)
         const root = await getNotesRoot(context.signal)
         const target = await resolveNoteDeleteTarget(root, notePath)

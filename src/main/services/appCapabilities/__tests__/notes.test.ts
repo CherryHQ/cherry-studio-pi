@@ -223,14 +223,14 @@ describe('notes app capabilities', () => {
       await fs.symlink(outsideDir, escapeDir, 'dir')
 
       await expect(getCapability('notes.read').execute({ path: 'escape' }, { source: 'agent' })).rejects.toThrow(
-        'Note path resolves outside the notes root directory'
+        '笔记路径解析到了笔记目录之外'
       )
       await expect(
         getCapability('notes.write').execute({ path: 'escape', content: 'overwrite' }, { source: 'agent' })
-      ).rejects.toThrow('Note path resolves outside the notes root directory')
+      ).rejects.toThrow('笔记路径解析到了笔记目录之外')
       await expect(
         getCapability('notes.create').execute({ parent: 'linked-outside', name: 'created' }, { source: 'agent' })
-      ).rejects.toThrow('Note parent resolves outside the notes root directory')
+      ).rejects.toThrow('笔记父目录解析到了笔记目录之外')
       expect(await fs.readFile(outsideFile, 'utf8')).toBe('outside\n')
       await expect(fs.stat(path.join(outsideDir, 'created.md'))).rejects.toThrow()
     } finally {
@@ -300,7 +300,7 @@ describe('notes app capabilities', () => {
 
     try {
       await expect(getCapability('notes.write').execute({ path: 'daily' }, { source: 'agent' })).rejects.toThrow(
-        'Note content is required'
+        '笔记内容不能为空'
       )
 
       expect(writeFileSpy).not.toHaveBeenCalled()
@@ -340,13 +340,13 @@ describe('notes app capabilities', () => {
 
   it('rejects empty note paths with clear errors', async () => {
     await expect(getCapability('notes.read').execute({ path: '   ' }, { source: 'agent' })).rejects.toThrow(
-      'Note path is required'
+      '笔记路径 不能为空'
     )
     await expect(
       getCapability('notes.write').execute({ path: '   ', content: 'content' }, { source: 'agent' })
-    ).rejects.toThrow('Note path is required')
+    ).rejects.toThrow('笔记路径 不能为空')
     await expect(getCapability('notes.delete').execute({ path: '   ' }, { source: 'agent' })).rejects.toThrow(
-      'Note path is required'
+      '笔记路径 不能为空'
     )
   })
 
@@ -354,7 +354,7 @@ describe('notes app capabilities', () => {
     const rmSpy = vi.spyOn(fs, 'rm')
 
     await expect(getCapability('notes.delete').execute({ path: ' . ' }, { source: 'agent' })).rejects.toThrow(
-      'Cannot delete the notes root directory'
+      '不能删除笔记根目录'
     )
     expect(rmSpy).not.toHaveBeenCalled()
 
