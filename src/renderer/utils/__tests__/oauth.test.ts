@@ -188,6 +188,46 @@ describe('oauth utilities', () => {
     timeoutSpy.mockRestore()
   })
 
+  it('bounds PPIO token exchange requests and cleans up the auth popup', async () => {
+    const timeoutSignal = new AbortController().signal
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeoutSignal)
+    const removeProtocolListener = vi.fn()
+    let protocolCallback: ((data: { url: string }) => void | Promise<void>) | undefined
+
+    ;(window as any).api = {
+      protocol: {
+        onReceiveData: vi.fn((callback) => {
+          protocolCallback = callback
+          return removeProtocolListener
+        })
+      }
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ access_token: 'ppio-token' })
+      })
+    )
+
+    const { oauthWithPPIO } = await import('../oauth')
+    const setKey = vi.fn()
+    const resultPromise = oauthWithPPIO(setKey)
+
+    await protocolCallback?.({ url: 'cherrystudiopi://ppio?code=oauth-code' })
+
+    await expect(resultPromise).resolves.toBe('ppio-token')
+    expect(fetch).toHaveBeenCalledWith(
+      'https://ppio.com/oauth/token',
+      expect.objectContaining({ signal: timeoutSignal })
+    )
+    expect(setKey).toHaveBeenCalledWith('ppio-token')
+    expect(removeProtocolListener).toHaveBeenCalledTimes(1)
+    expect(close).toHaveBeenCalled()
+
+    timeoutSpy.mockRestore()
+  })
+
   it('handles unknown provider billing links without throwing', async () => {
     const { providerBills, providerCharge } = await import('../oauth')
 

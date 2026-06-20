@@ -11,6 +11,7 @@ const OAUTH_POPUP_FEATURES =
   'width=720,height=720,toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,alwaysOnTop=yes,alwaysRaised=yes'
 const OAUTH_MESSAGE_TIMEOUT_MS = 10 * 60 * 1000
 const OAUTH_POPUP_CLOSED_POLL_MS = 1000
+const OAUTH_NETWORK_TIMEOUT_MS = 10_000
 
 function replaceOAuthMessageHandler(
   provider: string,
@@ -177,7 +178,8 @@ export const oauthWithPPIO = async (setKey) => {
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded'
             },
-            body: formData.toString()
+            body: formData.toString(),
+            signal: AbortSignal.timeout(OAUTH_NETWORK_TIMEOUT_MS)
           })
 
           if (!tokenResponse.ok) {
@@ -210,6 +212,9 @@ export const oauthWithPPIO = async (setKey) => {
 
     function cleanup(): void {
       removeListener()
+      if (popup && !popup.closed) {
+        popup.close()
+      }
       if (timeoutId) {
         clearTimeout(timeoutId)
         timeoutId = null
