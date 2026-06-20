@@ -26,6 +26,11 @@ const DATA_SYNC_SETTINGS_BRIDGE_CHECK_TIMEOUT_MS = 800
 const DATA_SYNC_SETTINGS_BRIDGE_CALL_TIMEOUT_MS = 1_500
 const RENDERER_PREPARE_STORAGE_V2_CHECK_TIMEOUT_MS = 800
 const RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS = 1_500
+const DATA_SYNC_INPUT_OBJECT_ERROR = '数据同步能力的输入必须是对象。'
+const WEBDAV_HOST_REQUIRED_ERROR = 'WebDAV URL 不能为空。请先配置 WebDAV 服务器地址，再重试数据同步。'
+const SYNC_INTERVAL_FINITE_ERROR = '同步间隔必须是有限数字（单位：分钟）。'
+const DEFAULT_INPUT_LABEL = '输入值'
+const REMOTE_PATH_LABEL = '远程路径'
 
 type DataSyncSettingsState = {
   dataSyncWebdavHost?: string
@@ -60,7 +65,7 @@ function dataSyncCapabilityAbortError(signal: AbortSignal) {
   const reason = signal.reason
   if (reason instanceof Error) return reason
   if (typeof reason === 'string' && reason.trim()) return new Error(reason.trim())
-  return new Error('Data sync capability call aborted')
+  return new Error('数据同步能力调用已取消。')
 }
 
 function throwIfDataSyncCapabilityAborted(signal?: AbortSignal) {
@@ -175,23 +180,23 @@ function hasOwnInput(input: any, key: string) {
 function normalizeInputObject(input: unknown) {
   if (input === null || typeof input === 'undefined') return {}
   if (typeof input !== 'object' || Array.isArray(input)) {
-    throw new Error('Data sync capability input must be an object')
+    throw new Error(DATA_SYNC_INPUT_OBJECT_ERROR)
   }
   return input as Record<string, unknown>
 }
 
 const WEBDAV_INPUT_LABELS: Partial<Record<keyof WebDavConfig, string>> = {
-  webdavHost: 'WebDAV host',
-  webdavUser: 'WebDAV username',
-  webdavPass: 'WebDAV password',
-  webdavPath: 'WebDAV path'
+  webdavHost: 'WebDAV URL',
+  webdavUser: 'WebDAV 用户名',
+  webdavPass: 'WebDAV 密码',
+  webdavPath: 'WebDAV 路径'
 }
 
 function normalizeInputText(value: unknown, fallback = '', options: { trim?: boolean; label?: string } = {}) {
   const trim = options.trim ?? true
   if (value === null || typeof value === 'undefined') return fallback
   if (typeof value !== 'string') {
-    throw new Error(`${options.label ?? 'Value'} must be a string`)
+    throw new Error((options.label ?? DEFAULT_INPUT_LABEL) + ' 必须是字符串。')
   }
   return trim ? value.trim() : value
 }
@@ -236,6 +241,10 @@ function hasWebDavHost(config: WebDavConfig) {
   return Boolean(config.webdavHost?.trim())
 }
 
+function assertWebDavHost(config: WebDavConfig) {
+  if (!hasWebDavHost(config)) throw new Error(WEBDAV_HOST_REQUIRED_ERROR)
+}
+
 function normalizeRemotePath(value?: string) {
   const trimmed = value?.trim() || DEFAULT_DATA_SYNC_PATH
   let normalized = trimmed.replace(/\\/g, '/').replace(/\/+/g, '/')
@@ -247,7 +256,7 @@ function normalizeRemotePath(value?: string) {
 }
 
 function normalizeDirectoryPath(value: unknown, fallback = '/') {
-  const trimmed = normalizeInputText(value, fallback, { label: 'Remote path' }) || fallback
+  const trimmed = normalizeInputText(value, fallback, { label: REMOTE_PATH_LABEL }) || fallback
   let normalized = trimmed.replace(/\\/g, '/').replace(/\/+/g, '/')
   if (!normalized.startsWith('/')) normalized = `/${normalized}`
   if (normalized.length > 1) normalized = normalized.replace(/\/+$/g, '')
@@ -258,12 +267,12 @@ function normalizeSyncIntervalInput(value: unknown) {
   if (value === null || typeof value === 'undefined') return undefined
   if (typeof value === 'string' && !value.trim()) return undefined
   if (typeof value !== 'number' && typeof value !== 'string') {
-    throw new Error('Sync interval must be a finite number of minutes')
+    throw new Error(SYNC_INTERVAL_FINITE_ERROR)
   }
   const parsed = typeof value === 'number' ? value : Number(value)
-  if (!Number.isFinite(parsed)) throw new Error('Sync interval must be a finite number of minutes')
+  if (!Number.isFinite(parsed)) throw new Error(SYNC_INTERVAL_FINITE_ERROR)
   const interval = Math.trunc(parsed)
-  if (interval < 0) throw new Error('Sync interval cannot be negative')
+  if (interval < 0) throw new Error('同步间隔不能为负数。')
   return interval
 }
 
@@ -276,7 +285,7 @@ function normalizeOptionalBooleanInput(value: unknown, label: string) {
     if (['true', '1', 'yes', 'on'].includes(normalized)) return true
     if (['false', '0', 'no', 'off'].includes(normalized)) return false
   }
-  throw new Error(`${label} must be a boolean`)
+  throw new Error(label + ' 必须是布尔值（true/false）。')
 }
 
 async function runWebDavCapability<T>(
@@ -473,8 +482,8 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
         const config = await resolveWebDavConfig(inputObject, { requireCredentials: true, signal: context.signal })
-        if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
-        const autoSync = normalizeOptionalBooleanInput(inputObject.autoSync, 'Auto sync')
+        assertWebDavHost(config)
+        const autoSync = normalizeOptionalBooleanInput(inputObject.autoSync, '自动同步')
         const syncInterval = normalizeSyncIntervalInput(inputObject.syncInterval)
         if (context.dryRun) {
           return okResult('WebDAV data sync config dry run completed', sanitizeForAgent(config))
@@ -511,7 +520,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
         const config = await resolveWebDavConfig(inputObject, { requireCredentials: true, signal: context.signal })
-        if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
+        assertWebDavHost(config)
         const remotePath = normalizeDirectoryPath(inputObject.remotePath)
         const serviceOptions = context.signal ? { signal: context.signal } : undefined
         return okResult(
@@ -553,7 +562,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
         const config = await resolveWebDavConfig(inputObject, { requireCredentials: true, signal: context.signal })
-        if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
+        assertWebDavHost(config)
         const remotePath = normalizeDirectoryPath(inputObject.remotePath, config.webdavPath || '/')
         const serviceOptions = context.signal ? { signal: context.signal } : undefined
 
@@ -622,8 +631,8 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
         const config = await resolveWebDavConfig(inputObject, { requireCredentials: true, signal: context.signal })
-        if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
-        const saveConfig = normalizeOptionalBooleanInput(inputObject.saveConfig, 'Save config') === true
+        assertWebDavHost(config)
+        const saveConfig = normalizeOptionalBooleanInput(inputObject.saveConfig, '保存配置') === true
         if (context.dryRun) {
           return okResult('Data sync dry run completed', sanitizeForAgent({ config }))
         }
@@ -676,7 +685,7 @@ export function createDataSyncCapabilities(): AppCapabilityDefinition[] {
       execute: async (input: any, context) => {
         const inputObject = normalizeInputObject(input)
         const config = await resolveWebDavConfig(inputObject, { requireCredentials: true, signal: context.signal })
-        if (!hasWebDavHost(config)) throw new Error('WebDAV host is required')
+        assertWebDavHost(config)
         if (context.dryRun) {
           return okResult('Data sync snapshot restore dry run completed', sanitizeForAgent({ config }))
         }

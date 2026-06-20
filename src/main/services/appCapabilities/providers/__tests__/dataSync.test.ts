@@ -348,7 +348,7 @@ describe('data sync app capabilities', () => {
         },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Sync interval must be a finite number of minutes')
+    ).rejects.toThrow('同步间隔必须是有限数字')
 
     expect(mocks.storageV2Service.setSetting).not.toHaveBeenCalled()
     expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
@@ -365,7 +365,7 @@ describe('data sync app capabilities', () => {
         },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Sync interval must be a finite number of minutes')
+    ).rejects.toThrow('同步间隔必须是有限数字')
 
     expect(mocks.storageV2Service.setSetting).not.toHaveBeenCalled()
     expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
@@ -382,7 +382,7 @@ describe('data sync app capabilities', () => {
         },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Auto sync must be a boolean')
+    ).rejects.toThrow('自动同步 必须是布尔值')
 
     expect(mocks.storageV2Service.setSetting).not.toHaveBeenCalled()
     expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
@@ -399,7 +399,7 @@ describe('data sync app capabilities', () => {
         },
         { source: 'agent', dryRun: true }
       )
-    ).rejects.toThrow('Sync interval must be a finite number of minutes')
+    ).rejects.toThrow('同步间隔必须是有限数字')
 
     expect(mocks.storageV2Service.setSetting).not.toHaveBeenCalled()
     expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
@@ -416,7 +416,7 @@ describe('data sync app capabilities', () => {
         },
         { source: 'agent' }
       )
-    ).rejects.toThrow('Sync interval cannot be negative')
+    ).rejects.toThrow('同步间隔不能为负数')
 
     expect(mocks.storageV2Service.setSetting).not.toHaveBeenCalled()
     expect(mocks.secretVault.setSecret).not.toHaveBeenCalled()
@@ -445,10 +445,10 @@ describe('data sync app capabilities', () => {
 
   it('rejects invalid WebDAV text field shapes before saving settings', async () => {
     for (const [field, value, message] of [
-      ['webdavHost', true, 'WebDAV host must be a string'],
-      ['webdavUser', 123, 'WebDAV username must be a string'],
-      ['webdavPass', { secret: 'value' }, 'WebDAV password must be a string'],
-      ['webdavPath', ['sync-root'], 'WebDAV path must be a string']
+      ['webdavHost', true, 'WebDAV URL 必须是字符串'],
+      ['webdavUser', 123, 'WebDAV 用户名 必须是字符串'],
+      ['webdavPass', { secret: 'value' }, 'WebDAV 密码 必须是字符串'],
+      ['webdavPath', ['sync-root'], 'WebDAV 路径 必须是字符串']
     ] as const) {
       await expect(
         capability('dataSync.webdav.config.set').execute(
@@ -474,26 +474,26 @@ describe('data sync app capabilities', () => {
 
   it('rejects invalid data sync capability input objects before side effects', async () => {
     await expect(capability('dataSync.status.get').execute('status' as any, { source: 'agent' })).rejects.toThrow(
-      'Data sync capability input must be an object'
+      '数据同步能力的输入必须是对象'
     )
     await expect(
       capability('dataSync.webdav.config.get').execute(['config'] as any, { source: 'agent' })
-    ).rejects.toThrow('Data sync capability input must be an object')
+    ).rejects.toThrow('数据同步能力的输入必须是对象')
     await expect(
       capability('dataSync.webdav.config.set').execute('dav.example.com' as any, { source: 'agent' })
-    ).rejects.toThrow('Data sync capability input must be an object')
+    ).rejects.toThrow('数据同步能力的输入必须是对象')
     await expect(capability('dataSync.webdav.directories.list').execute([], { source: 'agent' })).rejects.toThrow(
-      'Data sync capability input must be an object'
+      '数据同步能力的输入必须是对象'
     )
     await expect(capability('dataSync.webdav.diagnose').execute(true as any, { source: 'agent' })).rejects.toThrow(
-      'Data sync capability input must be an object'
+      '数据同步能力的输入必须是对象'
     )
     await expect(capability('dataSync.sync.now').execute(['sync'] as any, { source: 'agent' })).rejects.toThrow(
-      'Data sync capability input must be an object'
+      '数据同步能力的输入必须是对象'
     )
     await expect(
       capability('dataSync.snapshot.restoreLatest').execute('restore' as any, { source: 'agent' })
-    ).rejects.toThrow('Data sync capability input must be an object')
+    ).rejects.toThrow('数据同步能力的输入必须是对象')
 
     expect(mocks.storageV2Service.getSetting).not.toHaveBeenCalled()
     expect(mocks.storageV2Service.setSetting).not.toHaveBeenCalled()
@@ -593,7 +593,7 @@ describe('data sync app capabilities', () => {
   it('rejects invalid remote directory path shapes before WebDAV requests', async () => {
     await expect(
       capability('dataSync.webdav.directories.list').execute({ remotePath: ['team'] }, { source: 'agent' })
-    ).rejects.toThrow('Remote path must be a string')
+    ).rejects.toThrow('远程路径 必须是字符串')
 
     expect(mocks.appDataSyncService.listRemoteDirectories).not.toHaveBeenCalled()
   })
@@ -729,7 +729,7 @@ describe('data sync app capabilities', () => {
   it('rejects invalid saveConfig input before syncing', async () => {
     await expect(
       capability('dataSync.sync.now').execute({ saveConfig: 'sometimes' }, { source: 'agent' })
-    ).rejects.toThrow('Save config must be a boolean')
+    ).rejects.toThrow('保存配置 必须是布尔值')
 
     expect(mocks.appDataSyncService.syncNow).not.toHaveBeenCalled()
     expect(mocks.storageV2Service.setSetting).not.toHaveBeenCalled()
