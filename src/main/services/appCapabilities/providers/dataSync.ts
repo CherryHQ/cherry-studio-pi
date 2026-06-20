@@ -24,7 +24,8 @@ const DEFAULT_DATA_SYNC_PATH = '/cherry-studio-pi'
 const DATA_SYNC_SUFFIX = '/sync/v1'
 const DATA_SYNC_SETTINGS_BRIDGE_CHECK_TIMEOUT_MS = 800
 const DATA_SYNC_SETTINGS_BRIDGE_CALL_TIMEOUT_MS = 1_500
-const RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS = 5 * 60_000
+const RENDERER_PREPARE_STORAGE_V2_CHECK_TIMEOUT_MS = 800
+const RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS = 1_500
 
 type DataSyncSettingsState = {
   dataSyncWebdavHost?: string
@@ -299,6 +300,7 @@ async function runWebDavCapability<T>(
 async function prepareRendererStorageV2ForDataSync(signal?: AbortSignal) {
   try {
     await callRendererBridge<void>(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE, undefined, {
+      checkTimeoutMs: RENDERER_PREPARE_STORAGE_V2_CHECK_TIMEOUT_MS,
       timeoutMs: RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS,
       timeoutMessage: 'Timed out preparing local data before sync',
       signal

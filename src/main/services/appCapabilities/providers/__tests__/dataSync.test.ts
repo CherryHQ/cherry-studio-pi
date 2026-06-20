@@ -748,6 +748,9 @@ describe('data sync app capabilities', () => {
     const result = await capability('dataSync.sync.now').execute({}, { source: 'agent' })
 
     expect(result.ok).toBe(true)
+    expect(mocks.browserWindows[0].webContents.executeJavaScript.mock.calls[0][0]).toBe(
+      `typeof window[${JSON.stringify(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE)}] === 'function'`
+    )
     expect(mocks.browserWindows[0].webContents.executeJavaScript).toHaveBeenCalledWith(
       `typeof window[${JSON.stringify(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE)}] === 'function'`
     )
@@ -861,5 +864,36 @@ describe('data sync app capabilities', () => {
       source: 'agent',
       summary: { status: 'success' }
     })
+  })
+
+  it('keeps agent-triggered data sync running after a short renderer preparation timeout', async () => {
+    vi.useFakeTimers()
+    try {
+      mocks.appDataSyncService.syncNow.mockResolvedValueOnce({ status: 'success' })
+      mocks.browserWindows[0].webContents.executeJavaScript.mockImplementation((script: string) => {
+        if (script.includes('typeof')) return Promise.resolve(true)
+        if (script.includes(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE)) {
+          return new Promise(() => undefined)
+        }
+        return Promise.resolve(undefined)
+      })
+
+      const resultPromise = capability('dataSync.sync.now').execute({}, { source: 'agent' })
+
+      await vi.advanceTimersByTimeAsync(1_500)
+
+      await expect(resultPromise).resolves.toMatchObject({
+        ok: true,
+        summary: 'Data sync completed'
+      })
+      expect(mocks.appDataSyncService.syncNow).toHaveBeenCalledWith({
+        webdavHost: 'https://dav.example.com',
+        webdavUser: 'user',
+        webdavPass: 'secret',
+        webdavPath: '/sync-root'
+      })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

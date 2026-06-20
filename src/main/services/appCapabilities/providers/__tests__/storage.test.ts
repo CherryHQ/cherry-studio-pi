@@ -38,6 +38,8 @@ vi.mock('../../utils', () => ({
   sanitizeForAgent: (value: unknown) => value
 }))
 
+import { RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE } from '@shared/dataSyncBridge'
+
 import { createStorageCapabilities } from '../storage'
 
 function capability(id: string) {
@@ -159,6 +161,33 @@ describe('storage app capabilities', () => {
     await capability('storage.backup.restore').execute({ backupPath: '/tmp/backup' }, { source: 'agent' })
 
     expect(mocks.callRendererBridge).toHaveBeenCalledTimes(3)
+    expect(mocks.callRendererBridge).toHaveBeenNthCalledWith(
+      1,
+      RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE,
+      undefined,
+      expect.objectContaining({
+        checkTimeoutMs: 800,
+        timeoutMs: 1_500
+      })
+    )
+    expect(mocks.callRendererBridge).toHaveBeenNthCalledWith(
+      2,
+      RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE,
+      undefined,
+      expect.objectContaining({
+        checkTimeoutMs: 800,
+        timeoutMs: 1_500
+      })
+    )
+    expect(mocks.callRendererBridge).toHaveBeenNthCalledWith(
+      3,
+      RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE,
+      undefined,
+      expect.objectContaining({
+        checkTimeoutMs: 800,
+        timeoutMs: 1_500
+      })
+    )
     expect(mocks.storageV2Service.createSnapshot).toHaveBeenCalledWith('before-test')
     expect(mocks.storageV2Service.createBackup).toHaveBeenCalledWith('agent request')
     expect(mocks.storageV2Service.restoreBackup).toHaveBeenCalledWith('/tmp/backup')

@@ -9,7 +9,8 @@ import { okResult, sanitizeForAgent } from '../utils'
 const logger = loggerService.withContext('AppCapability:Storage')
 const DEFAULT_AGENT_LIST_LIMIT = 50
 const MAX_AGENT_LIST_LIMIT = 200
-const RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS = 5 * 60_000
+const RENDERER_PREPARE_STORAGE_V2_CHECK_TIMEOUT_MS = 800
+const RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS = 1_500
 
 function normalizeListLimit(value: unknown) {
   if (value !== null && typeof value !== 'undefined' && typeof value !== 'number' && typeof value !== 'string') {
@@ -70,6 +71,7 @@ function agentListOptions(input: unknown = {}) {
 async function prepareRendererStorageV2ForStorageOperation(operation: string, signal?: AbortSignal) {
   try {
     await callRendererBridge<void>(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE, undefined, {
+      checkTimeoutMs: RENDERER_PREPARE_STORAGE_V2_CHECK_TIMEOUT_MS,
       timeoutMs: RENDERER_PREPARE_STORAGE_V2_TIMEOUT_MS,
       timeoutMessage: `Timed out preparing local data before ${operation}`,
       signal
