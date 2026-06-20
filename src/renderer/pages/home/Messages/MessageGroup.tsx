@@ -28,6 +28,12 @@ interface Props {
   registerMessageElement?: (id: string, element: HTMLElement | null) => void
 }
 
+function getTargetElement(target: EventTarget | null): Element | null {
+  if (target instanceof Element) return target
+  if (target instanceof Node) return target.parentElement
+  return null
+}
+
 /**
  * Read initial message UI state from cache (one-time, used for useState initializer).
  */
@@ -228,8 +234,8 @@ const MessageGroup = ({ messages, topic, registerMessageElement }: Props) => {
   }, [messages, usefulMessageId])
 
   const handleHorizontalGroupWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
-    const target = event.target as HTMLElement | null
-    if (target?.closest('.message-content-container')) {
+    const targetElement = getTargetElement(event.target)
+    if (targetElement?.closest('.message-content-container')) {
       return
     }
 

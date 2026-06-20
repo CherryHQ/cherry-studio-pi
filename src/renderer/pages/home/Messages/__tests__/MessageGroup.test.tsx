@@ -295,6 +295,29 @@ describe('MessageGroup', () => {
     expect(horizontalGroup.scrollLeft).toBe(160)
   })
 
+  it('handles wheel events whose target is a text node in horizontal layout', () => {
+    const messages = [createMessage('msg-1', 0, 'horizontal'), createMessage('msg-2', 1, 'horizontal')]
+    const topic = { id: 'topic-1' } as Topic
+
+    const { container } = render(<MessageGroup messages={messages} topic={topic} />)
+
+    const outerWrapper = container.querySelector('#message-msg-1') as HTMLElement
+    const horizontalGroup = outerWrapper.parentElement as HTMLElement
+    const textTarget = document.createTextNode('wheel target')
+
+    horizontalGroup.appendChild(textTarget)
+    setElementSize(horizontalGroup, {
+      clientWidth: 500,
+      scrollLeft: 0,
+      scrollWidth: 1000
+    })
+
+    const wheelEvent = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX: 80 })
+
+    expect(() => textTarget.dispatchEvent(wheelEvent)).not.toThrow()
+    expect(horizontalGroup.scrollLeft).toBe(80)
+  })
+
   it('selects the requested branch from flow navigation even when the initial index points elsewhere', () => {
     const messages = [createMessage('msg-1', 0, 'horizontal'), createMessage('msg-2', 1, 'horizontal')]
     const topic = { id: 'topic-1' } as Topic
