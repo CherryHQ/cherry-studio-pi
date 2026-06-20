@@ -9,6 +9,12 @@ const DRAG_THRESHOLD = 5
 const DETACH_THRESHOLD = 30
 const TAB_GAP = 6
 
+function getTargetElement(target: EventTarget | null): Element | null {
+  if (target instanceof Element) return target
+  if (target instanceof Node) return target.parentElement
+  return null
+}
+
 type DragMode = 'pending' | 'reorder' | 'detach'
 
 interface DragState {
@@ -131,7 +137,7 @@ export function useTabDrag({
   const handlePointerDown = useCallback(
     (e: React.PointerEvent, tab: Tab, tabType: 'pinned' | 'normal') => {
       if (e.button !== 0) return
-      if ((e.target as HTMLElement).closest('[role="button"]')) return
+      if (getTargetElement(e.target)?.closest('[role="button"]')) return
 
       const target = e.currentTarget as HTMLElement
       target.setPointerCapture(e.pointerId)
