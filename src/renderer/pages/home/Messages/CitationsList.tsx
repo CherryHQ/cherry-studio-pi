@@ -312,8 +312,8 @@ const OpenButton = styled(Button)`
   margin-bottom: 8px;
   align-self: flex-start;
   font-size: 12px;
-  background-color: var(--color-background-soft);
-  border-radius: var(--list-item-border-radius);
+  background-color: var(--color-muted);
+  border-radius: var(--radius-lg);
 `
 
 const PreviewIcons = styled.div`
@@ -329,10 +329,10 @@ const PreviewIcon = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-background-soft);
+  background: var(--color-muted);
   border: 1px solid var(--color-border);
   margin-left: -8px;
-  color: var(--color-text-2);
+  color: var(--color-foreground-secondary);
 
   &:first-child {
     margin-left: 0;
@@ -346,10 +346,10 @@ const CitationIndex = styled.div`
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background-color: var(--color-reference);
+  background-color: var(--color-primary-soft);
   font-size: 10px;
   line-height: 1.6;
-  color: var(--color-reference-text);
+  color: var(--color-primary);
   flex-shrink: 0;
   opacity: 1;
   transition: opacity 0.3s ease;
@@ -358,11 +358,11 @@ const CitationIndex = styled.div`
 const CitationLink = styled.a`
   font-size: 14px;
   line-height: 1.6;
-  color: var(--color-text-1);
+  color: var(--color-foreground);
   text-decoration: none;
   flex: 1;
   .hostname {
-    color: var(--color-link);
+    color: var(--color-primary);
   }
 `
 
@@ -371,7 +371,7 @@ const CopyIconWrapper = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-text-2);
+  color: var(--color-foreground-secondary);
   opacity: 0;
   padding: 4px;
   border-radius: 4px;
@@ -383,7 +383,7 @@ const CopyIconWrapper = styled.div`
 
   &:hover {
     opacity: 1;
-    background-color: var(--color-background-soft);
+    background-color: var(--color-muted);
   }
 `
 
@@ -417,7 +417,7 @@ const WebSearchCardHeader = styled.div`
 const WebSearchCardContent = styled.div`
   font-size: 13px;
   line-height: 1.6;
-  color: var(--color-text-2);
+  color: var(--color-foreground-secondary);
   user-select: text;
   cursor: text;
   word-break: break-all;

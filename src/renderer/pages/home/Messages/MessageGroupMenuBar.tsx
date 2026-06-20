@@ -169,7 +169,7 @@ const MessageGroupMenuBar: FC<Props> = ({
         </Tooltip>
       )}
       <Button variant="ghost" size="sm" onClick={handleDeleteGroup}>
-        <DeleteOutlined style={{ color: 'var(--color-error)' }} />
+        <DeleteOutlined style={{ color: 'var(--color-error-base)' }} />
       </Button>
     </GroupMenuBar>
   )
@@ -199,10 +199,10 @@ const LayoutOption = styled.div<{ $active: boolean }>`
   cursor: pointer;
   padding: 2px 6px;
   border-radius: 4px;
-  background-color: ${({ $active }) => ($active ? 'var(--color-background-soft)' : 'transparent')};
+  background-color: ${({ $active }) => ($active ? 'var(--color-muted)' : 'transparent')};
 
   &:hover {
-    background-color: ${({ $active }) => ($active ? 'var(--color-background-soft)' : 'var(--color-hover)')};
+    background-color: ${({ $active }) => ($active ? 'var(--color-muted)' : 'var(--color-accent)')};
   }
 `
 

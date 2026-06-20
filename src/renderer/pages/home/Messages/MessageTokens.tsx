@@ -56,7 +56,7 @@ const MessageTokens: React.FC<MessageTokensProps> = ({ message }) => {
   if (message.role === 'user') {
     return (
       <div
-        className="message-tokens cursor-pointer select-text text-right text-(--color-text-3) text-[10px]"
+        className="message-tokens cursor-pointer select-text text-right text-(--color-foreground-muted) text-[10px]"
         onClick={locateMessage}>
         {`Tokens: ${message?.usage?.total_tokens}`}
       </div>
@@ -91,7 +91,7 @@ const MessageTokens: React.FC<MessageTokensProps> = ({ message }) => {
 
     return (
       <div
-        className="message-tokens cursor-pointer select-text text-right text-(--color-text-3) text-[10px]"
+        className="message-tokens cursor-pointer select-text text-right text-(--color-foreground-muted) text-[10px]"
         onClick={locateMessage}>
         {hasMetrics ? (
           <Tooltip content={metrixs} placement="top" classNames={{ content: 'text-[11px]' }}>

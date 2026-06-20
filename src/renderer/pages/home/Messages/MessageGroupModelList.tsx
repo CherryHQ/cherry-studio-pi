@@ -144,7 +144,7 @@ const DisplayModeToggle = styled.div<{ displayMode: MultiModelFoldDisplayMode }>
   height: 26px;
 
   &:hover {
-    background-color: var(--color-hover);
+    background-color: var(--color-accent);
   }
 `
 
@@ -227,7 +227,7 @@ const Segmented = styled(AntdSegmented)`
   background-color: transparent !important;
 
   .ant-segmented-item {
-    border-radius: var(--list-item-border-radius) !important;
+    border-radius: var(--radius-lg) !important;
     &:hover {
       background: transparent !important;
     }
@@ -235,7 +235,7 @@ const Segmented = styled(AntdSegmented)`
   .ant-segmented-thumb,
   .ant-segmented-item-selected {
     border: 0.5px solid var(--color-border);
-    border-radius: var(--list-item-border-radius) !important;
+    border-radius: var(--radius-lg) !important;
   }
 `
 

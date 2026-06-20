@@ -45,8 +45,8 @@ const MessageAttachments: FC<Props> = ({ file }) => {
 
   return (
     <div className="message-attachments mt-0.5 mb-2">
-      <div className="flex max-w-[520px] items-center gap-3 rounded-lg border border-(--color-border) bg-(--color-background-soft) px-3 py-2">
-        <div className="shrink-0 text-(--color-text-2)">
+      <div className="flex max-w-[520px] items-center gap-3 rounded-lg border border-(--color-border) bg-(--color-muted) px-3 py-2">
+        <div className="shrink-0 text-(--color-foreground-secondary)">
           <Paperclip size={16} />
         </div>
         <button
@@ -55,8 +55,8 @@ const MessageAttachments: FC<Props> = ({ file }) => {
           onClick={handlePreview}
           title={fileName}
           aria-label={fileName}>
-          <div className="truncate text-(--color-text-1) text-sm">{fileName}</div>
-          <div className="text-(--color-text-2) text-xs">
+          <div className="truncate text-(--color-foreground) text-sm">{fileName}</div>
+          <div className="text-(--color-foreground-secondary) text-xs">
             {formatFileSize(file.size)} · {fileSuffix}
           </div>
         </button>

@@ -340,7 +340,7 @@ const EditorContainer = styled(Space)`
   }
 
   .editing-message {
-    background-color: var(--color-background-opacity);
+    background-color: var(--color-background);
     border: 0.5px solid var(--color-border);
     border-radius: 15px;
     padding: 1em;

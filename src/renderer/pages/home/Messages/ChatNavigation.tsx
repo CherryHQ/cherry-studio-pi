@@ -412,11 +412,11 @@ const NavigationButton = styled(Button)`
   justify-content: center;
   border-radius: 0;
   border: none;
-  color: var(--color-text);
+  color: var(--color-foreground);
   transition: all 0.2s ease-in-out;
 
   &:hover {
-    background-color: var(--color-hover);
+    background-color: var(--color-accent);
     color: var(--color-primary);
   }
 

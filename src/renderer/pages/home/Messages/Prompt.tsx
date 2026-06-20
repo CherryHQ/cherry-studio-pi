@@ -88,7 +88,7 @@ const Container = styled.div<{ $isDark: boolean }>`
 `
 
 const Text = styled.div<{ $isVisible: boolean }>`
-  color: var(--color-text-2);
+  color: var(--color-foreground-secondary);
   font-size: 12px;
   display: -webkit-box;
   -webkit-line-clamp: 2;

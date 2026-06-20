@@ -109,7 +109,7 @@ const MessageOutline: FC<MessageOutlineProps> = ({ message }) => {
         {headings.map((heading, index) => (
           <div
             key={index}
-            className="flex h-6 shrink-0 cursor-pointer items-center gap-2 [&:hover_.outline-dot]:bg-(--color-text-3) [&:hover_.outline-text]:text-(--color-text-2)"
+            className="flex h-6 shrink-0 cursor-pointer items-center gap-2 [&:hover_.outline-dot]:bg-(--color-foreground-muted) [&:hover_.outline-text]:text-(--color-foreground-secondary)"
             onClick={() => scrollToHeading(heading.id)}>
             <div
               className="mr-1 h-1 shrink-0 rounded-[2px] bg-(--color-border) outline-dot transition-colors duration-200 ease-out"
@@ -118,7 +118,7 @@ const MessageOutline: FC<MessageOutlineProps> = ({ message }) => {
               }}
             />
             <div
-              className="hidden truncate whitespace-nowrap px-2 py-0.5 text-(--color-text-3) opacity-0 outline-text transition-opacity duration-200 ease-out group-hover:block group-hover:opacity-100"
+              className="hidden truncate whitespace-nowrap px-2 py-0.5 text-(--color-foreground-muted) opacity-0 outline-text transition-opacity duration-200 ease-out group-hover:block group-hover:opacity-100"
               style={{
                 fontSize: `${16 - heading.level}px`,
                 paddingLeft: `${(heading.level - miniLevel) * 8}px`
