@@ -288,10 +288,10 @@ describe('app tools notes routes', () => {
       const request = fetch(`${baseUrl}/notes/search?q=needle`, { signal: controller.signal }).catch((error) => error)
       await readdirStarted
       controller.abort(new Error('test client disconnected'))
-      await new Promise((resolve) => setTimeout(resolve, 0))
+      await expect(request).resolves.toBeInstanceOf(Error)
+      await new Promise((resolve) => setTimeout(resolve, 20))
       releaseReaddir()
 
-      await expect(request).resolves.toBeInstanceOf(Error)
       await new Promise((resolve) => setTimeout(resolve, 20))
 
       expect(readdirSpy).toHaveBeenCalled()
