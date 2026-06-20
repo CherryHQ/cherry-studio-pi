@@ -614,6 +614,56 @@ describe('DataSyncService', () => {
     })
   })
 
+  it('hydrates a delayed main-process result when status inspection stalls after a sync timeout', async () => {
+    vi.useFakeTimers()
+    const pendingSync = deferred<typeof successSummary>()
+    const idleStatus = {
+      syncing: false,
+      lastSummary: null,
+      conflicts: [],
+      syncStartedAt: null
+    }
+    mocks.syncNow.mockReturnValueOnce(pendingSync.promise)
+    mocks.getStatus
+      .mockResolvedValueOnce(idleStatus)
+      .mockResolvedValueOnce(idleStatus)
+      .mockImplementation(
+        () =>
+          new Promise(() => {
+            // Simulate a wedged status IPC while the main-process sync eventually finishes.
+          })
+      )
+
+    const sync = syncAppDataNow()
+    await vi.waitFor(() => expect(getDataSyncRuntimeState().syncing).toBe(true))
+    const rejection = expect(sync).rejects.toThrow('执行 WebDAV 同步')
+
+    await vi.advanceTimersByTimeAsync(15 * 60_000)
+    await vi.advanceTimersByTimeAsync(30_000)
+    await vi.advanceTimersByTimeAsync(30_000)
+
+    await rejection
+    expect(getDataSyncRuntimeState()).toEqual({
+      syncing: false,
+      syncStartedAt: null
+    })
+
+    pendingSync.resolve({
+      ...successSummary,
+      storageDownloaded: 2,
+      storageRecordCount: 3,
+      storageBundleHash: 'remote-bundle-hash'
+    })
+    await vi.advanceTimersByTimeAsync(0)
+
+    await vi.waitFor(() => {
+      expect(mocks.hydrateRuntimeCacheFromStorageV2).toHaveBeenCalledTimes(1)
+    })
+    expect(mocks.hydrateStorageV2ConversationsIfDexieEmpty).toHaveBeenCalledWith('data-sync:after delayed data sync', {
+      strict: true
+    })
+  })
+
   it('recovers a completed main-process summary when the sync IPC times out after success', async () => {
     vi.useFakeTimers()
     const startedAt = Date.parse('2026-06-06T10:00:00.000Z')

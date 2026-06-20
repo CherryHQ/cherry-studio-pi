@@ -560,6 +560,11 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
         return null
       }
 
+      if (!status && mainSyncPromise) {
+        logger.info('Main-process data sync status is unavailable after renderer IPC timeout; watching delayed result')
+        continueMainSyncAfterRendererTimeout(mainSyncPromise)
+      }
+
       const completedSummary = status?.lastSummary as Partial<DataSyncSummary> | null | undefined
       if (isSyncSummaryFromCurrentRun(completedSummary, rendererSyncStartedAt)) {
         if (completedSummary?.status === 'success') {
