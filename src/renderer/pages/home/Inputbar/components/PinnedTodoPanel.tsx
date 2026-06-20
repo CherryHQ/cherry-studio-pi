@@ -128,10 +128,10 @@ const PanelBody = styled.div`
   border-radius: 17px;
   border: 0.5px solid var(--color-border);
   overflow: hidden;
-  background-color: var(--color-background-opacity);
+  background-color: var(--color-background);
 
   body[theme-mode='dark'] & {
-    background-color: var(--color-background-mute);
+    background-color: var(--color-accent);
   }
 `
 
@@ -142,7 +142,7 @@ const PanelHeader = styled.div`
   padding: 8px 12px;
   cursor: pointer;
   font-size: 12px;
-  color: var(--color-text-2);
+  color: var(--color-foreground-secondary);
 `
 
 const HeaderLeft = styled.div`
@@ -174,5 +174,5 @@ const TodoItemRow = styled.div<{ $completed: boolean }>`
 const TodoContent = styled.span<{ $completed: boolean }>`
   flex: 1;
   text-decoration: ${(props) => (props.$completed ? 'line-through' : 'none')};
-  color: var(--color-text-1);
+  color: var(--color-foreground);
 `

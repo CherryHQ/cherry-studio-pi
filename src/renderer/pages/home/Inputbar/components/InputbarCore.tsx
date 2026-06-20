@@ -759,7 +759,7 @@ const InputBarContainer = styled.div`
   position: relative;
   border-radius: 17px;
   padding-top: 8px;
-  background-color: var(--color-background-opacity);
+  background-color: var(--color-background);
 
   &.file-dragging {
     border: 2px dashed #2ecc71;

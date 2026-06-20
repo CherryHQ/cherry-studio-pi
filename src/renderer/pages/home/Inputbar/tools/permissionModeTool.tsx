@@ -19,7 +19,7 @@ const getPermissionModeIcon = (mode: PermissionMode): ReactNode => {
     case 'default':
       return <Pointer size={18} color="var(--color-primary)" />
     case 'plan':
-      return <Route size={18} color="var(--color-link)" />
+      return <Route size={18} color="var(--color-primary)" />
     case 'acceptEdits':
       return <FolderPen size={18} color={AUTO_EDIT_MODE_COLOR} />
     case 'bypassPermissions':
