@@ -421,7 +421,7 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
               totalCount: fileResults.length,
               failedFiles
             })
-            window.toast.warning(t('chat.save.knowledge.error.file_partial_failed', { count: failedCount }))
+            window.toast?.warning(t('chat.save.knowledge.error.file_partial_failed', { count: failedCount }))
           }
 
           items.push(
@@ -461,7 +461,7 @@ const PopupContainer: React.FC<Props> = ({ source, title, resolve }) => {
         }
       }
 
-      window.toast.error(errorMessage)
+      window.toast?.error(errorMessage)
       if (mountedRef.current) {
         setLoading(false)
       }

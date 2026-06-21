@@ -48,7 +48,7 @@ const RecallResultCard = ({ item, index }: RecallResultCardProps) => {
         chunkIndex: item.chunkIndex
       })
       if (mountedRef.current) {
-        window.toast.error(t('message.copy.failed'))
+        window.toast?.error(t('message.copy.failed'))
       }
     }
   }

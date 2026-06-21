@@ -71,13 +71,13 @@ const InputEmbeddingDimension = ({
 
     if (!model) {
       logger.warn('Failed to get embedding dimensions: no model')
-      window.toast.error(t('knowledge.embedding_model_required'))
+      window.toast?.error(t('knowledge.embedding_model_required'))
       return
     }
 
     if (!provider) {
       logger.warn('Failed to get embedding dimensions: no provider')
-      window.toast.error(t('knowledge.provider_not_found'))
+      window.toast?.error(t('knowledge.provider_not_found'))
       return
     }
 
@@ -106,7 +106,7 @@ const InputEmbeddingDimension = ({
     } catch (error) {
       if (mountedRef.current && requestSeq === dimensionRequestSeqRef.current) {
         logger.error(t('message.error.get_embedding_dimensions'), error as Error)
-        window.toast.error(t('message.error.get_embedding_dimensions') + '\n' + getErrorMessage(error))
+        window.toast?.error(t('message.error.get_embedding_dimensions') + '\n' + getErrorMessage(error))
       }
     } finally {
       if (mountedRef.current && requestSeq === dimensionRequestSeqRef.current) {

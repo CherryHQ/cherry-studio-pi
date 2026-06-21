@@ -28,7 +28,7 @@ export const usePreviewKnowledgeSource = () => {
       const source = item.data.source.trim()
 
       if (!source) {
-        window.toast.warning(t('knowledge.data_source.preview.unavailable'))
+        window.toast?.warning(t('knowledge.data_source.preview.unavailable'))
         return
       }
 
@@ -36,7 +36,7 @@ export const usePreviewKnowledgeSource = () => {
         if (item.type === 'url' || item.type === 'note') {
           const previewUrl = sanitizeHttpUrl(source)
           if (!previewUrl) {
-            window.toast.warning(t('knowledge.data_source.preview.unavailable'))
+            window.toast?.warning(t('knowledge.data_source.preview.unavailable'))
             return
           }
 
@@ -53,7 +53,7 @@ export const usePreviewKnowledgeSource = () => {
           itemType: item.type,
           source
         })
-        window.toast.error(formatErrorMessageWithPrefix(previewError, t('knowledge.data_source.preview.failed')))
+        window.toast?.error(formatErrorMessageWithPrefix(previewError, t('knowledge.data_source.preview.failed')))
       }
     },
     [t]

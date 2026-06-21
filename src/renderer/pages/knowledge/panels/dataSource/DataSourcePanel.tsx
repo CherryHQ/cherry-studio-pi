@@ -123,7 +123,7 @@ const DataSourcePanel = ({
     try {
       await Promise.all(targets.map((item) => onReindex(item)))
     } catch (error) {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('knowledge.data_source.reindex_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('knowledge.data_source.reindex_failed')))
       return
     }
     setSelectedIds(new Set())
@@ -134,7 +134,7 @@ const DataSourcePanel = ({
     try {
       await Promise.all(targets.map((item) => onDelete(item)))
     } catch (error) {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('knowledge.data_source.delete_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('knowledge.data_source.delete_failed')))
       return
     }
     setSelectedIds(new Set())
@@ -149,7 +149,7 @@ const DataSourcePanel = ({
     try {
       await onDelete(pendingDeleteItem)
     } catch (error) {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('knowledge.data_source.delete_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('knowledge.data_source.delete_failed')))
       return
     }
 

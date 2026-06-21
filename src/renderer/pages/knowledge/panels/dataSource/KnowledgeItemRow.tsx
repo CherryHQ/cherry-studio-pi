@@ -175,7 +175,7 @@ const KnowledgeItemRowMoreMenu = ({
     event.stopPropagation()
     setIsOpen(false)
     void Promise.resolve(onPreviewSource()).catch((error) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('knowledge.data_source.preview.failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('knowledge.data_source.preview.failed')))
     })
   }
 
@@ -189,7 +189,7 @@ const KnowledgeItemRowMoreMenu = ({
     event.stopPropagation()
     setIsOpen(false)
     void Promise.resolve(onReindex()).catch((error) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('knowledge.data_source.reindex_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('knowledge.data_source.reindex_failed')))
     })
   }
 
@@ -197,7 +197,7 @@ const KnowledgeItemRowMoreMenu = ({
     event.stopPropagation()
     setIsOpen(false)
     void Promise.resolve(onDelete()).catch((error) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('knowledge.data_source.delete_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('knowledge.data_source.delete_failed')))
     })
   }
 

@@ -82,9 +82,9 @@ const ActiveRagConfigPanel = ({ base, onRestoreBase }: RagConfigPanelProps) => {
 
     try {
       await save(values)
-      window.toast.success(t('knowledge.rag.saved'))
+      window.toast?.success(t('knowledge.rag.saved'))
     } catch (error) {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('knowledge.error.failed_to_edit')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('knowledge.error.failed_to_edit')))
     }
   }
 
