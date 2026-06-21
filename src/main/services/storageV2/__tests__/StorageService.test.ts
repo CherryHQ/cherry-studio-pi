@@ -1060,6 +1060,52 @@ describe('StorageV2Service', () => {
     expect(mocks.modelService.bulkUpdate).not.toHaveBeenCalled()
   })
 
+  it('keeps runtime api keys unchanged when synced provider credentials cannot be restored', async () => {
+    mocks.providerRepository.list.mockResolvedValue([
+      {
+        id: 'openai',
+        type: 'openai',
+        name: 'OpenAI',
+        apiHost: 'https://api.openai.com/v1',
+        enabled: true,
+        sortOrder: 0,
+        config: { id: 'openai', presetProviderId: 'openai' },
+        models: [],
+        hasCredentialRef: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        deletedAt: null,
+        version: 1
+      }
+    ])
+    mocks.providerRepository.listCredentialRefs.mockResolvedValue(
+      new Map([
+        [
+          'openai',
+          {
+            apiKeys: 'storage-v2://secret/provider/openai/apiKeys'
+          }
+        ]
+      ])
+    )
+    mocks.providerService.getByProviderId.mockResolvedValue({ id: 'openai' })
+    mocks.secretVault.getSecret.mockResolvedValue(null)
+
+    await expect(
+      new StorageV2Service().projectProvidersToDataApiRuntime({
+        apiKeyProviderIds: new Set(['openai']),
+        modelProviderIds: new Set()
+      })
+    ).rejects.toThrow('为避免清空现有模型服务商密钥')
+
+    expect(mocks.providerService.replaceApiKeys).not.toHaveBeenCalled()
+    expect(mocks.providerService.update).not.toHaveBeenCalled()
+    expect(mocks.providerService.create).not.toHaveBeenCalled()
+    expect(mocks.modelService.list).not.toHaveBeenCalled()
+    expect(mocks.modelService.reconcileForProvider).not.toHaveBeenCalled()
+    expect(mocks.modelService.bulkUpdate).not.toHaveBeenCalled()
+  })
+
   it('deletes providers through the Storage v2 tombstone repository path', async () => {
     mocks.providerRepository.delete.mockResolvedValue({ deleted: true })
 
