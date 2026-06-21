@@ -109,4 +109,46 @@ describe('NutstorePathSelector', () => {
     expect(screen.queryByText('stale-child')).not.toBeInTheDocument()
     expect(screen.getByText('root-again')).toBeInTheDocument()
   })
+
+  it('shows non-Error directory load failures', async () => {
+    const fs = {
+      ls: vi.fn().mockRejectedValueOnce('remote list denied'),
+      mkdirs: vi.fn()
+    } as unknown as Nutstore.Fs
+
+    render(<NutstorePathSelector fs={fs} onCancel={vi.fn()} onConfirm={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(modalError).toHaveBeenCalledWith({
+        centered: true,
+        content: 'remote list denied'
+      })
+    })
+  })
+
+  it('shows folder creation failures without leaving an unhandled rejection', async () => {
+    const fs = {
+      ls: vi.fn().mockResolvedValue([]),
+      mkdirs: vi.fn().mockRejectedValueOnce({
+        error: {
+          message: 'folder already exists'
+        }
+      })
+    } as unknown as Nutstore.Fs
+
+    render(<NutstorePathSelector fs={fs} onCancel={vi.fn()} onConfirm={vi.fn()} />)
+
+    fireEvent.click(screen.getByText('settings.data.nutstore.new_folder.button.label'))
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '  Existing  ' } })
+    fireEvent.click(screen.getByText('settings.data.nutstore.new_folder.button.confirm'))
+
+    await waitFor(() => {
+      expect(fs.mkdirs).toHaveBeenCalledWith('/Existing')
+      expect(modalError).toHaveBeenCalledWith({
+        centered: true,
+        content: 'folder already exists'
+      })
+    })
+    expect(screen.getByRole('textbox')).toBeInTheDocument()
+  })
 })

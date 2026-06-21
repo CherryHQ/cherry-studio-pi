@@ -1,6 +1,7 @@
 import { Button, Input, RowFlex } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
 import { FolderIcon as NutstoreFolderIcon } from '@renderer/components/Icons/NutstoreIcons'
+import { getErrorMessage } from '@renderer/utils/error'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -71,10 +72,10 @@ function FileList(props: FileListProps) {
           setFiles(items)
         }
       } catch (error) {
-        if (!cancelled && error instanceof Error) {
-          logger.error('Error fetching files:', error)
+        if (!cancelled) {
+          logger.error('Error fetching files:', error as Error)
           window.modal.error({
-            content: error.message,
+            content: getErrorMessage(error),
             centered: true
           })
         }
@@ -129,11 +130,23 @@ export function NutstorePathSelector(props: Props) {
 
   const handleNewFolder = useCallback(
     async (name: string) => {
-      const target = (cwd ?? '/') + (cwd && cwd !== '/' ? '/' : '') + name
-      await props.fs.mkdirs(target)
-      if (!mountedRef.current) return
-      setShowNewFolder(false)
-      enter(target)
+      const folderName = name.trim()
+      if (!folderName) return
+
+      const target = (cwd ?? '/') + (cwd && cwd !== '/' ? '/' : '') + folderName
+      try {
+        await props.fs.mkdirs(target)
+        if (!mountedRef.current) return
+        setShowNewFolder(false)
+        enter(target)
+      } catch (error) {
+        if (!mountedRef.current) return
+        logger.error('Error creating folder:', error as Error)
+        window.modal.error({
+          content: getErrorMessage(error),
+          centered: true
+        })
+      }
     },
     [cwd, props.fs, enter]
   )
