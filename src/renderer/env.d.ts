@@ -18,6 +18,6 @@ declare global {
     modal: AppModalApi
     store: any
     navigate: UseNavigateResult<string>
-    toast: ToastUtilities
+    toast?: ToastUtilities
   }
 }

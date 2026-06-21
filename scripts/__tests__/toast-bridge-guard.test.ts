@@ -5,7 +5,10 @@ import { describe, expect, it } from 'vitest'
 
 const rendererRoot = path.resolve(process.cwd(), 'src/renderer')
 const sourceExtensions = new Set(['.ts', '.tsx'])
-const directToastPattern = /window\s*\.\s*toast\s*\.\s*(success|error|warning|info)\s*\(/g
+const requiredToastPatterns = [
+  /window\s*\.\s*toast\s*\.\s*(success|error|warning|info)\s*\(/g,
+  /window\s*\.\s*toast\s*\[/g
+]
 
 function listSourceFiles(dir: string): string[] {
   const entries = fs.readdirSync(dir, { withFileTypes: true })
@@ -135,7 +138,7 @@ describe('renderer toast bridge usage', () => {
     const violations = listSourceFiles(rendererRoot).flatMap((file) => {
       const source = fs.readFileSync(file, 'utf8')
       const searchable = stripCommentsAndStrings(source)
-      const matches = Array.from(searchable.matchAll(directToastPattern))
+      const matches = requiredToastPatterns.flatMap((pattern) => Array.from(searchable.matchAll(pattern)))
 
       return matches.map(
         (match) => `${path.relative(process.cwd(), file)}:${lineNumberAt(searchable, match.index ?? 0)}`

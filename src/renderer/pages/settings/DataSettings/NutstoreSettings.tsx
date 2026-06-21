@@ -176,7 +176,8 @@ const NutstoreSettings: FC = () => {
         return
       }
 
-      window.toast[isConnectedToNutstore ? 'success' : 'error']({
+      const toastType = isConnectedToNutstore ? 'success' : 'error'
+      window.toast?.[toastType]?.({
         timeout: 2000,
         title: isConnectedToNutstore
           ? t('settings.data.nutstore.checkConnection.success')
