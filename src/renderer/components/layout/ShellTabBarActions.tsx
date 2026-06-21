@@ -45,7 +45,7 @@ export function ShellTabBarActions({ isDetached = false }: { isDetached?: boolea
       await openSettingsWindow(settingsPath)
     } catch (error) {
       logger.error('Failed to open settings', error as Error)
-      window.toast.error({ title: t('common.error'), description: formatErrorMessage(error) })
+      window.toast?.error({ title: t('common.error'), description: formatErrorMessage(error) })
     }
   }
 

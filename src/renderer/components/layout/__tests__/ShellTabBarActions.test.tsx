@@ -92,4 +92,21 @@ describe('ShellTabBarActions', () => {
       expect(mocks.toastError).toHaveBeenCalledWith({ title: 'common.error', description: 'IPC failed' })
     })
   })
+
+  it('does not crash when opening settings fails before toast is available', async () => {
+    const user = userEvent.setup()
+    mocks.openSettingsWindow.mockRejectedValueOnce(new Error('IPC failed'))
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: undefined
+    })
+
+    render(<ShellTabBarActions />)
+
+    await user.click(screen.getByRole('button', { name: /settings/i }))
+
+    await waitFor(() => {
+      expect(mocks.openSettingsWindow).toHaveBeenCalledWith('/settings/provider')
+    })
+  })
 })
