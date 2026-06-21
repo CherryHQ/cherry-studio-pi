@@ -7,7 +7,7 @@ export function useFullScreenNotice() {
 
   useIpcOn('window.fullscreen_changed', (isFullscreen) => {
     if (isWin && isFullscreen) {
-      window.toast.info({
+      window.toast?.info({
         title: t('common.fullscreen'),
         timeout: 3000
       })

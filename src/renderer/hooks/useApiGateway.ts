@@ -82,7 +82,7 @@ export const useApiGateway = () => {
   const showSuccess = useCallback(
     (messageKey: string) => {
       if (mountedRef.current) {
-        window.toast.success(t(messageKey))
+        window.toast?.success(t(messageKey))
       }
     },
     [t]
@@ -90,7 +90,7 @@ export const useApiGateway = () => {
 
   const showError = useCallback((message: string) => {
     if (mountedRef.current) {
-      window.toast.error(message)
+      window.toast?.error(message)
     }
   }, [])
 

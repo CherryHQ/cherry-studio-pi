@@ -52,7 +52,7 @@ export function useAppUpdateHandler() {
       ipcRenderer.on(IpcChannel.UpdateNotAvailable, () => {
         updateAppUpdateState({ checking: false, manualCheck: false })
         if (window.location.hash.includes('settings/about')) {
-          window.toast.success(t('settings.about.updateNotAvailable'))
+          window.toast?.success(t('settings.about.updateNotAvailable'))
         }
       }),
       ipcRenderer.on(IpcChannel.UpdateAvailable, (_, releaseInfo: UpdateInfo) => {

@@ -50,12 +50,12 @@ export const useOcr = () => {
         }
       } catch (e) {
         logger.error('Failed to ocr.', e as Error)
-        window.toast.error(t('ocr.error.unknown') + ': ' + formatErrorMessage(e))
+        window.toast?.error(t('ocr.error.unknown') + ': ' + formatErrorMessage(e))
         throw e
       }
     }
     const promise = _ocr()
-    window.toast.loading({ title: t('ocr.processing'), promise })
+    window.toast?.loading({ title: t('ocr.processing'), promise })
     return promise
   }
 

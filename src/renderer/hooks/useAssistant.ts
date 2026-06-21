@@ -249,7 +249,7 @@ export function useAssistant(id: string | null | undefined) {
 
   const reportAssistantUpdateError = useCallback((message: string, error: unknown) => {
     logger.error(message, error as Error)
-    window.toast.error(formatErrorMessageWithPrefix(error, i18n.t('common.save_failed')))
+    window.toast?.error(formatErrorMessageWithPrefix(error, i18n.t('common.save_failed')))
   }, [])
 
   const updateAssistantSettings = useCallback(

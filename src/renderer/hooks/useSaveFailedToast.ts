@@ -17,7 +17,7 @@ export function useSaveFailedToast(messageKey = 'common.save_failed') {
   return useCallback(
     (error: unknown) => {
       if (mountedRef.current) {
-        window.toast.error(formatErrorMessageWithPrefix(error, t(messageKey)))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t(messageKey)))
       }
     },
     [messageKey, t]

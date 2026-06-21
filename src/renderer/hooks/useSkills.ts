@@ -18,7 +18,7 @@ function unwrapSkillResult<T>(result: SkillResult<T>): T {
 function reportSkillMutationError(action: string, error: unknown): string {
   const message = skillErrorMessage(error)
   logger.error(`Failed to ${action}`, { error: message })
-  window.toast.error(message)
+  window.toast?.error(message)
   return message
 }
 
