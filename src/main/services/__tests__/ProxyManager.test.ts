@@ -1,6 +1,7 @@
 import { defaultByPassRules } from '@shared/config/constant'
 import type { ProxyConfig } from 'electron'
 import { app, session } from 'electron'
+import https from 'https'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -11,6 +12,7 @@ import {
   getNodeProxyConfigFromEnvironment,
   getProxyEnvironment,
   getProxyProtocol,
+  NodeProxyController,
   ProxyBypassRuleMatcher,
   resolveHttpRequestUrlForProxyBypass
 } from '../proxy/nodeProxy'
@@ -411,5 +413,35 @@ describe('ProxyManager - bypass evaluation', () => {
       proxyRules: 'socks5://127.0.0.1:6153',
       proxyBypassRules: 'localhost'
     })
+  })
+})
+
+describe('NodeProxyController - request agents', () => {
+  it('does not let one request-specific TLS agent mutate later proxied requests', () => {
+    const calls: unknown[][] = []
+    const requestSpy = vi.spyOn(https, 'request').mockImplementation(((...args: unknown[]) => {
+      calls.push(args)
+      return { end: vi.fn(), on: vi.fn(), once: vi.fn() }
+    }) as never)
+    const controller = new NodeProxyController()
+
+    try {
+      controller.configure({ proxyRules: 'http://127.0.0.1:7890' })
+
+      https.request('https://api.example.com', { agent: new https.Agent({ rejectUnauthorized: false }) }, vi.fn())
+      https.request('https://api.example.org', {}, vi.fn())
+
+      const firstOptions = calls[0][1] as https.RequestOptions
+      const secondOptions = calls[1][1] as https.RequestOptions
+      const firstProxyAgent = firstOptions.agent as https.Agent
+      const secondProxyAgent = secondOptions.agent as https.Agent
+
+      expect(firstProxyAgent.options.rejectUnauthorized).toBe(false)
+      expect(secondProxyAgent.options.rejectUnauthorized).toBeUndefined()
+      expect(secondProxyAgent).not.toBe(firstProxyAgent)
+    } finally {
+      controller.configure({})
+      requestSpy.mockRestore()
+    }
   })
 })

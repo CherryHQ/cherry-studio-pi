@@ -601,6 +601,7 @@ class SelectiveDispatcher extends Dispatcher {
 export class NodeProxyController {
   private proxyDispatcher: Dispatcher | null = null
   private proxyAgent: ProxyAgent | null = null
+  private readonly requestTlsProxyAgents = new Map<string, ProxyAgent>()
   private currentConfigKey: string | null = null
   private readonly proxyBypassRuleMatcher = new ProxyBypassRuleMatcher()
 
@@ -677,22 +678,54 @@ export class NodeProxyController {
       https.get = this.originalHttpsGet
       https.request = this.originalHttpsRequest
 
-      try {
-        this.proxyAgent?.destroy()
-      } catch (error) {
-        this.logger?.error?.('Failed to destroy proxy agent:', error as Error)
-      }
-
-      this.proxyAgent = null
+      this.destroyHttpProxyAgents()
       return
     }
 
+    this.destroyHttpProxyAgents()
     const agent = new ProxyAgent()
     this.proxyAgent = agent
     http.get = this.bindHttpMethod(this.originalHttpGet, agent, 'http:')
     http.request = this.bindHttpMethod(this.originalHttpRequest, agent, 'http:')
     https.get = this.bindHttpMethod(this.originalHttpsGet, agent, 'https:')
     https.request = this.bindHttpMethod(this.originalHttpsRequest, agent, 'https:')
+  }
+
+  private destroyHttpProxyAgents() {
+    const agents = [this.proxyAgent, ...this.requestTlsProxyAgents.values()].filter((agent): agent is ProxyAgent =>
+      Boolean(agent)
+    )
+    this.proxyAgent = null
+    this.requestTlsProxyAgents.clear()
+
+    for (const agent of agents) {
+      try {
+        agent.destroy()
+      } catch (error) {
+        this.logger?.error?.('Failed to destroy proxy agent:', error as Error)
+      }
+    }
+  }
+
+  private getRequestTlsProxyAgent(rejectUnauthorized: boolean): ProxyAgent {
+    const key = `rejectUnauthorized:${rejectUnauthorized}`
+    const cached = this.requestTlsProxyAgents.get(key)
+    if (cached) return cached
+
+    const agent = new ProxyAgent({ rejectUnauthorized })
+    this.requestTlsProxyAgents.set(key, agent)
+    return agent
+  }
+
+  private resolveProxyAgentForRequest(
+    defaultProxyAgent: http.Agent | https.Agent,
+    requestAgent: http.RequestOptions['agent']
+  ): http.Agent | https.Agent {
+    if (requestAgent instanceof https.Agent && typeof requestAgent.options.rejectUnauthorized === 'boolean') {
+      return this.getRequestTlsProxyAgent(requestAgent.options.rejectUnauthorized)
+    }
+
+    return defaultProxyAgent
   }
 
   private bindHttpMethod<T extends HttpRequestMethod>(
@@ -733,11 +766,7 @@ export class NodeProxyController {
         return callOriginalMethod(options, callback)
       }
 
-      if (options.agent instanceof https.Agent) {
-        ;(agent as https.Agent).options.rejectUnauthorized = options.agent.options.rejectUnauthorized
-      }
-
-      options.agent = agent
+      options.agent = this.resolveProxyAgentForRequest(agent, options.agent)
       if (url) {
         return callOriginalMethod(url, options, callback)
       }
