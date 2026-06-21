@@ -66,7 +66,7 @@ const TranslateSettings: FC<Props> = ({ visible, onClose }) => {
         await persistPromise
       } catch (error) {
         logger.error(`Failed to persist ${actionName}`, error as Error)
-        window.toast.error(t('common.save_failed'))
+        window.toast?.error(t('common.save_failed'))
       }
     },
     [t]
@@ -75,7 +75,7 @@ const TranslateSettings: FC<Props> = ({ visible, onClose }) => {
   const updateBidirectionalPair = useCallback(
     (next: TranslateBidirectionalPair) => {
       if (next[0] === next[1]) {
-        window.toast.warning(t('translate.language.same'))
+        window.toast?.warning(t('translate.language.same'))
         return
       }
       void safePersist(setBidirectionalPair(next), 'translate bidirectional pair')
@@ -241,7 +241,7 @@ const TranslatePromptField: FC = () => {
       await persistPromise
     } catch (error) {
       logger.error(`Failed to persist ${actionName}`, error as Error)
-      window.toast.error(saveFailedMessageRef.current || 'Failed to save')
+      window.toast?.error(saveFailedMessageRef.current || 'Failed to save')
     }
   }, [])
 

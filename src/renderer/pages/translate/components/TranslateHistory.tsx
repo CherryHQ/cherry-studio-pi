@@ -112,7 +112,7 @@ const TranslateHistoryList: FC<Props> = ({ isOpen, onHistoryItemClick, onClose }
       try {
         await navigator.clipboard.writeText(value)
         if (mountedRef.current) {
-          window.toast.success(t('translate.copied'))
+          window.toast?.success(t('translate.copied'))
         }
       } catch (error) {
         logger.error('Failed to copy translate history text', error as Error)

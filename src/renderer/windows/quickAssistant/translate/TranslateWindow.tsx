@@ -44,10 +44,10 @@ const Translate: FC<Props> = ({ text }) => {
     if (!result) return
     try {
       await navigator.clipboard.writeText(result)
-      window.toast.success(t('message.copy.success'))
+      window.toast?.success(t('message.copy.success'))
     } catch (error) {
       logger.error('Failed to copy quick assistant translation result', error as Error)
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
     }
   }, [result, t])
 
