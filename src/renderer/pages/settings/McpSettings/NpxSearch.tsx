@@ -3,6 +3,7 @@ import logo from '@renderer/assets/images/cherry-text-logo.svg'
 import { useMcpServers } from '@renderer/hooks/useMcpServer'
 import type { McpServer } from '@renderer/types'
 import { getMcpConfigSampleFromReadme } from '@renderer/utils'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { Check, Plus } from 'lucide-react'
 import { npxFinder } from 'npx-scope-finder'
 import { type FC, useCallback, useEffect, useRef, useState } from 'react'
@@ -103,11 +104,7 @@ const NpxSearch: FC = () => {
 
         setSearchResults([])
         _searchResults = []
-        if (error instanceof Error) {
-          window.toast?.error(`${t('settings.mcp.npx_list.search_error')}: ${error.message}`)
-        } else {
-          window.toast?.error(t('settings.mcp.npx_list.search_error'))
-        }
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('settings.mcp.npx_list.search_error')))
       } finally {
         if (mountedRef.current && requestSeq === searchRequestSeqRef.current) {
           setSearchLoading(false)
@@ -153,9 +150,9 @@ const NpxSearch: FC = () => {
         if (mountedRef.current) {
           window.toast?.success(t('settings.mcp.addSuccess'))
         }
-      } catch {
+      } catch (error) {
         if (mountedRef.current) {
-          window.toast?.error(t('settings.mcp.addError'))
+          window.toast?.error(formatErrorMessageWithPrefix(error, t('settings.mcp.addError')))
         }
       } finally {
         setPackageAdding(packageName, false)

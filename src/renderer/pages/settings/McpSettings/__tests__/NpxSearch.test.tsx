@@ -118,6 +118,28 @@ describe('NpxSearch', () => {
     expect(window.toast.error).not.toHaveBeenCalled()
   })
 
+  it('shows nested search failure details', async () => {
+    mocks.npxFinder.mockRejectedValueOnce({ error: { message: 'registry unavailable' } })
+
+    render(<NpxSearch />)
+
+    await waitFor(() => {
+      expect(window.toast.error).toHaveBeenCalledWith('settings.mcp.npx_list.search_error: registry unavailable')
+    })
+  })
+
+  it('shows nested package add failure details while mounted', async () => {
+    mocks.addMcpServer.mockRejectedValueOnce({ error: { message: 'invalid command args' } })
+
+    render(<NpxSearch />)
+    await screen.findByText('demo-server')
+    fireEvent.click(screen.getByRole('button'))
+
+    await waitFor(() => {
+      expect(window.toast.error).toHaveBeenCalledWith('settings.mcp.addError: invalid command args')
+    })
+  })
+
   it('ignores failed package add notifications after unmount', async () => {
     const addResult = deferred<void>()
     mocks.addMcpServer.mockReturnValue(addResult.promise)
