@@ -1,5 +1,6 @@
 import { useInvalidateCache, useQuery } from '@data/hooks/useDataApi'
 import { loggerService } from '@logger'
+import { getErrorMessage } from '@renderer/utils/error'
 import { KNOWLEDGE_ITEMS_MAX_LIMIT } from '@shared/data/api/schemas/knowledges'
 import type { KnowledgeAddItemInput, KnowledgeItem, KnowledgeItemStatus } from '@shared/data/types/knowledge'
 import { type MutableRefObject, useCallback, useEffect, useRef, useState } from 'react'
@@ -19,7 +20,7 @@ const normalizeKnowledgeError = (error: unknown): Error => {
     return error
   }
 
-  return new Error(String(error))
+  return new Error(getErrorMessage(error), { cause: error })
 }
 
 const addLogger = loggerService.withContext('useAddKnowledgeItems')

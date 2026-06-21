@@ -99,6 +99,28 @@ describe('useAddKnowledgeItems', () => {
     })
   })
 
+  it('preserves nested orchestration rejection details', async () => {
+    mockAddItems.mockRejectedValueOnce({ error: { message: 'knowledge source bridge failed' } })
+
+    const { result } = renderHook(() => useAddKnowledgeItems('base-1'))
+
+    await act(async () => {
+      await expect(
+        result.current.submit([
+          {
+            type: 'url' as const,
+            data: {
+              source: 'https://example.com/article',
+              url: 'https://example.com/article'
+            }
+          }
+        ])
+      ).rejects.toThrow('knowledge source bridge failed')
+    })
+
+    expect(result.current.error?.message).toBe('knowledge source bridge failed')
+  })
+
   it('preserves the submit rejection when post-failure refresh also fails', async () => {
     const submitError = new Error('create failed')
     const invalidateError = new Error('refresh failed')
