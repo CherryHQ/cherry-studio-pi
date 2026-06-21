@@ -229,7 +229,7 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
     (overrides?: BuildPatchOverrides) => {
       void handleUpdateModel(buildPatch(overrides)).catch(() => {
         if (isDrawerActive()) {
-          window.toast.error(t('common.error'))
+          window.toast?.error(t('common.error'))
         }
       })
     },
@@ -276,7 +276,7 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
       }
     } catch {
       if (isDrawerActive()) {
-        window.toast.error(t('settings.models.manage.operation_failed'))
+        window.toast?.error(t('settings.models.manage.operation_failed'))
       }
     } finally {
       savingRef.current = false
@@ -322,7 +322,7 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
         try {
           await deleteModel(model.providerId ?? providerId, modelId)
           if (isDrawerActive()) {
-            window.toast.success(t('common.delete_success'))
+            window.toast?.success(t('common.delete_success'))
             onClose()
           }
         } finally {
@@ -390,11 +390,11 @@ export default function EditModelDrawer({ providerId, open, model: modelProp, on
                     try {
                       await navigator.clipboard.writeText(apiModelId)
                       if (isDrawerActive()) {
-                        window.toast.success(t('message.copied'))
+                        window.toast?.success(t('message.copied'))
                       }
                     } catch (error) {
                       if (isDrawerActive()) {
-                        window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+                        window.toast?.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
                       }
                     }
                   }}>

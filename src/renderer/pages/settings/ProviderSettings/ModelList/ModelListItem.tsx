@@ -48,7 +48,7 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ ref, model, disabled, onE
         await onToggleEnabled(model, enabled)
       } catch {
         if (mountedRef.current) {
-          window.toast.error(t('settings.models.manage.operation_failed'))
+          window.toast?.error(t('settings.models.manage.operation_failed'))
         }
       } finally {
         togglingRef.current = false

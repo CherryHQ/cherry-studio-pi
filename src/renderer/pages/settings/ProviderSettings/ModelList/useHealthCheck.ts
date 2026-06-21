@@ -80,7 +80,7 @@ export const useHealthCheck = (providerId: string) => {
       }))
 
       if (isEmpty(modelCheckEntries)) {
-        window.toast.error({
+        window.toast?.error({
           timeout: 5000,
           title: i18n.t('settings.provider.no_models_for_check')
         })
@@ -157,7 +157,7 @@ export const useHealthCheck = (providerId: string) => {
 
         if (runIdRef.current === runId) {
           logger.error('Model health check run failed', { providerId: provider.id, runId, error })
-          window.toast.error(i18n.t('settings.models.check.failed_to_start'))
+          window.toast?.error(i18n.t('settings.models.check.failed_to_start'))
         }
       } finally {
         if (runIdRef.current === runId) {

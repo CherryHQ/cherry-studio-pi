@@ -78,7 +78,7 @@ export default function AddModelFormPanel({
       }
 
       if (!enabled) {
-        window.toast.error(t('settings.models.add.provider_enable_failed'))
+        window.toast?.error(t('settings.models.add.provider_enable_failed'))
         return false
       }
 
@@ -118,7 +118,7 @@ export default function AddModelFormPanel({
       const modelId = values.modelId.trim()
 
       if (models.some((model) => model.id.endsWith(`::${modelId}`))) {
-        window.toast.error(t('error.model.exists'))
+        window.toast?.error(t('error.model.exists'))
         return false
       }
 
@@ -196,7 +196,7 @@ export default function AddModelFormPanel({
       }
     } catch {
       if (mountedRef.current) {
-        window.toast.error(t('settings.models.manage.operation_failed'))
+        window.toast?.error(t('settings.models.manage.operation_failed'))
       }
     } finally {
       submittingRef.current = false

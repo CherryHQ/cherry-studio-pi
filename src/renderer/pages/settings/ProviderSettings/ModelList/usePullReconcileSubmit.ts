@@ -66,7 +66,7 @@ export function usePullReconcileSubmit({ providerId, onApplyCommitted }: UsePull
           return
         }
 
-        window.toast.success(
+        window.toast?.success(
           t('settings.models.manage.sync_apply_result', {
             added: toAdd.length,
             deprecated: 0,
@@ -80,7 +80,7 @@ export function usePullReconcileSubmit({ providerId, onApplyCommitted }: UsePull
         }
 
         logger.error('Failed to apply pull reconcile selection', { providerId, error })
-        window.toast.error(t('settings.models.manage.sync_pull_failed'))
+        window.toast?.error(t('settings.models.manage.sync_pull_failed'))
       }
     },
     [onApplyCommitted, provider, providerId, reconcileTrigger, t, updateProvider]

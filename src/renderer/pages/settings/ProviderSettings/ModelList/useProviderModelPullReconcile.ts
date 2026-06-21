@@ -37,7 +37,7 @@ export function useProviderModelPullReconcile(providerId: string) {
         // Up to date: no diff to apply, but the existing local models are valid
         // for the new key/host — enable the provider if it is currently disabled.
         await enableProviderWhenModelsAvailable(provider, updateProvider, models.length, 'pull_reconcile_up_to_date')
-        window.toast.success(
+        window.toast?.success(
           `${t('settings.models.manage.fetch_up_to_date')} ${t('settings.models.manage.fetch_up_to_date_hint')}`
         )
         pullPreview.reset()

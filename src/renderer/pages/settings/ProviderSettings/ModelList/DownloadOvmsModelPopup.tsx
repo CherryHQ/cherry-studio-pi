@@ -273,7 +273,7 @@ const PopupContainer: React.FC<Props> = ({ title, resolve }) => {
           return
         }
         stopFakeProgress(true) // Complete the progress bar
-        window.toast.success(t('ovms.download.success_desc', { modelName: modelName, modelId: modelId }))
+        window.toast?.success(t('ovms.download.success_desc', { modelName: modelName, modelId: modelId }))
         setOpen(false)
         resolve({})
       } else {

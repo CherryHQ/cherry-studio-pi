@@ -94,7 +94,7 @@ const ModelListGroup: React.FC<ModelListGroupProps> = ({
         }
 
         logger.error('Failed to toggle provider model group', { groupName, enabled, error })
-        window.toast.error(t('settings.models.manage.operation_failed'))
+        window.toast?.error(t('settings.models.manage.operation_failed'))
       })
     },
     [canToggleGroupModels, groupModels, groupName, onToggleModels, t]

@@ -92,7 +92,7 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
     })
 
     if (modelsToAdd.length === 0) {
-      window.toast.error(t('error.model.exists'))
+      window.toast?.error(t('error.model.exists'))
       return false
     }
 
@@ -123,7 +123,7 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
       }
 
       if (!enabled) {
-        window.toast.error(t('settings.models.add.provider_enable_failed'))
+        window.toast?.error(t('settings.models.add.provider_enable_failed'))
         return false
       }
     }
@@ -144,7 +144,7 @@ const PopupContainer: React.FC<Props> = ({ title, provider, resolve, batchModels
     } catch (error) {
       logger.error('Failed to batch add models', { providerId: provider.id, error })
       if (mountedRef.current) {
-        window.toast.error(t('settings.models.manage.sync_pull_failed'))
+        window.toast?.error(t('settings.models.manage.sync_pull_failed'))
       }
     } finally {
       submittingRef.current = false
