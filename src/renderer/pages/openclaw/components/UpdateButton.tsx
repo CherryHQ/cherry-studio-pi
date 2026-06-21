@@ -1,4 +1,5 @@
 import { loggerService } from '@renderer/services/LoggerService'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { ArrowUpCircle, Loader2 } from 'lucide-react'
 import type { FC } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -71,7 +72,7 @@ const UpdateButton: FC<UpdateButtonProps> = ({ onUpdateComplete, onUpdatingChang
     } catch (err) {
       logger.error('Failed to update OpenClaw', err as Error)
       if (mountedRef.current) {
-        window.toast?.error(err instanceof Error ? err.message : String(err))
+        window.toast?.error(formatErrorMessageWithPrefix(err, t('openclaw.update.failed')))
       }
     } finally {
       if (mountedRef.current) {

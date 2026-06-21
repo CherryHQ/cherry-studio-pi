@@ -124,4 +124,26 @@ describe('UpdateButton', () => {
     await waitFor(() => expect(onUpdateComplete).toHaveBeenCalledTimes(1))
     expect(onUpdatingChange).toHaveBeenLastCalledWith(false)
   })
+
+  it('preserves nested update failure details', async () => {
+    vi.mocked(window.api.openclaw.performUpdate).mockRejectedValueOnce({
+      error: { message: 'update archive missing' }
+    })
+
+    render(<UpdateButton />)
+
+    await screen.findByText('v1.1.0')
+    fireEvent.click(screen.getByText('v1.1.0'))
+
+    const onOk = confirmMock.mock.calls[0]?.[0]?.onOk as (() => void) | undefined
+    expect(onOk).toBeTypeOf('function')
+
+    await act(async () => {
+      onOk?.()
+    })
+
+    await waitFor(() => {
+      expect(errorToast).toHaveBeenCalledWith('openclaw.update.failed: update archive missing')
+    })
+  })
 })
