@@ -120,6 +120,24 @@ describe('SelectionContextMenu', () => {
     expect(mocks.toastSuccess).toHaveBeenCalledWith('message.copied')
   })
 
+  it('copies the selected text when toast is unavailable', async () => {
+    mocks.clipboardWriteText.mockResolvedValueOnce(undefined)
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: undefined
+    })
+
+    render(
+      <SelectionContextMenu>
+        <span>content</span>
+      </SelectionContextMenu>
+    )
+    await openMenu()
+    await userEvent.click(screen.getByRole('button', { name: 'common.copy' }))
+
+    expect(mocks.clipboardWriteText).toHaveBeenCalledWith('selected text')
+  })
+
   it('shows a copy failure while mounted', async () => {
     mocks.clipboardWriteText.mockRejectedValueOnce(new Error('denied'))
 

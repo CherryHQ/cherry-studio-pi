@@ -91,7 +91,7 @@ const SelectionContextMenu: React.FC<SelectionContextMenuProps> = ({ children })
       .writeText(selectedText)
       .then(() => {
         if (mountedRef.current) {
-          window.toast.success(t('message.copied'))
+          window.toast?.success(t('message.copied'))
         }
       })
       .catch((error) => {
