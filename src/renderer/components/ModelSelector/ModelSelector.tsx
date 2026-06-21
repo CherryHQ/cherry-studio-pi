@@ -37,6 +37,7 @@ import {
   useRef,
   useState
 } from 'react'
+import { flushSync } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 
 import { matchesModelTag, MODEL_SELECTOR_TAGS } from './filters'
@@ -374,6 +375,24 @@ export function ModelSelector(props: ModelSelectorProps) {
     applyOpenChange(false)
   }, [applyOpenChange])
 
+  const closeAllSelectors = useCallback(() => {
+    requestCloseResourceSelectors(selectorId)
+    forceClose()
+  }, [forceClose, selectorId])
+
+  const closeBeforeSurfaceChange = useCallback(
+    (action: () => void) => {
+      // eslint-disable-next-line @eslint-react/dom/no-flush-sync -- match ResourceSelectorShell: tear down selector portals before the following route/modal change can leave them stranded.
+      flushSync(closeAllSelectors)
+
+      action()
+
+      queueMicrotask(closeAllSelectors)
+      requestAnimationFrame(closeAllSelectors)
+    },
+    [closeAllSelectors]
+  )
+
   const handlePopoverOpenChange = useCallback(
     (nextOpen: boolean) => {
       if (nextOpen) {
@@ -541,24 +560,24 @@ export function ModelSelector(props: ModelSelectorProps) {
         return
       }
 
-      emitSelection([item.modelId])
-      forceClose()
+      closeBeforeSurfaceChange(() => emitSelection([item.modelId]))
     },
-    [emitSelection, forceClose, multiple, multiSelectMode, rawSelectedModelIds]
+    [closeBeforeSurfaceChange, emitSelection, multiple, multiSelectMode, rawSelectedModelIds]
   )
 
   const handleClose = useCallback(() => {
-    forceClose()
-  }, [forceClose])
+    closeAllSelectors()
+  }, [closeAllSelectors])
 
   const handleNavigateToProviderSettings = useCallback(
     (providerId: string) => {
-      forceClose()
-      navigate({ to: '/settings/provider', search: { id: providerId } }).catch((error) => {
-        logger.error('Failed to navigate to provider settings', error as Error, { providerId })
+      closeBeforeSurfaceChange(() => {
+        navigate({ to: '/settings/provider', search: { id: providerId } }).catch((error) => {
+          logger.error('Failed to navigate to provider settings', error as Error, { providerId })
+        })
       })
     },
-    [forceClose, navigate]
+    [closeBeforeSurfaceChange, navigate]
   )
 
   const handleTogglePin = useCallback(

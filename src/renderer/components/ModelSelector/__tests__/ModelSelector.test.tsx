@@ -402,30 +402,45 @@ describe('ModelSelector', () => {
   it('navigates from provider settings without selecting a model', async () => {
     mockUseModelSelectorData.mockReturnValue(makeData())
     const onSelect = vi.fn()
+    const closeSelectors = vi.fn()
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeSelectors)
 
-    render(<ModelSelector open multiple={false} trigger={<button type="button">open</button>} onSelect={onSelect} />)
+    try {
+      render(<ModelSelector open multiple={false} trigger={<button type="button">open</button>} onSelect={onSelect} />)
 
-    fireEvent.click(screen.getByLabelText('navigate.provider_settings'))
+      fireEvent.click(screen.getByLabelText('navigate.provider_settings'))
 
-    await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith({ to: '/settings/provider', search: { id: 'openai' } })
-    )
-    expect(onSelect).not.toHaveBeenCalled()
+      await waitFor(() =>
+        expect(mockNavigate).toHaveBeenCalledWith({ to: '/settings/provider', search: { id: 'openai' } })
+      )
+      expect(closeSelectors.mock.calls.length).toBeGreaterThanOrEqual(1)
+      expect(onSelect).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeSelectors)
+    }
   })
 
   it('closes the unmanaged selector immediately after selecting a model', async () => {
     mockUseModelSelectorData.mockReturnValue(makeData())
     const onSelect = vi.fn()
+    const closeSelectors = vi.fn()
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeSelectors)
 
-    render(<ModelSelector multiple={false} trigger={<button type="button">open</button>} onSelect={onSelect} />)
+    try {
+      render(<ModelSelector multiple={false} trigger={<button type="button">open</button>} onSelect={onSelect} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'open' }))
-    expect(screen.getByTestId('model-selector-content')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'open' }))
+      expect(screen.getByTestId('model-selector-content')).toBeInTheDocument()
+      expect(closeSelectors).toHaveBeenCalledTimes(1)
 
-    fireEvent.click(screen.getByRole('option', { name: /gpt-4/i }))
+      fireEvent.click(screen.getByRole('option', { name: /gpt-4/i }))
 
-    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'openai::gpt-4' }))
-    expect(screen.queryByTestId('model-selector-content')).not.toBeInTheDocument()
+      expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'openai::gpt-4' }))
+      expect(closeSelectors.mock.calls.length).toBeGreaterThanOrEqual(2)
+      expect(screen.queryByTestId('model-selector-content')).not.toBeInTheDocument()
+    } finally {
+      window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeSelectors)
+    }
   })
 
   it('uses listVisibleCount to size the visible model list', () => {
