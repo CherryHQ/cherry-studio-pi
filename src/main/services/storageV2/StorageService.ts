@@ -369,6 +369,14 @@ function getProviderApiKeyEntries(provider: Provider): ProviderApiKeyEntry[] {
   })
 }
 
+function providerHasApiKeyMetadata(provider: Provider): boolean {
+  const apiKeys = (provider as unknown as { apiKeys?: unknown }).apiKeys
+  return (
+    Array.isArray(apiKeys) &&
+    apiKeys.some((entry) => isRecord(entry) && typeof entry.id === 'string' && entry.id.trim())
+  )
+}
+
 function selectProviderLegacyApiKey(apiKeys: ProviderApiKeyEntry[]) {
   return apiKeys.find((entry) => entry.isEnabled)?.key ?? apiKeys[0]?.key ?? ''
 }
@@ -994,7 +1002,9 @@ export class StorageV2Service {
       ])
 
       await this.upsertProviderModels(provider as never, models, index)
-      await this.upsertProviderApiKeys(provider.id, apiKeys)
+      if (apiKeys.length > 0 || !providerHasApiKeyMetadata(provider as never)) {
+        await this.upsertProviderApiKeys(provider.id, apiKeys)
+      }
       await this.upsertProviderAuthConfig(provider.id, authConfig)
     }
 

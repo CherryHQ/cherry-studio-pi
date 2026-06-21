@@ -877,6 +877,35 @@ describe('StorageV2Service', () => {
     })
   })
 
+  it('does not clear Storage v2 API key refs when runtime key values are temporarily unavailable', async () => {
+    const provider = {
+      id: 'provider-1',
+      name: 'OpenAI',
+      presetProviderId: 'openai',
+      isEnabled: true,
+      apiKeys: [{ id: 'key-a', isEnabled: true }],
+      authType: 'api-key',
+      apiFeatures: {},
+      settings: {}
+    } as unknown as Provider
+    const models = [{ id: 'gpt-4o', providerId: 'provider-1', name: 'GPT-4o' }]
+
+    mocks.providerService.list.mockResolvedValue([provider])
+    mocks.providerService.getApiKeys.mockResolvedValue([])
+    mocks.providerService.getAuthConfig.mockResolvedValue(null)
+    mocks.modelService.list.mockResolvedValue(models)
+
+    await expect(new StorageV2Service().flushProviderRuntimeMirrors()).resolves.toEqual({ mirroredCount: 1 })
+
+    expect(mocks.providerRepository.upsert).toHaveBeenCalledWith({ ...provider, models }, 0, undefined, {
+      preserveExistingCredential: true,
+      preserveSortOrder: false
+    })
+    expect(mocks.providerRepository.upsertCredentials).not.toHaveBeenCalledWith('provider-1', undefined, {
+      clearCredentialKinds: ['apiKey', 'apiKeys']
+    })
+  })
+
   it('projects synced Storage v2 providers, credentials, and models back to the Data API runtime', async () => {
     const apiKeysRef = 'storage-v2://secret/provider/openai/apiKeys'
     const authConfigRef = 'storage-v2://secret/provider/openai/authConfig'
