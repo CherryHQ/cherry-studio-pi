@@ -8,6 +8,7 @@ import { AgentChatInner } from '../AgentChat'
 
 const mocks = vi.hoisted(() => ({
   activeExecutions: [],
+  inputbarProps: [] as Array<{ isStreaming: boolean }>,
   loadOlder: vi.fn(),
   messages: [] as CherryUIMessage[],
   pending: false,
@@ -82,7 +83,10 @@ vi.mock('../components/AgentChatNavbar', () => ({
 }))
 
 vi.mock('../components/AgentSessionInputbar', () => ({
-  default: () => null
+  default: (props: { isStreaming: boolean }) => {
+    mocks.inputbarProps.push({ isStreaming: props.isStreaming })
+    return null
+  }
 }))
 
 vi.mock('../components/AgentSessionMessages', () => ({
@@ -130,6 +134,7 @@ function renderAgentChatInner() {
 describe('AgentChatInner', () => {
   beforeEach(() => {
     mocks.loadOlder.mockReset()
+    mocks.inputbarProps = []
     mocks.refresh.mockReset()
     mocks.sendMessage.mockReset()
     mocks.setMessages.mockReset()
@@ -183,5 +188,16 @@ describe('AgentChatInner', () => {
     renderAgentChatInner()
 
     expect(mocks.setMessages).not.toHaveBeenCalled()
+  })
+
+  it('keeps the inputbar in streaming mode while useChat has submitted but shared status has not caught up', () => {
+    mocks.pending = false
+    mocks.status = 'submitted'
+    mocks.messages = [createMessage('message-1')]
+
+    renderAgentChatInner()
+
+    expect(mocks.setMessages).not.toHaveBeenCalled()
+    expect(mocks.inputbarProps.at(-1)).toEqual({ isStreaming: true })
   })
 })

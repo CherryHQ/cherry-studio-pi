@@ -146,11 +146,12 @@ export const AgentChatInner = ({
   const { setMessages, status } = chat
   const { models } = useModels()
   const { isPending } = useTopicStreamStatus(sessionTopicId)
+  const isAgentBusy = isPending || status === 'streaming' || status === 'submitted'
 
   useEffect(() => {
-    if (isPending || status === 'streaming' || status === 'submitted') return
+    if (isAgentBusy) return
     setMessages(uiMessages)
-  }, [isPending, uiMessages, status, setMessages])
+  }, [isAgentBusy, uiMessages, setMessages])
 
   // ── Rendering pipeline ────────────────────────────────────────────
   const snapshot = useMemo<ModelSnapshot | undefined>(() => {
@@ -217,7 +218,7 @@ export const AgentChatInner = ({
             sessionId={sessionId}
             sendMessage={chat.sendMessage}
             stop={chat.stop}
-            isStreaming={isPending}
+            isStreaming={isAgentBusy}
           />
         </div>
       </QuickPanelProvider>
