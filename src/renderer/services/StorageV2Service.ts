@@ -520,6 +520,11 @@ export function deleteStorageV2File(fileId: string): Promise<{ deleted: boolean 
   return window.api.storageV2.deleteFile(fileId)
 }
 
+export function installStorageV2RuntimeMirrors() {
+  storageV2DexieSettingsMirrorService.install()
+  storageV2DexieTableMirrorService.install()
+}
+
 export async function flushStorageV2RuntimeMirrors() {
   await storageV2MirrorService.flushStrict()
   await flushStorageV2LocalStorageMirrorStrict()

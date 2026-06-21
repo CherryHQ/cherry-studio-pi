@@ -29,6 +29,8 @@ class StorageV2DexieSettingsMirrorService {
   private timer: ReturnType<typeof setTimeout> | null = null
   private pendingSettingIds = new Set<string>()
   private pendingDeletedIds = new Set<string>()
+  private suppressedHookSettingIds = new Set<string>()
+  private suppressedHookDeleteIds = new Set<string>()
   private inflight: Promise<void> | null = null
   private needsFollowUp = false
   private suspended = false
@@ -45,17 +47,17 @@ class StorageV2DexieSettingsMirrorService {
 
     db.settings.hook('creating', (primaryKey, obj, transaction) => {
       const id = typeof obj?.id === 'string' ? obj.id : typeof primaryKey === 'string' ? primaryKey : undefined
-      this.afterCommit(transaction, () => this.scheduleSetting(id))
+      this.afterCommit(transaction, () => this.scheduleSettingFromHook(id))
     })
 
     db.settings.hook('updating', (_mods, primaryKey, _obj, transaction) => {
       const id = typeof primaryKey === 'string' ? primaryKey : undefined
-      this.afterCommit(transaction, () => this.scheduleSetting(id))
+      this.afterCommit(transaction, () => this.scheduleSettingFromHook(id))
     })
 
     db.settings.hook('deleting', (primaryKey, _obj, transaction) => {
       const id = typeof primaryKey === 'string' ? primaryKey : undefined
-      this.afterCommit(transaction, () => this.scheduleDelete(id))
+      this.afterCommit(transaction, () => this.scheduleDeleteFromHook(id))
     })
   }
 
@@ -74,8 +76,38 @@ class StorageV2DexieSettingsMirrorService {
   }
 
   async putSettingAndFlush<T>(setting: DexieSettingRecord<T>, options: { strict?: boolean } = {}) {
-    await db.settings.put(setting)
+    this.suppressedHookSettingIds.add(setting.id)
+    try {
+      await db.settings.put(setting)
+    } catch (error) {
+      this.suppressedHookSettingIds.delete(setting.id)
+      throw error
+    } finally {
+      this.clearHookSuppressionSoon(this.suppressedHookSettingIds, setting.id)
+    }
+
     this.scheduleSetting(setting.id, 0)
+
+    if (options.strict) {
+      await this.flushStrict()
+      return
+    }
+
+    await this.flush()
+  }
+
+  async deleteSettingAndFlush(settingId: string, options: { strict?: boolean } = {}) {
+    this.suppressedHookDeleteIds.add(settingId)
+    try {
+      await db.settings.delete(settingId)
+    } catch (error) {
+      this.suppressedHookDeleteIds.delete(settingId)
+      throw error
+    } finally {
+      this.clearHookSuppressionSoon(this.suppressedHookDeleteIds, settingId)
+    }
+
+    this.scheduleDelete(settingId, 0)
 
     if (options.strict) {
       await this.flushStrict()
@@ -168,6 +200,25 @@ class StorageV2DexieSettingsMirrorService {
     }
 
     const timer = setTimeout(callback, 0)
+    unrefTimer(timer)
+  }
+
+  private scheduleSettingFromHook(settingId: string | undefined) {
+    if (!settingId) return
+    if (this.suppressedHookSettingIds.delete(settingId)) return
+    this.scheduleSetting(settingId)
+  }
+
+  private scheduleDeleteFromHook(settingId: string | undefined) {
+    if (!settingId) return
+    if (this.suppressedHookDeleteIds.delete(settingId)) return
+    this.scheduleDelete(settingId)
+  }
+
+  private clearHookSuppressionSoon(suppressedIds: Set<string>, settingId: string) {
+    const timer = setTimeout(() => {
+      suppressedIds.delete(settingId)
+    }, 0)
     unrefTimer(timer)
   }
 

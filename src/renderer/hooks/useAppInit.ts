@@ -13,6 +13,7 @@ import {
   stopDataSyncAutoSync,
   stopDataSyncExternalSyncListener
 } from '@renderer/services/DataSyncService'
+import { installStorageV2RuntimeMirrors } from '@renderer/services/StorageV2Service'
 import { useAppSelector } from '@renderer/store'
 import { defaultLanguage } from '@shared/config/constant'
 import { useLiveQuery } from 'dexie-react-hooks'
@@ -77,6 +78,10 @@ export function useAppInit() {
   useAppUpdateHandler()
   useFullScreenNotice()
   useStorageMonitorNotification()
+
+  useEffect(() => {
+    installStorageV2RuntimeMirrors()
+  }, [])
 
   useEffect(() => {
     savedAvatar?.value && cacheService.set('app.user.avatar', savedAvatar.value)

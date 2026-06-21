@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   settingsAnyOf: vi.fn(),
+  settingsDelete: vi.fn(),
   settingsHook: vi.fn(),
   settingsPut: vi.fn(),
   settingsWhere: vi.fn()
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@renderer/databases', () => ({
   default: {
     settings: {
+      delete: mocks.settingsDelete,
       hook: mocks.settingsHook,
       put: mocks.settingsPut,
       where: mocks.settingsWhere
@@ -38,6 +40,7 @@ describe('StorageV2DexieSettingsMirrorService', () => {
       anyOf: mocks.settingsAnyOf
     })
     mocks.settingsPut.mockResolvedValue(undefined)
+    mocks.settingsDelete.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -96,6 +99,65 @@ describe('StorageV2DexieSettingsMirrorService', () => {
 
     expect(mocks.settingsPut).toHaveBeenCalledWith({ id: 'translate:target:language', value: 'ja-JP' })
     expect(setSetting).toHaveBeenCalledWith('dexie.settings.translate:target:language', 'ja-JP', 'dexie-settings')
+  })
+
+  it('does not mirror a putSettingAndFlush write again when the Dexie hook fires', async () => {
+    const setSetting = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          setSetting
+        }
+      }
+    })
+    mocks.settingsAnyOf.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          id: 'image://avatar',
+          value: 'avatar-data'
+        }
+      ])
+    })
+
+    const { storageV2DexieSettingsMirrorService } = await import('../StorageV2DexieSettingsMirrorService')
+    storageV2DexieSettingsMirrorService.install()
+    const creatingHook = mocks.settingsHook.mock.calls.find(([eventName]) => eventName === 'creating')?.[1]
+    mocks.settingsPut.mockImplementation(async (setting) => {
+      creatingHook?.(setting.id, setting)
+    })
+
+    await storageV2DexieSettingsMirrorService.putSettingAndFlush({ id: 'image://avatar', value: 'avatar-data' })
+    await vi.runOnlyPendingTimersAsync()
+
+    expect(setSetting).toHaveBeenCalledTimes(1)
+    expect(setSetting).toHaveBeenCalledWith('dexie.settings.image://avatar', 'avatar-data', 'dexie-settings')
+  })
+
+  it('deletes a Dexie setting and mirrors one tombstone when the Dexie hook fires', async () => {
+    const setSetting = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        storageV2: {
+          setSetting
+        }
+      }
+    })
+
+    const { storageV2DexieSettingsMirrorService } = await import('../StorageV2DexieSettingsMirrorService')
+    storageV2DexieSettingsMirrorService.install()
+    const deletingHook = mocks.settingsHook.mock.calls.find(([eventName]) => eventName === 'deleting')?.[1]
+    mocks.settingsDelete.mockImplementation(async (settingId) => {
+      deletingHook?.(settingId)
+    })
+
+    await storageV2DexieSettingsMirrorService.deleteSettingAndFlush('image://avatar', { strict: true })
+    await vi.runOnlyPendingTimersAsync()
+
+    expect(mocks.settingsDelete).toHaveBeenCalledWith('image://avatar')
+    expect(setSetting).toHaveBeenCalledTimes(1)
+    expect(setSetting).toHaveBeenCalledWith('dexie.settings.image://avatar', null, 'dexie-settings')
   })
 
   it('does not keep the renderer process alive while debounce flushing Dexie settings mirrors', async () => {

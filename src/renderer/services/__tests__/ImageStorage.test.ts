@@ -1,17 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  deleteSetting: vi.fn(),
-  flushStrict: vi.fn(),
-  scheduleDelete: vi.fn()
-}))
-
-vi.mock('@renderer/databases', () => ({
-  default: {
-    settings: {
-      delete: mocks.deleteSetting
-    }
-  }
+  deleteSettingAndFlush: vi.fn()
 }))
 
 vi.mock('@renderer/utils', () => ({
@@ -20,8 +10,7 @@ vi.mock('@renderer/utils', () => ({
 
 vi.mock('../StorageV2DexieSettingsMirrorService', () => ({
   storageV2DexieSettingsMirrorService: {
-    flushStrict: mocks.flushStrict,
-    scheduleDelete: mocks.scheduleDelete
+    deleteSettingAndFlush: mocks.deleteSettingAndFlush
   }
 }))
 
@@ -35,18 +24,14 @@ describe('ImageStorage', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
-    mocks.flushStrict.mockResolvedValue(undefined)
-    mocks.deleteSetting.mockResolvedValue(undefined)
+    mocks.deleteSettingAndFlush.mockResolvedValue(undefined)
   })
 
-  it('writes the Storage v2 image tombstone before deleting the legacy setting', async () => {
+  it('deletes the legacy image setting through the strict Storage v2 mirror helper', async () => {
     const { default: ImageStorage } = await import('../ImageStorage')
 
     await ImageStorage.remove('avatar')
 
-    expect(mocks.scheduleDelete).toHaveBeenCalledWith('image://avatar')
-    expect(mocks.flushStrict).toHaveBeenCalled()
-    expect(mocks.deleteSetting).toHaveBeenCalledWith('image://avatar')
-    expect(mocks.flushStrict.mock.invocationCallOrder[0]).toBeLessThan(mocks.deleteSetting.mock.invocationCallOrder[0])
+    expect(mocks.deleteSettingAndFlush).toHaveBeenCalledWith('image://avatar', { strict: true })
   })
 })

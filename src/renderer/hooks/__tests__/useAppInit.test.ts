@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   checkForUpdate: vi.fn(),
   getAppInfo: vi.fn(),
   getDataPathFromArgs: vi.fn(),
+  installStorageV2RuntimeMirrors: vi.fn(),
   loggerWarn: vi.fn(),
   preferences: {
     'app.dist.auto_update.enabled': true,
@@ -77,6 +78,10 @@ vi.mock('@renderer/services/DataSyncService', () => ({
   startDataSyncExternalSyncListener: mocks.startDataSyncExternalSyncListener,
   stopDataSyncExternalSyncListener: mocks.stopDataSyncExternalSyncListener,
   stopDataSyncAutoSync: mocks.stopDataSyncAutoSync
+}))
+
+vi.mock('@renderer/services/StorageV2Service', () => ({
+  installStorageV2RuntimeMirrors: mocks.installStorageV2RuntimeMirrors
 }))
 
 vi.mock('@renderer/store', () => ({
@@ -167,6 +172,12 @@ describe('useAppInit', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.restoreAllMocks()
+  })
+
+  it('installs Storage v2 runtime mirrors when the main view initializes', () => {
+    renderHook(() => useAppInit())
+
+    expect(mocks.installStorageV2RuntimeMirrors).toHaveBeenCalledTimes(1)
   })
 
   it('cancels the delayed auto-update check on unmount', async () => {

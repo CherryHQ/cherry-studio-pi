@@ -11,9 +11,11 @@ const mocks = vi.hoisted(() => ({
   createSnapshot: vi.fn(),
   dexieSettingsMirrorFlush: vi.fn(),
   dexieSettingsMirrorGetStatus: vi.fn(),
+  dexieSettingsMirrorInstall: vi.fn(),
   dexieSettingsMirrorSuspend: vi.fn(),
   dexieTableMirrorFlush: vi.fn(),
   dexieTableMirrorGetStatus: vi.fn(),
+  dexieTableMirrorInstall: vi.fn(),
   dexieTableMirrorSuspend: vi.fn(),
   fileMirrorFlush: vi.fn(),
   fileMirrorGetStatus: vi.fn(),
@@ -64,6 +66,7 @@ vi.mock('../StorageV2DexieSettingsMirrorService', () => ({
   storageV2DexieSettingsMirrorService: {
     flushStrict: mocks.dexieSettingsMirrorFlush,
     getStatus: mocks.dexieSettingsMirrorGetStatus,
+    install: mocks.dexieSettingsMirrorInstall,
     suspendUntilReload: mocks.dexieSettingsMirrorSuspend
   }
 }))
@@ -73,6 +76,7 @@ vi.mock('../StorageV2DexieTableMirrorService', () => ({
   storageV2DexieTableMirrorService: {
     flushStrict: mocks.dexieTableMirrorFlush,
     getStatus: mocks.dexieTableMirrorGetStatus,
+    install: mocks.dexieTableMirrorInstall,
     suspendUntilReload: mocks.dexieTableMirrorSuspend
   }
 }))
@@ -331,5 +335,14 @@ describe('StorageV2Service legacy Dexie snapshots', () => {
     )
     expect(mocks.reduxMirrorSuspend).toHaveBeenCalledTimes(1)
     expect(mocks.agentMirrorSuspend).toHaveBeenCalledTimes(1)
+  })
+
+  it('installs Dexie runtime mirrors for incremental local changes', async () => {
+    const { installStorageV2RuntimeMirrors } = await import('../StorageV2Service')
+
+    installStorageV2RuntimeMirrors()
+
+    expect(mocks.dexieSettingsMirrorInstall).toHaveBeenCalledTimes(1)
+    expect(mocks.dexieTableMirrorInstall).toHaveBeenCalledTimes(1)
   })
 })
