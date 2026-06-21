@@ -108,14 +108,14 @@ const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) =
 
       try {
         await navigator.clipboard.writeText(user_code)
-        window.toast.success(t('settings.provider.copilot.code_copied'))
+        window.toast?.success(t('settings.provider.copilot.code_copied'))
       } catch (error) {
         logger.error('Failed to copy to clipboard:', error as Error)
       }
     } catch (error) {
       logger.error('Failed to get device code:', error as Error)
       if (mountedRef.current) {
-        window.toast.error(t('settings.provider.copilot.code_failed'))
+        window.toast?.error(t('settings.provider.copilot.code_failed'))
         setCurrentStep(0)
       }
     } finally {
@@ -152,13 +152,13 @@ const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) =
         updateState({ username: login, avatar: userAvatar })
         if (mountedRef.current) {
           setAuthStatus(AuthStatus.AUTHENTICATED)
-          window.toast.success(t('settings.provider.copilot.auth_success'))
+          window.toast?.success(t('settings.provider.copilot.auth_success'))
         }
       }
     } catch (error) {
       logger.error('Failed to get token:', error as Error)
       if (mountedRef.current) {
-        window.toast.error(t('settings.provider.copilot.auth_failed'))
+        window.toast?.error(t('settings.provider.copilot.auth_failed'))
         setCurrentStep(2)
       }
     } finally {
@@ -208,12 +208,12 @@ const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) =
         setVerificationPageOpened(false)
         setCurrentStep(0)
 
-        window.toast.success(t('settings.provider.copilot.logout_success'))
+        window.toast?.success(t('settings.provider.copilot.logout_success'))
       }
     } catch (error) {
       logger.error('Failed to logout:', error as Error)
       if (mountedRef.current) {
-        window.toast.error(t('settings.provider.copilot.logout_failed'))
+        window.toast?.error(t('settings.provider.copilot.logout_failed'))
       }
     } finally {
       finishAuthOperation()
@@ -232,10 +232,10 @@ const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) =
   const handleCopyUserCode = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(userCode)
-      window.toast.success(t('common.copied'))
+      window.toast?.success(t('common.copied'))
     } catch (error) {
       logger.error('Failed to copy to clipboard:', error as Error)
-      window.toast.error(t('common.copy_failed'))
+      window.toast?.error(t('common.copy_failed'))
     }
   }, [userCode, t])
 
@@ -245,7 +245,7 @@ const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) =
         setVerificationPageOpened(true)
         setCurrentStep(2)
       } else {
-        window.toast.error(t('settings.provider.oauth.error'))
+        window.toast?.error(t('settings.provider.oauth.error'))
       }
     }
   }, [t, verificationUri])
@@ -290,7 +290,7 @@ const GithubCopilotSettings: FC<GithubCopilotSettingsProps> = ({ providerId }) =
       await updateProvider({ providerSettings: { ...provider?.settings, rateLimit: value } })
     } catch (error) {
       logger.error('Failed to save Copilot rate limit', { providerId, error })
-      window.toast.error(t('settings.provider.save_failed'))
+      window.toast?.error(t('settings.provider.save_failed'))
       setRateLimit(providerRateLimit)
       rateLimitRef.current = providerRateLimit
     }

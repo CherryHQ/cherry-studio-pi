@@ -76,7 +76,7 @@ const OvmsSettings: FC = () => {
       const code = match ? match[1] : 'unknown'
       const errorMsg = code in errCodeMsg ? (errCodeMsg[code as keyof typeof errCodeMsg] ?? errMsg) : errMsg
 
-      window.toast.error(t('ovms.failed.install') + errorMsg)
+      window.toast?.error(t('ovms.failed.install') + errorMsg)
     } finally {
       installingRef.current = false
       if (isMountedRef.current) {
@@ -99,7 +99,7 @@ const OvmsSettings: FC = () => {
         setOvmsStatus(status)
       }
     } catch (error: unknown) {
-      window.toast.error(t('ovms.failed.run') + (error instanceof Error ? error.message : String(error)))
+      window.toast?.error(t('ovms.failed.run') + (error instanceof Error ? error.message : String(error)))
     } finally {
       runningRef.current = false
       if (isMountedRef.current) {
@@ -122,7 +122,7 @@ const OvmsSettings: FC = () => {
         setOvmsStatus(status)
       }
     } catch (error: unknown) {
-      window.toast.error(t('ovms.failed.stop') + (error instanceof Error ? error.message : String(error)))
+      window.toast?.error(t('ovms.failed.stop') + (error instanceof Error ? error.message : String(error)))
     } finally {
       stoppingRef.current = false
       if (isMountedRef.current) {

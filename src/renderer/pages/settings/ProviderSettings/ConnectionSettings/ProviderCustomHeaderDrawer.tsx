@@ -230,7 +230,7 @@ export default function ProviderCustomHeaderDrawer({ providerId, open, onClose }
   const applyJsonToRowsOrToast = useCallback((): boolean => {
     const parsed = parseHeadersJsonDraft(jsonDraft)
     if (!parsed.ok) {
-      window.toast.error(t('settings.provider.copilot.invalid_json'))
+      window.toast?.error(t('settings.provider.copilot.invalid_json'))
       return false
     }
     setRows(headersObjectToRows(parsed.headers))
@@ -257,14 +257,14 @@ export default function ProviderCustomHeaderDrawer({ providerId, open, onClose }
     const primaryDraft = trim(endpointDrafts[primaryEndpoint] ?? '')
     const isVertex = provider.authType === 'iam-gcp'
     if (!isVertex && (!primaryDraft || !validateApiHost(primaryDraft))) {
-      window.toast.error(t('settings.provider.api_host_no_valid'))
+      window.toast?.error(t('settings.provider.api_host_no_valid'))
       return
     }
 
     // Secondary endpoints are optional, but a non-empty one must still be a
     // valid URL — otherwise it surfaces as an opaque chat-traffic failure later.
     if (findInvalidSecondaryEndpointUrl(endpointDrafts, primaryEndpoint)) {
-      window.toast.error(t('settings.provider.api_host_no_valid'))
+      window.toast?.error(t('settings.provider.api_host_no_valid'))
       return
     }
 
@@ -275,7 +275,7 @@ export default function ProviderCustomHeaderDrawer({ providerId, open, onClose }
     if (headersUiMode === 'json') {
       const parsed = parseHeadersJsonDraft(jsonDraft)
       if (!parsed.ok) {
-        window.toast.error(t('settings.provider.copilot.invalid_json'))
+        window.toast?.error(t('settings.provider.copilot.invalid_json'))
         return
       }
       parsedHeaders = parsed.headers
@@ -297,7 +297,7 @@ export default function ProviderCustomHeaderDrawer({ providerId, open, onClose }
       // instead of silently losing their edits.
       logger.error('Failed to save provider request config', error as Error, { providerId })
       if (mountedRef.current) {
-        window.toast.error(t('settings.provider.save_failed'))
+        window.toast?.error(t('settings.provider.save_failed'))
       }
       return
     } finally {
@@ -324,7 +324,7 @@ export default function ProviderCustomHeaderDrawer({ providerId, open, onClose }
     }
 
     if (mountedRef.current) {
-      window.toast.success(t('message.save.success.title'))
+      window.toast?.success(t('message.save.success.title'))
       onClose()
     }
   }, [

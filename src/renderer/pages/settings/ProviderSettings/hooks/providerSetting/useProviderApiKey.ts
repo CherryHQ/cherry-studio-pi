@@ -149,7 +149,7 @@ export function useProviderApiKey(providerId: string) {
       } catch (error) {
         logger.error('Failed to enable provider after saving API key', { providerId: provider.id, error })
         if (mountedRef.current) {
-          window.toast.error(i18n.t('settings.models.add.provider_enable_failed'))
+          window.toast?.error(i18n.t('settings.models.add.provider_enable_failed'))
         }
       }
     },
@@ -177,7 +177,7 @@ export function useProviderApiKey(providerId: string) {
         void saveApiKeyRef.current(nextValue).catch((error) => {
           logger.error('Failed to save API keys', error as Error)
           if (mountedRef.current) {
-            window.toast.error(i18n.t('settings.provider.api_key.save_failed'))
+            window.toast?.error(i18n.t('settings.provider.api_key.save_failed'))
             setValue((current) => ({ ...current, hasPendingSync: true }))
           }
         })

@@ -60,7 +60,7 @@ const PopupContainer: FC<Props> = ({ providerId, resolve }) => {
       resolve({})
     } catch {
       if (mountedRef.current) {
-        window.toast.error(t('blocks.edit.save.failed.label'))
+        window.toast?.error(t('blocks.edit.save.failed.label'))
       }
     } finally {
       savingRef.current = false

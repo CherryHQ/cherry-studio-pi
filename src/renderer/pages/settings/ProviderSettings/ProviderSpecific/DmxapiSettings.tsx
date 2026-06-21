@@ -85,7 +85,7 @@ const DmxapiSettings: FC<DmxapiSettingsProps> = ({ providerId }) => {
       } catch {
         if (isCurrentSave()) {
           setSelectedPlatform(previous)
-          window.toast.error(t('settings.provider.save_failed'))
+          window.toast?.error(t('settings.provider.save_failed'))
         }
       }
     },

@@ -44,7 +44,7 @@ const LmStudioSettings: FC<Props> = ({ providerId }) => {
     } catch (error) {
       logger.error('Failed to save LM Studio keep alive time', { providerId, error })
       if (mountedRef.current) {
-        window.toast.error(t('settings.provider.save_failed'))
+        window.toast?.error(t('settings.provider.save_failed'))
         setKeepAliveMinutes(keepAliveTime)
       }
     }

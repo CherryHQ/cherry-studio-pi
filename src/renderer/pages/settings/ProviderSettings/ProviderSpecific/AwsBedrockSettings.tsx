@@ -74,7 +74,7 @@ const AwsBedrockSettings: FC<Props> = ({ providerId }) => {
     if (localRegion.trim().length > 0) {
       return true
     }
-    window.toast.warning(t('settings.provider.aws-bedrock.region_required'))
+    window.toast?.warning(t('settings.provider.aws-bedrock.region_required'))
     return false
   }
 
@@ -96,7 +96,7 @@ const AwsBedrockSettings: FC<Props> = ({ providerId }) => {
     } catch (error) {
       if (isCurrentSave(saveSeq)) {
         logger.error('Failed to update AWS Bedrock auth type', { providerId, error })
-        window.toast.error(t('settings.provider.save_failed'))
+        window.toast?.error(t('settings.provider.save_failed'))
       }
     }
   }
@@ -119,7 +119,7 @@ const AwsBedrockSettings: FC<Props> = ({ providerId }) => {
     } catch (error) {
       if (isCurrentSave(saveSeq)) {
         logger.error('Failed to save AWS Bedrock IAM config', { providerId, error })
-        window.toast.error(t('settings.provider.save_failed'))
+        window.toast?.error(t('settings.provider.save_failed'))
         isIamDraftDirtyRef.current = false
         resetLocalIamConfig()
       }
@@ -136,7 +136,7 @@ const AwsBedrockSettings: FC<Props> = ({ providerId }) => {
     } catch (error) {
       if (isCurrentSave(saveSeq)) {
         logger.error('Failed to save AWS Bedrock api-key region', { providerId, error })
-        window.toast.error(t('settings.provider.save_failed'))
+        window.toast?.error(t('settings.provider.save_failed'))
         isIamDraftDirtyRef.current = false
         resetLocalIamConfig()
       }

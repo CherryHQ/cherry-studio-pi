@@ -40,7 +40,7 @@ export default function ProviderHeader({ providerId }: ProviderHeaderProps) {
         await toggleProviderEnabled(enabled)
       } catch {
         if (mountedRef.current) {
-          window.toast.error(t('settings.provider.save_failed'))
+          window.toast?.error(t('settings.provider.save_failed'))
         }
       } finally {
         if (mountedRef.current) {

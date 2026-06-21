@@ -151,7 +151,7 @@ const CherryInOauth: FC<CherryInOauthProps> = ({ providerId }) => {
             logger.warn('Failed to refetch CherryIN auth config after login:', error as Error)
           })
           await fetchData()
-          window.toast.success(t('auth.get_key_success'))
+          window.toast?.success(t('auth.get_key_success'))
         },
         {
           oauthServer: CHERRYIN_OAUTH_SERVER
@@ -159,7 +159,7 @@ const CherryInOauth: FC<CherryInOauthProps> = ({ providerId }) => {
       )
     } catch (error) {
       logger.error('OAuth error:', error as Error)
-      window.toast.error(t('settings.provider.oauth.error'))
+      window.toast?.error(t('settings.provider.oauth.error'))
     } finally {
       loginRef.current = false
       setIsLoggingIn(false)
@@ -206,14 +206,14 @@ const CherryInOauth: FC<CherryInOauthProps> = ({ providerId }) => {
             const rejectedDeletes = deleteResults.filter((result) => result.status === 'rejected')
             if (rejectedDeletes.length > 0) {
               logger.warn(`Failed to delete ${rejectedDeletes.length} CherryIN OAuth key(s) after logout`)
-              window.toast.warning(t('settings.provider.oauth.logout_warning'))
+              window.toast?.warning(t('settings.provider.oauth.logout_warning'))
               return
             }
 
-            window.toast.success(t('settings.provider.oauth.logout_success'))
+            window.toast?.success(t('settings.provider.oauth.logout_success'))
           } catch (error) {
             logger.error('Logout error:', error as Error)
-            window.toast.warning(t('settings.provider.oauth.logout_warning'))
+            window.toast?.warning(t('settings.provider.oauth.logout_warning'))
           } finally {
             logoutOperationRef.current = false
             logoutConfirmRef.current = false

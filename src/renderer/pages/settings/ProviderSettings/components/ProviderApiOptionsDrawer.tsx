@@ -137,7 +137,7 @@ export default function ProviderApiOptionsDrawer({ providerId, open, onClose }: 
 
   const handleSaveError = useCallback(() => {
     if (mountedRef.current) {
-      window.toast.error(t('settings.provider.save_failed'))
+      window.toast?.error(t('settings.provider.save_failed'))
     }
   }, [t])
 

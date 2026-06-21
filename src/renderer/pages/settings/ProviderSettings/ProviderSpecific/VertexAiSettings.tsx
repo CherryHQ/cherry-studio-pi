@@ -138,7 +138,7 @@ const VertexAiSettings: FC<Props> = ({ providerId }) => {
     } catch (error) {
       logger.error('Failed to save Vertex AI auth config', { providerId, error })
       if (canMarkDraftClean(saveRequest.requestSeq, saveRequest.draftVersion)) {
-        window.toast.error(t('settings.provider.save_failed'))
+        window.toast?.error(t('settings.provider.save_failed'))
         isDraftDirtyRef.current = false
         resetLocalAuthConfig()
       }
@@ -202,12 +202,12 @@ const VertexAiSettings: FC<Props> = ({ providerId }) => {
           isDraftDirtyRef.current = false
         }
         if (isCurrentSaveRequest(saveRequest.requestSeq)) {
-          window.toast.success(t('settings.provider.vertex_ai.service_account.json_parse_success'))
+          window.toast?.success(t('settings.provider.vertex_ai.service_account.json_parse_success'))
         }
       } catch (error) {
         logger.error('Failed to save Vertex AI auth config from JSON import', { providerId, error })
         if (canMarkDraftClean(saveRequest.requestSeq, saveRequest.draftVersion)) {
-          window.toast.error(t('settings.provider.save_failed'))
+          window.toast?.error(t('settings.provider.save_failed'))
           // Preserve user-pasted JSON so they can correct and retry;
           // do not call resetLocalAuthConfig — it would clear the textarea.
           setServiceAccountJsonError(true)
@@ -231,7 +231,7 @@ const VertexAiSettings: FC<Props> = ({ providerId }) => {
 
     const parsed = parseVertexAIServiceAccountJson(value)
     if (!parsed) {
-      window.toast.error(t('settings.provider.vertex_ai.service_account.json_parse_error'))
+      window.toast?.error(t('settings.provider.vertex_ai.service_account.json_parse_error'))
       setServiceAccountJsonError(true)
       return
     }
@@ -256,7 +256,7 @@ const VertexAiSettings: FC<Props> = ({ providerId }) => {
       if (isCurrentSaveRequest(saveRequest.requestSeq)) {
         setServiceAccountJson('')
         setServiceAccountJsonError(false)
-        window.toast.success(t('settings.provider.vertex_ai.service_account.json_parse_success'))
+        window.toast?.success(t('settings.provider.vertex_ai.service_account.json_parse_success'))
       }
       if (canMarkDraftClean(saveRequest.requestSeq, saveRequest.draftVersion)) {
         isDraftDirtyRef.current = false
@@ -264,7 +264,7 @@ const VertexAiSettings: FC<Props> = ({ providerId }) => {
     } catch (error) {
       logger.error('Failed to save Vertex AI auth config from JSON import', { providerId, error })
       if (canMarkDraftClean(saveRequest.requestSeq, saveRequest.draftVersion)) {
-        window.toast.error(t('settings.provider.save_failed'))
+        window.toast?.error(t('settings.provider.save_failed'))
         // Preserve user-pasted JSON so they can correct and retry;
         // do not call resetLocalAuthConfig — it would clear the textarea.
         setServiceAccountJsonError(true)
@@ -302,7 +302,7 @@ const VertexAiSettings: FC<Props> = ({ providerId }) => {
     } catch (error) {
       logger.error('Failed to save Vertex AI auth config with location', { providerId, error })
       if (canMarkDraftClean(saveRequest.requestSeq, saveRequest.draftVersion)) {
-        window.toast.error(t('settings.provider.save_failed'))
+        window.toast?.error(t('settings.provider.save_failed'))
         // Only roll back location — do not clear credentials the user already confirmed.
         setLocalLocation(previousLocation)
         isDraftDirtyRef.current = false

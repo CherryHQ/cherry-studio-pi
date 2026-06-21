@@ -185,7 +185,7 @@ export default function ProviderEditorDrawer({
       // unsupported file — tell the user instead of silently doing nothing.
       logger.error('Failed to process uploaded provider logo', error as Error)
       if (mountedRef.current) {
-        window.toast.error(t('settings.provider.logo_upload_failed'))
+        window.toast?.error(t('settings.provider.logo_upload_failed'))
       }
     }
   }
@@ -283,7 +283,7 @@ export default function ProviderEditorDrawer({
     } catch (error) {
       logger.error('Provider editor submit failed', error as Error)
       if (mountedRef.current) {
-        window.toast.error(t('settings.provider.save_failed'))
+        window.toast?.error(t('settings.provider.save_failed'))
       }
     } finally {
       submittingRef.current = false

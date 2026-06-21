@@ -205,7 +205,7 @@ export default function ProviderList({ selectedProviderId, filterModeHint, onSel
   }, [])
 
   const handleReorderError = useCallback(() => {
-    window.toast.error(t('settings.provider.reorder_failed'))
+    window.toast?.error(t('settings.provider.reorder_failed'))
   }, [t])
 
   const handleSubmitEditor = useCallback(
@@ -213,9 +213,9 @@ export default function ProviderList({ selectedProviderId, filterModeHint, onSel
       const result = await submitEditor(providerInput)
 
       if (result.notice === 'create-logo-save-failed') {
-        window.toast.error(t('message.error.save_provider_logo'))
+        window.toast?.error(t('message.error.save_provider_logo'))
       } else if (result.notice === 'update-logo-save-failed') {
-        window.toast.error(t('message.error.update_provider_logo'))
+        window.toast?.error(t('message.error.update_provider_logo'))
       }
     },
     [submitEditor, t]
@@ -249,7 +249,7 @@ export default function ProviderList({ selectedProviderId, filterModeHint, onSel
           try {
             await deleteProvider(providerId)
           } catch (error) {
-            window.toast.error(t('settings.provider.delete_failed'))
+            window.toast?.error(t('settings.provider.delete_failed'))
             throw error
           } finally {
             deletingProviderIdsRef.current.delete(providerId)

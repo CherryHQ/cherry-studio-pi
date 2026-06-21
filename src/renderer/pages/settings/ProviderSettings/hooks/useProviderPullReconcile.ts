@@ -79,9 +79,9 @@ export function useProviderPullReconcile(providerId: string) {
           logger.error('Pull reconcile preview failed', { providerId, error })
           setPreview(null)
           if (error instanceof ModelSyncError && error.code === 'NO_ENABLED_API_KEY') {
-            window.toast.error(t('settings.models.check.no_api_keys'))
+            window.toast?.error(t('settings.models.check.no_api_keys'))
           } else {
-            window.toast.error(t('settings.models.manage.sync_pull_failed'))
+            window.toast?.error(t('settings.models.manage.sync_pull_failed'))
           }
         }
         throw error instanceof Error ? error : new Error(String(error))

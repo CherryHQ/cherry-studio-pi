@@ -101,7 +101,7 @@ export default function ProviderApiKeyListDrawer({ providerId, open, onClose }: 
       } catch (error) {
         logger.error('Failed to persist provider API keys', { providerId, error })
         if (mountedRef.current) {
-          window.toast.error(t('settings.provider.api_key.save_failed'))
+          window.toast?.error(t('settings.provider.api_key.save_failed'))
         }
         return false
       } finally {
@@ -118,13 +118,13 @@ export default function ProviderApiKeyListDrawer({ providerId, open, onClose }: 
     (nextDraft: DraftState) => {
       const key = normalizeApiKeyValue(nextDraft.key)
       if (!key) {
-        window.toast.warning(t('settings.provider.api.key.error.empty'))
+        window.toast?.warning(t('settings.provider.api.key.error.empty'))
         return null
       }
 
       const isDuplicate = apiKeys.some((item) => item.id !== nextDraft.id && item.key.trim() === key)
       if (isDuplicate) {
-        window.toast.warning(t('settings.provider.api.key.error.duplicate'))
+        window.toast?.warning(t('settings.provider.api.key.error.duplicate'))
         return null
       }
 

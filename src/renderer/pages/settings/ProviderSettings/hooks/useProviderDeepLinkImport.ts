@@ -108,7 +108,7 @@ export function useProviderDeepLinkImport(
         const defaultChatEndpoint = resolveDefaultEndpoint(updatedProvider.type)
         if (updatedProvider.apiHost && !validateApiHost(updatedProvider.apiHost)) {
           logger.warn('Rejected deep-link apiHost with invalid scheme', { providerId })
-          window.toast.error(t('settings.models.provider_key_add_failed_by_invalid_data'))
+          window.toast?.error(t('settings.models.provider_key_add_failed_by_invalid_data'))
           void navigate({ to: '/settings/provider' })
           return
         }
@@ -145,14 +145,14 @@ export function useProviderDeepLinkImport(
         if (isActive()) {
           onSelectProvider(providerId)
           void navigate({ to: '/settings/provider', search: { id: providerId } })
-          window.toast.success(t('settings.models.provider_key_added', { provider: displayName }))
+          window.toast?.success(t('settings.models.provider_key_added', { provider: displayName }))
         }
       } catch (error) {
         if (!isActive()) {
           return
         }
         logger.error('Failed to import provider deep link data', error as Error)
-        window.toast.error(t('settings.models.provider_key_add_failed_by_invalid_data'))
+        window.toast?.error(t('settings.models.provider_key_add_failed_by_invalid_data'))
         void navigate({ to: '/settings/provider' })
       }
     }
@@ -160,7 +160,7 @@ export function useProviderDeepLinkImport(
     try {
       const parsed = parseProviderSearchData(searchAddProviderData)
       if (!parsed) {
-        window.toast.error(t('settings.models.provider_key_add_failed_by_invalid_data'))
+        window.toast?.error(t('settings.models.provider_key_add_failed_by_invalid_data'))
         void navigate({ to: '/settings/provider' })
         return
       }
@@ -168,7 +168,7 @@ export function useProviderDeepLinkImport(
       void importProvider(parsed)
     } catch (error) {
       logger.error('Failed to parse provider deep link import data', error as Error)
-      window.toast.error(t('settings.models.provider_key_add_failed_by_invalid_data'))
+      window.toast?.error(t('settings.models.provider_key_add_failed_by_invalid_data'))
       void navigate({ to: '/settings/provider' })
     }
 
