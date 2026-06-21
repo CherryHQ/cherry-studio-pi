@@ -288,7 +288,11 @@ function normalizeProjectionModel(providerId: string, model: unknown): CreateMod
           ) as never
         }
       : {}),
-    ...(optionalRecord(model.pricing) ? { pricing: optionalRecord(model.pricing) as never } : {})
+    ...(optionalRecord(model.pricing) ? { pricing: optionalRecord(model.pricing) as never } : {}),
+    ...(typeof model.isEnabled === 'boolean' ? { isEnabled: model.isEnabled } : {}),
+    ...(typeof model.isHidden === 'boolean' ? { isHidden: model.isHidden } : {}),
+    ...(typeof model.isDeprecated === 'boolean' ? { isDeprecated: model.isDeprecated } : {}),
+    ...(optionalString(model.notes) ? { notes: optionalString(model.notes) } : {})
   }
 }
 

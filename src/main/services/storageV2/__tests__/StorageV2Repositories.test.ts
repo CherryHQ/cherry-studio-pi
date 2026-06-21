@@ -551,6 +551,40 @@ describe('StorageV2ProviderRepository', () => {
     ).toBe(false)
   })
 
+  it('stores provider model enabled state instead of forcing every model enabled', async () => {
+    const { client, execute } = createMockClient()
+    vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)
+    vi.spyOn(storageV2Database, 'withTransaction').mockImplementation(async (_client, fn) => fn())
+    vi.spyOn(storageV2Database, 'getClient').mockResolvedValue(client)
+
+    await new StorageV2ProviderRepository().upsert(
+      {
+        id: 'provider-1',
+        type: 'openai',
+        name: 'OpenAI',
+        models: [
+          {
+            id: 'archived-model',
+            name: 'Archived Model',
+            provider: 'provider-1',
+            group: 'chat',
+            isEnabled: false
+          }
+        ]
+      } as any,
+      0
+    )
+
+    const modelInsert = execute.mock.calls.find(
+      ([input]) => typeof input !== 'string' && input.sql.includes('INSERT INTO models')
+    )
+    if (!modelInsert) throw new Error('Expected model insert call')
+
+    const args = (modelInsert[0] as { args?: unknown[] }).args
+    expect(args?.slice(0, 4)).toEqual(['provider-1::archived-model', 'provider-1', 'Archived Model', 'chat'])
+    expect(args?.[6]).toBe(0)
+  })
+
   it('preserves existing provider sort order during unordered metadata-only mirrors', async () => {
     const { client, execute } = createMockClient()
     vi.spyOn(storageV2SyncLogService, 'recordChange').mockResolvedValue(undefined)

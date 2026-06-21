@@ -975,6 +975,65 @@ describe('StorageV2Service', () => {
     ])
   })
 
+  it('preserves synced model status when projecting new provider models', async () => {
+    mocks.providerRepository.list.mockResolvedValue([
+      {
+        id: 'openai',
+        type: 'openai',
+        name: 'OpenAI',
+        apiHost: 'https://api.openai.com/v1',
+        enabled: true,
+        sortOrder: 0,
+        config: { id: 'openai', presetProviderId: 'openai' },
+        models: [
+          {
+            id: 'archived-model',
+            apiModelId: 'archived-model',
+            providerId: 'openai',
+            name: 'Archived Model',
+            capabilities: [],
+            isEnabled: false,
+            isHidden: true,
+            isDeprecated: true,
+            notes: 'Synced as disabled'
+          }
+        ],
+        hasCredentialRef: false,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        deletedAt: null,
+        version: 1
+      }
+    ])
+    mocks.providerService.getByProviderId.mockResolvedValue({ id: 'openai' })
+    mocks.modelService.list.mockResolvedValue([])
+
+    await expect(
+      new StorageV2Service().projectProvidersToDataApiRuntime({ modelProviderIds: new Set(['openai']) })
+    ).resolves.toEqual({
+      providerCount: 1,
+      modelCount: 1
+    })
+
+    expect(mocks.modelService.reconcileForProvider).toHaveBeenCalledWith('openai', {
+      toAdd: [
+        {
+          dto: expect.objectContaining({
+            providerId: 'openai',
+            modelId: 'archived-model',
+            name: 'Archived Model',
+            isEnabled: false,
+            isHidden: true,
+            isDeprecated: true,
+            notes: 'Synced as disabled'
+          })
+        }
+      ],
+      toRemove: []
+    })
+    expect(mocks.modelService.bulkUpdate).not.toHaveBeenCalled()
+  })
+
   it('does not reconcile provider models when only provider credentials changed', async () => {
     mocks.providerRepository.list.mockResolvedValue([
       {

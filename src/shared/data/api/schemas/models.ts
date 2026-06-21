@@ -68,7 +68,15 @@ export const CreateModelSchema = z.strictObject({
   /** Parameter support (DB form) */
   parameterSupport: ParameterSupportDbSchema.optional(),
   /** Pricing configuration */
-  pricing: RuntimeModelPricingSchema.optional()
+  pricing: RuntimeModelPricingSchema.optional(),
+  /** Initial enabled state. Omit to use the default enabled state. */
+  isEnabled: z.boolean().optional(),
+  /** Initial hidden state. Omit to make the model visible by default. */
+  isHidden: z.boolean().optional(),
+  /** Initial provider-deprecation state. */
+  isDeprecated: z.boolean().optional(),
+  /** User notes */
+  notes: z.string().optional()
 })
 export type CreateModelDto = z.infer<typeof CreateModelSchema>
 

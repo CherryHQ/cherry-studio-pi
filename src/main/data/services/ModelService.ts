@@ -105,9 +105,9 @@ type CreateModelRegistryData = ModelLookupResult & {
 /**
  * Subset of user-row fields that can override registry-derived baseline values.
  *
- * Status fields (`isEnabled`, `isHidden`) are intentionally excluded: they are
- * user state managed via `PATCH /models/:id`, not preset baseline overrides.
- * They flow through `...row` spread in the migrator and through the
+ * Status fields (`isEnabled`, `isHidden`, `isDeprecated`) are intentionally
+ * excluded: they are user state managed outside registry enrichment, not preset
+ * baseline overrides. They flow through the create DTO/defaults and through the
  * `mergedModelToNewUserModel` projection in `ModelService.buildCreateValues`.
  */
 export interface UserModelOverlay {
@@ -248,8 +248,10 @@ function dtoToNewUserModel(dto: CreateModelDto): NewUserModelInput {
     reasoning: dto.reasoning ?? null,
     parameters: dto.parameterSupport ?? null,
     pricing: dto.pricing ?? null,
-    isEnabled: true,
-    isHidden: false
+    isEnabled: dto.isEnabled ?? true,
+    isHidden: dto.isHidden ?? false,
+    isDeprecated: dto.isDeprecated ?? false,
+    notes: dto.notes ?? null
   }
 }
 
@@ -280,7 +282,9 @@ function mergedModelToNewUserModel(
     parameters: merged.parameterSupport ?? null,
     pricing: merged.pricing ?? null,
     isEnabled: merged.isEnabled,
-    isHidden: merged.isHidden
+    isHidden: merged.isHidden,
+    isDeprecated: merged.isDeprecated ?? false,
+    notes: merged.notes ?? null
   }
 }
 

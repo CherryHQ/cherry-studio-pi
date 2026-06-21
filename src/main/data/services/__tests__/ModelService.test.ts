@@ -391,6 +391,44 @@ describe('ModelService.create', () => {
     expect(row.maxOutputTokens).toBe(8_192)
   })
 
+  it('preserves explicit status fields on first create', async () => {
+    await dbh.db.insert(userProviderTable).values(providerRow('openai', 'OpenAI'))
+
+    const [created] = await modelService.create([
+      {
+        dto: {
+          providerId: 'openai',
+          modelId: 'hidden-model',
+          name: 'Hidden Model',
+          isEnabled: false,
+          isHidden: true,
+          isDeprecated: true,
+          notes: 'Imported from sync'
+        }
+      }
+    ])
+
+    expect(created).toMatchObject({
+      id: 'openai::hidden-model',
+      isEnabled: false,
+      isHidden: true,
+      isDeprecated: true,
+      notes: 'Imported from sync'
+    })
+
+    const [row] = await dbh.db
+      .select()
+      .from(userModelTable)
+      .where(and(eq(userModelTable.providerId, 'openai'), eq(userModelTable.modelId, 'hidden-model')))
+
+    expect(row).toMatchObject({
+      isEnabled: false,
+      isHidden: true,
+      isDeprecated: true,
+      notes: 'Imported from sync'
+    })
+  })
+
   it('logs custom model creation when dto presetModelId is present without a registry match', async () => {
     await dbh.db.insert(userProviderTable).values(providerRow('openai', 'OpenAI'))
 

@@ -469,6 +469,13 @@ function normalizeProviderModels(provider: Provider): Model[] {
   return Array.from(modelsByStorageId.values())
 }
 
+function getProviderModelStorageEnabled(model: Model) {
+  const modelLike = model as unknown as { enabled?: unknown; isEnabled?: unknown }
+  if (typeof modelLike.enabled === 'boolean') return modelLike.enabled
+  if (typeof modelLike.isEnabled === 'boolean') return modelLike.isEnabled
+  return true
+}
+
 function cloneJsonValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
@@ -908,7 +915,7 @@ export class StorageV2ProviderRepository {
                 id, provider_id, name, group_name, capabilities_json, config_json, enabled, sort_order,
                 created_at, updated_at, deleted_at
               )
-              VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, NULL)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
               ON CONFLICT(id) DO UPDATE SET
                 provider_id = excluded.provider_id,
                 name = excluded.name,
@@ -927,6 +934,7 @@ export class StorageV2ProviderRepository {
               model.group || null,
               toJson(model.capabilities ?? model.type ?? null),
               toJson(model),
+              getProviderModelStorageEnabled(model) ? 1 : 0,
               modelIndex,
               timestamp,
               timestamp
