@@ -323,6 +323,17 @@ describe('CodeCliPage', () => {
     expect(testState.setTimeoutTimer).toHaveBeenCalledWith('launchSuccess', expect.any(Function), 2500)
   })
 
+  it('launches successfully when toast is unavailable', async () => {
+    Object.assign(window, { toast: undefined })
+
+    await openCodeToolDialog()
+
+    fireEvent.click(screen.getByRole('button', { name: 'code.launch.label' }))
+
+    expect(await screen.findByRole('button', { name: /code.launch.launched/ })).toBeEnabled()
+    expect(testState.codeCliRun).toHaveBeenCalledTimes(1)
+  })
+
   it('returns to idle and shows an error when launch fails', async () => {
     testState.codeCliRun.mockResolvedValue({ success: false, message: 'launch failed' })
 
