@@ -6,11 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   cancelAnimationFrame: vi.fn(),
   captureScrollableAsBlob: vi.fn(),
+  chatVirtualListProps: null as null | { onReachTop?: () => void },
   clearTopicMessages: vi.fn(),
   clipboardWrite: vi.fn(),
   clipboardWriteText: vi.fn(),
   getGroupedMessages: vi.fn(() => ({})),
   requestAnimationFrame: vi.fn(() => 42),
+  setTimeoutTimer: vi.fn(),
   modalConfirm: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
@@ -34,7 +36,8 @@ vi.mock('@logger', () => ({
   loggerService: {
     withContext: () => ({
       error: vi.fn(),
-      info: vi.fn()
+      info: vi.fn(),
+      warn: vi.fn()
     })
   }
 }))
@@ -64,7 +67,7 @@ vi.mock('@renderer/hooks/useChatContext', () => ({
 
 vi.mock('@renderer/hooks/useTimer', () => ({
   useTimer: () => ({
-    setTimeoutTimer: vi.fn()
+    setTimeoutTimer: mocks.setTimeoutTimer
   })
 }))
 
@@ -123,7 +126,9 @@ vi.mock('../Blocks', () => ({
 }))
 
 vi.mock('../ChatVirtualList', () => ({
-  ChatVirtualList: ({ handleRef }: { handleRef: React.MutableRefObject<any> }) => {
+  ChatVirtualList: (props: { handleRef: React.MutableRefObject<any>; onReachTop?: () => void }) => {
+    const { handleRef } = props
+    mocks.chatVirtualListProps = props
     handleRef.current = {
       getScrollElement: () => document.createElement('div'),
       scrollToBottom: vi.fn(),
@@ -178,6 +183,11 @@ function deferred<T = void>() {
 describe('Messages', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.chatVirtualListProps = null
+    mocks.setTimeoutTimer.mockImplementation((_key: string, fn: () => void) => {
+      fn()
+      return vi.fn()
+    })
     vi.stubGlobal('requestAnimationFrame', mocks.requestAnimationFrame)
     vi.stubGlobal('cancelAnimationFrame', mocks.cancelAnimationFrame)
     Object.defineProperty(navigator, 'clipboard', {
@@ -340,5 +350,29 @@ describe('Messages', () => {
 
     runningClear.resolve(undefined)
     await Promise.all([firstClear, secondClear])
+  })
+
+  it('keeps the older-message loader busy until async pagination settles', async () => {
+    const pagination = deferred<void>()
+    const loadOlder = vi.fn(() => pagination.promise)
+    const topic = { id: 'topic-1', assistantId: 'assistant-1', name: 'Topic' } as Topic
+
+    render(<Messages topic={topic} messages={[]} hasOlder loadOlder={loadOlder} onComponentUpdate={vi.fn()} />)
+
+    act(() => {
+      mocks.chatVirtualListProps?.onReachTop?.()
+    })
+
+    expect(loadOlder).toHaveBeenCalledTimes(1)
+    expect(mocks.setTimeoutTimer).not.toHaveBeenCalledWith('loadMoreMessages', expect.any(Function), expect.any(Number))
+
+    await act(async () => {
+      pagination.resolve()
+      await pagination.promise
+    })
+
+    await waitFor(() =>
+      expect(mocks.setTimeoutTimer).toHaveBeenCalledWith('loadMoreMessages', expect.any(Function), expect.any(Number))
+    )
   })
 })

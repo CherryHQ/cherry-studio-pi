@@ -41,12 +41,13 @@ interface MessagesProps {
   onFirstUpdate?(): void
   messages: Message[]
   /** Trigger loading of the next older branch page from the server. */
-  loadOlder?: () => void
+  loadOlder?: () => void | Promise<unknown>
   /** Whether older branch pages remain on the server. */
   hasOlder?: boolean
 }
 
 const logger = loggerService.withContext('Messages')
+const LOAD_OLDER_BUSY_MIN_MS = 300
 
 const Messages: React.FC<MessagesProps> = ({
   topic,
@@ -69,6 +70,7 @@ const Messages: React.FC<MessagesProps> = ({
   const { isMultiSelectMode, handleSelectMessage } = useChatContext()
 
   const chatListRef = useRef<ChatVirtualListHandle | null>(null)
+  const mountedRef = useRef(true)
   // Mirrors the scroll element from `chatListRef.current?.getScrollElement()`
   // so consumers expecting a ref-shaped object (capture utils, SelectionBox)
   // don't have to thread the imperative handle around. Updated after each
@@ -80,6 +82,13 @@ const Messages: React.FC<MessagesProps> = ({
   const partsMapRef = useRef(partsMap)
   const clearConfirmRef = useRef(false)
   const clearRunningRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     messagesRef.current = messages
@@ -235,15 +244,37 @@ const Messages: React.FC<MessagesProps> = ({
   const loadMoreMessages = useCallback(() => {
     if (!hasMore || isLoadingMore || !loadOlder) return
     setIsLoadingMore(true)
-    setTimeoutTimer(
-      'loadMoreMessages',
-      () => {
-        loadOlder()
+    const startedAt = Date.now()
+    const finish = () => {
+      if (mountedRef.current) {
         setIsLoadingMore(false)
-      },
-      300
-    )
-  }, [hasMore, isLoadingMore, loadOlder, setTimeoutTimer])
+      }
+    }
+    const finishAfterMinimumBusy = () => {
+      const remainingMs = LOAD_OLDER_BUSY_MIN_MS - (Date.now() - startedAt)
+      if (remainingMs > 0) {
+        setTimeoutTimer('loadMoreMessages', finish, remainingMs)
+        return
+      }
+      finish()
+    }
+
+    try {
+      const result = loadOlder()
+      if (result && typeof result.finally === 'function') {
+        void Promise.resolve(result)
+          .catch((error) => {
+            logger.warn('Failed to load older topic messages', error as Error, { topicId: topic.id })
+          })
+          .finally(finishAfterMinimumBusy)
+        return
+      }
+      finishAfterMinimumBusy()
+    } catch (error) {
+      logger.warn('Failed to load older topic messages', error as Error, { topicId: topic.id })
+      finishAfterMinimumBusy()
+    }
+  }, [hasMore, isLoadingMore, loadOlder, setTimeoutTimer, topic.id])
 
   useCommandHandler('chat.message.copy_last', async () => {
     const lastMessage = last(messages)

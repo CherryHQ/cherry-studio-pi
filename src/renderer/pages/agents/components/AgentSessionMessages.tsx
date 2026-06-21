@@ -23,6 +23,7 @@ import type { PropsWithChildren } from 'react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 const logger = loggerService.withContext('AgentSessionMessages')
+const LOAD_OLDER_BUSY_MIN_MS = 600
 
 type Props = {
   agentId: string
@@ -33,7 +34,7 @@ type Props = {
   /** Whether more older messages remain on the server (cursor pagination). */
   hasOlder?: boolean
   /** Trigger fetching the next older page. */
-  loadOlder?: () => void
+  loadOlder?: () => void | Promise<unknown>
 }
 
 const AgentSessionMessages = ({
@@ -51,6 +52,14 @@ const AgentSessionMessages = ({
   const chatListRef = useRef<ChatVirtualListHandle | null>(null)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const { setTimeoutTimer } = useTimer()
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   // Group messages chronologically; ChatVirtualList renders entries in array
   // order with scroll-to-bottom on first mount, so groups stay oldest-first.
@@ -59,9 +68,37 @@ const AgentSessionMessages = ({
   const handleReachTop = useCallback(() => {
     if (!hasOlder || isLoadingMore || !loadOlder) return
     setIsLoadingMore(true)
-    loadOlder()
-    setTimeoutTimer('agent-load-older-spinner', () => setIsLoadingMore(false), 600)
-  }, [hasOlder, isLoadingMore, loadOlder, setTimeoutTimer])
+    const startedAt = Date.now()
+    const finish = () => {
+      if (mountedRef.current) {
+        setIsLoadingMore(false)
+      }
+    }
+    const finishAfterMinimumBusy = () => {
+      const remainingMs = LOAD_OLDER_BUSY_MIN_MS - (Date.now() - startedAt)
+      if (remainingMs > 0) {
+        setTimeoutTimer('agent-load-older-spinner', finish, remainingMs)
+        return
+      }
+      finish()
+    }
+
+    try {
+      const result = loadOlder()
+      if (result && typeof result.finally === 'function') {
+        void Promise.resolve(result)
+          .catch((error) => {
+            logger.warn('Failed to load older agent session messages', error as Error, { sessionId })
+          })
+          .finally(finishAfterMinimumBusy)
+        return
+      }
+      finishAfterMinimumBusy()
+    } catch (error) {
+      logger.warn('Failed to load older agent session messages', error as Error, { sessionId })
+      finishAfterMinimumBusy()
+    }
+  }, [hasOlder, isLoadingMore, loadOlder, sessionId, setTimeoutTimer])
 
   // ── Derived topic for MessageGroup ──
 
