@@ -130,6 +130,52 @@ describe('ProxyManager - Electron proxy application', () => {
       })
     )
   })
+
+  it('applies the latest pending proxy config after an overlapping request', async () => {
+    let releaseDefaultSession!: () => void
+    electronMocks.defaultSession.setProxy.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseDefaultSession = resolve
+        })
+    )
+
+    const manager = new ProxyManager()
+    const configureProxy = (manager as unknown as { configureProxy(config: ProxyConfig): Promise<void> }).configureProxy
+    const firstConfigure = configureProxy.call(manager, {
+      mode: 'fixed_servers',
+      proxyRules: 'http://127.0.0.1:7890',
+      proxyBypassRules: 'first.example.com'
+    })
+
+    await Promise.resolve()
+
+    const secondConfigure = configureProxy.call(manager, {
+      mode: 'fixed_servers',
+      proxyRules: 'http://127.0.0.1:7891',
+      proxyBypassRules: 'second.example.com'
+    })
+
+    await Promise.resolve()
+
+    expect(electronMocks.defaultSession.setProxy).toHaveBeenCalledTimes(1)
+    expect(electronMocks.appSetProxy).toHaveBeenCalledTimes(1)
+
+    releaseDefaultSession()
+    await firstConfigure
+    await secondConfigure
+
+    expect(electronMocks.defaultSession.setProxy).toHaveBeenCalledTimes(2)
+    expect(electronMocks.webviewSession.setProxy).toHaveBeenCalledTimes(2)
+    expect(electronMocks.appSetProxy).toHaveBeenCalledTimes(2)
+    expect(electronMocks.appSetProxy).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mode: 'fixed_servers',
+        proxyRules: 'http://127.0.0.1:7891',
+        proxyBypassRules: expect.stringContaining('second.example.com')
+      })
+    )
+  })
 })
 
 describe('ProxyManager - bypass evaluation', () => {

@@ -15,6 +15,7 @@ export class ProxyManager extends BaseService {
   private config: ProxyConfig = { mode: 'direct' }
   private systemProxyInterval: Disposable | null = null
   private isSettingProxy = false
+  private pendingProxyConfig: ProxyConfig | null = null
   private nodeProxyController = new NodeProxyController(logger)
 
   private async monitorSystemProxy(): Promise<void> {
@@ -52,11 +53,13 @@ export class ProxyManager extends BaseService {
     )
 
     if (this.isSettingProxy) {
-      logger.info('Proxy configuration already in progress, skipping')
+      logger.info('Proxy configuration already in progress, applying the latest request after it completes')
+      this.pendingProxyConfig = { ...config }
       return
     }
 
     this.isSettingProxy = true
+    let errorToThrow: unknown
 
     try {
       this.clearSystemProxyMonitor()
@@ -76,9 +79,19 @@ export class ProxyManager extends BaseService {
       this.config = config
     } catch (error) {
       logger.error('Failed to config proxy:', error as Error)
-      throw error
+      errorToThrow = error
     } finally {
       this.isSettingProxy = false
+    }
+
+    const pendingConfig = this.pendingProxyConfig
+    this.pendingProxyConfig = null
+    if (pendingConfig) {
+      await this.configureProxy(pendingConfig)
+    }
+
+    if (errorToThrow) {
+      throw errorToThrow
     }
   }
 
