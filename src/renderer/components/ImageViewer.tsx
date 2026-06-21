@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next'
 
 const logger = loggerService.withContext('ImageViewer')
 const REMOTE_IMAGE_FETCH_TIMEOUT_MS = 15_000
+const UNKNOWN_COPY_ERROR_MESSAGE = 'Unknown clipboard error'
 
 export interface ImageViewerPreviewConfig {
   activeIndex?: number
@@ -72,6 +73,62 @@ export async function copyImageToClipboard(src: string): Promise<void> {
 const getPreviewIndex = (items: ImagePreviewItem[], src: string, fallbackIndex = 0) => {
   const matchedIndex = items.findIndex((item) => item.src === src)
   return matchedIndex >= 0 ? matchedIndex : fallbackIndex
+}
+
+function getCopyErrorMessage(error: unknown, seen = new WeakSet<object>()): string {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+  if (typeof error === 'string' && error.trim()) {
+    return error
+  }
+  if (!error || typeof error !== 'object') {
+    return UNKNOWN_COPY_ERROR_MESSAGE
+  }
+  if (seen.has(error)) {
+    return UNKNOWN_COPY_ERROR_MESSAGE
+  }
+
+  seen.add(error)
+
+  const nestedError = (error as { error?: unknown }).error
+  if (nestedError) {
+    const nestedMessage = getCopyErrorMessage(nestedError, seen)
+    if (nestedMessage !== UNKNOWN_COPY_ERROR_MESSAGE) {
+      return nestedMessage
+    }
+  }
+
+  const message = (error as { message?: unknown }).message
+  if (typeof message === 'string' && message.trim()) {
+    return message
+  }
+
+  try {
+    const serialized = JSON.stringify(error)
+    return serialized || UNKNOWN_COPY_ERROR_MESSAGE
+  } catch {
+    return UNKNOWN_COPY_ERROR_MESSAGE
+  }
+}
+
+function getCopyErrorStack(error: unknown, seen = new WeakSet<object>()): string | undefined {
+  if (error instanceof Error) {
+    return error.stack
+  }
+  if (!error || typeof error !== 'object' || seen.has(error)) {
+    return undefined
+  }
+
+  seen.add(error)
+
+  const stack = (error as { stack?: unknown }).stack
+  if (typeof stack === 'string' && stack) {
+    return stack
+  }
+
+  const nestedError = (error as { error?: unknown }).error
+  return getCopyErrorStack(nestedError, seen)
 }
 
 const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, preview, src, ...props }) => {
@@ -158,8 +215,10 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, 
           window.toast?.success(t('message.copy.success'))
         }
       } catch (error) {
-        const err = error as Error
-        logger.error(`Failed to copy image: ${err.message}`, { stack: err.stack })
+        logger.error('Failed to copy image', {
+          error: getCopyErrorMessage(error),
+          stack: getCopyErrorStack(error)
+        })
         if (mountedRef.current) {
           window.toast?.error(t('message.copy.failed'))
         }
@@ -176,8 +235,10 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, 
           window.toast?.success(t('message.copy.success'))
         }
       } catch (error) {
-        const err = error as Error
-        logger.error(`Failed to copy image source: ${err.message}`, { stack: err.stack })
+        logger.error('Failed to copy image source', {
+          error: getCopyErrorMessage(error),
+          stack: getCopyErrorStack(error)
+        })
         if (mountedRef.current) {
           window.toast?.error(t('message.copy.failed'))
         }

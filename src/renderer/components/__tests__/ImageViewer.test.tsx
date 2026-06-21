@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   convertImageToPng: vi.fn(),
   fetch: vi.fn(),
   fsRead: vi.fn(),
+  loggerError: vi.fn(),
   toast: {
     error: vi.fn(),
     success: vi.fn()
@@ -34,6 +35,14 @@ const mocks = vi.hoisted(() => ({
   clipboard: {
     write: vi.fn(),
     writeText: vi.fn()
+  }
+}))
+
+vi.mock('@logger', () => ({
+  loggerService: {
+    withContext: () => ({
+      error: mocks.loggerError
+    })
   }
 }))
 
@@ -121,6 +130,23 @@ describe('ImageViewer', () => {
     })
   })
 
+  it('logs non-Error copy source failures without exposing details in the toast', async () => {
+    mocks.clipboard.writeText.mockRejectedValueOnce('clipboard permission denied')
+
+    render(<ImageViewer src="https://example.com/image.png" alt="Example image" />)
+
+    fireEvent.contextMenu(screen.getByRole('img', { name: 'Example image' }))
+    fireEvent.click(screen.getByRole('button', { name: 'preview.copy.src' }))
+
+    await waitFor(() => {
+      expect(mocks.toast.error).toHaveBeenCalledWith('message.copy.failed')
+    })
+    expect(mocks.loggerError).toHaveBeenCalledWith('Failed to copy image source', {
+      error: 'clipboard permission denied',
+      stack: undefined
+    })
+  })
+
   it('copies image data from the context menu', async () => {
     render(<ImageViewer src="data:image/png;base64,aGVsbG8=" alt="Example image" />)
 
@@ -131,6 +157,27 @@ describe('ImageViewer', () => {
     })
     expect(mocks.clipboard.write).toHaveBeenCalledWith([expect.any(MockClipboardItem)])
     expect(mocks.toast.success).toHaveBeenCalledWith('message.copy.success')
+  })
+
+  it('logs nested copy image failures without exposing details in the toast', async () => {
+    mocks.convertImageToPng.mockRejectedValueOnce({
+      error: {
+        message: 'native conversion failed',
+        stack: 'native-stack'
+      }
+    })
+
+    render(<ImageViewer src="data:image/png;base64,aGVsbG8=" alt="Example image" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.copy' }))
+
+    await waitFor(() => {
+      expect(mocks.toast.error).toHaveBeenCalledWith('message.copy.failed')
+    })
+    expect(mocks.loggerError).toHaveBeenCalledWith('Failed to copy image', {
+      error: 'native conversion failed',
+      stack: 'native-stack'
+    })
   })
 
   it('ignores delayed copy source feedback after unmount', async () => {
