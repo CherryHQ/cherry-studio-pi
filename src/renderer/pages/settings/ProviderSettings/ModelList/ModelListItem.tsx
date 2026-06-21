@@ -1,6 +1,7 @@
 import { Avatar, AvatarFallback, Button, RowFlex, Switch, Tooltip } from '@cherrystudio/ui'
 import { getModelLogo } from '@renderer/config/models'
 import { cn } from '@renderer/utils'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import type { Model } from '@shared/data/types/model'
 import { Settings } from 'lucide-react'
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react'
@@ -46,9 +47,9 @@ const ModelListItem: React.FC<ModelListItemProps> = ({ ref, model, disabled, onE
       setToggling(true)
       try {
         await onToggleEnabled(model, enabled)
-      } catch {
+      } catch (error) {
         if (mountedRef.current) {
-          window.toast?.error(t('settings.models.manage.operation_failed'))
+          window.toast?.error(formatErrorMessageWithPrefix(error, t('settings.models.manage.operation_failed')))
         }
       } finally {
         togglingRef.current = false

@@ -112,7 +112,7 @@ describe('ModelListItem', () => {
 
     expect(onToggleEnabled).toHaveBeenCalledWith(expect.objectContaining({ id: 'openai::alpha' }), false)
     await waitFor(() => {
-      expect(window.toast.error).toHaveBeenCalledWith('settings.models.manage.operation_failed')
+      expect(window.toast.error).toHaveBeenCalledWith('settings.models.manage.operation_failed: toggle failed')
     })
   })
 

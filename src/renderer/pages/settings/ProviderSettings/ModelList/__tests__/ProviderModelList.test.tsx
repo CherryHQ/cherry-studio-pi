@@ -148,7 +148,7 @@ describe('ProviderModelList', () => {
     fireEvent.click(screen.getByRole('button', { name: 'settings.models.bulk_disable' }))
 
     await waitFor(() => {
-      expect(window.toast.error).toHaveBeenCalledWith('settings.models.manage.operation_failed')
+      expect(window.toast.error).toHaveBeenCalledWith('settings.models.manage.operation_failed: bulk close failed')
     })
     expect(loggerErrorMock).toHaveBeenCalledWith(
       'Failed to disable visible provider models',
@@ -157,6 +157,22 @@ describe('ProviderModelList', () => {
         error: expect.any(Error)
       })
     )
+  })
+
+  it('preserves nested bulk enable errors in the toast', async () => {
+    onToggleVisibleModelsMock.mockRejectedValue({
+      error: { message: 'provider model update rejected' }
+    })
+
+    render(<ProviderModelList providerId="openai" disabled={false} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'settings.models.bulk_enable' }))
+
+    await waitFor(() => {
+      expect(window.toast.error).toHaveBeenCalledWith(
+        'settings.models.manage.operation_failed: provider model update rejected'
+      )
+    })
   })
 
   it('enables visible disabled models from the action menu', () => {
