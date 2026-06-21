@@ -19,7 +19,7 @@ export async function downloadImages(urls: string[], options?: DownloadImagesOpt
       try {
         if (!url?.trim()) {
           logger.error('Image URL is empty, possibly due to prohibited prompt')
-          window.toast.warning(i18next.t('message.empty_url'))
+          window.toast?.warning(i18next.t('message.empty_url'))
           return null
         }
         const entry =
@@ -39,9 +39,9 @@ export async function downloadImages(urls: string[], options?: DownloadImagesOpt
           error instanceof Error &&
           (error.message.includes('Failed to parse URL') || error.message.includes('Invalid URL'))
         ) {
-          window.toast.warning(i18next.t('message.empty_url'))
+          window.toast?.warning(i18next.t('message.empty_url'))
         } else if (showProxyWarning) {
-          window.toast.warning(i18next.t('paintings.proxy_required'))
+          window.toast?.warning(i18next.t('paintings.proxy_required'))
         }
         return null
       }
