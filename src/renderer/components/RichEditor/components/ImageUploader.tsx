@@ -105,7 +105,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageSelect, vis
   const handleFileSelect = async (file: File) => {
     const validationError = validateFile(file)
     if (validationError) {
-      window.toast.error(validationError)
+      window.toast?.error(validationError)
       return
     }
 
@@ -119,12 +119,12 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageSelect, vis
         return
       }
       onImageSelect(base64Url)
-      window.toast.success(t('richEditor.imageUploader.uploadSuccess'))
+      window.toast?.success(t('richEditor.imageUploader.uploadSuccess'))
       onClose()
     } catch (error) {
       if (isActiveUpload(uploadSeq)) {
         logger.error('Image upload failed:', error as Error)
-        window.toast.error(t('richEditor.imageUploader.uploadError'))
+        window.toast?.error(t('richEditor.imageUploader.uploadError'))
       }
     } finally {
       if (mountedRef.current && uploadSeq === uploadSeqRef.current) {
@@ -135,18 +135,18 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageSelect, vis
 
   const handleUrlSubmit = () => {
     if (!urlInput.trim()) {
-      window.toast.error(t('richEditor.imageUploader.urlRequired'))
+      window.toast?.error(t('richEditor.imageUploader.urlRequired'))
       return
     }
 
     const imageUrl = normalizeImageEmbedUrl(urlInput)
     if (!imageUrl) {
-      window.toast.error(t('richEditor.imageUploader.invalidUrl'))
+      window.toast?.error(t('richEditor.imageUploader.invalidUrl'))
       return
     }
 
     onImageSelect(imageUrl)
-    window.toast.success(t('richEditor.imageUploader.embedSuccess'))
+    window.toast?.success(t('richEditor.imageUploader.embedSuccess'))
     setUrlInput('')
     onClose()
   }
@@ -194,7 +194,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageSelect, vis
               }}
               onError={(err) => {
                 logger.error('Dropzone validation failed:', err)
-                window.toast.error(err.message || t('richEditor.imageUploader.invalidType'))
+                window.toast?.error(err.message || t('richEditor.imageUploader.invalidType'))
               }}
               className="min-h-44 border-dashed bg-muted/20 hover:bg-accent/40">
               <div className="flex flex-col items-center justify-center gap-2 text-center">

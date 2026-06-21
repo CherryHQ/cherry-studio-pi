@@ -178,4 +178,20 @@ describe('ImageUploader', () => {
     expect(window.toast.error).toHaveBeenCalledTimes(4)
     expect(window.toast.error).toHaveBeenCalledWith('richEditor.imageUploader.invalidUrl')
   })
+
+  it('does not crash when validation fails before toast is available', () => {
+    const onImageSelect = vi.fn()
+    const onClose = vi.fn()
+    mocks.dropFile = new File(['text'], 'note.txt', { type: 'text/plain' })
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: undefined
+    })
+
+    render(<ImageUploader visible onImageSelect={onImageSelect} onClose={onClose} />)
+
+    expect(() => fireEvent.click(screen.getByRole('button', { name: 'dropzone' }))).not.toThrow()
+    expect(onImageSelect).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+  })
 })
