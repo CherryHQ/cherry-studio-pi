@@ -54,7 +54,7 @@ const HistoryPage: FC = () => {
   // topic 不包含 messages，用到的时候才会获取
   const onTopicClick = (topic: Topic | null | undefined) => {
     if (!topic) {
-      window.toast.error(t('history.error.topic_not_found'))
+      window.toast?.error(t('history.error.topic_not_found'))
       return
     }
     setStack((prev) => [...prev, 'topic'])
