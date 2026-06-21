@@ -31,14 +31,14 @@ const EnvironmentDependenciesSettings: FC = () => {
       }
     } catch (error: any) {
       if (mountedRef.current && requestSeq === statusRequestSeqRef.current) {
-        window.toast?.error(error.message)
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
       }
     } finally {
       if (mountedRef.current && requestSeq === statusRequestSeqRef.current) {
         setLoading(false)
       }
     }
-  }, [])
+  }, [t])
 
   const runAction = async (action: string, fn: () => Promise<EnvironmentDependenciesStatus>, successKey: string) => {
     if (actionInFlightRef.current) {
@@ -56,7 +56,7 @@ const EnvironmentDependenciesSettings: FC = () => {
       }
     } catch (error: any) {
       if (mountedRef.current && requestSeq === actionRequestSeqRef.current) {
-        window.toast?.error(error.message)
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
       }
     } finally {
       if (mountedRef.current && requestSeq === actionRequestSeqRef.current) {
