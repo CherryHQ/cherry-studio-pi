@@ -21,6 +21,7 @@ import DefaultAvatar from '@renderer/assets/images/avatar.png'
 import useAvatar from '@renderer/hooks/useAvatar'
 import ImageStorage from '@renderer/services/ImageStorage'
 import { compressImage, isEmoji } from '@renderer/utils'
+import { getErrorMessage } from '@renderer/utils/error'
 import React, { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -62,7 +63,7 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       setAvatarPopoverOpen(false)
       setAvatarPopoverView('menu')
     } catch (error: any) {
-      window.toast?.error(error.message)
+      window.toast?.error(getErrorMessage(error))
     }
   }
 
@@ -73,7 +74,7 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       setAvatarPopoverOpen(false)
       setAvatarPopoverView('menu')
     } catch (error: any) {
-      window.toast?.error(error.message)
+      window.toast?.error(getErrorMessage(error))
     }
   }
 
@@ -89,7 +90,7 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       setAvatarPopoverOpen(false)
       setAvatarPopoverView('menu')
     } catch (error: any) {
-      window.toast?.error(error.message)
+      window.toast?.error(getErrorMessage(error))
     }
   }
 

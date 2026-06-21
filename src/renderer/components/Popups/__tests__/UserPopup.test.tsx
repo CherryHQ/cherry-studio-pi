@@ -212,4 +212,32 @@ describe('UserPopup', () => {
       expect(ImageStorage.set).toHaveBeenCalledWith('avatar', expect.anything())
     })
   })
+
+  it('shows nested avatar reset failure details', async () => {
+    MockUseCacheUtils.setCacheValue('app.user.avatar', '🙂')
+    const ImageStorage = (await import('@renderer/services/ImageStorage')).default
+    vi.mocked(ImageStorage.set).mockRejectedValueOnce({
+      error: { message: 'Invalid response: 503 Service Unavailable' }
+    })
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: {
+        error: vi.fn()
+      }
+    })
+
+    await renderUserPopup()
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.avatar' }))
+    const resetButton = await screen.findByText('settings.general.avatar.reset')
+
+    await act(async () => {
+      fireEvent.click(resetButton)
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(window.toast?.error).toHaveBeenCalledWith('Invalid response: 503 Service Unavailable')
+    })
+  })
 })
