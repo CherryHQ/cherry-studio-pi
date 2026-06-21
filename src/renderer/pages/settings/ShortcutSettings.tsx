@@ -163,7 +163,7 @@ const ShortcutSettings: FC = () => {
       })
 
       if (hasConflict) {
-        window.toast.error(t('settings.shortcuts.occupied_by_other_application'))
+        window.toast?.error(t('settings.shortcuts.occupied_by_other_application'))
       }
     })
   }, [t])
@@ -191,7 +191,7 @@ const ShortcutSettings: FC = () => {
 
   const handleUpdateFailure = (record: (typeof shortcuts)[number], error: unknown) => {
     logger.error(`Failed to update shortcut preference: ${record.key}`, error as Error)
-    window.toast.error(t('settings.shortcuts.save_failed_with_name', { name: record.label }))
+    window.toast?.error(t('settings.shortcuts.save_failed_with_name', { name: record.label }))
   }
 
   const handleResetShortcut = async (record: (typeof shortcuts)[number]) => {
@@ -241,7 +241,7 @@ const ShortcutSettings: FC = () => {
   }
 
   const showConflictToast = (label: string) => {
-    window.toast.error(t('settings.shortcuts.conflict_with', { name: label }))
+    window.toast?.error(t('settings.shortcuts.conflict_with', { name: label }))
   }
 
   const handleKeyDown = async (event: ReactKeyboardEvent, record: (typeof shortcuts)[number]) => {
@@ -323,7 +323,7 @@ const ShortcutSettings: FC = () => {
           await preferenceService.setMultiple(updates)
         } catch (error) {
           logger.error('Failed to reset all shortcuts to defaults', error as Error)
-          window.toast.error(t('settings.shortcuts.reset_defaults_failed'))
+          window.toast?.error(t('settings.shortcuts.reset_defaults_failed'))
         } finally {
           resetOperationRef.current = false
           resetConfirmRef.current = false
@@ -370,7 +370,7 @@ const ShortcutSettings: FC = () => {
       await preferenceService.setMultiple(updates)
     } catch (error) {
       logger.error(`Failed to toggle shortcuts for group ${activeGroup}`, error as Error)
-      window.toast.error(t('settings.shortcuts.save_failed'))
+      window.toast?.error(t('settings.shortcuts.save_failed'))
     }
   }
 

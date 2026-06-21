@@ -278,4 +278,20 @@ describe('ShortcutSettings shortcut recorder', () => {
     runningReset.resolve(undefined)
     await Promise.all([firstReset, secondReset])
   })
+
+  it('keeps the shortcut page usable when a system conflict arrives before the toast bridge is ready', async () => {
+    Object.assign(window, { toast: undefined })
+
+    renderShortcutSettings()
+
+    const registrationConflictCalls = registrationConflictMock.mock.calls as unknown as Array<
+      [(event: { key: string; hasConflict: boolean }) => void]
+    >
+    const onRegistrationConflict = registrationConflictCalls[0]?.[0]
+    expect(onRegistrationConflict).toBeTypeOf('function')
+
+    onRegistrationConflict?.({ key: 'shortcut.app.search', hasConflict: true })
+
+    expect(await screen.findByText('settings.shortcuts.occupied_by_other_application')).toBeInTheDocument()
+  })
 })
