@@ -252,9 +252,7 @@ async function hydrateRuntimeCacheAfterDataSync(context: string, options: { stri
   } catch (error) {
     logger.warn(`Failed to hydrate runtime cache ${context}`, error as Error)
     if (options.strict) {
-      const message = `远端数据已同步到本机，但恢复到当前界面失败：${
-        error instanceof Error ? error.message : String(error)
-      }`
+      const message = `远端数据已同步到本机，但恢复到当前界面失败：${getErrorMessage(error)}`
       await rememberDataSyncFailure(message)
       throw new Error(message)
     }

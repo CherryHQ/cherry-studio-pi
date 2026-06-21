@@ -309,6 +309,23 @@ describe('DataSyncService', () => {
     expect(getDataSyncRuntimeState().syncing).toBe(false)
   })
 
+  it('records nested hydration failure details after downloaded remote data', async () => {
+    mocks.syncNow.mockResolvedValueOnce({
+      ...successSummary,
+      storageDownloaded: 2
+    })
+    mocks.hydrateRuntimeCacheFromStorageV2.mockRejectedValueOnce({
+      error: { message: 'runtime cache bridge rejected hydration' }
+    })
+
+    await expect(syncAppDataNow()).rejects.toThrow('runtime cache bridge rejected hydration')
+
+    expect(mocks.recordFailure).toHaveBeenCalledWith(
+      expect.stringContaining('远端数据已同步到本机，但恢复到当前界面失败：runtime cache bridge rejected hydration')
+    )
+    expect(getDataSyncRuntimeState().syncing).toBe(false)
+  })
+
   it('fails the manual sync when downloaded assistant conversations cannot hydrate into Dexie', async () => {
     mocks.syncNow.mockResolvedValueOnce({
       ...successSummary,
