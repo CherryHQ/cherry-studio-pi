@@ -3,6 +3,7 @@ import db from '@renderer/databases'
 import store from '@renderer/store'
 import type { FileMetadata, LegacyAssistant, Topic } from '@renderer/types'
 import type { Message, MessageBlock } from '@renderer/types/newMessage'
+import { getErrorMessage } from '@renderer/utils/error'
 
 import { storageV2AgentMirrorService } from './StorageV2AgentMirrorService'
 import { storageV2ConversationMirrorService } from './StorageV2ConversationMirrorService'
@@ -654,6 +655,7 @@ export async function runLegacyMigrationToStorageV2(
 
     return report
   } catch (error) {
+    const message = getErrorMessage(error)
     const finishedAt = new Date().toISOString()
     await recordStorageV2MigrationRun({
       kind: 'full-legacy-import',
@@ -662,10 +664,13 @@ export async function runLegacyMigrationToStorageV2(
       startedAt,
       finishedAt,
       snapshotPath,
-      error: error instanceof Error ? error.message : String(error)
+      error: message
     }).catch((recordError) => {
       logger.warn('Failed to record failed Storage v2 migration run', recordError as Error)
     })
+    if (!(error instanceof Error)) {
+      throw new Error(message, { cause: error })
+    }
     throw error
   }
 }

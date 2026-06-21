@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   importLegacyAppDb: vi.fn(),
   importLegacyDexieSnapshot: vi.fn(),
   importLegacyReduxSnapshot: vi.fn(),
+  recordMigrationRun: vi.fn(),
   knowledgeNotesToArray: vi.fn(),
   localStorageGetSnapshot: vi.fn(),
   localStorageGetStatus: vi.fn(),
@@ -153,6 +154,7 @@ describe('StorageV2Service legacy Dexie snapshots', () => {
           importLegacyAppDb: mocks.importLegacyAppDb,
           importLegacyDexieSnapshot: mocks.importLegacyDexieSnapshot,
           importLegacyReduxSnapshot: mocks.importLegacyReduxSnapshot,
+          recordMigrationRun: mocks.recordMigrationRun,
           restoreBackup: mocks.restoreBackup
         }
       }
@@ -189,6 +191,7 @@ describe('StorageV2Service legacy Dexie snapshots', () => {
     mocks.importLegacyAppDb.mockResolvedValue({})
     mocks.importLegacyDexieSnapshot.mockResolvedValue({})
     mocks.importLegacyReduxSnapshot.mockResolvedValue({})
+    mocks.recordMigrationRun.mockResolvedValue(undefined)
     mocks.knowledgeNotesToArray.mockResolvedValue([])
     mocks.localStorageGetSnapshot.mockReturnValue({})
     mocks.localStorageGetStatus.mockReturnValue({
@@ -344,5 +347,21 @@ describe('StorageV2Service legacy Dexie snapshots', () => {
 
     expect(mocks.dexieSettingsMirrorInstall).toHaveBeenCalledTimes(1)
     expect(mocks.dexieTableMirrorInstall).toHaveBeenCalledTimes(1)
+  })
+
+  it('records nested migration failure details', async () => {
+    mocks.importLegacyReduxSnapshot.mockRejectedValueOnce({ error: { message: 'redux import bridge failed' } })
+
+    const { runLegacyMigrationToStorageV2 } = await import('../StorageV2Service')
+
+    await expect(runLegacyMigrationToStorageV2()).rejects.toThrow('redux import bridge failed')
+
+    expect(mocks.recordMigrationRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'full-legacy-import',
+        status: 'failed',
+        error: 'redux import bridge failed'
+      })
+    )
   })
 })
