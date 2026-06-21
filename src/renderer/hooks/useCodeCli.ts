@@ -3,7 +3,7 @@ import { loggerService } from '@logger'
 import { codeCLI } from '@shared/config/constant'
 import type { CodeCliId, CodeCliOverride, CodeCliOverrides } from '@shared/data/preference/preferenceTypes'
 import { CODE_CLI_PRESET_MAP } from '@shared/data/presets/code-cli'
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 const logger = loggerService.withContext('useCodeCli')
 
@@ -24,6 +24,15 @@ function getEffectiveToolConfig(toolId: CodeCliId, overrides: CodeCliOverrides):
 
 export const useCodeCli = () => {
   const [overrides, setOverrides] = usePreference('feature.code_cli.overrides')
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const selectedCliTool = useMemo(() => {
     for (const [toolId, override] of Object.entries(overrides)) {
@@ -146,6 +155,9 @@ export const useCodeCli = () => {
   const selectFolder = useCallback(async () => {
     try {
       const folderPath = await window.api.file.selectFolder()
+      if (!mountedRef.current) {
+        return null
+      }
       if (folderPath) {
         await setCurrentDir(folderPath)
         return folderPath
