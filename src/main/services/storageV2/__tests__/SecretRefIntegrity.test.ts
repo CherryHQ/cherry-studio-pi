@@ -174,6 +174,22 @@ function createMockClient(): Client {
         }
       }
 
+      if (sql.includes('FROM task_run_logs')) {
+        return {
+          rows: [
+            {
+              result_json: JSON.stringify({
+                appCall: {
+                  secretRef: 'storage-v2://secret/task-run-log/run-1/result'
+                }
+              })
+            }
+          ],
+          columns: [],
+          columnTypes: []
+        }
+      }
+
       if (sql.includes('FROM sync_conflicts')) {
         throw new Error('SQLITE_ERROR: no such table: sync_conflicts')
       }
@@ -201,7 +217,8 @@ describe('scanStorageV2SecretReferences', () => {
         'message:message-1:provider-trace',
         'message-block:block-1:tool-result',
         'file:file-1:external',
-        'sync-change:change-1:before'
+        'sync-change:change-1:before',
+        'task-run-log:run-1:result'
       ])
     )
     expect(result.invalidRefs).toEqual(new Set(['storage-v2://secret/%']))

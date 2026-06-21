@@ -56,6 +56,11 @@ const SECRET_REF_QUERIES = [
     sql: 'SELECT active_chat_ids_json FROM channels'
   },
   {
+    source: 'task_run_logs.result_json',
+    column: 'result_json',
+    sql: 'SELECT result_json FROM task_run_logs'
+  },
+  {
     source: 'knowledge_bases.settings_json',
     column: 'settings_json',
     sql: 'SELECT settings_json FROM knowledge_bases'
