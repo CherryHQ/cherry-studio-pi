@@ -1,8 +1,10 @@
-import { isValidElement, type ReactElement } from 'react'
+import { act, cleanup, render, waitFor } from '@testing-library/react'
+import { isValidElement, type ReactElement, type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   closeTransientResourceSelectors: vi.fn(),
+  forceCloseEvent: 'cherry:resource-selector:force-close',
   topView: {
     show: vi.fn(),
     hide: vi.fn()
@@ -10,17 +12,29 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@renderer/components/ResourceSelector/resourceSelectorEvents', () => ({
-  closeTransientResourceSelectors: mocks.closeTransientResourceSelectors
+  closeTransientResourceSelectors: mocks.closeTransientResourceSelectors,
+  RESOURCE_SELECTOR_FORCE_CLOSE_EVENT: mocks.forceCloseEvent
 }))
 
 vi.mock('@renderer/components/TopView', () => ({
   TopView: mocks.topView
 }))
 
+vi.mock('antd', () => ({
+  Drawer: ({ children, open }: { children?: ReactNode; open?: boolean }) =>
+    open ? <div data-testid="agent-side-panel-drawer">{children}</div> : null
+}))
+
+vi.mock('../../AgentSidePanel', () => ({
+  default: () => <div data-testid="agent-side-panel" />
+}))
+
 describe('AgentSidePanelDrawer', () => {
   afterEach(() => {
+    cleanup()
     vi.clearAllMocks()
     vi.resetModules()
+    vi.useRealTimers()
   })
 
   it('shows the drawer through a stable TopView key', async () => {
@@ -84,5 +98,22 @@ describe('AgentSidePanelDrawer', () => {
     expect(mocks.closeTransientResourceSelectors).toHaveBeenCalledTimes(1)
     expect(mocks.topView.hide).toHaveBeenCalledTimes(1)
     expect(mocks.topView.hide).toHaveBeenCalledWith('AgentSidePanelDrawer')
+  })
+
+  it('closes the mounted drawer when transient resource surfaces are force-closed', async () => {
+    const { default: AgentSidePanelDrawer } = await import('../AgentSidePanelDrawer')
+
+    const shown = AgentSidePanelDrawer.show()
+    const [element] = mocks.topView.show.mock.calls[0]
+    render(element as ReactElement)
+
+    await act(async () => {})
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(mocks.forceCloseEvent))
+    })
+
+    await waitFor(() => expect(mocks.topView.hide).toHaveBeenCalledWith('AgentSidePanelDrawer'))
+    await expect(shown).resolves.toBeUndefined()
   })
 })

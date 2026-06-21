@@ -1,9 +1,12 @@
 import { useTopViewClose } from '@renderer/components/Popups/useTopViewClose'
-import { closeTransientResourceSelectors } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
+import {
+  closeTransientResourceSelectors,
+  RESOURCE_SELECTOR_FORCE_CLOSE_EVENT
+} from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { TopView } from '@renderer/components/TopView'
 import { isMac } from '@renderer/config/constant'
 import { Drawer } from 'antd'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import AgentSidePanel from '../AgentSidePanel'
 
@@ -23,6 +26,13 @@ const PopupContainer = ({ resolve }: Props) => {
   const onClose = useCallback(() => {
     close()
   }, [close])
+
+  useEffect(() => {
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, onClose)
+    return () => {
+      window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, onClose)
+    }
+  }, [onClose])
 
   return (
     <Drawer
