@@ -38,20 +38,31 @@ const PopupContainer: React.FC<Props> = ({ resolve, backupType = 'direct' }) => 
   const [open, setOpen] = useState(true)
   const [progressData, setProgressData] = useState<ProgressData>()
   const [running, setRunning] = useState(false)
+  const mountedRef = useRef(true)
+  const operationSeqRef = useRef(0)
   const runningRef = useRef(false)
   const { t } = useTranslation()
   const [skipBackupFile] = usePreference('data.backup.general.skip_backup_file')
   const close = useTopViewClose({ resolve, setOpen, topViewKey: TopViewKey })
 
   useEffect(() => {
+    mountedRef.current = true
+
     const removeListener = window.electron.ipcRenderer.on(IpcChannel.BackupProgress, (_, data: ProgressData) => {
-      setProgressData(data)
+      if (mountedRef.current) {
+        setProgressData(data)
+      }
     })
 
     return () => {
+      mountedRef.current = false
+      operationSeqRef.current += 1
+      runningRef.current = false
       removeListener()
     }
   }, [])
+
+  const isCurrentBackup = (operationSeq: number) => mountedRef.current && operationSeqRef.current === operationSeq
 
   const onOk = async () => {
     if (runningRef.current) {
@@ -60,6 +71,7 @@ const PopupContainer: React.FC<Props> = ({ resolve, backupType = 'direct' }) => 
 
     logger.debug(`skipBackupFile: ${skipBackupFile}, backupType: ${backupType}`)
 
+    const operationSeq = ++operationSeqRef.current
     runningRef.current = true
     setRunning(true)
     let didClose = false
@@ -69,14 +81,24 @@ const PopupContainer: React.FC<Props> = ({ resolve, backupType = 'direct' }) => 
       } else {
         await backup(skipBackupFile)
       }
+      if (!isCurrentBackup(operationSeq)) {
+        return
+      }
+
       didClose = true
       close({})
     } catch (error) {
+      if (!isCurrentBackup(operationSeq)) {
+        return
+      }
+
       logger.error('Backup failed:', error as Error)
       window.toast?.error(`${t('message.backup.failed')}: ${getErrorMessage(error)}`)
     } finally {
-      runningRef.current = false
-      if (!didClose) {
+      if (operationSeqRef.current === operationSeq) {
+        runningRef.current = false
+      }
+      if (!didClose && isCurrentBackup(operationSeq)) {
         setRunning(false)
       }
     }
