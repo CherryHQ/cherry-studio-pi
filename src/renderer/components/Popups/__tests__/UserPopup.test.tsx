@@ -77,7 +77,16 @@ vi.mock('@cherrystudio/ui', () => {
       open?: boolean
       onOpenChange?: (open: boolean) => void
     }) => <PopoverContext value={{ open, onOpenChange }}>{children}</PopoverContext>,
-    PopoverContent: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) => {
+    PopoverContent: ({
+      children,
+      sideOffset: _sideOffset,
+      ...props
+    }: {
+      children?: ReactNode
+      sideOffset?: number
+      [key: string]: unknown
+    }) => {
+      void _sideOffset
       const context = React.use(PopoverContext)
 
       return context.open ? (
