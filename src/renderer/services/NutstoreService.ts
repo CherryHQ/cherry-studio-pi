@@ -4,6 +4,7 @@ import i18n from '@renderer/i18n'
 import store, { handleSaveData } from '@renderer/store'
 import { setNutstoreSyncState } from '@renderer/store/nutstore'
 import type { WebDavConfig } from '@renderer/types'
+import { getErrorMessage } from '@renderer/utils/error'
 import { NUTSTORE_HOST } from '@shared/config/nutstore'
 import type { UnifiedPreferenceKeyType, UnifiedPreferenceType } from '@shared/data/preference/preferenceTypes'
 import dayjs from 'dayjs'
@@ -201,7 +202,8 @@ export async function backupToNutstore({
       window.toast?.error(i18n.t('message.backup.failed'))
     }
   } catch (error) {
-    store.dispatch(setNutstoreSyncState({ lastSyncError: 'Backup failed' }))
+    const errorMessage = getErrorMessage(error)
+    store.dispatch(setNutstoreSyncState({ lastSyncError: errorMessage }))
     logger.error('[Nutstore] Backup failed:', error as Error)
     window.toast?.error(i18n.t('message.backup.failed'))
   } finally {
@@ -225,11 +227,11 @@ export async function restoreFromNutstore(fileName?: string) {
 
   try {
     data = await window.api.backup.restoreFromWebdav({ ...config, fileName })
-  } catch (error: any) {
+  } catch (error) {
     logger.error('[backup] restoreFromWebdav: Error downloading file from WebDAV:', error as Error)
     window.modal.error({
       title: i18n.t('message.restore.failed'),
-      content: error.message
+      content: getErrorMessage(error)
     })
     return
   }

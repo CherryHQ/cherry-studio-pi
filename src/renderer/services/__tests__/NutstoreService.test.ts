@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   backupToWebdav: vi.fn(),
   restoreFromWebdav: vi.fn(),
   preferenceCache: new Map<string, unknown>(),
+  modalError: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn()
 }))
@@ -85,6 +86,7 @@ function nutstoreState(overrides: Record<string, unknown> = {}) {
 
 describe('NutstoreService', () => {
   let originalApi: unknown
+  let originalModal: unknown
   let originalToast: unknown
 
   beforeEach(() => {
@@ -101,6 +103,7 @@ describe('NutstoreService', () => {
     mocks.restoreFromWebdav.mockResolvedValue(undefined)
 
     originalApi = window.api
+    originalModal = window.modal
     originalToast = window.toast
     Object.defineProperty(window, 'api', {
       configurable: true,
@@ -125,6 +128,12 @@ describe('NutstoreService', () => {
         success: mocks.toastSuccess
       }
     })
+    Object.defineProperty(window, 'modal', {
+      configurable: true,
+      value: {
+        error: mocks.modalError
+      }
+    })
   })
 
   afterEach(() => {
@@ -133,6 +142,10 @@ describe('NutstoreService', () => {
     Object.defineProperty(window, 'api', {
       configurable: true,
       value: originalApi
+    })
+    Object.defineProperty(window, 'modal', {
+      configurable: true,
+      value: originalModal
     })
     Object.defineProperty(window, 'toast', {
       configurable: true,
@@ -203,6 +216,32 @@ describe('NutstoreService', () => {
     expect(mocks.restoreFromWebdav).toHaveBeenCalledWith(expect.objectContaining({ fileName: 'direct.zip' }))
     expect(mocks.handleData).not.toHaveBeenCalled()
     expect(mocks.toastError).not.toHaveBeenCalled()
+  })
+
+  it('preserves Nutstore backup failure details in sync state', async () => {
+    mocks.backupToWebdav.mockRejectedValueOnce('nutstore quota exceeded')
+
+    await backupToNutstore()
+
+    expect(mocks.dispatch).toHaveBeenCalledWith({
+      payload: { lastSyncError: 'nutstore quota exceeded' },
+      type: 'nutstore/setSyncState'
+    })
+  })
+
+  it('preserves nested Nutstore restore errors in the modal', async () => {
+    mocks.restoreFromWebdav.mockRejectedValueOnce({
+      error: {
+        message: 'nutstore restore permission denied'
+      }
+    })
+
+    await restoreFromNutstore('remote.zip')
+
+    expect(mocks.modalError).toHaveBeenCalledWith({
+      title: 'message.restore.failed',
+      content: 'nutstore restore permission denied'
+    })
   })
 
   it('does not reschedule after auto sync is stopped during an in-flight backup', async () => {
