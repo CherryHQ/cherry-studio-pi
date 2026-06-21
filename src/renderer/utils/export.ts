@@ -395,7 +395,7 @@ export const exportTopicAsMarkdown = async (
   excludeCitations?: boolean
 ): Promise<void> => {
   if (getExportState()) {
-    window.toast.warning(i18n.t('message.warn.export.exporting'))
+    window.toast?.warning(i18n.t('message.warn.export.exporting'))
     return
   }
 
@@ -408,10 +408,10 @@ export const exportTopicAsMarkdown = async (
       const markdown = await topicToMarkdown(topic, exportReasoning, excludeCitations)
       const result = await window.api.file.save(fileName, markdown)
       if (result) {
-        window.toast.success(i18n.t('message.success.markdown.export.specified'))
+        window.toast?.success(i18n.t('message.success.markdown.export.specified'))
       }
     } catch (error: any) {
-      window.toast.error(i18n.t('message.error.markdown.export.specified'))
+      window.toast?.error(i18n.t('message.error.markdown.export.specified'))
       logger.error('Failed to export topic as markdown:', error)
     } finally {
       setExportingState(false)
@@ -422,9 +422,9 @@ export const exportTopicAsMarkdown = async (
       const fileName = removeSpecialCharactersForFileName(topic.name) + ` ${timestamp}.md`
       const markdown = await topicToMarkdown(topic, exportReasoning, excludeCitations)
       await window.api.file.write(markdownExportPath + '/' + fileName, markdown)
-      window.toast.success(i18n.t('message.success.markdown.export.preconf'))
+      window.toast?.success(i18n.t('message.success.markdown.export.preconf'))
     } catch (error: any) {
-      window.toast.error(i18n.t('message.error.markdown.export.preconf'))
+      window.toast?.error(i18n.t('message.error.markdown.export.preconf'))
       logger.error('Failed to export topic as markdown:', error)
     } finally {
       setExportingState(false)
@@ -438,7 +438,7 @@ export const exportMessageAsMarkdown = async (
   excludeCitations?: boolean
 ): Promise<void> => {
   if (getExportState()) {
-    window.toast.warning(i18n.t('message.warn.export.exporting'))
+    window.toast?.warning(i18n.t('message.warn.export.exporting'))
     return
   }
 
@@ -454,10 +454,10 @@ export const exportMessageAsMarkdown = async (
         : await messageToMarkdown(message, excludeCitations)
       const result = await window.api.file.save(fileName, markdown)
       if (result) {
-        window.toast.success(i18n.t('message.success.markdown.export.specified'))
+        window.toast?.success(i18n.t('message.success.markdown.export.specified'))
       }
     } catch (error: any) {
-      window.toast.error(i18n.t('message.error.markdown.export.specified'))
+      window.toast?.error(i18n.t('message.error.markdown.export.specified'))
       logger.error('Failed to export message as markdown:', error)
     } finally {
       setExportingState(false)
@@ -471,9 +471,9 @@ export const exportMessageAsMarkdown = async (
         ? await messageToMarkdownWithReasoning(message, excludeCitations)
         : await messageToMarkdown(message, excludeCitations)
       await window.api.file.write(markdownExportPath + '/' + fileName, markdown)
-      window.toast.success(i18n.t('message.success.markdown.export.preconf'))
+      window.toast?.success(i18n.t('message.success.markdown.export.preconf'))
     } catch (error: any) {
-      window.toast.error(i18n.t('message.error.markdown.export.preconf'))
+      window.toast?.error(i18n.t('message.error.markdown.export.preconf'))
       logger.error('Failed to export message as markdown:', error)
     } finally {
       setExportingState(false)
@@ -563,7 +563,7 @@ const convertThinkingToNotionBlocks = async (thinkingContent: string): Promise<a
 
 const executeNotionExport = async (title: string, allBlocks: any[]): Promise<boolean> => {
   if (getExportState()) {
-    window.toast.warning(i18n.t('message.warn.export.exporting'))
+    window.toast?.warning(i18n.t('message.warn.export.exporting'))
     return false
   }
 
@@ -573,12 +573,12 @@ const executeNotionExport = async (title: string, allBlocks: any[]): Promise<boo
     notionApiKey: 'data.integration.notion.api_key'
   })
   if (!notionApiKey || !notionDatabaseID) {
-    window.toast.error(i18n.t('message.error.notion.no_api_key'))
+    window.toast?.error(i18n.t('message.error.notion.no_api_key'))
     return false
   }
 
   if (allBlocks.length === 0) {
-    window.toast.error(i18n.t('message.error.notion.export'))
+    window.toast?.error(i18n.t('message.error.notion.export'))
     return false
   }
 
@@ -600,7 +600,7 @@ const executeNotionExport = async (title: string, allBlocks: any[]): Promise<boo
         }
       }
     })
-    window.toast.loading({ title: i18n.t('message.loading.notion.preparing'), promise: responsePromise })
+    window.toast?.loading({ title: i18n.t('message.loading.notion.preparing'), promise: responsePromise })
     const response = await responsePromise
 
     const exportPromise = appendBlocks({
@@ -608,15 +608,15 @@ const executeNotionExport = async (title: string, allBlocks: any[]): Promise<boo
       children: allBlocks,
       client: notion
     })
-    window.toast.loading({ title: i18n.t('message.loading.notion.exporting_progress'), promise: exportPromise })
+    window.toast?.loading({ title: i18n.t('message.loading.notion.exporting_progress'), promise: exportPromise })
 
-    window.toast.success(i18n.t('message.success.notion.export'))
+    window.toast?.success(i18n.t('message.success.notion.export'))
     return true
   } catch (error: any) {
     // 清理可能存在的loading消息
 
     logger.error('Notion export failed:', error)
-    window.toast.error(i18n.t('message.error.notion.export'))
+    window.toast?.error(i18n.t('message.error.notion.export'))
     return false
   } finally {
     setExportingState(false)
@@ -687,12 +687,12 @@ export const exportMarkdownToYuque = async (title: string, content: string): Pro
   })
 
   if (getExportState()) {
-    window.toast.warning(i18n.t('message.warn.export.exporting'))
+    window.toast?.warning(i18n.t('message.warn.export.exporting'))
     return
   }
 
   if (!yuqueToken || !yuqueRepoId) {
-    window.toast.error(i18n.t('message.error.yuque.no_config'))
+    window.toast?.error(i18n.t('message.error.yuque.no_config'))
     return
   }
 
@@ -739,11 +739,11 @@ export const exportMarkdownToYuque = async (title: string, content: string): Pro
       throw new Error(`HTTP error! status: ${tocResponse.status}`)
     }
 
-    window.toast.success(i18n.t('message.success.yuque.export'))
+    window.toast?.success(i18n.t('message.success.yuque.export'))
     return data
   } catch (error: any) {
     logger.debug(error)
-    window.toast.error(i18n.t('message.error.yuque.export'))
+    window.toast?.error(i18n.t('message.error.yuque.export'))
     return null
   } finally {
     setExportingState(false)
@@ -763,7 +763,7 @@ export const exportMarkdownToYuque = async (title: string, content: string): Pro
  */
 export const exportMarkdownToObsidian = async (attributes: any): Promise<void> => {
   if (getExportState()) {
-    window.toast.warning(i18n.t('message.warn.export.exporting'))
+    window.toast?.warning(i18n.t('message.warn.export.exporting'))
     return
   }
 
@@ -776,12 +776,12 @@ export const exportMarkdownToObsidian = async (attributes: any): Promise<void> =
     let isMarkdownFile = false
 
     if (!obsidianVault) {
-      window.toast.error(i18n.t('chat.topics.export.obsidian_no_vault_selected'))
+      window.toast?.error(i18n.t('chat.topics.export.obsidian_no_vault_selected'))
       return
     }
 
     if (!attributes.title) {
-      window.toast.error(i18n.t('chat.topics.export.obsidian_title_required'))
+      window.toast?.error(i18n.t('chat.topics.export.obsidian_title_required'))
       return
     }
 
@@ -818,10 +818,10 @@ export const exportMarkdownToObsidian = async (attributes: any): Promise<void> =
     }
 
     await window.api.shell.openExternal(obsidianUrl)
-    window.toast.success(i18n.t('chat.topics.export.obsidian_export_success'))
+    window.toast?.success(i18n.t('chat.topics.export.obsidian_export_success'))
   } catch (error) {
     logger.error('Failed to export to Obsidian:', error as Error)
-    window.toast.error(i18n.t('chat.topics.export.obsidian_export_failed'))
+    window.toast?.error(i18n.t('chat.topics.export.obsidian_export_failed'))
   } finally {
     setExportingState(false)
   }
@@ -885,12 +885,12 @@ export const exportMarkdownToJoplin = async (
     })
 
   if (getExportState()) {
-    window.toast.warning(i18n.t('message.warn.export.exporting'))
+    window.toast?.warning(i18n.t('message.warn.export.exporting'))
     return
   }
 
   if (!joplinUrl || !joplinToken) {
-    window.toast.error(i18n.t('message.error.joplin.no_config'))
+    window.toast?.error(i18n.t('message.error.joplin.no_config'))
     return
   }
 
@@ -931,11 +931,11 @@ export const exportMarkdownToJoplin = async (
       throw new Error('response error')
     }
 
-    window.toast.success(i18n.t('message.success.joplin.export'))
+    window.toast?.success(i18n.t('message.success.joplin.export'))
     return data
   } catch (error: any) {
     logger.error('Failed to export to Joplin:', error)
-    window.toast.error(i18n.t('message.error.joplin.export'))
+    window.toast?.error(i18n.t('message.error.joplin.export'))
     return null
   } finally {
     setExportingState(false)
@@ -956,12 +956,12 @@ export const exportMarkdownToSiyuan = async (title: string, content: string): Pr
   })
 
   if (getExportState()) {
-    window.toast.warning(i18n.t('message.warn.export.exporting'))
+    window.toast?.warning(i18n.t('message.warn.export.exporting'))
     return
   }
 
   if (!siyuanApiUrl || !siyuanToken || !siyuanBoxId) {
-    window.toast.error(i18n.t('message.error.siyuan.no_config'))
+    window.toast?.error(i18n.t('message.error.siyuan.no_config'))
     return
   }
 
@@ -996,10 +996,10 @@ export const exportMarkdownToSiyuan = async (title: string, content: string): Pr
     // 创建文档
     await createSiyuanDoc(siyuanApiUrl, siyuanToken, siyuanBoxId, docPath, content)
 
-    window.toast.success(i18n.t('message.success.siyuan.export'))
+    window.toast?.success(i18n.t('message.success.siyuan.export'))
   } catch (error) {
     logger.error('Failed to export to Siyuan:', error as Error)
-    window.toast.error(i18n.t('message.error.siyuan.export') + (error instanceof Error ? `: ${error.message}` : ''))
+    window.toast?.error(i18n.t('message.error.siyuan.export') + (error instanceof Error ? `: ${error.message}` : ''))
   } finally {
     setExportingState(false)
   }
@@ -1072,10 +1072,10 @@ export const exportMessageToNotes = async (title: string, content: string, folde
     const cleanedContent = content.replace(/^## 🤖 Assistant(\n|$)/m, '')
     await addNote(title, cleanedContent, folderPath)
 
-    window.toast.success(i18n.t('message.success.notes.export'))
+    window.toast?.success(i18n.t('message.success.notes.export'))
   } catch (error) {
     logger.error('导出到笔记失败:', error as Error)
-    window.toast.error(i18n.t('message.error.notes.export'))
+    window.toast?.error(i18n.t('message.error.notes.export'))
     throw error
   }
 }
@@ -1091,10 +1091,10 @@ export const exportTopicToNotes = async (topic: Topic, folderPath: string): Prom
     const content = await topicToMarkdown(topic)
     await addNote(topic.name, content, folderPath)
 
-    window.toast.success(i18n.t('message.success.notes.export'))
+    window.toast?.success(i18n.t('message.success.notes.export'))
   } catch (error) {
     logger.error('导出到笔记失败:', error as Error)
-    window.toast.error(i18n.t('message.error.notes.export'))
+    window.toast?.error(i18n.t('message.error.notes.export'))
     throw error
   }
 }
@@ -1104,7 +1104,7 @@ const exportNoteAsMarkdown = async (noteName: string, content: string): Promise<
   const fileName = removeSpecialCharactersForFileName(noteName) + '.md'
   const result = await window.api.file.save(fileName, markdown)
   if (result) {
-    window.toast.success(i18n.t('message.success.markdown.export.specified'))
+    window.toast?.success(i18n.t('message.success.markdown.export.specified'))
   }
 }
 
@@ -1127,7 +1127,7 @@ const getScrollableElement = (): HTMLElement | null => {
 const getScrollableRef = (): { current: HTMLElement } | null => {
   const element = getScrollableElement()
   if (!element) {
-    window.toast.warning(i18n.t('notes.no_content_to_copy'))
+    window.toast?.warning(i18n.t('notes.no_content_to_copy'))
     return null
   }
   return { current: element }
@@ -1140,7 +1140,7 @@ const exportNoteAsImageToClipboard = async (): Promise<void> => {
   await captureScrollableAsBlob(scrollableRef, async (blob) => {
     if (blob) {
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-      window.toast.success(i18n.t('common.copied'))
+      window.toast?.success(i18n.t('common.copied'))
     }
   })
 }

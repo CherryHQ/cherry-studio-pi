@@ -152,11 +152,11 @@ function requestRelaunchAfterRestore(source: string) {
     try {
       void Promise.resolve(window.api.relaunchApp()).catch((error) => {
         logger.error(`${source}: Failed to relaunch app after data restore`, error as Error)
-        window.toast.error(formatErrorMessageWithPrefix(error, i18n.t('common.operation_failed')))
+        window.toast?.error(formatErrorMessageWithPrefix(error, i18n.t('common.operation_failed')))
       })
     } catch (error) {
       logger.error(`${source}: Failed to relaunch app after data restore`, error as Error)
-      window.toast.error(formatErrorMessageWithPrefix(error, i18n.t('common.operation_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, i18n.t('common.operation_failed')))
     }
   }, 1000)
 }
@@ -218,7 +218,7 @@ export async function backup(skipBackupFile: boolean) {
     // Use direct backup method - copy IndexedDB/LocalStorage directories directly
     await handleSaveData()
     await window.api.backup.backup(filename, selectFolder, skipBackupFile)
-    window.toast.success(i18n.t('message.backup.success'))
+    window.toast?.success(i18n.t('message.backup.success'))
   }
 }
 
@@ -234,7 +234,7 @@ export async function backupToLanTransfer() {
   const backupData = await getBackupData()
   await window.api.backup.createLanTransferBackup(backupData, savePath)
 
-  window.toast.success(i18n.t('settings.data.export_to_phone.file.export_success'))
+  window.toast?.success(i18n.t('settings.data.export_to_phone.file.export_success'))
 }
 
 export async function restore() {
@@ -337,11 +337,11 @@ export async function reset() {
             suspendStorageV2RuntimeMirrorsUntilReload()
             safeClearLocalStorageForBackup('reset')
             await clearDatabase()
-            window.toast.success(i18n.t('message.reset.success'))
+            window.toast?.success(i18n.t('message.reset.success'))
             requestRelaunchAfterRestore('reset')
           } catch (error) {
             logger.error('reset: Error resetting app data:', error as Error)
-            window.toast.error(i18n.t('notes.settings.data.reset_failed'))
+            window.toast?.error(i18n.t('notes.settings.data.reset_failed'))
           } finally {
             resetOperationRunning = false
             resetConfirmOpen = false
@@ -432,7 +432,7 @@ export async function backupToWebdav({
         source: 'backup',
         channel: 'system'
       })
-      showMessage && window.toast.success(i18n.t('message.backup.success'))
+      showMessage && window.toast?.success(i18n.t('message.backup.success'))
 
       // 清理旧备份文件
       if (webdavMaxBackups > 0) {
@@ -484,7 +484,7 @@ export async function backupToWebdav({
       }
 
       store.dispatch(setWebDAVSyncState({ lastSyncError: 'Backup failed' }))
-      showMessage && window.toast.error(i18n.t('message.backup.failed'))
+      showMessage && window.toast?.error(i18n.t('message.backup.failed'))
     }
   } catch (error: any) {
     // if auto backup process, throw error
@@ -502,7 +502,7 @@ export async function backupToWebdav({
       channel: 'system'
     })
     store.dispatch(setWebDAVSyncState({ lastSyncError: error.message }))
-    showMessage && window.toast.error(i18n.t('message.backup.failed'))
+    showMessage && window.toast?.error(i18n.t('message.backup.failed'))
     logger.error('[Backup] backupToWebdav: Error uploading file to WebDAV:', error)
     throw error
   } finally {
@@ -545,7 +545,7 @@ export async function restoreFromWebdav(fileName?: string) {
     await handleData(JSON.parse(data))
   } catch (error) {
     logger.error('[Backup] Error downloading file from WebDAV:', error as Error)
-    window.toast.error(i18n.t('error.backup.file_format'))
+    window.toast?.error(i18n.t('error.backup.file_format'))
   }
 }
 
@@ -611,7 +611,7 @@ export async function backupToS3({
         source: 'backup',
         channel: 'system'
       })
-      showMessage && window.toast.success(i18n.t('message.backup.success'))
+      showMessage && window.toast?.success(i18n.t('message.backup.success'))
 
       // 清理旧备份文件
       if (s3Config.maxBackups > 0) {
@@ -649,7 +649,7 @@ export async function backupToS3({
       }
 
       store.dispatch(setS3SyncState({ lastSyncError: 'Backup failed' }))
-      showMessage && window.toast.error(i18n.t('message.backup.failed'))
+      showMessage && window.toast?.error(i18n.t('message.backup.failed'))
     }
   } catch (error: any) {
     if (autoBackupProcess) {
@@ -667,7 +667,7 @@ export async function backupToS3({
     })
     store.dispatch(setS3SyncState({ lastSyncError: error.message }))
     logger.error('backupToS3: Error uploading file to S3:', error)
-    showMessage && window.toast.error(i18n.t('message.backup.failed'))
+    showMessage && window.toast?.error(i18n.t('message.backup.failed'))
     throw error
   } finally {
     if (!autoBackupProcess) {
@@ -1121,7 +1121,7 @@ export async function handleData(data: Record<string, any>) {
     )
     await mirrorRestoredLegacyDexieToStorageV2()
     await disableStorageV2AutoHydrateAfterLegacyRestore()
-    window.toast.success(i18n.t('message.restore.success'))
+    window.toast?.success(i18n.t('message.restore.success'))
     requestRelaunchAfterRestore('handleData:v1')
     return
   }
@@ -1156,12 +1156,12 @@ export async function handleData(data: Record<string, any>) {
 
     await mirrorRestoredLegacyDexieToStorageV2()
     await disableStorageV2AutoHydrateAfterLegacyRestore()
-    window.toast.success(i18n.t('message.restore.success'))
+    window.toast?.success(i18n.t('message.restore.success'))
     requestRelaunchAfterRestore(`handleData:v${data.version}`)
     return
   }
 
-  window.toast.error(i18n.t('error.backup.file_format'))
+  window.toast?.error(i18n.t('error.backup.file_format'))
 }
 
 async function backupDatabase() {
@@ -1373,7 +1373,7 @@ export async function restoreFromLocal(fileName: string) {
     return true
   } catch (error) {
     logger.error('[LocalBackup] Restore failed:', error as Error)
-    window.toast.error(i18n.t('error.backup.file_format'))
+    window.toast?.error(i18n.t('error.backup.file_format'))
     throw error
   }
 }

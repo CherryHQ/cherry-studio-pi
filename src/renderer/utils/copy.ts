@@ -8,9 +8,9 @@ const copyTextWithFeedback = async (getText: () => Promise<string> | string) => 
   try {
     const text = await getText()
     await navigator.clipboard.writeText(text)
-    window.toast.success(i18next.t('message.copy.success'))
+    window.toast?.success(i18next.t('message.copy.success'))
   } catch (error) {
-    window.toast.error(formatErrorMessageWithPrefix(error, i18next.t('common.copy_failed')))
+    window.toast?.error(formatErrorMessageWithPrefix(error, i18next.t('common.copy_failed')))
   }
 }
 
