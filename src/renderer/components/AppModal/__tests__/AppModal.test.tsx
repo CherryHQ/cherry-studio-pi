@@ -112,6 +112,38 @@ describe('AppModalProvider', () => {
     await expect(confirmed!).resolves.toBe(false)
   })
 
+  it('keeps the modal usable when onOk rejects before toast is available', async () => {
+    const user = userEvent.setup()
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: undefined
+    })
+    const modal = await renderModalProvider()
+    const onOk = vi.fn().mockRejectedValue(new Error('failed'))
+
+    let confirmed: ReturnType<AppModalApi['confirm']>
+    act(() => {
+      confirmed = modal.confirm({
+        title: 'Retry action',
+        content: 'The first attempt fails.',
+        okText: 'Run',
+        cancelText: 'Cancel',
+        onOk
+      })
+    })
+
+    await user.click(await screen.findByRole('button', { name: 'Run' }))
+
+    await waitFor(() => {
+      expect(onOk).toHaveBeenCalledOnce()
+    })
+    expect(screen.getByText('Retry action')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    await expect(confirmed!).resolves.toBe(false)
+  })
+
   it('does not run onOk more than once while confirmation is pending', async () => {
     const user = userEvent.setup()
     const modal = await renderModalProvider()

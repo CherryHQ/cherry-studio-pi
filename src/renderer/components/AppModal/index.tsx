@@ -174,7 +174,7 @@ function AppModalItem({
       close(item.id, true)
     } catch (error) {
       logger.error('Modal onOk failed', error as Error)
-      window.toast.error({ title: i18n.t('common.error'), description: formatErrorMessage(error) })
+      window.toast?.error({ title: i18n.t('common.error'), description: formatErrorMessage(error) })
       confirmingRef.current = false
       updateLoading(item.id, false)
     }
