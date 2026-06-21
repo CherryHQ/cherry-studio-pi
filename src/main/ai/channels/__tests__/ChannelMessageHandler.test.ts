@@ -731,6 +731,61 @@ describe('ChannelMessageHandler', () => {
     expect(mockStartAgentSessionRun).not.toHaveBeenCalled()
   })
 
+  it('keeps the latest abort controller when overlapping channel runs share a session', async () => {
+    const adapter = createMockAdapter()
+    const sharedSession = {
+      id: 'shared-session',
+      agentId: 'agent-1',
+      agentType: 'claude-code',
+      model: 'openai::gpt-4',
+      workspace: { path: '/tmp/test-workspace' },
+      configuration: {}
+    }
+    const runs: Array<{
+      listeners: Array<{ onDone: (result: { status: string }) => void | Promise<void> }>
+    }> = []
+
+    vi.mocked(channelService.getChannel).mockResolvedValue({
+      id: 'channel-1',
+      sessionId: 'shared-session',
+      permissionMode: null,
+      workspace: { type: 'system' }
+    } as any)
+    vi.mocked(agentSessionService.getById).mockResolvedValue(sharedSession as any)
+    mockStartAgentSessionRun.mockImplementation(async ({ listeners }) => {
+      runs.push({ listeners } as (typeof runs)[number])
+    })
+
+    const first = channelMessageHandler.handleIncoming(adapter, {
+      chatId: 'chat-1',
+      userId: 'user-1',
+      userName: 'User',
+      text: 'first'
+    })
+    const second = channelMessageHandler.handleIncoming(adapter, {
+      chatId: 'chat-2',
+      userId: 'user-2',
+      userName: 'User',
+      text: 'second'
+    })
+
+    await vi.advanceTimersByTimeAsync(10500)
+    expect(runs).toHaveLength(2)
+
+    for (const listener of runs[0].listeners) {
+      await listener.onDone({ status: 'success' })
+    }
+    await first
+
+    expect(channelMessageHandler.abortSession('shared-session')).toBe(true)
+    expect(mockStreamAbort).toHaveBeenCalledWith(buildAgentSessionTopicId('shared-session'), 'channel-session-aborted')
+
+    for (const listener of runs[1].listeners) {
+      await listener.onDone({ status: 'success' })
+    }
+    await second
+  })
+
   // channels-core-2: a local AbortController only flips a listener's isAlive() — clearing
   // a tracked session must stop the upstream agent-session turn via the manager.
   it('clearSessionTracker aborts the upstream agent-session turn via the manager', async () => {

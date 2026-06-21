@@ -369,7 +369,9 @@ export class ChannelMessageHandler {
         }
         throw streamError
       } finally {
-        this.activeAbortControllers.delete(session.id)
+        if (this.activeAbortControllers.get(session.id) === abortController) {
+          this.activeAbortControllers.delete(session.id)
+        }
         clearInterval(typingInterval)
       }
     } catch (error) {
