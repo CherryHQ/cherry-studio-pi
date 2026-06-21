@@ -38,6 +38,19 @@ function sortBackupFilesNewestFirst<T extends { fileName: string; modifiedTime?:
   return [...files].sort((a, b) => backupModifiedTime(b) - backupModifiedTime(a))
 }
 
+function getBackupErrorMessage(error: unknown, fallback = 'Unknown error'): string {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === 'string' && error.trim()) return error
+  if (error && typeof error === 'object') {
+    const nested = (error as { error?: unknown }).error
+    if (nested) return getBackupErrorMessage(nested, fallback)
+
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) return message
+  }
+  return fallback
+}
+
 function getCachedPreference<K extends UnifiedPreferenceKeyType>(
   key: K,
   fallback: UnifiedPreferenceType[K]
@@ -171,8 +184,9 @@ async function deleteS3FileWithRetry(fileName: string, s3Config: S3Config, maxRe
       logger.verbose(`Successfully deleted old backup file: ${fileName} (attempt ${attempt})`)
       return true
     } catch (error: any) {
-      lastError = error
-      logger.warn(`Delete attempt ${attempt}/${maxRetries} failed for ${fileName}:`, error.message)
+      const errorMessage = getBackupErrorMessage(error)
+      lastError = error instanceof Error ? error : new Error(errorMessage)
+      logger.warn(`Delete attempt ${attempt}/${maxRetries} failed for ${fileName}:`, { error: errorMessage })
 
       // 如果不是最后一次尝试，等待一段时间再重试
       if (attempt < maxRetries) {
@@ -196,8 +210,9 @@ async function deleteWebdavFileWithRetry(fileName: string, webdavConfig: WebDavC
       logger.verbose(`Successfully deleted old backup file: ${fileName} (attempt ${attempt})`)
       return true
     } catch (error: any) {
-      lastError = error
-      logger.warn(`Delete attempt ${attempt}/${maxRetries} failed for ${fileName}:`, error.message)
+      const errorMessage = getBackupErrorMessage(error)
+      lastError = error instanceof Error ? error : new Error(errorMessage)
+      logger.warn(`Delete attempt ${attempt}/${maxRetries} failed for ${fileName}:`, { error: errorMessage })
 
       // 如果不是最后一次尝试，等待一段时间再重试
       if (attempt < maxRetries) {
@@ -491,17 +506,18 @@ export async function backupToWebdav({
     if (autoBackupProcess) {
       throw error
     }
+    const errorMessage = getBackupErrorMessage(error)
     void notificationService.send({
       id: uuid(),
       type: 'error',
       title: i18n.t('message.backup.failed'),
-      message: error.message,
+      message: errorMessage,
       silent: false,
       timestamp: Date.now(),
       source: 'backup',
       channel: 'system'
     })
-    store.dispatch(setWebDAVSyncState({ lastSyncError: error.message }))
+    store.dispatch(setWebDAVSyncState({ lastSyncError: errorMessage }))
     showMessage && window.toast?.error(i18n.t('message.backup.failed'))
     logger.error('[Backup] backupToWebdav: Error uploading file to WebDAV:', error)
     throw error
@@ -529,7 +545,7 @@ export async function restoreFromWebdav(fileName?: string) {
     logger.error('[Backup] restoreFromWebdav: Error downloading file from WebDAV:', error)
     window.modal.error({
       title: i18n.t('message.restore.failed'),
-      content: error.message
+      content: getBackupErrorMessage(error)
     })
     return
   }
@@ -655,17 +671,18 @@ export async function backupToS3({
     if (autoBackupProcess) {
       throw error
     }
+    const errorMessage = getBackupErrorMessage(error)
     void notificationService.send({
       id: uuid(),
       type: 'error',
       title: i18n.t('message.backup.failed'),
-      message: error.message,
+      message: errorMessage,
       silent: false,
       timestamp: Date.now(),
       source: 'backup',
       channel: 'system'
     })
-    store.dispatch(setS3SyncState({ lastSyncError: error.message }))
+    store.dispatch(setS3SyncState({ lastSyncError: errorMessage }))
     logger.error('backupToS3: Error uploading file to S3:', error)
     showMessage && window.toast?.error(i18n.t('message.backup.failed'))
     throw error
@@ -1030,9 +1047,10 @@ export function startAutoSync(immediate = false, type?: BackupType) {
               )
             }
 
+            const errorMessage = getBackupErrorMessage(error)
             await window.modal.error({
               title: i18n.t('message.backup.failed'),
-              content: `${logPrefix} ${new Date().toLocaleString()} ` + error.message
+              content: `${logPrefix} ${new Date().toLocaleString()} ${errorMessage}`
             })
 
             scheduleNextBackup('fromNow', backupType)
@@ -1324,19 +1342,20 @@ export async function backupToLocal({
     if (autoBackupProcess) {
       throw error
     }
+    const errorMessage = getBackupErrorMessage(error)
 
     logger.error('[LocalBackup] Backup failed:', error)
 
     store.dispatch(
       setLocalBackupSyncState({
-        lastSyncError: error.message || 'Unknown error'
+        lastSyncError: errorMessage
       })
     )
 
     if (showMessage) {
       window.modal.error({
         title: i18n.t('message.backup.failed'),
-        content: error.message || 'Unknown error'
+        content: errorMessage
       })
     }
 

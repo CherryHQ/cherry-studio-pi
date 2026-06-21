@@ -97,6 +97,7 @@ import {
   handleData,
   reset,
   restore,
+  restoreFromWebdav,
   startAutoSync,
   stopAutoSync
 } from '../BackupService'
@@ -152,7 +153,8 @@ describe('BackupService legacy restore', () => {
           deleteWebdavFile: vi.fn().mockResolvedValue(true),
           listLocalBackupFiles: vi.fn().mockResolvedValue([]),
           listS3Files: vi.fn().mockResolvedValue([]),
-          listWebdavFiles: vi.fn().mockResolvedValue([])
+          listWebdavFiles: vi.fn().mockResolvedValue([]),
+          restoreFromWebdav: vi.fn().mockResolvedValue(undefined)
         },
         system: {
           getDeviceType: vi.fn().mockResolvedValue('mac'),
@@ -690,6 +692,62 @@ describe('BackupService legacy restore', () => {
         skipBackupFile: true
       })
     )
+  })
+
+  it('preserves non-Error WebDAV backup failures in notifications', async () => {
+    mocks.storeState.settings = {
+      s3: {},
+      webdavHost: 'https://webdav.example',
+      webdavUser: 'user',
+      webdavPass: 'pass',
+      webdavPath: '/backup',
+      webdavMaxBackups: 0,
+      webdavSkipBackupFile: false,
+      webdavDisableStream: false
+    }
+    vi.mocked(window.api.backup.backupToWebdav).mockRejectedValueOnce('webdav quota exceeded')
+
+    await expect(backupToWebdav()).rejects.toBe('webdav quota exceeded')
+
+    expect(mocks.notificationSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'webdav quota exceeded',
+        title: 'message.backup.failed'
+      })
+    )
+  })
+
+  it('preserves nested WebDAV restore errors in the modal', async () => {
+    vi.mocked(window.api.backup.restoreFromWebdav).mockRejectedValueOnce({
+      error: {
+        message: 'remote restore permission denied'
+      }
+    })
+
+    await restoreFromWebdav('remote.zip')
+
+    expect(window.modal.error).toHaveBeenCalledWith({
+      title: 'message.restore.failed',
+      content: 'remote restore permission denied'
+    })
+  })
+
+  it('preserves non-Error local backup failures in the modal', async () => {
+    mocks.storeState.settings = {
+      s3: {},
+      localBackupDir: '/configured-backups',
+      localBackupMaxBackups: 0,
+      localBackupSkipBackupFile: false
+    }
+    vi.mocked(window.api.resolvePath).mockResolvedValue('/resolved-backups')
+    vi.mocked(window.api.backup.backupToLocalDir).mockRejectedValueOnce('local disk full')
+
+    await expect(backupToLocal({ showMessage: true })).rejects.toBe('local disk full')
+
+    expect(window.modal.error).toHaveBeenCalledWith({
+      title: 'message.backup.failed',
+      content: 'local disk full'
+    })
   })
 
   it('runs WebDAV auto sync after starting immediate auto sync', async () => {
