@@ -24,12 +24,19 @@ const UpdateButton: FC<UpdateButtonProps> = ({ onUpdateComplete, onUpdatingChang
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   const [isUpdating, setIsUpdating] = useState(false)
   const mountedRef = useRef(true)
+  const isUpdatingRef = useRef(isUpdating)
+  const onUpdatingChangeRef = useRef(onUpdatingChange)
+  isUpdatingRef.current = isUpdating
+  onUpdatingChangeRef.current = onUpdatingChange
 
   useEffect(() => {
     mountedRef.current = true
 
     return () => {
       mountedRef.current = false
+      if (isUpdatingRef.current) {
+        onUpdatingChangeRef.current?.(false)
+      }
     }
   }, [])
 

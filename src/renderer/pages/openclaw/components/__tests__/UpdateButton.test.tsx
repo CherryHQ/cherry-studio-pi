@@ -88,8 +88,10 @@ describe('UpdateButton', () => {
       onOk?.()
     })
     await waitFor(() => expect(window.api.openclaw.performUpdate).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(onUpdatingChange).toHaveBeenLastCalledWith(true))
 
     unmount()
+    expect(onUpdatingChange).toHaveBeenLastCalledWith(false)
 
     await act(async () => {
       updateOperation.resolve({ success: true })
