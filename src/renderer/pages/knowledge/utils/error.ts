@@ -1,3 +1,4 @@
+import { getErrorMessage } from '@renderer/utils/error'
 import { KNOWLEDGE_BASE_ERROR_MISSING_EMBEDDING_MODEL, type KnowledgeBase } from '@shared/data/types/knowledge'
 
 type KnowledgeErrorTranslator = (
@@ -17,5 +18,5 @@ export const normalizeKnowledgeError = (error: unknown): Error => {
     return error
   }
 
-  return new Error(String(error))
+  return new Error(getErrorMessage(error), { cause: error })
 }
