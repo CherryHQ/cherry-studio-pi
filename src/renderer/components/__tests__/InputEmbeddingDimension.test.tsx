@@ -107,6 +107,19 @@ vi.mock('@renderer/services/ApiService', () => ({
   getRotatedApiKey: (provider: any) => provider.apiKey || ''
 }))
 
+vi.mock('@renderer/utils/error', () => ({
+  getErrorMessage: (error: unknown): string => {
+    if (typeof error === 'string') return error
+    if (error instanceof Error) return error.message
+    if (error && typeof error === 'object') {
+      const nested = (error as { error?: unknown }).error
+      if (nested) return (nested as { message?: string }).message || 'unknown error'
+      return (error as { message?: string }).message || 'unknown error'
+    }
+    return 'unknown error'
+  }
+}))
+
 // mock i18n
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -282,6 +295,20 @@ describe('InputEmbeddingDimension', () => {
 
       await waitFor(() => {
         expect(window.toast.error).toHaveBeenCalledWith('获取嵌入维度失败\nAPI Error')
+      })
+    })
+
+    it('should show nested bridge error details when API call fails', async () => {
+      mocks.embedMany.mockRejectedValue({ error: { message: 'embedding endpoint rejected request' } })
+
+      const user = userEvent.setup()
+      render(<InputEmbeddingDimension model={mockModel} />)
+
+      const refreshButton = getRefreshButton()
+      await user.click(refreshButton)
+
+      await waitFor(() => {
+        expect(window.toast.error).toHaveBeenCalledWith('获取嵌入维度失败\nembedding endpoint rejected request')
       })
     })
 
