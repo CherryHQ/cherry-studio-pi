@@ -31,19 +31,19 @@ const PromptSettings: FC = () => {
   const { trigger: createPrompt, isLoading: isCreatingPrompt } = useMutation('POST', '/prompts', {
     refresh: ['/prompts'],
     onError: (error) =>
-      window.toast.error(formatErrorMessageWithPrefix(error, t('settings.prompts.errors.createFailed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('settings.prompts.errors.createFailed')))
   })
 
   const { trigger: updatePrompt, isLoading: isUpdatingPrompt } = useMutation('PATCH', '/prompts/:id', {
     refresh: ['/prompts'],
     onError: (error) =>
-      window.toast.error(formatErrorMessageWithPrefix(error, t('settings.prompts.errors.updateFailed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('settings.prompts.errors.updateFailed')))
   })
 
   const { trigger: deletePrompt, isLoading: isDeletingPrompt } = useMutation('DELETE', '/prompts/:id', {
     refresh: ['/prompts'],
     onError: (error) =>
-      window.toast.error(formatErrorMessageWithPrefix(error, t('settings.prompts.errors.deleteFailed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('settings.prompts.errors.deleteFailed')))
   })
 
   const { applyReorderedList } = useReorder('/prompts')
@@ -89,7 +89,7 @@ const PromptSettings: FC = () => {
         await applyReorderedList(newPrompts)
       } catch (error) {
         logger.error('Failed to reorder prompts', error as Error)
-        window.toast.error(formatErrorMessageWithPrefix(error, t('settings.prompts.errors.reorderFailed')))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('settings.prompts.errors.reorderFailed')))
       }
     },
     [applyReorderedList, t]

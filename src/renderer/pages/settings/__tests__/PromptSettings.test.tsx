@@ -223,4 +223,18 @@ describe('PromptSettings', () => {
       expect(applyReorderedListMock).toHaveBeenCalledWith([prompts[1], prompts[0]])
     })
   })
+
+  it('keeps the page usable when reorder fails before the toast bridge is ready', async () => {
+    applyReorderedListMock.mockRejectedValueOnce(new Error('offline'))
+    Object.assign(window, { toast: undefined })
+
+    render(<PromptSettings />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'mock-reorder' }))
+
+    await waitFor(() => {
+      expect(applyReorderedListMock).toHaveBeenCalledWith([prompts[1], prompts[0]])
+    })
+    expect(screen.getByTestId('prompt-row-New prompt')).toBeInTheDocument()
+  })
 })
