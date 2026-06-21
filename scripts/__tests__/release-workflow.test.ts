@@ -91,6 +91,7 @@ describe('release workflow safety', () => {
     expect(prepareReleaseSkill).toContain('publish exactly once through the manual GitHub Actions Release workflow')
     expect(prepareReleaseSkill).toContain('Never publish a second release for the same user request')
     expect(prepareReleaseSkill).toContain('**`release.yml`** is manual-only')
+    expect(prepareReleaseSkill).toContain('fill both `version` and `confirm_version` with the same value')
     expect(prepareReleaseSkill).toContain('Do not chain these commands in one shell line')
     expect(prepareReleaseSkill).not.toContain('Merge to trigger release build')
     expect(prepareReleaseSkill).not.toContain('automatically triggers:\n- **`release.yml`**')
@@ -99,6 +100,15 @@ describe('release workflow safety', () => {
   it('keeps release preparation scoped to the Cherry Studio Pi repository', () => {
     expect(prepareReleaseWorkflow).toContain(
       "github.repository == 'CherryHQ/cherry-studio-pi' && github.ref == 'refs/heads/main'"
+    )
+  })
+
+  it('requires an explicit repeated version confirmation before preparing release tags', () => {
+    expect(prepareReleaseWorkflow).toContain('confirm_version:')
+    expect(prepareReleaseWorkflow).toContain('CONFIRM_VERSION="${{ github.event.inputs.confirm_version }}"')
+    expect(prepareReleaseWorkflow).toContain('Prepare Release confirmation mismatch')
+    expect(prepareReleaseWorkflow).toContain(
+      'Refusing to prepare another version commit/tag without an exact repeated confirmation.'
     )
   })
 

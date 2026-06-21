@@ -153,7 +153,8 @@ Otherwise, ask the user to confirm before proceeding to Step 6.
    git push
    git push origin v{version}
    ```
-4. Publishing installers is a separate explicit action: run **Actions -> Release -> Run workflow** with `tag=v{version}` and `confirm_tag=v{version}`. Run it once for the user's release request.
+4. If using **Actions -> Prepare Release** instead of the local helper, fill both `version` and `confirm_version` with the same value. This workflow only prepares one version commit/tag; it must not be treated as installer publishing.
+5. Publishing installers is a separate explicit action: run **Actions -> Release -> Run workflow** with `tag=v{version}` and `confirm_tag=v{version}`. Run it once for the user's release request.
 
 ## CI Trigger Chain
 

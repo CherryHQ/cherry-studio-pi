@@ -8,6 +8,11 @@ on:
         required: true
         default: "patch"
         type: string
+      confirm_version:
+        description: "Type the same version bump or exact version again to confirm"
+        required: true
+        default: ""
+        type: string
 
   # Ensure this workflow only runs from the default branch
   # (workflow_dispatch already restricts to branches with write access,
@@ -23,6 +28,20 @@ jobs:
     if: github.repository == 'CherryHQ/cherry-studio-pi' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
+      - name: Validate prepare-release confirmation
+        shell: bash
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          CONFIRM_VERSION="${{ github.event.inputs.confirm_version }}"
+
+          if [ "$CONFIRM_VERSION" != "$VERSION" ]; then
+            echo "::error::Prepare Release confirmation mismatch."
+            echo "version=$VERSION"
+            echo "confirm_version=$CONFIRM_VERSION"
+            echo "Refusing to prepare another version commit/tag without an exact repeated confirmation."
+            exit 1
+          fi
+
       - name: Check out Git repository
         uses: actions/checkout@v6
         with:
