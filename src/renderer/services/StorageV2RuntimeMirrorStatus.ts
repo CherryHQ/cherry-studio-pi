@@ -1,3 +1,5 @@
+import { getErrorMessage } from '@renderer/utils/error'
+
 export type StorageV2RuntimeMirrorStatusId =
   | 'agents'
   | 'conversations'
@@ -24,5 +26,5 @@ export type StorageV2RuntimeMirrorStatus = {
 
 export function serializeStorageV2MirrorError(error: unknown) {
   if (!error) return null
-  return error instanceof Error ? error.message : String(error)
+  return getErrorMessage(error)
 }
