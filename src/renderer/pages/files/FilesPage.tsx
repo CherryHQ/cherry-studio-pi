@@ -137,7 +137,7 @@ const FilesPage: FC = () => {
   const handleOpenFile = (file: FileMetadata) => {
     void window.api.file.openPath(FileManager.getFilePath(file)).catch((error) => {
       logger.error('Failed to open file from files page', error as Error)
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
     })
   }
 
