@@ -108,7 +108,7 @@ export function ImportSkillDialog({ open, onOpenChange, onInstalled }: Props) {
     const fallback = t('settings.skills.installFailed', { name: fallbackName ?? t('library.type.skill') })
     const message = e instanceof Error && e.message ? e.message : fallback
     setStatus({ kind: 'error', message })
-    window.toast.error(message)
+    window.toast?.error(message)
   }
 
   const handleZipPick = async () => {

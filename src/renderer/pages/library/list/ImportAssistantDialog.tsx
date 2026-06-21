@@ -259,7 +259,7 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
       setStatus(nextStatus)
 
       if (nextStatus.kind === 'success') {
-        window.toast.success(nextStatus.message)
+        window.toast?.success(nextStatus.message)
         // File-mode banner stays so the filename echo is visible;
         // clipboard / URL auto-close after a short delay.
         if (source !== 'file') {
@@ -270,7 +270,7 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
           }, AUTO_CLOSE_DELAY_MS)
         }
       } else {
-        window.toast.error(nextStatus.message)
+        window.toast?.error(nextStatus.message)
       }
     } finally {
       endLoading()

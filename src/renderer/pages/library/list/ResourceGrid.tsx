@@ -144,7 +144,7 @@ export const ResourceGrid: FC<Props> = ({
       setShowAddTag(false)
     } catch (error) {
       const message = error instanceof Error ? error.message : t('library.tag_sync_failed')
-      window.toast.error(message)
+      window.toast?.error(message)
       logger.error('Failed to create tag', error instanceof Error ? error : new Error(String(error)), {
         name: trimmed
       })

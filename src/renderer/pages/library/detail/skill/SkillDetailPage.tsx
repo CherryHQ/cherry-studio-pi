@@ -135,7 +135,7 @@ const SkillDetailPage: FC<Props> = ({ skill, onBack, onUninstalled }) => {
           setFileContent(result.data)
         } else {
           logger.warn('Failed to load skill file content', { skillId: skill.id, selectedFile, error: result.error })
-          window.toast.error(t('common.error'))
+          window.toast?.error(t('common.error'))
           setFileContent(null)
         }
       })
@@ -146,7 +146,7 @@ const SkillDetailPage: FC<Props> = ({ skill, onBack, onUninstalled }) => {
             selectedFile,
             error: error instanceof Error ? error.message : String(error)
           })
-          window.toast.error(error instanceof Error ? error.message : t('common.error'))
+          window.toast?.error(error instanceof Error ? error.message : t('common.error'))
           setFileContent(null)
         }
       })
@@ -185,10 +185,10 @@ const SkillDetailPage: FC<Props> = ({ skill, onBack, onUninstalled }) => {
     setUninstalling(true)
     try {
       await uninstallSkill()
-      window.toast.success(t('settings.skills.uninstallSuccess', { name: skill.name }))
+      window.toast?.success(t('settings.skills.uninstallSuccess', { name: skill.name }))
       onUninstalled?.()
     } catch (error) {
-      window.toast.error(t('library.uninstall_failed'))
+      window.toast?.error(t('library.uninstall_failed'))
       logger.error('Failed to uninstall skill', error instanceof Error ? error : new Error(String(error)), {
         skillId: skill.id,
         name: skill.name

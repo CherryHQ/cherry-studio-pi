@@ -51,7 +51,7 @@ export const WorkspaceField: FC<Props> = ({ form, onChange }) => {
       }
     } catch (error) {
       if (mountedRef.current) {
-        window.toast.error({
+        window.toast?.error({
           title: t('agent.session.workspace.select_failed'),
           description: getErrorMessage(error)
         })

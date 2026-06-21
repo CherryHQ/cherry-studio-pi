@@ -269,7 +269,7 @@ export default function LibraryPage() {
           await duplicateAssistant(r.raw)
           refetch()
         } catch (error) {
-          window.toast.error(error instanceof Error ? error.message : t('library.duplicate_assistant_failed'))
+          window.toast?.error(error instanceof Error ? error.message : t('library.duplicate_assistant_failed'))
         }
       }
     },
@@ -280,7 +280,7 @@ export default function LibraryPage() {
     async (preset: AssistantCatalogPreset) => {
       await createAssistant(toCreateAssistantDtoFromCatalogPreset(preset))
       refetch()
-      window.toast.success(t('common.add_success'))
+      window.toast?.success(t('common.add_success'))
     },
     [createAssistant, refetch, t]
   )
@@ -290,7 +290,7 @@ export default function LibraryPage() {
       try {
         await addAssistantPreset(preset)
       } catch (error) {
-        window.toast.error(error instanceof Error ? error.message : t('library.assistant_catalog.add_failed'))
+        window.toast?.error(error instanceof Error ? error.message : t('library.assistant_catalog.add_failed'))
       }
     },
     [addAssistantPreset, t]
@@ -309,7 +309,7 @@ export default function LibraryPage() {
       await addAssistantPreset(previewAssistantPreset)
       setPreviewAssistantPreset(null)
     } catch (error) {
-      window.toast.error(error instanceof Error ? error.message : t('library.assistant_catalog.add_failed'))
+      window.toast?.error(error instanceof Error ? error.message : t('library.assistant_catalog.add_failed'))
     } finally {
       setPreviewAssistantPresetAdding(false)
     }
@@ -340,7 +340,7 @@ export default function LibraryPage() {
           filters: [{ name: t('assistants.presets.import.file_filter'), extensions: ['json'] }]
         })
       } catch (error) {
-        window.toast.error(error instanceof Error ? error.message : t('library.export_assistant_failed'))
+        window.toast?.error(error instanceof Error ? error.message : t('library.export_assistant_failed'))
       }
     },
     [t]
