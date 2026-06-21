@@ -19,6 +19,7 @@ import {
   setDataSyncWebdavPath,
   setDataSyncWebdavUser
 } from '@renderer/store/settings'
+import { getErrorMessage } from '@renderer/utils/error'
 import { normalizeWebDavConfig, normalizeWebDavHost, normalizeWebDavPath, parseWebDavInput } from '@shared/webdavConfig'
 import { Alert, Breadcrumb, Button, Empty, Input, List, Modal, Space, Spin, Tooltip, Typography } from 'antd'
 import dayjs from 'dayjs'
@@ -138,14 +139,6 @@ function getDirectoryBrowserStartPath(value?: string) {
 
 function normalizeDirectoryBrowserPath(value?: string) {
   return normalizeWebDavPath(value, '/')
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error && error.message) {
-    return error.message
-  }
-
-  return String(error)
 }
 
 function summaryCount(value: unknown) {

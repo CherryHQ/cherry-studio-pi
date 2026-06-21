@@ -554,6 +554,15 @@ describe('DataSyncService', () => {
     unsubscribe()
   })
 
+  it('preserves nested main-process sync failure details', async () => {
+    mocks.syncNow.mockRejectedValueOnce({ error: { message: 'Invalid response: 503 Service Unavailable' } })
+
+    await expect(syncAppDataNow()).rejects.toThrow('503 Service Unavailable')
+
+    expect(getDataSyncRuntimeState().syncing).toBe(false)
+    expect(mocks.recordFailure).toHaveBeenCalledWith(expect.stringContaining('503 Service Unavailable'))
+  })
+
   it('fails and records a renderer-stage timeout when local sync preparation hangs', async () => {
     vi.useFakeTimers()
     const pendingPrepare = deferred<void>()

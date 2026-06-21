@@ -3,6 +3,7 @@ import { summarizeObjectShapeForLog } from '@renderer/aiCore/utils/logging'
 import i18n from '@renderer/i18n'
 import store, { persistor } from '@renderer/store'
 import type { WebDavConfig } from '@renderer/types'
+import { getErrorMessage } from '@renderer/utils/error'
 
 import {
   beginDataSyncLocalChangeNotificationSuppression,
@@ -168,10 +169,6 @@ function formatDurationZh(durationMs: number) {
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
   return seconds > 0 ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分钟`
-}
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error && error.message ? error.message : String(error)
 }
 
 function isDataSyncAlreadyRunningMessage(message: string) {
@@ -599,7 +596,11 @@ export async function syncAppDataNow(configOverride?: WebDavConfig): Promise<Dat
     }
 
     await rememberDataSyncFailure(message)
-    throw error
+    if (error instanceof Error) {
+      throw error
+    }
+
+    throw new Error(message, { cause: error })
   } finally {
     if (!keepRendererSyncingAfterReturn) {
       setDataSyncRunning(false)

@@ -467,6 +467,23 @@ describe('DataSyncSettings', () => {
     )
   })
 
+  it('shows nested data-sync failure details in manual sync feedback', async () => {
+    mocks.syncAppDataNow.mockRejectedValueOnce({ error: { message: '同步数据失败：WebDAV 返回 503' } })
+
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(syncButton())
+
+    await waitFor(() => {
+      expect(mocks.toast.error).toHaveBeenCalledWith(
+        expect.stringContaining('settings.data.data_sync.toast.sync_failed')
+      )
+      expect(mocks.toast.error).toHaveBeenCalledWith(expect.stringContaining('WebDAV 返回 503'))
+    })
+    await waitFor(expectSyncButtonIdle)
+  })
+
   it('reports success only after syncAppDataNow returns a completed summary', async () => {
     mocks.syncAppDataNow.mockResolvedValueOnce(successSummary())
 
