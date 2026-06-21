@@ -365,4 +365,19 @@ describe('CodeCliPage', () => {
     await waitFor(() => expect(window.toast.error).toHaveBeenCalledWith('launch failed'))
     expect(screen.getByRole('button', { name: 'code.launch.label' })).toBeEnabled()
   })
+
+  it('preserves nested launch error details when the CLI bridge rejects', async () => {
+    testState.codeCliRun.mockRejectedValueOnce({
+      error: { message: 'terminal executable not found' }
+    })
+
+    await openCodeToolDialog()
+
+    fireEvent.click(screen.getByRole('button', { name: 'code.launch.label' }))
+
+    await waitFor(() => {
+      expect(window.toast.error).toHaveBeenCalledWith('code.launch.error: terminal executable not found')
+    })
+    expect(screen.getByRole('button', { name: 'code.launch.label' })).toBeEnabled()
+  })
 })

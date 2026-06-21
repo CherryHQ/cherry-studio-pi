@@ -25,6 +25,7 @@ import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { useTimer } from '@renderer/hooks/useTimer'
 import { loggerService } from '@renderer/services/LoggerService'
 import { EFFORT_RATIO } from '@renderer/types'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { getThinkingBudget } from '@shared/ai/reasoningBudget'
 import type { TerminalConfig } from '@shared/config/constant'
 import { codeCLI, terminalApps } from '@shared/config/constant'
@@ -451,7 +452,7 @@ const CodeCliPage: FC = () => {
     } catch (error) {
       logger.error('codeTools.run failed:', error as Error)
       if (mountedRef.current) {
-        window.toast?.error(t('code.launch.error'))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('code.launch.error')))
       }
       return false
     }
@@ -484,7 +485,7 @@ const CodeCliPage: FC = () => {
     } catch (error) {
       logger.error('Failed to set custom terminal path:', error as Error)
       if (mountedRef.current) {
-        window.toast?.error(t('code.custom_path_error'))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('code.custom_path_error')))
       }
     }
   }
@@ -520,7 +521,7 @@ const CodeCliPage: FC = () => {
     } catch (error) {
       logger.error('start code tools failed:', error as Error)
       if (mountedRef.current) {
-        window.toast?.error(t('code.launch.error'))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('code.launch.error')))
         setLaunchStatus('idle')
       }
     }
