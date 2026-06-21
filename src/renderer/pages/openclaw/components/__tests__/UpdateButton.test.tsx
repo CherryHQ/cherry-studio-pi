@@ -100,4 +100,26 @@ describe('UpdateButton', () => {
     expect(errorToast).not.toHaveBeenCalled()
     expect(onUpdateComplete).not.toHaveBeenCalled()
   })
+
+  it('completes an update even when the global toast bridge is unavailable', async () => {
+    Object.assign(window, { toast: undefined })
+    const onUpdateComplete = vi.fn()
+    const onUpdatingChange = vi.fn()
+
+    render(<UpdateButton onUpdateComplete={onUpdateComplete} onUpdatingChange={onUpdatingChange} />)
+
+    await screen.findByText('v1.1.0')
+    fireEvent.click(screen.getByText('v1.1.0'))
+
+    const onOk = confirmMock.mock.calls[0]?.[0]?.onOk as (() => void) | undefined
+    expect(onOk).toBeTypeOf('function')
+
+    await act(async () => {
+      onOk?.()
+    })
+
+    await waitFor(() => expect(window.api.openclaw.performUpdate).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(onUpdateComplete).toHaveBeenCalledTimes(1))
+    expect(onUpdatingChange).toHaveBeenLastCalledWith(false)
+  })
 })

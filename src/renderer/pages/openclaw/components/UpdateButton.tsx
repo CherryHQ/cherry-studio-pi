@@ -56,15 +56,15 @@ const UpdateButton: FC<UpdateButtonProps> = ({ onUpdateComplete, onUpdatingChang
       if (!mountedRef.current) return
       if (result.success) {
         setUpdateInfo(null)
-        window.toast.success(t('openclaw.update.success'))
+        window.toast?.success(t('openclaw.update.success'))
         onUpdateComplete?.()
       } else {
-        window.toast.error(result.message)
+        window.toast?.error(result.message)
       }
     } catch (err) {
       logger.error('Failed to update OpenClaw', err as Error)
       if (mountedRef.current) {
-        window.toast.error(err instanceof Error ? err.message : String(err))
+        window.toast?.error(err instanceof Error ? err.message : String(err))
       }
     } finally {
       if (mountedRef.current) {
