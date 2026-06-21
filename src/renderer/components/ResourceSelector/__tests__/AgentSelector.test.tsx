@@ -121,6 +121,9 @@ beforeEach(() => {
     refetch: refetchPinsMock,
     togglePin: togglePinMock
   })
+  ;(window as any).toast = {
+    error: vi.fn()
+  }
 })
 
 afterEach(() => {
@@ -207,6 +210,28 @@ describe('AgentSelector', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Unpin' }))
     expect(togglePinMock).toHaveBeenCalledWith(ALPHA_AGENT_ID)
+  })
+
+  it('preserves agent pin failure details in the toast', async () => {
+    togglePinMock.mockRejectedValueOnce(new Error('pin write failed'))
+    usePinsMock.mockReturnValue({
+      isLoading: false,
+      isRefreshing: false,
+      isMutating: false,
+      error: undefined,
+      pinnedIds: [ALPHA_AGENT_ID],
+      refetch: refetchPinsMock,
+      togglePin: togglePinMock
+    })
+
+    renderSelector()
+    openPopover()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unpin' }))
+
+    await waitFor(() => {
+      expect(window.toast.error).toHaveBeenCalledWith('common.error: pin write failed')
+    })
   })
 
   it('navigates to the resource library agent editor from the row edit action', async () => {

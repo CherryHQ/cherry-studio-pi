@@ -7,6 +7,7 @@ import {
   buildLibraryEditSearch,
   buildLibraryRouteUrl
 } from '@renderer/pages/library/routeSearch'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { Bot } from 'lucide-react'
 import { type ReactElement, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -76,7 +77,7 @@ export function AgentSelector(props: AgentSelectorProps) {
         await togglePin(id)
       } catch (error) {
         logger.error('Failed to toggle agent pin', error as Error, { id })
-        window.toast?.error(t('common.error'))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('common.error')))
       }
     },
     [isPinActionDisabled, togglePin, t]

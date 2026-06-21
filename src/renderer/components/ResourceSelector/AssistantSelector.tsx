@@ -7,6 +7,7 @@ import {
   buildLibraryEditSearch,
   buildLibraryRouteUrl
 } from '@renderer/pages/library/routeSearch'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { type ReactElement, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -108,7 +109,7 @@ export function AssistantSelector(props: AssistantSelectorProps) {
         await togglePin(id)
       } catch (error) {
         logger.error('Failed to toggle assistant pin', error as Error, { id })
-        window.toast?.error(t('common.error'))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('common.error')))
       }
     },
     [isPinActionDisabled, togglePin, t]

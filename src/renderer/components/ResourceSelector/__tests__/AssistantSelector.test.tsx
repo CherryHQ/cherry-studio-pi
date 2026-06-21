@@ -140,6 +140,9 @@ beforeEach(() => {
     refetch: refetchPinsMock,
     togglePin: togglePinMock
   })
+  ;(window as any).toast = {
+    error: vi.fn()
+  }
 })
 
 afterEach(() => {
@@ -176,6 +179,30 @@ describe('AssistantSelector library navigation', () => {
     expect(screen.getByRole('option', { name: /Alpha Assistant/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create assistant' })).not.toBeInTheDocument()
+  })
+
+  it('preserves assistant pin failure details in the toast', async () => {
+    togglePinMock.mockRejectedValueOnce({
+      error: { message: 'assistant pin write failed' }
+    })
+    usePinsMock.mockReturnValue({
+      isLoading: false,
+      isRefreshing: false,
+      isMutating: false,
+      error: undefined,
+      pinnedIds: [ALPHA_ASSISTANT_ID],
+      refetch: refetchPinsMock,
+      togglePin: togglePinMock
+    })
+
+    renderSelector()
+    openPopover()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unpin' }))
+
+    await waitFor(() => {
+      expect(window.toast.error).toHaveBeenCalledWith('common.error: assistant pin write failed')
+    })
   })
 
   it('navigates to the resource library assistant editor from the row edit action', async () => {
