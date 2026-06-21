@@ -332,10 +332,10 @@ const HomeWindow: FC<{ draggable?: boolean }> = ({ draggable = true }) => {
     if (!content) return
     try {
       await navigator.clipboard.writeText(content)
-      window.toast.success(t('message.copy.success'))
+      window.toast?.success(t('message.copy.success'))
     } catch (error) {
       logger.error('Failed to copy quick assistant content', error as Error)
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
     }
   }, [content, t])
 
