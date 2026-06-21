@@ -108,6 +108,19 @@ describe('ImageViewer', () => {
     expect(mocks.toast.success).toHaveBeenCalledWith('message.copy.success')
   })
 
+  it('copies image source even when toast is not available', async () => {
+    Object.assign(window, { toast: undefined })
+
+    render(<ImageViewer src="https://example.com/image.png" alt="Example image" />)
+
+    fireEvent.contextMenu(screen.getByRole('img', { name: 'Example image' }))
+    fireEvent.click(screen.getByRole('button', { name: 'preview.copy.src' }))
+
+    await waitFor(() => {
+      expect(mocks.clipboard.writeText).toHaveBeenCalledWith('https://example.com/image.png')
+    })
+  })
+
   it('copies image data from the context menu', async () => {
     render(<ImageViewer src="data:image/png;base64,aGVsbG8=" alt="Example image" />)
 

@@ -155,13 +155,13 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, 
       try {
         await copyImageToClipboard(item.src)
         if (mountedRef.current) {
-          window.toast.success(t('message.copy.success'))
+          window.toast?.success(t('message.copy.success'))
         }
       } catch (error) {
         const err = error as Error
         logger.error(`Failed to copy image: ${err.message}`, { stack: err.stack })
         if (mountedRef.current) {
-          window.toast.error(t('message.copy.failed'))
+          window.toast?.error(t('message.copy.failed'))
         }
       }
     },
@@ -173,13 +173,13 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, 
       try {
         await navigator.clipboard.writeText(item.src)
         if (mountedRef.current) {
-          window.toast.success(t('message.copy.success'))
+          window.toast?.success(t('message.copy.success'))
         }
       } catch (error) {
         const err = error as Error
         logger.error(`Failed to copy image source: ${err.message}`, { stack: err.stack })
         if (mountedRef.current) {
-          window.toast.error(t('message.copy.failed'))
+          window.toast?.error(t('message.copy.failed'))
         }
       }
     },
