@@ -294,6 +294,24 @@ describe('download', () => {
         expect(mockedToast.error).toHaveBeenCalledWith('下载失败')
       })
 
+      it('should preserve string fetch error details', async () => {
+        mockFetch.mockRejectedValue('permission denied')
+
+        expect(() => download('https://example.com/file.pdf')).not.toThrow()
+        await waitForAsync()
+
+        expect(mockedToast.error).toHaveBeenCalledWith('下载失败：permission denied')
+      })
+
+      it('should preserve nested IPC fetch error details', async () => {
+        mockFetch.mockRejectedValue({ error: { message: 'Invalid response: 503 Service Unavailable' } })
+
+        expect(() => download('https://example.com/file.pdf')).not.toThrow()
+        await waitForAsync()
+
+        expect(mockedToast.error).toHaveBeenCalledWith('下载失败：Invalid response: 503 Service Unavailable')
+      })
+
       it('should handle HTTP errors gracefully', async () => {
         mockFetch.mockResolvedValue({ ok: false, status: 404 })
 

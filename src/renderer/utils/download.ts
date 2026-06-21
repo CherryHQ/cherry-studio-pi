@@ -4,6 +4,7 @@ import i18n from '@renderer/i18n'
 const logger = loggerService.withContext('Utils:download')
 const OBJECT_URL_REVOKE_DELAY_MS = 1000
 const REMOTE_DOWNLOAD_TIMEOUT_MS = 30_000
+const UNKNOWN_DOWNLOAD_ERROR_MESSAGE = 'Unknown download error'
 
 export const revokeObjectUrlLater = (url: string) => {
   const timer = setTimeout(() => URL.revokeObjectURL(url), OBJECT_URL_REVOKE_DELAY_MS)
@@ -11,11 +12,44 @@ export const revokeObjectUrlLater = (url: string) => {
   maybeNodeTimer.unref?.()
 }
 
+function getDownloadErrorMessage(error: unknown, seen = new WeakSet<object>()): string | undefined {
+  if (error instanceof Error) {
+    return error.message.trim() || undefined
+  }
+  if (typeof error === 'string') {
+    return error.trim() || undefined
+  }
+  if (!error || typeof error !== 'object' || seen.has(error)) {
+    return undefined
+  }
+
+  seen.add(error)
+
+  const nestedError = (error as { error?: unknown }).error
+  if (nestedError) {
+    const nestedMessage = getDownloadErrorMessage(nestedError, seen)
+    if (nestedMessage) return nestedMessage
+  }
+
+  const cause = (error as { cause?: unknown }).cause
+  if (cause) {
+    const causeMessage = getDownloadErrorMessage(cause, seen)
+    if (causeMessage) return causeMessage
+  }
+
+  const message = (error as { message?: unknown }).message
+  return typeof message === 'string' && message.trim() ? message : undefined
+}
+
 const showDownloadError = (error: unknown) => {
-  logger.error('Download failed:', error as Error)
+  const message = getDownloadErrorMessage(error)
+  logger.error(
+    'Download failed:',
+    error instanceof Error ? error : new Error(message || UNKNOWN_DOWNLOAD_ERROR_MESSAGE)
+  )
   // 显示用户友好的错误提示
-  if (error instanceof Error && error.message) {
-    window.toast?.error(`${i18n.t('message.download.failed')}：${error.message}`)
+  if (message) {
+    window.toast?.error(`${i18n.t('message.download.failed')}：${message}`)
   } else {
     window.toast?.error(i18n.t('message.download.failed'))
   }
