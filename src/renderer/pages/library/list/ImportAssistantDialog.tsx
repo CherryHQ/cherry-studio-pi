@@ -141,6 +141,7 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
   const [loading, setLoading] = useState(false)
   const mountedRef = useRef(true)
   const loadingRef = useRef(false)
+  const operationSeqRef = useRef(0)
   const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const clearAutoCloseTimer = useCallback(() => {
@@ -155,12 +156,14 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      operationSeqRef.current += 1
     }
   }, [])
 
   useEffect(() => {
     if (!open) {
       clearAutoCloseTimer()
+      operationSeqRef.current += 1
       setTab('file')
       setClipboardText('')
       setUrlText('')
@@ -170,16 +173,22 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
     }
   }, [clearAutoCloseTimer, open])
 
+  const isCurrentImport = useCallback((operationSeq: number) => {
+    return mountedRef.current && operationSeqRef.current === operationSeq
+  }, [])
+
   const beginLoading = useCallback(() => {
     if (loadingRef.current) return false
+    const operationSeq = ++operationSeqRef.current
     loadingRef.current = true
     if (mountedRef.current) {
       setLoading(true)
     }
-    return true
+    return operationSeq
   }, [])
 
-  const endLoading = useCallback(() => {
+  const endLoading = useCallback((operationSeq: number) => {
+    if (operationSeqRef.current !== operationSeq) return
     loadingRef.current = false
     if (mountedRef.current) {
       setLoading(false)
@@ -204,12 +213,11 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
     content: string,
     source: 'file' | 'clipboard' | 'url',
     fileName?: string,
-    lockHeld = false
+    activeOperationSeq?: number
   ) => {
-    if (!lockHeld && !beginLoading()) return
-    if (mountedRef.current) {
-      setStatus({ kind: 'idle' })
-    }
+    const operationSeq = activeOperationSeq ?? beginLoading()
+    if (!operationSeq || !isCurrentImport(operationSeq)) return
+    setStatus({ kind: 'idle' })
 
     try {
       // Parse error short-circuits the whole operation — no partial import possible.
@@ -223,7 +231,7 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
             : error instanceof Error
               ? error.message
               : t('message.agents.import.error')
-        if (mountedRef.current) {
+        if (isCurrentImport(operationSeq)) {
           setStatus({ kind: 'error', message })
         }
         return
@@ -232,12 +240,14 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
       const outcomes: DraftOutcome[] = []
 
       for (const draft of drafts) {
+        if (!isCurrentImport(operationSeq)) return
         try {
           // Names → ids first so the create call carries tagIds directly.
           // ensureTags is idempotent (POST /tags only for names the backend
           // doesn't already have). A failure here aborts the draft without
           // creating an orphan assistant row.
           const tagIds = draft.tags.length > 0 ? (await ensureTags(draft.tags)).map((tag) => tag.id) : undefined
+          if (!isCurrentImport(operationSeq)) return
 
           await createAssistant({ ...draft.dto, ...(tagIds ? { tagIds } : {}) })
           outcomes.push({ kind: 'ok' })
@@ -250,12 +260,11 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
         }
       }
 
+      if (!isCurrentImport(operationSeq)) return
       await Promise.resolve(onImported?.()).catch(() => undefined)
+      if (!isCurrentImport(operationSeq)) return
 
       const nextStatus = summarizeAssistantImportOutcomes(outcomes, t, fileName)
-      if (!mountedRef.current) {
-        return
-      }
       setStatus(nextStatus)
 
       if (nextStatus.kind === 'success') {
@@ -266,6 +275,7 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
           clearAutoCloseTimer()
           autoCloseTimerRef.current = setTimeout(() => {
             autoCloseTimerRef.current = null
+            if (!isCurrentImport(operationSeq)) return
             onOpenChange(false)
           }, AUTO_CLOSE_DELAY_MS)
         }
@@ -273,33 +283,35 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
         window.toast?.error(nextStatus.message)
       }
     } finally {
-      endLoading()
+      endLoading(operationSeq)
     }
   }
 
   // ---- File tab ----
-  const readFileOrBail = async (file: File): Promise<string | null> => {
+  const readFileOrBail = async (file: File, operationSeq: number): Promise<string | null> => {
     if (file.size > MAX_IMPORT_BYTES) {
-      if (mountedRef.current) {
+      if (isCurrentImport(operationSeq)) {
         setStatus({ kind: 'error', message: t('library.import_dialog.error.file_too_large') })
       }
       return null
     }
-    return file.text()
+    const content = await file.text()
+    return isCurrentImport(operationSeq) ? content : null
   }
 
   const handleFileDrop = async (file?: File) => {
     if (!file) return
-    if (!beginLoading()) return
+    const operationSeq = beginLoading()
+    if (!operationSeq) return
 
     let handedOff = false
     try {
-      const content = await readFileOrBail(file)
+      const content = await readFileOrBail(file, operationSeq)
       if (content === null) return
       handedOff = true
-      await runImport(content, 'file', file.name, true)
+      await runImport(content, 'file', file.name, operationSeq)
     } finally {
-      if (!handedOff) endLoading()
+      if (!handedOff) endLoading(operationSeq)
     }
   }
 
@@ -335,13 +347,13 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
       return
     }
 
-    if (!beginLoading()) return
-    if (mountedRef.current) {
-      setStatus({ kind: 'idle' })
-    }
+    const operationSeq = beginLoading()
+    if (!operationSeq) return
+    setStatus({ kind: 'idle' })
     let handedOff = false
     try {
       const response = await fetch(validation.url, createAssistantImportFetchInit())
+      if (!isCurrentImport(operationSeq)) return
       if (!response.ok) {
         throw new Error(t('assistants.presets.import.error.fetch_failed'))
       }
@@ -349,11 +361,12 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
         throw new Error(t('library.import_dialog.error.response_too_large'))
       }
       const content = await response.text()
+      if (!isCurrentImport(operationSeq)) return
       if (isAssistantImportContentTooLarge(content)) {
         throw new Error(t('library.import_dialog.error.response_too_large'))
       }
       handedOff = true
-      await runImport(content, 'url', undefined, true)
+      await runImport(content, 'url', undefined, operationSeq)
     } catch (error) {
       const message =
         error instanceof DOMException && error.name === 'TimeoutError'
@@ -361,11 +374,11 @@ export function ImportAssistantDialog({ open, onOpenChange, onImported }: Props)
           : error instanceof Error
             ? error.message
             : t('message.agents.import.error')
-      if (mountedRef.current) {
+      if (isCurrentImport(operationSeq)) {
         setStatus({ kind: 'error', message })
       }
     } finally {
-      if (!handedOff) endLoading()
+      if (!handedOff) endLoading(operationSeq)
     }
   }
 
