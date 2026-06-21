@@ -1,5 +1,5 @@
 import { MockUseCacheUtils } from '@test-mocks/renderer/useCache'
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type React from 'react'
 import type ReactType from 'react'
 import type { ReactNode } from 'react'
@@ -86,7 +86,17 @@ vi.mock('@cherrystudio/ui', () => {
         </div>
       ) : null
     },
-    PopoverTrigger: ({ children }: { children: ReactNode; asChild?: boolean }) => children,
+    PopoverTrigger: ({ children }: { children: ReactNode; asChild?: boolean }) => {
+      const context = React.use(PopoverContext)
+      if (!React.isValidElement(children)) return children
+
+      return React.cloneElement(children as React.ReactElement<any>, {
+        onClick: (event: React.MouseEvent) => {
+          ;(children.props as { onClick?: (event: React.MouseEvent) => void }).onClick?.(event)
+          context.onOpenChange?.(true)
+        }
+      })
+    },
     RowFlex: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) => (
       <div data-testid="row-flex" {...props}>
         {children}
@@ -177,5 +187,29 @@ describe('UserPopup', () => {
     expect(settled).toHaveBeenCalledTimes(1)
     expect(mocks.TopView.hide).toHaveBeenCalledTimes(1)
     expect(mocks.TopView.hide).toHaveBeenCalledWith('UserPopup')
+  })
+
+  it('handles avatar reset failures when toast is unavailable', async () => {
+    MockUseCacheUtils.setCacheValue('app.user.avatar', '🙂')
+    const ImageStorage = (await import('@renderer/services/ImageStorage')).default
+    vi.mocked(ImageStorage.set).mockRejectedValueOnce(new Error('storage failed'))
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: undefined
+    })
+
+    await renderUserPopup()
+
+    fireEvent.click(screen.getByRole('button', { name: 'common.avatar' }))
+    const resetButton = await screen.findByText('settings.general.avatar.reset')
+
+    await act(async () => {
+      fireEvent.click(resetButton)
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(ImageStorage.set).toHaveBeenCalledWith('avatar', expect.anything())
+    })
   })
 })

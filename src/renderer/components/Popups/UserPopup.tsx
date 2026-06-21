@@ -62,7 +62,7 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       setAvatarPopoverOpen(false)
       setAvatarPopoverView('menu')
     } catch (error: any) {
-      window.toast.error(error.message)
+      window.toast?.error(error.message)
     }
   }
 
@@ -73,7 +73,7 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       setAvatarPopoverOpen(false)
       setAvatarPopoverView('menu')
     } catch (error: any) {
-      window.toast.error(error.message)
+      window.toast?.error(error.message)
     }
   }
 
@@ -89,7 +89,7 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       setAvatarPopoverOpen(false)
       setAvatarPopoverView('menu')
     } catch (error: any) {
-      window.toast.error(error.message)
+      window.toast?.error(error.message)
     }
   }
 
