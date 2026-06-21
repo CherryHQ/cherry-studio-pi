@@ -349,7 +349,7 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
       }
       if (content === '') {
         if (mountedRef.current && requestSeq === exportRequestSeqRef.current) {
-          window.toast.error(i18n.t('chat.topics.export.obsidian_export_failed'))
+          window.toast?.error(i18n.t('chat.topics.export.obsidian_export_failed'))
         }
         return
       }
@@ -369,7 +369,7 @@ const PopupContainer: React.FC<PopupContainerProps> = ({
     } catch (error) {
       if (mountedRef.current && requestSeq === exportRequestSeqRef.current) {
         logger.error('Failed to prepare Obsidian export:', error as Error)
-        window.toast.error(i18n.t('chat.topics.export.obsidian_export_failed'))
+        window.toast?.error(i18n.t('chat.topics.export.obsidian_export_failed'))
       }
     } finally {
       if (mountedRef.current && requestSeq === exportRequestSeqRef.current) {

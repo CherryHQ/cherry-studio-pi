@@ -191,4 +191,38 @@ describe('ObsidianExportDialog', () => {
     expect(resolve).not.toHaveBeenCalled()
     expect(window.toast.error).not.toHaveBeenCalled()
   })
+
+  it('handles export preparation failures when toast is unavailable', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('clipboard unavailable'))
+    setupWindowMocks(writeText)
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: undefined
+    })
+    const resolve = vi.fn()
+
+    render(
+      <PopupContainer
+        open
+        obsidianTags={null}
+        processingMethod={ObsidianProcessingMethod.NEW_OR_OVERWRITE}
+        rawContent="hello obsidian"
+        resolve={resolve}
+        title="Daily Note"
+      />
+    )
+
+    const exportButton = await screen.findByRole('button', {
+      name: 'chat.topics.export.obsidian_btn'
+    })
+
+    await act(async () => {
+      fireEvent.click(exportButton)
+    })
+
+    await waitFor(() => {
+      expect(mocks.loggerError).toHaveBeenCalledWith('Failed to prepare Obsidian export:', expect.any(Error))
+    })
+    expect(resolve).not.toHaveBeenCalled()
+  })
 })
