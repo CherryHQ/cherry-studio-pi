@@ -227,6 +227,7 @@ describe('NutstoreService', () => {
       payload: { lastSyncError: 'nutstore quota exceeded' },
       type: 'nutstore/setSyncState'
     })
+    expect(mocks.toastError).toHaveBeenCalledWith('message.backup.failed: nutstore quota exceeded')
   })
 
   it('preserves nested Nutstore restore errors in the modal', async () => {

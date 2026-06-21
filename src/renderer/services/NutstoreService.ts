@@ -4,7 +4,7 @@ import i18n from '@renderer/i18n'
 import store, { handleSaveData } from '@renderer/store'
 import { setNutstoreSyncState } from '@renderer/store/nutstore'
 import type { WebDavConfig } from '@renderer/types'
-import { getErrorMessage } from '@renderer/utils/error'
+import { formatErrorMessageWithPrefix, getErrorMessage } from '@renderer/utils/error'
 import { NUTSTORE_HOST } from '@shared/config/nutstore'
 import type { UnifiedPreferenceKeyType, UnifiedPreferenceType } from '@shared/data/preference/preferenceTypes'
 import dayjs from 'dayjs'
@@ -205,7 +205,7 @@ export async function backupToNutstore({
     const errorMessage = getErrorMessage(error)
     store.dispatch(setNutstoreSyncState({ lastSyncError: errorMessage }))
     logger.error('[Nutstore] Backup failed:', error as Error)
-    window.toast?.error(i18n.t('message.backup.failed'))
+    window.toast?.error(formatErrorMessageWithPrefix(error, i18n.t('message.backup.failed')))
   } finally {
     store.dispatch(setNutstoreSyncState({ lastSyncTime: Date.now(), syncing: false }))
     isManualBackupRunning = false
