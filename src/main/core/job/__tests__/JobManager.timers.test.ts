@@ -55,4 +55,32 @@ describe('JobManager timer lifecycle', () => {
     expect(unref).toHaveBeenCalledTimes(1)
     expect(clearTimeoutSpy).toHaveBeenCalledWith(timer)
   })
+
+  it('does not clear newer in-flight state when an older duplicate execution finishes', () => {
+    const jobManager = new JobManager()
+    const olderController = new AbortController()
+    const newerController = new AbortController()
+    const olderExecuted = Promise.resolve()
+    const newerExecuted = Promise.resolve()
+    const internals = jobManager as unknown as {
+      abortControllers: Map<string, AbortController>
+      inFlightExecuted: Map<string, Promise<void>>
+      clearInFlightExecution: (jobId: string, controller: AbortController, executed: Promise<void>) => void
+    }
+
+    internals.abortControllers.set('job-1', olderController)
+    internals.inFlightExecuted.set('job-1', olderExecuted)
+    internals.abortControllers.set('job-1', newerController)
+    internals.inFlightExecuted.set('job-1', newerExecuted)
+
+    internals.clearInFlightExecution('job-1', olderController, olderExecuted)
+
+    expect(internals.abortControllers.get('job-1')).toBe(newerController)
+    expect(internals.inFlightExecuted.get('job-1')).toBe(newerExecuted)
+
+    internals.clearInFlightExecution('job-1', newerController, newerExecuted)
+
+    expect(internals.abortControllers.has('job-1')).toBe(false)
+    expect(internals.inFlightExecuted.has('job-1')).toBe(false)
+  })
 })

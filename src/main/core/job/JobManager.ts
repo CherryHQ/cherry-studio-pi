@@ -149,6 +149,15 @@ export class JobManager extends BaseService {
    */
   protected _recoveryDone: Promise<void> | undefined
 
+  private clearInFlightExecution(jobId: string, controller: AbortController, executed: Promise<void>): void {
+    if (this.abortControllers.get(jobId) === controller) {
+      this.abortControllers.delete(jobId)
+    }
+    if (this.inFlightExecuted.get(jobId) === executed) {
+      this.inFlightExecuted.delete(jobId)
+    }
+  }
+
   // ---------------- Lifecycle ----------------
 
   protected override onInit(): void {
@@ -1122,8 +1131,7 @@ export class JobManager extends BaseService {
           await this.finalizeJob(row.id, userCancel ? 'cancelled' : 'failed', undefined, error)
         }
       } finally {
-        this.abortControllers.delete(row.id)
-        this.inFlightExecuted.delete(row.id)
+        this.clearInFlightExecution(row.id, controller, executed)
         resolveExecuted()
       }
     })()
