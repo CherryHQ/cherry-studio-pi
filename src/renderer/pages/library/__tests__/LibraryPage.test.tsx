@@ -442,6 +442,31 @@ describe('LibraryPage create flow', () => {
     expect(refetchSpy).not.toHaveBeenCalled()
   })
 
+  it('reports nested assistant duplicate failure details', async () => {
+    const user = userEvent.setup()
+    duplicateAssistantMock.mockRejectedValueOnce({ error: { message: 'duplicate failed from IPC' } })
+    allResourcesMock.push({
+      id: 'assistant-to-duplicate',
+      type: 'assistant',
+      name: 'Assistant to duplicate',
+      description: '',
+      avatar: '💬',
+      tags: [],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+      raw: { id: 'assistant-to-duplicate', name: 'Assistant to duplicate', tags: [] }
+    })
+
+    render(<LibraryPage />)
+
+    await user.click(screen.getByRole('button', { name: 'duplicate first' }))
+
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalledWith('duplicate failed from IPC')
+    })
+    expect(refetchSpy).not.toHaveBeenCalled()
+  })
+
   it('resets a stale assistant catalog tab before keeping assistant filters disabled', async () => {
     const user = userEvent.setup()
     routeSearchMock.mockReturnValue({ resourceType: 'assistant' })

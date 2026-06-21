@@ -5,6 +5,7 @@ import {
 } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { useEnsureTags, useTagList } from '@renderer/hooks/useTags'
 import AgentSidePanelDrawer from '@renderer/pages/agents/components/AgentSidePanelDrawer'
+import { getErrorMessage } from '@renderer/utils/error'
 import type { InstalledSkill } from '@shared/data/types/agent'
 import type { Assistant } from '@shared/data/types/assistant'
 import type { Prompt } from '@shared/data/types/prompt'
@@ -269,11 +270,11 @@ export default function LibraryPage() {
           await duplicateAssistant(r.raw)
           refetch()
         } catch (error) {
-          window.toast?.error(error instanceof Error ? error.message : t('library.duplicate_assistant_failed'))
+          window.toast?.error(getErrorMessage(error))
         }
       }
     },
-    [duplicateAssistant, refetch, t]
+    [duplicateAssistant, refetch]
   )
 
   const addAssistantPreset = useCallback(
@@ -290,10 +291,10 @@ export default function LibraryPage() {
       try {
         await addAssistantPreset(preset)
       } catch (error) {
-        window.toast?.error(error instanceof Error ? error.message : t('library.assistant_catalog.add_failed'))
+        window.toast?.error(getErrorMessage(error))
       }
     },
-    [addAssistantPreset, t]
+    [addAssistantPreset]
   )
 
   const handlePreviewAssistantPreset = useCallback((preset: AssistantCatalogPreset) => {
@@ -309,11 +310,11 @@ export default function LibraryPage() {
       await addAssistantPreset(previewAssistantPreset)
       setPreviewAssistantPreset(null)
     } catch (error) {
-      window.toast?.error(error instanceof Error ? error.message : t('library.assistant_catalog.add_failed'))
+      window.toast?.error(getErrorMessage(error))
     } finally {
       setPreviewAssistantPresetAdding(false)
     }
-  }, [addAssistantPreset, previewAssistantPreset, previewAssistantPresetAdding, t])
+  }, [addAssistantPreset, previewAssistantPreset, previewAssistantPresetAdding])
 
   const handlePreviewOpenChange = useCallback(
     (open: boolean) => {
@@ -340,7 +341,7 @@ export default function LibraryPage() {
           filters: [{ name: t('assistants.presets.import.file_filter'), extensions: ['json'] }]
         })
       } catch (error) {
-        window.toast?.error(error instanceof Error ? error.message : t('library.export_assistant_failed'))
+        window.toast?.error(getErrorMessage(error))
       }
     },
     [t]
