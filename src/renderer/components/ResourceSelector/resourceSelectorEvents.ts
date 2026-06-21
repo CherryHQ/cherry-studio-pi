@@ -17,7 +17,19 @@ export function requestCloseResourceSelectors(sourceId?: string) {
 
 export function getModalSurfaceElements(): Element[] {
   if (typeof document === 'undefined') return []
-  return Array.from(document.querySelectorAll('[data-slot="dialog-content"], [role="dialog"], [aria-modal="true"]'))
+  return Array.from(
+    document.querySelectorAll(
+      [
+        '[data-slot="dialog-content"]',
+        '[data-slot="page-side-panel"]',
+        '[role="dialog"]',
+        '[aria-modal="true"]',
+        '.ant-modal',
+        '.ant-drawer-content-wrapper',
+        '.ant-drawer-content'
+      ].join(', ')
+    )
+  )
 }
 
 function isHiddenModalSurface(element: Element) {

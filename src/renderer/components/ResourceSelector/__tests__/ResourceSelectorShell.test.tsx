@@ -272,6 +272,33 @@ describe('ResourceSelectorShell', () => {
       }
     })
 
+    it('closes when an Ant Design drawer surface appears while the selector is open', async () => {
+      render(
+        <ResourceSelectorShell
+          trigger={<button type="button">Open</button>}
+          items={ITEMS}
+          pinnedIds={[]}
+          onTogglePin={vi.fn()}
+          labels={LABELS}
+          value={null}
+          onChange={vi.fn()}
+        />
+      )
+
+      openPopover()
+      expect(screen.getByPlaceholderText('Search')).toBeInTheDocument()
+
+      const drawerContentWrapper = document.createElement('div')
+      drawerContentWrapper.className = 'ant-drawer-content-wrapper'
+      document.body.appendChild(drawerContentWrapper)
+
+      try {
+        await waitFor(() => expect(screen.queryByPlaceholderText('Search')).not.toBeInTheDocument())
+      } finally {
+        drawerContentWrapper.remove()
+      }
+    })
+
     it('ignores stale modal observer callbacks after unmount', async () => {
       const originalMutationObserver = globalThis.MutationObserver
       const observerCallbacks: MutationCallback[] = []
