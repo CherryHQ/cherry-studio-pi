@@ -74,6 +74,16 @@ function syncButton() {
   return button!
 }
 
+function expectSyncButtonBusy() {
+  expect(syncButton()).toHaveAttribute('aria-busy', 'true')
+  expect(syncButton().querySelector('.anticon-spin')).toBeTruthy()
+}
+
+function expectSyncButtonIdle() {
+  expect(syncButton()).toHaveAttribute('aria-busy', 'false')
+  expect(syncButton().querySelector('.anticon-spin')).toBeFalsy()
+}
+
 function buttonByText(text: string) {
   const button = screen.getByText(text).closest('button')
   expect(button).toBeTruthy()
@@ -212,24 +222,40 @@ describe('DataSyncSettings', () => {
 
     render(<DataSyncSettings />)
     await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(2))
-    await waitFor(() => expect(syncButton()).toHaveClass('ant-btn-loading'))
+    await waitFor(expectSyncButtonBusy)
 
     fireEvent.click(syncButton())
 
     expect(mocks.syncAppDataNow).not.toHaveBeenCalled()
     expect(mocks.toast.success).not.toHaveBeenCalled()
-    expect(mocks.toast.info).not.toHaveBeenCalledWith('settings.data.data_sync.toast.sync_success')
+    await waitFor(() => expect(mocks.toast.info).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_running'))
   })
 
   it('clears a stale busy button when status refresh reports the main process is idle', async () => {
     mocks.getStatus.mockResolvedValueOnce(runningStatus()).mockResolvedValueOnce(idleStatus())
 
     render(<DataSyncSettings />)
-    await waitFor(() => expect(syncButton()).toHaveClass('ant-btn-loading'))
+    await waitFor(expectSyncButtonBusy)
 
     fireEvent.click(screen.getByText('settings.data.data_sync.refresh_status'))
 
-    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+    await waitFor(expectSyncButtonIdle)
+  })
+
+  it('does not swallow a manual sync when stale busy status refreshes to idle', async () => {
+    mocks.getStatus.mockResolvedValueOnce(runningStatus()).mockResolvedValue(idleStatus())
+    mocks.syncAppDataNow.mockResolvedValueOnce(successSummary())
+
+    render(<DataSyncSettings />)
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
+    await waitFor(expectSyncButtonBusy)
+
+    fireEvent.click(syncButton())
+
+    await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(mocks.syncAppDataNow).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mocks.toast.success).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_success'))
+    expect(mocks.toast.info).not.toHaveBeenCalledWith('settings.data.data_sync.toast.sync_running')
   })
 
   it('uses one fast status polling interval while syncing', async () => {
@@ -287,11 +313,11 @@ describe('DataSyncSettings', () => {
     fireEvent.click(screen.getByText('settings.data.data_sync.refresh_status'))
 
     await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(2))
-    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+    await waitFor(expectSyncButtonIdle)
 
     staleRefresh.resolve(runningStatus())
 
-    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+    await waitFor(expectSyncButtonIdle)
   })
 
   it('ignores pending status refresh responses after unmount', async () => {
@@ -316,11 +342,11 @@ describe('DataSyncSettings', () => {
     mocks.getStatus.mockResolvedValueOnce(runningStatus()).mockRejectedValueOnce(new Error('status unavailable'))
 
     render(<DataSyncSettings />)
-    await waitFor(() => expect(syncButton()).toHaveClass('ant-btn-loading'))
+    await waitFor(expectSyncButtonBusy)
 
     fireEvent.click(screen.getByText('settings.data.data_sync.refresh_status'))
 
-    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+    await waitFor(expectSyncButtonIdle)
     expect(mocks.toast.error).toHaveBeenCalledWith('common.operation_failed: status unavailable')
     expect(mocks.reportErrorToSystemAgent).toHaveBeenCalledWith(
       expect.any(Error),
@@ -342,7 +368,7 @@ describe('DataSyncSettings', () => {
     render(<DataSyncSettings />)
 
     await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+    await waitFor(expectSyncButtonIdle)
   })
 
   it('treats a null sync summary as an in-flight duplicate instead of success', async () => {
@@ -353,7 +379,7 @@ describe('DataSyncSettings', () => {
 
     await waitFor(() => expect(mocks.syncAppDataNow).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(mocks.toast.info).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_running'))
-    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+    await waitFor(expectSyncButtonIdle)
     expect(mocks.toast.success).not.toHaveBeenCalled()
     expect(mocks.toast.error).not.toHaveBeenCalled()
   })
@@ -368,7 +394,7 @@ describe('DataSyncSettings', () => {
 
     await waitFor(() => expect(mocks.syncAppDataNow).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(mocks.toast.info).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_running'))
-    await waitFor(() => expect(syncButton()).toHaveClass('ant-btn-loading'))
+    await waitFor(expectSyncButtonBusy)
     expect(mocks.toast.success).not.toHaveBeenCalled()
   })
 
@@ -381,7 +407,7 @@ describe('DataSyncSettings', () => {
     fireEvent.click(syncButton())
 
     await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(2))
-    await waitFor(() => expect(syncButton()).toHaveClass('ant-btn-loading'))
+    await waitFor(expectSyncButtonBusy)
     expect(mocks.toast.success).not.toHaveBeenCalled()
   })
 
@@ -394,7 +420,7 @@ describe('DataSyncSettings', () => {
     fireEvent.click(syncButton())
 
     await waitFor(() => expect(mocks.toast.info).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_running'))
-    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+    await waitFor(expectSyncButtonIdle)
     expect(mocks.toast.success).not.toHaveBeenCalled()
     expect(mocks.toast.error).not.toHaveBeenCalled()
     expect(mocks.reportErrorToSystemAgent).not.toHaveBeenCalled()
@@ -410,7 +436,7 @@ describe('DataSyncSettings', () => {
     fireEvent.click(syncButton())
 
     await waitFor(() => expect(mocks.toast.info).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_running'))
-    await waitFor(() => expect(syncButton()).toHaveClass('ant-btn-loading'))
+    await waitFor(expectSyncButtonBusy)
     expect(mocks.toast.success).not.toHaveBeenCalled()
     expect(mocks.toast.error).not.toHaveBeenCalled()
     expect(mocks.reportErrorToSystemAgent).not.toHaveBeenCalled()
@@ -429,7 +455,7 @@ describe('DataSyncSettings', () => {
         expect.stringContaining('settings.data.data_sync.toast.sync_failed')
       )
     )
-    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+    await waitFor(expectSyncButtonIdle)
     expect(mocks.toast.success).not.toHaveBeenCalled()
     expect(mocks.reportErrorToSystemAgent).toHaveBeenCalledWith(
       expect.any(Error),
@@ -506,11 +532,11 @@ describe('DataSyncSettings', () => {
     fireEvent.click(screen.getByText('settings.data.data_sync.refresh_status'))
 
     await waitFor(() => expect(mocks.getStatus).toHaveBeenCalledTimes(2))
-    await waitFor(() => expect(syncButton()).toHaveClass('ant-btn-loading'))
+    await waitFor(expectSyncButtonBusy)
 
     runningSync.resolve(successSummary())
     await waitFor(() => expect(mocks.toast.success).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_success'))
-    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+    await waitFor(expectSyncButtonIdle)
   })
 
   it('prevents duplicate data sync diagnostics while a diagnosis is pending', async () => {
@@ -689,7 +715,7 @@ describe('DataSyncSettings', () => {
     fireEvent.click(syncButton())
 
     await waitFor(() => expect(mocks.toast.success).toHaveBeenCalledWith('settings.data.data_sync.toast.sync_success'))
-    await waitFor(() => expect(syncButton()).not.toHaveClass('ant-btn-loading'))
+    await waitFor(expectSyncButtonIdle)
     expect(mocks.toast.error).not.toHaveBeenCalled()
     expect(mocks.reportErrorToSystemAgent).not.toHaveBeenCalled()
   })

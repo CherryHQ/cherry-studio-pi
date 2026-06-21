@@ -443,10 +443,13 @@ const DataSyncSettings: FC = () => {
 
     if (syncInProgress) {
       const nextStatus = await refreshStatus().catch(() => null)
+      if (!mountedRef.current) return
+      if (!nextStatus) return
+
       if (nextStatus?.syncing) {
         window.toast?.info(t('settings.data.data_sync.toast.sync_running'))
+        return
       }
-      return
     }
 
     const config = trySaveWebDavConfig()
@@ -938,8 +941,8 @@ const DataSyncSettings: FC = () => {
           <Button
             type="primary"
             icon={<SyncOutlined spin={syncInProgress} />}
-            loading={syncInProgress}
-            disabled={!webDavConfigComplete || syncInProgress || restoring || diagnosing}
+            aria-busy={syncInProgress}
+            disabled={!webDavConfigComplete || restoring || diagnosing}
             onClick={syncNow}>
             {t('settings.data.data_sync.sync')}
           </Button>
