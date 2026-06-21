@@ -64,14 +64,14 @@ const SelectionAssistantSettings: FC = () => {
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
     },
     [t]
   )
 
   const showOperationFailed = useCallback(
     (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
     },
     [t]
   )

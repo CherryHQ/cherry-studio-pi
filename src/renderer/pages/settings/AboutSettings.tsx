@@ -36,13 +36,13 @@ const AboutSettings: FC = () => {
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
     },
     [t]
   )
   const showOperationFailed = useCallback(
     (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
     },
     [t]
   )
@@ -66,7 +66,7 @@ const AboutSettings: FC = () => {
             await window.api.checkForUpdate()
           } catch {
             updateAppUpdateState({ manualCheck: false })
-            window.toast.error(t('settings.about.updateError'))
+            window.toast?.error(t('settings.about.updateError'))
           }
 
           updateAppUpdateState({ checking: false })
@@ -125,7 +125,7 @@ const AboutSettings: FC = () => {
 
   const handleTestChannelChange = async (value: UpgradeChannel) => {
     if (testPlan && currentChannelByVersion !== UpgradeChannel.LATEST && value !== currentChannelByVersion) {
-      window.toast.warning(t('settings.general.test_plan.version_channel_not_match'))
+      window.toast?.warning(t('settings.general.test_plan.version_channel_not_match'))
     }
     try {
       await setTestChannel(value)
@@ -424,7 +424,7 @@ function AboutActionRow({
         size="sm"
         onClick={() => {
           void handleAction().catch((error) => {
-            window.toast.error(formatErrorMessageWithPrefix(error, i18n.t('common.operation_failed')))
+            window.toast?.error(formatErrorMessageWithPrefix(error, i18n.t('common.operation_failed')))
           })
         }}
         variant="outline">

@@ -958,7 +958,7 @@ const TasksSettings: FC = () => {
     } catch (error) {
       if (!mountedRef.current) return
       logger.error('Failed to load tasks settings', error as Error)
-      window.toast.error(t('agent.cherryClaw.tasks.error.loadFailed'))
+      window.toast?.error(t('agent.cherryClaw.tasks.error.loadFailed'))
     } finally {
       if (mountedRef.current) {
         setLoading(false)

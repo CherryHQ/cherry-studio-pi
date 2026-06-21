@@ -53,7 +53,7 @@ const QuickAssistantSettings: FC = () => {
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
     },
     [t]
   )
@@ -83,7 +83,7 @@ const QuickAssistantSettings: FC = () => {
       }
 
       if (enable && !clickTrayToShowQuickAssistant) {
-        window.toast.info({
+        window.toast?.info({
           title: t('settings.quickAssistant.use_shortcut_to_show'),
           timeout: 4000,
           icon: <Info size={16} />

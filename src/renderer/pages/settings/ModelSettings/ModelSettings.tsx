@@ -148,7 +148,7 @@ const ModelSettings: FC<ModelSettingsProps> = ({
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
     },
     [t]
   )

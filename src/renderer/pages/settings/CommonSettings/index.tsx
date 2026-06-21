@@ -124,14 +124,14 @@ const CommonSettings: FC = () => {
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
     },
     [t]
   )
 
   const showOperationFailed = useCallback(
     (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
     },
     [t]
   )
@@ -327,7 +327,7 @@ const CommonSettings: FC = () => {
         try {
           await setUseSystemTitleBar(checked)
         } catch (error) {
-          window.toast.error(formatErrorMessage(error))
+          window.toast?.error(formatErrorMessage(error))
           throw error
         } finally {
           systemTitleBarOperationRef.current = false
@@ -372,7 +372,7 @@ const CommonSettings: FC = () => {
         try {
           await setDisableHardwareAcceleration(checked)
         } catch (error) {
-          window.toast.error(formatErrorMessage(error))
+          window.toast?.error(formatErrorMessage(error))
           throw error
         } finally {
           hardwareAccelerationOperationRef.current = false
@@ -414,7 +414,7 @@ const CommonSettings: FC = () => {
 
   const onSetProxyUrl = () => {
     if (proxyUrl && !isValidProxyUrl(proxyUrl)) {
-      window.toast.error(t('message.error.invalid.proxy.url'))
+      window.toast?.error(t('message.error.invalid.proxy.url'))
       return
     }
 

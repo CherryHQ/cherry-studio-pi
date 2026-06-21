@@ -406,9 +406,9 @@ const OpenClawPage: FC = () => {
                   onClick={async () => {
                     try {
                       await navigator.clipboard.writeText(installPath)
-                      window.toast.success(t('common.copied'))
+                      window.toast?.success(t('common.copied'))
                     } catch (error) {
-                      window.toast.error(t('common.copy_failed'))
+                      window.toast?.error(t('common.copy_failed'))
                       logger.error('Failed to copy install path:', error as Error)
                     }
                   }}>
@@ -472,9 +472,9 @@ const OpenClawPage: FC = () => {
                     onClick={async () => {
                       try {
                         await navigator.clipboard.writeText(error)
-                        window.toast.success(t('common.copied'))
+                        window.toast?.success(t('common.copied'))
                       } catch (err) {
-                        window.toast.error(t('common.copy_failed'))
+                        window.toast?.error(t('common.copy_failed'))
                         logger.error('Failed to copy error message:', err as Error)
                       }
                     }}>

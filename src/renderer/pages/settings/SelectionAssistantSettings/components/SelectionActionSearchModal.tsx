@@ -200,7 +200,7 @@ const SelectionActionSearchModal: FC<SelectionActionSearchModalProps> = ({
       const testUrl = customUrl.replace('{{queryString}}', 'cherry studio')
       void window.api.openWebsite(testUrl).catch((error) => {
         logger.error('Failed to open selection assistant test URL', error as Error)
-        window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
       })
     }
   }

@@ -21,7 +21,7 @@ const MacProcessTrustHintModal: FC<MacProcessTrustHintModalProps> = ({ open, onC
       onClose()
     } catch (error) {
       logger.error('Failed to open macOS accessibility settings', error as Error)
-      window.toast.error(t('common.error'))
+      window.toast?.error(t('common.error'))
     }
   }
 
@@ -31,7 +31,7 @@ const MacProcessTrustHintModal: FC<MacProcessTrustHintModalProps> = ({ open, onC
       onClose()
     } catch (error) {
       logger.error('Failed to request macOS process trust', error as Error)
-      window.toast.error(t('common.error'))
+      window.toast?.error(t('common.error'))
     }
   }
 

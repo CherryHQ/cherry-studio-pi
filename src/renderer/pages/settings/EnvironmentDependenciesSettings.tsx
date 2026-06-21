@@ -31,7 +31,7 @@ const EnvironmentDependenciesSettings: FC = () => {
       }
     } catch (error: any) {
       if (mountedRef.current && requestSeq === statusRequestSeqRef.current) {
-        window.toast.error(error.message)
+        window.toast?.error(error.message)
       }
     } finally {
       if (mountedRef.current && requestSeq === statusRequestSeqRef.current) {
@@ -52,11 +52,11 @@ const EnvironmentDependenciesSettings: FC = () => {
       const nextStatus = await fn()
       if (mountedRef.current && requestSeq === actionRequestSeqRef.current) {
         setStatus(nextStatus)
-        window.toast.success(t(successKey))
+        window.toast?.success(t(successKey))
       }
     } catch (error: any) {
       if (mountedRef.current && requestSeq === actionRequestSeqRef.current) {
-        window.toast.error(error.message)
+        window.toast?.error(error.message)
       }
     } finally {
       if (mountedRef.current && requestSeq === actionRequestSeqRef.current) {
@@ -85,7 +85,7 @@ const EnvironmentDependenciesSettings: FC = () => {
   const openManagedDir = () => {
     if (status?.managedDir) {
       void window.api.openPath(status.managedDir).catch((error) => {
-        window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
       })
     }
   }

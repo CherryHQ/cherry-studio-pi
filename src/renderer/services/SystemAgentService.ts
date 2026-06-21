@@ -235,7 +235,7 @@ export async function handleSystemAgentEvent(input: SystemAgentEventInput, optio
     })
 
     if (options.showToast && result?.summary) {
-      window.toast.info({
+      window.toast?.info({
         title: i18n.t('agent.system_agent.auto_triggered'),
         description: result.summary,
         timeout: 5000
