@@ -95,12 +95,12 @@ const NewMiniAppPanel: FC<Props> = ({ open, onClose }) => {
       if (typeof data === 'string') {
         setLogo(data)
         setLogoUrl('')
-        window.toast.success(t('settings.miniApps.custom.logo_upload_success'))
+        window.toast?.success(t('settings.miniApps.custom.logo_upload_success'))
       }
     }
     reader.onerror = () => {
       if (isActive()) {
-        window.toast.error(t('settings.miniApps.custom.logo_upload_error'))
+        window.toast?.error(t('settings.miniApps.custom.logo_upload_error'))
       }
     }
     reader.readAsDataURL(file)
@@ -118,11 +118,11 @@ const NewMiniAppPanel: FC<Props> = ({ open, onClose }) => {
     }
 
     if (PRESETS_MINI_APPS.some((app) => app.id === trimmedId)) {
-      window.toast.error(t('settings.miniApps.custom.conflicting_ids', { ids: trimmedId }))
+      window.toast?.error(t('settings.miniApps.custom.conflicting_ids', { ids: trimmedId }))
       return
     }
     if (existingAppIds.has(trimmedId)) {
-      window.toast.error(t('settings.miniApps.custom.duplicate_ids', { ids: trimmedId }))
+      window.toast?.error(t('settings.miniApps.custom.duplicate_ids', { ids: trimmedId }))
       return
     }
     submittingRef.current = true
@@ -137,12 +137,12 @@ const NewMiniAppPanel: FC<Props> = ({ open, onClose }) => {
         supportedRegions: ['CN', 'Global']
       })
       if (isActive()) {
-        window.toast.success(t('settings.miniApps.custom.save_success'))
+        window.toast?.success(t('settings.miniApps.custom.save_success'))
         handleClose(true)
       }
     } catch (error) {
       if (isActive()) {
-        window.toast.error(t('settings.miniApps.custom.save_error'))
+        window.toast?.error(t('settings.miniApps.custom.save_error'))
         logger.error('Failed to save custom mini app:', error as Error)
       }
     } finally {

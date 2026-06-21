@@ -34,7 +34,7 @@ const MiniAppDisplaySettings: FC = () => {
   const handleResetCacheLimit = useCallback(() => {
     void setMaxKeepAlive(DEFAULT_MAX_KEEPALIVE)
       .then(() => {
-        window.toast.info(t('settings.miniApps.cache_change_notice'))
+        window.toast?.info(t('settings.miniApps.cache_change_notice'))
       })
       .catch(showSaveFailed)
   }, [t, setMaxKeepAlive, showSaveFailed])
@@ -45,7 +45,7 @@ const MiniAppDisplaySettings: FC = () => {
         .then(() => {
           if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
           debounceTimerRef.current = setTimeout(() => {
-            window.toast.info(t('settings.miniApps.cache_change_notice'))
+            window.toast?.info(t('settings.miniApps.cache_change_notice'))
             debounceTimerRef.current = null
           }, 500)
         })
