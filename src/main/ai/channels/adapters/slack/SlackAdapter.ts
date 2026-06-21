@@ -314,6 +314,11 @@ class SlackAdapter extends ChannelAdapter {
       })
 
       ws.on('close', (code, reason) => {
+        if (this.ws !== ws) {
+          this.log.debug('Ignoring stale Slack WebSocket close', { code })
+          return
+        }
+        this.ws = null
         this.markDisconnected(`WebSocket closed: ${code}`)
         this.log.warn(`WebSocket closed (code=${code}, reason=${reason.toString()})`)
         this.scheduleReconnect()

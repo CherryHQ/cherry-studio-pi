@@ -72,9 +72,20 @@ function createAdapter(overrides: Record<string, unknown> = {}) {
   )
 }
 
+function mockJsonResponse(data: unknown, ok = true, status = 200): Response {
+  return {
+    ok,
+    status,
+    headers: new Headers({ 'content-type': 'application/json' }),
+    json: () => Promise.resolve(data),
+    text: () => Promise.resolve(JSON.stringify(data))
+  } as unknown as Response
+}
+
 describe('DiscordAdapter', () => {
   beforeEach(() => {
     mockNetFetch.mockReset()
+    mockNetFetch.mockResolvedValue(mockJsonResponse({ url: 'wss://discord.test/gateway' }))
     mockWsInstance = null
   })
 
@@ -122,6 +133,22 @@ describe('DiscordAdapter', () => {
     expect(vi.getTimerCount()).toBe(1)
 
     await adapter.disconnect()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('ignores close events from a stale WebSocket after reconnect replacement', async () => {
+    vi.useFakeTimers()
+    const adapter = createAdapter()
+    adapter.getGatewayUrl = vi.fn().mockResolvedValue('wss://discord.test/gateway')
+
+    await adapter.startGateway()
+    const staleWs = mockWsInstance!
+
+    await adapter.startGateway()
+
+    expect(staleWs.close).toHaveBeenCalled()
+    staleWs.emit('close', 1000, Buffer.from('replaced'))
+
     expect(vi.getTimerCount()).toBe(0)
   })
 })

@@ -218,6 +218,21 @@ describe('SlackAdapter', () => {
     expect(wsRef.close).toHaveBeenCalled()
   })
 
+  it('ignores close events from a stale WebSocket after reconnect replacement', async () => {
+    vi.useFakeTimers()
+    const adapter = createAdapter()
+
+    await adapter.startSocketMode()
+    const staleWs = mockWsInstance!
+
+    await adapter.startSocketMode()
+
+    expect(staleWs.close).toHaveBeenCalled()
+    staleWs.emit('close', 1000, Buffer.from('replaced'))
+
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   // ─── Message Sending ──────────────────────────────────────
 
   it('sendMessage() calls chat.postMessage with correct params', async () => {

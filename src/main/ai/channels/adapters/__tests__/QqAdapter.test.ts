@@ -1,3 +1,4 @@
+import { EventEmitter } from 'events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@logger', () => ({
@@ -16,8 +17,22 @@ vi.mock('electron', () => ({
   net: { fetch: (...args: unknown[]) => mockNetFetch(...args) }
 }))
 
+class MockWebSocket extends EventEmitter {
+  static OPEN = 1
+  static CONNECTING = 0
+  readyState = 1
+  send = vi.fn()
+  close = vi.fn()
+  ping = vi.fn()
+}
+
+let mockWsInstance: MockWebSocket | null = null
+
 vi.mock('ws', () => {
-  const Ctor = vi.fn()
+  const Ctor = vi.fn().mockImplementation(() => {
+    mockWsInstance = new MockWebSocket()
+    return mockWsInstance
+  })
   Object.assign(Ctor, { OPEN: 1, CONNECTING: 0, CLOSED: 3, CLOSING: 2 })
   return { default: Ctor, WebSocket: Ctor }
 })
@@ -50,8 +65,14 @@ function createAdapter() {
 }
 
 describe('QqAdapter.downloadAttachments', () => {
-  beforeEach(() => mockNetFetch.mockReset())
-  afterEach(() => vi.restoreAllMocks())
+  beforeEach(() => {
+    mockNetFetch.mockReset()
+    mockWsInstance = null
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+  })
 
   it('rejects an SSRF target before any (token-bearing) fetch (C8)', async () => {
     const adapter = createAdapter()
@@ -130,6 +151,26 @@ describe('QqAdapter.downloadAttachments', () => {
       vi.advanceTimersByTime(1000)
 
       expect(heartbeatSpy).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('ignores close events from a stale WebSocket after reconnect replacement', async () => {
+    vi.useFakeTimers()
+    try {
+      const adapter = createAdapter()
+      adapter.getGatewayUrl = vi.fn().mockResolvedValue('wss://qq.test/gateway')
+
+      await adapter.startGateway()
+      const staleWs = mockWsInstance!
+
+      await adapter.startGateway()
+
+      expect(staleWs.close).toHaveBeenCalled()
+      staleWs.emit('close', 1000, Buffer.from('replaced'))
+
+      expect(vi.getTimerCount()).toBe(0)
     } finally {
       vi.useRealTimers()
     }
