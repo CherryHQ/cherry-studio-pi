@@ -1089,6 +1089,41 @@ describe('AgentSessionRuntimeService', () => {
     expect(service.isSessionBusy('session-1')).toBe(false)
   })
 
+  it('settles the session when the runtime connection disappears before send', async () => {
+    const events = createAsyncQueue<any>()
+    const service = new AgentSessionRuntimeService()
+    const connection = {
+      events: events.iterable,
+      send: vi.fn(),
+      close: vi.fn(),
+      getContextUsage: vi.fn(() => {
+        getEntry(service).connection = undefined
+        return null
+      })
+    }
+    runtimeDriverRegistry.register({
+      type: 'test-runtime',
+      capabilities: ['agent-session'],
+      connect: vi.fn().mockResolvedValue(connection),
+      validateSession: vi.fn(),
+      listAvailableTools: vi.fn().mockResolvedValue([])
+    })
+    const handle = service.beginTurn({ ...baseTurnInput, userMessage: userMessage('user-1') })
+    const stream = service.openTurnStream({
+      sessionId: 'session-1',
+      turnId: handle.turnId,
+      signal: new AbortController().signal
+    })
+    const reader = stream.getReader()
+
+    await expect(reader.read()).resolves.toMatchObject({ value: { type: 'start' }, done: false })
+    await expect(reader.read()).rejects.toThrow('Agent runtime connection disappeared before the turn was sent')
+
+    expect(connection.send).not.toHaveBeenCalled()
+    expect(service.inspect('session-1')).toMatchObject({ status: 'idle', lastTerminalStatus: 'error' })
+    expect(service.isSessionBusy('session-1')).toBe(false)
+  })
+
   it('passes trace context to the runtime driver and closes the connection after trace turns', async () => {
     const events = createAsyncQueue<any>()
     const connection = {

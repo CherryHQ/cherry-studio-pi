@@ -714,11 +714,15 @@ export class AgentSessionRuntimeService extends BaseService {
   private async admitTurn(entry: AgentSessionRuntimeEntry, turn: AgentSessionTurn): Promise<void> {
     if (!this.isCurrentEntry(entry) || entry.currentTurn !== turn || turn.terminalStatus) return
     if (turn.admitted) return
+    const connection = entry.connection
+    if (!connection) {
+      throw new Error('Agent runtime connection disappeared before the turn was sent')
+    }
     turn.admitted = true
     entry.status = 'active'
     // `Set.delete` returns whether it was queued as a steer — consume the flag as we admit the turn.
     const systemReminder = entry.steerMessageIds?.delete(turn.userMessage.id) ?? false
-    await entry.connection?.send({ message: turn.userMessage, systemReminder })
+    await connection.send({ message: turn.userMessage, systemReminder })
   }
 
   private enqueueTurnChunk(turn: AgentSessionTurn, chunk: UIMessageChunk): void {
