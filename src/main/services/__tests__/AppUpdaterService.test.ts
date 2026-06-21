@@ -487,6 +487,34 @@ describe('AppUpdaterService', () => {
       expect(mocks.updateDownloadBlocker.release).toHaveBeenCalledTimes(1)
     })
 
+    it('does not start duplicate manual downloads while one is still running', async () => {
+      let resolveDownload: ((value: string[]) => void) | undefined
+      autoUpdater.autoDownload = false
+      vi.mocked(autoUpdater.downloadUpdate).mockImplementation(
+        () =>
+          new Promise<string[]>((resolve) => {
+            resolveDownload = resolve
+          })
+      )
+
+      await appUpdater.checkForUpdates()
+      await appUpdater.checkForUpdates()
+
+      expect(autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1)
+      expect(mocks.powerSaveBlockerService.acquire).toHaveBeenCalledTimes(1)
+      expect(mocks.updateDownloadBlocker.release).not.toHaveBeenCalled()
+
+      resolveDownload?.([])
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(mocks.updateDownloadBlocker.release).toHaveBeenCalledTimes(1)
+
+      await appUpdater.checkForUpdates()
+
+      expect(autoUpdater.downloadUpdate).toHaveBeenCalledTimes(2)
+      expect(mocks.powerSaveBlockerService.acquire).toHaveBeenCalledTimes(2)
+    })
+
     it('does not report an update error when the manual download is cancelled', async () => {
       let rejectDownload: ((error: Error) => void) | undefined
       autoUpdater.autoDownload = false

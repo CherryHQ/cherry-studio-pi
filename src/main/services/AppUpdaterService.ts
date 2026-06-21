@@ -76,6 +76,7 @@ export class AppUpdaterService extends BaseService {
   private updateCheckResult: UpdateCheckResult | null = null
   private quitAndInstallStarted = false
   private releaseUpdateInstallBlocker: ((reason: string) => void) | null = null
+  private manualDownloadToken: CancellationToken | null = null
 
   protected async onInit(): Promise<void> {
     autoUpdater.logger = logger as Logger
@@ -337,8 +338,12 @@ export class AppUpdaterService extends BaseService {
   }
 
   public cancelDownload() {
+    const activeManualDownloadToken = this.manualDownloadToken
     this.cancellationToken.cancel()
     this.cancellationToken = new CancellationToken()
+    if (this.manualDownloadToken === activeManualDownloadToken) {
+      this.manualDownloadToken = null
+    }
     if (autoUpdater.autoDownload) {
       this.updateCheckResult?.cancellationToken?.cancel()
     }
@@ -346,6 +351,12 @@ export class AppUpdaterService extends BaseService {
 
   private startManualDownloadUpdate(): void {
     const token = this.cancellationToken
+    if (this.manualDownloadToken && !this.manualDownloadToken.cancelled) {
+      logger.info('Manual update download is already in progress, ignoring duplicate start request')
+      return
+    }
+
+    this.manualDownloadToken = token
     const blocker = powerSaveBlockerService.acquire('app-update.download', {
       type: 'prevent-app-suspension'
     })
@@ -365,8 +376,16 @@ export class AppUpdaterService extends BaseService {
           logger.error('Failed to download update:', updateError)
           application.get('WindowManager').broadcastToType(WindowType.Main, IpcChannel.UpdateError, updateError)
         })
-        .finally(() => blocker.release())
+        .finally(() => {
+          if (this.manualDownloadToken === token) {
+            this.manualDownloadToken = null
+          }
+          blocker.release()
+        })
     } catch (error) {
+      if (this.manualDownloadToken === token) {
+        this.manualDownloadToken = null
+      }
       blocker.release()
       const updateError = toError(error)
       logger.error('Failed to start update download:', updateError)
