@@ -339,4 +339,21 @@ describe('AppCapabilityService', () => {
       error: 'bad input'
     })
   })
+
+  it('normalizes contradictory provider error flags from successful results', async () => {
+    executeCapability.mockReset()
+    executeCapability.mockResolvedValueOnce({
+      ok: true,
+      isError: true,
+      summary: 'settings updated',
+      data: { value: 'dark' }
+    } as any)
+    const service = new AppCapabilityService()
+
+    await expect(service.call('settings.read', {}, { source: 'agent' })).resolves.toEqual({
+      ok: true,
+      summary: 'settings updated',
+      data: { value: 'dark' }
+    })
+  })
 })

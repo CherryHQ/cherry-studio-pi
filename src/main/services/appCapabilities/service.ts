@@ -95,8 +95,10 @@ function normalizeCapabilityResult<T>(capabilityId: string, result: unknown): Ap
           ? capabilityId + CAPABILITY_FAILED_INFIX + candidate.error
           : capabilityId + CAPABILITY_FAILED_SUFFIX
 
+  const { isError: _providerIsError, ...normalizedCandidate } = candidate
+
   return {
-    ...candidate,
+    ...normalizedCandidate,
     ok: candidate.ok,
     summary,
     ...(candidate.ok ? {} : { isError: true })
