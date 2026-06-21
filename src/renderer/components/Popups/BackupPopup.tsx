@@ -73,7 +73,7 @@ const PopupContainer: React.FC<Props> = ({ resolve, backupType = 'direct' }) => 
       close({})
     } catch (error) {
       logger.error('Backup failed:', error as Error)
-      window.toast.error(`${t('message.backup.failed')}: ${getErrorMessage(error)}`)
+      window.toast?.error(`${t('message.backup.failed')}: ${getErrorMessage(error)}`)
     } finally {
       runningRef.current = false
       if (!didClose) {
