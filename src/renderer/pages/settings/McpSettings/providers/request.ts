@@ -59,6 +59,68 @@ export function getProviderSyncErrorMessage(t: TranslateFn, error: unknown): str
   return t('settings.mcp.sync.error')
 }
 
+function extractProviderSyncErrorDetails(error: unknown, seen = new WeakSet<object>()): string | null {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+  if (typeof error === 'string' && error.trim()) {
+    return error
+  }
+  if (typeof error === 'number' || typeof error === 'boolean') {
+    return String(error)
+  }
+  if (!error || typeof error !== 'object' || seen.has(error)) {
+    return null
+  }
+
+  seen.add(error)
+
+  const nestedError = (error as { error?: unknown }).error
+  if (nestedError) {
+    const nestedDetails = extractProviderSyncErrorDetails(nestedError, seen)
+    if (nestedDetails) return nestedDetails
+  }
+
+  const cause = (error as { cause?: unknown }).cause
+  if (cause) {
+    const causeDetails = extractProviderSyncErrorDetails(cause, seen)
+    if (causeDetails) return causeDetails
+  }
+
+  const message = (error as { message?: unknown }).message
+  if (typeof message === 'string' && message.trim()) {
+    return message
+  }
+
+  return null
+}
+
 export function getProviderSyncErrorDetails(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  const details = extractProviderSyncErrorDetails(error)
+  if (details) return details
+
+  if (!error || typeof error !== 'object') {
+    return 'Unknown error'
+  }
+
+  try {
+    return JSON.stringify(error) || 'Unknown error'
+  } catch {
+    return 'Unknown error'
+  }
+}
+
+export function getProviderSyncToastMessage(t: TranslateFn, error: unknown): string {
+  const message = getProviderSyncErrorMessage(t, error)
+  if (isMcpProviderRequestTimeoutError(error)) {
+    return message
+  }
+
+  const details = getProviderSyncErrorDetails(error)
+
+  if (!details || details === message) {
+    return message
+  }
+
+  return `${message}: ${details}`
 }

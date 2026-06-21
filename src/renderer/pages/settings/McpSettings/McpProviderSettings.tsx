@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next'
 
 import { SettingsContentColumn } from '..'
 import { getProviderDisplayName, type ProviderConfig } from './providers/config'
+import { getProviderSyncErrorDetails, getProviderSyncToastMessage } from './providers/request'
 import { isSameMcpServerCandidate, toCreateMcpServerDto } from './utils'
 
 const logger = loggerService.withContext('McpProviderSettings')
@@ -160,10 +161,13 @@ const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => 
       } else {
         window.toast?.error(result.message)
       }
-    } catch (error: any) {
-      logger.error('Failed to fetch MCP servers', error)
+    } catch (error: unknown) {
+      logger.error(
+        'Failed to fetch MCP servers',
+        error instanceof Error ? error : new Error(getProviderSyncErrorDetails(error))
+      )
       if (isMountedRef.current && requestSeq === fetchRequestSeqRef.current && providerKeyRef.current === providerKey) {
-        window.toast?.error(`${t('settings.mcp.sync.error')}: ${error.message}`)
+        window.toast?.error(getProviderSyncToastMessage(t, error))
       }
     } finally {
       if (requestSeq === fetchRequestSeqRef.current) {
