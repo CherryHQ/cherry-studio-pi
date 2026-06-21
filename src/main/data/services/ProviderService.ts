@@ -228,6 +228,7 @@ class ProviderService {
    */
   async create(dto: CreateProviderDto): Promise<Provider> {
     assertManagedCherryAiProviderMutationAllowed(dto.providerId, `create provider ${dto.providerId}`)
+    const apiKeys = normalizeApiKeyEntries(dto.apiKeys ?? [])
 
     const values: NewUserProviderInput = {
       providerId: dto.providerId,
@@ -235,11 +236,11 @@ class ProviderService {
       name: dto.name,
       endpointConfigs: dto.endpointConfigs ?? null,
       defaultChatEndpoint: dto.defaultChatEndpoint ?? null,
-      apiKeys: normalizeApiKeyEntries(dto.apiKeys ?? []),
+      apiKeys,
       authConfig: dto.authConfig ?? null,
       apiFeatures: dto.apiFeatures ?? null,
       providerSettings: dto.providerSettings ?? null,
-      isEnabled: false
+      isEnabled: apiKeys.some((entry) => entry.isEnabled)
     }
 
     const row = await withSqliteErrors(

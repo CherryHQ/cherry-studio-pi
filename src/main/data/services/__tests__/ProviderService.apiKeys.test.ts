@@ -383,12 +383,14 @@ describe('ProviderService API keys', () => {
     })
 
     expect(created.apiKeys).toEqual([{ id: 'created-key', isEnabled: true }])
+    expect(created.isEnabled).toBe(true)
 
     const [row] = await dbh.db
       .select()
       .from(userProviderTable)
       .where(eq(userProviderTable.providerId, 'created-with-key'))
     expect(row.apiKeys).toEqual([{ id: 'created-key', key: 'sk-created', isEnabled: true }])
+    expect(row.isEnabled).toBe(true)
 
     await expect(
       providerService.create({
@@ -402,6 +404,27 @@ describe('ProviderService API keys', () => {
     ).rejects.toMatchObject({
       code: ErrorCode.CONFLICT
     })
+  })
+
+  it('keeps newly created providers disabled when no enabled API key is present', async () => {
+    const createdWithoutKeys = await providerService.create({
+      providerId: 'created-without-keys',
+      name: 'Created Without Keys'
+    })
+    const createdWithDisabledKey = await providerService.create({
+      providerId: 'created-with-disabled-key',
+      name: 'Created With Disabled Key',
+      apiKeys: [{ id: 'disabled-key', key: 'sk-disabled', isEnabled: false }]
+    })
+
+    expect(createdWithoutKeys.isEnabled).toBe(false)
+    expect(createdWithDisabledKey.isEnabled).toBe(false)
+
+    const rows = await dbh.db.select().from(userProviderTable)
+    const enabledById = new Map(rows.map((row) => [row.providerId, row.isEnabled]))
+
+    expect(enabledById.get('created-without-keys')).toBe(false)
+    expect(enabledById.get('created-with-disabled-key')).toBe(false)
   })
 
   it('returns authConfig for an existing provider, null when absent, and NOT_FOUND when missing', async () => {
