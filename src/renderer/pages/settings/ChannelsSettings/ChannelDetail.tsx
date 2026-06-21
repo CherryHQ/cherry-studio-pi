@@ -120,22 +120,33 @@ const ChannelLogModal: FC<{
       return
     }
 
+    let cancelled = false
+
     // Load existing logs
     window.api.channel
       .getLogs(channelId)
-      .then(setLogs)
+      .then((entries) => {
+        if (!cancelled) {
+          setLogs(entries)
+        }
+      })
       .catch((err) => {
-        logger.warn('Failed to load channel logs', { channelId, err })
+        if (!cancelled) {
+          logger.warn('Failed to load channel logs', { channelId, err })
+        }
       })
 
     // Subscribe to real-time logs
     const unsub = window.api.channel.onLog((entry) => {
-      if (entry.channelId === channelId) {
+      if (!cancelled && entry.channelId === channelId) {
         setLogs((prev) => [...prev.slice(-199), entry])
       }
     })
 
-    return unsub
+    return () => {
+      cancelled = true
+      unsub()
+    }
   }, [open, channelId])
 
   useEffect(() => {
@@ -423,16 +434,26 @@ const ChannelDetail: FC<ChannelDetailProps> = ({ channelDef }) => {
 
   // Fetch initial statuses + subscribe to real-time changes
   useEffect(() => {
+    let cancelled = false
+
     window.api.channel
       .getStatuses()
       .then((list) => {
-        setStatuses(new Map(list.map((s) => [s.channelId, s])))
+        if (!cancelled) {
+          setStatuses(new Map(list.map((s) => [s.channelId, s])))
+        }
       })
       .catch((err) => {
-        logger.warn('Failed to load initial channel statuses', { err })
+        if (!cancelled) {
+          logger.warn('Failed to load initial channel statuses', { err })
+        }
       })
 
     const unsub = window.api.channel.onStatusChange((status) => {
+      if (cancelled) {
+        return
+      }
+
       setStatuses((prev) => {
         // When a channel transitions to connected, revalidate SWR
         // (e.g. after QR registration saves credentials in main process)
@@ -444,7 +465,11 @@ const ChannelDetail: FC<ChannelDetailProps> = ({ channelDef }) => {
         return next
       })
     })
-    return unsub
+
+    return () => {
+      cancelled = true
+      unsub()
+    }
   }, [mutate])
 
   const handleAdd = useCallback(async () => {
