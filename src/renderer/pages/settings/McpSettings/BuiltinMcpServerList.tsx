@@ -79,11 +79,11 @@ const BuiltinMcpServerList: FC = () => {
       try {
         await addMcpServer(toCreateMcpServerDto(server))
         if (mountedRef.current) {
-          window.toast.success(t('settings.mcp.addSuccess'))
+          window.toast?.success(t('settings.mcp.addSuccess'))
         }
       } catch {
         if (mountedRef.current) {
-          window.toast.error(t('settings.mcp.addError'))
+          window.toast?.error(t('settings.mcp.addError'))
         }
       } finally {
         setServerAdding(server.id, false)

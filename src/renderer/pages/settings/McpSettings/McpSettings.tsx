@@ -471,7 +471,7 @@ const McpSettings: React.FC = () => {
         try {
           await updateMcpServer({ body: { ...mcpServerDto, isActive: true } })
           await window.api.mcp.restartServer(server.id)
-          window.toast.success(t('settings.mcp.updateSuccess'))
+          window.toast?.success(t('settings.mcp.updateSuccess'))
           setIsFormChanged(false)
         } catch (error: any) {
           window.modal.error({
@@ -482,7 +482,7 @@ const McpSettings: React.FC = () => {
         }
       } else {
         await updateMcpServer({ body: { ...mcpServerDto, isActive: false } })
-        window.toast.success(t('settings.mcp.updateSuccess'))
+        window.toast?.success(t('settings.mcp.updateSuccess'))
         setIsFormChanged(false)
       }
       setLoading(false)
@@ -540,7 +540,7 @@ const McpSettings: React.FC = () => {
   const onDeleteMcpServer = useCallback(
     async (serverToDelete: McpServer) => {
       const showDeleteError = (error: unknown) => {
-        window.toast.error(`${t('settings.mcp.deleteError')}: ${formatErrorMessage(error)}`)
+        window.toast?.error(`${t('settings.mcp.deleteError')}: ${formatErrorMessage(error)}`)
       }
 
       try {
@@ -569,7 +569,7 @@ const McpSettings: React.FC = () => {
             try {
               await window.api.mcp.removeServer(serverToDelete.id)
               await deleteMcpServer({})
-              window.toast.success(t('settings.mcp.deleteSuccess'))
+              window.toast?.success(t('settings.mcp.deleteSuccess'))
               void navigate({ to: '/settings/mcp' })
             } catch (error) {
               showDeleteError(error)
@@ -693,7 +693,7 @@ const McpSettings: React.FC = () => {
         await updateMcpServer({ body: { disabledTools } })
       } catch (error) {
         logger.error('Failed to update MCP tool enabled state', error as Error)
-        window.toast.error(t('settings.mcp.updateError'))
+        window.toast?.error(t('settings.mcp.updateError'))
       }
     },
     [server, t, updateMcpServer]
@@ -718,7 +718,7 @@ const McpSettings: React.FC = () => {
         await updateMcpServer({ body: { disabledAutoApproveTools } })
       } catch (error) {
         logger.error('Failed to update MCP tool auto-approve state', error as Error)
-        window.toast.error(t('settings.mcp.updateError'))
+        window.toast?.error(t('settings.mcp.updateError'))
       }
     },
     [server, t, updateMcpServer]

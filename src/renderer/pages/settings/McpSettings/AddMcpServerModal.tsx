@@ -184,7 +184,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
     } catch (error) {
       logger.error(`Connectivity state update failed for ${createdServer.name}:`, error as Error)
       if (notifyUser && mountedRef.current) {
-        window.toast.error(createdServer.name + t('settings.mcp.addServer.importFrom.connectionFailed'))
+        window.toast?.error(createdServer.name + t('settings.mcp.addServer.importFrom.connectionFailed'))
       } else {
         logger.warn(
           `DXT server ${createdServer.name} connectivity state update failed; this is normal for servers requiring additional configuration`
@@ -206,7 +206,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
         const isMcpbImport = importMethod === 'mcpb'
 
         if (!packageFile) {
-          window.toast.error(
+          window.toast?.error(
             t(
               isMcpbImport
                 ? 'settings.mcp.addServer.importFrom.noMcpbFile'
@@ -225,7 +225,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
             : await window.api.mcp.uploadDxt(packageFile)
 
           if (!result.success) {
-            window.toast.error(
+            window.toast?.error(
               result.error ||
                 t(
                   isMcpbImport
@@ -241,7 +241,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
 
           // Check for duplicate names
           if (existingServers && existingServers.some((server) => server.name === manifest.name)) {
-            window.toast.error(t('settings.mcp.addServer.importFrom.nameExists', { name: manifest.name }))
+            window.toast?.error(t('settings.mcp.addServer.importFrom.nameExists', { name: manifest.name }))
             setLoading(false)
             return
           }
@@ -303,7 +303,7 @@ const AddMcpServerModal: FC<AddMcpServerModalProps> = ({
         } catch (error) {
           logger.error(`${isMcpbImport ? 'MCPB' : 'DXT'} processing error:`, error as Error)
           if (mountedRef.current) {
-            window.toast.error(
+            window.toast?.error(
               t(
                 isMcpbImport
                   ? 'settings.mcp.addServer.importFrom.mcpbProcessFailed'

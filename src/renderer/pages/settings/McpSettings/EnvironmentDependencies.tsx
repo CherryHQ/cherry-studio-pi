@@ -139,7 +139,7 @@ const EnvironmentDependencies: FC<EnvironmentDependenciesProps> = ({ mini = fals
       logger.error('Failed to check MCP environment dependencies', error as Error)
       if (!hasShownCheckBinariesErrorRef.current) {
         hasShownCheckBinariesErrorRef.current = true
-        window.toast.error(`${t('settings.mcp.installError')}: ${formatErrorMessage(error)}`)
+        window.toast?.error(`${t('settings.mcp.installError')}: ${formatErrorMessage(error)}`)
       }
     }
   }, [setIsUvInstalled, setIsBunInstalled, t])
@@ -159,7 +159,7 @@ const EnvironmentDependencies: FC<EnvironmentDependenciesProps> = ({ mini = fals
     } catch (error) {
       logger.error('Failed to install UV binary', error as Error)
       if (isMountedRef.current) {
-        window.toast.error(`${t('settings.mcp.installError')}: ${formatErrorMessage(error)}`)
+        window.toast?.error(`${t('settings.mcp.installError')}: ${formatErrorMessage(error)}`)
       }
     } finally {
       installingUvRef.current = false
@@ -189,7 +189,7 @@ const EnvironmentDependencies: FC<EnvironmentDependenciesProps> = ({ mini = fals
     } catch (error) {
       logger.error('Failed to install Bun binary', error as Error)
       if (isMountedRef.current) {
-        window.toast.error(`${t('settings.mcp.installError')}: ${formatErrorMessage(error)}`)
+        window.toast?.error(`${t('settings.mcp.installError')}: ${formatErrorMessage(error)}`)
       }
     } finally {
       installingBunRef.current = false
@@ -228,7 +228,7 @@ const EnvironmentDependencies: FC<EnvironmentDependenciesProps> = ({ mini = fals
     if (binariesDir) {
       void window.api.openPath(binariesDir).catch((error) => {
         logger.error('Failed to open MCP binaries directory', error as Error)
-        window.toast.error(`${t('common.operation_failed')}: ${formatErrorMessage(error)}`)
+        window.toast?.error(`${t('common.operation_failed')}: ${formatErrorMessage(error)}`)
       })
     }
   }

@@ -128,7 +128,7 @@ const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => 
 
     const normalizedToken = token.trim()
     if (!normalizedToken) {
-      window.toast.error(t('settings.mcp.sync.tokenRequired', 'API Token is required'))
+      window.toast?.error(t('settings.mcp.sync.tokenRequired', 'API Token is required'))
       return
     }
 
@@ -156,14 +156,14 @@ const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => 
         const dbKey = `mcp:provider:${provider.key}:servers`
         await db.settings.put({ id: dbKey, value: servers })
 
-        window.toast.success(t('settings.mcp.fetch.success', 'Successfully fetched MCP servers'))
+        window.toast?.success(t('settings.mcp.fetch.success', 'Successfully fetched MCP servers'))
       } else {
-        window.toast.error(result.message)
+        window.toast?.error(result.message)
       }
     } catch (error: any) {
       logger.error('Failed to fetch MCP servers', error)
       if (isMountedRef.current && requestSeq === fetchRequestSeqRef.current && providerKeyRef.current === providerKey) {
-        window.toast.error(`${t('settings.mcp.sync.error')}: ${error.message}`)
+        window.toast?.error(`${t('settings.mcp.sync.error')}: ${error.message}`)
       }
     } finally {
       if (requestSeq === fetchRequestSeqRef.current) {
@@ -188,9 +188,9 @@ const McpProviderSettings: React.FC<Props> = ({ provider, existingServers }) => 
 
       try {
         await addMcpServer(toCreateMcpServerDto(server))
-        window.toast.success(t('settings.mcp.addSuccess'))
+        window.toast?.success(t('settings.mcp.addSuccess'))
       } catch {
-        window.toast.error(t('settings.mcp.addError'))
+        window.toast?.error(t('settings.mcp.addError'))
       } finally {
         addingServerIdsRef.current.delete(server.id)
         if (isMountedRef.current) {

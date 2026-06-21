@@ -129,11 +129,11 @@ const McpServersList: FC = () => {
       })
       if (mountedRef.current) {
         void navigate({ to: `/settings/mcp/settings/${newServer.id}` })
-        window.toast.success(t('settings.mcp.addSuccess'))
+        window.toast?.success(t('settings.mcp.addSuccess'))
       }
     } catch {
       if (mountedRef.current) {
-        window.toast.error(t('settings.mcp.addError'))
+        window.toast?.error(t('settings.mcp.addError'))
       }
     } finally {
       manualAddRef.current = false
@@ -148,7 +148,7 @@ const McpServersList: FC = () => {
       const created = await addMcpServer(dto)
       if (mountedRef.current) {
         setIsAddModalVisible(false)
-        window.toast.success(t('settings.mcp.addSuccess'))
+        window.toast?.success(t('settings.mcp.addSuccess'))
       }
       return created
     },

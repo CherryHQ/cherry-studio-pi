@@ -56,7 +56,7 @@ const NpxSearch: FC = () => {
       const searchScope = (scopeOverride || npmScope).trim()
 
       if (!searchScope) {
-        window.toast.warning(t('settings.mcp.npx_list.scope_required'))
+        window.toast?.warning(t('settings.mcp.npx_list.scope_required'))
         return
       }
 
@@ -94,7 +94,7 @@ const NpxSearch: FC = () => {
         _searchResults = formattedResults
 
         if (formattedResults.length === 0) {
-          window.toast.info(t('settings.mcp.npx_list.no_packages'))
+          window.toast?.info(t('settings.mcp.npx_list.no_packages'))
         }
       } catch (error: unknown) {
         if (!mountedRef.current || requestSeq !== searchRequestSeqRef.current) {
@@ -104,9 +104,9 @@ const NpxSearch: FC = () => {
         setSearchResults([])
         _searchResults = []
         if (error instanceof Error) {
-          window.toast.error(`${t('settings.mcp.npx_list.search_error')}: ${error.message}`)
+          window.toast?.error(`${t('settings.mcp.npx_list.search_error')}: ${error.message}`)
         } else {
-          window.toast.error(t('settings.mcp.npx_list.search_error'))
+          window.toast?.error(t('settings.mcp.npx_list.search_error'))
         }
       } finally {
         if (mountedRef.current && requestSeq === searchRequestSeqRef.current) {
@@ -151,11 +151,11 @@ const NpxSearch: FC = () => {
       try {
         await addMcpServer(newServer)
         if (mountedRef.current) {
-          window.toast.success(t('settings.mcp.addSuccess'))
+          window.toast?.success(t('settings.mcp.addSuccess'))
         }
       } catch {
         if (mountedRef.current) {
-          window.toast.error(t('settings.mcp.addError'))
+          window.toast?.error(t('settings.mcp.addError'))
         }
       } finally {
         setPackageAdding(packageName, false)

@@ -146,7 +146,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
   const handleDelete = useCallback(() => {
     const showDeleteError = (error: unknown) => {
       if (mountedRef.current) {
-        window.toast.error(`${t('settings.mcp.deleteError')}: ${formatErrorMessage(error)}`)
+        window.toast?.error(`${t('settings.mcp.deleteError')}: ${formatErrorMessage(error)}`)
       }
     }
 
@@ -179,7 +179,7 @@ const McpServerCard: FC<McpServerCardProps> = ({ server, isEditing = false, onEd
             await window.api.mcp.removeServer(server.id)
             await deleteMcpServer({})
             if (mountedRef.current) {
-              window.toast.success(t('settings.mcp.deleteSuccess'))
+              window.toast?.success(t('settings.mcp.deleteSuccess'))
             }
           } catch (error) {
             showDeleteError(error)
