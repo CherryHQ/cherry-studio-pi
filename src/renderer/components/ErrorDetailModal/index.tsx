@@ -560,7 +560,7 @@ const ErrorDetailContent: React.FC<ErrorDetailContentProps> = ({
     try {
       await navigator.clipboard.writeText(errorText)
       if (mountedRef.current) {
-        window.toast.success(t('message.copied'))
+        window.toast?.success(t('message.copied'))
       }
     } catch (clipboardError) {
       showCopyFailed(clipboardError)

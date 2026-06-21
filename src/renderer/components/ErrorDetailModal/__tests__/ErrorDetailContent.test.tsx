@@ -126,6 +126,30 @@ describe('ErrorDetailContent', () => {
     expect(mocks.toastSuccess).not.toHaveBeenCalled()
   })
 
+  it('copies error details when toast is unavailable', async () => {
+    mocks.clipboardWriteText.mockResolvedValueOnce(undefined)
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: undefined
+    })
+
+    render(
+      <ErrorDetailContent
+        error={{
+          name: 'Error',
+          message: 'Something failed',
+          stack: null
+        }}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /common.copy/ }))
+
+    await waitFor(() => {
+      expect(mocks.clipboardWriteText).toHaveBeenCalledWith(expect.stringContaining('Something failed'))
+    })
+  })
+
   it('ignores copy failure feedback after unmount', async () => {
     const clipboardOperation = deferred<void>()
     mocks.clipboardWriteText.mockReturnValueOnce(clipboardOperation.promise)
