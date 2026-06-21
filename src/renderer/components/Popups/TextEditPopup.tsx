@@ -169,7 +169,7 @@ const PopupContainer: React.FC<Props> = ({
     } catch (error) {
       if (isCurrentTranslation(translationSeq)) {
         logger.error('Translation failed:', error as Error)
-        window.toast.error(formatErrorMessageWithPrefix(error, t('translate.error.failed')))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('translate.error.failed')))
       }
     } finally {
       if (translationSeqRef.current === translationSeq) {

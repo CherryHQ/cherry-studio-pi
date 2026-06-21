@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type React from 'react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -189,6 +189,23 @@ describe('TextEditPopup', () => {
 
     expect(mocks.loggerError).not.toHaveBeenCalled()
     expect(window.toast.error).not.toHaveBeenCalled()
+  })
+
+  it('handles translation failures when toast is unavailable', async () => {
+    mocks.translateText.mockRejectedValueOnce(new Error('translation failed'))
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: undefined
+    })
+    await showPopup()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'common.translate_text' }))
+    })
+
+    await waitFor(() => {
+      expect(mocks.loggerError).toHaveBeenCalledWith('Translation failed:', expect.any(Error))
+    })
   })
 
   it('does not start translating after the confirmation resolves for an unmounted popup', async () => {
