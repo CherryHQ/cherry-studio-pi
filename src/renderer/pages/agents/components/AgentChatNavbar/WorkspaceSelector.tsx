@@ -49,9 +49,11 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
         properties: ['openDirectory', 'createDirectory']
       })
       if (!selectedPath) return
+      if (!mountedRef.current) return
 
       const workspace = await createWorkspaceByPath(selectedPath)
       if (!workspace) return
+      if (!mountedRef.current) return
 
       const updated = await updateSession(
         {
@@ -61,9 +63,8 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
         { showSuccessToast: false }
       )
       if (!updated) return
-      if (mountedRef.current) {
-        window.toast?.success(t('agent.session.workspace.updated'))
-      }
+      if (!mountedRef.current) return
+      window.toast?.success(t('agent.session.workspace.updated'))
     } catch (error) {
       if (mountedRef.current) {
         window.toast?.error({

@@ -1,6 +1,6 @@
 import { RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import type { AgentSessionEntity } from '@shared/data/api/schemas/agentSessions'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -210,6 +210,35 @@ describe('WorkspaceSelector', () => {
 
       selectFolderDeferred.resolve(null)
       await waitFor(() => expect(button).not.toBeDisabled())
+    } finally {
+      restoreWindow()
+    }
+  })
+
+  it('ignores a late folder picker result after the navbar unmounts', async () => {
+    const selectFolderDeferred = createDeferred<string | null>()
+    const selectFolder = vi.fn().mockReturnValue(selectFolderDeferred.promise)
+    const success = vi.fn()
+    const error = vi.fn()
+    const restoreWindow = installWindowMocks({ selectFolder, success, error })
+
+    try {
+      const { unmount } = render(<WorkspaceSelector session={createSession()} />)
+
+      fireEvent.click(screen.getByRole('button', { name: /agent\.session\.workspace\.select/ }))
+      await waitFor(() => expect(selectFolder).toHaveBeenCalledTimes(1))
+      unmount()
+
+      await act(async () => {
+        selectFolderDeferred.resolve('/Users/me/project')
+        await selectFolderDeferred.promise
+        await Promise.resolve()
+      })
+
+      expect(createWorkspaceByPathMock).not.toHaveBeenCalled()
+      expect(updateSessionMock).not.toHaveBeenCalled()
+      expect(success).not.toHaveBeenCalled()
+      expect(error).not.toHaveBeenCalled()
     } finally {
       restoreWindow()
     }
