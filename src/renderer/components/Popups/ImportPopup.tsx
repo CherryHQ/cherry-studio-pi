@@ -83,7 +83,7 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       }
 
       if (result.success) {
-        window.toast.success(
+        window.toast?.success(
           t('import.chatgpt.success', {
             topics: result.topicsCount,
             messages: result.messagesCount
@@ -91,12 +91,12 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
         )
         close({ success: true })
       } else {
-        window.toast.error(result.error || t('import.chatgpt.error.unknown'))
+        window.toast?.error(result.error || t('import.chatgpt.error.unknown'))
       }
     } catch (error) {
       if (mountedRef.current && operationSeq === operationSeqRef.current) {
         logger.error('ChatGPT import failed:', error as Error)
-        window.toast.error(t('import.chatgpt.error.unknown'))
+        window.toast?.error(t('import.chatgpt.error.unknown'))
         close({})
       }
     } finally {

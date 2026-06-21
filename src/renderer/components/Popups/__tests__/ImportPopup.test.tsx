@@ -168,6 +168,34 @@ describe('ImportPopup', () => {
     expect(mocks.TopView.hide).toHaveBeenCalledWith('ImportPopup')
   })
 
+  it('resolves success when toast is unavailable', async () => {
+    const { settled } = await showPopup()
+    Object.defineProperty(window, 'toast', {
+      configurable: true,
+      value: undefined
+    })
+    vi.mocked(window.api.file.open).mockResolvedValue({ content: '{"ok":true}' })
+    mocks.importChatGPTConversations.mockResolvedValue({
+      success: true,
+      topicsCount: 2,
+      messagesCount: 5
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('import.chatgpt.button'))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      vi.advanceTimersByTime(200)
+      await Promise.resolve()
+    })
+
+    expect(settled).toHaveBeenCalledWith({ success: true })
+    expect(mocks.TopView.hide).toHaveBeenCalledWith('ImportPopup')
+  })
+
   it('ignores duplicate import clicks while file selection is pending', async () => {
     await showPopup()
     let resolveOpen: (value: { content: string } | null) => void = () => {}
