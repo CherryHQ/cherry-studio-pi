@@ -573,6 +573,25 @@ describe('StorageV2ConversationHydrationService', () => {
     expect(mocks.listStorageV2Messages).toHaveBeenCalledTimes(2)
   })
 
+  it('preserves nested conversation hydration failure details in strict mode', async () => {
+    mocks.topicsCount.mockResolvedValue(0)
+    mocks.messageBlocksCount.mockResolvedValue(0)
+    mocks.listStorageV2Conversations.mockResolvedValue([
+      {
+        id: 'topic-error',
+        ownerId: 'assistant-1',
+        title: 'Error Topic',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:01.000Z'
+      }
+    ])
+    mocks.listStorageV2Messages.mockRejectedValueOnce({ error: { message: 'message bridge failed' } })
+
+    await expect(
+      hydrateStorageV2ConversationsIfDexieEmpty('data-sync:after data sync', { strict: true })
+    ).rejects.toThrow('message bridge failed')
+  })
+
   it('rechecks existing empty Dexie topic caches against Storage v2', async () => {
     mocks.topicsCount.mockResolvedValue(1)
     mocks.messageBlocksCount.mockResolvedValue(0)

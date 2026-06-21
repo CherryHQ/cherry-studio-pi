@@ -9,6 +9,7 @@ import {
   MessageBlockType,
   UserMessageStatus
 } from '@renderer/types/newMessage'
+import { getErrorMessage } from '@renderer/utils/error'
 
 import { getStorageV2AutoHydrateEnabled } from './StorageV2HydrationService'
 import { listStorageV2Conversations, listStorageV2Messages } from './StorageV2Service'
@@ -452,7 +453,7 @@ export async function hydrateStorageV2ConversationsIfDexieEmpty(
           }
         } catch (error) {
           logger.warn('Failed to hydrate assistant conversation from Storage v2', error as Error)
-          failures.push(error instanceof Error ? error.message : String(error))
+          failures.push(getErrorMessage(error))
         }
       }
 
