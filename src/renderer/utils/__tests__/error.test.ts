@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { formatErrorMessage, getErrorDetails, isAbortError, isTimeoutError, serializeHealthCheckError } from '../error'
+import {
+  formatErrorMessage,
+  getErrorDetails,
+  getErrorMessage,
+  isAbortError,
+  isTimeoutError,
+  serializeHealthCheckError
+} from '../error'
 
 describe('error', () => {
   describe('getErrorDetails', () => {
@@ -127,6 +134,20 @@ describe('error', () => {
       expect(result).toContain('Error Details:')
       expect(result).toContain('"code": "E_CIRCULAR"')
       expect(result).toContain('"self": "[Circular]"')
+    })
+  })
+
+  describe('getErrorMessage', () => {
+    it('preserves string errors', () => {
+      expect(getErrorMessage('plain IPC failure')).toBe('plain IPC failure')
+    })
+
+    it('preserves nested error messages', () => {
+      expect(getErrorMessage({ error: { message: 'nested bridge failure' } })).toBe('nested bridge failure')
+    })
+
+    it('preserves object message fields', () => {
+      expect(getErrorMessage({ message: 'object failure' })).toBe('object failure')
     })
   })
 

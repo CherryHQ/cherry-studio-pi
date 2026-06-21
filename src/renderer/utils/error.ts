@@ -82,12 +82,33 @@ export function formatErrorMessage(error: unknown): string {
   }
 }
 
-export function getErrorMessage(error: unknown): string {
+function extractErrorMessage(error: unknown): string | null {
   if (error instanceof Error && error.message) {
     return error.message
-  } else {
-    return t('error.unknown')
   }
+  if (typeof error === 'string' && error.trim()) {
+    return error
+  }
+  if (!error || typeof error !== 'object') {
+    return null
+  }
+
+  const maybeError = (error as { error?: unknown }).error
+  if (maybeError) {
+    const nested = extractErrorMessage(maybeError)
+    if (nested) return nested
+  }
+
+  const maybeMessage = (error as { message?: unknown }).message
+  if (typeof maybeMessage === 'string' && maybeMessage.trim()) {
+    return maybeMessage
+  }
+
+  return null
+}
+
+export function getErrorMessage(error: unknown): string {
+  return extractErrorMessage(error) ?? t('error.unknown')
 }
 
 export function formatErrorMessageWithPrefix(error: unknown, prefix: string): string {
