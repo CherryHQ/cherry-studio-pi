@@ -57,7 +57,7 @@ const AttachmentButton: FC<Props> = ({ quickPanel, couldAddImageFile, extensions
       }
 
       if (supportedFiles.length !== _files.length) {
-        window.toast.info(
+        window.toast?.info(
           t('chat.input.file_not_supported_count', {
             count: _files.length - supportedFiles.length
           })

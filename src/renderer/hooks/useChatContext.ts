@@ -114,7 +114,7 @@ export const useChatContextProvider = (activeTopic: Topic): ChatContextValue => 
   const handleMultiSelectAction = useCallback(
     async (actionType: string, messageIds: string[]) => {
       if (messageIds.length === 0) {
-        window.toast.warning(t('chat.multiple.select.empty'))
+        window.toast?.warning(t('chat.multiple.select.empty'))
         return
       }
 
@@ -150,11 +150,11 @@ export const useChatContextProvider = (activeTopic: Topic): ChatContextValue => 
               deleteRunningRef.current = true
               try {
                 await Promise.all(messageIds.map((messageId) => v2?.deleteMessage(messageId)))
-                window.toast.success(t('message.delete.success'))
+                window.toast?.success(t('message.delete.success'))
                 handleToggleMultiSelectMode(false)
               } catch (error) {
                 logger.error('Failed to delete messages:', error as Error)
-                window.toast.error(t('message.delete.failed'))
+                window.toast?.error(t('message.delete.failed'))
               } finally {
                 deleteRunningRef.current = false
                 deleteConfirmRef.current = false
@@ -172,7 +172,7 @@ export const useChatContextProvider = (activeTopic: Topic): ChatContextValue => 
             try {
               const savedPath = await window.api.file.save(fileName, contentToSave)
               if (savedPath) {
-                window.toast.success(t('message.save.success.title'))
+                window.toast?.success(t('message.save.success.title'))
                 handleToggleMultiSelectMode(false)
               }
             } catch (error) {
@@ -190,7 +190,7 @@ export const useChatContextProvider = (activeTopic: Topic): ChatContextValue => 
           if (contentToCopy) {
             try {
               await navigator.clipboard.writeText(contentToCopy)
-              window.toast.success(t('message.copied'))
+              window.toast?.success(t('message.copied'))
               handleToggleMultiSelectMode(false)
             } catch (error) {
               logger.error('Failed to copy selected messages:', error as Error)

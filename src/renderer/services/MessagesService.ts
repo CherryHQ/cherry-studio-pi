@@ -55,15 +55,15 @@ export async function getMessageTitle(message: Message, length = 30): Promise<st
       })
 
       const titlePromise = fetchMessagesSummary({ messages: [tempMessage] })
-      window.toast.loading({ title: t('chat.topics.export.wait_for_title_naming'), promise: titlePromise })
+      window.toast?.loading({ title: t('chat.topics.export.wait_for_title_naming'), promise: titlePromise })
       const { text: title } = await titlePromise
 
       if (title) {
-        window.toast.success(t('chat.topics.export.title_naming_success'))
+        window.toast?.success(t('chat.topics.export.title_naming_success'))
         return title
       }
     } catch (e) {
-      window.toast.error(t('chat.topics.export.title_naming_failed'))
+      window.toast?.error(t('chat.topics.export.title_naming_failed'))
       logger.error('Failed to generate title using topic naming, downgraded to default logic', e as Error)
     }
   }

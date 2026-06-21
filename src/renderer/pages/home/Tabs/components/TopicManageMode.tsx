@@ -120,7 +120,7 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
 
     const remainingTopics = topics.filter((topic) => !selectedIds.has(topic.id))
     if (remainingTopics.length === 0) {
-      window.toast.error(t('chat.topics.manage.error.at_least_one'))
+      window.toast?.error(t('chat.topics.manage.error.at_least_one'))
       return
     }
 
@@ -153,16 +153,16 @@ export const TopicManagePanel: React.FC<TopicManagePanelProps> = ({
       }
 
       if (successfulIds.size === idsArray.length) {
-        window.toast.success(t('chat.topics.manage.delete.success', { count: successfulIds.size }))
+        window.toast?.success(t('chat.topics.manage.delete.success', { count: successfulIds.size }))
       } else if (successfulIds.size > 0) {
-        window.toast.warning(
+        window.toast?.warning(
           t('chat.topics.manage.delete.partial_success', {
             successCount: successfulIds.size,
             failedCount: idsArray.length - successfulIds.size
           })
         )
       } else {
-        window.toast.error(t('chat.topics.manage.delete.error'))
+        window.toast?.error(t('chat.topics.manage.delete.error'))
       }
       exitManageMode()
     } finally {

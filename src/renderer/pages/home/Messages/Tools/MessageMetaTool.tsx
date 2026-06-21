@@ -66,7 +66,7 @@ const MessageMetaTool: FC<Props> = ({ toolResponse }) => {
         return
       }
 
-      window.toast.success({ title: t('message.copied'), key: 'copy-meta-tool' })
+      window.toast?.success({ title: t('message.copied'), key: 'copy-meta-tool' })
       setCopied(true)
       setTimeoutTimer('copyMetaTool', () => setCopied(false), 2000)
     } catch (error) {

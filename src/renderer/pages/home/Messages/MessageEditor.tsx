@@ -164,7 +164,7 @@ const MessageEditor: FC<Props> = ({ message, onSave, onResend, onCancel }) => {
       })
 
       if (droppedFiles.length > 0 && supportedFiles === 0) {
-        window.toast.info(t('chat.input.file_not_supported'))
+        window.toast?.info(t('chat.input.file_not_supported'))
       }
     }
   }

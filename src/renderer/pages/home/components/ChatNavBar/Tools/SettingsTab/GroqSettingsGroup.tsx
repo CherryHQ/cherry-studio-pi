@@ -30,7 +30,7 @@ const GroqSettingsGroup: FC<Props> = ({ SettingGroup, SettingRowTitleSmall }) =>
       void updateProvider({
         providerSettings: { ...provider.settings, serviceTier: value ?? undefined }
       }).catch((error) => {
-        window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
       })
     },
     [provider, t, updateProvider]

@@ -67,14 +67,14 @@ const ThinkingBlock: React.FC<Props> = ({ id, content, isStreaming, thinkingMs }
         .writeText(content)
         .then(() => {
           if (mountedRef.current) {
-            window.toast.success({ title: t('message.copied'), key: 'copy-message' })
+            window.toast?.success({ title: t('message.copied'), key: 'copy-message' })
             setCopied(true)
           }
         })
         .catch((error) => {
           logger.error('Failed to copy text:', error)
           if (mountedRef.current) {
-            window.toast.error({ title: t('message.copy.failed'), key: 'copy-message-error' })
+            window.toast?.error({ title: t('message.copy.failed'), key: 'copy-message-error' })
           }
         })
     }

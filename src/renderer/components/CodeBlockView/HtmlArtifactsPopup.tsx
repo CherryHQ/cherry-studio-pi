@@ -147,7 +147,7 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({ open, title, ht
             await window.api.file.saveImage(fileName, dataUrl)
           } catch (error) {
             logger.error('Failed to save HTML artifact image', error as Error)
-            window.toast.error(t('common.save_failed'))
+            window.toast?.error(t('common.save_failed'))
           }
         }
       }
@@ -156,12 +156,12 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({ open, title, ht
           await captureScrollableIframeAsBlob(previewFrameRef, async (blob) => {
             if (blob) {
               await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-              window.toast.success(t('message.copy.success'))
+              window.toast?.success(t('message.copy.success'))
             }
           })
         } catch (error) {
           logger.error('Failed to copy HTML artifact image', error as Error)
-          window.toast.error(t('message.copy.failed'))
+          window.toast?.error(t('message.copy.failed'))
         }
       }
 

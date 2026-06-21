@@ -196,11 +196,11 @@ const MessageMenubar: FC<Props> = (props) => {
 
       try {
         await navigator.clipboard.writeText(removeTrailingDoubleSpaces(mainTextContent.trimStart()))
-        window.toast.success(t('message.copied'))
+        window.toast?.success(t('message.copied'))
         setCopied(true)
       } catch (error) {
         logger.error('Failed to copy message text', error as Error)
-        window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
       }
     },
     [mainTextContent, setCopied, t]
@@ -208,7 +208,7 @@ const MessageMenubar: FC<Props> = (props) => {
 
   const onNewBranch = useCallback(async () => {
     await startBranch()
-    window.toast.success(t('chat.message.new.branch.created'))
+    window.toast?.success(t('chat.message.new.branch.created'))
   }, [startBranch, t])
 
   /**
@@ -331,7 +331,7 @@ const MessageMenubar: FC<Props> = (props) => {
               const fileName = dayjs(message.createdAt).format('YYYYMMDDHHmm') + '.md'
               void window.api.file.save(fileName, mainTextContent).catch((error) => {
                 logger.error('Failed to save message file', error as Error)
-                window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+                window.toast?.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
               })
             }
           },
@@ -366,7 +366,7 @@ const MessageMenubar: FC<Props> = (props) => {
                 })
               } catch (error) {
                 logger.error('Failed to copy message image', error as Error)
-                window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+                window.toast?.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
               }
             }
           },
@@ -379,11 +379,11 @@ const MessageMenubar: FC<Props> = (props) => {
                 const title = await getMessageTitle(message)
                 if (title && imageData) {
                   const success = await window.api.file.saveImage(title, imageData)
-                  if (success) window.toast.success(t('chat.topics.export.image_saved'))
+                  if (success) window.toast?.success(t('chat.topics.export.image_saved'))
                 }
               } catch (error) {
                 logger.error('Failed to export message image', error as Error)
-                window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+                window.toast?.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
               }
             }
           },
@@ -407,7 +407,7 @@ const MessageMenubar: FC<Props> = (props) => {
                 await window.api.export.toWord(markdown, title)
               } catch (error) {
                 logger.error('Failed to export message to Word', error as Error)
-                window.toast.error(formatErrorMessageWithPrefix(error, t('chat.topics.export_to_word_failed')))
+                window.toast?.error(formatErrorMessageWithPrefix(error, t('chat.topics.export_to_word_failed')))
               }
             }
           },
@@ -751,13 +751,13 @@ const buttonRenderers: Record<MessageMenubarButtonId, MessageMenubarButtonRender
                 if (translationContent) {
                   try {
                     await navigator.clipboard.writeText(translationContent)
-                    window.toast.success(t('translate.copied'))
+                    window.toast?.success(t('translate.copied'))
                   } catch (error) {
                     logger.error('Failed to copy translated message', error as Error)
-                    window.toast.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
+                    window.toast?.error(formatErrorMessageWithPrefix(error, t('common.copy_failed')))
                   }
                 } else {
-                  window.toast.warning(t('translate.empty'))
+                  window.toast?.warning(t('translate.empty'))
                 }
               }
             }

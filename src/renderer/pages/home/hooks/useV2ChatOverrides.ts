@@ -218,7 +218,7 @@ export function useV2ChatOverrides(params: Params): Result {
       } catch (err) {
         if (err instanceof DataApiError && err.code === ErrorCode.NOT_FOUND) {
           logger.warn('setActiveNode on unpersisted message', { messageId, topicId: topic.id })
-          window.toast.warning('Message is still syncing — try again in a moment')
+          window.toast?.warning('Message is still syncing — try again in a moment')
           return
         }
         throw err
@@ -240,7 +240,7 @@ export function useV2ChatOverrides(params: Params): Result {
       } catch (err) {
         if (err instanceof DataApiError && err.code === ErrorCode.NOT_FOUND) {
           logger.warn('setActiveBranch on unpersisted message', { throughNodeId, topicId: topic.id })
-          window.toast.warning('Message is still syncing — try again in a moment')
+          window.toast?.warning('Message is still syncing — try again in a moment')
           return
         }
         throw err

@@ -27,7 +27,7 @@ export const ClickableFilePath = memo(function ClickableFilePath({ path, display
   const openInEditor = useCallback(
     (app: ExternalAppInfo) => {
       window.api.shell.openExternal(buildEditorUrl(app, path)).catch(() => {
-        window.toast.error(t('chat.input.tools.open_file_error', { path }))
+        window.toast?.error(t('chat.input.tools.open_file_error', { path }))
       })
     },
     [path, t]
@@ -37,7 +37,7 @@ export const ClickableFilePath = memo(function ClickableFilePath({ path, display
     (e: React.MouseEvent | React.KeyboardEvent) => {
       e.stopPropagation()
       window.api.file.openPath(path).catch(() => {
-        window.toast.error(t('chat.input.tools.open_file_error', { path }))
+        window.toast?.error(t('chat.input.tools.open_file_error', { path }))
       })
     },
     [path, t]
@@ -62,7 +62,7 @@ export const ClickableFilePath = memo(function ClickableFilePath({ path, display
         onClick: ({ domEvent }) => {
           domEvent.stopPropagation()
           window.api.file.showInFolder(path).catch(() => {
-            window.toast.error(t('chat.input.tools.file_not_found', { path }))
+            window.toast?.error(t('chat.input.tools.file_not_found', { path }))
           })
         }
       }

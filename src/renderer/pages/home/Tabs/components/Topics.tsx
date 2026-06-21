@@ -187,7 +187,7 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
       if (topic && name !== topic.name) {
         const updatedTopic = { ...topic, name, isNameManuallyEdited: true }
         void updateTopic(updatedTopic)
-        window.toast.success(t('common.saved'))
+        window.toast?.success(t('common.saved'))
       }
       setEditingTopicId(null)
     },
@@ -246,7 +246,7 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
       } catch (err) {
         logger.error('Failed to delete topic', { topicId: topic.id, err })
         const message = err instanceof Error ? err.message : t('chat.topics.manage.delete.error')
-        window.toast.error(message)
+        window.toast?.error(message)
         setDeletingTopicId(null)
         return
       }
@@ -306,7 +306,7 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
       } catch (err) {
         logger.error('Failed to delete topic', { topicId: topic.id, err })
         const message = err instanceof Error ? err.message : t('chat.topics.manage.delete.error')
-        window.toast.error(message)
+        window.toast?.error(message)
         return
       }
       if (topic.id === activeTopic?.id && topics.length > 1) {
@@ -354,7 +354,7 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
         }
       } catch (error) {
         logger.error('auto-rename failed', error as Error)
-        window.toast.error(`${t('message.error.fetchTopicName')}: ${(error as Error).message ?? ''}`)
+        window.toast?.error(`${t('message.error.fetchTopicName')}: ${(error as Error).message ?? ''}`)
       } finally {
         finishTopicRenaming(topic.id)
       }
@@ -372,7 +372,7 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
         await fn()
       } catch (error) {
         logger.error('topic export failed', error as Error)
-        window.toast.error(t('chat.topics.export.failed'))
+        window.toast?.error(t('chat.topics.export.failed'))
       }
     },
     [t]
@@ -400,11 +400,11 @@ export const Topics: React.FC<Props> = ({ activeTopic, setActiveTopic, position 
       try {
         const result = await SaveToKnowledgePopup.showForTopic(topic)
         if (result?.success) {
-          window.toast.success(t('chat.save.topic.knowledge.success', { count: result.savedCount }))
+          window.toast?.success(t('chat.save.topic.knowledge.success', { count: result.savedCount }))
         }
       } catch (error) {
         logger.error('save to knowledge failed', error as Error)
-        window.toast.error(t('chat.save.topic.knowledge.error.save_failed'))
+        window.toast?.error(t('chat.save.topic.knowledge.error.save_failed'))
       }
     },
     [t]

@@ -35,7 +35,7 @@ const HtmlArtifactsCard: FC<Props> = ({ html, onSave, isStreaming = false }) => 
       await window.api.file.openPath(path)
     } catch (error) {
       logger.error('Failed to open HTML artifact externally', error as Error)
-      window.toast.error(t('chat.artifacts.preview.openExternal.error.content'))
+      window.toast?.error(t('chat.artifacts.preview.openExternal.error.content'))
     }
   }
 
@@ -44,7 +44,7 @@ const HtmlArtifactsCard: FC<Props> = ({ html, onSave, isStreaming = false }) => 
     try {
       const savedPath = await window.api.file.save(fileName, htmlContent)
       if (!savedPath) return
-      window.toast.success(t('message.download.success'))
+      window.toast?.success(t('message.download.success'))
     } catch (error) {
       logger.error('Failed to download HTML artifact', error as Error)
       showSaveFailed(error)

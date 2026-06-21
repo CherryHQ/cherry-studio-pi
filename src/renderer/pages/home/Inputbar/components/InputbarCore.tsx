@@ -513,7 +513,7 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
         )
       } catch (error) {
         logger.warn('Failed to append txt attachment content:', error as Error)
-        window.toast.error(t('chat.input.file_error'))
+        window.toast?.error(t('chat.input.file_error'))
       }
     },
     [focusTextarea, resizeTextArea, setFiles, setText, setTimeoutTimer, t, textareaRef]

@@ -60,7 +60,7 @@ const WebSearchButton: FC<Props> = ({ assistantId }) => {
 
   const onClick = useCallback(() => {
     if (!assistant || !model) {
-      window.toast.error(t('error.model.not_exists'))
+      window.toast?.error(t('error.model.not_exists'))
       return
     }
     if (enableWebSearch) {
@@ -90,7 +90,7 @@ const WebSearchButton: FC<Props> = ({ assistantId }) => {
       !isGemini3Model(model) &&
       getEffectiveMcpMode(assistant) !== 'disabled'
     ) {
-      window.toast.warning(t('chat.mcp.warning.gemini_web_search'))
+      window.toast?.warning(t('chat.mcp.warning.gemini_web_search'))
       return
     }
     if (
@@ -98,7 +98,7 @@ const WebSearchButton: FC<Props> = ({ assistantId }) => {
       isGPT5SeriesReasoningModel(model) &&
       assistant.settings.reasoning_effort === 'minimal'
     ) {
-      window.toast.warning(t('chat.web_search.warning.openai'))
+      window.toast?.warning(t('chat.web_search.warning.openai'))
       return
     }
 

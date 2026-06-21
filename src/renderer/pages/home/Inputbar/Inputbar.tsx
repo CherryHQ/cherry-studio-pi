@@ -236,7 +236,7 @@ const InputbarInner: FC<InputbarInnerProps> = ({ setActiveTopic, topic, actionsR
     }
 
     if (!model) {
-      window.toast.error(t('code.model_required'))
+      window.toast?.error(t('code.model_required'))
       return
     }
 
@@ -265,7 +265,7 @@ const InputbarInner: FC<InputbarInnerProps> = ({ setActiveTopic, topic, actionsR
       // silently discarding what the user typed.
       setText(text_)
       setFiles(files)
-      window.toast.error(t('chat.input.send_failed'))
+      window.toast?.error(t('chat.input.send_failed'))
     } finally {
       sendInFlightRef.current = false
       setIsSending(false)

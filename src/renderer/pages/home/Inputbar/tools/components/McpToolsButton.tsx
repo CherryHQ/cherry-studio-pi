@@ -156,7 +156,7 @@ const McpToolsButton: FC<Props> = ({ quickPanel, setInputValue, resizeTextArea, 
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
     },
     [t]
   )
@@ -190,7 +190,7 @@ const McpToolsButton: FC<Props> = ({ quickPanel, setInputValue, resizeTextArea, 
           assistant.settings?.enableWebSearch &&
           !isGemini3Model(model)
         ) {
-          window.toast.warning(t('chat.mcp.warning.gemini_web_search'))
+          window.toast?.warning(t('chat.mcp.warning.gemini_web_search'))
           settingsPatch.enableWebSearch = false
         }
       }

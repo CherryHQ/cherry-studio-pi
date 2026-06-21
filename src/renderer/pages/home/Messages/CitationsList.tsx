@@ -175,12 +175,12 @@ const CopyButton: React.FC<{ content: string }> = ({ content }) => {
       .then(() => {
         if (mountedRef.current) {
           setCopied(true)
-          window.toast.success(t('common.copied'))
+          window.toast?.success(t('common.copied'))
         }
       })
       .catch(() => {
         if (mountedRef.current) {
-          window.toast.error(t('message.copy.failed'))
+          window.toast?.error(t('message.copy.failed'))
         }
       })
   }
@@ -274,7 +274,7 @@ const KnowledgeCitation: React.FC<{ citation: Citation }> = ({ citation }) => {
   const handleOpenLocalPathError = useCallback(
     (error: unknown) => {
       logger.error('Failed to open citation source path', error as Error)
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
     },
     [t]
   )

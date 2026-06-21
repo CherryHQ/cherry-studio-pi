@@ -192,7 +192,7 @@ const Messages: React.FC<MessagesProps> = ({
           }
         } catch (error) {
           logger.error('Failed to export topic image', error as Error)
-          window.toast.error(t('common.save_failed'))
+          window.toast?.error(t('common.save_failed'))
         }
       }),
       EventEmitter.on(EVENT_NAMES.NEW_CONTEXT, () => {
@@ -213,20 +213,20 @@ const Messages: React.FC<MessagesProps> = ({
               await dataApiService.patch(`/messages/${resolved.messageId}`, {
                 body: { data: { parts: allParts } }
               })
-              window.toast.success(t('code_block.edit.save.success'))
+              window.toast?.success(t('code_block.edit.save.success'))
               return
             }
 
             logger.error(
               `Failed to save code block ${codeBlockId} content to message block ${msgBlockId}: unable to resolve part`
             )
-            window.toast.error(t('code_block.edit.save.failed.label'))
+            window.toast?.error(t('code_block.edit.save.failed.label'))
           } catch (error) {
             logger.error(
               `Failed to save code block ${codeBlockId} content to message block ${msgBlockId}:`,
               error as Error
             )
-            window.toast.error(t('code_block.edit.save.failed.label'))
+            window.toast?.error(t('code_block.edit.save.failed.label'))
           }
         }
       )
@@ -283,7 +283,7 @@ const Messages: React.FC<MessagesProps> = ({
       const text = parts ? getTextFromParts(parts) : getMainTextContent(lastMessage)
       try {
         await navigator.clipboard.writeText(text)
-        window.toast.success(t('message.copy.success'))
+        window.toast?.success(t('message.copy.success'))
       } catch (error) {
         logger.error('Failed to copy last message:', error as Error)
         showCopyFailed(error)

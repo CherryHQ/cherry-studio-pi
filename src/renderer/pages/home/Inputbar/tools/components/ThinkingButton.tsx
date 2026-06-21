@@ -97,7 +97,7 @@ const ThinkingButton: FC<Props> = ({
         assistant?.settings.enableWebSearch &&
         option === 'minimal'
       ) {
-        window.toast.warning(t('chat.web_search.warning.openai'))
+        window.toast?.warning(t('chat.web_search.warning.openai'))
         return
       }
       cacheService.set(`assistant.reasoning_effort_cache.${assistantId}`, option)

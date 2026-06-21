@@ -49,7 +49,7 @@ const QuickPhrasesButton = ({ quickPanel, setInputValue, resizeTextArea }: Props
     refresh: ['/prompts'],
     onError: (error) => {
       logger.error('Failed to create prompt', error)
-      window.toast.error(formatErrorMessageWithPrefix(error, t('settings.prompts.errors.createFailed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('settings.prompts.errors.createFailed')))
     }
   })
 

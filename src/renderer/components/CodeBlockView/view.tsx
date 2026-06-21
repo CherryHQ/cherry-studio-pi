@@ -162,12 +162,12 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
       const content = sourceViewRef.current?.getContent?.() ?? children
       await navigator.clipboard.writeText(content.trimEnd())
       if (mountedRef.current) {
-        window.toast.success(t('code_block.copy.success'))
+        window.toast?.success(t('code_block.copy.success'))
       }
     } catch (error) {
       logger.error('Failed to copy to clipboard:', { error })
       if (mountedRef.current) {
-        window.toast.error(t('code_block.copy.failed'))
+        window.toast?.error(t('code_block.copy.failed'))
       }
     }
   }, [children, t])
@@ -191,7 +191,7 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
     void window.api.file.save(`${fileName}${ext}`, children).catch((error) => {
       logger.error('Failed to save code block source', error as Error)
       if (mountedRef.current) {
-        window.toast.error(t('common.save_failed'))
+        window.toast?.error(t('common.save_failed'))
       }
     })
   }, [children, language, t])
