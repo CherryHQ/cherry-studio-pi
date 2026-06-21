@@ -518,7 +518,7 @@ export async function backupToWebdav({
       channel: 'system'
     })
     store.dispatch(setWebDAVSyncState({ lastSyncError: errorMessage }))
-    showMessage && window.toast?.error(i18n.t('message.backup.failed'))
+    showMessage && window.toast?.error(formatErrorMessageWithPrefix(error, i18n.t('message.backup.failed')))
     logger.error('[Backup] backupToWebdav: Error uploading file to WebDAV:', error)
     throw error
   } finally {
@@ -684,7 +684,7 @@ export async function backupToS3({
     })
     store.dispatch(setS3SyncState({ lastSyncError: errorMessage }))
     logger.error('backupToS3: Error uploading file to S3:', error)
-    showMessage && window.toast?.error(i18n.t('message.backup.failed'))
+    showMessage && window.toast?.error(formatErrorMessageWithPrefix(error, i18n.t('message.backup.failed')))
     throw error
   } finally {
     if (!autoBackupProcess) {

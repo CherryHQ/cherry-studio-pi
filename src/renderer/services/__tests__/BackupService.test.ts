@@ -717,6 +717,46 @@ describe('BackupService legacy restore', () => {
     )
   })
 
+  it('preserves WebDAV backup failure details in manual toast feedback', async () => {
+    mocks.storeState.settings = {
+      s3: {},
+      webdavHost: 'https://webdav.example',
+      webdavUser: 'user',
+      webdavPass: 'pass',
+      webdavPath: '/backup',
+      webdavMaxBackups: 0,
+      webdavSkipBackupFile: false,
+      webdavDisableStream: false
+    }
+    vi.mocked(window.api.backup.backupToWebdav).mockRejectedValueOnce({
+      error: { message: 'webdav quota exceeded' }
+    })
+
+    await expect(backupToWebdav({ showMessage: true })).rejects.toEqual({
+      error: { message: 'webdav quota exceeded' }
+    })
+
+    expect(window.toast.error).toHaveBeenCalledWith('message.backup.failed: webdav quota exceeded')
+  })
+
+  it('preserves S3 backup failure details in manual toast feedback', async () => {
+    mocks.storeState.settings = {
+      s3: {
+        bucket: 'bucket',
+        maxBackups: 0
+      }
+    }
+    vi.mocked(window.api.backup.backupToS3).mockRejectedValueOnce({
+      error: { message: 's3 quota exceeded' }
+    })
+
+    await expect(backupToS3({ showMessage: true })).rejects.toEqual({
+      error: { message: 's3 quota exceeded' }
+    })
+
+    expect(window.toast.error).toHaveBeenCalledWith('message.backup.failed: s3 quota exceeded')
+  })
+
   it('preserves nested WebDAV restore errors in the modal', async () => {
     vi.mocked(window.api.backup.restoreFromWebdav).mockRejectedValueOnce({
       error: {
