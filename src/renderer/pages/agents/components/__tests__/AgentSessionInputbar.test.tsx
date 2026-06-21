@@ -277,6 +277,27 @@ describe('AgentSessionInputbar', () => {
     expect(window.toast.error).not.toHaveBeenCalledWith('code.model_required')
   })
 
+  it('does not crash when the toast host is unavailable during a model-required warning', async () => {
+    cacheServiceMock.getCasual.mockReturnValue('hello')
+    agentState.model = null
+    modelState.models = []
+    delete (window as any).toast
+    const sendMessage = vi.fn().mockResolvedValue(undefined)
+
+    render(
+      <AgentSessionInputbar
+        agentId="agent-1"
+        sessionId="session-1"
+        sendMessage={sendMessage}
+        stop={vi.fn()}
+        isStreaming={false}
+      />
+    )
+
+    expect(() => fireEvent.click(screen.getByTestId('agent-session-inputbar'))).not.toThrow()
+    expect(sendMessage).not.toHaveBeenCalled()
+  })
+
   it('ignores duplicate sends while a send request is still in flight', async () => {
     cacheServiceMock.getCasual.mockReturnValue('hello')
     const sendDeferred = createDeferred<void>()

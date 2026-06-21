@@ -378,7 +378,7 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
     }
 
     if (!model && !agentBase?.model?.trim()) {
-      window.toast.error(t('code.model_required'))
+      window.toast?.error(t('code.model_required'))
       return
     }
 
@@ -423,7 +423,7 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
         setText(textToSend)
         setFiles(filesToSend)
         setTimeoutTimer('agentSession_restoreFailedMessage', () => resizeTextArea(), 0)
-        window.toast.error(t('chat.input.send_failed'))
+        window.toast?.error(t('chat.input.send_failed'))
       }
     } finally {
       sendInFlightRef.current = false

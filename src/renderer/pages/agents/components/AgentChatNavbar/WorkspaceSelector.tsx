@@ -62,11 +62,11 @@ const WorkspaceSelector = ({ session }: WorkspaceSelectorProps) => {
       )
       if (!updated) return
       if (mountedRef.current) {
-        window.toast.success(t('agent.session.workspace.updated'))
+        window.toast?.success(t('agent.session.workspace.updated'))
       }
     } catch (error) {
       if (mountedRef.current) {
-        window.toast.error({
+        window.toast?.error({
           title: t('agent.session.workspace.select_failed'),
           description: getErrorMessage(error)
         })
