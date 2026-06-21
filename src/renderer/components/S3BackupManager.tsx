@@ -12,7 +12,7 @@ import {
 } from '@cherrystudio/ui'
 import { restoreFromS3 } from '@renderer/services/BackupService'
 import type { S3Config } from '@renderer/types'
-import { formatFileSize } from '@renderer/utils'
+import { formatFileSize, getErrorMessage } from '@renderer/utils'
 import { runExclusiveOperation } from '@renderer/utils/exclusiveOperation'
 import dayjs from 'dayjs'
 import { ChevronLeft, ChevronRight, CircleAlert, RefreshCw, Trash2 } from 'lucide-react'
@@ -90,9 +90,9 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
       if (isActive() && fetchSeq === fetchSeqRef.current) {
         setBackupFiles(files)
       }
-    } catch (error: any) {
+    } catch (error) {
       if (isActive() && fetchSeq === fetchSeqRef.current) {
-        window.toast?.error(t('settings.data.s3.manager.files.fetch.error', { message: error.message }))
+        window.toast?.error(t('settings.data.s3.manager.files.fetch.error', { message: getErrorMessage(error) }))
       }
     } finally {
       if (isActive() && fetchSeq === fetchSeqRef.current) {
@@ -203,9 +203,9 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
             )
             setSelectedRowKeys([])
             await fetchBackupFiles()
-          } catch (error: any) {
+          } catch (error) {
             if (isActive()) {
-              window.toast?.error(t('settings.data.s3.manager.delete.error', { message: error.message }))
+              window.toast?.error(t('settings.data.s3.manager.delete.error', { message: getErrorMessage(error) }))
             }
           } finally {
             if (isActive()) {
@@ -257,9 +257,9 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
 
             window.toast?.success(t('settings.data.s3.manager.delete.success.single'))
             await fetchBackupFiles()
-          } catch (error: any) {
+          } catch (error) {
             if (isActive()) {
-              window.toast?.error(t('settings.data.s3.manager.delete.error', { message: error.message }))
+              window.toast?.error(t('settings.data.s3.manager.delete.error', { message: getErrorMessage(error) }))
             }
           } finally {
             if (isActive()) {
@@ -300,9 +300,9 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
 
             window.toast?.success(t('settings.data.s3.restore.success'))
             onClose() // 关闭模态框
-          } catch (error: any) {
+          } catch (error) {
             if (isActive()) {
-              window.toast?.error(t('settings.data.s3.restore.error', { message: error.message }))
+              window.toast?.error(t('settings.data.s3.restore.error', { message: getErrorMessage(error) }))
             }
           } finally {
             if (isActive()) {

@@ -11,7 +11,7 @@ import {
   Spinner
 } from '@cherrystudio/ui'
 import { backupToS3 } from '@renderer/services/BackupService'
-import { formatFileSize } from '@renderer/utils'
+import { formatFileSize, getErrorMessage } from '@renderer/utils'
 import { runExclusiveOperation } from '@renderer/utils/exclusiveOperation'
 import dayjs from 'dayjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -197,9 +197,9 @@ export function useS3RestoreModal({
       if (mountedRef.current && listSeq === listSeqRef.current) {
         setBackupFiles(files)
       }
-    } catch (error: any) {
+    } catch (error) {
       if (mountedRef.current && listSeq === listSeqRef.current) {
-        window.toast?.error(t('settings.data.s3.manager.files.fetch.error', { message: error.message }))
+        window.toast?.error(t('settings.data.s3.manager.files.fetch.error', { message: getErrorMessage(error) }))
       }
     } finally {
       if (mountedRef.current && listSeq === listSeqRef.current) {
@@ -251,9 +251,9 @@ export function useS3RestoreModal({
               window.toast?.success(t('message.restore.success'))
               setIsRestoreModalVisible(false)
             }
-          } catch (error: any) {
+          } catch (error) {
             if (mountedRef.current) {
-              window.toast?.error(t('settings.data.s3.restore.error', { message: error.message }))
+              window.toast?.error(t('settings.data.s3.restore.error', { message: getErrorMessage(error) }))
             }
           } finally {
             if (mountedRef.current) {

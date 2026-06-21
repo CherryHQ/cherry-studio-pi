@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -60,7 +60,9 @@ vi.mock('@renderer/services/BackupService', () => ({
 }))
 
 vi.mock('@renderer/utils', () => ({
-  formatFileSize: (size: number) => `${size} B`
+  formatFileSize: (size: number) => `${size} B`,
+  getErrorMessage: (error: unknown) =>
+    typeof error === 'string' ? error : error instanceof Error ? error.message : 'unknown error'
 }))
 
 vi.mock('react-i18next', () => ({
@@ -243,5 +245,28 @@ describe('backup managers', () => {
     expect(window.toast.success).not.toHaveBeenCalled()
     expect(window.toast.error).not.toHaveBeenCalled()
     expect(window.api.backup.listWebdavFiles).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows non-Error WebDAV fetch failures instead of an empty message', async () => {
+    vi.mocked(window.api.backup.listWebdavFiles).mockRejectedValue('permission denied')
+
+    render(
+      <WebdavBackupManager
+        visible
+        onClose={vi.fn()}
+        webdavConfig={{
+          webdavHost: 'http://127.0.0.1:8080',
+          webdavUser: 'webdav',
+          webdavPass: 'secret',
+          webdavPath: '/dav'
+        }}
+      />
+    )
+
+    await waitFor(() => {
+      expect(window.toast.error).toHaveBeenCalledWith(
+        'settings.data.webdav.backup.manager.fetch.error: permission denied'
+      )
+    })
   })
 })

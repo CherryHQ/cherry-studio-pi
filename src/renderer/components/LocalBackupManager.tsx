@@ -12,7 +12,7 @@ import {
   Tooltip
 } from '@cherrystudio/ui'
 import { restoreFromLocal } from '@renderer/services/BackupService'
-import { formatFileSize } from '@renderer/utils'
+import { formatFileSize, getErrorMessage } from '@renderer/utils'
 import { runExclusiveOperation } from '@renderer/utils/exclusiveOperation'
 import dayjs from 'dayjs'
 import { ChevronLeft, ChevronRight, CircleAlert, RefreshCw, Trash2 } from 'lucide-react'
@@ -76,9 +76,9 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
       if (isActive() && fetchSeq === fetchSeqRef.current) {
         setBackupFiles(files)
       }
-    } catch (error: any) {
+    } catch (error) {
       if (isActive() && fetchSeq === fetchSeqRef.current) {
-        window.toast?.error(`${t('settings.data.local.backup.manager.fetch.error')}: ${error.message}`)
+        window.toast?.error(`${t('settings.data.local.backup.manager.fetch.error')}: ${getErrorMessage(error)}`)
       }
     } finally {
       if (isActive() && fetchSeq === fetchSeqRef.current) {
@@ -177,9 +177,9 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
             )
             setSelectedRowKeys([])
             await fetchBackupFiles()
-          } catch (error: any) {
+          } catch (error) {
             if (isActive()) {
-              window.toast?.error(`${t('settings.data.local.backup.manager.delete.error')}: ${error.message}`)
+              window.toast?.error(`${t('settings.data.local.backup.manager.delete.error')}: ${getErrorMessage(error)}`)
             }
           } finally {
             if (isActive()) {
@@ -219,9 +219,9 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
 
             window.toast?.success(t('settings.data.local.backup.manager.delete.success.single'))
             await fetchBackupFiles()
-          } catch (error: any) {
+          } catch (error) {
             if (isActive()) {
-              window.toast?.error(`${t('settings.data.local.backup.manager.delete.error')}: ${error.message}`)
+              window.toast?.error(`${t('settings.data.local.backup.manager.delete.error')}: ${getErrorMessage(error)}`)
             }
           } finally {
             if (isActive()) {
@@ -261,9 +261,9 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
 
             window.toast?.success(t('settings.data.local.backup.manager.restore.success'))
             onClose() // Close the modal
-          } catch (error: any) {
+          } catch (error) {
             if (isActive()) {
-              window.toast?.error(`${t('settings.data.local.backup.manager.restore.error')}: ${error.message}`)
+              window.toast?.error(`${t('settings.data.local.backup.manager.restore.error')}: ${getErrorMessage(error)}`)
             }
           } finally {
             if (isActive()) {
