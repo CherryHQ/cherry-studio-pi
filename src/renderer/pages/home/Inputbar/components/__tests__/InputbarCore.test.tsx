@@ -185,12 +185,18 @@ function renderInputbar(
   overrides: {
     files?: FileMetadata[]
     focusTextarea?: () => void
+    handleSendMessage?: () => void
+    isLoading?: boolean
+    allowSendWhileLoading?: boolean
+    onPause?: () => void
     onHeightChange?: (height: number) => void
     onTextChange?: (text: string) => void
   } = {}
 ) {
   const textareaRef: React.RefObject<TextAreaRef | null> = { current: null }
   const focusTextarea = overrides.focusTextarea ?? vi.fn()
+  const handleSendMessage = overrides.handleSendMessage ?? vi.fn()
+  const isLoading = overrides.isLoading ?? false
   const onHeightChange = overrides.onHeightChange ?? vi.fn()
   const onTextChange = overrides.onTextChange ?? vi.fn()
   const actions = {
@@ -215,16 +221,20 @@ function renderInputbar(
         height={undefined}
         onHeightChange={onHeightChange}
         supportedExts={[]}
-        isLoading={false}
-        handleSendMessage={vi.fn()}
+        isLoading={isLoading}
+        onPause={overrides.onPause}
+        handleSendMessage={handleSendMessage}
+        primaryActionMode={isLoading && overrides.onPause ? 'pause' : 'send'}
+        allowSendWhileLoading={overrides.allowSendWhileLoading}
       />
     </InputbarToolsProvider>
   )
 
   return {
     textarea: screen.getByRole('textbox'),
-    sendButton: screen.getByRole('button', { name: 'send' }),
+    sendButton: screen.queryByRole('button', { name: 'send' }),
     focusTextarea,
+    handleSendMessage,
     onHeightChange,
     onTextChange,
     unmount: view.unmount
@@ -258,6 +268,7 @@ describe('InputbarCore', () => {
     const { textarea, sendButton } = renderInputbar(TopicType.Chat)
 
     expect(textarea).not.toBeDisabled()
+    expect(sendButton).toBeInTheDocument()
     expect(cacheMock.values.get('chat.web_search.searching')).toBe(false)
     expect(sendButton).not.toHaveAttribute('aria-disabled', 'true')
   })
@@ -292,7 +303,44 @@ describe('InputbarCore', () => {
     const { textarea, sendButton } = renderInputbar(TopicType.Session)
 
     expect(textarea).not.toBeDisabled()
+    expect(sendButton).toBeInTheDocument()
     expect(sendButton).not.toBeDisabled()
+  })
+
+  it('allows agent session follow-up sends while the runtime is streaming', () => {
+    const handleSendMessage = vi.fn()
+    const onPause = vi.fn()
+
+    const { textarea, sendButton } = renderInputbar(TopicType.Session, {
+      handleSendMessage,
+      isLoading: true,
+      allowSendWhileLoading: true,
+      onPause
+    })
+
+    expect(textarea).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /^(chat\.input\.pause|暂停)$/ })).toBeInTheDocument()
+    expect(sendButton).toBeInTheDocument()
+    expect(sendButton).not.toBeDisabled()
+
+    if (!sendButton) throw new Error('send button should be visible while agent sessions are loading')
+    fireEvent.click(sendButton)
+
+    expect(handleSendMessage).toHaveBeenCalledOnce()
+  })
+
+  it('keeps normal chats send-blocked while loading', () => {
+    const handleSendMessage = vi.fn()
+    const onPause = vi.fn()
+
+    renderInputbar(TopicType.Chat, {
+      handleSendMessage,
+      isLoading: true,
+      onPause
+    })
+
+    expect(screen.queryByRole('button', { name: 'send' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^(chat\.input\.pause|暂停)$/ })).toBeInTheDocument()
   })
 
   it('does not steal focus from an active selector input when the window refocuses', () => {

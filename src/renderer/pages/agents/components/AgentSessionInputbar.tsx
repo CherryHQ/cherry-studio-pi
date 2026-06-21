@@ -491,6 +491,7 @@ const AgentSessionInputbarInner: FC<InnerProps> = ({
       onPause={abortAgentSession}
       isLoading={isStreaming}
       primaryActionMode={isStreaming ? 'pause' : 'send'}
+      allowSendWhileLoading
       handleSendMessage={sendMessage}
       leftToolbar={leftToolbar}
       forceEnableQuickPanelTriggers

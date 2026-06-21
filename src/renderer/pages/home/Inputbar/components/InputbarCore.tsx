@@ -62,6 +62,7 @@ export interface InputbarCoreProps {
   leftToolbar?: React.ReactNode
   rightToolbar?: React.ReactNode
   primaryActionMode?: 'send' | 'pause'
+  allowSendWhileLoading?: boolean
 
   // Preview sections (attachments, mentions, etc.)
   topContent?: React.ReactNode
@@ -143,6 +144,7 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
   leftToolbar,
   rightToolbar,
   primaryActionMode = 'send',
+  allowSendWhileLoading = false,
   topContent,
   pinnedContent,
   forceEnableQuickPanelTriggers
@@ -220,7 +222,7 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
   // 判断是否有内容：文本不为空或有文件
   const noContent = isEmpty && files.length === 0
   // 发送入口统一禁用条件：空内容、正在生成、普通聊天 web-search 搜索态
-  const isSendDisabled = noContent || isLoading || isWebSearchSendBlocked
+  const isSendDisabled = noContent || (isLoading && !allowSendWhileLoading) || isWebSearchSendBlocked
 
   useEffect(() => {
     setExtensions(supportedExts)
@@ -647,12 +649,24 @@ export const InputbarCore: FC<InputbarCoreProps> = ({
           />
         </Tooltip>
       )
-    } else {
+    }
+
+    if (primaryActionMode !== 'pause' || allowSendWhileLoading) {
       extras.push(<SendMessageButton key="send" sendMessage={handleSendMessage} disabled={isSendDisabled} />)
     }
 
     return <>{extras}</>
-  }, [text, onTranslated, isTranslating, primaryActionMode, onPause, handleSendMessage, isSendDisabled, t])
+  }, [
+    text,
+    onTranslated,
+    isTranslating,
+    primaryActionMode,
+    onPause,
+    allowSendWhileLoading,
+    handleSendMessage,
+    isSendDisabled,
+    t
+  ])
 
   const quickPanelElement = config.enableQuickPanel ? <QuickPanelView setInputText={setText} /> : null
 
