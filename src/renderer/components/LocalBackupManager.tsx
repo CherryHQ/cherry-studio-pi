@@ -78,7 +78,7 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
       }
     } catch (error: any) {
       if (isActive() && fetchSeq === fetchSeqRef.current) {
-        window.toast.error(`${t('settings.data.local.backup.manager.fetch.error')}: ${error.message}`)
+        window.toast?.error(`${t('settings.data.local.backup.manager.fetch.error')}: ${error.message}`)
       }
     } finally {
       if (isActive() && fetchSeq === fetchSeqRef.current) {
@@ -140,7 +140,7 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
 
   const handleDeleteSelected = async () => {
     if (selectedRowKeys.length === 0) {
-      window.toast.warning(t('settings.data.local.backup.manager.select.files.delete'))
+      window.toast?.warning(t('settings.data.local.backup.manager.select.files.delete'))
       return
     }
 
@@ -172,14 +172,14 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
               return
             }
 
-            window.toast.success(
+            window.toast?.success(
               t('settings.data.local.backup.manager.delete.success.multiple', { count: selectedRowKeys.length })
             )
             setSelectedRowKeys([])
             await fetchBackupFiles()
           } catch (error: any) {
             if (isActive()) {
-              window.toast.error(`${t('settings.data.local.backup.manager.delete.error')}: ${error.message}`)
+              window.toast?.error(`${t('settings.data.local.backup.manager.delete.error')}: ${error.message}`)
             }
           } finally {
             if (isActive()) {
@@ -217,11 +217,11 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
               return
             }
 
-            window.toast.success(t('settings.data.local.backup.manager.delete.success.single'))
+            window.toast?.success(t('settings.data.local.backup.manager.delete.success.single'))
             await fetchBackupFiles()
           } catch (error: any) {
             if (isActive()) {
-              window.toast.error(`${t('settings.data.local.backup.manager.delete.error')}: ${error.message}`)
+              window.toast?.error(`${t('settings.data.local.backup.manager.delete.error')}: ${error.message}`)
             }
           } finally {
             if (isActive()) {
@@ -259,11 +259,11 @@ export function LocalBackupManager({ visible, onClose, localBackupDir, restoreMe
               return
             }
 
-            window.toast.success(t('settings.data.local.backup.manager.restore.success'))
+            window.toast?.success(t('settings.data.local.backup.manager.restore.success'))
             onClose() // Close the modal
           } catch (error: any) {
             if (isActive()) {
-              window.toast.error(`${t('settings.data.local.backup.manager.restore.error')}: ${error.message}`)
+              window.toast?.error(`${t('settings.data.local.backup.manager.restore.error')}: ${error.message}`)
             }
           } finally {
             if (isActive()) {

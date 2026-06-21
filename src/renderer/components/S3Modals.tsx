@@ -172,7 +172,7 @@ export function useS3RestoreModal({
 
   const showRestoreModal = useCallback(async () => {
     if (!endpoint || !region || !bucket || !accessKeyId || !secretAccessKey) {
-      window.toast.error(t('settings.data.s3.manager.config.incomplete'))
+      window.toast?.error(t('settings.data.s3.manager.config.incomplete'))
       return
     }
 
@@ -199,7 +199,7 @@ export function useS3RestoreModal({
       }
     } catch (error: any) {
       if (mountedRef.current && listSeq === listSeqRef.current) {
-        window.toast.error(t('settings.data.s3.manager.files.fetch.error', { message: error.message }))
+        window.toast?.error(t('settings.data.s3.manager.files.fetch.error', { message: error.message }))
       }
     } finally {
       if (mountedRef.current && listSeq === listSeqRef.current) {
@@ -210,7 +210,7 @@ export function useS3RestoreModal({
 
   const handleRestore = useCallback(async () => {
     if (!selectedFile || !endpoint || !region || !bucket || !accessKeyId || !secretAccessKey) {
-      window.toast.error(
+      window.toast?.error(
         !selectedFile ? t('settings.data.s3.restore.file.required') : t('settings.data.s3.restore.config.incomplete')
       )
       return
@@ -248,12 +248,12 @@ export function useS3RestoreModal({
               skipBackupFile: false
             })
             if (mountedRef.current) {
-              window.toast.success(t('message.restore.success'))
+              window.toast?.success(t('message.restore.success'))
               setIsRestoreModalVisible(false)
             }
           } catch (error: any) {
             if (mountedRef.current) {
-              window.toast.error(t('settings.data.s3.restore.error', { message: error.message }))
+              window.toast?.error(t('settings.data.s3.restore.error', { message: error.message }))
             }
           } finally {
             if (mountedRef.current) {

@@ -347,7 +347,7 @@ const DataSyncSettings: FC = () => {
     try {
       return saveWebDavConfig(nextPath)
     } catch (error) {
-      window.toast.error(getErrorMessage(error))
+      window.toast?.error(getErrorMessage(error))
       return null
     }
   }
@@ -381,7 +381,7 @@ const DataSyncSettings: FC = () => {
       setStatus((prev) => (prev ? { ...prev, syncing: false, syncStartedAt: null } : prev))
       if (showLoading) {
         const feedback = statusRefreshFeedbackRef.current
-        window.toast.error(`${feedback.t('common.operation_failed')}: ${getErrorMessage(error)}`)
+        window.toast?.error(`${feedback.t('common.operation_failed')}: ${getErrorMessage(error)}`)
         void reportErrorToSystemAgent(
           error,
           {
@@ -411,7 +411,7 @@ const DataSyncSettings: FC = () => {
   const webDavConfigComplete = Boolean(webdavHost.trim() && webdavUser.trim() && webdavPass)
 
   const warnWebDavConfigRequired = () => {
-    window.toast.warning(t('settings.data.data_sync.toast.webdav_required'))
+    window.toast?.warning(t('settings.data.data_sync.toast.webdav_required'))
   }
 
   useEffect(() => {
@@ -437,14 +437,14 @@ const DataSyncSettings: FC = () => {
 
     if (syncNowRef.current) {
       setSyncing(true)
-      window.toast.info(t('settings.data.data_sync.toast.sync_running'))
+      window.toast?.info(t('settings.data.data_sync.toast.sync_running'))
       return
     }
 
     if (syncInProgress) {
       const nextStatus = await refreshStatus().catch(() => null)
       if (nextStatus?.syncing) {
-        window.toast.info(t('settings.data.data_sync.toast.sync_running'))
+        window.toast?.info(t('settings.data.data_sync.toast.sync_running'))
       }
       return
     }
@@ -467,7 +467,7 @@ const DataSyncSettings: FC = () => {
 
         latestStatus = nextStatus
         keepSyncingWhenStatusUnknown = true
-        window.toast.info(t('settings.data.data_sync.toast.sync_running'))
+        window.toast?.info(t('settings.data.data_sync.toast.sync_running'))
         return
       }
 
@@ -484,7 +484,7 @@ const DataSyncSettings: FC = () => {
       latestStatus = await refreshStatus().catch(() => null)
       if (!mountedRef.current) return
 
-      window.toast.success(t('settings.data.data_sync.toast.sync_success'))
+      window.toast?.success(t('settings.data.data_sync.toast.sync_success'))
     } catch (error) {
       latestStatus = await refreshStatus().catch(() => null)
       if (!mountedRef.current) return
@@ -492,11 +492,11 @@ const DataSyncSettings: FC = () => {
       if (isDataSyncAlreadyRunningError(error)) {
         keepSyncingWhenStatusUnknown = true
         setSyncing(latestStatus ? isSyncing(latestStatus) : true)
-        window.toast.info(t('settings.data.data_sync.toast.sync_running'))
+        window.toast?.info(t('settings.data.data_sync.toast.sync_running'))
         return
       }
 
-      window.toast.error(t('settings.data.data_sync.toast.sync_failed', { message: getErrorMessage(error) }))
+      window.toast?.error(t('settings.data.data_sync.toast.sync_failed', { message: getErrorMessage(error) }))
       void reportErrorToSystemAgent(
         error,
         {
@@ -555,11 +555,11 @@ const DataSyncSettings: FC = () => {
           await window.api.dataSync.restoreLatestSnapshot(config)
           if (!mountedRef.current) return
 
-          window.toast.success(t('settings.data.data_sync.toast.restore_success'))
+          window.toast?.success(t('settings.data.data_sync.toast.restore_success'))
         } catch (error) {
           if (!mountedRef.current) return
 
-          window.toast.error(t('settings.data.data_sync.toast.restore_failed', { message: getErrorMessage(error) }))
+          window.toast?.error(t('settings.data.data_sync.toast.restore_failed', { message: getErrorMessage(error) }))
           void reportErrorToSystemAgent(
             error,
             {
@@ -590,7 +590,7 @@ const DataSyncSettings: FC = () => {
     try {
       await window.api.file.showInFolder(filePath)
     } catch (error) {
-      window.toast.error(t('settings.data.data_sync.toast.open_snapshot_failed', { message: getErrorMessage(error) }))
+      window.toast?.error(t('settings.data.data_sync.toast.open_snapshot_failed', { message: getErrorMessage(error) }))
       void reportErrorToSystemAgent(
         error,
         {
@@ -637,7 +637,7 @@ const DataSyncSettings: FC = () => {
 
       setDiagnosis(nextDiagnosis)
       setStatus(nextStatus)
-      window.toast.success(t('settings.data.data_sync.toast.diagnose_success'))
+      window.toast?.success(t('settings.data.data_sync.toast.diagnose_success'))
     } catch (error) {
       if (!isLatestRequest()) return
 
@@ -647,7 +647,7 @@ const DataSyncSettings: FC = () => {
         summary: message,
         checkedAt: Date.now()
       })
-      window.toast.error(t('settings.data.data_sync.toast.diagnose_failed', { message }))
+      window.toast?.error(t('settings.data.data_sync.toast.diagnose_failed', { message }))
       void reportErrorToSystemAgent(
         error,
         {
@@ -688,12 +688,12 @@ const DataSyncSettings: FC = () => {
           { defaultPath: DEFAULT_REMOTE_PATH, requireCredentials: true }
         )
     } catch (error) {
-      window.toast.error(getErrorMessage(error))
+      window.toast?.error(getErrorMessage(error))
       return
     }
 
     if (!normalizedConfig.webdavHost) {
-      window.toast.warning(t('settings.data.data_sync.toast.webdav_required'))
+      window.toast?.warning(t('settings.data.data_sync.toast.webdav_required'))
       return
     }
 
@@ -760,7 +760,7 @@ const DataSyncSettings: FC = () => {
     const config = trySaveWebDavConfig(path)
     if (!config) return
     closeDirectoryBrowser()
-    window.toast.success(
+    window.toast?.success(
       t('settings.data.data_sync.toast.remote_path_selected', { path: normalizeRemotePathInput(path) })
     )
   }
@@ -813,7 +813,7 @@ const DataSyncSettings: FC = () => {
               }
             } catch (error) {
               event.preventDefault()
-              window.toast.error(getErrorMessage(error))
+              window.toast?.error(getErrorMessage(error))
             }
           }}
           onBlur={() => {
@@ -832,7 +832,7 @@ const DataSyncSettings: FC = () => {
                 stopDataSyncAutoSync()
               }
             } catch (error) {
-              window.toast.error(getErrorMessage(error))
+              window.toast?.error(getErrorMessage(error))
             }
           }}
           style={{ width: 280 }}

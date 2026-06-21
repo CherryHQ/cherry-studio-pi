@@ -99,7 +99,7 @@ const NutstoreSettings: FC = () => {
           error instanceof Error && error.message.includes('timed out')
             ? t('error.request_timeout')
             : t('settings.provider.oauth.error')
-        window.toast.error(message)
+        window.toast?.error(message)
       }
     } finally {
       if (mountedRef.current && requestSeq === loginRequestSeqRef.current) {
@@ -196,7 +196,7 @@ const NutstoreSettings: FC = () => {
       )
     } catch (error) {
       if (mountedRef.current && requestSeq === connectionRequestSeqRef.current) {
-        window.toast.error(formatErrorMessageWithPrefix(error, t('settings.data.nutstore.checkConnection.fail')))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('settings.data.nutstore.checkConnection.fail')))
         setNsConnected(false)
       }
     } finally {

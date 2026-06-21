@@ -32,14 +32,14 @@ const BasicDataSettings: React.FC = () => {
 
   const showOperationFailed = useCallback(
     (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
     },
     [t]
   )
 
   const showSaveFailed = useCallback(
     (error: unknown) => {
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.save_failed')))
     },
     [t]
   )
@@ -107,28 +107,28 @@ const BasicDataSettings: React.FC = () => {
       // check new app data path is root path
       const pathParts = newAppDataPath.split(/[/\\]/).filter((part: string) => part !== '')
       if (pathParts.length <= 1) {
-        window.toast.error(t('settings.data.app_data.select_error_root_path'))
+        window.toast?.error(t('settings.data.app_data.select_error_root_path'))
         return
       }
 
       // check new app data path is not in old app data path
       const isInOldPath = await window.api.isPathInside(newAppDataPath, appInfo.appDataPath)
       if (isInOldPath) {
-        window.toast.error(t('settings.data.app_data.select_error_same_path'))
+        window.toast?.error(t('settings.data.app_data.select_error_same_path'))
         return
       }
 
       // check new app data path is not in app install path
       const isInInstallPath = await window.api.isPathInside(newAppDataPath, appInfo.installPath)
       if (isInInstallPath) {
-        window.toast.error(t('settings.data.app_data.select_error_in_app_path'))
+        window.toast?.error(t('settings.data.app_data.select_error_in_app_path'))
         return
       }
 
       // check new app data path has write permission
       const hasWritePermission = await window.api.hasWritePermission(newAppDataPath)
       if (!hasWritePermission) {
-        window.toast.error(t('settings.data.app_data.select_error_write_permission'))
+        window.toast?.error(t('settings.data.app_data.select_error_write_permission'))
         return
       }
 
@@ -139,7 +139,7 @@ const BasicDataSettings: React.FC = () => {
       void showMigrationConfirmModal(appInfo.appDataPath, newAppDataPath, migrationTitle, migrationClassName)
     } catch (error) {
       logger.error('Failed to select app data path', error as Error)
-      window.toast.error(formatErrorMessageWithPrefix(error, t('settings.data.app_data.path_change_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('settings.data.app_data.path_change_failed')))
     }
   }
 
@@ -151,7 +151,7 @@ const BasicDataSettings: React.FC = () => {
       okText: t('common.confirm'),
       cancelText: t('common.cancel'),
       onOk: () => {
-        window.toast.info({
+        window.toast?.info({
           title: t('settings.data.app_data.restart_notice'),
           timeout: 2000
         })
@@ -236,7 +236,7 @@ const BasicDataSettings: React.FC = () => {
               return
             }
 
-            window.toast.info({
+            window.toast?.info({
               title: t('settings.data.app_data.restart_notice'),
               timeout: 3000
             })
@@ -252,20 +252,20 @@ const BasicDataSettings: React.FC = () => {
             return
           }
           await window.api.setAppDataPath(newPath)
-          window.toast.success(t('settings.data.app_data.path_changed_without_copy'))
+          window.toast?.success(t('settings.data.app_data.path_changed_without_copy'))
 
           setAppInfo(await window.api.getAppInfo())
 
           setTimeoutTimer(
             'showMigrationConfirmModal_2',
             () => {
-              window.toast.success(t('settings.data.app_data.select_success'))
+              window.toast?.success(t('settings.data.app_data.select_success'))
               requestRelaunch()
             },
             500
           )
         } catch (error) {
-          window.toast.error({
+          window.toast?.error({
             title: t('settings.data.app_data.path_change_failed') + ': ' + error,
             timeout: 5000
           })
@@ -366,7 +366,7 @@ const BasicDataSettings: React.FC = () => {
 
     loadingModal.destroy()
 
-    window.toast.success({
+    window.toast?.success({
       title: t('settings.data.app_data.copy_success'),
       timeout: 2000
     })
@@ -414,14 +414,14 @@ const BasicDataSettings: React.FC = () => {
 
         setAppInfo(await window.api.getAppInfo())
 
-        window.toast.success(t('settings.data.app_data.select_success'))
+        window.toast?.success(t('settings.data.app_data.select_success'))
         await releaseQuitHoldOnce()
         requestRelaunch({
           args: ['--user-data-dir=' + newDataPath]
         })
       } catch (error) {
         await releaseQuitHoldOnce()
-        window.toast.error({
+        window.toast?.error({
           title: t('settings.data.app_data.copy_failed') + ': ' + error,
           timeout: 5000
         })
@@ -477,9 +477,9 @@ const BasicDataSettings: React.FC = () => {
           await window.api.clearCache()
           await window.api.trace.cleanLocalData()
           await window.api.getCacheSize().then(setCacheSize)
-          window.toast.success(t('settings.data.clear_cache.success'))
+          window.toast?.success(t('settings.data.clear_cache.success'))
         } catch (error) {
-          window.toast.error(t('settings.data.clear_cache.error'))
+          window.toast?.error(t('settings.data.clear_cache.error'))
         } finally {
           clearCacheOperationRef.current = false
           clearCacheConfirmRef.current = false

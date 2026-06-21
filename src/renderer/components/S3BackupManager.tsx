@@ -68,7 +68,7 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
     }
 
     if (!endpoint || !region || !bucket || !accessKeyId || !secretAccessKey) {
-      window.toast.error(t('settings.data.s3.manager.config.incomplete'))
+      window.toast?.error(t('settings.data.s3.manager.config.incomplete'))
       return
     }
 
@@ -92,7 +92,7 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
       }
     } catch (error: any) {
       if (isActive() && fetchSeq === fetchSeqRef.current) {
-        window.toast.error(t('settings.data.s3.manager.files.fetch.error', { message: error.message }))
+        window.toast?.error(t('settings.data.s3.manager.files.fetch.error', { message: error.message }))
       }
     } finally {
       if (isActive() && fetchSeq === fetchSeqRef.current) {
@@ -154,12 +154,12 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
 
   const handleDeleteSelected = async () => {
     if (selectedRowKeys.length === 0) {
-      window.toast.warning(t('settings.data.s3.manager.select.warning'))
+      window.toast?.warning(t('settings.data.s3.manager.select.warning'))
       return
     }
 
     if (!endpoint || !region || !bucket || !accessKeyId || !secretAccessKey) {
-      window.toast.error(t('settings.data.s3.manager.config.incomplete'))
+      window.toast?.error(t('settings.data.s3.manager.config.incomplete'))
       return
     }
 
@@ -198,14 +198,14 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
               return
             }
 
-            window.toast.success(
+            window.toast?.success(
               t('settings.data.s3.manager.delete.success.multiple', { count: selectedRowKeys.length })
             )
             setSelectedRowKeys([])
             await fetchBackupFiles()
           } catch (error: any) {
             if (isActive()) {
-              window.toast.error(t('settings.data.s3.manager.delete.error', { message: error.message }))
+              window.toast?.error(t('settings.data.s3.manager.delete.error', { message: error.message }))
             }
           } finally {
             if (isActive()) {
@@ -219,7 +219,7 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
 
   const handleDeleteSingle = async (fileName: string) => {
     if (!endpoint || !region || !bucket || !accessKeyId || !secretAccessKey) {
-      window.toast.error(t('settings.data.s3.manager.config.incomplete'))
+      window.toast?.error(t('settings.data.s3.manager.config.incomplete'))
       return
     }
 
@@ -255,11 +255,11 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
               return
             }
 
-            window.toast.success(t('settings.data.s3.manager.delete.success.single'))
+            window.toast?.success(t('settings.data.s3.manager.delete.success.single'))
             await fetchBackupFiles()
           } catch (error: any) {
             if (isActive()) {
-              window.toast.error(t('settings.data.s3.manager.delete.error', { message: error.message }))
+              window.toast?.error(t('settings.data.s3.manager.delete.error', { message: error.message }))
             }
           } finally {
             if (isActive()) {
@@ -273,7 +273,7 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
 
   const handleRestore = async (fileName: string) => {
     if (!endpoint || !region || !bucket || !accessKeyId || !secretAccessKey) {
-      window.toast.error(t('settings.data.s3.manager.config.incomplete'))
+      window.toast?.error(t('settings.data.s3.manager.config.incomplete'))
       return
     }
 
@@ -298,11 +298,11 @@ export function S3BackupManager({ visible, onClose, s3Config, restoreMethod }: S
               return
             }
 
-            window.toast.success(t('settings.data.s3.restore.success'))
+            window.toast?.success(t('settings.data.s3.restore.success'))
             onClose() // 关闭模态框
           } catch (error: any) {
             if (isActive()) {
-              window.toast.error(t('settings.data.s3.restore.error', { message: error.message }))
+              window.toast?.error(t('settings.data.s3.restore.error', { message: error.message }))
             }
           } finally {
             if (isActive()) {

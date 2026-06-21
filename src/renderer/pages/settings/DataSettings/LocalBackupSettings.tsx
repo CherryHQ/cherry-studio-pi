@@ -128,7 +128,7 @@ const LocalBackupSettings: React.FC = () => {
       return false
     }
     if (isInAppDataPath) {
-      window.toast.error(t('settings.data.local.directory.select_error_app_data_path'))
+      window.toast?.error(t('settings.data.local.directory.select_error_app_data_path'))
       return false
     }
 
@@ -139,7 +139,7 @@ const LocalBackupSettings: React.FC = () => {
       return false
     }
     if (isInInstallPath) {
-      window.toast.error(t('settings.data.local.directory.select_error_in_app_install_path'))
+      window.toast?.error(t('settings.data.local.directory.select_error_in_app_install_path'))
       return false
     }
 
@@ -149,7 +149,7 @@ const LocalBackupSettings: React.FC = () => {
       return false
     }
     if (!hasWritePermission) {
-      window.toast.error(t('settings.data.local.directory.select_error_write_permission'))
+      window.toast?.error(t('settings.data.local.directory.select_error_write_permission'))
       return false
     }
 
@@ -213,7 +213,7 @@ const LocalBackupSettings: React.FC = () => {
     } catch (error) {
       logger.error('Failed to change local backup directory:', error as Error)
       if (isDirectoryChangeCurrent(requestSeq)) {
-        window.toast.error(t('settings.data.app_data.select_error'))
+        window.toast?.error(t('settings.data.app_data.select_error'))
       }
     }
   }
