@@ -121,8 +121,16 @@ export class EventLoopLagSampler {
   ) {}
 
   start(epoch: number): void {
+    if (this.timer) {
+      clearInterval(this.timer)
+      this.timer = null
+    }
     this.epoch = epoch
     this.expected = performance.now() + this.intervalMs
+    this.fires = 0
+    this.totalLag = 0
+    this.maxLag = 0
+    this.spikes.length = 0
     this.timer = setInterval(() => {
       const now = performance.now()
       const lag = now - this.expected
@@ -146,7 +154,7 @@ export class EventLoopLagSampler {
       this.timer = null
     }
     return {
-      spikes: this.spikes,
+      spikes: [...this.spikes],
       fires: this.fires,
       totalLag: this.totalLag,
       maxLag: this.maxLag,
