@@ -344,7 +344,13 @@ class ModelService {
       )
       const merged = applyUserOverlay(baseline, { ...dtoValues, name: dto.name ?? null })
 
-      return mergedModelToNewUserModel(dto.providerId, dto.modelId, presetModel.id, merged)
+      return {
+        ...mergedModelToNewUserModel(dto.providerId, dto.modelId, presetModel.id, merged),
+        isEnabled: dtoValues.isEnabled,
+        isHidden: dtoValues.isHidden,
+        isDeprecated: dtoValues.isDeprecated,
+        notes: dtoValues.notes
+      }
     }
 
     return { ...dtoValues, presetModelId: dto.presetModelId ?? null }

@@ -391,6 +391,52 @@ describe('ModelService.create', () => {
     expect(row.maxOutputTokens).toBe(8_192)
   })
 
+  it('preserves explicit status fields when creating from a registry preset', async () => {
+    await dbh.db.insert(userProviderTable).values(providerRow('openai', 'OpenAI'))
+
+    const [created] = await modelService.create([
+      {
+        dto: {
+          providerId: 'openai',
+          modelId: 'gpt-4o',
+          isEnabled: false,
+          isHidden: true,
+          isDeprecated: true,
+          notes: 'Disabled during import'
+        },
+        registryData: {
+          presetModel: {
+            id: 'gpt-4o',
+            name: 'GPT-4o',
+            capabilities: ['function-call'],
+            isEnabled: true,
+            isHidden: false
+          } as any,
+          registryOverride: null
+        }
+      }
+    ])
+
+    expect(created).toMatchObject({
+      isEnabled: false,
+      isHidden: true,
+      isDeprecated: true,
+      notes: 'Disabled during import'
+    })
+
+    const [row] = await dbh.db
+      .select()
+      .from(userModelTable)
+      .where(and(eq(userModelTable.providerId, 'openai'), eq(userModelTable.modelId, 'gpt-4o')))
+
+    expect(row).toMatchObject({
+      isEnabled: false,
+      isHidden: true,
+      isDeprecated: true,
+      notes: 'Disabled during import'
+    })
+  })
+
   it('preserves explicit status fields on first create', async () => {
     await dbh.db.insert(userProviderTable).values(providerRow('openai', 'OpenAI'))
 
