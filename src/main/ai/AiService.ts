@@ -186,7 +186,9 @@ export class AiService extends BaseService {
           requestOptions: { ...payload.requestOptions, signal: controller.signal }
         })
       } finally {
-        this.imageRequests.delete(requestId)
+        if (this.imageRequests.get(requestId) === controller) {
+          this.imageRequests.delete(requestId)
+        }
       }
     })
 

@@ -65,6 +65,21 @@ function createService(): InstanceType<typeof AiService> {
   return new (AiService as any)()
 }
 
+function getImageHandlers(service: InstanceType<typeof AiService>) {
+  ;(service as unknown as { registerIpcHandlers(): void }).registerIpcHandlers()
+  const generateCall = vi.mocked(ipcMain.handle).mock.calls.find(([channel]) => channel === IpcChannel.Ai_GenerateImage)
+  const abortCall = vi.mocked(ipcMain.on).mock.calls.find(([channel]) => channel === IpcChannel.Ai_AbortImage)
+  if (!generateCall) throw new Error('Ai_GenerateImage handler was not registered')
+  if (!abortCall) throw new Error('Ai_AbortImage listener was not registered')
+  return {
+    generateImage: generateCall[1] as (
+      event: unknown,
+      request: { requestId: string; payload: Record<string, unknown> }
+    ) => Promise<unknown>,
+    abortImage: abortCall[1] as (event: unknown, request: { requestId: string }) => void
+  }
+}
+
 describe('AiService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -216,6 +231,49 @@ describe('AiService', () => {
 
     expect(createInternalEntry).toHaveBeenCalledWith({ source: 'base64', data: 'data:image/png;base64,abc123' })
     expect(result).toEqual({ files: [fileEntry] })
+  })
+
+  it('keeps the latest image abort controller when duplicate request ids overlap', async () => {
+    const service = createService()
+    let resolveFirst!: (value: unknown) => void
+    let resolveSecond!: (value: unknown) => void
+    let secondSignal!: AbortSignal
+
+    vi.spyOn(service, 'generateImage').mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirst = resolve
+        }) as never
+    )
+    vi.spyOn(service, 'generateImage').mockImplementationOnce(
+      (request: any) =>
+        new Promise((resolve) => {
+          secondSignal = request.requestOptions.signal
+          resolveSecond = resolve
+        }) as never
+    )
+
+    const { generateImage, abortImage } = getImageHandlers(service)
+    const payload = {
+      uniqueModelId: 'test-provider::test-model',
+      prompt: 'draw',
+      requestOptions: {}
+    }
+
+    const first = generateImage(null, { requestId: 'image-1', payload })
+    await Promise.resolve()
+    const second = generateImage(null, { requestId: 'image-1', payload })
+    await Promise.resolve()
+
+    resolveFirst({ files: [] })
+    await first
+
+    expect(secondSignal.aborted).toBe(false)
+    abortImage(null, { requestId: 'image-1' })
+    expect(secondSignal.aborted).toBe(true)
+
+    resolveSecond({ files: [] })
+    await second
   })
 })
 
