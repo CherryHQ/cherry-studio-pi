@@ -473,10 +473,10 @@ const McpSettings: React.FC = () => {
           await window.api.mcp.restartServer(server.id)
           window.toast?.success(t('settings.mcp.updateSuccess'))
           setIsFormChanged(false)
-        } catch (error: any) {
+        } catch (error: unknown) {
           window.modal.error({
             title: t('settings.mcp.updateError'),
-            content: error.message,
+            content: formatErrorMessage(error),
             centered: true
           })
         }
