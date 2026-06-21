@@ -92,6 +92,10 @@ describe('ChannelManager', () => {
         channelConfig: channel.config
       })
       const connectError = (channel.config as { connectError?: string }).connectError
+      const connectPromise = (channel.config as { connectPromise?: Promise<void> }).connectPromise
+      if (connectPromise) {
+        adapter.connect.mockReturnValueOnce(connectPromise)
+      }
       if (connectError) {
         adapter.connect.mockRejectedValueOnce(new Error(connectError))
       }
@@ -323,6 +327,40 @@ describe('ChannelManager', () => {
         error: 'invalid token'
       })
     )
+  })
+
+  it('ignores stale background connect failure after a channel is replaced', async () => {
+    let rejectOldConnect!: (error: Error) => void
+    const oldConnect = new Promise<void>((_resolve, reject) => {
+      rejectOldConnect = reject
+    })
+
+    vi.mocked(channelService.getChannel)
+      .mockResolvedValueOnce(
+        makeChannelRow({
+          id: 'ch-race',
+          config: { bot_token: 'old-token', allowed_chat_ids: [], connectPromise: oldConnect }
+        })
+      )
+      .mockResolvedValueOnce(
+        makeChannelRow({ id: 'ch-race', config: { bot_token: 'new-token', allowed_chat_ids: [] } })
+      )
+
+    await channelManager.syncChannel('ch-race')
+    expect(createdAdapters).toHaveLength(1)
+    const oldAdapter = createdAdapters[0]
+
+    await channelManager.syncChannel('ch-race')
+    expect(createdAdapters).toHaveLength(2)
+    const newAdapter = createdAdapters[1]
+    expect(oldAdapter.disconnect).toHaveBeenCalledTimes(1)
+    expect(channelManager.getAdapter('ch-race')).toBe(newAdapter)
+
+    rejectOldConnect(new Error('old connect failed'))
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    expect(channelManager.getAdapter('ch-race')).toBe(newAdapter)
+    expect(mockLogger.error).not.toHaveBeenCalledWith('Failed to connect channel adapter', expect.anything())
   })
 
   it('inactive channels are skipped', async () => {

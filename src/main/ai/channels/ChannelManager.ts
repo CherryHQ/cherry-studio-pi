@@ -430,11 +430,30 @@ export class ChannelManager extends BaseService {
       // await connect for strict workflows or leave it in the background.
       this.adapters.set(key, adapter)
 
+      const isCurrentAdapter = () => this.adapters.get(key) === adapter
+
       const connect = async () => {
         try {
           await adapter.connect()
+          if (!isCurrentAdapter()) {
+            logger.debug('Ignoring stale channel adapter connect success', {
+              agentId,
+              channelId: row.id,
+              type: row.type
+            })
+            return
+          }
           logger.info('Channel adapter connected', { agentId, channelId: row.id, type: row.type })
         } catch (error) {
+          if (!isCurrentAdapter()) {
+            logger.debug('Ignoring stale channel adapter connect failure', {
+              agentId,
+              channelId: row.id,
+              type: row.type,
+              error: error instanceof Error ? error.message : String(error)
+            })
+            return
+          }
           this.adapters.delete(key)
           logger.error('Failed to connect channel adapter', {
             agentId,
