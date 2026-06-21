@@ -21,6 +21,7 @@ const OPERATIONAL_DIAGNOSTIC_FILES = new Set([
   'services/WebDavAtomic.ts',
   'services/WebDavRetry.ts',
   'services/appData/AppDataSyncService.ts',
+  'services/storageV2/StorageService.ts',
   'services/storageV2/WebDavRecordSyncService.ts'
 ])
 
