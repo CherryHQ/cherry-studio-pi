@@ -1,3 +1,4 @@
+import { RESOURCE_SELECTOR_FORCE_CLOSE_EVENT } from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
@@ -115,6 +116,47 @@ describe('WorkspaceSection', () => {
     await user.click(screen.getByRole('button', { name: 'library.config.agent.field.workspace.clear' }))
 
     expect(onChange).toHaveBeenCalledWith({ workspacePath: '' })
+  })
+
+  it('closes lingering resource selector popovers before opening the folder picker without faking keyboard input', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    const originalApi = window.api
+    const selectFolder = vi.fn().mockResolvedValue(null)
+    const closeResourceSelectors = vi.fn()
+    const closeDocumentPopovers = vi.fn()
+    const closeWindowPopovers = vi.fn()
+
+    window.addEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+    document.addEventListener('keydown', closeDocumentPopovers)
+    window.addEventListener('keydown', closeWindowPopovers)
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: {
+        ...originalApi,
+        file: {
+          ...originalApi?.file,
+          selectFolder
+        }
+      }
+    })
+
+    try {
+      render(<WorkspaceSection form={createForm()} onChange={onChange} />)
+
+      await user.click(screen.getByRole('button', { name: 'library.config.agent.field.workspace.select' }))
+
+      expect(closeResourceSelectors).toHaveBeenCalled()
+      expect(closeDocumentPopovers).not.toHaveBeenCalled()
+      expect(closeWindowPopovers).not.toHaveBeenCalled()
+      expect(selectFolder).toHaveBeenCalledTimes(1)
+      expect(onChange).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, closeResourceSelectors)
+      document.removeEventListener('keydown', closeDocumentPopovers)
+      window.removeEventListener('keydown', closeWindowPopovers)
+      Object.defineProperty(window, 'api', { configurable: true, value: originalApi })
+    }
   })
 
   it('ignores duplicate workspace selections while the folder picker is open', async () => {

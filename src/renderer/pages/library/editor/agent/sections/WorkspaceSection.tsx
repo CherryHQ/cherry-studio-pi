@@ -1,4 +1,8 @@
 import { Button, Field, FieldContent } from '@cherrystudio/ui'
+import {
+  closeTransientResourceSelectors,
+  scheduleCloseTransientResourceSelectors
+} from '@renderer/components/ResourceSelector/resourceSelectorEvents'
 import { getErrorMessage } from '@renderer/utils/error'
 import { FolderOpen, FolderPlus, X } from 'lucide-react'
 import type { FC } from 'react'
@@ -35,6 +39,7 @@ export const WorkspaceField: FC<Props> = ({ form, onChange }) => {
   const handleSelect = async () => {
     if (selectingRef.current) return
     selectingRef.current = true
+    const cancelScheduledClose = scheduleCloseTransientResourceSelectors()
     setSelecting(true)
     try {
       const selected = await window.api.file.selectFolder({
@@ -52,6 +57,7 @@ export const WorkspaceField: FC<Props> = ({ form, onChange }) => {
         })
       }
     } finally {
+      cancelScheduledClose?.()
       selectingRef.current = false
       if (mountedRef.current) {
         setSelecting(false)
@@ -72,6 +78,10 @@ export const WorkspaceField: FC<Props> = ({ form, onChange }) => {
               type="button"
               variant="ghost"
               onClick={() => void handleSelect()}
+              onPointerDown={(event) => {
+                event.stopPropagation()
+                closeTransientResourceSelectors()
+              }}
               onMouseDown={(event) => event.stopPropagation()}
               disabled={selecting}
               loading={selecting}
