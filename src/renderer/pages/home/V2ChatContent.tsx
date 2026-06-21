@@ -125,7 +125,7 @@ interface InnerProps extends Props {
   siblingsMap: ReturnType<typeof useTopicMessagesV2>['siblingsMap']
   refresh: () => Promise<CherryUIMessage[]>
   activeNodeId: string | null
-  loadOlder: () => void
+  loadOlder: () => void | Promise<unknown>
   hasOlder: boolean
   messagesCacheMutate: ReturnType<typeof useTopicMessagesV2>['mutate']
 }

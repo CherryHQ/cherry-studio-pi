@@ -231,7 +231,7 @@ export interface UseInfiniteQueryResult<TResponse> {
   isRefreshing: boolean
   error?: Error
   hasNext: boolean
-  loadNext: () => void
+  loadNext: () => Promise<void>
   refresh: () => Promise<unknown>
   reset: () => void
   mutate: SWRInfiniteKeyedMutator<TResponse[]>
@@ -866,8 +866,9 @@ export function useInfiniteQuery<TPath extends ApiPath>(
   }, [pages])
 
   // Rapid double-clicks are deduped by SWR's `dedupingInterval` — no callback-level guard needed.
-  const loadNext = useCallback(() => {
-    if (hasNext) void setSize((s) => s + 1)
+  const loadNext = useCallback(async () => {
+    if (!hasNext) return
+    await setSize((s) => s + 1)
   }, [hasNext, setSize])
 
   const refresh = useCallback(() => mutate(), [mutate])

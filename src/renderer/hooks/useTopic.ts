@@ -237,7 +237,7 @@ export function useAllTopics(opts?: { q?: string; loadAll?: boolean }) {
   // position so paging is visible to the user.
   useEffect(() => {
     if (opts?.loadAll && hasNext && !isLoading && !isRefreshing) {
-      loadNext()
+      void loadNext()
     }
   }, [opts?.loadAll, hasNext, isLoading, isRefreshing, loadNext])
 

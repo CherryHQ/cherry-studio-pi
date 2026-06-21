@@ -105,7 +105,7 @@ export const useSessions = (agentId?: string | null, pageSize = DEFAULT_SESSION_
 
   const loadMore = useCallback(() => {
     if (!isLoadingMore && hasMore) {
-      loadNext()
+      void loadNext()
     }
   }, [hasMore, isLoadingMore, loadNext])
 

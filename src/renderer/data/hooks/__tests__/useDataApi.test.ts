@@ -664,7 +664,7 @@ describe('useInfiniteQuery integration', () => {
     expect(result.current.pages[0]?.nextCursor).toBe('c1')
 
     await act(async () => {
-      result.current.loadNext()
+      await result.current.loadNext()
     })
 
     await waitFor(() => expect(result.current.pages).toHaveLength(2))
@@ -696,7 +696,7 @@ describe('useInfiniteQuery integration', () => {
 
     await waitFor(() => expect(result.current.pages).toHaveLength(1))
     await act(async () => {
-      result.current.loadNext()
+      await result.current.loadNext()
     })
     await waitFor(() => expect(result.current.pages).toHaveLength(2))
 

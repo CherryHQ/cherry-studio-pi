@@ -155,7 +155,7 @@ export interface UseTopicMessagesV2Result {
   refresh: () => Promise<CherryUIMessage[]>
   activeNodeId: string | null
   /** Load the next (older) page of branch history. */
-  loadOlder: () => void
+  loadOlder: () => Promise<void>
   /** Whether older pages remain on the server. */
   hasOlder: boolean
   /**

@@ -65,7 +65,7 @@ export const useTranslateHistories = ({
 
   const loadMore = useCallback(() => {
     if (!isLoadingMore && hasMore) {
-      loadNext()
+      void loadNext()
     }
   }, [isLoadingMore, hasMore, loadNext])
 
