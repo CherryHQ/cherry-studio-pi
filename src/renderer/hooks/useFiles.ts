@@ -1,6 +1,6 @@
 import type { FileMetadata } from '@renderer/types'
 import { filterSupportedFiles } from '@renderer/utils'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 type Props = {
@@ -13,6 +13,16 @@ export const useFiles = (props?: Props) => {
 
   const [files, setFiles] = useState<FileMetadata[]>([])
   const [selecting, setSelecting] = useState<boolean>(false)
+  const mountedRef = useRef(true)
+  const selectingRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const extensions = useMemo(() => {
     if (props?.extensions) {
@@ -34,10 +44,11 @@ export const useFiles = (props?: Props) => {
    */
   const onSelectFile = useCallback(
     async ({ multipleSelections = true }: { multipleSelections?: boolean }): Promise<FileMetadata[]> => {
-      if (selecting) {
+      if (selectingRef.current) {
         return []
       }
 
+      selectingRef.current = true
       const selectProps: Electron.OpenDialogOptions['properties'] = multipleSelections
         ? ['openFile', 'multiSelections']
         : ['openFile']
@@ -46,40 +57,55 @@ export const useFiles = (props?: Props) => {
       const useAllFiles = extensions.length > 20
 
       setSelecting(true)
-      const _files = await window.api.file.select({
-        properties: selectProps,
-        filters: [
-          {
-            name: 'Files',
-            extensions: useAllFiles ? ['*'] : extensions.map((i) => i.replace('.', ''))
+      try {
+        const _files = await window.api.file.select({
+          properties: selectProps,
+          filters: [
+            {
+              name: 'Files',
+              extensions: useAllFiles ? ['*'] : extensions.map((i) => i.replace('.', ''))
+            }
+          ]
+        })
+
+        if (!mountedRef.current) {
+          return []
+        }
+
+        if (_files) {
+          if (!useAllFiles) {
+            setFiles((currentFiles) => [...currentFiles, ..._files])
+            return _files
           }
-        ]
-      })
-      setSelecting(false)
+          const supportedFiles = await filterSupportedFiles(_files, extensions)
 
-      if (_files) {
-        if (!useAllFiles) {
-          setFiles([...files, ..._files])
-          return _files
-        }
-        const supportedFiles = await filterSupportedFiles(_files, extensions)
-        if (supportedFiles.length > 0) {
-          setFiles([...files, ...supportedFiles])
-        }
+          if (!mountedRef.current) {
+            return []
+          }
 
-        if (supportedFiles.length !== _files.length) {
-          window.toast?.info(
-            t('chat.input.file_not_supported_count', {
-              count: _files.length - supportedFiles.length
-            })
-          )
+          if (supportedFiles.length > 0) {
+            setFiles((currentFiles) => [...currentFiles, ...supportedFiles])
+          }
+
+          if (supportedFiles.length !== _files.length) {
+            window.toast?.info(
+              t('chat.input.file_not_supported_count', {
+                count: _files.length - supportedFiles.length
+              })
+            )
+          }
+          return supportedFiles
+        } else {
+          return []
         }
-        return supportedFiles
-      } else {
-        return []
+      } finally {
+        selectingRef.current = false
+        if (mountedRef.current) {
+          setSelecting(false)
+        }
       }
     },
-    [extensions, files, selecting, t]
+    [extensions, t]
   )
 
   const clearFiles = useCallback(() => {
