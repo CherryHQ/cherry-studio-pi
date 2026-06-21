@@ -55,13 +55,47 @@ export function createPaintingGenerateError(
   return new PaintingGenerateError(code, options)
 }
 
+function extractPaintingErrorMessage(error: unknown, seen = new WeakSet<object>()): string | null {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim()
+  }
+
+  if (typeof error === 'string' && error.trim()) {
+    return error.trim()
+  }
+
+  if (!error || typeof error !== 'object') {
+    return null
+  }
+
+  if (seen.has(error)) {
+    return null
+  }
+  seen.add(error)
+
+  const maybeMessage = (error as { message?: unknown }).message
+  if (typeof maybeMessage === 'string' && maybeMessage.trim()) {
+    return maybeMessage.trim()
+  }
+
+  const maybeError = (error as { error?: unknown }).error
+  const nestedErrorMessage = extractPaintingErrorMessage(maybeError, seen)
+  if (nestedErrorMessage) {
+    return nestedErrorMessage
+  }
+
+  const maybeCause = (error as { cause?: unknown }).cause
+  return extractPaintingErrorMessage(maybeCause, seen)
+}
+
 export function normalizePaintingGenerateError(error: unknown): Error {
   if (error instanceof PaintingGenerateError) {
     return error
   }
 
-  if (error instanceof Error) {
-    return createPaintingGenerateError('REMOTE_ERROR', { message: error.message })
+  const message = extractPaintingErrorMessage(error)
+  if (message) {
+    return createPaintingGenerateError('REMOTE_ERROR', { message })
   }
 
   return createPaintingGenerateError('GENERATE_FAILED')
