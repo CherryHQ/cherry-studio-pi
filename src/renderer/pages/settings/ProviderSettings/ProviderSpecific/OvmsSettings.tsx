@@ -1,5 +1,6 @@
 import { Button, ColFlex } from '@cherrystudio/ui'
 import { cn } from '@cherrystudio/ui/lib/utils'
+import { getErrorMessage } from '@renderer/utils/error'
 import { AlertTriangle, CheckCircle2, Info, XCircle } from 'lucide-react'
 import type { FC } from 'react'
 import { useEffect, useRef, useState } from 'react'
@@ -61,7 +62,7 @@ const OvmsSettings: FC = () => {
         setOvmsStatus(status)
       }
     } catch (error: unknown) {
-      const errMsg = error instanceof Error ? error.message : String(error)
+      const errMsg = getErrorMessage(error)
       const errCodeMsg = {
         '100': t('ovms.failed.install_code_100'),
         '101': t('ovms.failed.install_code_101'),
@@ -99,7 +100,7 @@ const OvmsSettings: FC = () => {
         setOvmsStatus(status)
       }
     } catch (error: unknown) {
-      window.toast?.error(t('ovms.failed.run') + (error instanceof Error ? error.message : String(error)))
+      window.toast?.error(t('ovms.failed.run') + getErrorMessage(error))
     } finally {
       runningRef.current = false
       if (isMountedRef.current) {
@@ -122,7 +123,7 @@ const OvmsSettings: FC = () => {
         setOvmsStatus(status)
       }
     } catch (error: unknown) {
-      window.toast?.error(t('ovms.failed.stop') + (error instanceof Error ? error.message : String(error)))
+      window.toast?.error(t('ovms.failed.stop') + getErrorMessage(error))
     } finally {
       stoppingRef.current = false
       if (isMountedRef.current) {
