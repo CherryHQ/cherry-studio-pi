@@ -1,3 +1,7 @@
+import * as fs from 'node:fs'
+import * as os from 'node:os'
+import * as path from 'node:path'
+
 import { EventEmitter } from 'events'
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest'
 
@@ -94,6 +98,22 @@ import { LanTransferService } from '../LanTransferService'
 
 function createService(): LanTransferService {
   return new LanTransferService()
+}
+
+function createDeferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
+}
+
+async function waitForPredicate(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    if (predicate()) return
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+  throw new Error('Timed out waiting for predicate')
 }
 
 // =============================================================================
@@ -643,6 +663,41 @@ describe('LanTransferService - Transfer', () => {
       await expect(service.sendFile('/path/to/file.zip')).rejects.toThrow(
         'No active connection. Please connect to a peer first.'
       )
+    })
+
+    it('should reject a concurrent send while the first transfer is still preparing', async () => {
+      const service = createService()
+      await (service as any).onInit()
+
+      const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'lan-transfer-test-'))
+      const filePath = path.join(tempDir, 'backup.zip')
+      await fs.promises.writeFile(filePath, Buffer.from('zip-data'))
+
+      const transferComplete = createDeferred<{ type: 'file_complete'; transferId: string; success: boolean }>()
+      const performFileTransfer = vi.fn(() => transferComplete.promise)
+      ;(service as any).performFileTransfer = performFileTransfer
+      ;(service as any).socket = { destroyed: false, writable: true }
+      ;(service as any).currentPeer = { id: 'peer-1', name: 'Peer', host: 'localhost', port: 12345 }
+
+      try {
+        const first = service.sendFile(filePath)
+        const second = service.sendFile(filePath)
+        first.catch(() => undefined)
+        second.catch(() => undefined)
+
+        await waitForPredicate(() => performFileTransfer.mock.calls.length > 0)
+        transferComplete.resolve({ type: 'file_complete', transferId: 'transfer-1', success: true })
+
+        const results = await Promise.allSettled([first, second])
+
+        expect(performFileTransfer).toHaveBeenCalledTimes(1)
+        expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+        const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+        expect(rejected?.reason).toBeInstanceOf(Error)
+        expect(rejected?.reason.message).toBe('A file transfer is already in progress')
+      } finally {
+        await fs.promises.rm(tempDir, { recursive: true, force: true })
+      }
     })
   })
 
