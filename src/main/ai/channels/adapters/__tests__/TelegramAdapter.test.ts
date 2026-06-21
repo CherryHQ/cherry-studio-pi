@@ -11,19 +11,23 @@ vi.mock('../../ChannelManager', () => ({
   registerAdapterFactory: vi.fn()
 }))
 
-const mockBot = {
-  use: vi.fn(),
-  command: vi.fn(),
-  on: vi.fn(),
-  api: {
-    setMyCommands: vi.fn().mockResolvedValue(undefined),
-    sendMessage: vi.fn().mockResolvedValue(undefined),
-    sendChatAction: vi.fn().mockResolvedValue(undefined)
-  },
-  catch: vi.fn(),
-  start: vi.fn().mockResolvedValue(undefined),
-  stop: vi.fn().mockResolvedValue(undefined)
+function createMockBot() {
+  return {
+    use: vi.fn(),
+    command: vi.fn(),
+    on: vi.fn(),
+    api: {
+      setMyCommands: vi.fn().mockResolvedValue(undefined),
+      sendMessage: vi.fn().mockResolvedValue(undefined),
+      sendChatAction: vi.fn().mockResolvedValue(undefined)
+    },
+    catch: vi.fn(),
+    start: vi.fn().mockResolvedValue(undefined),
+    stop: vi.fn().mockResolvedValue(undefined)
+  }
 }
+
+const mockBot = createMockBot()
 
 vi.mock('grammy', () => ({
   Bot: vi.fn().mockImplementation(() => mockBot)
@@ -31,6 +35,8 @@ vi.mock('grammy', () => ({
 
 // Import the module to trigger self-registration side effect
 import '../telegram/TelegramAdapter'
+
+import { Bot } from 'grammy'
 
 import { registerAdapterFactory } from '../../ChannelManager'
 
@@ -52,6 +58,9 @@ describe('TelegramAdapter', () => {
     mockBot.catch.mockClear()
     mockBot.start.mockClear().mockResolvedValue(undefined)
     mockBot.stop.mockClear().mockResolvedValue(undefined)
+    vi.mocked(Bot)
+      .mockClear()
+      .mockImplementation(() => mockBot as any)
   })
 
   afterEach(() => {
@@ -146,6 +155,34 @@ describe('TelegramAdapter', () => {
     const callsAfterDisconnect = mockBot.start.mock.calls.length
     await vi.advanceTimersByTimeAsync(60_000)
     expect(mockBot.start.mock.calls.length).toBe(callsAfterDisconnect) // no further reconnect
+  })
+
+  it('ignores polling rejection from a stale bot after replacement', async () => {
+    vi.useFakeTimers()
+    const staleBot = createMockBot()
+    const currentBot = createMockBot()
+    let rejectStalePolling!: (error: Error) => void
+
+    staleBot.start.mockReturnValue(
+      new Promise((_resolve, reject) => {
+        rejectStalePolling = reject
+      })
+    )
+    currentBot.start.mockResolvedValue(undefined)
+    vi.mocked(Bot)
+      .mockImplementationOnce(() => staleBot as any)
+      .mockImplementationOnce(() => currentBot as any)
+
+    const adapter = createAdapter()
+    await adapter.connect()
+    await adapter.startBot()
+
+    rejectStalePolling(new Error('409: Conflict'))
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(adapter.connected).toBe(true)
+    expect(adapter.reconnectTimer).toBeNull()
+    expect(currentBot.start).toHaveBeenCalledTimes(1)
   })
 
   it('sendMessage() sends text with MarkdownV2 by default', async () => {

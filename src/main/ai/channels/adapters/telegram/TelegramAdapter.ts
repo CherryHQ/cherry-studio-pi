@@ -190,6 +190,10 @@ class TelegramAdapter extends ChannelAdapter {
     // Start long polling (fire-and-forget). `bot.start()` only resolves when the bot stops;
     // a fatal polling error (e.g. 409 Conflict) rejects here — schedule a backoff reconnect.
     bot.start().catch((err) => {
+      if (this.shouldStop || this.bot !== bot) {
+        this.log.debug('Ignoring polling stop from stale Telegram bot')
+        return
+      }
       const msg = err instanceof Error ? err.message : String(err)
       this.clearStabilityTimer()
       this.markDisconnected(msg)
