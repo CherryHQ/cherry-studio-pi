@@ -100,7 +100,7 @@ export const captureScrollable = async (elRef: React.RefObject<HTMLElement | nul
           el.scrollTop = originalScrollTop
         }, 0)
 
-        window.toast.error(i18n.t('message.error.dimension_too_large'))
+        window.toast?.error(i18n.t('message.error.dimension_too_large'))
         return Promise.reject()
       }
 
