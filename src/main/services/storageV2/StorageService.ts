@@ -1018,9 +1018,7 @@ export class StorageV2Service {
     const llm = optionalRecord(snapshot.llm)
     const providers = optionalArray<Record<string, unknown>>(llm?.providers) ?? []
     const apiKeyProviderIds = options.apiKeyProviderIds
-    const apiKeyCredentialRefsByProvider = apiKeyProviderIds
-      ? await storageV2ProviderRepository.listCredentialRefs()
-      : null
+    const apiKeyCredentialRefsByProvider = await storageV2ProviderRepository.listCredentialRefs()
     const modelProviderIds = options.modelProviderIds
     let providerCount = 0
     let modelCount = 0
@@ -1030,11 +1028,11 @@ export class StorageV2Service {
       if (!normalized) continue
 
       const providerId = normalized.create.providerId
-      const providerApiKeysRequested = apiKeyProviderIds?.has(providerId) === true
+      const providerApiKeysRequested = apiKeyProviderIds ? apiKeyProviderIds.has(providerId) : true
       const credentialRefs = providerApiKeysRequested ? apiKeyCredentialRefsByProvider?.get(providerId) : undefined
       const hasStoredApiKeyRef = Boolean(credentialRefs?.apiKeys || credentialRefs?.apiKey)
 
-      if (providerApiKeysRequested && hasStoredApiKeyRef && normalized.apiKeys === undefined) {
+      if (providerApiKeysRequested && hasStoredApiKeyRef && (normalized.apiKeys?.length ?? 0) === 0) {
         throw new Error(
           `Storage v2 服务商 ${providerId} 声明了 API Key 凭据，但本机密钥库未能恢复出密钥值。为避免清空现有模型服务商密钥，本次运行时投影已停止。`
         )
