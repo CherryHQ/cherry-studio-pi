@@ -67,13 +67,13 @@ const ApiGatewaySettings: FC = () => {
     try {
       await navigator.clipboard.writeText(apiKey)
       if (mountedRef.current) {
-        window.toast.success(t('apiGateway.messages.apiKeyCopied'))
+        window.toast?.success(t('apiGateway.messages.apiKeyCopied'))
       }
     } catch {
       // Clipboard write can be denied (permissions / insecure context); don't
       // report a copy that didn't happen.
       if (mountedRef.current) {
-        window.toast.error(t('apiGateway.messages.operationFailed'))
+        window.toast?.error(t('apiGateway.messages.operationFailed'))
       }
     }
   }
@@ -86,11 +86,11 @@ const ApiGatewaySettings: FC = () => {
     try {
       await setApiGatewayConfig({ apiKey: generateApiKey() })
       if (mountedRef.current) {
-        window.toast.success(t('apiGateway.messages.apiKeyRegenerated'))
+        window.toast?.success(t('apiGateway.messages.apiKeyRegenerated'))
       }
     } catch {
       if (mountedRef.current) {
-        window.toast.error(t('apiGateway.messages.operationFailed'))
+        window.toast?.error(t('apiGateway.messages.operationFailed'))
       }
     }
   }
@@ -101,7 +101,7 @@ const ApiGatewaySettings: FC = () => {
 
     if (!normalizedPortDraft || !Number.isInteger(port) || port < 1000 || port > 65535) {
       setPortDraft(String(serverPort))
-      window.toast.error(t('apiGateway.messages.invalidPort'))
+      window.toast?.error(t('apiGateway.messages.invalidPort'))
       return
     }
 
@@ -119,7 +119,7 @@ const ApiGatewaySettings: FC = () => {
       .catch(() => {
         if (mountedRef.current) {
           setPortDraft(String(serverPort))
-          window.toast.error(t('apiGateway.messages.operationFailed'))
+          window.toast?.error(t('apiGateway.messages.operationFailed'))
         }
       })
   }

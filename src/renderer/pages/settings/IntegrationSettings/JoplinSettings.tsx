@@ -64,11 +64,11 @@ const JoplinSettings: FC = () => {
 
     try {
       if (!joplinToken) {
-        window.toast.error(t('settings.data.joplin.check.empty_token'))
+        window.toast?.error(t('settings.data.joplin.check.empty_token'))
         return
       }
       if (!joplinUrl) {
-        window.toast.error(t('settings.data.joplin.check.empty_url'))
+        window.toast?.error(t('settings.data.joplin.check.empty_url'))
         return
       }
 
@@ -85,15 +85,15 @@ const JoplinSettings: FC = () => {
       }
 
       if (!response.ok || data?.error) {
-        window.toast.error(t('settings.data.joplin.check.fail'))
+        window.toast?.error(t('settings.data.joplin.check.fail'))
         return
       }
 
-      window.toast.success(t('settings.data.joplin.check.success'))
+      window.toast?.success(t('settings.data.joplin.check.success'))
     } catch (error) {
       logger.error('Failed to check Joplin connection', error as Error)
       if (mountedRef.current) {
-        window.toast.error(`${t('settings.data.joplin.check.fail')}: ${formatErrorMessage(error)}`)
+        window.toast?.error(`${t('settings.data.joplin.check.fail')}: ${formatErrorMessage(error)}`)
       }
     } finally {
       checkingConnectionRef.current = false
@@ -110,7 +110,7 @@ const JoplinSettings: FC = () => {
   const handleJoplinHelpClick = () => {
     void window.api.openWebsite('https://joplinapp.org/help/apps/clipper').catch((error) => {
       logger.error('Failed to open Joplin documentation', error as Error)
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
     })
   }
 

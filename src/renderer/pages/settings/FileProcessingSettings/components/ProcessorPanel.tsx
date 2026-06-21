@@ -127,7 +127,7 @@ export function ProcessorPanel({
       } catch (error) {
         logger.error(`Failed to ${actionName}`, error as Error)
         if (mountedRef.current) {
-          window.toast.error(t('settings.tool.file_processing.errors.save_failed'))
+          window.toast?.error(t('settings.tool.file_processing.errors.save_failed'))
         }
       }
     },
@@ -151,7 +151,7 @@ export function ProcessorPanel({
     const trimmedApiHost = apiHostInput.trim()
     setApiHostInput(trimmedApiHost)
     if (!validateApiHost(trimmedApiHost)) {
-      window.toast.warning(t('settings.tool.file_processing.errors.invalid_api_host'))
+      window.toast?.warning(t('settings.tool.file_processing.errors.invalid_api_host'))
       return
     }
     await persist(() => onSetCapabilityField(processor.id, entry.feature, 'apiHost', trimmedApiHost), 'save API host')

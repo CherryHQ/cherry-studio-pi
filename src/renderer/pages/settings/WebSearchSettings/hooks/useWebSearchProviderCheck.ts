@@ -37,11 +37,11 @@ export function useWebSearchProviderCheck({ provider, capability }: UseWebSearch
 
     try {
       await runCheck()
-      window.toast.success(t('settings.tool.websearch.check_success'))
+      window.toast?.success(t('settings.tool.websearch.check_success'))
     } catch (error) {
       logger.error('Web search provider check failed', error as Error)
       const errorMessage = error instanceof Error ? error.message : String(error)
-      window.toast.error(`${t('settings.tool.websearch.check_failed')}: ${errorMessage}`)
+      window.toast?.error(`${t('settings.tool.websearch.check_failed')}: ${errorMessage}`)
     } finally {
       checkingRef.current = false
       setChecking(false)

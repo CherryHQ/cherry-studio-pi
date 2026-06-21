@@ -16,7 +16,7 @@ export function useWebSearchPersist(shouldNotify?: () => boolean) {
       } catch (error) {
         logger.error(message, error as Error)
         if (shouldNotify?.() ?? true) {
-          window.toast.error(t('settings.tool.websearch.errors.save_failed'))
+          window.toast?.error(t('settings.tool.websearch.errors.save_failed'))
         }
         return { ok: false }
       }

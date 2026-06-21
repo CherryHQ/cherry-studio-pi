@@ -83,7 +83,7 @@ const WebSearchApiKeyItem: FC<WebSearchApiKeyItemProps> = ({ item, onUpdate, onR
       }
 
       if (!result.value.isValid) {
-        window.toast.warning(result.value.error)
+        window.toast?.warning(result.value.error)
         return
       }
 
@@ -112,12 +112,12 @@ const WebSearchApiKeyItem: FC<WebSearchApiKeyItemProps> = ({ item, onUpdate, onR
       .writeText(item.key)
       .then(() => {
         if (mountedRef.current) {
-          window.toast.success(t('message.copy.success'))
+          window.toast?.success(t('message.copy.success'))
         }
       })
       .catch(() => {
         if (mountedRef.current) {
-          window.toast.error(t('message.copy.failed'))
+          window.toast?.error(t('message.copy.failed'))
         }
       })
   }

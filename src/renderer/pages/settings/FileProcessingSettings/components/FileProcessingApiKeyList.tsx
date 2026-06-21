@@ -105,7 +105,7 @@ const FileProcessingApiKeyItem: FC<FileProcessingApiKeyItemProps> = ({ item, onU
         }
 
         if (!result.isValid) {
-          window.toast.warning(result.error)
+          window.toast?.warning(result.error)
           return
         }
 
@@ -113,7 +113,7 @@ const FileProcessingApiKeyItem: FC<FileProcessingApiKeyItemProps> = ({ item, onU
       } catch (error) {
         logger.error('Failed to save file processing API key', error as Error)
         if (mountedRef.current) {
-          window.toast.error(t('settings.tool.file_processing.errors.save_failed'))
+          window.toast?.error(t('settings.tool.file_processing.errors.save_failed'))
         }
       }
     })
@@ -138,13 +138,13 @@ const FileProcessingApiKeyItem: FC<FileProcessingApiKeyItemProps> = ({ item, onU
       .writeText(item.key)
       .then(() => {
         if (mountedRef.current) {
-          window.toast.success(t('common.copied'))
+          window.toast?.success(t('common.copied'))
         }
       })
       .catch((error) => {
         logger.error('Failed to copy file processing API key', error as Error)
         if (mountedRef.current) {
-          window.toast.error(t('common.copy_failed'))
+          window.toast?.error(t('common.copy_failed'))
         }
       })
   }
@@ -168,7 +168,7 @@ const FileProcessingApiKeyItem: FC<FileProcessingApiKeyItemProps> = ({ item, onU
         } catch (error) {
           logger.error('Failed to remove file processing API key', error as Error)
           if (mountedRef.current) {
-            window.toast.error(t('settings.tool.file_processing.errors.save_failed'))
+            window.toast?.error(t('settings.tool.file_processing.errors.save_failed'))
           }
         }
       }

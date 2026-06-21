@@ -52,11 +52,11 @@ const NotionSettings: FC = () => {
     }
     try {
       if (!notionApiKey?.trim()) {
-        window.toast.error(t('settings.data.notion.check.empty_api_key'))
+        window.toast?.error(t('settings.data.notion.check.empty_api_key'))
         return
       }
       if (!notionDatabaseID?.trim()) {
-        window.toast.error(t('settings.data.notion.check.empty_database_id'))
+        window.toast?.error(t('settings.data.notion.check.empty_database_id'))
         return
       }
 
@@ -72,14 +72,14 @@ const NotionSettings: FC = () => {
       }
 
       if (result) {
-        window.toast.success(t('settings.data.notion.check.success'))
+        window.toast?.success(t('settings.data.notion.check.success'))
       } else {
-        window.toast.error(t('settings.data.notion.check.fail'))
+        window.toast?.error(t('settings.data.notion.check.fail'))
       }
     } catch (error) {
       logger.error('Failed to check Notion connection', error as Error)
       if (mountedRef.current) {
-        window.toast.error(formatErrorMessage(error) || t('settings.data.notion.check.error'))
+        window.toast?.error(formatErrorMessage(error) || t('settings.data.notion.check.error'))
       }
     } finally {
       checkingConnectionRef.current = false
@@ -96,7 +96,7 @@ const NotionSettings: FC = () => {
   const handleNotionTitleClick = () => {
     void window.api.openWebsite('https://docs.cherry-ai.com/advanced-basic/notion').catch((error) => {
       logger.error('Failed to open Notion documentation', error as Error)
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
     })
   }
 

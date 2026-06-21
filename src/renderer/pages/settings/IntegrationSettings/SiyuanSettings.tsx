@@ -53,7 +53,7 @@ const SiyuanSettings: FC = () => {
   const handleSiyuanHelpClick = () => {
     void window.api.openWebsite('https://docs.cherry-ai.com/advanced-basic/siyuan').catch((error) => {
       logger.error('Failed to open Siyuan documentation', error as Error)
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
     })
   }
 
@@ -64,7 +64,7 @@ const SiyuanSettings: FC = () => {
 
     try {
       if (!siyuanApiUrl || !siyuanToken) {
-        window.toast.error(t('settings.data.siyuan.check.empty_config'))
+        window.toast?.error(t('settings.data.siyuan.check.empty_config'))
         return
       }
 
@@ -84,7 +84,7 @@ const SiyuanSettings: FC = () => {
       }
 
       if (!response.ok) {
-        window.toast.error(t('settings.data.siyuan.check.fail'))
+        window.toast?.error(t('settings.data.siyuan.check.fail'))
         return
       }
 
@@ -94,15 +94,15 @@ const SiyuanSettings: FC = () => {
       }
 
       if (data.code !== 0) {
-        window.toast.error(t('settings.data.siyuan.check.fail'))
+        window.toast?.error(t('settings.data.siyuan.check.fail'))
         return
       }
 
-      window.toast.success(t('settings.data.siyuan.check.success'))
+      window.toast?.success(t('settings.data.siyuan.check.success'))
     } catch (error) {
       logger.error('Check Siyuan connection failed:', error as Error)
       if (mountedRef.current) {
-        window.toast.error(t('settings.data.siyuan.check.error'))
+        window.toast?.error(t('settings.data.siyuan.check.error'))
       }
     } finally {
       checkingConnectionRef.current = false

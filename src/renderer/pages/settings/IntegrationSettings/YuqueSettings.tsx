@@ -53,11 +53,11 @@ const YuqueSettings: FC = () => {
     }
     try {
       if (!yuqueToken) {
-        window.toast.error(t('settings.data.yuque.check.empty_token'))
+        window.toast?.error(t('settings.data.yuque.check.empty_token'))
         return
       }
       if (!yuqueUrl) {
-        window.toast.error(t('settings.data.yuque.check.empty_repo_url'))
+        window.toast?.error(t('settings.data.yuque.check.empty_repo_url'))
         return
       }
 
@@ -75,7 +75,7 @@ const YuqueSettings: FC = () => {
       }
 
       if (!response.ok) {
-        window.toast.error(t('settings.data.yuque.check.fail'))
+        window.toast?.error(t('settings.data.yuque.check.fail'))
         return
       }
       const yuqueSlug = yuqueUrl.replace('https://www.yuque.com/', '')
@@ -90,7 +90,7 @@ const YuqueSettings: FC = () => {
       }
 
       if (!repoIDResponse.ok) {
-        window.toast.error(t('settings.data.yuque.check.fail'))
+        window.toast?.error(t('settings.data.yuque.check.fail'))
         return
       }
       const data = (await repoIDResponse.json()) as unknown
@@ -100,15 +100,15 @@ const YuqueSettings: FC = () => {
 
       if (!isYuqueRepoResponse(data)) {
         logger.error('Invalid Yuque repo response')
-        window.toast.error(t('settings.data.yuque.check.fail'))
+        window.toast?.error(t('settings.data.yuque.check.fail'))
         return
       }
       await setYuqueRepoId(String(data.data.id))
-      window.toast.success(t('settings.data.yuque.check.success'))
+      window.toast?.success(t('settings.data.yuque.check.success'))
     } catch (error) {
       logger.error('Failed to check Yuque connection', error as Error)
       if (mountedRef.current) {
-        window.toast.error(formatErrorMessage(error) || t('settings.data.yuque.check.fail'))
+        window.toast?.error(formatErrorMessage(error) || t('settings.data.yuque.check.fail'))
       }
     } finally {
       checkingConnectionRef.current = false
@@ -121,7 +121,7 @@ const YuqueSettings: FC = () => {
   const handleYuqueHelpClick = () => {
     void window.api.openWebsite('https://www.yuque.com/settings/tokens').catch((error) => {
       logger.error('Failed to open Yuque token settings', error as Error)
-      window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+      window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
     })
   }
 
