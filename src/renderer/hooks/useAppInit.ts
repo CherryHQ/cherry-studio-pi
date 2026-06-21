@@ -56,16 +56,24 @@ export function useAppInit() {
   }, [])
 
   useEffect(() => {
+    let active = true
+
     void window.api
       .getDataPathFromArgs()
       .then((dataPath) => {
-        if (dataPath) {
+        if (active && dataPath) {
           void window.navigate({ to: '/settings/data', replace: true })
         }
       })
       .catch((error) => {
-        logger.warn('Failed to read data path from launch args', error as Error)
+        if (active) {
+          logger.warn('Failed to read data path from launch args', error as Error)
+        }
       })
+
+    return () => {
+      active = false
+    }
   }, [])
 
   // [v2] Removed: Redux persistor flush is no longer needed after v2 data refactoring
@@ -149,16 +157,27 @@ export function useAppInit() {
   }, [windowStyle, miniAppShow, theme, isLeftNavbar, navBackgroundColor])
 
   useEffect(() => {
+    let active = true
+
     // set files path
     void window.api
       .getAppInfo()
       .then((info) => {
+        if (!active) {
+          return
+        }
         cacheService.set('app.path.files', info.filesPath)
         cacheService.set('app.path.resources', info.resourcesPath)
       })
       .catch((error) => {
-        logger.warn('Failed to cache application paths', error as Error)
+        if (active) {
+          logger.warn('Failed to cache application paths', error as Error)
+        }
       })
+
+    return () => {
+      active = false
+    }
   }, [])
 
   useEffect(() => {

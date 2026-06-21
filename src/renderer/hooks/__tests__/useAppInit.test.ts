@@ -121,6 +121,20 @@ const flushMicrotasks = () =>
     queueMicrotask(() => resolve())
   })
 
+type Deferred<T> = {
+  promise: Promise<T>
+  resolve: (value: T | PromiseLike<T>) => void
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: Deferred<T>['resolve']
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve
+  })
+
+  return { promise, resolve }
+}
+
 function installWindowApi() {
   Object.defineProperty(window, 'api', {
     configurable: true,
@@ -213,6 +227,41 @@ describe('useAppInit', () => {
     expect(mocks.getAppInfo).toHaveBeenCalledTimes(1)
     expect(mocks.checkForUpdate).not.toHaveBeenCalled()
     expect(mocks.updateAppUpdateState).not.toHaveBeenCalled()
+  })
+
+  it('does not navigate when launch data path resolves after unmount', async () => {
+    const launchDataPath = deferred<string | null>()
+    mocks.getDataPathFromArgs.mockReturnValueOnce(launchDataPath.promise)
+
+    const { unmount } = renderHook(() => useAppInit())
+    unmount()
+
+    await act(async () => {
+      launchDataPath.resolve('/tmp/custom-data')
+      await launchDataPath.promise
+    })
+
+    expect(window.navigate).not.toHaveBeenCalled()
+  })
+
+  it('does not cache app paths when app info resolves after unmount', async () => {
+    const appInfo = deferred<{ filesPath: string; isPackaged: boolean; resourcesPath: string }>()
+    mocks.getAppInfo.mockReturnValueOnce(appInfo.promise)
+
+    const { unmount } = renderHook(() => useAppInit())
+    unmount()
+
+    await act(async () => {
+      appInfo.resolve({
+        filesPath: '/tmp/files',
+        isPackaged: true,
+        resourcesPath: '/tmp/resources'
+      })
+      await appInfo.promise
+    })
+
+    expect(mocks.cacheSet).not.toHaveBeenCalledWith('app.path.files', '/tmp/files')
+    expect(mocks.cacheSet).not.toHaveBeenCalledWith('app.path.resources', '/tmp/resources')
   })
 
   it('does not update state when an in-flight update check finishes after unmount', async () => {
