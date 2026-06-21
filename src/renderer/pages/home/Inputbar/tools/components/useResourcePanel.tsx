@@ -53,6 +53,25 @@ export const useResourcePanel = (params: Params, role: 'button' | 'manager' = 'b
   const hasAttemptedLoadRef = useRef(false)
   const fileListRef = useRef<string[]>([])
   const loadRequestSeqRef = useRef(0)
+  const mountedRef = useRef(true)
+  const deferredOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearDeferredOpenTimer = useCallback(() => {
+    if (deferredOpenTimerRef.current) {
+      clearTimeout(deferredOpenTimerRef.current)
+      deferredOpenTimerRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+      loadRequestSeqRef.current += 1
+      clearDeferredOpenTimer()
+    }
+  }, [clearDeferredOpenTimer])
 
   const updateFileListState = useCallback(
     (nextFiles: string[]) => {
@@ -189,7 +208,9 @@ export const useResourcePanel = (params: Params, role: 'button' | 'manager' = 'b
       }
 
       hasAttemptedLoadRef.current = true
-      setIsLoading(true)
+      if (mountedRef.current) {
+        setIsLoading(true)
+      }
       const deduped = new Set<string>()
       const collected: string[] = []
 
@@ -229,7 +250,7 @@ export const useResourcePanel = (params: Params, role: 'button' | 'manager' = 'b
         logger.error('Failed to load files', error as Error)
         return []
       } finally {
-        if (requestSeq === loadRequestSeqRef.current) {
+        if (mountedRef.current && requestSeq === loadRequestSeqRef.current) {
           setIsLoading(false)
         }
       }
@@ -422,7 +443,7 @@ export const useResourcePanel = (params: Params, role: 'button' | 'manager' = 'b
       const searchPattern = searchText.trim() || '.'
       const requestSeq = ++loadRequestSeqRef.current
       const newFiles = await loadFiles(searchPattern, requestSeq)
-      if (requestSeq !== loadRequestSeqRef.current) {
+      if (!mountedRef.current || requestSeq !== loadRequestSeqRef.current) {
         return
       }
 
@@ -440,6 +461,10 @@ export const useResourcePanel = (params: Params, role: 'button' | 'manager' = 'b
    */
   const openQuickPanel = useCallback(
     async (triggerInfo?: ResourcePanelTriggerInfo) => {
+      if (!mountedRef.current) {
+        return
+      }
+
       const normalizedTriggerInfo =
         triggerInfo && triggerInfo.type === 'input'
           ? {
@@ -452,7 +477,7 @@ export const useResourcePanel = (params: Params, role: 'button' | 'manager' = 'b
       // Always load fresh files when opening the panel
       const requestSeq = ++loadRequestSeqRef.current
       const files = await loadFiles('.', requestSeq)
-      if (requestSeq !== loadRequestSeqRef.current) {
+      if (!mountedRef.current || requestSeq !== loadRequestSeqRef.current) {
         return
       }
       updateFileListState(files)
@@ -472,6 +497,12 @@ export const useResourcePanel = (params: Params, role: 'button' | 'manager' = 'b
             }
           : { type: 'button' },
         onClose({ action, searchText }) {
+          if (!mountedRef.current) {
+            loadRequestSeqRef.current += 1
+            triggerInfoRef.current = undefined
+            return
+          }
+
           if (action === 'esc') {
             const activeTrigger = triggerInfoRef.current
             if (activeTrigger?.type === 'input' && activeTrigger?.position !== undefined) {
@@ -563,7 +594,12 @@ export const useResourcePanel = (params: Params, role: 'button' | 'manager' = 'b
               : undefined
 
           context.close('select')
-          setTimeout(() => {
+          clearDeferredOpenTimer()
+          deferredOpenTimerRef.current = setTimeout(() => {
+            deferredOpenTimerRef.current = null
+            if (!mountedRef.current) {
+              return
+            }
             void openQuickPanel(rootTrigger ?? { type: 'button' })
           }, 0)
         }
@@ -578,8 +614,9 @@ export const useResourcePanel = (params: Params, role: 'button' | 'manager' = 'b
     return () => {
       disposeMenu()
       disposeTrigger()
+      clearDeferredOpenTimer()
     }
-  }, [openQuickPanel, registerRootMenu, registerTrigger, role, t])
+  }, [clearDeferredOpenTimer, openQuickPanel, registerRootMenu, registerTrigger, role, t])
 
   return {
     handleOpenQuickPanel,
