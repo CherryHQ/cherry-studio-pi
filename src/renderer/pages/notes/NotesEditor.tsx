@@ -133,11 +133,11 @@ const NotesEditor: FC<NotesEditorProps> = memo(
                       const newValue = !enableSpellCheck
                       void setEnableSpellCheck(newValue).catch((error) => {
                         logger.error('Failed to update spell check preference', error as Error)
-                        window.toast.error(t('notes.settings.save_failed'))
+                        window.toast?.error(t('notes.settings.save_failed'))
                       })
                       void window.api.setEnableSpellCheck(newValue).catch((error) => {
                         logger.error('Failed to update spell check runtime state', error as Error)
-                        window.toast.error(t('notes.settings.save_failed'))
+                        window.toast?.error(t('notes.settings.save_failed'))
                       })
                     }}
                     icon={<SpellCheck size={18} />}

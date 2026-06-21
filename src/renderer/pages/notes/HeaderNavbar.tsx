@@ -76,13 +76,13 @@ const HeaderNavbar = ({
       const content = getCurrentNoteContent?.()
       if (content) {
         await navigator.clipboard.writeText(content)
-        window.toast.success(t('common.copied'))
+        window.toast?.success(t('common.copied'))
       } else {
-        window.toast.warning(t('notes.no_content_to_copy'))
+        window.toast?.warning(t('notes.no_content_to_copy'))
       }
     } catch (error) {
       logger.error('Failed to copy content:', error as Error)
-      window.toast.error(t('common.copy_failed'))
+      window.toast?.error(t('common.copy_failed'))
     }
   }, [getCurrentNoteContent])
 
@@ -90,18 +90,18 @@ const HeaderNavbar = ({
     try {
       const content = getCurrentNoteContent?.()
       if (!content) {
-        window.toast.warning(t('notes.no_content_to_export'))
+        window.toast?.warning(t('notes.no_content_to_export'))
         return
       }
       if (!activeNode) {
-        window.toast.warning(t('notes.no_note_selected'))
+        window.toast?.warning(t('notes.no_note_selected'))
         return
       }
       const fileName = activeNode.name.replace('.md', '')
       await window.api.export.toWord(content, fileName)
     } catch (error) {
       logger.error('Failed to export to Word:', error as Error)
-      window.toast.error(t('notes.export_to_word_failed'))
+      window.toast?.error(t('notes.export_to_word_failed'))
     }
   }, [getCurrentNoteContent, activeNode])
 

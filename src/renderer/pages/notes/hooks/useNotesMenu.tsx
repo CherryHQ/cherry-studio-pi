@@ -63,17 +63,17 @@ export const useNotesMenu = ({
     async (note: NotesTreeNode) => {
       try {
         if (bases.length === 0) {
-          window.toast.warning(t('chat.save.knowledge.empty.no_knowledge_base'))
+          window.toast?.warning(t('chat.save.knowledge.empty.no_knowledge_base'))
           return
         }
 
         const result = await SaveToKnowledgePopup.showForNote(note)
 
         if (result?.success) {
-          window.toast.success(t('notes.export_success', { count: result.savedCount }))
+          window.toast?.success(t('notes.export_success', { count: result.savedCount }))
         }
       } catch (error) {
-        window.toast.error(t('notes.export_failed'))
+        window.toast?.error(t('notes.export_failed'))
         logger.error(`Failed to export note to knowledge base: ${error}`)
       }
     },
@@ -91,7 +91,7 @@ export const useNotesMenu = ({
         await exportNote({ node, platform })
       } catch (error) {
         logger.error(`Failed to ${platform === 'copyImage' ? 'copy' : 'export'} as image:`, error as Error)
-        window.toast.error(t(platform === 'copyImage' ? 'common.copy_failed' : 'common.save_failed'))
+        window.toast?.error(t(platform === 'copyImage' ? 'common.copy_failed' : 'common.save_failed'))
       }
     },
     [activeNode, onSelectNode, t]
@@ -103,7 +103,7 @@ export const useNotesMenu = ({
         await fn()
       } catch (error) {
         logger.error('note export failed', error as Error)
-        window.toast.error(t('notes.export_failed'))
+        window.toast?.error(t('notes.export_failed'))
       }
     },
     [t]
@@ -154,7 +154,7 @@ export const useNotesMenu = ({
     (node: NotesTreeNode) => {
       void window.api.openPath(node.externalPath).catch((error) => {
         logger.error('Failed to open note externally', error as Error)
-        window.toast.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('common.operation_failed')))
       })
     },
     [t]

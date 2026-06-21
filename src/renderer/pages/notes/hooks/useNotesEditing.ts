@@ -35,7 +35,7 @@ export const useNotesEditing = ({ onRenameNode }: UseNotesEditingProps) => {
     onSave: (newName: string) => {
       if (editingNodeId && newName) {
         onRenameNode(editingNodeId, newName)
-        window.toast.success(t('common.saved'))
+        window.toast?.success(t('common.saved'))
         logger.debug(`Renamed node ${editingNodeId} to "${newName}"`)
       }
       setEditingNodeId(null)
@@ -63,7 +63,7 @@ export const useNotesEditing = ({ onRenameNode }: UseNotesEditingProps) => {
         if (!isMountedRef.current) return
 
         if (!content || content.trim().length === 0) {
-          window.toast.warning(t('notes.auto_rename.empty_note'))
+          window.toast?.warning(t('notes.auto_rename.empty_note'))
           return
         }
 
@@ -72,13 +72,13 @@ export const useNotesEditing = ({ onRenameNode }: UseNotesEditingProps) => {
 
         if (summaryText) {
           onRenameNode(note.id, summaryText)
-          window.toast.success(t('notes.auto_rename.success'))
+          window.toast?.success(t('notes.auto_rename.success'))
         } else {
-          window.toast.error(t('notes.auto_rename.failed'))
+          window.toast?.error(t('notes.auto_rename.failed'))
         }
       } catch (error) {
         if (isMountedRef.current) {
-          window.toast.error(t('notes.auto_rename.failed'))
+          window.toast?.error(t('notes.auto_rename.failed'))
           logger.error(`Failed to auto-rename note: ${error}`)
         }
       } finally {

@@ -58,7 +58,7 @@ const NotesSettings: FC = () => {
     } catch (error) {
       logger.error('Failed to select directory:', error as Error)
       if (mountedRef.current) {
-        window.toast.error(t('notes.settings.data.select_directory_failed'))
+        window.toast?.error(t('notes.settings.data.select_directory_failed'))
       }
     } finally {
       if (mountedRef.current) {
@@ -69,7 +69,7 @@ const NotesSettings: FC = () => {
 
   const handleApplyPath = async () => {
     if (!tempPath) {
-      window.toast.error(t('notes.settings.data.path_required'))
+      window.toast?.error(t('notes.settings.data.path_required'))
       return
     }
 
@@ -80,16 +80,16 @@ const NotesSettings: FC = () => {
       if (!mountedRef.current) return
 
       if (!isValidDir) {
-        window.toast.error(t('notes.settings.data.invalid_directory'))
+        window.toast?.error(t('notes.settings.data.invalid_directory'))
         return
       }
 
       updateNotesPath(tempPath)
-      window.toast.success(t('notes.settings.data.path_updated'))
+      window.toast?.success(t('notes.settings.data.path_updated'))
     } catch (error) {
       logger.error('Failed to apply notes path:', error as Error)
       if (mountedRef.current) {
-        window.toast.error(t('notes.settings.data.apply_path_failed'))
+        window.toast?.error(t('notes.settings.data.apply_path_failed'))
       }
     }
   }
@@ -100,11 +100,11 @@ const NotesSettings: FC = () => {
       if (!mountedRef.current) return
       setTempPath(info.notesPath)
       updateNotesPath(info.notesPath)
-      window.toast.success(t('notes.settings.data.reset_to_default'))
+      window.toast?.success(t('notes.settings.data.reset_to_default'))
     } catch (error) {
       logger.error('Failed to reset to default:', error as Error)
       if (mountedRef.current) {
-        window.toast.error(t('notes.settings.data.reset_failed'))
+        window.toast?.error(t('notes.settings.data.reset_failed'))
       }
     }
   }
