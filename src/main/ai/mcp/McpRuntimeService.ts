@@ -868,6 +868,12 @@ export class McpRuntimeService extends BaseService {
     this.activeToolCalls.clear()
   }
 
+  private clearActiveToolCall(callId: string, controller: AbortController) {
+    if (this.activeToolCalls.get(callId) === controller) {
+      this.activeToolCalls.delete(callId)
+    }
+  }
+
   private async waitForPendingClients(): Promise<void> {
     const pending = [...this.pendingClients.values()]
     if (pending.length === 0) return
@@ -1105,7 +1111,7 @@ export class McpRuntimeService extends BaseService {
         getServerLogger(server, { tool: name, callId: toolCallId }).error(`Error calling tool`, error as Error)
         throw error
       } finally {
-        this.activeToolCalls.delete(toolCallId)
+        this.clearActiveToolCall(toolCallId, abortController)
       }
     }
 

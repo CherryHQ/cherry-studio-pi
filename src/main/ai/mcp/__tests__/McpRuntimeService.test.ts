@@ -177,6 +177,31 @@ describe('McpRuntimeService.waitForPendingClients', () => {
   })
 })
 
+describe('McpRuntimeService active tool calls', () => {
+  beforeEach(() => {
+    BaseService.resetInstances()
+    MockMainCacheServiceUtils.resetMocks()
+  })
+
+  it('does not clear a newer abort controller when an older duplicate call id finishes', () => {
+    const service = new McpRuntimeService()
+    const callId = 'call-1'
+    const older = new AbortController()
+    const newer = new AbortController()
+
+    ;(service as any).activeToolCalls.set(callId, older)
+    ;(service as any).activeToolCalls.set(callId, newer)
+
+    ;(service as any).clearActiveToolCall(callId, older)
+
+    expect((service as any).activeToolCalls.get(callId)).toBe(newer)
+
+    ;(service as any).clearActiveToolCall(callId, newer)
+
+    expect((service as any).activeToolCalls.has(callId)).toBe(false)
+  })
+})
+
 describe('MCP IPC payload validation (mcp-services-5)', () => {
   it('rejects a malformed callTool payload (missing serverId/name)', () => {
     expect(McpCallToolPayloadSchema.safeParse({}).success).toBe(false)
