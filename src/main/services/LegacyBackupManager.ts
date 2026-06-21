@@ -61,6 +61,20 @@ const LEGACY_TEMP_APP_DIR = 'cherry-studio'
 const URL_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/
 const WINDOWS_DRIVE_PATH_PATTERN = /^[a-zA-Z]:(?:[\\/]|$)/
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === 'string' && error.trim()) return error
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) return message
+  }
+  return fallback
+}
+
+function getLoggableError(error: unknown, fallback: string): Error {
+  return error instanceof Error ? error : new Error(getErrorMessage(error, fallback))
+}
+
 function assertZipEntriesWithin(entryNames: string[], baseDir: string): void {
   const root = path.resolve(baseDir)
 
@@ -869,9 +883,9 @@ class BackupManager {
       })
 
       return await this.restore(_, backupedFilePath)
-    } catch (error: any) {
-      logger.error('Failed to restore from WebDAV:', error)
-      throw new Error(error.message || 'Failed to restore backup file')
+    } catch (error) {
+      logger.error('Failed to restore from WebDAV:', getLoggableError(error, 'Failed to restore backup file'))
+      throw new Error(getErrorMessage(error, 'Failed to restore backup file'))
     } finally {
       await fs.remove(backupedFilePath).catch(() => {})
     }
@@ -906,9 +920,12 @@ class BackupManager {
 
       logger.info(`S3 restore file downloaded successfully: ${filename}`)
       return await this.restore(_, backupedFilePath)
-    } catch (error: any) {
-      logger.error('[BackupManager] Failed to restore from S3:', error)
-      throw new Error(error.message || 'Failed to restore backup file')
+    } catch (error) {
+      logger.error(
+        '[BackupManager] Failed to restore from S3:',
+        getLoggableError(error, 'Failed to restore backup file')
+      )
+      throw new Error(getErrorMessage(error, 'Failed to restore backup file'))
     } finally {
       await fs.remove(backupedFilePath).catch(() => {})
     }
@@ -1093,9 +1110,9 @@ class BackupManager {
           size: file.size
         }))
         .sort((a, b) => new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime())
-    } catch (error: any) {
-      logger.error('Failed to list WebDAV files:', error)
-      throw new Error(error.message || 'Failed to list backup files')
+    } catch (error) {
+      logger.error('Failed to list WebDAV files:', getLoggableError(error, 'Failed to list backup files'))
+      throw new Error(getErrorMessage(error, 'Failed to list backup files'))
     }
   }
 
@@ -1264,9 +1281,9 @@ class BackupManager {
     try {
       const webdavClient = this.getWebDavInstance(webdavConfig)
       return await webdavClient.deleteFile(fileName)
-    } catch (error: any) {
-      logger.error('Failed to delete WebDAV file:', error)
-      throw new Error(error.message || 'Failed to delete backup file')
+    } catch (error) {
+      logger.error('Failed to delete WebDAV file:', getLoggableError(error, 'Failed to delete backup file'))
+      throw new Error(getErrorMessage(error, 'Failed to delete backup file'))
     }
   }
 
@@ -1484,9 +1501,9 @@ class BackupManager {
         })
 
       return files.sort((a, b) => new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime())
-    } catch (error: any) {
-      logger.error('Failed to list S3 files:', error)
-      throw new Error(error.message || 'Failed to list backup files')
+    } catch (error) {
+      logger.error('Failed to list S3 files:', getLoggableError(error, 'Failed to list backup files'))
+      throw new Error(getErrorMessage(error, 'Failed to list backup files'))
     }
   }
 
@@ -1501,9 +1518,9 @@ class BackupManager {
     try {
       const s3Client = this.getS3Storage(s3Config)
       return await s3Client.deleteFile(fileName)
-    } catch (error: any) {
-      logger.error('Failed to delete S3 file:', error)
-      throw new Error(error.message || 'Failed to delete backup file')
+    } catch (error) {
+      logger.error('Failed to delete S3 file:', getLoggableError(error, 'Failed to delete backup file'))
+      throw new Error(getErrorMessage(error, 'Failed to delete backup file'))
     }
   }
 }

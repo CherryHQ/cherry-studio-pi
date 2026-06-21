@@ -532,6 +532,25 @@ describe('BackupManager remote restore cleanup', () => {
     expect(fs.remove).toHaveBeenCalledWith('/tmp/cherry-studio-pi/backup/remote.zip')
   })
 
+  it('preserves non-Error WebDAV restore failures', async () => {
+    const getFileContents = vi.fn().mockRejectedValue('quota exceeded')
+    vi.mocked(WebDav).mockImplementation(() => ({ getFileContents }) as never)
+
+    await expect(
+      backupManager.restoreFromWebdav(
+        {} as Electron.IpcMainInvokeEvent,
+        {
+          webdavHost: 'https://dav.example.com',
+          webdavUser: 'user',
+          webdavPass: 'pass',
+          fileName: 'remote.zip'
+        } as any
+      )
+    ).rejects.toThrow('quota exceeded')
+
+    expect(fs.remove).toHaveBeenCalledWith('/tmp/cherry-studio-pi/backup/remote.zip')
+  })
+
   it('removes the downloaded S3 restore zip after restore finishes', async () => {
     const getFileContents = vi.fn().mockResolvedValue(Buffer.from('zip-data'))
     vi.mocked(S3Storage).mockImplementation(() => ({ getFileContents }) as never)
@@ -552,6 +571,24 @@ describe('BackupManager remote restore cleanup', () => {
     expect(getFileContents).toHaveBeenCalledWith('remote-s3.zip')
     expect(restore).toHaveBeenCalledWith(expect.anything(), '/tmp/cherry-studio-pi/backup/remote-s3.zip')
     expect(fs.remove).toHaveBeenCalledWith('/tmp/cherry-studio-pi/backup/remote-s3.zip')
+  })
+
+  it('preserves object-message S3 list failures', async () => {
+    const listFiles = vi.fn().mockRejectedValue({ message: 'bucket permission denied' })
+    vi.mocked(S3Storage).mockImplementation(() => ({ listFiles }) as never)
+
+    await expect(
+      backupManager.listS3Files(
+        {} as Electron.IpcMainInvokeEvent,
+        {
+          endpoint: 'https://s3.example.com',
+          region: 'us-east-1',
+          bucket: 'backups',
+          accessKeyId: 'id',
+          secretAccessKey: 'secret'
+        } as any
+      )
+    ).rejects.toThrow('bucket permission denied')
   })
 })
 
