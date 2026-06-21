@@ -8,7 +8,11 @@ import { WebdavBackupManager } from '../WebdavBackupManager'
 
 const mocks = vi.hoisted(() => ({
   t: (key: string, options?: Record<string, unknown>) =>
-    options && 'count' in options ? `${key}:${options.count}` : key
+    options && 'count' in options
+      ? `${key}:${options.count}`
+      : options && 'message' in options
+        ? `${key}:${options.message}`
+        : key
 }))
 
 vi.mock('@cherrystudio/ui', () => {
@@ -60,9 +64,20 @@ vi.mock('@renderer/services/BackupService', () => ({
 }))
 
 vi.mock('@renderer/utils', () => ({
-  formatFileSize: (size: number) => `${size} B`,
-  getErrorMessage: (error: unknown) =>
-    typeof error === 'string' ? error : error instanceof Error ? error.message : 'unknown error'
+  formatFileSize: (size: number) => `${size} B`
+}))
+
+vi.mock('@renderer/utils/error', () => ({
+  getErrorMessage: (error: unknown): string => {
+    if (typeof error === 'string') return error
+    if (error instanceof Error) return error.message
+    if (error && typeof error === 'object') {
+      const nested = (error as { error?: unknown }).error
+      if (nested) return (nested as { message?: string }).message || 'unknown error'
+      return (error as { message?: string }).message || 'unknown error'
+    }
+    return 'unknown error'
+  }
 }))
 
 vi.mock('react-i18next', () => ({
@@ -267,6 +282,38 @@ describe('backup managers', () => {
       expect(window.toast.error).toHaveBeenCalledWith(
         'settings.data.webdav.backup.manager.fetch.error: permission denied'
       )
+    })
+  })
+
+  it('shows nested local fetch failure details', async () => {
+    vi.mocked(window.api.backup.listLocalBackupFiles).mockRejectedValue({ error: { message: 'disk is offline' } })
+
+    render(<LocalBackupManager visible onClose={vi.fn()} localBackupDir="/tmp/backups" />)
+
+    await waitFor(() => {
+      expect(window.toast.error).toHaveBeenCalledWith('settings.data.local.backup.manager.fetch.error: disk is offline')
+    })
+  })
+
+  it('shows nested S3 fetch failure details', async () => {
+    vi.mocked(window.api.backup.listS3Files).mockRejectedValue({ error: { message: 'bucket not found' } })
+
+    render(
+      <S3BackupManager
+        visible
+        onClose={vi.fn()}
+        s3Config={{
+          endpoint: 'http://127.0.0.1:9000',
+          region: 'local',
+          bucket: 'backups',
+          accessKeyId: 'access',
+          secretAccessKey: 'secret'
+        }}
+      />
+    )
+
+    await waitFor(() => {
+      expect(window.toast.error).toHaveBeenCalledWith('settings.data.s3.manager.files.fetch.error:bucket not found')
     })
   })
 })

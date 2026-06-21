@@ -11,7 +11,8 @@ import {
   Tooltip
 } from '@cherrystudio/ui'
 import { restoreFromWebdav } from '@renderer/services/BackupService'
-import { formatFileSize, getErrorMessage } from '@renderer/utils'
+import { formatFileSize } from '@renderer/utils'
+import { getErrorMessage } from '@renderer/utils/error'
 import { runExclusiveOperation } from '@renderer/utils/exclusiveOperation'
 import dayjs from 'dayjs'
 import { ChevronLeft, ChevronRight, CircleAlert, RefreshCw, Trash2 } from 'lucide-react'

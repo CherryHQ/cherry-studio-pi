@@ -26,13 +26,27 @@ vi.mock('@renderer/services/BackupService', () => ({
   backupToWebdav: (...args: unknown[]) => mocks.backupToWebdav(...args)
 }))
 
+vi.mock('@renderer/utils/error', () => ({
+  getErrorMessage: (error: unknown): string => {
+    if (typeof error === 'string') return error
+    if (error instanceof Error) return error.message
+    if (error && typeof error === 'object') {
+      const nested = (error as { error?: unknown }).error
+      if (nested) return (nested as { message?: string }).message || 'unknown error'
+      return (error as { message?: string }).message || 'unknown error'
+    }
+    return 'unknown error'
+  }
+}))
+
 vi.mock('react-i18next', () => ({
   initReactI18next: {
     type: '3rdParty',
     init: vi.fn()
   },
   useTranslation: () => ({
-    t: (key: string) => key
+    t: (key: string, options?: Record<string, unknown>) =>
+      options && 'message' in options ? `${key}:${options.message}` : key
   })
 }))
 
@@ -128,6 +142,7 @@ describe('backup modals', () => {
       configurable: true,
       value: {
         backup: {
+          listS3Files: vi.fn(),
           restoreFromS3: vi.fn()
         }
       }
@@ -237,5 +252,36 @@ describe('backup modals', () => {
     expect(window.api.backup.restoreFromS3).not.toHaveBeenCalled()
     expect(window.toast.success).not.toHaveBeenCalled()
     expect(window.toast.error).not.toHaveBeenCalled()
+  })
+
+  it('shows nested S3 restore file-list failure details', async () => {
+    vi.mocked(window.api.backup.listS3Files).mockRejectedValue({ error: { message: 'network timeout' } })
+    const getRestoreModal = renderS3RestoreHarness()
+
+    await act(async () => {
+      await getRestoreModal().showRestoreModal()
+    })
+
+    expect(window.toast.error).toHaveBeenCalledWith('settings.data.s3.manager.files.fetch.error:network timeout')
+  })
+
+  it('shows nested S3 restore failure details', async () => {
+    vi.mocked(window.api.backup.restoreFromS3).mockRejectedValue({ error: { message: 'restore denied' } })
+    const getRestoreModal = renderS3RestoreHarness()
+
+    await act(async () => {
+      getRestoreModal().setSelectedFile('backup.zip')
+    })
+
+    await act(async () => {
+      await getRestoreModal().handleRestore()
+    })
+
+    const onOk = vi.mocked(window.modal.confirm).mock.calls[0][0].onOk!
+    await act(async () => {
+      await onOk()
+    })
+
+    expect(window.toast.error).toHaveBeenCalledWith('settings.data.s3.restore.error:restore denied')
   })
 })

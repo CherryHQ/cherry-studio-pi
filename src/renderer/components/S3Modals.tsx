@@ -11,7 +11,8 @@ import {
   Spinner
 } from '@cherrystudio/ui'
 import { backupToS3 } from '@renderer/services/BackupService'
-import { formatFileSize, getErrorMessage } from '@renderer/utils'
+import { formatFileSize } from '@renderer/utils'
+import { getErrorMessage } from '@renderer/utils/error'
 import { runExclusiveOperation } from '@renderer/utils/exclusiveOperation'
 import dayjs from 'dayjs'
 import { useCallback, useEffect, useRef, useState } from 'react'
