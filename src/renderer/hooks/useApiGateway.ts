@@ -1,6 +1,7 @@
 import { cacheService } from '@data/CacheService'
 import { useSharedCache } from '@data/hooks/useCache'
 import { useMultiplePreferences } from '@data/hooks/usePreference'
+import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -94,6 +95,13 @@ export const useApiGateway = () => {
     }
   }, [])
 
+  const showOperationError = useCallback(
+    (messageKey: string, error: unknown) => {
+      showError(formatErrorMessageWithPrefix(error, t(messageKey)))
+    },
+    [showError, t]
+  )
+
   const startApiGateway = useCallback(async () => {
     if (!beginOperation()) return
     try {
@@ -102,14 +110,14 @@ export const useApiGateway = () => {
         await setApiGatewayEnabled(true)
         showSuccess('apiGateway.messages.startSuccess')
       } else {
-        showError(t('apiGateway.messages.startError') + result.error)
+        showOperationError('apiGateway.messages.startError', result.error)
       }
     } catch (error: any) {
-      showError(t('apiGateway.messages.startError') + (error.message || error))
+      showOperationError('apiGateway.messages.startError', error)
     } finally {
       finishOperation()
     }
-  }, [beginOperation, finishOperation, setApiGatewayEnabled, showError, showSuccess, t])
+  }, [beginOperation, finishOperation, setApiGatewayEnabled, showOperationError, showSuccess])
 
   const stopApiGateway = useCallback(async () => {
     if (!beginOperation()) return
@@ -119,14 +127,14 @@ export const useApiGateway = () => {
         await setApiGatewayEnabled(false)
         showSuccess('apiGateway.messages.stopSuccess')
       } else {
-        showError(t('apiGateway.messages.stopError') + result.error)
+        showOperationError('apiGateway.messages.stopError', result.error)
       }
     } catch (error: any) {
-      showError(t('apiGateway.messages.stopError') + (error.message || error))
+      showOperationError('apiGateway.messages.stopError', error)
     } finally {
       finishOperation()
     }
-  }, [beginOperation, finishOperation, setApiGatewayEnabled, showError, showSuccess, t])
+  }, [beginOperation, finishOperation, setApiGatewayEnabled, showOperationError, showSuccess])
 
   const restartApiGateway = useCallback(async () => {
     if (!beginOperation()) return
@@ -136,24 +144,24 @@ export const useApiGateway = () => {
         await setApiGatewayEnabled(true)
         showSuccess('apiGateway.messages.restartSuccess')
       } else {
-        showError(t('apiGateway.messages.restartError') + result.error)
+        showOperationError('apiGateway.messages.restartError', result.error)
       }
     } catch (error) {
-      showError(t('apiGateway.messages.restartFailed') + (error as Error).message)
+      showOperationError('apiGateway.messages.restartFailed', error)
     } finally {
       finishOperation()
     }
-  }, [beginOperation, finishOperation, setApiGatewayEnabled, showError, showSuccess, t])
+  }, [beginOperation, finishOperation, setApiGatewayEnabled, showOperationError, showSuccess])
 
   // Keep the UI toggle in sync when Main auto-starts the gateway (e.g. when
   // agents exist) while the persisted `enabled` flag is still false.
   useEffect(() => {
     if (apiGatewayRunning && !apiGatewayConfig.enabled) {
       void setApiGatewayEnabled(true).catch((error) => {
-        showError(t('apiGateway.messages.operationFailed') + (error instanceof Error ? error.message : error))
+        showOperationError('apiGateway.messages.operationFailed', error)
       })
     }
-  }, [apiGatewayRunning, apiGatewayConfig.enabled, setApiGatewayEnabled, showError, t])
+  }, [apiGatewayRunning, apiGatewayConfig.enabled, setApiGatewayEnabled, showOperationError])
 
   return {
     apiGatewayConfig,

@@ -161,6 +161,48 @@ describe('useApiGateway', () => {
     expect(mockToast.error).toHaveBeenCalledWith(expect.stringContaining('persist failed'))
   })
 
+  it('reports nested IPC command errors without losing details', async () => {
+    mockUseMultiplePreferences.mockImplementation(() => [
+      {
+        apiKey: 'test-key',
+        enabled: false,
+        host: '127.0.0.1',
+        port: 23333
+      },
+      vi.fn().mockResolvedValue(undefined)
+    ])
+    mockApiGateway.start.mockRejectedValue({ error: { message: 'bind EADDRINUSE 127.0.0.1:23333' } })
+
+    const { result } = renderHook(() => useApiGateway())
+
+    await act(async () => {
+      await result.current.startApiGateway()
+    })
+
+    expect(mockToast.error).toHaveBeenCalledWith('apiGateway.messages.startError: bind EADDRINUSE 127.0.0.1:23333')
+  })
+
+  it('reports gateway result errors without object placeholders', async () => {
+    mockUseMultiplePreferences.mockImplementation(() => [
+      {
+        apiKey: 'test-key',
+        enabled: true,
+        host: '127.0.0.1',
+        port: 23333
+      },
+      vi.fn().mockResolvedValue(undefined)
+    ])
+    mockApiGateway.stop.mockResolvedValue({ success: false, error: { message: 'gateway is not running' } })
+
+    const { result } = renderHook(() => useApiGateway())
+
+    await act(async () => {
+      await result.current.stopApiGateway()
+    })
+
+    expect(mockToast.error).toHaveBeenCalledWith('apiGateway.messages.stopError: gateway is not running')
+  })
+
   it('ignores concurrent gateway commands while an operation is in flight', async () => {
     const startOperation = createDeferred<{ success: true }>()
     const setApiGatewayConfig = vi.fn().mockResolvedValue(undefined)
