@@ -126,12 +126,12 @@ export const useSessions = (agentId?: string | null, pageSize = DEFAULT_SESSION_
           }
         })
       } catch (error) {
-        window.toast.error(formatErrorMessageWithPrefix(error, t('agent.session.create.error.failed')))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('agent.session.create.error.failed')))
         return null
       }
 
       await refresh().catch((error) => {
-        window.toast.error(formatErrorMessageWithPrefix(error, t('agent.session.get.error.failed')))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('agent.session.get.error.failed')))
       })
 
       return result
@@ -151,7 +151,7 @@ export const useSessions = (agentId?: string | null, pageSize = DEFAULT_SESSION_
         await deleteTrigger({ params: { sessionId: id } })
         return true
       } catch (error) {
-        window.toast.error(formatErrorMessageWithPrefix(error, t('agent.session.delete.error.failed')))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('agent.session.delete.error.failed')))
         return false
       }
     },
@@ -162,7 +162,7 @@ export const useSessions = (agentId?: string | null, pageSize = DEFAULT_SESSION_
       try {
         return await deleteManyTrigger({ query: { ids: ids.join(',') } })
       } catch (error) {
-        window.toast.error(formatErrorMessageWithPrefix(error, t('agent.session.delete.error.failed')))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('agent.session.delete.error.failed')))
         return null
       }
     },
@@ -174,7 +174,7 @@ export const useSessions = (agentId?: string | null, pageSize = DEFAULT_SESSION_
       try {
         await applyReorderedList(reorderedList as unknown as Array<Record<string, unknown>>)
       } catch (error) {
-        window.toast.error(formatErrorMessageWithPrefix(error, t('agent.session.reorder.error.failed')))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('agent.session.reorder.error.failed')))
       }
     },
     [applyReorderedList, t]
@@ -196,7 +196,7 @@ export const useSessions = (agentId?: string | null, pageSize = DEFAULT_SESSION_
           await pinTrigger({ body: { entityType: 'session', entityId: sessionId } })
         }
       } catch (error) {
-        window.toast.error(formatErrorMessageWithPrefix(error, t('agent.session.pin.error.failed')))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('agent.session.pin.error.failed')))
       }
     },
     [pinIdBySessionId, pinTrigger, unpinTrigger, t]
@@ -249,11 +249,11 @@ export const useUpdateSession = (agentId: string | null) => {
         const { id, ...patch } = form
         const result = await updateTrigger({ params: { sessionId: id }, body: patch })
         if (options?.showSuccessToast ?? true) {
-          window.toast.success(t('common.update_success'))
+          window.toast?.success(t('common.update_success'))
         }
         return result
       } catch (error) {
-        window.toast.error({ title: t('agent.session.update.error.failed'), description: getErrorMessage(error) })
+        window.toast?.error({ title: t('agent.session.update.error.failed'), description: getErrorMessage(error) })
         return undefined
       }
     },

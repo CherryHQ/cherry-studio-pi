@@ -16,7 +16,7 @@ export function useAgentWorkspaceMutations() {
         const body: CreateAgentWorkspaceDto = { path, ...(name ? { name } : {}) }
         return await createWorkspaceTrigger({ body })
       } catch (error) {
-        window.toast.error({
+        window.toast?.error({
           title: t('agent.session.workspace.create_failed'),
           description: getErrorMessage(error)
         })

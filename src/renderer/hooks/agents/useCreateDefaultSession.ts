@@ -32,7 +32,7 @@ export const useCreateDefaultSession = (agentId: string | null, workspace: Agent
     }
 
     if (!agent.model) {
-      window.toast.error(t('error.model.not_exists'))
+      window.toast?.error(t('error.model.not_exists'))
       return null
     }
 

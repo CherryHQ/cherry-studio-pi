@@ -77,11 +77,11 @@ export const useAgents = () => {
     async (form: AddAgentForm): Promise<Result<LegacyAgentEntity>> => {
       try {
         const result = await createTrigger({ body: form as unknown as CreateAgentDto })
-        window.toast.success(t('common.add_success'))
+        window.toast?.success(t('common.add_success'))
         return { success: true, data: result as unknown as LegacyAgentEntity }
       } catch (error) {
         const msg = formatErrorMessageWithPrefix(error, t('agent.add.error.failed'))
-        window.toast.error(msg)
+        window.toast?.error(msg)
         return { success: false, error: error instanceof Error ? error : new Error(msg) }
       }
     },
@@ -95,9 +95,9 @@ export const useAgents = () => {
     async (id: string) => {
       try {
         await deleteTrigger({ params: { agentId: id } })
-        window.toast.success(t('common.delete_success'))
+        window.toast?.success(t('common.delete_success'))
       } catch (error) {
-        window.toast.error(formatErrorMessageWithPrefix(error, t('agent.delete.error.failed')))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('agent.delete.error.failed')))
       }
     },
     [deleteTrigger, t]
@@ -122,7 +122,7 @@ export const useUpdateAgent = () => {
         const { id, ...patch } = form
         const result = await updateTrigger({ params: { agentId: id }, body: patch as unknown as UpdateAgentDto })
         if (options?.showSuccessToast ?? true) {
-          window.toast.success({ key: 'update-agent', title: t('common.update_success') })
+          window.toast?.success({ key: 'update-agent', title: t('common.update_success') })
         }
 
         return {
@@ -130,7 +130,7 @@ export const useUpdateAgent = () => {
           configuration: parseAgentConfiguration(result.configuration, { entityId: result.id, entityType: 'agent' })
         }
       } catch (error) {
-        window.toast.error(formatErrorMessageWithPrefix(error, t('agent.update.error.failed')))
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('agent.update.error.failed')))
         return undefined
       }
     },
