@@ -138,7 +138,7 @@ const WindowFooter: FC<FooterProps> = ({
     navigator.clipboard
       .writeText(content)
       .then(() => {
-        window.toast.success(t('message.copy.success'))
+        window.toast?.success(t('message.copy.success'))
         setIsCopyHovered(true)
         setTimeoutTimer(
           'handleCopy',
@@ -149,7 +149,7 @@ const WindowFooter: FC<FooterProps> = ({
         )
       })
       .catch(() => {
-        window.toast.error(t('message.copy.failed'))
+        window.toast?.error(t('message.copy.failed'))
       })
   }
 
