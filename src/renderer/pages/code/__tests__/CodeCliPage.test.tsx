@@ -323,6 +323,27 @@ describe('CodeCliPage', () => {
     expect(testState.setTimeoutTimer).toHaveBeenCalledWith('launchSuccess', expect.any(Function), 2500)
   })
 
+  it('ignores a delayed launch result after unmount', async () => {
+    const runOperation = deferred<{ success: boolean }>()
+    testState.codeCliRun.mockReturnValueOnce(runOperation.promise)
+
+    const { unmount } = render(<CodeCliPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'open tool' }))
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'code.launch.label' }))
+    await waitFor(() => expect(testState.codeCliRun).toHaveBeenCalledTimes(1))
+    unmount()
+
+    await act(async () => {
+      runOperation.resolve({ success: true })
+      await runOperation.promise
+    })
+
+    expect(window.toast.success).not.toHaveBeenCalled()
+    expect(testState.setTimeoutTimer).not.toHaveBeenCalledWith('launchSuccess', expect.any(Function), 2500)
+  })
+
   it('launches successfully when toast is unavailable', async () => {
     Object.assign(window, { toast: undefined })
 

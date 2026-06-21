@@ -431,6 +431,9 @@ const CodeCliPage: FC = () => {
 
     try {
       const result = await window.api.codeCli.run(selectedCliTool, modelId, currentDirectory, env, runOptions)
+      if (!mountedRef.current) {
+        return false
+      }
       if (result && result.success) {
         setLaunchStatus('success')
         setTimeoutTimer(
@@ -447,7 +450,9 @@ const CodeCliPage: FC = () => {
       return false
     } catch (error) {
       logger.error('codeTools.run failed:', error as Error)
-      window.toast?.error(t('code.launch.error'))
+      if (mountedRef.current) {
+        window.toast?.error(t('code.launch.error'))
+      }
       return false
     }
   }
@@ -462,16 +467,25 @@ const CodeCliPage: FC = () => {
         ]
       })
 
+      if (!mountedRef.current) {
+        return
+      }
+
       if (result && result.length > 0) {
         const path = result[0].path
         await window.api.codeCli.setCustomTerminalPath(terminalId, path)
+        if (!mountedRef.current) {
+          return
+        }
         setTerminalCustomPaths((prev) => ({ ...prev, [terminalId]: path }))
         window.toast?.success(t('code.custom_path_set'))
         void loadAvailableTerminals()
       }
     } catch (error) {
       logger.error('Failed to set custom terminal path:', error as Error)
-      window.toast?.error(t('code.custom_path_error'))
+      if (mountedRef.current) {
+        window.toast?.error(t('code.custom_path_error'))
+      }
     }
   }
 
@@ -487,6 +501,9 @@ const CodeCliPage: FC = () => {
 
     try {
       const result = await prepareLaunchEnvironment()
+      if (!mountedRef.current) {
+        return
+      }
       if (!result) {
         window.toast?.error(t('code.model_required'))
         setLaunchStatus('idle')
@@ -494,13 +511,18 @@ const CodeCliPage: FC = () => {
       }
 
       const launched = await executeLaunch(result.env)
+      if (!mountedRef.current) {
+        return
+      }
       if (!launched) {
         setLaunchStatus('idle')
       }
     } catch (error) {
       logger.error('start code tools failed:', error as Error)
-      window.toast?.error(t('code.launch.error'))
-      setLaunchStatus('idle')
+      if (mountedRef.current) {
+        window.toast?.error(t('code.launch.error'))
+        setLaunchStatus('idle')
+      }
     }
   }
 
