@@ -52,14 +52,14 @@ function replaceOAuthMessageHandler(
 function openOAuthPopup(url: string, target = 'oauth', features = OAUTH_POPUP_FEATURES) {
   if (!isHttpExternalUrl(url)) {
     logger.warn('Blocked unsafe OAuth URL', { url: summarizeTextForLog(url) })
-    window.toast.error(i18n.t('settings.provider.oauth.error'))
+    window.toast?.error(i18n.t('settings.provider.oauth.error'))
     return null
   }
 
   const popup = window.open(url, target, features)
   if (!popup) {
     logger.warn('OAuth popup did not open')
-    window.toast.error(i18n.t('settings.provider.oauth.error'))
+    window.toast?.error(i18n.t('settings.provider.oauth.error'))
   }
 
   return popup
@@ -118,7 +118,7 @@ export const oauthWithAihubmix = async (setKey) => {
         logger.error('[oauthWithAihubmix] error', error as Error)
         popup?.close()
         cleanup()
-        window.toast.error(i18n.t('settings.provider.oauth.error'))
+        window.toast?.error(i18n.t('settings.provider.oauth.error'))
       }
     }
   }
@@ -239,19 +239,19 @@ export const oauthWithTokenFlux = async () => {
       signal: AbortSignal.timeout(10000)
     })
     if (!resp.ok) {
-      window.toast.error(i18n.t('settings.provider.oauth.error'))
+      window.toast?.error(i18n.t('settings.provider.oauth.error'))
       return
     }
     const data = await resp.json()
     const authUrl = data?.data?.url
     if (typeof authUrl !== 'string') {
-      window.toast.error(i18n.t('settings.provider.oauth.error'))
+      window.toast?.error(i18n.t('settings.provider.oauth.error'))
       return
     }
     openOAuthPopup(authUrl)
   } catch (error) {
     logger.error('[oauthWithTokenFlux] error', error as Error)
-    window.toast.error(i18n.t('settings.provider.oauth.error'))
+    window.toast?.error(i18n.t('settings.provider.oauth.error'))
   }
 }
 export const oauthWith302AI = async (setKey) => {
@@ -412,7 +412,7 @@ export const providerCharge = async (provider: string) => {
   const charge = chargeUrlMap[provider as keyof typeof chargeUrlMap]
   if (!charge) {
     logger.warn('Unknown provider charge URL requested', { provider })
-    window.toast.error(i18n.t('settings.provider.oauth.error'))
+    window.toast?.error(i18n.t('settings.provider.oauth.error'))
     return
   }
 
@@ -462,7 +462,7 @@ export const providerBills = async (provider: string) => {
   const bills = billsUrlMap[provider as keyof typeof billsUrlMap]
   if (!bills) {
     logger.warn('Unknown provider bills URL requested', { provider })
-    window.toast.error(i18n.t('settings.provider.oauth.error'))
+    window.toast?.error(i18n.t('settings.provider.oauth.error'))
     return
   }
 

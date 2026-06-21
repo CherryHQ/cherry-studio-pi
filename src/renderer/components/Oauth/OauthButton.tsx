@@ -24,7 +24,7 @@ const OauthButton: FC<Props> = ({ provider, onSuccess, ...buttonProps }) => {
     const handleSuccess = (key: string) => {
       if (key.trim()) {
         onSuccess?.(key)
-        window.toast.success(t('auth.get_key_success'))
+        window.toast?.success(t('auth.get_key_success'))
       }
     }
 
