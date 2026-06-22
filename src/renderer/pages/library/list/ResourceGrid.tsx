@@ -1,5 +1,6 @@
 import { Button, EmptyState, Input } from '@cherrystudio/ui'
 import { loggerService } from '@logger'
+import { getErrorMessage } from '@renderer/utils/error'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Plus, Search, Tag, Upload, X } from 'lucide-react'
 import type { FC, MouseEvent, RefObject } from 'react'
@@ -143,9 +144,9 @@ export const ResourceGrid: FC<Props> = ({
       setNewTagName('')
       setShowAddTag(false)
     } catch (error) {
-      const message = error instanceof Error ? error.message : t('library.tag_sync_failed')
+      const message = getErrorMessage(error)
       window.toast?.error(message)
-      logger.error('Failed to create tag', error instanceof Error ? error : new Error(String(error)), {
+      logger.error('Failed to create tag', error instanceof Error ? error : new Error(message, { cause: error }), {
         name: trimmed
       })
     } finally {

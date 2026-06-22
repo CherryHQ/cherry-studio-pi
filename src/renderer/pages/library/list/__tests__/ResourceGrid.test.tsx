@@ -254,6 +254,26 @@ describe('ResourceGrid tag toolbar', () => {
       expect(screen.queryByPlaceholderText('library.toolbar.add_tag_placeholder')).not.toBeInTheDocument()
     })
   })
+
+  it('preserves nested tag creation failure details', async () => {
+    const user = userEvent.setup()
+    const onAddTag = vi.fn().mockRejectedValueOnce({ error: { message: 'tag backend rejected the name' } })
+
+    renderResourceGrid({
+      onAddTag,
+      tags: [{ id: 'tag-alpha', name: 'alpha', color: '#111111', count: 1 }]
+    })
+
+    await user.click(screen.getByRole('button', { name: /library\.toolbar\.tag_button/ }))
+    const tagInput = screen.getByPlaceholderText('library.toolbar.add_tag_placeholder')
+    await user.type(tagInput, 'beta')
+    const addButton = tagInput.parentElement?.querySelector('button') as HTMLButtonElement
+
+    await user.click(addButton)
+
+    await waitFor(() => expect(window.toast.error).toHaveBeenCalledWith('tag backend rejected the name'))
+    expect(screen.getByPlaceholderText('library.toolbar.add_tag_placeholder')).toBeInTheDocument()
+  })
 })
 
 describe('FixedCardMenu tag binding', () => {
