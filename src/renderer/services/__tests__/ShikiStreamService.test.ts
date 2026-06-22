@@ -71,6 +71,21 @@ describe('ShikiStreamService', () => {
       }
       spy.mockRestore()
     })
+
+    it('should preserve nested postMessage failure details and clear pending requests', async () => {
+      const postFailure = { error: { message: 'structured clone failed' } }
+      ;(shikiStreamService as any).worker = {
+        postMessage: vi.fn(() => {
+          throw postFailure
+        }),
+        terminate: vi.fn()
+      }
+
+      await expect((shikiStreamService as any).sendWorkerMessage({ type: 'cleanup', callerId })).rejects.toThrow(
+        'structured clone failed'
+      )
+      expect((shikiStreamService as any).pendingRequests.size).toBe(0)
+    })
   })
 
   describe('tokenizer management (main)', () => {

@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { getErrorMessage } from '@renderer/utils/error'
 import {
   DEFAULT_LANGUAGES,
   DEFAULT_THEMES,
@@ -277,7 +278,7 @@ class ShikiStreamService {
     } catch (error) {
       const pendingRequest = this.pendingRequests.get(id)
       if (pendingRequest) {
-        pendingRequest.reject(error instanceof Error ? error : new Error(String(error)))
+        pendingRequest.reject(error instanceof Error ? error : new Error(getErrorMessage(error), { cause: error }))
       }
     }
 
