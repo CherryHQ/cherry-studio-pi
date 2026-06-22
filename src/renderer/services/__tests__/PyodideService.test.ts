@@ -163,6 +163,26 @@ describe('PyodideService', () => {
     expect(worker.terminated).toBe(true)
   })
 
+  it('clears pending execution state when posting Python code to the worker fails', async () => {
+    const { pyodideService } = await import('../PyodideService')
+
+    const resultPromise = pyodideService.runScript('print("hello")', {}, 10_000)
+    await vi.dynamicImportSettled()
+
+    const worker = workerMock.MockPyodideWorker.instances[0]
+    expect(worker).toBeDefined()
+    vi.spyOn(worker, 'postMessage').mockImplementationOnce(() => {
+      throw { error: { message: 'structured clone failed' } }
+    })
+
+    worker.emit({ type: 'initialized' })
+
+    await expect(resultPromise).resolves.toEqual({
+      text: 'Internal error: structured clone failed'
+    })
+    expect((pyodideService as any).resolvers.size).toBe(0)
+  })
+
   it('does not keep the renderer process alive while Pyodide timeouts are pending', async () => {
     const unref = vi.fn()
     const timer = { unref } as unknown as ReturnType<typeof setTimeout>

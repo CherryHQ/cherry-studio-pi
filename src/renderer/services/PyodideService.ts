@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { uuid } from '@renderer/utils'
+import { getErrorMessage } from '@renderer/utils/error'
 import { IpcChannel } from '@shared/IpcChannel'
 
 const logger = loggerService.withContext('PyodideService')
@@ -27,6 +28,10 @@ function unrefTimer(timer: ReturnType<typeof setTimeout>) {
   if (typeof timer === 'object' && timer && 'unref' in timer && typeof timer.unref === 'function') {
     timer.unref()
   }
+}
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(getErrorMessage(error), { cause: error })
 }
 
 // 定义结果类型接口
@@ -159,7 +164,7 @@ class PyodideService {
           this.worker = null
           this.initPromise = null
           this.initRetryCount++
-          reject(new Error(`Failed to load Pyodide worker: ${error instanceof Error ? error.message : String(error)}`))
+          reject(new Error(`Failed to load Pyodide worker: ${getErrorMessage(error)}`, { cause: error }))
         })
     })
 
@@ -209,8 +214,9 @@ class PyodideService {
     try {
       await this.initialize()
     } catch (error: unknown) {
-      logger.error('Pyodide initialization failed, cannot execute Python code', error as Error)
-      const text = `Initialization failed: ${error instanceof Error ? error.message : String(error)}`
+      const normalizedError = toError(error)
+      logger.error('Pyodide initialization failed, cannot execute Python code', normalizedError)
+      const text = `Initialization failed: ${normalizedError.message}`
       return { text }
     }
 
@@ -246,16 +252,22 @@ class PyodideService {
           }
         })
 
-        this.worker?.postMessage({
-          id,
-          python: script,
-          context
-        })
+        try {
+          this.worker?.postMessage({
+            id,
+            python: script,
+            context
+          })
+        } catch (error) {
+          clearTimeout(timeoutId)
+          this.resolvers.delete(id)
+          reject(toError(error))
+        }
       })
 
       return { text: this.formatOutput(output), image: output.image }
     } catch (error: unknown) {
-      const text = `Internal error: ${error instanceof Error ? error.message : String(error)}`
+      const text = `Internal error: ${getErrorMessage(error)}`
       return { text }
     }
   }
@@ -362,7 +374,7 @@ export function registerPyodideIpcHandler(): void {
     } catch (error: unknown) {
       const response: PythonExecutionResponse = {
         id: request.id,
-        error: error instanceof Error ? error.message : String(error)
+        error: getErrorMessage(error)
       }
       ipcRenderer.send(IpcChannel.Python_ExecutionResponse, response)
     }
