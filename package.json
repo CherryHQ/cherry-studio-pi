@@ -1,6 +1,6 @@
 {
   "name": "CherryStudioPi",
-  "version": "1.9.64",
+  "version": "1.9.65",
   "private": true,
   "description": "A powerful AI desktop client with the pi agent runtime.",
   "desktopName": "CherryStudioPi.desktop",
