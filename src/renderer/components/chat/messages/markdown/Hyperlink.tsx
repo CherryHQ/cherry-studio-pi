@@ -1,5 +1,6 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@cherrystudio/ui'
 import { OgCard } from '@renderer/components/OgCard'
+import { canFetchLinkPreviewMetadata } from '@renderer/utils/url'
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 interface HyperLinkProps {
@@ -18,6 +19,7 @@ const Hyperlink: React.FC<HyperLinkProps> = ({ children, href }) => {
       return href
     }
   }, [href])
+  const canPreview = useMemo(() => canFetchLinkPreviewMetadata(href), [href])
 
   const clearCloseTimer = useCallback(() => {
     if (closeTimerRef.current) {
@@ -41,7 +43,7 @@ const Hyperlink: React.FC<HyperLinkProps> = ({ children, href }) => {
 
   useEffect(() => clearCloseTimer, [clearCloseTimer])
 
-  if (!href) return children
+  if (!href || !canPreview) return children
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
