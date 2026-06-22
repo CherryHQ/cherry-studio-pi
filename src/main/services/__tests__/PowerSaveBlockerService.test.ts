@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  loggerWarn: vi.fn(),
   powerSaveBlocker: {
     start: vi.fn(),
     stop: vi.fn(),
@@ -12,7 +13,7 @@ vi.mock('@logger', () => ({
   loggerService: {
     withContext: () => ({
       info: vi.fn(),
-      warn: vi.fn(),
+      warn: mocks.loggerWarn,
       error: vi.fn()
     })
   }
@@ -75,5 +76,52 @@ describe('PowerSaveBlockerService', () => {
 
     expect(mocks.powerSaveBlocker.stop).toHaveBeenCalledTimes(2)
     expect(powerSaveBlockerService.getActiveBlockers()).toHaveLength(0)
+  })
+
+  it('preserves structured acquire failures in logs', () => {
+    mocks.powerSaveBlocker.start.mockImplementationOnce(() => {
+      throw {
+        response: {
+          status: 503,
+          statusText: 'Service Unavailable'
+        }
+      }
+    })
+
+    const lease = powerSaveBlockerService.acquire('test-task')
+
+    expect(powerSaveBlockerService.getActiveBlockers()).toHaveLength(0)
+    expect(mocks.loggerWarn).toHaveBeenCalledWith('Failed to acquire power save blocker', {
+      reason: 'test-task',
+      type: 'prevent-app-suspension',
+      detail: undefined,
+      error: '503 Service Unavailable'
+    })
+
+    lease.release()
+    expect(mocks.powerSaveBlocker.stop).not.toHaveBeenCalled()
+  })
+
+  it('preserves structured release failures in logs', () => {
+    mocks.powerSaveBlocker.stop.mockImplementationOnce(() => {
+      throw {
+        cause: {
+          code: 'POWER_BLOCKER_RELEASE_FAILED'
+        }
+      }
+    })
+
+    const lease = powerSaveBlockerService.acquire('test-task')
+    lease.release()
+
+    expect(powerSaveBlockerService.getActiveBlockers()).toHaveLength(0)
+    expect(mocks.loggerWarn).toHaveBeenCalledWith(
+      'Failed to release power save blocker',
+      expect.objectContaining({
+        reason: 'test-task',
+        type: 'prevent-app-suspension',
+        error: 'POWER_BLOCKER_RELEASE_FAILED'
+      })
+    )
   })
 })
