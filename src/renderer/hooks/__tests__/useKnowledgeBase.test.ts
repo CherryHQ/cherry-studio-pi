@@ -219,6 +219,22 @@ describe('useCreateKnowledgeBase', () => {
     })
   })
 
+  it('preserves nested create failure details from runtime IPC', async () => {
+    mockRuntimeCreateBase.mockRejectedValueOnce({ error: { message: 'knowledge base bridge failed' } })
+    const input: CreateKnowledgeBaseInput = {
+      name: 'Base 4',
+      embeddingModelId: 'openai::text-embedding-3-small',
+      dimensions: 1536
+    }
+    const { result } = renderHook(() => useCreateKnowledgeBase())
+
+    await act(async () => {
+      await expect(result.current.createBase(input)).rejects.toThrow('knowledge base bridge failed')
+    })
+
+    expect(result.current.createError?.message).toBe('knowledge base bridge failed')
+  })
+
   it('keeps creating until the latest overlapping create completes', async () => {
     const firstCreatedBase = createKnowledgeBase({ id: 'base-older', name: 'Older Base' })
     const secondCreatedBase = createKnowledgeBase({ id: 'base-newer', name: 'Newer Base' })

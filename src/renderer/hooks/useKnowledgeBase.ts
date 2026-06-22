@@ -1,5 +1,6 @@
 import { useInvalidateCache, useMutation, useQuery } from '@data/hooks/useDataApi'
 import { loggerService } from '@logger'
+import { getErrorMessage } from '@renderer/utils/error'
 import type { KnowledgeBaseListItem, UpdateKnowledgeBaseDto } from '@shared/data/api/schemas/knowledges'
 import { KNOWLEDGE_BASES_MAX_LIMIT } from '@shared/data/api/schemas/knowledges'
 import type { CreateKnowledgeBaseDto, RestoreKnowledgeBaseDto } from '@shared/data/types/knowledge'
@@ -18,7 +19,7 @@ const normalizeError = (error: unknown): Error => {
     return error
   }
 
-  return new Error(String(error))
+  return new Error(getErrorMessage(error), { cause: error })
 }
 
 type MutationSequenceRef = MutableRefObject<number>
