@@ -17,6 +17,8 @@ const stubApp = (id: string): MiniApp => ({
 const mocks = vi.hoisted(() => ({
   appId: 'alpha',
   allApps: [] as MiniApp[],
+  error: null as unknown,
+  loggerError: vi.fn(),
   openedKeepAliveMiniApps: [] as MiniApp[],
   loaded: new Map<string, boolean>(),
   openMiniAppKeepAlive: vi.fn()
@@ -25,7 +27,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@logger', () => ({
   loggerService: {
     withContext: () => ({
-      error: vi.fn(),
+      error: mocks.loggerError,
       debug: vi.fn()
     })
   }
@@ -46,7 +48,7 @@ vi.mock('@renderer/hooks/useMiniApps', () => ({
     allApps: mocks.allApps,
     openedKeepAliveMiniApps: mocks.openedKeepAliveMiniApps,
     isLoading: false,
-    error: null
+    error: mocks.error
   })
 }))
 
@@ -94,8 +96,10 @@ describe('MiniAppPage', () => {
   beforeEach(() => {
     mocks.appId = 'alpha'
     mocks.allApps = [stubApp('alpha'), stubApp('bravo')]
+    mocks.error = null
     mocks.openedKeepAliveMiniApps = []
     mocks.loaded = new Map<string, boolean>()
+    mocks.loggerError.mockClear()
     mocks.openMiniAppKeepAlive.mockClear()
     ;(globalThis as unknown as { CSS: { escape: (value: string) => string } }).CSS = {
       escape: (value: string) => value
@@ -118,5 +122,19 @@ describe('MiniAppPage', () => {
       expect(screen.getByTestId('webview-search')).toHaveTextContent('bravo:false')
       expect(screen.getByTestId('minimal-toolbar')).toHaveTextContent('bravo:https://bravo.example.com')
     })
+  })
+
+  it('preserves nested mini-app load error details in logs', async () => {
+    mocks.error = { error: { message: 'mini app store unavailable' } }
+
+    render(<MiniAppPage />)
+
+    await waitFor(() => {
+      expect(mocks.loggerError).toHaveBeenCalledWith(
+        'Failed to load mini apps',
+        expect.objectContaining({ message: 'mini app store unavailable' })
+      )
+    })
+    expect(mocks.openMiniAppKeepAlive).not.toHaveBeenCalled()
   })
 })

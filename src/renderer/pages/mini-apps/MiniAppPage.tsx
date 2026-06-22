@@ -3,6 +3,7 @@ import { LogoAvatar } from '@renderer/components/Icons'
 import { getMiniAppsLogo } from '@renderer/config/miniApps'
 import { useMiniAppPopup } from '@renderer/hooks/useMiniAppPopup'
 import { useMiniApps } from '@renderer/hooks/useMiniApps'
+import { getErrorMessage } from '@renderer/utils/error'
 import { getWebviewLoaded, onWebviewStateChange, setWebviewLoaded } from '@renderer/utils/webviewStateManager'
 import { DataApiError, ErrorCode } from '@shared/data/api'
 import type { MiniApp } from '@shared/data/types/miniApp'
@@ -37,7 +38,7 @@ const MiniAppPage: FC = () => {
   useEffect(() => {
     if (isLoading) return
     if (error) {
-      logger.error('Failed to load mini apps', error instanceof Error ? error : new Error(String(error)))
+      logger.error('Failed to load mini apps', error instanceof Error ? error : new Error(getErrorMessage(error)))
       return
     }
     if (!app) return
