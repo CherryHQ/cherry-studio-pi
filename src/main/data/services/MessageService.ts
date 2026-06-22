@@ -619,8 +619,11 @@ export class MessageService {
     const pathOrder = new Map(pathIds.map((id, i) => [id, i]))
     const pathMessages = pathRows.sort((a, b) => pathOrder.get(a.id)! - pathOrder.get(b.id)!)
 
-    // Reverse to get root->nodeId order
-    const fullPath = pathMessages.reverse()
+    // Reverse to get root->nodeId order. The structural virtual root (the only
+    // parentId-null row) is returned separately as `rootId`; branch items are
+    // renderable content messages only.
+    const rootToNodePath = pathMessages.reverse()
+    const fullPath = rootToNodePath[0]?.parentId === null ? rootToNodePath.slice(1) : rootToNodePath
 
     // Apply pagination
     let startIndex = 0
