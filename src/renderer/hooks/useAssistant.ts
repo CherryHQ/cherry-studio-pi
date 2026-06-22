@@ -240,12 +240,16 @@ export function useDefaultAssistant(): { assistant: Assistant } {
  * the source data for the current id.
  */
 export function useAssistant(id: string | null | undefined) {
-  const { assistant } = useAssistantApiById(id ?? undefined)
+  const { assistant, isLoading, error } = useAssistantApiById(id ?? undefined)
   const { updateAssistant: patchAssistant } = useAssistantMutations()
   const { defaultModel, setDefaultModel } = useDefaultModel()
 
   const modelId = assistant?.modelId ?? (!id ? defaultModel?.id : undefined)
-  const { model } = useModelById(modelId)
+  const { model, isLoading: isModelLoading } = useModelById(modelId)
+
+  // The composer reads model load/missing state off these (feat parity).
+  const isModelPending = (!!id && isLoading) || (!!modelId && isModelLoading)
+  const isModelMissing = !isModelPending && !model
 
   const reportAssistantUpdateError = useCallback((message: string, error: unknown) => {
     logger.error(message, error as Error)
@@ -298,6 +302,10 @@ export function useAssistant(id: string | null | undefined) {
   return {
     assistant,
     model,
+    isLoading,
+    error,
+    isModelPending,
+    isModelMissing,
     setModel,
     updateAssistant: (patch: UpdateAssistantDto) => {
       if (!id) return Promise.resolve(undefined)

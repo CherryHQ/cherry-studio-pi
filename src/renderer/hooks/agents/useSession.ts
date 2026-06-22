@@ -232,7 +232,11 @@ export const useSessions = (agentId?: string | null, pageSize = DEFAULT_SESSION_
  * changes must still work for sessions whose agent was just restored, changed,
  * or temporarily unresolved in the renderer.
  */
-export const useUpdateSession = (agentId: string | null) => {
+// `agentId` is optional: the v2 composer calls `useUpdateSession()` and drives
+// the session id off `form.id`; existing agent-page callers still pass an
+// explicit `string | null`. Updates are session-addressed, so unresolved/null
+// agent ids must not block workspace or session metadata patches.
+export const useUpdateSession = (agentId?: string | null) => {
   void agentId
   const { t } = useTranslation()
   const { trigger: updateTrigger } = useMutation('PATCH', '/agent-sessions/:sessionId', {
