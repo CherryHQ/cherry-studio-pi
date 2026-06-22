@@ -13,6 +13,7 @@ const ZIP_RESULT_CONTENT_TYPES = new Set([
   'application/x-zip-compressed',
   'application/octet-stream'
 ])
+const UNKNOWN_MARKDOWN_PERSISTENCE_ERROR = 'Unknown markdown persistence error'
 
 export type MarkdownPersistencePayload =
   | {
@@ -129,7 +130,7 @@ function redactUrlQuery(url: string): string {
 
 function getSafeMarkdownPersistenceErrorForLog(error: unknown): Error {
   if (!(error instanceof Error)) {
-    return new Error(String(error))
+    return new Error(extractMarkdownPersistenceErrorMessage(error) ?? UNKNOWN_MARKDOWN_PERSISTENCE_ERROR)
   }
 
   if (error.message.startsWith('Markdown result download failed:')) {
@@ -139,4 +140,29 @@ function getSafeMarkdownPersistenceErrorForLog(error: unknown): Error {
   }
 
   return error
+}
+
+function extractMarkdownPersistenceErrorMessage(error: unknown, seen = new WeakSet<object>()): string | null {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === 'string' && error.trim()) return error
+  if (!error || typeof error !== 'object') return null
+  if (seen.has(error)) return null
+  seen.add(error)
+
+  const nestedError = (error as { error?: unknown }).error
+  if (nestedError) {
+    const nestedMessage = extractMarkdownPersistenceErrorMessage(nestedError, seen)
+    if (nestedMessage) return nestedMessage
+  }
+
+  const message = (error as { message?: unknown }).message
+  if (typeof message === 'string' && message.trim()) return message
+
+  const cause = (error as { cause?: unknown }).cause
+  if (cause) {
+    const causeMessage = extractMarkdownPersistenceErrorMessage(cause, seen)
+    if (causeMessage) return causeMessage
+  }
+
+  return null
 }

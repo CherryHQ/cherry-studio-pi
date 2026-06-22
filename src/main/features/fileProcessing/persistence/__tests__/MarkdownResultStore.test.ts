@@ -145,6 +145,47 @@ describe('MarkdownResultStore', () => {
     ).rejects.toThrow('Markdown result download failed: 500 Internal Server Error')
   })
 
+  it('logs structured non-Error persistence failures without flattening them', async () => {
+    const warnSpy = vi.spyOn(mockMainLoggerService, 'warn').mockImplementation(() => {})
+    const structuredError = { error: { message: 'zip archive missing markdown file' } }
+    fetchMock.mockResolvedValueOnce(
+      new Response('zip-binary', {
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          'content-type': 'application/zip'
+        }
+      })
+    )
+    readMarkdownFromResponseZipMock.mockRejectedValueOnce(structuredError)
+
+    await expect(
+      markdownResultStore.persistResultToPath({
+        jobId: 'job-1',
+        path: OUTPUT_PATH,
+        result: {
+          kind: 'remote-zip-url',
+          downloadUrl: 'https://cdn.example.com/results/task-1.zip?Signature=secret',
+          configuredApiHost: 'https://api.example.com'
+        }
+      })
+    ).rejects.toBe(structuredError)
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Markdown result path persistence failed',
+      expect.objectContaining({
+        message: 'zip archive missing markdown file'
+      }),
+      expect.objectContaining({
+        jobId: 'job-1',
+        resultKind: 'remote-zip-url',
+        downloadUrl: 'https://cdn.example.com/results/task-1.zip'
+      })
+    )
+
+    warnSpy.mockRestore()
+  })
+
   it('allows public cross-origin provider download urls', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response('zip-binary', {
