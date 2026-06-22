@@ -7,6 +7,7 @@ import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
 import type { Citation } from '@renderer/types'
 import { formatErrorMessageWithPrefix } from '@renderer/utils/error'
 import { fetchWebContent, fetchXOEmbed, isXPostUrl } from '@renderer/utils/fetch'
+import { getFileName } from '@renderer/utils/file'
 import { cleanMarkdownContent } from '@renderer/utils/formats'
 import { openHttpExternalUrl } from '@renderer/utils/openExternal'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
@@ -295,7 +296,7 @@ const KnowledgeCitation: React.FC<{ citation: Citation }> = ({ citation }) => {
               })
             }>
             {/* example title: User/path/example.pdf */}
-            {citation.title?.split('/').pop()}
+            {citation.title ? getFileName(citation.title) || citation.title : undefined}
           </CitationLink>
           <CitationIndex>{citation.number}</CitationIndex>
           {citation.content && <CopyButton content={citation.content} />}

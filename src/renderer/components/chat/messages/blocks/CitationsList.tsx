@@ -4,6 +4,7 @@ import SelectionContextMenu from '@renderer/components/SelectionContextMenu'
 import { useTemporaryValue } from '@renderer/hooks/useTemporaryValue'
 import type { Citation } from '@renderer/types'
 import { fetchWebContent, fetchXOEmbed, isXPostUrl } from '@renderer/utils/fetch'
+import { getFileName } from '@renderer/utils/file'
 import { cleanMarkdownContent } from '@renderer/utils/formats'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { Check, Copy, FileSearch } from 'lucide-react'
@@ -270,7 +271,7 @@ const KnowledgeCitation: React.FC<{ citation: Citation; actions?: CitationPanelA
             href={citation.url}
             onClick={(e) => handleLinkClick(citation.url, e, linkActions)}>
             {/* example title: User/path/example.pdf */}
-            {citation.title?.split('/').pop()}
+            {citation.title ? getFileName(citation.title) || citation.title : undefined}
           </a>
           <div className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[10px] text-primary leading-[1.6] opacity-100 transition-opacity duration-300 group-hover:opacity-0">
             {citation.number}
