@@ -151,50 +151,24 @@ artifactBuildCompleted: scripts/artifact-build-completed.js
 releaseInfo:
   releaseNotes: |
     <!--LANG:en-->
-    Cherry Studio Pi 1.9.10 - Agent Stability & Release Hardening
-
-    ✨ New Features
-    - [Storage] Completed the Storage v2 reliability layer with stable data roots, authoritative writes, read-through recovery, backup/restore validation, and secret-backed local configuration
-    - [Models] Added support for grok-build-0.1 capabilities (reasoning, tool use, vision)
-    - [Providers] StepFun now supports Claude Code / Anthropic-compatible mode with auto-filled endpoint
-    - [Agents] DeepSeek V4 Flash and MiMo V2.5+ now properly support 1M context window in Claude Code
+    Cherry Studio Pi 1.9.63 - Reliability Fixes
 
     🐛 Bug Fixes
-    - [Agents] Hardened agent configuration parsing to prevent malformed local data from causing settings pages or agent creation/editing flows to white-screen
-    - [Agents] Normalized avatar, Soul Mode, heartbeat, permission mode, and advanced configuration reads through a shared safe parser
-    - [Packaging] Fixed packaged app startup failures caused by missing platform ripgrep binaries
-    - [Profile] Reworked the default user avatar with a flat circular-safe design
-    - [Web Search] Fixed ExaMCP web search not returning result content correctly
-    - [Code Viewer] Fixed code syntax highlighting issues where tokens could disappear in light theme
-    - [OpenCode] Fixed launch failures after CLI updates by using package-local executable
-    - [Agents] Fixed Agent mode not forwarding custom provider headers to Claude Code
-    - [Models] Fixed Grok 4.3 reasoning effort support in xAI responses
-    - [OpenClaw] Improved migration message clarity when external PATH installation is detected
-    - [Models] Fixed Gemini 3.x models using wrong UI and sending deprecated sampling parameters
-    - [Models] Fixed Qwen max series models incorrectly showing vision capability
-    - [Providers] Fixed AIHubMix reasoning effort configuration not working properly
+    - [Models] Fixed model and MCP settings saves so concurrent updates do not overwrite each other or lose model visibility/status settings
+    - [Chat] Fixed branched conversations showing an extra hidden root message in some history views
+    - [Downloads] Fixed trusted local/private API downloads while keeping unsafe remote URL protection enabled
+
+    💄 Improvements
+    - [CLI] Improved built-in code CLI launch reliability and reduced unnecessary network checks when auto update is disabled
 
     <!--LANG:zh-CN-->
-    Cherry Studio Pi 1.9.10 - 智能体稳定性与发布加固
-
-    ✨ 新功能
-    - [存储] 完成 Storage v2 可靠性层，覆盖稳定数据根、权威写入、读穿透恢复、备份/恢复校验和敏感配置本地加密存储
-    - [模型] 支持 grok-build-0.1 模型能力（推理、工具调用、视觉）
-    - [提供商] StepFun 现在支持 Claude Code / Anthropic 兼容模式，并自动填充端点
-    - [智能体] DeepSeek V4 Flash 和 MiMo V2.5+ 现在在 Claude Code 中正确支持 1M 上下文窗口
+    Cherry Studio Pi 1.9.63 - 可靠性修复
 
     🐛 问题修复
-    - [智能体] 加固智能体配置解析，避免本地异常配置导致设置页或创建/编辑流程白屏
-    - [智能体] 将头像、Soul Mode、心跳、权限模式和高级配置读取统一收敛到安全解析入口
-    - [打包] 修复安装包因缺少平台 ripgrep 二进制导致的启动失败
-    - [个人资料] 重新设计默认用户头像，采用扁平且适配圆形裁切的样式
-    - [网络搜索] 修复 ExaMCP 网络搜索无法正确返回结果内容的问题
-    - [代码查看器] 修复浅色主题下代码语法高亮标记可能消失的问题
-    - [OpenCode] 修复 CLI 更新后启动失败的问题，现在使用包本地可执行文件
-    - [智能体] 修复智能体模式未将自定义提供商标头转发给 Claude Code 的问题
-    - [模型] 修复 xAI 响应中 Grok 4.3 推理强度支持问题
-    - [OpenClaw] 改进检测到外部 PATH 安装时的迁移消息清晰度
-    - [模型] 修复 Gemini 3.x 模型使用错误 UI 并发送已弃用采样参数的问题
-    - [模型] 修复 Qwen max 系列模型错误显示视觉能力的问题
-    - [提供商] 修复 AIHubMix 推理强度配置无法正常工作的问题
+    - [模型] 修复模型和 MCP 设置保存的可靠性问题，避免并发更新互相覆盖或丢失模型显示/状态设置
+    - [对话] 修复分支对话在部分历史视图中显示额外隐藏根消息的问题
+    - [下载] 修复受信任本地/内网 API 的文件下载，同时保留不安全远程 URL 防护
+
+    💄 改进
+    - [CLI] 提升内置代码 CLI 启动可靠性，并在关闭自动更新时减少不必要的网络检查
     <!--LANG:END-->
