@@ -4166,13 +4166,13 @@ export class AppDataSyncService {
         undefined,
         false
       )
-      const stat = await fsp.stat(localBackupPath).catch(() => null)
+      const stat = await fsp.stat(localBackupPath)
       await this.pruneLocalDataSyncTempBackups({ keepPath: localBackupPath })
 
       summary.joinSafetySnapshotCreated = true
       summary.joinSafetySnapshotFileName = fileName
       summary.joinSafetySnapshotPath = localBackupPath
-      summary.joinSafetySnapshotBytes = stat?.size ?? 0
+      summary.joinSafetySnapshotBytes = stat.size
       this.pendingFailureSafetySnapshot = {
         joinSafetySnapshotCreated: summary.joinSafetySnapshotCreated,
         joinSafetySnapshotFileName: summary.joinSafetySnapshotFileName,

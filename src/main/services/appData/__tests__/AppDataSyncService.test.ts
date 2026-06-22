@@ -2067,6 +2067,29 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('stops when an enabled local join safety snapshot cannot be verified', async () => {
+    process.env.CHERRY_STUDIO_DATA_SYNC_LOCAL_SAFETY_SNAPSHOT = '1'
+    const localRecord = {
+      ...remoteRecord,
+      value: { mode: 'local-default' },
+      valueHash: 'local-default-hash',
+      updatedAt: remoteRecord.updatedAt + 60_000,
+      deviceId: 'new-device'
+    }
+    mocks.db.listRecords.mockResolvedValue([localRecord])
+    mocks.db.getSyncState.mockResolvedValue(null)
+    mocks.backupManager.backup.mockResolvedValueOnce('/tmp/cherry-studio-pi-missing-join-safety.zip')
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow('创建本地保护快照失败')
+
+    expect(
+      mocks.webdav.putFileContents.mock.calls.some(([filePath]) => String(filePath).endsWith('/manifest.json'))
+    ).toBe(false)
+    expect(mocks.db.applyRemoteRecord).not.toHaveBeenCalled()
+    expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith('record:settings:theme:hash', expect.anything())
+    expect(mocks.storageV2.upsertSyncState).not.toHaveBeenCalledWith('last-sync-summary', expect.anything())
+  })
+
   it('hydrates remote app records without per-record conflict audits when joining an existing sync space', async () => {
     const localRecord = {
       ...remoteRecord,
