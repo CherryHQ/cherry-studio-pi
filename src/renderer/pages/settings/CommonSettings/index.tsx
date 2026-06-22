@@ -416,7 +416,7 @@ const CommonSettings: FC = () => {
 
   const handleColorPrimaryChange = useCallback(
     (colorHex: string) => {
-      setUserTheme({
+      void setUserTheme({
         ...userTheme,
         colorPrimary: colorHex
       })
@@ -426,7 +426,7 @@ const CommonSettings: FC = () => {
 
   const handleUserFontChange = useCallback(
     (value: string) => {
-      setUserTheme({
+      void setUserTheme({
         ...userTheme,
         userFontFamily: value
       })
@@ -436,7 +436,7 @@ const CommonSettings: FC = () => {
 
   const handleUserCodeFontChange = useCallback(
     (value: string) => {
-      setUserTheme({
+      void setUserTheme({
         ...userTheme,
         userCodeFontFamily: value
       })

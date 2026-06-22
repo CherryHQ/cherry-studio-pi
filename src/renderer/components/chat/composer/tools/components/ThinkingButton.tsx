@@ -79,7 +79,7 @@ const useThinkingToolController = ({
 
       if (!isEnabled) {
         cacheService.set(`assistant.reasoning_effort_cache.${assistantId}`, option)
-        updateAssistantSettings({
+        void updateAssistantSettings({
           reasoning_effort: option
         })
         return
@@ -94,7 +94,7 @@ const useThinkingToolController = ({
         return
       }
       cacheService.set(`assistant.reasoning_effort_cache.${assistantId}`, option)
-      updateAssistantSettings({
+      void updateAssistantSettings({
         reasoning_effort: option
       })
     },

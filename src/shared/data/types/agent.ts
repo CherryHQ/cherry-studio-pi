@@ -6,8 +6,11 @@
  * across main and renderer.
  */
 
-import type { CreateAgentDto, UpdateAgentDto } from '../api/schemas/agents'
-import type { AgentSessionEntity as AgentSessionEntityType } from '../api/schemas/agentSessions'
+import type { AgentConfiguration, AgentEntity, CreateAgentDto, UpdateAgentDto } from '../api/schemas/agents'
+import type {
+  AgentSessionEntity as AgentSessionEntityType,
+  AgentSessionMessageEntity
+} from '../api/schemas/agentSessions'
 
 export type {
   AgentBase,
@@ -48,10 +51,10 @@ export type AgentPersistedMessage = {
 }
 
 export type CreateAgentRequest = CreateAgentDto
-export type CreateAgentResponse = import('../api/schemas/agents').AgentEntity
+export type CreateAgentResponse = AgentEntity
 export type UpdateAgentRequest = UpdateAgentDto
 
-export type GetAgentResponse = import('../api/schemas/agents').AgentEntity & {
+export type GetAgentResponse = AgentEntity & {
   tools?: unknown[]
 }
 
@@ -62,9 +65,9 @@ export type GetAgentSessionResponse = AgentSessionEntityType & {
   modelId?: string | null
   instructions?: string
   mcps?: string[]
-  configuration?: import('../api/schemas/agents').AgentConfiguration
+  configuration?: AgentConfiguration
   tools?: unknown[]
-  messages?: import('../api/schemas/agentSessions').AgentSessionMessageEntity[]
+  messages?: AgentSessionMessageEntity[]
   plugins?: Array<Record<string, unknown>>
 }
 

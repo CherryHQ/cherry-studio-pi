@@ -50,7 +50,7 @@ vi.mock('@renderer/components/SelectionContextMenu', () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>
 }))
 
-vi.mock('@renderer/features/command', () => ({
+vi.mock('@renderer/hooks/command', () => ({
   useCommandHandler: mocks.useCommandHandler
 }))
 

@@ -31,6 +31,9 @@ vi.mock('@cherrystudio/ui', () => ({
     <button type="button" className={className}>
       {children}
     </button>
+  ),
+  CustomTag: ({ children, className }: { children: ReactNode; className?: string }) => (
+    <span className={className}>{children}</span>
   )
 }))
 
@@ -42,11 +45,11 @@ vi.mock('@cherrystudio/ui/lib/utils', () => ({
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' ')
 }))
 
-vi.mock('@renderer/components/ModelSelector', () => ({
+vi.mock('@renderer/components/Selector/model', () => ({
   ModelSelector: ({ trigger }: { trigger: ReactNode }) => <div>{trigger}</div>
 }))
 
-vi.mock('@renderer/components/ModelSelector/utils', () => ({
+vi.mock('@renderer/components/Selector/model/utils', () => ({
   getProviderDisplayName: (provider: Provider) => provider.name
 }))
 

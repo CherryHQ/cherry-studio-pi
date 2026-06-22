@@ -36,11 +36,11 @@ function normalizeCreateAgentRequest(form: CreateAgentRequest): CreateAgentDto {
   return {
     ...form,
     type: form.type || 'pi'
-  } as CreateAgentDto
+  }
 }
 
 function normalizeUpdateAgentRequest(updates: UpdateAgentRequest): UpdateAgentDto {
-  return updates as UpdateAgentDto
+  return updates
 }
 
 function isDataApiNotFoundError(error: unknown) {
@@ -52,7 +52,7 @@ export async function listAgentsWithStorageV2Recovery(options: LegacyListOptions
 }
 
 export async function createAgentWithStorageV2Recovery(form: CreateAgentRequest): Promise<CreateAgentResponse> {
-  return (await agentService.createAgent(normalizeCreateAgentRequest(form))) as CreateAgentResponse
+  return agentService.createAgent(normalizeCreateAgentRequest(form))
 }
 
 export async function getAgentWithStorageV2Recovery(id: string): Promise<GetAgentResponse | null> {

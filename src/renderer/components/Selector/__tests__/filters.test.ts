@@ -1,8 +1,8 @@
 /**
  * Behavior tests for the model-selector tag filter predicates. Focus is on
- * the parts that are easy to silently break: the "free" substring match
- * (false-positive risk on words like `freedom-*` / `carefree-*`), the
- * capability tag dispatch, and cherryai special-casing.
+ * the parts that are easy to silently break: tokenized "free" matching,
+ * false-positive risks on words like `freedom-*` / `carefree-*`, capability
+ * tag dispatch, and cherryai special-casing.
  */
 
 import { modelMatchesDisplayTag } from '@renderer/components/Tags/Model'
@@ -82,24 +82,21 @@ describe('modelMatchesDisplayTag — "free" tag', () => {
     expect(modelMatchesDisplayTag(model, 'free')).toBe(true)
   })
 
-  it('matches when the name contains the "free" substring (case-insensitive)', () => {
+  it('matches when the name contains a standalone "free" token (case-insensitive)', () => {
     const model = makeModel({ name: 'Llama-3-Free-8B' })
 
     expect(modelMatchesDisplayTag(model, 'free')).toBe(true)
   })
 
-  it('uses the shared free-model check instead of selector-only apiModelId matching', () => {
+  it('uses the shared free-model token check for apiModelId values', () => {
     const model = makeModel({ name: 'Llama-3', apiModelId: 'llama-3:free' })
 
-    expect(modelMatchesDisplayTag(model, 'free')).toBe(false)
+    expect(modelMatchesDisplayTag(model, 'free')).toBe(true)
   })
 
-  it('accepts the substring even when embedded in a longer word (known false-positive surface)', () => {
-    // "freedom" / "carefree" will match. Locking this in explicitly so a
-    // future tightening of the predicate surfaces as a test change rather
-    // than a silent UX regression.
-    expect(modelMatchesDisplayTag(makeModel({ name: 'freedom-pro' }), 'free')).toBe(true)
-    expect(modelMatchesDisplayTag(makeModel({ name: 'carefree-mini' }), 'free')).toBe(true)
+  it('does not accept the substring when embedded in a longer word', () => {
+    expect(modelMatchesDisplayTag(makeModel({ name: 'freedom-pro' }), 'free')).toBe(false)
+    expect(modelMatchesDisplayTag(makeModel({ name: 'carefree-mini' }), 'free')).toBe(false)
   })
 
   it('returns false when no field contains "free" and provider is not cherryai', () => {

@@ -126,7 +126,7 @@ describe('useAssistantMutationsById', () => {
     renderHook(() => useAssistantMutationsById('assistant-1'))
 
     expect(useMutationMock).toHaveBeenCalledWith('DELETE', '/assistants/assistant-1', {
-      refresh: ['/assistants', '/pins']
+      refresh: ['/assistants', '/assistants/*']
     })
   })
 })

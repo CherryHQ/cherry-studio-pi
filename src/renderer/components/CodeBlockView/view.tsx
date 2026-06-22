@@ -115,6 +115,15 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
 
   const sourceViewRef = useRef<CodeEditorHandles>(null)
   const specialViewRef = useRef<BasicPreviewHandles>(null)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const hasSpecialView = useMemo(() => SPECIAL_VIEWS.includes(language), [language])
 
@@ -154,8 +163,11 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
       // Prioritize getting content from editor, fallback to children
       const content = sourceViewRef.current?.getContent?.() ?? children
       await navigator.clipboard.writeText(content.trimEnd())
-      window.toast.success(t('code_block.copy.success'))
+      if (mountedRef.current) {
+        window.toast.success(t('code_block.copy.success'))
+      }
     } catch (error) {
+      if (!mountedRef.current) return
       logger.error('Failed to copy to clipboard:', { error })
       window.toast.error(t('code_block.copy.failed'))
     }
@@ -187,15 +199,18 @@ export const CodeBlockView: React.FC<Props> = memo(({ children, language, onSave
     pyodideService
       .runScript(children, {}, codeExecutionTimeoutMinutes * 60000)
       .then((result) => {
+        if (!mountedRef.current) return
         setExecutionResult(result)
       })
       .catch((error) => {
+        if (!mountedRef.current) return
         logger.error('Unexpected error:', error)
         setExecutionResult({
           text: `Unexpected error: ${error.message || 'Unknown error'}`
         })
       })
       .finally(() => {
+        if (!mountedRef.current) return
         setIsRunning(false)
       })
   }, [children, codeExecutionTimeoutMinutes])

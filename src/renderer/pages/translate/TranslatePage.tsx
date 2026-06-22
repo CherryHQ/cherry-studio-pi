@@ -109,10 +109,19 @@ const TranslatePage: FC = () => {
   const outputTextRef = useRef<HTMLDivElement>(null)
   const isProgrammaticScroll = useRef(false)
   const translateInputRef = useRef(translateInput)
+  const mountedRef = useRef(true)
 
   useEffect(() => {
     translateInputRef.current = translateInput
   }, [translateInput])
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const selectedModelId = useMemo(
     () => (translateModelId && isUniqueModelId(translateModelId) ? translateModelId : undefined),
@@ -212,9 +221,11 @@ const TranslatePage: FC = () => {
         setTimeoutTimer(
           'auto-copy',
           async () => {
+            if (!mountedRef.current) return
             try {
               await copy(translated)
             } catch (error) {
+              if (!mountedRef.current) return
               logger.error('Failed to auto copy translated text', error as Error)
               window.toast.error(t('translate.error.auto_copy_failed'))
             }

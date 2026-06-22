@@ -6,6 +6,7 @@ import { CallToolResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { CopyIcon } from '@renderer/components/Icons'
 import { useCodeStyle } from '@renderer/context/CodeStyleProvider'
 import { useIsToolAutoApproved } from '@renderer/hooks/useMcpServer'
+import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { useTimer } from '@renderer/hooks/useTimer'
 import type { McpToolResponse } from '@renderer/types'
 import { IpcChannel } from '@shared/IpcChannel'
@@ -14,7 +15,7 @@ import { Collapse, ConfigProvider, Progress } from 'antd'
 import { Check, ChevronRight, ShieldCheck } from 'lucide-react'
 import { parse as parsePartialJson } from 'partial-json'
 import type { FC } from 'react'
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import styled from 'styled-components'
 
@@ -51,6 +52,8 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
   const [fontSize] = usePreference('chat.message.font_size')
   const [progress, setProgress] = useState<number>(0)
   const { setTimeoutTimer } = useTimer()
+  const showCopyFailed = useSaveFailedToast('common.copy_failed')
+  const mountedRef = useRef(true)
 
   const { id, tool, status, response, partialArguments } = toolResponse
   const approval = useToolApproval(toolResponse, tool)
@@ -60,6 +63,14 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
   const isError = status === 'error'
   const isStreaming = status === 'streaming'
   const willAwaitApproval = approval.isWaiting || (!autoApproved && status === 'invoking')
+
+  useEffect(() => {
+    mountedRef.current = true
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     const removeListener = window.electron.ipcRenderer.on(
@@ -88,11 +99,26 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
     }
   }, [isStreaming, isDone, isError, id, isPending])
 
-  const copyContent = (content: string, toolId: string) => {
-    void navigator.clipboard.writeText(content)
-    window.toast.success({ title: t('message.copied'), key: 'copy-message' })
-    setCopiedMap((prev) => ({ ...prev, [toolId]: true }))
-    setTimeoutTimer('copyContent', () => setCopiedMap((prev) => ({ ...prev, [toolId]: false })), 2000)
+  const copyContent = async (content: string, toolId: string) => {
+    try {
+      await navigator.clipboard.writeText(content)
+      if (!mountedRef.current) return
+      window.toast?.success?.({ title: t('message.copied'), key: 'copy-message' })
+      setCopiedMap((prev) => ({ ...prev, [toolId]: true }))
+      setTimeoutTimer(
+        'copyContent',
+        () => {
+          if (mountedRef.current) {
+            setCopiedMap((prev) => ({ ...prev, [toolId]: false }))
+          }
+        },
+        2000
+      )
+    } catch (error) {
+      if (!mountedRef.current) return
+      logger.error('Failed to copy MCP tool response:', error as Error)
+      showCopyFailed(error)
+    }
   }
 
   const handleCollapseChange = (keys: string | string[]) => {
@@ -149,7 +175,7 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
                   className="message-action-button"
                   onClick={(e) => {
                     e.stopPropagation()
-                    copyContent(JSON.stringify(result, null, 2), id)
+                    void copyContent(JSON.stringify(result, null, 2), id)
                   }}
                   aria-label={t('common.copy')}>
                   {!copiedMap[id] && <CopyIcon size={14} />}

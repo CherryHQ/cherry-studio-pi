@@ -70,6 +70,10 @@ const MessageMetaTool: FC<Props> = ({ toolResponse }) => {
       setCopied(true)
       setTimeoutTimer('copyMetaTool', () => setCopied(false), 2000)
     } catch (error) {
+      if (!mountedRef.current) {
+        return
+      }
+
       showCopyFailed(error)
     }
   }

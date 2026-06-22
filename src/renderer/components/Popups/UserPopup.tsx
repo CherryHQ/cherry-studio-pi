@@ -21,7 +21,8 @@ import DefaultAvatar from '@renderer/assets/images/avatar.png'
 import useAvatar from '@renderer/hooks/useAvatar'
 import ImageStorage from '@renderer/services/ImageStorage'
 import { fileToAvatarDataUrl, isEmoji } from '@renderer/utils'
-import React, { useRef, useState } from 'react'
+import { getErrorMessage } from '@renderer/utils/error'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import EmojiPicker from '../EmojiPicker'
@@ -42,15 +43,29 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
   const [avatarPopoverOpen, setAvatarPopoverOpen] = useState(false)
   const [avatarPopoverView, setAvatarPopoverView] = useState<AvatarPopoverView>('menu')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const closingRef = useRef(false)
   const { t } = useTranslation()
   const avatar = useAvatar()
 
-  const closeDialog = () => {
+  const closeDialog = useCallback(() => {
+    if (closingRef.current) {
+      return
+    }
+
+    closingRef.current = true
     setOpen(false)
     window.setTimeout(() => {
       resolve({})
     }, CLOSE_ANIMATION_MS)
-  }
+  }, [resolve])
+
+  useEffect(() => {
+    UserPopup.setCloseHandler(closeDialog)
+
+    return () => {
+      UserPopup.clearCloseHandler(closeDialog)
+    }
+  }, [closeDialog])
 
   const onOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
@@ -67,7 +82,7 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       setAvatarPopoverOpen(false)
       setAvatarPopoverView('menu')
     } catch (error: any) {
-      window.toast.error(error.message)
+      window.toast?.error?.(getErrorMessage(error))
     }
   }
 
@@ -78,7 +93,7 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       setAvatarPopoverOpen(false)
       setAvatarPopoverView('menu')
     } catch (error: any) {
-      window.toast.error(error.message)
+      window.toast?.error?.(getErrorMessage(error))
     }
   }
 
@@ -90,7 +105,7 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
       setAvatarPopoverOpen(false)
       setAvatarPopoverView('menu')
     } catch (error: any) {
-      window.toast.error(error.message)
+      window.toast?.error?.(getErrorMessage(error))
     }
   }
 
@@ -182,16 +197,35 @@ const PopupContainer: React.FC<Props> = ({ resolve }) => {
 
 export default class UserPopup {
   static topviewId = 0
+  private static closeHandler: (() => void) | null = null
+
+  static setCloseHandler(handler: () => void) {
+    this.closeHandler = handler
+  }
+
+  static clearCloseHandler(handler: () => void) {
+    if (this.closeHandler === handler) {
+      this.closeHandler = null
+    }
+  }
+
   static hide() {
+    if (this.closeHandler) {
+      this.closeHandler()
+      return
+    }
+
     TopView.hide('UserPopup')
   }
+
   static show() {
     return new Promise<any>((resolve) => {
       TopView.show(
         <PopupContainer
           resolve={(v) => {
+            this.closeHandler = null
             resolve(v)
-            this.hide()
+            TopView.hide('UserPopup')
           }}
         />,
         'UserPopup'
