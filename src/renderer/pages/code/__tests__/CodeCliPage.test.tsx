@@ -158,14 +158,25 @@ vi.mock('react-i18next', () => ({
 vi.mock('../components/CodeToolGallery', () => ({
   CodeToolGallery: ({
     tools,
+    isBunInstalled,
+    handleInstallBun,
     handleSelectTool
   }: {
     tools: Array<{ value: codeCLI; label: string }>
+    isBunInstalled: boolean
+    handleInstallBun: () => void
     handleSelectTool: (value: codeCLI) => void
   }) => (
-    <button type="button" onClick={() => handleSelectTool(tools[0].value)}>
-      open tool
-    </button>
+    <div>
+      {!isBunInstalled && (
+        <button type="button" onClick={handleInstallBun}>
+          code.install_bun
+        </button>
+      )}
+      <button type="button" onClick={() => handleSelectTool(tools[0].value)}>
+        open tool
+      </button>
+    </div>
   )
 }))
 
@@ -190,6 +201,7 @@ beforeEach(() => {
   Object.assign(window, {
     api: {
       isBinaryExist: vi.fn().mockResolvedValue(true),
+      installBunBinary: vi.fn().mockResolvedValue(undefined),
       codeCli: {
         getAvailableTerminals: vi.fn().mockResolvedValue([]),
         run: testState.codeCliRun
@@ -274,6 +286,21 @@ describe('CodeCliPage', () => {
     })
 
     expect(testState.setIsBunInstalled).not.toHaveBeenCalled()
+  })
+
+  it('preserves nested bun installation failure details', async () => {
+    testState.isBunInstalled = false
+    vi.mocked(window.api.installBunBinary).mockRejectedValueOnce({
+      error: { message: 'download refused by mirror' }
+    })
+
+    render(<CodeCliPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'code.install_bun' }))
+
+    await waitFor(() =>
+      expect(window.toast.error).toHaveBeenCalledWith('settings.mcp.installError: download refused by mirror')
+    )
+    expect(testState.setTimeoutTimer).toHaveBeenCalledWith('handleInstallBun', expect.any(Function), 1000)
   })
 
   it('disables launch when the tool cannot launch', async () => {

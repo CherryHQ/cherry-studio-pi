@@ -327,9 +327,8 @@ const CodeCliPage: FC = () => {
       window.toast?.success(t('settings.mcp.installSuccess'))
     } catch (error) {
       logger.error('Failed to install bun:', error as Error)
-      const message = error instanceof Error ? error.message : String(error)
       if (mountedRef.current) {
-        window.toast?.error(`${t('settings.mcp.installError')}: ${message}`)
+        window.toast?.error(formatErrorMessageWithPrefix(error, t('settings.mcp.installError')))
       }
     } finally {
       if (mountedRef.current) {
