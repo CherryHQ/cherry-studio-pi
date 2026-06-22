@@ -112,7 +112,39 @@ async function realpathOrResolvedPath(filePath: string) {
   try {
     return await fs.realpath(filePath)
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return path.resolve(filePath)
+    if (isMissingPathError(error)) return path.resolve(filePath)
+    throw error
+  }
+}
+
+function isMissingPathError(error: unknown) {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code
+  return code === 'ENOENT' || code === 'ENOTDIR'
+}
+
+async function statOrNullIfMissing(filePath: string) {
+  try {
+    return await fs.stat(filePath)
+  } catch (error) {
+    if (isMissingPathError(error)) return null
+    throw error
+  }
+}
+
+async function readdirOrEmptyIfMissing(dirPath: string) {
+  try {
+    return await fs.readdir(dirPath, { withFileTypes: true })
+  } catch (error) {
+    if (isMissingPathError(error)) return []
+    throw error
+  }
+}
+
+async function readUtf8FileOrEmptyIfMissing(filePath: string, signal?: AbortSignal) {
+  try {
+    return await fs.readFile(filePath, { encoding: 'utf8', signal })
+  } catch (error) {
+    if (isMissingPathError(error)) return ''
     throw error
   }
 }
@@ -125,7 +157,7 @@ async function resolveRealPathPreservingMissingSegments(filePath: string) {
     try {
       return path.join(await fs.realpath(current), ...missingSegments.reverse())
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      if (!isMissingPathError(error)) throw error
     }
 
     const parent = path.dirname(current)
@@ -145,12 +177,12 @@ async function assertResolvedInsideNotesRoot(root: string, target: string, label
 
 async function resolveNoteDeleteTarget(root: string, input: string) {
   const target = resolveInsideRoot(root, input)
-  if (path.extname(target) || (await fs.stat(target).catch(() => null))) {
+  if (path.extname(target) || (await statOrNullIfMissing(target))) {
     return target
   }
 
   const markdownTarget = `${target}.md`
-  const markdownStat = await fs.stat(markdownTarget).catch(() => null)
+  const markdownStat = await statOrNullIfMissing(markdownTarget)
   return markdownStat?.isFile() ? markdownTarget : target
 }
 
@@ -237,7 +269,7 @@ async function listNoteEntries(root: string, input: any, signal?: AbortSignal) {
   while (stack.length > 0 && collected.length <= limit) {
     throwIfNotesSignalAborted(signal)
     const current = stack.pop()!
-    const entries = await fs.readdir(current.dirPath, { withFileTypes: true }).catch(() => [])
+    const entries = await readdirOrEmptyIfMissing(current.dirPath)
     throwIfNotesSignalAborted(signal)
     const childDirectories: Array<{ dirPath: string; depth: number }> = []
 
@@ -259,7 +291,7 @@ async function listNoteEntries(root: string, input: any, signal?: AbortSignal) {
       const relativePath = path.relative(root, entryPath).replace(/\\/g, '/')
 
       if (entry.isDirectory()) {
-        const stats = await fs.stat(entryPath).catch(() => null)
+        const stats = await statOrNullIfMissing(entryPath)
         throwIfNotesSignalAborted(signal)
         const item = {
           type: 'folder',
@@ -277,7 +309,7 @@ async function listNoteEntries(root: string, input: any, signal?: AbortSignal) {
           childDirectories.push({ dirPath: entryPath, depth: current.depth + 1 })
         }
       } else if (entry.isFile() && path.extname(entry.name).toLowerCase() === '.md') {
-        const stats = await fs.stat(entryPath).catch(() => null)
+        const stats = await statOrNullIfMissing(entryPath)
         throwIfNotesSignalAborted(signal)
         const treePath = `/${relativePath.replace(/\.md$/i, '')}`
         const item = {
@@ -327,7 +359,7 @@ async function collectNoteFilesForSearch(root: string, signal?: AbortSignal) {
   while (stack.length > 0 && files.length < MAX_NOTE_SEARCH_FILES) {
     throwIfNotesSignalAborted(signal)
     const current = stack.pop()!
-    const entries = await fs.readdir(current.dirPath, { withFileTypes: true }).catch(() => [])
+    const entries = await readdirOrEmptyIfMissing(current.dirPath)
     throwIfNotesSignalAborted(signal)
     const childDirectories: Array<{ dirPath: string; depth: number }> = []
 
@@ -474,7 +506,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
           throwIfNotesSignalAborted(context.signal)
           if (matches.length >= limit) break
           const nameMatches = file.name.toLowerCase().includes(query)
-          const stat = await fs.stat(file.externalPath).catch(() => null)
+          const stat = await statOrNullIfMissing(file.externalPath)
           throwIfNotesSignalAborted(context.signal)
           if (!stat?.isFile()) continue
           if (nameMatches) {
@@ -483,9 +515,7 @@ export function createNotesCapabilities(): AppCapabilityDefinition[] {
           }
           if (stat.size > MAX_NOTE_SEARCH_FILE_BYTES) continue
 
-          const content = await fs
-            .readFile(file.externalPath, { encoding: 'utf8', signal: context.signal })
-            .catch(() => '')
+          const content = await readUtf8FileOrEmptyIfMissing(file.externalPath, context.signal)
           throwIfNotesSignalAborted(context.signal)
           const index = content.toLowerCase().indexOf(query)
           if (index >= 0) {

@@ -181,6 +181,36 @@ describe('notes app capabilities', () => {
     readFileSpy.mockRestore()
   })
 
+  it('surfaces non-missing filesystem errors while listing notes', async () => {
+    const denied = Object.assign(new Error('EACCES: permission denied, scandir notes'), { code: 'EACCES' })
+    const readdirSpy = vi.spyOn(fs, 'readdir').mockRejectedValueOnce(denied)
+
+    try {
+      await expect(getCapability('notes.list').execute({}, { source: 'agent' })).rejects.toThrow('EACCES')
+    } finally {
+      readdirSpy.mockRestore()
+    }
+  })
+
+  it('surfaces non-missing filesystem errors while searching note files', async () => {
+    const notePath = path.join(tmpDir, 'daily.md')
+    await fs.writeFile(notePath, 'today\n', 'utf8')
+    const originalStat = fs.stat.bind(fs)
+    const denied = Object.assign(new Error('EACCES: permission denied, stat note'), { code: 'EACCES' })
+    const statSpy = vi.spyOn(fs, 'stat').mockImplementation(async (...args: Parameters<typeof fs.stat>) => {
+      if (String(args[0]) === notePath) throw denied
+      return originalStat(...args)
+    })
+
+    try {
+      await expect(getCapability('notes.search').execute({ query: 'today' }, { source: 'agent' })).rejects.toThrow(
+        'EACCES'
+      )
+    } finally {
+      statSpy.mockRestore()
+    }
+  })
+
   it('returns a bounded preview when reading oversized notes', async () => {
     const notePath = path.join(tmpDir, 'large-note.md')
     await fs.writeFile(notePath, 'a'.repeat(2048), 'utf8')
