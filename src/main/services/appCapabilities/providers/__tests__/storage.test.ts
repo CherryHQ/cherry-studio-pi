@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   callRendererBridge: vi.fn(),
+  runtimeFlush: {
+    flushMainStorageV2RuntimeMirrors: vi.fn()
+  },
   storageV2Service: {
     getDataRoot: vi.fn(),
     healthCheck: vi.fn(),
@@ -23,6 +26,10 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../rendererBridge', () => ({
   callRendererBridge: mocks.callRendererBridge,
   getBridgeErrorMessage: (error: unknown) => (error instanceof Error ? error.message : String(error))
+}))
+
+vi.mock('@main/services/AppRuntimeSaveService', () => ({
+  flushMainStorageV2RuntimeMirrors: mocks.runtimeFlush.flushMainStorageV2RuntimeMirrors
 }))
 
 vi.mock('@main/services/storageV2/StorageService', () => ({
@@ -52,6 +59,7 @@ describe('storage app capabilities', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.callRendererBridge.mockResolvedValue(undefined)
+    mocks.runtimeFlush.flushMainStorageV2RuntimeMirrors.mockResolvedValue(undefined)
     mocks.storageV2Service.getDataRoot.mockReturnValue('/tmp/cherry-data')
     mocks.storageV2Service.healthCheck.mockResolvedValue({ ok: true })
     mocks.storageV2Service.getStats.mockResolvedValue({ providers: 0 })
@@ -155,11 +163,12 @@ describe('storage app capabilities', () => {
     })
   })
 
-  it('prepares renderer runtime data before agent-triggered snapshots, backups, and restores', async () => {
+  it('flushes main runtime mirrors and prepares renderer runtime data before agent-triggered snapshots, backups, and restores', async () => {
     await capability('storage.snapshot.create').execute({ reason: 'before-test' }, { source: 'agent' })
     await capability('storage.backup.create').execute({ reason: 'agent request' }, { source: 'agent' })
     await capability('storage.backup.restore').execute({ backupPath: '/tmp/backup' }, { source: 'agent' })
 
+    expect(mocks.runtimeFlush.flushMainStorageV2RuntimeMirrors).toHaveBeenCalledTimes(3)
     expect(mocks.callRendererBridge).toHaveBeenCalledTimes(3)
     expect(mocks.callRendererBridge).toHaveBeenNthCalledWith(
       1,
@@ -191,6 +200,15 @@ describe('storage app capabilities', () => {
     expect(mocks.storageV2Service.createSnapshot).toHaveBeenCalledWith('before-test')
     expect(mocks.storageV2Service.createBackup).toHaveBeenCalledWith('agent request')
     expect(mocks.storageV2Service.restoreBackup).toHaveBeenCalledWith('/tmp/backup')
+    expect(mocks.runtimeFlush.flushMainStorageV2RuntimeMirrors.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.callRendererBridge.mock.invocationCallOrder[0]
+    )
+    expect(mocks.runtimeFlush.flushMainStorageV2RuntimeMirrors.mock.invocationCallOrder[1]).toBeLessThan(
+      mocks.callRendererBridge.mock.invocationCallOrder[1]
+    )
+    expect(mocks.runtimeFlush.flushMainStorageV2RuntimeMirrors.mock.invocationCallOrder[2]).toBeLessThan(
+      mocks.callRendererBridge.mock.invocationCallOrder[2]
+    )
     expect(mocks.callRendererBridge.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.storageV2Service.createSnapshot.mock.invocationCallOrder[0]
     )
@@ -221,6 +239,17 @@ describe('storage app capabilities', () => {
       undefined,
       expect.objectContaining({ signal: controller.signal })
     )
+    expect(mocks.storageV2Service.createBackup).not.toHaveBeenCalled()
+  })
+
+  it('stops storage writes when main runtime mirror flushing fails', async () => {
+    mocks.runtimeFlush.flushMainStorageV2RuntimeMirrors.mockRejectedValueOnce(new Error('provider mirror is locked'))
+
+    await expect(
+      capability('storage.backup.create').execute({ reason: 'agent request' }, { source: 'agent' })
+    ).rejects.toThrow('provider mirror is locked')
+
+    expect(mocks.callRendererBridge).not.toHaveBeenCalled()
     expect(mocks.storageV2Service.createBackup).not.toHaveBeenCalled()
   })
 
@@ -265,6 +294,7 @@ describe('storage app capabilities', () => {
     )
 
     expect(mocks.callRendererBridge).not.toHaveBeenCalled()
+    expect(mocks.runtimeFlush.flushMainStorageV2RuntimeMirrors).not.toHaveBeenCalled()
     expect(mocks.storageV2Service.getDataRoot).not.toHaveBeenCalled()
     expect(mocks.storageV2Service.healthCheck).not.toHaveBeenCalled()
     expect(mocks.storageV2Service.getStats).not.toHaveBeenCalled()

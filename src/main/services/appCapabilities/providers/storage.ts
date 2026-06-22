@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { flushMainStorageV2RuntimeMirrors } from '@main/services/AppRuntimeSaveService'
 import { storageV2Service } from '@main/services/storageV2/StorageService'
 import { RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE } from '@shared/dataSyncBridge'
 
@@ -99,6 +100,10 @@ function agentListOptions(input: unknown = {}) {
 }
 
 async function prepareRendererStorageV2ForStorageOperation(operation: string, signal?: AbortSignal) {
+  throwIfStorageSignalAborted(signal)
+  await flushMainStorageV2RuntimeMirrors()
+  throwIfStorageSignalAborted(signal)
+
   try {
     await callRendererBridge<void>(RENDERER_PREPARE_STORAGE_V2_FOR_DATA_SYNC_BRIDGE, undefined, {
       checkTimeoutMs: RENDERER_PREPARE_STORAGE_V2_CHECK_TIMEOUT_MS,
