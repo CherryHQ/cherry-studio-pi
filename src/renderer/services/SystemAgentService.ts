@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import i18n from '@renderer/i18n'
+import { getErrorMessage } from '@renderer/utils/error'
 import { isSensitiveAgentKey, redactAgentText } from '@shared/security/redaction'
 
 const logger = loggerService.withContext('SystemAgentService')
@@ -61,11 +62,7 @@ function normalizeMessageText(message: unknown) {
 }
 
 function errorMessage(error: unknown) {
-  if (error instanceof Error) return normalizeMessageText(error.message) ?? 'Unknown error'
-  if (typeof error === 'string') return normalizeMessageText(error) ?? 'Unknown error'
-  if (error == null) return 'Unknown error'
-
-  return normalizeMessageText(String(error)) ?? 'Unknown error'
+  return normalizeMessageText(getErrorMessage(error, 'Unknown error')) ?? 'Unknown error'
 }
 
 function dedupeKey(input: SystemAgentEventInput) {

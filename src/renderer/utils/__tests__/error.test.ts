@@ -149,6 +149,29 @@ describe('error', () => {
     it('preserves object message fields', () => {
       expect(getErrorMessage({ message: 'object failure' })).toBe('object failure')
     })
+
+    it('preserves structured response status details', () => {
+      expect(
+        getErrorMessage({
+          response: {
+            status: 503,
+            statusText: 'Service Unavailable'
+          }
+        })
+      ).toBe('503 Service Unavailable')
+    })
+
+    it('uses readable status and code fallbacks for message-less objects', () => {
+      expect(getErrorMessage({ status: 423 })).toBe('HTTP 423')
+      expect(getErrorMessage({ code: 'SQLITE_BUSY' })).toBe('SQLITE_BUSY')
+    })
+
+    it('uses the provided fallback for circular message-less objects', () => {
+      const circular: Record<string, unknown> = {}
+      circular.cause = circular
+
+      expect(getErrorMessage(circular, 'fallback message')).toBe('fallback message')
+    })
   })
 
   describe('serializeHealthCheckError', () => {

@@ -140,6 +140,29 @@ describe('SystemAgentService', () => {
     )
   })
 
+  it('preserves structured renderer error messages for automatic diagnostics', async () => {
+    await reportErrorToSystemAgent(
+      {
+        response: {
+          status: 503,
+          statusText: 'Service Unavailable'
+        }
+      },
+      {
+        source: 'test.structured-error'
+      },
+      { dedupe: false }
+    )
+
+    expect(window.api.systemAgent.handleEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        source: 'test.structured-error',
+        message: '503 Service Unavailable'
+      })
+    )
+  })
+
   it('redacts sensitive renderer error payloads before handing them to the system agent', async () => {
     await reportErrorToSystemAgent(
       new Error(

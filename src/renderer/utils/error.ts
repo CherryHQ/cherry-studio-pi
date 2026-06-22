@@ -82,33 +82,52 @@ export function formatErrorMessage(error: unknown): string {
   }
 }
 
-function extractErrorMessage(error: unknown): string | null {
-  if (error instanceof Error && error.message) {
-    return error.message
+function normalizeMessageText(message: unknown): string | null {
+  if (typeof message !== 'string') return null
+
+  const normalizedMessage = message.trim()
+  return normalizedMessage.length > 0 ? normalizedMessage : null
+}
+
+function parseStatus(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isInteger(value)) return value
+  if (typeof value === 'string' && /^\d{3}$/.test(value.trim())) return Number(value)
+  return null
+}
+
+function extractErrorMessage(error: unknown, seen = new WeakSet<object>()): string | null {
+  if (error instanceof Error) {
+    return normalizeMessageText(error.message) ?? extractErrorMessage(error.cause, seen)
   }
-  if (typeof error === 'string' && error.trim()) {
-    return error
+  if (typeof error === 'string') {
+    return normalizeMessageText(error)
+  }
+  if (typeof error === 'number' || typeof error === 'boolean' || typeof error === 'bigint') {
+    return String(error)
   }
   if (!error || typeof error !== 'object') {
     return null
   }
 
-  const maybeError = (error as { error?: unknown }).error
-  if (maybeError) {
-    const nested = extractErrorMessage(maybeError)
+  if (seen.has(error)) return null
+  seen.add(error)
+
+  const source = error as Record<string, unknown>
+  for (const key of ['message', 'error', 'cause', 'reason', 'description', 'response'] as const) {
+    const nested = extractErrorMessage(source[key], seen)
     if (nested) return nested
   }
 
-  const maybeMessage = (error as { message?: unknown }).message
-  if (typeof maybeMessage === 'string' && maybeMessage.trim()) {
-    return maybeMessage
-  }
+  const status = parseStatus(source.status) ?? parseStatus(source.statusCode) ?? parseStatus(source.code)
+  const statusText = normalizeMessageText(source.statusText)
+  if (status && statusText) return `${status} ${statusText}`
+  if (status) return `HTTP ${status}`
 
-  return null
+  return normalizeMessageText(source.code)
 }
 
-export function getErrorMessage(error: unknown): string {
-  return extractErrorMessage(error) ?? t('error.unknown')
+export function getErrorMessage(error: unknown, fallback?: string): string {
+  return extractErrorMessage(error) ?? fallback ?? t('error.unknown')
 }
 
 export function formatErrorMessageWithPrefix(error: unknown, prefix: string): string {
