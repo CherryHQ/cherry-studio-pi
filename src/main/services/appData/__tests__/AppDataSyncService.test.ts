@@ -2040,6 +2040,34 @@ describe('AppDataSyncService', () => {
     expect(mocks.backupManager.backup).not.toHaveBeenCalled()
   })
 
+  it('prunes managed temp backups even when their metadata cannot be read', async () => {
+    const tempBackupDir = path.join(
+      process.env.TMPDIR || process.env.TEMP || process.env.TMP || '/tmp',
+      'cherry-studio-pi',
+      'backup'
+    )
+    await fsp.mkdir(tempBackupDir, { recursive: true })
+    const staleJoinSafetyPath = path.join(tempBackupDir, 'cherry-studio-pi.data-sync.join-safety.local-device.2.zip')
+    await fsp.writeFile(staleJoinSafetyPath, 'stale-join-safety')
+
+    const originalStat = fsp.stat.bind(fsp)
+    const statSpy = vi.spyOn(fsp, 'stat').mockImplementation(async (filePath: any, options?: any) => {
+      if (String(filePath) === staleJoinSafetyPath) {
+        throw Object.assign(new Error('metadata denied'), { code: 'EACCES' })
+      }
+      return originalStat(filePath, options)
+    })
+
+    try {
+      await new AppDataSyncService().syncNow(config)
+    } finally {
+      statSpy.mockRestore()
+    }
+
+    expect(await pathExists(staleJoinSafetyPath)).toBe(false)
+    expect(mocks.backupManager.backup).not.toHaveBeenCalled()
+  })
+
   it('creates a local join safety snapshot only when explicitly enabled', async () => {
     process.env.CHERRY_STUDIO_DATA_SYNC_LOCAL_SAFETY_SNAPSHOT = '1'
     const localRecord = {

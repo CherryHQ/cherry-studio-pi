@@ -4198,6 +4198,14 @@ export class AppDataSyncService {
   private async pruneLocalDataSyncTempBackups(
     options: { keepPath?: string | null; keepLatestJoinSafety?: number } = {}
   ) {
+    type LocalTempBackupCandidate = {
+      filePath: string
+      fileName: string
+      mtimeMs: number
+      size: number
+      retentionEligible: boolean
+    }
+
     const keepLatestJoinSafety = options.keepLatestJoinSafety ?? DATA_SYNC_JOIN_SAFETY_LOCAL_RETENTION
     const keepPath = options.keepPath ? path.resolve(options.keepPath) : null
     const directories = new Set<string>([getDataSyncTempBackupDir(), getLegacyDataSyncTempBackupDir()])
@@ -4225,17 +4233,35 @@ export class AppDataSyncService {
             .filter((entry) => entry.isFile() && isManagedDataSyncTempBackupFile(entry.name))
             .map(async (entry) => {
               const filePath = path.resolve(directory, entry.name)
-              const stat = await fsp.stat(filePath).catch(() => null)
-              if (!stat?.isFile()) return null
+              let stat: fs.Stats | null
+              try {
+                stat = await fsp.stat(filePath)
+              } catch (error) {
+                if (isMissingLocalPathError(error)) return null
+                logger.warn('Failed to read data sync temp backup metadata; pruning it as stale', {
+                  filePath,
+                  error: errorMessage(error)
+                })
+                // Managed temp backups are expendable; unreadable metadata should not make them leak forever.
+                return {
+                  filePath,
+                  fileName: entry.name,
+                  mtimeMs: Number.NEGATIVE_INFINITY,
+                  size: 0,
+                  retentionEligible: false
+                }
+              }
+              if (!stat.isFile()) return null
               return {
                 filePath,
                 fileName: entry.name,
                 mtimeMs: stat.mtimeMs,
-                size: stat.size
+                size: stat.size,
+                retentionEligible: true
               }
             })
         )
-      ).filter((item): item is { filePath: string; fileName: string; mtimeMs: number; size: number } => Boolean(item))
+      ).filter((item): item is LocalTempBackupCandidate => Boolean(item))
 
       const keepPaths = new Set<string>()
       if (keepPath) {
@@ -4243,7 +4269,7 @@ export class AppDataSyncService {
       }
 
       const latestJoinSafety = candidates
-        .filter((candidate) => isJoinSafetyTempBackupFile(candidate.fileName))
+        .filter((candidate) => candidate.retentionEligible && isJoinSafetyTempBackupFile(candidate.fileName))
         .sort((left, right) => right.mtimeMs - left.mtimeMs)
         .slice(0, keepLatestJoinSafety)
       for (const candidate of latestJoinSafety) {
