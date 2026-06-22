@@ -21,7 +21,8 @@ export function getFileDirectory(filePath: string): string {
  * @returns {string} 文件扩展名（小写），如果没有则返回 '.'
  */
 export function getFileExtension(filePath: string): string {
-  const parts = filePath.split('.')
+  const fileName = filePath.split(/[/\\]/).pop() ?? ''
+  const parts = fileName.split('.')
   if (parts.length > 1) {
     const extension = parts.slice(-1)[0].toLowerCase()
     return '.' + extension

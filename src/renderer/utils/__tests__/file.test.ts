@@ -81,6 +81,18 @@ describe('file', () => {
       expect(result).toBe('.json')
     })
 
+    it('should ignore dots in parent directories', () => {
+      const filePath = '/tmp/cherry.workspace/noextension'
+      const result = getFileExtension(filePath)
+      expect(result).toBe('.')
+    })
+
+    it('should handle Windows paths correctly', () => {
+      const filePath = 'C:\\Users\\Cherry.Workspace\\image.PNG'
+      const result = getFileExtension(filePath)
+      expect(result).toBe('.png')
+    })
+
     it('should handle empty string input', () => {
       // 验证空字符串输入的边界情况
       const filePath = ''
