@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { getErrorMessage } from '@renderer/utils/error'
 import type { WebSearchCapability, WebSearchProvider } from '@shared/data/preference/preferenceTypes'
 import { useCallback, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -39,8 +40,9 @@ export function useWebSearchProviderCheck({ provider, capability }: UseWebSearch
       await runCheck()
       window.toast?.success(t('settings.tool.websearch.check_success'))
     } catch (error) {
-      logger.error('Web search provider check failed', error as Error)
-      const errorMessage = error instanceof Error ? error.message : String(error)
+      const normalizedError = error instanceof Error ? error : new Error(getErrorMessage(error), { cause: error })
+      logger.error('Web search provider check failed', normalizedError)
+      const errorMessage = normalizedError.message
       window.toast?.error(`${t('settings.tool.websearch.check_failed')}: ${errorMessage}`)
     } finally {
       checkingRef.current = false

@@ -102,6 +102,21 @@ describe('useWebSearchProviderCheck', () => {
     expect(toastErrorMock).toHaveBeenCalledWith('settings.tool.websearch.check_failed: missing API key')
   })
 
+  it('preserves nested provider check failure details in the toast', async () => {
+    searchKeywordsMock.mockRejectedValueOnce({ error: { message: 'remote provider refused the request' } })
+    const { result } = renderHook(() =>
+      useWebSearchProviderCheck({ provider: tavilyProvider, capability: 'searchKeywords' })
+    )
+
+    await act(async () => {
+      await result.current.checkProvider()
+    })
+
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      'settings.tool.websearch.check_failed: remote provider refused the request'
+    )
+  })
+
   it('ignores duplicate provider checks while one is already running', async () => {
     const runningCheck = deferred<{ results: unknown[] }>()
     searchKeywordsMock.mockReturnValueOnce(runningCheck.promise)
