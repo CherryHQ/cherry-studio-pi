@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   getDefaultDataPath: vi.fn(),
+  loggerWarn: vi.fn(),
   fs: {
     existsSync: vi.fn(),
     readFileSync: vi.fn(),
@@ -14,6 +15,14 @@ const mocks = vi.hoisted(() => ({
     writeFileSync: vi.fn(),
     renameSync: vi.fn(),
     chmodSync: vi.fn()
+  }
+}))
+
+vi.mock('@logger', () => ({
+  loggerService: {
+    withContext: () => ({
+      warn: mocks.loggerWarn
+    })
   }
 }))
 
@@ -204,6 +213,32 @@ describe('StorageV2DataRootService', () => {
 
     expect(info.dataRoot).toBe('/mock/configured-root')
     expect(info.source).toBe('config')
+  })
+
+  it('preserves structured config read errors in data root logs', async () => {
+    const configPath = '/mock/home/.cherrystudio/config/config.json'
+    vi.mocked(fs.existsSync).mockImplementation((candidate) => String(candidate) === configPath)
+    vi.mocked(fs.readFileSync).mockImplementation((candidate) => {
+      if (String(candidate) === configPath) {
+        throw {
+          response: {
+            status: '503',
+            statusText: 'Service Unavailable'
+          }
+        }
+      }
+
+      return JSON.stringify(manifest)
+    })
+
+    const { StorageV2DataRootService } = await import('../DataRootService')
+    const info = new StorageV2DataRootService().resolveDataRoot()
+
+    expect(info.dataRoot).toBe('/mock/appData/Cherry Studio Pi/Data')
+    expect(mocks.loggerWarn).toHaveBeenCalledWith('Failed to read JSON file', {
+      filePath: configPath,
+      error: '503 Service Unavailable'
+    })
   })
 
   it('ignores active configured roots written by legacy Perry Studio builds', async () => {
