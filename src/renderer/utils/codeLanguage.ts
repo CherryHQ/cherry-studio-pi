@@ -50,7 +50,8 @@ export function getLanguageByExtension(extension: string): string {
 export function getLanguageByFilePath(filePath: string): string {
   if (!filePath) return 'text'
 
-  const ext = filePath.split('.').pop()
+  const fileName = filePath.split(/[/\\]/).pop() ?? ''
+  const ext = fileName.includes('.') ? fileName.split('.').pop() : undefined
   if (!ext) return 'text'
 
   return getLanguageByExtension(ext)

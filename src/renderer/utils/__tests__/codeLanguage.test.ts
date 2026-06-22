@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { getExtensionByLanguage } from '../codeLanguage'
+import { getExtensionByLanguage, getLanguageByFilePath } from '../codeLanguage'
 
 describe('codeLanguage', () => {
   describe('getExtensionByLanguage', () => {
@@ -61,6 +61,20 @@ describe('codeLanguage', () => {
       testLanguageExtensions({
         '': '.'
       })
+    })
+  })
+
+  describe('getLanguageByFilePath', () => {
+    it('should infer language from the basename extension', () => {
+      expect(getLanguageByFilePath('/tmp/cherry.workspace/src/index.ts')).toBe('TypeScript')
+    })
+
+    it('should ignore dots in parent directories', () => {
+      expect(getLanguageByFilePath('/tmp/cherry.workspace/README')).toBe('text')
+    })
+
+    it('should handle Windows paths correctly', () => {
+      expect(getLanguageByFilePath('C:\\Users\\Cherry.Workspace\\script.py')).toBe('Python')
     })
   })
 })
