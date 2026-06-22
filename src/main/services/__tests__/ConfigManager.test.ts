@@ -121,6 +121,21 @@ describe('ConfigManager Storage v2 mirror', () => {
     expect(mocks.settingsRepository.set).toHaveBeenCalledTimes(2)
   })
 
+  it('preserves structured config mirror failure details', async () => {
+    mocks.storeData.tray = true
+    mocks.settingsRepository.set.mockRejectedValueOnce({
+      response: {
+        status: 503,
+        statusText: 'Service Unavailable'
+      }
+    })
+    const manager = new ConfigManager()
+
+    await expect(manager.mirrorAllToStorageV2()).rejects.toThrow(
+      'Failed to mirror 1 config setting(s) to Storage v2; first failed key: tray; 503 Service Unavailable'
+    )
+  })
+
   it('hydrates missing electron-store settings from Storage v2 without overwriting local values by default', async () => {
     mocks.storeData.tray = true
     mocks.settingsRepository.list.mockResolvedValue([
