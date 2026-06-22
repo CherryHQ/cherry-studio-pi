@@ -12,7 +12,23 @@ export function getResourceSelectorForceCloseSource(event: Event): string | unde
 
 export function requestCloseResourceSelectors(sourceId?: string) {
   if (typeof window === 'undefined') return
-  window.dispatchEvent(new CustomEvent(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, { detail: { sourceId } }))
+  window.dispatchEvent(createResourceSelectorForceCloseEvent(sourceId))
+}
+
+function createResourceSelectorForceCloseEvent(sourceId?: string): ResourceSelectorForceCloseEvent {
+  const detail = { sourceId }
+  const eventConstructor = typeof window !== 'undefined' ? window.CustomEvent : globalThis.CustomEvent
+
+  if (typeof eventConstructor === 'function') {
+    return new eventConstructor(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT, { detail })
+  }
+
+  const event = new Event(RESOURCE_SELECTOR_FORCE_CLOSE_EVENT) as ResourceSelectorForceCloseEvent
+  Object.defineProperty(event, 'detail', {
+    configurable: true,
+    value: detail
+  })
+  return event
 }
 
 export function getModalSurfaceElements(): Element[] {
@@ -49,19 +65,38 @@ export function closeTransientResourceSelectors() {
   requestCloseResourceSelectors()
 }
 
+function scheduleMicrotask(callback: () => void) {
+  if (typeof window.queueMicrotask === 'function') {
+    window.queueMicrotask(callback)
+    return
+  }
+
+  void Promise.resolve().then(callback)
+}
+
+function scheduleFrame(callback: FrameRequestCallback) {
+  if (typeof window.requestAnimationFrame === 'function' && typeof window.cancelAnimationFrame === 'function') {
+    const frame = window.requestAnimationFrame(callback)
+    return () => window.cancelAnimationFrame(frame)
+  }
+
+  const timer = window.setTimeout(() => callback(Date.now()), 16)
+  return () => window.clearTimeout(timer)
+}
+
 export function scheduleCloseTransientResourceSelectors() {
   closeTransientResourceSelectors()
 
   if (typeof window === 'undefined') return undefined
 
-  window.queueMicrotask(closeTransientResourceSelectors)
-  const frames: number[] = []
-  frames.push(window.requestAnimationFrame(closeTransientResourceSelectors))
-  frames.push(
-    window.requestAnimationFrame(() => {
-      frames.push(window.requestAnimationFrame(closeTransientResourceSelectors))
+  scheduleMicrotask(closeTransientResourceSelectors)
+  let cancelNestedFrame: (() => void) | undefined
+  const cancelFrames = [
+    scheduleFrame(closeTransientResourceSelectors),
+    scheduleFrame(() => {
+      cancelNestedFrame = scheduleFrame(closeTransientResourceSelectors)
     })
-  )
+  ]
   const timers = [
     window.setTimeout(closeTransientResourceSelectors, 50),
     window.setTimeout(closeTransientResourceSelectors, 150),
@@ -69,7 +104,8 @@ export function scheduleCloseTransientResourceSelectors() {
   ]
 
   return () => {
-    frames.forEach((frame) => window.cancelAnimationFrame(frame))
+    cancelFrames.forEach((cancelFrame) => cancelFrame())
+    cancelNestedFrame?.()
     timers.forEach((timer) => window.clearTimeout(timer))
   }
 }
