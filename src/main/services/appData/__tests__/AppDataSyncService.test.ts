@@ -4293,6 +4293,29 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('preserves structured bridge error messages in failure summaries', async () => {
+    const failureSummary = await new AppDataSyncService().recordSyncFailure({
+      error: {
+        message: 'storage bridge failed'
+      },
+      statusCode: 503
+    })
+
+    expect(failureSummary).toEqual(
+      expect.objectContaining({
+        status: 'failed',
+        error: 'storage bridge failed'
+      })
+    )
+    expect(mocks.storageV2.upsertSyncState).toHaveBeenCalledWith(
+      'last-sync-summary',
+      expect.objectContaining({
+        status: 'failed',
+        error: 'storage bridge failed'
+      })
+    )
+  })
+
   it('uses the Storage v2 app sync device id when legacy app.db is missing the original one', async () => {
     mocks.storageV2.getSyncState.mockImplementation(async (id: string) =>
       id === 'device-id' ? 'storage-device' : null

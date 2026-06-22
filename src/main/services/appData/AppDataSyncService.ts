@@ -930,8 +930,50 @@ async function sha256File(filePath: string): Promise<string> {
   return hash.digest('hex')
 }
 
+function extractErrorMessage(error: unknown, seen = new WeakSet<object>()): string | null {
+  if (error instanceof Error) {
+    return error.message || extractErrorMessage(error.cause, seen)
+  }
+
+  if (typeof error === 'string') {
+    return error.trim() || null
+  }
+
+  if (typeof error === 'number' || typeof error === 'boolean' || typeof error === 'bigint') {
+    return String(error)
+  }
+
+  if (!isPlainRecord(error)) {
+    return null
+  }
+
+  if (seen.has(error)) {
+    return null
+  }
+  seen.add(error)
+
+  for (const key of ['message', 'error', 'cause', 'reason'] as const) {
+    const message = extractErrorMessage(error[key], seen)
+    if (message) return message
+  }
+
+  const status = error.status ?? error.statusCode
+  const code = error.code
+  if (typeof status === 'number' && typeof code === 'string' && code.trim()) {
+    return `${code.trim()} (${status})`
+  }
+  if (typeof code === 'string' && code.trim()) {
+    return code.trim()
+  }
+  if (typeof status === 'number') {
+    return `HTTP ${status}`
+  }
+
+  return null
+}
+
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error)
+  return extractErrorMessage(error) ?? '未知同步错误'
 }
 
 function quoteSqlString(value: string) {
