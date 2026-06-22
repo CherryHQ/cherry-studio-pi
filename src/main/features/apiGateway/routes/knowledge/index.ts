@@ -14,6 +14,24 @@ import {
 } from './schemas'
 
 const logger = loggerService.withContext('KnowledgeRoutes')
+const UNKNOWN_KNOWLEDGE_SEARCH_ERROR = 'Unknown knowledge search error'
+
+function getKnowledgeSearchErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === 'string' && error.trim()) return error
+  if (!error || typeof error !== 'object') return UNKNOWN_KNOWLEDGE_SEARCH_ERROR
+
+  const nestedError = (error as { error?: unknown }).error
+  if (nestedError) {
+    const nestedMessage = getKnowledgeSearchErrorMessage(nestedError)
+    if (nestedMessage !== UNKNOWN_KNOWLEDGE_SEARCH_ERROR) return nestedMessage
+  }
+
+  const message = (error as { message?: unknown }).message
+  if (typeof message === 'string' && message.trim()) return message
+
+  return UNKNOWN_KNOWLEDGE_SEARCH_ERROR
+}
 
 /**
  * Knowledge base routes (Elysia plugin, mounted under `/v1`). Backed by the v2
@@ -99,8 +117,12 @@ export const knowledgeRoutes = new Elysia({ prefix: '/knowledge-bases' })
               error: undefined as string | undefined
             }
           } catch (error) {
-            logger.error(`Error searching knowledge base ${base.id}`, error as Error)
-            return { base, results: [], error: (error as Error).message }
+            const message = getKnowledgeSearchErrorMessage(error)
+            logger.error(
+              `Error searching knowledge base ${base.id}`,
+              error instanceof Error ? error : new Error(message)
+            )
+            return { base, results: [], error: message }
           }
         })
       )

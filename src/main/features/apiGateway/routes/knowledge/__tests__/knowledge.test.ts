@@ -130,6 +130,15 @@ describe('knowledge routes (v2)', () => {
     expect(body.error.code).toBe('SERVICE_UNAVAILABLE')
   })
 
+  it('POST /search → 503 when every targeted base search rejects a non-Error value', async () => {
+    mockList.mockResolvedValue({ items: [kb('kb-1', 'KB 1'), kb('kb-2', 'KB 2')], total: 2, page: 1 })
+    mockSearch.mockRejectedValue('vector bridge unavailable')
+    const { status, body } = await call('POST', '/knowledge-bases/search', { query: 'hi' })
+    expect(status).toBe(503)
+    expect(body.error.code).toBe('SERVICE_UNAVAILABLE')
+    expect(body.error.details.originalError).toContain('vector bridge unavailable')
+  })
+
   it('POST /search → 404 when none of the specified bases exist', async () => {
     mockGetById.mockRejectedValue(DataApiErrorFactory.notFound('KnowledgeBase', 'nope'))
     const { status, body } = await call('POST', '/knowledge-bases/search', {
