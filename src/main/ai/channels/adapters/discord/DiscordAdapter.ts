@@ -388,6 +388,8 @@ class DiscordAdapter extends ChannelAdapter {
   }
 
   private handleHello(data: { heartbeat_interval: number }): void {
+    // A reconnect or duplicate HELLO must not leave an older heartbeat interval running.
+    this.clearHeartbeat()
     this.heartbeatAcked = true
 
     // Jittered first heartbeat as per Discord docs
@@ -780,6 +782,16 @@ class DiscordAdapter extends ChannelAdapter {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
     }
+    this.clearHeartbeat()
+    if (this.ws) {
+      if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+        this.ws.close()
+      }
+      this.ws = null
+    }
+  }
+
+  private clearHeartbeat(): void {
     if (this.heartbeatJitterTimer) {
       clearTimeout(this.heartbeatJitterTimer)
       this.heartbeatJitterTimer = null
@@ -787,12 +799,6 @@ class DiscordAdapter extends ChannelAdapter {
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer)
       this.heartbeatTimer = null
-    }
-    if (this.ws) {
-      if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
-        this.ws.close()
-      }
-      this.ws = null
     }
   }
 

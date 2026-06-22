@@ -125,6 +125,29 @@ describe('DiscordAdapter', () => {
     }
   })
 
+  it('replaces existing heartbeat timers when the gateway sends duplicate hello', async () => {
+    vi.useFakeTimers()
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0)
+    const adapter = createAdapter()
+    const ws = new MockWebSocket()
+    adapter.ws = ws
+
+    try {
+      adapter.handleHello({ heartbeat_interval: 1000 })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(vi.getTimerCount()).toBe(1)
+
+      adapter.handleHello({ heartbeat_interval: 1000 })
+      expect(vi.getTimerCount()).toBe(1)
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(ws.send).toHaveBeenCalledTimes(4)
+      expect(vi.getTimerCount()).toBe(1)
+    } finally {
+      randomSpy.mockRestore()
+    }
+  })
+
   it('clears a pending reconnect timer on disconnect', async () => {
     vi.useFakeTimers()
     const adapter = createAdapter()
