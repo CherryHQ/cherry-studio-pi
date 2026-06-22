@@ -1591,6 +1591,25 @@ describe('AppDataSyncService', () => {
     )
   })
 
+  it('surfaces sync directory recheck failures after WebDAV precondition errors', async () => {
+    mocks.webdav.exists
+      .mockResolvedValueOnce(false)
+      .mockRejectedValueOnce(Object.assign(new Error('Unauthorized'), { status: 401 }))
+    mocks.webdav.createDirectory.mockRejectedValueOnce(Object.assign(new Error('Precondition Failed'), { status: 412 }))
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow(
+      'checking remote directory /remote-root/sync/v1 after create precondition failure: 401'
+    )
+
+    expect(mocks.webdav.exists).toHaveBeenNthCalledWith(1, '/remote-root/sync/v1', expect.anything())
+    expect(mocks.webdav.createDirectory).toHaveBeenCalledWith(
+      '/remote-root/sync/v1',
+      expect.objectContaining({ recursive: true })
+    )
+    expect(mocks.webdav.exists).toHaveBeenNthCalledWith(2, '/remote-root/sync/v1', expect.anything())
+    expect(mocks.webdav.putFileContents).not.toHaveBeenCalled()
+  })
+
   it('restores the newest remote safety snapshot even when it belongs to this device', async () => {
     const oldSnapshot = {
       id: 'remote-old',

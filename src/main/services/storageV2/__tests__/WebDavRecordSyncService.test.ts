@@ -4534,6 +4534,27 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(String(mocks.remoteFiles.get(remoteSecretPath))).not.toBe(firstCiphertext)
   })
 
+  it('surfaces directory recheck failures after WebDAV precondition errors', async () => {
+    const service = new StorageV2WebDavRecordSyncService([settingsTable])
+
+    mocks.webdav.exists
+      .mockResolvedValueOnce(false)
+      .mockRejectedValueOnce(Object.assign(new Error('Unauthorized'), { status: 401 }))
+    mocks.webdav.createDirectory.mockRejectedValueOnce(Object.assign(new Error('Precondition Failed'), { status: 412 }))
+
+    await expect(
+      service.sync(mocks.webdav as any, '/remote-root/sync/v1', { version: 1, blobs: {}, records: {} })
+    ).rejects.toThrow('checking remote directory /remote-root/sync/v1 after create precondition failure: 401')
+
+    expect(mocks.webdav.exists).toHaveBeenNthCalledWith(1, '/remote-root/sync/v1')
+    expect(mocks.webdav.createDirectory).toHaveBeenCalledWith(
+      '/remote-root/sync/v1',
+      expect.objectContaining({ recursive: true })
+    )
+    expect(mocks.webdav.exists).toHaveBeenNthCalledWith(2, '/remote-root/sync/v1')
+    expect(mocks.webdav.putFileContents).not.toHaveBeenCalled()
+  })
+
   it('fails safely when the remote secret vault cannot be decrypted with the current sync space key', async () => {
     const credentialRow: ProviderCredentialRow = {
       provider_id: 'provider-1',

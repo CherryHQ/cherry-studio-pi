@@ -1553,7 +1553,7 @@ export class AppDataSyncService {
           `checking remote directory ${dirPath} after create precondition failure`,
           () => webDavExists(client, dirPath, options.signal),
           { logger, signal: options.signal }
-        ).catch(() => false)
+        )
         if (existsAfterFailure) {
           logger.warn(`Remote directory ${dirPath} exists after create precondition failure`, error as Error)
           return

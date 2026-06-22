@@ -965,7 +965,7 @@ export class StorageV2WebDavRecordSyncService {
           `checking remote directory ${dirPath} after create precondition failure`,
           () => webDavExists(client, dirPath, signal),
           { logger, signal }
-        ).catch(() => false)
+        )
         if (existsAfterFailure) {
           logger.warn(`Remote directory ${dirPath} exists after create precondition failure`, error as Error)
           return
