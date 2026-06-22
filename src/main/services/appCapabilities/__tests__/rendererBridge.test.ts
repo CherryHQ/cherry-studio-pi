@@ -56,6 +56,23 @@ describe('app capability renderer bridge', () => {
     expect(message).toContain('Authorization: Bearer [redacted]')
   })
 
+  it('extracts structured bridge error messages before redacting', () => {
+    const message = getBridgeErrorMessage({
+      error: {
+        message: 'Renderer failed with apiKey=sk-secret-token'
+      }
+    })
+
+    expect(message).toBe('Renderer failed with apiKey=[redacted]')
+  })
+
+  it('falls back safely for circular bridge error payloads', () => {
+    const circular: { error?: unknown } = {}
+    circular.error = circular
+
+    expect(getBridgeErrorMessage(circular)).toBe('Unknown renderer bridge error')
+  })
+
   it('uses the first responsive bridge without waiting for earlier unresponsive windows', async () => {
     const unresponsiveWindow = createWindow(vi.fn(() => new Promise(() => undefined)))
     const responsiveWindow = createWindow(

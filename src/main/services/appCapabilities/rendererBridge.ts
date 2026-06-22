@@ -11,6 +11,7 @@ const RENDERER_BRIDGE_PROBE_TIMEOUT_ERROR = '等待主窗口响应超时。'
 const RENDERER_BRIDGE_CALL_TIMEOUT_ERROR = '调用主窗口桥接超时。'
 const MAIN_WINDOW_NOT_READY_ERROR = '主窗口尚未准备好，请打开主窗口后重试。'
 const RUNTIME_STATE_READ_TIMEOUT_PREFIX = '读取运行时状态超时：'
+const UNKNOWN_RENDERER_BRIDGE_ERROR = 'Unknown renderer bridge error'
 
 type RendererBridgeProbeResult = {
   hasBridge: boolean
@@ -26,8 +27,33 @@ class RendererBridgeTimeoutError extends Error {
   }
 }
 
+function extractBridgeErrorMessage(error: unknown, seen = new WeakSet<object>()): string | null {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === 'string' && error.trim()) return error
+  if (!error || typeof error !== 'object') return null
+  if (seen.has(error)) return null
+  seen.add(error)
+
+  const nestedError = (error as { error?: unknown }).error
+  if (nestedError) {
+    const nestedMessage = extractBridgeErrorMessage(nestedError, seen)
+    if (nestedMessage) return nestedMessage
+  }
+
+  const message = (error as { message?: unknown }).message
+  if (typeof message === 'string' && message.trim()) return message
+
+  const cause = (error as { cause?: unknown }).cause
+  if (cause) {
+    const causeMessage = extractBridgeErrorMessage(cause, seen)
+    if (causeMessage) return causeMessage
+  }
+
+  return null
+}
+
 export function getBridgeErrorMessage(error: unknown) {
-  return redactAgentText(error instanceof Error ? error.message : String(error))
+  return redactAgentText(extractBridgeErrorMessage(error) ?? UNKNOWN_RENDERER_BRIDGE_ERROR)
 }
 
 function rendererBridgeAbortError(signal: AbortSignal) {
