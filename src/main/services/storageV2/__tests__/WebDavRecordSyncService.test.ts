@@ -4300,6 +4300,49 @@ describe('StorageV2WebDavRecordSyncService', () => {
     })
   })
 
+  it('preserves structured secret import failure details', async () => {
+    const credentialRow: ProviderCredentialRow = {
+      provider_id: 'provider-1',
+      credential_kind: 'apiKey',
+      secret_ref: 'storage-v2://secret/provider/provider-1/apiKey',
+      updated_at: '2026-06-01T08:00:00.000Z',
+      updated_by_device_id: 'device-a'
+    }
+    const deviceA = makeProviderCredentialDb({ credentials: [credentialRow] })
+    const deviceB = makeProviderCredentialDb({})
+    const service = new StorageV2WebDavRecordSyncService([providerCredentialTable])
+
+    mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({
+      'provider:provider-1:apiKey': {
+        value: 'sk-local-provider',
+        updatedAt: '2026-06-01T08:00:00.000Z'
+      }
+    })
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(deviceA.client as any)
+    const firstResult = await service.sync(
+      mocks.webdav as any,
+      '/remote-root/sync/v1',
+      { version: 1, blobs: {}, records: {} },
+      { secretKeyMaterial: 'dav-user:dav-password' }
+    )
+
+    mocks.secretVault.exportPlaintextSecrets.mockResolvedValueOnce({})
+    mocks.secretVault.importPlaintextSecrets.mockRejectedValueOnce({
+      error: {
+        message: 'secure storage refused import'
+      },
+      statusCode: 503
+    })
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(deviceB.client as any)
+
+    await expect(
+      service.sync(mocks.webdav as any, '/remote-root/sync/v1', firstResult.manifest, {
+        secretKeyMaterial: 'dav-user:dav-password'
+      })
+    ).rejects.toThrow('secure storage refused import')
+    expect(deviceB.state.credentials).toEqual([])
+  })
+
   it('fails safe when the remote secret vault count does not match the bundle', async () => {
     const credentialRow: ProviderCredentialRow = {
       provider_id: 'provider-1',
