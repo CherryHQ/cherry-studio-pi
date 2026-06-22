@@ -22,6 +22,7 @@ const CAPABILITY_FAILED_SUFFIX = ' 调用失败'
 const CAPABILITY_FAILED_INFIX = ' 调用失败：'
 const CAPABILITY_ABORTED_INFIX = ' 已取消：'
 const DRY_RUN_UNSUPPORTED_PREFIX = '能力不支持 dry run：'
+const UNKNOWN_CAPABILITY_ERROR = 'Unknown capability error'
 
 function abortReasonMessage(signal: AbortSignal) {
   const reason = signal.reason
@@ -34,6 +35,23 @@ function abortReasonError(signal: AbortSignal) {
   const reason = signal.reason
   if (reason instanceof Error) return reason
   return new Error(abortReasonMessage(signal))
+}
+
+function getCapabilityErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === 'string' && error.trim()) return error
+  if (!error || typeof error !== 'object') return UNKNOWN_CAPABILITY_ERROR
+
+  const nestedError = (error as { error?: unknown }).error
+  if (nestedError) {
+    const nestedMessage = getCapabilityErrorMessage(nestedError)
+    if (nestedMessage !== UNKNOWN_CAPABILITY_ERROR) return nestedMessage
+  }
+
+  const message = (error as { message?: unknown }).message
+  if (typeof message === 'string' && message.trim()) return message
+
+  return UNKNOWN_CAPABILITY_ERROR
 }
 
 function createAbortWait(signal: AbortSignal) {
@@ -227,7 +245,7 @@ export class AppCapabilityService {
         )
       }
 
-      const message = error instanceof Error ? error.message : String(error)
+      const message = getCapabilityErrorMessage(error)
       logger.warn('App capability failed', { id: capabilityId, error: redactAgentText(message) })
       return sanitizeResultForSource(
         {

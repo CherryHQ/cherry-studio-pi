@@ -276,6 +276,29 @@ describe('AppCapabilityService', () => {
     })
   })
 
+  it('preserves structured thrown agent capability error messages', async () => {
+    loggerWarn.mockClear()
+    executeCapability.mockReset()
+    executeCapability.mockRejectedValueOnce({
+      error: {
+        message: 'Bridge failed with apiKey=sk-secret-token'
+      }
+    })
+    const service = new AppCapabilityService()
+
+    const result = await service.call('settings.read', {}, { source: 'agent' })
+    const serialized = JSON.stringify(result)
+
+    expect(result.ok).toBe(false)
+    expect(serialized).not.toContain('sk-secret-token')
+    expect(result.summary).toContain('Bridge failed with apiKey=[redacted]')
+    expect(result.error).toContain('Bridge failed with apiKey=[redacted]')
+    expect(loggerWarn).toHaveBeenCalledWith('App capability failed', {
+      id: 'settings.read',
+      error: 'Bridge failed with apiKey=[redacted]'
+    })
+  })
+
   it('does not sanitize non-agent capability results', async () => {
     executeCapability.mockReset()
     executeCapability.mockResolvedValueOnce({
