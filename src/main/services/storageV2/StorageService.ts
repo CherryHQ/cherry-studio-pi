@@ -1,5 +1,6 @@
 import { modelService } from '@data/services/ModelService'
 import { providerService } from '@data/services/ProviderService'
+import { getErrorMessage } from '@main/utils/errorMessage'
 import { ErrorCode, isDataApiError } from '@shared/data/api'
 import type { CreateModelDto, UpdateModelDto } from '@shared/data/api/schemas/models'
 import type { CreateProviderDto, UpdateProviderDto } from '@shared/data/api/schemas/providers'
@@ -1186,7 +1187,7 @@ export class StorageV2Service {
         }
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = getErrorMessage(error, 'Unknown Storage v2 health summary error')
       checks.push({
         id: 'storage_health',
         label: 'Storage health',
@@ -1211,7 +1212,7 @@ export class StorageV2Service {
         }
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = getErrorMessage(error, 'Unknown Storage v2 health summary error')
       checks.push({
         id: 'integrity',
         label: 'Integrity',
@@ -1247,7 +1248,7 @@ export class StorageV2Service {
         values: { count: audit.warnings.length }
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = getErrorMessage(error, 'Unknown Storage v2 health summary error')
       checks.push({
         id: 'audit_warnings',
         label: 'Audit warnings',
@@ -1271,7 +1272,7 @@ export class StorageV2Service {
         values: { count: recordCount }
       })
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
+      const message = getErrorMessage(error, 'Unknown Storage v2 health summary error')
       checks.push({
         id: 'record_coverage',
         label: 'Record coverage',

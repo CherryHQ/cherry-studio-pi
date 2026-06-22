@@ -1365,6 +1365,59 @@ describe('StorageV2Service', () => {
     )
   })
 
+  it('preserves structured health summary failure details', async () => {
+    mocks.database.healthCheck.mockRejectedValueOnce({
+      response: {
+        status: 503,
+        statusText: 'Service Unavailable'
+      }
+    })
+    mocks.database.integrityReport.mockRejectedValueOnce({
+      cause: {
+        code: 'SQLITE_BUSY'
+      }
+    })
+    mocks.migrationAuditService.runAudit.mockRejectedValueOnce({
+      message: 'audit unavailable'
+    })
+    mocks.statisticsService.getStats.mockRejectedValueOnce({
+      status: 423,
+      statusText: 'Locked'
+    })
+
+    const summary = await new StorageV2Service().getHealthSummary()
+
+    expect(summary.status).toBe('blocked')
+    expect(summary.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'storage_health',
+          status: 'error',
+          message: 'Storage health check failed: 503 Service Unavailable',
+          values: { message: '503 Service Unavailable' }
+        }),
+        expect.objectContaining({
+          id: 'integrity',
+          status: 'error',
+          message: 'Storage integrity report failed: SQLITE_BUSY',
+          values: { message: 'SQLITE_BUSY' }
+        }),
+        expect.objectContaining({
+          id: 'audit_warnings',
+          status: 'error',
+          message: 'Migration audit failed: audit unavailable',
+          values: { message: 'audit unavailable' }
+        }),
+        expect.objectContaining({
+          id: 'record_coverage',
+          status: 'warning',
+          message: 'Storage v2 stats failed: 423 Locked',
+          values: { message: '423 Locked' }
+        })
+      ])
+    )
+  })
+
   it('restores localStorage MCP provider tokens from secret refs in core snapshots', async () => {
     const secretRef = 'storage-v2://secret/mcp-provider-token/mcprouter_token/token'
     mocks.settingsRepository.list.mockResolvedValue([
