@@ -391,6 +391,25 @@ describe('AppUpdaterService', () => {
       expect(mocks.updateInstallBlocker.release).toHaveBeenCalledTimes(1)
     })
 
+    it('reports structured installer launch failures to the renderer', async () => {
+      vi.mocked(autoUpdater.quitAndInstall).mockImplementationOnce(() => {
+        throw { response: { status: 423, statusText: 'Locked' } }
+      })
+
+      appUpdater.quitAndInstall()
+
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(mocks.windowManager.broadcastToType).toHaveBeenCalledWith(
+        WindowType.Main,
+        IpcChannel.UpdateError,
+        expect.objectContaining({ message: '423 Locked' })
+      )
+      expect(mocks.windowManager.broadcastToType.mock.calls[0]?.[2]).toBeInstanceOf(Error)
+      expect(application.unmarkQuitting).toHaveBeenCalledTimes(1)
+      expect(mocks.updateInstallBlocker.release).toHaveBeenCalledTimes(1)
+    })
+
     it('allows retry if the installer launch never reaches will-quit or emits an error', async () => {
       vi.useFakeTimers()
       try {
@@ -472,6 +491,27 @@ describe('AppUpdaterService', () => {
         IpcChannel.UpdateError,
         downloadError
       )
+    })
+
+    it('preserves structured manual download failure details', async () => {
+      autoUpdater.autoDownload = false
+      vi.mocked(autoUpdater.downloadUpdate).mockRejectedValueOnce({
+        response: {
+          status: 503,
+          statusText: 'Service Unavailable'
+        }
+      })
+
+      await appUpdater.checkForUpdates()
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(mocks.windowManager.broadcastToType).toHaveBeenCalledWith(
+        WindowType.Main,
+        IpcChannel.UpdateError,
+        expect.objectContaining({ message: '503 Service Unavailable' })
+      )
+      expect(mocks.windowManager.broadcastToType.mock.calls[0]?.[2]).toBeInstanceOf(Error)
+      expect(mocks.updateDownloadBlocker.release).toHaveBeenCalledTimes(1)
     })
 
     it('releases the manual download power blocker after a successful download', async () => {

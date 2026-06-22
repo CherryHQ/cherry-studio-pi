@@ -4,6 +4,7 @@ import { BaseService, DependsOn, Injectable, Phase, ServicePhase } from '@main/c
 import { isWin } from '@main/core/platform'
 import { WindowType } from '@main/core/window/types'
 import { powerSaveBlockerService } from '@main/services/PowerSaveBlockerService'
+import { getErrorMessage } from '@main/utils/errorMessage'
 import { getIpCountry } from '@main/utils/ipService'
 import { generateUserAgent, getClientId } from '@main/utils/systemInfo'
 import { APP_NAME, FeedUrl, UpdateConfigUrl, UpdateMirror } from '@shared/config/constant'
@@ -25,7 +26,7 @@ function toError(error: unknown): Error {
     return error
   }
 
-  return new Error(typeof error === 'string' ? error : String(error))
+  return new Error(getErrorMessage(error, 'Unknown update error'))
 }
 
 function getCommonHeaders() {
@@ -108,15 +109,16 @@ export class AppUpdaterService extends BaseService {
 
   private registerAutoUpdaterListeners(): void {
     const wm = () => application.get('WindowManager')
-    const onError = (error: Error) => {
+    const onError = (error: unknown) => {
+      const updateError = toError(error)
       const wasInstalling = this.quitAndInstallStarted
       this.quitAndInstallStarted = false
       if (wasInstalling) {
         application.unmarkQuitting()
         this.releaseUpdateInstallBlocker?.('update-error')
       }
-      logger.error('update error', error)
-      wm().broadcastToType(WindowType.Main, IpcChannel.UpdateError, error)
+      logger.error('update error', updateError)
+      wm().broadcastToType(WindowType.Main, IpcChannel.UpdateError, updateError)
     }
     autoUpdater.on('error', onError)
     this.registerDisposable(() => autoUpdater.removeListener('error', onError))
@@ -489,10 +491,11 @@ export class AppUpdaterService extends BaseService {
         // Silent install hides close/elevation failures on Windows and can look like the app disappeared.
         autoUpdater.quitAndInstall(false, true)
       } catch (error) {
+        const updateError = toError(error)
         this.quitAndInstallStarted = false
         application.unmarkQuitting()
-        logger.error('Failed to quit and install update', error as Error)
-        application.get('WindowManager').broadcastToType(WindowType.Main, IpcChannel.UpdateError, error)
+        logger.error('Failed to quit and install update', updateError)
+        application.get('WindowManager').broadcastToType(WindowType.Main, IpcChannel.UpdateError, updateError)
         releaseInstallBlocker('quit-and-install-error')
       }
     })
