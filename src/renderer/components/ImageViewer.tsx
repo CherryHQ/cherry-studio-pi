@@ -301,7 +301,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({ alt, onClick, onContextMenu, 
   )
   const onActionError = React.useCallback((error: unknown, action: ImagePreviewAction, item: ImagePreviewItem) => {
     logger.error(`Image preview action failed: ${action.id}`, {
-      error: error instanceof Error ? error.message : String(error),
+      error: getCopyErrorMessage(error),
       itemId: item.id
     })
   }, [])
