@@ -1,4 +1,5 @@
 import { loggerService } from '@logger'
+import { getErrorMessage } from '@renderer/utils/error'
 import { useCallback } from 'react'
 
 import type { ToolApprovalRespondFn } from './ToolApprovalContext'
@@ -36,13 +37,14 @@ export function useToolApprovalBridge(topicId: string): ToolApprovalRespondFn {
           throw new Error('Main rejected the tool-approval decision')
         }
       } catch (error) {
+        const message = getErrorMessage(error)
         logger.error('Failed to deliver tool-approval decision to main', {
           approvalId,
           approved,
           transport: match.transport,
-          error: error instanceof Error ? error.message : String(error)
+          error: message
         })
-        throw error instanceof Error ? error : new Error(String(error))
+        throw error instanceof Error ? error : new Error(message, { cause: error })
       }
     },
     [topicId]

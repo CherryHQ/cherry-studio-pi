@@ -52,6 +52,13 @@ describe('useToolApprovalBridge', () => {
     await expect(result.current({ match, approved: false })).rejects.toThrow('ipc boom')
   })
 
+  it('preserves nested IPC rejection details', async () => {
+    respond.mockRejectedValueOnce({ error: { message: 'approval bridge failed' } })
+    const { result } = renderHook(() => useToolApprovalBridge('topic-1'))
+
+    await expect(result.current({ match, approved: false })).rejects.toThrow('approval bridge failed')
+  })
+
   it('no-ops without an approvalId', async () => {
     const { result } = renderHook(() => useToolApprovalBridge('topic-1'))
 
