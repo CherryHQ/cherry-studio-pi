@@ -9,6 +9,7 @@ import { useIsToolAutoApproved } from '@renderer/hooks/useMcpServer'
 import { useSaveFailedToast } from '@renderer/hooks/useSaveFailedToast'
 import { useTimer } from '@renderer/hooks/useTimer'
 import type { McpToolResponse } from '@renderer/types'
+import { renderPlainTextCodeHtml, sanitizeHtml } from '@renderer/utils/html'
 import { IpcChannel } from '@shared/IpcChannel'
 import type { McpProgressEvent } from '@shared/types/mcp'
 import { Collapse, ConfigProvider, Progress } from 'antd'
@@ -326,24 +327,51 @@ const ToolResponseContent: FC<{
 
   // Extract and highlight response when available
   useEffect(() => {
-    if (!isExpanded || !response) return
-
-    const highlight = async () => {
-      const { text: previewContent, images } = extractPreviewContent(response)
-      setResponseImages(images)
-      const {
-        data: truncatedContent,
-        isTruncated: wasTruncated,
-        originalLength: origLen
-      } = truncateOutput(previewContent)
-      setIsTruncated(wasTruncated)
-      setOriginalLength(origLen)
-      const result = await highlightCode(truncatedContent, 'json')
-      setHighlightedResponse(result)
+    if (!isExpanded || !response) {
+      setHighlightedResponse('')
+      setResponseImages([])
+      setIsTruncated(false)
+      setOriginalLength(0)
+      return
     }
 
-    const timer = setTimeout(highlight, 0)
-    return () => clearTimeout(timer)
+    let cancelled = false
+    const highlight = async () => {
+      try {
+        setHighlightedResponse('')
+        setResponseImages([])
+        setIsTruncated(false)
+        setOriginalLength(0)
+        const { text: previewContent, images } = extractPreviewContent(response)
+        if (cancelled) return
+        setResponseImages(images)
+        const {
+          data: truncatedContent,
+          isTruncated: wasTruncated,
+          originalLength: origLen
+        } = truncateOutput(previewContent)
+        if (cancelled) return
+        setIsTruncated(wasTruncated)
+        setOriginalLength(origLen)
+        try {
+          const result = await highlightCode(truncatedContent, 'json')
+          if (cancelled) return
+          setHighlightedResponse(sanitizeHtml(result))
+        } catch (error) {
+          logger.debug('Failed to highlight MCP tool response', error as Error)
+          if (!cancelled) setHighlightedResponse(renderPlainTextCodeHtml(truncatedContent))
+        }
+      } catch (error) {
+        logger.debug('Failed to render MCP tool response', error as Error)
+        if (!cancelled) setHighlightedResponse('')
+      }
+    }
+
+    const timer = setTimeout(() => void highlight(), 0)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   }, [isExpanded, response, highlightCode])
 
   if (!isExpanded) return null
