@@ -90,19 +90,33 @@ export const SettingHelpText = ({ className, ...props }: React.ComponentPropsWit
   <div className={cn('text-[11px] text-foreground/40', className)} {...props} />
 )
 
-export const SettingHelpLink = ({ className, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-  <a className={cn('cursor-pointer text-[11px] text-primary hover:underline', className)} {...props} />
+function resolveExternalLinkRel(target?: React.HTMLAttributeAnchorTarget, rel?: string) {
+  return rel ?? (target === '_blank' ? 'noopener noreferrer' : undefined)
+}
+
+export const SettingHelpLink = ({
+  className,
+  rel,
+  target,
+  ...props
+}: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+  <a
+    className={cn('cursor-pointer text-[11px] text-primary hover:underline', className)}
+    rel={resolveExternalLinkRel(target, rel)}
+    target={target}
+    {...props}
+  />
 )
 
 export const SettingTitleExternalLink = ({
   className,
   target = '_blank',
-  rel = 'noreferrer',
+  rel,
   ...props
 }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
   <a
     target={target}
-    rel={rel}
+    rel={resolveExternalLinkRel(target, rel)}
     className={cn('inline-flex items-center text-primary hover:underline', className)}
     {...props}
   />

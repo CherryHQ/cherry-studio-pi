@@ -131,8 +131,10 @@ describe('ProviderHeader', () => {
     expect(screen.getByText('OpenAI').closest('a')).toBeNull()
     const docsLink = screen.getByRole('link', { name: 'OpenAI · common.docs' })
     expect(docsLink).toHaveAttribute('href', 'https://platform.openai.com/docs')
+    expect(docsLink).toHaveAttribute('rel', 'noopener noreferrer')
     const modelsLink = screen.getByRole('link', { name: 'OpenAI · settings.models.list_title' })
     expect(modelsLink).toHaveAttribute('href', 'https://platform.openai.com/docs/models')
+    expect(modelsLink).toHaveAttribute('rel', 'noopener noreferrer')
   })
 
   it('opens the api options drawer when the meta enables the entry', () => {
