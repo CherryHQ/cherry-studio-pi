@@ -68,6 +68,36 @@ const KNOWLEDGE_SEARCH_OVERFETCH_FACTOR = 5
 const KNOWLEDGE_SEARCH_CANDIDATE_CAP = 200
 const REINDEX_ALLOWED_STATUSES = new Set<KnowledgeItemStatus>(['completed', 'failed'])
 const KNOWLEDGE_JOB_TYPE_SET = new Set<string>(KNOWLEDGE_JOB_TYPES)
+const UNKNOWN_KNOWLEDGE_SERVICE_ERROR = 'Unknown knowledge service error'
+
+function getKnowledgeServiceErrorMessage(error: unknown, seen = new WeakSet<object>()): string {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === 'string' && error.trim()) return error
+  if (!error || typeof error !== 'object') return UNKNOWN_KNOWLEDGE_SERVICE_ERROR
+  if (seen.has(error)) return UNKNOWN_KNOWLEDGE_SERVICE_ERROR
+  seen.add(error)
+
+  const nestedError = (error as { error?: unknown }).error
+  if (nestedError) {
+    const nestedMessage = getKnowledgeServiceErrorMessage(nestedError, seen)
+    if (nestedMessage !== UNKNOWN_KNOWLEDGE_SERVICE_ERROR) return nestedMessage
+  }
+
+  const message = (error as { message?: unknown }).message
+  if (typeof message === 'string' && message.trim()) return message
+
+  const cause = (error as { cause?: unknown }).cause
+  if (cause) {
+    const causeMessage = getKnowledgeServiceErrorMessage(cause, seen)
+    if (causeMessage !== UNKNOWN_KNOWLEDGE_SERVICE_ERROR) return causeMessage
+  }
+
+  return UNKNOWN_KNOWLEDGE_SERVICE_ERROR
+}
+
+function normalizeKnowledgeServiceError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(getKnowledgeServiceErrorMessage(error))
+}
 
 @Injectable('KnowledgeService')
 @ServicePhase(Phase.WhenReady)
@@ -141,7 +171,7 @@ export class KnowledgeService extends BaseService {
         const vectorStoreService = application.get('KnowledgeVectorStoreService')
         await vectorStoreService.deleteStore(baseId)
       } catch (error) {
-        const normalizedError = error instanceof Error ? error : new Error(String(error))
+        const normalizedError = normalizeKnowledgeServiceError(error)
         logger.error('Failed to delete knowledge base vector artifacts', normalizedError, { baseId })
         throw error
       }
@@ -149,7 +179,7 @@ export class KnowledgeService extends BaseService {
       try {
         await knowledgeBaseService.delete(baseId)
       } catch (error) {
-        const normalizedError = error instanceof Error ? error : new Error(String(error))
+        const normalizedError = normalizeKnowledgeServiceError(error)
         logger.error('Failed to delete knowledge base SQLite row after artifact cleanup', normalizedError, {
           baseId
         })
@@ -188,10 +218,10 @@ export class KnowledgeService extends BaseService {
       try {
         await this.deleteBase(restoredBase.id)
       } catch (cleanupError) {
-        const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+        const cleanupMessage = getKnowledgeServiceErrorMessage(cleanupError)
         logger.error(
           'Failed to delete restored knowledge base after item restoration failed',
-          cleanupError instanceof Error ? cleanupError : new Error(cleanupMessage),
+          normalizeKnowledgeServiceError(cleanupError),
           {
             sourceBaseId: sourceBase.id,
             restoredBaseId: restoredBase.id
@@ -199,14 +229,14 @@ export class KnowledgeService extends BaseService {
         )
         throw DataApiErrorFactory.invalidOperation(
           'restoreBase',
-          `Failed to restore knowledge items: ${
-            error instanceof Error ? error.message : String(error)
-          }. Restored knowledge base '${restoredBase.id}' could not be cleaned up automatically: ${cleanupMessage}. Please delete it manually.`
+          `Failed to restore knowledge items: ${getKnowledgeServiceErrorMessage(error)}. Restored knowledge base '${
+            restoredBase.id
+          }' could not be cleaned up automatically: ${cleanupMessage}. Please delete it manually.`
         )
       }
       throw DataApiErrorFactory.invalidOperation(
         'restoreBase',
-        `Failed to restore knowledge items: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to restore knowledge items: ${getKnowledgeServiceErrorMessage(error)}`
       )
     }
 
@@ -637,9 +667,7 @@ export class KnowledgeService extends BaseService {
     } catch (error) {
       throw DataApiErrorFactory.invalidOperation(
         'restoreBase',
-        `Cannot restore knowledge item '${item.id}' (${item.type}): ${
-          error instanceof Error ? error.message : String(error)
-        }`
+        `Cannot restore knowledge item '${item.id}' (${item.type}): ${getKnowledgeServiceErrorMessage(error)}`
       )
     }
   }

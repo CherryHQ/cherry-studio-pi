@@ -529,6 +529,18 @@ describe('KnowledgeService', () => {
     )
   })
 
+  it('preserves structured SQLite delete failures after vector cleanup', async () => {
+    const service = new KnowledgeService()
+    knowledgeBaseDeleteMock.mockRejectedValueOnce({ error: { message: 'database delete denied' } })
+
+    await expect(service.deleteBase('kb-1')).rejects.toThrow(
+      'Vector artifacts were deleted, but SQLite knowledge base cleanup failed: database delete denied'
+    )
+
+    expect(deleteStoreMock).toHaveBeenCalledWith('kb-1')
+    expect(knowledgeBaseDeleteMock).toHaveBeenCalledWith('kb-1')
+  })
+
   it('cancels file-processing jobs linked by active knowledge checks before deleting a base', async () => {
     const service = new KnowledgeService()
     listMock.mockResolvedValueOnce([
@@ -668,6 +680,28 @@ describe('KnowledgeService', () => {
     ).rejects.toThrow(
       "Restored knowledge base 'restored-kb' could not be cleaned up automatically: delete store failed"
     )
+  })
+
+  it('preserves structured restore item failures after cleanup succeeds', async () => {
+    const service = new KnowledgeService()
+    const sourceBase = createBase({ id: 'source-kb', embeddingModelId: 'provider::embed', dimensions: 3 })
+    const restoredBase = createBase({ id: 'restored-kb', embeddingModelId: 'provider::embed', dimensions: 3 })
+    knowledgeBaseGetByIdMock.mockResolvedValueOnce(sourceBase)
+    knowledgeBaseCreateMock.mockResolvedValueOnce(restoredBase)
+    knowledgeItemGetRootItemsByBaseIdMock.mockResolvedValueOnce([createNoteItem('source-note', 'source-kb')])
+    enqueueMock.mockRejectedValueOnce({ error: { message: 'restore queue unavailable' } })
+
+    await expect(
+      service.restoreBase({
+        sourceBaseId: 'source-kb',
+        name: 'Restored KB',
+        embeddingModelId: 'provider::embed',
+        dimensions: 3
+      })
+    ).rejects.toThrow('Failed to restore knowledge items: restore queue unavailable')
+
+    expect(deleteStoreMock).toHaveBeenCalledWith('restored-kb')
+    expect(knowledgeBaseDeleteMock).toHaveBeenCalledWith('restored-kb')
   })
 
   it('restores a processed file by copying its source and artifact, then indexes without reprocessing', async () => {
