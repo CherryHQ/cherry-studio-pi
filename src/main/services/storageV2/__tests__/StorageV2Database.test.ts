@@ -162,6 +162,31 @@ describe('StorageV2Database.initialize', () => {
     expect(archiveDir).toMatch(/^\/mock\/data\/corrupt\/.+-main-db$/)
     expect(fs.renameSync).toHaveBeenCalledWith('/mock/data/main.db', `${archiveDir}/main.db`)
   })
+
+  it('recovers when libsql reports corruption through a structured error object', async () => {
+    mockStorageRoot()
+    vi.mocked(fs.existsSync).mockImplementation((candidate) => String(candidate) === '/mock/data/main.db')
+    mockCreateClient.mockImplementationOnce(() => {
+      throw {
+        error: {
+          message: 'file is not a database'
+        }
+      }
+    })
+    mockCreateClient.mockReturnValueOnce(createInitializedClient())
+
+    const database = new StorageV2Database()
+    await database.initialize()
+
+    const archiveDirCall = vi
+      .mocked(fs.mkdirSync)
+      .mock.calls.find(([candidate]) => String(candidate).includes('/mock/data/corrupt/'))
+    const archiveDir = String(archiveDirCall?.[0] ?? '')
+
+    expect(mockCreateClient).toHaveBeenCalledTimes(2)
+    expect(archiveDir).toMatch(/^\/mock\/data\/corrupt\/.+-main-db$/)
+    expect(fs.renameSync).toHaveBeenCalledWith('/mock/data/main.db', `${archiveDir}/main.db`)
+  })
 })
 
 describe('StorageV2Database.withTransaction', () => {
