@@ -104,7 +104,7 @@ export function confirmMenuPresentationModeChange({
       try {
         await setMenuPresentationMode(mode)
       } catch (error) {
-        window.toast.error(formatErrorMessage(error))
+        window.toast?.error?.(formatErrorMessage(error))
         throw error
       }
 
@@ -333,7 +333,7 @@ const CommonSettings: FC = () => {
         try {
           await setUseSystemTitleBar(checked)
         } catch (error) {
-          window.toast.error(formatErrorMessage(error))
+          window.toast?.error?.(formatErrorMessage(error))
           throw error
         }
 
@@ -359,7 +359,7 @@ const CommonSettings: FC = () => {
         try {
           await setDisableHardwareAcceleration(checked)
         } catch (error) {
-          window.toast.error(formatErrorMessage(error))
+          window.toast?.error?.(formatErrorMessage(error))
           throw error
         }
 
@@ -398,7 +398,7 @@ const CommonSettings: FC = () => {
 
   const onSetProxyUrl = () => {
     if (proxyUrl && !isValidProxyUrl(proxyUrl)) {
-      window.toast.error(t('message.error.invalid.proxy.url'))
+      window.toast?.error?.(t('message.error.invalid.proxy.url'))
       return
     }
 

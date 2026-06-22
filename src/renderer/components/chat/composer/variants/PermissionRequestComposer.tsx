@@ -213,7 +213,7 @@ export default function PermissionRequestComposer({ request, onRespond, classNam
           action,
           approvalId: request.approvalId
         })
-        window.toast.error(t('agent.toolPermission.error.sendFailed'))
+        window.toast?.error?.(t('agent.toolPermission.error.sendFailed'))
         setIsSubmitting(false)
       }
     },

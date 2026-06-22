@@ -148,7 +148,7 @@ const TranslatePage: FC = () => {
         await persistPromise
       } catch (error) {
         logger.error(`Failed to persist ${actionName}`, error as Error)
-        window.toast.error(t('common.save_failed'))
+        window.toast?.error?.(t('common.save_failed'))
       }
     },
     [t]
@@ -188,7 +188,7 @@ const TranslatePage: FC = () => {
       await copy(translateInput)
     } catch (error) {
       logger.error('Failed to copy source text:', error as Error)
-      window.toast.error(t('common.copy_failed'))
+      window.toast?.error?.(t('common.copy_failed'))
     }
   }, [copy, t, translateInput])
 
@@ -197,7 +197,7 @@ const TranslatePage: FC = () => {
       await copy(translateOutput)
     } catch (error) {
       logger.error('Failed to copy text to clipboard:', error as Error)
-      window.toast.error(t('common.copy_failed'))
+      window.toast?.error?.(t('common.copy_failed'))
     }
   }, [copy, t, translateOutput])
 
@@ -215,7 +215,7 @@ const TranslatePage: FC = () => {
         smoothReset('')
         return
       }
-      window.toast.success(t('translate.complete'))
+      window.toast?.success?.(t('translate.complete'))
 
       if (autoCopy) {
         setTimeoutTimer(
@@ -227,7 +227,7 @@ const TranslatePage: FC = () => {
             } catch (error) {
               if (!mountedRef.current) return
               logger.error('Failed to auto copy translated text', error as Error)
-              window.toast.error(t('translate.error.auto_copy_failed'))
+              window.toast?.error?.(t('translate.error.auto_copy_failed'))
             }
           },
           100
@@ -255,7 +255,7 @@ const TranslatePage: FC = () => {
         setDetectedLanguage(actualSourceLanguage)
       } catch (error) {
         logger.error('Failed to detect language', error as Error)
-        window.toast.error(formatErrorMessageWithPrefix(error, t('translate.error.detect.failed')))
+        window.toast?.error?.(formatErrorMessageWithPrefix(error, t('translate.error.detect.failed')))
         return
       } finally {
         setIsDetecting(false)
@@ -265,7 +265,7 @@ const TranslatePage: FC = () => {
     }
 
     if (actualSourceLanguage === UNKNOWN_LANG_CODE) {
-      window.toast.error(t('translate.error.detect.unknown'))
+      window.toast?.error?.(t('translate.error.detect.unknown'))
       return
     }
 
@@ -277,7 +277,7 @@ const TranslatePage: FC = () => {
     )
 
     if (!targetResult.success) {
-      window.toast.warning(
+      window.toast?.warning?.(
         targetResult.errorType === 'same_language' ? t('translate.language.same') : t('translate.language.not_pair')
       )
       return
@@ -302,7 +302,7 @@ const TranslatePage: FC = () => {
   const onAbort = useCallback(() => {
     if (!isTranslating) return
     cancel()
-    window.toast.info(t('translate.info.aborted'))
+    window.toast?.info?.(t('translate.info.aborted'))
   }, [cancel, isTranslating, t])
 
   const handleExchange = useCallback(() => {
@@ -389,20 +389,20 @@ const TranslatePage: FC = () => {
             isText = await isTextFile(file.path)
           } catch (error) {
             logger.error('Failed to check file type.', error as Error)
-            window.toast.error(formatErrorMessageWithPrefix(error, t('translate.files.error.check_type')))
+            window.toast?.error?.(formatErrorMessageWithPrefix(error, t('translate.files.error.check_type')))
             return
           }
         }
 
         if (!isText && !isDocument) {
-          window.toast.error(t('common.file.not_supported', { type: fileExtension }))
+          window.toast?.error?.(t('common.file.not_supported', { type: fileExtension }))
           logger.error('Unsupported file type.')
           return
         }
 
         const maxSize = isDocument ? 20 * MB : 5 * MB
         if (file.size > maxSize) {
-          window.toast.error(t('translate.files.error.too_large') + ` (0 ~ ${maxSize / MB} MB)`)
+          window.toast?.error?.(t('translate.files.error.too_large') + ` (0 ~ ${maxSize / MB} MB)`)
           return
         }
 
@@ -413,7 +413,7 @@ const TranslatePage: FC = () => {
           appendTranslateInput(result)
         } catch (error) {
           logger.error('Failed to read file.', error as Error)
-          window.toast.error(formatErrorMessageWithPrefix(error, t('translate.files.error.unknown')))
+          window.toast?.error?.(formatErrorMessageWithPrefix(error, t('translate.files.error.unknown')))
         }
       }
 
@@ -452,7 +452,7 @@ const TranslatePage: FC = () => {
       }
     } catch (error) {
       logger.error('Unknown error when selecting file.', error as Error)
-      window.toast.error(formatErrorMessageWithPrefix(error, t('translate.files.error.unknown')))
+      window.toast?.error?.(formatErrorMessageWithPrefix(error, t('translate.files.error.unknown')))
     } finally {
       clearFiles()
       setIsProcessing(false)
@@ -463,7 +463,7 @@ const TranslatePage: FC = () => {
     (files: FileMetadata[] | FileList): FileMetadata | File | null => {
       if (files.length === 0) return null
       if (files.length > 1) {
-        window.toast.error(t('translate.files.error.multiple'))
+        window.toast?.error?.(t('translate.files.error.multiple'))
         return null
       }
       return files[0]
@@ -479,7 +479,7 @@ const TranslatePage: FC = () => {
       try {
         const data = await getTextFromDropEvent(e).catch((error) => {
           logger.error('getTextFromDropEvent', error as Error)
-          window.toast.error(t('translate.files.error.unknown'))
+          window.toast?.error?.(t('translate.files.error.unknown'))
           return null
         })
         if (data) {
@@ -488,7 +488,7 @@ const TranslatePage: FC = () => {
 
         const droppedFiles = await getFilesFromDropEvent(e).catch((error) => {
           logger.error('handleDrop:', error as Error)
-          window.toast.error(t('translate.files.error.unknown'))
+          window.toast?.error?.(t('translate.files.error.unknown'))
           return null
         })
 
@@ -500,7 +500,7 @@ const TranslatePage: FC = () => {
         }
       } catch (error) {
         logger.error('Drop processing failed', error as Error)
-        window.toast.error(formatErrorMessageWithPrefix(error, t('translate.files.error.unknown')))
+        window.toast?.error?.(formatErrorMessageWithPrefix(error, t('translate.files.error.unknown')))
       } finally {
         setIsProcessing(false)
       }
@@ -529,7 +529,7 @@ const TranslatePage: FC = () => {
 
         if (!filePath) {
           if (!file.type.startsWith('image/')) {
-            window.toast.info(t('common.file.not_supported', { type: getFileExtension(file.name) }))
+            window.toast?.info?.(t('common.file.not_supported', { type: getFileExtension(file.name) }))
             return
           }
           const tempFilePath = await window.api.file.createTempFile(file.name)
@@ -542,13 +542,13 @@ const TranslatePage: FC = () => {
         }
 
         if (!selectedFile) {
-          window.toast.error(t('translate.files.error.unknown'))
+          window.toast?.error?.(t('translate.files.error.unknown'))
           return
         }
         await processFile(selectedFile)
       } catch (error) {
         logger.error('onPaste:', error as Error)
-        window.toast.error(t('chat.input.file_error'))
+        window.toast?.error?.(t('chat.input.file_error'))
       } finally {
         setIsProcessing(false)
       }

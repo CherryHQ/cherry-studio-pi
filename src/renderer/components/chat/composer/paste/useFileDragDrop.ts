@@ -72,7 +72,7 @@ export function useFileDragDrop(options: UseFileDragDropOptions) {
 
         // 如果有不支持的文件，显示提示
         if (droppedFiles.length > 0 && supportedFiles.length !== droppedFiles.length) {
-          window.toast.info(
+          window.toast?.info?.(
             options.t('chat.input.file_not_supported_count', {
               count: droppedFiles.length - supportedFiles.length
             })

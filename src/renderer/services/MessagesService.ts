@@ -53,11 +53,11 @@ export async function getMessageTitle(message: ExportableMessage, length = 30): 
       const { text: title } = await titlePromise
 
       if (title) {
-        window.toast.success(t('chat.topics.export.title_naming_success'))
+        window.toast?.success?.(t('chat.topics.export.title_naming_success'))
         return title
       }
     } catch (e) {
-      window.toast.error(t('chat.topics.export.title_naming_failed'))
+      window.toast?.error?.(t('chat.topics.export.title_naming_failed'))
       logger.error('Failed to generate title using topic naming, downgraded to default logic', e as Error)
     }
   }

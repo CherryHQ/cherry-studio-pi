@@ -81,7 +81,7 @@ const useWebSearchToolController = ({ assistantId, launcher }: Props) => {
 
   const onClick = useCallback(() => {
     if (!assistant || !model) {
-      window.toast.error(t('error.model.not_exists'))
+      window.toast?.error?.(t('error.model.not_exists'))
       return
     }
     if (enableWebSearch) {

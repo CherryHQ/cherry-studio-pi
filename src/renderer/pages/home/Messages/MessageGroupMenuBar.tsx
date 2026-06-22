@@ -60,7 +60,7 @@ const MessageGroupMenuBar: FC<Props> = ({
         try {
           await v2Chat?.deleteMessageGroup(askId)
         } catch {
-          window.toast.error(t('common.delete_failed'))
+          window.toast?.error?.(t('common.delete_failed'))
         }
       }
     })

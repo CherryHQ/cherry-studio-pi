@@ -194,7 +194,7 @@ export default function LibraryPage() {
         refetch()
         setPromptDialog(null)
       } catch (error) {
-        window.toast.error(
+        window.toast?.error?.(
           formatErrorMessageWithPrefix(
             error,
             t(prompt ? 'settings.prompts.errors.updateFailed' : 'settings.prompts.errors.createFailed')
@@ -249,7 +249,7 @@ export default function LibraryPage() {
           await duplicateAssistant(r.raw)
           refetch()
         } catch (error) {
-          window.toast.error(error instanceof Error ? error.message : t('library.duplicate_assistant_failed'))
+          window.toast?.error?.(error instanceof Error ? error.message : t('library.duplicate_assistant_failed'))
         }
       }
     },
@@ -264,7 +264,7 @@ export default function LibraryPage() {
         [getAssistantPresetCatalogKey(preset)]: assistant.id
       }))
       refetch()
-      window.toast.success(t('common.add_success'))
+      window.toast?.success?.(t('common.add_success'))
       return assistant
     },
     [createAssistant, refetch, setAddedAssistantPresets, t]
@@ -275,7 +275,7 @@ export default function LibraryPage() {
       try {
         await addAssistantPreset(preset)
       } catch (error) {
-        window.toast.error(error instanceof Error ? error.message : t('library.assistant_catalog.add_failed'))
+        window.toast?.error?.(error instanceof Error ? error.message : t('library.assistant_catalog.add_failed'))
       }
     },
     [addAssistantPreset, t]
@@ -299,7 +299,7 @@ export default function LibraryPage() {
     try {
       await addAssistantPreset(previewAssistantPreset)
     } catch (error) {
-      window.toast.error(error instanceof Error ? error.message : t('library.assistant_catalog.add_failed'))
+      window.toast?.error?.(error instanceof Error ? error.message : t('library.assistant_catalog.add_failed'))
     } finally {
       setPreviewAssistantPresetAdding(false)
     }
@@ -327,7 +327,7 @@ export default function LibraryPage() {
           filters: [{ name: t('assistants.presets.import.file_filter'), extensions: ['json'] }]
         })
       } catch (error) {
-        window.toast.error(error instanceof Error ? error.message : t('library.export_assistant_failed'))
+        window.toast?.error?.(error instanceof Error ? error.message : t('library.export_assistant_failed'))
       }
     },
     [t]

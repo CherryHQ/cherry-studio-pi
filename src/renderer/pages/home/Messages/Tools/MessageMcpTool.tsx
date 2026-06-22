@@ -130,13 +130,13 @@ const MessageMcpTool: FC<Props> = ({ toolResponse }) => {
       try {
         const success = await window.api.mcp.abortTool(toolResponse.id)
         if (success) {
-          window.toast.success(t('message.tools.aborted'))
+          window.toast?.success?.(t('message.tools.aborted'))
         } else {
-          window.toast.error(t('message.tools.abort_failed'))
+          window.toast?.error?.(t('message.tools.abort_failed'))
         }
       } catch (error) {
         logger.error('Failed to abort tool:', error as Error)
-        window.toast.error(t('message.tools.abort_failed'))
+        window.toast?.error?.(t('message.tools.abort_failed'))
       }
     }
   }

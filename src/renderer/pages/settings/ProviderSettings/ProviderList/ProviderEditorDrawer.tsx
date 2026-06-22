@@ -174,7 +174,7 @@ export default function ProviderEditorDrawer({
       // fileToAvatarDataUrl can reject on a corrupt or unsupported file
       // (compression or base64 encoding) — tell the user instead of silently doing nothing.
       logger.error('Failed to process uploaded provider logo', error as Error)
-      window.toast.error(t('settings.provider.logo_upload_failed'))
+      window.toast?.error?.(t('settings.provider.logo_upload_failed'))
     }
   }
 
@@ -269,7 +269,7 @@ export default function ProviderEditorDrawer({
       await onSubmit(payload)
     } catch (error) {
       logger.error('Provider editor submit failed', error as Error)
-      window.toast.error(t('settings.provider.save_failed'))
+      window.toast?.error?.(t('settings.provider.save_failed'))
     } finally {
       setIsSubmitting(false)
     }

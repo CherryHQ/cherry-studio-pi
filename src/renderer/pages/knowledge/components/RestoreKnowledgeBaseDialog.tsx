@@ -98,7 +98,9 @@ const RestoreKnowledgeBaseDialog = ({
     // Restore drops root items whose source is gone (a v1-migrated directory child's virtual path,
     // a deleted file). Tell the user instead of silently restoring fewer items than expected.
     if (result.skippedMissingSourceCount > 0) {
-      window.toast.warning(t('knowledge.restore.skipped_missing_sources', { count: result.skippedMissingSourceCount }))
+      window.toast?.warning?.(
+        t('knowledge.restore.skipped_missing_sources', { count: result.skippedMissingSourceCount })
+      )
     }
 
     onRestored(result.base)

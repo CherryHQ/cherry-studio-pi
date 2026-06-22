@@ -156,7 +156,7 @@ const HtmlArtifactsPopup: React.FC<HtmlArtifactsPopupProps> = ({
           await captureScrollableIframeAsBlob(previewFrameRef, async (blob) => {
             if (blob) {
               await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-              window.toast.success(t('message.copy.success'))
+              window.toast?.success?.(t('message.copy.success'))
             }
           })
         }
