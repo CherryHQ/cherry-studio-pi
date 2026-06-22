@@ -101,6 +101,7 @@ async function resolveStoredSecret(value: unknown, signal?: AbortSignal) {
 async function getStorageV2DataSyncSettings(signal?: AbortSignal): Promise<{
   settings: DataSyncSettingsState
   hasConfiguredValue: boolean
+  hasUsableWebDavConfig: boolean
 }> {
   throwIfDataSyncCapabilityAborted(signal)
   const [webdavHost, webdavUser, webdavPass, webdavPath, dataSyncAutoSync, dataSyncSyncInterval] = await Promise.all([
@@ -124,6 +125,7 @@ async function getStorageV2DataSyncSettings(signal?: AbortSignal): Promise<{
 
   return {
     settings,
+    hasUsableWebDavConfig: Boolean(settings.dataSyncWebdavHost?.trim()),
     hasConfiguredValue: Boolean(
       settings.dataSyncWebdavHost ||
         settings.dataSyncWebdavUser ||
@@ -145,12 +147,13 @@ async function getDataSyncSettings(signal?: AbortSignal): Promise<DataSyncSettin
       dataSyncAutoSync: false,
       dataSyncSyncInterval: 0
     },
-    hasConfiguredValue: false
+    hasConfiguredValue: false,
+    hasUsableWebDavConfig: false
   }
 
   try {
     storageSettings = await getStorageV2DataSyncSettings(signal)
-    if (storageSettings.hasConfiguredValue) {
+    if (storageSettings.hasUsableWebDavConfig) {
       return storageSettings.settings
     }
   } catch (error) {
@@ -169,7 +172,7 @@ async function getDataSyncSettings(signal?: AbortSignal): Promise<DataSyncSettin
     })
   } catch (error) {
     if (signal?.aborted) throw error
-    logger.warn('Failed to read data sync settings from renderer; using Storage v2 fallback', {
+    logger.warn('Failed to read usable data sync settings from renderer; using Storage v2 fallback', {
       error: getBridgeErrorMessage(error)
     })
     return storageSettings.settings

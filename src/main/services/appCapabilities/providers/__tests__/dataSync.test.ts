@@ -158,6 +158,28 @@ describe('data sync app capabilities', () => {
     )
   })
 
+  it('falls back to the renderer settings bridge when Storage v2 only has incomplete sync options', async () => {
+    mockStorageV2DataSyncSettings({
+      dataSyncWebdavHost: '',
+      dataSyncWebdavUser: '',
+      dataSyncWebdavPass: '',
+      dataSyncWebdavPath: '/cherry-studio-pi',
+      dataSyncAutoSync: true
+    })
+
+    const result = await capability('dataSync.webdav.config.get').execute({}, { source: 'agent' })
+
+    expect(result.ok).toBe(true)
+    expect(result.data).toMatchObject({
+      webdavHost: 'https://dav.example.com',
+      webdavUser: 'user',
+      webdavPass: '[redacted]'
+    })
+    expect(mocks.browserWindows[0].webContents.executeJavaScript).toHaveBeenCalledWith(
+      `window[${JSON.stringify(RENDERER_GET_DATA_SYNC_SETTINGS_BRIDGE)}]()`
+    )
+  })
+
   it('falls back quickly when the renderer settings bridge is unresponsive', async () => {
     vi.useFakeTimers()
     try {
