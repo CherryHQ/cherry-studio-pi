@@ -81,6 +81,19 @@ describe('utils/file/fs download', () => {
     await expectMissing(dest)
   })
 
+  it('allows a private URL only when it matches the configured API host', async () => {
+    fetchMock.mockResolvedValue(mockResponse('trusted local result'))
+    const dest = path.join(root, 'trusted-local.txt') as FilePath
+
+    await download('http://127.0.0.1:8080/result.txt', dest, { configuredApiHost: 'http://127.0.0.1:8080' })
+
+    expect(await readFile(dest, 'utf8')).toBe('trusted local result')
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:8080/result.txt',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
+  })
+
   it('rejects oversized downloads from content-length before writing', async () => {
     fetchMock.mockResolvedValue(mockResponse('', { 'content-length': String(MAX_DOWNLOAD_BYTES + 1) }))
     const dest = path.join(root, 'huge.txt') as FilePath

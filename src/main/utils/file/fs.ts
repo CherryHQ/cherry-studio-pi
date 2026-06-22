@@ -50,6 +50,15 @@ import xxhashLoader from 'xxhash-wasm'
 const logger = loggerService.withContext('utils/file/fs')
 const MAX_REMOTE_DOWNLOAD_BYTES = 100 * 1024 * 1024
 
+export interface DownloadOptions {
+  /**
+   * Allows local/private URLs only when the download URL matches this
+   * user-configured API origin exactly. Default downloads still reject
+   * local/private hosts to preserve SSRF protection.
+   */
+  configuredApiHost?: string
+}
+
 const notImplemented = (op: string): never => {
   throw new Error(`@main/utils/file/fs.${op}: not implemented (deferred to Phase 2)`)
 }
@@ -520,8 +529,8 @@ export async function compressImage(_input: FilePath | Uint8Array, _output: File
  * (tmp + rename), so an interrupted download leaves no partially-written
  * dest file. Throws on non-2xx responses.
  */
-export async function download(url: string, dest: FilePath): Promise<void> {
-  const safeUrl = sanitizeRemoteUrl(url)
+export async function download(url: string, dest: FilePath, options: DownloadOptions = {}): Promise<void> {
+  const safeUrl = sanitizeRemoteUrl(url, options.configuredApiHost)
   const controller = new AbortController()
   const response = await fetch(safeUrl, { signal: controller.signal })
   if (!response.ok) {

@@ -616,7 +616,7 @@ describe('download', () => {
   it('downloads response body to dest atomically', async () => {
     routes.set('/file.bin', { status: 200, body: Buffer.from([0x01, 0x02, 0x03]), type: 'application/octet-stream' })
     const dest = path.join(tmp, 'out.bin') as FilePath
-    await fsDownload(`${baseUrl}/file.bin`, dest)
+    await fsDownload(`${baseUrl}/file.bin`, dest, { configuredApiHost: baseUrl })
     const buf = await readFile(dest)
     expect(Array.from(buf)).toEqual([0x01, 0x02, 0x03])
   })
