@@ -418,7 +418,7 @@ const TranslatePage: FC = () => {
       }
 
       const promise = read()
-      window.toast.loading({ title: t('translate.files.reading'), promise })
+      window.toast?.loading?.({ title: t('translate.files.reading'), promise })
     },
     [appendTranslateInput, t]
   )

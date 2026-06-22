@@ -49,7 +49,7 @@ export async function getMessageTitle(message: ExportableMessage, length = 30): 
   if (useTopicNaming) {
     try {
       const titlePromise = fetchMessagesSummary({ messages: [message] })
-      window.toast.loading({ title: t('chat.topics.export.wait_for_title_naming'), promise: titlePromise })
+      window.toast?.loading?.({ title: t('chat.topics.export.wait_for_title_naming'), promise: titlePromise })
       const { text: title } = await titlePromise
 
       if (title) {

@@ -5,8 +5,9 @@ import { describe, expect, it } from 'vitest'
 
 const rendererRoot = path.resolve(process.cwd(), 'src/renderer')
 const sourceExtensions = new Set(['.ts', '.tsx'])
+const toastMethods = ['success', 'error', 'warning', 'info', 'loading', 'closeAll', 'closeToast', 'getToastQueue']
 const requiredToastPatterns = [
-  /window\s*\.\s*toast\s*\.\s*(success|error|warning|info)\s*\(/g,
+  new RegExp(`window\\s*\\.\\s*toast\\s*\\.\\s*(${toastMethods.join('|')})\\s*\\(`, 'g'),
   /window\s*\.\s*toast\s*\[/g
 ]
 
