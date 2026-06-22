@@ -163,4 +163,23 @@ describe('StorageV2StartupSeedService', () => {
     expect(report.appData.importedRecordCount).toBe(0)
     expect(report.appData.warnings[0]).toContain('app.db locked')
   })
+
+  it('preserves structured legacy import failure details in warnings', async () => {
+    mocks.importAgentDb.mockRejectedValueOnce({
+      response: {
+        status: 423,
+        statusText: 'Locked'
+      }
+    })
+    mocks.importAppDb.mockRejectedValueOnce({
+      cause: {
+        code: 'SQLITE_BUSY'
+      }
+    })
+
+    const report = await new StorageV2StartupSeedService().seedFromLegacyRuntimeDatabases()
+
+    expect(report.agent.warnings[0]).toBe('Legacy agents.db startup seed failed: 423 Locked')
+    expect(report.appData.warnings[0]).toBe('Legacy app.db startup seed failed: SQLITE_BUSY')
+  })
 })
