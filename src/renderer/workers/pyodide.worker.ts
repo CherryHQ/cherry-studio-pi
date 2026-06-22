@@ -1,5 +1,7 @@
 /// <reference lib="webworker" />
 
+import { getWorkerErrorMessage } from './workerError'
+
 interface WorkerResponse {
   type: 'initialized' | 'init-error' | 'system-error'
   id?: string
@@ -95,7 +97,7 @@ const pyodidePromise = (async () => {
       }
     })
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorMessage = getWorkerErrorMessage(error)
 
     // 通知主线程初始化错误
     self.postMessage({
@@ -124,7 +126,7 @@ function processResult(result: any): any {
 
     return result
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorMessage = getWorkerErrorMessage(error)
     return { __error__: 'Result processing failed', details: errorMessage }
   }
 }
@@ -135,7 +137,7 @@ pyodidePromise
     self.postMessage({ type: 'initialized' } as WorkerResponse)
   })
   .catch((error: unknown) => {
-    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorMessage = getWorkerErrorMessage(error)
     self.postMessage({
       type: 'init-error',
       error: errorMessage
@@ -164,7 +166,7 @@ self.onmessage = async (event) => {
     try {
       await pyodide.loadPackagesFromImports(python)
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
+      const errorMessage = getWorkerErrorMessage(error)
       throw new Error(`Failed to load required packages: ${errorMessage}`)
     }
 
@@ -186,7 +188,7 @@ self.onmessage = async (event) => {
         output.image = image
       }
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error)
+      const errorMessage = getWorkerErrorMessage(error)
       // 不设置 output.result，但设置错误信息
       if (output.error) {
         output.error += `\nExecution error:\n${errorMessage}`
@@ -196,7 +198,7 @@ self.onmessage = async (event) => {
     }
   } catch (error: unknown) {
     // 处理所有其他错误
-    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorMessage = getWorkerErrorMessage(error)
 
     if (output.error) {
       output.error += `\nSystem error:\n${errorMessage}`
