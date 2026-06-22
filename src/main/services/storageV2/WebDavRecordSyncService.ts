@@ -1108,16 +1108,17 @@ export class StorageV2WebDavRecordSyncService {
       return Boolean(bundledRecord)
     }
 
+    const relativePath = safeRemoteRelativePath(meta.path)
+    const remotePath = path.posix.join(basePath, relativePath)
     try {
-      const relativePath = safeRemoteRelativePath(meta.path)
-      const remotePath = path.posix.join(basePath, relativePath)
       return await runWebDavOperation(
         `checking Storage v2 sync record existence ${remotePath}`,
         () => webDavExists(client, remotePath, signal),
         { logger, signal }
       )
-    } catch {
-      return false
+    } catch (error) {
+      if (error instanceof WebDavOperationError && error.status === 404) return false
+      throw error
     }
   }
 

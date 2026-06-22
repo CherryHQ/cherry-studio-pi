@@ -2608,6 +2608,57 @@ describe('StorageV2WebDavRecordSyncService', () => {
     expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(true)
   })
 
+  it('stops instead of rewriting equal-hash records when WebDAV existence checks fail', async () => {
+    const remote = makeSharedWebDavStore()
+    const localRow = {
+      key: 'theme',
+      value_json: '{"mode":"light"}',
+      scope: 'app',
+      updated_at: '2026-05-29T12:10:00.000Z',
+      deleted_at: null,
+      version: 2
+    }
+    const localHash = hashJson(localRow)
+    const db = makeSettingsDb([localRow])
+    vi.mocked(storageV2Database.getClient).mockResolvedValueOnce(db.client as any)
+    remote.client.exists.mockImplementation(async (filePath: string) => {
+      const normalized = path.posix.normalize(filePath).replace(/\/+$/g, '')
+      if (normalized.endsWith('/storage-v2/records/settings/flaky-theme.json')) {
+        throw {
+          response: {
+            status: 423,
+            statusText: 'Locked'
+          }
+        }
+      }
+
+      return Array.from(remote.files.keys()).some((key) => {
+        const value = path.posix.normalize(String(key))
+        return value === normalized || value.startsWith(`${normalized}/`)
+      })
+    })
+
+    await expect(
+      new StorageV2WebDavRecordSyncService([settingsTable]).sync(remote.client as any, '/remote-root/sync/v1', {
+        version: 1,
+        blobs: {},
+        records: {
+          'settings:theme': {
+            entityType: 'settings',
+            table: 'settings',
+            idValues: ['theme'],
+            valueHash: localHash,
+            updatedAt: Date.parse(localRow.updated_at),
+            deletedAt: null,
+            version: 2,
+            path: 'storage-v2/records/settings/flaky-theme.json'
+          }
+        }
+      })
+    ).rejects.toThrow('423 Locked')
+    expect(hasRemoteFile(remote, /^\/remote-root\/sync\/v1\/storage-v2\/bundle\/[a-f0-9]{64}\.json$/)).toBe(false)
+  })
+
   it('keeps stale remote artifacts during normal sync instead of recursively deleting provider files', async () => {
     const remote = makeSharedWebDavStore()
     const localRow = {
