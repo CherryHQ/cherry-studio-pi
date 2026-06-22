@@ -29,7 +29,12 @@ import {
 } from '@main/services/storageV2/WebDavRecordSyncService'
 import { hashJsonValue, writeWebDavJsonAtomically } from '@main/services/WebDavAtomic'
 import { createWebDavClientOptions } from '@main/services/WebDavClientOptions'
-import { normalizeWebDavHost, runWebDavOperation, WebDavOperationError } from '@main/services/WebDavRetry'
+import {
+  getWebDavErrorStatus,
+  normalizeWebDavHost,
+  runWebDavOperation,
+  WebDavOperationError
+} from '@main/services/WebDavRetry'
 import { getDataPath } from '@main/utils'
 import { getNotesDir } from '@main/utils/file'
 import { readResponseTextWithinLimit } from '@main/utils/readResponseText'
@@ -952,15 +957,19 @@ function extractErrorMessage(error: unknown, seen = new WeakSet<object>()): stri
   }
   seen.add(error)
 
-  for (const key of ['message', 'error', 'cause', 'reason'] as const) {
+  for (const key of ['message', 'error', 'cause', 'reason', 'description', 'response'] as const) {
     const message = extractErrorMessage(error[key], seen)
     if (message) return message
   }
 
   const status = error.status ?? error.statusCode
   const code = error.code
+  const statusText = typeof error.statusText === 'string' ? error.statusText.trim() : ''
   if (typeof status === 'number' && typeof code === 'string' && code.trim()) {
     return `${code.trim()} (${status})`
+  }
+  if (typeof status === 'number' && statusText) {
+    return `${status} ${statusText}`
   }
   if (typeof code === 'string' && code.trim()) {
     return code.trim()
@@ -973,6 +982,10 @@ function extractErrorMessage(error: unknown, seen = new WeakSet<object>()): stri
 }
 
 function errorMessage(error: unknown) {
+  if (error instanceof WebDavOperationError) {
+    return extractErrorMessage(error.originalError) ?? error.message
+  }
+
   return extractErrorMessage(error) ?? '未知同步错误'
 }
 
@@ -1018,9 +1031,21 @@ function isCausedByTransientWebDavError(error: unknown) {
   return cause instanceof WebDavOperationError && cause.transient
 }
 
-function isCausedByWebDavStatus(error: unknown, status: number) {
+function isCausedByWebDavStatus(error: unknown, status: number, seen = new WeakSet<object>()): boolean {
+  if (error && typeof error === 'object') {
+    if (seen.has(error)) return false
+    seen.add(error)
+  }
+
+  if (getWebDavErrorStatus(error) === status) return true
+
   const cause = error instanceof Error ? error.cause : undefined
-  return cause instanceof WebDavOperationError && cause.status === status
+  if (cause !== undefined) return isCausedByWebDavStatus(cause, status, seen)
+
+  if (!isPlainRecord(error)) return false
+
+  const nestedCause = error.cause ?? error.error ?? error.response
+  return nestedCause !== undefined && isCausedByWebDavStatus(nestedCause, status, seen)
 }
 
 function isIgnorableCreateDirectoryError(error: unknown) {

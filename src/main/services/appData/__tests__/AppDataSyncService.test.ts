@@ -1153,6 +1153,21 @@ describe('AppDataSyncService', () => {
     expect(mocks.remoteFiles.has(lockPath)).toBe(false)
   })
 
+  it('preserves nested WebDAV response details when reading a remote lock fails', async () => {
+    const lockPath = '/remote-root/sync/v1/.sync.lock.json'
+    mocks.remoteFiles.set(lockPath, JSON.stringify({ version: 1 }))
+    mocks.webdav.getFileContents.mockImplementation(async (filePath: string) => {
+      expect(filePath).toBe(lockPath)
+      throw { response: { status: 503, statusText: 'Service Unavailable' } }
+    })
+
+    await expect(new AppDataSyncService().syncNow(config)).rejects.toThrow(
+      '远端同步锁读取失败。为避免破坏远端数据，本次同步已停止：503 Service Unavailable'
+    )
+
+    expect(mocks.storageRecordSync.sync).not.toHaveBeenCalled()
+  })
+
   it('rejects oversized remote lock files before downloading their contents', async () => {
     const lockPath = '/remote-root/sync/v1/.sync.lock.json'
     mocks.remoteFiles.set(lockPath, Buffer.alloc(65 * 1024))
