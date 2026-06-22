@@ -94,13 +94,15 @@ function deferred<T>(): Deferred<T> {
 }
 
 function setupWindowMocks(writeText: ReturnType<typeof vi.fn>) {
+  const obsidianApi = {
+    getFiles: vi.fn().mockResolvedValue([]),
+    getVaults: vi.fn().mockResolvedValue([{ name: 'Vault', path: '/vault' }])
+  }
+
   Object.defineProperty(window, 'api', {
     configurable: true,
     value: {
-      obsidian: {
-        getFiles: vi.fn().mockResolvedValue([]),
-        getVaults: vi.fn().mockResolvedValue([{ name: 'Vault', path: '/vault' }])
-      }
+      obsidian: obsidianApi
     }
   })
 
@@ -118,6 +120,14 @@ function setupWindowMocks(writeText: ReturnType<typeof vi.fn>) {
       writeText
     }
   })
+
+  return obsidianApi
+}
+
+async function waitForVaultReady(obsidianApi: ReturnType<typeof setupWindowMocks>) {
+  await waitFor(() => {
+    expect(obsidianApi.getFiles).toHaveBeenCalledWith('Vault')
+  })
 }
 
 describe('ObsidianExportDialog', () => {
@@ -127,7 +137,7 @@ describe('ObsidianExportDialog', () => {
 
   it('exports raw content while the dialog is still mounted', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
-    setupWindowMocks(writeText)
+    const obsidianApi = setupWindowMocks(writeText)
     const resolve = vi.fn()
 
     render(
@@ -140,6 +150,7 @@ describe('ObsidianExportDialog', () => {
         title="Daily Note"
       />
     )
+    await waitForVaultReady(obsidianApi)
 
     const exportButton = await screen.findByRole('button', {
       name: 'chat.topics.export.obsidian_btn'
@@ -157,7 +168,7 @@ describe('ObsidianExportDialog', () => {
   it('ignores a stale export completion after unmount', async () => {
     const clipboardWrite = deferred<void>()
     const writeText = vi.fn().mockReturnValue(clipboardWrite.promise)
-    setupWindowMocks(writeText)
+    const obsidianApi = setupWindowMocks(writeText)
     const resolve = vi.fn()
 
     const { unmount } = render(
@@ -170,6 +181,7 @@ describe('ObsidianExportDialog', () => {
         title="Daily Note"
       />
     )
+    await waitForVaultReady(obsidianApi)
 
     const exportButton = await screen.findByRole('button', {
       name: 'chat.topics.export.obsidian_btn'
@@ -194,7 +206,7 @@ describe('ObsidianExportDialog', () => {
 
   it('handles export preparation failures when toast is unavailable', async () => {
     const writeText = vi.fn().mockRejectedValue(new Error('clipboard unavailable'))
-    setupWindowMocks(writeText)
+    const obsidianApi = setupWindowMocks(writeText)
     Object.defineProperty(window, 'toast', {
       configurable: true,
       value: undefined
@@ -211,6 +223,7 @@ describe('ObsidianExportDialog', () => {
         title="Daily Note"
       />
     )
+    await waitForVaultReady(obsidianApi)
 
     const exportButton = await screen.findByRole('button', {
       name: 'chat.topics.export.obsidian_btn'
