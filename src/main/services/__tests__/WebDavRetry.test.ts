@@ -30,6 +30,34 @@ describe('WebDavRetry', () => {
     expect(message).not.toContain('发生未知错误')
   })
 
+  it('recognizes structured WebDAV response status errors', () => {
+    const error = new WebDavOperationError('listing remote directory /dav', {
+      response: {
+        status: 503,
+        statusText: 'Service Unavailable'
+      }
+    })
+
+    expect(error.message).toContain('503 Service Unavailable')
+    expect(error.transient).toBe(true)
+    expect(describeWebDavUserFacingError(error, '同步数据')).toContain('WebDAV 服务暂时不可用')
+  })
+
+  it('keeps structured WebDAV network errors actionable', () => {
+    const message = describeWebDavUserFacingError(
+      {
+        error: {
+          message: 'getaddrinfo ENOTFOUND openapi.alipan.com'
+        }
+      },
+      '同步数据'
+    )
+
+    expect(message).toContain('无法解析 WebDAV 地址')
+    expect(message).not.toContain('发生未知错误')
+    expect(message).not.toContain('[object Object]')
+  })
+
   it('describes write permission failures as read-only WebDAV endpoints', () => {
     const error = new WebDavOperationError(
       'writing remote sync probe /remote-root/sync/v1/.cherry-studio-pi-write-test.tmp',

@@ -48,19 +48,43 @@ function parseStatus(value: unknown): number | null {
   return null
 }
 
-function errorMessage(error: unknown) {
-  if (error instanceof Error) return normalizeMessageText(error.message) ?? UNKNOWN_WEB_DAV_ERROR_MESSAGE
-  if (typeof error === 'string') return normalizeMessageText(error) ?? UNKNOWN_WEB_DAV_ERROR_MESSAGE
-  if (error == null) return UNKNOWN_WEB_DAV_ERROR_MESSAGE
-
-  return normalizeMessageText(String(error)) ?? UNKNOWN_WEB_DAV_ERROR_MESSAGE
-}
-
 function normalizeMessageText(message: unknown) {
   if (typeof message !== 'string') return null
 
   const normalizedMessage = message.trim()
   return normalizedMessage.length > 0 ? normalizedMessage : null
+}
+
+function extractErrorMessage(error: unknown, seen = new WeakSet<object>()): string | null {
+  if (error instanceof Error) {
+    return normalizeMessageText(error.message) ?? extractErrorMessage(error.cause, seen)
+  }
+
+  if (typeof error === 'string') return normalizeMessageText(error)
+  if (typeof error === 'number' || typeof error === 'boolean' || typeof error === 'bigint') return String(error)
+
+  const source = asObject(error)
+  if (!source) return null
+
+  if (seen.has(source)) return null
+  seen.add(source)
+
+  for (const key of ['message', 'error', 'cause', 'reason', 'description', 'response'] as const) {
+    const message = extractErrorMessage(source[key], seen)
+    if (message) return message
+  }
+
+  const status = parseStatus(source.status) ?? parseStatus(source.statusCode) ?? parseStatus(source.code)
+  const statusText = normalizeMessageText(source.statusText)
+  if (status && statusText) return `${status} ${statusText}`
+  if (status) return `${status}`
+
+  const code = normalizeMessageText(source.code)
+  return code
+}
+
+function errorMessage(error: unknown) {
+  return extractErrorMessage(error) ?? UNKNOWN_WEB_DAV_ERROR_MESSAGE
 }
 
 function normalizeMaxAttempts(value: number | undefined) {
@@ -92,6 +116,13 @@ export function getWebDavErrorStatus(error: unknown): number | null {
 }
 
 function getWebDavErrorStatusText(error: unknown) {
+  const source = asObject(error)
+  const directStatusText = normalizeMessageText(source?.statusText)
+  if (directStatusText) return directStatusText
+
+  const responseStatusText = normalizeMessageText(asObject(source?.response)?.statusText)
+  if (responseStatusText) return responseStatusText
+
   const message = errorMessage(error)
   const match = message.match(/\b(?:Invalid response:|status(?: code)?[:=]?)\s*\d{3}\s+([^\n]+)$/i)
   if (match?.[1]?.trim()) return match[1].trim()
