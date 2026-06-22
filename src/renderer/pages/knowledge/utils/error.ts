@@ -1,6 +1,7 @@
 import {
-  KNOWLEDGE_BASE_ERROR_MISSING_EMBEDDING_MODEL,
   type KnowledgeBase,
+  type KnowledgeBaseErrorCode,
+  KnowledgeBaseErrorCodeSchema,
   type KnowledgeItem,
   type KnowledgeItemErrorCode,
   KnowledgeItemErrorCodeSchema
@@ -10,15 +11,35 @@ type KnowledgeErrorTranslator = (
   key:
     | 'knowledge.error.failed_base_unknown'
     | 'knowledge.error.missing_embedding_model'
+    | 'knowledge.error.missing_vector_store'
     | 'knowledge.error.directory_not_migrated'
 ) => string
 
+/** Localized copy for a known base error code. Exhaustive over `KnowledgeBaseErrorCode`. */
+const translateKnowledgeBaseErrorCode = (code: KnowledgeBaseErrorCode, t: KnowledgeErrorTranslator): string => {
+  switch (code) {
+    case 'missing_embedding_model':
+      return t('knowledge.error.missing_embedding_model')
+    case 'missing_vector_store':
+      return t('knowledge.error.missing_vector_store')
+    default:
+      return code satisfies never
+  }
+}
+
+/**
+ * Failed-base tooltip text. `KnowledgeBase.error` is a nullable error-code enum
+ * (`KnowledgeBaseErrorCodeSchema.nullable()`), so a recognized code maps to localized copy and the
+ * only other reachable value — `null` — falls back to the generic reason. (Unlike the item helper
+ * below, a base never carries a free-form message to pass through.)
+ */
 export const getKnowledgeBaseFailureReason = (base: Pick<KnowledgeBase, 'error'>, t: KnowledgeErrorTranslator) => {
-  if (base.error === KNOWLEDGE_BASE_ERROR_MISSING_EMBEDDING_MODEL) {
-    return t('knowledge.error.missing_embedding_model')
+  const parsedCode = KnowledgeBaseErrorCodeSchema.safeParse(base.error)
+  if (parsedCode.success) {
+    return translateKnowledgeBaseErrorCode(parsedCode.data, t)
   }
 
-  return base.error ?? t('knowledge.error.failed_base_unknown')
+  return t('knowledge.error.failed_base_unknown')
 }
 
 /** Localized copy for a known item error code. Exhaustive over `KnowledgeItemErrorCode`. */
@@ -41,10 +62,25 @@ export const getKnowledgeItemFailureReason = (item: Pick<KnowledgeItem, 'error'>
   return item.error
 }
 
+function extractKnowledgeErrorMessage(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined
+
+  const message = (error as { message?: unknown }).message
+  if (typeof message === 'string' && message.trim()) return message
+
+  const nestedError = (error as { error?: unknown }).error
+  if (nestedError && typeof nestedError === 'object') {
+    const nestedMessage = (nestedError as { message?: unknown }).message
+    if (typeof nestedMessage === 'string' && nestedMessage.trim()) return nestedMessage
+  }
+
+  return undefined
+}
+
 export const normalizeKnowledgeError = (error: unknown): Error => {
   if (error instanceof Error) {
     return error
   }
 
-  return new Error(String(error))
+  return new Error(extractKnowledgeErrorMessage(error) ?? String(error))
 }
