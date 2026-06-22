@@ -224,4 +224,24 @@ describe('scanStorageV2SecretReferences', () => {
     expect(result.invalidRefs).toEqual(new Set(['storage-v2://secret/%']))
     expect(result.skippedSources).toEqual(['sync_conflicts.local_snapshot_json', 'sync_conflicts.remote_snapshot_json'])
   })
+
+  it('skips structured missing schema errors', async () => {
+    const client = {
+      execute: vi.fn(async (input: string | { sql: string }) => {
+        const sql = typeof input === 'string' ? input : input.sql
+        if (sql.includes('FROM providers')) {
+          throw {
+            cause: {
+              message: 'SQLITE_ERROR: no such table: providers'
+            }
+          }
+        }
+        return { rows: [], columns: [], columnTypes: [] }
+      })
+    } as unknown as Client
+
+    const result = await scanStorageV2SecretReferences(client)
+
+    expect(result.skippedSources).toContain('providers.config_json')
+  })
 })

@@ -1,4 +1,5 @@
 import type { Client } from '@libsql/client'
+import { getErrorMessage } from '@main/utils/errorMessage'
 
 export const STORAGE_V2_SECRET_REF_PREFIX = 'storage-v2://secret/'
 
@@ -141,7 +142,7 @@ export function collectStorageV2SecretRefsFromValue(value: unknown, refs: Set<st
 }
 
 function isMissingSchemaError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error)
+  const message = getErrorMessage(error)
   return /no such (table|column)|SQLITE_ERROR/i.test(message) && /no such (table|column)/i.test(message)
 }
 
