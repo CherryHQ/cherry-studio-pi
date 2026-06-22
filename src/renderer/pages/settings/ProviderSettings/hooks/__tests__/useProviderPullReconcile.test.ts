@@ -184,4 +184,24 @@ describe('useProviderPullReconcile — C3 single-flight by api-key signature', (
 
     expect(window.toast.error).not.toHaveBeenCalled()
   })
+
+  it('preserves nested preview failure details from bridged errors', async () => {
+    useProviderApiKeysMock.mockReturnValue(keys('sk-1'))
+    buildPreviewMock.mockRejectedValue({ error: { message: 'provider upstream timed out' } })
+
+    const { result } = renderHook(() => useProviderPullReconcile('openai'))
+    let thrown: unknown
+
+    await act(async () => {
+      try {
+        await result.current.fetchPreview()
+      } catch (error) {
+        thrown = error
+      }
+    })
+
+    expect(thrown).toBeInstanceOf(Error)
+    expect((thrown as Error).message).toBe('provider upstream timed out')
+    expect(window.toast.error).toHaveBeenCalledWith('settings.models.manage.sync_pull_failed')
+  })
 })

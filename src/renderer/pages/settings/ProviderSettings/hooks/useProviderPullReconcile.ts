@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { useProviderApiKeys } from '@renderer/hooks/useProvider'
+import { getErrorMessage } from '@renderer/utils/error'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -84,7 +85,7 @@ export function useProviderPullReconcile(providerId: string) {
             window.toast?.error(t('settings.models.manage.sync_pull_failed'))
           }
         }
-        throw error instanceof Error ? error : new Error(String(error))
+        throw error instanceof Error ? error : new Error(getErrorMessage(error), { cause: error })
       } finally {
         if (isCurrent()) {
           setIsPreviewLoading(false)
