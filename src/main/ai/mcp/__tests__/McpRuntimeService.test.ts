@@ -3,9 +3,14 @@ import type { McpServer } from '@shared/data/types/mcpServer'
 import { MockMainCacheServiceUtils } from '@test-mocks/main/CacheService'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+const mcpCatalogMock = vi.hoisted(() => ({
+  clearSharedToolsCache: vi.fn(),
+  refreshTools: vi.fn().mockResolvedValue(undefined)
+}))
+
 vi.mock('@application', async () => {
   const { mockApplicationFactory } = await import('@test-mocks/main/application')
-  return mockApplicationFactory()
+  return mockApplicationFactory({ McpCatalogService: mcpCatalogMock } as Record<string, unknown>)
 })
 
 const getByIdMock = vi.fn<(id: string) => Promise<McpServer>>()
@@ -272,5 +277,36 @@ describe('redactSensitive (mcp-services-3)', () => {
     a.b = b // a -> b -> a cycle
     expect(() => redactSensitive(a)).not.toThrow()
     expect(redactSensitive(a)).toMatchObject({ name: 'a', b: { name: 'b', a: '[Circular]' } })
+  })
+})
+
+describe('McpRuntimeService.restartServer', () => {
+  beforeEach(() => {
+    BaseService.resetInstances()
+    MockMainCacheServiceUtils.resetMocks()
+    getByIdMock.mockReset()
+    mcpCatalogMock.clearSharedToolsCache.mockReset()
+    mcpCatalogMock.refreshTools.mockReset().mockResolvedValue(undefined)
+    getByIdMock.mockResolvedValue({ id: 'server-1', name: 'docs', isActive: true } as McpServer)
+  })
+
+  it('clears the shared tools cache and does not refresh when restart fails', async () => {
+    const service = new McpRuntimeService()
+    vi.spyOn(service as any, 'getOrCreateClient').mockRejectedValue(new Error('bad config'))
+
+    await expect(service.restartServer('server-1')).rejects.toThrow('bad config')
+
+    expect(mcpCatalogMock.clearSharedToolsCache).toHaveBeenCalledWith('server-1')
+    expect(mcpCatalogMock.refreshTools).not.toHaveBeenCalled()
+  })
+
+  it('clears then repopulates the shared tools cache on a successful restart', async () => {
+    const service = new McpRuntimeService()
+    vi.spyOn(service as any, 'getOrCreateClient').mockResolvedValue({})
+
+    await service.restartServer('server-1')
+
+    expect(mcpCatalogMock.clearSharedToolsCache).toHaveBeenCalledWith('server-1')
+    expect(mcpCatalogMock.refreshTools).toHaveBeenCalledWith('server-1')
   })
 })

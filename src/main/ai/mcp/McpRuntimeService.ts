@@ -94,6 +94,7 @@ export interface McpToolListChangedEvent {
 // so a generous floor avoids false positives on slow SSE/streamableHttp handshakes while
 // still letting users raise it further via `server.timeout`.
 const MCP_CONNECT_TIMEOUT_FLOOR_MS = 180_000
+const MCP_PENDING_CLIENT_SHUTDOWN_TIMEOUT_MS = 5_000
 
 // Redact potentially sensitive fields in objects (headers, tokens, api keys)
 export function redactSensitive(input: any): any {
@@ -859,10 +860,29 @@ export class McpRuntimeService extends BaseService {
     this.activeToolCalls.clear()
   }
 
+  private clearActiveToolCall(callId: string, controller: AbortController): void {
+    if (this.activeToolCalls.get(callId) === controller) {
+      this.activeToolCalls.delete(callId)
+    }
+  }
+
   private async waitForPendingClients(): Promise<void> {
     const pending = [...this.pendingClients.values()]
     if (pending.length === 0) return
-    await Promise.allSettled(pending)
+    let timeout: NodeJS.Timeout | undefined
+    try {
+      await Promise.race([
+        Promise.allSettled(pending),
+        new Promise<void>((resolve) => {
+          timeout = setTimeout(() => {
+            logger.warn('Timed out waiting for pending MCP clients during shutdown', { pendingCount: pending.length })
+            resolve()
+          }, MCP_PENDING_CLIENT_SHUTDOWN_TIMEOUT_MS)
+        })
+      ])
+    } finally {
+      if (timeout) clearTimeout(timeout)
+    }
   }
 
   private async closeAllClients(): Promise<void> {
@@ -975,8 +995,11 @@ export class McpRuntimeService extends BaseService {
       source: 'client'
     })
     await this.closeClientsForServer(server.id)
-    // Clear cache before restarting to ensure fresh data
+    // Clear caches before restarting to ensure fresh data. McpCatalogService.listTools
+    // is cache-only for startup performance, so a failed restart must not leave
+    // old tools visible to agents/chat.
     this.clearServerCache(server)
+    application.get('McpCatalogService').clearSharedToolsCache(server.id)
     try {
       await this.getOrCreateClient(server)
       await application.get('McpCatalogService').refreshTools(server.id)
@@ -1081,7 +1104,7 @@ export class McpRuntimeService extends BaseService {
         getServerLogger(server, { tool: name, callId: toolCallId }).error(`Error calling tool`, error as Error)
         throw error
       } finally {
-        this.activeToolCalls.delete(toolCallId)
+        this.clearActiveToolCall(toolCallId, abortController)
       }
     }
 

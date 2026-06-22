@@ -178,8 +178,21 @@ export class McpCatalogService extends BaseService {
   }
 
   public async listTools(serverId: string, options: ListToolsOptions = {}): Promise<McpTool[]> {
-    const server = await this.getServerById(serverId)
-    return this.listToolsForServer(server, options)
+    const cached = application.get('CacheService').getShared(mcpToolsCacheKey(serverId)) as McpTool[] | undefined
+
+    // Keep the agent/chat startup path cache-only: slow or dead MCP servers
+    // should not block a new session. A never-warmed cache gets one background
+    // refresh so the next session can see the tools; warmed empty caches stay
+    // empty until an explicit refresh/prewarm succeeds.
+    if (cached === undefined) {
+      void this.refreshTools(serverId).catch(() => {})
+    }
+
+    const tools = cached ?? []
+    if (options.includeDisabled || tools.length === 0) return tools
+
+    const server = await this.getServerById(serverId).catch(() => undefined)
+    return server ? tools.filter((tool) => !isMcpToolDisabledBySource(server, tool)) : tools
   }
 
   // Resources and prompts are owned by McpRuntimeService (cached under `mcp:list_*` and exposed
