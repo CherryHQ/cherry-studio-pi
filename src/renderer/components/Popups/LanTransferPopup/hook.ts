@@ -1,5 +1,6 @@
 import { loggerService } from '@logger'
 import { getBackupData } from '@renderer/services/BackupService'
+import { getErrorMessage } from '@renderer/utils/error'
 import type { LanTransferPeer } from '@shared/config/types'
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -214,12 +215,12 @@ export function useLanTransfer(): UseLanTransferReturn {
           })
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = getErrorMessage(error)
         dispatch({
           type: 'UPDATE_TRANSFER_STATE',
           payload: { peerId, state: { status: 'failed', error: message } }
         })
-        logger.error('Failed to send file', error as Error)
+        logger.error('Failed to send file', error instanceof Error ? error : new Error(message, { cause: error }))
       } finally {
         // Step 4: Clean up temp file
         if (backupPath) {
