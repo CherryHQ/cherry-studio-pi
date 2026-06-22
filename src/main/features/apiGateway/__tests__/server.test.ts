@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+const mocks = vi.hoisted(() => ({
+  buildAppOverride: {
+    current: null as null | (() => unknown)
+  }
+}))
+
 /**
  * Server lifecycle tests for `ApiGateway` (start/stop) against the real
  * `@elysia/node` adapter on an ephemeral port. Restart at the service level is
@@ -32,7 +38,9 @@ vi.mock('@logger', () => ({
 vi.mock('../app', async () => {
   const { Elysia } = await import('elysia')
   const { node } = await import('@elysia/node')
-  return { buildApp: () => new Elysia({ adapter: node() }).get('/health', () => 'ok') }
+  return {
+    buildApp: () => mocks.buildAppOverride.current?.() ?? new Elysia({ adapter: node() }).get('/health', () => 'ok')
+  }
 })
 
 import { ApiGateway } from '../server'
@@ -42,6 +50,7 @@ describe('ApiGateway server lifecycle', () => {
 
   afterEach(async () => {
     await gateway?.stop().catch(() => {})
+    mocks.buildAppOverride.current = null
     gateway = null
   })
 
@@ -69,6 +78,39 @@ describe('ApiGateway server lifecycle', () => {
   it('stop() before start is a no-op', async () => {
     gateway = new ApiGateway()
     await expect(gateway.stop()).resolves.toBeUndefined()
+    expect(gateway.isRunning()).toBe(false)
+  })
+
+  it('preserves structured async listen failures', async () => {
+    mocks.buildAppOverride.current = () =>
+      ({
+        listen: (_options: unknown, callback: (serverInfo: unknown) => void) => {
+          callback({
+            stop: vi.fn(),
+            raw: {
+              ready: () => Promise.reject({ error: { message: 'EADDRINUSE: port already in use' } })
+            }
+          })
+        }
+      }) as any
+
+    gateway = new ApiGateway()
+
+    await expect(gateway.start()).rejects.toThrow('EADDRINUSE: port already in use')
+    expect(gateway.isRunning()).toBe(false)
+  })
+
+  it('preserves structured synchronous listen failures', async () => {
+    mocks.buildAppOverride.current = () =>
+      ({
+        listen: () => {
+          throw { cause: { message: 'listen permission denied' } }
+        }
+      }) as any
+
+    gateway = new ApiGateway()
+
+    await expect(gateway.start()).rejects.toThrow('listen permission denied')
     expect(gateway.isRunning()).toBe(false)
   })
 })

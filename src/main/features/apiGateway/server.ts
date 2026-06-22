@@ -10,6 +10,7 @@ const logger = loggerService.withContext('ApiGateway')
 const GLOBAL_REQUEST_TIMEOUT_MS = 5 * 60_000
 const GLOBAL_HEADERS_TIMEOUT_MS = GLOBAL_REQUEST_TIMEOUT_MS + 5_000
 const GLOBAL_KEEPALIVE_TIMEOUT_MS = 60_000
+const UNKNOWN_START_ERROR = 'API gateway failed to start'
 
 /**
  * `@elysia/node` resolves the listen callback's argument to Elysia's Bun-shaped
@@ -24,6 +25,36 @@ type NodeServerInfo = Server & {
     // srvx `NodeServer`: `ready()` resolves once listening (rejects on EADDRINUSE etc.).
     ready?: () => Promise<unknown>
   }
+}
+
+function getStartErrorMessage(error: unknown, seen = new WeakSet<object>()): string | null {
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === 'string' && error.trim()) return error
+  if (!error || typeof error !== 'object') return null
+  if (seen.has(error)) return null
+  seen.add(error)
+
+  const nestedError = (error as { error?: unknown }).error
+  if (nestedError) {
+    const nestedMessage = getStartErrorMessage(nestedError, seen)
+    if (nestedMessage) return nestedMessage
+  }
+
+  const message = (error as { message?: unknown }).message
+  if (typeof message === 'string' && message.trim()) return message
+
+  const cause = (error as { cause?: unknown }).cause
+  if (cause) {
+    const causeMessage = getStartErrorMessage(cause, seen)
+    if (causeMessage) return causeMessage
+  }
+
+  return null
+}
+
+function normalizeStartError(error: unknown): Error {
+  if (error instanceof Error) return error
+  return new Error(getStartErrorMessage(error) ?? UNKNOWN_START_ERROR)
 }
 
 export class ApiGateway {
@@ -69,7 +100,7 @@ export class ApiGateway {
               })
               .catch((error: unknown) => {
                 this.cleanupFailedStart()
-                reject(error instanceof Error ? error : new Error(String(error)))
+                reject(normalizeStartError(error))
               })
           } else {
             this.running = true
@@ -79,7 +110,7 @@ export class ApiGateway {
         })
       } catch (error) {
         this.cleanupFailedStart()
-        reject(error instanceof Error ? error : new Error(String(error)))
+        reject(normalizeStartError(error))
       }
     })
   }
